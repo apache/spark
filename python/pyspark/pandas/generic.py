@@ -582,7 +582,7 @@ class Frame(object, metaclass=ABCMeta):
             "`to_numpy` loads all data into the driver's memory. "
             "It should only be used if the resulting NumPy ndarray is expected to be small."
         )
-        return self._to_pandas().values
+        return cast(np.ndarray, self._to_pandas().values)
 
     @property
     def values(self) -> np.ndarray:

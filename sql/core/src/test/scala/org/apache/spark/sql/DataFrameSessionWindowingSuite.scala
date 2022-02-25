@@ -21,6 +21,7 @@ import java.time.LocalDateTime
 
 import org.scalatest.BeforeAndAfterEach
 
+import org.apache.spark.sql.catalyst.encoders.RowEncoder
 import org.apache.spark.sql.catalyst.expressions.AttributeReference
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Expand}
 import org.apache.spark.sql.functions._
@@ -405,5 +406,65 @@ class DataFrameSessionWindowingSuite extends QueryTest with SharedSparkSession
     assert(attributeReference.dataType == expectedSchema)
 
     checkAnswer(aggDF, Seq(Row("2016-03-27 19:39:25", "2016-03-27 19:39:40", 2)))
+  }
+
+  test("SPARK-38227: 'start' and 'end' fields should be nullable") {
+    // We expect the fields in window struct as nullable since the dataType of SessionWindow
+    // defines them as nullable. The rule 'SessionWindowing' should respect the dataType.
+    val df1 = Seq(
+      ("hello", "2016-03-27 09:00:05", 1),
+      ("structured", "2016-03-27 09:00:32", 2)).toDF("id", "time", "value")
+    val df2 = Seq(
+      ("world", LocalDateTime.parse("2016-03-27T09:00:05"), 1),
+      ("spark", LocalDateTime.parse("2016-03-27T09:00:32"), 2)).toDF("id", "time", "value")
+
+    val udf = spark.udf.register("gapDuration", (s: String) => {
+      if (s == "hello") {
+        "1 second"
+      } else if (s == "structured") {
+        // zero gap duration will be filtered out from aggregation
+        "0 second"
+      } else if (s == "world") {
+        // negative gap duration will be filtered out from aggregation
+        "-10 seconds"
+      } else {
+        "10 seconds"
+      }
+    })
+
+    def validateWindowColumnInSchema(schema: StructType, colName: String): Unit = {
+      schema.find(_.name == colName) match {
+        case Some(StructField(_, st: StructType, _, _)) =>
+          assertFieldInWindowStruct(st, "start")
+          assertFieldInWindowStruct(st, "end")
+
+        case _ => fail("Failed to find suitable window column from DataFrame!")
+      }
+    }
+
+    def assertFieldInWindowStruct(windowType: StructType, fieldName: String): Unit = {
+      val field = windowType.fields.find(_.name == fieldName)
+      assert(field.isDefined, s"'$fieldName' field should exist in window struct")
+      assert(field.get.nullable, s"'$fieldName' field should be nullable")
+    }
+
+    for {
+      df <- Seq(df1, df2)
+      nullable <- Seq(true, false)
+    } {
+      val dfWithDesiredNullability = new DataFrame(df.queryExecution, RowEncoder(
+        StructType(df.schema.fields.map(_.copy(nullable = nullable)))))
+      // session window without dynamic gap
+      val windowedProject = dfWithDesiredNullability
+        .select(session_window($"time", "10 seconds").as("session"), $"value")
+      val schema = windowedProject.queryExecution.optimizedPlan.schema
+      validateWindowColumnInSchema(schema, "session")
+
+      // session window with dynamic gap
+      val windowedProject2 = dfWithDesiredNullability
+        .select(session_window($"time", udf($"id")).as("session"), $"value")
+      val schema2 = windowedProject2.queryExecution.optimizedPlan.schema
+      validateWindowColumnInSchema(schema2, "session")
+    }
   }
 }

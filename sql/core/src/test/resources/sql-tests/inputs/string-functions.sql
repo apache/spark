@@ -141,14 +141,17 @@ select to_binary('abc');
 select to_binary('abc', 'utf-8');
 select to_binary('abc', 'base64');
 select to_binary('abc', 'hex');
+-- 'format' parameter can be any foldable string value, not just literal.
 select to_binary('abc', concat('utf', '-8'));
-select to_binary('abc', concat('base', '64'));
+-- 'format' parameter is case insensitive.
 select to_binary('abc', 'Hex');
-select to_binary('abc', 'UTF-8');
+-- null inputs lead to null result.
 select to_binary('abc', null);
 select to_binary(null, 'utf-8');
 select to_binary(null, null);
 select to_binary(null, cast(null as string));
+-- 'format' parameter must be string type or void type.
 select to_binary(null, cast(null as int));
-select to_binary('abc', 'invalidFormat');
 select to_binary('abc', 1);
+-- invalid inputs.
+select to_binary('abc', 'invalidFormat');

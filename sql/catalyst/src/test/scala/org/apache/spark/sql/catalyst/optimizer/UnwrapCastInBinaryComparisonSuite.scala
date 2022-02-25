@@ -212,7 +212,9 @@ class UnwrapCastInBinaryComparisonSuite extends PlanTest with ExpressionEvalHelp
   }
 
   test("unwrap cast should skip if cannot coerce type") {
-    assertEquivalent(Cast(f, ByteType) > 100.toByte, Cast(f, ByteType) > 100.toByte)
+    if (!conf.ansiEnabled) {
+      assertEquivalent(Cast(f, ByteType) > 100.toByte, Cast(f, ByteType) > 100.toByte)
+    }
   }
 
   test("test getRange()") {
