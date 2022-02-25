@@ -860,7 +860,7 @@ valueExpression
 
 primaryExpression
     : name=(CURRENT_DATE | CURRENT_TIMESTAMP | CURRENT_USER)                                   #currentLike
-    | TIMESTAMPADD '(' unit=identifier ',' unitsAmount=valueExpression ',' timestamp=valueExpression ')'  #timestampadd
+    | name=(TIMESTAMPADD | DATEADD) '(' unit=identifier ',' unitsAmount=valueExpression ',' timestamp=valueExpression ')'  #timestampadd
     | CASE whenClause+ (ELSE elseExpression=expression)? END                                   #searchedCase
     | CASE value=expression whenClause+ (ELSE elseExpression=expression)? END                  #simpleCase
     | name=(CAST | TRY_CAST) '(' expression AS dataType ')'                                    #cast
@@ -1130,6 +1130,7 @@ ansiNonReserved
     | DATA
     | DATABASE
     | DATABASES
+    | DATEADD
     | DAY
     | DBPROPERTIES
     | DEFINED
@@ -1377,6 +1378,7 @@ nonReserved
     | DATA
     | DATABASE
     | DATABASES
+    | DATEADD
     | DAY
     | DBPROPERTIES
     | DEFINED
@@ -1644,6 +1646,7 @@ DAY: 'DAY';
 DATA: 'DATA';
 DATABASE: 'DATABASE';
 DATABASES: 'DATABASES';
+DATEADD: 'DATEADD';
 DBPROPERTIES: 'DBPROPERTIES';
 DEFINED: 'DEFINED';
 DELETE: 'DELETE';
