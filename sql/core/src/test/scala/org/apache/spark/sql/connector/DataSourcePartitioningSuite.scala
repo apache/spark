@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.expressions.{Ascending, DataSourceBucketTra
 import org.apache.spark.sql.catalyst.plans.{physical => v1}
 import org.apache.spark.sql.catalyst.plans.physical.DataSourcePartitioning
 import org.apache.spark.sql.connector.catalog.Identifier
+import org.apache.spark.sql.connector.catalog.InMemoryTableCatalog
 import org.apache.spark.sql.connector.catalog.functions._
 import org.apache.spark.sql.connector.distributions.Distribution
 import org.apache.spark.sql.connector.distributions.Distributions
@@ -149,6 +150,29 @@ class DataSourcePartitioningSuite extends DistributionAndOrderingSuiteBase {
     checkQueryPlan(df, distribution, Seq.empty, v1.SinglePartition)
   }
 
+  test("non-clustered distribution: no V2 catalog") {
+    spark.conf.set("spark.sql.catalog.testcat2", classOf[InMemoryTableCatalog].getName)
+    val nonFunctionCatalog = spark.sessionState.catalogManager.catalog("testcat2")
+        .asInstanceOf[InMemoryTableCatalog]
+    val partitions: Array[Transform] = Array(bucket(32, "ts"))
+    createTable(table, schema, partitions,
+      Distributions.clustered(partitions.map(_.asInstanceOf[Expression])),
+      catalog = nonFunctionCatalog)
+    sql(s"INSERT INTO testcat2.ns.$table VALUES " +
+        s"(0, 'aaa', CAST('2022-01-01' AS timestamp)), " +
+        s"(1, 'bbb', CAST('2021-01-01' AS timestamp)), " +
+        s"(2, 'ccc', CAST('2020-01-01' AS timestamp))")
+
+    val df = sql(s"SELECT * FROM testcat2.ns.$table")
+    val distribution = v1.UnspecifiedDistribution
+
+    try {
+      checkQueryPlan(df, distribution, Seq.empty, v1.UnknownPartitioning(0))
+    } finally {
+      spark.conf.unset("spark.sql.catalog.testcat2")
+    }
+  }
+
   test("non-clustered distribution: no V2 function provided") {
     catalog.clearFunctions()
 
@@ -221,7 +245,8 @@ class DataSourcePartitioningSuite extends DistributionAndOrderingSuiteBase {
       schema: StructType,
       partitions: Array[Transform],
       distribution: Distribution = Distributions.unspecified(),
-      ordering: Array[expressions.SortOrder] = Array.empty): Unit = {
+      ordering: Array[expressions.SortOrder] = Array.empty,
+      catalog: InMemoryTableCatalog = catalog): Unit = {
     catalog.createTable(Identifier.of(Array("ns"), table),
       schema, partitions, emptyProps, distribution, ordering, None)
   }
