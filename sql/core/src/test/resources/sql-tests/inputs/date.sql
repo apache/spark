@@ -142,7 +142,13 @@ select from_json('{"d":"26/October/2015"}', 'd Date', map('dateFormat', 'dd/MMMM
 select from_csv('26/October/2015', 'd Date', map('dateFormat', 'dd/MMMMM/yyyy'));
 
 -- Add a number of units to a timestamp or a date
-select dateadd(MONTH, -1, timestamp'2022-02-25 01:02:03');
+select dateadd(MICROSECOND, 1001, timestamp'2022-02-25 01:02:03.123');
+select dateadd(MILLISECOND, -1, timestamp'2022-02-25 01:02:03.456');
 select dateadd(SECOND, 58, timestamp'2022-02-25 01:02:03');
+select dateadd(MINUTE, -100, date'2022-02-25');
+select dateadd(HOUR, -1, timestamp'2022-02-25 01:02:03');
+select dateadd(DAY, 367, date'2022-02-25');
+select dateadd(WEEK, -4, timestamp'2022-02-25 01:02:03');
+select dateadd(MONTH, -1, timestamp'2022-02-25 01:02:03');
+select dateadd(QUARTER, 5, date'2022-02-25');
 select dateadd(YEAR, 1, date'2022-02-25');
-select dateadd(HOUR, -1, date'2022-02-25');
