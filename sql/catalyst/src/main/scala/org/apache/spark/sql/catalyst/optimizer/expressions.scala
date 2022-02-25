@@ -632,30 +632,6 @@ object PushFoldableIntoBranches extends Rule[LogicalPlan] with PredicateHelper {
           branches.map(e => e.copy(_2 = u.withNewChildren(Array(e._2)))),
           Some(u.withNewChildren(Array(elseValue.getOrElse(Literal(null, c.dataType))))))
 
-      case SupportedBinaryExpr(s: StaticInvoke, i @ If(_, trueValue, falseValue), right)
-        if right.foldable && atMostOneUnfoldable(Seq(trueValue, falseValue)) =>
-        i.copy(
-          trueValue = s.copy(arguments = Seq(trueValue, right)),
-          falseValue = s.copy(arguments = Seq(falseValue, right)))
-
-      case SupportedBinaryExpr(s: StaticInvoke, left, i @ If(_, trueValue, falseValue))
-        if left.foldable && atMostOneUnfoldable(Seq(trueValue, falseValue)) =>
-        i.copy(
-          trueValue = s.copy(arguments = Seq(left, trueValue)),
-          falseValue = s.copy(arguments = Seq(left, falseValue)))
-
-      case SupportedBinaryExpr(s: StaticInvoke, c @ CaseWhen(branches, elseValue), right)
-        if right.foldable && atMostOneUnfoldable(branches.map(_._2) ++ elseValue) =>
-        c.copy(
-          branches.map(e => e.copy(_2 = s.copy(arguments = Array(e._2, right)))),
-          Some(s.copy(arguments = Array(elseValue.getOrElse(Literal(null, c.dataType)), right))))
-
-      case SupportedBinaryExpr(s: StaticInvoke, left, c @ CaseWhen(branches, elseValue))
-        if left.foldable && atMostOneUnfoldable(branches.map(_._2) ++ elseValue) =>
-        c.copy(
-          branches.map(e => e.copy(_2 = s.copy(arguments = Array(left, e._2)))),
-          Some(s.copy(arguments = Array(left, elseValue.getOrElse(Literal(null, c.dataType))))))
-
       case SupportedBinaryExpr(b, i @ If(_, trueValue, falseValue), right)
           if right.foldable && atMostOneUnfoldable(Seq(trueValue, falseValue)) =>
         i.copy(
