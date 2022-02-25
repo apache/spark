@@ -474,7 +474,7 @@ trait StringBinaryPredicateExpressionBuilderBase extends ExpressionBuilder {
     val numArgs = expressions.length
     if (numArgs == 2) {
       if (expressions(0).dataType == BinaryType && expressions(1).dataType == BinaryType) {
-        createBinaryPredicate(expressions(0), expressions(1))
+        BinaryStringPredicate(funcName, expressions(0), expressions(1))
       } else {
         createStringPredicate(expressions(0), expressions(1))
       }
@@ -484,7 +484,6 @@ trait StringBinaryPredicateExpressionBuilderBase extends ExpressionBuilder {
   }
 
   protected def funcName: String
-  protected def createBinaryPredicate(left: Expression, right: Expression): Expression
   protected def createStringPredicate(left: Expression, right: Expression): Expression
 }
 
@@ -494,6 +493,33 @@ object StringPredicate {
     case s @ StaticInvoke(clz, _, "contains" | "startsWith" | "endsWith", Seq(_, _), _, _, _, _)
       if clz == classOf[ByteArrayMethods] => Some(s)
     case _ => None
+  }
+}
+
+case class BinaryStringPredicate(funcName: String, left: Expression, right: Expression)
+  extends RuntimeReplaceable with ImplicitCastInputTypes {
+
+  private lazy val realFuncName = funcName match {
+    case "startswith" => "startsWith"
+    case "endswith" => "endsWith"
+    case name => name
+  }
+
+  override lazy val replacement =
+      StaticInvoke(
+        classOf[ByteArrayMethods],
+        BooleanType,
+        realFuncName,
+        Seq(left, right),
+        Seq(BinaryType, BinaryType))
+
+  override def prettyName: String = funcName
+  override def inputTypes: Seq[AbstractDataType] = Seq(BinaryType, BinaryType)
+  override def children: Seq[Expression] = Seq(left, right)
+
+  override protected def withNewChildrenInternal(
+    newChildren: IndexedSeq[Expression]): Expression = {
+    copy(left = newChildren(0), right = newChildren(1))
   }
 }
 
@@ -520,10 +546,6 @@ object StringPredicate {
 object ContainsExpressionBuilder extends StringBinaryPredicateExpressionBuilderBase {
   override protected def funcName: String = "contains"
 
-  override protected def createBinaryPredicate(left: Expression, right: Expression): Expression = {
-    new BinaryContains(left, right)
-  }
-
   override protected def createStringPredicate(left: Expression, right: Expression): Expression = {
     Contains(left, right)
   }
@@ -537,25 +559,6 @@ case class Contains(left: Expression, right: Expression) extends StringPredicate
   override def prettyName: String = "contains"
   override protected def withNewChildrenInternal(
     newLeft: Expression, newRight: Expression): Contains = copy(left = newLeft, right = newRight)
-}
-
-case class BinaryContains(left: Expression, right: Expression, replacement: Expression)
-  extends RuntimeReplaceable with InheritAnalysisRules {
-
-  def this(left: Expression, right: Expression) = {
-    this(left, right,
-      StaticInvoke(
-        classOf[ByteArrayMethods],
-        BooleanType,
-        "contains",
-        Seq(left, right),
-        Seq(BinaryType, BinaryType)))
-  }
-
-  override def parameters: Seq[Expression] = left :: right :: Nil
-  override def prettyName: String = "contains"
-  override protected def withNewChildInternal(newChild: Expression): BinaryContains =
-    copy(replacement = newChild)
 }
 
 @ExpressionDescription(
@@ -583,10 +586,6 @@ case class BinaryContains(left: Expression, right: Expression, replacement: Expr
 object StartsWithExpressionBuilder extends StringBinaryPredicateExpressionBuilderBase {
   override protected def funcName: String = "contains"
 
-  override protected def createBinaryPredicate(left: Expression, right: Expression): Expression = {
-    new BinaryStartsWith(left, right)
-  }
-
   override protected def createStringPredicate(left: Expression, right: Expression): Expression = {
     StartsWith(left, right)
   }
@@ -600,25 +599,6 @@ case class StartsWith(left: Expression, right: Expression) extends StringPredica
   override def prettyName: String = "startswith"
   override protected def withNewChildrenInternal(
     newLeft: Expression, newRight: Expression): StartsWith = copy(left = newLeft, right = newRight)
-}
-
-case class BinaryStartsWith(left: Expression, right: Expression, replacement: Expression)
-  extends RuntimeReplaceable with InheritAnalysisRules {
-
-  def this(left: Expression, right: Expression) = {
-    this(left, right,
-      StaticInvoke(
-        classOf[ByteArrayMethods],
-        BooleanType,
-        "startsWith",
-        Seq(left, right),
-        Seq(BinaryType, BinaryType)))
-  }
-
-  override def parameters: Seq[Expression] = left :: right :: Nil
-  override def prettyName: String = "startswith"
-  override protected def withNewChildInternal(newChild: Expression): BinaryStartsWith =
-    copy(replacement = newChild)
 }
 
 @ExpressionDescription(
@@ -646,10 +626,6 @@ case class BinaryStartsWith(left: Expression, right: Expression, replacement: Ex
 object EndsWithExpressionBuilder extends StringBinaryPredicateExpressionBuilderBase {
   override protected def funcName: String = "contains"
 
-  override protected def createBinaryPredicate(left: Expression, right: Expression): Expression = {
-    new BinaryEndsWith(left, right)
-  }
-
   override protected def createStringPredicate(left: Expression, right: Expression): Expression = {
     EndsWith(left, right)
   }
@@ -663,25 +639,6 @@ case class EndsWith(left: Expression, right: Expression) extends StringPredicate
   override def prettyName: String = "endswith"
   override protected def withNewChildrenInternal(
     newLeft: Expression, newRight: Expression): EndsWith = copy(left = newLeft, right = newRight)
-}
-
-case class BinaryEndsWith(left: Expression, right: Expression, replacement: Expression)
-  extends RuntimeReplaceable with InheritAnalysisRules {
-
-  def this(left: Expression, right: Expression) = {
-    this(left, right,
-      StaticInvoke(
-        classOf[ByteArrayMethods],
-        BooleanType,
-        "endsWith",
-        Seq(left, right),
-        Seq(BinaryType, BinaryType)))
-  }
-
-  override def parameters: Seq[Expression] = left :: right :: Nil
-  override def prettyName: String = "endswith"
-  override protected def withNewChildInternal(newChild: Expression): BinaryEndsWith =
-    copy(replacement = newChild)
 }
 
 /**
