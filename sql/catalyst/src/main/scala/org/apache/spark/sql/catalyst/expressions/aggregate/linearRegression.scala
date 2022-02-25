@@ -48,9 +48,7 @@ case class RegrCount(left: Expression, right: Expression)
 
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = """
-     _FUNC_(y, x) - Returns the average of the independent variable for non-null pairs in a group, where `y` is the dependent variable and `x` is the independent variable.
-  """,
+  usage = "_FUNC_(y, x) - Returns the average of the independent variable for non-null pairs in a group, where `y` is the dependent variable and `x` is the independent variable.",
   examples = """
     Examples:
       > SELECT _FUNC_(y, x) FROM VALUES (1, 2), (2, 2), (2, 3), (2, 4) AS tab(y, x);
@@ -80,9 +78,7 @@ case class RegrAvgX(left: Expression, right: Expression)
 
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = """
-     _FUNC_(y, x) - Returns the average of the dependent variable for non-null pairs in a group, where `y` is the dependent variable and `x` is the independent variable.
-  """,
+  usage = "_FUNC_(y, x) - Returns the average of the dependent variable for non-null pairs in a group, where `y` is the dependent variable and `x` is the independent variable.",
   examples = """
     Examples:
       > SELECT _FUNC_(y, x) FROM VALUES (1, 2), (2, 2), (2, 3), (2, 4) AS tab(y, x);
