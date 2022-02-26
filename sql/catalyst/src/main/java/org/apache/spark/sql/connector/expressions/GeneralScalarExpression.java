@@ -30,7 +30,11 @@ import org.apache.spark.sql.connector.util.V2ExpressionSQLBuilder;
  * <p>
  * The currently supported SQL scalar expressions:
  * <ol>
- *  <li><pre>Name: &lt;&gt;</pre><pre>SQL semantic: `expr1 &lt;&gt; expr2`</pre> ANSI enabled: No, Since version 3.3.0</li>
+ *  <li>Name: &lt;&gt;</li>
+ *  <ul>
+ *   <li>SQL semantic: `expr1 &lt;&gt; expr2`</li>
+ *   <li>Since version: 3.3.0</li>
+ *  </ul>
  * </ol>
  *
  * @since 3.3.0
