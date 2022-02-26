@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.expressions.aggregate
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions.{And, AttributeReference, EqualTo, Expression, ExpressionDescription, If, ImplicitCastInputTypes, IsNotNull, IsNull, Literal, Or, RuntimeReplaceableAggregate}
 import org.apache.spark.sql.catalyst.trees.BinaryLike
-import org.apache.spark.sql.types.{AbstractDataType, DataType, DoubleType, LongType, NumericType}
+import org.apache.spark.sql.types.{AbstractDataType, DataType, DoubleType, NumericType}
 
 // scalastyle:off line.size.limit
 @ExpressionDescription(
@@ -245,7 +245,7 @@ abstract class Regression
   override def dataType: DataType = DoubleType
   override def inputTypes: Seq[AbstractDataType] = Seq(DoubleType, DoubleType)
 
-  protected val count = AttributeReference("count", LongType)()
+  protected val count = AttributeReference("count", DoubleType)()
   protected val meanX = AttributeReference("meanX", DoubleType)()
   protected val meanY = AttributeReference("meanY", DoubleType)()
   protected val c2 = AttributeReference("c2", DoubleType)()
@@ -253,16 +253,14 @@ abstract class Regression
 
   override val aggBufferAttributes: Seq[AttributeReference] = Seq(count, meanX, meanY, c2, m2X)
 
-  override val initialValues: Seq[Expression] = Literal(0L) +: Array.fill(4)(Literal(0.0))
+  override val initialValues: Seq[Expression] = Array.fill(5)(Literal(0D))
 
   override lazy val updateExpressions: Seq[Expression] = {
-    val newCount = count + 1L
-    val oldMeanX = meanX
-    val newMeanX = oldMeanX + (right - oldMeanX) / newCount
-    val oldMeanY = meanY
-    val newMeanY = oldMeanY + (left - oldMeanY) / newCount
-    val newC2 = c2 + (right - oldMeanX) * (left - newMeanY)
-    val newM2X = m2X + (right - oldMeanX) * (right - newMeanX)
+    val newCount = count + 1D
+    val newMeanX = meanX + (right - meanX) / newCount
+    val newMeanY = meanY + (left - meanY) / newCount
+    val newC2 = c2 + (right - meanX) * (left - newMeanY)
+    val newM2X = m2X + (right - meanX) * (right - newMeanX)
 
     val isNull = left.isNull || right.isNull
     Seq(
@@ -275,17 +273,15 @@ abstract class Regression
   }
 
   override val mergeExpressions: Seq[Expression] = {
-    val count1 = count.left
-    val count2 = count.right
-    val newCount = count1 + count2
-    val multiplyCount = count1.cast(dataType) * count2
+    val newCount = count.left + count.right
+    val multiplyCount = count.left * count.right
     val newM2X =
       m2X.left + m2X.right + multiplyCount * Pow(meanX.left - meanX.right, 2) / newCount
     val deltaX = meanX.right - meanX.left
     val deltaY = meanY.right - meanY.left
     val newC2 = c2.left + c2.right + deltaX * deltaY * multiplyCount / newCount
-    val newMeanX = meanX.left + deltaX * count2 / newCount
-    val newMeanY = meanY.left + deltaY * count2 / newCount
+    val newMeanX = meanX.left + deltaX * count.right / newCount
+    val newMeanY = meanY.left + deltaY * count.right / newCount
 
     Seq(newCount, newMeanX, newMeanY, newC2, newM2X)
   }
@@ -307,7 +303,7 @@ abstract class Regression
   since = "3.3.0")
 // scalastyle:on line.size.limit
 case class RegrSlope(left: Expression, right: Expression) extends Regression {
-  override val evaluateExpression = If(count == 0L, Literal(null, dataType), c2 / m2X)
+  override val evaluateExpression = If(count == 0D, Literal(null, dataType), c2 / m2X)
   override def prettyName: String = "regr_slope"
   override protected def withNewChildrenInternal(
       newLeft: Expression, newRight: Expression): RegrSlope =
@@ -330,10 +326,8 @@ case class RegrSlope(left: Expression, right: Expression) extends Regression {
   since = "3.3.0")
 // scalastyle:on line.size.limit
 case class RegrIntercept(left: Expression, right: Expression) extends Regression {
-  override val evaluateExpression = {
-    lazy val slope = c2 / m2X
-    If(count == 0L, Literal(null, dataType), meanY - slope * meanX)
-  }
+  override val evaluateExpression =
+    If(count == 0D, Literal(null, dataType), meanY - (c2 / m2X) * meanX)
   override def prettyName: String = "regr_intercept"
   override protected def withNewChildrenInternal(
       newLeft: Expression, newRight: Expression): RegrIntercept =
