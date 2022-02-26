@@ -27,7 +27,7 @@ class V2ExpressionBuilder(e: Expression) {
 
   def build(): Option[V2Expression] = generateExpression(e)
 
-  private def canTranslate(b: BinaryArithmetic) = b match {
+  private def canTranslate(b: BinaryOperator) = b match {
     case add: Add => add.failOnError
     case sub: Subtract => sub.failOnError
     case mul: Multiply => mul.failOnError
@@ -49,7 +49,7 @@ class V2ExpressionBuilder(e: Expression) {
     case IsNotNull(col) => generateExpression(col)
       .map(c => new GeneralScalarExpression("IS_NOT_NULL", Array[V2Expression](c)))
     case b: BinaryOperator
-      if !b.isInstanceOf[BinaryArithmetic] || canTranslate(b.asInstanceOf[BinaryArithmetic]) =>
+      if !b.isInstanceOf[BinaryArithmetic] || canTranslate(b) =>
       val left = generateExpression(b.left)
       val right = generateExpression(b.right)
       if (left.isDefined && right.isDefined) {

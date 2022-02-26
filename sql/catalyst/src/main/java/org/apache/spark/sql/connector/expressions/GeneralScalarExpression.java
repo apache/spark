@@ -30,12 +30,159 @@ import org.apache.spark.sql.connector.util.V2ExpressionSQLBuilder;
  * <p>
  * The currently supported SQL scalar expressions:
  * <ol>
- *  <li>Name: &lt;&gt;</li>
- *  <ul>
- *   <li>SQL semantic: `expr1 &lt;&gt; expr2`</li>
- *   <li>Since version: 3.3.0</li>
- *  </ul>
+ *  <li>Name: IS_NULL
+ *   <ul>
+ *    <li>SQL semantic: `expr IS NULL`</li>
+ *    <li>Since version: 3.3.0</li>
+ *   </ul>
+ *  </li>
+ *  <li>Name: IS_NOT_NULL
+ *   <ul>
+ *    <li>SQL semantic: `expr IS NOT NULL`</li>
+ *    <li>Since version: 3.3.0</li>
+ *   </ul>
+ *  </li>
+ *  <li>Name: =
+ *   <ul>
+ *    <li>SQL semantic: `expr1 = expr2`</li>
+ *    <li>Since version: 3.3.0</li>
+ *   </ul>
+ *  </li>
+ *  <li>Name: !=
+ *   <ul>
+ *    <li>SQL semantic: `expr1 != expr2`</li>
+ *    <li>Since version: 3.3.0</li>
+ *   </ul>
+ *  </li>
+ *  <li>Name: &lt;&gt;
+ *   <ul>
+ *    <li>SQL semantic: `expr1 &lt;&gt; expr2`</li>
+ *    <li>Since version: 3.3.0</li>
+ *   </ul>
+ *  </li>
+ *  <li>Name: &lt;=&gt;
+ *   <ul>
+ *    <li>SQL semantic: `expr1 &lt;=&gt; expr2`</li>
+ *    <li>Since version: 3.3.0</li>
+ *   </ul>
+ *  </li>
+ *  <li>Name: &lt;
+ *   <ul>
+ *    <li>SQL semantic: `expr1 &lt; expr2`</li>
+ *    <li>Since version: 3.3.0</li>
+ *   </ul>
+ *  </li>
+ *  <li>Name: &lt;=
+ *   <ul>
+ *    <li>SQL semantic: `expr1 &lt;= expr2`</li>
+ *    <li>Since version: 3.3.0</li>
+ *   </ul>
+ *  </li>
+ *  <li>Name: &gt;
+ *   <ul>
+ *    <li>SQL semantic: `expr1 &gt; expr2`</li>
+ *    <li>Since version: 3.3.0</li>
+ *   </ul>
+ *  </li>
+ *  <li>Name: &gt;=
+ *   <ul>
+ *    <li>SQL semantic: `expr1 &gt;= expr2`</li>
+ *    <li>Since version: 3.3.0</li>
+ *   </ul>
+ *  </li>
+ *  <li>Name: +
+ *   <ul>
+ *    <li>SQL semantic: `expr1 + expr2`</li>
+ *    <li>Since version: 3.3.0</li>
+ *   </ul>
+ *  </li>
+ *  <li>Name: -
+ *   <ul>
+ *    <li>SQL semantic: `expr1 - expr2`</li>
+ *    <li>Since version: 3.3.0</li>
+ *   </ul>
+ *  </li>
+ *  <li>Name: *
+ *   <ul>
+ *    <li>SQL semantic: `expr1 * expr2`</li>
+ *    <li>Since version: 3.3.0</li>
+ *   </ul>
+ *  </li>
+ *  <li>Name: /
+ *   <ul>
+ *    <li>SQL semantic: `expr1 / expr2`</li>
+ *    <li>Since version: 3.3.0</li>
+ *   </ul>
+ *  </li>
+ *  <li>Name: %
+ *   <ul>
+ *    <li>SQL semantic: `expr1 % expr2`</li>
+ *    <li>Since version: 3.3.0</li>
+ *   </ul>
+ *  </li>
+ *  <li>Name: pmod
+ *   <ul>
+ *    <li>SQL semantic: `pmod(expr1, expr2)`</li>
+ *    <li>Since version: 3.3.0</li>
+ *   </ul>
+ *  </li>
+ *  <li>Name: &amp;&amp;
+ *   <ul>
+ *    <li>SQL semantic: `expr1 &amp;&amp; expr2`</li>
+ *    <li>Since version: 3.3.0</li>
+ *   </ul>
+ *  </li>
+ *  <li>Name: ||
+ *   <ul>
+ *    <li>SQL semantic: `expr1 || expr2`</li>
+ *    <li>Since version: 3.3.0</li>
+ *   </ul>
+ *  </li>
+ *  <li>Name: AND
+ *   <ul>
+ *    <li>SQL semantic: `expr1 AND expr2`</li>
+ *    <li>Since version: 3.3.0</li>
+ *   </ul>
+ *  </li>
+ *  <li>Name: OR
+ *   <ul>
+ *    <li>SQL semantic: `expr1 OR expr2`</li>
+ *    <li>Since version: 3.3.0</li>
+ *   </ul>
+ *  </li>
+ *  <li>Name: &amp;
+ *   <ul>
+ *    <li>SQL semantic: `expr1 &amp; expr2`</li>
+ *    <li>Since version: 3.3.0</li>
+ *   </ul>
+ *  </li>
+ *  <li>Name: |
+ *   <ul>
+ *    <li>SQL semantic: `expr1 | expr2`</li>
+ *    <li>Since version: 3.3.0</li>
+ *   </ul>
+ *  </li>
+ *  <li>Name: ^
+ *   <ul>
+ *    <li>SQL semantic: `expr1 ^ expr2`</li>
+ *    <li>Since version: 3.3.0</li>
+ *   </ul>
+ *  </li>
+ *  <li>Name: NOT
+ *   <ul>
+ *    <li>SQL semantic: `NOT expr`</li>
+ *    <li>Since version: 3.3.0</li>
+ *   </ul>
+ *  </li>
+ *  <li>Name: CASE_WHEN
+ *   <ul>
+ *    <li>SQL semantic: `CASE WHEN expr1 THEN expr2 [WHEN expr3 THEN expr4]* [ELSE expr5] END`</li>
+ *    <li>Since version: 3.3.0</li>
+ *   </ul>
+ *  </li>
  * </ol>
+ * Note: SQL semantic conforms ANSI standard, so some expressions are not supported when ANSI off,
+ * including: add, subtract, multiply, divide, remainder, pmod.
  *
  * @since 3.3.0
  */
