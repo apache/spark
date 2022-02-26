@@ -166,7 +166,7 @@ class DistinctKeyVisitorSuite extends PlanTest {
   }
 
   test("WithCTE's distinct attributes") {
-    checkDistinctAttributes(WithCTE(Distinct(t1), mutable.ArrayBuffer.empty[CTERelationDef]),
+    checkDistinctAttributes(WithCTE(Distinct(t1), mutable.ArrayBuffer.empty[CTERelationDef].toSeq),
       Set(ExpressionSet(Seq(a, b, c))))
   }
 }
