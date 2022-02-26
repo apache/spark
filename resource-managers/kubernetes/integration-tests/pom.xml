@@ -43,7 +43,7 @@
     <spark.kubernetes.test.master></spark.kubernetes.test.master>
     <spark.kubernetes.test.namespace></spark.kubernetes.test.namespace>
     <spark.kubernetes.test.serviceAccountName></spark.kubernetes.test.serviceAccountName>
-    <spark.kubernetes.test.dockerFile>resource-managers/kubernetes/docker/src/main/dockerfiles/spark/Dockerfile.java17</spark.kubernetes.test.dockerFile>
+    <spark.kubernetes.test.dockerFile>Dockerfile.java17</spark.kubernetes.test.dockerFile>
 
     <test.exclude.tags></test.exclude.tags>
     <test.include.tags></test.include.tags>
