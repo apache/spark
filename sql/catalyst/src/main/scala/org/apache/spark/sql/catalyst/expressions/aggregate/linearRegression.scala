@@ -257,10 +257,11 @@ abstract class Regression
 
   override lazy val updateExpressions: Seq[Expression] = {
     val newCount = count + 1D
-    val newMeanX = meanX + (right - meanX) / newCount
+    val rightMeanX = right - meanX
+    val newMeanX = meanX + rightMeanX / newCount
     val newMeanY = meanY + (left - meanY) / newCount
-    val newC2 = c2 + (right - meanX) * (left - newMeanY)
-    val newM2X = m2X + (right - meanX) * (right - newMeanX)
+    val newC2 = c2 + rightMeanX * (left - newMeanY)
+    val newM2X = m2X + rightMeanX * (right - newMeanX)
 
     val isNull = left.isNull || right.isNull
     Seq(
@@ -275,8 +276,8 @@ abstract class Regression
   override val mergeExpressions: Seq[Expression] = {
     val newCount = count.left + count.right
     val multiplyCount = count.left * count.right
-    val newM2X =
-      m2X.left + m2X.right + multiplyCount * Pow(meanX.left - meanX.right, 2) / newCount
+    val subMean = meanX.left - meanX.right
+    val newM2X = m2X.left + m2X.right + multiplyCount * subMean * subMean / newCount
     val deltaX = meanX.right - meanX.left
     val deltaY = meanY.right - meanY.left
     val newC2 = c2.left + c2.right + deltaX * deltaY * multiplyCount / newCount
