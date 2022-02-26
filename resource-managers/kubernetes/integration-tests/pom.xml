@@ -92,6 +92,7 @@
           <configuration>
             <excludes>
               <exclude>${volcano.exclude}</exclude>
+              <exclude>${yunikorn.exclude}</exclude>
             </excludes>
           </configuration>
         </plugin>
@@ -241,6 +242,12 @@
           <version>${kubernetes-client.version}</version>
         </dependency>
       </dependencies>
+    </profile>
+    <profile>
+      <id>yunikorn</id>
+      <properties>
+        <yunikorn.exclude></yunikorn.exclude>
+      </properties>
     </profile>
   </profiles>
 </project>

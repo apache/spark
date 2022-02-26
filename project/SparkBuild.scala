@@ -426,6 +426,11 @@ object SparkBuild extends PomBuild {
     enable(Volcano.settings)(kubernetesIntegrationTests)
   }
 
+  if (!profiles.contains("yunikorn")) {
+    enable(YuniKorn.settings)(kubernetes)
+    enable(YuniKorn.settings)(kubernetesIntegrationTests)
+  }
+
   enable(KubernetesIntegrationTests.settings)(kubernetesIntegrationTests)
 
   enable(YARN.settings)(yarn)
@@ -971,6 +976,12 @@ object Volcano {
   lazy val settings = Seq(
     unmanagedSources / excludeFilter := HiddenFileFilter || "*Volcano*.scala"
   )
+}
+
+object YuniKorn {
+  // Exclude all yunikorn file for Compile and Test
+  lazy val settings = Seq(
+    unmanagedSources / excludeFilter := HiddenFileFilter || "*YuniKorn*.scala")
 }
 
 object Unidoc {
