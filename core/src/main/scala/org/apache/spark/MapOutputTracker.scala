@@ -1177,7 +1177,7 @@ private[spark] class MapOutputTrackerMaster(
   override def getMapSizesForMergeResult(
       shuffleId: Int,
       partitionId: Int): Iterator[(BlockManagerId, Seq[(BlockId, Long, Int)])] = {
-    Seq.empty.toIterator
+    Seq.empty.iterator
   }
 
   // This method is only called in local-mode. Since push based shuffle won't be
@@ -1186,7 +1186,7 @@ private[spark] class MapOutputTrackerMaster(
       shuffleId: Int,
       partitionId: Int,
       chunkTracker: RoaringBitmap): Iterator[(BlockManagerId, Seq[(BlockId, Long, Int)])] = {
-    Seq.empty.toIterator
+    Seq.empty.iterator
   }
 
   // This method is only called in local-mode.

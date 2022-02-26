@@ -272,7 +272,7 @@ private[spark] object CryptoStreamUtils extends Logging {
       cipherStream.write(b, off, len)
     }
 
-    override def write(b: Int): Unit = safeCall {
+    override def write(b: Int): Unit = safeCal
       cipherStream.write(b)
     }
   }

@@ -33,7 +33,7 @@ import org.apache.spark.sql.types._
 private[execution] sealed case class LazyIterator(func: () => TraversableOnce[InternalRow])
   extends Iterator[InternalRow] {
 
-  lazy val results: Iterator[InternalRow] = func().toIterator
+  lazy val results: Iterator[InternalRow] = func().iterator
   override def hasNext: Boolean = results.hasNext
   override def next(): InternalRow = results.next()
 }
@@ -96,7 +96,7 @@ case class GenerateExec(
           if (outer && outputRows.isEmpty) {
             joinedRow.withRight(generatorNullRow) :: Nil
           } else {
-            outputRows.toIterator.map(joinedRow.withRight)
+            outputRows.iterator.map(joinedRow.withRight)
           }
         } ++ LazyIterator(() => boundGenerator.terminate()).map { row =>
           // we leave the left side as the last element of its child output
