@@ -46,12 +46,10 @@ public class ShuffleIndexInformation {
     }
   }
 
-  /**
-   * Size of the index file
-   * @return size
-   */
   public int getRetainedMemorySize() {
     // SPARK-33206: here the offsets' capacity is multiplied by 8 as offsets stores long values.
+    // Integer overflow won't be an issue here as long as the number of reducers is under
+    // (Integer.MAX_VALUE - INSTANCE_MEMORY_FOOTPRINT) / 8 - 1 = 268435432.
     return (offsets.capacity() << 3) + INSTANCE_MEMORY_FOOTPRINT;
   }
 
