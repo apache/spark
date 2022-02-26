@@ -30,6 +30,7 @@ import org.apache.spark.sql.catalyst.analysis.{ExpressionBuilder, FunctionRegist
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
+import org.apache.spark.sql.catalyst.trees.BinaryLike
 import org.apache.spark.sql.catalyst.trees.TreePattern.{TreePattern, UPPER_OR_LOWER}
 import org.apache.spark.sql.catalyst.util.{ArrayData, GenericArrayData, TypeUtils}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
@@ -361,15 +362,19 @@ case class Elt(
     ev.copy(
       code"""
          |${index.code}
-         |final int $indexVal = ${index.value};
-         |${CodeGenerator.JAVA_BOOLEAN} $indexMatched = false;
-         |$inputVal = null;
-         |do {
-         |  $codes
-         |} while (false);
-         |$indexOutOfBoundBranch
-         |final ${CodeGenerator.javaType(dataType)} ${ev.value} = $inputVal;
-         |final boolean ${ev.isNull} = ${ev.value} == null;
+         |boolean ${ev.isNull} = ${index.isNull};
+         |${CodeGenerator.javaType(dataType)} ${ev.value} = null;
+         |if (!${index.isNull}) {
+         |  final int $indexVal = ${index.value};
+         |  ${CodeGenerator.JAVA_BOOLEAN} $indexMatched = false;
+         |  $inputVal = null;
+         |  do {
+         |    $codes
+         |  } while (false);
+         |  $indexOutOfBoundBranch
+         |  ${ev.value} = $inputVal;
+         |  ${ev.isNull} = ${ev.value} == null;
+         |}
        """.stripMargin)
   }
 
@@ -1047,8 +1052,8 @@ case class StringTrim(srcStr: Expression, trimStr: Option[Expression] = None)
   """,
   since = "3.2.0",
   group = "string_funcs")
-case class StringTrimBoth(srcStr: Expression, trimStr: Option[Expression], child: Expression)
-  extends RuntimeReplaceable {
+case class StringTrimBoth(srcStr: Expression, trimStr: Option[Expression], replacement: Expression)
+  extends RuntimeReplaceable with InheritAnalysisRules {
 
   def this(srcStr: Expression, trimStr: Expression) = {
     this(srcStr, Option(trimStr), StringTrim(srcStr, trimStr))
@@ -1058,13 +1063,12 @@ case class StringTrimBoth(srcStr: Expression, trimStr: Option[Expression], child
     this(srcStr, None, StringTrim(srcStr))
   }
 
-  override def exprsReplaced: Seq[Expression] = srcStr +: trimStr.toSeq
-  override def flatArguments: Iterator[Any] = Iterator(srcStr, trimStr)
-
   override def prettyName: String = "btrim"
 
+  override def parameters: Seq[Expression] = srcStr +: trimStr.toSeq
+
   override protected def withNewChildInternal(newChild: Expression): StringTrimBoth =
-    copy(child = newChild)
+    copy(replacement = newChild)
 }
 
 object StringTrimLeft {
@@ -1376,17 +1380,17 @@ case class StringLocate(substr: Expression, str: Expression, start: Expression)
 }
 
 trait PadExpressionBuilderBase extends ExpressionBuilder {
-  override def build(expressions: Seq[Expression]): Expression = {
+  override def build(funcName: String, expressions: Seq[Expression]): Expression = {
     val numArgs = expressions.length
     if (numArgs == 2) {
       if (expressions(0).dataType == BinaryType) {
-        createBinaryPad(expressions(0), expressions(1), Literal(Array[Byte](0)))
+        BinaryPad(funcName, expressions(0), expressions(1), Literal(Array[Byte](0)))
       } else {
         createStringPad(expressions(0), expressions(1), Literal(" "))
       }
     } else if (numArgs == 3) {
       if (expressions(0).dataType == BinaryType && expressions(2).dataType == BinaryType) {
-        createBinaryPad(expressions(0), expressions(1), expressions(2))
+        BinaryPad(funcName, expressions(0), expressions(1), expressions(2))
       } else {
         createStringPad(expressions(0), expressions(1), expressions(2))
       }
@@ -1395,8 +1399,6 @@ trait PadExpressionBuilderBase extends ExpressionBuilder {
     }
   }
 
-  protected def funcName: String
-  protected def createBinaryPad(str: Expression, len: Expression, pad: Expression): Expression
   protected def createStringPad(str: Expression, len: Expression, pad: Expression): Expression
 }
 
@@ -1423,10 +1425,6 @@ trait PadExpressionBuilderBase extends ExpressionBuilder {
   since = "1.5.0",
   group = "string_funcs")
 object LPadExpressionBuilder extends PadExpressionBuilderBase {
-  override def funcName: String = "lpad"
-  override def createBinaryPad(str: Expression, len: Expression, pad: Expression): Expression = {
-    new BinaryLPad(str, len, pad)
-  }
   override def createStringPad(str: Expression, len: Expression, pad: Expression): Expression = {
     StringLPad(str, len, pad)
   }
@@ -1459,21 +1457,28 @@ case class StringLPad(str: Expression, len: Expression, pad: Expression)
     copy(str = newFirst, len = newSecond, pad = newThird)
 }
 
-case class BinaryLPad(str: Expression, len: Expression, pad: Expression, child: Expression)
-  extends RuntimeReplaceable {
+case class BinaryPad(funcName: String, str: Expression, len: Expression, pad: Expression)
+  extends RuntimeReplaceable with ImplicitCastInputTypes {
+  assert(funcName == "lpad" || funcName == "rpad")
 
-  def this(str: Expression, len: Expression, pad: Expression) = this(str, len, pad, StaticInvoke(
+  override lazy val replacement: Expression = StaticInvoke(
     classOf[ByteArray],
     BinaryType,
-    "lpad",
+    funcName,
     Seq(str, len, pad),
-    Seq(BinaryType, IntegerType, BinaryType),
+    inputTypes,
     returnNullable = false)
-  )
 
-  override def prettyName: String = "lpad"
-  def exprsReplaced: Seq[Expression] = Seq(str, len, pad)
-  protected def withNewChildInternal(newChild: Expression): BinaryLPad = copy(child = newChild)
+  override def inputTypes: Seq[AbstractDataType] = Seq(BinaryType, IntegerType, BinaryType)
+
+  override def nodeName: String = funcName
+
+  override def children: Seq[Expression] = Seq(str, len, pad)
+
+  override protected def withNewChildrenInternal(
+      newChildren: IndexedSeq[Expression]): Expression = {
+    copy(str = newChildren(0), len = newChildren(1), pad = newChildren(2))
+  }
 }
 
 @ExpressionDescription(
@@ -1499,10 +1504,6 @@ case class BinaryLPad(str: Expression, len: Expression, pad: Expression, child: 
   since = "1.5.0",
   group = "string_funcs")
 object RPadExpressionBuilder extends PadExpressionBuilderBase {
-  override def funcName: String = "rpad"
-  override def createBinaryPad(str: Expression, len: Expression, pad: Expression): Expression = {
-    new BinaryRPad(str, len, pad)
-  }
   override def createStringPad(str: Expression, len: Expression, pad: Expression): Expression = {
     StringRPad(str, len, pad)
   }
@@ -1533,23 +1534,6 @@ case class StringRPad(str: Expression, len: Expression, pad: Expression = Litera
   override protected def withNewChildrenInternal(
       newFirst: Expression, newSecond: Expression, newThird: Expression): StringRPad =
     copy(str = newFirst, len = newSecond, pad = newThird)
-}
-
-case class BinaryRPad(str: Expression, len: Expression, pad: Expression, child: Expression)
-  extends RuntimeReplaceable {
-
-  def this(str: Expression, len: Expression, pad: Expression) = this(str, len, pad, StaticInvoke(
-    classOf[ByteArray],
-    BinaryType,
-    "rpad",
-    Seq(str, len, pad),
-    Seq(BinaryType, IntegerType, BinaryType),
-    returnNullable = false)
-  )
-
-  override def prettyName: String = "rpad"
-  def exprsReplaced: Seq[Expression] = Seq(str, len, pad)
-  protected def withNewChildInternal(newChild: Expression): BinaryRPad = copy(child = newChild)
 }
 
 object ParseUrl {
@@ -2025,16 +2009,26 @@ case class Substring(str: Expression, pos: Expression, len: Expression)
   since = "2.3.0",
   group = "string_funcs")
 // scalastyle:on line.size.limit
-case class Right(str: Expression, len: Expression, child: Expression) extends RuntimeReplaceable {
-  def this(str: Expression, len: Expression) = {
-    this(str, len, If(IsNull(str), Literal(null, StringType), If(LessThanOrEqual(len, Literal(0)),
-      Literal(UTF8String.EMPTY_UTF8, StringType), new Substring(str, UnaryMinus(len)))))
+case class Right(str: Expression, len: Expression) extends RuntimeReplaceable
+  with ImplicitCastInputTypes with BinaryLike[Expression] {
+
+  override lazy val replacement: Expression = If(
+    IsNull(str),
+    Literal(null, StringType),
+    If(
+      LessThanOrEqual(len, Literal(0)),
+      Literal(UTF8String.EMPTY_UTF8, StringType),
+      new Substring(str, UnaryMinus(len))
+    )
+  )
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(StringType, IntegerType)
+  override def left: Expression = str
+  override def right: Expression = len
+  override protected def withNewChildrenInternal(
+      newLeft: Expression, newRight: Expression): Expression = {
+    copy(str = newLeft, len = newRight)
   }
-
-  override def flatArguments: Iterator[Any] = Iterator(str, len)
-  override def exprsReplaced: Seq[Expression] = Seq(str, len)
-
-  override protected def withNewChildInternal(newChild: Expression): Right = copy(child = newChild)
 }
 
 /**
@@ -2051,14 +2045,21 @@ case class Right(str: Expression, len: Expression, child: Expression) extends Ru
   since = "2.3.0",
   group = "string_funcs")
 // scalastyle:on line.size.limit
-case class Left(str: Expression, len: Expression, child: Expression) extends RuntimeReplaceable {
-  def this(str: Expression, len: Expression) = {
-    this(str, len, Substring(str, Literal(1), len))
+case class Left(str: Expression, len: Expression) extends RuntimeReplaceable
+  with ImplicitCastInputTypes with BinaryLike[Expression] {
+
+  override lazy val replacement: Expression = Substring(str, Literal(1), len)
+
+  override def inputTypes: Seq[AbstractDataType] = {
+    Seq(TypeCollection(StringType, BinaryType), IntegerType)
   }
 
-  override def flatArguments: Iterator[Any] = Iterator(str, len)
-  override def exprsReplaced: Seq[Expression] = Seq(str, len)
-  override protected def withNewChildInternal(newChild: Expression): Left = copy(child = newChild)
+  override def left: Expression = str
+  override def right: Expression = len
+  override protected def withNewChildrenInternal(
+      newLeft: Expression, newRight: Expression): Expression = {
+    copy(str = newLeft, len = newRight)
+  }
 }
 
 /**
@@ -2438,16 +2439,16 @@ object Decode {
   since = "3.2.0",
   group = "string_funcs")
 // scalastyle:on line.size.limit
-case class Decode(params: Seq[Expression], child: Expression) extends RuntimeReplaceable {
+case class Decode(params: Seq[Expression], replacement: Expression)
+  extends RuntimeReplaceable with InheritAnalysisRules {
 
-  def this(params: Seq[Expression]) = {
-    this(params, Decode.createExpr(params))
+  def this(params: Seq[Expression]) = this(params, Decode.createExpr(params))
+
+  override def parameters: Seq[Expression] = params
+
+  override protected def withNewChildInternal(newChild: Expression): Expression = {
+    copy(replacement = newChild)
   }
-
-  override def flatArguments: Iterator[Any] = Iterator(params)
-  override def exprsReplaced: Seq[Expression] = params
-
-  override protected def withNewChildInternal(newChild: Expression): Decode = copy(child = newChild)
 }
 
 /**
@@ -2557,56 +2558,52 @@ case class Encode(value: Expression, charset: Expression)
   since = "3.3.0",
   group = "string_funcs")
 // scalastyle:on line.size.limit
-case class ToBinary(expr: Expression, format: Option[Expression], child: Expression)
-  extends RuntimeReplaceable {
+case class ToBinary(expr: Expression, format: Option[Expression]) extends RuntimeReplaceable
+  with ImplicitCastInputTypes {
 
-  def this(expr: Expression, format: Expression) = this(expr, Option(format),
-    format match {
-      case lit if (lit.foldable && Seq(StringType, NullType).contains(lit.dataType)) =>
-        val value = lit.eval()
-        if (value == null) Literal(null, BinaryType)
-        else {
-          value.asInstanceOf[UTF8String].toString.toLowerCase(Locale.ROOT) match {
-            case "hex" => Unhex(expr)
-            case "utf-8" => Encode(expr, Literal("UTF-8"))
-            case "base64" => UnBase64(expr)
-            case _ => lit
-          }
-        }
-
-      case other => other
+  override lazy val replacement: Expression = format.map { f =>
+    assert(f.foldable && (f.dataType == StringType || f.dataType == NullType))
+    val value = f.eval()
+    if (value == null) {
+      Literal(null, BinaryType)
+    } else {
+      value.asInstanceOf[UTF8String].toString.toLowerCase(Locale.ROOT) match {
+        case "hex" => Unhex(expr)
+        case "utf-8" => Encode(expr, Literal("UTF-8"))
+        case "base64" => UnBase64(expr)
+        case other => throw QueryCompilationErrors.invalidStringLiteralParameter(
+          "to_binary", "format", other,
+          Some("The value has to be a case-insensitive string literal of " +
+            "'hex', 'utf-8', or 'base64'."))
+      }
     }
-  )
+  }.getOrElse(Unhex(expr))
 
-  def this(expr: Expression) = this(expr, None, Unhex(expr))
+  def this(expr: Expression) = this(expr, None)
 
-  override def flatArguments: Iterator[Any] = Iterator(expr, format)
-  override def exprsReplaced: Seq[Expression] = expr +: format.toSeq
+  def this(expr: Expression, format: Expression) = this(expr, Some({
+    // We perform this check in the constructor to make it eager and not go through type coercion.
+    if (format.foldable && (format.dataType == StringType || format.dataType == NullType)) {
+      format
+    } else {
+      throw QueryCompilationErrors.requireLiteralParameter("to_binary", "format", "string")
+    }
+  }))
 
   override def prettyName: String = "to_binary"
-  override def dataType: DataType = BinaryType
 
-  override def checkInputDataTypes(): TypeCheckResult = {
-    def checkFormat(lit: Expression) = {
-      if (lit.foldable && Seq(StringType, NullType).contains(lit.dataType)) {
-        val value = lit.eval()
-        value == null ||
-          Seq("hex", "utf-8", "base64").contains(
-            value.asInstanceOf[UTF8String].toString.toLowerCase(Locale.ROOT))
-      } else false
-    }
+  override def children: Seq[Expression] = expr +: format.toSeq
 
-    if (format.forall(checkFormat)) {
-      super.checkInputDataTypes()
+  override def inputTypes: Seq[AbstractDataType] = children.map(_ => StringType)
+
+  override protected def withNewChildrenInternal(
+      newChildren: IndexedSeq[Expression]): Expression = {
+    if (format.isDefined) {
+      copy(expr = newChildren.head, format = Some(newChildren.last))
     } else {
-      TypeCheckResult.TypeCheckFailure(
-        s"Unsupported encoding format: $format. The format has to be " +
-          s"a case-insensitive string literal of 'hex', 'utf-8', or 'base64'")
+      copy(expr = newChildren.head)
     }
   }
-
-  override protected def withNewChildInternal(newChild: Expression): ToBinary =
-    copy(child = newChild)
 }
 
 /**

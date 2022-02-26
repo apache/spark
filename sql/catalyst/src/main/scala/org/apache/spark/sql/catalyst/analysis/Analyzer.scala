@@ -3893,11 +3893,13 @@ object TimeWindowing extends Rule[LogicalPlan] {
           val windowStart = lastStart - i * window.slideDuration
           val windowEnd = windowStart + window.windowDuration
 
+          // We make sure value fields are nullable since the dataType of TimeWindow defines them
+          // as nullable.
           CreateNamedStruct(
             Literal(WINDOW_START) ::
-              PreciseTimestampConversion(windowStart, LongType, dataType) ::
+              PreciseTimestampConversion(windowStart, LongType, dataType).castNullable() ::
               Literal(WINDOW_END) ::
-              PreciseTimestampConversion(windowEnd, LongType, dataType) ::
+              PreciseTimestampConversion(windowEnd, LongType, dataType).castNullable() ::
               Nil)
         }
 
@@ -4012,11 +4014,15 @@ object SessionWindowing extends Rule[LogicalPlan] {
         val sessionEnd = PreciseTimestampConversion(session.timeColumn + gapDuration,
           session.timeColumn.dataType, LongType)
 
+        // We make sure value fields are nullable since the dataType of SessionWindow defines them
+        // as nullable.
         val literalSessionStruct = CreateNamedStruct(
           Literal(SESSION_START) ::
-            PreciseTimestampConversion(sessionStart, LongType, session.timeColumn.dataType) ::
+            PreciseTimestampConversion(sessionStart, LongType, session.timeColumn.dataType)
+              .castNullable() ::
             Literal(SESSION_END) ::
-            PreciseTimestampConversion(sessionEnd, LongType, session.timeColumn.dataType) ::
+            PreciseTimestampConversion(sessionEnd, LongType, session.timeColumn.dataType)
+              .castNullable() ::
             Nil)
 
         val sessionStruct = Alias(literalSessionStruct, SESSION_COL_NAME)(

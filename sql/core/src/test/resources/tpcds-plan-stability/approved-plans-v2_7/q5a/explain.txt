@@ -183,7 +183,7 @@ Input [5]: [s_store_id#24, sum#30, sum#31, sum#32, sum#33]
 Keys [1]: [s_store_id#24]
 Functions [4]: [sum(UnscaledValue(sales_price#8)), sum(UnscaledValue(return_amt#10)), sum(UnscaledValue(profit#9)), sum(UnscaledValue(net_loss#11))]
 Aggregate Attributes [4]: [sum(UnscaledValue(sales_price#8))#35, sum(UnscaledValue(return_amt#10))#36, sum(UnscaledValue(profit#9))#37, sum(UnscaledValue(net_loss#11))#38]
-Results [5]: [store channel AS channel#39, concat(store, s_store_id#24) AS id#40, MakeDecimal(sum(UnscaledValue(sales_price#8))#35,17,2) AS sales#41, MakeDecimal(sum(UnscaledValue(return_amt#10))#36,17,2) AS returns#42, CheckOverflow((promote_precision(cast(MakeDecimal(sum(UnscaledValue(profit#9))#37,17,2) as decimal(18,2))) - promote_precision(cast(MakeDecimal(sum(UnscaledValue(net_loss#11))#38,17,2) as decimal(18,2)))), DecimalType(18,2), true) AS profit#43]
+Results [5]: [store channel AS channel#39, concat(store, s_store_id#24) AS id#40, MakeDecimal(sum(UnscaledValue(sales_price#8))#35,17,2) AS sales#41, MakeDecimal(sum(UnscaledValue(return_amt#10))#36,17,2) AS returns#42, CheckOverflow((promote_precision(cast(MakeDecimal(sum(UnscaledValue(profit#9))#37,17,2) as decimal(18,2))) - promote_precision(cast(MakeDecimal(sum(UnscaledValue(net_loss#11))#38,17,2) as decimal(18,2)))), DecimalType(18,2)) AS profit#43]
 
 (22) Scan parquet default.catalog_sales
 Output [4]: [cs_catalog_page_sk#44, cs_ext_sales_price#45, cs_net_profit#46, cs_sold_date_sk#47]
@@ -280,7 +280,7 @@ Input [5]: [cp_catalog_page_id#66, sum#72, sum#73, sum#74, sum#75]
 Keys [1]: [cp_catalog_page_id#66]
 Functions [4]: [sum(UnscaledValue(sales_price#50)), sum(UnscaledValue(return_amt#52)), sum(UnscaledValue(profit#51)), sum(UnscaledValue(net_loss#53))]
 Aggregate Attributes [4]: [sum(UnscaledValue(sales_price#50))#77, sum(UnscaledValue(return_amt#52))#78, sum(UnscaledValue(profit#51))#79, sum(UnscaledValue(net_loss#53))#80]
-Results [5]: [catalog channel AS channel#81, concat(catalog_page, cp_catalog_page_id#66) AS id#82, MakeDecimal(sum(UnscaledValue(sales_price#50))#77,17,2) AS sales#83, MakeDecimal(sum(UnscaledValue(return_amt#52))#78,17,2) AS returns#84, CheckOverflow((promote_precision(cast(MakeDecimal(sum(UnscaledValue(profit#51))#79,17,2) as decimal(18,2))) - promote_precision(cast(MakeDecimal(sum(UnscaledValue(net_loss#53))#80,17,2) as decimal(18,2)))), DecimalType(18,2), true) AS profit#85]
+Results [5]: [catalog channel AS channel#81, concat(catalog_page, cp_catalog_page_id#66) AS id#82, MakeDecimal(sum(UnscaledValue(sales_price#50))#77,17,2) AS sales#83, MakeDecimal(sum(UnscaledValue(return_amt#52))#78,17,2) AS returns#84, CheckOverflow((promote_precision(cast(MakeDecimal(sum(UnscaledValue(profit#51))#79,17,2) as decimal(18,2))) - promote_precision(cast(MakeDecimal(sum(UnscaledValue(net_loss#53))#80,17,2) as decimal(18,2)))), DecimalType(18,2)) AS profit#85]
 
 (43) Scan parquet default.web_sales
 Output [4]: [ws_web_site_sk#86, ws_ext_sales_price#87, ws_net_profit#88, ws_sold_date_sk#89]
@@ -399,7 +399,7 @@ Input [5]: [web_site_id#114, sum#120, sum#121, sum#122, sum#123]
 Keys [1]: [web_site_id#114]
 Functions [4]: [sum(UnscaledValue(sales_price#92)), sum(UnscaledValue(return_amt#94)), sum(UnscaledValue(profit#93)), sum(UnscaledValue(net_loss#95))]
 Aggregate Attributes [4]: [sum(UnscaledValue(sales_price#92))#125, sum(UnscaledValue(return_amt#94))#126, sum(UnscaledValue(profit#93))#127, sum(UnscaledValue(net_loss#95))#128]
-Results [5]: [web channel AS channel#129, concat(web_site, web_site_id#114) AS id#130, MakeDecimal(sum(UnscaledValue(sales_price#92))#125,17,2) AS sales#131, MakeDecimal(sum(UnscaledValue(return_amt#94))#126,17,2) AS returns#132, CheckOverflow((promote_precision(cast(MakeDecimal(sum(UnscaledValue(profit#93))#127,17,2) as decimal(18,2))) - promote_precision(cast(MakeDecimal(sum(UnscaledValue(net_loss#95))#128,17,2) as decimal(18,2)))), DecimalType(18,2), true) AS profit#133]
+Results [5]: [web channel AS channel#129, concat(web_site, web_site_id#114) AS id#130, MakeDecimal(sum(UnscaledValue(sales_price#92))#125,17,2) AS sales#131, MakeDecimal(sum(UnscaledValue(return_amt#94))#126,17,2) AS returns#132, CheckOverflow((promote_precision(cast(MakeDecimal(sum(UnscaledValue(profit#93))#127,17,2) as decimal(18,2))) - promote_precision(cast(MakeDecimal(sum(UnscaledValue(net_loss#95))#128,17,2) as decimal(18,2)))), DecimalType(18,2)) AS profit#133]
 
 (69) Union
 

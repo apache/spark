@@ -1982,4 +1982,14 @@ class SubquerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
         Row(4, null) :: Nil)
     }
   }
+
+  test("SPARK-38155: disallow distinct aggregate in lateral subqueries") {
+    withTempView("t1", "t2") {
+      Seq((0, 1)).toDF("c1", "c2").createOrReplaceTempView("t1")
+      Seq((1, 2), (2, 2)).toDF("c1", "c2").createOrReplaceTempView("t2")
+      assert(intercept[AnalysisException] {
+        sql("SELECT * FROM t1 JOIN LATERAL (SELECT DISTINCT c2 FROM t2 WHERE c1 > t1.c1)")
+      }.getMessage.contains("Correlated column is not allowed in predicate"))
+    }
+  }
 }

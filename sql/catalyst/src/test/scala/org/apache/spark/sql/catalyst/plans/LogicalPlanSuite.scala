@@ -105,4 +105,12 @@ class LogicalPlanSuite extends SparkFunSuite {
     assert(Range(0, 100, 1, 3).select('id).maxRowsPerPartition === Some(34))
     assert(Range(0, 100, 1, 3).where('id % 2 === 1).maxRowsPerPartition === Some(34))
   }
+
+  test("SPARK-38286: Union's maxRows and maxRowsPerPartition may overflow") {
+    val query1 = Range(0, Long.MaxValue, 1, 1)
+    val query2 = Range(0, 100, 1, 10)
+    val query = query1.union(query2)
+    assert(query.maxRows.isEmpty)
+    assert(query.maxRowsPerPartition.isEmpty)
+  }
 }

@@ -148,7 +148,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
       AppStatusStore.CURRENT_VERSION, logDir.toString())
 
     try {
-      open(dbPath, metadata)
+      open(dbPath, metadata, conf)
     } catch {
       // If there's an error, remove the listing database and any existing UI database
       // from the store directory, since it's extremely likely that they'll all contain
@@ -156,12 +156,12 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
       case _: UnsupportedStoreVersionException | _: MetadataMismatchException =>
         logInfo("Detected incompatible DB versions, deleting...")
         path.listFiles().foreach(Utils.deleteRecursively)
-        open(dbPath, metadata)
+        open(dbPath, metadata, conf)
       case dbExc @ (_: NativeDB.DBException | _: RocksDBException) =>
         // Get rid of the corrupted data and re-create it.
         logWarning(s"Failed to load disk store $dbPath :", dbExc)
         Utils.deleteRecursively(dbPath)
-        open(dbPath, metadata)
+        open(dbPath, metadata, conf)
     }
   }.getOrElse(new InMemoryStore())
 
@@ -1218,7 +1218,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     // the existing data.
     dm.openStore(appId, attempt.info.attemptId).foreach { path =>
       try {
-        return KVUtils.open(path, metadata)
+        return KVUtils.open(path, metadata, conf)
       } catch {
         case e: Exception =>
           logInfo(s"Failed to open existing store for $appId/${attempt.info.attemptId}.", e)
@@ -1284,14 +1284,14 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     try {
       logInfo(s"Leasing disk manager space for app $appId / ${attempt.info.attemptId}...")
       lease = dm.lease(reader.totalSize, reader.compressionCodec.isDefined)
-      val diskStore = KVUtils.open(lease.tmpPath, metadata)
+      val diskStore = KVUtils.open(lease.tmpPath, metadata, conf)
       hybridStore.setDiskStore(diskStore)
       hybridStore.switchToDiskStore(new HybridStore.SwitchToDiskStoreListener {
         override def onSwitchToDiskStoreSuccess: Unit = {
           logInfo(s"Completely switched to diskStore for app $appId / ${attempt.info.attemptId}.")
           diskStore.close()
           val newStorePath = lease.commit(appId, attempt.info.attemptId)
-          hybridStore.setDiskStore(KVUtils.open(newStorePath, metadata))
+          hybridStore.setDiskStore(KVUtils.open(newStorePath, metadata, conf))
           memoryManager.release(appId, attempt.info.attemptId)
         }
         override def onSwitchToDiskStoreFail(e: Exception): Unit = {
@@ -1327,7 +1327,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
       logInfo(s"Leasing disk manager space for app $appId / ${attempt.info.attemptId}...")
       val lease = dm.lease(reader.totalSize, isCompressed)
       try {
-        Utils.tryWithResource(KVUtils.open(lease.tmpPath, metadata)) { store =>
+        Utils.tryWithResource(KVUtils.open(lease.tmpPath, metadata, conf)) { store =>
           rebuildAppStore(store, reader, attempt.info.lastUpdated.getTime())
         }
         newStorePath = lease.commit(appId, attempt.info.attemptId)
@@ -1345,7 +1345,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
       }
     }
 
-    KVUtils.open(newStorePath, metadata)
+    KVUtils.open(newStorePath, metadata, conf)
   }
 
   private def createInMemoryStore(attempt: AttemptInfoWrapper): KVStore = {

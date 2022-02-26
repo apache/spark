@@ -40,6 +40,9 @@ private object MsSqlServerDialect extends JdbcDialect {
   override def canHandle(url: String): Boolean =
     url.toLowerCase(Locale.ROOT).startsWith("jdbc:sqlserver")
 
+  // scalastyle:off line.size.limit
+  // See https://docs.microsoft.com/en-us/sql/t-sql/functions/aggregate-functions-transact-sql?view=sql-server-ver15
+  // scalastyle:on line.size.limit
   override def compileAggregate(aggFunction: AggregateFunc): Option[String] = {
     super.compileAggregate(aggFunction).orElse(
       aggFunction match {

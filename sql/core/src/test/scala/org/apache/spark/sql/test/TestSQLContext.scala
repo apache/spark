@@ -61,7 +61,13 @@ private[sql] object TestSQLContext {
   val overrideConfs: Map[String, String] =
     Map(
       // Fewer shuffle partitions to speed up testing.
-      SQLConf.SHUFFLE_PARTITIONS.key -> "5")
+      SQLConf.SHUFFLE_PARTITIONS.key -> "5",
+      // Enable parquet read field id for tests to ensure correctness
+      // By default, if Spark schema doesn't contain the `parquet.field.id` metadata,
+      // the underlying matching mechanism should behave exactly like name matching
+      // which is the existing behavior. Therefore, turning this on ensures that we didn't
+      // introduce any regression for such mixed matching mode.
+      SQLConf.PARQUET_FIELD_ID_READ_ENABLED.key -> "true")
 }
 
 private[sql] class TestSQLSessionStateBuilder(
