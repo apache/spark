@@ -21,7 +21,6 @@ import java.io.File;
 import java.io.IOException;
 import java.util.Arrays;
 import java.util.LinkedList;
-import java.util.Objects;
 import java.util.UUID;
 
 import scala.Tuple2$;
@@ -250,7 +249,7 @@ public class UnsafeExternalSorterSuite {
     // The insertion of this record should trigger a spill:
     insertNumber(sorter, 0);
     // Ensure that spill files were created
-    assertTrue(Objects.requireNonNull(tempDir.listFiles()).length >= 1);
+    assertTrue(tempDir.listFiles().length >= 1);
     // Read back the sorted data:
     UnsafeSorterIterator iter = sorter.getSortedIterator();
 
