@@ -21,23 +21,23 @@ import org.apache.spark.deploy.k8s._
 
 class YuniKornFeatureStepSuite extends SparkFunSuite {
 
-  test("SPARK-37809: Driver Pod with YuniKorn labels") {
+  test("SPARK-37809: Driver Pod with YuniKorn annotations") {
     val sparkConf = new SparkConf()
     val kubernetesConf = KubernetesTestConf.createDriverConf(sparkConf)
     val step = new YuniKornFeatureStep()
     step.init(kubernetesConf)
     val configuredPod = step.configurePod(SparkPod.initialPod())
     val annotations = configuredPod.pod.getMetadata.getAnnotations
-    assert(annotations.get("yunikorn.apache.org/app-id") === ${kubernetesConf.appId})
+    assert(annotations.get("yunikorn.apache.org/app-id") === kubernetesConf.appId)
   }
 
-  test("SPARK-37809: Executor Pod with YuniKorn labels") {
+  test("SPARK-37809: Executor Pod with YuniKorn annotations") {
     val sparkConf = new SparkConf()
     val kubernetesConf = KubernetesTestConf.createExecutorConf(sparkConf)
     val step = new YuniKornFeatureStep()
     step.init(kubernetesConf)
     val configuredPod = step.configurePod(SparkPod.initialPod())
     val annotations = configuredPod.pod.getMetadata.getAnnotations
-    assert(annotations.get("yunikorn.apache.org/app-id") === ${kubernetesConf.appId})
+    assert(annotations.get("yunikorn.apache.org/app-id") === kubernetesConf.appId)
   }
 }

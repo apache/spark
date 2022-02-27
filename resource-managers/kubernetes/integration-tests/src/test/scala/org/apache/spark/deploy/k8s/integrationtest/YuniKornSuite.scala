@@ -23,8 +23,7 @@ class YuniKornSuite extends KubernetesSuite with YuniKornTestsSuite {
   override protected def setUpTest(): Unit = {
     super.setUpTest()
     sparkAppConf
-      .set("spark.kubernetes.driver.scheduler.name", "yunikorn")
-      .set("spark.kubernetes.executor.scheduler.name", "yunikorn")
+      .set("spark.kubernetes.scheduler.name", "yunikorn")
   }
 }
 

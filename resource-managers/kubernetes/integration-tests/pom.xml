@@ -48,6 +48,7 @@
     <test.exclude.tags></test.exclude.tags>
     <test.include.tags></test.include.tags>
     <volcano.exclude>**/*Volcano*.scala</volcano.exclude>
+    <yunikorn.exclude>**/*YuniKorn*.scala</yunikorn.exclude>
   </properties>
   <packaging>jar</packaging>
   <name>Spark Project Kubernetes Integration Tests</name>
