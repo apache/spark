@@ -115,42 +115,63 @@ private[spark] object KubernetesClientUtils extends Logging {
     val maxSize = conf.get(Config.CONFIG_MAP_MAXSIZE)
     if (confDir.isDefined) {
       val confFiles: Seq[File] = listConfFiles(confDir.get, maxSize)
-      val orderedConfFiles = orderFilesBySize(confFiles)
-      var truncatedMapSize: Long = 0
-      val truncatedMap = mutable.HashMap[String, String]()
-      val skippedFiles = mutable.HashSet[String]()
-      var source: Source = Source.fromString("") // init with empty source.
-      for (file <- orderedConfFiles) {
-        try {
-          source = Source.fromFile(file)(Codec.UTF8)
-          val (fileName, fileContent) = file.getName -> source.mkString
-          if ((truncatedMapSize + fileName.length + fileContent.length) < maxSize) {
-            truncatedMap.put(fileName, fileContent)
-            truncatedMapSize = truncatedMapSize + (fileName.length + fileContent.length)
-          } else {
-            skippedFiles.add(fileName)
-          }
-        } catch {
-          case e: MalformedInputException =>
-            logWarning(
-              s"Unable to read a non UTF-8 encoded file ${file.getAbsolutePath}. Skipping...", e)
-            None
-        } finally {
-          source.close()
-        }
-      }
+      val truncatedMap = loadFiles(confFiles, maxSize)
       if (truncatedMap.nonEmpty) {
         logInfo(s"Spark configuration files loaded from $confDir :" +
           s" ${truncatedMap.keys.mkString(",")}")
       }
-      if (skippedFiles.nonEmpty) {
-        logWarning(s"Skipped conf file(s) ${skippedFiles.mkString(",")}, due to size constraint." +
-          s" Please see, config: `${Config.CONFIG_MAP_MAXSIZE.key}` for more details.")
-      }
-      truncatedMap.toMap
+      truncatedMap
     } else {
       Map.empty[String, String]
     }
+  }
+
+  private[submit] def loadHadoopConfDirFiles(
+      confDir: Option[String],
+      maxSize: Long): Map[String, String] = {
+    if (confDir.isDefined) {
+      val confFiles: Seq[File] = listConfFiles(confDir.get, maxSize)
+      val truncatedMap = loadFiles(confFiles, maxSize)
+      if (truncatedMap.nonEmpty) {
+        logInfo(s"Hadoop configuration files loaded from $confDir :" +
+          s" ${truncatedMap.keys.mkString(",")}")
+      }
+      truncatedMap
+    } else {
+      Map.empty[String, String]
+    }
+  }
+
+  private def loadFiles(confFiles: Seq[File], maxSize: Long): Map[String, String] = {
+    val orderedConfFiles = orderFilesBySize(confFiles)
+    var truncatedMapSize: Long = 0
+    val truncatedMap = mutable.HashMap[String, String]()
+    val skippedFiles = mutable.HashSet[String]()
+    var source: Source = Source.fromString("") // init with empty source.
+    for (file <- orderedConfFiles) {
+      try {
+        source = Source.fromFile(file)(Codec.UTF8)
+        val (fileName, fileContent) = file.getName -> source.mkString
+        if ((truncatedMapSize + fileName.length + fileContent.length) < maxSize) {
+          truncatedMap.put(fileName, fileContent)
+          truncatedMapSize = truncatedMapSize + (fileName.length + fileContent.length)
+        } else {
+          skippedFiles.add(fileName)
+        }
+      } catch {
+        case e: MalformedInputException =>
+          logWarning(
+            s"Unable to read a non UTF-8 encoded file ${file.getAbsolutePath}. Skipping...", e)
+          None
+      } finally {
+        source.close()
+      }
+    }
+    if (skippedFiles.nonEmpty) {
+      logWarning(s"Skipped conf file(s) ${skippedFiles.mkString(",")}, due to size constraint." +
+        s" Please see, config: `${Config.CONFIG_MAP_MAXSIZE.key}` for more details.")
+    }
+    truncatedMap.toMap
   }
 
   private def listConfFiles(confDir: String, maxSize: Long): Seq[File] = {
