@@ -562,6 +562,7 @@ class ParquetFilters(
         } else {
           Some(sources.Or(leftResultOptional.get, rightResultOptional.get))
         }
+
       case sources.Not(pred) =>
         val resultOptional = convertibleFiltersHelper(pred, canPartialPushDown = false)
         resultOptional.map(sources.Not)
@@ -785,10 +786,6 @@ class ParquetFilters(
             }
           )
         }
-
-      case sources.Not(pred) =>
-        createFilterHelper(pred, canPartialPushDownConjuncts = false)
-          .map(FilterApi.not)
 
       case _ if predicate.references.forall(partitionSchema.names.contains) =>
         evaluateFilter(predicate)
