@@ -299,7 +299,7 @@ abstract class Regression
        NULL
       > SELECT _FUNC_(y, x) FROM VALUES (null, 1) AS tab(y, x);
        NULL
-   """,
+  """,
   group = "agg_funcs",
   since = "3.3.0")
 // scalastyle:on line.size.limit
@@ -322,7 +322,7 @@ case class RegrSlope(left: Expression, right: Expression) extends Regression {
        NULL
       > SELECT _FUNC_(y, x) FROM VALUES (null, 1) AS tab(y, x);
        NULL
-   """,
+  """,
   group = "agg_funcs",
   since = "3.3.0")
 // scalastyle:on line.size.limit
