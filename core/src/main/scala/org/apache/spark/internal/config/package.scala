@@ -655,7 +655,7 @@ package object config {
       .createWithDefault(false)
 
   private[spark] val SHUFFLE_SERVICE_REMOVE_SHUFFLE_ENABLED =
-    ConfigBuilder("spark.shuffle.service.remove.shuffle.enabled")
+    ConfigBuilder("spark.shuffle.service.removeShuffle")
       .doc("Whether to use the ExternalShuffleService for deleting shuffle blocks for " +
         "deallocated executors.")
       .version("3.3.0")
