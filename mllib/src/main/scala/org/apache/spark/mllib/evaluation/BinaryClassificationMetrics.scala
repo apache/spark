@@ -113,7 +113,7 @@ class BinaryClassificationMetrics @Since("3.0.0") (
       } else {
         iter
       }
-    }
+    }.cache()
   }
 
   /**
@@ -186,7 +186,7 @@ class BinaryClassificationMetrics @Since("3.0.0") (
       mergeValue = (c: BinaryLabelCounter, labelAndWeight: (Double, Double)) =>
         c += (labelAndWeight._1, labelAndWeight._2),
       mergeCombiners = (c1: BinaryLabelCounter, c2: BinaryLabelCounter) => c1 += c2
-    ).sortByKey(ascending = false)
+    ).sortByKey(ascending = false).cache()
 
     val binnedCounts =
       // Only down-sample if bins is > 0
