@@ -1844,7 +1844,7 @@ class Analyzer(override val catalogManager: CatalogManager)
         withPosition(ordinal) {
           if (index > 0 && index <= aggs.size) {
             val ordinalExpr = aggs(index - 1)
-            if (!ordinalExpr.exists(_.isInstanceOf[AggregateExpression])) {
+            if (ordinalExpr.exists(_.isInstanceOf[AggregateExpression])) {
               throw QueryCompilationErrors.groupByPositionRefersToAggregateFunctionError(
                 index, ordinalExpr)
             } else {
