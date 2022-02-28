@@ -16,6 +16,7 @@
  */
 package org.apache.spark.sql.catalyst.parser
 
+import org.apache.spark.SparkThrowableHelper
 import org.apache.spark.sql.catalyst.analysis.AnalysisTest
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 
@@ -53,6 +54,21 @@ class ErrorParserSuite extends AnalysisTest {
     }
   }
 
+  def interceptWithErrorClass(sqlCommand: String, errorClass: String, message: String*): Unit = {
+    intercept(sqlCommand, message: _*)
+
+    val e = intercept[ParseException](CatalystSqlParser.parsePlan(sqlCommand))
+    assert(e.getErrorClass == errorClass)
+  }
+
+  def interceptWithErrorClass(sql: String, line: Int, startPosition: Int, stopPosition: Int,
+    errorClass: String, messages: String*): Unit = {
+    intercept(sql, line, startPosition, stopPosition, messages: _*)
+
+    val e = intercept[ParseException](CatalystSqlParser.parsePlan(sql))
+    assert(e.getErrorClass == errorClass)
+  }
+
   test("no viable input") {
     intercept("select ((r + 1) ", 1, 16, 16,
       "no viable alternative at input", "----------------^^^")
@@ -64,10 +80,13 @@ class ErrorParserSuite extends AnalysisTest {
   }
 
   test("mismatched input") {
-    intercept("select * from r order by q from t", 1, 27, 31,
-      "mismatched input",
-      "---------------------------^^^")
-    intercept("select *\nfrom r\norder by q\nfrom t", 4, 0, 4, "mismatched input", "^^^")
+    interceptWithErrorClass ("select * from r order by q from t", 1, 27, 31,
+      "PARSE_INPUT_MISMATCHED",
+      "syntax error at or near",
+      "---------------------------^^^"
+    )
+    interceptWithErrorClass("select *\nfrom r\norder by q\nfrom t", 4, 0, 4,
+      "PARSE_INPUT_MISMATCHED", "syntax error at or near", "^^^")
   }
 
   test("semantic errors") {
@@ -78,8 +97,12 @@ class ErrorParserSuite extends AnalysisTest {
 
   test("SPARK-21136: misleading error message due to problematic antlr grammar") {
     intercept("select * from a left join_ b on a.id = b.id", "missing 'JOIN' at 'join_'")
-    intercept("select * from test where test.t is like 'test'", "mismatched input 'is' expecting")
-    intercept("SELECT * FROM test WHERE x NOT NULL", "mismatched input 'NOT' expecting")
+    interceptWithErrorClass("select * from test where test.t is like 'test'",
+      "PARSE_INPUT_MISMATCHED",
+      SparkThrowableHelper.getMessage("PARSE_INPUT_MISMATCHED", Array("'is'")))
+    interceptWithErrorClass("SELECT * FROM test WHERE x NOT NULL",
+      "PARSE_INPUT_MISMATCHED",
+      SparkThrowableHelper.getMessage("PARSE_INPUT_MISMATCHED", Array("'NOT'")))
   }
 
   test("hyphen in identifier - DDL tests") {
