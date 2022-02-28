@@ -134,24 +134,19 @@ class IncrementalExecution(
 
     override def apply(plan: SparkPlan): SparkPlan = plan transform {
       // NOTE: we should include all aggregate execs here which are used in streaming aggregations
-      case a: SortAggregateExec =>
-        require(a.isStreaming, "The node should have marked as streaming!")
+      case a: SortAggregateExec if a.isStreaming =>
         a.copy(numShufflePartitions = Some(numStateStores))
 
-      case a: HashAggregateExec =>
-        require(a.isStreaming, "The node should have marked as streaming!")
+      case a: HashAggregateExec if a.isStreaming =>
         a.copy(numShufflePartitions = Some(numStateStores))
 
-      case a: ObjectHashAggregateExec =>
-        require(a.isStreaming, "The node should have marked as streaming!")
+      case a: ObjectHashAggregateExec if a.isStreaming =>
         a.copy(numShufflePartitions = Some(numStateStores))
 
-      case a: MergingSessionsExec =>
-        require(a.isStreaming, "The node should have marked as streaming!")
+      case a: MergingSessionsExec if a.isStreaming =>
         a.copy(numShufflePartitions = Some(numStateStores))
 
-      case a: UpdatingSessionsExec =>
-        require(a.isStreaming, "The node should have marked as streaming!")
+      case a: UpdatingSessionsExec if a.isStreaming =>
         a.copy(numShufflePartitions = Some(numStateStores))
 
       case StateStoreSaveExec(keys, None, None, None, stateFormatVersion,
