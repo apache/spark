@@ -93,19 +93,29 @@ object DecorrelateInnerQuery extends PredicateHelper {
   /**
    * Check if an expression can be pulled up over an [[Aggregate]] without changing the
    * semantics of the plan. The expression must be an equality predicate that guarantees
-   * one-to-one mapping between inner and outer attributes. More specifically, one side
-   * of the predicate must be an attribute and another side of the predicate must not
-   * contain other attributes from the inner query.
+   * one-to-one mapping between inner and outer attributes.
    * For example:
    *   (a = outer(c)) -> true
    *   (a > outer(c)) -> false
    *   (a + b = outer(c)) -> false
    *   (a = outer(c) - b) -> false
    */
-  private def canPullUpOverAgg(expression: Expression): Boolean = expression match {
-    case Equality(_: Attribute, b) => !containsAttribute(b)
-    case Equality(a, _: Attribute) => !containsAttribute(a)
-    case o => !containsAttribute(o)
+  def canPullUpOverAgg(expression: Expression): Boolean = {
+    def isSupported(e: Expression): Boolean = e match {
+      case _: Attribute => true
+      // Allow Cast expressions that guarantee 1:1 mapping.
+      case Cast(a: Attribute, dataType, _, _) => Cast.canUpCast(a.dataType, dataType)
+      case _ => false
+    }
+
+    // Only allow equality condition with one side being an attribute or an expression that
+    // guarantees 1:1 mapping and another side being an expression without attributes from
+    // the inner query.
+    expression match {
+      case Equality(a, b) if isSupported(a) => !containsAttribute(b)
+      case Equality(a, b) if isSupported(b) => !containsAttribute(a)
+      case o => !containsAttribute(o)
+    }
   }
 
   /**
