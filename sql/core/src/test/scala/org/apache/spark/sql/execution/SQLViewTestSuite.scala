@@ -409,7 +409,7 @@ abstract class SQLViewTestSuite extends QueryTest with SQLTestUtils {
 
 abstract class TempViewTestSuite extends SQLViewTestSuite {
 
-  def createDatasetView(df: DataFrame, viewName: String): Unit
+  def createOrReplaceDatasetView(df: DataFrame, viewName: String): Unit
 
   test("SPARK-37202: temp view should capture the function registered by catalog API") {
     val funcName = "tempFunc"
@@ -443,15 +443,15 @@ abstract class TempViewTestSuite extends SQLViewTestSuite {
     val viewName = formattedViewName("v")
     withSQLConf(STORE_ANALYZED_PLAN_FOR_VIEW.key -> "false") {
       withView(viewName) {
-        createDatasetView(sql("SELECT 1"), "v")
-        createDatasetView(sql(s"SELECT * FROM $viewName"), "v")
+        createOrReplaceDatasetView(sql("SELECT 1"), "v")
+        createOrReplaceDatasetView(sql(s"SELECT * FROM $viewName"), "v")
         checkViewOutput(viewName, Seq(Row(1)))
       }
     }
     withSQLConf(STORE_ANALYZED_PLAN_FOR_VIEW.key -> "true") {
       withView(viewName) {
-        createDatasetView(sql("SELECT 1"), "v")
-        createDatasetView(sql(s"SELECT * FROM $viewName"), "v")
+        createOrReplaceDatasetView(sql("SELECT 1"), "v")
+        createOrReplaceDatasetView(sql(s"SELECT * FROM $viewName"), "v")
         checkViewOutput(viewName, Seq(Row(1)))
 
         createView("v", "SELECT 2", replace = true)
