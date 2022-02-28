@@ -288,7 +288,7 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
     val s = ScriptTransformation("func", Seq.empty, p, null)
 
     compareTransformQuery("select transform(a, b) using 'func' from e where f < 10",
-      s.copy(child = p.copy(child = p.child.where('f < 10)),
+      s.copy(child = p.copy(child = p.child.where(Symbol("f") < 10)),
         output = Seq(Symbol("key").string, Symbol("value").string)))
     compareTransformQuery("map a, b using 'func' as c, d from e",
       s.copy(output = Seq(Symbol("c").string, Symbol("d").string)))

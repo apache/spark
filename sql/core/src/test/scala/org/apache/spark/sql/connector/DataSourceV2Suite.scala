@@ -132,12 +132,12 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
         checkAnswer(q4, Nil)
         if (cls == classOf[AdvancedDataSourceV2]) {
           val batch = getBatch(q4)
-          // 'j < 10 is not supported by the testing data source.
+          // Symbol("j") < 10 is not supported by the testing data source.
           assert(batch.filters.isEmpty)
           assert(batch.requiredSchema.fieldNames === Seq("j"))
         } else {
           val batch = getJavaBatch(q4)
-          // 'j < 10 is not supported by the testing data source.
+          // Symbol("j") < 10 is not supported by the testing data source.
           assert(batch.filters.isEmpty)
           assert(batch.requiredSchema.fieldNames === Seq("j"))
         }
@@ -192,12 +192,12 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
         checkAnswer(q4, Nil)
         if (cls == classOf[AdvancedDataSourceV2WithV2Filter]) {
           val batch = getBatchWithV2Filter(q4)
-          // 'j < 10 is not supported by the testing data source.
+          // Symbol("j") < 10 is not supported by the testing data source.
           assert(batch.filters.isEmpty)
           assert(batch.requiredSchema.fieldNames === Seq("j"))
         } else {
           val batch = getJavaBatchWithV2Filter(q4)
-          // 'j < 10 is not supported by the testing data source.
+          // Symbol("j") < 10 is not supported by the testing data source.
           assert(batch.filters.isEmpty)
           assert(batch.requiredSchema.fieldNames === Seq("j"))
         }

@@ -94,7 +94,7 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
     //   Filter(nodeId = 1)
     //     Range(nodeId = 2)
     // TODO: update metrics in generated operators
-    val ds = spark.range(10).filter('id < 5)
+    val ds = spark.range(10).filter(Symbol("id") < 5)
     testSparkPlanMetricsWithPredicates(ds.toDF(), 1, Map(
       0L -> (("WholeStageCodegen (1)", Map(
         "duration" -> {
@@ -281,7 +281,7 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
   test("SortMergeJoin metrics") {
     // Because SortMergeJoin may skip different rows if the number of partitions is different, this
     // test should use the deterministic number of partitions.
-    val testDataForJoin = testData2.filter('a < 2) // TestData2(1, 1) :: TestData2(1, 2)
+    val testDataForJoin = testData2.filter(Symbol("a") < 2) // TestData2(1, 1) :: TestData2(1, 2)
     testDataForJoin.createOrReplaceTempView("testDataForJoin")
     withTempView("testDataForJoin") {
       // Assume the execution plan is
@@ -314,7 +314,7 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
   test("SortMergeJoin(outer) metrics") {
     // Because SortMergeJoin may skip different rows if the number of partitions is different,
     // this test should use the deterministic number of partitions.
-    val testDataForJoin = testData2.filter('a < 2) // TestData2(1, 1) :: TestData2(1, 2)
+    val testDataForJoin = testData2.filter(Symbol("a") < 2) // TestData2(1, 1) :: TestData2(1, 2)
     testDataForJoin.createOrReplaceTempView("testDataForJoin")
     withTempView("testDataForJoin") {
       // Assume the execution plan is
@@ -459,7 +459,7 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
   }
 
   test("BroadcastNestedLoopJoin metrics") {
-    val testDataForJoin = testData2.filter('a < 2) // TestData2(1, 1) :: TestData2(1, 2)
+    val testDataForJoin = testData2.filter(Symbol("a") < 2) // TestData2(1, 1) :: TestData2(1, 2)
     testDataForJoin.createOrReplaceTempView("testDataForJoin")
     withSQLConf(SQLConf.CROSS_JOINS_ENABLED.key -> "true") {
       withTempView("testDataForJoin") {
@@ -512,7 +512,7 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
 
   test("CartesianProduct metrics") {
     withSQLConf(SQLConf.CROSS_JOINS_ENABLED.key -> "true") {
-      val testDataForJoin = testData2.filter('a < 2) // TestData2(1, 1) :: TestData2(1, 2)
+      val testDataForJoin = testData2.filter(Symbol("a") < 2) // TestData2(1, 1) :: TestData2(1, 2)
       testDataForJoin.createOrReplaceTempView("testDataForJoin")
       withTempView("testDataForJoin") {
         // Assume the execution plan is
