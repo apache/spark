@@ -120,13 +120,13 @@ class DataSourceV2SQLSuite
   }
 
   test("DescribeTable extended using v2 catalog") {
-    spark.sql("CREATE TABLE testcat.table_name (id bigint, data string)" +
+    spark.sql("CREATE TABLE testcat.default.table_name (id bigint, data string)" +
       " USING foo" +
       " PARTITIONED BY (id)" +
       " TBLPROPERTIES ('bar'='baz')" +
       " COMMENT 'this is a test table'" +
       " LOCATION 'file:/tmp/testcat/table_name'")
-    val descriptionDf = spark.sql("DESCRIBE TABLE EXTENDED testcat.table_name")
+    val descriptionDf = spark.sql("DESCRIBE TABLE EXTENDED testcat.default.table_name")
     assert(descriptionDf.schema.map(field => (field.name, field.dataType))
       === Seq(
         ("col_name", StringType),
@@ -146,7 +146,9 @@ class DataSourceV2SQLSuite
       Array("_partition", "string", "Partition key used to store the row"),
       Array("", "", ""),
       Array("# Detailed Table Information", "", ""),
-      Array("Name", "testcat.table_name", ""),
+      Array("Catalog", "testcat", ""),
+      Array("Database", "default", ""),
+      Array("Table", "table_name", ""),
       Array("Comment", "this is a test table", ""),
       Array("Location", "file:/tmp/testcat/table_name", ""),
       Array("Provider", "foo", ""),

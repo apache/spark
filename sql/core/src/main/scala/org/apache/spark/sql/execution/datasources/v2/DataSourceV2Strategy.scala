@@ -289,7 +289,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       if (partitionSpec.nonEmpty) {
         throw QueryCompilationErrors.describeDoesNotSupportPartitionForV2TablesError()
       }
-      DescribeTableExec(output, r.table, isExtended) :: Nil
+      DescribeTableExec(output, r, isExtended) :: Nil
 
     case DescribeColumn(_: ResolvedTable, column, isExtended, output) =>
       column match {

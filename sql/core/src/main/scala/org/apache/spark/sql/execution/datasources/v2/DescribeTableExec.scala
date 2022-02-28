@@ -21,13 +21,17 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.analysis.ResolvedTable
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.connector.catalog.{CatalogV2Util, SupportsMetadataColumns, Table}
 
 case class DescribeTableExec(
     output: Seq[Attribute],
-    table: Table,
+    resolvedTable: ResolvedTable,
     isExtended: Boolean) extends LeafV2CommandExec {
+
+  private val table: Table = resolvedTable.table
+
   override protected def run(): Seq[InternalRow] = {
     val rows = new ArrayBuffer[InternalRow]()
     addSchema(rows)
@@ -43,7 +47,9 @@ case class DescribeTableExec(
   private def addTableDetails(rows: ArrayBuffer[InternalRow]): Unit = {
     rows += emptyRow()
     rows += toCatalystRow("# Detailed Table Information", "", "")
-    rows += toCatalystRow("Name", table.name(), "")
+    rows += toCatalystRow("Catalog", resolvedTable.catalog.name(), "")
+    rows += toCatalystRow("Database", resolvedTable.identifier.namespace().mkString("."), "")
+    rows += toCatalystRow("Table", resolvedTable.identifier.name(), "")
 
     CatalogV2Util.TABLE_RESERVED_PROPERTIES.foreach(propKey => {
       if (table.properties.containsKey(propKey)) {
