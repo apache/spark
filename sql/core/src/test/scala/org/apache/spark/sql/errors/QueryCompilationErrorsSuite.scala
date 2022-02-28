@@ -162,6 +162,6 @@ class QueryCompilationErrorsSuite extends QueryTest with SharedSparkSession {
 
     assert(e.errorClass === Some("UNSUPPORTED_PANDAS_UDF_AGGREGATE_EXPRESSION"))
     assert(e.message ===
-      "Pivot does not support Pandas UDF aggregate expressions.")
+      "Pandas UDF aggregate expressions don't support pivot.")
   }
 }

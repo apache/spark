@@ -159,7 +159,7 @@
     "message" : [ "Using PythonUDF in join condition of join type %s is not supported" ]
   },
   "UNSUPPORTED_PANDAS_UDF_AGGREGATE_EXPRESSION" : {
-    "message" : [ "Pivot does not support Pandas UDF aggregate expressions." ]
+    "message" : [ "Pandas UDF aggregate expressions don't support pivot." ]
   },
   "WRITING_JOB_ABORTED" : {
     "message" : [ "Writing job aborted" ],
