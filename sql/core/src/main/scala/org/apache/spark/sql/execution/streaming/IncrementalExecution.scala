@@ -133,6 +133,7 @@ class IncrementalExecution(
     }
 
     override def apply(plan: SparkPlan): SparkPlan = plan transform {
+      // NOTE: we should include all aggregate execs here which are used in streaming aggregations
       case a: SortAggregateExec =>
         require(a.isStreaming, "The node should have marked as streaming!")
         a.copy(numShufflePartitions = Some(numStateStores))

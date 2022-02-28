@@ -576,7 +576,7 @@ case class SessionWindowStateStoreRestoreExec(
 
   override def requiredChildDistribution: Seq[Distribution] = {
     StatefulOperatorPartitioning.getClusteredDistributionWithBackwardCompatibility(
-      keyExpressions, getStateInfo, conf) :: Nil
+      keyWithoutSessionExpressions, getStateInfo, conf) :: Nil
   }
 
   override def requiredChildOrdering: Seq[Seq[SortOrder]] = {
@@ -688,7 +688,7 @@ case class SessionWindowStateStoreSaveExec(
 
   override def requiredChildDistribution: Seq[Distribution] = {
     StatefulOperatorPartitioning.getClusteredDistributionWithBackwardCompatibility(
-      keyExpressions, getStateInfo, conf) :: Nil
+      keyWithoutSessionExpressions, getStateInfo, conf) :: Nil
   }
 
   override def shouldRunAnotherBatch(newMetadata: OffsetSeqMetadata): Boolean = {
