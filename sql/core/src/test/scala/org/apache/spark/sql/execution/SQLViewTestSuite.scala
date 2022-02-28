@@ -468,7 +468,7 @@ class LocalTempViewTestSuite extends TempViewTestSuite with SharedSparkSession {
   override protected def tableIdentifier(viewName: String): TableIdentifier = {
     TableIdentifier(viewName)
   }
-  override def createDatasetView(df: DataFrame, viewName: String): Unit = {
+  override def createOrReplaceDatasetView(df: DataFrame, viewName: String): Unit = {
     df.createOrReplaceTempView(viewName)
   }
 }
@@ -482,7 +482,7 @@ class GlobalTempViewTestSuite extends TempViewTestSuite with SharedSparkSession 
   override protected def tableIdentifier(viewName: String): TableIdentifier = {
     TableIdentifier(viewName, Some(db))
   }
-  override def createDatasetView(df: DataFrame, viewName: String): Unit = {
+  override def createOrReplaceDatasetView(df: DataFrame, viewName: String): Unit = {
     df.createOrReplaceGlobalTempView(viewName)
   }
 }
