@@ -130,7 +130,7 @@ class QueryPlanSuite extends SparkFunSuite {
     assert(!nonDeterministicPlan.deterministic)
   }
 
-  test("SC-94826: Nullability propagation in transformUpWithNewOutput") {
+  test("SPARK-38347: Nullability propagation in transformUpWithNewOutput") {
     // A test rule that replaces Attributes in Project's project list.
     val testRule = new Rule[LogicalPlan] {
       override def apply(plan: LogicalPlan): LogicalPlan = plan.transformUpWithNewOutput {
