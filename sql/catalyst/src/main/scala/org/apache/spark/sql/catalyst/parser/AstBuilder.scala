@@ -2757,6 +2757,41 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
   }
 
   /**
+   * Create a [[StructType]] from a number of CREATE TABLE column definitions.
+   */
+  override def visitCreateTableColTypeList(
+      ctx: CreateTableColTypeListContext): Seq[StructField] = withOrigin(ctx) {
+    ctx.createTableColType().asScala.map(visitCreateTableColType).toSeq
+  }
+
+  /**
+   * Create a top level [[StructField]] from a CREATE TABLE column definition.
+   */
+  override def visitCreateTableColType(
+      ctx: CreateTableColTypeContext): StructField = withOrigin(ctx) {
+    import ctx._
+
+    val builder = new MetadataBuilder
+    // Add comment to metadata
+    Option(commentSpec()).map(visitCommentSpec).foreach {
+      builder.putString("comment", _)
+    }
+
+    // Process the 'DEFAULT expression' clause in the column definition, if any.
+    val name: String = colName.getText
+    val defaultExpr = Option(ctx.defaultExpression()).map(visitDefaultExpression)
+    if (defaultExpr != None) {
+      throw new ParseException(defaultColumnNotImplementedYetError, ctx)
+    }
+
+    StructField(
+      name = name,
+      dataType = typedVisit[DataType](ctx.dataType),
+      nullable = NULL == null,
+      metadata = builder.build())
+  }
+
+  /**
    * Create a [[StructType]] from a sequence of [[StructField]]s.
    */
   protected def createStructType(ctx: ComplexColTypeListContext): StructType = {
@@ -3459,7 +3494,8 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
   override def visitCreateTable(ctx: CreateTableContext): LogicalPlan = withOrigin(ctx) {
     val (table, temp, ifNotExists, external) = visitCreateTableHeader(ctx.createTableHeader)
 
-    val columns = Option(ctx.colTypeList()).map(visitColTypeList).getOrElse(Nil)
+    val columns = Option(ctx.createTableColTypeList()).map(visitCreateTableColTypeList)
+      .getOrElse(Nil)
     val provider = Option(ctx.tableProvider).map(_.multipartIdentifier.getText)
     val (partTransforms, partCols, bucketSpec, properties, options, location, comment, serdeInfo) =
       visitCreateTableClauses(ctx.createTableClauses())
@@ -3651,12 +3687,20 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
     }
   }
 
+  private def defaultColumnNotImplementedYetError = {
+    "Support for DEFAULT column values is not implemented yet"
+  }
+
   /**
    * Parse new column info from ADD COLUMN into a QualifiedColType.
    */
   override def visitQualifiedColTypeWithPosition(
       ctx: QualifiedColTypeWithPositionContext): QualifiedColType = withOrigin(ctx) {
     val name = typedVisit[Seq[String]](ctx.name)
+    val defaultExpr = Option(ctx.defaultExpression()).map(visitDefaultExpression)
+    if (defaultExpr != None) {
+      throw new ParseException(defaultColumnNotImplementedYetError, ctx)
+    }
     QualifiedColType(
       path = if (name.length > 1) Some(UnresolvedFieldName(name.init)) else None,
       colName = name.last,
@@ -3745,6 +3789,12 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
     } else {
       None
     }
+    if (action.defaultExpression != null) {
+      throw new ParseException(defaultColumnNotImplementedYetError, ctx)
+    }
+    if (action.dropDefault != null) {
+      throw new ParseException(defaultColumnNotImplementedYetError, ctx)
+    }
 
     assert(Seq(dataType, nullable, comment, position).count(_.nonEmpty) == 1)
 
@@ -3812,6 +3862,9 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
         if (col.path.isDefined) {
           throw QueryParsingErrors.operationInHiveStyleCommandUnsupportedError(
             "Replacing with a nested column", "REPLACE COLUMNS", ctx)
+        }
+        if (Option(colType.defaultExpression()).map(visitDefaultExpression) != None) {
+          throw new ParseException(defaultColumnNotImplementedYetError, ctx)
         }
         col
       }.toSeq

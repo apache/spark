@@ -136,7 +136,7 @@ statement
         (RESTRICT | CASCADE)?                                          #dropNamespace
     | SHOW namespaces ((FROM | IN) multipartIdentifier)?
         (LIKE? pattern=STRING)?                                        #showNamespaces
-    | createTableHeader ('(' colTypeList ')')? tableProvider?
+    | createTableHeader ('(' createTableColTypeList ')')? tableProvider?
         createTableClauses
         (AS? query)?                                                   #createTable
     | CREATE TABLE (IF NOT EXISTS)? target=tableIdentifier
@@ -961,7 +961,11 @@ qualifiedColTypeWithPositionList
     ;
 
 qualifiedColTypeWithPosition
-    : name=multipartIdentifier dataType (NOT NULL)? commentSpec? colPosition?
+    : name=multipartIdentifier dataType (NOT NULL)? defaultExpression? commentSpec? colPosition?
+    ;
+
+defaultExpression
+    : DEFAULT expression
     ;
 
 colTypeList
@@ -970,6 +974,14 @@ colTypeList
 
 colType
     : colName=errorCapturingIdentifier dataType (NOT NULL)? commentSpec?
+    ;
+
+createTableColTypeList
+    : createTableColType (',' createTableColType)*
+    ;
+
+createTableColType
+    : colName=errorCapturingIdentifier dataType (NOT NULL)? defaultExpression? commentSpec?
     ;
 
 complexColTypeList
@@ -1078,6 +1090,8 @@ alterColumnAction
     | commentSpec
     | colPosition
     | setOrDrop=(SET | DROP) NOT NULL
+    | SET defaultExpression
+    | dropDefault=DROP DEFAULT
     ;
 
 
@@ -1132,6 +1146,7 @@ ansiNonReserved
     | DATABASES
     | DAY
     | DBPROPERTIES
+    | DEFAULT
     | DEFINED
     | DELETE
     | DELIMITED
@@ -1379,6 +1394,7 @@ nonReserved
     | DATABASES
     | DAY
     | DBPROPERTIES
+    | DEFAULT
     | DEFINED
     | DELETE
     | DELIMITED
@@ -1645,6 +1661,7 @@ DATA: 'DATA';
 DATABASE: 'DATABASE';
 DATABASES: 'DATABASES';
 DBPROPERTIES: 'DBPROPERTIES';
+DEFAULT: 'DEFAULT';
 DEFINED: 'DEFINED';
 DELETE: 'DELETE';
 DELIMITED: 'DELIMITED';
@@ -1974,4 +1991,3 @@ WS
 UNRECOGNIZED
     : .
     ;
-

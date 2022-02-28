@@ -2235,4 +2235,44 @@ class DDLParserSuite extends AnalysisTest {
     comparePlans(parsePlan(timestampTypeSql), insertPartitionPlan(timestamp))
     comparePlans(parsePlan(binaryTypeSql), insertPartitionPlan(binaryStr))
   }
+
+  test("SPARK-38334: Implement support for DEFAULT values for columns in tables") {
+    // The following commands will support DEFAULT columns, but this has not been implemented yet.
+    for (sql <- Seq(
+      "ALTER TABLE t1 ADD COLUMN x int NOT NULL DEFAULT 42",
+      "ALTER TABLE t1 ALTER COLUMN a.b.c SET DEFAULT 42",
+      "ALTER TABLE t1 ALTER COLUMN a.b.c DROP DEFAULT",
+      "ALTER TABLE t1 REPLACE COLUMNS (x STRING DEFAULT 42)",
+      "CREATE TABLE my_tab(a INT COMMENT 'test', b STRING NOT NULL DEFAULT \"abc\") USING parquet"
+    )) {
+      val exc = intercept[ParseException] {
+        parsePlan(sql);
+      }
+      assert(exc.getMessage.contains("Support for DEFAULT column values is not implemented yet"));
+    }
+    // In each of the following cases, the DEFAULT reference parses as an unresolved attribute
+    // reference. We can handle these cases after the parsing stage, at later phases of analysis.
+    for (sql <- Seq(
+      "VALUES (1, 2, DEFAULT)",
+      "INSERT INTO t PARTITION(part = date'2019-01-02') VALUES ('a', DEFAULT)",
+      """
+        |MERGE INTO testcat1.ns1.ns2.tbl AS target
+        |USING testcat2.ns1.ns2.tbl AS source
+        |ON target.col1 = source.col1
+        |WHEN MATCHED AND (target.col2='delete') THEN DELETE
+        |WHEN MATCHED AND (target.col2='update') THEN UPDATE SET target.col2 = source.col2
+        |WHEN NOT MATCHED AND (target.col2='insert')
+        |THEN INSERT (target.col1, target.col2) values (source.col1, DEFAULT)
+      """.stripMargin
+    )) {
+      assert(!parsePlan(sql).resolved)
+    }
+    // REPLACE TABLE does not support DEFAULT columns, and here we check that the parser rejects
+    // naturally.
+    var exc = intercept[ParseException] {
+      parsePlan("REPLACE TABLE my_tab(a INT COMMENT 'test', b STRING NOT NULL " +
+        " DEFAULT \"xyz\") USING parquet")
+    }
+    assert(exc.getMessage.contains("mismatched input 'DEFAULT'"))
+  }
 }
