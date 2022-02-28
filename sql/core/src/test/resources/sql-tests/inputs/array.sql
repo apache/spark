@@ -106,3 +106,10 @@ select elt(2, '123', null);
 
 select array(1, 2, 3)[5];
 select array(1, 2, 3)[-1];
+
+-- array_size
+select array_size(array()) = size(array());
+select array_size(array(true)) = size(array(true));
+select array_size(array(2, 1)) = size(array(2, 1));
+select array_size(NULL) = size(NULL);
+select array_size(map('a', 1, 'b', 2));
