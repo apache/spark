@@ -981,7 +981,7 @@ object Volcano {
 object YuniKorn {
   // Exclude all yunikorn file for Compile and Test
   lazy val settings = Seq(
-    unmanagedSources / excludeFilter := HiddenFileFilter || "*YuniKorn*.scala")
+    unmanagedSources / excludeFilter += HiddenFileFilter || "*YuniKorn*.scala")
 }
 
 object Unidoc {
