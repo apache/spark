@@ -16,10 +16,9 @@
  */
 package org.apache.spark.sql.catalyst.expressions
 
-import org.apache.spark.SparkFunSuite
-
-import org.apache.spark.sql.catalyst.analysis.DummyCommand
+import org.apache.spark.{SparkFunSuite, TaskContext, TaskContextImpl}
 import org.apache.spark.sql.catalyst.expressions.codegen._
+import org.apache.spark.sql.catalyst.plans.logical.Command
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{BinaryType, DataType, IntegerType}
 
@@ -258,10 +257,18 @@ class SubexpressionEliminationSuite extends SparkFunSuite with ExpressionEvalHel
   }
 
   test("SPARK-38333: DPP expression should not be eliminated") {
-    val equivalence = new EquivalentExpressions
-    val expression = DynamicPruningExpression(Exists(DummyCommand()))
-    equivalence.addExprTree(expression)
-    assert(equivalence.getEquivalentExprs(expression).size == 0)
+    try {
+      // support we in executor
+      val context1 = new TaskContextImpl(0, 0, 0, 0, 0, null, null, null)
+      TaskContext.setTaskContext(context1)
+
+      val equivalence = new EquivalentExpressions
+      val expression = DynamicPruningExpression(Exists(TestCommand("foo")))
+      equivalence.addExprTree(expression)
+      assert(equivalence.getEquivalentExprs(expression).size == 0)
+    } finally {
+      TaskContext.unset()
+    }
   }
 
   test("SPARK-34723: Correct parameter type for subexpression elimination under whole-stage") {
@@ -325,3 +332,4 @@ case class CodegenFallbackExpression(child: Expression)
   override def dataType: DataType = child.dataType
 }
 
+case class TestCommand(foo: String) extends Command
