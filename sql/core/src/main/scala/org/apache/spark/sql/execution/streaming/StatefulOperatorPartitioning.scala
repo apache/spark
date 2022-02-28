@@ -47,7 +47,7 @@ object StatefulOperatorPartitioning {
     if (conf.getConf(STATEFUL_OPERATOR_USE_STRICT_DISTRIBUTION)) {
       StatefulOpClusteredDistribution(expressions, numPartitions)
     } else {
-      ClusteredDistribution(expressions, Some(numPartitions))
+      ClusteredDistribution(expressions, requiredNumPartitions = Some(numPartitions))
     }
   }
 }
