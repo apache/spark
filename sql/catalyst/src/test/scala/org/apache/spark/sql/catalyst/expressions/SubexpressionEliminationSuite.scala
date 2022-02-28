@@ -17,6 +17,8 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.SparkFunSuite
+
+import org.apache.spark.sql.catalyst.analysis.DummyCommand
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{BinaryType, DataType, IntegerType}
@@ -255,6 +257,13 @@ class SubexpressionEliminationSuite extends SparkFunSuite with ExpressionEvalHel
     assert(equivalence2.getAllEquivalentExprs.count(_.size == 2) == 0)
   }
 
+  test("SPARK-38333: DPP expression should not be eliminated") {
+    val equivalence = new EquivalentExpressions
+    val expression = DynamicPruningExpression(Exists(DummyCommand()))
+    equivalence.addExprTree(expression)
+    assert(equivalence.getEquivalentExprs(expression).size == 0)
+  }
+
   test("SPARK-34723: Correct parameter type for subexpression elimination under whole-stage") {
     withSQLConf(SQLConf.CODEGEN_METHOD_SPLIT_THRESHOLD.key -> "1") {
       val str = BoundReference(0, BinaryType, false)
@@ -315,3 +324,4 @@ case class CodegenFallbackExpression(child: Expression)
   extends UnaryExpression with CodegenFallback {
   override def dataType: DataType = child.dataType
 }
+
