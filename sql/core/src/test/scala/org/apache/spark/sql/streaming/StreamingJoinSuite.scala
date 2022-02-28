@@ -88,7 +88,7 @@ abstract class StreamingJoinSuite
     val (rightInput, df2) = setupStream("right", 3)
     // Use different schemas to ensure the null row is being generated from the correct side.
     val left = df1.select(Symbol("key"), window(Symbol("leftTime"), "10 second"), Symbol("leftValue"))
-    val right = df2.select(Symbol("key"), window(Symbol("rightTime"), "10 second"), 'rightValue.cast("string"))
+    val right = df2.select(Symbol("key"), window(Symbol("rightTime"), "10 second"), Symbol("rightValue").cast("string"))
 
     val joined = left.join(
       right,
@@ -118,13 +118,13 @@ abstract class StreamingJoinSuite
     val (rightInput, df2) = setupStream("right", 3)
     // Use different schemas to ensure the null row is being generated from the correct side.
     val left = df1.select(Symbol("key"), window(Symbol("leftTime"), "10 second"), Symbol("leftValue"))
-    val right = df2.select(Symbol("key"), window(Symbol("rightTime"), "10 second"), 'rightValue.cast("string"))
+    val right = df2.select(Symbol("key"), window(Symbol("rightTime"), "10 second"), Symbol("rightValue").cast("string"))
 
     val joined = left.join(
       right,
       left("key") === right("key")
         && left("window") === right("window")
-        && 'rightValue.cast("int") > 7,
+        && Symbol("rightValue").cast("int") > 7,
       joinType)
 
     val select = if (joinType == "left_semi") {
@@ -168,9 +168,9 @@ abstract class StreamingJoinSuite
         joinType)
 
     val select = if (joinType == "left_semi") {
-      joined.select(Symbol("leftKey"), 'leftTime.cast("int"))
+      joined.select(Symbol("leftKey"), Symbol("leftTime").cast("int"))
     } else {
-      joined.select(Symbol("leftKey"), Symbol("rightKey"), 'leftTime.cast("int"), 'rightTime.cast("int"))
+      joined.select(Symbol("leftKey"), Symbol("rightKey"), Symbol("leftTime").cast("int"), Symbol("rightTime").cast("int"))
     }
 
     (leftInput, rightInput, select)
@@ -349,7 +349,7 @@ class StreamingInnerJoinSuite extends StreamingJoinSuite {
 
     val joined =
       df1.join(df2, expr("leftKey = rightKey AND leftTime < rightTime - interval 5 seconds"))
-        .select(Symbol("leftKey"), 'leftTime.cast("int"), 'rightTime.cast("int"))
+        .select(Symbol("leftKey"), Symbol("leftTime").cast("int"), Symbol("rightTime").cast("int"))
 
     testStream(joined)(
       AddData(leftInput, (1, 5)),
@@ -432,7 +432,7 @@ class StreamingInnerJoinSuite extends StreamingJoinSuite {
     //     drop state where rightTime < eventTime - 5
 
     val joined =
-      df1.join(df2, condition).select(Symbol("leftKey"), 'leftTime.cast("int"), 'rightTime.cast("int"))
+      df1.join(df2, condition).select(Symbol("leftKey"), Symbol("leftTime").cast("int"), Symbol("rightTime").cast("int"))
 
     testStream(joined)(
       // If leftTime = 20, then it match only with rightTime = [15, 30]
@@ -1316,15 +1316,15 @@ class StreamingOuterJoinSuite extends StreamingJoinSuite {
         "_2 * 3 as rightValue")
       .withWatermark("rightTime", "10 seconds")
 
-    val windowed1 = df1.select('leftKey1, 'leftKey2,
-      window('leftTime, "10 second").as('leftWindow), 'leftValue)
-    val windowed2 = df2.select('rightKey1, 'rightKey2,
-      window('rightTime, "10 second").as('rightWindow), 'rightValue)
+    val windowed1 = df1.select(Symbol("leftKey1"), Symbol("leftKey2"),
+      window(Symbol("leftTime"), "10 second").as(Symbol("leftWindow")), Symbol("leftValue"))
+    val windowed2 = df2.select(Symbol("rightKey1"), Symbol("rightKey2"),
+      window(Symbol("rightTime"), "10 second").as(Symbol("rightWindow")), Symbol("rightValue"))
     windowed1.join(windowed2,
       expr("leftKey1 <=> rightKey1 AND leftKey2 = rightKey2 AND leftWindow = rightWindow"),
       "left_outer"
-    ).select('leftKey1, 'rightKey1, 'leftKey2, 'rightKey2, $"leftWindow.end".cast("long"),
-      'leftValue, 'rightValue)
+    ).select(Symbol("leftKey1"), Symbol("rightKey1"), Symbol("leftKey2"), Symbol("rightKey2"), $"leftWindow.end".cast("long"),
+      Symbol("leftValue"), Symbol("rightValue"))
   }
 }
 
