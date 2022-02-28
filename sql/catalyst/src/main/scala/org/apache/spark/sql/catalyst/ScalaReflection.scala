@@ -103,7 +103,7 @@ object ScalaReflection extends ScalaReflection {
         val className = getClassNameFromType(tpe)
         className match {
           case "scala.Array" =>
-            val TypeRef(_, _, Seq(elementType)) = tpe
+            val TypeRef(_, _, Seq(elementType)) = tpe.dealias
             arrayClassFor(elementType)
           case other =>
             val clazz = getClassFromType(tpe)
