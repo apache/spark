@@ -283,6 +283,15 @@ private[spark] object Config extends Logging {
       .stringConf
       .createOptional
 
+  val KUBERNETES_SCHEDULER_NAME =
+    ConfigBuilder("spark.kubernetes.scheduler.name")
+      .doc("Specify the scheduler name for driver and executor pods. If " +
+        s"`${KUBERNETES_DRIVER_SCHEDULER_NAME.key}` or " +
+        s"`${KUBERNETES_EXECUTOR_SCHEDULER_NAME.key}` is set, will override this.")
+      .version("3.3.0")
+      .stringConf
+      .createOptional
+
   val KUBERNETES_EXECUTOR_REQUEST_CORES =
     ConfigBuilder("spark.kubernetes.executor.request.cores")
       .doc("Specify the cpu request for each executor pod")

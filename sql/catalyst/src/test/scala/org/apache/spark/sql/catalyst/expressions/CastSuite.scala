@@ -39,6 +39,15 @@ import org.apache.spark.unsafe.types.UTF8String
  *       in `CastSuiteBase` instead of this file to ensure the test coverage.
  */
 class CastSuite extends CastSuiteBase {
+  override def beforeAll(): Unit = {
+    super.beforeAll()
+    SQLConf.get.setConf(SQLConf.ANSI_ENABLED, false)
+  }
+
+  override def afterAll(): Unit = {
+    super.afterAll()
+    SQLConf.get.unsetConf(SQLConf.ANSI_ENABLED)
+  }
 
   override def cast(v: Any, targetType: DataType, timeZoneId: Option[String] = None): CastBase = {
     v match {

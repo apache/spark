@@ -199,6 +199,10 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
             failAnalysis(s"invalid cast from ${c.child.dataType.catalogString} to " +
               c.dataType.catalogString)
 
+          case e: RuntimeReplaceable if !e.replacement.resolved =>
+            throw new IllegalStateException("Illegal RuntimeReplaceable: " + e +
+              "\nReplacement is unresolved: " + e.replacement)
+
           case g: Grouping =>
             failAnalysis("grouping() can only be used with GroupingSets/Cube/Rollup")
           case g: GroupingID =>
@@ -623,7 +627,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
     }
   }
 
-  private def extraHintForAnsiTypeCoercionExpression(plan: LogicalPlan): String = {
+  private[analysis] def extraHintForAnsiTypeCoercionExpression(plan: LogicalPlan): String = {
     if (!SQLConf.get.ansiEnabled) {
       ""
     } else {
@@ -755,7 +759,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
         }
         // Validate to make sure the correlations appearing in the query are valid and
         // allowed by spark.
-        checkCorrelationsInSubquery(expr.plan, isScalarOrLateral = true)
+        checkCorrelationsInSubquery(expr.plan, isScalar = true)
 
       case _: LateralSubquery =>
         assert(plan.isInstanceOf[LateralJoin])
@@ -774,7 +778,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
         }
         // Validate to make sure the correlations appearing in the query are valid and
         // allowed by spark.
-        checkCorrelationsInSubquery(expr.plan, isScalarOrLateral = true)
+        checkCorrelationsInSubquery(expr.plan, isLateral = true)
 
       case inSubqueryOrExistsSubquery =>
         plan match {
@@ -827,7 +831,8 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
    */
   private def checkCorrelationsInSubquery(
       sub: LogicalPlan,
-      isScalarOrLateral: Boolean = false): Unit = {
+      isScalar: Boolean = false,
+      isLateral: Boolean = false): Unit = {
     // Validate that correlated aggregate expression do not contain a mixture
     // of outer and local references.
     def checkMixedReferencesInsideAggregateExpr(expr: Expression): Unit = {
@@ -852,7 +857,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
     // DecorrelateInnerQuery is enabled. Otherwise, only Filter can only outer references.
     def canHostOuter(plan: LogicalPlan): Boolean = plan match {
       case _: Filter => true
-      case _: Project => isScalarOrLateral && SQLConf.get.decorrelateInnerQueryEnabled
+      case _: Project => (isScalar || isLateral) && SQLConf.get.decorrelateInnerQueryEnabled
       case _ => false
     }
 
@@ -980,8 +985,8 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
       // up to the operator producing the correlated values.
 
       // Category 1:
-      // ResolvedHint, Distinct, LeafNode, Repartition, and SubqueryAlias
-      case _: ResolvedHint | _: Distinct | _: LeafNode | _: Repartition | _: SubqueryAlias =>
+      // ResolvedHint, LeafNode, Repartition, and SubqueryAlias
+      case _: ResolvedHint | _: LeafNode | _: Repartition | _: SubqueryAlias =>
 
       // Category 2:
       // These operators can be anywhere in a correlated subquery.
@@ -1014,6 +1019,16 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
       case a: Aggregate =>
         failOnInvalidOuterReference(a)
         failOnUnsupportedCorrelatedPredicate(unsupportedPredicates.toSeq, a)
+
+      // Distinct does not host any correlated expressions, but during the optimization phase
+      // it will be rewritten as Aggregate, which can only be on a correlation path if the
+      // correlation contains only the supported correlated equality predicates.
+      // Only block it for lateral subqueries because scalar subqueries must be aggregated
+      // and it does not impact the results for IN/EXISTS subqueries.
+      case d: Distinct =>
+        if (isLateral) {
+          failOnUnsupportedCorrelatedPredicate(unsupportedPredicates.toSeq, d)
+        }
 
       // Join can host correlated expressions.
       case j @ Join(left, right, joinType, _, _) =>

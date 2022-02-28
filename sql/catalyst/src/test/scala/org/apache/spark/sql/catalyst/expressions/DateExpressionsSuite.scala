@@ -1462,7 +1462,9 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
           Literal("yyyy-MM-dd'T'HH:mm:ss.SSSz"), TimestampType),
         1580184371847000L)
     }
-    withSQLConf(SQLConf.LEGACY_TIME_PARSER_POLICY.key -> "corrected") {
+    withSQLConf(
+      SQLConf.LEGACY_TIME_PARSER_POLICY.key -> "corrected",
+      SQLConf.ANSI_ENABLED.key -> "false") {
       checkEvaluation(
         GetTimestamp(
           Literal("2020-01-27T20:06:11.847-0800"),
@@ -1481,8 +1483,8 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   test("Consistent error handling for datetime formatting and parsing functions") {
 
     def checkException[T <: Exception : ClassTag](c: String): Unit = {
-      checkExceptionInExpression[T](new ParseToTimestamp(Literal("1"), Literal(c)).child, c)
-      checkExceptionInExpression[T](new ParseToDate(Literal("1"), Literal(c)).child, c)
+      checkExceptionInExpression[T](new ParseToTimestamp(Literal("1"), Literal(c)).replacement, c)
+      checkExceptionInExpression[T](new ParseToDate(Literal("1"), Literal(c)).replacement, c)
       checkExceptionInExpression[T](ToUnixTimestamp(Literal("1"), Literal(c)), c)
       checkExceptionInExpression[T](UnixTimestamp(Literal("1"), Literal(c)), c)
       if (!Set("E", "F", "q", "Q").contains(c)) {
@@ -1502,10 +1504,10 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("SPARK-31896: Handle am-pm timestamp parsing when hour is missing") {
     checkEvaluation(
-      new ParseToTimestamp(Literal("PM"), Literal("a")).child,
+      new ParseToTimestamp(Literal("PM"), Literal("a")).replacement,
       Timestamp.valueOf("1970-01-01 12:00:00.0"))
     checkEvaluation(
-      new ParseToTimestamp(Literal("11:11 PM"), Literal("mm:ss a")).child,
+      new ParseToTimestamp(Literal("11:11 PM"), Literal("mm:ss a")).replacement,
       Timestamp.valueOf("1970-01-01 12:11:11.0"))
   }
 
@@ -1882,6 +1884,68 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
               Literal(targetTz),
               sourceTs),
           StringType, StringType, TimestampNTZType)
+      }
+    }
+  }
+
+  test("SPARK-38195: add a quantity of interval units to a timestamp") {
+    // Check case-insensitivity
+    checkEvaluation(
+      TimestampAdd(Literal("Hour"), Literal(1), Literal(LocalDateTime.of(2022, 2, 15, 12, 57, 0))),
+      LocalDateTime.of(2022, 2, 15, 13, 57, 0))
+    // Check nulls as input values
+    checkEvaluation(
+      TimestampAdd(
+        Literal.create(null, StringType),
+        Literal(1),
+        Literal(LocalDateTime.of(2022, 2, 15, 12, 57, 0))),
+      null)
+    checkEvaluation(
+      TimestampAdd(
+        Literal("MINUTE"),
+        Literal.create(null, IntegerType),
+        Literal(LocalDateTime.of(2022, 2, 15, 12, 57, 0))),
+      null)
+    checkEvaluation(
+      TimestampAdd(
+        Literal("MINUTE"),
+        Literal(1),
+        Literal.create(null, TimestampType)),
+      null)
+    // Check crossing the daylight saving time
+    checkEvaluation(
+      TimestampAdd(
+        Literal("HOUR"),
+        Literal(6),
+        Literal(Instant.parse("2022-03-12T23:30:00Z")),
+        Some("America/Los_Angeles")),
+      Instant.parse("2022-03-13T05:30:00Z"))
+    // Check the leap year
+    checkEvaluation(
+      TimestampAdd(
+        Literal("DAY"),
+        Literal(2),
+        Literal(LocalDateTime.of(2020, 2, 28, 10, 11, 12)),
+        Some("America/Los_Angeles")),
+      LocalDateTime.of(2020, 3, 1, 10, 11, 12))
+
+    Seq(
+      "YEAR", "QUARTER", "MONTH",
+      "WEEK", "DAY",
+      "HOUR", "MINUTE", "SECOND",
+      "MILLISECOND", "MICROSECOND"
+    ).foreach { unit =>
+      outstandingTimezonesIds.foreach { tz =>
+        Seq(TimestampNTZType, TimestampType).foreach { tsType =>
+          checkConsistencyBetweenInterpretedAndCodegenAllowingException(
+            (quantity: Expression, timestamp: Expression) =>
+              TimestampAdd(
+                Literal(unit),
+                quantity,
+                timestamp,
+                Some(tz)),
+            IntegerType, tsType)
+        }
       }
     }
   }

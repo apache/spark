@@ -29,7 +29,24 @@
   <name>Spark Project Kubernetes</name>
   <properties>
     <sbt.project.name>kubernetes</sbt.project.name>
+    <volcano.exclude>**/*Volcano*.scala</volcano.exclude>
   </properties>
+
+  <profiles>
+    <profile>
+      <id>volcano</id>
+      <properties>
+        <volcano.exclude></volcano.exclude>
+      </properties>
+      <dependencies>
+        <dependency>
+          <groupId>io.fabric8</groupId>
+          <artifactId>volcano-model-v1beta1</artifactId>
+          <version>${kubernetes-client.version}</version>
+        </dependency>
+      </dependencies>
+    </profile>
+  </profiles>
 
   <dependencies>
     <dependency>
@@ -103,6 +120,19 @@
 
 
   <build>
+    <pluginManagement>
+      <plugins>
+        <plugin>
+          <groupId>net.alchim31.maven</groupId>
+          <artifactId>scala-maven-plugin</artifactId>
+          <configuration>
+            <excludes>
+              <exclude>${volcano.exclude}</exclude>
+            </excludes>
+          </configuration>
+        </plugin>
+      </plugins>
+    </pluginManagement>
     <outputDirectory>target/scala-${scala.binary.version}/classes</outputDirectory>
     <testOutputDirectory>target/scala-${scala.binary.version}/test-classes</testOutputDirectory>
   </build>

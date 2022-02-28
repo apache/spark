@@ -60,6 +60,7 @@ class UnivocityGenerator(
     legacyFormat = FAST_DATE_FORMAT,
     isParsing = false)
 
+  @scala.annotation.tailrec
   private def makeConverter(dataType: DataType): ValueConverter = dataType match {
     case DateType =>
       (row: InternalRow, ordinal: Int) => dateFormatter.format(row.getInt(ordinal))

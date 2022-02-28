@@ -72,9 +72,14 @@ case object AllTuples extends Distribution {
 /**
  * Represents data where tuples that share the same values for the `clustering`
  * [[Expression Expressions]] will be co-located in the same partition.
+ *
+ * @param requireAllClusterKeys When true, `Partitioning` which satisfies this distribution,
+ *                              must match all `clustering` expressions in the same ordering.
  */
 case class ClusteredDistribution(
     clustering: Seq[Expression],
+    requireAllClusterKeys: Boolean = SQLConf.get.getConf(
+      SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_DISTRIBUTION),
     requiredNumPartitions: Option[Int] = None) extends Distribution {
   require(
     clustering != Nil,
@@ -87,6 +92,19 @@ case class ClusteredDistribution(
       s"This ClusteredDistribution requires ${requiredNumPartitions.get} partitions, but " +
         s"the actual number of partitions is $numPartitions.")
     HashPartitioning(clustering, numPartitions)
+  }
+
+  /**
+   * Checks if `expressions` match all `clustering` expressions in the same ordering.
+   *
+   * `Partitioning` should call this to check its expressions when `requireAllClusterKeys`
+   * is set to true.
+   */
+  def areAllClusterKeysMatched(expressions: Seq[Expression]): Boolean = {
+    expressions.length == clustering.length &&
+      expressions.zip(clustering).forall {
+        case (l, r) => l.semanticEquals(r)
+      }
   }
 }
 
@@ -101,6 +119,16 @@ case class ClusteredDistribution(
  * Since this distribution relies on [[HashPartitioning]] on the physical partitioning of the
  * stateful operator, only [[HashPartitioning]] (and HashPartitioning in
  * [[PartitioningCollection]]) can satisfy this distribution.
+ * When `_requiredNumPartitions` is 1, [[SinglePartition]] is essentially same as
+ * [[HashPartitioning]], so it can satisfy this distribution as well.
+ *
+ * NOTE: This is applied only to stream-stream join as of now. For other stateful operators, we
+ * have been using ClusteredDistribution, which could construct the physical partitioning of the
+ * state in different way (ClusteredDistribution requires relaxed condition and multiple
+ * partitionings can satisfy the requirement.) We need to construct the way to fix this with
+ * minimizing possibility to break the existing checkpoints.
+ *
+ * TODO(SPARK-38204): address the issue explained in above note.
  */
 case class StatefulOpClusteredDistribution(
     expressions: Seq[Expression],
@@ -251,8 +279,14 @@ case class HashPartitioning(expressions: Seq[Expression], numPartitions: Int)
           expressions.length == h.expressions.length && expressions.zip(h.expressions).forall {
             case (l, r) => l.semanticEquals(r)
           }
-        case ClusteredDistribution(requiredClustering, _) =>
-          expressions.forall(x => requiredClustering.exists(_.semanticEquals(x)))
+        case c @ ClusteredDistribution(requiredClustering, requireAllClusterKeys, _) =>
+          if (requireAllClusterKeys) {
+            // Checks `HashPartitioning` is partitioned on exactly same clustering keys of
+            // `ClusteredDistribution`.
+            c.areAllClusterKeysMatched(expressions)
+          } else {
+            expressions.forall(x => requiredClustering.exists(_.semanticEquals(x)))
+          }
         case _ => false
       }
     }
@@ -312,8 +346,15 @@ case class RangePartitioning(ordering: Seq[SortOrder], numPartitions: Int)
           //   `RangePartitioning(a, b, c)` satisfies `OrderedDistribution(a, b)`.
           val minSize = Seq(requiredOrdering.size, ordering.size).min
           requiredOrdering.take(minSize) == ordering.take(minSize)
-        case ClusteredDistribution(requiredClustering, _) =>
-          ordering.map(_.child).forall(x => requiredClustering.exists(_.semanticEquals(x)))
+        case c @ ClusteredDistribution(requiredClustering, requireAllClusterKeys, _) =>
+          val expressions = ordering.map(_.child)
+          if (requireAllClusterKeys) {
+            // Checks `RangePartitioning` is partitioned on exactly same clustering keys of
+            // `ClusteredDistribution`.
+            c.areAllClusterKeysMatched(expressions)
+          } else {
+            expressions.forall(x => requiredClustering.exists(_.semanticEquals(x)))
+          }
         case _ => false
       }
     }
@@ -514,10 +555,7 @@ case class HashShuffleSpec(
     // will add shuffles with the default partitioning of `ClusteredDistribution`, which uses all
     // the join keys.
     if (SQLConf.get.getConf(SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION)) {
-      partitioning.expressions.length == distribution.clustering.length &&
-        partitioning.expressions.zip(distribution.clustering).forall {
-          case (l, r) => l.semanticEquals(r)
-        }
+      distribution.areAllClusterKeysMatched(partitioning.expressions)
     } else {
       true
     }

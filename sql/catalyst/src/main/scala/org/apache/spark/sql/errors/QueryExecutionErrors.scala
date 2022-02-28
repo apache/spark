@@ -42,7 +42,7 @@ import org.apache.spark.sql.catalyst.ScalaReflection.Schema
 import org.apache.spark.sql.catalyst.WalkedTypePath
 import org.apache.spark.sql.catalyst.analysis.UnresolvedGenerator
 import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, CatalogTable}
-import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Expression, UnevaluableAggregate}
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Expression}
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.JoinType
 import org.apache.spark.sql.catalyst.plans.logical.{DomainJoin, LogicalPlan}
@@ -124,12 +124,6 @@ object QueryExecutionErrors {
   def cannotParseDecimalError(): Throwable = {
     new SparkIllegalStateException(errorClass = "CANNOT_PARSE_DECIMAL",
       messageParameters = Array.empty)
-  }
-
-  def evaluateUnevaluableAggregateUnsupportedError(
-      methodName: String, unEvaluable: UnevaluableAggregate): Throwable = {
-    new SparkUnsupportedOperationException(errorClass = "INTERNAL_ERROR",
-      messageParameters = Array(s"Cannot evaluate expression: $methodName: $unEvaluable"))
   }
 
   def dataTypeUnsupportedError(dataType: String, failure: String): Throwable = {
@@ -240,6 +234,14 @@ object QueryExecutionErrors {
     new SparkRuntimeException(
       errorClass = "UNSUPPORTED_FEATURE",
       messageParameters = Array(s"literal for '${v.toString}' of ${v.getClass.toString}."))
+  }
+
+  def pivotColumnUnsupportedError(v: Any, dataType: DataType): RuntimeException = {
+    new SparkRuntimeException(
+      errorClass = "UNSUPPORTED_FEATURE",
+      messageParameters = Array(
+        s"pivoting by the value '${v.toString}' of the column data type" +
+        s" '${dataType.catalogString}'."))
   }
 
   def noDefaultForDataTypeError(dataType: DataType): RuntimeException = {
@@ -797,6 +799,15 @@ object QueryExecutionErrors {
       s"""
          |Found duplicate field(s) "$requiredFieldName": $matchedOrcFields
          |in case-insensitive mode
+       """.stripMargin.replaceAll("\n", " "))
+  }
+
+  def foundDuplicateFieldInFieldIdLookupModeError(
+      requiredId: Int, matchedFields: String): Throwable = {
+    new RuntimeException(
+      s"""
+         |Found duplicate field(s) "$requiredId": $matchedFields
+         |in id mapping mode
        """.stripMargin.replaceAll("\n", " "))
   }
 
@@ -1940,7 +1951,7 @@ object QueryExecutionErrors {
       s"The input string '$input' does not match the given number format: '$format'")
   }
 
-  def MultipleBucketTransformsError(): Throwable = {
+  def multipleBucketTransformsError(): Throwable = {
     new UnsupportedOperationException("Multiple bucket transforms are not supported.")
   }
 
@@ -1954,5 +1965,11 @@ object QueryExecutionErrors {
 
   def unsupportedDropNamespaceRestrictError(): Throwable = {
     new SQLFeatureNotSupportedException("Drop namespace restrict is not supported")
+  }
+
+  def invalidUnitInTimestampAdd(unit: String): Throwable = {
+    new SparkIllegalArgumentException(
+      errorClass = "INVALID_PARAMETER_VALUE",
+      messageParameters = Array("unit", "timestampadd", unit))
   }
 }

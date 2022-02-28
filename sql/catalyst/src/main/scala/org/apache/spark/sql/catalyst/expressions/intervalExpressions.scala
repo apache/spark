@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGe
 import org.apache.spark.sql.catalyst.util.DateTimeConstants.MONTHS_PER_YEAR
 import org.apache.spark.sql.catalyst.util.IntervalUtils
 import org.apache.spark.sql.catalyst.util.IntervalUtils._
-import org.apache.spark.sql.errors.QueryExecutionErrors
+import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.types.DayTimeIntervalType.{DAY, HOUR, MINUTE, SECOND}
@@ -122,10 +122,7 @@ case class ExtractANSIIntervalSeconds(child: Expression)
 
 object ExtractIntervalPart {
 
-  def parseExtractField(
-      extractField: String,
-      source: Expression,
-      errorHandleFunc: => Nothing): Expression = {
+  def parseExtractField(extractField: String, source: Expression): Expression = {
     (extractField.toUpperCase(Locale.ROOT), source.dataType) match {
       case ("YEAR" | "Y" | "YEARS" | "YR" | "YRS", YearMonthIntervalType(start, end))
         if isUnitInIntervalRange(YEAR, start, end) =>
@@ -157,7 +154,8 @@ object ExtractIntervalPart {
         ExtractANSIIntervalSeconds(source)
       case ("SECOND" | "S" | "SEC" | "SECONDS" | "SECS", CalendarIntervalType) =>
         ExtractIntervalSeconds(source)
-      case _ => errorHandleFunc
+      case _ =>
+        throw QueryCompilationErrors.literalTypeUnsupportedForSourceTypeError(extractField, source)
     }
   }
 

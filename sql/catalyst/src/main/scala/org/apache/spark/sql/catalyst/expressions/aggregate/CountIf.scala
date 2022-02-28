@@ -17,11 +17,9 @@
 
 package org.apache.spark.sql.catalyst.expressions.aggregate
 
-import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
-import org.apache.spark.sql.catalyst.expressions.{Expression, ExpressionDescription, ImplicitCastInputTypes, UnevaluableAggregate}
-import org.apache.spark.sql.catalyst.trees.TreePattern.{COUNT_IF, TreePattern}
+import org.apache.spark.sql.catalyst.expressions.{Expression, ExpressionDescription, ImplicitCastInputTypes, Literal, NullIf, RuntimeReplaceableAggregate}
 import org.apache.spark.sql.catalyst.trees.UnaryLike
-import org.apache.spark.sql.types.{AbstractDataType, BooleanType, DataType, LongType}
+import org.apache.spark.sql.types.{AbstractDataType, BooleanType}
 
 @ExpressionDescription(
   usage = """
@@ -36,30 +34,11 @@ import org.apache.spark.sql.types.{AbstractDataType, BooleanType, DataType, Long
   """,
   group = "agg_funcs",
   since = "3.0.0")
-case class CountIf(predicate: Expression) extends UnevaluableAggregate with ImplicitCastInputTypes
-  with UnaryLike[Expression] {
-
-  override def prettyName: String = "count_if"
-
-  override def child: Expression = predicate
-
-  override def nullable: Boolean = false
-
-  override def dataType: DataType = LongType
-
+case class CountIf(child: Expression) extends RuntimeReplaceableAggregate
+  with ImplicitCastInputTypes with UnaryLike[Expression] {
+  override lazy val replacement: Expression = Count(new NullIf(child, Literal.FalseLiteral))
+  override def nodeName: String = "count_if"
   override def inputTypes: Seq[AbstractDataType] = Seq(BooleanType)
-
-  final override val nodePatterns: Seq[TreePattern] = Seq(COUNT_IF)
-
-  override def checkInputDataTypes(): TypeCheckResult = predicate.dataType match {
-    case BooleanType =>
-      TypeCheckResult.TypeCheckSuccess
-    case _ =>
-      TypeCheckResult.TypeCheckFailure(
-        s"function $prettyName requires boolean type, not ${predicate.dataType.catalogString}"
-      )
-  }
-
   override protected def withNewChildInternal(newChild: Expression): CountIf =
-    copy(predicate = newChild)
+    copy(child = newChild)
 }

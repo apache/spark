@@ -334,10 +334,14 @@ case class StateStoreRestoreExec(
   override def outputPartitioning: Partitioning = child.outputPartitioning
 
   override def requiredChildDistribution: Seq[Distribution] = {
+    // NOTE: Please read through the NOTE on the classdoc of StatefulOpClusteredDistribution
+    // before making any changes.
+    // TODO(SPARK-38204)
     if (keyExpressions.isEmpty) {
       AllTuples :: Nil
     } else {
-      ClusteredDistribution(keyExpressions, stateInfo.map(_.numPartitions)) :: Nil
+      ClusteredDistribution(keyExpressions,
+        requiredNumPartitions = stateInfo.map(_.numPartitions)) :: Nil
     }
   }
 
@@ -493,10 +497,14 @@ case class StateStoreSaveExec(
   override def outputPartitioning: Partitioning = child.outputPartitioning
 
   override def requiredChildDistribution: Seq[Distribution] = {
+    // NOTE: Please read through the NOTE on the classdoc of StatefulOpClusteredDistribution
+    // before making any changes.
+    // TODO(SPARK-38204)
     if (keyExpressions.isEmpty) {
       AllTuples :: Nil
     } else {
-      ClusteredDistribution(keyExpressions, stateInfo.map(_.numPartitions)) :: Nil
+      ClusteredDistribution(keyExpressions,
+        requiredNumPartitions = stateInfo.map(_.numPartitions)) :: Nil
     }
   }
 
@@ -573,7 +581,11 @@ case class SessionWindowStateStoreRestoreExec(
   }
 
   override def requiredChildDistribution: Seq[Distribution] = {
-    ClusteredDistribution(keyWithoutSessionExpressions, stateInfo.map(_.numPartitions)) :: Nil
+    // NOTE: Please read through the NOTE on the classdoc of StatefulOpClusteredDistribution
+    // before making any changes.
+    // TODO(SPARK-38204)
+    ClusteredDistribution(keyWithoutSessionExpressions,
+      requiredNumPartitions = stateInfo.map(_.numPartitions)) :: Nil
   }
 
   override def requiredChildOrdering: Seq[Seq[SortOrder]] = {
@@ -684,7 +696,11 @@ case class SessionWindowStateStoreSaveExec(
   override def outputPartitioning: Partitioning = child.outputPartitioning
 
   override def requiredChildDistribution: Seq[Distribution] = {
-    ClusteredDistribution(keyExpressions, stateInfo.map(_.numPartitions)) :: Nil
+    // NOTE: Please read through the NOTE on the classdoc of StatefulOpClusteredDistribution
+    // before making any changes.
+    // TODO(SPARK-38204)
+    ClusteredDistribution(keyExpressions,
+      requiredNumPartitions = stateInfo.map(_.numPartitions)) :: Nil
   }
 
   override def shouldRunAnotherBatch(newMetadata: OffsetSeqMetadata): Boolean = {
@@ -741,8 +757,13 @@ case class StreamingDeduplicateExec(
   extends UnaryExecNode with StateStoreWriter with WatermarkSupport {
 
   /** Distribute by grouping attributes */
-  override def requiredChildDistribution: Seq[Distribution] =
-    ClusteredDistribution(keyExpressions, stateInfo.map(_.numPartitions)) :: Nil
+  override def requiredChildDistribution: Seq[Distribution] = {
+    // NOTE: Please read through the NOTE on the classdoc of StatefulOpClusteredDistribution
+    // before making any changes.
+    // TODO(SPARK-38204)
+    ClusteredDistribution(keyExpressions,
+      requiredNumPartitions = stateInfo.map(_.numPartitions)) :: Nil
+  }
 
   override protected def doExecute(): RDD[InternalRow] = {
     metrics // force lazy init at driver
