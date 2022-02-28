@@ -467,14 +467,6 @@ object AggUtils {
       partialAggregate
     }
 
-    // Unlike streaming aggregation, this starts with stateful operator at the new stage, hence
-    // we can rely on the most strict required child distribution in the first node, and let
-    // following nodes having on par or relaxed required child distribution to follow the
-    // output partitioning.
-
-    // This is backward compatible as long as we require the same child distribution in the
-    // stateful operator.
-
     // shuffle & sort happens here: most of details are also handled in this physical plan
     val restored = SessionWindowStateStoreRestoreExec(groupingWithoutSessionAttributes,
       sessionExpression.toAttribute, stateInfo = None, eventTimeWatermark = None,

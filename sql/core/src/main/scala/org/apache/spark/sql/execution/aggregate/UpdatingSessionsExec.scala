@@ -70,7 +70,7 @@ case class UpdatingSessionsExec(
         numShufflePartitions match {
           case Some(parts) =>
             StatefulOperatorPartitioning.getClusteredDistributionWithBackwardCompatibility(
-              expressions, parts, conf) :: Nil
+              groupingWithoutSessionExpression, parts, conf) :: Nil
 
           case _ =>
             throw new IllegalStateException("Expected to set the number of partitions before " +
