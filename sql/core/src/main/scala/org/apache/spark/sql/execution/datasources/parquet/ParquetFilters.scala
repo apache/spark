@@ -734,8 +734,10 @@ class ParquetFilters(
 
       case sources.Not(pred) =>
         createFilterHelper(pred, canPartialPushDownConjuncts = false)
-          .filterNot(_ == null)
-          .map(FilterApi.not)
+          .map {
+            case null => null
+            case f => FilterApi.not(f)
+          }
 
       case sources.In(name, values) if pushDownInFilterThreshold > 0 && values.nonEmpty &&
           canMakeFilterOn(name, values.head) =>
