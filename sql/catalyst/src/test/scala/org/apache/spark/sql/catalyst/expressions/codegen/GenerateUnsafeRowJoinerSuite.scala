@@ -206,7 +206,7 @@ class GenerateUnsafeRowJoinerSuite extends SparkFunSuite {
     if (actualFixedLength !== expectedFixedLength) {
       actualFixedLength.grouped(8)
         .zip(expectedFixedLength.grouped(8))
-        .zip(mergedSchema.fields.toIterator)
+        .zip(mergedSchema.fields.iterator)
         .foreach {
           case ((actual, expected), field) =>
             assert(actual === expected, s"Fixed length sections are not equal for field $field")

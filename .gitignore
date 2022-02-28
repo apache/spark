@@ -9,6 +9,8 @@
 *~
 .java-version
 .DS_Store
+.ammonite
+.bloop
 .bsp/
 .cache
 .classpath
@@ -21,10 +23,12 @@
 # SPARK-35223: Add IssueNavigationLink to make IDEA support hyperlink on JIRA Ticket and GitHub PR on Git plugin.
 !.idea/vcs.xml
 .idea_modules/
+.metals
 .project
 .pydevproject
 .scala_dependencies
 .settings
+.vscode
 /lib/
 R-unit-tests.log
 R/unit-tests.out
@@ -59,6 +63,7 @@ lint-r-report.log
 lint-js-report.log
 log/
 logs/
+metals.sbt
 out/
 project/boot/
 project/build/target/

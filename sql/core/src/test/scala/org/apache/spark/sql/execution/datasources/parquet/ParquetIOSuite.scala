@@ -191,7 +191,12 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
         .coalesce(1)
     }
 
-    val combinations = Seq((5, 2), (1, 0), (1, 1), (18, 10), (18, 17), (19, 0), (38, 37))
+    var combinations = Seq((5, 2), (1, 0), (18, 10), (18, 17), (19, 0), (38, 37))
+    // If ANSI mode is on, the combination (1, 1) will cause a runtime error. Otherwise, the
+    // decimal RDD contains all null values and should be able to read back from Parquet.
+    if (!SQLConf.get.ansiEnabled) {
+      combinations = combinations++ Seq((1, 1))
+    }
     for ((precision, scale) <- combinations) {
       withTempPath { dir =>
         val data = makeDecimalRDD(DecimalType(precision, scale))

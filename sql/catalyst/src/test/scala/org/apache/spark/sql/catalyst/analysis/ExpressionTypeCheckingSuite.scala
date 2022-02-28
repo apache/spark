@@ -23,10 +23,12 @@ import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
+import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
-class ExpressionTypeCheckingSuite extends SparkFunSuite {
+class ExpressionTypeCheckingSuite extends SparkFunSuite with SQLHelper {
 
   val testRelation = LocalRelation(
     Symbol("intField").int,
@@ -103,8 +105,14 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite {
     assertSuccess(GreaterThanOrEqual(Symbol("intField"), Symbol("stringField")))
 
     // We will transform EqualTo with numeric and boolean types to CaseKeyWhen
-    assertSuccess(EqualTo(Symbol("intField"), Symbol("booleanField")))
-    assertSuccess(EqualNullSafe(Symbol("intField"), Symbol("booleanField")))
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
+      assertSuccess(EqualTo(Symbol("intField"), Symbol("booleanField")))
+      assertSuccess(EqualNullSafe(Symbol("intField"), Symbol("booleanField")))
+    }
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      assertError(EqualTo(Symbol("intField"), Symbol("booleanField")), "differing types")
+      assertError(EqualNullSafe(Symbol("intField"), Symbol("booleanField")), "differing types")
+    }
 
     assertErrorForDifferingTypes(EqualTo(Symbol("intField"), Symbol("mapField")))
     assertErrorForDifferingTypes(EqualNullSafe(Symbol("intField"), Symbol("mapField")))

@@ -99,6 +99,10 @@ select element_at(array(1, 2, 3), 0);
 select elt(4, '123', '456');
 select elt(0, '123', '456');
 select elt(-1, '123', '456');
+select elt(null, '123', '456');
+select elt(null, '123', null);
+select elt(1, '123', null);
+select elt(2, '123', null);
 
 select array(1, 2, 3)[5];
 select array(1, 2, 3)[-1];

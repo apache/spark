@@ -119,11 +119,13 @@ abstract class SQLViewTestSuite extends QueryTest with SQLTestUtils {
   test("change SQLConf should not change view behavior - ansiEnabled") {
     withTable("t") {
       Seq(2, 3, 1).toDF("c1").write.format("parquet").saveAsTable("t")
-      val viewName = createView("v1", "SELECT 1/0 AS invalid", Seq("c1"))
-      withView(viewName) {
-        Seq("true", "false").foreach { flag =>
-          withSQLConf(ANSI_ENABLED.key -> flag) {
-            checkViewOutput(viewName, Seq(Row(null)))
+      withSQLConf(ANSI_ENABLED.key -> "false") {
+        val viewName = createView("v1", "SELECT 1/0 AS invalid", Seq("c1"))
+        withView(viewName) {
+          Seq("true", "false").foreach { flag =>
+            withSQLConf(ANSI_ENABLED.key -> flag) {
+              checkViewOutput(viewName, Seq(Row(null)))
+            }
           }
         }
       }
