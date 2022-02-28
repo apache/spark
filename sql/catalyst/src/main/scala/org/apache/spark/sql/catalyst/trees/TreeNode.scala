@@ -246,11 +246,14 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product with Tre
     children.foldLeft(Option.empty[BaseType]) { (l, r) => l.orElse(r.find(f)) }
   }
 
+  /**
+   * Test whether there is [[TreeNode]] satisfies the conditions specified in `f`.
+   * The condition is recursively applied to this node and all of its children (pre-order).
+   */
   def exists(f: BaseType => Boolean): Boolean = if (f(this)) {
     true
   } else {
     children.exists(_.exists(f))
-    // children.foldLeft(false) { (l, r) => if (l) true else r.exists(f) }
   }
 
   /**
