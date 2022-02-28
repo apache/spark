@@ -861,7 +861,7 @@ valueExpression
 primaryExpression
     : name=(CURRENT_DATE | CURRENT_TIMESTAMP | CURRENT_USER)                                   #currentLike
     | TIMESTAMPADD '(' unit=identifier ',' unitsAmount=valueExpression ',' timestamp=valueExpression ')'     #timestampadd
-    | TIMESTAMPDIFF '(' unit=identifier ',' startTimestamp=valueExpression ',' startEnd=valueExpression ')'  #timestampdiff
+    | TIMESTAMPDIFF '(' unit=identifier ',' startTimestamp=valueExpression ',' endTimestamp=valueExpression ')'  #timestampdiff
     | CASE whenClause+ (ELSE elseExpression=expression)? END                                   #searchedCase
     | CASE value=expression whenClause+ (ELSE elseExpression=expression)? END                  #simpleCase
     | name=(CAST | TRY_CAST) '(' expression AS dataType ')'                                    #cast

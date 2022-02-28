@@ -4516,7 +4516,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
     val arguments = Seq(
       Literal(ctx.unit.getText),
       expression(ctx.startTimestamp),
-      expression(ctx.startEnd))
+      expression(ctx.endTimestamp))
     UnresolvedFunction("timestampdiff", arguments, isDistinct = false)
   }
 }
