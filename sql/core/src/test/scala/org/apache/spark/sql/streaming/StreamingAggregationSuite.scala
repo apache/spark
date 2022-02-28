@@ -587,8 +587,8 @@ class StreamingAggregationSuite extends StateStoreMetricsTest with Assertions {
     true
   }
 
-   testWithAllStateVersions("SPARK-21977: coalesce(1) with 0 partition RDD should be " +
-     "repartitioned to 1") {
+  testWithAllStateVersions("SPARK-21977: coalesce(1) with 0 partition RDD should be " +
+    "repartitioned to 1") {
     val inputSource = new BlockRDDBackedSource(spark)
     MockSourceProvider.withMockSources(inputSource) {
       // `coalesce(1)` changes the partitioning of data to `SinglePartition` which by default
