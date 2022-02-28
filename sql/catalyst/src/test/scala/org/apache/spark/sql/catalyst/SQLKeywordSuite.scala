@@ -54,7 +54,7 @@ trait SQLKeywordUtils extends SparkFunSuite with SQLHelper {
     val default = (_: String) => Nil
     var startTagFound = false
     var parseFinished = false
-    val lineIter = sqlSyntaxDefs.toIterator
+    val lineIter = sqlSyntaxDefs.iterator
     while (!parseFinished && lineIter.hasNext) {
       val line = lineIter.next()
       if (line.trim.startsWith(startTag)) {
