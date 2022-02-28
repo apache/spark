@@ -37,7 +37,7 @@ class DecorrelateInnerQuerySuite extends PlanTest {
   val testRelation2 = LocalRelation(x, y, z)
 
   private def hasOuterReferences(plan: LogicalPlan): Boolean = {
-    plan.find(_.expressions.exists(SubExprUtils.containsOuter)).isDefined
+    plan.exists(_.expressions.exists(SubExprUtils.containsOuter))
   }
 
   private def check(

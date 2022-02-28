@@ -734,10 +734,10 @@ abstract class OrcQuerySuite extends OrcQueryTest with SharedSparkSession {
 
       withSQLConf(SQLConf.ORC_VECTORIZED_READER_NESTED_COLUMN_ENABLED.key -> "true") {
         val readDf = spark.read.orc(path)
-        val vectorizationEnabled = readDf.queryExecution.executedPlan.find {
+        val vectorizationEnabled = readDf.queryExecution.executedPlan.exists {
           case scan @ (_: FileSourceScanExec | _: BatchScanExec) => scan.supportsColumnar
           case _ => false
-        }.isDefined
+        }
         assert(vectorizationEnabled)
         checkAnswer(readDf, df)
       }
@@ -756,10 +756,10 @@ abstract class OrcQuerySuite extends OrcQueryTest with SharedSparkSession {
 
       withSQLConf(SQLConf.ORC_VECTORIZED_READER_NESTED_COLUMN_ENABLED.key -> "true") {
         val readDf = spark.read.orc(path)
-        val vectorizationEnabled = readDf.queryExecution.executedPlan.find {
+        val vectorizationEnabled = readDf.queryExecution.executedPlan.exists {
           case scan @ (_: FileSourceScanExec | _: BatchScanExec) => scan.supportsColumnar
           case _ => false
-        }.isDefined
+        }
         assert(vectorizationEnabled)
         checkAnswer(readDf, df)
       }
@@ -783,10 +783,10 @@ abstract class OrcQuerySuite extends OrcQueryTest with SharedSparkSession {
           withSQLConf(SQLConf.ORC_VECTORIZED_READER_NESTED_COLUMN_ENABLED.key -> "true",
             SQLConf.WHOLESTAGE_MAX_NUM_FIELDS.key -> maxNumFields) {
             val scanPlan = spark.read.orc(path).queryExecution.executedPlan
-            assert(scanPlan.find {
+            assert(scanPlan.exists {
               case scan @ (_: FileSourceScanExec | _: BatchScanExec) => scan.supportsColumnar
               case _ => false
-            }.isDefined == vectorizedEnabled)
+            } == vectorizedEnabled)
           }
       }
     }
