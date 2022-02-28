@@ -64,7 +64,7 @@
   "INCOMPATIBLE_DATASOURCE_REGISTER" : {
     "message" : [ "Detected an incompatible DataSourceRegister. Please remove the incompatible library from classpath or upgrade it. Error: %s" ]
   },
-  "INCONSISTENT_BEHAVIOR_CROSS_VERSION": {
+  "INCONSISTENT_BEHAVIOR_CROSS_VERSION" : {
     "message" : [ "You may get a different result due to the upgrading of Spark %s: %s" ]
   },
   "INDEX_OUT_OF_BOUNDS" : {
