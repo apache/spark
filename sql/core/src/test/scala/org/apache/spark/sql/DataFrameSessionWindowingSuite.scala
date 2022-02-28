@@ -20,10 +20,9 @@ package org.apache.spark.sql
 import java.time.LocalDateTime
 
 import org.scalatest.BeforeAndAfterEach
-
 import org.apache.spark.sql.catalyst.encoders.RowEncoder
 import org.apache.spark.sql.catalyst.expressions.AttributeReference
-import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Expand}
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Expand, Filter}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
@@ -466,5 +465,33 @@ class DataFrameSessionWindowingSuite extends QueryTest with SharedSparkSession
       val schema2 = windowedProject2.queryExecution.optimizedPlan.schema
       validateWindowColumnInSchema(schema2, "session")
     }
+  }
+
+  test("SPARK-38349: No need to filter events when gapDuration greater than 0") {
+    val df1 = Seq(
+      ("2016-03-27 19:39:30", 1, "a")).toDF("time", "value", "id")
+      .groupBy(session_window($"time", "-5 seconds"))
+      .agg(count("*").as("counts"))
+      .orderBy($"session_window.start".asc)
+      .select($"session_window.start".cast("string"), $"session_window.end".cast("string"),
+        $"counts")
+
+    val filter1 = df1.queryExecution.optimizedPlan.find(_.isInstanceOf[Filter])
+    assert(filter1.isDefined)
+    val exist1 = filter1.filter(_.toString.contains(">"))
+    assert(exist1.nonEmpty, "No need to filter windows when gapDuration less than 0")
+
+    val df2 = Seq(
+      ("2016-03-27 19:39:40", 2, "a")).toDF("time", "value", "id")
+      .groupBy(session_window($"time", "5 seconds"))
+      .agg(count("*").as("counts"))
+      .orderBy($"session_window.start".asc)
+      .select($"session_window.start".cast("string"), $"session_window.end".cast("string"),
+        $"counts")
+
+    val filter2 = df2.queryExecution.optimizedPlan.find(_.isInstanceOf[Filter])
+    assert(filter2.isDefined)
+    val exist2 = filter2.filter(_.toString.contains(">"))
+    assert(exist2.isEmpty, "No need to filter windows when gapDuration value greater than 0")
   }
 }
