@@ -86,7 +86,8 @@ trait FileScanSuiteBase extends SharedSparkSession {
     val optionsNotEqual =
       new CaseInsensitiveStringMap(ImmutableMap.copyOf(ImmutableMap.of("key2", "value2")))
     val partitionFilters = Seq(And(IsNull(Symbol("data").int), LessThan(Symbol("data").int, 0)))
-    val partitionFiltersNotEqual = Seq(And(IsNull(Symbol("data").int), LessThan(Symbol("data").int, 1)))
+    val partitionFiltersNotEqual = Seq(And(IsNull(Symbol("data").int),
+      LessThan(Symbol("data").int, 1)))
     val dataFilters = Seq(And(IsNull(Symbol("data").int), LessThan(Symbol("data").int, 0)))
     val dataFiltersNotEqual = Seq(And(IsNull(Symbol("data").int), LessThan(Symbol("data").int, 1)))
 

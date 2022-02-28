@@ -802,7 +802,8 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
 
       withTempPath { dir =>
         val m2 = intercept[SparkException] {
-          val df = spark.range(1).select(Symbol("id") as Symbol("a"), Symbol("id") as Symbol("b")).coalesce(1)
+          val df = spark.range(1).select(Symbol("id") as Symbol("a"), Symbol("id") as Symbol("b"))
+            .coalesce(1)
           df.write.partitionBy("a").options(extraOptions).parquet(dir.getCanonicalPath)
         }.getCause.getMessage
         assert(m2.contains("Intentional exception for testing purposes"))
@@ -886,7 +887,8 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
       checkAnswer(
         // Decimal column in this file is encoded using plain dictionary
         readResourceParquetFile("test-data/dec-in-fixed-len.parquet"),
-        spark.range(1 << 4).select(Symbol("id") % 10 cast DecimalType(10, 2) as Symbol("fixed_len_dec")))
+        spark.range(1 << 4)
+          .select(Symbol("id") % 10 cast DecimalType(10, 2) as Symbol("fixed_len_dec")))
     }
   }
 

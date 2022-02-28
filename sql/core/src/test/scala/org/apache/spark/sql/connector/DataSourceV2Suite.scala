@@ -235,8 +235,8 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
     "supports external metadata") {
     withTempDir { dir =>
       val cls = classOf[SupportsExternalMetadataWritableDataSource].getName
-      spark.range(10).select(Symbol("id") as Symbol("i"), -Symbol("id") as Symbol("j")).write.format(cls)
-          .option("path", dir.getCanonicalPath).mode("append").save()
+      spark.range(10).select(Symbol("id") as Symbol("i"), -Symbol("id") as Symbol("j"))
+        .write.format(cls).option("path", dir.getCanonicalPath).mode("append").save()
       val schema = new StructType().add("i", "long").add("j", "long")
         checkAnswer(
           spark.read.format(cls).option("path", dir.getCanonicalPath).schema(schema).load(),
@@ -307,7 +307,8 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
         val path = file.getCanonicalPath
         assert(spark.read.format(cls.getName).option("path", path).load().collect().isEmpty)
 
-        spark.range(10).select(Symbol("id") as Symbol("i"), -Symbol("id") as Symbol("j")).write.format(cls.getName)
+        spark.range(10).select(Symbol("id") as Symbol("i"), -Symbol("id") as Symbol("j"))
+          .write.format(cls.getName)
           .option("path", path).mode("append").save()
         checkAnswer(
           spark.read.format(cls.getName).option("path", path).load(),
@@ -315,29 +316,34 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
 
         // default save mode is ErrorIfExists
         intercept[AnalysisException] {
-          spark.range(10).select(Symbol("id") as Symbol("i"), -Symbol("id") as Symbol("j")).write.format(cls.getName)
+          spark.range(10).select(Symbol("id") as Symbol("i"), -Symbol("id") as Symbol("j"))
+            .write.format(cls.getName)
             .option("path", path).save()
         }
-        spark.range(10).select(Symbol("id") as Symbol("i"), -Symbol("id") as Symbol("j")).write.mode("append").format(cls.getName)
+        spark.range(10).select(Symbol("id") as Symbol("i"), -Symbol("id") as Symbol("j"))
+          .write.mode("append").format(cls.getName)
           .option("path", path).save()
         checkAnswer(
           spark.read.format(cls.getName).option("path", path).load(),
           spark.range(10).union(spark.range(10)).select(Symbol("id"), -Symbol("id")))
 
-        spark.range(5).select(Symbol("id") as Symbol("i"), -Symbol("id") as Symbol("j")).write.format(cls.getName)
+        spark.range(5).select(Symbol("id") as Symbol("i"), -Symbol("id") as Symbol("j"))
+          .write.format(cls.getName)
           .option("path", path).mode("overwrite").save()
         checkAnswer(
           spark.read.format(cls.getName).option("path", path).load(),
           spark.range(5).select(Symbol("id"), -Symbol("id")))
 
         val e = intercept[AnalysisException] {
-          spark.range(5).select(Symbol("id") as Symbol("i"), -Symbol("id") as Symbol("j")).write.format(cls.getName)
+          spark.range(5).select(Symbol("id") as Symbol("i"), -Symbol("id") as Symbol("j"))
+            .write.format(cls.getName)
             .option("path", path).mode("ignore").save()
         }
         assert(e.message.contains("please use Append or Overwrite modes instead"))
 
         val e2 = intercept[AnalysisException] {
-          spark.range(5).select(Symbol("id") as Symbol("i"), -Symbol("id") as Symbol("j")).write.format(cls.getName)
+          spark.range(5).select(Symbol("id") as Symbol("i"), -Symbol("id") as Symbol("j"))
+            .write.format(cls.getName)
             .option("path", path).mode("error").save()
         }
         assert(e2.getMessage.contains("please use Append or Overwrite modes instead"))
@@ -354,7 +360,8 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
           }
         }
         // this input data will fail to read middle way.
-        val input = spark.range(15).select(failingUdf(Symbol("id")).as(Symbol("i"))).select(Symbol("i"), -Symbol("i") as Symbol("j"))
+        val input = spark.range(15).select(failingUdf(Symbol("id")).as(Symbol("i")))
+          .select(Symbol("i"), -Symbol("i") as Symbol("j"))
         val e3 = intercept[SparkException] {
           input.write.format(cls.getName).option("path", path).mode("overwrite").save()
         }
@@ -374,7 +381,9 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
         assert(spark.read.format(cls.getName).option("path", path).load().collect().isEmpty)
 
         val numPartition = 6
-        spark.range(0, 10, 1, numPartition).select(Symbol("id") as Symbol("i"), -Symbol("id") as Symbol("j")).write.format(cls.getName)
+        spark.range(0, 10, 1, numPartition)
+          .select(Symbol("id") as Symbol("i"), -Symbol("id") as Symbol("j"))
+          .write.format(cls.getName)
           .mode("append").option("path", path).save()
         checkAnswer(
           spark.read.format(cls.getName).option("path", path).load(),

@@ -64,13 +64,16 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
   }
 
   test("count distinct is partially aggregated") {
-    val query = testData.groupBy(Symbol("value")).agg(count_distinct(Symbol("key"))).queryExecution.analyzed
+    val query = testData.groupBy(Symbol("value")).agg(count_distinct(Symbol("key")))
+      .queryExecution.analyzed
     testPartialAggregationPlan(query)
   }
 
   test("mixed aggregates are partially aggregated") {
     val query =
-      testData.groupBy(Symbol("value")).agg(count(Symbol("value")), count_distinct(Symbol("key"))).queryExecution.analyzed
+      testData.groupBy(Symbol("value"))
+        .agg(count(Symbol("value")), count_distinct(Symbol("key")))
+        .queryExecution.analyzed
     testPartialAggregationPlan(query)
   }
 
@@ -200,7 +203,8 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
   }
 
   test("terminal limit -> project -> sort should use TakeOrderedAndProject") {
-    val query = testData.select(Symbol("key"), Symbol("value")).sort(Symbol("key")).select(Symbol("value"), Symbol("key")).limit(2)
+    val query = testData.select(Symbol("key"), Symbol("value")).sort(Symbol("key"))
+      .select(Symbol("value"), Symbol("key")).limit(2)
     val planned = query.queryExecution.executedPlan
     assert(planned.isInstanceOf[execution.TakeOrderedAndProjectExec])
     assert(planned.output === testData.select(Symbol("value"), Symbol("key")).logicalPlan.output)
@@ -214,7 +218,8 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
   }
 
   test("TakeOrderedAndProject can appear in the middle of plans") {
-    val query = testData.select(Symbol("key"), Symbol("value")).sort(Symbol("key")).limit(2).filter('key === 3)
+    val query = testData.select(Symbol("key"), Symbol("value"))
+      .sort(Symbol("key")).limit(2).filter('key === 3)
     val planned = query.queryExecution.executedPlan
     assert(planned.find(_.isInstanceOf[TakeOrderedAndProjectExec]).isDefined)
   }

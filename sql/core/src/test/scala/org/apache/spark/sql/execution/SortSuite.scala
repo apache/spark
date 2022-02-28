@@ -44,13 +44,15 @@ class SortSuite extends SparkPlanTest with SharedSparkSession {
 
     checkAnswer(
       input.toDF("a", "b", "c"),
-      (child: SparkPlan) => SortExec(Symbol("a").asc :: Symbol("b").asc :: Nil, global = true, child = child),
+      (child: SparkPlan) => SortExec(Symbol("a").asc :: Symbol("b").asc :: Nil,
+        global = true, child = child),
       input.sortBy(t => (t._1, t._2)).map(Row.fromTuple),
       sortAnswers = false)
 
     checkAnswer(
       input.toDF("a", "b", "c"),
-      (child: SparkPlan) => SortExec(Symbol("b").asc :: Symbol("a").asc :: Nil, global = true, child = child),
+      (child: SparkPlan) => SortExec(Symbol("b").asc :: Symbol("a").asc :: Nil,
+        global = true, child = child),
       input.sortBy(t => (t._2, t._1)).map(Row.fromTuple),
       sortAnswers = false)
   }
@@ -106,7 +108,8 @@ class SortSuite extends SparkPlanTest with SharedSparkSession {
     )
     checkAnswer(
       input.toDF("a", "b", "c"),
-      (child: SparkPlan) => SortExec(Stream(Symbol("a").asc, 'b.asc, 'c.asc), global = true, child = child),
+      (child: SparkPlan) => SortExec(Stream(Symbol("a").asc, 'b.asc, 'c.asc),
+        global = true, child = child),
       input.sortBy(t => (t._1, t._2, t._3)).map(Row.fromTuple),
       sortAnswers = false)
   }

@@ -608,7 +608,8 @@ class ExplainSuiteAE extends ExplainSuiteHelper with EnableAdaptiveExecutionSuit
 
   test("SPARK-35884: Explain formatted with subquery") {
     withTempView("t1", "t2") {
-      spark.range(100).select(Symbol("id") % 10 as "key", Symbol("id") as "value").createOrReplaceTempView("t1")
+      spark.range(100).select(Symbol("id") % 10 as "key", Symbol("id") as "value")
+        .createOrReplaceTempView("t1")
       spark.range(10).createOrReplaceTempView("t2")
       val query =
         """

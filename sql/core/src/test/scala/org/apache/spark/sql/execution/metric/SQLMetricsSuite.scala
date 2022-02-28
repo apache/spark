@@ -704,7 +704,8 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
     withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true") {
       // A special query that only has one partition, so there is no shuffle and the entire query
       // can be whole-stage-codegened.
-      val df = spark.range(0, 1500, 1, 1).limit(10).groupBy(Symbol("id")).count().limit(1).filter('id >= 0)
+      val df = spark.range(0, 1500, 1, 1).limit(10).groupBy(Symbol("id"))
+        .count().limit(1).filter('id >= 0)
       df.collect()
       val plan = df.queryExecution.executedPlan
 

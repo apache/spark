@@ -1140,7 +1140,8 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
 
   test("withField should add multiple fields to nullable struct") {
     checkAnswer(
-      nullableStructLevel1.withColumn("a", Symbol("a").withField("d", lit(4)).withField("e", lit(5))),
+      nullableStructLevel1.withColumn("a", Symbol("a")
+        .withField("d", lit(4)).withField("e", lit(5))),
       Row(null) :: Row(Row(1, null, 3, 4, 5)) :: Nil,
       StructType(Seq(
         StructField("a", StructType(Seq(
@@ -1295,7 +1296,8 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
 
   test("withField should replace multiple fields in nullable struct") {
     checkAnswer(
-      nullableStructLevel1.withColumn("a", Symbol("a").withField("a", lit(10)).withField("b", lit(20))),
+      nullableStructLevel1.withColumn("a", Symbol("a").withField("a", lit(10))
+        .withField("b", lit(20))),
       Row(null) :: Row(Row(10, 20, 3)) :: Nil,
       StructType(Seq(
         StructField("a", StructType(Seq(

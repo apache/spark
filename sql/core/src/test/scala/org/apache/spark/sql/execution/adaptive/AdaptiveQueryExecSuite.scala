@@ -283,7 +283,8 @@ class AdaptiveQueryExecSuite
       val df1 = spark.range(10).withColumn("a", Symbol("id"))
       val df2 = spark.range(10).withColumn("b", Symbol("id"))
       withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
-        val testDf = df1.where(Symbol("a") > 10).join(df2.where(Symbol("b") > 10), Seq("id"), "left_outer")
+        val testDf = df1.where(Symbol("a") > 10)
+          .join(df2.where(Symbol("b") > 10), Seq("id"), "left_outer")
           .groupBy(Symbol("a")).count()
         checkAnswer(testDf, Seq())
         val plan = testDf.queryExecution.executedPlan
@@ -296,7 +297,8 @@ class AdaptiveQueryExecSuite
       }
 
       withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "1") {
-        val testDf = df1.where(Symbol("a") > 10).join(df2.where(Symbol("b") > 10), Seq("id"), "left_outer")
+        val testDf = df1.where(Symbol("a") > 10)
+          .join(df2.where(Symbol("b") > 10), Seq("id"), "left_outer")
           .groupBy(Symbol("a")).count()
         checkAnswer(testDf, Seq())
         val plan = testDf.queryExecution.executedPlan

@@ -242,7 +242,8 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
             child = child,
             ioschema = serde
           ),
-          df.select(Symbol("a"), Symbol("b"), Symbol("c"), Symbol("d"), Symbol("e"), Symbol("f"), Symbol("g"), Symbol("h"), Symbol("i"), Symbol("j")).collect())
+          df.select(Symbol("a"), Symbol("b"), Symbol("c"), Symbol("d"), Symbol("e"),
+            Symbol("f"), Symbol("g"), Symbol("h"), Symbol("i"), Symbol("j")).collect())
       }
     }
   }
@@ -483,7 +484,8 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
           child = child,
           ioschema = defaultIOSchema
         ),
-        df.select(Symbol("a"), Symbol("b"), Symbol("c"), Symbol("d"), Symbol("e"), Symbol("f"), Symbol("g")).collect())
+        df.select(Symbol("a"), Symbol("b"), Symbol("c"), Symbol("d"), Symbol("e"),
+          Symbol("f"), Symbol("g")).collect())
     }
   }
 

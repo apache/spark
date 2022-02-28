@@ -138,7 +138,8 @@ class UserDefinedTypeSuite extends QueryTest with SharedSparkSession with Parque
     assert(vec === df.collect()(0).getAs[TestUDT.MyDenseVector](1))
     assert(vec === df.take(1)(0).getAs[TestUDT.MyDenseVector](1))
     checkAnswer(df.limit(1).groupBy(Symbol("int")).agg(first(Symbol("vec"))), Row(1, vec))
-    checkAnswer(df.orderBy(Symbol("int")).limit(1).groupBy(Symbol("int")).agg(first(Symbol("vec"))), Row(1, vec))
+    checkAnswer(df.orderBy(Symbol("int")).limit(1).groupBy(Symbol("int"))
+      .agg(first(Symbol("vec"))), Row(1, vec))
   }
 
   test("UDTs with JSON") {
