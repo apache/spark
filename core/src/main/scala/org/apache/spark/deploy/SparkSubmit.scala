@@ -1456,9 +1456,9 @@ private[spark] object SparkSubmitUtils extends Logging {
           throw new RuntimeException(rr.getAllProblemMessages.toString)
         }
         // retrieve all resolved dependencies
+        retrieveOptions.setDestArtifactPattern(packagesDirectory.getAbsolutePath + File.separator +
+          "[organization]_[artifact]-[revision](-[classifier]).[ext]")
         ivy.retrieve(rr.getModuleDescriptor.getModuleRevisionId,
-          packagesDirectory.getAbsolutePath + File.separator +
-            "[organization]_[artifact]-[revision](-[classifier]).[ext]",
           retrieveOptions.setConfs(Array(ivyConfName)))
         resolveDependencyPaths(rr.getArtifacts.toArray, packagesDirectory)
       } finally {
