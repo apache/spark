@@ -190,7 +190,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         """Returns a :class:`DataFrameStatFunctions` for statistic functions."""
         return DataFrameStatFunctions(self)
 
-    def toJSON(self, use_unicode: bool = True) -> "RDD[str]":
+    def toJSON(self, use_unicode: bool = True) -> RDD[str]:
         """Converts a :class:`DataFrame` into a :class:`RDD` of string.
 
         Each row is turned into a JSON document as one element in the returned RDD.
