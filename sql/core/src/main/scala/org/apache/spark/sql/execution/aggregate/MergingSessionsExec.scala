@@ -40,6 +40,8 @@ import org.apache.spark.sql.execution.metric.SQLMetrics
  */
 case class MergingSessionsExec(
     requiredChildDistributionExpressions: Option[Seq[Expression]],
+    isStreaming: Boolean,
+    numShufflePartitions: Option[Int],
     groupingExpressions: Seq[NamedExpression],
     sessionExpression: NamedExpression,
     aggregateExpressions: Seq[AggregateExpression],

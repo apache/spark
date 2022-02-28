@@ -28,6 +28,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.execution.{LocalLimitExec, QueryExecution, SparkPlan, SparkPlanner, UnaryExecNode}
+import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, MergingSessionsExec, ObjectHashAggregateExec, SortAggregateExec, UpdatingSessionsExec}
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeLike
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.OutputMode
@@ -132,8 +133,25 @@ class IncrementalExecution(
     }
 
     override def apply(plan: SparkPlan): SparkPlan = plan transform {
-      case StatefulOperatorPartitioningExec(clustering, _, child) =>
-        StatefulOperatorPartitioningExec(clustering, Some(numStateStores), child)
+      case a: SortAggregateExec =>
+        require(a.isStreaming, "The node should have marked as streaming!")
+        a.copy(numShufflePartitions = Some(numStateStores))
+
+      case a: HashAggregateExec =>
+        require(a.isStreaming, "The node should have marked as streaming!")
+        a.copy(numShufflePartitions = Some(numStateStores))
+
+      case a: ObjectHashAggregateExec =>
+        require(a.isStreaming, "The node should have marked as streaming!")
+        a.copy(numShufflePartitions = Some(numStateStores))
+
+      case a: MergingSessionsExec =>
+        require(a.isStreaming, "The node should have marked as streaming!")
+        a.copy(numShufflePartitions = Some(numStateStores))
+
+      case a: UpdatingSessionsExec =>
+        require(a.isStreaming, "The node should have marked as streaming!")
+        a.copy(numShufflePartitions = Some(numStateStores))
 
       case StateStoreSaveExec(keys, None, None, None, stateFormatVersion,
              UnaryExecNode(agg,

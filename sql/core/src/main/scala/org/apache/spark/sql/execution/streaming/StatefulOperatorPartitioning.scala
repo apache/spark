@@ -19,31 +19,8 @@ package org.apache.spark.sql.execution.streaming
 
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.plans.physical.{ClusteredDistribution, Distribution, StatefulOpClusteredDistribution}
-import org.apache.spark.sql.execution.{BaseProjectExec, SparkPlan}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.STATEFUL_OPERATOR_USE_STRICT_DISTRIBUTION
-
-case class StatefulOperatorPartitioningExec(
-    clustering: Seq[Expression],
-    numPartitions: Option[Int] = None,
-    child: SparkPlan)
-  extends BaseProjectExec(child.output, child) {
-
-  import StatefulOperatorPartitioning._
-
-  override def requiredChildDistribution: Seq[Distribution] = {
-    numPartitions match {
-      case Some(part) =>
-        getClusteredDistributionWithBackwardCompatibility(clustering, part, conf) :: Nil
-      case _ =>
-        throw new IllegalStateException("Expected to set the number of partitions before " +
-          "calling the method!")
-    }
-  }
-
-  override protected def withNewChildInternal(
-      newChild: SparkPlan): StatefulOperatorPartitioningExec = copy(child = newChild)
-}
 
 /**
  * This object is to provide clustered distribution for stateful operator with ensuring backward

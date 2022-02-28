@@ -45,8 +45,29 @@ object AggUtils {
     }
   }
 
+  private def createStreamingAggregate(
+      requiredChildDistributionExpressions: Option[Seq[Expression]] = None,
+      groupingExpressions: Seq[NamedExpression] = Nil,
+      aggregateExpressions: Seq[AggregateExpression] = Nil,
+      aggregateAttributes: Seq[Attribute] = Nil,
+      initialInputBufferOffset: Int = 0,
+      resultExpressions: Seq[NamedExpression] = Nil,
+      child: SparkPlan): SparkPlan = {
+    // numShufflePartitions will be set to None, and replaced to the actual value in the state rule.
+    createAggregate(
+      requiredChildDistributionExpressions,
+      isStreaming = true,
+      groupingExpressions = groupingExpressions,
+      aggregateExpressions = aggregateExpressions,
+      aggregateAttributes = aggregateAttributes,
+      initialInputBufferOffset = initialInputBufferOffset,
+      resultExpressions = resultExpressions,
+      child = child)
+  }
+
   private def createAggregate(
       requiredChildDistributionExpressions: Option[Seq[Expression]] = None,
+      isStreaming: Boolean = false,
       groupingExpressions: Seq[NamedExpression] = Nil,
       aggregateExpressions: Seq[AggregateExpression] = Nil,
       aggregateAttributes: Seq[Attribute] = Nil,
@@ -60,6 +81,8 @@ object AggUtils {
     if (useHash && !forceSortAggregate) {
       HashAggregateExec(
         requiredChildDistributionExpressions = requiredChildDistributionExpressions,
+        isStreaming = isStreaming,
+        numShufflePartitions = None,
         groupingExpressions = groupingExpressions,
         aggregateExpressions = mayRemoveAggFilters(aggregateExpressions),
         aggregateAttributes = aggregateAttributes,
@@ -73,6 +96,8 @@ object AggUtils {
       if (objectHashEnabled && useObjectHash && !forceSortAggregate) {
         ObjectHashAggregateExec(
           requiredChildDistributionExpressions = requiredChildDistributionExpressions,
+          isStreaming = isStreaming,
+          numShufflePartitions = None,
           groupingExpressions = groupingExpressions,
           aggregateExpressions = mayRemoveAggFilters(aggregateExpressions),
           aggregateAttributes = aggregateAttributes,
@@ -82,6 +107,8 @@ object AggUtils {
       } else {
         SortAggregateExec(
           requiredChildDistributionExpressions = requiredChildDistributionExpressions,
+          isStreaming = isStreaming,
+          numShufflePartitions = None,
           groupingExpressions = groupingExpressions,
           aggregateExpressions = mayRemoveAggFilters(aggregateExpressions),
           aggregateAttributes = aggregateAttributes,
@@ -121,7 +148,7 @@ object AggUtils {
     // If we have session window expression in aggregation, we add MergingSessionExec to
     // merge sessions with calculating aggregation values.
     val interExec: SparkPlan = mayAppendMergingSessionExec(groupingExpressions,
-      aggregateExpressions, partialAggregate)
+      aggregateExpressions, partialAggregate, isStreaming = false)
 
     // 2. Create an Aggregate Operator for final aggregations.
     val finalAggregateExpressions = aggregateExpressions.map(_.copy(mode = Final))
@@ -153,7 +180,8 @@ object AggUtils {
     // If we have session window expression in aggregation, we add UpdatingSessionsExec to
     // calculate sessions for input rows and update rows' session column, so that further
     // aggregations can aggregate input rows for the same session.
-    val maySessionChild = mayAppendUpdatingSessionExec(groupingExpressions, child)
+    val maySessionChild = mayAppendUpdatingSessionExec(groupingExpressions, child,
+      isStreaming = false)
 
     val distinctAttributes = normalizedNamedDistinctExpressions.map(_.toAttribute)
     val groupingAttributes = groupingExpressions.map(_.toAttribute)
@@ -290,7 +318,7 @@ object AggUtils {
     val partialAggregate: SparkPlan = {
       val aggregateExpressions = functionsWithoutDistinct.map(_.copy(mode = Partial))
       val aggregateAttributes = aggregateExpressions.map(_.resultAttribute)
-      createAggregate(
+      createStreamingAggregate(
         groupingExpressions = groupingExpressions,
         aggregateExpressions = aggregateExpressions,
         aggregateAttributes = aggregateAttributes,
@@ -299,46 +327,10 @@ object AggUtils {
         child = child)
     }
 
-    // We have to make sure the physical plans for streaming aggregation should be placed to
-    // the same stage except partial aggregation. It may not work because the new stage after
-    // partial aggregation starts with another aggregation instead of state store restore exec.
-
-    // We can make a change for aggregate exec to receive the exact required child distribution,
-    // to make sure all physical plans for streaming aggregation are all requiring the same, but
-    // we don't have an exact information for required number of partitions as of now, so we
-    // should defer the required child distribution till state rule has been applied, and then
-    // it is going to be non-trivial to replace required child distribution from aggregate exec.
-
-    // Instead, we can introduce a specially crafted physical node at the first of the stage,
-    // which effectively pass-through the inputs, but able to change the required child
-    // distribution in the state rule. In state rule, we change the required child distribution
-    // with same one we use for state store restore exec. After the change, based on the relaxed
-    // requirement of clustered distribution, further aggregate execs will follow the output
-    // partitioning of the first node.
-
-    // Note that, requiring the exact number of partitions from the first node, is backward
-    // compatible. There are two major cases we need to consider:
-    // 1. child had partitioned with sub-group or group with different order, and had same number
-    //    of partitions with default number of shuffle partitions.
-    // 2. child had partitioned with sub-group or group with different order, and had different
-    //    number of partitions compared to the default number of shuffle partitions.
-    // In former, StateStoreRestoreExec and StateStoreSaveExec would have required the exact number
-    // of partitions, which the child output partitioning would not satisfy, hence shuffle will
-    // happen once before the operator. The steps would be different with the steps described in
-    // the method doc. Placing a new node moves the shuffle to the prior of new node, which
-    // makes the steps be effectively same as described in the method doc, and it does not lead
-    // the wrong behavior/output.
-    // In latter, the first aggregate exec after partial aggregate would have triggered the
-    // shuffle before, and now, new node will do it instead. The output partitioning will satisfy
-    // remaining nodes for aggregation.
-
-    val statePartitioningExec: SparkPlan = StatefulOperatorPartitioningExec(
-      clustering = groupingAttributes, child = partialAggregate)
-
     val partialMerged1: SparkPlan = {
       val aggregateExpressions = functionsWithoutDistinct.map(_.copy(mode = PartialMerge))
       val aggregateAttributes = aggregateExpressions.map(_.resultAttribute)
-      createAggregate(
+      createStreamingAggregate(
         requiredChildDistributionExpressions =
             Some(groupingAttributes),
         groupingExpressions = groupingAttributes,
@@ -347,7 +339,7 @@ object AggUtils {
         initialInputBufferOffset = groupingAttributes.length,
         resultExpressions = groupingAttributes ++
             aggregateExpressions.flatMap(_.aggregateFunction.inputAggBufferAttributes),
-        child = statePartitioningExec)
+        child = partialAggregate)
     }
 
     val restored = StateStoreRestoreExec(groupingAttributes, None, stateFormatVersion,
@@ -356,7 +348,7 @@ object AggUtils {
     val partialMerged2: SparkPlan = {
       val aggregateExpressions = functionsWithoutDistinct.map(_.copy(mode = PartialMerge))
       val aggregateAttributes = aggregateExpressions.map(_.resultAttribute)
-      createAggregate(
+      createStreamingAggregate(
         requiredChildDistributionExpressions =
             Some(groupingAttributes),
         groupingExpressions = groupingAttributes,
@@ -384,7 +376,7 @@ object AggUtils {
       // projection:
       val finalAggregateAttributes = finalAggregateExpressions.map(_.resultAttribute)
 
-      createAggregate(
+      createStreamingAggregate(
         requiredChildDistributionExpressions = Some(groupingAttributes),
         groupingExpressions = groupingAttributes,
         aggregateExpressions = finalAggregateExpressions,
@@ -443,7 +435,7 @@ object AggUtils {
     val partialAggregate: SparkPlan = {
       val aggregateExpressions = functionsWithoutDistinct.map(_.copy(mode = Partial))
       val aggregateAttributes = aggregateExpressions.map(_.resultAttribute)
-      createAggregate(
+      createStreamingAggregate(
         groupingExpressions = groupingExpressions,
         aggregateExpressions = aggregateExpressions,
         aggregateAttributes = aggregateAttributes,
@@ -460,6 +452,8 @@ object AggUtils {
       // this is to reduce amount of rows to shuffle
       MergingSessionsExec(
         requiredChildDistributionExpressions = None,
+        isStreaming = true,
+        numShufflePartitions = None,
         groupingExpressions = groupingAttributes,
         sessionExpression = sessionExpression,
         aggregateExpressions = aggregateExpressions,
@@ -491,6 +485,9 @@ object AggUtils {
       val aggregateAttributes = aggregateExpressions.map(_.resultAttribute)
       MergingSessionsExec(
         requiredChildDistributionExpressions = Some(groupingWithoutSessionAttributes),
+        isStreaming = true,
+        // This will be replaced with actual value in state rule.
+        numShufflePartitions = None,
         groupingExpressions = groupingAttributes,
         sessionExpression = sessionExpression,
         aggregateExpressions = aggregateExpressions,
@@ -518,8 +515,8 @@ object AggUtils {
       // projection:
       val finalAggregateAttributes = finalAggregateExpressions.map(_.resultAttribute)
 
-      createAggregate(
-        requiredChildDistributionExpressions = Some(groupingAttributes),
+      createStreamingAggregate(
+        requiredChildDistributionExpressions = Some(groupingWithoutSessionAttributes),
         groupingExpressions = groupingAttributes,
         aggregateExpressions = finalAggregateExpressions,
         aggregateAttributes = finalAggregateAttributes,
@@ -533,10 +530,15 @@ object AggUtils {
 
   private def mayAppendUpdatingSessionExec(
       groupingExpressions: Seq[NamedExpression],
-      maybeChildPlan: SparkPlan): SparkPlan = {
+      maybeChildPlan: SparkPlan,
+      isStreaming: Boolean): SparkPlan = {
     groupingExpressions.find(_.metadata.contains(SessionWindow.marker)) match {
       case Some(sessionExpression) =>
         UpdatingSessionsExec(
+          isStreaming = isStreaming,
+          // numShufflePartitions will be set to None, and replaced to the actual value in the
+          // state rule if the query is streaming.
+          numShufflePartitions = None,
           groupingExpressions.map(_.toAttribute),
           sessionExpression.toAttribute,
           maybeChildPlan)
@@ -548,7 +550,8 @@ object AggUtils {
   private def mayAppendMergingSessionExec(
       groupingExpressions: Seq[NamedExpression],
       aggregateExpressions: Seq[AggregateExpression],
-      partialAggregate: SparkPlan): SparkPlan = {
+      partialAggregate: SparkPlan,
+      isStreaming: Boolean): SparkPlan = {
     groupingExpressions.find(_.metadata.contains(SessionWindow.marker)) match {
       case Some(sessionExpression) =>
         val aggExpressions = aggregateExpressions.map(_.copy(mode = PartialMerge))
@@ -561,6 +564,10 @@ object AggUtils {
 
         MergingSessionsExec(
           requiredChildDistributionExpressions = Some(groupingWithoutSessionsAttributes),
+          isStreaming = isStreaming,
+          // numShufflePartitions will be set to None, and replaced to the actual value in the
+          // state rule if the query is streaming.
+          numShufflePartitions = None,
           groupingExpressions = groupingAttributes,
           sessionExpression = sessionExpression,
           aggregateExpressions = aggExpressions,

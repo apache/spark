@@ -45,6 +45,8 @@ import org.apache.spark.util.Utils
  */
 case class HashAggregateExec(
     requiredChildDistributionExpressions: Option[Seq[Expression]],
+    isStreaming: Boolean,
+    numShufflePartitions: Option[Int],
     groupingExpressions: Seq[NamedExpression],
     aggregateExpressions: Seq[AggregateExpression],
     aggregateAttributes: Seq[Attribute],

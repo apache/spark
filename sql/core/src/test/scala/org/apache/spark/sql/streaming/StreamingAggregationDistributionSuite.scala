@@ -24,7 +24,7 @@ import org.scalatest.Assertions
 
 import org.apache.spark.sql.catalyst.plans.physical.UnspecifiedDistribution
 import org.apache.spark.sql.execution.aggregate.BaseAggregateExec
-import org.apache.spark.sql.execution.streaming.{MemoryStream, StatefulOperatorPartitioningExec, StateStoreRestoreExec, StateStoreSaveExec}
+import org.apache.spark.sql.execution.streaming.{MemoryStream, StateStoreRestoreExec, StateStoreSaveExec}
 import org.apache.spark.sql.functions.count
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.OutputMode.Update
@@ -48,16 +48,6 @@ class StreamingAggregationDistributionSuite extends StreamTest
       CheckAnswer((1, 2, 2), (2, 4, 1), (3, 6, 1), (4, 8, 1)),
       Execute { query =>
         val numPartitions = query.lastExecution.numStateStores
-
-        // verify the partitioning node first in the stage
-        val statePartitioningExecs = query.lastExecution.executedPlan.collect {
-          case s: StatefulOperatorPartitioningExec => s
-        }
-        assert(statePartitioningExecs.nonEmpty)
-        assert(requireStatefulOpClusteredDistribution(statePartitioningExecs.head,
-          Seq(Seq("key1", "key2")), numPartitions))
-        assert(hasDesiredHashPartitioningInChildren(statePartitioningExecs.head,
-          Seq(Seq("key1", "key2")), numPartitions))
 
         // verify state store restore/save
         val stateStoreOps = query.lastExecution.executedPlan.collect {
@@ -192,16 +182,6 @@ class StreamingAggregationDistributionSuite extends StreamTest
 
         val numPartitions = query.lastExecution.numStateStores
 
-        // verify the partitioning node first in the stage
-        val statePartitioningExecs = executedPlan.collect {
-          case s: StatefulOperatorPartitioningExec => s
-        }
-        assert(statePartitioningExecs.nonEmpty)
-        assert(requireClusteredDistribution(statePartitioningExecs.head,
-          Seq(Seq("key1", "key2")), Some(numPartitions)))
-        assert(hasDesiredHashPartitioningInChildren(statePartitioningExecs.head,
-          Seq(Seq("key1")), numPartitions))
-
         // verify state store restore/save
         val stateStoreOps = executedPlan.collect {
           case s: StateStoreRestoreExec => s
@@ -233,7 +213,7 @@ class StreamingAggregationDistributionSuite extends StreamTest
         // we expect, HashPartitioning with sub-clustering keys & number of partitions.
         aggregateExecsWithoutPartialAgg.foreach { aggr =>
           assert(requireClusteredDistribution(aggr, Seq(Seq("key1", "key2")),
-            None))
+            Some(numPartitions)))
           assert(hasDesiredHashPartitioningInChildren(aggr, Seq(Seq("key1")),
             numPartitions))
         }
