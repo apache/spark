@@ -20,6 +20,7 @@ package org.apache.spark.sql
 import java.time.LocalDateTime
 
 import org.scalatest.BeforeAndAfterEach
+
 import org.apache.spark.sql.catalyst.encoders.RowEncoder
 import org.apache.spark.sql.catalyst.expressions.AttributeReference
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Expand, Filter}
