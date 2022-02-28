@@ -4042,7 +4042,8 @@ object SessionWindowing extends Rule[LogicalPlan] {
           children.toStream.exists(e =>
             e.toString.startsWith("-") || e.toString.startsWith("0")) ||
             // User defined functions are not resolved here
-            gapDuration.child.getField("udfName").child != null
+            !gapDuration.child.getField("udfName")
+              .child.toString.toLowerCase(Locale.ROOT).startsWith("case when")
         }
         val filterExpr = if (validGapDuration) {
           IsNotNull(session.timeColumn) &&

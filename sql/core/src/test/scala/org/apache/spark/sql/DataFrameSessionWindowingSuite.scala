@@ -469,6 +469,7 @@ class DataFrameSessionWindowingSuite extends QueryTest with SharedSparkSession
   }
 
   test("SPARK-38349: No need to filter events when gapDuration greater than 0") {
+    // negative value
     val df1 = Seq(
       ("2016-03-27 19:39:30", 1, "a")).toDF("time", "value", "id")
       .groupBy(session_window($"time", "-5 seconds"))
@@ -482,6 +483,7 @@ class DataFrameSessionWindowingSuite extends QueryTest with SharedSparkSession
     val exist1 = filter1.filter(_.toString.contains(">"))
     assert(exist1.nonEmpty, "No need to filter windows when gapDuration less than 0")
 
+    // positive value
     val df2 = Seq(
       ("2016-03-27 19:39:40", 2, "a")).toDF("time", "value", "id")
       .groupBy(session_window($"time", "5 seconds"))
@@ -494,5 +496,36 @@ class DataFrameSessionWindowingSuite extends QueryTest with SharedSparkSession
     assert(filter2.isDefined)
     val exist2 = filter2.filter(_.toString.contains(">"))
     assert(exist2.isEmpty, "No need to filter windows when gapDuration value greater than 0")
+
+    // case when
+    val df3 = Seq(
+      ("2016-03-27 19:39:40", 2, "a")).toDF("time", "value", "id")
+      .groupBy(session_window($"time",
+        when(col("time").equalTo("1"), "5 seconds")
+        .when(col("time").equalTo("2"), "10 seconds")
+        .otherwise("10 seconds")))
+      .agg(count("*").as("counts"))
+      .orderBy($"session_window.start".asc)
+      .select($"session_window.start".cast("string"), $"session_window.end".cast("string"),
+        $"counts")
+
+    val filter3 = df3.queryExecution.optimizedPlan.find(_.isInstanceOf[Filter])
+    assert(filter3.isDefined)
+    val exist3 = filter3.filter(_.toString.contains(">"))
+    assert(exist3.isEmpty, "No need to filter windows when gapDuration value greater than 0")
+
+    // udf
+    withTempTable { table =>
+      spark.udf.register("gapDuration",
+        (i: java.lang.Integer) => s"${i * 10} seconds")
+      val filter4 = spark.sql(
+        s"""select session_window(time, gapDuration(value)),
+           | value from $table""".stripMargin)
+          .select($"session_window.start".cast(StringType), $"session_window.end".cast(StringType),
+            $"value").queryExecution.optimizedPlan.find(_.isInstanceOf[Filter])
+      assert(filter4.isDefined)
+      val exist4 = filter4.filter(_.toString.contains(">"))
+      assert(exist4.nonEmpty, "need to filter windows when gapDuration is udf")
+    }
   }
 }
