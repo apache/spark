@@ -896,6 +896,12 @@ object SQLConf {
     .intConf
     .createWithDefault(4096)
 
+  val PARQUET_COLUMN_NAME_CHECK_ENABLED = buildConf("spark.sql.parquet.columnNameCheck.enabled")
+    .doc("Parquet Column Name Check.")
+    .version("3.1.1")
+    .booleanConf
+    .createWithDefault(true)
+
   val ORC_COMPRESSION = buildConf("spark.sql.orc.compression.codec")
     .doc("Sets the compression codec used when writing ORC files. If either `compression` or " +
       "`orc.compress` is specified in the table-specific options/properties, the precedence " +
@@ -3629,6 +3635,8 @@ class SQLConf extends Serializable with Logging {
   def parquetVectorizedReaderEnabled: Boolean = getConf(PARQUET_VECTORIZED_READER_ENABLED)
 
   def parquetVectorizedReaderBatchSize: Int = getConf(PARQUET_VECTORIZED_READER_BATCH_SIZE)
+
+  def parquetColumnNameCheckEnabled: Boolean = getConf(PARQUET_COLUMN_NAME_CHECK_ENABLED)
 
   def columnBatchSize: Int = getConf(COLUMN_BATCH_SIZE)
 

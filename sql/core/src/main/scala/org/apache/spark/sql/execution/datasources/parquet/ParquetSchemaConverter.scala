@@ -585,9 +585,11 @@ private[sql] object ParquetSchemaConverter {
     Types.buildMessage().named(ParquetSchemaConverter.SPARK_PARQUET_SCHEMA_NAME)
 
   def checkFieldName(name: String): Unit = {
-    // ,;{}()\n\t= and space are special characters in Parquet schema
-    if (name.matches(".*[ ,;{}()\n\t=].*")) {
-      throw QueryCompilationErrors.columnNameContainsInvalidCharactersError(name)
+    if (SQLConf.get.parquetColumnNameCheckEnabled) {
+      // ,;{}()\n\t= and space are special characters in Parquet schema
+      if (name.matches(".*[ ,;{}()\n\t=].*")) {
+        throw QueryCompilationErrors.columnNameContainsInvalidCharactersError(name)
+      }
     }
   }
 
