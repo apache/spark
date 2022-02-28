@@ -439,8 +439,15 @@ abstract class TempViewTestSuite extends SQLViewTestSuite {
     }
   }
 
-  test("back compatibility: skip cyclic reference check when storeAnalyzedPlan = true") {
+  test("back compatibility: skip cyclic reference check if view is stored as logical plan") {
     val viewName = formattedViewName("v")
+    withSQLConf(STORE_ANALYZED_PLAN_FOR_VIEW.key -> "false") {
+      withView(viewName) {
+        createDatasetView(sql("SELECT 1"), "v")
+        createDatasetView(sql(s"SELECT * FROM $viewName"), "v")
+        checkViewOutput(viewName, Seq(Row(1)))
+      }
+    }
     withSQLConf(STORE_ANALYZED_PLAN_FOR_VIEW.key -> "true") {
       withView(viewName) {
         createDatasetView(sql("SELECT 1"), "v")
