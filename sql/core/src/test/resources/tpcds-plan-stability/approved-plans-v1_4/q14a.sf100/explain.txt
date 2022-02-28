@@ -477,7 +477,7 @@ Input [7]: [ss_item_sk#1, ss_quantity#2, ss_list_price#3, i_item_sk#48, i_brand_
 (78) HashAggregate [codegen id : 45]
 Input [5]: [ss_quantity#2, ss_list_price#3, i_brand_id#49, i_class_id#50, i_category_id#51]
 Keys [3]: [i_brand_id#49, i_class_id#50, i_category_id#51]
-Functions [2]: [partial_sum(CheckOverflow((promote_precision(cast(ss_quantity#2 as decimal(12,2))) * promote_precision(cast(ss_list_price#3 as decimal(12,2)))), DecimalType(18,2), true)), partial_count(1)]
+Functions [2]: [partial_sum(CheckOverflow((promote_precision(cast(ss_quantity#2 as decimal(12,2))) * promote_precision(cast(ss_list_price#3 as decimal(12,2)))), DecimalType(18,2))), partial_count(1)]
 Aggregate Attributes [3]: [sum#54, isEmpty#55, count#56]
 Results [6]: [i_brand_id#49, i_class_id#50, i_category_id#51, sum#57, isEmpty#58, count#59]
 
@@ -488,9 +488,9 @@ Arguments: hashpartitioning(i_brand_id#49, i_class_id#50, i_category_id#51, 5), 
 (80) HashAggregate [codegen id : 46]
 Input [6]: [i_brand_id#49, i_class_id#50, i_category_id#51, sum#57, isEmpty#58, count#59]
 Keys [3]: [i_brand_id#49, i_class_id#50, i_category_id#51]
-Functions [2]: [sum(CheckOverflow((promote_precision(cast(ss_quantity#2 as decimal(12,2))) * promote_precision(cast(ss_list_price#3 as decimal(12,2)))), DecimalType(18,2), true)), count(1)]
-Aggregate Attributes [2]: [sum(CheckOverflow((promote_precision(cast(ss_quantity#2 as decimal(12,2))) * promote_precision(cast(ss_list_price#3 as decimal(12,2)))), DecimalType(18,2), true))#61, count(1)#62]
-Results [5]: [i_brand_id#49, i_class_id#50, i_category_id#51, sum(CheckOverflow((promote_precision(cast(ss_quantity#2 as decimal(12,2))) * promote_precision(cast(ss_list_price#3 as decimal(12,2)))), DecimalType(18,2), true))#61 AS sales#63, count(1)#62 AS number_sales#64]
+Functions [2]: [sum(CheckOverflow((promote_precision(cast(ss_quantity#2 as decimal(12,2))) * promote_precision(cast(ss_list_price#3 as decimal(12,2)))), DecimalType(18,2))), count(1)]
+Aggregate Attributes [2]: [sum(CheckOverflow((promote_precision(cast(ss_quantity#2 as decimal(12,2))) * promote_precision(cast(ss_list_price#3 as decimal(12,2)))), DecimalType(18,2)))#61, count(1)#62]
+Results [5]: [i_brand_id#49, i_class_id#50, i_category_id#51, sum(CheckOverflow((promote_precision(cast(ss_quantity#2 as decimal(12,2))) * promote_precision(cast(ss_list_price#3 as decimal(12,2)))), DecimalType(18,2)))#61 AS sales#63, count(1)#62 AS number_sales#64]
 
 (81) Filter [codegen id : 46]
 Input [5]: [i_brand_id#49, i_class_id#50, i_category_id#51, sales#63, number_sales#64]
@@ -562,7 +562,7 @@ Input [7]: [cs_item_sk#68, cs_quantity#69, cs_list_price#70, i_item_sk#74, i_bra
 (97) HashAggregate [codegen id : 91]
 Input [5]: [cs_quantity#69, cs_list_price#70, i_brand_id#75, i_class_id#76, i_category_id#77]
 Keys [3]: [i_brand_id#75, i_class_id#76, i_category_id#77]
-Functions [2]: [partial_sum(CheckOverflow((promote_precision(cast(cs_quantity#69 as decimal(12,2))) * promote_precision(cast(cs_list_price#70 as decimal(12,2)))), DecimalType(18,2), true)), partial_count(1)]
+Functions [2]: [partial_sum(CheckOverflow((promote_precision(cast(cs_quantity#69 as decimal(12,2))) * promote_precision(cast(cs_list_price#70 as decimal(12,2)))), DecimalType(18,2))), partial_count(1)]
 Aggregate Attributes [3]: [sum#78, isEmpty#79, count#80]
 Results [6]: [i_brand_id#75, i_class_id#76, i_category_id#77, sum#81, isEmpty#82, count#83]
 
@@ -573,9 +573,9 @@ Arguments: hashpartitioning(i_brand_id#75, i_class_id#76, i_category_id#77, 5), 
 (99) HashAggregate [codegen id : 92]
 Input [6]: [i_brand_id#75, i_class_id#76, i_category_id#77, sum#81, isEmpty#82, count#83]
 Keys [3]: [i_brand_id#75, i_class_id#76, i_category_id#77]
-Functions [2]: [sum(CheckOverflow((promote_precision(cast(cs_quantity#69 as decimal(12,2))) * promote_precision(cast(cs_list_price#70 as decimal(12,2)))), DecimalType(18,2), true)), count(1)]
-Aggregate Attributes [2]: [sum(CheckOverflow((promote_precision(cast(cs_quantity#69 as decimal(12,2))) * promote_precision(cast(cs_list_price#70 as decimal(12,2)))), DecimalType(18,2), true))#85, count(1)#86]
-Results [5]: [i_brand_id#75, i_class_id#76, i_category_id#77, sum(CheckOverflow((promote_precision(cast(cs_quantity#69 as decimal(12,2))) * promote_precision(cast(cs_list_price#70 as decimal(12,2)))), DecimalType(18,2), true))#85 AS sales#87, count(1)#86 AS number_sales#88]
+Functions [2]: [sum(CheckOverflow((promote_precision(cast(cs_quantity#69 as decimal(12,2))) * promote_precision(cast(cs_list_price#70 as decimal(12,2)))), DecimalType(18,2))), count(1)]
+Aggregate Attributes [2]: [sum(CheckOverflow((promote_precision(cast(cs_quantity#69 as decimal(12,2))) * promote_precision(cast(cs_list_price#70 as decimal(12,2)))), DecimalType(18,2)))#85, count(1)#86]
+Results [5]: [i_brand_id#75, i_class_id#76, i_category_id#77, sum(CheckOverflow((promote_precision(cast(cs_quantity#69 as decimal(12,2))) * promote_precision(cast(cs_list_price#70 as decimal(12,2)))), DecimalType(18,2)))#85 AS sales#87, count(1)#86 AS number_sales#88]
 
 (100) Filter [codegen id : 92]
 Input [5]: [i_brand_id#75, i_class_id#76, i_category_id#77, sales#87, number_sales#88]
@@ -647,7 +647,7 @@ Input [7]: [ws_item_sk#90, ws_quantity#91, ws_list_price#92, i_item_sk#96, i_bra
 (116) HashAggregate [codegen id : 137]
 Input [5]: [ws_quantity#91, ws_list_price#92, i_brand_id#97, i_class_id#98, i_category_id#99]
 Keys [3]: [i_brand_id#97, i_class_id#98, i_category_id#99]
-Functions [2]: [partial_sum(CheckOverflow((promote_precision(cast(ws_quantity#91 as decimal(12,2))) * promote_precision(cast(ws_list_price#92 as decimal(12,2)))), DecimalType(18,2), true)), partial_count(1)]
+Functions [2]: [partial_sum(CheckOverflow((promote_precision(cast(ws_quantity#91 as decimal(12,2))) * promote_precision(cast(ws_list_price#92 as decimal(12,2)))), DecimalType(18,2))), partial_count(1)]
 Aggregate Attributes [3]: [sum#100, isEmpty#101, count#102]
 Results [6]: [i_brand_id#97, i_class_id#98, i_category_id#99, sum#103, isEmpty#104, count#105]
 
@@ -658,9 +658,9 @@ Arguments: hashpartitioning(i_brand_id#97, i_class_id#98, i_category_id#99, 5), 
 (118) HashAggregate [codegen id : 138]
 Input [6]: [i_brand_id#97, i_class_id#98, i_category_id#99, sum#103, isEmpty#104, count#105]
 Keys [3]: [i_brand_id#97, i_class_id#98, i_category_id#99]
-Functions [2]: [sum(CheckOverflow((promote_precision(cast(ws_quantity#91 as decimal(12,2))) * promote_precision(cast(ws_list_price#92 as decimal(12,2)))), DecimalType(18,2), true)), count(1)]
-Aggregate Attributes [2]: [sum(CheckOverflow((promote_precision(cast(ws_quantity#91 as decimal(12,2))) * promote_precision(cast(ws_list_price#92 as decimal(12,2)))), DecimalType(18,2), true))#107, count(1)#108]
-Results [5]: [i_brand_id#97, i_class_id#98, i_category_id#99, sum(CheckOverflow((promote_precision(cast(ws_quantity#91 as decimal(12,2))) * promote_precision(cast(ws_list_price#92 as decimal(12,2)))), DecimalType(18,2), true))#107 AS sales#109, count(1)#108 AS number_sales#110]
+Functions [2]: [sum(CheckOverflow((promote_precision(cast(ws_quantity#91 as decimal(12,2))) * promote_precision(cast(ws_list_price#92 as decimal(12,2)))), DecimalType(18,2))), count(1)]
+Aggregate Attributes [2]: [sum(CheckOverflow((promote_precision(cast(ws_quantity#91 as decimal(12,2))) * promote_precision(cast(ws_list_price#92 as decimal(12,2)))), DecimalType(18,2)))#107, count(1)#108]
+Results [5]: [i_brand_id#97, i_class_id#98, i_category_id#99, sum(CheckOverflow((promote_precision(cast(ws_quantity#91 as decimal(12,2))) * promote_precision(cast(ws_list_price#92 as decimal(12,2)))), DecimalType(18,2)))#107 AS sales#109, count(1)#108 AS number_sales#110]
 
 (119) Filter [codegen id : 138]
 Input [5]: [i_brand_id#97, i_class_id#98, i_category_id#99, sales#109, number_sales#110]
@@ -793,7 +793,7 @@ Input [4]: [ws_quantity#140, ws_list_price#141, ws_sold_date_sk#142, d_date_sk#1
 (143) HashAggregate [codegen id : 7]
 Input [2]: [quantity#132, list_price#133]
 Keys: []
-Functions [1]: [partial_avg(CheckOverflow((promote_precision(cast(quantity#132 as decimal(12,2))) * promote_precision(cast(list_price#133 as decimal(12,2)))), DecimalType(18,2), true))]
+Functions [1]: [partial_avg(CheckOverflow((promote_precision(cast(quantity#132 as decimal(12,2))) * promote_precision(cast(list_price#133 as decimal(12,2)))), DecimalType(18,2)))]
 Aggregate Attributes [2]: [sum#146, count#147]
 Results [2]: [sum#148, count#149]
 
@@ -804,9 +804,9 @@ Arguments: SinglePartition, ENSURE_REQUIREMENTS, [id=#150]
 (145) HashAggregate [codegen id : 8]
 Input [2]: [sum#148, count#149]
 Keys: []
-Functions [1]: [avg(CheckOverflow((promote_precision(cast(quantity#132 as decimal(12,2))) * promote_precision(cast(list_price#133 as decimal(12,2)))), DecimalType(18,2), true))]
-Aggregate Attributes [1]: [avg(CheckOverflow((promote_precision(cast(quantity#132 as decimal(12,2))) * promote_precision(cast(list_price#133 as decimal(12,2)))), DecimalType(18,2), true))#151]
-Results [1]: [avg(CheckOverflow((promote_precision(cast(quantity#132 as decimal(12,2))) * promote_precision(cast(list_price#133 as decimal(12,2)))), DecimalType(18,2), true))#151 AS average_sales#152]
+Functions [1]: [avg(CheckOverflow((promote_precision(cast(quantity#132 as decimal(12,2))) * promote_precision(cast(list_price#133 as decimal(12,2)))), DecimalType(18,2)))]
+Aggregate Attributes [1]: [avg(CheckOverflow((promote_precision(cast(quantity#132 as decimal(12,2))) * promote_precision(cast(list_price#133 as decimal(12,2)))), DecimalType(18,2)))#151]
+Results [1]: [avg(CheckOverflow((promote_precision(cast(quantity#132 as decimal(12,2))) * promote_precision(cast(list_price#133 as decimal(12,2)))), DecimalType(18,2)))#151 AS average_sales#152]
 
 Subquery:2 Hosting operator id = 127 Hosting Expression = ss_sold_date_sk#130 IN dynamicpruning#13
 

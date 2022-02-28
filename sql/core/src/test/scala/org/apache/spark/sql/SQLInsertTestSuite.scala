@@ -291,13 +291,11 @@ trait SQLInsertTestSuite extends QueryTest with SQLTestUtils {
       case SQLConf.StoreAssignmentPolicy.ANSI | SQLConf.StoreAssignmentPolicy.STRICT =>
         true
       case SQLConf.StoreAssignmentPolicy.LEGACY =>
-        SQLConf.get.ansiEnabled
+        false
     }
 
     testingPolicies.foreach { policy =>
-      withSQLConf(
-        SQLConf.STORE_ASSIGNMENT_POLICY.key -> policy.toString,
-        SQLConf.ANSI_ENABLED.key -> "false") {
+      withSQLConf(SQLConf.STORE_ASSIGNMENT_POLICY.key -> policy.toString) {
         withTable("t") {
           sql("create table t(a int, b string) using parquet partitioned by (a)")
           if (shouldThrowException(policy)) {
@@ -308,6 +306,23 @@ trait SQLInsertTestSuite extends QueryTest with SQLTestUtils {
           } else {
             sql("insert into t partition(a='ansi') values('ansi')")
             checkAnswer(sql("select * from t"), Row("ansi", null) :: Nil)
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-38228: legacy store assignment should not fail on error under ANSI mode") {
+    // DS v2 doesn't support the legacy policy
+    if (format != "foo") {
+      Seq(true, false).foreach { ansiEnabled =>
+        withSQLConf(
+          SQLConf.STORE_ASSIGNMENT_POLICY.key -> SQLConf.StoreAssignmentPolicy.LEGACY.toString,
+          SQLConf.ANSI_ENABLED.key -> ansiEnabled.toString) {
+          withTable("t") {
+            sql("create table t(a int) using parquet")
+            sql("insert into t values('ansi')")
+            checkAnswer(spark.table("t"), Row(null))
           }
         }
       }

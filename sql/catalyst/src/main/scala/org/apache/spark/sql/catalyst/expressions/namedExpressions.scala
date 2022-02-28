@@ -475,4 +475,19 @@ object FileSourceMetadataAttribute {
           && attr.metadata.getBoolean(FILE_SOURCE_METADATA_COL_ATTR_KEY) => Some(attr)
       case _ => None
     }
+
+  /**
+   * Cleanup the internal metadata information of an attribute if it is
+   * a [[FileSourceMetadataAttribute]], it will remove both [[METADATA_COL_ATTR_KEY]] and
+   * [[FILE_SOURCE_METADATA_COL_ATTR_KEY]] from the attribute [[Metadata]]
+   */
+  def cleanupFileSourceMetadataInformation(attr: Attribute): Attribute = attr match {
+    case FileSourceMetadataAttribute(attr) => attr.withMetadata(
+      new MetadataBuilder().withMetadata(attr.metadata)
+        .remove(METADATA_COL_ATTR_KEY)
+        .remove(FILE_SOURCE_METADATA_COL_ATTR_KEY)
+        .build()
+    )
+    case attr => attr
+  }
 }

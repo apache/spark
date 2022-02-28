@@ -135,6 +135,7 @@ object AnsiTypeCoercion extends TypeCoercionBase {
   }
 
   /** Promotes StringType to other data types. */
+  @scala.annotation.tailrec
   private def findWiderTypeForString(dt1: DataType, dt2: DataType): Option[DataType] = {
     (dt1, dt2) match {
       case (StringType, _: IntegralType) => Some(LongType)
@@ -279,6 +280,9 @@ object AnsiTypeCoercion extends TypeCoercionBase {
    */
   object GetDateFieldOperations extends TypeCoercionRule {
     override def transform: PartialFunction[Expression, Expression] = {
+      // Skip nodes who's children have not been resolved yet.
+      case g if !g.childrenResolved => g
+
       case g: GetDateField if AnyTimestampType.unapply(g.child) =>
         g.withNewChildren(Seq(Cast(g.child, DateType)))
     }

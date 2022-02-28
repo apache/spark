@@ -100,6 +100,13 @@ class Serializer:
         """
         raise NotImplementedError
 
+    def dumps(self, obj):
+        """
+        Serialize an object into a byte array.
+        When batching is used, this will be called with an array of objects.
+        """
+        raise NotImplementedError
+
     def _load_stream_without_unbatching(self, stream):
         """
         Return an iterator of deserialized batches (iterable) of objects from the input stream.

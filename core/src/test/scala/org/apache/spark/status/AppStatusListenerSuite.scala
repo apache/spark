@@ -28,6 +28,7 @@ import org.scalatest.BeforeAndAfter
 
 import org.apache.spark._
 import org.apache.spark.executor.{ExecutorMetrics, TaskMetrics}
+import org.apache.spark.internal.config.History.{HYBRID_STORE_DISK_BACKEND, HybridStoreDiskBackend}
 import org.apache.spark.internal.config.Status._
 import org.apache.spark.metrics.ExecutorMetricType
 import org.apache.spark.resource.ResourceProfile
@@ -36,15 +37,11 @@ import org.apache.spark.scheduler.cluster._
 import org.apache.spark.status.ListenerEventsTestHelper._
 import org.apache.spark.status.api.v1
 import org.apache.spark.storage._
-import org.apache.spark.tags.ExtendedLevelDBTest
+import org.apache.spark.tags.{ExtendedLevelDBTest, ExtendedRocksDBTest}
 import org.apache.spark.util.Utils
 import org.apache.spark.util.kvstore.{InMemoryStore, KVStore}
 
-@ExtendedLevelDBTest
-class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter {
-  private val conf = new SparkConf()
-    .set(LIVE_ENTITY_UPDATE_PERIOD, 0L)
-    .set(ASYNC_TRACKING_ENABLED, false)
+abstract class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter {
 
   private val twoReplicaMemAndDiskLevel = StorageLevel(true, true, false, true, 2)
 
@@ -53,7 +50,11 @@ class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter {
   private var store: ElementTrackingStore = _
   private var taskIdTracker = -1L
 
-  protected def createKVStore: KVStore = KVUtils.open(testDir, getClass().getName())
+  protected def conf: SparkConf = new SparkConf()
+    .set(LIVE_ENTITY_UPDATE_PERIOD, 0L)
+    .set(ASYNC_TRACKING_ENABLED, false)
+
+  protected def createKVStore: KVStore = KVUtils.open(testDir, getClass().getName(), conf)
 
   before {
     time = 0L
@@ -1890,4 +1891,16 @@ class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter {
 
 class AppStatusListenerWithInMemoryStoreSuite extends AppStatusListenerSuite {
   override def createKVStore: KVStore = new InMemoryStore()
+}
+
+@ExtendedLevelDBTest
+class AppStatusListenerWithLevelDBSuite extends AppStatusListenerSuite {
+  override def conf: SparkConf = super.conf
+    .set(HYBRID_STORE_DISK_BACKEND, HybridStoreDiskBackend.LEVELDB.toString)
+}
+
+@ExtendedRocksDBTest
+class AppStatusListenerWithRocksDBSuite extends AppStatusListenerSuite {
+  override def conf: SparkConf = super.conf
+    .set(HYBRID_STORE_DISK_BACKEND, HybridStoreDiskBackend.ROCKSDB.toString)
 }
