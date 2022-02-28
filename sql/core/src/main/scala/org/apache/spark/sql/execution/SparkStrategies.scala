@@ -373,7 +373,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         namedGroupingExpressions, aggregateExpressions, rewrittenResultExpressions, child) =>
 
         if (aggregateExpressions.exists(PythonUDF.isGroupedAggPandasUDF)) {
-          throw AnalysisException(
+          throw new AnalysisException(
             "Streaming aggregation doesn't support group aggregate pandas UDF")
         }
 
