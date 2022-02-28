@@ -732,6 +732,11 @@ class ParquetFilters(
           }
         }
 
+      case sources.Not(pred) =>
+        createFilterHelper(pred, canPartialPushDownConjuncts = false)
+          .filterNot(_ == null)
+          .map(FilterApi.not)
+
       case sources.In(name, values) if pushDownInFilterThreshold > 0 && values.nonEmpty &&
           canMakeFilterOn(name, values.head) =>
         val fieldType = nameToParquetField(name).fieldType
