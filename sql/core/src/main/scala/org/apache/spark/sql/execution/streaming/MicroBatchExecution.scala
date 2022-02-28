@@ -315,6 +315,12 @@ class MicroBatchExecution(
          * is the second latest batch id in the offset log. */
         if (latestBatchId != 0) {
           val secondLatestOffsets = offsetLog.get(latestBatchId - 1).getOrElse {
+            logError(s"The offset log for batch ${latestBatchId - 1} doesn't exist, " +
+              s"which is required to restart the query from the latest batch $latestBatchId " +
+              "from the offset log. Please ensure there are two subsequent offset logs " +
+              "available for the latest batch via manually deleting the offset file(s). " +
+              "Please also ensure the latest batch for commit log is equal or one batch " +
+              "earlier than the latest batch for offset log.")
             throw new IllegalStateException(s"batch ${latestBatchId - 1} doesn't exist")
           }
           committedOffsets = secondLatestOffsets.toStreamProgress(sources)
