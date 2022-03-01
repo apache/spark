@@ -37,7 +37,7 @@ case class JDBCWriteBuilder(schema: StructType, options: JdbcOptionsInWrite) ext
     override def toInsertableRelation: InsertableRelation = (data: DataFrame, _: Boolean) => {
       // TODO (SPARK-32595): do truncate and append atomically.
       if (isTruncate) {
-        val conn = JdbcUtils.createConnectionFactory(options)()
+        val conn = JdbcUtils.createConnectionFactory(options)(None)
         JdbcUtils.truncateTable(conn, options)
       }
       JdbcUtils.saveTable(data, Some(schema), SQLConf.get.caseSensitiveAnalysis, options)

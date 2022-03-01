@@ -28,7 +28,7 @@ import scala.collection.mutable.ArrayBuffer
 import scala.util.Try
 import scala.util.control.NonFatal
 
-import org.apache.spark.TaskContext
+import org.apache.spark.{Partition, TaskContext}
 import org.apache.spark.executor.InputMetrics
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{DataFrame, Row}
@@ -60,9 +60,9 @@ object JdbcUtils extends Logging with SQLConfHelper {
    * @param options - JDBC options that contains url, table and other information.
    * @throws IllegalArgumentException if the driver could not open a JDBC connection.
    */
-  def createConnectionFactory(options: JDBCOptions): () => Connection = {
+  def createConnectionFactory(options: JDBCOptions): Option[Partition] => Connection = {
     val driverClass: String = options.driverClass
-    () => {
+    (_: Option[Partition]) => {
       DriverRegistry.register(driverClass)
       val driver: Driver = DriverRegistry.get(driverClass)
       val connection =
@@ -651,7 +651,7 @@ object JdbcUtils extends Logging with SQLConfHelper {
    * updated even with error if it doesn't support transaction, as there're dirty outputs.
    */
   def savePartition(
-      getConnection: () => Connection,
+      getConnection: Option[Partition] => Connection,
       table: String,
       iterator: Iterator[Row],
       rddSchema: StructType,
@@ -667,7 +667,7 @@ object JdbcUtils extends Logging with SQLConfHelper {
 
     val outMetrics = TaskContext.get().taskMetrics().outputMetrics
 
-    val conn = getConnection()
+    val conn = getConnection(None)
     var committed = false
 
     var finalIsolationLevel = Connection.TRANSACTION_NONE
@@ -874,7 +874,7 @@ object JdbcUtils extends Logging with SQLConfHelper {
     val table = options.table
     val dialect = JdbcDialects.get(url)
     val rddSchema = df.schema
-    val getConnection: () => Connection = createConnectionFactory(options)
+    val getConnection: Option[Partition] => Connection = createConnectionFactory(options)
     val batchSize = options.batchSize
     val isolationLevel = options.isolationLevel
 
@@ -1177,7 +1177,7 @@ object JdbcUtils extends Logging with SQLConfHelper {
   }
 
   def withConnection[T](options: JDBCOptions)(f: Connection => T): T = {
-    val conn = createConnectionFactory(options)()
+    val conn = createConnectionFactory(options)(None)
     try {
       f(conn)
     } finally {

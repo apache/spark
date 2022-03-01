@@ -46,7 +46,7 @@ class JdbcRelationProvider extends CreatableRelationProvider
     val options = new JdbcOptionsInWrite(parameters)
     val isCaseSensitive = sqlContext.conf.caseSensitiveAnalysis
 
-    val conn = JdbcUtils.createConnectionFactory(options)()
+    val conn = JdbcUtils.createConnectionFactory(options)(None)
     try {
       val tableExists = JdbcUtils.tableExists(conn, options)
       if (tableExists) {

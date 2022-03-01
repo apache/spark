@@ -60,7 +60,7 @@ object JDBCRDD extends Logging {
 
   def getQueryOutputSchema(
       query: String, options: JDBCOptions, dialect: JdbcDialect): StructType = {
-    val conn: Connection = JdbcUtils.createConnectionFactory(options)()
+    val conn: Connection = JdbcUtils.createConnectionFactory(options)(None)
     try {
       val statement = conn.prepareStatement(query)
       try {
@@ -204,7 +204,7 @@ object JDBCRDD extends Logging {
  */
 private[jdbc] class JDBCRDD(
     sc: SparkContext,
-    getConnection: () => Connection,
+    getConnection: Option[Partition] => Connection,
     schema: StructType,
     columns: Array[String],
     filters: Array[Filter],
@@ -318,7 +318,7 @@ private[jdbc] class JDBCRDD(
 
     val inputMetrics = context.taskMetrics().inputMetrics
     val part = thePart.asInstanceOf[JDBCPartition]
-    conn = getConnection()
+    conn = getConnection(Some(part))
     val dialect = JdbcDialects.get(url)
     import scala.collection.JavaConverters._
     dialect.beforeFetch(conn, options.asProperties.asScala.toMap)
