@@ -20,6 +20,7 @@ import io.fabric8.volcano.scheduling.v1beta1.PodGroup
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.k8s._
+import org.apache.spark.deploy.k8s.Config._
 
 class VolcanoFeatureStepSuite extends SparkFunSuite {
 
@@ -35,6 +36,16 @@ class VolcanoFeatureStepSuite extends SparkFunSuite {
     assert(annotations.get("scheduling.k8s.io/group-name") === s"${kubernetesConf.appId}-podgroup")
     val podGroup = step.getAdditionalPreKubernetesResources().head.asInstanceOf[PodGroup]
     assert(podGroup.getMetadata.getName === s"${kubernetesConf.appId}-podgroup")
+  }
+
+  test("SPARK-38818: Support `spark.kubernetes.job.queue`") {
+    val sparkConf = new SparkConf()
+      .set(KUBERNETES_JOB_QUEUE.key, "queue1")
+    val kubernetesConf = KubernetesTestConf.createDriverConf(sparkConf)
+    val step = new VolcanoFeatureStep()
+    step.init(kubernetesConf)
+    val podGroup = step.getAdditionalPreKubernetesResources().head.asInstanceOf[PodGroup]
+    assert(podGroup.getSpec.getQueue === "queue1")
   }
 
   test("SPARK-36061: Executor Pod with Volcano PodGroup") {
