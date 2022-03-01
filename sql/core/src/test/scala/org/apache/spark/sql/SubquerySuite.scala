@@ -1992,4 +1992,30 @@ class SubquerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
       }.getMessage.contains("Correlated column is not allowed in predicate"))
     }
   }
+
+  test("SPARK-38180: allow safe cast expressions in correlated equality conditions") {
+    withTempView("t1", "t2") {
+      Seq((0, 1), (1, 2)).toDF("c1", "c2").createOrReplaceTempView("t1")
+      Seq((0, 2), (0, 3)).toDF("c1", "c2").createOrReplaceTempView("t2")
+      checkAnswer(sql(
+        """
+          |SELECT (SELECT SUM(c2) FROM t2 WHERE c1 = a)
+          |FROM (SELECT CAST(c1 AS DOUBLE) a FROM t1)
+          |""".stripMargin),
+        Row(5) :: Row(null) :: Nil)
+      checkAnswer(sql(
+        """
+          |SELECT (SELECT SUM(c2) FROM t2 WHERE CAST(c1 AS STRING) = a)
+          |FROM (SELECT CAST(c1 AS STRING) a FROM t1)
+          |""".stripMargin),
+        Row(5) :: Row(null) :: Nil)
+      assert(intercept[AnalysisException] {
+        sql(
+          """
+            |SELECT (SELECT SUM(c2) FROM t2 WHERE CAST(c1 AS SHORT) = a)
+            |FROM (SELECT CAST(c1 AS SHORT) a FROM t1)
+            |""".stripMargin)
+      }.getMessage.contains("Correlated column is not allowed in predicate"))
+    }
+  }
 }
