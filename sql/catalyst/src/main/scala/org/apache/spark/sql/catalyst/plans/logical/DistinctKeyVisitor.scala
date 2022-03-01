@@ -80,16 +80,13 @@ object DistinctKeyVisitor extends LogicalPlanVisitor[Set[ExpressionSet]] {
   }
 
   override def visitJoin(p: Join): Set[ExpressionSet] = {
-    p.joinType match {
-      case LeftSemiOrAnti(_) => p.left.distinctKeys
-      case Inner =>
-        p match {
-          case ExtractEquiJoinKeys(_, leftKeys, rightKeys, _, _, _, _, _)
-              if p.left.distinctKeys.exists(_.subsetOf(ExpressionSet(leftKeys))) &&
-                p.right.distinctKeys.exists(_.subsetOf(ExpressionSet(rightKeys))) =>
-            Set(ExpressionSet(leftKeys), ExpressionSet(rightKeys))
-          case _ => default(p)
-        }
+    p match {
+      case Join(_, _, LeftSemiOrAnti(_), _, _) =>
+        p.left.distinctKeys
+      case ExtractEquiJoinKeys(Inner, leftKeys, rightKeys, _, _, _, _, _)
+        if p.left.distinctKeys.exists(_.subsetOf(ExpressionSet(leftKeys))) &&
+          p.right.distinctKeys.exists(_.subsetOf(ExpressionSet(rightKeys))) =>
+        Set(ExpressionSet(leftKeys), ExpressionSet(rightKeys))
       case _ => default(p)
     }
   }

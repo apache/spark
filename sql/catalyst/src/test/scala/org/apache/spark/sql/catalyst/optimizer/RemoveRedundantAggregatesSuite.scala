@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions.{Expression, PythonUDF}
 import org.apache.spark.sql.catalyst.expressions.Literal.TrueLiteral
 import org.apache.spark.sql.catalyst.plans.{LeftAnti, LeftSemi, PlanTest}
-import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
+import org.apache.spark.sql.catalyst.plans.logical.{Distinct, LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.types.IntegerType
 
@@ -230,7 +230,7 @@ class RemoveRedundantAggregatesSuite extends PlanTest {
     }
   }
 
-  test("SPARK-36194: Remove aggregation from aggregation") {
+  test("SPARK-36194: Child distinct keys is the subset of required keys") {
     val originalQuery = relation
       .groupBy('a)('a, count('b).as("cnt"))
       .groupBy('a, 'cnt)('a, 'cnt)
@@ -243,48 +243,38 @@ class RemoveRedundantAggregatesSuite extends PlanTest {
     comparePlans(optimized, correctAnswer)
   }
 
-  test("SPARK-36194: Negative case: The grouping expressions not same") {
+  test("SPARK-36194: Child distinct keys are subsets and aggregateExpressions are foldable") {
+    val originalQuery = x.groupBy('a, 'b)('a, 'b)
+      .join(y, LeftSemi, Some("x.a".attr === "y.a".attr && "x.b".attr === "y.b".attr))
+      .groupBy("x.a".attr, "x.b".attr)(TrueLiteral)
+      .analyze
+    val correctAnswer = x.groupBy('a, 'b)('a, 'b)
+      .join(y, LeftSemi, Some("x.a".attr === "y.a".attr && "x.b".attr === "y.b".attr))
+      .select(TrueLiteral)
+      .analyze
+    val optimized = Optimize.execute(originalQuery)
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("SPARK-36194: Negative case: child distinct keys is not the subset of required keys") {
     Seq(LeftSemi, LeftAnti).foreach { joinType =>
-      val originalQuery = x.groupBy('a, 'b)('a, 'b)
+      val originalQuery1 = x.groupBy('a, 'b)('a, 'b)
         .join(y, joinType, Some("x.a".attr === "y.a".attr && "x.b".attr === "y.b".attr))
         .groupBy("x.a".attr)("x.a".attr)
+        .analyze
+      comparePlans(Optimize.execute(originalQuery1), originalQuery1)
 
-      val optimized = Optimize.execute(originalQuery.analyze)
-      comparePlans(optimized, originalQuery.analyze)
-    }
-  }
-
-  test("SPARK-36194: Negative case: The aggregate expressions not the sub aggregateExprs") {
-    Seq(LeftSemi, LeftAnti).foreach { joinType =>
-      val originalQuery = x.groupBy('a, 'b)('a, 'b)
-        .join(y, joinType, Some("x.a".attr === "y.a".attr && "x.b".attr === "y.b".attr))
-        .groupBy("x.a".attr, "x.b".attr)(TrueLiteral)
-
-      val optimized = Optimize.execute(originalQuery.analyze)
-      comparePlans(optimized, originalQuery.analyze)
-    }
-  }
-
-  test("SPARK-36194: Negative case: The aggregate expressions not same") {
-    Seq(LeftSemi, LeftAnti).foreach { joinType =>
-      val originalQuery = x.groupBy('a, 'b)('a, 'b)
+      val originalQuery2 = x.groupBy('a, 'b)('a, 'b)
         .join(y, joinType, Some("x.a".attr === "y.a".attr && "x.b".attr === "y.b".attr))
         .groupBy("x.a".attr)(count("x.b".attr))
-
-      val optimized = Optimize.execute(originalQuery.analyze)
-      comparePlans(optimized, originalQuery.analyze)
+        .analyze
+      comparePlans(Optimize.execute(originalQuery2), originalQuery2)
     }
   }
 
-  test("SPARK-36194: Negative case: The aggregate expressions with Literal") {
-    Seq(LeftSemi, LeftAnti).foreach { joinType =>
-      val originalQuery = x.groupBy('a, 'b)('a, TrueLiteral)
-        .join(y, joinType, Some("x.a".attr === "y.a".attr))
-        .groupBy("x.a".attr)("x.a".attr, TrueLiteral)
-
-      val optimized = Optimize.execute(originalQuery.analyze)
-      comparePlans(optimized, originalQuery.analyze)
-    }
+  test("SPARK-36194: Negative case: child distinct keys is empty") {
+    val originalQuery = Distinct(x.groupBy('a, 'b)('a, TrueLiteral)).analyze
+    comparePlans(Optimize.execute(originalQuery), originalQuery)
   }
 
   test("SPARK-36194: Negative case: Remove aggregation from contains non-deterministic") {
