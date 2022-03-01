@@ -1424,6 +1424,31 @@ class DDLParserSuite extends AnalysisTest {
     assert(exc.getMessage.contains("Columns aliases are not allowed in UPDATE."))
   }
 
+  private def basicMergeIntoCommand(firstValue: String, secondValue: String): String =
+    """
+      |MERGE INTO testcat1.ns1.ns2.tbl AS target
+      |USING testcat2.ns1.ns2.tbl AS source
+      |ON target.col1 = source.col1
+      |WHEN MATCHED AND (target.col2='delete') THEN DELETE
+      |WHEN MATCHED AND (target.col2='update') THEN UPDATE SET target.col2 = source.col2
+      |WHEN NOT MATCHED AND (target.col2='insert')
+      |THEN INSERT (target.col1, target.col2) values (
+      """.stripMargin + firstValue + ", " + secondValue + ")"
+
+  private def basicMergeIntoPlan(firstValue: String, secondValue: String): LogicalPlan =
+    MergeIntoTable(
+      SubqueryAlias("target", UnresolvedRelation(Seq("testcat1", "ns1", "ns2", "tbl"))),
+      SubqueryAlias("source", UnresolvedRelation(Seq("testcat2", "ns1", "ns2", "tbl"))),
+      EqualTo(UnresolvedAttribute("target.col1"), UnresolvedAttribute(firstValue)),
+      Seq(DeleteAction(Some(EqualTo(UnresolvedAttribute("target.col2"), Literal("delete")))),
+        UpdateAction(Some(EqualTo(UnresolvedAttribute("target.col2"), Literal("update"))),
+          Seq(Assignment(UnresolvedAttribute("target.col2"),
+            UnresolvedAttribute(secondValue))))),
+      Seq(InsertAction(Some(EqualTo(UnresolvedAttribute("target.col2"), Literal("insert"))),
+        Seq(Assignment(UnresolvedAttribute("target.col1"), UnresolvedAttribute(firstValue)),
+          Assignment(UnresolvedAttribute("target.col2"), UnresolvedAttribute(secondValue))))))
+
+
   test("merge into table: basic") {
     parseCompare(
       """
@@ -1447,6 +1472,7 @@ class DDLParserSuite extends AnalysisTest {
           Seq(Assignment(UnresolvedAttribute("target.col1"), UnresolvedAttribute("source.col1")),
             Assignment(UnresolvedAttribute("target.col2"), UnresolvedAttribute("source.col2")))))))
   }
+
 
   test("merge into table: using subquery") {
     parseCompare(
@@ -2253,20 +2279,39 @@ class DDLParserSuite extends AnalysisTest {
     }
     // In each of the following cases, the DEFAULT reference parses as an unresolved attribute
     // reference. We can handle these cases after the parsing stage, at later phases of analysis.
-    for (sql <- Seq(
-      "VALUES (1, 2, DEFAULT)",
-      "INSERT INTO t PARTITION(part = date'2019-01-02') VALUES ('a', DEFAULT)",
+    comparePlans(parsePlan("VALUES (1, 2, DEFAULT) AS val"),
+      SubqueryAlias("val",
+        UnresolvedInlineTable(Seq("col1", "col2", "col3"), Seq(Seq(Literal(1), Literal(2),
+          UnresolvedAttribute("DEFAULT"))))))
+    comparePlans(parsePlan(
+      "INSERT INTO t PARTITION(part = date'2019-01-02') VALUES ('a', DEFAULT)"),
+      InsertIntoStatement(
+        UnresolvedRelation(Seq("t")),
+        Map("part" -> Some("2019-01-02")),
+        userSpecifiedCols = Seq.empty[String],
+        query = UnresolvedInlineTable(Seq("col1", "col2"), Seq(Seq(Literal("a"),
+          UnresolvedAttribute("DEFAULT")))),
+        overwrite = false, ifPartitionNotExists = false))
+    parseCompare(
       """
         |MERGE INTO testcat1.ns1.ns2.tbl AS target
         |USING testcat2.ns1.ns2.tbl AS source
         |ON target.col1 = source.col1
         |WHEN MATCHED AND (target.col2='delete') THEN DELETE
-        |WHEN MATCHED AND (target.col2='update') THEN UPDATE SET target.col2 = source.col2
+        |WHEN MATCHED AND (target.col2='update') THEN UPDATE SET target.col2 = DEFAULT
         |WHEN NOT MATCHED AND (target.col2='insert')
-        |THEN INSERT (target.col1, target.col2) values (source.col1, DEFAULT)
-      """.stripMargin
-    )) {
-      assert(!parsePlan(sql).resolved)
-    }
+        |THEN INSERT (target.col1, target.col2) VALUES (source.col1, DEFAULT)
+      """.stripMargin,
+      MergeIntoTable(
+        SubqueryAlias("target", UnresolvedRelation(Seq("testcat1", "ns1", "ns2", "tbl"))),
+        SubqueryAlias("source", UnresolvedRelation(Seq("testcat2", "ns1", "ns2", "tbl"))),
+        EqualTo(UnresolvedAttribute("target.col1"), UnresolvedAttribute("source.col1")),
+        Seq(DeleteAction(Some(EqualTo(UnresolvedAttribute("target.col2"), Literal("delete")))),
+          UpdateAction(Some(EqualTo(UnresolvedAttribute("target.col2"), Literal("update"))),
+            Seq(Assignment(UnresolvedAttribute("target.col2"),
+              UnresolvedAttribute("DEFAULT"))))),
+        Seq(InsertAction(Some(EqualTo(UnresolvedAttribute("target.col2"), Literal("insert"))),
+          Seq(Assignment(UnresolvedAttribute("target.col1"), UnresolvedAttribute("source.col1")),
+            Assignment(UnresolvedAttribute("target.col2"), UnresolvedAttribute("DEFAULT")))))))
   }
 }
