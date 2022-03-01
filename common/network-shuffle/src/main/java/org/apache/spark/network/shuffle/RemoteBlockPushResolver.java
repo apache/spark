@@ -84,7 +84,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
   private final ErrorHandler.BlockPushErrorHandler errorHandler;
 
   @SuppressWarnings("UnstableApiUsage")
-  private final LoadingCache<File, ShuffleIndexInformation> indexCache;
+  private final LoadingCache<String, ShuffleIndexInformation> indexCache;
 
   @SuppressWarnings("UnstableApiUsage")
   public RemoteBlockPushResolver(TransportConf conf) {
@@ -96,15 +96,16 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
       NettyUtils.createThreadFactory("spark-shuffle-merged-shuffle-directory-cleaner"));
     this.minChunkSize = conf.minChunkSizeInMergedShuffleFile();
     this.ioExceptionsThresholdDuringMerge = conf.ioExceptionsThresholdDuringMerge();
-    CacheLoader<File, ShuffleIndexInformation> indexCacheLoader =
-      new CacheLoader<File, ShuffleIndexInformation>() {
-        public ShuffleIndexInformation load(File file) throws IOException {
-          return new ShuffleIndexInformation(file);
+    CacheLoader<String, ShuffleIndexInformation> indexCacheLoader =
+      new CacheLoader<String, ShuffleIndexInformation>() {
+        public ShuffleIndexInformation load(String filePath) throws IOException {
+          return new ShuffleIndexInformation(filePath);
         }
       };
     indexCache = CacheBuilder.newBuilder()
       .maximumWeight(conf.mergedIndexCacheSize())
-      .weigher((Weigher<File, ShuffleIndexInformation>) (file, indexInfo) -> indexInfo.getSize())
+      .weigher((Weigher<String, ShuffleIndexInformation>)
+        (filePath, indexInfo) -> indexInfo.getRetainedMemorySize())
       .build(indexCacheLoader);
     this.errorHandler = new ErrorHandler.BlockPushErrorHandler();
   }
@@ -130,7 +131,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
       // be the first time the merge manager receives a pushed block for a given application
       // shuffle partition, or after the merged shuffle file is finalized. We handle these
       // two cases accordingly by checking if the file already exists.
-      File indexFile = getMergedShuffleIndexFile(appShuffleId, reduceId);
+      File indexFile = new File(getMergedShuffleIndexFilePath(appShuffleId, reduceId));
       File metaFile = getMergedShuffleMetaFile(appShuffleId, reduceId);
       try {
         if (dataFile.exists()) {
@@ -164,7 +165,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
   @Override
   public MergedBlockMeta getMergedBlockMeta(String appId, int shuffleId, int reduceId) {
     AppShuffleId appShuffleId = new AppShuffleId(appId, shuffleId);
-    File indexFile = getMergedShuffleIndexFile(appShuffleId, reduceId);
+    File indexFile = new File(getMergedShuffleIndexFilePath(appShuffleId, reduceId));
     if (!indexFile.exists()) {
       throw new RuntimeException(String.format(
         "Merged shuffle index file %s not found", indexFile.getPath()));
@@ -193,17 +194,18 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
       throw new RuntimeException(String.format("Merged shuffle data file %s not found",
         dataFile.getPath()));
     }
-    File indexFile = getMergedShuffleIndexFile(appShuffleId, reduceId);
+    String indexFilePath =
+      getMergedShuffleIndexFilePath(appShuffleId, reduceId);
     try {
       // If we get here, the merged shuffle file should have been properly finalized. Thus we can
       // use the file length to determine the size of the merged shuffle block.
-      ShuffleIndexInformation shuffleIndexInformation = indexCache.get(indexFile);
+      ShuffleIndexInformation shuffleIndexInformation = indexCache.get(indexFilePath);
       ShuffleIndexRecord shuffleIndexRecord = shuffleIndexInformation.getIndex(chunkId);
       return new FileSegmentManagedBuffer(
         conf, dataFile, shuffleIndexRecord.getOffset(), shuffleIndexRecord.getLength());
     } catch (ExecutionException e) {
       throw new RuntimeException(String.format(
-        "Failed to open merged shuffle index file %s", indexFile.getPath()), e);
+        "Failed to open merged shuffle index file %s", indexFilePath), e);
     }
   }
 
@@ -211,29 +213,29 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
    * The logic here is consistent with
    * org.apache.spark.storage.DiskBlockManager#getMergedShuffleFile
    */
-  private File getFile(String appId, String filename) {
+  private String getFilePath(String appId, String filename) {
     // TODO: [SPARK-33236] Change the message when this service is able to handle NM restart
     AppPathsInfo appPathsInfo = Preconditions.checkNotNull(appsPathInfo.get(appId),
       "application " + appId + " is not registered or NM was restarted.");
-    File targetFile = ExecutorDiskUtils.getFile(appPathsInfo.activeLocalDirs,
+    String targetFile = ExecutorDiskUtils.getFilePath(appPathsInfo.activeLocalDirs,
       appPathsInfo.subDirsPerLocalDir, filename);
-    logger.debug("Get merged file {}", targetFile.getAbsolutePath());
+    logger.debug("Get merged file {}", targetFile);
     return targetFile;
   }
 
   private File getMergedShuffleDataFile(AppShuffleId appShuffleId, int reduceId) {
     String fileName = String.format("%s.data", generateFileName(appShuffleId, reduceId));
-    return getFile(appShuffleId.appId, fileName);
+    return new File(getFilePath(appShuffleId.appId, fileName));
   }
 
-  private File getMergedShuffleIndexFile(AppShuffleId appShuffleId, int reduceId) {
+  private String getMergedShuffleIndexFilePath(AppShuffleId appShuffleId, int reduceId) {
     String indexName = String.format("%s.index", generateFileName(appShuffleId, reduceId));
-    return getFile(appShuffleId.appId, indexName);
+    return getFilePath(appShuffleId.appId, indexName);
   }
 
   private File getMergedShuffleMetaFile(AppShuffleId appShuffleId, int reduceId) {
     String metaName = String.format("%s.meta", generateFileName(appShuffleId, reduceId));
-    return getFile(appShuffleId.appId, metaName);
+    return new File(getFilePath(appShuffleId.appId, metaName));
   }
 
   @Override

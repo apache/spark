@@ -68,7 +68,8 @@ public class TestShuffleDataContext {
   }
 
   /** Creates reducer blocks in a sort-based data format within our local dirs. */
-  public void insertSortShuffleData(int shuffleId, int mapId, byte[][] blocks) throws IOException {
+  public String insertSortShuffleData(int shuffleId, int mapId, byte[][] blocks)
+      throws IOException {
     String blockId = "shuffle_" + shuffleId + "_" + mapId + "_0";
 
     OutputStream dataStream = null;
@@ -76,10 +77,10 @@ public class TestShuffleDataContext {
     boolean suppressExceptionsDuringClose = true;
 
     try {
-      dataStream = new FileOutputStream(
-        ExecutorDiskUtils.getFile(localDirs, subDirsPerLocalDir, blockId + ".data"));
-      indexStream = new DataOutputStream(new FileOutputStream(
-        ExecutorDiskUtils.getFile(localDirs, subDirsPerLocalDir, blockId + ".index")));
+      dataStream = new FileOutputStream(new File(
+        ExecutorDiskUtils.getFilePath(localDirs, subDirsPerLocalDir, blockId + ".data")));
+      indexStream = new DataOutputStream(new FileOutputStream(new File(
+        ExecutorDiskUtils.getFilePath(localDirs, subDirsPerLocalDir, blockId + ".index"))));
 
       long offset = 0;
       indexStream.writeLong(offset);
@@ -93,6 +94,7 @@ public class TestShuffleDataContext {
       Closeables.close(dataStream, suppressExceptionsDuringClose);
       Closeables.close(indexStream, suppressExceptionsDuringClose);
     }
+    return blockId;
   }
 
   /** Creates spill file(s) within the local dirs. */
@@ -122,11 +124,11 @@ public class TestShuffleDataContext {
 
   private void insertFile(String filename, byte[] block) throws IOException {
     OutputStream dataStream = null;
-    File file = ExecutorDiskUtils.getFile(localDirs, subDirsPerLocalDir, filename);
+    File file = new File(ExecutorDiskUtils.getFilePath(localDirs, subDirsPerLocalDir, filename));
     Assert.assertFalse("this test file has been already generated", file.exists());
     try {
       dataStream = new FileOutputStream(
-        ExecutorDiskUtils.getFile(localDirs, subDirsPerLocalDir, filename));
+        new File(ExecutorDiskUtils.getFilePath(localDirs, subDirsPerLocalDir, filename)));
       dataStream.write(block);
     } finally {
       Closeables.close(dataStream, false);
