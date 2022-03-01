@@ -18,12 +18,14 @@ package org.apache.spark.deploy.k8s.integrationtest
 
 import org.scalatest.Tag
 
+import org.apache.spark.deploy.k8s.features.YuniKornFeatureStep
+
 class YuniKornSuite extends KubernetesSuite with YuniKornTestsSuite {
 
   override protected def setUpTest(): Unit = {
     super.setUpTest()
     sparkAppConf
-      .set("spark.kubernetes.scheduler.name", "yunikorn")
+      .set("spark.kubernetes.scheduler.name", YuniKornFeatureStep.SchedulerName)
   }
 }
 

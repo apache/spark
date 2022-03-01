@@ -27,13 +27,13 @@ private[spark] trait YuniKornTestsSuite { k8sSuite: KubernetesSuite =>
   import YuniKornTestsSuite._
 
   protected def checkScheduler(pod: Pod): Unit = {
-    assert(pod.getSpec.getSchedulerName === "yunikorn")
+    assert(pod.getSpec.getSchedulerName === YuniKornFeatureStep.SchedulerName)
   }
 
   protected def checkAnnotations(pod: Pod): Unit = {
     val appId = pod.getMetadata.getLabels.get("spark-app-selector")
     val annotations = pod.getMetadata.getAnnotations
-    assert(annotations.get("yunikorn.apache.org/app-id") === appId)
+    assert(annotations.get(YuniKornFeatureStep.AppIdAnnotationKey) === appId)
   }
 
   test("Run SparkPi with yunikorn scheduler", k8sTestTag, yunikornTag) {

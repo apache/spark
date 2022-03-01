@@ -28,7 +28,7 @@ class YuniKornFeatureStepSuite extends SparkFunSuite {
     step.init(kubernetesConf)
     val configuredPod = step.configurePod(SparkPod.initialPod())
     val annotations = configuredPod.pod.getMetadata.getAnnotations
-    assert(annotations.get("yunikorn.apache.org/app-id") === kubernetesConf.appId)
+    assert(annotations.get(YuniKornFeatureStep.AppIdAnnotationKey) === kubernetesConf.appId)
   }
 
   test("SPARK-37809: Executor Pod with YuniKorn annotations") {
@@ -38,6 +38,6 @@ class YuniKornFeatureStepSuite extends SparkFunSuite {
     step.init(kubernetesConf)
     val configuredPod = step.configurePod(SparkPod.initialPod())
     val annotations = configuredPod.pod.getMetadata.getAnnotations
-    assert(annotations.get("yunikorn.apache.org/app-id") === kubernetesConf.appId)
+    assert(annotations.get(YuniKornFeatureStep.AppIdAnnotationKey) === kubernetesConf.appId)
   }
 }

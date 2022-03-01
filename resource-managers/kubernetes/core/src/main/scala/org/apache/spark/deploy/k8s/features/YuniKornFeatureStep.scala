@@ -25,8 +25,6 @@ private[spark] class YuniKornFeatureStep extends KubernetesDriverCustomFeatureCo
 
   private var kubernetesConf: KubernetesConf = _
 
-  private val YUNIKORN_APP_ID_ANNOTATION = "yunikorn.apache.org/app-id"
-
   override def init(config: KubernetesDriverConf): Unit = {
     kubernetesConf = config
   }
@@ -38,9 +36,14 @@ private[spark] class YuniKornFeatureStep extends KubernetesDriverCustomFeatureCo
   override def configurePod(pod: SparkPod): SparkPod = {
     val k8sPodBuilder = new PodBuilder(pod.pod)
       .editMetadata()
-      .addToAnnotations(YUNIKORN_APP_ID_ANNOTATION, kubernetesConf.appId)
+      .addToAnnotations(YuniKornFeatureStep.AppIdAnnotationKey, kubernetesConf.appId)
       .endMetadata()
     val k8sPod = k8sPodBuilder.build()
     SparkPod(k8sPod, pod.container)
   }
+}
+
+object YuniKornFeatureStep {
+  val AppIdAnnotationKey = "yunikorn.apache.org/app-id"
+  val SchedulerName = "yunikorn"
 }
