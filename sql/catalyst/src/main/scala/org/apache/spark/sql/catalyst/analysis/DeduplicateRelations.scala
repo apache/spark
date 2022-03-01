@@ -43,46 +43,45 @@ object DeduplicateRelations extends Rule[LogicalPlan] {
     val newPlan = renewDuplicatedRelations(mutable.HashSet.empty, plan)._1
     if (newPlan.find(p => p.resolved && p.missingInput.nonEmpty).isDefined) {
       // Wait for `ResolveMissingReferences` to resolve missing attributes first
-      newPlan
-    } else {
-      newPlan.resolveOperatorsUpWithPruning(
-        _.containsAnyPattern(JOIN, LATERAL_JOIN, AS_OF_JOIN, INTERSECT, EXCEPT, UNION, COMMAND),
-        ruleId) {
-        case p: LogicalPlan if !p.childrenResolved => p
-        // To resolve duplicate expression IDs for Join.
-        case j @ Join(left, right, _, _, _) if !j.duplicateResolved =>
-          j.copy(right = dedupRight(left, right))
-        // Resolve duplicate output for LateralJoin.
-        case j @ LateralJoin(left, right, _, _) if right.resolved && !j.duplicateResolved =>
-          j.copy(right = right.withNewPlan(dedupRight(left, right.plan)))
-        // Resolve duplicate output for AsOfJoin.
-        case j @ AsOfJoin(left, right, _, _, _, _, _) if !j.duplicateResolved =>
-          j.copy(right = dedupRight(left, right))
-        // intersect/except will be rewritten to join at the beginning of optimizer. Here we need to
-        // deduplicate the right side plan, so that we won't produce an invalid self-join later.
-        case i @ Intersect(left, right, _) if !i.duplicateResolved =>
-          i.copy(right = dedupRight(left, right))
-        case e @ Except(left, right, _) if !e.duplicateResolved =>
-          e.copy(right = dedupRight(left, right))
-        // Only after we finish by-name resolution for Union
-        case u: Union if !u.byName && !u.duplicateResolved =>
-          // Use projection-based de-duplication for Union to avoid breaking the checkpoint sharing
-          // feature in streaming.
-          val newChildren = u.children.foldRight(Seq.empty[LogicalPlan]) { (head, tail) =>
-            head +: tail.map {
-              case child if head.outputSet.intersect(child.outputSet).isEmpty =>
-                child
-              case child =>
-                val projectList = child.output.map { attr =>
-                  Alias(attr, attr.name)()
-                }
-                Project(projectList, child)
-            }
+      return newPlan
+    }
+    newPlan.resolveOperatorsUpWithPruning(
+      _.containsAnyPattern(JOIN, LATERAL_JOIN, AS_OF_JOIN, INTERSECT, EXCEPT, UNION, COMMAND),
+      ruleId) {
+      case p: LogicalPlan if !p.childrenResolved => p
+      // To resolve duplicate expression IDs for Join.
+      case j @ Join(left, right, _, _, _) if !j.duplicateResolved =>
+        j.copy(right = dedupRight(left, right))
+      // Resolve duplicate output for LateralJoin.
+      case j @ LateralJoin(left, right, _, _) if right.resolved && !j.duplicateResolved =>
+        j.copy(right = right.withNewPlan(dedupRight(left, right.plan)))
+      // Resolve duplicate output for AsOfJoin.
+      case j @ AsOfJoin(left, right, _, _, _, _, _) if !j.duplicateResolved =>
+        j.copy(right = dedupRight(left, right))
+      // intersect/except will be rewritten to join at the beginning of optimizer. Here we need to
+      // deduplicate the right side plan, so that we won't produce an invalid self-join later.
+      case i @ Intersect(left, right, _) if !i.duplicateResolved =>
+        i.copy(right = dedupRight(left, right))
+      case e @ Except(left, right, _) if !e.duplicateResolved =>
+        e.copy(right = dedupRight(left, right))
+      // Only after we finish by-name resolution for Union
+      case u: Union if !u.byName && !u.duplicateResolved =>
+        // Use projection-based de-duplication for Union to avoid breaking the checkpoint sharing
+        // feature in streaming.
+        val newChildren = u.children.foldRight(Seq.empty[LogicalPlan]) { (head, tail) =>
+          head +: tail.map {
+            case child if head.outputSet.intersect(child.outputSet).isEmpty =>
+              child
+            case child =>
+              val projectList = child.output.map { attr =>
+                Alias(attr, attr.name)()
+              }
+              Project(projectList, child)
           }
-          u.copy(children = newChildren)
-        case m @ MergeIntoTable(targetTable, sourceTable, _, _, _) if !m.duplicateResolved =>
-          m.copy(sourceTable = dedupRight(targetTable, sourceTable))
-      }
+        }
+        u.copy(children = newChildren)
+      case m @ MergeIntoTable(targetTable, sourceTable, _, _, _) if !m.duplicateResolved =>
+        m.copy(sourceTable = dedupRight(targetTable, sourceTable))
     }
   }
 
