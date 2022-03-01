@@ -199,8 +199,8 @@ object QueryCompilationErrors {
 
   def pandasUDFAggregateNotSupportedInPivotError(): Throwable = {
     new AnalysisException(
-      errorClass = "UNSUPPORTED_PANDAS_UDF_AGGREGATE_EXPRESSION",
-      messageParameters = Array.empty)
+      errorClass = "UNSUPPORTED_FEATURE",
+      messageParameters = Array("Pandas UDF aggregate expressions don't support pivot."))
   }
 
   def aggregateExpressionRequiredForPivotError(sql: String): Throwable = {
@@ -1570,8 +1570,9 @@ object QueryCompilationErrors {
 
   def usePythonUDFInJoinConditionUnsupportedError(joinType: JoinType): Throwable = {
     new AnalysisException(
-      errorClass = "UNSUPPORTED_JOIN_CONDITION",
-      messageParameters = Array(s"$joinType"))
+      errorClass = "UNSUPPORTED_FEATURE",
+      messageParameters = Array(
+        s"Using PythonUDF in join condition of join type $joinType is not supported"))
   }
 
   def conflictingAttributesInJoinConditionError(

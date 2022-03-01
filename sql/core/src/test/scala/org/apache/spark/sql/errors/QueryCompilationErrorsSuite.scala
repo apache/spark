@@ -102,7 +102,7 @@ class QueryCompilationErrorsSuite extends QueryTest with SharedSparkSession {
       "The argument_index of string format cannot contain position 0$.")
   }
 
-  test("CANNOT_USE_MIXTURE") {
+  test("CANNOT_USE_MIXTURE: Using aggregate function with grouped aggregate pandas UDF") {
     import IntegratedUDFTestUtils._
 
     val df = Seq(
@@ -121,7 +121,7 @@ class QueryCompilationErrorsSuite extends QueryTest with SharedSparkSession {
       "Cannot use a mixture of aggregate function and group aggregate pandas UDF")
   }
 
-  test("UNSUPPORTED_JOIN_CONDITION") {
+  test("UNSUPPORTED_FEATURE: Using Python UDF with unsupported join condition") {
     import IntegratedUDFTestUtils._
 
     val df1 = Seq(
@@ -141,12 +141,13 @@ class QueryCompilationErrorsSuite extends QueryTest with SharedSparkSession {
           df2, pythonTestUDF(df1("CustomerID") === df2("CustomerID")), "leftouter").collect()
     }
 
-    assert(e.errorClass === Some("UNSUPPORTED_JOIN_CONDITION"))
+    assert(e.errorClass === Some("UNSUPPORTED_FEATURE"))
     assert(e.message ===
+      "The feature is not supported: " +
       "Using PythonUDF in join condition of join type LeftOuter is not supported")
   }
 
-  test("UNSUPPORTED_PANDAS_UDF_AGGREGATE_EXPRESSION") {
+  test("UNSUPPORTED_FEATURE: Using pandas UDF aggregate expression with pivot") {
     import IntegratedUDFTestUtils._
 
     val df = Seq(
@@ -160,8 +161,9 @@ class QueryCompilationErrorsSuite extends QueryTest with SharedSparkSession {
         df.groupBy(df("CustomerID")).pivot(df("CustomerID")).agg(pandasTestUDF(df("Quantity")))
     }
 
-    assert(e.errorClass === Some("UNSUPPORTED_PANDAS_UDF_AGGREGATE_EXPRESSION"))
+    assert(e.errorClass === Some("UNSUPPORTED_FEATURE"))
     assert(e.message ===
+      "The feature is not supported: " +
       "Pandas UDF aggregate expressions don't support pivot.")
   }
 }

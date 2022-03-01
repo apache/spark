@@ -155,12 +155,6 @@
   "UNSUPPORTED_GROUPING_EXPRESSION" : {
     "message" : [ "grouping()/grouping_id() can only be used with GroupingSets/Cube/Rollup" ]
   },
-  "UNSUPPORTED_JOIN_CONDITION" : {
-    "message" : [ "Using PythonUDF in join condition of join type %s is not supported" ]
-  },
-  "UNSUPPORTED_PANDAS_UDF_AGGREGATE_EXPRESSION" : {
-    "message" : [ "Pandas UDF aggregate expressions don't support pivot." ]
-  },
   "WRITING_JOB_ABORTED" : {
     "message" : [ "Writing job aborted" ],
     "sqlState" : "40000"
