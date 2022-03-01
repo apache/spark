@@ -444,7 +444,7 @@ class FileMetadataStructSuite extends QueryTest with SharedSparkSession {
   }
 
   metadataColumnsTest("prune metadata schema in filters", schema) { (df, f0, f1) =>
-    val prunedDF = df.select("namFileMetadataStructSuite.scalae", "age", "info.id")
+    val prunedDF = df.select("name", "age", "info.id")
       .where(col(METADATA_FILE_PATH).contains("data/f0"))
 
     val fileSourceScanMetaCols = prunedDF.queryExecution.sparkPlan.collectFirst {
