@@ -661,7 +661,7 @@ object PushFoldableIntoBranches extends Rule[LogicalPlan] with PredicateHelper {
 
 object SupportedBinaryExpr {
   def unapply(expr: Expression): Option[(Expression, Expression, Expression)] = expr match {
-    case _: BinaryComparison | _: StringBinaryPredicate | _: StringRegexExpression =>
+    case _: BinaryComparison | _: StringPredicate | _: StringRegexExpression =>
       Some(expr, expr.children.head, expr.children.last)
     case _: BinaryArithmetic => Some(expr, expr.children.head, expr.children.last)
     case _: BinaryMathExpression => Some(expr, expr.children.head, expr.children.last)

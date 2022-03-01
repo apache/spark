@@ -456,7 +456,7 @@ case class Lower(child: Expression)
 }
 
 /** A base trait for functions that compare two strings or binaries, returning a boolean. */
-abstract class StringBinaryPredicate extends BinaryExpression
+abstract class StringPredicate extends BinaryExpression
   with Predicate with ImplicitCastInputTypes with NullIntolerant {
 
   def compare(l: UTF8String, r: UTF8String): Boolean
@@ -486,9 +486,9 @@ trait StringBinaryPredicateExpressionBuilderBase extends ExpressionBuilder {
   protected def createStringPredicate(left: Expression, right: Expression): Expression
 }
 
-object StringBinaryPredicate {
+object StringPredicate {
   def unapply(expr: Expression): Option[Expression] = expr match {
-    case _: StringBinaryPredicate => Some(expr)
+    case _: StringPredicate => Some(expr)
     case s @ StaticInvoke(clz, _, "contains" | "startsWith" | "endsWith", Seq(_, _), _, _, _, _)
       if clz == classOf[ByteArrayMethods] => Some(s)
     case _ => None
@@ -547,7 +547,7 @@ object ContainsExpressionBuilder extends StringBinaryPredicateExpressionBuilderB
   }
 }
 
-case class Contains(left: Expression, right: Expression) extends StringBinaryPredicate {
+case class Contains(left: Expression, right: Expression) extends StringPredicate {
   override def compare(l: UTF8String, r: UTF8String): Boolean = l.contains(r)
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     defineCodeGen(ctx, ev, (c1, c2) => s"($c1).contains($c2)")
@@ -584,7 +584,7 @@ object StartsWithExpressionBuilder extends StringBinaryPredicateExpressionBuilde
   }
 }
 
-case class StartsWith(left: Expression, right: Expression) extends StringBinaryPredicate {
+case class StartsWith(left: Expression, right: Expression) extends StringPredicate {
   override def compare(l: UTF8String, r: UTF8String): Boolean = l.startsWith(r)
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     defineCodeGen(ctx, ev, (c1, c2) => s"($c1).startsWith($c2)")
@@ -621,7 +621,7 @@ object EndsWithExpressionBuilder extends StringBinaryPredicateExpressionBuilderB
   }
 }
 
-case class EndsWith(left: Expression, right: Expression) extends StringBinaryPredicate {
+case class EndsWith(left: Expression, right: Expression) extends StringPredicate {
   override def compare(l: UTF8String, r: UTF8String): Boolean = l.endsWith(r)
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     defineCodeGen(ctx, ev, (c1, c2) => s"($c1).endsWith($c2)")
