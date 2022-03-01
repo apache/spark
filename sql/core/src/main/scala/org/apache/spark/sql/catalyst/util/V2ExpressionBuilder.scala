@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.util
 
-import org.apache.spark.sql.catalyst.expressions.{Add, Attribute, BinaryArithmetic, BinaryOperator, BitwiseAnd, BitwiseOr, BitwiseXor, CaseWhen, Divide, EqualTo, Expression, IntegralDivide, IsNotNull, IsNull, Literal, Multiply, Not, Pmod, Remainder, Subtract}
+import org.apache.spark.sql.catalyst.expressions.{Add, Attribute, BinaryOperator, BitwiseNot, CaseWhen, Divide, EqualTo, Expression, IntegralDivide, IsNotNull, IsNull, Literal, Multiply, Not, Pmod, Remainder, Subtract}
 import org.apache.spark.sql.connector.expressions.{Expression => V2Expression, FieldReference, GeneralScalarExpression, LiteralValue}
 
 /**
@@ -32,13 +32,10 @@ class V2ExpressionBuilder(e: Expression) {
     case sub: Subtract => sub.failOnError
     case mul: Multiply => mul.failOnError
     case div: Divide => div.failOnError
-    case intDiv: IntegralDivide => intDiv.failOnError
+    case _: IntegralDivide => false
     case r: Remainder => r.failOnError
-    case p: Pmod => p.failOnError
-    case _: BitwiseAnd => true
-    case _: BitwiseOr => true
-    case _: BitwiseXor => true
-    case _ => false
+    case _: Pmod => false
+    case _ => true
   }
 
   private def generateExpression(expr: Expression): Option[V2Expression] = expr match {
@@ -48,8 +45,7 @@ class V2ExpressionBuilder(e: Expression) {
       .map(c => new GeneralScalarExpression("IS_NULL", Array[V2Expression](c)))
     case IsNotNull(col) => generateExpression(col)
       .map(c => new GeneralScalarExpression("IS_NOT_NULL", Array[V2Expression](c)))
-    case b: BinaryOperator
-      if !b.isInstanceOf[BinaryArithmetic] || canTranslate(b) =>
+    case b: BinaryOperator if canTranslate(b) =>
       val left = generateExpression(b.left)
       val right = generateExpression(b.right)
       if (left.isDefined && right.isDefined) {
@@ -67,6 +63,8 @@ class V2ExpressionBuilder(e: Expression) {
       }
     case Not(child) => generateExpression(child)
       .map(v => new GeneralScalarExpression("NOT", Array[V2Expression](v)))
+    case BitwiseNot(child) => generateExpression(child)
+      .map(v => new GeneralScalarExpression("~", Array[V2Expression](v)))
     case CaseWhen(branches, elseValue) =>
       val conditions = branches.map(_._1).flatMap(generateExpression)
       val values = branches.map(_._2).flatMap(generateExpression)

@@ -49,21 +49,27 @@ public class V2ExpressionSQLBuilder {
         case "<=":
         case ">":
         case ">=":
+          return visitBinaryComparison(name, build(e.children()[0]), build(e.children()[1]));
         case "+":
         case "-":
         case "*":
         case "/":
         case "%":
-        case "&&":
-        case "||":
+          return visitBinaryArithmetic(name, build(e.children()[0]), build(e.children()[1]));
         case "AND":
+          return visitAnd(name, build(e.children()[0]), build(e.children()[1]));
         case "OR":
-        case "&":
-        case "|":
-        case "^":
-          return visitBinaryOperation(name, build(e.children()[0]), build(e.children()[1]));
+          return visitOr(name, build(e.children()[0]), build(e.children()[1]));
         case "NOT":
           return visitNot(build(e.children()[0]));
+        case "&":
+          return visitBitwiseAnd(name, build(e.children()[0]), build(e.children()[1]));
+        case "|":
+          return visitBitwiseOr(name, build(e.children()[0]), build(e.children()[1]));
+        case "^":
+          return visitBitwiseXor(name, build(e.children()[0]), build(e.children()[1]));
+        case "~":
+          return visitBitwiseNot(build(e.children()[0]));
         case "CASE_WHEN":
           List<String> children = new ArrayList<>();
           for (Expression child : e.children()) {
@@ -99,13 +105,39 @@ public class V2ExpressionSQLBuilder {
     return v + " IS NOT NULL";
   }
 
-  protected String visitBinaryOperation(String name, String l, String r) {
+  protected String visitBinaryComparison(String name, String l, String r) {
+    return "(" + l + ") " + name + " (" + r + ")";
+  }
+
+  protected String visitBinaryArithmetic(String name, String l, String r) {
+    return "(" + l + ") " + name + " (" + r + ")";
+  }
+
+  protected String visitAnd(String name, String l, String r) {
+    return "(" + l + ") " + name + " (" + r + ")";
+  }
+
+  protected String visitOr(String name, String l, String r) {
+    return "(" + l + ") " + name + " (" + r + ")";
+  }
+
+  protected String visitBitwiseAnd(String name, String l, String r) {
+    return "(" + l + ") " + name + " (" + r + ")";
+  }
+
+  protected String visitBitwiseOr(String name, String l, String r) {
+    return "(" + l + ") " + name + " (" + r + ")";
+  }
+
+  protected String visitBitwiseXor(String name, String l, String r) {
     return "(" + l + ") " + name + " (" + r + ")";
   }
 
   protected String visitNot(String v) {
     return "NOT (" + v + ")";
   }
+
+  protected String visitBitwiseNot(String v) { return "~ (" + v + ")"; }
 
   protected String visitCaseWhen(String[] children) {
     StringBuilder sb = new StringBuilder("CASE");
