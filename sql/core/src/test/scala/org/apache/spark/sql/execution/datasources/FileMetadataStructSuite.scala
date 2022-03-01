@@ -510,4 +510,58 @@ class FileMetadataStructSuite extends QueryTest with SharedSparkSession {
       )
     }
   }
+
+  metadataColumnsTest("file metadata in streaming", schema) { (df, _, _) =>
+    withTempDir { dir =>
+      df.coalesce(1).write.format("json").save(dir.getCanonicalPath + "/source/new-streaming-data")
+
+      val stream = spark.readStream.format("json")
+        .schema(schema)
+        .load(dir.getCanonicalPath + "/source/new-streaming-data")
+        .select("*", "_metadata")
+        .writeStream.format("json")
+        .option("checkpointLocation", dir.getCanonicalPath + "/target/checkpoint")
+        .start(dir.getCanonicalPath + "/target/new-streaming-data")
+
+      stream.processAllAvailable()
+      stream.stop()
+
+      val newDF = spark.read.format("json")
+        .load(dir.getCanonicalPath + "/target/new-streaming-data")
+
+      val sourceFile = new File(dir, "/source/new-streaming-data").listFiles()
+        .filter(_.getName.endsWith(".json")).head
+      val sourceFileMetadata = Map(
+        METADATA_FILE_PATH -> sourceFile.toURI.toString,
+        METADATA_FILE_NAME -> sourceFile.getName,
+        METADATA_FILE_SIZE -> sourceFile.length(),
+        METADATA_FILE_MODIFICATION_TIME -> new Timestamp(sourceFile.lastModified())
+      )
+
+      // SELECT * will have: name, age, info, _metadata of /source/new-streaming-data
+      assert(newDF.select("*").columns.toSet == Set("name", "age", "info", "_metadata"))
+      // Verify the data is expected
+      checkAnswer(
+        newDF.select(col("name"), col("age"), col("info"),
+          col(METADATA_FILE_PATH), col(METADATA_FILE_NAME),
+          // since we are writing _metadata to a json file,
+          // we should explicitly cast the column to timestamp type
+          col(METADATA_FILE_SIZE), to_timestamp(col(METADATA_FILE_MODIFICATION_TIME))),
+        Seq(
+          Row(
+            "jack", 24, Row(12345L, "uom"),
+            sourceFileMetadata(METADATA_FILE_PATH),
+            sourceFileMetadata(METADATA_FILE_NAME),
+            sourceFileMetadata(METADATA_FILE_SIZE),
+            sourceFileMetadata(METADATA_FILE_MODIFICATION_TIME)),
+          Row(
+            "lily", 31, Row(54321L, "ucb"),
+            sourceFileMetadata(METADATA_FILE_PATH),
+            sourceFileMetadata(METADATA_FILE_NAME),
+            sourceFileMetadata(METADATA_FILE_SIZE),
+            sourceFileMetadata(METADATA_FILE_MODIFICATION_TIME))
+        )
+      )
+    }
+  }
 }
