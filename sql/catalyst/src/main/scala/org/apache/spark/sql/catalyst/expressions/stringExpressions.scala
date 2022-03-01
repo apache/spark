@@ -37,6 +37,7 @@ import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.UTF8StringBuilder
+import org.apache.spark.unsafe.array.ByteArrayMethods
 import org.apache.spark.unsafe.types.{ByteArray, UTF8String}
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -468,13 +469,62 @@ abstract class StringPredicate extends BinaryExpression
   override def toString: String = s"$nodeName($left, $right)"
 }
 
-/**
- * A function that returns true if the string `left` contains the string `right`.
- */
+trait StringBinaryPredicateExpressionBuilderBase extends ExpressionBuilder {
+  override def build(funcName: String, expressions: Seq[Expression]): Expression = {
+    val numArgs = expressions.length
+    if (numArgs == 2) {
+      if (expressions(0).dataType == BinaryType && expressions(1).dataType == BinaryType) {
+        BinaryPredicate(funcName, expressions(0), expressions(1))
+      } else {
+        createStringPredicate(expressions(0), expressions(1))
+      }
+    } else {
+      throw QueryCompilationErrors.invalidFunctionArgumentNumberError(Seq(2), funcName, numArgs)
+    }
+  }
+
+  protected def createStringPredicate(left: Expression, right: Expression): Expression
+}
+
+object BinaryPredicate {
+  def unapply(expr: Expression): Option[StaticInvoke] = expr match {
+    case s @ StaticInvoke(clz, _, "contains" | "startsWith" | "endsWith", Seq(_, _), _, _, _, _)
+      if clz == classOf[ByteArrayMethods] => Some(s)
+    case _ => None
+  }
+}
+
+case class BinaryPredicate(override val prettyName: String, left: Expression, right: Expression)
+  extends RuntimeReplaceable with ImplicitCastInputTypes with BinaryLike[Expression] {
+
+  private lazy val realFuncName = prettyName match {
+    case "startswith" => "startsWith"
+    case "endswith" => "endsWith"
+    case name => name
+  }
+
+  override lazy val replacement =
+    StaticInvoke(
+      classOf[ByteArrayMethods],
+      BooleanType,
+      realFuncName,
+      Seq(left, right),
+      Seq(BinaryType, BinaryType))
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(BinaryType, BinaryType)
+
+  override protected def withNewChildrenInternal(
+      newLeft: Expression,
+      newRight: Expression): Expression = {
+    copy(left = newLeft, right = newRight)
+  }
+}
+
 @ExpressionDescription(
   usage = """
     _FUNC_(left, right) - Returns a boolean. The value is True if right is found inside left.
     Returns NULL if either input expression is NULL. Otherwise, returns False.
+    Both left or right must be of STRING or BINARY type.
   """,
   examples = """
     Examples:
@@ -484,10 +534,18 @@ abstract class StringPredicate extends BinaryExpression
        false
       > SELECT _FUNC_('Spark SQL', null);
        NULL
+      > SELECT _FUNC_(x'537061726b2053514c', x'537061726b');
+       true
   """,
   since = "3.3.0",
   group = "string_funcs"
 )
+object ContainsExpressionBuilder extends StringBinaryPredicateExpressionBuilderBase {
+  override protected def createStringPredicate(left: Expression, right: Expression): Expression = {
+    Contains(left, right)
+  }
+}
+
 case class Contains(left: Expression, right: Expression) extends StringPredicate {
   override def compare(l: UTF8String, r: UTF8String): Boolean = l.contains(r)
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
@@ -499,8 +557,9 @@ case class Contains(left: Expression, right: Expression) extends StringPredicate
 
 @ExpressionDescription(
   usage = """
-    _FUNC_(left, right) - Returns true if the string `left` starts with the string `right`.
-    Returns NULL if either input expression is NULL.
+    _FUNC_(left, right) - Returns a boolean. The value is True if left starts with right.
+    Returns NULL if either input expression is NULL. Otherwise, returns False.
+    Both left or right must be of STRING or BINARY type.
   """,
   examples = """
     Examples:
@@ -510,10 +569,20 @@ case class Contains(left: Expression, right: Expression) extends StringPredicate
        false
       > SELECT _FUNC_('Spark SQL', null);
        NULL
+      > SELECT _FUNC_(x'537061726b2053514c', x'537061726b');
+       true
+      > SELECT _FUNC_(x'537061726b2053514c', x'53514c');
+       false
   """,
   since = "3.3.0",
   group = "string_funcs"
 )
+object StartsWithExpressionBuilder extends StringBinaryPredicateExpressionBuilderBase {
+  override protected def createStringPredicate(left: Expression, right: Expression): Expression = {
+    StartsWith(left, right)
+  }
+}
+
 case class StartsWith(left: Expression, right: Expression) extends StringPredicate {
   override def compare(l: UTF8String, r: UTF8String): Boolean = l.startsWith(r)
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
@@ -525,8 +594,9 @@ case class StartsWith(left: Expression, right: Expression) extends StringPredica
 
 @ExpressionDescription(
   usage = """
-    _FUNC_(left, right) - Returns true if the string `left` ends with the string `right`.
-    Returns NULL if either input expression is NULL.
+    _FUNC_(left, right) - Returns a boolean. The value is True if left ends with right.
+    Returns NULL if either input expression is NULL. Otherwise, returns False.
+    Both left or right must be of STRING or BINARY type.
   """,
   examples = """
     Examples:
@@ -536,10 +606,20 @@ case class StartsWith(left: Expression, right: Expression) extends StringPredica
        false
       > SELECT _FUNC_('Spark SQL', null);
        NULL
+      > SELECT _FUNC_(x'537061726b2053514c', x'537061726b');
+       false
+      > SELECT _FUNC_(x'537061726b2053514c', x'53514c');
+       true
   """,
   since = "3.3.0",
   group = "string_funcs"
 )
+object EndsWithExpressionBuilder extends StringBinaryPredicateExpressionBuilderBase {
+  override protected def createStringPredicate(left: Expression, right: Expression): Expression = {
+    EndsWith(left, right)
+  }
+}
+
 case class EndsWith(left: Expression, right: Expression) extends StringPredicate {
   override def compare(l: UTF8String, r: UTF8String): Boolean = l.endsWith(r)
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
