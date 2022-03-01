@@ -59,7 +59,7 @@ abstract class CTEInlineSuiteBase
          """.stripMargin)
       checkAnswer(df, Nil)
       assert(
-        !df.queryExecution.optimizedPlan.exists(_.isInstanceOf[WithCTE]),
+        df.queryExecution.optimizedPlan.exists(_.isInstanceOf[WithCTE]),
         "Non-deterministic With-CTE with multiple references should be not inlined.")
     }
   }
