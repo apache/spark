@@ -140,7 +140,7 @@ object ParquetReadSupport extends Logging {
         "Spark read schema expects field Ids, " +
           "but Parquet file schema doesn't contain any field Ids.\n" +
         "Please remove the field ids from Spark schema or ignore missing ids by " +
-          "setting `spark.sql.parquet.fieldId.ignoreMissing = true`\n" +
+          "setting `spark.sql.parquet.fieldId.read.ignoreMissing = true`\n" +
         s"""
            |Spark read schema:
            |${catalystRequestedSchema.prettyJson}
