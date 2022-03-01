@@ -233,7 +233,7 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
 
       val query1 = testData.select('value).orderBy('key).limit(2000)
       val planned1 = query1.queryExecution.executedPlan
-      assert(planned1.exists(_.isInstanceOf[TakeOrderedAndProjectExec]))
+      assert(!planned1.exists(_.isInstanceOf[TakeOrderedAndProjectExec]))
     }
   }
 
