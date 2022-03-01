@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.plans.logical
 
 import org.apache.spark.sql.catalyst.expressions.ExpressionSet
+import org.apache.spark.sql.internal.SQLConf.PROPAGATE_DISTINCT_KEYS_ENABLED
 
 /**
  * A trait to add distinct attributes to [[LogicalPlan]]. For example:
@@ -28,6 +29,6 @@ import org.apache.spark.sql.catalyst.expressions.ExpressionSet
  */
 trait LogicalPlanDistinctKeys { self: LogicalPlan =>
   lazy val distinctKeys: Set[ExpressionSet] = {
-    if (conf.propagateDistinctKeysEnabled) DistinctKeyVisitor.visit(self) else Set.empty
+    if (conf.getConf(PROPAGATE_DISTINCT_KEYS_ENABLED)) DistinctKeyVisitor.visit(self) else Set.empty
   }
 }

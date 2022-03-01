@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.optimizer
 
 import org.apache.spark.sql.catalyst.analysis.PullOutNondeterministic
-import org.apache.spark.sql.catalyst.expressions.{AliasHelper, AttributeSet, ExpressionSet}
+import org.apache.spark.sql.catalyst.expressions.{Alias, AliasHelper, AttributeSet, ExpressionSet}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.rules.Rule
@@ -48,8 +48,15 @@ object RemoveRedundantAggregates extends Rule[LogicalPlan] with AliasHelper {
         newAggregate
       }
 
-     case agg @ Aggregate(groupingExps, _, child) if agg.groupOnly && child.deterministic &&
-         child.distinctKeys.exists(_.subsetOf(ExpressionSet(groupingExps))) =>
+     case agg @ Aggregate(groupingExps, _, child)
+         if agg.groupOnly && child.deterministic &&
+           child.distinctKeys.exists(_.subsetOf(ExpressionSet(groupingExps))) =>
+      Project(agg.aggregateExpressions, child)
+
+    case agg @ Aggregate(groupingExps, aggregateExps, child)
+        if aggregateExps.forall(a => a.isInstanceOf[Alias] && a.children.forall(_.foldable)) &&
+          child.deterministic &&
+          child.distinctKeys.exists(_.subsetOf(ExpressionSet(groupingExps))) =>
       Project(agg.aggregateExpressions, child)
   }
 
