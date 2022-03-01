@@ -76,7 +76,7 @@ struct<timestampdiff(QUARTER, TIMESTAMP_NTZ '2022-01-01 01:02:03', TIMESTAMP_NTZ
 
 
 -- !query
-select timestampdiff(HOUR, timestamp_ntz'2022-02-14 01:02:03', timestamp'2022-02-14 02:03:04')
+select timestampdiff(HOUR, timestamp_ntz'2022-02-14 01:02:03', timestamp_ltz'2022-02-14 02:03:04')
 -- !query schema
 struct<timestampdiff(HOUR, TIMESTAMP_NTZ '2022-02-14 01:02:03', TIMESTAMP '2022-02-14 02:03:04'):bigint>
 -- !query output
