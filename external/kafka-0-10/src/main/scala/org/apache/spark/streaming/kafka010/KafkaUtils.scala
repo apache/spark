@@ -184,10 +184,10 @@ object KafkaUtils extends Logging {
    */
   private[kafka010] def fixKafkaParams(kafkaParams: ju.HashMap[String, Object]): Unit = {
     logWarning(s"overriding ${ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG} to false for executor")
-    kafkaParams.put(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, false: java.lang.Boolean)
+    kafkaParams.putIfAbsent(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, false: java.lang.Boolean)
 
     logWarning(s"overriding ${ConsumerConfig.AUTO_OFFSET_RESET_CONFIG} to none for executor")
-    kafkaParams.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "none")
+    kafkaParams.putIfAbsent(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "none")
 
     // driver and executor should be in different consumer groups
     val originalGroupId = kafkaParams.get(ConsumerConfig.GROUP_ID_CONFIG)
