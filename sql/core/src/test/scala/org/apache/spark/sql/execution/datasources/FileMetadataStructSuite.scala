@@ -444,7 +444,7 @@ class FileMetadataStructSuite extends QueryTest with SharedSparkSession {
   }
 
   metadataColumnsTest("prune metadata schema in filters", schema) { (df, f0, f1) =>
-    val prunedDF = df.select("name", "age", "info.id")
+    val prunedDF = df.select("namFileMetadataStructSuite.scalae", "age", "info.id")
       .where(col(METADATA_FILE_PATH).contains("data/f0"))
 
     val fileSourceScanMetaCols = prunedDF.queryExecution.sparkPlan.collectFirst {
@@ -475,7 +475,43 @@ class FileMetadataStructSuite extends QueryTest with SharedSparkSession {
     )
   }
 
-  metadataColumnsTest("file metadata in streaming", schema) { (df, f0, f1) =>
+  metadataColumnsTest("write _metadata in parquet and read back", schema) { (df, f0, f1) =>
+    // SPARK-38314: Selecting and then writing df containing hidden file
+    // metadata column `_metadata` into parquet files will still keep the internal `Attribute`
+    // metadata information of the column. It will then fail when read again.
+    withTempDir { dir =>
+      df.select("*", "_metadata")
+        .write.format("parquet").save(dir.getCanonicalPath + "/new-data")
+
+      val newDF = spark.read.format("parquet").load(dir.getCanonicalPath + "/new-data")
+
+      // SELECT * will have: name, age, info, _metadata of f0 and f1
+      checkAnswer(
+        newDF.select("*"),
+        Seq(
+          Row("jack", 24, Row(12345L, "uom"),
+            Row(f0(METADATA_FILE_PATH), f0(METADATA_FILE_NAME),
+              f0(METADATA_FILE_SIZE), f0(METADATA_FILE_MODIFICATION_TIME))),
+          Row("lily", 31, Row(54321L, "ucb"),
+            Row(f1(METADATA_FILE_PATH), f1(METADATA_FILE_NAME),
+              f1(METADATA_FILE_SIZE), f1(METADATA_FILE_MODIFICATION_TIME)))
+        )
+      )
+
+      // SELECT _metadata won't override the existing user data (_metadata of f0 and f1)
+      checkAnswer(
+        newDF.select("_metadata"),
+        Seq(
+          Row(Row(f0(METADATA_FILE_PATH), f0(METADATA_FILE_NAME),
+            f0(METADATA_FILE_SIZE), f0(METADATA_FILE_MODIFICATION_TIME))),
+          Row(Row(f1(METADATA_FILE_PATH), f1(METADATA_FILE_NAME),
+            f1(METADATA_FILE_SIZE), f1(METADATA_FILE_MODIFICATION_TIME)))
+        )
+      )
+    }
+  }
+
+  metadataColumnsTest("file metadata in streaming", schema) { (df, _, _) =>
     withTempDir { dir =>
       df.coalesce(1).write.format("json").save(dir.getCanonicalPath + "/source/new-streaming-data")
 
