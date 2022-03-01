@@ -826,4 +826,4 @@ select timestampdiff('SECOND', date'2022-02-15', timestamp'2022-02-14 23:59:59')
 -- !query schema
 struct<timestampdiff(SECOND, DATE '2022-02-15', TIMESTAMP_NTZ '2022-02-14 23:59:59'):bigint>
 -- !query output
--28801
+-1

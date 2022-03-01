@@ -3183,8 +3183,7 @@ case class TimestampDiff(
   override def second: Expression = startTimestamp
   override def third: Expression = endTimestamp
 
-  override def inputTypes: Seq[AbstractDataType] =
-    Seq(StringType, AnyTimestampType, AnyTimestampType)
+  override def inputTypes: Seq[AbstractDataType] = Seq(StringType, TimestampType, TimestampType)
   override def dataType: DataType = LongType
 
   override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =

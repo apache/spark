@@ -1955,26 +1955,26 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(
       TimestampDiff(
         Literal("Hour"),
-        Literal(LocalDateTime.of(2022, 2, 15, 12, 57, 0)),
-        Literal(LocalDateTime.of(2022, 2, 15, 13, 57, 0))),
+        Literal(Instant.parse("2022-02-15T12:57:00Z")),
+        Literal(Instant.parse("2022-02-15T13:57:00Z"))),
       1L)
     // Check nulls as input values
     checkEvaluation(
       TimestampDiff(
         Literal.create(null, StringType),
-        Literal(LocalDateTime.of(2021, 2, 15, 12, 57, 0)),
-        Literal(LocalDateTime.of(2022, 2, 15, 12, 57, 0))),
+        Literal(Instant.parse("2021-02-15T12:57:00Z")),
+        Literal(Instant.parse("2022-02-15T12:57:00Z"))),
       null)
     checkEvaluation(
       TimestampDiff(
         Literal("MINUTE"),
         Literal.create(null, TimestampType),
-        Literal(LocalDateTime.of(2022, 2, 15, 12, 57, 0))),
+        Literal(Instant.parse("2022-02-15T12:57:00Z"))),
       null)
     checkEvaluation(
       TimestampDiff(
         Literal("MINUTE"),
-        Literal(LocalDateTime.of(2022, 2, 15, 12, 57, 0)),
+        Literal(Instant.parse("2021-02-15T12:57:00Z")),
         Literal.create(null, TimestampType)),
       null)
     // Check crossing the daylight saving time
@@ -1989,8 +1989,8 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(
       TimestampDiff(
         Literal("DAY"),
-        Literal(LocalDateTime.of(2020, 2, 28, 10, 11, 12)),
-        Literal(LocalDateTime.of(2020, 3, 1, 10, 11, 12)),
+        Literal(Instant.parse("2020-02-28T10:11:12Z")),
+        Literal(Instant.parse("2020-03-01T10:21:12Z")),
         Some("America/Los_Angeles")),
       2L)
 
@@ -2001,16 +2001,14 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       "MILLISECOND", "MICROSECOND"
     ).foreach { unit =>
       outstandingTimezonesIds.foreach { tz =>
-        Seq(TimestampNTZType, TimestampType).foreach { tsType =>
-          checkConsistencyBetweenInterpretedAndCodegenAllowingException(
-            (startTs: Expression, endTs: Expression) =>
-              TimestampDiff(
-                Literal(unit),
-                startTs,
-                endTs,
-                Some(tz)),
-            tsType, tsType)
-        }
+        checkConsistencyBetweenInterpretedAndCodegenAllowingException(
+          (startTs: Expression, endTs: Expression) =>
+            TimestampDiff(
+              Literal(unit),
+              startTs,
+              endTs,
+              Some(tz)),
+          TimestampType, TimestampType)
       }
     }
   }
