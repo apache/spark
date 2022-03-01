@@ -86,7 +86,9 @@ class DataFrameSuite extends QueryTest
 
   test("access complex data") {
     assert(complexData.filter(complexData("a").getItem(0) === 2).count() == 1)
-    assert(complexData.filter(complexData("m").getItem("1") === 1).count() == 1)
+    if (!conf.ansiEnabled) {
+      assert(complexData.filter(complexData("m").getItem("1") === 1).count() == 1)
+    }
     assert(complexData.filter(complexData("s").getField("key") === 1).count() == 1)
   }
 
@@ -1563,7 +1565,9 @@ class DataFrameSuite extends QueryTest
 
   test("SPARK-7133: Implement struct, array, and map field accessor") {
     assert(complexData.filter(complexData("a")(0) === 2).count() == 1)
-    assert(complexData.filter(complexData("m")("1") === 1).count() == 1)
+    if (!conf.ansiEnabled) {
+      assert(complexData.filter(complexData("m")("1") === 1).count() == 1)
+    }
     assert(complexData.filter(complexData("s")("key") === 1).count() == 1)
     assert(complexData.filter(complexData("m")(complexData("s")("value")) === 1).count() == 1)
     assert(complexData.filter(complexData("a")(complexData("s")("key")) === 1).count() == 1)
@@ -2458,8 +2462,10 @@ class DataFrameSuite extends QueryTest
       val aggPlusSort2 = df.groupBy(col("name")).agg(count(col("name"))).orderBy(col("name"))
       checkAnswer(aggPlusSort1, aggPlusSort2.collect())
 
-      val aggPlusFilter1 = df.groupBy(df("name")).agg(count(df("name"))).filter(df("name") === 0)
-      val aggPlusFilter2 = df.groupBy(col("name")).agg(count(col("name"))).filter(col("name") === 0)
+      val aggPlusFilter1 =
+        df.groupBy(df("name")).agg(count(df("name"))).filter(df("name") === "test1")
+      val aggPlusFilter2 =
+        df.groupBy(col("name")).agg(count(col("name"))).filter(col("name") === "test1")
       checkAnswer(aggPlusFilter1, aggPlusFilter2.collect())
     }
   }
