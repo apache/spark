@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
+import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.sql.catalyst.analysis.EliminateSubqueryAliases
@@ -753,6 +754,250 @@ object OptimizeOneRowRelationSubquery extends Rule[LogicalPlan] {
       plan
     } else {
       rewrite(plan)
+    }
+  }
+}
+
+/**
+ * An optimizer rule which combines compatible scalar sub-queries with underlying aggregations.
+ * The propose of this rule is to reuse the base plan of compatible scalar sub-queries so as to
+ * prune unnecessary sub-queries jobs.
+ *
+ * This rule doesn't actually clean up sub-queries. Instead, it replaces underlying plans of
+ * compatible sub-queries with an unified aggregation plan to make these sub-queries reusable.
+ *
+ * In overall, the rule can be divided into three steps:
+ * <ol>
+ *  <li>Extract aggregation, projections and base plans from aggregate-based scalar sub-queries.
+ *     Then, put these sub-queries into groups according to their base plans. The base plan
+ *     refers to top non-project descendant of Aggregate. Ideally, sub-queries with same kind
+ *     of base plan can share a unified combined subquery plan. </li>
+ *  <li>Combine aggregate and project expressions with corresponding base plans to build fused
+ *      aggregates.</li>
+ *   <li>Replace ScalarSubqueries with SharedScalarSubqueries based on fused aggregates.</li>
+ * </ol>
+ *
+ * First example: sub-queries based on multiple fields of the same relation
+ * {{{
+ * SELECT SUM(i) FROM t
+ * WHERE l > (SELECT MIN(l2) FROM t) AND l2 < (SELECT MAX(l) FROM t)
+ * AND AND i2 <> (SELECT MAX(i2) FROM t) AND i2 <> (SELECT MIN(i2) FROM t)
+ * }}}
+ *
+ * The optimized (pseudo) logical plan of above query:
+ * {{{
+ *  Aggregate [sum(i)]
+ *  +- Project [i]
+ *    +- Filter (((l > scalar-subquery#1) AND (l2 < scalar-subquery#2)) AND
+ * (NOT (i2 = scalar-subquery#3) AND NOT (i2 = scalar-subquery#4)))
+ *       :  :- Aggregate [min(l2)]
+ *       :  :  +- Project [l2]
+ *       :  :     +- Relation [l,l2,i,i2]
+ *       :  +- Aggregate [max(l)]
+ *       :     +- Project [l]
+ *       :        +- Relation [l,l2,i,i2]
+ *       :  +- Aggregate [max(i2)]
+ *       :     +- Project [l]
+ *       :        +- Relation [l,l2,i,i2]
+ *       :  +- Aggregate [min(i2)]
+ *       :     +- Project [l]
+ *       :        +- Relation [l,l2,i,i2]
+ *       +- Relation [l,l2,i,i2]
+ * }}}
+ *
+ * With current rule, underlying plans of sub-queries are replaced with a fused one:
+ * {{{
+ *  Aggregate [sum(i)]
+ *  +- Project [i]
+ *    +- Filter (((l > shared-scalar-subquery#1) AND (l2 < shared-scalar-subquery#2)) AND
+ * (NOT (i2 = shared-scalar-subquery#3) AND NOT (i2 = shared-scalar-subquery#4)))
+ *       :  :- Aggregate [min(l2),max(l),max(i2),min(i2)]
+ *       :  :  +- Project [l2,l,i2]
+ *       :  :     +- Relation [l,l2,i,i2]
+ *       :  :- Aggregate [min(l2),max(l),max(i2),min(i2)]
+ *       :  :  +- Project [l2,l,i2]
+ *       :        +- Relation [l,l2,i,i2]
+ *       :  :- Aggregate [min(l2),max(l),max(i2),min(i2)]
+ *       :  :  +- Project [l2,l,i2]
+ *       :        +- Relation [l,l2,i,i2]
+ *       :  :- Aggregate [min(l2),max(l),max(i2),min(i2)]
+ *       :  :  +- Project [l2,l,i2]
+ *       :        +- Relation [l,l2,i,i2]
+ *       +- Relation [l,l2,i,i2]
+ * }}}
+ *
+ * Second example: sub-queries of different filter conditions
+ * {{{
+ * SELECT SUM(i) FROM {0}
+ * WHERE l > (SELECT MIN(l + l2 + i) FROM {0} WHERE l > 0)
+ * AND l2 < (SELECT MAX(i) + MAX(i2) FROM {0} WHERE l > 0)
+ * AND i2 > (SELECT COUNT(IF(i % 2 == 0, 1, NULL)) FROM {0} WHERE l < 0)
+ * AND i > (SELECT COUNT(IF(i2 % 2 == 0, 1, NULL)) FROM {0} WHERE l < 0)
+ * }}}
+ *
+ * With current rule, sub-queries sharing same base plan (Filter + Scan) will be combined:
+ * {{{
+ * Aggregate [sum(i)]
+ * +- Project [i]
+ *    +- Filter (((l > shared-scalar-subquery#1) AND (l2 < shared-scalar-subquery#2)) AND
+ * ((i2 > shared-scalar-subquery#3) AND (i > shared-scalar-subquery#4)))
+ *       :  :- Aggregate [min(l + l2 + i), (max(i) + max(i2))]
+ *       :  :  +- Project [l, l2, i, i2]
+ *       :  :     +- Filter (l#46L > 0)
+ *       :  :        +- Relation [l,l2,i,i2]
+ *       :  :- Aggregate [min(l + l2 + i), (max(i) + max(i2))]
+ *       :  :  +- Project [l, l2, i, i2]
+ *       :  :     +- Filter (l#46L > 0)
+ *       :  :        +- Relation [l,l2,i,i2]
+ *       :  :- Aggregate [count(if (((i % 2) = 0)) 1 else null),
+ *                        count(if (((i2 % 2) = 0)) 1 else null)]
+ *       :  :  +- Project [i, i2]
+ *       :  :     +- Filter (l < 0)
+ *       :  :        +- Relation [l,l2,i,i2]
+ *       :  :- Aggregate [count(if (((i % 2) = 0)) 1 else null),
+ *                        count(if (((i2 % 2) = 0)) 1 else null)]
+ *       :  :  +- Project [i, i2]
+ *       :  :     +- Filter (l < 0)
+ *       :  :        +- Relation [l,l2,i,i2]
+ *       +- Relation [l,l2,i,i2]
+ * }}}
+ */
+object CombineScalarSubquery extends Rule[LogicalPlan] {
+
+  // Data structure contains all information extracted from a ScalarSubquery, which is friendly
+  // to the subsequent plan combination.
+  // Among all fields, basePlan, scalar and aggregate are pretty straightforward.
+  // The field `inputRefOrder` aligns with `projects`, which records the binding ordinals in the
+  // child plan's output for corresponding project expression. As a Map, the key represents the
+  // exprId of project's AttributeReference; the value represents the ordinal to fetch the input
+  // data of the leaf expression from the output of the child plan.
+  private case class CombineBlock(
+      basePlan: LogicalPlan,
+      scalar: ExprId,
+      aggregate: NamedExpression,
+      inputRefOrder: List[Map[ExprId, Int]],
+      projects: List[NamedExpression])
+
+  // Data structure holds the result of plan combination. The ordinal of scalar in the scalar list
+  // represents the ordinal to fetch its value from the output of the fused plan.
+  private case class FusedAggregate(aggregate: Aggregate, scalars: List[ExprId])
+
+  private def createCombineBlock(scalar: ExprId, agg: Aggregate): CombineBlock = {
+    agg.child match {
+      case prj: Project =>
+        val baseOutput = prj.child.output.map(_.exprId)
+        val prjExpressions = mutable.ListBuffer.empty[NamedExpression]
+        val inputRefs = mutable.ListBuffer.empty[Map[ExprId, Int]]
+        prj.projectList.foreach { e =>
+          prjExpressions += e
+          // Collect all attributeReferences.
+          // Then, find and bind their ordinals in the base plan's output.
+          inputRefs += e.collectLeaves().collect {
+            case ar: AttributeReference =>
+              ar.exprId -> baseOutput.indexOf(ar.exprId)
+          }.toMap
+        }
+        CombineBlock(prj.child,
+                     scalar,
+                     agg.aggregateExpressions.head,
+                     inputRefs.toList,
+                     prjExpressions.toList)
+
+      case plan =>
+        val refOrderMaps = plan.output.zipWithIndex
+            .map { case (attr, i) => Map(attr.exprId -> i) }
+        CombineBlock(plan,
+                     scalar,
+                     agg.aggregateExpressions.head,
+                     refOrderMaps.toList,
+                     plan.output.toList)
+    }
+  }
+
+  private def mergeCombineBlocks(blocks: Seq[CombineBlock]): FusedAggregate = {
+    // Simply choose the first block's base as the global base
+    val basePlan = blocks.head.basePlan
+    val baseOutput = basePlan.output
+
+    val scalars = ArrayBuffer.empty[ExprId]
+    val aggBuffer = ArrayBuffer.empty[NamedExpression]
+    val prjBuffer = ArrayBuffer.empty[NamedExpression]
+    val prjMap = mutable.Map.empty[LogicalPlan, ExprId]
+
+    blocks.foreach { blk =>
+      scalars += blk.scalar
+
+      // Merge project expressions which are semantically equal. And rebase distinct
+      // project expressions to the global base.
+      val boundProjects: List[ExprId] = blk.projects.zipWithIndex.map { case (p, i) =>
+        // reuse project expression among different aggregations if possible
+        val singlePrj = Project(p :: Nil, blk.basePlan).canonicalized
+        prjMap.getOrElseUpdate(singlePrj, {
+          val refMap = blk.inputRefOrder(i)
+          val bound = p.transform {
+            case ar: AttributeReference =>
+              val newExprId = baseOutput(refMap(ar.exprId)).exprId
+              ar.withExprId(newExprId)
+          }.asInstanceOf[NamedExpression]
+          prjBuffer += bound
+          bound.exprId
+        })
+      }
+
+      // Rebase aggregate expressions
+      val oldPrjExprIds = blk.projects.map(_.exprId)
+      aggBuffer += blk.aggregate.transform {
+        case ar: AttributeReference =>
+          val newExprId = boundProjects(oldPrjExprIds.indexOf(ar.exprId))
+          ar.withExprId(newExprId)
+      }.asInstanceOf[NamedExpression]
+    }
+
+    val fusedProject = Project(prjBuffer.toList, basePlan)
+    val fusedAggregate = Aggregate(Nil, aggBuffer.toList, fusedProject)
+
+    FusedAggregate(fusedAggregate, scalars.toList)
+  }
+
+  override def apply(plan: LogicalPlan): LogicalPlan = {
+
+    val builder = mutable.Map.empty[LogicalPlan, ArrayBuffer[CombineBlock]]
+    val scalarSet = mutable.HashSet.empty[ExprId]
+
+    // Collect combination candidates from scalar sub-queries. Assign these candidates into
+    // groups according to the canonicalized base plan.
+    plan.transformAllExpressionsWithPruning(_.containsPattern(SCALAR_SUBQUERY)) {
+      case s @ ScalarSubquery(agg: Aggregate, _, _, _)
+        if !s.isCorrelated && !scalarSet.contains(s.exprId) =>
+
+        val combBlock = createCombineBlock(s.exprId, agg)
+        val blockSeq = builder.getOrElseUpdate(
+          combBlock.basePlan.canonicalized, ArrayBuffer.empty[CombineBlock])
+        blockSeq += combBlock
+        scalarSet += s.exprId
+        s
+    }
+
+    // Combine plans which share the same base to form fused aggregates. And create links between
+    // scalar sub-queries and fused aggregates.
+    val fusedAggregates = builder.filter(_._2.length > 1)
+        .flatMap { case (_, blocks) =>
+          val fusedAgg = mergeCombineBlocks(blocks.toList)
+          fusedAgg.scalars.indices.map { i =>
+            fusedAgg.scalars(i) -> Tuple2(i, fusedAgg.aggregate)
+          }
+        }.toMap
+
+    // Replace scalar sub-queries, which share base with other queries, with sharedScalarSubquery
+    // of fused aggregate.
+    if (fusedAggregates.isEmpty) {
+      plan
+    } else {
+      plan.transformAllExpressionsWithPruning(_.containsPattern(SCALAR_SUBQUERY)) {
+        case s: ScalarSubquery if fusedAggregates.contains(s.exprId) =>
+          val (ordinal, agg) = fusedAggregates(s.exprId)
+          SharedScalarSubquery(agg, ordinal, s.outerAttrs, s.exprId, s.joinCond)
+      }
     }
   }
 }

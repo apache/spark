@@ -27,7 +27,7 @@ import org.apache.spark.scheduler.{SparkListener, SparkListenerEvent, SparkListe
 import org.apache.spark.sql.{Dataset, QueryTest, Row, SparkSession, Strategy}
 import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan}
-import org.apache.spark.sql.execution.{CollectLimitExec, CommandResultExec, LocalTableScanExec, PartialReducerPartitionSpec, QueryExecution, ReusedSubqueryExec, ShuffledRowRDD, SortExec, SparkPlan, UnaryExecNode, UnionExec}
+import org.apache.spark.sql.execution.{CollectLimitExec, CommandResultExec, LocalTableScanExec, PartialReducerPartitionSpec, QueryExecution, ReusedSubqueryExec, ShuffledRowRDD, SortExec, SparkPlan, SubqueryExec, UnaryExecNode, UnionExec}
 import org.apache.spark.sql.execution.aggregate.BaseAggregateExec
 import org.apache.spark.sql.execution.command.DataWritingCommandExec
 import org.apache.spark.sql.execution.datasources.noop.NoopDataSource
@@ -336,6 +336,35 @@ class AdaptiveQueryExecSuite
       assert(smj.size == 1)
       val bhj = findTopLevelBroadcastHashJoin(adaptivePlan)
       assert(bhj.size == 1)
+
+      checkNumLocalShuffleReads(adaptivePlan)
+    }
+  }
+
+  test("Shared Scalar subquery") {
+    withSQLConf(
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "80") {
+      val (plan, adaptivePlan) = runAdaptiveAndVerifyResult(
+        """
+          |SELECT *, (SELECT sum(a) from testData3 where a <> 0)
+          |FROM testData
+          |join testData2
+          |ON key = a
+          |where (value + a) = (SELECT max(a) from testData3) OR
+          |      value == (SELECT min(a + 1) from testData3) OR
+          |      (value - a) == (SELECT max(a) from testData3 where a <> 0)
+          |""".stripMargin)
+      val smj = findTopLevelSortMergeJoin(plan)
+      assert(smj.size == 1)
+      val bhj = findTopLevelBroadcastHashJoin(adaptivePlan)
+      assert(bhj.size == 1)
+
+      val reuse = findReusedSubquery(adaptivePlan).distinct
+      assert(reuse.size == 2)
+      assert(collectWithSubqueries(adaptivePlan) {
+        case e: SubqueryExec => e
+      }.distinct.size == 2)
 
       checkNumLocalShuffleReads(adaptivePlan)
     }

@@ -17,10 +17,11 @@
 
 package org.apache.spark.sql
 
+import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.spark.sql.catalyst.expressions.SubqueryExpression
-import org.apache.spark.sql.catalyst.plans.logical.{Join, LogicalPlan, Sort}
+import org.apache.spark.sql.catalyst.expressions.{SharedScalarSubquery, SubqueryExpression}
+import org.apache.spark.sql.catalyst.plans.logical.{Join, LogicalPlan, Project, Sort}
 import org.apache.spark.sql.execution.{ColumnarToRowExec, ExecSubqueryExpression, FileSourceScanExec, InputAdapter, ReusedSubqueryExec, ScalarSubquery, SubqueryExec, WholeStageCodegenExec}
 import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanHelper, DisableAdaptiveExecution}
 import org.apache.spark.sql.execution.datasources.FileScanRDD
@@ -1387,10 +1388,10 @@ class SubquerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
         var countSubqueryExec = 0
         var countReuseSubqueryExec = 0
         df.queryExecution.executedPlan.transformAllExpressions {
-          case s @ ScalarSubquery(_: SubqueryExec, _) =>
+          case s @ ScalarSubquery(_: SubqueryExec, _, _) =>
             countSubqueryExec = countSubqueryExec + 1
             s
-          case s @ ScalarSubquery(_: ReusedSubqueryExec, _) =>
+          case s @ ScalarSubquery(_: ReusedSubqueryExec, _, _) =>
             countReuseSubqueryExec = countReuseSubqueryExec + 1
             s
         }
@@ -1411,7 +1412,7 @@ class SubquerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     val df = sql("SELECT a FROM l WHERE a = (SELECT max(c) FROM r WHERE c = 1)".stripMargin)
     val subqueryExecs: ArrayBuffer[SubqueryExec] = ArrayBuffer.empty
     df.queryExecution.executedPlan.transformAllExpressions {
-      case s @ ScalarSubquery(p: SubqueryExec, _) =>
+      case s @ ScalarSubquery(p: SubqueryExec, _, _) =>
         subqueryExecs += p
         s
     }
@@ -2017,5 +2018,75 @@ class SubquerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
             |""".stripMargin)
       }.getMessage.contains("Correlated column is not allowed in predicate"))
     }
+  }
+
+  test("combine scalar subqueries in one group") {
+    val df = Seq((1, 2, 3), (3, 4, 5), (5, 6, 7)).toDF("a", "b", "c")
+    df.createOrReplaceTempView("t")
+
+    val ret = sql(
+      """
+        | select a, b, c from t
+        | where c >= (select min(b) from t) and c <= (select max(a) from t)
+        |""".stripMargin)
+    checkAnswer(ret, Row(1, 2, 3) :: Row(3, 4, 5) :: Nil)
+
+    val planWithOrdinals = mutable.Map.empty[LogicalPlan, mutable.ArrayBuffer[Int]]
+    ret.queryExecution.optimizedPlan.transformAllExpressions {
+      case s @ SharedScalarSubquery(p, i, _, _, _) =>
+        planWithOrdinals.getOrElseUpdate(p.canonicalized, mutable.ArrayBuffer.empty[Int]) += i
+        s
+    }
+    assert(planWithOrdinals.size == 1)
+    assert(planWithOrdinals.head._2.sorted == Seq(0, 1))
+  }
+
+  test("combine scalar subqueries in different groups") {
+    val df = Seq((1, 2, 3), (3, 4, 5), (5, 6, 7), (7, 8, 9)).toDF("a", "b", "c")
+    df.createOrReplaceTempView("t")
+
+    val ret = sql(
+      """
+        | select a, (select min(c) from t), (select max(c) from t)
+        | from t
+        | where (c > (select min(a + b) - 1 from t where a > 1) and
+        |   c < (select max(a) + max(b) - 1 from t where a > 1)) or
+        |   c == (select sum(a + 2) from t where b < 3)
+        |""".stripMargin)
+    checkAnswer(ret, Row(1, 3, 9) :: Row(5, 3, 9) :: Row(7, 3, 9) :: Nil)
+
+    val planWithOrdinals = mutable.Map.empty[LogicalPlan, mutable.ArrayBuffer[Int]]
+    ret.queryExecution.optimizedPlan.transformAllExpressions {
+      case s @ SharedScalarSubquery(p, i, _, _, _) =>
+        planWithOrdinals.getOrElseUpdate(p.canonicalized, mutable.ArrayBuffer.empty[Int]) += i
+        s
+    }
+    assert(planWithOrdinals.size == 2)
+    assert(planWithOrdinals.values.map(_.sorted).toSeq == Seq(Seq(0, 1), Seq(0, 1)))
+  }
+
+  test("combine scalar subqueries with project reuse") {
+    val df = Seq((1, 2, 3), (3, 4, 5), (5, 6, 7), (7, 8, 9)).toDF("a", "b", "c")
+    df.createOrReplaceTempView("t")
+
+    val ret = sql(
+      """
+        | select a + (select max(a) from t)
+        | from t
+        | where (c > (select min(a + b + c) from t) and
+        |   c < (select max(b) from t))
+        |""".stripMargin)
+    checkAnswer(ret, Row(12) :: Nil)
+
+    val planWithOrdinals = mutable.Map.empty[LogicalPlan, mutable.ArrayBuffer[Int]]
+    ret.queryExecution.optimizedPlan.transformAllExpressions {
+      case s @ SharedScalarSubquery(p, i, _, _, _) =>
+        planWithOrdinals.getOrElseUpdate(p.canonicalized, mutable.ArrayBuffer.empty[Int]) += i
+        s
+    }
+    assert(planWithOrdinals.size == 1)
+    val prj = planWithOrdinals.head._1.children.head
+    assert(prj.isInstanceOf[Project])
+    assert(prj.asInstanceOf[Project].projectList.length == 3)
   }
 }

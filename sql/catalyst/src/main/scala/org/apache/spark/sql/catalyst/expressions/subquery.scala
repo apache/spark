@@ -290,6 +290,45 @@ object ScalarSubquery {
 }
 
 /**
+ * A variant of ScalarSubquery, which holds a subquery plan contains multiple output columns.
+ * It indicates the underlying plan also serves other SharedScalarSubqueries. The extra attribute
+ * "ordinal" guides the subquery expression to consume the specific index of multiple output
+ * attributes.
+ */
+case class SharedScalarSubquery(
+    plan: LogicalPlan,
+    ordinal: Int,
+    outerAttrs: Seq[Expression] = Seq.empty,
+    exprId: ExprId = NamedExpression.newExprId,
+    joinCond: Seq[Expression] = Seq.empty)
+    extends SubqueryExpression(plan, outerAttrs, exprId, joinCond) with Unevaluable {
+  override def dataType: DataType = {
+    assert(plan.schema.fields.length > ordinal,
+           s"Shared Scalar subquery should have only ${ordinal + 1} column")
+    plan.schema.fields(ordinal).dataType
+  }
+  override def nullable: Boolean = true
+  override def withNewPlan(plan: LogicalPlan): SharedScalarSubquery = copy(plan = plan)
+  override def toString: String = s"shared-scalar-subquery#${exprId.id} $conditionString"
+  override lazy val preCanonicalized: Expression = {
+    SharedScalarSubquery(
+      plan.canonicalized,
+      ordinal,
+      outerAttrs.map(_.preCanonicalized),
+      ExprId(0),
+      joinCond.map(_.preCanonicalized))
+  }
+
+  override protected def withNewChildrenInternal(
+      newChildren: IndexedSeq[Expression]): SharedScalarSubquery =
+    copy(
+      outerAttrs = newChildren.take(outerAttrs.size),
+      joinCond = newChildren.drop(outerAttrs.size))
+
+  final override def nodePatternsInternal: Seq[TreePattern] = Seq(SCALAR_SUBQUERY)
+}
+
+/**
  * A subquery that can return multiple rows and columns. This should be rewritten as a join
  * with the outer query during the optimization phase.
  *

@@ -33,6 +33,8 @@ case class PlanAdaptiveSubqueries(
       _.containsAnyPattern(SCALAR_SUBQUERY, IN_SUBQUERY, DYNAMIC_PRUNING_SUBQUERY)) {
       case expressions.ScalarSubquery(_, _, exprId, _) =>
         execution.ScalarSubquery(subqueryMap(exprId.id), exprId)
+      case expressions.SharedScalarSubquery(_, ordinal, _, exprId, _) =>
+        execution.ScalarSubquery(subqueryMap(exprId.id), exprId, Option(ordinal))
       case expressions.InSubquery(values, ListQuery(_, _, exprId, _, _)) =>
         val expr = if (values.length == 1) {
           values.head

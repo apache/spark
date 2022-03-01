@@ -56,20 +56,23 @@ object ExecSubqueryExpression {
 /**
  * A subquery that will return only one row and one column.
  *
- * This is the physical copy of ScalarSubquery to be used inside SparkPlan.
+ * This is the physical copy of ScalarSubquery/SharedScalarSubquery to be used inside SparkPlan.
+ * The ordinal represents the location of current subquery in the shared subquery plan, which
+ * will be None if the subquery is created from ScalarSubquery.
  */
 case class ScalarSubquery(
     plan: BaseSubqueryExec,
-    exprId: ExprId)
+    exprId: ExprId,
+    ordinal: Option[Int] = None)
   extends ExecSubqueryExpression with LeafLike[Expression] {
 
-  override def dataType: DataType = plan.schema.fields.head.dataType
+  override def dataType: DataType = plan.schema.fields(ordinal.getOrElse(0)).dataType
   override def nullable: Boolean = true
   override def toString: String = plan.simpleString(SQLConf.get.maxToStringFields)
   override def withNewPlan(query: BaseSubqueryExec): ScalarSubquery = copy(plan = query)
 
   override lazy val preCanonicalized: Expression = {
-    ScalarSubquery(plan.canonicalized.asInstanceOf[BaseSubqueryExec], ExprId(0))
+    ScalarSubquery(plan.canonicalized.asInstanceOf[BaseSubqueryExec], ExprId(0), ordinal)
   }
 
   // the first column in first row from `query`.
@@ -82,9 +85,11 @@ case class ScalarSubquery(
       sys.error(s"more than one row returned by a subquery used as an expression:\n$plan")
     }
     if (rows.length == 1) {
-      assert(rows(0).numFields == 1,
-        s"Expects 1 field, but got ${rows(0).numFields}; something went wrong in analysis")
-      result = rows(0).get(0, dataType)
+      val index = ordinal.getOrElse(0)
+      assert(rows(0).numFields > index,
+             s"Expects at least ${index + 1} fields, but only got ${rows(0).numFields} " +
+                 s"from plan; something went wrong in analysis")
+      result = rows(0).get(index, dataType)
     } else {
       // If there is no rows returned, the result should be null.
       result = null
@@ -181,6 +186,13 @@ case class PlanSubqueries(sparkSession: SparkSession) extends Rule[SparkPlan] {
           SubqueryExec.createForScalarSubquery(
             s"scalar-subquery#${subquery.exprId.id}", executedPlan),
           subquery.exprId)
+      case shared: expressions.SharedScalarSubquery =>
+        val executedPlan = QueryExecution.prepareExecutedPlan(sparkSession, shared.plan)
+        ScalarSubquery(
+          SubqueryExec.createForScalarSubquery(
+            s"shared-scalar-subquery#${shared.exprId.id}", executedPlan),
+          shared.exprId,
+          Option(shared.ordinal))
       case expressions.InSubquery(values, ListQuery(query, _, exprId, _, _)) =>
         val expr = if (values.length == 1) {
           values.head
