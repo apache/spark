@@ -253,15 +253,15 @@ abstract class Regression
 
   override val aggBufferAttributes: Seq[AttributeReference] = Seq(count, meanX, meanY, c2, m2X)
 
-  override val initialValues: Seq[Expression] = Array.fill(5)(Literal(0D))
+  override val initialValues: Seq[Expression] = Array.fill(5)(Literal(0.0))
 
   override lazy val updateExpressions: Seq[Expression] = {
-    val newCount = count + 1D
-    val rightMeanX = right - meanX
-    val newMeanX = meanX + rightMeanX / newCount
+    val newCount = count + 1.0
+    val dx = right - meanX
+    val newMeanX = meanX + dx / newCount
     val newMeanY = meanY + (left - meanY) / newCount
-    val newC2 = c2 + rightMeanX * (left - newMeanY)
-    val newM2X = m2X + rightMeanX * (right - newMeanX)
+    val newC2 = c2 + dx * (left - newMeanY)
+    val newM2X = m2X + dx * (right - newMeanX)
 
     val isNull = left.isNull || right.isNull
     Seq(
