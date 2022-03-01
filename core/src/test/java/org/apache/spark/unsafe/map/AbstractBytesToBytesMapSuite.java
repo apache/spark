@@ -24,7 +24,6 @@ import java.util.*;
 
 import scala.Tuple2$;
 
-import org.hamcrest.MatcherAssert;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
@@ -49,9 +48,7 @@ import org.apache.spark.unsafe.array.ByteArrayMethods;
 import org.apache.spark.util.Utils;
 import org.apache.spark.internal.config.package$;
 
-import static org.hamcrest.Matchers.greaterThan;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.*;
 import static org.mockito.Answers.RETURNS_SMART_NULLS;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
@@ -527,7 +524,7 @@ public abstract class AbstractBytesToBytesMapSuite {
           break;
         }
       }
-      MatcherAssert.assertThat(i, greaterThan(0));
+      assertTrue(i > 0);
       Assert.assertFalse(success);
     } finally {
       map.free();

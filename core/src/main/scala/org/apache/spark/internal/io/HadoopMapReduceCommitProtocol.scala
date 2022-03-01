@@ -104,7 +104,7 @@ class HadoopMapReduceCommitProtocol(
    * The staging directory of this write job. Spark uses it to deal with files with absolute output
    * path, or writing data into partitioned directory with dynamicPartitionOverwrite=true.
    */
-  protected lazy val stagingDir = getStagingDir(path, jobId)
+  protected def stagingDir = getStagingDir(path, jobId)
 
   protected def setupCommitter(context: TaskAttemptContext): OutputCommitter = {
     val format = context.getOutputFormatClass.getConstructor().newInstance()

@@ -1593,7 +1593,7 @@ class Analyzer(override val catalogManager: CatalogManager)
       exprs.exists(_.collect { case _: Star => true }.nonEmpty)
 
     private def extractStar(exprs: Seq[Expression]): Seq[Star] =
-      exprs.map(_.collect { case s: Star => s }).flatten
+      exprs.flatMap(_.collect { case s: Star => s })
 
     /**
      * Expands the matching attribute.*'s in `child`'s output.

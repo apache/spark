@@ -1872,7 +1872,7 @@ private[spark] class BlockManager(
             serializerManager.dataSerializeStream(
               blockId,
               out,
-              elements.toIterator)(info.classTag.asInstanceOf[ClassTag[T]])
+              elements.iterator)(info.classTag.asInstanceOf[ClassTag[T]])
           }
         case Right(bytes) =>
           diskStore.putBytes(blockId, bytes)
