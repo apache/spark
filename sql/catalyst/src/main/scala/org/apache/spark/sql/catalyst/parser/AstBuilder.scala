@@ -2759,16 +2759,16 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
   /**
    * Create a [[StructType]] from a number of CREATE TABLE column definitions.
    */
-  override def visitCreateTableColTypeList(
-      ctx: CreateTableColTypeListContext): Seq[StructField] = withOrigin(ctx) {
-    ctx.createTableColType().asScala.map(visitCreateTableColType).toSeq
+  override def visitCreateOrReplaceTableColTypeList(
+      ctx: CreateOrReplaceTableColTypeListContext): Seq[StructField] = withOrigin(ctx) {
+    ctx.createOrReplaceTableColType().asScala.map(visitCreateOrReplaceTableColType).toSeq
   }
 
   /**
    * Create a top level [[StructField]] from a CREATE TABLE column definition.
    */
-  override def visitCreateTableColType(
-      ctx: CreateTableColTypeContext): StructField = withOrigin(ctx) {
+  override def visitCreateOrReplaceTableColType(
+      ctx: CreateOrReplaceTableColTypeContext): StructField = withOrigin(ctx) {
     import ctx._
 
     val builder = new MetadataBuilder
@@ -3494,8 +3494,8 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
   override def visitCreateTable(ctx: CreateTableContext): LogicalPlan = withOrigin(ctx) {
     val (table, temp, ifNotExists, external) = visitCreateTableHeader(ctx.createTableHeader)
 
-    val columns = Option(ctx.createTableColTypeList()).map(visitCreateTableColTypeList)
-      .getOrElse(Nil)
+    val columns = Option(ctx.createOrReplaceTableColTypeList())
+      .map(visitCreateOrReplaceTableColTypeList).getOrElse(Nil)
     val provider = Option(ctx.tableProvider).map(_.multipartIdentifier.getText)
     val (partTransforms, partCols, bucketSpec, properties, options, location, comment, serdeInfo) =
       visitCreateTableClauses(ctx.createTableClauses())
@@ -3574,7 +3574,8 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
     val orCreate = ctx.replaceTableHeader().CREATE() != null
     val (partTransforms, partCols, bucketSpec, properties, options, location, comment, serdeInfo) =
       visitCreateTableClauses(ctx.createTableClauses())
-    val columns = Option(ctx.colTypeList()).map(visitColTypeList).getOrElse(Nil)
+    val columns = Option(ctx.createOrReplaceTableColTypeList())
+      .map(visitCreateOrReplaceTableColTypeList).getOrElse(Nil)
     val provider = Option(ctx.tableProvider).map(_.multipartIdentifier.getText)
 
     if (provider.isDefined && serdeInfo.isDefined) {

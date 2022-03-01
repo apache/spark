@@ -136,7 +136,7 @@ statement
         (RESTRICT | CASCADE)?                                          #dropNamespace
     | SHOW namespaces ((FROM | IN) multipartIdentifier)?
         (LIKE? pattern=STRING)?                                        #showNamespaces
-    | createTableHeader ('(' createTableColTypeList ')')? tableProvider?
+    | createTableHeader ('(' createOrReplaceTableColTypeList ')')? tableProvider?
         createTableClauses
         (AS? query)?                                                   #createTable
     | CREATE TABLE (IF NOT EXISTS)? target=tableIdentifier
@@ -146,7 +146,7 @@ statement
         createFileFormat |
         locationSpec |
         (TBLPROPERTIES tableProps=propertyList))*                      #createTableLike
-    | replaceTableHeader ('(' colTypeList ')')? tableProvider?
+    | replaceTableHeader ('(' createOrReplaceTableColTypeList ')')? tableProvider?
         createTableClauses
         (AS? query)?                                                   #replaceTable
     | ANALYZE TABLE multipartIdentifier partitionSpec? COMPUTE STATISTICS
@@ -976,11 +976,11 @@ colType
     : colName=errorCapturingIdentifier dataType (NOT NULL)? commentSpec?
     ;
 
-createTableColTypeList
-    : createTableColType (',' createTableColType)*
+createOrReplaceTableColTypeList
+    : createOrReplaceTableColType (',' createOrReplaceTableColType)*
     ;
 
-createTableColType
+createOrReplaceTableColType
     : colName=errorCapturingIdentifier dataType (NOT NULL)? defaultExpression? commentSpec?
     ;
 

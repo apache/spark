@@ -2243,7 +2243,8 @@ class DDLParserSuite extends AnalysisTest {
       "ALTER TABLE t1 ALTER COLUMN a.b.c SET DEFAULT 42",
       "ALTER TABLE t1 ALTER COLUMN a.b.c DROP DEFAULT",
       "ALTER TABLE t1 REPLACE COLUMNS (x STRING DEFAULT 42)",
-      "CREATE TABLE my_tab(a INT COMMENT 'test', b STRING NOT NULL DEFAULT \"abc\") USING parquet"
+      "CREATE TABLE my_tab(a INT COMMENT 'test', b STRING NOT NULL DEFAULT \"abc\") USING parquet",
+      "REPLACE TABLE my_tab(a INT COMMENT 'test', b STRING NOT NULL DEFAULT \"xyz\") USING parquet"
     )) {
       val exc = intercept[ParseException] {
         parsePlan(sql);
@@ -2267,12 +2268,5 @@ class DDLParserSuite extends AnalysisTest {
     )) {
       assert(!parsePlan(sql).resolved)
     }
-    // REPLACE TABLE does not support DEFAULT columns, and here we check that the parser rejects
-    // naturally.
-    var exc = intercept[ParseException] {
-      parsePlan("REPLACE TABLE my_tab(a INT COMMENT 'test', b STRING NOT NULL " +
-        " DEFAULT \"xyz\") USING parquet")
-    }
-    assert(exc.getMessage.contains("mismatched input 'DEFAULT'"))
   }
 }
