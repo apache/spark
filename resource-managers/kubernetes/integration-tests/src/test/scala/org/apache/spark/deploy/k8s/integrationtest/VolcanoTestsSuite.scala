@@ -21,9 +21,11 @@ import java.util.UUID
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
-import scala.concurrent._
+// scalastyle:off executioncontextglobal
+import scala.concurrent.ExecutionContext.Implicits.global
+// scalastyle:on executioncontextglobal
+import scala.concurrent.Future
 
-import ExecutionContext.Implicits.global
 import io.fabric8.kubernetes.api.model.Pod
 import io.fabric8.kubernetes.client.NamespacedKubernetesClient
 import io.fabric8.volcano.client.VolcanoClient
@@ -35,14 +37,13 @@ import org.apache.spark.deploy.k8s.features.VolcanoFeatureStep
 import org.apache.spark.internal.config.NETWORK_AUTH_ENABLED
 
 private[spark] trait VolcanoTestsSuite { k8sSuite: KubernetesSuite =>
-  import VolcanoSuite._
   import VolcanoTestsSuite._
-  import KubernetesSuite._
+  import org.apache.spark.deploy.k8s.integrationtest.VolcanoSuite.volcanoTag
+  import org.apache.spark.deploy.k8s.integrationtest.KubernetesSuite.{k8sTestTag, INTERVAL, TIMEOUT}
 
   lazy val volcanoClient: VolcanoClient
     = kubernetesTestComponents.kubernetesClient.adapt(classOf[VolcanoClient])
-  lazy val k8sClient: NamespacedKubernetesClient
-    = kubernetesTestComponents.kubernetesClient
+  lazy val k8sClient: NamespacedKubernetesClient = kubernetesTestComponents.kubernetesClient
 
   protected def checkScheduler(pod: Pod): Unit = {
     assert(pod.getSpec.getSchedulerName === "volcano")
@@ -61,8 +62,7 @@ private[spark] trait VolcanoTestsSuite { k8sSuite: KubernetesSuite =>
     val podGroupName = s"$appId-podgroup"
     val podGroup = volcanoClient.podGroups().withName(podGroupName).get()
     assert(podGroup.getMetadata.getOwnerReferences.get(0).getName === pod.getMetadata.getName)
-    val spec = podGroup.getSpec
-    if (queue.isDefined) assert(spec.getQueue === queue.get)
+    queue.foreach(q => assert(q === podGroup.getSpec.getQueue))
   }
 
   private def createOrReplaceYAMLResource(yamlPath: String): Unit = {
@@ -124,10 +124,10 @@ private[spark] trait VolcanoTestsSuite { k8sSuite: KubernetesSuite =>
       .set(KUBERNETES_SCHEDULER_NAME.key, "volcano")
       .set(KUBERNETES_DRIVER_POD_FEATURE_STEPS.key, VOLCANO_FEATURE_STEP)
       .set(KUBERNETES_EXECUTOR_POD_FEATURE_STEPS.key, VOLCANO_FEATURE_STEP)
-    if (queue.isDefined) conf.set(KUBERNETES_JOB_QUEUE.key, queue.get)
-    if (groupLoc.isDefined) {
-      conf.set(s"${KUBERNETES_DRIVER_LABEL_PREFIX}spark-group-locator", groupLoc.get)
-      conf.set(s"${KUBERNETES_EXECUTOR_LABEL_PREFIX}spark-group-locator", groupLoc.get)
+    queue.foreach(conf.set(KUBERNETES_JOB_QUEUE.key, _))
+    groupLoc.foreach { locator =>
+      conf.set(s"${KUBERNETES_DRIVER_LABEL_PREFIX}spark-group-locator", locator)
+      conf.set(s"${KUBERNETES_EXECUTOR_LABEL_PREFIX}spark-group-locator", locator)
     }
     conf
   }
@@ -151,27 +151,41 @@ private[spark] trait VolcanoTestsSuite { k8sSuite: KubernetesSuite =>
     )
   }
 
-  test("Run 4 SparkPi Jobs with 2 volcano queues (queue scheduling)", k8sTestTag, volcanoTag) {
+  test("SPARK-38188: Run SparkPi jobs with 2 queues (only 1 enable)", k8sTestTag, volcanoTag) {
+    // Disabled queue0 and enabled queue1
     createOrReplaceYAMLResource(VOLCANO_Q0_DISABLE_Q1_ENABLE_YAML)
+    // Submit jobs into disabled queue0 and enabled queue1
     val jobNum = 4
-    val groupLocator = "queue-test" + UUID.randomUUID().toString.replaceAll("-", "")
-    // Submit two jobs into disabled queue0 and enabled queue1
     (1 to jobNum).foreach { i =>
       Future {
-        runJobAndVerify(i.toString, Option(groupLocator), Option(s"queue${i % 2}"))
+        val queueName = s"queue${i % 2}"
+        runJobAndVerify(i.toString, Option(s"$GROUP_PREFIX-$queueName"), Option(queueName))
       }
     }
     // There are two `Succeeded` jobs and two `Pending` jobs
     Eventually.eventually(TIMEOUT, INTERVAL) {
-      val completedPods = getPods("driver", groupLocator, "Succeeded")
+      val completedPods = getPods("driver", s"$GROUP_PREFIX-queue1", "Succeeded")
       assert(completedPods.size === 2)
-      val pendingPods = getPods("driver", groupLocator, "Pending")
+      val pendingPods = getPods("driver", s"$GROUP_PREFIX-queue0", "Pending")
       assert(pendingPods.size === 2)
     }
-    // Now, enable all queues, then all jobs completed
+    deleteYAMLResource(VOLCANO_Q0_DISABLE_Q1_ENABLE_YAML)
+  }
+
+  test("SPARK-38188: Run SparkPi jobs with 2 queues (all enable)", k8sTestTag, volcanoTag) {
+    // Enable all queues
     createOrReplaceYAMLResource(VOLCANO_ENABLE_Q0_AND_Q1_YAML)
+    val jobNum = 4
+    // Submit jobs into these two queues
+    (1 to jobNum).foreach { i =>
+      Future {
+        val queueName = s"queue${i % 2}"
+        runJobAndVerify(i.toString, Option(s"$GROUP_PREFIX"), Option(queueName))
+      }
+    }
+    // All jobs "Succeeded"
     Eventually.eventually(TIMEOUT, INTERVAL) {
-      val completedPods = getPods("driver", groupLocator, "Succeeded")
+      val completedPods = getPods("driver", GROUP_PREFIX, "Succeeded")
       assert(completedPods.size === jobNum)
     }
     deleteYAMLResource(VOLCANO_ENABLE_Q0_AND_Q1_YAML)
@@ -186,4 +200,5 @@ private[spark] object VolcanoTestsSuite extends SparkFunSuite {
   val VOLCANO_Q0_DISABLE_Q1_ENABLE_YAML = new File(
     getClass.getResource("/volcano/disable-queue0-enable-queue1.yml").getFile
   ).getAbsolutePath
+  val GROUP_PREFIX = "volcano-test" + UUID.randomUUID().toString.replaceAll("-", "")
 }

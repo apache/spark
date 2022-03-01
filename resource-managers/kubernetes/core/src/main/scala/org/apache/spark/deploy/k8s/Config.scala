@@ -294,8 +294,7 @@ private[spark] object Config extends Logging {
 
   val KUBERNETES_JOB_QUEUE = ConfigBuilder("spark.kubernetes.job.queue")
     .doc("The name of the queue to which the job is submitted. This info " +
-      "will be stored in configuration and passed to specified feature step (such as " +
-      "`VolcanoFeatureStep`).")
+      "will be stored in configuration and passed to specific feature step.")
     .version("3.3.0")
     .stringConf
     .createOptional
