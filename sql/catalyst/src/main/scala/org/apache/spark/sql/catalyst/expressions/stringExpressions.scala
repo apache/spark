@@ -455,7 +455,7 @@ case class Lower(child: Expression)
   override protected def withNewChildInternal(newChild: Expression): Lower = copy(child = newChild)
 }
 
-/** A base trait for functions that compare two strings or binaries, returning a boolean. */
+/** A base trait for functions that compare two strings, returning a boolean. */
 abstract class StringPredicate extends BinaryExpression
   with Predicate with ImplicitCastInputTypes with NullIntolerant {
 
@@ -486,9 +486,8 @@ trait StringBinaryPredicateExpressionBuilderBase extends ExpressionBuilder {
   protected def createStringPredicate(left: Expression, right: Expression): Expression
 }
 
-object StringPredicate {
-  def unapply(expr: Expression): Option[Expression] = expr match {
-    case _: StringPredicate => Some(expr)
+object BinaryPredicate {
+  def unapply(expr: Expression): Option[StaticInvoke] = expr match {
     case s @ StaticInvoke(clz, _, "contains" | "startsWith" | "endsWith", Seq(_, _), _, _, _, _)
       if clz == classOf[ByteArrayMethods] => Some(s)
     case _ => None

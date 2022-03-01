@@ -669,9 +669,8 @@ object SupportedBinaryExpr {
          _: DateAddYMInterval | _: TimestampAddYMInterval | _: TimeAdd =>
       Some(expr, expr.children.head, expr.children.last)
     case _: FindInSet | _: RoundBase => Some(expr, expr.children.head, expr.children.last)
-    case s @ StaticInvoke(clz, _, "contains" | "startsWith" | "endsWith",
-         Seq(left, right), _, _, _, _) if clz == classOf[ByteArrayMethods] =>
-      Some(s, left, right)
+    case BinaryPredicate(expr) =>
+      Some(expr, expr.arguments.head, expr.arguments.last)
     case _ => None
   }
 }
