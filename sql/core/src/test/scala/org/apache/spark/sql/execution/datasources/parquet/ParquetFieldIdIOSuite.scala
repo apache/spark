@@ -107,14 +107,14 @@ class ParquetFieldIdIOSuite extends QueryTest with ParquetTest with SharedSparkS
     }
   }
 
-  test("absence of field ids: reading nested schema") {
+  test("SPARK-38094: absence of field ids: reading nested schema") {
     withTempDir { dir =>
       // now with nested schema/complex type
       val readSchema =
         new StructType()
           .add("a", IntegerType, true, withId(1))
           .add("b", ArrayType(StringType), true, withId(2))
-          .add("c", new StructType().add("xx", IntegerType, true, withId(6)), true, withId(3))
+          .add("c", new StructType().add("c1", IntegerType, true, withId(6)), true, withId(3))
           .add("d", MapType(StringType, StringType), true, withId(4))
           .add("e", IntegerType, true, withId(5))
 
