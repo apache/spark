@@ -913,14 +913,23 @@ trait CheckAnalysis extends PredicateHelper {
     // The last one is true because there can be multiple combinations of (a, b) that
     // satisfy the equality condition. For example, if outer(c) = 0, then both (0, 0)
     // and (-1, 1) can make the predicate evaluate to true.
-    def isUnsupportedPredicate(condition: Expression): Boolean = condition match {
-      // Only allow equality condition with one side being an attribute and another
-      // side being an expression without attributes from the inner query. Note
-      // OuterReference is a leaf node and will not be found here.
-      case Equality(_: Attribute, b) => containsAttribute(b)
-      case Equality(a, _: Attribute) => containsAttribute(a)
-      case e @ Equality(_, _) => containsAttribute(e)
-      case _ => true
+    def isUnsupportedPredicate(condition: Expression): Boolean = {
+      def isSupported(e: Expression): Boolean = e match {
+        case _: Attribute => true
+        // SPARK-38180: Allow Cast expressions that guarantee 1:1 mapping.
+        case Cast(a: Attribute, dataType, _) => Cast.canUpCast(a.dataType, dataType)
+        case _ => false
+      }
+
+      condition match {
+        // Only allow equality condition with one side being an attribute and another
+        // side being an expression without attributes from the inner query. Note
+        // OuterReference is a leaf node and will not be found here.
+        case Equality(a, b) if isSupported(a) => containsAttribute(b)
+        case Equality(a, b) if isSupported(b) => containsAttribute(a)
+        case e @ Equality(_, _) => containsAttribute(e)
+        case _ => true
+      }
     }
 
     val unsupportedPredicates = mutable.ArrayBuffer.empty[Expression]
