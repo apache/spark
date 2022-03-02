@@ -140,3 +140,15 @@ select date '2012-01-01' - interval '2-2' year to month,
 select to_date('26/October/2015', 'dd/MMMMM/yyyy');
 select from_json('{"d":"26/October/2015"}', 'd Date', map('dateFormat', 'dd/MMMMM/yyyy'));
 select from_csv('26/October/2015', 'd Date', map('dateFormat', 'dd/MMMMM/yyyy'));
+
+-- Add a number of units to a timestamp or a date
+select dateadd(MICROSECOND, 1001, timestamp'2022-02-25 01:02:03.123');
+select date_add(MILLISECOND, -1, timestamp'2022-02-25 01:02:03.456');
+select dateadd(SECOND, 58, timestamp'2022-02-25 01:02:03');
+select date_add(MINUTE, -100, date'2022-02-25');
+select dateadd(HOUR, -1, timestamp'2022-02-25 01:02:03');
+select date_add(DAY, 367, date'2022-02-25');
+select dateadd(WEEK, -4, timestamp'2022-02-25 01:02:03');
+select date_add(MONTH, -1, timestamp'2022-02-25 01:02:03');
+select dateadd(QUARTER, 5, date'2022-02-25');
+select date_add(YEAR, 1, date'2022-02-25');

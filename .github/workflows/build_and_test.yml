@@ -529,8 +529,10 @@ jobs:
         #   See also https://github.com/sphinx-doc/sphinx/issues/7551.
         # Jinja2 3.0.0+ causes error when building with Sphinx.
         #   See also https://issues.apache.org/jira/browse/SPARK-35375.
-        python3.9 -m pip install 'sphinx<3.1.0' mkdocs pydata_sphinx_theme ipython nbsphinx numpydoc 'jinja2<3.0.0'
-        python3.9 -m pip install sphinx_plotly_directive 'numpy>=1.20.0' pyarrow pandas 'plotly>=4.8'
+        # Pin the MarkupSafe to 2.0.1 to resolve the CI error.
+        #   See also https://issues.apache.org/jira/browse/SPARK-38279.
+        python3.9 -m pip install 'sphinx<3.1.0' mkdocs pydata_sphinx_theme ipython nbsphinx numpydoc 'jinja2<3.0.0' 'markupsafe==2.0.1'
+        python3.9 -m pip install sphinx_plotly_directive 'numpy>=1.20.0' pyarrow pandas 'plotly>=4.8' 
         apt-get update -y
         apt-get install -y ruby ruby-dev
         Rscript -e "install.packages(c('devtools', 'testthat', 'knitr', 'rmarkdown', 'markdown', 'e1071', 'roxygen2'), repos='https://cloud.r-project.org/')"

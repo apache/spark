@@ -48,10 +48,12 @@ object TestForTypeAlias {
   type TwoInt = (Int, Int)
   type ThreeInt = (TwoInt, Int)
   type SeqOfTwoInt = Seq[TwoInt]
+  type IntArray = Array[Int]
 
   def tupleTypeAlias: TwoInt = (1, 1)
   def nestedTupleTypeAlias: ThreeInt = ((1, 1), 2)
   def seqOfTupleTypeAlias: SeqOfTwoInt = Seq((1, 1), (2, 2))
+  def aliasedArrayInTuple: (Int, IntArray) = (1, Array(1))
 }
 
 class DatasetSuite extends QueryTest
@@ -1645,6 +1647,12 @@ class DatasetSuite extends QueryTest
     checkDataset(
       Seq(1).toDS().map(_ => ("", TestForTypeAlias.seqOfTupleTypeAlias)),
       ("", Seq((1, 1), (2, 2))))
+  }
+
+  test("SPARK-38042: Dataset should work with a product containing an aliased array type") {
+    checkDataset(
+      Seq(1).toDS().map(_ => ("", TestForTypeAlias.aliasedArrayInTuple)),
+      ("", (1, Array(1))))
   }
 
   test("Check RelationalGroupedDataset toString: Single data") {

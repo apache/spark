@@ -430,6 +430,6 @@ Input [2]: [sum#59, count#60]
 Keys: []
 Functions [1]: [avg(netpaid#40)]
 Aggregate Attributes [1]: [avg(netpaid#40)#62]
-Results [1]: [CheckOverflow((0.050000 * promote_precision(avg(netpaid#40)#62)), DecimalType(24,8), true) AS (0.05 * avg(netpaid))#63]
+Results [1]: [CheckOverflow((0.050000 * promote_precision(avg(netpaid#40)#62)), DecimalType(24,8)) AS (0.05 * avg(netpaid))#63]
 
 

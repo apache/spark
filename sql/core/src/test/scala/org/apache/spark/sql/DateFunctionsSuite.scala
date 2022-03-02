@@ -23,7 +23,7 @@ import java.time.{Instant, LocalDateTime, ZoneId}
 import java.util.{Locale, TimeZone}
 import java.util.concurrent.TimeUnit
 
-import org.apache.spark.{SparkException, SparkUpgradeException}
+import org.apache.spark.{SparkConf, SparkException, SparkUpgradeException}
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.{CEST, LA}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.functions._
@@ -34,6 +34,10 @@ import org.apache.spark.unsafe.types.CalendarInterval
 
 class DateFunctionsSuite extends QueryTest with SharedSparkSession {
   import testImplicits._
+
+  // The test cases which throw exceptions under ANSI mode are covered by date.sql and
+  // datetime-parsing-invalid.sql in org.apache.spark.sql.SQLQueryTestSuite.
+  override def sparkConf: SparkConf = super.sparkConf.set(SQLConf.ANSI_ENABLED.key, "false")
 
   test("function current_date") {
     val df1 = Seq((1, 2), (3, 1)).toDF("a", "b")
