@@ -46,7 +46,7 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
   }
 
   private def intercept(sqlCommand: String, messages: String*): Unit =
-    interceptParseException(parser.parsePlan)(sqlCommand, messages: _*)
+    interceptParseException(parser.parsePlan)(sqlCommand, messages: _*)()
 
   private def compareTransformQuery(sql: String, expected: LogicalPlan): Unit = {
     val plan = parser.parsePlan(sql).asInstanceOf[ScriptTransformation].copy(ioschema = null)

@@ -17,9 +17,12 @@
 
 package org.apache.spark.sql.catalyst.parser
 
+import scala.collection.JavaConverters._
 import scala.util.{Failure, Success, Try}
 
 import org.antlr.v4.runtime.{DefaultErrorStrategy, InputMismatchException, IntStream, Parser, ParserRuleContext, RecognitionException, Recognizer}
+
+import org.apache.spark.unsafe.types.UTF8String
 
 /**
  * A [[SparkRecognitionException]] extends the [[RecognitionException]] with more information
@@ -60,13 +63,23 @@ private[parser] class SparkRecognitionException(
  * ANTLR parser to the downstream consumers, to be able to apply the [[SparkThrowable]] error
  * message framework to these exceptions.
  */
-case object SparkParserErrorStrategy extends DefaultErrorStrategy {
+class SparkParserErrorStrategy() extends DefaultErrorStrategy {
   override def reportInputMismatch(recognizer: Parser, e: InputMismatchException): Unit = {
     // Keep the original error message in ANTLR
     val msg = "mismatched input " +
       this.getTokenErrorDisplay(e.getOffendingToken) +
       " expecting " +
       e.getExpectedTokens.toString(recognizer.getVocabulary)
+    val expectedTokens = e.getExpectedTokens.toSet.asScala.toList
+
+    val expectedTokenNames = expectedTokens.map(i => recognizer.getVocabulary.getDisplayName(i))
+    val offendingTokenName = getTokenErrorDisplay(e.getOffendingToken)
+    val sorted = expectedTokenNames.map(token =>
+      (token,
+        UTF8String.fromString(offendingTokenName.drop(1).dropRight(1).toLowerCase())
+        .levenshteinDistance(UTF8String.fromString(token.drop(1).dropRight(1).toLowerCase()))))
+      .sortWith(_._2 < _._2)
+
     val exceptionWithErrorClass = new SparkRecognitionException(
       e,
       "PARSE_INPUT_MISMATCHED",

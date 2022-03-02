@@ -32,41 +32,47 @@ class ErrorParserSuite extends AnalysisTest {
     assert(parsePlan(sqlCommand) == plan)
   }
 
-  def intercept(sqlCommand: String, messages: String*): Unit =
-    interceptParseException(CatalystSqlParser.parsePlan)(sqlCommand, messages: _*)
-
-  def intercept(sql: String, line: Int, startPosition: Int, stopPosition: Int,
-                messages: String*): Unit = {
+  private def interceptImpl(sql: String, messages: String*)(
+    line: Option[Int] = None, startPosition: Option[Int] = None, stopPosition: Option[Int] = None)(
+    errorClass: Option[String] = None): Unit = {
     val e = intercept[ParseException](CatalystSqlParser.parsePlan(sql))
-
-    // Check position.
-    assert(e.line.isDefined)
-    assert(e.line.get === line)
-    assert(e.startPosition.isDefined)
-    assert(e.startPosition.get === startPosition)
-    assert(e.stop.startPosition.isDefined)
-    assert(e.stop.startPosition.get === stopPosition)
 
     // Check messages.
     val error = e.getMessage
     messages.foreach { message =>
       assert(error.contains(message))
     }
+
+    // Check position.
+    if (line.isDefined) {
+      assert(line.isDefined && startPosition.isDefined && stopPosition.isDefined)
+      assert(e.line.isDefined)
+      assert(e.line.get === line.get)
+      assert(e.startPosition.isDefined)
+      assert(e.startPosition.get === startPosition.get)
+      assert(e.stop.startPosition.isDefined)
+      assert(e.stop.startPosition.get === stopPosition.get)
+    }
+
+    // Check error class.
+    if (errorClass.isDefined) {
+      assert(e.getErrorClass == errorClass.get)
+    }
   }
 
-  def interceptWithErrorClass(sqlCommand: String, errorClass: String, message: String*): Unit = {
-    intercept(sqlCommand, message: _*)
-
-    val e = intercept[ParseException](CatalystSqlParser.parsePlan(sqlCommand))
-    assert(e.getErrorClass == errorClass)
+  def intercept(sqlCommand: String, errorClass: Option[String], messages: String*): Unit = {
+      interceptImpl(sqlCommand, messages: _*)()(errorClass)
   }
 
-  def interceptWithErrorClass(sql: String, line: Int, startPosition: Int, stopPosition: Int,
-    errorClass: String, messages: String*): Unit = {
-    intercept(sql, line, startPosition, stopPosition, messages: _*)
+  def intercept(sql: String, line: Int, startPosition: Int, stopPosition: Int,
+    messages: String*): Unit = {
+    interceptImpl(sql, messages: _*)(Some(line), Some(startPosition), Some(stopPosition))()
+  }
 
-    val e = intercept[ParseException](CatalystSqlParser.parsePlan(sql))
-    assert(e.getErrorClass == errorClass)
+  def intercept(sql: String, errorClass: String, line: Int, startPosition: Int, stopPosition: Int,
+    messages: String*): Unit = {
+    interceptImpl(sql, messages: _*)(
+      Some(line), Some(startPosition), Some(stopPosition))(Some(errorClass))
   }
 
   test("no viable input") {
@@ -80,13 +86,14 @@ class ErrorParserSuite extends AnalysisTest {
   }
 
   test("mismatched input") {
-    interceptWithErrorClass ("select * from r order by q from t", 1, 27, 31,
-      "PARSE_INPUT_MISMATCHED",
+    intercept("select * from r order by q from t", "PARSE_INPUT_MISMATCHED",
+      1, 27, 31,
       "syntax error at or near",
       "---------------------------^^^"
     )
-    interceptWithErrorClass("select *\nfrom r\norder by q\nfrom t", 4, 0, 4,
-      "PARSE_INPUT_MISMATCHED", "syntax error at or near", "^^^")
+    intercept("select *\nfrom r\norder by q\nfrom t", "PARSE_INPUT_MISMATCHED",
+      4, 0, 4,
+      "syntax error at or near", "^^^")
   }
 
   test("semantic errors") {
@@ -96,12 +103,10 @@ class ErrorParserSuite extends AnalysisTest {
   }
 
   test("SPARK-21136: misleading error message due to problematic antlr grammar") {
-    intercept("select * from a left join_ b on a.id = b.id", "missing 'JOIN' at 'join_'")
-    interceptWithErrorClass("select * from test where test.t is like 'test'",
-      "PARSE_INPUT_MISMATCHED",
+    intercept("select * from a left join_ b on a.id = b.id", None, "missing 'JOIN' at 'join_'")
+    intercept("select * from test where test.t is like 'test'", Some("PARSE_INPUT_MISMATCHED"),
       SparkThrowableHelper.getMessage("PARSE_INPUT_MISMATCHED", Array("'is'")))
-    interceptWithErrorClass("SELECT * FROM test WHERE x NOT NULL",
-      "PARSE_INPUT_MISMATCHED",
+    intercept("SELECT * FROM test WHERE x NOT NULL", Some("PARSE_INPUT_MISMATCHED"),
       SparkThrowableHelper.getMessage("PARSE_INPUT_MISMATCHED", Array("'NOT'")))
   }
 
