@@ -31,6 +31,8 @@ trait StatefulOpClusteredDistributionTestHelper extends SparkFunSuite {
       case (d: ClusteredDistribution, clusterColumns: Seq[String])
         if partitionExpressionsColumns(d.clustering) == clusterColumns &&
           d.requiredNumPartitions == desiredNumPartitions => true
+
+      case _ => false
     }
   }
 
@@ -43,6 +45,8 @@ trait StatefulOpClusteredDistributionTestHelper extends SparkFunSuite {
       case (d: StatefulOpClusteredDistribution, clusterColumns: Seq[String])
         if partitionExpressionsColumns(d.expressions) == clusterColumns &&
           d._requiredNumPartitions == desiredNumPartitions => true
+
+      case _ => false
     }
   }
 
