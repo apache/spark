@@ -202,9 +202,10 @@ of the most common options to set are:
   <td><code>spark.driver.memoryOverheadFactor</code></td>
   <td>0.10</td>
   <td>
-    Fraction of driver memory to be allocated as additional non-heap memory per driver process
-    in cluster mode. This value is ignored if <code>spark.driver.memoryOverhead</code> is set
-    directly.
+    Fraction of driver memory to be allocated as additional non-heap memory per driver process in cluster mode.
+    This is memory that accounts for things like VM overheads, interned strings,
+    other native overheads, etc. This tends to grow with the container size.
+    This value is ignored if <code>spark.driver.memoryOverhead</code> is set directly.
   </td>
   <td>3.3.0</td>
 </tr>
@@ -302,6 +303,8 @@ of the most common options to set are:
   <td>0.10</td>
   <td>
     Fraction of executor memory to be allocated as additional non-heap memory per executor process.
+    This is memory that accounts for things like VM overheads, interned strings,
+    other native overheads, etc. This tends to grow with the container size.
     This value is ignored if <code>spark.executor.memoryOverhead</code> is set directly.
   </td>
   <td>3.3.0</td>

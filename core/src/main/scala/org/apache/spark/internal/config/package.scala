@@ -107,9 +107,10 @@ package object config {
 
   private[spark] val DRIVER_MEMORY_OVERHEAD_FACTOR =
     ConfigBuilder("spark.driver.memoryOverheadFactor")
-      .doc("This sets the Memory Overhead Factor on the driver that will allocate memory to " +
-        "non-JVM memory, which includes off-heap memory allocations, non-JVM tasks, various " +
-        "systems processes, and tmpfs-based local directories.")
+      .doc("Fraction of driver memory to be allocated as additional non-heap memory per driver " +
+        "process in cluster mode. This is memory that accounts for things like VM overheads, " +
+        "interned strings, other native overheads, etc. This tends to grow with the container " +
+        "size. This value is ignored if spark.driver.memoryOverhead is set directly.")
       .version("3.3.0")
       .doubleConf
       .checkValue(factor => factor > 0,
@@ -328,9 +329,10 @@ package object config {
 
   private[spark] val EXECUTOR_MEMORY_OVERHEAD_FACTOR =
     ConfigBuilder("spark.executor.memoryOverheadFactor")
-      .doc("This sets the Memory Overhead Factor on executors that will allocate memory to " +
-        "non-JVM memory, which includes off-heap memory allocations, non-JVM tasks, various " +
-        "systems processes, and tmpfs-based local directories.")
+      .doc("Fraction of executor memory to be allocated as additional non-heap memory per " +
+        "executor process. This is memory that accounts for things like VM overheads, " +
+        "interned strings, other native overheads, etc. This tends to grow with the container " +
+        "size. This value is ignored if spark.executor.memoryOverhead is set directly.")
       .version("3.3.0")
       .doubleConf
       .checkValue(factor => factor > 0,
