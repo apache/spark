@@ -118,7 +118,7 @@ class PruneFileSourcePartitionsSuite extends PrunePartitionSuiteBase with Shared
     }
   }
 
-  test("SPARK-38357 data + partition filters with OR") {
+  test("SPARK-38357: data + partition filters with OR") {
     // Force datasource v2 for parquet
     withSQLConf((SQLConf.USE_V1_SOURCE_LIST.key, "")) {
       withTempPath { dir =>
