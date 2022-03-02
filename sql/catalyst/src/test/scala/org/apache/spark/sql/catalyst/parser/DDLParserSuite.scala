@@ -1424,31 +1424,6 @@ class DDLParserSuite extends AnalysisTest {
     assert(exc.getMessage.contains("Columns aliases are not allowed in UPDATE."))
   }
 
-  private def basicMergeIntoCommand(firstValue: String, secondValue: String): String =
-    """
-      |MERGE INTO testcat1.ns1.ns2.tbl AS target
-      |USING testcat2.ns1.ns2.tbl AS source
-      |ON target.col1 = source.col1
-      |WHEN MATCHED AND (target.col2='delete') THEN DELETE
-      |WHEN MATCHED AND (target.col2='update') THEN UPDATE SET target.col2 = source.col2
-      |WHEN NOT MATCHED AND (target.col2='insert')
-      |THEN INSERT (target.col1, target.col2) values (
-      """.stripMargin + firstValue + ", " + secondValue + ")"
-
-  private def basicMergeIntoPlan(firstValue: String, secondValue: String): LogicalPlan =
-    MergeIntoTable(
-      SubqueryAlias("target", UnresolvedRelation(Seq("testcat1", "ns1", "ns2", "tbl"))),
-      SubqueryAlias("source", UnresolvedRelation(Seq("testcat2", "ns1", "ns2", "tbl"))),
-      EqualTo(UnresolvedAttribute("target.col1"), UnresolvedAttribute(firstValue)),
-      Seq(DeleteAction(Some(EqualTo(UnresolvedAttribute("target.col2"), Literal("delete")))),
-        UpdateAction(Some(EqualTo(UnresolvedAttribute("target.col2"), Literal("update"))),
-          Seq(Assignment(UnresolvedAttribute("target.col2"),
-            UnresolvedAttribute(secondValue))))),
-      Seq(InsertAction(Some(EqualTo(UnresolvedAttribute("target.col2"), Literal("insert"))),
-        Seq(Assignment(UnresolvedAttribute("target.col1"), UnresolvedAttribute(firstValue)),
-          Assignment(UnresolvedAttribute("target.col2"), UnresolvedAttribute(secondValue))))))
-
-
   test("merge into table: basic") {
     parseCompare(
       """
