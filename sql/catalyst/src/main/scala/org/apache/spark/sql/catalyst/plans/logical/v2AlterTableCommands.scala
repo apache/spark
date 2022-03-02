@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.plans.logical
 
 import org.apache.spark.sql.catalyst.analysis.{FieldName, FieldPosition}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
+import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.util.TypeUtils
 import org.apache.spark.sql.connector.catalog.{TableCatalog, TableChange}
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -204,7 +205,9 @@ case class AlterColumn(
     dataType: Option[DataType],
     nullable: Option[Boolean],
     comment: Option[String],
-    position: Option[FieldPosition]) extends AlterTableCommand {
+    position: Option[FieldPosition],
+    setDefaultExpression: Option[Expression],
+    dropDefaultExpression: Option[Boolean]) extends AlterTableCommand {
   override def changes: Seq[TableChange] = {
     require(column.resolved, "FieldName should be resolved before it's converted to TableChange.")
     val colName = column.name.toArray
@@ -222,7 +225,14 @@ case class AlterColumn(
         "FieldPosition should be resolved before it's converted to TableChange.")
       TableChange.updateColumnPosition(colName, newPosition.position)
     }
-    typeChange.toSeq ++ nullabilityChange ++ commentChange ++ positionChange
+    val setDefaultExpressionChange = setDefaultExpression.map { newSetDefaultExpression =>
+      TableChange.updateSetDefaultExpression(colName, newSetDefaultExpression)
+    }
+    val setDropDefaultExpressionChange = dropDefaultExpression.map { newDropDefaultExpression =>
+      TableChange.updateDropDefaultExpression(colName, newDropDefaultExpression)
+    }
+    typeChange.toSeq ++ nullabilityChange ++ commentChange ++ positionChange ++
+      setDefaultExpressionChange ++ setDropDefaultExpressionChange
   }
 
   override protected def withNewChildInternal(newChild: LogicalPlan): LogicalPlan =

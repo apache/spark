@@ -3802,14 +3802,19 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
     } else {
       None
     }
-    if (action.defaultExpression != null) {
-      throw new ParseException(defaultColumnNotImplementedYetError, ctx)
+    val setDefaultExpression = if (action.defaultExpression() != null) {
+      Option(action.defaultExpression()).map(visitDefaultExpression)
+    } else {
+      None
     }
-    if (action.dropDefault != null) {
-      throw new ParseException(defaultColumnNotImplementedYetError, ctx)
+    val dropDefaultExpression = if (action.dropDefault != null) {
+      Option(true)
+    } else {
+      None
     }
 
-    assert(Seq(dataType, nullable, comment, position).count(_.nonEmpty) == 1)
+    assert(Seq(dataType, nullable, comment, position, setDefaultExpression, dropDefaultExpression)
+      .count(_.nonEmpty) == 1)
 
     AlterColumn(
       createUnresolvedTable(ctx.table, s"ALTER TABLE ... $verb COLUMN"),
@@ -3817,7 +3822,9 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
       dataType = dataType,
       nullable = nullable,
       comment = comment,
-      position = position)
+      position = position,
+      setDefaultExpression = setDefaultExpression,
+      dropDefaultExpression = dropDefaultExpression)
   }
 
   /**
@@ -3852,7 +3859,9 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
       nullable = None,
       comment = Option(ctx.colType().commentSpec()).map(visitCommentSpec),
       position = Option(ctx.colPosition).map(
-        pos => UnresolvedFieldPosition(typedVisit[ColumnPosition](pos))))
+        pos => UnresolvedFieldPosition(typedVisit[ColumnPosition](pos))),
+      setDefaultExpression = None,
+      dropDefaultExpression = None)
   }
 
   override def visitHiveReplaceColumns(
@@ -3871,15 +3880,15 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
           throw QueryParsingErrors.operationInHiveStyleCommandUnsupportedError(
             "Column position", "REPLACE COLUMNS", ctx)
         }
-        val col = typedVisit[QualifiedColType](colType)
+        val col: QualifiedColType = typedVisit[QualifiedColType](colType)
         if (col.path.isDefined) {
           throw QueryParsingErrors.operationInHiveStyleCommandUnsupportedError(
             "Replacing with a nested column", "REPLACE COLUMNS", ctx)
         }
-        if (Option(colType.defaultExpression()).map(visitDefaultExpression) != None) {
-          throw new ParseException(defaultColumnNotImplementedYetError, ctx)
-        }
-        col
+        // Set the DEFAULT expression from the ALTER TABLE ... REPLACE COLUMNS command, if any.
+        val defaultExpr: Option[Expression] =
+          Option(colType.defaultExpression()).map(visitDefaultExpression)
+        col.copy(default = defaultExpr)
       }.toSeq
     )
   }

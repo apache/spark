@@ -1179,8 +1179,8 @@ class AnalysisSuite extends AnalysisTest with Matchers {
 
   test("SPARK-38334: Implement support for DEFAULT values for columns in tables") {
     // The default value expression is set at parsing time and then resolved normally.
-    // In this test case, there is no change to the LogicalPlan during the analysis step.
-    val plan =
+    // In these test cases, there are no changes to the LogicalPlan during each analysis step.
+    val addColsPlan =
       AddColumns(
         testRelation,
         Seq(QualifiedColType(path = None,
@@ -1190,7 +1190,42 @@ class AnalysisSuite extends AnalysisTest with Matchers {
           comment = None,
           position = None,
           default = Some(Literal(42)))))
-    val expected = plan
-    checkAnalysis(plan, expected)
+    checkAnalysis(addColsPlan, addColsPlan)
+
+    val replaceColsPlan =
+      ReplaceColumns(
+        testRelation,
+        Seq(QualifiedColType(path = None,
+          colName = "b",
+          dataType = IntegerType,
+          nullable = true,
+          comment = None,
+          position = None,
+          default = Some(Literal(42)))))
+    checkAnalysis(replaceColsPlan, replaceColsPlan)
+
+    val alterColsSetDefaultPlan =
+      AlterColumn(
+        testRelation,
+        column = ResolvedFieldName(Seq("a"), StructField("a", IntegerType)),
+        dataType = Some(IntegerType),
+        nullable = Some(true),
+        comment = None,
+        position = None,
+        setDefaultExpression = Some(Literal(42)),
+        dropDefaultExpression = Some(false))
+    checkAnalysis(alterColsSetDefaultPlan, alterColsSetDefaultPlan)
+
+    val alterColsDropDefaultPlan =
+      AlterColumn(
+        testRelation,
+        column = ResolvedFieldName(Seq("a"), StructField("a", IntegerType)),
+        dataType = Some(IntegerType),
+        nullable = Some(true),
+        comment = None,
+        position = None,
+        setDefaultExpression = None,
+        dropDefaultExpression = Some(true))
+    checkAnalysis(alterColsDropDefaultPlan, alterColsDropDefaultPlan)
   }
 }
