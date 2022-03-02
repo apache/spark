@@ -1357,6 +1357,15 @@ See the [configuration page](configuration.html) for information on Spark config
   <td>3.3.0</td>
 </tr>
 <tr>
+  <td><code>spark.kubernetes.job.queue</code></td>
+  <td>(none)</td>
+  <td>
+    The name of the queue to which the job is submitted. This info will be stored in configuration
+    and passed to specific feature step.
+  </td>
+  <td>3.3.0</td>
+</tr>
+<tr>
   <td><code>spark.kubernetes.configMap.maxSize</code></td>
   <td><code>1572864</code></td>
   <td>

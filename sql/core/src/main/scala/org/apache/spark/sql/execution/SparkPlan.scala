@@ -37,6 +37,7 @@ import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.vectorized.ColumnarBatch
+import org.apache.spark.util.NextIterator
 
 object SparkPlan {
   /** The original [[LogicalPlan]] from which this [[SparkPlan]] is converted. */
@@ -384,10 +385,9 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
     val bis = new ByteArrayInputStream(bytes)
     val ins = new DataInputStream(codec.compressedInputStream(bis))
 
-    new Iterator[InternalRow] {
+    new NextIterator[InternalRow] {
       private var sizeOfNextRow = ins.readInt()
-      override def hasNext: Boolean = sizeOfNextRow >= 0
-      override def next(): InternalRow = {
+      private def _next(): InternalRow = {
         val bs = new Array[Byte](sizeOfNextRow)
         ins.readFully(bs)
         val row = new UnsafeRow(nFields)
@@ -395,6 +395,22 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
         sizeOfNextRow = ins.readInt()
         row
       }
+
+      override def getNext(): InternalRow = {
+        if (sizeOfNextRow >= 0) {
+          try {
+            _next()
+          } catch {
+            case t: Throwable if ins != null =>
+              ins.close()
+              throw t
+          }
+        } else {
+          finished = true
+          null
+        }
+      }
+      override def close(): Unit = ins.close()
     }
   }
 
