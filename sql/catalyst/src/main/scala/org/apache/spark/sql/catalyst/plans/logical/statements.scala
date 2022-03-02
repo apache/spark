@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.plans.logical
 
 import org.apache.spark.sql.catalyst.analysis.{FieldName, FieldPosition}
-import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression}
 import org.apache.spark.sql.catalyst.trees.{LeafLike, UnaryLike}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types.DataType
@@ -130,7 +130,8 @@ case class QualifiedColType(
     dataType: DataType,
     nullable: Boolean,
     comment: Option[String],
-    position: Option[FieldPosition]) {
+    position: Option[FieldPosition],
+    default: Option[Expression]) {
   def name: Seq[String] = path.map(_.name).getOrElse(Nil) :+ colName
 
   def resolved: Boolean = path.forall(_.resolved) && position.forall(_.resolved)

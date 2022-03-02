@@ -1145,11 +1145,11 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     assertAnalysisErrorClass(parsePlan(
      """
         |SELECT c.x
-        |FROM VALUES NAMED_STRUCT('x', 'A', 'y', 1), NAMED_STRUCT('x', 'A', 'y', 2) AS t(c)
+        |FROM VALUES NAMED_STRUCT('x', 'A', 'yG', 1), NAMED_STRUCT('x', 'A', 'y', 2) AS t(c)
         |GROUP BY c.x
         |ORDER BY c.x + c.y
         |""".stripMargin),
-      "MISSING_COLUMN",G
+      "MISSING_COLUMN",
       Array("c.y", "x"))
   }
 
@@ -1178,16 +1178,15 @@ class AnalysisSuite extends AnalysisTest with Matchers {
   }
 
   test("SPARK-38334: Implement support for DEFAULT values for columns in tables") {
-    val plan = parsePlan("ALTER TABLE t1 ADD COLUMN b int NOT NULL DEFAULT 42")
-    val expected = {
-      AlterColumn(
-        table = testRelation,
-        column =
-      )
-      Project(testRelation.output,
-        Sort(Seq(SortOrder(projected.toAttribute, Ascending)), false,
-          Project(testRelation.output :+ plan, testRelation)))
-    }
+    val plan = parsePlan("ALTER TABLE t1 ADD COLUMN b int DEFAULT 42")
+    val expected = AddColumns(
+      testRelation,
+      Seq(QualifiedColType(path = None,
+        colName = "b",
+        dataType = IntegerType,
+        nullable = true,
+        comment = None,
+        position = None)))
     checkAnalysis(plan, expected)
   }
 }
