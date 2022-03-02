@@ -2307,8 +2307,21 @@ class DDLParserSuite extends AnalysisTest {
           comment = None,
           position = None,
           default = Some(Literal("abc"))))))
+    comparePlans(
+      parsePlan(
+        "CREATE TABLE my_tab(a INT COMMENT 'test', b STRING NOT NULL " +
+        "DEFAULT \"abc\") USING parquet"),
+      ReplaceColumns(
+        UnresolvedTable(Seq("t1"), "ALTER TABLE ... REPLACE COLUMNS", None),
+        Seq(QualifiedColType(
+          path = None,
+          colName = "x",
+          dataType = StringType,
+          nullable = true,
+          comment = None,
+          position = None,
+          default = Some(Literal("abc"))))))
     for (sql <- Seq(
-      "CREATE TABLE my_tab(a INT COMMENT 'test', b STRING NOT NULL DEFAULT \"abc\") USING parquet",
       "REPLACE TABLE my_tab(a INT COMMENT 'test', b STRING NOT NULL DEFAULT \"xyz\") USING parquet"
     )) {
       val exc = intercept[ParseException] {

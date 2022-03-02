@@ -1135,4 +1135,8 @@ case class TableSpec(
     location: Option[String],
     comment: Option[String],
     serde: Option[SerdeInfo],
-    external: Boolean)
+    external: Boolean,
+    // This is a map from colum indexes to expressions representing DEFAULT values, such as those
+    // specified in ALTER TABLE ... ADD COLUMN commands. The column indexes are zero-based and map
+    // to the ordering of the columns in the referenced table.
+    defaultColumnExpressions: Map[Int, Expression])

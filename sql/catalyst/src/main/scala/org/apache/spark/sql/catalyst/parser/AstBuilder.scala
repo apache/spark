@@ -2784,15 +2784,8 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
       builder.putString("comment", _)
     }
 
-    // Process the 'DEFAULT expression' clause in the column definition, if any.
-    val name: String = colName.getText
-    val defaultExpr = Option(ctx.defaultExpression()).map(visitDefaultExpression)
-    if (defaultExpr != None) {
-      throw new ParseException(defaultColumnNotImplementedYetError, ctx)
-    }
-
     StructField(
-      name = name,
+      name = colName.getText,
       dataType = typedVisit[DataType](ctx.dataType),
       nullable = NULL == null,
       metadata = builder.build())
