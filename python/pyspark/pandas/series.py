@@ -1059,7 +1059,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         3    I am a rabbit
         dtype: object
         """
-        if isinstance(arg, dict):
+        if isinstance(arg, (dict, pd.Series)):
             is_start = True
             # In case dictionary is empty.
             current = F.when(SF.lit(False), SF.lit(None).cast(self.spark.data_type))
