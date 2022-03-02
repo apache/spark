@@ -861,7 +861,7 @@ valueExpression
 primaryExpression
     : name=(CURRENT_DATE | CURRENT_TIMESTAMP | CURRENT_USER)                                   #currentLike
     | name=(TIMESTAMPADD | DATEADD | DATE_ADD) '(' unit=identifier ',' unitsAmount=valueExpression ',' timestamp=valueExpression ')'  #timestampadd
-    | TIMESTAMPDIFF '(' unit=identifier ',' startTimestamp=valueExpression ',' endTimestamp=valueExpression ')'  #timestampdiff
+    | name=(TIMESTAMPDIFF | DATEDIFF | DATE_DIFF) '(' unit=identifier ',' startTimestamp=valueExpression ',' endTimestamp=valueExpression ')'  #timestampdiff
     | CASE whenClause+ (ELSE elseExpression=expression)? END                                   #searchedCase
     | CASE value=expression whenClause+ (ELSE elseExpression=expression)? END                  #simpleCase
     | name=(CAST | TRY_CAST) '(' expression AS dataType ')'                                    #cast
@@ -1133,6 +1133,8 @@ ansiNonReserved
     | DATABASES
     | DATEADD
     | DATE_ADD
+    | DATEDIFF
+    | DATE_DIFF
     | DAY
     | DBPROPERTIES
     | DEFINED
@@ -1383,6 +1385,8 @@ nonReserved
     | DATABASES
     | DATEADD
     | DATE_ADD
+    | DATEDIFF
+    | DATE_DIFF
     | DAY
     | DBPROPERTIES
     | DEFINED
@@ -1653,6 +1657,8 @@ DATABASE: 'DATABASE';
 DATABASES: 'DATABASES';
 DATEADD: 'DATEADD';
 DATE_ADD: 'DATE_ADD';
+DATEDIFF: 'DATEDIFF';
+DATE_DIFF: 'DATE_DIFF';
 DBPROPERTIES: 'DBPROPERTIES';
 DEFINED: 'DEFINED';
 DELETE: 'DELETE';
