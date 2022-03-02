@@ -2268,8 +2268,18 @@ class DDLParserSuite extends AnalysisTest {
 
   test("SPARK-38335: Implement support for DEFAULT values for columns in tables") {
     // The following commands will support DEFAULT columns, but this has not been implemented yet.
+    comparePlans(
+      parsePlan("ALTER TABLE t1 ADD COLUMN x int NOT NULL DEFAULT 42"),
+      AddColumns(
+        UnresolvedTable(Seq("t1"), "ALTER TABLE ... ADD COLUMN", None),
+        Seq(QualifiedColType(path = None,
+          colName = "x",
+          dataType = IntegerType,
+          nullable = false,
+          comment = None,
+          position = None,
+          default = Some(Literal(42))))))
     for (sql <- Seq(
-      "ALTER TABLE t1 ADD COLUMN x int NOT NULL DEFAULT 42",
       "ALTER TABLE t1 ALTER COLUMN a.b.c SET DEFAULT 42",
       "ALTER TABLE t1 ALTER COLUMN a.b.c DROP DEFAULT",
       "ALTER TABLE t1 REPLACE COLUMNS (x STRING DEFAULT 42)",

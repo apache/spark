@@ -3700,11 +3700,19 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
   }
 
   /**
+   * Create a DEFAULT expression within ALTER TABLE commands.
+   */
+  override def visitDefaultExpression(ctx: DefaultExpressionContext): Expression = withOrigin(ctx) {
+    expression(ctx.expression)
+  }
+
+  /**
    * Parse new column info from ADD COLUMN into a QualifiedColType.
    */
   override def visitQualifiedColTypeWithPosition(
       ctx: QualifiedColTypeWithPositionContext): QualifiedColType = withOrigin(ctx) {
     val name = typedVisit[Seq[String]](ctx.name)
+    val defaultExpr = Option(ctx.defaultExpression()).map(visitDefaultExpression)
     QualifiedColType(
       path = if (name.length > 1) Some(UnresolvedFieldName(name.init)) else None,
       colName = name.last,
@@ -3713,7 +3721,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
       comment = Option(ctx.commentSpec()).map(visitCommentSpec),
       position = Option(ctx.colPosition).map( pos =>
         UnresolvedFieldPosition(typedVisit[ColumnPosition](pos))),
-      default = Option(ctx.defaultExpression()).map(visitDefaultExpression))
+      default = defaultExpr)
   }
 
   /**
