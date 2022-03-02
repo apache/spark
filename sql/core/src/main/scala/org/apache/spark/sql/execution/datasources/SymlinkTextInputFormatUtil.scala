@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.datasources
 
 import java.io.{BufferedReader, InputStreamReader}
+import java.net.URI
 import java.nio.charset.StandardCharsets.UTF_8
 
 import com.google.common.io.CharStreams
@@ -28,15 +29,35 @@ import org.apache.spark.sql.catalyst.catalog.CatalogTable
 
 object SymlinkTextInputFormatUtil {
 
+  /**
+   * Determine if InputFormat is SymlinkTable
+   *
+   * @param inputFormat Table InputFormat
+   * @return
+   */
   def isSymlinkTextFormat(inputFormat: String): Boolean = {
     inputFormat.equals("org.apache.hadoop.hive.ql.io.SymlinkTextInputFormat")
   }
 
+  /**
+   * Determine CatalogTable is SymlinkTable
+   *
+   * @param catalogTable CatalogTable
+   * @return
+   */
   def isSymlinkTextFormat(catalogTable: CatalogTable): Boolean = {
     catalogTable.storage.inputFormat.exists(isSymlinkTextFormat)
   }
 
-  // Mostly copied from BackgroundHiveSplitLoader#getTargetPathsFromSymlink of trino(prestosql)
+  /**
+   * Get symlink files from target path
+   * Mostly copied from BackgroundHiveSplitLoader#getTargetPathsFromSymlink of trino(prestosql)
+   * compatible with hive SymlinkTextInputFormat#getTargetPathsFromSymlinksDirs
+   *
+   * @param fileSystem filesystem
+   * @param symlinkDir symlink table location
+   * @return
+   */
   def getTargetPathsFromSymlink(
       fileSystem: FileSystem,
       symlinkDir: Path): Seq[Path] = {
@@ -59,5 +80,18 @@ object SymlinkTextInputFormatUtil {
       case _ =>
         Seq.empty
     }
+  }
+
+  /**
+   * Get symlink uris from target path
+   *
+   * @param fileSystem filesystem
+   * @param location symlink table location
+   * @return
+   */
+  def getSymlinkTableLocationPaths(fileSystem: FileSystem, location: URI): Seq[Option[URI]] = {
+    SymlinkTextInputFormatUtil
+      .getTargetPathsFromSymlink(fileSystem, new Path(location))
+      .map(path => Option(path.toUri))
   }
 }

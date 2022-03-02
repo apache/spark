@@ -204,7 +204,7 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
         (options, None)
       }
 
-    val fs = tablePath.getFileSystem(sparkSession.sparkContext.hadoopConfiguration)
+    lazy val fs = tablePath.getFileSystem(sparkSession.sparkContext.hadoopConfiguration)
     val isSymlinkTextFormat = SymlinkTextInputFormatUtil.isSymlinkTextFormat(relation.tableMeta)
 
     val symlinkTargets = if (isSymlinkTextFormat) {

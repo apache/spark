@@ -25,16 +25,16 @@ import scala.util.control.NonFatal
 import org.apache.hadoop.fs.{FileSystem, Path, PathFilter}
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{SparkSession}
+import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.{InternalRow, TableIdentifier}
-import org.apache.spark.sql.catalyst.catalog.{CatalogStatistics, CatalogTable, CatalogTableType}
+import org.apache.spark.sql.catalyst.catalog.{CatalogStatistics, CatalogTable, CatalogTablePartition, CatalogTableType}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util.{ArrayData, GenericArrayData}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.QueryExecution
-import org.apache.spark.sql.execution.datasources.{DataSourceUtils, InMemoryFileIndex}
+import org.apache.spark.sql.execution.datasources.{DataSourceUtils, InMemoryFileIndex, SymlinkTextInputFormatUtil}
 import org.apache.spark.sql.internal.{SessionState, SQLConf}
 import org.apache.spark.sql.types._
 
@@ -74,19 +74,42 @@ object CommandUtils extends Logging {
   def calculateTotalSize(spark: SparkSession, catalogTable: CatalogTable): BigInt = {
     val sessionState = spark.sessionState
     val startTime = System.nanoTime()
+
+    val isSymlinkTable = SymlinkTextInputFormatUtil.isSymlinkTextFormat(catalogTable)
+    lazy val fs = new Path(catalogTable.location)
+      .getFileSystem(spark.sessionState.newHadoopConf())
     val totalSize = if (catalogTable.partitionColumnNames.isEmpty) {
-      calculateSingleLocationSize(sessionState, catalogTable.identifier,
-        catalogTable.storage.locationUri)
+      if (isSymlinkTable) {
+        calculateMultipleLocationSizes(spark, catalogTable.identifier
+          , SymlinkTextInputFormatUtil.getSymlinkTableLocationPaths(fs, catalogTable.location)
+        ).sum
+      } else {
+        calculateSingleLocationSize(sessionState, catalogTable.identifier,
+          catalogTable.storage.locationUri)
+      }
     } else {
       // Calculate table size as a sum of the visible partitions. See SPARK-21079
       val partitions = sessionState.catalog.listPartitions(catalogTable.identifier)
       logInfo(s"Starting to calculate sizes for ${partitions.length} partitions.")
-      val paths = partitions.map(_.storage.locationUri)
-      calculateMultipleLocationSizes(spark, catalogTable.identifier, paths).sum
+      calculateMultipleLocationSizes(spark, catalogTable.identifier,
+        getPartitionPaths(partitions, isSymlinkTable, fs)).sum
     }
     logInfo(s"It took ${(System.nanoTime() - startTime) / (1000 * 1000)} ms to calculate" +
       s" the total size for table ${catalogTable.identifier}.")
     totalSize
+  }
+
+  def getPartitionPaths(partitions: Seq[CatalogTablePartition]
+                        , isSymlinkTable: Boolean, fs: => FileSystem): Seq[Option[URI]] = {
+    partitions.flatMap { catalogTablePartition =>
+        if (isSymlinkTable) {
+          catalogTablePartition.storage.locationUri
+            .map(SymlinkTextInputFormatUtil.getSymlinkTableLocationPaths(fs, _))
+            .getOrElse(Seq.empty)
+        } else {
+          Seq(catalogTablePartition.storage.locationUri)
+        }
+    }
   }
 
   def calculateSingleLocationSize(
