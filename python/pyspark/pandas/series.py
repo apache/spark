@@ -5256,23 +5256,19 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         index_type = self._internal.spark_type_for(index_scol)
 
         if np.nan in where:
+            # When `where` is np.nan, pandas returns the last index value.
             max_index = self._internal.spark_frame.select(F.last(index_scol)).take(1)[0][0]
             modified_where = [max_index if x is np.nan else x for x in where]
-            cond = [
-                F.last(
-                    F.when(index_scol <= SF.lit(index).cast(index_type), self.spark.column),
-                    ignorenulls=True,
-                )
-                for idx, index in enumerate(modified_where)
-            ]
         else:
-            cond = [
-                F.last(
-                    F.when(index_scol <= SF.lit(index).cast(index_type), self.spark.column),
-                    ignorenulls=True,
-                )
-                for idx, index in enumerate(where)
-            ]
+            modified_where = where
+
+        cond = [
+            F.last(
+                F.when(index_scol <= SF.lit(index).cast(index_type), self.spark.column),
+                ignorenulls=True,
+            )
+            for idx, index in enumerate(modified_where)
+        ]
 
         sdf = self._internal.spark_frame.select(cond)
         if not should_return_series:
