@@ -1153,7 +1153,8 @@ abstract class DynamicPartitionPruningSuiteBase
 
   test("join key with multiple references on the filtering plan") {
     withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "true",
-      SQLConf.ADAPTIVE_OPTIMIZER_EXCLUDED_RULES.key -> AQEPropagateEmptyRelation.ruleName
+      SQLConf.ADAPTIVE_OPTIMIZER_EXCLUDED_RULES.key -> AQEPropagateEmptyRelation.ruleName,
+      SQLConf.ANSI_ENABLED.key -> "false" // ANSI mode doesn't support "String + String"
     ) {
       // when enable AQE, the reusedExchange is inserted when executed.
       withTable("fact", "dim") {

@@ -493,14 +493,16 @@ object FunctionRegistry {
     expression[BoolOr]("some", true),
     expression[BoolOr]("bool_or"),
     expression[RegrCount]("regr_count"),
+    expression[RegrAvgX]("regr_avgx"),
+    expression[RegrAvgY]("regr_avgy"),
 
     // string functions
     expression[Ascii]("ascii"),
     expression[Chr]("char", true),
     expression[Chr]("chr"),
-    expression[Contains]("contains"),
-    expression[StartsWith]("startswith"),
-    expression[EndsWith]("endswith"),
+    expressionBuilder("contains", ContainsExpressionBuilder),
+    expressionBuilder("startswith", StartsWithExpressionBuilder),
+    expressionBuilder("endswith", EndsWithExpressionBuilder),
     expression[Base64]("base64"),
     expression[BitLength]("bit_length"),
     expression[Length]("char_length", true),
@@ -629,6 +631,7 @@ object FunctionRegistry {
     expression[UnixMicros]("unix_micros"),
     expression[ConvertTimezone]("convert_timezone"),
     expression[TimestampAdd]("timestampadd"),
+    expression[TimestampDiff]("timestampdiff"),
 
     // collection functions
     expression[CreateArray]("array"),

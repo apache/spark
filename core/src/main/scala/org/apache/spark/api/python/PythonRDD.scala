@@ -245,7 +245,7 @@ private[spark] object PythonRDD extends Logging {
             out.writeInt(1)
 
             // Write the next object and signal end of data for this iteration
-            writeIteratorToStream(partitionArray.toIterator, out)
+            writeIteratorToStream(partitionArray.iterator, out)
             out.writeInt(SpecialLengths.END_OF_DATA_SECTION)
             out.flush()
           } else {
