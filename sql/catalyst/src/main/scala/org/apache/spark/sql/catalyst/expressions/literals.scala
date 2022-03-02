@@ -158,6 +158,7 @@ object Literal {
         Literal(CatalystTypeConverters.createToCatalystConverter(dataType)(v), dataType)
       case _: DayTimeIntervalType if v.isInstanceOf[Duration] =>
         Literal(CatalystTypeConverters.createToCatalystConverter(dataType)(v), dataType)
+      case _: ObjectType => Literal(v, dataType)
       case _ => Literal(CatalystTypeConverters.convertToCatalyst(v), dataType)
     }
   }

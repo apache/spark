@@ -299,4 +299,19 @@ class DecimalSuite extends SparkFunSuite with PrivateMethodTester with SQLHelper
       assert(Decimal.fromStringANSI(UTF8String.fromString(string)) === Decimal(string))
     }
   }
+
+  test("SPARK-37451: Performance improvement regressed String to Decimal cast") {
+    val values = Array("7.836725755512218E38")
+    for (string <- values) {
+      assert(Decimal.fromString(UTF8String.fromString(string)) === null)
+      intercept[ArithmeticException](Decimal.fromStringANSI(UTF8String.fromString(string)))
+    }
+
+    withSQLConf(SQLConf.LEGACY_ALLOW_NEGATIVE_SCALE_OF_DECIMAL_ENABLED.key -> "true") {
+      for (string <- values) {
+        assert(Decimal.fromString(UTF8String.fromString(string)) === Decimal(string))
+        assert(Decimal.fromStringANSI(UTF8String.fromString(string)) === Decimal(string))
+      }
+    }
+  }
 }

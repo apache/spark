@@ -18,9 +18,13 @@
 package org.apache.spark.scheduler
 
 import java.nio.ByteBuffer
+import java.util.Properties
+import java.util.concurrent.{CountDownLatch, ExecutorService, LinkedBlockingQueue, ThreadPoolExecutor, TimeUnit}
+import java.util.concurrent.atomic.AtomicBoolean
 
 import scala.collection.mutable.{ArrayBuffer, HashMap}
 import scala.concurrent.duration._
+import scala.language.reflectiveCalls
 
 import org.mockito.ArgumentMatchers.{any, anyInt, anyString, eq => meq}
 import org.mockito.Mockito.{atLeast, atMost, never, spy, times, verify, when}
@@ -34,7 +38,7 @@ import org.apache.spark.internal.config
 import org.apache.spark.resource.{ExecutorResourceRequests, ResourceProfile, TaskResourceRequests}
 import org.apache.spark.resource.ResourceUtils._
 import org.apache.spark.resource.TestResourceIDs._
-import org.apache.spark.util.{Clock, ManualClock}
+import org.apache.spark.util.{Clock, ManualClock, ThreadUtils}
 
 class FakeSchedulerBackend extends SchedulerBackend {
   def start(): Unit = {}
@@ -1993,6 +1997,94 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     taskId = tasks.head.taskId
     assert(barrierTSM.runningTasksSet.contains(taskId))
     assert(!normalTSM.runningTasksSet.contains(taskId))
+  }
+
+  test("SPARK-37300: TaskSchedulerImpl should ignore task finished" +
+    " event if its task was finished state") {
+    val taskScheduler = setupScheduler()
+
+    val latch = new CountDownLatch(2)
+    val resultGetter = new TaskResultGetter(sc.env, taskScheduler) {
+      override protected val getTaskResultExecutor: ExecutorService =
+        new ThreadPoolExecutor(1, 1, 0L, TimeUnit.MILLISECONDS, new LinkedBlockingQueue[Runnable],
+          ThreadUtils.namedThreadFactory("task-result-getter")) {
+          override def execute(command: Runnable): Unit = {
+            super.execute(new Runnable {
+              override def run(): Unit = {
+                command.run()
+                latch.countDown()
+              }
+            })
+          }
+        }
+      def taskResultExecutor() : ExecutorService = getTaskResultExecutor
+    }
+    taskScheduler.taskResultGetter = resultGetter
+
+    val workerOffers = IndexedSeq(new WorkerOffer("executor0", "host0", 1),
+      new WorkerOffer("executor1", "host1", 1))
+    val task1 = new ShuffleMapTask(1, 0, null, new Partition {
+      override def index: Int = 0
+    }, Seq(TaskLocation("host0", "executor0")), new Properties, null)
+
+    val task2 = new ShuffleMapTask(1, 0, null, new Partition {
+      override def index: Int = 1
+    }, Seq(TaskLocation("host1", "executor1")), new Properties, null)
+
+    val taskSet = new TaskSet(Array(task1, task2), 0, 0, 0, null, 0)
+
+    taskScheduler.submitTasks(taskSet)
+    val taskDescriptions = taskScheduler.resourceOffers(workerOffers).flatten
+    assert(2 === taskDescriptions.length)
+
+    val ser = sc.env.serializer.newInstance()
+    val directResult = new DirectTaskResult[Int](ser.serialize(1), Seq(), Array.empty)
+    val resultBytes = ser.serialize(directResult)
+
+    val busyTask = new Runnable {
+      val lock : Object = new Object
+      var running : AtomicBoolean = new AtomicBoolean(false)
+      override def run(): Unit = {
+        lock.synchronized {
+          running.set(true)
+          lock.wait()
+        }
+      }
+      def markTaskDone: Unit = {
+        lock.synchronized {
+          lock.notify()
+        }
+      }
+    }
+    // make getTaskResultExecutor busy
+    resultGetter.taskResultExecutor().submit(busyTask)
+
+    // task1 finished
+    val tid = taskDescriptions(0).taskId
+    taskScheduler.statusUpdate(
+      tid = tid,
+      state = TaskState.FINISHED,
+      serializedData = resultBytes
+    )
+
+    // mark executor heartbeat timed out
+    taskScheduler.executorLost(taskDescriptions(0).executorId, ExecutorProcessLost("Executor " +
+      "heartbeat timed out"))
+
+    // Wait busyTask begin running
+    eventually(timeout(10.seconds)) {
+      assert(busyTask.running.get())
+    }
+
+    busyTask.markTaskDone
+
+    // Wait until all events are processed
+    latch.await()
+
+    val taskSetManager = taskScheduler.taskIdToTaskSetManager.get(taskDescriptions(1).taskId)
+    assert(taskSetManager != null)
+    assert(0 == taskSetManager.tasksSuccessful)
+    assert(!taskSetManager.successful(taskDescriptions(0).index))
   }
 
   /**

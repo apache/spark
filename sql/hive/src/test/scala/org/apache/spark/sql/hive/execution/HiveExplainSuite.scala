@@ -27,11 +27,13 @@ import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SQLTestUtils
+import org.apache.spark.tags.SlowHiveTest
 import org.apache.spark.util.Utils
 
 /**
  * A set of tests that validates support for Hive Explain command.
  */
+@SlowHiveTest
 class HiveExplainSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
   import testImplicits._
 

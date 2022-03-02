@@ -105,3 +105,72 @@ select decode(2, 1, 'Southlake');
 select decode(2, 1, 'Southlake', 2, 'San Francisco', 3, 'New Jersey', 4, 'Seattle', 'Non domestic');
 select decode(6, 1, 'Southlake', 2, 'San Francisco', 3, 'New Jersey', 4, 'Seattle', 'Non domestic');
 select decode(6, 1, 'Southlake', 2, 'San Francisco', 3, 'New Jersey', 4, 'Seattle');
+
+-- contains
+SELECT CONTAINS(null, 'Spark');
+SELECT CONTAINS('Spark SQL', null);
+SELECT CONTAINS(null, null);
+SELECT CONTAINS('Spark SQL', 'Spark');
+SELECT CONTAINS('Spark SQL', 'SQL');
+SELECT CONTAINS('Spark SQL', 'SPARK');
+
+SELECT startswith('Spark SQL', 'ark');
+SELECT startswith('Spark SQL', 'Spa');
+SELECT startswith(null, 'Spark');
+SELECT startswith('Spark', null);
+SELECT startswith(null, null);
+
+SELECT endswith('Spark SQL', 'QL');
+SELECT endswith('Spark SQL', 'Spa');
+SELECT endswith(null, 'Spark');
+SELECT endswith('Spark', null);
+SELECT endswith(null, null);
+
+SELECT contains(x'537061726b2053514c', x'537061726b');
+SELECT contains(x'', x'');
+SELECT contains(x'537061726b2053514c', null);
+SELECT contains(12, '1');
+SELECT contains(true, 'ru');
+SELECT contains(x'12', 12);
+SELECT contains(true, false);
+
+SELECT startswith(x'537061726b2053514c', x'537061726b');
+SELECT startswith(x'537061726b2053514c', x'');
+SELECT startswith(x'', x'');
+SELECT startswith(x'537061726b2053514c', null);
+
+SELECT endswith(x'537061726b2053514c', x'53516c');
+SELECT endsWith(x'537061726b2053514c', x'537061726b');
+SELECT endsWith(x'537061726b2053514c', x'');
+SELECT endsWith(x'', x'');
+SELECT endsWith(x'537061726b2053514c', null);
+
+-- to_number
+select to_number('454', '000');
+select to_number('454.2', '000.0');
+select to_number('12,454', '00,000');
+select to_number('$78.12', '$00.00');
+select to_number('-454', '-000');
+select to_number('-454', 'S000');
+select to_number('12,454.8-', '00,000.9-');
+select to_number('00,454.8-', '00,000.9-');
+
+-- to_binary
+select to_binary('abc');
+select to_binary('abc', 'utf-8');
+select to_binary('abc', 'base64');
+select to_binary('abc', 'hex');
+-- 'format' parameter can be any foldable string value, not just literal.
+select to_binary('abc', concat('utf', '-8'));
+-- 'format' parameter is case insensitive.
+select to_binary('abc', 'Hex');
+-- null inputs lead to null result.
+select to_binary('abc', null);
+select to_binary(null, 'utf-8');
+select to_binary(null, null);
+select to_binary(null, cast(null as string));
+-- 'format' parameter must be string type or void type.
+select to_binary(null, cast(null as int));
+select to_binary('abc', 1);
+-- invalid inputs.
+select to_binary('abc', 'invalidFormat');

@@ -17,12 +17,20 @@
 
 import unittest
 
-from pyspark.ml.classification import BinaryLogisticRegressionSummary, \
-    BinaryRandomForestClassificationSummary, FMClassifier, \
-    FMClassificationSummary, LinearSVC, LinearSVCSummary,  \
-    LogisticRegression, LogisticRegressionSummary, \
-    MultilayerPerceptronClassifier, MultilayerPerceptronClassificationSummary, \
-    RandomForestClassificationSummary, RandomForestClassifier
+from pyspark.ml.classification import (
+    BinaryLogisticRegressionSummary,
+    BinaryRandomForestClassificationSummary,
+    FMClassifier,
+    FMClassificationSummary,
+    LinearSVC,
+    LinearSVCSummary,
+    LogisticRegression,
+    LogisticRegressionSummary,
+    MultilayerPerceptronClassifier,
+    MultilayerPerceptronClassificationSummary,
+    RandomForestClassificationSummary,
+    RandomForestClassifier,
+)
 from pyspark.ml.clustering import BisectingKMeans, GaussianMixture, KMeans
 from pyspark.ml.linalg import Vectors
 from pyspark.ml.regression import GeneralizedLinearRegression, LinearRegression
@@ -31,13 +39,14 @@ from pyspark.testing.mlutils import SparkSessionTestCase
 
 
 class TrainingSummaryTest(SparkSessionTestCase):
-
     def test_linear_regression_summary(self):
-        df = self.spark.createDataFrame([(1.0, 2.0, Vectors.dense(1.0)),
-                                         (0.0, 2.0, Vectors.sparse(1, [], []))],
-                                        ["label", "weight", "features"])
-        lr = LinearRegression(maxIter=5, regParam=0.0, solver="normal", weightCol="weight",
-                              fitIntercept=False)
+        df = self.spark.createDataFrame(
+            [(1.0, 2.0, Vectors.dense(1.0)), (0.0, 2.0, Vectors.sparse(1, [], []))],
+            ["label", "weight", "features"],
+        )
+        lr = LinearRegression(
+            maxIter=5, regParam=0.0, solver="normal", weightCol="weight", fitIntercept=False
+        )
         model = lr.fit(df)
         self.assertTrue(model.hasSummary)
         s = model.summary
@@ -74,11 +83,14 @@ class TrainingSummaryTest(SparkSessionTestCase):
 
     def test_glr_summary(self):
         from pyspark.ml.linalg import Vectors
-        df = self.spark.createDataFrame([(1.0, 2.0, Vectors.dense(1.0)),
-                                         (0.0, 2.0, Vectors.sparse(1, [], []))],
-                                        ["label", "weight", "features"])
-        glr = GeneralizedLinearRegression(family="gaussian", link="identity", weightCol="weight",
-                                          fitIntercept=False)
+
+        df = self.spark.createDataFrame(
+            [(1.0, 2.0, Vectors.dense(1.0)), (0.0, 2.0, Vectors.sparse(1, [], []))],
+            ["label", "weight", "features"],
+        )
+        glr = GeneralizedLinearRegression(
+            family="gaussian", link="identity", weightCol="weight", fitIntercept=False
+        )
         model = glr.fit(df)
         self.assertTrue(model.hasSummary)
         s = model.summary
@@ -111,9 +123,10 @@ class TrainingSummaryTest(SparkSessionTestCase):
         self.assertAlmostEqual(sameSummary.deviance, s.deviance)
 
     def test_binary_logistic_regression_summary(self):
-        df = self.spark.createDataFrame([(1.0, 2.0, Vectors.dense(1.0)),
-                                         (0.0, 2.0, Vectors.sparse(1, [], []))],
-                                        ["label", "weight", "features"])
+        df = self.spark.createDataFrame(
+            [(1.0, 2.0, Vectors.dense(1.0)), (0.0, 2.0, Vectors.sparse(1, [], []))],
+            ["label", "weight", "features"],
+        )
         lr = LogisticRegression(maxIter=5, regParam=0.01, weightCol="weight", fitIntercept=False)
         model = lr.fit(df)
         self.assertTrue(model.hasSummary)
@@ -154,11 +167,15 @@ class TrainingSummaryTest(SparkSessionTestCase):
         self.assertAlmostEqual(sameSummary.areaUnderROC, s.areaUnderROC)
 
     def test_multiclass_logistic_regression_summary(self):
-        df = self.spark.createDataFrame([(1.0, 2.0, Vectors.dense(1.0)),
-                                         (0.0, 2.0, Vectors.sparse(1, [], [])),
-                                         (2.0, 2.0, Vectors.dense(2.0)),
-                                         (2.0, 2.0, Vectors.dense(1.9))],
-                                        ["label", "weight", "features"])
+        df = self.spark.createDataFrame(
+            [
+                (1.0, 2.0, Vectors.dense(1.0)),
+                (0.0, 2.0, Vectors.sparse(1, [], [])),
+                (2.0, 2.0, Vectors.dense(2.0)),
+                (2.0, 2.0, Vectors.dense(1.9)),
+            ],
+            ["label", "weight", "features"],
+        )
         lr = LogisticRegression(maxIter=5, regParam=0.01, weightCol="weight", fitIntercept=False)
         model = lr.fit(df)
         self.assertTrue(model.hasSummary)
@@ -194,9 +211,10 @@ class TrainingSummaryTest(SparkSessionTestCase):
         self.assertAlmostEqual(sameSummary.accuracy, s.accuracy)
 
     def test_linear_svc_summary(self):
-        df = self.spark.createDataFrame([(1.0, 2.0, Vectors.dense(1.0, 1.0, 1.0)),
-                                         (0.0, 2.0, Vectors.dense(1.0, 2.0, 3.0))],
-                                        ["label", "weight", "features"])
+        df = self.spark.createDataFrame(
+            [(1.0, 2.0, Vectors.dense(1.0, 1.0, 1.0)), (0.0, 2.0, Vectors.dense(1.0, 2.0, 3.0))],
+            ["label", "weight", "features"],
+        )
         svc = LinearSVC(maxIter=5, weightCol="weight")
         model = svc.fit(df)
         self.assertTrue(model.hasSummary)
@@ -236,9 +254,10 @@ class TrainingSummaryTest(SparkSessionTestCase):
         self.assertAlmostEqual(sameSummary.areaUnderROC, s.areaUnderROC)
 
     def test_binary_randomforest_classification_summary(self):
-        df = self.spark.createDataFrame([(1.0, 2.0, Vectors.dense(1.0)),
-                                         (0.0, 2.0, Vectors.sparse(1, [], []))],
-                                        ["label", "weight", "features"])
+        df = self.spark.createDataFrame(
+            [(1.0, 2.0, Vectors.dense(1.0)), (0.0, 2.0, Vectors.sparse(1, [], []))],
+            ["label", "weight", "features"],
+        )
         rf = RandomForestClassifier(weightCol="weight")
         model = rf.fit(df)
         self.assertTrue(model.hasSummary)
@@ -275,11 +294,15 @@ class TrainingSummaryTest(SparkSessionTestCase):
         self.assertAlmostEqual(sameSummary.areaUnderROC, s.areaUnderROC)
 
     def test_multiclass_randomforest_classification_summary(self):
-        df = self.spark.createDataFrame([(1.0, 2.0, Vectors.dense(1.0)),
-                                         (0.0, 2.0, Vectors.sparse(1, [], [])),
-                                         (2.0, 2.0, Vectors.dense(2.0)),
-                                         (2.0, 2.0, Vectors.dense(1.9))],
-                                        ["label", "weight", "features"])
+        df = self.spark.createDataFrame(
+            [
+                (1.0, 2.0, Vectors.dense(1.0)),
+                (0.0, 2.0, Vectors.sparse(1, [], [])),
+                (2.0, 2.0, Vectors.dense(2.0)),
+                (2.0, 2.0, Vectors.dense(1.9)),
+            ],
+            ["label", "weight", "features"],
+        )
         rf = RandomForestClassifier(weightCol="weight")
         model = rf.fit(df)
         self.assertTrue(model.hasSummary)
@@ -311,12 +334,15 @@ class TrainingSummaryTest(SparkSessionTestCase):
         self.assertAlmostEqual(sameSummary.accuracy, s.accuracy)
 
     def test_fm_classification_summary(self):
-        df = self.spark.createDataFrame([(1.0, Vectors.dense(2.0)),
-                                         (0.0, Vectors.dense(2.0)),
-                                         (0.0, Vectors.dense(6.0)),
-                                         (1.0, Vectors.dense(3.0))
-                                         ],
-                                        ["label", "features"])
+        df = self.spark.createDataFrame(
+            [
+                (1.0, Vectors.dense(2.0)),
+                (0.0, Vectors.dense(2.0)),
+                (0.0, Vectors.dense(6.0)),
+                (1.0, Vectors.dense(3.0)),
+            ],
+            ["label", "features"],
+        )
         fm = FMClassifier(maxIter=5)
         model = fm.fit(df)
         self.assertTrue(model.hasSummary)
@@ -355,12 +381,15 @@ class TrainingSummaryTest(SparkSessionTestCase):
         self.assertAlmostEqual(sameSummary.areaUnderROC, s.areaUnderROC)
 
     def test_mlp_classification_summary(self):
-        df = self.spark.createDataFrame([(0.0, Vectors.dense([0.0, 0.0])),
-                                         (1.0, Vectors.dense([0.0, 1.0])),
-                                         (1.0, Vectors.dense([1.0, 0.0])),
-                                         (0.0, Vectors.dense([1.0, 1.0]))
-                                         ],
-                                        ["label", "features"])
+        df = self.spark.createDataFrame(
+            [
+                (0.0, Vectors.dense([0.0, 0.0])),
+                (1.0, Vectors.dense([0.0, 1.0])),
+                (1.0, Vectors.dense([1.0, 0.0])),
+                (0.0, Vectors.dense([1.0, 1.0])),
+            ],
+            ["label", "features"],
+        )
         mlp = MultilayerPerceptronClassifier(layers=[2, 2, 2], seed=123)
         model = mlp.fit(df)
         self.assertTrue(model.hasSummary)
@@ -391,8 +420,12 @@ class TrainingSummaryTest(SparkSessionTestCase):
         self.assertAlmostEqual(sameSummary.accuracy, s.accuracy)
 
     def test_gaussian_mixture_summary(self):
-        data = [(Vectors.dense(1.0),), (Vectors.dense(5.0),), (Vectors.dense(10.0),),
-                (Vectors.sparse(1, [], []),)]
+        data = [
+            (Vectors.dense(1.0),),
+            (Vectors.dense(5.0),),
+            (Vectors.dense(10.0),),
+            (Vectors.sparse(1, [], []),),
+        ]
         df = self.spark.createDataFrame(data, ["features"])
         gmm = GaussianMixture(k=2)
         model = gmm.fit(df)
@@ -409,8 +442,12 @@ class TrainingSummaryTest(SparkSessionTestCase):
         self.assertEqual(s.numIter, 3)
 
     def test_bisecting_kmeans_summary(self):
-        data = [(Vectors.dense(1.0),), (Vectors.dense(5.0),), (Vectors.dense(10.0),),
-                (Vectors.sparse(1, [], []),)]
+        data = [
+            (Vectors.dense(1.0),),
+            (Vectors.dense(5.0),),
+            (Vectors.dense(10.0),),
+            (Vectors.sparse(1, [], []),),
+        ]
         df = self.spark.createDataFrame(data, ["features"])
         bkm = BisectingKMeans(k=2)
         model = bkm.fit(df)
@@ -425,8 +462,12 @@ class TrainingSummaryTest(SparkSessionTestCase):
         self.assertEqual(s.numIter, 20)
 
     def test_kmeans_summary(self):
-        data = [(Vectors.dense([0.0, 0.0]),), (Vectors.dense([1.0, 1.0]),),
-                (Vectors.dense([9.0, 8.0]),), (Vectors.dense([8.0, 9.0]),)]
+        data = [
+            (Vectors.dense([0.0, 0.0]),),
+            (Vectors.dense([1.0, 1.0]),),
+            (Vectors.dense([9.0, 8.0]),),
+            (Vectors.dense([8.0, 9.0]),),
+        ]
         df = self.spark.createDataFrame(data, ["features"])
         kmeans = KMeans(k=2, seed=1)
         model = kmeans.fit(df)
@@ -446,7 +487,8 @@ if __name__ == "__main__":
 
     try:
         import xmlrunner  # type: ignore[import]
-        testRunner = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2)
+
+        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:
         testRunner = None
     unittest.main(testRunner=testRunner, verbosity=2)

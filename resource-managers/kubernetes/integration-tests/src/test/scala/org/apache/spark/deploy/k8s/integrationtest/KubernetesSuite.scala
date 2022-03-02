@@ -35,9 +35,9 @@ import org.scalatest.matchers.should.Matchers._
 import org.scalatest.time.{Minutes, Seconds, Span}
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.deploy.k8s.Constants.ENV_APPLICATION_ID
 import org.apache.spark.deploy.k8s.integrationtest.TestConstants._
 import org.apache.spark.deploy.k8s.integrationtest.backend.{IntegrationTestBackend, IntegrationTestBackendFactory}
-import org.apache.spark.deploy.k8s.integrationtest.backend.minikube.Minikube
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 
@@ -76,7 +76,7 @@ class KubernetesSuite extends SparkFunSuite
   protected override def logForFailedTest(): Unit = {
     logInfo("\n\n===== EXTRA LOGS FOR THE FAILED TEST\n")
     logInfo("BEGIN DESCRIBE PODS for application\n" +
-      Minikube.describePods(s"spark-app-locator=$appLocator").mkString("\n"))
+      testBackend.describePods(s"spark-app-locator=$appLocator").mkString("\n"))
     logInfo("END DESCRIBE PODS for the application")
     val driverPodOption = kubernetesTestComponents.kubernetesClient
       .pods()
@@ -182,7 +182,7 @@ class KubernetesSuite extends SparkFunSuite
     }
   }
 
-  before {
+  protected def setUpTest(): Unit = {
     appLocator = UUID.randomUUID().toString.replaceAll("-", "")
     driverPodName = "spark-test-app-" + UUID.randomUUID().toString.replaceAll("-", "")
     sparkAppConf = kubernetesTestComponents.newSparkAppConf()
@@ -194,6 +194,10 @@ class KubernetesSuite extends SparkFunSuite
     if (!kubernetesTestComponents.hasUserSpecifiedNamespace) {
       kubernetesTestComponents.createNamespace()
     }
+  }
+
+  before {
+    setUpTest()
   }
 
   after {
@@ -209,7 +213,9 @@ class KubernetesSuite extends SparkFunSuite
       driverPodChecker: Pod => Unit = doBasicDriverPodCheck,
       executorPodChecker: Pod => Unit = doBasicExecutorPodCheck,
       appArgs: Array[String] = Array.empty[String],
-      isJVM: Boolean = true ): Unit = {
+      isJVM: Boolean = true,
+      customSparkConf: Option[SparkAppConf] = None,
+      customAppLocator: Option[String] = None): Unit = {
     runSparkApplicationAndVerifyCompletion(
       appResource,
       SPARK_PI_MAIN_CLASS,
@@ -218,7 +224,10 @@ class KubernetesSuite extends SparkFunSuite
       appArgs,
       driverPodChecker,
       executorPodChecker,
-      isJVM)
+      isJVM,
+      customSparkConf = customSparkConf,
+      customAppLocator = customAppLocator
+    )
   }
 
   protected def runDFSReadWriteAndVerifyCompletion(
@@ -333,7 +342,9 @@ class KubernetesSuite extends SparkFunSuite
       pyFiles: Option[String] = None,
       executorPatience: Option[(Option[Interval], Option[Timeout])] = None,
       decommissioningTest: Boolean = false,
-      env: Map[String, String] = Map.empty[String, String]): Unit = {
+      env: Map[String, String] = Map.empty[String, String],
+      customSparkConf: Option[SparkAppConf] = None,
+      customAppLocator: Option[String] = None): Unit = {
 
   // scalastyle:on argcount
     val appArguments = SparkAppArguments(
@@ -367,7 +378,7 @@ class KubernetesSuite extends SparkFunSuite
 
     val execWatcher = kubernetesTestComponents.kubernetesClient
       .pods()
-      .withLabel("spark-app-locator", appLocator)
+      .withLabel("spark-app-locator", customAppLocator.getOrElse(appLocator))
       .withLabel("spark-role", "executor")
       .watch(new Watcher[Pod] {
         logDebug("Beginning watch of executors")
@@ -431,7 +442,7 @@ class KubernetesSuite extends SparkFunSuite
     logDebug("Starting Spark K8s job")
     SparkAppLauncher.launch(
       appArguments,
-      sparkAppConf,
+      customSparkConf.getOrElse(sparkAppConf),
       TIMEOUT.value.toSeconds.toInt,
       sparkHomeDir,
       isJVM,
@@ -440,7 +451,7 @@ class KubernetesSuite extends SparkFunSuite
 
     val driverPod = kubernetesTestComponents.kubernetesClient
       .pods()
-      .withLabel("spark-app-locator", appLocator)
+      .withLabel("spark-app-locator", customAppLocator.getOrElse(appLocator))
       .withLabel("spark-role", "driver")
       .list()
       .getItems
@@ -553,6 +564,7 @@ class KubernetesSuite extends SparkFunSuite
     assert(pod.getMetadata.getLabels.get("label2") === "label2-value")
     assert(pod.getMetadata.getAnnotations.get("annotation1") === "annotation1-value")
     assert(pod.getMetadata.getAnnotations.get("annotation2") === "annotation2-value")
+    val appId = pod.getMetadata.getAnnotations.get("yunikorn.apache.org/app-id")
 
     val container = pod.getSpec.getContainers.get(0)
     val envVars = container
@@ -564,6 +576,7 @@ class KubernetesSuite extends SparkFunSuite
       .toMap
     assert(envVars("ENV1") === "VALUE1")
     assert(envVars("ENV2") === "VALUE2")
+    assert(appId === envVars(ENV_APPLICATION_ID))
   }
 
   private def deleteDriverPod(): Unit = {
@@ -596,6 +609,7 @@ class KubernetesSuite extends SparkFunSuite
 
 private[spark] object KubernetesSuite {
   val k8sTestTag = Tag("k8s")
+  val localTestTag = Tag("local")
   val rTestTag = Tag("r")
   val MinikubeTag = Tag("minikube")
   val SPARK_PI_MAIN_CLASS: String = "org.apache.spark.examples.SparkPi"

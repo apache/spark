@@ -29,7 +29,7 @@ def _unsupported_property(property_name, deprecated=False, reason=""):
     )
 
 
-class _MissingPandasLikeDataFrame(object):
+class _MissingPandasLikeDataFrame:
 
     # Functions
     asfreq = _unsupported_function("asfreq")
@@ -39,7 +39,6 @@ class _MissingPandasLikeDataFrame(object):
     compare = _unsupported_function("compare")
     convert_dtypes = _unsupported_function("convert_dtypes")
     corrwith = _unsupported_function("corrwith")
-    cov = _unsupported_function("cov")
     ewm = _unsupported_function("ewm")
     infer_objects = _unsupported_function("infer_objects")
     interpolate = _unsupported_function("interpolate")

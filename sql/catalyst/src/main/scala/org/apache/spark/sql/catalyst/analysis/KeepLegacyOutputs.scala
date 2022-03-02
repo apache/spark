@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import org.apache.spark.sql.catalyst.plans.logical.{DescribeNamespace, LogicalPlan, ShowNamespaces, ShowTables}
+import org.apache.spark.sql.catalyst.plans.logical.{DescribeNamespace, LogicalPlan, ShowNamespaces, ShowTableProperties, ShowTables}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.COMMAND
 import org.apache.spark.sql.internal.SQLConf
@@ -43,6 +43,8 @@ object KeepLegacyOutputs extends Rule[LogicalPlan] {
           assert(d.output.length == 2)
           d.copy(output = Seq(d.output.head.withName("database_description_item"),
             d.output.last.withName("database_description_value")))
+        case s: ShowTableProperties if s.propertyKey.isDefined =>
+           s.copy(output = Seq(s.output.last))
       }
     }
   }

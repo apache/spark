@@ -17,7 +17,7 @@
 
 package org.apache.hive.service.cli.operation;
 import java.io.CharArrayWriter;
-import java.util.Enumeration;
+import java.util.Map;
 import java.util.regex.Pattern;
 
 import org.apache.hadoop.hive.ql.exec.Task;
@@ -25,21 +25,26 @@ import org.apache.hadoop.hive.ql.log.PerfLogger;
 import org.apache.hadoop.hive.ql.session.OperationLog;
 import org.apache.hadoop.hive.ql.session.OperationLog.LoggingLevel;
 import org.apache.hive.service.cli.CLIServiceUtils;
-import org.apache.log4j.Appender;
-import org.apache.log4j.ConsoleAppender;
-import org.apache.log4j.Layout;
-import org.apache.log4j.Logger;
-import org.apache.log4j.WriterAppender;
-import org.apache.log4j.spi.Filter;
-import org.apache.log4j.spi.LoggingEvent;
-
+import org.apache.logging.log4j.Level;
+import org.apache.logging.log4j.Logger;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Marker;
+import org.apache.logging.log4j.core.Filter;
+import org.apache.logging.log4j.core.LogEvent;
+import org.apache.logging.log4j.core.Layout;
+import org.apache.logging.log4j.core.StringLayout;
+import org.apache.logging.log4j.core.Appender;
+import org.apache.logging.log4j.core.appender.ConsoleAppender;
+import org.apache.logging.log4j.core.appender.AbstractWriterAppender;
+import org.apache.logging.log4j.core.appender.WriterManager;
 import com.google.common.base.Joiner;
+import org.apache.logging.log4j.message.Message;
 
 /**
  * An Appender to divert logs from individual threads to the LogObject they belong to.
  */
-public class LogDivertAppender extends WriterAppender {
-  private static final Logger LOG = Logger.getLogger(LogDivertAppender.class.getName());
+public class LogDivertAppender extends AbstractWriterAppender<WriterManager> {
+  private static final Logger LOG = LogManager.getLogger(LogDivertAppender.class.getName());
   private final OperationManager operationManager;
   private boolean isVerbose;
   private Layout verboseLayout;
@@ -51,10 +56,12 @@ public class LogDivertAppender extends WriterAppender {
    * they don't generate more logs for themselves when they process logs.
    * White list filter is used for less verbose log collection
    */
-  private static class NameFilter extends Filter {
+  private static class NameFilter implements Filter {
     private Pattern namePattern;
     private LoggingLevel loggingMode;
     private OperationManager operationManager;
+
+    private State state;
 
     /* Patterns that are excluded in verbose logging level.
      * Filter out messages coming from log processing classes, or we'll run an infinite loop.
@@ -91,46 +98,152 @@ public class LogDivertAppender extends WriterAppender {
       OperationLog.LoggingLevel loggingMode, OperationManager op) {
       this.operationManager = op;
       this.loggingMode = loggingMode;
+      this.state = State.INITIALIZING;
       setCurrentNamePattern(loggingMode);
     }
 
     @Override
-    public int decide(LoggingEvent ev) {
+    public Result getOnMismatch() {
+      return Result.NEUTRAL;
+    }
+
+    @Override
+    public Result getOnMatch() {
+      return Result.NEUTRAL;
+    }
+
+    @Override
+    public Result filter(org.apache.logging.log4j.core.Logger logger, Level level, Marker marker, String s, Object... objects) {
+      return Result.NEUTRAL;
+    }
+
+    @Override
+    public Result filter(org.apache.logging.log4j.core.Logger logger, Level level, Marker marker, String s, Object o) {
+      return Result.NEUTRAL;
+    }
+
+    @Override
+    public Result filter(org.apache.logging.log4j.core.Logger logger, Level level, Marker marker, String s, Object o, Object o1) {
+      return Result.NEUTRAL;
+    }
+
+    @Override
+    public Result filter(org.apache.logging.log4j.core.Logger logger, Level level, Marker marker, String s, Object o, Object o1, Object o2) {
+      return Result.NEUTRAL;
+    }
+
+    @Override
+    public Result filter(org.apache.logging.log4j.core.Logger logger, Level level, Marker marker, String s, Object o, Object o1, Object o2, Object o3) {
+      return Result.NEUTRAL;
+    }
+
+    @Override
+    public Result filter(org.apache.logging.log4j.core.Logger logger, Level level, Marker marker, String s, Object o, Object o1, Object o2, Object o3, Object o4) {
+      return Result.NEUTRAL;
+    }
+
+    @Override
+    public Result filter(org.apache.logging.log4j.core.Logger logger, Level level, Marker marker, String s, Object o, Object o1, Object o2, Object o3, Object o4, Object o5) {
+      return Result.NEUTRAL;
+    }
+
+    @Override
+    public Result filter(org.apache.logging.log4j.core.Logger logger, Level level, Marker marker, String s, Object o, Object o1, Object o2, Object o3, Object o4, Object o5, Object o6) {
+      return Result.NEUTRAL;
+    }
+
+    @Override
+    public Result filter(org.apache.logging.log4j.core.Logger logger, Level level, Marker marker, String s, Object o, Object o1, Object o2, Object o3, Object o4, Object o5, Object o6, Object o7) {
+      return Result.NEUTRAL;
+    }
+
+    @Override
+    public Result filter(org.apache.logging.log4j.core.Logger logger, Level level, Marker marker, String s, Object o, Object o1, Object o2, Object o3, Object o4, Object o5, Object o6, Object o7, Object o8) {
+      return Result.NEUTRAL;
+    }
+
+    @Override
+    public Result filter(org.apache.logging.log4j.core.Logger logger, Level level, Marker marker, String s, Object o, Object o1, Object o2, Object o3, Object o4, Object o5, Object o6, Object o7, Object o8, Object o9) {
+      return Result.NEUTRAL;
+    }
+
+    @Override
+    public Result filter(org.apache.logging.log4j.core.Logger logger, Level level, Marker marker, Object o, Throwable throwable) {
+      return Result.NEUTRAL;
+    }
+
+    @Override
+    public Result filter(org.apache.logging.log4j.core.Logger logger, Level level, Marker marker, Message message, Throwable throwable) {
+      return Result.NEUTRAL;
+    }
+
+    @Override
+    public Result filter(LogEvent logEvent) {
       OperationLog log = operationManager.getOperationLogByThread();
       boolean excludeMatches = (loggingMode == OperationLog.LoggingLevel.VERBOSE);
 
       if (log == null) {
-        return Filter.DENY;
+        return Result.DENY;
       }
 
       OperationLog.LoggingLevel currentLoggingMode = log.getOpLoggingLevel();
       // If logging is disabled, deny everything.
       if (currentLoggingMode == OperationLog.LoggingLevel.NONE) {
-        return Filter.DENY;
+        return Result.DENY;
       }
-      // Look at the current session's setting
+      // Look at the current session's setdoAppendting
       // and set the pattern and excludeMatches accordingly.
       if (currentLoggingMode != loggingMode) {
         loggingMode = currentLoggingMode;
         setCurrentNamePattern(loggingMode);
       }
 
-      boolean isMatch = namePattern.matcher(ev.getLoggerName()).matches();
+      boolean isMatch = namePattern.matcher(logEvent.getLoggerName()).matches();
 
       if (excludeMatches == isMatch) {
         // Deny if this is black-list filter (excludeMatches = true) and it
         // matched
         // or if this is whitelist filter and it didn't match
-        return Filter.DENY;
+        return Result.DENY;
       }
-      return Filter.NEUTRAL;
+      return Result.NEUTRAL;
+    }
+
+    @Override
+    public State getState() {
+      return state;
+    }
+
+    @Override
+    public void initialize() {
+      state = State.INITIALIZED;
+    }
+
+    @Override
+    public void start() {
+      state = State.STARTED;
+    }
+
+    @Override
+    public void stop() {
+      state = State.STOPPED;
+    }
+
+    @Override
+    public boolean isStarted() {
+      return state == State.STARTED;
+    }
+
+    @Override
+    public boolean isStopped() {
+      return state == State.STOPPED;
     }
   }
 
   /** This is where the log message will go to */
   private final CharArrayWriter writer = new CharArrayWriter();
 
-  private void setLayout(boolean isVerbose, Layout lo) {
+  private static StringLayout getLayout(boolean isVerbose, StringLayout lo) {
     if (isVerbose) {
       if (lo == null) {
         lo = CLIServiceUtils.verboseLayout;
@@ -139,38 +252,44 @@ public class LogDivertAppender extends WriterAppender {
     } else {
       lo = CLIServiceUtils.nonVerboseLayout;
     }
-    setLayout(lo);
+    return lo;
   }
 
-  private void initLayout(boolean isVerbose) {
-    // There should be a ConsoleAppender. Copy its Layout.
-    Logger root = Logger.getRootLogger();
-    Layout layout = null;
+  private static StringLayout initLayout(OperationLog.LoggingLevel loggingMode) {
+    boolean isVerbose = (loggingMode == OperationLog.LoggingLevel.VERBOSE);
 
-    Enumeration<?> appenders = root.getAllAppenders();
-    while (appenders.hasMoreElements()) {
-      Appender ap = (Appender) appenders.nextElement();
+    // There should be a ConsoleAppender. Copy its Layout.
+    org.apache.logging.log4j.core.Logger root = (org.apache.logging.log4j.core.Logger) LogManager.getRootLogger();
+    StringLayout layout = null;
+
+    Map<String, Appender> appenders = root.getAppenders();
+    for (Map.Entry<String, Appender> entry : appenders.entrySet()) {
+      Appender ap = entry.getValue();
       if (ap.getClass().equals(ConsoleAppender.class)) {
-        layout = ap.getLayout();
-        break;
+        Layout l = ap.getLayout();
+        if (l.getClass().equals(StringLayout.class)) {
+          layout = (StringLayout) l;
+          break;
+        }
       }
     }
-    setLayout(isVerbose, layout);
+    return getLayout(isVerbose, layout);
   }
 
   public LogDivertAppender(OperationManager operationManager,
     OperationLog.LoggingLevel loggingMode) {
-    isVerbose = (loggingMode == OperationLog.LoggingLevel.VERBOSE);
-    initLayout(isVerbose);
-    setWriter(writer);
-    setName("LogDivertAppender");
+    super("LogDivertAppender", initLayout(loggingMode), null, false, true,
+            new WriterManager(new CharArrayWriter(), "LogDivertAppender",
+                    initLayout(loggingMode), true));
+
+    this.isVerbose = (loggingMode == OperationLog.LoggingLevel.VERBOSE);
     this.operationManager = operationManager;
-    this.verboseLayout = isVerbose ? layout : CLIServiceUtils.verboseLayout;
+    this.verboseLayout = isVerbose ? getLayout() : CLIServiceUtils.verboseLayout;
     addFilter(new NameFilter(loggingMode, operationManager));
   }
 
   @Override
-  public void doAppend(LoggingEvent event) {
+  public void append(LogEvent event) {
     OperationLog log = operationManager.getOperationLogByThread();
 
     // Set current layout depending on the verbose/non-verbose mode.
@@ -181,24 +300,15 @@ public class LogDivertAppender extends WriterAppender {
       // the last subAppend call, change the layout to preserve consistency.
       if (isCurrModeVerbose != isVerbose) {
         isVerbose = isCurrModeVerbose;
-        setLayout(isVerbose, verboseLayout);
+        // setLayout(isVerbose, verboseLayout);
       }
     }
-    super.doAppend(event);
-  }
 
-  /**
-   * Overrides WriterAppender.subAppend(), which does the real logging. No need
-   * to worry about concurrency since log4j calls this synchronously.
-   */
-  @Override
-  protected void subAppend(LoggingEvent event) {
-    super.subAppend(event);
+
     // That should've gone into our writer. Notify the LogContext.
     String logOutput = writer.toString();
     writer.reset();
 
-    OperationLog log = operationManager.getOperationLogByThread();
     if (log == null) {
       LOG.debug(" ---+++=== Dropped log event from thread " + event.getThreadName());
       return;

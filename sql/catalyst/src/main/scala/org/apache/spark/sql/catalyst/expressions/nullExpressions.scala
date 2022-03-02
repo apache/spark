@@ -130,29 +130,6 @@ case class Coalesce(children: Seq[Expression]) extends ComplexTypeMergingExpress
 
 
 @ExpressionDescription(
-  usage = "_FUNC_(expr1, expr2) - Returns `expr2` if `expr1` is null, or `expr1` otherwise.",
-  examples = """
-    Examples:
-      > SELECT _FUNC_(NULL, array('2'));
-       ["2"]
-  """,
-  since = "2.0.0",
-  group = "conditional_funcs")
-case class IfNull(left: Expression, right: Expression, child: Expression)
-  extends RuntimeReplaceable {
-
-  def this(left: Expression, right: Expression) = {
-    this(left, right, Coalesce(Seq(left, right)))
-  }
-
-  override def flatArguments: Iterator[Any] = Iterator(left, right)
-  override def exprsReplaced: Seq[Expression] = Seq(left, right)
-
-  override protected def withNewChildInternal(newChild: Expression): IfNull = copy(child = newChild)
-}
-
-
-@ExpressionDescription(
   usage = "_FUNC_(expr1, expr2) - Returns null if `expr1` equals to `expr2`, or `expr1` otherwise.",
   examples = """
     Examples:
@@ -161,17 +138,18 @@ case class IfNull(left: Expression, right: Expression, child: Expression)
   """,
   since = "2.0.0",
   group = "conditional_funcs")
-case class NullIf(left: Expression, right: Expression, child: Expression)
-  extends RuntimeReplaceable {
+case class NullIf(left: Expression, right: Expression, replacement: Expression)
+  extends RuntimeReplaceable with InheritAnalysisRules {
 
   def this(left: Expression, right: Expression) = {
     this(left, right, If(EqualTo(left, right), Literal.create(null, left.dataType), left))
   }
 
-  override def flatArguments: Iterator[Any] = Iterator(left, right)
-  override def exprsReplaced: Seq[Expression] = Seq(left, right)
+  override def parameters: Seq[Expression] = Seq(left, right)
 
-  override protected def withNewChildInternal(newChild: Expression): NullIf = copy(child = newChild)
+  override protected def withNewChildInternal(newChild: Expression): NullIf = {
+    copy(replacement = newChild)
+  }
 }
 
 
@@ -184,16 +162,17 @@ case class NullIf(left: Expression, right: Expression, child: Expression)
   """,
   since = "2.0.0",
   group = "conditional_funcs")
-case class Nvl(left: Expression, right: Expression, child: Expression) extends RuntimeReplaceable {
+case class Nvl(left: Expression, right: Expression, replacement: Expression)
+  extends RuntimeReplaceable with InheritAnalysisRules {
 
   def this(left: Expression, right: Expression) = {
     this(left, right, Coalesce(Seq(left, right)))
   }
 
-  override def flatArguments: Iterator[Any] = Iterator(left, right)
-  override def exprsReplaced: Seq[Expression] = Seq(left, right)
+  override def parameters: Seq[Expression] = Seq(left, right)
 
-  override protected def withNewChildInternal(newChild: Expression): Nvl = copy(child = newChild)
+  override protected def withNewChildInternal(newChild: Expression): Nvl =
+    copy(replacement = newChild)
 }
 
 
@@ -208,17 +187,18 @@ case class Nvl(left: Expression, right: Expression, child: Expression) extends R
   since = "2.0.0",
   group = "conditional_funcs")
 // scalastyle:on line.size.limit
-case class Nvl2(expr1: Expression, expr2: Expression, expr3: Expression, child: Expression)
-  extends RuntimeReplaceable {
+case class Nvl2(expr1: Expression, expr2: Expression, expr3: Expression, replacement: Expression)
+  extends RuntimeReplaceable with InheritAnalysisRules {
 
   def this(expr1: Expression, expr2: Expression, expr3: Expression) = {
     this(expr1, expr2, expr3, If(IsNotNull(expr1), expr2, expr3))
   }
 
-  override def flatArguments: Iterator[Any] = Iterator(expr1, expr2, expr3)
-  override def exprsReplaced: Seq[Expression] = Seq(expr1, expr2, expr3)
+  override def parameters: Seq[Expression] = Seq(expr1, expr2, expr3)
 
-  override protected def withNewChildInternal(newChild: Expression): Nvl2 = copy(child = newChild)
+  override protected def withNewChildInternal(newChild: Expression): Nvl2 = {
+    copy(replacement = newChild)
+  }
 }
 
 

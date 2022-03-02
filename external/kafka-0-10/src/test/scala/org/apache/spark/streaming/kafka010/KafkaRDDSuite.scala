@@ -21,15 +21,17 @@ import java.{ util => ju }
 import java.io.File
 
 import scala.collection.JavaConverters._
+import scala.concurrent.duration._
 import scala.util.Random
 
-import kafka.log.{CleanerConfig, Log, LogCleaner, LogConfig, ProducerStateManager}
+import kafka.log.{CleanerConfig, LogCleaner, LogConfig, UnifiedLog}
 import kafka.server.{BrokerTopicStats, LogDirFailureChannel}
 import kafka.utils.Pool
 import org.apache.kafka.common.TopicPartition
 import org.apache.kafka.common.record.{CompressionType, MemoryRecords, SimpleRecord}
 import org.apache.kafka.common.serialization.StringDeserializer
 import org.scalatest.BeforeAndAfterAll
+import org.scalatest.concurrent.Eventually.{eventually, interval, timeout}
 
 import org.apache.spark._
 import org.apache.spark.scheduler.ExecutorCacheTaskLocation
@@ -84,7 +86,7 @@ class KafkaRDDSuite extends SparkFunSuite with BeforeAndAfterAll {
   private def compactLogs(topic: String, partition: Int,
       messages: Array[(String, String)]): Unit = {
     val mockTime = new MockTime()
-    val logs = new Pool[TopicPartition, Log]()
+    val logs = new Pool[TopicPartition, UnifiedLog]()
     val logDir = kafkaTestUtils.brokerLogDir
     val dir = new File(logDir, topic + "-" + partition)
     dir.mkdirs()
@@ -93,7 +95,7 @@ class KafkaRDDSuite extends SparkFunSuite with BeforeAndAfterAll {
     logProps.put(LogConfig.MinCleanableDirtyRatioProp, java.lang.Float.valueOf(0.1f))
     val logDirFailureChannel = new LogDirFailureChannel(1)
     val topicPartition = new TopicPartition(topic, partition)
-    val log = new Log(
+    val log = UnifiedLog(
       dir,
       LogConfig(logProps),
       0L,
@@ -103,9 +105,10 @@ class KafkaRDDSuite extends SparkFunSuite with BeforeAndAfterAll {
       mockTime,
       Int.MaxValue,
       Int.MaxValue,
-      topicPartition,
-      new ProducerStateManager(topicPartition, dir),
-      logDirFailureChannel
+      logDirFailureChannel,
+      lastShutdownClean = false,
+      topicId = None,
+      keepPartitionMetadataFile = false
     )
     messages.foreach { case (k, v) =>
       val record = new SimpleRecord(k.getBytes, v.getBytes)
@@ -201,6 +204,11 @@ class KafkaRDDSuite extends SparkFunSuite with BeforeAndAfterAll {
       sc, kafkaParams, offsetRanges, preferredHosts
     ).map(m => m.key -> m.value)
 
+    // To make it sure that the compaction happens
+    eventually(timeout(20.second), interval(1.seconds)) {
+      val dir = new File(kafkaTestUtils.brokerLogDir, topic + "-0")
+      assert(dir.listFiles().exists(_.getName.endsWith(".deleted")))
+    }
     val received = rdd.collect.toSet
     assert(received === compactedMessages.toSet)
 

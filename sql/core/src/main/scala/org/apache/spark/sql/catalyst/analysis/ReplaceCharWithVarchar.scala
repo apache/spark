@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.catalyst.catalog.CatalogTable
-import org.apache.spark.sql.catalyst.plans.logical.{AddColumns, AlterColumn, CreateV2Table, LogicalPlan, ReplaceColumns, ReplaceTable}
+import org.apache.spark.sql.catalyst.plans.logical.{AddColumns, AlterColumn, CreateTable, LogicalPlan, ReplaceColumns, ReplaceTable}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.execution.command.{AlterTableAddColumnsCommand, AlterTableChangeColumnCommand, CreateDataSourceTableCommand, CreateTableCommand}
@@ -31,7 +31,7 @@ object ReplaceCharWithVarchar extends Rule[LogicalPlan] {
 
     plan.resolveOperators {
       // V2 commands
-      case cmd: CreateV2Table =>
+      case cmd: CreateTable =>
         cmd.copy(tableSchema = replaceCharWithVarcharInSchema(cmd.tableSchema))
       case cmd: ReplaceTable =>
         cmd.copy(tableSchema = replaceCharWithVarcharInSchema(cmd.tableSchema))

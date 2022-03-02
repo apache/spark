@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
+import org.apache.spark.sql.catalyst.analysis.AnalysisContext
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeSet}
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.trees.{BinaryLike, LeafLike, UnaryLike}
@@ -50,5 +51,7 @@ trait AnalysisOnlyCommand extends Command {
   def childrenToAnalyze: Seq[LogicalPlan]
   override final def children: Seq[LogicalPlan] = if (isAnalyzed) Nil else childrenToAnalyze
   override def innerChildren: Seq[QueryPlan[_]] = if (isAnalyzed) childrenToAnalyze else Nil
-  def markAsAnalyzed(): LogicalPlan
+  // After the analysis finished, we give the command a chance to update it's state based
+  // on the `AnalysisContext`
+  def markAsAnalyzed(analysisContext: AnalysisContext): LogicalPlan
 }

@@ -19,6 +19,7 @@ package org.apache.spark.sql.types
 
 import java.util.Locale
 
+import scala.annotation.tailrec
 import scala.reflect.runtime.universe.typeTag
 
 import org.apache.spark.annotation.Stable
@@ -76,11 +77,14 @@ case class DecimalType(precision: Int, scale: Int) extends FractionalType {
    * Returns whether this DecimalType is wider than `other`. If yes, it means `other`
    * can be casted into `this` safely without losing any precision or range.
    */
-  private[sql] def isWiderThan(other: DataType): Boolean = other match {
+  private[sql] def isWiderThan(other: DataType): Boolean = isWiderThanInternal(other)
+
+  @tailrec
+  private def isWiderThanInternal(other: DataType): Boolean = other match {
     case dt: DecimalType =>
       (precision - scale) >= (dt.precision - dt.scale) && scale >= dt.scale
     case dt: IntegralType =>
-      isWiderThan(DecimalType.forType(dt))
+      isWiderThanInternal(DecimalType.forType(dt))
     case _ => false
   }
 
@@ -88,11 +92,14 @@ case class DecimalType(precision: Int, scale: Int) extends FractionalType {
    * Returns whether this DecimalType is tighter than `other`. If yes, it means `this`
    * can be casted into `other` safely without losing any precision or range.
    */
-  private[sql] def isTighterThan(other: DataType): Boolean = other match {
+  private[sql] def isTighterThan(other: DataType): Boolean = isTighterThanInternal(other)
+
+  @tailrec
+  private def isTighterThanInternal(other: DataType): Boolean = other match {
     case dt: DecimalType =>
       (precision - scale) <= (dt.precision - dt.scale) && scale <= dt.scale
     case dt: IntegralType =>
-      isTighterThan(DecimalType.forType(dt))
+      isTighterThanInternal(DecimalType.forType(dt))
     case _ => false
   }
 

@@ -27,11 +27,13 @@ import java.util.stream.StreamSupport;
 
 import com.google.common.collect.ImmutableSet;
 import org.apache.commons.io.FileUtils;
+import org.apache.commons.lang3.SystemUtils;
 import org.iq80.leveldb.DBIterator;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 import static org.junit.Assert.*;
+import static org.junit.Assume.assumeFalse;
 
 public class LevelDBSuite {
 
@@ -50,6 +52,7 @@ public class LevelDBSuite {
 
   @Before
   public void setup() throws Exception {
+    assumeFalse(SystemUtils.IS_OS_MAC_OSX && SystemUtils.OS_ARCH.equals("aarch64"));
     dbpath = File.createTempFile("test.", ".ldb");
     dbpath.delete();
     db = new LevelDB(dbpath);
@@ -326,13 +329,14 @@ public class LevelDBSuite {
     byte[] prefix = db.getTypeInfo(type).keyPrefix();
     int count = 0;
 
-    DBIterator it = db.db().iterator();
-    it.seek(prefix);
+    try (DBIterator it = db.db().iterator()) {
+      it.seek(prefix);
 
-    while (it.hasNext()) {
-      byte[] key = it.next().getKey();
-      if (LevelDBIterator.startsWith(key, prefix)) {
-        count++;
+      while (it.hasNext()) {
+        byte[] key = it.next().getKey();
+        if (LevelDBIterator.startsWith(key, prefix)) {
+          count++;
+        }
       }
     }
 

@@ -25,7 +25,7 @@ from typing import Union
 
 import pandas as pd
 
-from pyspark.pandas import config, namespace, sql_processor
+from pyspark.pandas import config, namespace, sql_formatter
 from pyspark.pandas.accessors import PandasOnSparkFrameMethods
 from pyspark.pandas.frame import DataFrame
 from pyspark.pandas.datetimes import DatetimeMethods
@@ -113,8 +113,8 @@ def attach(logger_module: Union[str, ModuleType]) -> None:
     except ImportError:
         pass
 
-    sql_processor._CAPTURE_SCOPES = 3
-    modules.append(sql_processor)
+    sql_formatter._CAPTURE_SCOPES = 4
+    modules.append(sql_formatter)
 
     # Modules
     for target_module in modules:

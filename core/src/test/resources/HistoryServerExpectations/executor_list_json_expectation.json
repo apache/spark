@@ -11,8 +11,8 @@
   "failedTasks" : 1,
   "completedTasks" : 31,
   "totalTasks" : 32,
-  "totalDuration" : 8820,
-  "totalGCTime" : 352,
+  "totalDuration" : 9011,
+  "totalGCTime" : 0,
   "totalInputBytes" : 28000288,
   "totalShuffleRead" : 0,
   "totalShuffleWrite" : 13180,
@@ -41,7 +41,8 @@
     "MinorGCCount" : 0,
     "MinorGCTime" : 0,
     "MajorGCCount" : 0,
-    "MajorGCTime" : 0
+    "MajorGCTime" : 0,
+    "TotalGCTime" : 0
   },
   "attributes" : { },
   "resources" : { },

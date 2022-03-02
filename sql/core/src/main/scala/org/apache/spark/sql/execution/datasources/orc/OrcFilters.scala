@@ -17,7 +17,8 @@
 
 package org.apache.spark.sql.execution.datasources.orc
 
-import java.time.{Duration, Instant, LocalDate, Period}
+import java.sql.Timestamp
+import java.time.{Duration, Instant, LocalDate, LocalDateTime, Period}
 
 import org.apache.hadoop.hive.common.`type`.HiveDecimal
 import org.apache.hadoop.hive.ql.io.sarg.{PredicateLeaf, SearchArgument}
@@ -25,7 +26,7 @@ import org.apache.hadoop.hive.ql.io.sarg.SearchArgument.Builder
 import org.apache.hadoop.hive.ql.io.sarg.SearchArgumentFactory.newBuilder
 import org.apache.hadoop.hive.serde2.io.HiveDecimalWritable
 
-import org.apache.spark.sql.catalyst.util.DateTimeUtils.{instantToMicros, localDateToDays, toJavaDate, toJavaTimestamp}
+import org.apache.spark.sql.catalyst.util.DateTimeUtils.{instantToMicros, localDateTimeToMicros, localDateToDays, toJavaDate, toJavaTimestamp}
 import org.apache.spark.sql.catalyst.util.IntervalUtils
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
@@ -146,7 +147,7 @@ private[sql] object OrcFilters extends OrcFiltersBase {
     case FloatType | DoubleType => PredicateLeaf.Type.FLOAT
     case StringType => PredicateLeaf.Type.STRING
     case DateType => PredicateLeaf.Type.DATE
-    case TimestampType => PredicateLeaf.Type.TIMESTAMP
+    case TimestampType | TimestampNTZType => PredicateLeaf.Type.TIMESTAMP
     case _: DecimalType => PredicateLeaf.Type.DECIMAL
     case _ => throw QueryExecutionErrors.unsupportedOperationForDataTypeError(dataType)
   }
@@ -168,6 +169,12 @@ private[sql] object OrcFilters extends OrcFiltersBase {
       toJavaDate(localDateToDays(value.asInstanceOf[LocalDate]))
     case _: TimestampType if value.isInstanceOf[Instant] =>
       toJavaTimestamp(instantToMicros(value.asInstanceOf[Instant]))
+    case _: TimestampNTZType if value.isInstanceOf[LocalDateTime] =>
+      val orcTimestamp = OrcUtils.toOrcNTZ(localDateTimeToMicros(value.asInstanceOf[LocalDateTime]))
+      // Hive meets OrcTimestamp will throw ClassNotFoundException, So convert it.
+      val timestamp = new Timestamp(orcTimestamp.getTime)
+      timestamp.setNanos(orcTimestamp.getNanos)
+      timestamp
     case _: YearMonthIntervalType =>
       IntervalUtils.periodToMonths(value.asInstanceOf[Period]).longValue()
     case _: DayTimeIntervalType =>

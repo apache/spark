@@ -50,7 +50,7 @@ class HivePartitionFilteringSuite(version: String)
   private val hValue = 0 to 4
   private val chunkValue = Seq("aa", "ab", "ba", "bb")
   private val dateValue = Seq("2019-01-01", "2019-01-02", "2019-01-03") ++ defaultPartition
-  private val dateStrValue = Seq("2020-01-01", "2020-01-02", "2020-01-03")
+  private val dateStrValue = Seq("2020-01-01", "2020-01-02", "2020-01-03", "20200104", "20200105")
   private val testPartitionCount =
     dsValue.size * hValue.size * chunkValue.size * dateValue.size * dateStrValue.size
 
@@ -633,6 +633,35 @@ class HivePartitionFilteringSuite(version: String)
 
       assert(filteredPartitions.size == 1 * hValue.size * chunkValue.size *
         dateValue.size * dateStrValue.size)
+    }
+  }
+
+  test("SPARK-35437: getPartitionsByFilter: relax cast if does not need timezone") {
+    // does not need time zone
+    Seq(("true", "20200104" :: Nil), ("false", dateStrValue)).foreach {
+      case (pruningFastFallbackEnabled, prunedPartition) =>
+        withSQLConf(pruningFastFallback -> pruningFastFallbackEnabled) {
+          testMetastorePartitionFiltering(
+            attr("datestr").cast(IntegerType) === 20200104,
+            dsValue,
+            hValue,
+            chunkValue,
+            dateValue,
+            prunedPartition)
+        }
+    }
+
+    // need time zone
+    Seq("true", "false").foreach { pruningFastFallbackEnabled =>
+      withSQLConf(pruningFastFallback -> pruningFastFallbackEnabled) {
+        testMetastorePartitionFiltering(
+          attr("datestr").cast(DateType) === Date.valueOf("2020-01-01"),
+          dsValue,
+          hValue,
+          chunkValue,
+          dateValue,
+          dateStrValue)
+      }
     }
   }
 

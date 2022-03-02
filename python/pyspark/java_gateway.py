@@ -64,13 +64,10 @@ def launch_gateway(conf=None, popen_kwargs=None):
         command = [os.path.join(SPARK_HOME, script)]
         if conf:
             for k, v in conf.getAll():
-                command += ['--conf', '%s=%s' % (k, v)]
+                command += ["--conf", "%s=%s" % (k, v)]
         submit_args = os.environ.get("PYSPARK_SUBMIT_ARGS", "pyspark-shell")
         if os.environ.get("SPARK_TESTING"):
-            submit_args = ' '.join([
-                "--conf spark.ui.enabled=false",
-                submit_args
-            ])
+            submit_args = " ".join(["--conf spark.ui.enabled=false", submit_args])
         command = command + shlex.split(submit_args)
 
         # Create a temporary directory where the gateway server should write the connection
@@ -87,14 +84,15 @@ def launch_gateway(conf=None, popen_kwargs=None):
             # Launch the Java gateway.
             popen_kwargs = {} if popen_kwargs is None else popen_kwargs
             # We open a pipe to stdin so that the Java gateway can die when the pipe is broken
-            popen_kwargs['stdin'] = PIPE
+            popen_kwargs["stdin"] = PIPE
             # We always set the necessary environment variables.
-            popen_kwargs['env'] = env
+            popen_kwargs["env"] = env
             if not on_windows:
                 # Don't send ctrl-c / SIGINT to the Java gateway:
                 def preexec_func():
                     signal.signal(signal.SIGINT, signal.SIG_IGN)
-                popen_kwargs['preexec_fn'] = preexec_func
+
+                popen_kwargs["preexec_fn"] = preexec_func
                 proc = Popen(command, **popen_kwargs)
             else:
                 # preexec_fn not supported on Windows
@@ -127,24 +125,23 @@ def launch_gateway(conf=None, popen_kwargs=None):
             # child processes in the tree (http://technet.microsoft.com/en-us/library/bb491009.aspx)
             def killChild():
                 Popen(["cmd", "/c", "taskkill", "/f", "/t", "/pid", str(proc.pid)])
+
             atexit.register(killChild)
 
     # Connect to the gateway (or client server to pin the thread between JVM and Python)
     if os.environ.get("PYSPARK_PIN_THREAD", "true").lower() == "true":
         gateway = ClientServer(
             java_parameters=JavaParameters(
-                port=gateway_port,
-                auth_token=gateway_secret,
-                auto_convert=True),
-            python_parameters=PythonParameters(
-                port=0,
-                eager_load=False))
+                port=gateway_port, auth_token=gateway_secret, auto_convert=True
+            ),
+            python_parameters=PythonParameters(port=0, eager_load=False),
+        )
     else:
         gateway = JavaGateway(
             gateway_parameters=GatewayParameters(
-                port=gateway_port,
-                auth_token=gateway_secret,
-                auto_convert=True))
+                port=gateway_port, auth_token=gateway_secret, auto_convert=True
+            )
+        )
 
     # Store a reference to the Popen object for use by the caller (e.g., in reading stdout/stderr)
     gateway.proc = proc

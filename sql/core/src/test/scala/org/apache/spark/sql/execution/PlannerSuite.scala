@@ -257,7 +257,7 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
           val numExchanges = collect(plan) {
             case exchange: ShuffleExchangeExec => exchange
           }.length
-          assert(numExchanges === 5)
+          assert(numExchanges === 3)
         }
 
         {
@@ -273,7 +273,7 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
           val numExchanges = collect(plan) {
             case exchange: ShuffleExchangeExec => exchange
           }.length
-          assert(numExchanges === 5)
+          assert(numExchanges === 3)
         }
 
       }
@@ -432,7 +432,7 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
   }
 
   test("EnsureRequirements should respect ClusteredDistribution's num partitioning") {
-    val distribution = ClusteredDistribution(Literal(1) :: Nil, Some(13))
+    val distribution = ClusteredDistribution(Literal(1) :: Nil, requiredNumPartitions = Some(13))
     // Number of partitions differ
     val finalPartitioning = HashPartitioning(Literal(1) :: Nil, 13)
     val childPartitioning = HashPartitioning(Literal(1) :: Nil, 5)

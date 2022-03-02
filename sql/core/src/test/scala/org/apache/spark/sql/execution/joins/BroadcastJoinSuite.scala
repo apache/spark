@@ -402,13 +402,12 @@ abstract class BroadcastJoinSuiteBase extends QueryTest with SQLTestUtils
         assert(b.buildSide === buildSide)
       case w: WholeStageCodegenExec =>
         assert(w.children.head.getClass.getSimpleName === joinMethod)
-        if (w.children.head.isInstanceOf[BroadcastNestedLoopJoinExec]) {
-          assert(
-            w.children.head.asInstanceOf[BroadcastNestedLoopJoinExec].buildSide === buildSide)
-        } else if (w.children.head.isInstanceOf[BroadcastHashJoinExec]) {
-          assert(w.children.head.asInstanceOf[BroadcastHashJoinExec].buildSide === buildSide)
-        } else {
-          fail()
+        w.children.head match {
+          case bnlj: BroadcastNestedLoopJoinExec =>
+            assert(bnlj.buildSide === buildSide)
+          case bhj: BroadcastHashJoinExec =>
+            assert(bhj.buildSide === buildSide)
+          case _ => fail()
         }
     }
   }
@@ -633,6 +632,32 @@ abstract class BroadcastJoinSuiteBase extends QueryTest with SQLTestUtils
           left = DummySparkPlan(outputPartitioning = HashPartitioning(Seq(l1, l2), 1)),
           right = DummySparkPlan())
         assert(bhj.outputPartitioning === PartitioningCollection(expected.take(limit)))
+      }
+    }
+  }
+
+  test("SPARK-37742: join planning shouldn't read invalid InMemoryRelation stats") {
+    withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "10") {
+      try {
+        val df1 = Seq(1).toDF("key")
+        val df2 = Seq((1, "1"), (2, "2")).toDF("key", "value")
+        df2.persist()
+        df2.queryExecution.toRdd
+
+        val df3 = df1.join(df2, Seq("key"), "inner")
+        val numCachedPlan = collect(df3.queryExecution.executedPlan) {
+          case i: InMemoryTableScanExec => i
+        }.size
+        // df2 should be cached.
+        assert(numCachedPlan === 1)
+
+        val numBroadCastHashJoin = collect(df3.queryExecution.executedPlan) {
+          case b: BroadcastHashJoinExec => b
+        }.size
+        // df2 should not be broadcasted.
+        assert(numBroadCastHashJoin === 0)
+      } finally {
+        spark.catalog.clearCache()
       }
     }
   }

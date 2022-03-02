@@ -23,7 +23,7 @@ import scala.collection.JavaConverters._
 import scala.reflect.ClassTag
 import scala.reflect.runtime.universe.TypeTag
 
-import org.apache.log4j.Level
+import org.apache.logging.log4j.Level
 import org.scalatest.matchers.must.Matchers
 
 import org.apache.spark.api.python.PythonEvalType
@@ -221,7 +221,9 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     val pl = plan.asInstanceOf[Project].projectList
 
     assert(pl(0).dataType == DoubleType)
-    assert(pl(1).dataType == DoubleType)
+    if (!SQLConf.get.ansiEnabled) {
+      assert(pl(1).dataType == DoubleType)
+    }
     assert(pl(2).dataType == DoubleType)
     assert(pl(3).dataType == DoubleType)
     assert(pl(4).dataType == DoubleType)
@@ -846,7 +848,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
         assert(logAppender.loggingEvents.size == count)
         assert(logAppender.loggingEvents.exists(
           e => e.getLevel == Level.WARN &&
-            e.getRenderedMessage.contains(message)))
+            e.getMessage.getFormattedMessage.contains(message)))
       }
 
       withLogAppender(logAppender) {
@@ -1149,5 +1151,29 @@ class AnalysisSuite extends AnalysisTest with Matchers {
         |""".stripMargin),
       "MISSING_COLUMN",
       Array("c.y", "x"))
+  }
+
+  test("SPARK-38118: Func(wrong_type) in the HAVING clause should throw data mismatch error") {
+    Seq("mean", "abs").foreach { func =>
+      assertAnalysisError(parsePlan(
+        s"""
+           |WITH t as (SELECT true c)
+           |SELECT t.c
+           |FROM t
+           |GROUP BY t.c
+           |HAVING ${func}(t.c) > 0d""".stripMargin),
+        Seq(s"cannot resolve '$func(t.c)' due to data type mismatch"),
+        false)
+
+      assertAnalysisError(parsePlan(
+        s"""
+           |WITH t as (SELECT true c, false d)
+           |SELECT (t.c AND t.d) c
+           |FROM t
+           |GROUP BY t.c
+           |HAVING ${func}(c) > 0d""".stripMargin),
+        Seq(s"cannot resolve '$func(t.c)' due to data type mismatch"),
+        false)
+    }
   }
 }

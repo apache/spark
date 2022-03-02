@@ -30,7 +30,7 @@ class PinThreadTests(unittest.TestCase):
     def setUpClass(cls):
         cls.old_pin_thread = os.environ.get("PYSPARK_PIN_THREAD")
         os.environ["PYSPARK_PIN_THREAD"] = "true"
-        cls.sc = SparkContext('local[4]', cls.__name__, conf=SparkConf())
+        cls.sc = SparkContext("local[4]", cls.__name__, conf=SparkConf())
 
     @classmethod
     def tearDownClass(cls):
@@ -47,6 +47,7 @@ class PinThreadTests(unittest.TestCase):
         jvm_thread_ids = []
 
         for i in range(10):
+
             def test_local_property():
                 jvm_thread_id = self.sc._jvm.java.lang.Thread.currentThread().getId()
                 jvm_thread_ids.append(jvm_thread_id)
@@ -66,6 +67,7 @@ class PinThreadTests(unittest.TestCase):
                     assert jvm_thread_id == self.sc._jvm.java.lang.Thread.currentThread().getId()
                 except Exception as e:
                     exceptions.append(e)
+
             threads.append(threading.Thread(target=test_local_property))
 
         for t in threads:
@@ -134,13 +136,13 @@ class PinThreadTests(unittest.TestCase):
 
         for i in thread_ids_to_cancel:
             self.assertTrue(
-                is_job_cancelled[i],
-                "Thread {i}: Job in group A was not cancelled.".format(i=i))
+                is_job_cancelled[i], "Thread {i}: Job in group A was not cancelled.".format(i=i)
+            )
 
         for i in thread_ids_to_run:
             self.assertFalse(
-                is_job_cancelled[i],
-                "Thread {i}: Job in group B did not succeeded.".format(i=i))
+                is_job_cancelled[i], "Thread {i}: Job in group B did not succeeded.".format(i=i)
+            )
 
     def test_inheritable_local_property(self):
         self.sc.setLocalProperty("a", "hi")
@@ -170,7 +172,8 @@ if __name__ == "__main__":
 
     try:
         import xmlrunner  # type: ignore[import]
-        testRunner = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2)
+
+        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:
         testRunner = None
     unittest.main(testRunner=testRunner, verbosity=2)

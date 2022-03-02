@@ -22,11 +22,15 @@ import java.util.UUID
 import org.apache.spark.sql.catalyst.expressions.PredicateHelper
 import org.apache.spark.sql.catalyst.plans.logical.{AppendData, LogicalPlan, OverwriteByExpression, OverwritePartitionsDynamic}
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.connector.catalog.Table
-import org.apache.spark.sql.connector.write.{LogicalWriteInfoImpl, SupportsDynamicOverwrite, SupportsOverwrite, SupportsTruncate, WriteBuilder}
+import org.apache.spark.sql.catalyst.streaming.InternalOutputModes._
+import org.apache.spark.sql.connector.catalog.{SupportsWrite, Table}
+import org.apache.spark.sql.connector.write.{LogicalWriteInfoImpl, SupportsDynamicOverwrite, SupportsOverwrite, SupportsTruncate, Write, WriteBuilder}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.datasources.DataSourceStrategy
+import org.apache.spark.sql.execution.streaming.sources.{MicroBatchWrite, WriteToMicroBatchDataSource}
+import org.apache.spark.sql.internal.connector.SupportsStreamingUpdateAsAppend
 import org.apache.spark.sql.sources.{AlwaysTrue, Filter}
+import org.apache.spark.sql.streaming.OutputMode
 
 /**
  * A rule that constructs logical writes.
@@ -77,6 +81,36 @@ object V2Writes extends Rule[LogicalPlan] with PredicateHelper {
       }
       val newQuery = DistributionAndOrderingUtils.prepareQuery(write, query, conf)
       o.copy(write = Some(write), query = newQuery)
+
+    case WriteToMicroBatchDataSource(
+        relation, table, query, queryId, writeOptions, outputMode, Some(batchId)) =>
+
+      val writeBuilder = newWriteBuilder(table, query, writeOptions, queryId)
+      val write = buildWriteForMicroBatch(table, writeBuilder, outputMode)
+      val microBatchWrite = new MicroBatchWrite(batchId, write.toStreaming)
+      val customMetrics = write.supportedCustomMetrics.toSeq
+      val newQuery = DistributionAndOrderingUtils.prepareQuery(write, query, conf)
+      WriteToDataSourceV2(relation, microBatchWrite, newQuery, customMetrics)
+  }
+
+  private def buildWriteForMicroBatch(
+      table: SupportsWrite,
+      writeBuilder: WriteBuilder,
+      outputMode: OutputMode): Write = {
+
+    outputMode match {
+      case Append =>
+        writeBuilder.build()
+      case Complete =>
+        // TODO: we should do this check earlier when we have capability API.
+        require(writeBuilder.isInstanceOf[SupportsTruncate],
+          table.name + " does not support Complete mode.")
+        writeBuilder.asInstanceOf[SupportsTruncate].truncate().build()
+      case Update =>
+        require(writeBuilder.isInstanceOf[SupportsStreamingUpdateAsAppend],
+          table.name + " does not support Update mode.")
+        writeBuilder.asInstanceOf[SupportsStreamingUpdateAsAppend].build()
+    }
   }
 
   private def isTruncate(filters: Array[Filter]): Boolean = {
@@ -86,12 +120,10 @@ object V2Writes extends Rule[LogicalPlan] with PredicateHelper {
   private def newWriteBuilder(
       table: Table,
       query: LogicalPlan,
-      writeOptions: Map[String, String]): WriteBuilder = {
+      writeOptions: Map[String, String],
+      queryId: String = UUID.randomUUID().toString): WriteBuilder = {
 
-    val info = LogicalWriteInfoImpl(
-      queryId = UUID.randomUUID().toString,
-      query.schema,
-      writeOptions.asOptions)
+    val info = LogicalWriteInfoImpl(queryId, query.schema, writeOptions.asOptions)
     table.asWritable.newWriteBuilder(info)
   }
 }

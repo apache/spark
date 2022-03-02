@@ -229,7 +229,9 @@ private[spark] class RestSubmissionClient(master: String) extends Logging {
    * Exposed for testing.
    */
   private[rest] def readResponse(connection: HttpURLConnection): SubmitRestProtocolResponse = {
+    // scalastyle:off executioncontextglobal
     import scala.concurrent.ExecutionContext.Implicits.global
+    // scalastyle:on executioncontextglobal
     val responseFuture = Future {
       val responseCode = connection.getResponseCode
 

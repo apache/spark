@@ -30,7 +30,9 @@ import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.tags.SlowHiveTest
 
+@SlowHiveTest
 class HiveCommandSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
 
   protected override def beforeAll(): Unit = {
@@ -118,46 +120,6 @@ class HiveCommandSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
         sql("SHOW VIEWS IN default LIKE 'show1*|show2*'"),
         Row("default", "show1a", false) ::
           Row("default", "show2b", false) :: Nil)
-    }
-  }
-
-  test("show tblproperties of data source tables - basic") {
-    checkAnswer(
-      sql("SHOW TBLPROPERTIES parquet_tab1").filter(s"key = 'my_key1'"),
-      Row("my_key1", "v1") :: Nil
-    )
-
-    checkAnswer(
-      sql(s"SHOW TBLPROPERTIES parquet_tab1('my_key1')"),
-      Row("my_key1", "v1") :: Nil
-    )
-  }
-
-  test("show tblproperties for datasource table - errors") {
-    val message = intercept[AnalysisException] {
-      sql("SHOW TBLPROPERTIES badtable")
-    }.getMessage
-    assert(message.contains("Table or view not found: badtable"))
-
-    // When key is not found, a row containing the error is returned.
-    checkAnswer(
-      sql("SHOW TBLPROPERTIES parquet_tab1('invalid.prop.key')"),
-      Row("invalid.prop.key",
-        "Table default.parquet_tab1 does not have property: invalid.prop.key") :: Nil
-    )
-  }
-
-  test("SPARK-34240 Unify output of SHOW TBLPROPERTIES and pass output attributes properly") {
-    checkAnswer(sql("SHOW TBLPROPERTIES parquet_tab2").filter("key != 'transient_lastDdlTime'"),
-      Row("prop1Key", "prop1Val") :: Row("`prop2Key`", "prop2Val") :: Nil)
-    checkAnswer(sql("SHOW TBLPROPERTIES parquet_tab2('prop1Key')"), Row("prop1Key", "prop1Val"))
-    checkAnswer(sql("SHOW TBLPROPERTIES parquet_tab2('`prop2Key`')"), Row("`prop2Key`", "prop2Val"))
-    withSQLConf(SQLConf.LEGACY_KEEP_COMMAND_OUTPUT_SCHEMA.key -> "true") {
-      checkAnswer(sql("SHOW TBLPROPERTIES parquet_tab2").filter("key != 'transient_lastDdlTime'"),
-        Row("prop1Key", "prop1Val") :: Row("`prop2Key`", "prop2Val") :: Nil)
-      checkAnswer(sql("SHOW TBLPROPERTIES parquet_tab2('prop1Key')"), Row("prop1Val"))
-      checkAnswer(sql("SHOW TBLPROPERTIES parquet_tab2('`prop2Key`')"),
-        Row("prop2Val"))
     }
   }
 

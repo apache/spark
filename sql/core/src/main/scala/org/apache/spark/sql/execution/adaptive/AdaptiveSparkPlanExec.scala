@@ -116,9 +116,10 @@ case class AdaptiveSparkPlanExec(
     Seq(
       RemoveRedundantProjects,
       ensureRequirements,
+      ReplaceHashWithSortAgg,
       RemoveRedundantSorts,
       DisableUnnecessaryBucketedScan,
-      OptimizeSkewedJoin(ensureRequirements, costEvaluator)
+      OptimizeSkewedJoin(ensureRequirements)
     ) ++ context.session.sessionState.queryStagePrepRules
   }
 
@@ -409,7 +410,6 @@ case class AdaptiveSparkPlanExec(
         if (isFinalPlan) "Final Plan" else "Current Plan",
         currentPhysicalPlan,
         depth,
-        lastChildren,
         append,
         verbose,
         maxFields,
@@ -418,7 +418,6 @@ case class AdaptiveSparkPlanExec(
         "Initial Plan",
         initialPlan,
         depth,
-        lastChildren,
         append,
         verbose,
         maxFields,
@@ -431,7 +430,6 @@ case class AdaptiveSparkPlanExec(
       header: String,
       plan: SparkPlan,
       depth: Int,
-      lastChildren: Seq[Boolean],
       append: String => Unit,
       verbose: Boolean,
       maxFields: Int,

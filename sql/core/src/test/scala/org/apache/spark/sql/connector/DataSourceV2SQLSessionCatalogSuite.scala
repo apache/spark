@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.connector
 
-import org.apache.spark.sql.{DataFrame, Row, SaveMode}
+import org.apache.spark.sql.{DataFrame, SaveMode}
 import org.apache.spark.sql.connector.catalog.{Identifier, InMemoryTable, Table, TableCatalog}
 
 class DataSourceV2SQLSessionCatalogSuite
@@ -61,22 +61,6 @@ class DataSourceV2SQLSessionCatalogSuite
         // The following should not throw AnalysisException.
         sql(s"DESCRIBE TABLE ignored.$t1")
       }
-    }
-  }
-
-  test("SPARK-31624: SHOW TBLPROPERTIES working with V2 tables and the session catalog") {
-    val t1 = "tbl"
-    withTable(t1) {
-      sql(s"CREATE TABLE $t1 (id bigint, data string) USING $v2Format TBLPROPERTIES " +
-        "(key='v', key2='v2')")
-
-      checkAnswer(sql(s"SHOW TBLPROPERTIES $t1"), Seq(Row("key", "v"), Row("key2", "v2")))
-
-      checkAnswer(sql(s"SHOW TBLPROPERTIES $t1('key')"), Row("key", "v"))
-
-      checkAnswer(
-        sql(s"SHOW TBLPROPERTIES $t1('keyX')"),
-        Row("keyX", s"Table default.$t1 does not have property: keyX"))
     }
   }
 

@@ -23,20 +23,19 @@ from pyspark.streaming.context import StreamingContext
 from pyspark.util import _print_missing_jar  # type: ignore[attr-defined]
 
 
-__all__ = ['KinesisUtils', 'InitialPositionInStream', 'utf8_decoder']
+__all__ = ["KinesisUtils", "InitialPositionInStream", "utf8_decoder"]
 
 T = TypeVar("T")
 
 
 def utf8_decoder(s: Optional[bytes]) -> Optional[str]:
-    """ Decode the unicode as UTF-8 """
+    """Decode the unicode as UTF-8"""
     if s is None:
         return None
-    return s.decode('utf-8')
+    return s.decode("utf-8")
 
 
-class KinesisUtils(object):
-
+class KinesisUtils:
     @staticmethod
     @overload
     def createStream(
@@ -90,8 +89,7 @@ class KinesisUtils(object):
         awsAccessKeyId: Optional[str] = None,
         awsSecretKey: Optional[str] = None,
         decoder: Union[
-            Callable[[Optional[bytes]], T],
-            Callable[[Optional[bytes]], Optional[str]]
+            Callable[[Optional[bytes]], T], Callable[[Optional[bytes]], Optional[str]]
         ] = utf8_decoder,
         stsAssumeRoleArn: Optional[str] = None,
         stsSessionName: Optional[str] = None,
@@ -158,18 +156,18 @@ class KinesisUtils(object):
         jlevel = ssc._sc._getJavaStorageLevel(storageLevel)  # type: ignore[attr-defined]
         jduration = ssc._jduration(checkpointInterval)  # type: ignore[attr-defined]
 
+        jvm = ssc._jvm  # type: ignore[attr-defined]
+
         try:
-            helper = (
-                ssc._jvm.org.apache.spark.streaming.kinesis  # type: ignore[attr-defined]
-                .KinesisUtilsPythonHelper()
-            )
+            helper = jvm.org.apache.spark.streaming.kinesis.KinesisUtilsPythonHelper()
         except TypeError as e:
             if str(e) == "'JavaPackage' object is not callable":
                 _print_missing_jar(
                     "Streaming's Kinesis",
                     "streaming-kinesis-asl",
                     "streaming-kinesis-asl-assembly",
-                    ssc.sparkContext.version)
+                    ssc.sparkContext.version,
+                )
             raise
         jstream = helper.createStream(
             ssc._jssc,  # type: ignore[attr-defined]
@@ -184,11 +182,11 @@ class KinesisUtils(object):
             awsSecretKey,
             stsAssumeRoleArn,
             stsSessionName,
-            stsExternalId
+            stsExternalId,
         )
         stream: DStream = DStream(jstream, ssc, NoOpSerializer())
         return stream.map(lambda v: decoder(v))
 
 
-class InitialPositionInStream(object):
+class InitialPositionInStream:
     LATEST, TRIM_HORIZON = (0, 1)

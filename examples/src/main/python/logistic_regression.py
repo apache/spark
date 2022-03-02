@@ -42,6 +42,7 @@ def readPointBatch(iterator):
         matrix[i] = np.fromstring(s.replace(',', ' '), dtype=np.float32, sep=' ')
     return [matrix]
 
+
 if __name__ == "__main__":
 
     if len(sys.argv) != 3:

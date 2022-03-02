@@ -178,6 +178,7 @@ DataFrame APIs
     DataFrame.limit
     DataFrame.localCheckpoint
     DataFrame.mapInPandas
+    DataFrame.mapInArrow
     DataFrame.na
     DataFrame.observe
     DataFrame.orderBy
@@ -200,6 +201,7 @@ DataFrame APIs
     DataFrame.show
     DataFrame.sort
     DataFrame.sortWithinPartitions
+    DataFrame.sparkSession
     DataFrame.stat
     DataFrame.storageLevel
     DataFrame.subtract
@@ -222,7 +224,7 @@ DataFrame APIs
     DataFrame.write
     DataFrame.writeStream
     DataFrame.writeTo
-    DataFrame.to_pandas_on_spark
+    DataFrame.pandas_api
     DataFrameNaFunctions.drop
     DataFrameNaFunctions.fill
     DataFrameNaFunctions.replace
@@ -302,6 +304,7 @@ Data Types
     StructType
     TimestampNTZType
     TimestampType
+    DayTimeIntervalType
 
 
 Observation

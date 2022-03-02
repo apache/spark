@@ -308,7 +308,7 @@ private[kafka010] class KafkaOffsetReaderAdmin(
          * latest offset (offset in `knownOffsets` is great than the one in `partitionOffsets`).
          */
         def findIncorrectOffsets(): Seq[(TopicPartition, Long, Long)] = {
-          var incorrectOffsets = ArrayBuffer[(TopicPartition, Long, Long)]()
+          val incorrectOffsets = ArrayBuffer[(TopicPartition, Long, Long)]()
           partitionOffsets.foreach { case (tp, offset) =>
             knownOffsets.foreach(_.get(tp).foreach { knownOffset =>
               if (knownOffset > offset) {
@@ -387,11 +387,11 @@ private[kafka010] class KafkaOffsetReaderAdmin(
 
     // Calculate offset ranges
     val offsetRangesBase = untilPartitionOffsets.keySet.map { tp =>
-      val fromOffset = fromPartitionOffsets.get(tp).getOrElse {
+      val fromOffset = fromPartitionOffsets.getOrElse(tp,
         // This should not happen since topicPartitions contains all partitions not in
         // fromPartitionOffsets
         throw new IllegalStateException(s"$tp doesn't have a from offset")
-      }
+      )
       val untilOffset = untilPartitionOffsets(tp)
       KafkaOffsetRange(tp, fromOffset, untilOffset, None)
     }.toSeq
