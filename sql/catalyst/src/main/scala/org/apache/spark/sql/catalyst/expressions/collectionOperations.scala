@@ -139,10 +139,7 @@ object Size {
  */
 @ExpressionDescription(
   usage = """
-    _FUNC_(expr) - Returns the size of an array.
-    The function returns null for null input if spark.sql.legacy.sizeOfNull is set to false or
-    spark.sql.ansi.enabled is set to true. Otherwise, the function returns -1 for null input.
-    With the default settings, the function returns -1 for null input.
+    _FUNC_(expr) - Returns the size of an array. The function returns null for null input.
   """,
   examples = """
     Examples:
@@ -151,33 +148,17 @@ object Size {
   """,
   since = "3.3.0",
   group = "collection_funcs")
-case class ArraySize(expr: Expression, legacySizeOfNull: Option[Boolean]) extends RuntimeReplaceable
-  with ImplicitCastInputTypes {
-  override lazy val replacement: Expression =
-    if (legacySizeOfNull.isDefined) Size(expr, legacySizeOfNull.get) else Size(expr)
-
-  def this(expr: Expression) = this(expr, None)
-
-  def this(expr: Expression, legacySizeOfNull: Boolean) = this(expr, Some(legacySizeOfNull))
+case class ArraySize(expr: Expression) extends RuntimeReplaceable with ImplicitCastInputTypes {
+  override lazy val replacement: Expression = Size(expr, legacySizeOfNull = false)
 
   override def prettyName: String = "array_size"
 
-  override def children: Seq[Expression] = legacySizeOfNull match {
-    case Some(flag) => Seq(expr, Literal(flag, BooleanType))
-    case None => Seq(expr)
-  }
+  override def children: Seq[Expression] = Seq(expr)
 
-  override def inputTypes: Seq[AbstractDataType] = legacySizeOfNull match {
-    case Some(_) => Seq(ArrayType, BooleanType)
-    case None => Seq(ArrayType)
-  }
+  override def inputTypes: Seq[AbstractDataType] = Seq(ArrayType)
 
   override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): ArraySize =
-    legacySizeOfNull match {
-      case Some(flag) => copy(expr = newChildren.head,
-        legacySizeOfNull = Some(newChildren.last.eval().asInstanceOf[Boolean]))
-      case None => copy(expr = newChildren.head)
-    }
+    copy(expr = newChildren.head)
 }
 
 /**
