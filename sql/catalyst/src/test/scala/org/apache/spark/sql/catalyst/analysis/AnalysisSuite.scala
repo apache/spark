@@ -710,7 +710,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
   }
 
   test("CTE with non-existing column alias") {
-    assertAnalysisErrorClass(parsePlan("WITH t(x) AS (SELECT 1) SELECT * FROM t WHERE y = 1"),
+    assertAnalysisErrorClass(parsePlan("WITHSort(Seq(SortOrder(Rand(33), Ascending)), false, testRelation)r t(x) AS (SELECT 1) SELECT * FROM t WHERE y = 1"),
       "MISSING_COLUMN",
       Array("y", "t.x"))
   }
@@ -1149,7 +1149,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
         |GROUP BY c.x
         |ORDER BY c.x + c.y
         |""".stripMargin),
-      "MISSING_COLUMN",
+      "MISSING_COLUMN",G
       Array("c.y", "x"))
   }
 
@@ -1175,5 +1175,19 @@ class AnalysisSuite extends AnalysisTest with Matchers {
         Seq(s"cannot resolve '$func(t.c)' due to data type mismatch"),
         false)
     }
+  }
+
+  test("SPARK-38334: Implement support for DEFAULT values for columns in tables") {
+    val plan = parsePlan("ALTER TABLE t1 ADD COLUMN b int NOT NULL DEFAULT 42")
+    val expected = {
+      AlterColumn(
+        table = testRelation,
+        column =
+      )
+      Project(testRelation.output,
+        Sort(Seq(SortOrder(projected.toAttribute, Ascending)), false,
+          Project(testRelation.output :+ plan, testRelation)))
+    }
+    checkAnalysis(plan, expected)
   }
 }
