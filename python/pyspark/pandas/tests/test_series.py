@@ -1163,7 +1163,7 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
         psser = ps.from_pandas(pser)
 
         # dict correspondence
-        # Currently Koalas doesn't return NaN as pandas does.
+        # Currently pandas API on Spark doesn't return NaN as pandas does.
         self.assert_eq(psser.map({}), pser.map({}).replace({pd.np.nan: None}))
 
         d = defaultdict(lambda: "abc")
