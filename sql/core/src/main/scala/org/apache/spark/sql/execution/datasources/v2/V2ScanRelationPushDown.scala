@@ -29,7 +29,7 @@ import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.connector.expressions.{SortOrder => V2SortOrder}
 import org.apache.spark.sql.connector.expressions.aggregate.{Aggregation, Avg, Count, GeneralAggregateFunc, Sum}
 import org.apache.spark.sql.connector.expressions.filter.Predicate
-import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownAggregates, SupportsPushDownFilters, V1Scan}
+import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownAggregates, SupportsPushDownFilters, SupportsPushDownTopN, V1Scan}
 import org.apache.spark.sql.execution.datasources.DataSourceStrategy
 import org.apache.spark.sql.sources
 import org.apache.spark.sql.types.{DataType, DayTimeIntervalType, LongType, StructType, YearMonthIntervalType}
@@ -385,7 +385,11 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper wit
         if (topNPushed) {
           sHolder.pushedLimit = Some(limit)
           sHolder.sortOrders = orders
-          operation
+          sHolder.builder match {
+            case s: SupportsPushDownTopN if s.supportCompleteSortPushDown() =>
+              operation
+            case _ => s
+          }
         } else {
           s
         }

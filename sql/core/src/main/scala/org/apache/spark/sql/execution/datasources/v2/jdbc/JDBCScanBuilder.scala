@@ -72,7 +72,7 @@ case class JDBCScanBuilder(
 
   private var pushedGroupByCols: Option[Array[String]] = None
 
-  override def supportCompletePushDown(aggregation: Aggregation): Boolean = {
+  override def supportCompleteAggregationPushDown(aggregation: Aggregation): Boolean = {
     lazy val fieldNames = aggregation.groupByColumns()(0).fieldNames()
     jdbcOptions.numPartitions.map(_ == 1).getOrElse(true) ||
       (aggregation.groupByColumns().length == 1 && fieldNames.length == 1 &&
@@ -135,6 +135,10 @@ case class JDBCScanBuilder(
       return true
     }
     false
+  }
+
+  override def supportCompleteSortPushDown(): Boolean = {
+    jdbcOptions.numPartitions.map(_ == 1).getOrElse(true)
   }
 
   override def pushTopN(orders: Array[SortOrder], limit: Int): Boolean = {

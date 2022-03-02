@@ -32,6 +32,14 @@ import org.apache.spark.sql.connector.expressions.SortOrder;
 public interface SupportsPushDownTopN extends ScanBuilder {
 
     /**
+     * Whether the datasource support complete sort push-down. Spark will do sort again
+     * if this method returns false.
+     *
+     * @return true if the sort can be pushed down to datasource completely, false otherwise.
+     */
+    default boolean supportCompleteSortPushDown() { return false; }
+
+    /**
      * Pushes down top N to the data source.
      */
     boolean pushTopN(SortOrder[] orders, int limit);
