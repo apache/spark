@@ -267,33 +267,33 @@ Invalid index: -1, numElements: 3. If necessary set spark.sql.ansi.strictIndexOp
 
 
 -- !query
-select array_size(array()) = size(array())
+select array_size(array())
 -- !query schema
-struct<(array_size(array()) = size(array())):boolean>
+struct<array_size(array()):int>
 -- !query output
-true
+0
 
 
 -- !query
-select array_size(array(true)) = size(array(true))
+select array_size(array(true))
 -- !query schema
-struct<(array_size(array(true)) = size(array(true))):boolean>
+struct<array_size(array(true)):int>
 -- !query output
-true
+1
 
 
 -- !query
-select array_size(array(2, 1)) = size(array(2, 1))
+select array_size(array(2, 1))
 -- !query schema
-struct<(array_size(array(2, 1)) = size(array(2, 1))):boolean>
+struct<array_size(array(2, 1)):int>
 -- !query output
-true
+2
 
 
 -- !query
-select array_size(NULL) = size(NULL)
+select array_size(NULL)
 -- !query schema
-struct<(array_size(NULL) = size(NULL)):boolean>
+struct<array_size(NULL):int>
 -- !query output
 NULL
 
