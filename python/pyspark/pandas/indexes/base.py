@@ -606,7 +606,11 @@ class Index(IndexOpsMixin):
                     "If the mapper is a dictionary, its values must be of the same type"
                 )
 
-        return Index(self.to_series().map(mapper, na_action)).rename(self.name)
+        return Index(
+            self.to_series().pandas_on_spark.transform_batch(
+                lambda pser: pser.map(mapper, na_action)
+            )
+        ).rename(self.name)
 
     @property
     def values(self) -> np.ndarray:
