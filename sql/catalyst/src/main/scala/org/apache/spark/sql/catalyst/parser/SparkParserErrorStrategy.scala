@@ -17,12 +17,10 @@
 
 package org.apache.spark.sql.catalyst.parser
 
-import scala.collection.JavaConverters._
 import scala.util.{Failure, Success, Try}
 
-import org.antlr.v4.runtime.{DefaultErrorStrategy, InputMismatchException, IntStream, Parser, ParserRuleContext, RecognitionException, Recognizer}
-
-import org.apache.spark.unsafe.types.UTF8String
+import org.antlr.v4.runtime.{DefaultErrorStrategy, InputMismatchException, IntStream, Parser,
+  ParserRuleContext, RecognitionException, Recognizer}
 
 /**
  * A [[SparkRecognitionException]] extends the [[RecognitionException]] with more information
@@ -47,7 +45,7 @@ private[parser] class SparkRecognitionException(
       recognitionException.getMessage,
       recognitionException.getRecognizer,
       recognitionException.getInputStream,
-      Try {recognitionException.getCtx.asInstanceOf[ParserRuleContext]} match {
+      Try { recognitionException.getCtx.asInstanceOf[ParserRuleContext] } match {
         case Success(value) => value
         case Failure(_) => null
       },
@@ -70,15 +68,6 @@ class SparkParserErrorStrategy() extends DefaultErrorStrategy {
       this.getTokenErrorDisplay(e.getOffendingToken) +
       " expecting " +
       e.getExpectedTokens.toString(recognizer.getVocabulary)
-    val expectedTokens = e.getExpectedTokens.toSet.asScala.toList
-
-    val expectedTokenNames = expectedTokens.map(i => recognizer.getVocabulary.getDisplayName(i))
-    val offendingTokenName = getTokenErrorDisplay(e.getOffendingToken)
-    val sorted = expectedTokenNames.map(token =>
-      (token,
-        UTF8String.fromString(offendingTokenName.drop(1).dropRight(1).toLowerCase())
-        .levenshteinDistance(UTF8String.fromString(token.drop(1).dropRight(1).toLowerCase()))))
-      .sortWith(_._2 < _._2)
 
     val exceptionWithErrorClass = new SparkRecognitionException(
       e,
