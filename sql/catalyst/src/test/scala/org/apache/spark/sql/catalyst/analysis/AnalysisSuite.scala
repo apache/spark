@@ -1178,6 +1178,8 @@ class AnalysisSuite extends AnalysisTest with Matchers {
   }
 
   test("SPARK-38334: Implement support for DEFAULT values for columns in tables") {
+    // The default value expression is set at parsing time and then resolved normally.
+    // In this test case, there is no change to the LogicalPlan during the analysis step.
     val plan =
       AddColumns(
         testRelation,
