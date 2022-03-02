@@ -757,9 +757,9 @@ partitionField
     ;
 
 transform
-    : qualifiedName                                                           #identityTransform
+    : qualifiedName                                                                             #identityTransform
     | transformName=identifier
-      LEFT_PAREN argument+=transformArgument (COMMA argument+=transformArgument)* RIGHT_PAREN  #applyTransform
+      LEFT_PAREN argument+=transformArgument (COMMA argument+=transformArgument)* RIGHT_PAREN   #applyTransform
     ;
 
 transformArgument
@@ -777,7 +777,7 @@ expressionSeq
 
 booleanExpression
     : NOT booleanExpression                                        #logicalNot
-    | EXISTS LEFT_PAREN query RIGHT_PAREN                                         #exists
+    | EXISTS LEFT_PAREN query RIGHT_PAREN                          #exists
     | valueExpression predicate?                                   #predicated
     | left=booleanExpression operator=AND right=booleanExpression  #logicalBinary
     | left=booleanExpression operator=OR right=booleanExpression   #logicalBinary
@@ -813,7 +813,7 @@ primaryExpression
     | CASE whenClause+ (ELSE elseExpression=expression)? END                                   #searchedCase
     | CASE value=expression whenClause+ (ELSE elseExpression=expression)? END                  #simpleCase
     | name=(CAST | TRY_CAST) LEFT_PAREN expression AS dataType RIGHT_PAREN                     #cast
-    | STRUCT LEFT_PAREN (argument+=namedExpression (COMMA argument+=namedExpression)*)? RIGHT_PAREN  #struct
+    | STRUCT LEFT_PAREN (argument+=namedExpression (COMMA argument+=namedExpression)*)? RIGHT_PAREN #struct
     | FIRST LEFT_PAREN expression (IGNORE NULLS)? RIGHT_PAREN                                  #first
     | LAST LEFT_PAREN expression (IGNORE NULLS)? RIGHT_PAREN                                   #last
     | POSITION LEFT_PAREN substr=valueExpression IN str=valueExpression RIGHT_PAREN            #position
