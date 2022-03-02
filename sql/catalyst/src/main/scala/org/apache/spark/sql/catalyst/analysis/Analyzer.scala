@@ -42,7 +42,7 @@ import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
 import org.apache.spark.sql.catalyst.trees.{AlwaysProcess, CurrentOrigin}
 import org.apache.spark.sql.catalyst.trees.TreePattern._
-import org.apache.spark.sql.catalyst.util.{toPrettySQL, CharVarcharUtils}
+import org.apache.spark.sql.catalyst.util.{toPrettySQL, CharVarcharUtils, IntervalUtils}
 import org.apache.spark.sql.connector.catalog._
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.connector.catalog.TableChange.{After, ColumnPosition}
@@ -4033,14 +4033,18 @@ object SessionWindowing extends Rule[LogicalPlan] {
         }
 
         // As same as tumbling window, we add a filter to filter out nulls.
-        // And we also filter out events with negative or zero gap duration.
+        // And we also filter out events with negative or zero or invalid gap duration.
         val children = gapDuration.child.children
         val validGapDuration = if (children.size == 0) {
-          gapDuration.child.toString.startsWith("-") ||
-            gapDuration.child.toString.startsWith("0")
+          val child = gapDuration.child.toString
+          child.startsWith("-") || child.startsWith("0") || child.startsWith("null")
         } else {
-          children.toStream.exists(e =>
-            e.toString.startsWith("-") || e.toString.startsWith("0")) ||
+          children.toStream
+            .filter(_.dataType != BooleanType)
+            .exists(e =>
+            e.toString.startsWith("-") ||
+              e.toString.startsWith("0") ||
+              IntervalUtils.safeStringToInterval(UTF8String.fromString(e.toString)) == null) ||
             // User defined functions are not resolved here
             !gapDuration.child.getField("udfName")
               .child.toString.toLowerCase(Locale.ROOT).startsWith("case when")
