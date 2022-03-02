@@ -251,7 +251,7 @@ public class HiveAuthFactory {
     }
   }
 
-  public static TTransport getSocketTransport(String host, int port, int loginTimeout) throws TTransportException {
+  public static TTransport getSocketTransport(String host, int port, int loginTimeout) {
     return new TSocket(host, port, loginTimeout);
   }
 
