@@ -741,10 +741,9 @@ struct<timestampadd(YEAR, 1, DATE '2022-02-25'):timestamp>
 -- !query
 select date_diff(MICROSECOND, timestamp'2022-02-25 01:02:03.123', timestamp'2022-02-25 01:02:03.124001')
 -- !query schema
-struct<>
+struct<timestampdiff(MICROSECOND, TIMESTAMP '2022-02-25 01:02:03.123', TIMESTAMP '2022-02-25 01:02:03.124001'):bigint>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Undefined function: date_diff. This function is neither a built-in/temporary function, nor a persistent function that is qualified as spark_catalog.default.date_diff.; line 1 pos 7
+1001
 
 
 -- !query
@@ -758,10 +757,9 @@ struct<timestampdiff(MILLISECOND, TIMESTAMP '2022-02-25 01:02:03.456', TIMESTAMP
 -- !query
 select date_diff(SECOND, timestamp'2022-02-25 01:02:03', timestamp'2022-02-25 01:03:01')
 -- !query schema
-struct<>
+struct<timestampdiff(SECOND, TIMESTAMP '2022-02-25 01:02:03', TIMESTAMP '2022-02-25 01:03:01'):bigint>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Undefined function: date_diff. This function is neither a built-in/temporary function, nor a persistent function that is qualified as spark_catalog.default.date_diff.; line 1 pos 7
+58
 
 
 -- !query
@@ -775,10 +773,9 @@ struct<timestampdiff(MINUTE, DATE '2022-02-25', TIMESTAMP '2022-02-24 22:20:00')
 -- !query
 select date_diff(HOUR, timestamp'2022-02-25 01:02:03', timestamp'2022-02-25 00:02:03')
 -- !query schema
-struct<>
+struct<timestampdiff(HOUR, TIMESTAMP '2022-02-25 01:02:03', TIMESTAMP '2022-02-25 00:02:03'):bigint>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Undefined function: date_diff. This function is neither a built-in/temporary function, nor a persistent function that is qualified as spark_catalog.default.date_diff.; line 1 pos 7
+-1
 
 
 -- !query
@@ -792,10 +789,9 @@ struct<timestampdiff(DAY, DATE '2022-02-25', TIMESTAMP '2023-02-27 00:00:00'):bi
 -- !query
 select date_diff(WEEK, timestamp'2022-02-25 01:02:03', timestamp'2022-01-28 01:02:03')
 -- !query schema
-struct<>
+struct<timestampdiff(WEEK, TIMESTAMP '2022-02-25 01:02:03', TIMESTAMP '2022-01-28 01:02:03'):bigint>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Undefined function: date_diff. This function is neither a built-in/temporary function, nor a persistent function that is qualified as spark_catalog.default.date_diff.; line 1 pos 7
+-4
 
 
 -- !query
@@ -809,10 +805,9 @@ struct<timestampdiff(MONTH, TIMESTAMP '2022-02-25 01:02:03', TIMESTAMP '2022-01-
 -- !query
 select date_diff(QUARTER, date'2022-02-25', date'2023-05-25')
 -- !query schema
-struct<>
+struct<timestampdiff(QUARTER, DATE '2022-02-25', DATE '2023-05-25'):bigint>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Undefined function: date_diff. This function is neither a built-in/temporary function, nor a persistent function that is qualified as spark_catalog.default.date_diff.; line 1 pos 7
+5
 
 
 -- !query
