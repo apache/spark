@@ -1186,7 +1186,8 @@ class AnalysisSuite extends AnalysisTest with Matchers {
         dataType = IntegerType,
         nullable = true,
         comment = None,
-        position = None)))
+        position = None,
+        default = Some(Literal(42)))))
     checkAnalysis(plan, expected)
   }
 }
