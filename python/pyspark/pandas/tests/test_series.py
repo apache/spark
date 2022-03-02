@@ -1161,12 +1161,25 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
     def test_map(self):
         pser = pd.Series(["cat", "dog", None, "rabbit"])
         psser = ps.from_pandas(pser)
+
+        # dict correspondence
         # Currently Koalas doesn't return NaN as pandas does.
         self.assert_eq(psser.map({}), pser.map({}).replace({pd.np.nan: None}))
 
         d = defaultdict(lambda: "abc")
         self.assertTrue("abc" in repr(psser.map(d)))
         self.assert_eq(psser.map(d), pser.map(d))
+
+        # series correspondence
+        pser_to_apply = pd.Series(["one", "two", "three", "four"])
+        self.assert_eq(psser.map(pser_to_apply), pser.map(pser_to_apply))
+        self.assert_eq(psser.map(pser_to_apply, na_action="ignore"), pser.map(pser_to_apply, na_action="ignore"))
+
+        # function correspondence
+        self.assert_eq(
+            psser.map(lambda x: x.upper(), na_action="ignore"),
+            pser.map(lambda x: x.upper(), na_action="ignore"),
+        )
 
         def tomorrow(date) -> datetime:
             return date + timedelta(days=1)

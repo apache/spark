@@ -976,9 +976,10 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         else:
             return sdf.select(F.covar_samp(*sdf.columns)).head(1)[0][0]
 
-    # TODO: arg should support Series
     # TODO: NaN and None
-    def map(self, arg: Union[Dict, Callable]) -> "Series":
+    def map(
+        self, arg: Union[Dict, Callable[[Any], Any], pd.Series], na_action: Optional[str] = None
+    ) -> "Series":
         """
         Map values of Series according to input correspondence.
 
@@ -992,8 +993,10 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
         Parameters
         ----------
-        arg : function or dict
+        arg : function, dict, or pd.Series
             Mapping correspondence.
+        na_action :
+            If ‘ignore’, propagate NA values, without passing them to the mapping correspondence.
 
         Returns
         -------
@@ -1045,6 +1048,16 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         2      I am a None
         3    I am a rabbit
         dtype: object
+
+        To avoid applying the function to missing values (and keep them as NaN)
+        na_action='ignore' can be used:
+
+        >>> s.map('I am a {}'.format, na_action='ignore')
+        0       I am a cat
+        1       I am a dog
+        2             None
+        3    I am a rabbit
+        dtype: object
         """
         if isinstance(arg, dict):
             is_start = True
@@ -1067,7 +1080,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
                 current = current.otherwise(SF.lit(None).cast(self.spark.data_type))
             return self._with_new_scol(current)
         else:
-            return self.apply(arg)
+            return self.pandas_on_spark.transform_batch(lambda pser: pser.map(arg, na_action))
 
     @property
     def shape(self) -> Tuple[int]:
