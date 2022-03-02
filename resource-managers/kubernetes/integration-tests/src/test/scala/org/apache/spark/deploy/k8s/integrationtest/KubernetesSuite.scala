@@ -184,7 +184,8 @@ class KubernetesSuite extends SparkFunSuite
 
   protected def setUpTest(): Unit = {
     appLocator = UUID.randomUUID().toString.replaceAll("-", "")
-    driverPodName = "spark-test-app-" + UUID.randomUUID().toString.replaceAll("-", "")
+    driverPodName = "spark-test-app-" +
+      UUID.randomUUID().toString.replaceAll("-", "") + "-driver"
     sparkAppConf = kubernetesTestComponents.newSparkAppConf()
       .set("spark.kubernetes.container.image", image)
       .set("spark.kubernetes.driver.pod.name", driverPodName)
