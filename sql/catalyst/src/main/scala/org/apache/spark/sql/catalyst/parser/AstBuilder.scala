@@ -4508,4 +4508,15 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
       expression(ctx.timestamp))
     UnresolvedFunction("timestampadd", arguments, isDistinct = false)
   }
+
+  /**
+   * Create a TimestampDiff expression.
+   */
+  override def visitTimestampdiff(ctx: TimestampdiffContext): Expression = withOrigin(ctx) {
+    val arguments = Seq(
+      Literal(ctx.unit.getText),
+      expression(ctx.startTimestamp),
+      expression(ctx.endTimestamp))
+    UnresolvedFunction("timestampdiff", arguments, isDistinct = false)
+  }
 }

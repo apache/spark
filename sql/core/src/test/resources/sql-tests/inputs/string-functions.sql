@@ -126,6 +126,25 @@ SELECT endswith(null, 'Spark');
 SELECT endswith('Spark', null);
 SELECT endswith(null, null);
 
+SELECT contains(x'537061726b2053514c', x'537061726b');
+SELECT contains(x'', x'');
+SELECT contains(x'537061726b2053514c', null);
+SELECT contains(12, '1');
+SELECT contains(true, 'ru');
+SELECT contains(x'12', 12);
+SELECT contains(true, false);
+
+SELECT startswith(x'537061726b2053514c', x'537061726b');
+SELECT startswith(x'537061726b2053514c', x'');
+SELECT startswith(x'', x'');
+SELECT startswith(x'537061726b2053514c', null);
+
+SELECT endswith(x'537061726b2053514c', x'53516c');
+SELECT endsWith(x'537061726b2053514c', x'537061726b');
+SELECT endsWith(x'537061726b2053514c', x'');
+SELECT endsWith(x'', x'');
+SELECT endsWith(x'537061726b2053514c', null);
+
 -- to_number
 select to_number('454', '000');
 select to_number('454.2', '000.0');

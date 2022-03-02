@@ -110,7 +110,7 @@ private[ui] class StoragePage(parent: SparkUITab, store: AppStatusStore) extends
       // Don't show the tables if there is no stream block
       Nil
     } else {
-      val sorted = blocks.groupBy(_.name).toSeq.sortBy(_._1.toString)
+      val sorted = blocks.groupBy(_.name).toSeq.sortBy(_._1)
 
       <div>
         <h4>Receiver Blocks</h4>

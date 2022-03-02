@@ -118,11 +118,11 @@ private[spark] class ShuffleBlockPusher(conf: SparkConf) extends Logging {
     pushRequests ++= Utils.randomize(requests)
     if (pushRequests.isEmpty) {
       notifyDriverAboutPushCompletion()
+    } else {
+      submitTask(() => {
+        tryPushUpToMax()
+      })
     }
-
-    submitTask(() => {
-      tryPushUpToMax()
-    })
   }
 
   private[shuffle] def tryPushUpToMax(): Unit = {

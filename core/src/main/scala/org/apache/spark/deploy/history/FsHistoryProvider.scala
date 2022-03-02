@@ -144,8 +144,8 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     val dbPath = Files.createDirectories(new File(path, dir).toPath()).toFile()
     Utils.chmod700(dbPath)
 
-    val metadata = new FsHistoryProviderMetadata(CURRENT_LISTING_VERSION,
-      AppStatusStore.CURRENT_VERSION, logDir.toString())
+    val metadata = FsHistoryProviderMetadata(CURRENT_LISTING_VERSION,
+      AppStatusStore.CURRENT_VERSION, logDir)
 
     try {
       open(dbPath, metadata, conf)
@@ -414,7 +414,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     } else {
       Map()
     }
-    Map("Event log directory" -> logDir.toString) ++ safeMode
+    Map("Event log directory" -> logDir) ++ safeMode
   }
 
   override def start(): Unit = {
