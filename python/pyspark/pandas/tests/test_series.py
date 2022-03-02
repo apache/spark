@@ -1173,7 +1173,10 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
         # series correspondence
         pser_to_apply = pd.Series(["one", "two", "four"], index=["cat", "dog", "rabbit"])
         self.assert_eq(psser.map(pser_to_apply), pser.map(pser_to_apply))
-        self.assert_eq(psser.map(pser_to_apply, na_action="ignore"), pser.map(pser_to_apply, na_action="ignore"))
+        self.assert_eq(
+            psser.map(pser_to_apply, na_action="ignore"),
+            pser.map(pser_to_apply, na_action="ignore"),
+        )
 
         # function correspondence
         self.assert_eq(
