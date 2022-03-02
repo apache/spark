@@ -55,6 +55,9 @@ public class V2ExpressionSQLBuilder {
         case "*":
         case "/":
         case "%":
+        case "&":
+        case "|":
+        case "^":
           return visitBinaryArithmetic(name, build(e.children()[0]), build(e.children()[1]));
         case "AND":
           return visitAnd(name, build(e.children()[0]), build(e.children()[1]));
@@ -62,14 +65,10 @@ public class V2ExpressionSQLBuilder {
           return visitOr(name, build(e.children()[0]), build(e.children()[1]));
         case "NOT":
           return visitNot(build(e.children()[0]));
-        case "&":
-          return visitBitwiseAnd(name, build(e.children()[0]), build(e.children()[1]));
-        case "|":
-          return visitBitwiseOr(name, build(e.children()[0]), build(e.children()[1]));
-        case "^":
-          return visitBitwiseXor(name, build(e.children()[0]), build(e.children()[1]));
+        case "UNARY_ARITHMETIC(-)":
+          return visitUnaryArithmetic("-", build(e.children()[0]));
         case "~":
-          return visitBitwiseNot(build(e.children()[0]));
+          return visitUnaryArithmetic(name, build(e.children()[0]));
         case "CASE_WHEN":
           List<String> children = new ArrayList<>();
           for (Expression child : e.children()) {
@@ -90,11 +89,7 @@ public class V2ExpressionSQLBuilder {
   }
 
   protected String visitFieldReference(FieldReference fieldRef) {
-    if (fieldRef.fieldNames().length != 1) {
-      throw new IllegalArgumentException(
-        "FieldReference with field name has multiple or zero parts unsupported: " + fieldRef);
-    }
-    return fieldRef.fieldNames()[0];
+    return fieldRef.toString();
   }
 
   protected String visitIsNull(String v) {
@@ -121,23 +116,11 @@ public class V2ExpressionSQLBuilder {
     return "(" + l + ") " + name + " (" + r + ")";
   }
 
-  protected String visitBitwiseAnd(String name, String l, String r) {
-    return "(" + l + ") " + name + " (" + r + ")";
-  }
-
-  protected String visitBitwiseOr(String name, String l, String r) {
-    return "(" + l + ") " + name + " (" + r + ")";
-  }
-
-  protected String visitBitwiseXor(String name, String l, String r) {
-    return "(" + l + ") " + name + " (" + r + ")";
-  }
-
   protected String visitNot(String v) {
     return "NOT (" + v + ")";
   }
 
-  protected String visitBitwiseNot(String v) { return "~ (" + v + ")"; }
+  protected String visitUnaryArithmetic(String name, String v) { return name +" (" + v + ")"; }
 
   protected String visitCaseWhen(String[] children) {
     StringBuilder sb = new StringBuilder("CASE");

@@ -120,6 +120,24 @@ import org.apache.spark.sql.connector.util.V2ExpressionSQLBuilder;
  *    <li>Since version: 3.3.0</li>
  *   </ul>
  *  </li>
+ *  <li>Name: &amp;
+ *   <ul>
+ *    <li>SQL semantic: `expr1 &amp; expr2`</li>
+ *    <li>Since version: 3.3.0</li>
+ *   </ul>
+ *  </li>
+ *  <li>Name: |
+ *   <ul>
+ *    <li>SQL semantic: `expr1 | expr2`</li>
+ *    <li>Since version: 3.3.0</li>
+ *   </ul>
+ *  </li>
+ *  <li>Name: ^
+ *   <ul>
+ *    <li>SQL semantic: `expr1 ^ expr2`</li>
+ *    <li>Since version: 3.3.0</li>
+ *   </ul>
+ *  </li>
  *  <li>Name: AND
  *   <ul>
  *    <li>SQL semantic: `expr1 AND expr2`</li>
@@ -138,21 +156,9 @@ import org.apache.spark.sql.connector.util.V2ExpressionSQLBuilder;
  *    <li>Since version: 3.3.0</li>
  *   </ul>
  *  </li>
- *  <li>Name: &amp;
+ *  <li>Name: UNARY_ARITHMETIC(-)
  *   <ul>
- *    <li>SQL semantic: `expr1 &amp; expr2`</li>
- *    <li>Since version: 3.3.0</li>
- *   </ul>
- *  </li>
- *  <li>Name: |
- *   <ul>
- *    <li>SQL semantic: `expr1 | expr2`</li>
- *    <li>Since version: 3.3.0</li>
- *   </ul>
- *  </li>
- *  <li>Name: ^
- *   <ul>
- *    <li>SQL semantic: `expr1 ^ expr2`</li>
+ *    <li>SQL semantic: `- expr`</li>
  *    <li>Since version: 3.3.0</li>
  *   </ul>
  *  </li>

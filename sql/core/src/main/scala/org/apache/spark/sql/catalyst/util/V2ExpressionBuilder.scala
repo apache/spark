@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.util
 
-import org.apache.spark.sql.catalyst.expressions.{Add, Attribute, BinaryOperator, BitwiseNot, CaseWhen, Divide, EqualTo, Expression, IntegralDivide, IsNotNull, IsNull, Literal, Multiply, Not, Pmod, Remainder, Subtract}
+import org.apache.spark.sql.catalyst.expressions.{Add, Attribute, BinaryArithmetic, BinaryOperator, BitwiseNot, CaseWhen, Divide, EqualTo, Expression, IsNotNull, IsNull, Literal, Multiply, Not, Remainder, Subtract, UnaryMinus}
 import org.apache.spark.sql.connector.expressions.{Expression => V2Expression, FieldReference, GeneralScalarExpression, LiteralValue}
 
 /**
@@ -32,10 +32,9 @@ class V2ExpressionBuilder(e: Expression) {
     case sub: Subtract => sub.failOnError
     case mul: Multiply => mul.failOnError
     case div: Divide => div.failOnError
-    case _: IntegralDivide => false
     case r: Remainder => r.failOnError
-    case _: Pmod => false
-    case _ => true
+    case o: BinaryOperator => !o.isInstanceOf[BinaryArithmetic]
+    case _ => false
   }
 
   private def generateExpression(expr: Expression): Option[V2Expression] = expr match {
@@ -63,6 +62,10 @@ class V2ExpressionBuilder(e: Expression) {
       }
     case Not(child) => generateExpression(child)
       .map(v => new GeneralScalarExpression("NOT", Array[V2Expression](v)))
+    // UnaryMinus and Subtract has the same operator symbol, we uses UNARY_ARITHMETIC(-) to
+    // represent UnaryMinus here.
+    case UnaryMinus(child, true) => generateExpression(child)
+      .map(v => new GeneralScalarExpression("UNARY_ARITHMETIC(-)", Array[V2Expression](v)))
     case BitwiseNot(child) => generateExpression(child)
       .map(v => new GeneralScalarExpression("~", Array[V2Expression](v)))
     case CaseWhen(branches, elseValue) =>

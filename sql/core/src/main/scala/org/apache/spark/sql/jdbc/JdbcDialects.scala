@@ -32,7 +32,7 @@ import org.apache.spark.sql.catalyst.util.{DateFormatter, DateTimeUtils, Timesta
 import org.apache.spark.sql.connector.catalog.TableChange
 import org.apache.spark.sql.connector.catalog.TableChange._
 import org.apache.spark.sql.connector.catalog.index.TableIndex
-import org.apache.spark.sql.connector.expressions.{Expression, FieldReference, GeneralScalarExpression, NamedReference}
+import org.apache.spark.sql.connector.expressions.{Expression, NamedReference}
 import org.apache.spark.sql.connector.expressions.aggregate.{AggregateFunc, Avg, Count, CountStar, Max, Min, Sum}
 import org.apache.spark.sql.connector.util.V2ExpressionSQLBuilder
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -202,12 +202,9 @@ abstract class JdbcDialect extends Serializable with Logging{
    */
   @Since("3.3.0")
   def compileExpression(expr: Expression): Option[String] = {
-    val V2ExpressionSQLBuilder = new V2ExpressionSQLBuilder()
+    val v2ExpressionSQLBuilder = new V2ExpressionSQLBuilder()
     try {
-      expr match {
-        case _: FieldReference => Some(V2ExpressionSQLBuilder.build(expr)).map(quoteIdentifier)
-        case _: GeneralScalarExpression => Some(V2ExpressionSQLBuilder.build(expr))
-      }
+      Some(v2ExpressionSQLBuilder.build(expr))
     } catch {
       case _: IllegalArgumentException => None
     }
