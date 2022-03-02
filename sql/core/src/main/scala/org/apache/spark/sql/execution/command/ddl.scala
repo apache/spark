@@ -20,7 +20,6 @@ package org.apache.spark.sql.execution.command
 import java.util.Locale
 import java.util.concurrent.TimeUnit._
 
-import scala.collection.{GenMap, GenSeq}
 import scala.collection.parallel.ForkJoinTaskSupport
 import scala.collection.parallel.immutable.ParVector
 import scala.util.control.NonFatal
@@ -643,7 +642,7 @@ case class RepairTableCommand(
       val pathFilter = getPathFilter(hadoopConf)
 
       val evalPool = ThreadUtils.newForkJoinPool("RepairTableCommand", 8)
-      val partitionSpecsAndLocs: GenSeq[(TablePartitionSpec, Path)] =
+      val partitionSpecsAndLocs: Seq[(TablePartitionSpec, Path)] =
         try {
           scanPartitions(spark, fs, pathFilter, root, Map(), table.partitionColumnNames, threshold,
             spark.sessionState.conf.resolver, new ForkJoinTaskSupport(evalPool)).seq
@@ -656,7 +655,7 @@ case class RepairTableCommand(
       val partitionStats = if (spark.sqlContext.conf.gatherFastStats) {
         gatherPartitionStats(spark, partitionSpecsAndLocs, fs, pathFilter, threshold)
       } else {
-        GenMap.empty[String, PartitionStatistics]
+        Map.empty[String, PartitionStatistics]
       }
       logInfo(s"Finished to gather the fast stats for all $total partitions.")
 
@@ -689,13 +688,13 @@ case class RepairTableCommand(
       partitionNames: Seq[String],
       threshold: Int,
       resolver: Resolver,
-      evalTaskSupport: ForkJoinTaskSupport): GenSeq[(TablePartitionSpec, Path)] = {
+      evalTaskSupport: ForkJoinTaskSupport): Seq[(TablePartitionSpec, Path)] = {
     if (partitionNames.isEmpty) {
       return Seq(spec -> path)
     }
 
     val statuses = fs.listStatus(path, filter)
-    val statusPar: GenSeq[FileStatus] =
+    val statusPar: Seq[FileStatus] =
       if (partitionNames.length > 1 && statuses.length > threshold || partitionNames.length > 2) {
         // parallelize the list of partitions here, then we can have better parallelism later.
         val parArray = new ParVector(statuses.toVector)
@@ -728,10 +727,10 @@ case class RepairTableCommand(
 
   private def gatherPartitionStats(
       spark: SparkSession,
-      partitionSpecsAndLocs: GenSeq[(TablePartitionSpec, Path)],
+      partitionSpecsAndLocs: Seq[(TablePartitionSpec, Path)],
       fs: FileSystem,
       pathFilter: PathFilter,
-      threshold: Int): GenMap[String, PartitionStatistics] = {
+      threshold: Int): Map[String, PartitionStatistics] = {
     if (partitionSpecsAndLocs.length > threshold) {
       val hadoopConf = spark.sessionState.newHadoopConf()
       val serializableConfiguration = new SerializableConfiguration(hadoopConf)
@@ -752,7 +751,7 @@ case class RepairTableCommand(
             val statuses = fs.listStatus(path, pathFilter)
             (path.toString, PartitionStatistics(statuses.length, statuses.map(_.getLen).sum))
           }
-        }.collectAsMap()
+        }.collectAsMap().toMap
     } else {
       partitionSpecsAndLocs.map { case (_, location) =>
         val statuses = fs.listStatus(location, pathFilter)
@@ -764,8 +763,8 @@ case class RepairTableCommand(
   private def addPartitions(
       spark: SparkSession,
       table: CatalogTable,
-      partitionSpecsAndLocs: GenSeq[(TablePartitionSpec, Path)],
-      partitionStats: GenMap[String, PartitionStatistics]): Unit = {
+      partitionSpecsAndLocs: Seq[(TablePartitionSpec, Path)],
+      partitionStats: Map[String, PartitionStatistics]): Unit = {
     val total = partitionSpecsAndLocs.length
     var done = 0L
     // Hive metastore may not have enough memory to handle millions of partitions in single RPC,
