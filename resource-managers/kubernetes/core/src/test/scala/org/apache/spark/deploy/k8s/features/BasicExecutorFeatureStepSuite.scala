@@ -452,9 +452,9 @@ class BasicExecutorFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
       .set(EXECUTOR_MEMORY.key, s"${executorMem.toInt}m")
 
     // New config should take precedence
-    sparkConf.set(EXECUTOR_MEMORY_OVERHEAD_FACTOR, 0.2)
-    sparkConf.set(MEMORY_OVERHEAD_FACTOR, 0.3)
     val expectedFactor = 0.2
+    sparkConf.set(EXECUTOR_MEMORY_OVERHEAD_FACTOR, expectedFactor)
+    sparkConf.set(MEMORY_OVERHEAD_FACTOR, 0.3)
 
     val conf = KubernetesTestConf.createExecutorConf(
       sparkConf = sparkConf)
@@ -479,7 +479,8 @@ class BasicExecutorFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
       .set(EXECUTOR_MEMORY.key, s"${executorMem.toInt}m")
 
     // New config should take precedence
-    sparkConf.set(MEMORY_OVERHEAD_FACTOR, 0.3)
+    val expectedFactor = 0.3
+    sparkConf.set(MEMORY_OVERHEAD_FACTOR, expectedFactor)
 
     val conf = KubernetesTestConf.createExecutorConf(
       sparkConf = sparkConf)
@@ -489,7 +490,7 @@ class BasicExecutorFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
       resourceProfile)
     val pod = step.configurePod(SparkPod.initialPod())
     val mem = amountAndFormat(pod.container.getResources.getRequests.get("memory"))
-    val expected = (executorMem + executorMem * 0.3).toInt
+    val expected = (executorMem + executorMem * expectedFactor).toInt
     assert(mem === s"${expected}Mi")
   }
 

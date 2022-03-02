@@ -228,9 +228,9 @@ class BasicDriverFeatureStepSuite extends SparkFunSuite {
       .set(DRIVER_MEMORY.key, s"${driverMem.toInt}m")
 
     // New config should take precedence
-    sparkConf.set(DRIVER_MEMORY_OVERHEAD_FACTOR, 0.2)
-    sparkConf.set(MEMORY_OVERHEAD_FACTOR, 0.3)
     val expectedFactor = 0.2
+    sparkConf.set(DRIVER_MEMORY_OVERHEAD_FACTOR, expectedFactor)
+    sparkConf.set(MEMORY_OVERHEAD_FACTOR, 0.3)
 
     val conf = KubernetesTestConf.createDriverConf(
       sparkConf = sparkConf)
@@ -241,7 +241,7 @@ class BasicDriverFeatureStepSuite extends SparkFunSuite {
     assert(mem === s"${expected}Mi")
 
     val systemProperties = step.getAdditionalPodSystemProperties()
-    assert(systemProperties(DRIVER_MEMORY_OVERHEAD_FACTOR.key) === "0.2")
+    assert(systemProperties(DRIVER_MEMORY_OVERHEAD_FACTOR.key) === expectedFactor.toString)
   }
 
   test(s"SPARK-38194: old memory factor settings is applied if new one isn't given") {
@@ -255,18 +255,19 @@ class BasicDriverFeatureStepSuite extends SparkFunSuite {
       .set(DRIVER_MEMORY.key, s"${driverMem.toInt}m")
 
     // Old config still works if new config isn't given
-    sparkConf.set(MEMORY_OVERHEAD_FACTOR, 0.3)
+    val expectedFactor = 0.3
+    sparkConf.set(MEMORY_OVERHEAD_FACTOR, expectedFactor)
 
     val conf = KubernetesTestConf.createDriverConf(
       sparkConf = sparkConf)
     val step = new BasicDriverFeatureStep(conf)
     val pod = step.configurePod(SparkPod.initialPod())
     val mem = amountAndFormat(pod.container.getResources.getRequests.get("memory"))
-    val expected = (driverMem + driverMem * 0.3).toInt
+    val expected = (driverMem + driverMem * expectedFactor).toInt
     assert(mem === s"${expected}Mi")
 
     val systemProperties = step.getAdditionalPodSystemProperties()
-    assert(systemProperties(DRIVER_MEMORY_OVERHEAD_FACTOR.key) === "0.3")
+    assert(systemProperties(DRIVER_MEMORY_OVERHEAD_FACTOR.key) === expectedFactor.toString)
   }
 
   test("SPARK-35493: make spark.blockManager.port be able to be fallen back to in driver pod") {
