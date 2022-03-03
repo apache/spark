@@ -2307,48 +2307,39 @@ class DDLParserSuite extends AnalysisTest {
           comment = None,
           position = None,
           default = Some(Literal("abc"))))))
+    val structType = new StructType()
+      .add("a", IntegerType, nullable = true, "test")
+      .add("b", StringType, nullable = false)
+    val tableSpec = org.apache.spark.sql.catalyst.plans.logical.TableSpec(
+      properties = Map.empty,
+      provider = Some("parquet"),
+      options = Map.empty,
+      location = None,
+      comment = None,
+      serde = None,
+      external = false)
     comparePlans(
       parsePlan(
         "CREATE TABLE my_tab(a INT COMMENT 'test', b STRING NOT NULL " +
           "DEFAULT \"abc\") USING parquet"),
       CreateTable(
         name = UnresolvedDBObjectName(Seq("my_tab"), isNamespace = false),
-        tableSchema = new StructType()
-          .add("a", IntegerType, nullable = true, "test")
-          .add("b", StringType, nullable = false),
+        tableSchema = structType,
         partitioning = Seq.empty[Transform],
-        tableSpec = org.apache.spark.sql.catalyst.plans.logical.TableSpec(
-          properties = Map.empty,
-          provider = Some("parquet"),
-          options = Map.empty,
-          location = None,
-          comment = None,
-          serde = None,
-          external = false
-        ),
+        tableSpec = tableSpec,
         ignoreIfExists = false,
         defaultColumnExpressions = Seq[Option[Expression]](None, Some(Literal("abc")))))
     comparePlans(
       parsePlan(
         "REPLACE TABLE my_tab(a INT COMMENT 'test', " +
           "b STRING NOT NULL DEFAULT \"xyz\") USING parquet"),
-      CreateTable(
+      ReplaceTable(
         name = UnresolvedDBObjectName(Seq("my_tab"), isNamespace = false),
-        tableSchema = new StructType()
-          .add("a", IntegerType, nullable = true, "test")
-          .add("b", StringType, nullable = false),
+        tableSchema = structType,
         partitioning = Seq.empty[Transform],
-        tableSpec = org.apache.spark.sql.catalyst.plans.logical.TableSpec(
-          properties = Map.empty,
-          provider = Some("parquet"),
-          options = Map.empty,
-          location = None,
-          comment = None,
-          serde = None,
-          external = false
-        ),
-        ignoreIfExists = false,
-        defaultColumnExpressions = Seq[Option[Expression]](None, Some(Literal("abc")))))
+        tableSpec = tableSpec,
+        orCreate = false,
+        defaultColumnExpressions = Seq[Option[Expression]](None, Some(Literal("xyz")))))
 
     // In each of the following cases, the DEFAULT reference parses as an unresolved attribute
     // reference. We can handle these cases after the parsing stage, at later phases of analysis.

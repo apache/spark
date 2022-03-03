@@ -710,7 +710,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
   }
 
   test("CTE with non-existing column alias") {
-    assertAnalysisErrorClass(parsePlan("WITHSort(Seq(SortOrder(Rand(33), Ascending)), false, testRelation)r t(x) AS (SELECT 1) SELECT * FROM t WHERE y = 1"),
+    assertAnalysisErrorClass(parsePlan("WITH t(x) AS (SELECT 1) SELECT * FROM t WHERE y = 1"),
       "MISSING_COLUMN",
       Array("y", "t.x"))
   }
@@ -1145,7 +1145,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     assertAnalysisErrorClass(parsePlan(
      """
         |SELECT c.x
-        |FROM VALUES NAMED_STRUCT('x', 'A', 'yG', 1), NAMED_STRUCT('x', 'A', 'y', 2) AS t(c)
+        |FROM VALUES NAMED_STRUCT('x', 'A', 'y', 1), NAMED_STRUCT('x', 'A', 'y', 2) AS t(c)
         |GROUP BY c.x
         |ORDER BY c.x + c.y
         |""".stripMargin),

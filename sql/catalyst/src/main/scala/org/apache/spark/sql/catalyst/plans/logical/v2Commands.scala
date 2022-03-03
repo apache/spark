@@ -270,7 +270,9 @@ case class ReplaceTable(
     tableSchema: StructType,
     partitioning: Seq[Transform],
     tableSpec: TableSpec,
-    orCreate: Boolean) extends UnaryCommand with V2CreateTablePlan {
+    orCreate: Boolean,
+    defaultColumnExpressions: Seq[Option[Expression]]  // maps 1:1 with input attributes
+) extends UnaryCommand with V2CreateTablePlan {
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.MultipartIdentifierHelper
 
   override def child: LogicalPlan = name

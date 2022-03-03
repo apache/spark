@@ -3622,7 +3622,9 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
         val schema = StructType(columns ++ partCols)
         ReplaceTable(
           UnresolvedDBObjectName(table, isNamespace = false),
-          schema, partitioning, tableSpec, orCreate = orCreate)
+          schema, partitioning, tableSpec, orCreate = orCreate,
+          defaultColumnExpressions =
+            getDefaultColumnExpressions(ctx.createOrReplaceTableColTypeList()))
     }
   }
 
