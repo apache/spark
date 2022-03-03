@@ -1324,36 +1324,6 @@ case class LocalLimit(limitExpr: Expression, child: LogicalPlan) extends OrderPr
     copy(child = newChild)
 }
 
-object LimitRange {
-  def apply(startExpr: Expression, endExpr: Expression, child: LogicalPlan): UnaryNode = {
-    LimitRange0(startExpr, endExpr, LocalLimit(endExpr, child))
-  }
-
-  def unapply(p: LimitRange0): Option[(Expression, Expression, LogicalPlan)] = {
-    p match {
-      case LimitRange0(le0, le1, LocalLimit(le2, child)) if le1 == le2 => Some((le0, le1, child))
-      case _ => None
-    }
-  }
-}
-/**
- * A global (coordinated) limit. This operator can emit at most `limitExpr` number in total.
- *
- * See [[Limit]] for more information.
- */
-case class LimitRange0(startExpr: Expression, endExpr: Expression, child: LogicalPlan)
-  extends OrderPreservingUnaryNode {
-  override def output: Seq[Attribute] = child.output
-  override def maxRows: Option[Long] = {
-    (endExpr, endExpr) match {
-      case (IntegerLiteral(start), IntegerLiteral(end)) => Some(end - start)
-      case _ => None
-    }
-  }
-  override protected def withNewChildInternal(newChild: LogicalPlan): LimitRange0 =
-    copy(child = newChild)
-}
-
 /**
  * This is similar with [[Limit]] except:
  *
