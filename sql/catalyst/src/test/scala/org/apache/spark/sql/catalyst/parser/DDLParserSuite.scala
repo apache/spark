@@ -2331,6 +2331,17 @@ class DDLParserSuite extends AnalysisTest {
         defaultColumnExpressions = Seq[Option[Expression]](None, Some(Literal("abc")))))
     comparePlans(
       parsePlan(
+        "CREATE OR REPLACE TABLE my_tab(a INT COMMENT 'test', b STRING NOT NULL " +
+          "DEFAULT \"abc\") USING parquet"),
+     ReplaceTable(
+        name = UnresolvedDBObjectName(Seq("my_tab"), isNamespace = false),
+        tableSchema = structType,
+        partitioning = Seq.empty[Transform],
+        tableSpec = tableSpec,
+        orCreate = true,
+        defaultColumnExpressions = Seq[Option[Expression]](None, Some(Literal("abc")))))
+    comparePlans(
+      parsePlan(
         "REPLACE TABLE my_tab(a INT COMMENT 'test', " +
           "b STRING NOT NULL DEFAULT \"xyz\") USING parquet"),
       ReplaceTable(
