@@ -317,6 +317,17 @@ abstract class AnsiCastSuiteBase extends CastSuiteBase {
     }
   }
 
+  test("cast from array III") {
+    val from: DataType = ArrayType(DoubleType, containsNull = false)
+    val array = Literal.create(Seq(1.0, 2.0), from)
+    val to: DataType = ArrayType(IntegerType, containsNull = false)
+    val answer = Literal.create(Seq(1, 2), to).value
+    checkEvaluation(cast(array, to), answer)
+
+    val overflowArray = Literal.create(Seq(Int.MaxValue + 1.0D), from)
+    checkExceptionInExpression[ArithmeticException](cast(overflowArray, to), "overflow")
+  }
+
   test("cast from map II") {
     val map = Literal.create(
       Map("a" -> "123", "b" -> "true", "c" -> "f", "d" -> null),
@@ -340,6 +351,20 @@ abstract class AnsiCastSuiteBase extends CastSuiteBase {
       assert(ret.resolved)
       checkCastToBooleanError(map_notNull, to, Map("a" -> null, "b" -> true, "c" -> false))
     }
+  }
+
+  test("cast from map III") {
+    val from: DataType = MapType(DoubleType, DoubleType, valueContainsNull = false)
+    val map = Literal.create(Map(1.0 -> 2.0), from)
+    val to: DataType = MapType(IntegerType, IntegerType, valueContainsNull = false)
+    val answer = Literal.create(Map(1 -> 2), to).value
+    checkEvaluation(cast(map, to), answer)
+
+    Seq(
+      Literal.create(Map((Int.MaxValue + 1.0) -> 2.0), from),
+      Literal.create(Map(1.0 -> (Int.MinValue - 1.0)), from)).foreach { overflowMap =>
+        checkExceptionInExpression[ArithmeticException](cast(overflowMap, to), "overflow")
+      }
   }
 
   test("cast from struct II") {
@@ -392,6 +417,17 @@ abstract class AnsiCastSuiteBase extends CastSuiteBase {
       assert(ret.resolved)
       checkCastToBooleanError(struct_notNull, to, InternalRow(null, true, false))
     }
+  }
+
+  test("cast from struct III") {
+    val from: DataType = StructType(Seq(StructField("a", DoubleType, nullable = false)))
+    val struct = Literal.create(InternalRow(1.0), from)
+    val to: DataType = StructType(Seq(StructField("a", IntegerType, nullable = false)))
+    val answer = Literal.create(InternalRow(1), to).value
+    checkEvaluation(cast(struct, to), answer)
+
+    val overflowStruct = Literal.create(InternalRow(Int.MaxValue + 1.0), from)
+    checkExceptionInExpression[ArithmeticException](cast(overflowStruct, to), "overflow")
   }
 
   test("ANSI mode: cast string to timestamp with parse error") {
