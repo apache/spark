@@ -229,16 +229,23 @@ class MapOutputTrackerSuite extends SparkFunSuite with LocalSparkContext {
 
     // When the threshold is 50%, only host A should be returned as a preferred location
     // as it has 4 out of 7 bytes of output.
-    val topLocs50 = tracker.getLocationsWithLargestOutputs(10, 0, 1, 0.5)
-    assert(topLocs50.nonEmpty)
-    assert(topLocs50.get.size === 1)
-    assert(topLocs50.get.head === BlockManagerId("a", "hostA", 1000))
+    sc = new SparkContext("local", "test", new SparkConf())
+    val numMaps = 3
+    val numReducers = 1
+    val rdd = sc.parallelize(1 to 3, numMaps).map(n => (n, n).asInstanceOf[Product2[Int, Int]])
+    val dep = mock(classOf[ShuffleDependency[Int, Int, _]])
+    when(dep.shuffleId).thenReturn(10)
+    when(dep.rdd).thenReturn(rdd)
+    when(dep.partitioner).thenReturn(new HashPartitioner(numReducers))
+
+    val topLocs50 = tracker.getLocationsWithLargestOutputs(dep, 0, numMaps, 0, numReducers, 0.5)
+    assert(topLocs50.size === 1)
+    assert(topLocs50.head === BlockManagerId("a", "hostA", 1000))
 
     // When the threshold is 20%, both hosts should be returned as preferred locations.
-    val topLocs20 = tracker.getLocationsWithLargestOutputs(10, 0, 1, 0.2)
-    assert(topLocs20.nonEmpty)
-    assert(topLocs20.get.size === 2)
-    assert(topLocs20.get.toSet ===
+    val topLocs20 = tracker.getLocationsWithLargestOutputs(dep, 0, numMaps, 0, numReducers, 0.2)
+    assert(topLocs20.size === 2)
+    assert(topLocs20.toSet ===
            Seq(BlockManagerId("a", "hostA", 1000), BlockManagerId("b", "hostB", 1000)).toSet)
 
     tracker.stop()

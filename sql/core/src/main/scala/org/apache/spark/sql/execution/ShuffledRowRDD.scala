@@ -177,19 +177,36 @@ class ShuffledRowRDD(
     val tracker = SparkEnv.get.mapOutputTracker.asInstanceOf[MapOutputTrackerMaster]
     partition.asInstanceOf[ShuffledRowRDDPartition].spec match {
       case CoalescedPartitionSpec(startReducerIndex, endReducerIndex, _) =>
-        // TODO order by partition size.
-        startReducerIndex.until(endReducerIndex).flatMap { reducerIndex =>
-          tracker.getPreferredLocationsForShuffle(dependency, reducerIndex)
-        }
+        tracker.getPreferredLocationsForShuffle(
+          dependency,
+          0,
+          dependency.rdd.getNumPartitions,
+          startReducerIndex,
+          endReducerIndex)
 
-      case PartialReducerPartitionSpec(_, startMapIndex, endMapIndex, _) =>
-        tracker.getMapLocation(dependency, startMapIndex, endMapIndex)
+      case PartialReducerPartitionSpec(reducerIndex, startMapIndex, endMapIndex, _) =>
+        tracker.getPreferredLocationsForShuffle(
+          dependency,
+          startMapIndex,
+          endMapIndex,
+          reducerIndex,
+          reducerIndex + 1)
 
-      case PartialMapperPartitionSpec(mapIndex, _, _) =>
-        tracker.getMapLocation(dependency, mapIndex, mapIndex + 1)
+      case PartialMapperPartitionSpec(mapIndex, startReducerIndex, endReducerIndex) =>
+        tracker.getPreferredLocationsForShuffle(
+          dependency,
+          mapIndex,
+          mapIndex + 1,
+          startReducerIndex,
+          endReducerIndex)
 
       case CoalescedMapperPartitionSpec(startMapIndex, endMapIndex, numReducers) =>
-        tracker.getMapLocation(dependency, startMapIndex, endMapIndex)
+        tracker.getPreferredLocationsForShuffle(
+          dependency,
+          startMapIndex,
+          endMapIndex,
+          0,
+          numReducers)
     }
   }
 
