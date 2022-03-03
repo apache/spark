@@ -124,4 +124,49 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession {
           |--------------^^^
           |""".stripMargin)
   }
+
+  test("SPARK:38104: INVALID_SQL_SYNTAX - redefine window") {
+    validateParsingError(
+      sqlText = "SELECT min(a) OVER win FROM t1 WINDOW win AS win, win AS win2",
+      errorClass = "INVALID_SQL_SYNTAX",
+      sqlState = "42000",
+      message =
+        """
+          |Invalid SQL syntax: The definition of window 'win' is repetitive.(line 1, pos 31)
+          |
+          |== SQL ==
+          |SELECT min(a) OVER win FROM t1 WINDOW win AS win, win AS win2
+          |-------------------------------^^^
+          |""".stripMargin)
+  }
+
+  test("SPARK:38104: INVALID_SQL_SYNTAX- invalid window reference") {
+    validateParsingError(
+      sqlText = "SELECT min(a) OVER win FROM t1 WINDOW win AS win",
+      errorClass = "INVALID_SQL_SYNTAX",
+      sqlState = "42000",
+      message =
+        """
+          |Invalid SQL syntax: Window reference 'win' is not a window specification.(line 1, pos 31)
+          |
+          |== SQL ==
+          |SELECT min(a) OVER win FROM t1 WINDOW win AS win
+          |-------------------------------^^^
+          |""".stripMargin)
+  }
+
+  test("SPARK:38104: INVALID_SQL_SYNTAX - window reference cannot be resolved") {
+    validateParsingError(
+      sqlText = "SELECT min(a) OVER win FROM t1 WINDOW win AS win2",
+      errorClass = "INVALID_SQL_SYNTAX",
+      sqlState = "42000",
+      message =
+        """
+          |Invalid SQL syntax: Cannot resolve window reference 'win2'.(line 1, pos 31)
+          |
+          |== SQL ==
+          |SELECT min(a) OVER win FROM t1 WINDOW win AS win2
+          |-------------------------------^^^
+          |""".stripMargin)
+  }
 }
