@@ -32,7 +32,7 @@ import org.apache.spark.sql.catalyst.util.{DateFormatter, DateTimeUtils, Timesta
 import org.apache.spark.sql.connector.catalog.TableChange
 import org.apache.spark.sql.connector.catalog.TableChange._
 import org.apache.spark.sql.connector.catalog.index.TableIndex
-import org.apache.spark.sql.connector.expressions.{Expression, NamedReference}
+import org.apache.spark.sql.connector.expressions.{Expression, FieldReference, NamedReference}
 import org.apache.spark.sql.connector.expressions.aggregate.{AggregateFunc, Avg, Count, CountStar, Max, Min, Sum}
 import org.apache.spark.sql.connector.util.V2ExpressionSQLBuilder
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -195,6 +195,16 @@ abstract class JdbcDialect extends Serializable with Logging{
     case _ => value
   }
 
+  class JDBCSQLBuilder extends V2ExpressionSQLBuilder {
+    override def visitFieldReference(fieldRef: FieldReference): String = {
+      if (fieldRef.fieldNames().length != 1) {
+        throw new IllegalArgumentException(
+          "FieldReference with field name has multiple or zero parts unsupported: " + fieldRef);
+      }
+      quoteIdentifier(fieldRef.fieldNames.head)
+    }
+  }
+
   /**
    * Converts V2 expression to String representing a SQL expression.
    * @param expr The V2 expression to be converted.
@@ -202,9 +212,9 @@ abstract class JdbcDialect extends Serializable with Logging{
    */
   @Since("3.3.0")
   def compileExpression(expr: Expression): Option[String] = {
-    val v2ExpressionSQLBuilder = new V2ExpressionSQLBuilder()
+    val jdbcSQLBuilder = new JDBCSQLBuilder()
     try {
-      Some(v2ExpressionSQLBuilder.build(expr))
+      Some(jdbcSQLBuilder.build(expr))
     } catch {
       case _: IllegalArgumentException => None
     }

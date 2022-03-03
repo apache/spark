@@ -98,7 +98,7 @@ import org.apache.spark.sql.connector.util.V2ExpressionSQLBuilder;
  *  </li>
  *  <li>Name: -
  *   <ul>
- *    <li>SQL semantic: `expr1 - expr2`</li>
+ *    <li>SQL semantic: `expr1 - expr2` or `- expr`</li>
  *    <li>Since version: 3.3.0</li>
  *   </ul>
  *  </li>
@@ -153,12 +153,6 @@ import org.apache.spark.sql.connector.util.V2ExpressionSQLBuilder;
  *  <li>Name: NOT
  *   <ul>
  *    <li>SQL semantic: `NOT expr`</li>
- *    <li>Since version: 3.3.0</li>
- *   </ul>
- *  </li>
- *  <li>Name: UNARY_ARITHMETIC(-)
- *   <ul>
- *    <li>SQL semantic: `- expr`</li>
  *    <li>Since version: 3.3.0</li>
  *   </ul>
  *  </li>

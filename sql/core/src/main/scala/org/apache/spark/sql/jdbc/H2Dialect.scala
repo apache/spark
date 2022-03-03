@@ -22,32 +22,11 @@ import java.util.Locale
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.{NoSuchNamespaceException, NoSuchTableException, TableAlreadyExistsException}
-import org.apache.spark.sql.connector.expressions.{Expression, FieldReference}
 import org.apache.spark.sql.connector.expressions.aggregate.{AggregateFunc, GeneralAggregateFunc}
-import org.apache.spark.sql.connector.util.V2ExpressionSQLBuilder
 
 private object H2Dialect extends JdbcDialect {
   override def canHandle(url: String): Boolean =
     url.toLowerCase(Locale.ROOT).startsWith("jdbc:h2")
-
-  class H2SQLBuilder extends V2ExpressionSQLBuilder {
-    override def visitFieldReference(fieldRef: FieldReference): String = {
-      if (fieldRef.fieldNames().length != 1) {
-        throw new IllegalArgumentException(
-          "FieldReference with field name has multiple or zero parts unsupported: " + fieldRef);
-      }
-      quoteIdentifier(fieldRef.fieldNames.head)
-    }
-  }
-
-  override def compileExpression(expr: Expression): Option[String] = {
-    val h2SQLBuilder = new H2SQLBuilder()
-    try {
-      Some(h2SQLBuilder.build(expr))
-    } catch {
-      case _: IllegalArgumentException => None
-    }
-  }
 
   override def compileAggregate(aggFunction: AggregateFunc): Option[String] = {
     super.compileAggregate(aggFunction).orElse(

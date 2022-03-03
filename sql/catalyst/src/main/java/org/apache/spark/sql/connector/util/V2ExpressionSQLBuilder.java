@@ -51,7 +51,6 @@ public class V2ExpressionSQLBuilder {
         case ">=":
           return visitBinaryComparison(name, build(e.children()[0]), build(e.children()[1]));
         case "+":
-        case "-":
         case "*":
         case "/":
         case "%":
@@ -59,14 +58,18 @@ public class V2ExpressionSQLBuilder {
         case "|":
         case "^":
           return visitBinaryArithmetic(name, build(e.children()[0]), build(e.children()[1]));
+        case "-":
+          if (e.children().length == 1) {
+            return visitUnaryArithmetic(name, build(e.children()[0]));
+          } else {
+            return visitBinaryArithmetic(name, build(e.children()[0]), build(e.children()[1]));
+          }
         case "AND":
           return visitAnd(name, build(e.children()[0]), build(e.children()[1]));
         case "OR":
           return visitOr(name, build(e.children()[0]), build(e.children()[1]));
         case "NOT":
           return visitNot(build(e.children()[0]));
-        case "UNARY_ARITHMETIC(-)":
-          return visitUnaryArithmetic("-", build(e.children()[0]));
         case "~":
           return visitUnaryArithmetic(name, build(e.children()[0]));
         case "CASE_WHEN":

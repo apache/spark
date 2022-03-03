@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.util
 
-import org.apache.spark.sql.catalyst.expressions.{Add, Attribute, BinaryArithmetic, BinaryOperator, BitwiseNot, CaseWhen, Divide, EqualTo, Expression, IsNotNull, IsNull, Literal, Multiply, Not, Remainder, Subtract, UnaryMinus}
+import org.apache.spark.sql.catalyst.expressions.{Add, And, Attribute, BinaryComparison, BinaryOperator, BitwiseAnd, BitwiseNot, BitwiseOr, BitwiseXor, CaseWhen, Divide, EqualTo, Expression, IsNotNull, IsNull, Literal, Multiply, Not, Or, Remainder, Subtract, UnaryMinus}
 import org.apache.spark.sql.connector.expressions.{Expression => V2Expression, FieldReference, GeneralScalarExpression, LiteralValue}
 
 /**
@@ -28,12 +28,14 @@ class V2ExpressionBuilder(e: Expression) {
   def build(): Option[V2Expression] = generateExpression(e)
 
   private def canTranslate(b: BinaryOperator) = b match {
+    case _: And | _: Or => true
+    case _: BinaryComparison => true
+    case _: BitwiseAnd | _: BitwiseOr | _: BitwiseXor => true
     case add: Add => add.failOnError
     case sub: Subtract => sub.failOnError
     case mul: Multiply => mul.failOnError
     case div: Divide => div.failOnError
     case r: Remainder => r.failOnError
-    case o: BinaryOperator => !o.isInstanceOf[BinaryArithmetic]
     case _ => false
   }
 
@@ -62,10 +64,8 @@ class V2ExpressionBuilder(e: Expression) {
       }
     case Not(child) => generateExpression(child)
       .map(v => new GeneralScalarExpression("NOT", Array[V2Expression](v)))
-    // UnaryMinus and Subtract has the same operator symbol, we uses UNARY_ARITHMETIC(-) to
-    // represent UnaryMinus here.
     case UnaryMinus(child, true) => generateExpression(child)
-      .map(v => new GeneralScalarExpression("UNARY_ARITHMETIC(-)", Array[V2Expression](v)))
+      .map(v => new GeneralScalarExpression("-", Array[V2Expression](v)))
     case BitwiseNot(child) => generateExpression(child)
       .map(v => new GeneralScalarExpression("~", Array[V2Expression](v)))
     case CaseWhen(branches, elseValue) =>
