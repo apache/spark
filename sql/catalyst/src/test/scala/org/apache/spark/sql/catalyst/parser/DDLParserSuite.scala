@@ -1777,7 +1777,7 @@ class DDLParserSuite extends AnalysisTest {
         allColumns = true))
 
     intercept("ANALYZE TABLE a.b.c COMPUTE STATISTICS FOR ALL COLUMNS key, value",
-      Some("PARSE_INPUT_MISMATCHED"), "syntax error at or near 'key'") // expecting {<EOF>, ';'}
+      Some("PARSE_INPUT_MISMATCHED"), "Syntax error at or near 'key'") // expecting {<EOF>, ';'}
     intercept("ANALYZE TABLE a.b.c COMPUTE STATISTICS FOR ALL",
       "missing 'COLUMNS' at '<EOF>'")
   }

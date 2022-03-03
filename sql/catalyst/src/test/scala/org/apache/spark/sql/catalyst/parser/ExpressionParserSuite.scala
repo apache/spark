@@ -867,7 +867,7 @@ class ExpressionParserSuite extends AnalysisTest {
     assertEqual("1 + r.r As q", (Literal(1) + UnresolvedAttribute("r.r")).as("q"))
     assertEqual("1 - f('o', o(bar))", Literal(1) - 'f.function("o", 'o.function('bar)))
     intercept("1 - f('o', o(bar)) hello * world", Some("PARSE_INPUT_MISMATCHED"),
-      "syntax error at or near '*'")
+      "Syntax error at or near '*'")
   }
 
   test("SPARK-17364, fully qualified column name which starts with number") {
@@ -887,7 +887,7 @@ class ExpressionParserSuite extends AnalysisTest {
     val complexName = FunctionIdentifier("`ba`r", Some("`fo`o"))
     assertEqual(complexName.quotedString, UnresolvedAttribute(Seq("`fo`o", "`ba`r")))
     intercept(complexName.unquotedString, Some("PARSE_INPUT_MISMATCHED"),
-      "syntax error at or near")
+      "Syntax error at or near")
     // Function identifier contains continuous backticks should be treated correctly.
     val complexName2 = FunctionIdentifier("ba``r", Some("fo``o"))
     assertEqual(complexName2.quotedString, UnresolvedAttribute(Seq("fo``o", "ba``r")))

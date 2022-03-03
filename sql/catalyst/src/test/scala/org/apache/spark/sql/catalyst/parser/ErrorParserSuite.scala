@@ -33,8 +33,10 @@ class ErrorParserSuite extends AnalysisTest {
   }
 
   private def interceptImpl(sql: String, messages: String*)(
-    line: Option[Int] = None, startPosition: Option[Int] = None, stopPosition: Option[Int] = None)(
-    errorClass: Option[String] = None): Unit = {
+      line: Option[Int] = None,
+      startPosition: Option[Int] = None,
+      stopPosition: Option[Int] = None,
+      errorClass: Option[String] = None): Unit = {
     val e = intercept[ParseException](CatalystSqlParser.parsePlan(sql))
 
     // Check messages.
@@ -61,18 +63,18 @@ class ErrorParserSuite extends AnalysisTest {
   }
 
   def intercept(sqlCommand: String, errorClass: Option[String], messages: String*): Unit = {
-      interceptImpl(sqlCommand, messages: _*)()(errorClass)
+    interceptImpl(sqlCommand, messages: _*)(errorClass = errorClass)
   }
 
-  def intercept(sql: String, line: Int, startPosition: Int, stopPosition: Int,
-    messages: String*): Unit = {
-    interceptImpl(sql, messages: _*)(Some(line), Some(startPosition), Some(stopPosition))()
+  def intercept(
+      sql: String, line: Int, startPosition: Int, stopPosition: Int, messages: String*): Unit = {
+    interceptImpl(sql, messages: _*)(Some(line), Some(startPosition), Some(stopPosition))
   }
 
   def intercept(sql: String, errorClass: String, line: Int, startPosition: Int, stopPosition: Int,
-    messages: String*): Unit = {
+      messages: String*): Unit = {
     interceptImpl(sql, messages: _*)(
-      Some(line), Some(startPosition), Some(stopPosition))(Some(errorClass))
+      Some(line), Some(startPosition), Some(stopPosition), Some(errorClass))
   }
 
   test("no viable input") {
@@ -88,12 +90,12 @@ class ErrorParserSuite extends AnalysisTest {
   test("mismatched input") {
     intercept("select * from r order by q from t", "PARSE_INPUT_MISMATCHED",
       1, 27, 31,
-      "syntax error at or near",
+      "Syntax error at or near",
       "---------------------------^^^"
     )
     intercept("select *\nfrom r\norder by q\nfrom t", "PARSE_INPUT_MISMATCHED",
       4, 0, 4,
-      "syntax error at or near", "^^^")
+      "Syntax error at or near", "^^^")
   }
 
   test("semantic errors") {

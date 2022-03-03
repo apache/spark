@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.catalyst.parser
 
-import scala.util.{Failure, Success, Try}
-
 import org.antlr.v4.runtime.{DefaultErrorStrategy, InputMismatchException, IntStream, Parser,
   ParserRuleContext, RecognitionException, Recognizer}
 
@@ -27,7 +25,7 @@ import org.antlr.v4.runtime.{DefaultErrorStrategy, InputMismatchException, IntSt
  * including the error class and parameters for the error message, which align with the interface
  * of [[SparkThrowableHelper]].
  */
-private[parser] class SparkRecognitionException(
+class SparkRecognitionException(
     message: String,
     recognizer: Recognizer[_, _],
     input: IntStream,
@@ -45,9 +43,9 @@ private[parser] class SparkRecognitionException(
       recognitionException.getMessage,
       recognitionException.getRecognizer,
       recognitionException.getInputStream,
-      Try { recognitionException.getCtx.asInstanceOf[ParserRuleContext] } match {
-        case Success(value) => value
-        case Failure(_) => null
+      recognitionException.getCtx match {
+        case p: ParserRuleContext => p
+        case _ => null
       },
       Some(errorClass),
       messageParameters)

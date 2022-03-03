@@ -123,7 +123,7 @@
     "sqlState" : "42000"
   },
   "PARSE_INPUT_MISMATCHED" : {
-    "message" : [ "syntax error at or near %s" ],
+    "message" : [ "Syntax error at or near %s" ],
     "sqlState" : "42000"
   },
   "PIVOT_VALUE_DATA_TYPE_MISMATCH" : {
