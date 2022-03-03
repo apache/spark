@@ -81,7 +81,8 @@ private[spark] class IndexShuffleBlockResolver(
    def getDataFile(shuffleId: Int, mapId: Long, dirs: Option[Array[String]]): File = {
     val blockId = ShuffleDataBlockId(shuffleId, mapId, NOOP_REDUCE_ID)
     dirs
-      .map(ExecutorDiskUtils.getFile(_, blockManager.subDirsPerLocalDir, blockId.name))
+      .map(d =>
+        new File(ExecutorDiskUtils.getFilePath(d, blockManager.subDirsPerLocalDir, blockId.name)))
       .getOrElse(blockManager.diskBlockManager.getFile(blockId))
   }
 
@@ -97,7 +98,8 @@ private[spark] class IndexShuffleBlockResolver(
       dirs: Option[Array[String]] = None): File = {
     val blockId = ShuffleIndexBlockId(shuffleId, mapId, NOOP_REDUCE_ID)
     dirs
-      .map(ExecutorDiskUtils.getFile(_, blockManager.subDirsPerLocalDir, blockId.name))
+      .map(d =>
+        new File(ExecutorDiskUtils.getFilePath(d, blockManager.subDirsPerLocalDir, blockId.name)))
       .getOrElse(blockManager.diskBlockManager.getFile(blockId))
   }
 
