@@ -53,7 +53,6 @@ object AggUtils {
       initialInputBufferOffset: Int = 0,
       resultExpressions: Seq[NamedExpression] = Nil,
       child: SparkPlan): SparkPlan = {
-    // numShufflePartitions will be set to None, and replaced to the actual value in the state rule.
     createAggregate(
       requiredChildDistributionExpressions,
       isStreaming = true,
