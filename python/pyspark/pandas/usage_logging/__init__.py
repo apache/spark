@@ -135,6 +135,8 @@ def attach(logger_module: Union[str, ModuleType]) -> None:
             "__getitem__",
             "__setitem__",
             "__getattr__",
+            "__enter__",
+            "__exit__",
         ]
     )
 
