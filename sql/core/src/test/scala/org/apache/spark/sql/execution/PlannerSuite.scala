@@ -59,18 +59,21 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
   }
 
   test("count is partially aggregated") {
-    val query = testData.groupBy('value).agg(count('key)).queryExecution.analyzed
+    val query = testData.groupBy(Symbol("value")).agg(count(Symbol("key"))).queryExecution.analyzed
     testPartialAggregationPlan(query)
   }
 
   test("count distinct is partially aggregated") {
-    val query = testData.groupBy('value).agg(count_distinct('key)).queryExecution.analyzed
+    val query = testData.groupBy(Symbol("value")).agg(count_distinct(Symbol("key")))
+      .queryExecution.analyzed
     testPartialAggregationPlan(query)
   }
 
   test("mixed aggregates are partially aggregated") {
     val query =
-      testData.groupBy('value).agg(count('value), count_distinct('key)).queryExecution.analyzed
+      testData.groupBy(Symbol("value"))
+        .agg(count(Symbol("value")), count_distinct(Symbol("key")))
+        .queryExecution.analyzed
     testPartialAggregationPlan(query)
   }
 
@@ -193,45 +196,47 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
   }
 
   test("efficient terminal limit -> sort should use TakeOrderedAndProject") {
-    val query = testData.select('key, 'value).sort('key).limit(2)
+    val query = testData.select(Symbol("key"), Symbol("value")).sort(Symbol("key")).limit(2)
     val planned = query.queryExecution.executedPlan
     assert(planned.isInstanceOf[execution.TakeOrderedAndProjectExec])
-    assert(planned.output === testData.select('key, 'value).logicalPlan.output)
+    assert(planned.output === testData.select(Symbol("key"), Symbol("value")).logicalPlan.output)
   }
 
   test("terminal limit -> project -> sort should use TakeOrderedAndProject") {
-    val query = testData.select('key, 'value).sort('key).select('value, 'key).limit(2)
+    val query = testData.select(Symbol("key"), Symbol("value")).sort(Symbol("key"))
+      .select(Symbol("value"), Symbol("key")).limit(2)
     val planned = query.queryExecution.executedPlan
     assert(planned.isInstanceOf[execution.TakeOrderedAndProjectExec])
-    assert(planned.output === testData.select('value, 'key).logicalPlan.output)
+    assert(planned.output === testData.select(Symbol("value"), Symbol("key")).logicalPlan.output)
   }
 
   test("terminal limits that are not handled by TakeOrderedAndProject should use CollectLimit") {
-    val query = testData.select('value).limit(2)
+    val query = testData.select(Symbol("value")).limit(2)
     val planned = query.queryExecution.sparkPlan
     assert(planned.isInstanceOf[CollectLimitExec])
-    assert(planned.output === testData.select('value).logicalPlan.output)
+    assert(planned.output === testData.select(Symbol("value")).logicalPlan.output)
   }
 
   test("TakeOrderedAndProject can appear in the middle of plans") {
-    val query = testData.select('key, 'value).sort('key).limit(2).filter('key === 3)
+    val query = testData.select(Symbol("key"), Symbol("value"))
+      .sort(Symbol("key")).limit(2).filter('key === 3)
     val planned = query.queryExecution.executedPlan
     assert(planned.find(_.isInstanceOf[TakeOrderedAndProjectExec]).isDefined)
   }
 
   test("CollectLimit can appear in the middle of a plan when caching is used") {
-    val query = testData.select('key, 'value).limit(2).cache()
+    val query = testData.select(Symbol("key"), Symbol("value")).limit(2).cache()
     val planned = query.queryExecution.optimizedPlan.asInstanceOf[InMemoryRelation]
     assert(planned.cachedPlan.isInstanceOf[CollectLimitExec])
   }
 
   test("TakeOrderedAndProjectExec appears only when number of limit is below the threshold.") {
     withSQLConf(SQLConf.TOP_K_SORT_FALLBACK_THRESHOLD.key -> "1000") {
-      val query0 = testData.select('value).orderBy('key).limit(100)
+      val query0 = testData.select(Symbol("value")).orderBy(Symbol("key")).limit(100)
       val planned0 = query0.queryExecution.executedPlan
       assert(planned0.find(_.isInstanceOf[TakeOrderedAndProjectExec]).isDefined)
 
-      val query1 = testData.select('value).orderBy('key).limit(2000)
+      val query1 = testData.select(Symbol("value")).orderBy(Symbol("key")).limit(2000)
       val planned1 = query1.queryExecution.executedPlan
       assert(planned1.find(_.isInstanceOf[TakeOrderedAndProjectExec]).isEmpty)
     }

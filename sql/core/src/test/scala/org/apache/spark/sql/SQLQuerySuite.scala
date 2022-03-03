@@ -3066,15 +3066,17 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
           val df = spark.read.format(format).load(dir.getCanonicalPath)
           checkPushedFilters(
             format,
-            df.where(('id < 2 and 's.contains("foo")) or ('id > 10 and 's.contains("bar"))),
+            df.where((Symbol("id") < 2 and Symbol("s").contains("foo")) or
+              (Symbol("id") > 10 and Symbol("s").contains("bar"))),
             Array(sources.Or(sources.LessThan("id", 2), sources.GreaterThan("id", 10))))
           checkPushedFilters(
             format,
-            df.where('s.contains("foo") or ('id > 10 and 's.contains("bar"))),
+            df.where(Symbol("s").contains("foo") or
+              (Symbol("id") > 10 and Symbol("s").contains("bar"))),
             Array.empty)
           checkPushedFilters(
             format,
-            df.where('id < 2 and not('id > 10 and 's.contains("bar"))),
+            df.where(Symbol("id") < 2 and not(Symbol("id") > 10 and Symbol("s").contains("bar"))),
             Array(sources.IsNotNull("id"), sources.LessThan("id", 2)))
         }
       }

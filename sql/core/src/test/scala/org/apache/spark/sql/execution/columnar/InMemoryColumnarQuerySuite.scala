@@ -152,7 +152,7 @@ class InMemoryColumnarQuerySuite extends QueryTest with SharedSparkSession {
   }
 
   test("projection") {
-    val logicalPlan = testData.select('value, 'key).logicalPlan
+    val logicalPlan = testData.select(Symbol("value"), Symbol("key")).logicalPlan
     val plan = spark.sessionState.executePlan(logicalPlan).sparkPlan
     val scan = InMemoryRelation(new TestCachedBatchSerializer(useCompression = true, 5),
       MEMORY_ONLY, plan, None, logicalPlan)
