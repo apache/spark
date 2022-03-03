@@ -193,13 +193,13 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
         with self.assertRaisesRegex(TypeError, expected_error_message):
             psser.rename(["0", "1"])
 
+        # Function index
+        res = psser.rename(lambda x: x ** 2)
+        self.assert_eq(res, pser.rename(lambda x: x ** 2))
+
         # Series index
         # pser = pd.Series(['a', 'b', 'c', 'd', 'e', 'f', 'g'], name='x')
         # psser = ps.from_pandas(s)
-
-        # TODO: index
-        # res = psser.rename(lambda x: x ** 2)
-        # self.assert_eq(res, pser.rename(lambda x: x ** 2))
 
         # res = psser.rename(pser)
         # self.assert_eq(res, pser.rename(pser))

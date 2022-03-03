@@ -1087,16 +1087,16 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
     def name(self, name: Name) -> None:
         self.rename(name, inplace=True)
 
-    # TODO: Functionality and documentation should be matched. Currently, changing index labels
-    # taking dictionary and function to change index are not supported.
-    def rename(self, index: Optional[Name] = None, **kwargs: Any) -> "Series":
+    # TODO: Currently, changing index labels taking dictionary is not supported.
+    def rename(self, index: Optional[Union[Name, Callable[[Any], Any]]] = None, **kwargs: Any) -> "Series":
         """
-        Alter Series name.
+        Alter Series index labels or name.
 
         Parameters
         ----------
-        index : scalar
-            Scalar will alter the ``Series.name`` attribute.
+        index : scalar or function, optional
+            Functions are transformations to apply to the index.
+            Scalar will alter the Series.name attribute.
 
         inplace : bool, default False
             Whether to return a new Series. If True then value of copy is
@@ -1105,7 +1105,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         Returns
         -------
         Series
-            Series with name altered.
+            Series with index labels or name altered.
 
         Examples
         --------
@@ -1122,9 +1122,26 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         1    2
         2    3
         Name: my_name, dtype: int64
+
+        >>> s.rename(lambda x: x ** 2)  # function, changes labels
+        0    1
+        1    2
+        4    3
+        dtype: int64
         """
         if index is None:
             pass
+        if callable(index):
+            if kwargs.get("inplace", False):
+                raise ValueError("inplace True is not supported yet for a function 'index'")
+            frame = self.to_frame()
+            new_index_name = verify_temp_column_name(frame, "__index_name__")
+            frame[new_index_name] = self.index.map(index)
+            frame.set_index(new_index_name, inplace=True)
+            frame.index.name = self.index.name
+            return first_series(frame).rename(self.name)
+        elif isinstance(index, dict):
+            raise ValueError("dict 'index' is not supported yet")
         elif not is_hashable(index):
             raise TypeError("Series.name must be a hashable type")
         elif not isinstance(index, tuple):
