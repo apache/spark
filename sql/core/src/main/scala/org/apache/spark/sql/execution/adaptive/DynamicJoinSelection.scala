@@ -18,8 +18,10 @@
 package org.apache.spark.sql.execution.adaptive
 
 import org.apache.spark.MapOutputStatistics
+import org.apache.spark.sql.catalyst.optimizer.JoinSelectionHelper
 import org.apache.spark.sql.catalyst.planning.ExtractEquiJoinKeys
-import org.apache.spark.sql.catalyst.plans.logical.{HintInfo, JoinStrategyHint, LogicalPlan, NO_BROADCAST_HASH, PREFER_SHUFFLE_HASH, SHUFFLE_HASH}
+import org.apache.spark.sql.catalyst.plans.{LeftAnti, LeftOuter, RightOuter}
+import org.apache.spark.sql.catalyst.plans.logical.{HintInfo, Join, JoinStrategyHint, LogicalPlan, NO_BROADCAST_HASH, PREFER_SHUFFLE_HASH, SHUFFLE_HASH}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.internal.SQLConf
 
@@ -33,7 +35,7 @@ import org.apache.spark.sql.internal.SQLConf
  *   3. if a join satisfies both NO_BROADCAST_HASH and PREFER_SHUFFLE_HASH,
  *      then add a SHUFFLE_HASH hint.
  */
-object DynamicJoinSelection extends Rule[LogicalPlan] {
+object DynamicJoinSelection extends Rule[LogicalPlan] with JoinSelectionHelper {
 
   private def shouldDemoteBroadcastHashJoin(mapStats: MapOutputStatistics): Boolean = {
     val partitionCnt = mapStats.bytesByPartitionId.length
@@ -50,10 +52,41 @@ object DynamicJoinSelection extends Rule[LogicalPlan] {
       mapStats.bytesByPartitionId.forall(_ <= maxShuffledHashJoinLocalMapThreshold)
   }
 
-  private def selectJoinStrategy(plan: LogicalPlan): Option[JoinStrategyHint] = plan match {
+  private def selectJoinStrategy(
+      join: Join,
+      plan: LogicalPlan): Option[JoinStrategyHint] = plan match {
     case LogicalQueryStage(_, stage: ShuffleQueryStageExec) if stage.isMaterialized
       && stage.mapStats.isDefined =>
-      val demoteBroadcastHash = shouldDemoteBroadcastHashJoin(stage.mapStats.get)
+
+      val manyEmptyInPlan = shouldDemoteBroadcastHashJoin(stage.mapStats.get)
+      val canBroadcastPlan = (canBuildBroadcastLeft(join.joinType) && join.left == plan) ||
+        (canBuildBroadcastRight(join.joinType) && join.right == plan)
+      val manyEmptyInOther = (if (join.left == plan) join.right else join.left) match {
+        case LogicalQueryStage(_, stage: ShuffleQueryStageExec) if stage.isMaterialized
+          && stage.mapStats.isDefined => shouldDemoteBroadcastHashJoin(stage.mapStats.get)
+        case _ => false
+      }
+
+      val demoteBroadcastHash = if (manyEmptyInPlan && canBroadcastPlan) {
+        join.joinType match {
+          // don't demote BHJ since you cannot short circuit local join if inner (null-filled)
+          // side is empty
+          case LeftOuter | RightOuter | LeftAnti => false
+          case _ => true
+        }
+      } else if (manyEmptyInOther && canBroadcastPlan) {
+        // for example, LOJ, 'plan' is RHS but it's the LHS that has many empty partitions
+        // if we proceed with shuffle.  But if we proceed with BHJ, the OptimizeShuffleWithLocalRead
+        // will assemble partitions as they were before the shuffle and that may no longer have
+        // many empty partitions and thus cannot short-circuit local join
+        join.joinType match {
+          case LeftOuter | RightOuter | LeftAnti => true
+          case _ => false
+        }
+      } else {
+        false
+      }
+
       val preferShuffleHash = preferShuffledHashJoin(stage.mapStats.get)
       if (demoteBroadcastHash && preferShuffleHash) {
         Some(SHUFFLE_HASH)
@@ -69,16 +102,16 @@ object DynamicJoinSelection extends Rule[LogicalPlan] {
   }
 
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformDown {
-    case j @ ExtractEquiJoinKeys(_, _, _, _, _, left, right, hint) =>
+    case j @ ExtractEquiJoinKeys(joinType, _, _, _, _, left, right, hint) =>
       var newHint = hint
       if (!hint.leftHint.exists(_.strategy.isDefined)) {
-        selectJoinStrategy(left).foreach { strategy =>
+        selectJoinStrategy(j, left).foreach { strategy =>
           newHint = newHint.copy(leftHint =
             Some(hint.leftHint.getOrElse(HintInfo()).copy(strategy = Some(strategy))))
         }
       }
       if (!hint.rightHint.exists(_.strategy.isDefined)) {
-        selectJoinStrategy(right).foreach { strategy =>
+        selectJoinStrategy(j, right).foreach { strategy =>
           newHint = newHint.copy(rightHint =
             Some(hint.rightHint.getOrElse(HintInfo()).copy(strategy = Some(strategy))))
         }
