@@ -976,7 +976,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         else:
             return sdf.select(F.covar_samp(*sdf.columns)).head(1)[0][0]
 
-    # TODO: NaN and None
+    # TODO: NaN and None when ``arg`` is an empty dict
     def map(
         self, arg: Union[Dict, Callable[[Any], Any], pd.Series], na_action: Optional[str] = None
     ) -> "Series":
@@ -993,10 +993,10 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
         Parameters
         ----------
-        arg : function, dict, or pd.Series
+        arg : function, dict or pd.Series
             Mapping correspondence.
         na_action :
-            If ‘ignore’, propagate NA values, without passing them to the mapping correspondence.
+            If `ignore`, propagate NA values, without passing them to the mapping correspondence.
 
         Returns
         -------
