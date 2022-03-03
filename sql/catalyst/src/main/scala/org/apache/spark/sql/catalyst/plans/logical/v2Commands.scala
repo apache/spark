@@ -198,7 +198,9 @@ case class CreateTable(
     tableSchema: StructType,
     partitioning: Seq[Transform],
     tableSpec: TableSpec,
-    ignoreIfExists: Boolean) extends UnaryCommand with V2CreateTablePlan {
+    ignoreIfExists: Boolean,
+    defaultColumnExpressions: Seq[Option[Expression]]  // maps 1:1 with input attributes
+) extends UnaryCommand with V2CreateTablePlan {
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.MultipartIdentifierHelper
 
   override def child: LogicalPlan = name
@@ -1135,8 +1137,4 @@ case class TableSpec(
     location: Option[String],
     comment: Option[String],
     serde: Option[SerdeInfo],
-    external: Boolean,
-    // This is a map from colum indexes to expressions representing DEFAULT values, such as those
-    // specified in ALTER TABLE ... ADD COLUMN commands. The column indexes are zero-based and map
-    // to the ordering of the columns in the referenced table.
-    defaultColumnExpressions: Map[Int, Expression])
+    external: Boolean)

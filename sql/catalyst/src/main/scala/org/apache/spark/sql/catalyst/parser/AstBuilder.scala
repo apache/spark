@@ -3464,6 +3464,16 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
   }
 
   /**
+   * Extracts expressions representing DEFAULT columns values from the given list of columns.
+   */
+  private def getDefaultColumnExpressions(
+      ctx: CreateOrReplaceTableColTypeListContext): Seq[Option[Expression]] = {
+    ctx.createOrReplaceTableColType().asScala.map({ ctx: CreateOrReplaceTableColTypeContext =>
+      Option(ctx.defaultExpression()).map(visitDefaultExpression)
+    })
+  }
+
+  /**
    * Create a table, returning a [[CreateTable]] or [[CreateTableAsSelect]] logical plan.
    *
    * Expected format:
@@ -3538,7 +3548,9 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
         val schema = StructType(columns ++ partCols)
         CreateTable(
           UnresolvedDBObjectName(table, isNamespace = false),
-          schema, partitioning, tableSpec, ignoreIfExists = ifNotExists)
+          schema, partitioning, tableSpec, ignoreIfExists = ifNotExists,
+          defaultColumnExpressions =
+            getDefaultColumnExpressions(ctx.createOrReplaceTableColTypeList()))
     }
   }
 

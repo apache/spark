@@ -21,7 +21,7 @@ import java.util.Locale
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis._
-import org.apache.spark.sql.catalyst.expressions.{EqualTo, Hex, Literal}
+import org.apache.spark.sql.catalyst.expressions.{EqualTo, Expression, Hex, Literal}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.connector.catalog.TableChange.ColumnPosition.{after, first}
 import org.apache.spark.sql.connector.expressions.{ApplyTransform, BucketTransform, DaysTransform, FieldReference, HoursTransform, IdentityTransform, LiteralValue, MonthsTransform, Transform, YearsTransform}
@@ -2260,7 +2260,7 @@ class DDLParserSuite extends AnalysisTest {
   }
 
   test("SPARK-38335: Implement support for DEFAULT values for columns in tables") {
-    // The following commands will support DEFAULT columns, but this has not been implemented yet.
+    // The following commands support DEFAULT columns. The parsing support for this is implemented.
     comparePlans(
       parsePlan("ALTER TABLE t1 ADD COLUMN x int NOT NULL DEFAULT 42"),
       AddColumns(
@@ -2310,25 +2310,46 @@ class DDLParserSuite extends AnalysisTest {
     comparePlans(
       parsePlan(
         "CREATE TABLE my_tab(a INT COMMENT 'test', b STRING NOT NULL " +
-        "DEFAULT \"abc\") USING parquet"),
-      ReplaceColumns(
-        UnresolvedTable(Seq("t1"), "ALTER TABLE ... REPLACE COLUMNS", None),
-        Seq(QualifiedColType(
-          path = None,
-          colName = "x",
-          dataType = StringType,
-          nullable = true,
+          "DEFAULT \"abc\") USING parquet"),
+      CreateTable(
+        name = UnresolvedDBObjectName(Seq("my_tab"), isNamespace = false),
+        tableSchema = new StructType()
+          .add("a", IntegerType, nullable = true, "test")
+          .add("b", StringType, nullable = false),
+        partitioning = Seq.empty[Transform],
+        tableSpec = org.apache.spark.sql.catalyst.plans.logical.TableSpec(
+          properties = Map.empty,
+          provider = Some("parquet"),
+          options = Map.empty,
+          location = None,
           comment = None,
-          position = None,
-          default = Some(Literal("abc"))))))
-    for (sql <- Seq(
-      "REPLACE TABLE my_tab(a INT COMMENT 'test', b STRING NOT NULL DEFAULT \"xyz\") USING parquet"
-    )) {
-      val exc = intercept[ParseException] {
-        parsePlan(sql);
-      }
-      assert(exc.getMessage.contains("Support for DEFAULT column values is not implemented yet"));
-    }
+          serde = None,
+          external = false
+        ),
+        ignoreIfExists = false,
+        defaultColumnExpressions = Seq[Option[Expression]](None, Some(Literal("abc")))))
+    comparePlans(
+      parsePlan(
+        "REPLACE TABLE my_tab(a INT COMMENT 'test', " +
+          "b STRING NOT NULL DEFAULT \"xyz\") USING parquet"),
+      CreateTable(
+        name = UnresolvedDBObjectName(Seq("my_tab"), isNamespace = false),
+        tableSchema = new StructType()
+          .add("a", IntegerType, nullable = true, "test")
+          .add("b", StringType, nullable = false),
+        partitioning = Seq.empty[Transform],
+        tableSpec = org.apache.spark.sql.catalyst.plans.logical.TableSpec(
+          properties = Map.empty,
+          provider = Some("parquet"),
+          options = Map.empty,
+          location = None,
+          comment = None,
+          serde = None,
+          external = false
+        ),
+        ignoreIfExists = false,
+        defaultColumnExpressions = Seq[Option[Expression]](None, Some(Literal("abc")))))
+
     // In each of the following cases, the DEFAULT reference parses as an unresolved attribute
     // reference. We can handle these cases after the parsing stage, at later phases of analysis.
     comparePlans(parsePlan("VALUES (1, 2, DEFAULT) AS val"),
