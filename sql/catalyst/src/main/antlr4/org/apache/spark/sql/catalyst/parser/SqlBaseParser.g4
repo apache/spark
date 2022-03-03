@@ -14,9 +14,11 @@
  * This file is an adaptation of Presto's presto-parser/src/main/antlr4/com/facebook/presto/sql/parser/SqlBase.g4 grammar.
  */
 
-grammar SqlBase;
+parser grammar SqlBaseParser;
 
-@parser::members {
+options { tokenVocab = SqlBaseLexer; }
+
+@members {
   /**
    * When false, INTERSECT is given the greater precedence over the other set
    * operations (UNION, EXCEPT and MINUS) as per the SQL standard.
@@ -35,63 +37,8 @@ grammar SqlBase;
   public boolean SQL_standard_keyword_behavior = false;
 }
 
-@lexer::members {
-  /**
-   * When true, parser should throw ParseExcetion for unclosed bracketed comment.
-   */
-  public boolean has_unclosed_bracketed_comment = false;
-
-  /**
-   * Verify whether current token is a valid decimal token (which contains dot).
-   * Returns true if the character that follows the token is not a digit or letter or underscore.
-   *
-   * For example:
-   * For char stream "2.3", "2." is not a valid decimal token, because it is followed by digit '3'.
-   * For char stream "2.3_", "2.3" is not a valid decimal token, because it is followed by '_'.
-   * For char stream "2.3W", "2.3" is not a valid decimal token, because it is followed by 'W'.
-   * For char stream "12.0D 34.E2+0.12 "  12.0D is a valid decimal token because it is followed
-   * by a space. 34.E2 is a valid decimal token because it is followed by symbol '+'
-   * which is not a digit or letter or underscore.
-   */
-  public boolean isValidDecimal() {
-    int nextChar = _input.LA(1);
-    if (nextChar >= 'A' && nextChar <= 'Z' || nextChar >= '0' && nextChar <= '9' ||
-      nextChar == '_') {
-      return false;
-    } else {
-      return true;
-    }
-  }
-
-  /**
-   * This method will be called when we see '/*' and try to match it as a bracketed comment.
-   * If the next character is '+', it should be parsed as hint later, and we cannot match
-   * it as a bracketed comment.
-   *
-   * Returns true if the next character is '+'.
-   */
-  public boolean isHint() {
-    int nextChar = _input.LA(1);
-    if (nextChar == '+') {
-      return true;
-    } else {
-      return false;
-    }
-  }
-
-  /**
-   * This method will be called when the character stream ends and try to find out the
-   * unclosed bracketed comment.
-   * If the method be called, it means the end of the entire character stream match,
-   * and we set the flag and fail later.
-   */
-  public void markUnclosedComment() {
-    has_unclosed_bracketed_comment = true;
-  }
-}
-
 singleStatement
-    : statement ';'* EOF
+    : statement SEMICOLON* EOF
     ;
 
 singleExpression
@@ -136,7 +83,7 @@ statement
         (RESTRICT | CASCADE)?                                          #dropNamespace
     | SHOW namespaces ((FROM | IN) multipartIdentifier)?
         (LIKE? pattern=STRING)?                                        #showNamespaces
-    | createTableHeader ('(' colTypeList ')')? tableProvider?
+    | createTableHeader (LEFT_PAREN colTypeList RIGHT_PAREN)? tableProvider?
         createTableClauses
         (AS? query)?                                                   #createTable
     | CREATE TABLE (IF NOT EXISTS)? target=tableIdentifier
@@ -146,7 +93,7 @@ statement
         createFileFormat |
         locationSpec |
         (TBLPROPERTIES tableProps=propertyList))*                      #createTableLike
-    | replaceTableHeader ('(' colTypeList ')')? tableProvider?
+    | replaceTableHeader (LEFT_PAREN colTypeList RIGHT_PAREN)? tableProvider?
         createTableClauses
         (AS? query)?                                                   #replaceTable
     | ANALYZE TABLE multipartIdentifier partitionSpec? COMPUTE STATISTICS
@@ -158,13 +105,13 @@ statement
         columns=qualifiedColTypeWithPositionList                       #addTableColumns
     | ALTER TABLE multipartIdentifier
         ADD (COLUMN | COLUMNS)
-        '(' columns=qualifiedColTypeWithPositionList ')'               #addTableColumns
+        LEFT_PAREN columns=qualifiedColTypeWithPositionList RIGHT_PAREN #addTableColumns
     | ALTER TABLE table=multipartIdentifier
         RENAME COLUMN
         from=multipartIdentifier TO to=errorCapturingIdentifier        #renameTableColumn
     | ALTER TABLE multipartIdentifier
         DROP (COLUMN | COLUMNS)
-        '(' columns=multipartIdentifierList ')'                        #dropTableColumns
+        LEFT_PAREN columns=multipartIdentifierList RIGHT_PAREN         #dropTableColumns
     | ALTER TABLE multipartIdentifier
         DROP (COLUMN | COLUMNS) columns=multipartIdentifierList        #dropTableColumns
     | ALTER (TABLE | VIEW) from=multipartIdentifier
@@ -181,7 +128,8 @@ statement
         colName=multipartIdentifier colType colPosition?               #hiveChangeColumn
     | ALTER TABLE table=multipartIdentifier partitionSpec?
         REPLACE COLUMNS
-        '(' columns=qualifiedColTypeWithPositionList ')'               #hiveReplaceColumns
+        LEFT_PAREN columns=qualifiedColTypeWithPositionList
+        RIGHT_PAREN                                                    #hiveReplaceColumns
     | ALTER TABLE multipartIdentifier (partitionSpec)?
         SET SERDE STRING (WITH SERDEPROPERTIES propertyList)?          #setTableSerDe
     | ALTER TABLE multipartIdentifier (partitionSpec)?
@@ -191,7 +139,7 @@ statement
     | ALTER TABLE multipartIdentifier
         from=partitionSpec RENAME TO to=partitionSpec                  #renameTablePartition
     | ALTER (TABLE | VIEW) multipartIdentifier
-        DROP (IF EXISTS)? partitionSpec (',' partitionSpec)* PURGE?    #dropTablePartitions
+        DROP (IF EXISTS)? partitionSpec (COMMA partitionSpec)* PURGE?  #dropTablePartitions
     | ALTER TABLE multipartIdentifier
         (partitionSpec)? SET locationSpec                              #setTableLocation
     | ALTER TABLE multipartIdentifier RECOVER PARTITIONS               #recoverPartitions
@@ -205,12 +153,12 @@ statement
          (TBLPROPERTIES propertyList))*
         AS query                                                       #createView
     | CREATE (OR REPLACE)? GLOBAL? TEMPORARY VIEW
-        tableIdentifier ('(' colTypeList ')')? tableProvider
+        tableIdentifier (LEFT_PAREN colTypeList RIGHT_PAREN)? tableProvider
         (OPTIONS propertyList)?                                        #createTempViewUsing
     | ALTER VIEW multipartIdentifier AS? query                         #alterViewQuery
     | CREATE (OR REPLACE)? TEMPORARY? FUNCTION (IF NOT EXISTS)?
         multipartIdentifier AS className=STRING
-        (USING resource (',' resource)*)?                              #createFunction
+        (USING resource (COMMA resource)*)?                            #createFunction
     | DROP TEMPORARY? FUNCTION (IF EXISTS)? multipartIdentifier        #dropFunction
     | EXPLAIN (LOGICAL | FORMATTED | EXTENDED | CODEGEN | COST)?
         statement                                                      #explain
@@ -219,7 +167,7 @@ statement
     | SHOW TABLE EXTENDED ((FROM | IN) ns=multipartIdentifier)?
         LIKE pattern=STRING partitionSpec?                             #showTableExtended
     | SHOW TBLPROPERTIES table=multipartIdentifier
-        ('(' key=propertyKey ')')?                                     #showTblProperties
+        (LEFT_PAREN key=propertyKey RIGHT_PAREN)?                      #showTblProperties
     | SHOW COLUMNS (FROM | IN) table=multipartIdentifier
         ((FROM | IN) ns=multipartIdentifier)?                          #showColumns
     | SHOW VIEWS ((FROM | IN) multipartIdentifier)?
@@ -264,7 +212,7 @@ statement
     | RESET .*?                                                        #resetConfiguration
     | CREATE INDEX (IF NOT EXISTS)? identifier ON TABLE?
         multipartIdentifier (USING indexType=identifier)?
-        '(' columns=multipartIdentifierPropertyList ')'
+        LEFT_PAREN columns=multipartIdentifierPropertyList RIGHT_PAREN
         (OPTIONS options=propertyList)?                                #createIndex
     | DROP INDEX (IF EXISTS)? identifier ON TABLE? multipartIdentifier #dropIndex
     | unsupportedHiveNativeCommands .*?                                #failNativeCommand
@@ -369,7 +317,7 @@ partitionSpecLocation
     ;
 
 partitionSpec
-    : PARTITION '(' partitionVal (',' partitionVal)* ')'
+    : PARTITION LEFT_PAREN partitionVal (COMMA partitionVal)* RIGHT_PAREN
     ;
 
 partitionVal
@@ -397,15 +345,15 @@ describeFuncName
     ;
 
 describeColName
-    : nameParts+=identifier ('.' nameParts+=identifier)*
+    : nameParts+=identifier (DOT nameParts+=identifier)*
     ;
 
 ctes
-    : WITH namedQuery (',' namedQuery)*
+    : WITH namedQuery (COMMA namedQuery)*
     ;
 
 namedQuery
-    : name=errorCapturingIdentifier (columnAliases=identifierList)? AS? '(' query ')'
+    : name=errorCapturingIdentifier (columnAliases=identifierList)? AS? LEFT_PAREN query RIGHT_PAREN
     ;
 
 tableProvider
@@ -425,7 +373,7 @@ createTableClauses
     ;
 
 propertyList
-    : '(' property (',' property)* ')'
+    : LEFT_PAREN property (COMMA property)* RIGHT_PAREN
     ;
 
 property
@@ -433,7 +381,7 @@ property
     ;
 
 propertyKey
-    : identifier ('.' identifier)*
+    : identifier (DOT identifier)*
     | STRING
     ;
 
@@ -445,11 +393,11 @@ propertyValue
     ;
 
 constantList
-    : '(' constant (',' constant)* ')'
+    : LEFT_PAREN constant (COMMA constant)* RIGHT_PAREN
     ;
 
 nestedConstantList
-    : '(' constantList (',' constantList)* ')'
+    : LEFT_PAREN constantList (COMMA constantList)* RIGHT_PAREN
     ;
 
 createFileFormat
@@ -477,17 +425,17 @@ dmlStatementNoWith
     | UPDATE multipartIdentifier tableAlias setClause whereClause?                 #updateTable
     | MERGE INTO target=multipartIdentifier targetAlias=tableAlias
         USING (source=multipartIdentifier |
-          '(' sourceQuery=query')') sourceAlias=tableAlias
+          LEFT_PAREN sourceQuery=query RIGHT_PAREN) sourceAlias=tableAlias
         ON mergeCondition=booleanExpression
         matchedClause*
         notMatchedClause*                                                          #mergeIntoTable
     ;
 
 queryOrganization
-    : (ORDER BY order+=sortItem (',' order+=sortItem)*)?
-      (CLUSTER BY clusterBy+=expression (',' clusterBy+=expression)*)?
-      (DISTRIBUTE BY distributeBy+=expression (',' distributeBy+=expression)*)?
-      (SORT BY sort+=sortItem (',' sort+=sortItem)*)?
+    : (ORDER BY order+=sortItem (COMMA order+=sortItem)*)?
+      (CLUSTER BY clusterBy+=expression (COMMA clusterBy+=expression)*)?
+      (DISTRIBUTE BY distributeBy+=expression (COMMA distributeBy+=expression)*)?
+      (SORT BY sort+=sortItem (COMMA sort+=sortItem)*)?
       windowClause?
       (LIMIT (ALL | limit=expression))?
     ;
@@ -511,7 +459,7 @@ queryPrimary
     | fromStatement                                                         #fromStmt
     | TABLE multipartIdentifier                                             #table
     | inlineTable                                                           #inlineTableDefault1
-    | '(' query ')'                                                         #subquery
+    | LEFT_PAREN query RIGHT_PAREN                                          #subquery
     ;
 
 sortItem
@@ -553,13 +501,13 @@ querySpecification
     ;
 
 transformClause
-    : (SELECT kind=TRANSFORM '(' setQuantifier? expressionSeq ')'
+    : (SELECT kind=TRANSFORM LEFT_PAREN setQuantifier? expressionSeq RIGHT_PAREN
             | kind=MAP setQuantifier? expressionSeq
             | kind=REDUCE setQuantifier? expressionSeq)
       inRowFormat=rowFormat?
       (RECORDWRITER recordWriter=STRING)?
       USING script=STRING
-      (AS (identifierSeq | colTypeList | ('(' (identifierSeq | colTypeList) ')')))?
+      (AS (identifierSeq | colTypeList | (LEFT_PAREN (identifierSeq | colTypeList) RIGHT_PAREN)))?
       outRowFormat=rowFormat?
       (RECORDREADER recordReader=STRING)?
     ;
@@ -587,12 +535,12 @@ matchedAction
 
 notMatchedAction
     : INSERT ASTERISK
-    | INSERT '(' columns=multipartIdentifierList ')'
-        VALUES '(' expression (',' expression)* ')'
+    | INSERT LEFT_PAREN columns=multipartIdentifierList RIGHT_PAREN
+        VALUES LEFT_PAREN expression (COMMA expression)* RIGHT_PAREN
     ;
 
 assignmentList
-    : assignment (',' assignment)*
+    : assignment (COMMA assignment)*
     ;
 
 assignment
@@ -608,16 +556,16 @@ havingClause
     ;
 
 hint
-    : '/*+' hintStatements+=hintStatement (','? hintStatements+=hintStatement)* '*/'
+    : HENT_START hintStatements+=hintStatement (COMMA? hintStatements+=hintStatement)* HENT_END
     ;
 
 hintStatement
     : hintName=identifier
-    | hintName=identifier '(' parameters+=primaryExpression (',' parameters+=primaryExpression)* ')'
+    | hintName=identifier LEFT_PAREN parameters+=primaryExpression (COMMA parameters+=primaryExpression)* RIGHT_PAREN
     ;
 
 fromClause
-    : FROM relation (',' relation)* lateralView* pivotClause?
+    : FROM relation (COMMA relation)* lateralView* pivotClause?
     ;
 
 temporalClause
@@ -627,11 +575,11 @@ temporalClause
 
 aggregationClause
     : GROUP BY groupingExpressionsWithGroupingAnalytics+=groupByClause
-        (',' groupingExpressionsWithGroupingAnalytics+=groupByClause)*
-    | GROUP BY groupingExpressions+=expression (',' groupingExpressions+=expression)* (
+        (COMMA groupingExpressionsWithGroupingAnalytics+=groupByClause)*
+    | GROUP BY groupingExpressions+=expression (COMMA groupingExpressions+=expression)* (
       WITH kind=ROLLUP
     | WITH kind=CUBE
-    | kind=GROUPING SETS '(' groupingSet (',' groupingSet)* ')')?
+    | kind=GROUPING SETS LEFT_PAREN groupingSet (COMMA groupingSet)* RIGHT_PAREN)?
     ;
 
 groupByClause
@@ -640,8 +588,8 @@ groupByClause
     ;
 
 groupingAnalytics
-    : (ROLLUP | CUBE) '(' groupingSet (',' groupingSet)* ')'
-    | GROUPING SETS '(' groupingElement (',' groupingElement)* ')'
+    : (ROLLUP | CUBE) LEFT_PAREN groupingSet (COMMA groupingSet)* RIGHT_PAREN
+    | GROUPING SETS LEFT_PAREN groupingElement (COMMA groupingElement)* RIGHT_PAREN
     ;
 
 groupingElement
@@ -650,17 +598,17 @@ groupingElement
     ;
 
 groupingSet
-    : '(' (expression (',' expression)*)? ')'
+    : LEFT_PAREN (expression (COMMA expression)*)? RIGHT_PAREN
     | expression
     ;
 
 pivotClause
-    : PIVOT '(' aggregates=namedExpressionSeq FOR pivotColumn IN '(' pivotValues+=pivotValue (',' pivotValues+=pivotValue)* ')' ')'
+    : PIVOT LEFT_PAREN aggregates=namedExpressionSeq FOR pivotColumn IN LEFT_PAREN pivotValues+=pivotValue (COMMA pivotValues+=pivotValue)* RIGHT_PAREN RIGHT_PAREN
     ;
 
 pivotColumn
     : identifiers+=identifier
-    | '(' identifiers+=identifier (',' identifiers+=identifier)* ')'
+    | LEFT_PAREN identifiers+=identifier (COMMA identifiers+=identifier)* RIGHT_PAREN
     ;
 
 pivotValue
@@ -668,7 +616,7 @@ pivotValue
     ;
 
 lateralView
-    : LATERAL VIEW (OUTER)? qualifiedName '(' (expression (',' expression)*)? ')' tblName=identifier (AS? colName+=identifier (',' colName+=identifier)*)?
+    : LATERAL VIEW (OUTER)? qualifiedName LEFT_PAREN (expression (COMMA expression)*)? RIGHT_PAREN tblName=identifier (AS? colName+=identifier (COMMA colName+=identifier)*)?
     ;
 
 setQuantifier
@@ -701,27 +649,27 @@ joinCriteria
     ;
 
 sample
-    : TABLESAMPLE '(' sampleMethod? ')' (REPEATABLE '('seed=INTEGER_VALUE')')?
+    : TABLESAMPLE LEFT_PAREN sampleMethod? RIGHT_PAREN (REPEATABLE LEFT_PAREN seed=INTEGER_VALUE RIGHT_PAREN)?
     ;
 
 sampleMethod
     : negativeSign=MINUS? percentage=(INTEGER_VALUE | DECIMAL_VALUE) PERCENTLIT   #sampleByPercentile
     | expression ROWS                                                             #sampleByRows
     | sampleType=BUCKET numerator=INTEGER_VALUE OUT OF denominator=INTEGER_VALUE
-        (ON (identifier | qualifiedName '(' ')'))?                                #sampleByBucket
+        (ON (identifier | qualifiedName LEFT_PAREN RIGHT_PAREN))?                 #sampleByBucket
     | bytes=expression                                                            #sampleByBytes
     ;
 
 identifierList
-    : '(' identifierSeq ')'
+    : LEFT_PAREN identifierSeq RIGHT_PAREN
     ;
 
 identifierSeq
-    : ident+=errorCapturingIdentifier (',' ident+=errorCapturingIdentifier)*
+    : ident+=errorCapturingIdentifier (COMMA ident+=errorCapturingIdentifier)*
     ;
 
 orderedIdentifierList
-    : '(' orderedIdentifier (',' orderedIdentifier)* ')'
+    : LEFT_PAREN orderedIdentifier (COMMA orderedIdentifier)* RIGHT_PAREN
     ;
 
 orderedIdentifier
@@ -729,7 +677,7 @@ orderedIdentifier
     ;
 
 identifierCommentList
-    : '(' identifierComment (',' identifierComment)* ')'
+    : LEFT_PAREN identifierComment (COMMA identifierComment)* RIGHT_PAREN
     ;
 
 identifierComment
@@ -738,19 +686,19 @@ identifierComment
 
 relationPrimary
     : multipartIdentifier temporalClause?
-      sample? tableAlias                      #tableName
-    | '(' query ')' sample? tableAlias        #aliasedQuery
-    | '(' relation ')' sample? tableAlias     #aliasedRelation
-    | inlineTable                             #inlineTableDefault2
-    | functionTable                           #tableValuedFunction
+      sample? tableAlias                                    #tableName
+    | LEFT_PAREN query RIGHT_PAREN sample? tableAlias       #aliasedQuery
+    | LEFT_PAREN relation RIGHT_PAREN sample? tableAlias    #aliasedRelation
+    | inlineTable                                           #inlineTableDefault2
+    | functionTable                                         #tableValuedFunction
     ;
 
 inlineTable
-    : VALUES expression (',' expression)* tableAlias
+    : VALUES expression (COMMA expression)* tableAlias
     ;
 
 functionTable
-    : funcName=functionName '(' (expression (',' expression)*)? ')' tableAlias
+    : funcName=functionName LEFT_PAREN (expression (COMMA expression)*)? RIGHT_PAREN tableAlias
     ;
 
 tableAlias
@@ -768,15 +716,15 @@ rowFormat
     ;
 
 multipartIdentifierList
-    : multipartIdentifier (',' multipartIdentifier)*
+    : multipartIdentifier (COMMA multipartIdentifier)*
     ;
 
 multipartIdentifier
-    : parts+=errorCapturingIdentifier ('.' parts+=errorCapturingIdentifier)*
+    : parts+=errorCapturingIdentifier (DOT parts+=errorCapturingIdentifier)*
     ;
 
 multipartIdentifierPropertyList
-    : multipartIdentifierProperty (',' multipartIdentifierProperty)*
+    : multipartIdentifierProperty (COMMA multipartIdentifierProperty)*
     ;
 
 multipartIdentifierProperty
@@ -784,11 +732,11 @@ multipartIdentifierProperty
     ;
 
 tableIdentifier
-    : (db=errorCapturingIdentifier '.')? table=errorCapturingIdentifier
+    : (db=errorCapturingIdentifier DOT)? table=errorCapturingIdentifier
     ;
 
 functionIdentifier
-    : (db=errorCapturingIdentifier '.')? function=errorCapturingIdentifier
+    : (db=errorCapturingIdentifier DOT)? function=errorCapturingIdentifier
     ;
 
 namedExpression
@@ -796,11 +744,11 @@ namedExpression
     ;
 
 namedExpressionSeq
-    : namedExpression (',' namedExpression)*
+    : namedExpression (COMMA namedExpression)*
     ;
 
 partitionFieldList
-    : '(' fields+=partitionField (',' fields+=partitionField)* ')'
+    : LEFT_PAREN fields+=partitionField (COMMA fields+=partitionField)* RIGHT_PAREN
     ;
 
 partitionField
@@ -809,9 +757,9 @@ partitionField
     ;
 
 transform
-    : qualifiedName                                                           #identityTransform
+    : qualifiedName                                                                             #identityTransform
     | transformName=identifier
-      '(' argument+=transformArgument (',' argument+=transformArgument)* ')'  #applyTransform
+      LEFT_PAREN argument+=transformArgument (COMMA argument+=transformArgument)* RIGHT_PAREN   #applyTransform
     ;
 
 transformArgument
@@ -824,12 +772,12 @@ expression
     ;
 
 expressionSeq
-    : expression (',' expression)*
+    : expression (COMMA expression)*
     ;
 
 booleanExpression
     : NOT booleanExpression                                        #logicalNot
-    | EXISTS '(' query ')'                                         #exists
+    | EXISTS LEFT_PAREN query RIGHT_PAREN                          #exists
     | valueExpression predicate?                                   #predicated
     | left=booleanExpression operator=AND right=booleanExpression  #logicalBinary
     | left=booleanExpression operator=OR right=booleanExpression   #logicalBinary
@@ -837,10 +785,10 @@ booleanExpression
 
 predicate
     : NOT? kind=BETWEEN lower=valueExpression AND upper=valueExpression
-    | NOT? kind=IN '(' expression (',' expression)* ')'
-    | NOT? kind=IN '(' query ')'
+    | NOT? kind=IN LEFT_PAREN expression (COMMA expression)* RIGHT_PAREN
+    | NOT? kind=IN LEFT_PAREN query RIGHT_PAREN
     | NOT? kind=RLIKE pattern=valueExpression
-    | NOT? kind=(LIKE | ILIKE) quantifier=(ANY | SOME | ALL) ('('')' | '(' expression (',' expression)* ')')
+    | NOT? kind=(LIKE | ILIKE) quantifier=(ANY | SOME | ALL) (LEFT_PAREN RIGHT_PAREN | LEFT_PAREN expression (COMMA expression)* RIGHT_PAREN)
     | NOT? kind=(LIKE | ILIKE) pattern=valueExpression (ESCAPE escapeChar=STRING)?
     | IS NOT? kind=NULL
     | IS NOT? kind=(TRUE | FALSE | UNKNOWN)
@@ -860,38 +808,38 @@ valueExpression
 
 primaryExpression
     : name=(CURRENT_DATE | CURRENT_TIMESTAMP | CURRENT_USER)                                   #currentLike
-    | name=(TIMESTAMPADD | DATEADD | DATE_ADD) '(' unit=identifier ',' unitsAmount=valueExpression ',' timestamp=valueExpression ')'  #timestampadd
-    | name=(TIMESTAMPDIFF | DATEDIFF | DATE_DIFF) '(' unit=identifier ',' startTimestamp=valueExpression ',' endTimestamp=valueExpression ')'  #timestampdiff
+    | name=(TIMESTAMPADD | DATEADD | DATE_ADD) LEFT_PAREN unit=identifier COMMA unitsAmount=valueExpression COMMA timestamp=valueExpression RIGHT_PAREN             #timestampadd
+    | name=(TIMESTAMPDIFF | DATEDIFF | DATE_DIFF) LEFT_PAREN unit=identifier COMMA startTimestamp=valueExpression COMMA endTimestamp=valueExpression RIGHT_PAREN    #timestampdiff
     | CASE whenClause+ (ELSE elseExpression=expression)? END                                   #searchedCase
     | CASE value=expression whenClause+ (ELSE elseExpression=expression)? END                  #simpleCase
-    | name=(CAST | TRY_CAST) '(' expression AS dataType ')'                                    #cast
-    | STRUCT '(' (argument+=namedExpression (',' argument+=namedExpression)*)? ')'             #struct
-    | FIRST '(' expression (IGNORE NULLS)? ')'                                                 #first
-    | LAST '(' expression (IGNORE NULLS)? ')'                                                  #last
-    | POSITION '(' substr=valueExpression IN str=valueExpression ')'                           #position
+    | name=(CAST | TRY_CAST) LEFT_PAREN expression AS dataType RIGHT_PAREN                     #cast
+    | STRUCT LEFT_PAREN (argument+=namedExpression (COMMA argument+=namedExpression)*)? RIGHT_PAREN #struct
+    | FIRST LEFT_PAREN expression (IGNORE NULLS)? RIGHT_PAREN                                  #first
+    | LAST LEFT_PAREN expression (IGNORE NULLS)? RIGHT_PAREN                                   #last
+    | POSITION LEFT_PAREN substr=valueExpression IN str=valueExpression RIGHT_PAREN            #position
     | constant                                                                                 #constantDefault
     | ASTERISK                                                                                 #star
-    | qualifiedName '.' ASTERISK                                                               #star
-    | '(' namedExpression (',' namedExpression)+ ')'                                           #rowConstructor
-    | '(' query ')'                                                                            #subqueryExpression
-    | functionName '(' (setQuantifier? argument+=expression (',' argument+=expression)*)? ')'
-       (FILTER '(' WHERE where=booleanExpression ')')?
+    | qualifiedName DOT ASTERISK                                                               #star
+    | LEFT_PAREN namedExpression (COMMA namedExpression)+ RIGHT_PAREN                          #rowConstructor
+    | LEFT_PAREN query RIGHT_PAREN                                                             #subqueryExpression
+    | functionName LEFT_PAREN (setQuantifier? argument+=expression (COMMA argument+=expression)*)? RIGHT_PAREN
+       (FILTER LEFT_PAREN WHERE where=booleanExpression RIGHT_PAREN)?
        (nullsOption=(IGNORE | RESPECT) NULLS)? ( OVER windowSpec)?                             #functionCall
-    | identifier '->' expression                                                               #lambda
-    | '(' identifier (',' identifier)+ ')' '->' expression                                     #lambda
-    | value=primaryExpression '[' index=valueExpression ']'                                    #subscript
+    | identifier ARROW expression                                                              #lambda
+    | LEFT_PAREN identifier (COMMA identifier)+ RIGHT_PAREN ARROW expression                   #lambda
+    | value=primaryExpression LEFT_BRACKET index=valueExpression RIGHT_BRACKET                 #subscript
     | identifier                                                                               #columnReference
-    | base=primaryExpression '.' fieldName=identifier                                          #dereference
-    | '(' expression ')'                                                                       #parenthesizedExpression
-    | EXTRACT '(' field=identifier FROM source=valueExpression ')'                             #extract
-    | (SUBSTR | SUBSTRING) '(' str=valueExpression (FROM | ',') pos=valueExpression
-      ((FOR | ',') len=valueExpression)? ')'                                                   #substring
-    | TRIM '(' trimOption=(BOTH | LEADING | TRAILING)? (trimStr=valueExpression)?
-       FROM srcStr=valueExpression ')'                                                         #trim
-    | OVERLAY '(' input=valueExpression PLACING replace=valueExpression
-      FROM position=valueExpression (FOR length=valueExpression)? ')'                          #overlay
-    | PERCENTILE_CONT '(' percentage=valueExpression ')'
-      WITHIN GROUP '(' ORDER BY sortItem ')'                                                   #percentile
+    | base=primaryExpression DOT fieldName=identifier                                          #dereference
+    | LEFT_PAREN expression RIGHT_PAREN                                                        #parenthesizedExpression
+    | EXTRACT LEFT_PAREN field=identifier FROM source=valueExpression RIGHT_PAREN              #extract
+    | (SUBSTR | SUBSTRING) LEFT_PAREN str=valueExpression (FROM | COMMA) pos=valueExpression
+      ((FOR | COMMA) len=valueExpression)? RIGHT_PAREN                                         #substring
+    | TRIM LEFT_PAREN trimOption=(BOTH | LEADING | TRAILING)? (trimStr=valueExpression)?
+       FROM srcStr=valueExpression RIGHT_PAREN                                                 #trim
+    | OVERLAY LEFT_PAREN input=valueExpression PLACING replace=valueExpression
+      FROM position=valueExpression (FOR length=valueExpression)? RIGHT_PAREN                  #overlay
+    | PERCENTILE_CONT LEFT_PAREN percentage=valueExpression RIGHT_PAREN
+      WITHIN GROUP LEFT_PAREN ORDER BY sortItem RIGHT_PAREN                                    #percentile
     ;
 
 constant
@@ -948,17 +896,18 @@ colPosition
     ;
 
 dataType
-    : complex=ARRAY '<' dataType '>'                            #complexDataType
-    | complex=MAP '<' dataType ',' dataType '>'                 #complexDataType
-    | complex=STRUCT ('<' complexColTypeList? '>' | NEQ)        #complexDataType
+    : complex=ARRAY LT dataType GT                              #complexDataType
+    | complex=MAP LT dataType COMMA dataType GT                 #complexDataType
+    | complex=STRUCT (LT complexColTypeList? GT | NEQ)          #complexDataType
     | INTERVAL from=(YEAR | MONTH) (TO to=MONTH)?               #yearMonthIntervalDataType
     | INTERVAL from=(DAY | HOUR | MINUTE | SECOND)
       (TO to=(HOUR | MINUTE | SECOND))?                         #dayTimeIntervalDataType
-    | identifier ('(' INTEGER_VALUE (',' INTEGER_VALUE)* ')')?  #primitiveDataType
+    | identifier (LEFT_PAREN INTEGER_VALUE
+      (COMMA INTEGER_VALUE)* RIGHT_PAREN)?                      #primitiveDataType
     ;
 
 qualifiedColTypeWithPositionList
-    : qualifiedColTypeWithPosition (',' qualifiedColTypeWithPosition)*
+    : qualifiedColTypeWithPosition (COMMA qualifiedColTypeWithPosition)*
     ;
 
 qualifiedColTypeWithPosition
@@ -966,7 +915,7 @@ qualifiedColTypeWithPosition
     ;
 
 colTypeList
-    : colType (',' colType)*
+    : colType (COMMA colType)*
     ;
 
 colType
@@ -974,11 +923,11 @@ colType
     ;
 
 complexColTypeList
-    : complexColType (',' complexColType)*
+    : complexColType (COMMA complexColType)*
     ;
 
 complexColType
-    : identifier ':'? dataType (NOT NULL)? commentSpec?
+    : identifier COLON? dataType (NOT NULL)? commentSpec?
     ;
 
 whenClause
@@ -986,7 +935,7 @@ whenClause
     ;
 
 windowClause
-    : WINDOW namedWindow (',' namedWindow)*
+    : WINDOW namedWindow (COMMA namedWindow)*
     ;
 
 namedWindow
@@ -994,14 +943,14 @@ namedWindow
     ;
 
 windowSpec
-    : name=errorCapturingIdentifier         #windowRef
-    | '('name=errorCapturingIdentifier')'   #windowRef
-    | '('
-      ( CLUSTER BY partition+=expression (',' partition+=expression)*
-      | ((PARTITION | DISTRIBUTE) BY partition+=expression (',' partition+=expression)*)?
-        ((ORDER | SORT) BY sortItem (',' sortItem)*)?)
+    : name=errorCapturingIdentifier                         #windowRef
+    | LEFT_PAREN name=errorCapturingIdentifier RIGHT_PAREN  #windowRef
+    | LEFT_PAREN
+      ( CLUSTER BY partition+=expression (COMMA partition+=expression)*
+      | ((PARTITION | DISTRIBUTE) BY partition+=expression (COMMA partition+=expression)*)?
+        ((ORDER | SORT) BY sortItem (COMMA sortItem)*)?)
       windowFrame?
-      ')'                                   #windowDef
+      RIGHT_PAREN                                           #windowDef
     ;
 
 windowFrame
@@ -1018,7 +967,7 @@ frameBound
     ;
 
 qualifiedNameList
-    : qualifiedName (',' qualifiedName)*
+    : qualifiedName (COMMA qualifiedName)*
     ;
 
 functionName
@@ -1029,7 +978,7 @@ functionName
     ;
 
 qualifiedName
-    : identifier ('.' identifier)*
+    : identifier (DOT identifier)*
     ;
 
 // this rule is used for explicitly capturing wrong identifiers such as test-table, which should actually be `test-table`
@@ -1591,402 +1540,4 @@ nonReserved
     | YEAR
     | ZONE
 //--DEFAULT-NON-RESERVED-END
-    ;
-
-// NOTE: If you add a new token in the list below, you should update the list of keywords
-// and reserved tag in `docs/sql-ref-ansi-compliance.md#sql-keywords`.
-
-//============================
-// Start of the keywords list
-//============================
-//--SPARK-KEYWORD-LIST-START
-ADD: 'ADD';
-AFTER: 'AFTER';
-ALL: 'ALL';
-ALTER: 'ALTER';
-ANALYZE: 'ANALYZE';
-AND: 'AND';
-ANTI: 'ANTI';
-ANY: 'ANY';
-ARCHIVE: 'ARCHIVE';
-ARRAY: 'ARRAY';
-AS: 'AS';
-ASC: 'ASC';
-AT: 'AT';
-AUTHORIZATION: 'AUTHORIZATION';
-BETWEEN: 'BETWEEN';
-BOTH: 'BOTH';
-BUCKET: 'BUCKET';
-BUCKETS: 'BUCKETS';
-BY: 'BY';
-CACHE: 'CACHE';
-CASCADE: 'CASCADE';
-CASE: 'CASE';
-CAST: 'CAST';
-CATALOG: 'CATALOG';
-CATALOGS: 'CATALOGS';
-CHANGE: 'CHANGE';
-CHECK: 'CHECK';
-CLEAR: 'CLEAR';
-CLUSTER: 'CLUSTER';
-CLUSTERED: 'CLUSTERED';
-CODEGEN: 'CODEGEN';
-COLLATE: 'COLLATE';
-COLLECTION: 'COLLECTION';
-COLUMN: 'COLUMN';
-COLUMNS: 'COLUMNS';
-COMMENT: 'COMMENT';
-COMMIT: 'COMMIT';
-COMPACT: 'COMPACT';
-COMPACTIONS: 'COMPACTIONS';
-COMPUTE: 'COMPUTE';
-CONCATENATE: 'CONCATENATE';
-CONSTRAINT: 'CONSTRAINT';
-COST: 'COST';
-CREATE: 'CREATE';
-CROSS: 'CROSS';
-CUBE: 'CUBE';
-CURRENT: 'CURRENT';
-CURRENT_DATE: 'CURRENT_DATE';
-CURRENT_TIME: 'CURRENT_TIME';
-CURRENT_TIMESTAMP: 'CURRENT_TIMESTAMP';
-CURRENT_USER: 'CURRENT_USER';
-DAY: 'DAY';
-DATA: 'DATA';
-DATABASE: 'DATABASE';
-DATABASES: 'DATABASES';
-DATEADD: 'DATEADD';
-DATE_ADD: 'DATE_ADD';
-DATEDIFF: 'DATEDIFF';
-DATE_DIFF: 'DATE_DIFF';
-DBPROPERTIES: 'DBPROPERTIES';
-DEFINED: 'DEFINED';
-DELETE: 'DELETE';
-DELIMITED: 'DELIMITED';
-DESC: 'DESC';
-DESCRIBE: 'DESCRIBE';
-DFS: 'DFS';
-DIRECTORIES: 'DIRECTORIES';
-DIRECTORY: 'DIRECTORY';
-DISTINCT: 'DISTINCT';
-DISTRIBUTE: 'DISTRIBUTE';
-DIV: 'DIV';
-DROP: 'DROP';
-ELSE: 'ELSE';
-END: 'END';
-ESCAPE: 'ESCAPE';
-ESCAPED: 'ESCAPED';
-EXCEPT: 'EXCEPT';
-EXCHANGE: 'EXCHANGE';
-EXISTS: 'EXISTS';
-EXPLAIN: 'EXPLAIN';
-EXPORT: 'EXPORT';
-EXTENDED: 'EXTENDED';
-EXTERNAL: 'EXTERNAL';
-EXTRACT: 'EXTRACT';
-FALSE: 'FALSE';
-FETCH: 'FETCH';
-FIELDS: 'FIELDS';
-FILTER: 'FILTER';
-FILEFORMAT: 'FILEFORMAT';
-FIRST: 'FIRST';
-FOLLOWING: 'FOLLOWING';
-FOR: 'FOR';
-FOREIGN: 'FOREIGN';
-FORMAT: 'FORMAT';
-FORMATTED: 'FORMATTED';
-FROM: 'FROM';
-FULL: 'FULL';
-FUNCTION: 'FUNCTION';
-FUNCTIONS: 'FUNCTIONS';
-GLOBAL: 'GLOBAL';
-GRANT: 'GRANT';
-GROUP: 'GROUP';
-GROUPING: 'GROUPING';
-HAVING: 'HAVING';
-HOUR: 'HOUR';
-IF: 'IF';
-IGNORE: 'IGNORE';
-IMPORT: 'IMPORT';
-IN: 'IN';
-INDEX: 'INDEX';
-INDEXES: 'INDEXES';
-INNER: 'INNER';
-INPATH: 'INPATH';
-INPUTFORMAT: 'INPUTFORMAT';
-INSERT: 'INSERT';
-INTERSECT: 'INTERSECT';
-INTERVAL: 'INTERVAL';
-INTO: 'INTO';
-IS: 'IS';
-ITEMS: 'ITEMS';
-JOIN: 'JOIN';
-KEYS: 'KEYS';
-LAST: 'LAST';
-LATERAL: 'LATERAL';
-LAZY: 'LAZY';
-LEADING: 'LEADING';
-LEFT: 'LEFT';
-LIKE: 'LIKE';
-ILIKE: 'ILIKE';
-LIMIT: 'LIMIT';
-LINES: 'LINES';
-LIST: 'LIST';
-LOAD: 'LOAD';
-LOCAL: 'LOCAL';
-LOCATION: 'LOCATION';
-LOCK: 'LOCK';
-LOCKS: 'LOCKS';
-LOGICAL: 'LOGICAL';
-MACRO: 'MACRO';
-MAP: 'MAP';
-MATCHED: 'MATCHED';
-MERGE: 'MERGE';
-MINUTE: 'MINUTE';
-MONTH: 'MONTH';
-MSCK: 'MSCK';
-NAMESPACE: 'NAMESPACE';
-NAMESPACES: 'NAMESPACES';
-NATURAL: 'NATURAL';
-NO: 'NO';
-NOT: 'NOT' | '!';
-NULL: 'NULL';
-NULLS: 'NULLS';
-OF: 'OF';
-ON: 'ON';
-ONLY: 'ONLY';
-OPTION: 'OPTION';
-OPTIONS: 'OPTIONS';
-OR: 'OR';
-ORDER: 'ORDER';
-OUT: 'OUT';
-OUTER: 'OUTER';
-OUTPUTFORMAT: 'OUTPUTFORMAT';
-OVER: 'OVER';
-OVERLAPS: 'OVERLAPS';
-OVERLAY: 'OVERLAY';
-OVERWRITE: 'OVERWRITE';
-PARTITION: 'PARTITION';
-PARTITIONED: 'PARTITIONED';
-PARTITIONS: 'PARTITIONS';
-PERCENTILE_CONT: 'PERCENTILE_CONT';
-PERCENTLIT: 'PERCENT';
-PIVOT: 'PIVOT';
-PLACING: 'PLACING';
-POSITION: 'POSITION';
-PRECEDING: 'PRECEDING';
-PRIMARY: 'PRIMARY';
-PRINCIPALS: 'PRINCIPALS';
-PROPERTIES: 'PROPERTIES';
-PURGE: 'PURGE';
-QUERY: 'QUERY';
-RANGE: 'RANGE';
-RECORDREADER: 'RECORDREADER';
-RECORDWRITER: 'RECORDWRITER';
-RECOVER: 'RECOVER';
-REDUCE: 'REDUCE';
-REFERENCES: 'REFERENCES';
-REFRESH: 'REFRESH';
-RENAME: 'RENAME';
-REPAIR: 'REPAIR';
-REPEATABLE: 'REPEATABLE';
-REPLACE: 'REPLACE';
-RESET: 'RESET';
-RESPECT: 'RESPECT';
-RESTRICT: 'RESTRICT';
-REVOKE: 'REVOKE';
-RIGHT: 'RIGHT';
-RLIKE: 'RLIKE' | 'REGEXP';
-ROLE: 'ROLE';
-ROLES: 'ROLES';
-ROLLBACK: 'ROLLBACK';
-ROLLUP: 'ROLLUP';
-ROW: 'ROW';
-ROWS: 'ROWS';
-SECOND: 'SECOND';
-SCHEMA: 'SCHEMA';
-SCHEMAS: 'SCHEMAS';
-SELECT: 'SELECT';
-SEMI: 'SEMI';
-SEPARATED: 'SEPARATED';
-SERDE: 'SERDE';
-SERDEPROPERTIES: 'SERDEPROPERTIES';
-SESSION_USER: 'SESSION_USER';
-SET: 'SET';
-SETMINUS: 'MINUS';
-SETS: 'SETS';
-SHOW: 'SHOW';
-SKEWED: 'SKEWED';
-SOME: 'SOME';
-SORT: 'SORT';
-SORTED: 'SORTED';
-START: 'START';
-STATISTICS: 'STATISTICS';
-STORED: 'STORED';
-STRATIFY: 'STRATIFY';
-STRUCT: 'STRUCT';
-SUBSTR: 'SUBSTR';
-SUBSTRING: 'SUBSTRING';
-SYNC: 'SYNC';
-SYSTEM_TIME: 'SYSTEM_TIME';
-SYSTEM_VERSION: 'SYSTEM_VERSION';
-TABLE: 'TABLE';
-TABLES: 'TABLES';
-TABLESAMPLE: 'TABLESAMPLE';
-TBLPROPERTIES: 'TBLPROPERTIES';
-TEMPORARY: 'TEMPORARY' | 'TEMP';
-TERMINATED: 'TERMINATED';
-THEN: 'THEN';
-TIME: 'TIME';
-TIMESTAMP: 'TIMESTAMP';
-TIMESTAMPADD: 'TIMESTAMPADD';
-TIMESTAMPDIFF: 'TIMESTAMPDIFF';
-TO: 'TO';
-TOUCH: 'TOUCH';
-TRAILING: 'TRAILING';
-TRANSACTION: 'TRANSACTION';
-TRANSACTIONS: 'TRANSACTIONS';
-TRANSFORM: 'TRANSFORM';
-TRIM: 'TRIM';
-TRUE: 'TRUE';
-TRUNCATE: 'TRUNCATE';
-TRY_CAST: 'TRY_CAST';
-TYPE: 'TYPE';
-UNARCHIVE: 'UNARCHIVE';
-UNBOUNDED: 'UNBOUNDED';
-UNCACHE: 'UNCACHE';
-UNION: 'UNION';
-UNIQUE: 'UNIQUE';
-UNKNOWN: 'UNKNOWN';
-UNLOCK: 'UNLOCK';
-UNSET: 'UNSET';
-UPDATE: 'UPDATE';
-USE: 'USE';
-USER: 'USER';
-USING: 'USING';
-VALUES: 'VALUES';
-VERSION: 'VERSION';
-VIEW: 'VIEW';
-VIEWS: 'VIEWS';
-WHEN: 'WHEN';
-WHERE: 'WHERE';
-WINDOW: 'WINDOW';
-WITH: 'WITH';
-WITHIN: 'WITHIN';
-YEAR: 'YEAR';
-ZONE: 'ZONE';
-//--SPARK-KEYWORD-LIST-END
-//============================
-// End of the keywords list
-//============================
-
-EQ  : '=' | '==';
-NSEQ: '<=>';
-NEQ : '<>';
-NEQJ: '!=';
-LT  : '<';
-LTE : '<=' | '!>';
-GT  : '>';
-GTE : '>=' | '!<';
-
-PLUS: '+';
-MINUS: '-';
-ASTERISK: '*';
-SLASH: '/';
-PERCENT: '%';
-TILDE: '~';
-AMPERSAND: '&';
-PIPE: '|';
-CONCAT_PIPE: '||';
-HAT: '^';
-
-STRING
-    : '\'' ( ~('\''|'\\') | ('\\' .) )* '\''
-    | '"' ( ~('"'|'\\') | ('\\' .) )* '"'
-    | 'R\'' (~'\'')* '\''
-    | 'R"'(~'"')* '"'
-    ;
-
-BIGINT_LITERAL
-    : DIGIT+ 'L'
-    ;
-
-SMALLINT_LITERAL
-    : DIGIT+ 'S'
-    ;
-
-TINYINT_LITERAL
-    : DIGIT+ 'Y'
-    ;
-
-INTEGER_VALUE
-    : DIGIT+
-    ;
-
-EXPONENT_VALUE
-    : DIGIT+ EXPONENT
-    | DECIMAL_DIGITS EXPONENT {isValidDecimal()}?
-    ;
-
-DECIMAL_VALUE
-    : DECIMAL_DIGITS {isValidDecimal()}?
-    ;
-
-FLOAT_LITERAL
-    : DIGIT+ EXPONENT? 'F'
-    | DECIMAL_DIGITS EXPONENT? 'F' {isValidDecimal()}?
-    ;
-
-DOUBLE_LITERAL
-    : DIGIT+ EXPONENT? 'D'
-    | DECIMAL_DIGITS EXPONENT? 'D' {isValidDecimal()}?
-    ;
-
-BIGDECIMAL_LITERAL
-    : DIGIT+ EXPONENT? 'BD'
-    | DECIMAL_DIGITS EXPONENT? 'BD' {isValidDecimal()}?
-    ;
-
-IDENTIFIER
-    : (LETTER | DIGIT | '_')+
-    ;
-
-BACKQUOTED_IDENTIFIER
-    : '`' ( ~'`' | '``' )* '`'
-    ;
-
-fragment DECIMAL_DIGITS
-    : DIGIT+ '.' DIGIT*
-    | '.' DIGIT+
-    ;
-
-fragment EXPONENT
-    : 'E' [+-]? DIGIT+
-    ;
-
-fragment DIGIT
-    : [0-9]
-    ;
-
-fragment LETTER
-    : [A-Z]
-    ;
-
-SIMPLE_COMMENT
-    : '--' ('\\\n' | ~[\r\n])* '\r'? '\n'? -> channel(HIDDEN)
-    ;
-
-BRACKETED_COMMENT
-    : '/*' {!isHint()}? ( BRACKETED_COMMENT | . )*? ('*/' | {markUnclosedComment();} EOF) -> channel(HIDDEN)
-    ;
-
-WS
-    : [ \r\n\t]+ -> channel(HIDDEN)
-    ;
-
-// Catch-all for anything we can't recognize.
-// We use this to be able to ignore and recover all the text
-// when splitting statements with DelimiterLexer
-UNRECOGNIZED
-    : .
     ;
