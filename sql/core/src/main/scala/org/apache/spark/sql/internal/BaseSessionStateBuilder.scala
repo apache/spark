@@ -242,15 +242,24 @@ abstract class BaseSessionStateBuilder(
    * Note: this depends on `catalog` and `experimentalMethods` fields.
    */
   protected def optimizer: Optimizer = {
-    new SparkOptimizer(catalogManager, catalog, experimentalMethods) {
-      override def earlyScanPushDownRules: Seq[Rule[LogicalPlan]] =
-        super.earlyScanPushDownRules ++ customEarlyScanPushDownRules
+    val optimizerClassName = conf.getConfString("spark.sql.customized.optimizer", "")
+    if (optimizerClassName.nonEmpty && !optimizerClassName.equals("")) {
+      val catalogManagerTypeName = Class.forName("org.apache.spark.sql.connector.catalog.CatalogManager")
+      val sessionCatalogTypeName = Class.forName("org.apache.spark.sql.catalyst.catalog.SessionCatalog")
+      val experimentalMethodsTypeName = Class.forName("org.apache.spark.sql.ExperimentalMethods")
+      val optimizerInstance = Class.forName(optimizerClassName).getConstructor(catalogManagerTypeName, sessionCatalogTypeName, experimentalMethodsTypeName).newInstance(catalogManager, catalog, experimentalMethods)
+      optimizerInstance.asInstanceOf[Optimizer]
+    } else {
+      new SparkOptimizer(catalogManager, catalog, experimentalMethods) {
+        override def earlyScanPushDownRules: Seq[Rule[LogicalPlan]] =
+          super.earlyScanPushDownRules ++ customEarlyScanPushDownRules
 
-      override def preCBORules: Seq[Rule[LogicalPlan]] =
-        super.preCBORules ++ customPreCBORules
+        override def preCBORules: Seq[Rule[LogicalPlan]] =
+          super.preCBORules ++ customPreCBORules
 
-      override def extendedOperatorOptimizationRules: Seq[Rule[LogicalPlan]] =
-        super.extendedOperatorOptimizationRules ++ customOperatorOptimizationRules
+        override def extendedOperatorOptimizationRules: Seq[Rule[LogicalPlan]] =
+          super.extendedOperatorOptimizationRules ++ customOperatorOptimizationRules
+      }
     }
   }
 
@@ -288,9 +297,17 @@ abstract class BaseSessionStateBuilder(
    * Note: this depends on the `conf` and `experimentalMethods` fields.
    */
   protected def planner: SparkPlanner = {
-    new SparkPlanner(session, experimentalMethods) {
-      override def extraPlanningStrategies: Seq[Strategy] =
-        super.extraPlanningStrategies ++ customPlanningStrategies
+    val plannerClassName = conf.getConfString("spark.sql.customized.planner", "")
+    if (plannerClassName.nonEmpty && !plannerClassName.equals("")) {
+      val sparkSessionType = Class.forName("org.apache.spark.sql.SparkSession")
+      val experimentalMethodsType = Class.forName("org.apache.spark.sql.ExperimentalMethods")
+      val plannerInstance = Class.forName(plannerClassName).getConstructor(sparkSessionType, experimentalMethodsType).newInstance(session, experimentalMethods)
+      plannerInstance.asInstanceOf[SparkPlanner]
+    } else {
+      new SparkPlanner(session, experimentalMethods) {
+        override def extraPlanningStrategies: Seq[Strategy] =
+          super.extraPlanningStrategies ++ customPlanningStrategies
+      }
     }
   }
 
