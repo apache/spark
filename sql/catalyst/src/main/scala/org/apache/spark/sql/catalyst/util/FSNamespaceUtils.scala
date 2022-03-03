@@ -22,7 +22,7 @@ import org.apache.spark.sql.catalyst.catalog.CatalogStorageFormat
 
 object FSNamespaceUtils {
 
-  def replaceLocationWithSpecialPrefix(
+  def replaceLocWithSpecPrefix(
         specificLocation: String,
         storage: CatalogStorageFormat): CatalogStorageFormat = {
     val uri = if (specificLocation != null && storage.locationUri.isDefined) {

@@ -1240,7 +1240,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     val l = conf.get(SQLConf.HIVE_SPECIFIC_FS_LOCATION)
     val res = client.getPartitions(db, table, metaStoreSpec)
       .map { part => part.copy(spec = restorePartitionSpec(part.spec, partColNameMap),
-        storage = FSNamespaceUtils.replaceLocationWithSpecialPrefix(l, part.storage))
+        storage = FSNamespaceUtils.replaceLocWithSpecPrefix(l, part.storage))
       }
 
     metaStoreSpec match {
@@ -1266,7 +1266,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     val clientPrunedPartitions =
       client.getPartitionsByFilter(rawTable, predicates).map { part =>
         part.copy(spec = restorePartitionSpec(part.spec, partColNameMap),
-          storage = FSNamespaceUtils.replaceLocationWithSpecialPrefix(specFS, part.storage))
+          storage = FSNamespaceUtils.replaceLocWithSpecPrefix(specFS, part.storage))
       }
     prunePartitionsByFilter(catalogTable, clientPrunedPartitions, predicates, defaultTimeZoneId)
   }
