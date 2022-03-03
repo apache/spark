@@ -30,6 +30,7 @@ import org.apache.spark.sql.{AnalysisException, SparkSession}
 import org.apache.spark.sql.catalyst.{QualifiedTableName, TableIdentifier}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.util.FSNamespaceUtils
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.datasources.parquet.{ParquetFileFormat, ParquetOptions}
 import org.apache.spark.sql.internal.SQLConf
@@ -129,26 +130,34 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
   def convert(relation: HiveTableRelation, isWrite: Boolean): LogicalRelation = {
     val serde = relation.tableMeta.storage.serde.getOrElse("").toLowerCase(Locale.ROOT)
 
+    val specFS = sessionState.conf.getConf(SQLConf.HIVE_SPECIFIC_FS_LOCATION)
+    val specCatalog = FSNamespaceUtils.replaceLocWithSpecPrefix(specFS, relation.tableMeta.storage)
+    val specTableMeta = relation.tableMeta.copy(storage = specCatalog)
+    val specRelation = if (specFS != null && specCatalog.locationUri.isDefined) {
+      relation.copy(tableMeta = specTableMeta)
+    } else relation
+
     // Consider table and storage properties. For properties existing in both sides, storage
     // properties will supersede table properties.
     if (serde.contains("parquet")) {
-      val options = relation.tableMeta.properties.filterKeys(isParquetProperty).toMap ++
-        relation.tableMeta.storage.properties + (ParquetOptions.MERGE_SCHEMA ->
+      val options = specRelation.tableMeta.properties.filterKeys(isParquetProperty).toMap ++
+        specRelation.tableMeta.storage.properties + (ParquetOptions.MERGE_SCHEMA ->
         SQLConf.get.getConf(HiveUtils.CONVERT_METASTORE_PARQUET_WITH_SCHEMA_MERGING).toString)
-        convertToLogicalRelation(relation, options, classOf[ParquetFileFormat], "parquet", isWrite)
+        convertToLogicalRelation(specRelation, options,
+          classOf[ParquetFileFormat], "parquet", isWrite)
     } else {
-      val options = relation.tableMeta.properties.filterKeys(isOrcProperty).toMap ++
-        relation.tableMeta.storage.properties
+      val options = specRelation.tableMeta.properties.filterKeys(isOrcProperty).toMap ++
+        specRelation.tableMeta.storage.properties
       if (SQLConf.get.getConf(SQLConf.ORC_IMPLEMENTATION) == "native") {
         convertToLogicalRelation(
-          relation,
+          specRelation,
           options,
           classOf[org.apache.spark.sql.execution.datasources.orc.OrcFileFormat],
           "orc",
           isWrite)
       } else {
         convertToLogicalRelation(
-          relation,
+          specRelation,
           options,
           classOf[org.apache.spark.sql.hive.orc.OrcFileFormat],
           "orc",
