@@ -41,7 +41,7 @@ class V2ExpressionBuilder(e: Expression) {
 
   private def generateExpression(expr: Expression): Option[V2Expression] = expr match {
     case Literal(value, dataType) => Some(LiteralValue(value, dataType))
-    case attr: Attribute => Some(FieldReference.column(quoteIfNeeded(attr.name)))
+    case attr: Attribute => Some(FieldReference.column(attr.name))
     case IsNull(col) => generateExpression(col)
       .map(c => new GeneralScalarExpression("IS_NULL", Array[V2Expression](c)))
     case IsNotNull(col) => generateExpression(col)

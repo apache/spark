@@ -30,141 +30,141 @@ import org.apache.spark.sql.connector.util.V2ExpressionSQLBuilder;
  * <p>
  * The currently supported SQL scalar expressions:
  * <ol>
- *  <li>Name: IS_NULL
+ *  <li>Name: <code>IS_NULL</code>
  *   <ul>
- *    <li>SQL semantic: `expr IS NULL`</li>
+ *    <li>SQL semantic: <code>expr IS NULL</code></li>
  *    <li>Since version: 3.3.0</li>
  *   </ul>
  *  </li>
- *  <li>Name: IS_NOT_NULL
+ *  <li>Name: <code>IS_NOT_NULL</code>
  *   <ul>
- *    <li>SQL semantic: `expr IS NOT NULL`</li>
+ *    <li>SQL semantic: <code>expr IS NOT NULL</code></li>
  *    <li>Since version: 3.3.0</li>
  *   </ul>
  *  </li>
- *  <li>Name: =
+ *  <li>Name: <code>=</code>
  *   <ul>
- *    <li>SQL semantic: `expr1 = expr2`</li>
+ *    <li>SQL semantic: <code>expr1 = expr2</code></li>
  *    <li>Since version: 3.3.0</li>
  *   </ul>
  *  </li>
- *  <li>Name: !=
+ *  <li>Name: <code>!=</code>
  *   <ul>
- *    <li>SQL semantic: `expr1 != expr2`</li>
+ *    <li>SQL semantic: <code>expr1 != expr2</code></li>
  *    <li>Since version: 3.3.0</li>
  *   </ul>
  *  </li>
- *  <li>Name: &lt;&gt;
+ *  <li>Name: <code>&lt;&gt;</code>
  *   <ul>
- *    <li>SQL semantic: `expr1 &lt;&gt; expr2`</li>
+ *    <li>SQL semantic: <code>expr1 &lt;&gt; expr2</code></li>
  *    <li>Since version: 3.3.0</li>
  *   </ul>
  *  </li>
- *  <li>Name: &lt;=&gt;
+ *  <li>Name: <code>&lt;=&gt;</code>
  *   <ul>
- *    <li>SQL semantic: `expr1 &lt;=&gt; expr2`</li>
+ *    <li>SQL semantic: <code>expr1 &lt;=&gt; expr2</code></li>
  *    <li>Since version: 3.3.0</li>
  *   </ul>
  *  </li>
- *  <li>Name: &lt;
+ *  <li>Name: <code>&lt;</code>
  *   <ul>
- *    <li>SQL semantic: `expr1 &lt; expr2`</li>
+ *    <li>SQL semantic: <code>expr1 &lt; expr2</code></li>
  *    <li>Since version: 3.3.0</li>
  *   </ul>
  *  </li>
- *  <li>Name: &lt;=
+ *  <li>Name: <code>&lt;=</code>
  *   <ul>
- *    <li>SQL semantic: `expr1 &lt;= expr2`</li>
+ *    <li>SQL semantic: <code>expr1 &lt;= expr2</code></li>
  *    <li>Since version: 3.3.0</li>
  *   </ul>
  *  </li>
- *  <li>Name: &gt;
+ *  <li>Name: <code>&gt;</code>
  *   <ul>
- *    <li>SQL semantic: `expr1 &gt; expr2`</li>
+ *    <li>SQL semantic: <code>expr1 &gt; expr2</code></li>
  *    <li>Since version: 3.3.0</li>
  *   </ul>
  *  </li>
- *  <li>Name: &gt;=
+ *  <li>Name: <code>&gt;=</code>
  *   <ul>
- *    <li>SQL semantic: `expr1 &gt;= expr2`</li>
+ *    <li>SQL semantic: <code>expr1 &gt;= expr2</code></li>
  *    <li>Since version: 3.3.0</li>
  *   </ul>
  *  </li>
- *  <li>Name: +
+ *  <li>Name: <code>+</code>
  *   <ul>
- *    <li>SQL semantic: `expr1 + expr2`</li>
+ *    <li>SQL semantic: <code>expr1 + expr2</code></li>
  *    <li>Since version: 3.3.0</li>
  *   </ul>
  *  </li>
- *  <li>Name: -
+ *  <li>Name: <code>-</code>
  *   <ul>
- *    <li>SQL semantic: `expr1 - expr2` or `- expr`</li>
+ *    <li>SQL semantic: <code>expr1 - expr2</code> or <code>- expr</code></li>
  *    <li>Since version: 3.3.0</li>
  *   </ul>
  *  </li>
- *  <li>Name: *
+ *  <li>Name: <code>*</code>
  *   <ul>
- *    <li>SQL semantic: `expr1 * expr2`</li>
+ *    <li>SQL semantic: <code>expr1 * expr2</code></li>
  *    <li>Since version: 3.3.0</li>
  *   </ul>
  *  </li>
- *  <li>Name: /
+ *  <li>Name: <code>/</code>
  *   <ul>
- *    <li>SQL semantic: `expr1 / expr2`</li>
+ *    <li>SQL semantic: <code>expr1 / expr2</code></li>
  *    <li>Since version: 3.3.0</li>
  *   </ul>
  *  </li>
- *  <li>Name: %
+ *  <li>Name: <code>%</code>
  *   <ul>
- *    <li>SQL semantic: `expr1 % expr2`</li>
+ *    <li>SQL semantic: <code>expr1 % expr2</code></li>
  *    <li>Since version: 3.3.0</li>
  *   </ul>
  *  </li>
- *  <li>Name: &amp;
+ *  <li>Name: <code>&amp;</code>
  *   <ul>
- *    <li>SQL semantic: `expr1 &amp; expr2`</li>
+ *    <li>SQL semantic: <code>expr1 &amp; expr2</code></li>
  *    <li>Since version: 3.3.0</li>
  *   </ul>
  *  </li>
- *  <li>Name: |
+ *  <li>Name: <code>|</code>
  *   <ul>
- *    <li>SQL semantic: `expr1 | expr2`</li>
+ *    <li>SQL semantic: <code>expr1 | expr2</code></li>
  *    <li>Since version: 3.3.0</li>
  *   </ul>
  *  </li>
- *  <li>Name: ^
+ *  <li>Name: <code>^</code>
  *   <ul>
- *    <li>SQL semantic: `expr1 ^ expr2`</li>
+ *    <li>SQL semantic: <code>expr1 ^ expr2</code></li>
  *    <li>Since version: 3.3.0</li>
  *   </ul>
  *  </li>
- *  <li>Name: AND
+ *  <li>Name: <code>AND</code>
  *   <ul>
- *    <li>SQL semantic: `expr1 AND expr2`</li>
+ *    <li>SQL semantic: <code>expr1 AND expr2</code></li>
  *    <li>Since version: 3.3.0</li>
  *   </ul>
  *  </li>
- *  <li>Name: OR
+ *  <li>Name: <code>OR</code>
  *   <ul>
- *    <li>SQL semantic: `expr1 OR expr2`</li>
+ *    <li>SQL semantic: <code>expr1 OR expr2</code></li>
  *    <li>Since version: 3.3.0</li>
  *   </ul>
  *  </li>
- *  <li>Name: NOT
+ *  <li>Name: <code>NOT</code>
  *   <ul>
- *    <li>SQL semantic: `NOT expr`</li>
+ *    <li>SQL semantic: <code>NOT expr</code></li>
  *    <li>Since version: 3.3.0</li>
  *   </ul>
  *  </li>
- *  <li>Name: ~
+ *  <li>Name: <code>~</code>
  *   <ul>
- *    <li>SQL semantic: `~ expr`</li>
+ *    <li>SQL semantic: <code>~ expr</code></li>
  *    <li>Since version: 3.3.0</li>
  *   </ul>
  *  </li>
- *  <li>Name: CASE_WHEN
+ *  <li>Name: <code>CASE_WHEN</code>
  *   <ul>
- *    <li>SQL semantic: `CASE WHEN expr1 THEN expr2 [WHEN expr3 THEN expr4]* [ELSE expr5] END`</li>
+ *    <li>SQL semantic: <code>CASE WHEN expr1 THEN expr2 [WHEN expr3 THEN expr4]* [ELSE expr5] END</code></li>
  *    <li>Since version: 3.3.0</li>
  *   </ul>
  *  </li>
