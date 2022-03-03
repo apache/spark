@@ -2787,8 +2787,8 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
     // Process the 'DEFAULT expression' clause in the column definition, if any.
     val name: String = colName.getText
     val defaultExpr = Option(ctx.defaultExpression()).map(visitDefaultExpression)
-    if (defaultExpr != None) {
-      throw new ParseException(defaultColumnNotImplementedYetError, ctx)
+    if (defaultExpr.isDefined) {
+      throw QueryParsingErrors.defaultColumnNotImplementedYetError(ctx)
     }
 
     StructField(
@@ -3695,10 +3695,6 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
     }
   }
 
-  private def defaultColumnNotImplementedYetError = {
-    "Support for DEFAULT column values is not implemented yet"
-  }
-
   /**
    * Parse new column info from ADD COLUMN into a QualifiedColType.
    */
@@ -3706,8 +3702,8 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
       ctx: QualifiedColTypeWithPositionContext): QualifiedColType = withOrigin(ctx) {
     val name = typedVisit[Seq[String]](ctx.name)
     val defaultExpr = Option(ctx.defaultExpression()).map(visitDefaultExpression)
-    if (defaultExpr != None) {
-      throw new ParseException(defaultColumnNotImplementedYetError, ctx)
+    if (defaultExpr.isDefined) {
+      throw QueryParsingErrors.defaultColumnNotImplementedYetError(ctx)
     }
     QualifiedColType(
       path = if (name.length > 1) Some(UnresolvedFieldName(name.init)) else None,
@@ -3798,10 +3794,10 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
       None
     }
     if (action.defaultExpression != null) {
-      throw new ParseException(defaultColumnNotImplementedYetError, ctx)
+      throw QueryParsingErrors.defaultColumnNotImplementedYetError(ctx)
     }
     if (action.dropDefault != null) {
-      throw new ParseException(defaultColumnNotImplementedYetError, ctx)
+      throw QueryParsingErrors.defaultColumnNotImplementedYetError(ctx)
     }
 
     assert(Seq(dataType, nullable, comment, position).count(_.nonEmpty) == 1)
@@ -3871,8 +3867,8 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
           throw QueryParsingErrors.operationInHiveStyleCommandUnsupportedError(
             "Replacing with a nested column", "REPLACE COLUMNS", ctx)
         }
-        if (Option(colType.defaultExpression()).map(visitDefaultExpression) != None) {
-          throw new ParseException(defaultColumnNotImplementedYetError, ctx)
+        if (Option(colType.defaultExpression()).map(visitDefaultExpression).isDefined) {
+          throw QueryParsingErrors.defaultColumnNotImplementedYetError(ctx)
         }
         col
       }.toSeq

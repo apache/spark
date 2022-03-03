@@ -1448,7 +1448,6 @@ class DDLParserSuite extends AnalysisTest {
             Assignment(UnresolvedAttribute("target.col2"), UnresolvedAttribute("source.col2")))))))
   }
 
-
   test("merge into table: using subquery") {
     parseCompare(
       """
@@ -2237,7 +2236,7 @@ class DDLParserSuite extends AnalysisTest {
     comparePlans(parsePlan(binaryTypeSql), insertPartitionPlan(binaryStr))
   }
 
-  test("SPARK-38335: Implement support for DEFAULT values for columns in tables") {
+  test("SPARK-38335: Implement parser support for DEFAULT values for columns in tables") {
     // The following commands will support DEFAULT columns, but this has not been implemented yet.
     for (sql <- Seq(
       "ALTER TABLE t1 ADD COLUMN x int NOT NULL DEFAULT 42",
