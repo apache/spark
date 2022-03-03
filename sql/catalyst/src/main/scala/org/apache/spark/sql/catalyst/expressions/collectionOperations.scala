@@ -148,11 +148,16 @@ object Size {
   group = "collection_funcs")
 case class ArraySize(expr: Expression)
   extends RuntimeReplaceable with ImplicitCastInputTypes with UnaryLike[Expression] {
+
+  def child: Expression = expr
+
   override lazy val replacement: Expression = Size(expr, legacySizeOfNull = false)
 
   override def prettyName: String = "array_size"
 
   override def inputTypes: Seq[AbstractDataType] = Seq(ArrayType)
+
+  protected def withNewChildInternal(newChild: Expression): ArraySize = copy(expr = newChild)
 }
 
 /**
