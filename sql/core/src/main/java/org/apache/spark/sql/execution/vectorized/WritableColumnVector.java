@@ -812,10 +812,6 @@ public abstract class WritableColumnVector extends ColumnVector {
       DecimalType.isByteArrayDecimalType(type);
   }
 
-  protected boolean isStruct() {
-    return type instanceof StructType || type instanceof CalendarIntervalType;
-  }
-
   /**
    * Sets up the common state and also handles creating the child columns if this is a nested
    * type.
