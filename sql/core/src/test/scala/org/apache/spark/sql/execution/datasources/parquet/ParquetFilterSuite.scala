@@ -84,7 +84,7 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
       conf.parquetFilterPushDownDecimal, conf.parquetFilterPushDownStringStartWith,
       conf.parquetFilterPushDownInFilterThreshold,
       caseSensitive.getOrElse(conf.caseSensitiveAnalysis),
-      datetimeRebaseSpec)
+      datetimeRebaseSpec, conf.parquetFilterPushDownPartition)
 
   override def beforeEach(): Unit = {
     super.beforeEach()

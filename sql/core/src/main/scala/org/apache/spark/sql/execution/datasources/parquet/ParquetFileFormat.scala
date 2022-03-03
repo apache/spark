@@ -249,6 +249,7 @@ class ParquetFileFormat
     val pushDownDecimal = sqlConf.parquetFilterPushDownDecimal
     val pushDownStringStartWith = sqlConf.parquetFilterPushDownStringStartWith
     val pushDownInFilterThreshold = sqlConf.parquetFilterPushDownInFilterThreshold
+    val pushDownPartition = sqlConf.parquetFilterPushDownPartition
     val isCaseSensitive = sqlConf.caseSensitiveAnalysis
     val parquetOptions = new ParquetOptions(options, sparkSession.sessionState.conf)
     val datetimeRebaseModeInRead = parquetOptions.datetimeRebaseModeInRead
@@ -278,7 +279,8 @@ class ParquetFileFormat
           pushDownStringStartWith,
           pushDownInFilterThreshold,
           isCaseSensitive,
-          datetimeRebaseSpec)
+          datetimeRebaseSpec,
+          pushDownPartition)
         filters
           // Collects all converted Parquet filter predicates. Notice that not all predicates can be
           // converted (`ParquetFilters.createFilter` returns an `Option`). That's why a `flatMap`

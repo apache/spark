@@ -24,7 +24,7 @@ import scala.util.Random
 import org.apache.spark.SparkConf
 import org.apache.spark.benchmark.Benchmark
 import org.apache.spark.sql.{DataFrame, SparkSession}
-import org.apache.spark.sql.functions.{monotonically_increasing_id, timestamp_seconds}
+import org.apache.spark.sql.functions.{col, lit, monotonically_increasing_id, timestamp_seconds}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.ParquetOutputTimestampType
 import org.apache.spark.sql.types.{ByteType, Decimal, DecimalType}
@@ -92,7 +92,11 @@ object FilterPushdownBenchmark extends SqlBasedBenchmark {
     saveAsTable(df, dir, true)
   }
 
-  private def saveAsTable(df: DataFrame, dir: File, useDictionary: Boolean = false): Unit = {
+  private def saveAsTable(
+      df: DataFrame,
+      dir: File,
+      useDictionary: Boolean = false,
+      usePartition: Boolean = false): Unit = {
     val orcPath = dir.getCanonicalPath + "/orc"
     val parquetPath = dir.getCanonicalPath + "/parquet"
 
@@ -102,8 +106,13 @@ object FilterPushdownBenchmark extends SqlBasedBenchmark {
       .option("orc.stripe.size", blockSize).orc(orcPath)
     spark.read.orc(orcPath).createOrReplaceTempView("orcTable")
 
-    df.write.mode("overwrite")
-      .option("parquet.block.size", blockSize).parquet(parquetPath)
+    val parquetWriter = df.write.mode("overwrite")
+      .option("parquet.block.size", blockSize)
+    if (usePartition) {
+      parquetWriter.partitionBy("part").parquet(parquetPath)
+    } else {
+      parquetWriter.parquet(parquetPath)
+    }
     spark.read.parquet(parquetPath).createOrReplaceTempView("parquetTable")
   }
 
@@ -128,6 +137,31 @@ object FilterPushdownBenchmark extends SqlBasedBenchmark {
       benchmark.addCase(name) { _ =>
         withSQLConf(SQLConf.ORC_FILTER_PUSHDOWN_ENABLED.key -> s"$pushDownEnabled") {
           spark.sql(s"SELECT $selectExpr FROM orcTable WHERE $whereExpr").noop()
+        }
+      }
+    }
+
+    benchmark.run()
+  }
+
+  def partitionFilterPushDownBenchmark(
+      values: Int,
+      title: String,
+      whereExpr: String,
+      selectExpr: String = "*"): Unit = {
+    val benchmark = new Benchmark(title, values, minNumIters = 5, output = output)
+
+    Seq(
+      (false, false), (true, false), (true, true)
+    ).foreach { case (pushDownEnabled, partPushDownEnabled) =>
+      val name = s"Parquet Vectorized " +
+        s"${if (pushDownEnabled) s"(FilterPushdown " +
+          s"${if (partPushDownEnabled) "with Partition" else "without Partition"}) " else ""}"
+      benchmark.addCase(name) { _ =>
+        withSQLConf(
+          SQLConf.PARQUET_FILTER_PUSHDOWN_ENABLED.key -> s"$pushDownEnabled",
+          SQLConf.PARQUET_FILTER_PUSHDOWN_PARTITION_ENABLED.key -> s"$partPushDownEnabled") {
+          spark.sql(s"SELECT $selectExpr FROM parquetTable WHERE $whereExpr").noop()
         }
       }
     }
@@ -374,6 +408,28 @@ object FilterPushdownBenchmark extends SqlBasedBenchmark {
             val whereExpr = (1 to numFilter).map(i => s"c$i = 0").mkString(" and ")
             // Note: InferFiltersFromConstraints will add more filters to this given filters
             filterPushDownBenchmark(numRows, s"Select 1 row with $numFilter filters", whereExpr)
+          }
+        }
+      }
+    }
+
+    runBenchmark("Pushdown benchmark for Partition Filter") {
+      withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> "") {
+        withTempPath { dir =>
+          withTempTable("orcTable", "parquetTable") {
+            val df = spark.range(numRows).withColumnRenamed("id", "a")
+              .withColumn("b", col("a"))
+            val partDf = df.withColumn("part", lit(0))
+              .union(df.withColumn("part", lit(1)))
+              .union(df.withColumn("part", lit(2)))
+            saveAsTable(partDf, dir, usePartition = true)
+            spark.read.parquet(dir.getAbsolutePath).createOrReplaceTempView("parquetTable")
+            Seq("(a = 10 and part = 0) or (a = 10240 and part = 1) or (part = 2)",
+              "(a > 10 and part = 0) or (a <= 10 and part >=1 and part < 3)")
+              .foreach { whereExpr =>
+                val title = s"Data filter with partitions: (${whereExpr})"
+                partitionFilterPushDownBenchmark(numRows, title, whereExpr)
+              }
           }
         }
       }

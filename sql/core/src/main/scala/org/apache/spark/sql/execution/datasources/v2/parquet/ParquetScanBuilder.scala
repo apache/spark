@@ -53,6 +53,7 @@ case class ParquetScanBuilder(
       val pushDownDecimal = sqlConf.parquetFilterPushDownDecimal
       val pushDownStringStartWith = sqlConf.parquetFilterPushDownStringStartWith
       val pushDownInFilterThreshold = sqlConf.parquetFilterPushDownInFilterThreshold
+      val pushDownPartition = sqlConf.parquetFilterPushDownPartition
       val isCaseSensitive = sqlConf.caseSensitiveAnalysis
       val parquetSchema =
         new SparkToParquetSchemaConverter(sparkSession.sessionState.conf).convert(readDataSchema())
@@ -67,6 +68,7 @@ case class ParquetScanBuilder(
         // The rebase mode doesn't matter here because the filters are used to determine
         // whether they is convertible.
         RebaseSpec(LegacyBehaviorPolicy.CORRECTED),
+        pushDownPartition,
         readPartitionSchema())
       parquetFilters.convertibleFilters(pushedDataFilters).toArray
     } else {

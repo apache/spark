@@ -828,6 +828,15 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
+  val PARQUET_FILTER_PUSHDOWN_PARTITION_ENABLED =
+    buildConf("spark.sql.parquet.filterPushdown.partition")
+      .doc("If true, enables Parquet data filter push-down optimization for partition. " +
+        s"This configuration only has an effect when '${PARQUET_FILTER_PUSHDOWN_ENABLED.key}' " +
+        s"is enabled.")
+      .version("3.3.0")
+      .booleanConf
+      .createWithDefault(true)
+
   val PARQUET_FILTER_PUSHDOWN_DATE_ENABLED = buildConf("spark.sql.parquet.filterPushdown.date")
     .doc("If true, enables Parquet filter push-down optimization for Date. " +
       s"This configuration only has an effect when '${PARQUET_FILTER_PUSHDOWN_ENABLED.key}' is " +
@@ -3782,6 +3791,8 @@ class SQLConf extends Serializable with Logging {
   def stateStoreCompressionCodec: String = getConf(STATE_STORE_COMPRESSION_CODEC)
 
   def parquetFilterPushDown: Boolean = getConf(PARQUET_FILTER_PUSHDOWN_ENABLED)
+
+  def parquetFilterPushDownPartition: Boolean = getConf(PARQUET_FILTER_PUSHDOWN_PARTITION_ENABLED)
 
   def parquetFilterPushDownDate: Boolean = getConf(PARQUET_FILTER_PUSHDOWN_DATE_ENABLED)
 
