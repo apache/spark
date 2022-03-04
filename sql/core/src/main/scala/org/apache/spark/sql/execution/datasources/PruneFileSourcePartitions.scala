@@ -46,7 +46,6 @@ private[sql] object PruneFileSourcePartitions
   private def getPartitionKeyFiltersAndDataFilters(
       sparkSession: SparkSession,
       relation: LeafNode,
-      dataSchema: StructType,
       partitionSchema: StructType,
       filters: Seq[Expression],
       output: Seq[AttributeReference]): (ExpressionSet, Seq[Expression]) = {
@@ -54,19 +53,13 @@ private[sql] object PruneFileSourcePartitions
       filters.filter(f => f.deterministic && !SubqueryExpression.hasSubquery(f)), output)
     val partitionColumns =
       relation.resolve(partitionSchema, sparkSession.sessionState.analyzer.resolver)
-    val dataColumns =
-      relation.resolve(dataSchema, sparkSession.sessionState.analyzer.resolver)
     val partitionSet = AttributeSet(partitionColumns)
-    val dataSet = AttributeSet(dataColumns)
-    val partitionFilter =
-      normalizedFilters.flatMap(extractPredicatesWithinOutputSet(_, partitionSet))
-    val dataFilters = normalizedFilters.flatMap(extractPredicatesWithinOutputSet(_, dataSet))
-    if (filters.size > dataFilters.size + partitionFilter.size) {
-      val extraDataFilter = filters.diff(partitionFilter).diff(dataFilters)
-      (ExpressionSet(partitionFilter), dataFilters ++ extraDataFilter)
-    } else {
-      (ExpressionSet(partitionFilter), dataFilters)
-    }
+    val (partitionFilters, dataFilters) = normalizedFilters.partition(f =>
+      f.references.subsetOf(partitionSet)
+    )
+    val extraPartitionFilter =
+      dataFilters.flatMap(extractPredicatesWithinOutputSet(_, partitionSet))
+    (ExpressionSet(partitionFilters ++ extraPartitionFilter), dataFilters)
   }
 
   private def rebuildPhysicalOperation(
@@ -89,7 +82,7 @@ private[sql] object PruneFileSourcePartitions
             HadoopFsRelation(
               catalogFileIndex: CatalogFileIndex,
               partitionSchema,
-              dataSchema,
+              _,
               _,
               _,
               _),
@@ -98,7 +91,7 @@ private[sql] object PruneFileSourcePartitions
             _))
         if filters.nonEmpty && fsRelation.partitionSchemaOption.isDefined =>
       val (partitionKeyFilters, _) = getPartitionKeyFiltersAndDataFilters(
-        fsRelation.sparkSession, logicalRelation, dataSchema, partitionSchema, filters,
+        fsRelation.sparkSession, logicalRelation, partitionSchema, filters,
         logicalRelation.output)
 
       if (partitionKeyFilters.nonEmpty) {
@@ -130,13 +123,15 @@ private[sql] object PruneFileSourcePartitions
       val dataSchema = StructType(scan.readSchema().fields.diff(scan.readPartitionSchema.fields))
       val (partitionKeyFilters, dataFilters) =
         getPartitionKeyFiltersAndDataFilters(scan.sparkSession, v2Relation,
-          dataSchema, scan.readPartitionSchema, filters, output)
+          scan.readPartitionSchema, filters, output)
       // The dataFilters are pushed down only once
-      if (partitionKeyFilters.nonEmpty || (dataFilters.nonEmpty && scan.dataFilters.isEmpty)) {
+      if ((partitionKeyFilters.nonEmpty && dataFilters.isEmpty)
+        || (dataFilters.nonEmpty && scan.dataFilters.isEmpty)) {
         val prunedV2Relation =
           v2Relation.copy(scan = scan.withFilters(partitionKeyFilters.toSeq, dataFilters))
         // The pushed down partition filters don't need to be reevaluated.
-        val afterScanFilters = ExpressionSet(dataFilters)
+        val afterScanFilters =
+          ExpressionSet(filters) -- partitionKeyFilters.filter(_.references.nonEmpty)
         rebuildPhysicalOperation(projects, afterScanFilters.toSeq, prunedV2Relation)
       } else {
         op
