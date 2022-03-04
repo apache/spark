@@ -36,7 +36,7 @@ import org.apache.spark.sql.connector.catalog.SupportsNamespaces.PROP_OWNER
 import org.apache.spark.sql.execution.command.{DDLSuite, DDLUtils}
 import org.apache.spark.sql.execution.datasources.parquet.ParquetFooterReader
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.hive.HiveExternalCatalog
+import org.apache.spark.sql.hive.{HiveExternalCatalog, HiveUtils}
 import org.apache.spark.sql.hive.HiveUtils.{CONVERT_METASTORE_ORC, CONVERT_METASTORE_PARQUET}
 import org.apache.spark.sql.hive.orc.OrcFileOperator
 import org.apache.spark.sql.hive.test.{TestHive, TestHiveSingleton, TestHiveSparkSession}
@@ -844,7 +844,7 @@ class HiveDDLSuite
       assert(
         catalog.getTableMetadata(TableIdentifier(tabName)).tableType == CatalogTableType.MANAGED)
       // The table property is case sensitive. Thus, external is allowed
-      sql(s"ALTER TABLE $tabName SET TBLPROPERTIES ('external' = 'TRUE')")
+      sql(s"ALTER TABLE $tabName SET TBLPROPERTIES ('External' = 'TRUE')")
       // The table type is not changed to external
       assert(
         catalog.getTableMetadata(TableIdentifier(tabName)).tableType == CatalogTableType.MANAGED)
@@ -2926,54 +2926,42 @@ class HiveDDLSuite
     }
   }
 
-  test("SPARK-33844: Insert overwrite directory should check schema too") {
-    withView("v") {
-      spark.range(1).createTempView("v")
-      withTempPath { path =>
-        val e = intercept[AnalysisException] {
-          spark.sql(s"INSERT OVERWRITE LOCAL DIRECTORY '${path.getCanonicalPath}' " +
-            s"STORED AS PARQUET SELECT ID, if(1=1, 1, 0), abs(id), '^-' FROM v")
-        }.getMessage
-        assert(e.contains("Column name \"(IF((1 = 1), 1, 0))\" contains invalid character(s). " +
-          "Please use alias to rename it."))
+  test("SPARK-33844, 37969: Insert overwrite directory should check schema too") {
+    withSQLConf(HiveUtils.CONVERT_METASTORE_INSERT_DIR.key -> "false") {
+      withView("v") {
+        spark.range(1).createTempView("v")
+        withTempPath { path =>
+          Seq("PARQUET", "ORC").foreach { format =>
+            val e = intercept[SparkException] {
+              spark.sql(s"INSERT OVERWRITE LOCAL DIRECTORY '${path.getCanonicalPath}' " +
+                s"STORED AS $format SELECT ID, if(1=1, 1, 0), abs(id), '^-' FROM v")
+            }.getCause.getMessage
+            assert(e.contains("Column name \"(IF((1 = 1), 1, 0))\" contains" +
+              " invalid character(s). Please use alias to rename it."))
+          }
+        }
       }
     }
   }
 
   test("SPARK-36201: Add check for inner field of parquet/orc schema") {
-    withView("v") {
-      spark.range(1).createTempView("v")
-      withTempPath { path =>
-        val e = intercept[AnalysisException] {
-          spark.sql(
-            s"""
-               |INSERT OVERWRITE LOCAL DIRECTORY '${path.getCanonicalPath}'
-               |STORED AS PARQUET
-               |SELECT
-               |NAMED_STRUCT('ID', ID, 'IF(ID=1,ID,0)', IF(ID=1,ID,0), 'B', ABS(ID)) AS col1
-               |FROM v
+    withSQLConf(HiveUtils.CONVERT_METASTORE_INSERT_DIR.key -> "false") {
+      withView("v") {
+        spark.range(1).createTempView("v")
+        withTempPath { path =>
+          val e = intercept[SparkException] {
+            spark.sql(
+              s"""
+                 |INSERT OVERWRITE LOCAL DIRECTORY '${path.getCanonicalPath}'
+                 |STORED AS PARQUET
+                 |SELECT
+                 |NAMED_STRUCT('ID', ID, 'IF(ID=1,ID,0)', IF(ID=1,ID,0), 'B', ABS(ID)) AS col1
+                 |FROM v
                """.stripMargin)
-        }.getMessage
-        assert(e.contains("Column name \"IF(ID=1,ID,0)\" contains" +
-          " invalid character(s). Please use alias to rename it."))
-      }
-    }
-  }
-
-  test("SPARK-36312: ParquetWriteSupport should check inner field") {
-    withView("v") {
-      spark.range(1).createTempView("v")
-      withTempPath { path =>
-        val e = intercept[AnalysisException] {
-          spark.sql(
-            """
-              |SELECT
-              |NAMED_STRUCT('ID', ID, 'IF(ID=1,ID,0)', IF(ID=1,ID,0), 'B', ABS(ID)) AS col1
-              |FROM v
-              |""".stripMargin).write.mode(SaveMode.Overwrite).parquet(path.toString)
-        }.getMessage
-        assert(e.contains("Column name \"IF(ID=1,ID,0)\" contains" +
-          " invalid character(s). Please use alias to rename it."))
+          }.getCause.getMessage
+          assert(e.contains("Column name \"IF(ID=1,ID,0)\" contains invalid character(s). " +
+            "Please use alias to rename it."))
+        }
       }
     }
   }
@@ -3058,5 +3046,11 @@ class HiveDDLSuite
       val df1 = spark.table("v")
       assert(df1.schema.names.toSeq == Seq("A", "B"))
     }
+  }
+
+  test("SPARK-38216: Fail early if all the columns are partitioned columns") {
+    assertAnalysisError(
+      "CREATE TABLE tab (c1 int) PARTITIONED BY (c1) STORED AS PARQUET",
+      "Cannot use all columns for partition columns")
   }
 }

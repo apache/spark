@@ -35,6 +35,7 @@ import org.apache.spark.sql.connector.metric.{CustomMetric, CustomTaskMetric}
 import org.apache.spark.sql.connector.read._
 import org.apache.spark.sql.connector.write._
 import org.apache.spark.sql.connector.write.streaming.{StreamingDataWriterFactory, StreamingWrite}
+import org.apache.spark.sql.internal.connector.SupportsStreamingUpdateAsAppend
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -80,6 +81,7 @@ class InMemoryTable(
     case _: DaysTransform =>
     case _: HoursTransform =>
     case _: BucketTransform =>
+    case _: SortedBucketTransform =>
     case t if !allowUnsupportedTransforms =>
       throw new IllegalArgumentException(s"Transform $t is not a supported transform")
   }
@@ -161,10 +163,15 @@ class InMemoryTable(
           case (v, t) =>
             throw new IllegalArgumentException(s"Match: unsupported argument(s) type - ($v, $t)")
         }
-      case BucketTransform(numBuckets, ref, _) =>
-        val (value, dataType) = extractor(ref.fieldNames, cleanedSchema, row)
-        val valueHashCode = if (value == null) 0 else value.hashCode
-        ((valueHashCode + 31 * dataType.hashCode()) & Integer.MAX_VALUE) % numBuckets
+      case BucketTransform(numBuckets, cols, _) =>
+        val valueTypePairs = cols.map(col => extractor(col.fieldNames, cleanedSchema, row))
+        var valueHashCode = 0
+        valueTypePairs.foreach( pair =>
+          if ( pair._1 != null) valueHashCode += pair._1.hashCode()
+        )
+        var dataTypeHashCode = 0
+        valueTypePairs.foreach(dataTypeHashCode += _._2.hashCode())
+        ((valueHashCode + 31 * dataTypeHashCode) & Integer.MAX_VALUE) % numBuckets
     }
   }
 
@@ -305,7 +312,9 @@ class InMemoryTable(
     InMemoryTable.maybeSimulateFailedTableWrite(new CaseInsensitiveStringMap(properties))
     InMemoryTable.maybeSimulateFailedTableWrite(info.options)
 
-    new WriteBuilder with SupportsTruncate with SupportsOverwrite with SupportsDynamicOverwrite {
+    new WriteBuilder with SupportsTruncate with SupportsOverwrite
+      with SupportsDynamicOverwrite with SupportsStreamingUpdateAsAppend {
+
       private var writer: BatchWrite = Append
       private var streamingWriter: StreamingWrite = StreamingAppend
 

@@ -132,6 +132,8 @@ object SizeInBytesOnlyStatsPlanVisitor extends LogicalPlanVisitor[Statistics] {
 
   override def visitRepartitionByExpr(p: RepartitionByExpression): Statistics = p.child.stats
 
+  override def visitRebalancePartitions(p: RebalancePartitions): Statistics = p.child.stats
+
   override def visitSample(p: Sample): Statistics = {
     val ratio = p.upperBound - p.lowerBound
     var sizeInBytes = EstimationUtils.ceil(BigDecimal(p.child.stats.sizeInBytes) * ratio)

@@ -26,8 +26,8 @@ from pyspark.shuffle import Aggregator, ExternalMerger, ExternalSorter
 class MergerTests(unittest.TestCase):
     def setUp(self):
         self.N = 1 << 12
-        self.l = [i for i in range(self.N)]
-        self.data = list(zip(self.l, self.l))
+        self.lst = [i for i in range(self.N)]
+        self.data = list(zip(self.lst, self.lst))
         self.agg = Aggregator(
             lambda x: [x], lambda x, y: x.append(y) or x, lambda x, y: x.extend(y) or x
         )
@@ -81,8 +81,8 @@ class MergerTests(unittest.TestCase):
             self.assertEqual(list(range(k)), list(vs))
 
         ser = CPickleSerializer()
-        l = ser.loads(ser.dumps(list(gen_gs(50002, 30000))))
-        for k, vs in l:
+        lst = ser.loads(ser.dumps(list(gen_gs(50002, 30000))))
+        for k, vs in lst:
             self.assertEqual(k, len(vs))
             self.assertEqual(list(range(k)), list(vs))
 
@@ -119,15 +119,15 @@ class MergerTests(unittest.TestCase):
 
 class SorterTests(unittest.TestCase):
     def test_in_memory_sort(self):
-        l = list(range(1024))
-        random.shuffle(l)
+        lst = list(range(1024))
+        random.shuffle(lst)
         sorter = ExternalSorter(1024)
-        self.assertEqual(sorted(l), list(sorter.sorted(l)))
-        self.assertEqual(sorted(l, reverse=True), list(sorter.sorted(l, reverse=True)))
-        self.assertEqual(sorted(l, key=lambda x: -x), list(sorter.sorted(l, key=lambda x: -x)))
+        self.assertEqual(sorted(lst), list(sorter.sorted(lst)))
+        self.assertEqual(sorted(lst, reverse=True), list(sorter.sorted(lst, reverse=True)))
+        self.assertEqual(sorted(lst, key=lambda x: -x), list(sorter.sorted(lst, key=lambda x: -x)))
         self.assertEqual(
-            sorted(l, key=lambda x: -x, reverse=True),
-            list(sorter.sorted(l, key=lambda x: -x, reverse=True)),
+            sorted(lst, key=lambda x: -x, reverse=True),
+            list(sorter.sorted(lst, key=lambda x: -x, reverse=True)),
         )
 
     def test_external_sort(self):
@@ -135,31 +135,31 @@ class SorterTests(unittest.TestCase):
             def _next_limit(self):
                 return self.memory_limit
 
-        l = list(range(1024))
-        random.shuffle(l)
+        lst = list(range(1024))
+        random.shuffle(lst)
         sorter = CustomizedSorter(1)
-        self.assertEqual(sorted(l), list(sorter.sorted(l)))
+        self.assertEqual(sorted(lst), list(sorter.sorted(lst)))
         self.assertGreater(shuffle.DiskBytesSpilled, 0)
         last = shuffle.DiskBytesSpilled
-        self.assertEqual(sorted(l, reverse=True), list(sorter.sorted(l, reverse=True)))
+        self.assertEqual(sorted(lst, reverse=True), list(sorter.sorted(lst, reverse=True)))
         self.assertGreater(shuffle.DiskBytesSpilled, last)
         last = shuffle.DiskBytesSpilled
-        self.assertEqual(sorted(l, key=lambda x: -x), list(sorter.sorted(l, key=lambda x: -x)))
+        self.assertEqual(sorted(lst, key=lambda x: -x), list(sorter.sorted(lst, key=lambda x: -x)))
         self.assertGreater(shuffle.DiskBytesSpilled, last)
         last = shuffle.DiskBytesSpilled
         self.assertEqual(
-            sorted(l, key=lambda x: -x, reverse=True),
-            list(sorter.sorted(l, key=lambda x: -x, reverse=True)),
+            sorted(lst, key=lambda x: -x, reverse=True),
+            list(sorter.sorted(lst, key=lambda x: -x, reverse=True)),
         )
         self.assertGreater(shuffle.DiskBytesSpilled, last)
 
     def test_external_sort_in_rdd(self):
         conf = SparkConf().set("spark.python.worker.memory", "1m")
         sc = SparkContext(conf=conf)
-        l = list(range(10240))
-        random.shuffle(l)
-        rdd = sc.parallelize(l, 4)
-        self.assertEqual(sorted(l), rdd.sortBy(lambda x: x).collect())
+        lst = list(range(10240))
+        random.shuffle(lst)
+        rdd = sc.parallelize(lst, 4)
+        self.assertEqual(sorted(lst), rdd.sortBy(lambda x: x).collect())
         sc.stop()
 
 

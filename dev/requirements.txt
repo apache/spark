@@ -19,7 +19,7 @@ coverage
 
 # Linter
 mypy
-git+https://github.com/typeddjango/pytest-mypy-plugins.git@b0020061f48e85743ee3335bd62a3a608d17c6bd
+pytest-mypy-plugins==1.9.3
 flake8==3.9.0
 pandas-stubs
 

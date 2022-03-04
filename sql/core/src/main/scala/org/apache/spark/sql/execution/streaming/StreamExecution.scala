@@ -37,10 +37,8 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes._
 import org.apache.spark.sql.connector.catalog.{SupportsWrite, Table}
-import org.apache.spark.sql.connector.metric.CustomMetric
 import org.apache.spark.sql.connector.read.streaming.{Offset => OffsetV2, ReadLimit, SparkDataStream}
-import org.apache.spark.sql.connector.write.{LogicalWriteInfoImpl, SupportsTruncate}
-import org.apache.spark.sql.connector.write.streaming.StreamingWrite
+import org.apache.spark.sql.connector.write.{LogicalWriteInfoImpl, SupportsTruncate, Write}
 import org.apache.spark.sql.execution.command.StreamingExplainCommand
 import org.apache.spark.sql.execution.datasources.v2.StreamWriterCommitProgress
 import org.apache.spark.sql.internal.SQLConf
@@ -289,6 +287,11 @@ abstract class StreamExecution(
         // Disable cost-based join optimization as we do not want stateful operations
         // to be rearranged
         sparkSessionForStream.conf.set(SQLConf.CBO_ENABLED.key, "false")
+        // Disable any config affecting the required child distribution of stateful operators.
+        // Please read through the NOTE on the classdoc of StatefulOpClusteredDistribution for
+        // details.
+        sparkSessionForStream.conf.set(SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_DISTRIBUTION.key,
+          "false")
 
         updateStatusMessage("Initializing sources")
         // force initialization of the logical plan so that the sources can be created
@@ -579,16 +582,16 @@ abstract class StreamExecution(
         |batch = $batchDescription""".stripMargin
   }
 
-  protected def createStreamingWrite(
+  protected def createWrite(
       table: SupportsWrite,
       options: Map[String, String],
-      inputPlan: LogicalPlan): (StreamingWrite, Seq[CustomMetric]) = {
+      inputPlan: LogicalPlan): Write = {
     val info = LogicalWriteInfoImpl(
       queryId = id.toString,
       inputPlan.schema,
       new CaseInsensitiveStringMap(options.asJava))
     val writeBuilder = table.newWriteBuilder(info)
-    val write = outputMode match {
+    outputMode match {
       case Append =>
         writeBuilder.build()
 
@@ -603,8 +606,6 @@ abstract class StreamExecution(
           table.name + " does not support Update mode.")
         writeBuilder.asInstanceOf[SupportsStreamingUpdateAsAppend].build()
     }
-
-    (write.toStreaming, write.supportedCustomMetrics().toSeq)
   }
 
   protected def purge(threshold: Long): Unit = {

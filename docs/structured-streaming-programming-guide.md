@@ -3318,7 +3318,7 @@ You can also asynchronously monitor all queries associated with a
 `SparkSession` by attaching a `StreamingQueryListener`
 ([Scala](api/scala/org/apache/spark/sql/streaming/StreamingQueryListener.html)/[Java](api/java/org/apache/spark/sql/streaming/StreamingQueryListener.html) docs).
 Once you attach your custom `StreamingQueryListener` object with
-`sparkSession.streams.attachListener()`, you will get callbacks when a query is started and
+`sparkSession.streams.addListener()`, you will get callbacks when a query is started and
 stopped and when there is progress made in an active query. Here is an example,
 
 <div class="codetabs">

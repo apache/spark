@@ -282,7 +282,7 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils with Adapti
     withTable("bucketed_table") {
       val numBuckets = NumBucketsForPruningNullDf
       val bucketSpec = BucketSpec(numBuckets, Seq("j"), Nil)
-      val naNDF = nullDF.selectExpr("i", "cast(if(isnull(j), 'NaN', j) as double) as j", "k")
+      val naNDF = nullDF.selectExpr("i", "try_cast(if(isnull(j), 'NaN', j) as double) as j", "k")
       // json does not support predicate push-down, and thus json is used here
       naNDF.write
         .format("json")
@@ -773,8 +773,7 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils with Adapti
 
     // join predicates is a super set of child's partitioning columns
     val bucketedTableTestSpec1 =
-      BucketedTableTestSpec(Some(BucketSpec(8, Seq("i", "j"), Seq("i", "j"))),
-        numPartitions = 1, expectedShuffle = false)
+      BucketedTableTestSpec(Some(BucketSpec(8, Seq("i", "j"), Seq("i", "j"))), numPartitions = 1)
     testBucketing(
       bucketedTableTestSpecLeft = bucketedTableTestSpec1,
       bucketedTableTestSpecRight = bucketedTableTestSpec1,

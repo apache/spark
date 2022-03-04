@@ -108,7 +108,6 @@ abstract class Optimizer(catalogManager: CatalogManager)
         EliminateAggregateFilter,
         ReorderAssociativeOperator,
         LikeSimplification,
-        NotPropagation,
         BooleanSimplification,
         SimplifyConditionals,
         PushFoldableIntoBranches,
@@ -239,6 +238,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
       // PropagateEmptyRelation can change the nullability of an attribute from nullable to
       // non-nullable when an empty relation child of a Union is removed
       UpdateAttributeNullability) :+
+    Batch("Optimize One Row Plan", fixedPoint, OptimizeOneRowPlan) :+
     // The following batch should be executed after batch "Join Reorder" and "LocalRelation".
     Batch("Check Cartesian Products", Once,
       CheckCartesianProducts) :+
@@ -415,7 +415,8 @@ abstract class Optimizer(catalogManager: CatalogManager)
  * This rule should be applied before RewriteDistinctAggregates.
  */
 object EliminateDistinct extends Rule[LogicalPlan] {
-  override def apply(plan: LogicalPlan): LogicalPlan = plan transformExpressions  {
+  override def apply(plan: LogicalPlan): LogicalPlan = plan.transformAllExpressionsWithPruning(
+    _.containsPattern(AGGREGATE_EXPRESSION)) {
     case ae: AggregateExpression if ae.isDistinct && isDuplicateAgnostic(ae.aggregateFunction) =>
       ae.copy(isDistinct = false)
   }
@@ -437,8 +438,8 @@ object EliminateDistinct extends Rule[LogicalPlan] {
  * This rule should be applied before RewriteDistinctAggregates.
  */
 object EliminateAggregateFilter extends Rule[LogicalPlan] {
-  override def apply(plan: LogicalPlan): LogicalPlan = plan.transformExpressionsWithPruning(
-    _.containsAllPatterns(TRUE_OR_FALSE_LITERAL), ruleId)  {
+  override def apply(plan: LogicalPlan): LogicalPlan = plan.transformAllExpressionsWithPruning(
+    _.containsAllPatterns(AGGREGATE_EXPRESSION, TRUE_OR_FALSE_LITERAL), ruleId)  {
     case ae @ AggregateExpression(_, _, _, Some(Literal.TrueLiteral), _) =>
       ae.copy(filter = None)
     case AggregateExpression(af: DeclarativeAggregate, _, _, Some(Literal.FalseLiteral), _) =>
@@ -684,7 +685,9 @@ object LimitPushDown extends Rule[LogicalPlan] {
           left = maybePushLocalLimit(limitExpr, join.left),
           right = maybePushLocalLimit(limitExpr, join.right))
       case LeftSemi | LeftAnti if join.condition.isEmpty =>
-        join.copy(left = maybePushLocalLimit(limitExpr, join.left))
+        join.copy(
+          left = maybePushLocalLimit(limitExpr, join.left),
+          right = maybePushLocalLimit(Literal(1, IntegerType), join.right))
       case _ => join
     }
   }
@@ -719,9 +722,9 @@ object LimitPushDown extends Rule[LogicalPlan] {
       LocalLimit(exp, project.copy(child = pushLocalLimitThroughJoin(exp, join)))
     // Push down limit 1 through Aggregate and turn Aggregate into Project if it is group only.
     case Limit(le @ IntegerLiteral(1), a: Aggregate) if a.groupOnly =>
-      Limit(le, Project(a.output, LocalLimit(le, a.child)))
+      Limit(le, Project(a.aggregateExpressions, LocalLimit(le, a.child)))
     case Limit(le @ IntegerLiteral(1), p @ Project(_, a: Aggregate)) if a.groupOnly =>
-      Limit(le, p.copy(child = Project(a.output, LocalLimit(le, a.child))))
+      Limit(le, p.copy(child = Project(a.aggregateExpressions, LocalLimit(le, a.child))))
   }
 }
 
@@ -762,22 +765,22 @@ object PushProjectionThroughUnion extends Rule[LogicalPlan] with PredicateHelper
     result.asInstanceOf[A]
   }
 
+  def pushProjectionThroughUnion(projectList: Seq[NamedExpression], u: Union): Seq[LogicalPlan] = {
+    val newFirstChild = Project(projectList, u.children.head)
+    val newOtherChildren = u.children.tail.map { child =>
+      val rewrites = buildRewrites(u.children.head, child)
+      Project(projectList.map(pushToRight(_, rewrites)), child)
+    }
+    newFirstChild +: newOtherChildren
+  }
+
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
     _.containsAllPatterns(UNION, PROJECT)) {
 
     // Push down deterministic projection through UNION ALL
-    case p @ Project(projectList, u: Union) =>
-      assert(u.children.nonEmpty)
-      if (projectList.forall(_.deterministic)) {
-        val newFirstChild = Project(projectList, u.children.head)
-        val newOtherChildren = u.children.tail.map { child =>
-          val rewrites = buildRewrites(u.children.head, child)
-          Project(projectList.map(pushToRight(_, rewrites)), child)
-        }
-        u.copy(children = newFirstChild +: newOtherChildren)
-      } else {
-        p
-      }
+    case Project(projectList, u: Union)
+        if projectList.forall(_.deterministic) && u.children.nonEmpty =>
+      u.copy(children = pushProjectionThroughUnion(projectList, u))
   }
 }
 
@@ -1004,7 +1007,7 @@ object CollapseProject extends Rule[LogicalPlan] with AliasHelper {
     }.isEmpty)
   }
 
-  private def buildCleanedProjectList(
+  def buildCleanedProjectList(
       upper: Seq[NamedExpression],
       lower: Seq[NamedExpression]): Seq[NamedExpression] = {
     val aliases = getAliasMap(lower)
@@ -1049,11 +1052,11 @@ object CollapseProject extends Rule[LogicalPlan] with AliasHelper {
 }
 
 /**
- * Combines adjacent [[RepartitionOperation]] operators
+ * Combines adjacent [[RepartitionOperation]] and [[RebalancePartitions]] operators
  */
 object CollapseRepartition extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformUpWithPruning(
-    _.containsPattern(REPARTITION_OPERATION), ruleId) {
+    _.containsAnyPattern(REPARTITION_OPERATION, REBALANCE_PARTITIONS), ruleId) {
     // Case 1: When a Repartition has a child of Repartition or RepartitionByExpression,
     // 1) When the top node does not enable the shuffle (i.e., coalesce API), but the child
     //   enables the shuffle. Returns the child node if the last numPartitions is bigger;
@@ -1066,6 +1069,14 @@ object CollapseRepartition extends Rule[LogicalPlan] {
     // Case 2: When a RepartitionByExpression has a child of global Sort, Repartition or
     // RepartitionByExpression we can remove the child.
     case r @ RepartitionByExpression(_, child @ (Sort(_, true, _) | _: RepartitionOperation), _) =>
+      r.withNewChildren(child.children)
+    // Case 3: When a RebalancePartitions has a child of local or global Sort, Repartition or
+    // RepartitionByExpression we can remove the child.
+    case r @ RebalancePartitions(_, child @ (_: Sort | _: RepartitionOperation)) =>
+      r.withNewChildren(child.children)
+    // Case 4: When a RebalancePartitions has a child of RebalancePartitions we can remove the
+    // child.
+    case r @ RebalancePartitions(_, child: RebalancePartitions) =>
       r.withNewChildren(child.children)
   }
 }
@@ -1290,6 +1301,9 @@ object InferFiltersFromConstraints extends Rule[LogicalPlan]
  * Combines all adjacent [[Union]] operators into a single [[Union]].
  */
 object CombineUnions extends Rule[LogicalPlan] {
+  import CollapseProject.{buildCleanedProjectList, canCollapseExpressions}
+  import PushProjectionThroughUnion.pushProjectionThroughUnion
+
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformDownWithPruning(
     _.containsAnyPattern(UNION, DISTINCT_LIKE), ruleId) {
     case u: Union => flattenUnion(u, false)
@@ -1311,6 +1325,10 @@ object CombineUnions extends Rule[LogicalPlan] {
     // rules (by position and by name) could cause incorrect results.
     while (stack.nonEmpty) {
       stack.pop() match {
+        case p1 @ Project(_, p2: Project)
+            if canCollapseExpressions(p1.projectList, p2.projectList, alwaysInline = false) =>
+          val newProjectList = buildCleanedProjectList(p1.projectList, p2.projectList)
+          stack.pushAll(Seq(p2.copy(projectList = newProjectList)))
         case Distinct(Union(children, byName, allowMissingCol))
             if flattenDistinct && byName == topByName && allowMissingCol == topAllowMissingCol =>
           stack.pushAll(children.reverse)
@@ -1322,6 +1340,20 @@ object CombineUnions extends Rule[LogicalPlan] {
         case Union(children, byName, allowMissingCol)
             if byName == topByName && allowMissingCol == topAllowMissingCol =>
           stack.pushAll(children.reverse)
+        // Push down projection through Union and then push pushed plan to Stack if
+        // there is a Project.
+        case Project(projectList, Distinct(u @ Union(children, byName, allowMissingCol)))
+            if projectList.forall(_.deterministic) && children.nonEmpty &&
+              flattenDistinct && byName == topByName && allowMissingCol == topAllowMissingCol =>
+          stack.pushAll(pushProjectionThroughUnion(projectList, u).reverse)
+        case Project(projectList, Deduplicate(keys: Seq[Attribute], u: Union))
+            if projectList.forall(_.deterministic) && flattenDistinct && u.byName == topByName &&
+              u.allowMissingCol == topAllowMissingCol && AttributeSet(keys) == u.outputSet =>
+          stack.pushAll(pushProjectionThroughUnion(projectList, u).reverse)
+        case Project(projectList, u @ Union(children, byName, allowMissingCol))
+            if projectList.forall(_.deterministic) && children.nonEmpty &&
+              byName == topByName && allowMissingCol == topAllowMissingCol =>
+          stack.pushAll(pushProjectionThroughUnion(projectList, u).reverse)
         case child =>
           flattened += child
       }
@@ -1359,24 +1391,22 @@ object CombineFilters extends Rule[LogicalPlan] with PredicateHelper {
  * Removes Sort operations if they don't affect the final output ordering.
  * Note that changes in the final output ordering may affect the file size (SPARK-32318).
  * This rule handles the following cases:
- * 1) if the child maximum number of rows less than or equal to 1
- * 2) if the sort order is empty or the sort order does not have any reference
- * 3) if the Sort operator is a local sort and the child is already sorted
- * 4) if there is another Sort operator separated by 0...n Project, Filter, Repartition or
- *    RepartitionByExpression (with deterministic expressions) operators
- * 5) if the Sort operator is within Join separated by 0...n Project, Filter, Repartition or
- *    RepartitionByExpression (with deterministic expressions) operators only and the Join condition
- *    is deterministic
- * 6) if the Sort operator is within GroupBy separated by 0...n Project, Filter, Repartition or
- *    RepartitionByExpression (with deterministic expressions) operators only and the aggregate
- *    function is order irrelevant
+ * 1) if the sort order is empty or the sort order does not have any reference
+ * 2) if the Sort operator is a local sort and the child is already sorted
+ * 3) if there is another Sort operator separated by 0...n Project, Filter, Repartition or
+ *    RepartitionByExpression, RebalancePartitions (with deterministic expressions) operators
+ * 4) if the Sort operator is within Join separated by 0...n Project, Filter, Repartition or
+ *    RepartitionByExpression, RebalancePartitions (with deterministic expressions) operators only
+ *    and the Join condition is deterministic
+ * 5) if the Sort operator is within GroupBy separated by 0...n Project, Filter, Repartition or
+ *    RepartitionByExpression, RebalancePartitions (with deterministic expressions) operators only
+ *    and the aggregate function is order irrelevant
  */
 object EliminateSorts extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
     _.containsPattern(SORT))(applyLocally)
 
   private val applyLocally: PartialFunction[LogicalPlan, LogicalPlan] = {
-    case Sort(_, _, child) if child.maxRows.exists(_ <= 1L) => recursiveRemoveSort(child)
     case s @ Sort(orders, _, child) if orders.isEmpty || orders.exists(_.child.foldable) =>
       val newOrders = orders.filterNot(_.child.foldable)
       if (newOrders.isEmpty) {
@@ -1409,6 +1439,7 @@ object EliminateSorts extends Rule[LogicalPlan] {
     case p: Project => p.projectList.forall(_.deterministic)
     case f: Filter => f.condition.deterministic
     case r: RepartitionByExpression => r.partitionExpressions.forall(_.deterministic)
+    case r: RebalancePartitions => r.partitionExpressions.forall(_.deterministic)
     case _: Repartition => true
     case _ => false
   }

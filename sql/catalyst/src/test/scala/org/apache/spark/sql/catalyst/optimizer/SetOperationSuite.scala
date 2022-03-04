@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.expressions.{And, GreaterThan, GreaterThanO
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
-import org.apache.spark.sql.types.BooleanType
+import org.apache.spark.sql.types.{BooleanType, DecimalType}
 
 class SetOperationSuite extends PlanTest {
   object Optimize extends RuleExecutor[LogicalPlan] {
@@ -327,5 +327,67 @@ class SetOperationSuite extends PlanTest {
     val unionCorrectAnswer2 =
       Union(testRelation :: testRelation :: testRelation :: testRelation :: Nil, true, false)
     comparePlans(unionOptimized2, unionCorrectAnswer2, false)
+  }
+
+  test("SPARK-37915: combine unions if there is a project between them") {
+    val relation1 = LocalRelation('a.decimal(18, 1), 'b.int)
+    val relation2 = LocalRelation('a.decimal(18, 2), 'b.int)
+    val relation3 = LocalRelation('a.decimal(18, 3), 'b.int)
+    val relation4 = LocalRelation('a.decimal(18, 4), 'b.int)
+    val relation5 = LocalRelation('a.decimal(18, 5), 'b.int)
+
+    val optimizedRelation1 = relation1.select('a.cast(DecimalType(19, 2)).cast(DecimalType(20, 3))
+      .cast(DecimalType(21, 4)).cast(DecimalType(22, 5)).as("a"), 'b)
+    val optimizedRelation2 = relation2.select('a.cast(DecimalType(19, 2)).cast(DecimalType(20, 3))
+      .cast(DecimalType(21, 4)).cast(DecimalType(22, 5)).as("a"), 'b)
+    val optimizedRelation3 = relation3.select('a.cast(DecimalType(20, 3))
+      .cast(DecimalType(21, 4)).cast(DecimalType(22, 5)).as("a"), 'b)
+    val optimizedRelation4 = relation4
+      .select('a.cast(DecimalType(21, 4)).cast(DecimalType(22, 5)).as("a"), 'b)
+    val optimizedRelation5 = relation5.select('a.cast(DecimalType(22, 5)).as("a"), 'b)
+
+    // SQL UNION ALL
+    comparePlans(
+      Optimize.execute(relation1.union(relation2)
+        .union(relation3).union(relation4).union(relation5).analyze),
+      Union(Seq(optimizedRelation1, optimizedRelation2, optimizedRelation3,
+        optimizedRelation4, optimizedRelation5)).analyze)
+
+    // SQL UNION
+    comparePlans(
+      Optimize.execute(Distinct(Distinct(Distinct(Distinct(relation1.union(relation2))
+        .union(relation3)).union(relation4)).union(relation5)).analyze),
+      Distinct(Union(Seq(optimizedRelation1, optimizedRelation2, optimizedRelation3,
+        optimizedRelation4, optimizedRelation5))).analyze)
+
+    // Deduplicate
+    comparePlans(
+      Optimize.execute(relation1.union(relation2).deduplicate('a, 'b).union(relation3)
+        .deduplicate('a, 'b).union(relation4).deduplicate('a, 'b).union(relation5)
+        .deduplicate('a, 'b).analyze),
+      Deduplicate(
+        Seq('a, 'b),
+        Union(Seq(optimizedRelation1, optimizedRelation2, optimizedRelation3,
+          optimizedRelation4, optimizedRelation5))).analyze)
+
+    // Other cases
+    comparePlans(
+      Optimize.execute(Distinct(Distinct(Distinct(Distinct(relation1.union(relation2))
+        .union(relation3)).union(relation4)).union(relation5)).select('a % 2).analyze),
+      Distinct(Union(Seq(optimizedRelation1, optimizedRelation2, optimizedRelation3,
+        optimizedRelation4, optimizedRelation5))).select('a % 2).analyze)
+
+    comparePlans(
+      Optimize.execute(Distinct(Distinct(Distinct(Distinct(relation1.union(relation2))
+        .union(relation3)).union(relation4)).union(relation5)).select('a + 'b).analyze),
+      Distinct(Union(Seq(optimizedRelation1, optimizedRelation2, optimizedRelation3,
+        optimizedRelation4, optimizedRelation5))).select('a + 'b).analyze)
+
+    comparePlans(
+      Optimize.execute(Distinct(Distinct(Distinct(Distinct(relation1.union(relation2))
+        .union(relation3)).union(relation4)).union(relation5)).select('a).analyze),
+      Distinct(Union(Seq(optimizedRelation1, optimizedRelation2, optimizedRelation3,
+        optimizedRelation4, optimizedRelation5))).select('a).analyze)
+
   }
 }

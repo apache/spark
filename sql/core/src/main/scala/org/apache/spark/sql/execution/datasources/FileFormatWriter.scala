@@ -111,7 +111,11 @@ object FileFormatWriter extends Logging with V1WritesHelper {
     FileOutputFormat.setOutputPath(job, new Path(outputSpec.outputPath))
 
     val partitionSet = AttributeSet(partitionColumns)
-    val dataColumns = outputSpec.outputColumns.filterNot(partitionSet.contains)
+    // cleanup the internal metadata information of
+    // the file source metadata attribute if any before write out
+    val finalOutputSpec = outputSpec.copy(outputColumns = outputSpec.outputColumns
+      .map(FileSourceMetadataAttribute.cleanupFileSourceMetadataInformation))
+    val dataColumns = finalOutputSpec.outputColumns.filterNot(partitionSet.contains)
 
     var needConvert = false
     val projectList: Seq[NamedExpression] = plan.output.map {
@@ -135,12 +139,12 @@ object FileFormatWriter extends Logging with V1WritesHelper {
       uuid = UUID.randomUUID.toString,
       serializableHadoopConf = new SerializableConfiguration(job.getConfiguration),
       outputWriterFactory = outputWriterFactory,
-      allColumns = outputSpec.outputColumns,
+      allColumns = finalOutputSpec.outputColumns,
       dataColumns = dataColumns,
       partitionColumns = partitionColumns,
       bucketSpec = writerBucketSpec,
-      path = outputSpec.outputPath,
-      customPartitionLocations = outputSpec.customPartitionLocations,
+      path = finalOutputSpec.outputPath,
+      customPartitionLocations = finalOutputSpec.customPartitionLocations,
       maxRecordsPerFile = caseInsensitiveOptions.get("maxRecordsPerFile").map(_.toLong)
         .getOrElse(sparkSession.sessionState.conf.maxRecordsPerFile),
       timeZoneId = caseInsensitiveOptions.get(DateTimeUtils.TIMEZONE_OPTION)
@@ -276,7 +280,6 @@ object FileFormatWriter extends Logging with V1WritesHelper {
     try {
       Utils.tryWithSafeFinallyAndFailureCallbacks(block = {
         // Execute the task to write rows out and commit the task.
-        val taskAttemptID = taskAttemptContext.getTaskAttemptID
         dataWriter.writeWithIterator(iterator)
         dataWriter.commit()
       })(catchBlock = {

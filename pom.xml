@@ -133,12 +133,12 @@
     <!-- Version used for internal directory structure -->
     <hive.version.short>2.3</hive.version.short>
     <!-- note that this should be compatible with Kafka brokers version 0.10 and up -->
-    <kafka.version>2.8.1</kafka.version>
+    <kafka.version>3.1.0</kafka.version>
     <!-- After 10.15.1.3, the minimum required version is JDK9 -->
     <derby.version>10.14.2.0</derby.version>
     <parquet.version>1.12.2</parquet.version>
-    <orc.version>1.7.2</orc.version>
-    <jetty.version>9.4.43.v20210629</jetty.version>
+    <orc.version>1.7.3</orc.version>
+    <jetty.version>9.4.44.v20210927</jetty.version>
     <jakartaservlet.version>4.0.3</jakartaservlet.version>
     <chill.version>0.10.0</chill.version>
     <ivy.version>2.5.0</ivy.version>
@@ -147,7 +147,7 @@
     If you changes codahale.metrics.version, you also need to change
     the link to metrics.dropwizard.io in docs/monitoring.md.
     -->
-    <codahale.metrics.version>4.2.2</codahale.metrics.version>
+    <codahale.metrics.version>4.2.7</codahale.metrics.version>
     <avro.version>1.11.0</avro.version>
     <aws.kinesis.client.version>1.12.0</aws.kinesis.client.version>
     <!-- Should be consistent with Kinesis client dependency -->
@@ -157,9 +157,9 @@
     <!--  org.apache.httpcomponents/httpclient-->
     <commons.httpclient.version>4.5.13</commons.httpclient.version>
     <commons.httpcore.version>4.4.14</commons.httpcore.version>
-    <commons.math3.version>3.4.1</commons.math3.version>
+    <commons.math3.version>3.6.1</commons.math3.version>
     <!-- managed up from 3.2.1 for SPARK-11652 -->
-    <commons.collections.version>3.2.2</commons.collections.version>
+    <commons.collections.version>4.4</commons.collections.version>
     <scala.version>2.12.15</scala.version>
     <scala.binary.version>2.12</scala.binary.version>
     <scalatest-maven-plugin.version>2.0.2</scalatest-maven-plugin.version>
@@ -184,7 +184,7 @@
     <guava.version>14.0.1</guava.version>
     <janino.version>3.0.16</janino.version>
     <jersey.version>2.34</jersey.version>
-    <joda.version>2.10.12</joda.version>
+    <joda.version>2.10.13</joda.version>
     <jodd.version>3.5.2</jodd.version>
     <jsr305.version>3.0.0</jsr305.version>
     <libthrift.version>0.12.0</libthrift.version>
@@ -196,15 +196,15 @@
     <commons-crypto.version>1.1.0</commons-crypto.version>
     <commons-cli.version>1.5.0</commons-cli.version>
     <bouncycastle.version>1.60</bouncycastle.version>
-    <tink.version>1.6.0</tink.version>
+    <tink.version>1.6.1</tink.version>
     <!--
     If you are changing Arrow version specification, please check
     ./python/pyspark/sql/pandas/utils.py, and ./python/setup.py too.
     -->
-    <arrow.version>6.0.1</arrow.version>
+    <arrow.version>7.0.0</arrow.version>
     <!-- org.fusesource.leveldbjni will be used except on arm64 platform. -->
     <leveldbjni.group>org.fusesource.leveldbjni</leveldbjni.group>
-    <kubernetes-client.version>5.10.1</kubernetes-client.version>
+    <kubernetes-client.version>5.12.1</kubernetes-client.version>
 
     <test.java.home>${java.home}</test.java.home>
 
@@ -393,7 +393,7 @@
     </dependency>
     <dependency>
       <groupId>org.scalatestplus</groupId>
-      <artifactId>mockito-3-12_${scala.binary.version}</artifactId>
+      <artifactId>mockito-4-2_${scala.binary.version}</artifactId>
       <scope>test</scope>
     </dependency>
     <dependency>
@@ -407,7 +407,7 @@
       <scope>test</scope>
     </dependency>
     <dependency>
-      <groupId>com.novocode</groupId>
+      <groupId>com.github.sbt</groupId>
       <artifactId>junit-interface</artifactId>
       <scope>test</scope>
     </dependency>
@@ -584,7 +584,7 @@
       <dependency>
         <groupId>org.apache.commons</groupId>
         <artifactId>commons-text</artifactId>
-        <version>1.6</version>
+        <version>1.9</version>
       </dependency>
       <dependency>
         <groupId>commons-lang</groupId>
@@ -612,8 +612,8 @@
         <version>${commons.math3.version}</version>
       </dependency>
       <dependency>
-        <groupId>commons-collections</groupId>
-        <artifactId>commons-collections</artifactId>
+        <groupId>org.apache.commons</groupId>
+        <artifactId>commons-collections4</artifactId>
         <version>${commons.collections.version}</version>
       </dependency>
       <dependency>
@@ -773,7 +773,7 @@
       <dependency>
         <groupId>com.github.luben</groupId>
         <artifactId>zstd-jni</artifactId>
-        <version>1.5.1-1</version>
+        <version>1.5.2-1</version>
       </dependency>
       <dependency>
         <groupId>com.clearspring.analytics</groupId>
@@ -801,17 +801,12 @@
       <dependency>
         <groupId>org.roaringbitmap</groupId>
         <artifactId>RoaringBitmap</artifactId>
-        <version>0.9.23</version>
-      </dependency>
-      <dependency>
-        <groupId>commons-net</groupId>
-        <artifactId>commons-net</artifactId>
-        <version>3.1</version>
+        <version>0.9.25</version>
       </dependency>
       <dependency>
         <groupId>io.netty</groupId>
         <artifactId>netty-all</artifactId>
-        <version>4.1.72.Final</version>
+        <version>4.1.74.Final</version>
         <exclusions>
           <exclusion>
             <groupId>io.netty</groupId>
@@ -1027,6 +1022,11 @@
         </exclusions>
       </dependency>
       <dependency>
+        <groupId>com.chuusai</groupId>
+        <artifactId>shapeless_${scala.binary.version}</artifactId>
+        <version>2.3.7</version>
+      </dependency>
+      <dependency>
         <groupId>org.json4s</groupId>
         <artifactId>json4s-jackson_${scala.binary.version}</artifactId>
         <version>3.7.0-M11</version>
@@ -1058,11 +1058,6 @@
         <version>${scala.version}</version>
       </dependency>
       <dependency>
-        <groupId>org.scala-lang</groupId>
-        <artifactId>scala-actors</artifactId>
-        <version>${scala.version}</version>
-      </dependency>
-      <dependency>
         <groupId>org.scala-lang.modules</groupId>
         <artifactId>scala-parser-combinators_${scala.binary.version}</artifactId>
         <version>1.1.2</version>
@@ -1086,8 +1081,8 @@
       </dependency>
       <dependency>
         <groupId>org.scalatestplus</groupId>
-        <artifactId>mockito-3-12_${scala.binary.version}</artifactId>
-        <version>3.2.10.0</version>
+        <artifactId>mockito-4-2_${scala.binary.version}</artifactId>
+        <version>3.2.11.0</version>
         <scope>test</scope>
       </dependency>
       <dependency>
@@ -1099,13 +1094,13 @@
       <dependency>
         <groupId>org.mockito</groupId>
         <artifactId>mockito-core</artifactId>
-        <version>3.12.4</version>
+        <version>4.2.0</version>
         <scope>test</scope>
       </dependency>
       <dependency>
         <groupId>org.mockito</groupId>
         <artifactId>mockito-inline</artifactId>
-        <version>3.12.4</version>
+        <version>4.2.0</version>
         <scope>test</scope>
       </dependency>
       <dependency>
@@ -1123,25 +1118,13 @@
       <dependency>
         <groupId>junit</groupId>
         <artifactId>junit</artifactId>
-        <version>4.13.1</version>
+        <version>4.13.2</version>
         <scope>test</scope>
       </dependency>
       <dependency>
-        <groupId>org.hamcrest</groupId>
-        <artifactId>hamcrest-core</artifactId>
-        <version>1.3</version>
-        <scope>test</scope>
-      </dependency>
-      <dependency>
-        <groupId>org.hamcrest</groupId>
-        <artifactId>hamcrest-library</artifactId>
-        <version>1.3</version>
-        <scope>test</scope>
-      </dependency>
-      <dependency>
-        <groupId>com.novocode</groupId>
+        <groupId>com.github.sbt</groupId>
         <artifactId>junit-interface</artifactId>
-        <version>0.11</version>
+        <version>0.13.3</version>
         <scope>test</scope>
       </dependency>
       <dependency>
@@ -1176,7 +1159,7 @@
       <dependency>
         <groupId>org.postgresql</groupId>
         <artifactId>postgresql</artifactId>
-        <version>42.3.0</version>
+        <version>42.3.3</version>
         <scope>test</scope>
       </dependency>
       <dependency>
@@ -2756,39 +2739,39 @@
             </execution>
           </executions>
         </plugin>
-	<plugin>
-	  <groupId>org.codehaus.mojo</groupId>
-	  <artifactId>build-helper-maven-plugin</artifactId>
-	  <version>3.2.0</version>
-	  <executions>
-	    <execution>
-	      <id>module-timestamp-property</id>
-	      <phase>validate</phase>
-	      <goals>
-		<goal>timestamp-property</goal>
-	      </goals>
-	      <configuration>
-		<name>module.build.timestamp</name>
-		<pattern>${maven.build.timestamp.format}</pattern>
-		<timeSource>current</timeSource>
-		<timeZone>America/Los_Angeles</timeZone>
-	      </configuration>
-	    </execution>
-	    <execution>
-	      <id>local-timestamp-property</id>
-	      <phase>validate</phase>
-	      <goals>
-		<goal>timestamp-property</goal>
-	      </goals>
-	      <configuration>
-		<name>local.build.timestamp</name>
-		<pattern>${maven.build.timestamp.format}</pattern>
-		<timeSource>build</timeSource>
-		<timeZone>America/Los_Angeles</timeZone>
-	      </configuration>
-	    </execution>
-	  </executions>
-	</plugin>
+        <plugin>
+          <groupId>org.codehaus.mojo</groupId>
+          <artifactId>build-helper-maven-plugin</artifactId>
+          <version>3.2.0</version>
+          <executions>
+            <execution>
+              <id>module-timestamp-property</id>
+              <phase>validate</phase>
+              <goals>
+                <goal>timestamp-property</goal>
+              </goals>
+              <configuration>
+                <name>module.build.timestamp</name>
+                <pattern>${maven.build.timestamp.format}</pattern>
+                <timeSource>current</timeSource>
+                <timeZone>America/Los_Angeles</timeZone>
+              </configuration>
+            </execution>
+            <execution>
+              <id>local-timestamp-property</id>
+              <phase>validate</phase>
+              <goals>
+                <goal>timestamp-property</goal>
+              </goals>
+              <configuration>
+                <name>local.build.timestamp</name>
+                <pattern>${maven.build.timestamp.format}</pattern>
+                <timeSource>build</timeSource>
+                <timeZone>America/Los_Angeles</timeZone>
+              </configuration>
+            </execution>
+          </executions>
+        </plugin>
         <plugin>
           <groupId>net.alchim31.maven</groupId>
           <artifactId>scala-maven-plugin</artifactId>
@@ -3132,58 +3115,6 @@
               </configuration>
             </execution>
           </executions>
-        </plugin>
-        <!-- This plugin's configuration is used to store Eclipse m2e settings only. -->
-        <!-- It has no influence on the Maven build itself. -->
-        <plugin>
-          <groupId>org.eclipse.m2e</groupId>
-          <artifactId>lifecycle-mapping</artifactId>
-          <version>1.0.0</version>
-          <configuration>
-            <lifecycleMappingMetadata>
-              <pluginExecutions>
-                <pluginExecution>
-                  <pluginExecutionFilter>
-                    <groupId>org.apache.maven.plugins</groupId>
-                    <artifactId>maven-dependency-plugin</artifactId>
-                    <versionRange>[2.8,)</versionRange>
-                    <goals>
-                      <goal>build-classpath</goal>
-                    </goals>
-                  </pluginExecutionFilter>
-                  <action>
-                    <ignore></ignore>
-                  </action>
-                </pluginExecution>
-                <pluginExecution>
-                  <pluginExecutionFilter>
-                    <groupId>org.apache.maven.plugins</groupId>
-                    <artifactId>maven-jar-plugin</artifactId>
-                    <versionRange>3.1.2</versionRange>
-                    <goals>
-                      <goal>test-jar</goal>
-                    </goals>
-                  </pluginExecutionFilter>
-                  <action>
-                    <ignore></ignore>
-                  </action>
-                </pluginExecution>
-                <pluginExecution>
-                  <pluginExecutionFilter>
-                    <groupId>org.apache.maven.plugins</groupId>
-                    <artifactId>maven-antrun-plugin</artifactId>
-                    <versionRange>[${maven-antrun.version},)</versionRange>
-                    <goals>
-                      <goal>run</goal>
-                    </goals>
-                  </pluginExecutionFilter>
-                  <action>
-                    <ignore></ignore>
-                  </action>
-                </pluginExecution>
-              </pluginExecutions>
-            </lifecycleMappingMetadata>
-          </configuration>
         </plugin>
       </plugins>
     </pluginManagement>
@@ -3564,9 +3495,9 @@
     <profile>
       <id>scala-2.12</id>
       <properties>
-        <!-- 
+        <!--
          SPARK-34774 Add this property to ensure change-scala-version.sh can replace the public `scala.version`
-         property correctly. 
+         property correctly.
         -->
         <scala.version>2.12.15</scala.version>
       </properties>
@@ -3581,7 +3512,7 @@
     <profile>
       <id>scala-2.13</id>
       <properties>
-        <scala.version>2.13.7</scala.version>
+        <scala.version>2.13.8</scala.version>
         <scala.binary.version>2.13</scala.binary.version>
       </properties>
       <build>
@@ -3757,6 +3688,73 @@
           <type>pom</type>
         </dependency>
       </dependencies>
+    </profile>
+    <profile>
+      <id>only-eclipse</id>
+      <activation>
+        <property>
+          <!-- Eclipse M2E plugin exports this property and auto-activates this profile -->
+          <name>m2e.version</name>
+        </property>
+      </activation>
+      <build>
+        <pluginManagement>
+          <plugins>
+            <!-- This plugin's configuration is used to store Eclipse m2e settings only. -->
+            <!-- It has no influence on the Maven build itself. -->
+            <plugin>
+              <groupId>org.eclipse.m2e</groupId>
+              <artifactId>lifecycle-mapping</artifactId>
+              <version>1.0.0</version>
+              <configuration>
+                <lifecycleMappingMetadata>
+                  <pluginExecutions>
+                    <pluginExecution>
+                      <pluginExecutionFilter>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-dependency-plugin</artifactId>
+                        <versionRange>[2.8,)</versionRange>
+                        <goals>
+                          <goal>build-classpath</goal>
+                        </goals>
+                      </pluginExecutionFilter>
+                      <action>
+                        <ignore></ignore>
+                      </action>
+                    </pluginExecution>
+                    <pluginExecution>
+                      <pluginExecutionFilter>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-jar-plugin</artifactId>
+                        <versionRange>3.1.2</versionRange>
+                        <goals>
+                          <goal>test-jar</goal>
+                        </goals>
+                      </pluginExecutionFilter>
+                      <action>
+                        <ignore></ignore>
+                      </action>
+                    </pluginExecution>
+                    <pluginExecution>
+                      <pluginExecutionFilter>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-antrun-plugin</artifactId>
+                        <versionRange>[${maven-antrun.version},)</versionRange>
+                        <goals>
+                          <goal>run</goal>
+                        </goals>
+                      </pluginExecutionFilter>
+                      <action>
+                        <ignore></ignore>
+                      </action>
+                    </pluginExecution>
+                  </pluginExecutions>
+                </lifecycleMappingMetadata>
+              </configuration>
+            </plugin>
+          </plugins>
+        </pluginManagement>
+      </build>
     </profile>
   </profiles>
 </project>

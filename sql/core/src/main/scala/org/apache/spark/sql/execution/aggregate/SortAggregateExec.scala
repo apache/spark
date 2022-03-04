@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.execution.aggregate
 
-import java.util.concurrent.TimeUnit.NANOSECONDS
-
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
@@ -44,8 +42,7 @@ case class SortAggregateExec(
   with AliasAwareOutputOrdering {
 
   override lazy val metrics = Map(
-    "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"),
-    "aggTime" -> SQLMetrics.createTimingMetric(sparkContext, "time in aggregation build"))
+    "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
 
   override def requiredChildOrdering: Seq[Seq[SortOrder]] = {
     groupingExpressions.map(SortOrder(_, Ascending)) :: Nil
@@ -57,14 +54,11 @@ case class SortAggregateExec(
 
   protected override def doExecute(): RDD[InternalRow] = {
     val numOutputRows = longMetric("numOutputRows")
-    val aggTime = longMetric("aggTime")
-
     child.execute().mapPartitionsWithIndexInternal { (partIndex, iter) =>
-      val beforeAgg = System.nanoTime()
       // Because the constructor of an aggregation iterator will read at least the first row,
       // we need to get the value of iter.hasNext first.
       val hasInput = iter.hasNext
-      val res = if (!hasInput && groupingExpressions.nonEmpty) {
+      if (!hasInput && groupingExpressions.nonEmpty) {
         // This is a grouped aggregate and the input iterator is empty,
         // so return an empty iterator.
         Iterator[UnsafeRow]()
@@ -90,8 +84,6 @@ case class SortAggregateExec(
           outputIter
         }
       }
-      aggTime += NANOSECONDS.toMillis(System.nanoTime() - beforeAgg)
-      res
     }
   }
 
@@ -101,11 +93,13 @@ case class SortAggregateExec(
       groupingExpressions.isEmpty
   }
 
-  protected def doProduceWithKeys(ctx: CodegenContext): String = {
+  protected override def needHashTable: Boolean = false
+
+  protected override def doProduceWithKeys(ctx: CodegenContext): String = {
     throw new UnsupportedOperationException("SortAggregate code-gen does not support grouping keys")
   }
 
-  protected def doConsumeWithKeys(ctx: CodegenContext, input: Seq[ExprCode]): String = {
+  protected override def doConsumeWithKeys(ctx: CodegenContext, input: Seq[ExprCode]): String = {
     throw new UnsupportedOperationException("SortAggregate code-gen does not support grouping keys")
   }
 

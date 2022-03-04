@@ -68,7 +68,7 @@ public class BlockPushReturnCode extends BlockTransferMessage {
 
   @Override
   public boolean equals(Object other) {
-    if (other != null && other instanceof BlockPushReturnCode) {
+    if (other instanceof BlockPushReturnCode) {
       BlockPushReturnCode o = (BlockPushReturnCode) other;
       return returnCode == o.returnCode && Objects.equals(failureBlockId, o.failureBlockId);
     }

@@ -294,7 +294,7 @@ case class AttributeReference(
   }
 
   override lazy val preCanonicalized: Expression = {
-    AttributeReference("none", dataType.asNullable)(exprId)
+    AttributeReference("none", dataType)(exprId)
   }
 
   override def newInstance(): AttributeReference =
@@ -342,7 +342,7 @@ case class AttributeReference(
     AttributeReference(name, dataType, nullable, newMetadata)(exprId, qualifier)
   }
 
-  override def withDataType(newType: DataType): Attribute = {
+  override def withDataType(newType: DataType): AttributeReference = {
     AttributeReference(name, newType, nullable, metadata)(exprId, qualifier)
   }
 
@@ -434,8 +434,8 @@ object VirtualColumn {
 }
 
 /**
- * The internal representation of the hidden metadata struct:
- * set `__metadata_col` to `true` in AttributeReference metadata
+ * The internal representation of the MetadataAttribute,
+ * it sets `__metadata_col` to `true` in AttributeReference metadata
  * - apply() will create a metadata attribute reference
  * - unapply() will check if an attribute reference is the metadata attribute reference
  */
@@ -449,5 +449,45 @@ object MetadataAttribute {
       && attr.metadata.getBoolean(METADATA_COL_ATTR_KEY)) {
       Some(attr)
     } else None
+  }
+}
+
+/**
+ * The internal representation of the FileSourceMetadataAttribute, it sets `__metadata_col`
+ * and `__file_source_metadata_col` to `true` in AttributeReference's metadata
+ * - apply() will create a file source metadata attribute reference
+ * - unapply() will check if an attribute reference is the file source metadata attribute reference
+ */
+object FileSourceMetadataAttribute {
+
+  val FILE_SOURCE_METADATA_COL_ATTR_KEY = "__file_source_metadata_col"
+
+  def apply(name: String, dataType: DataType, nullable: Boolean = true): AttributeReference =
+    AttributeReference(name, dataType, nullable,
+      new MetadataBuilder()
+        .putBoolean(METADATA_COL_ATTR_KEY, value = true)
+        .putBoolean(FILE_SOURCE_METADATA_COL_ATTR_KEY, value = true).build())()
+
+  def unapply(attr: AttributeReference): Option[AttributeReference] =
+    attr match {
+      case MetadataAttribute(attr)
+        if attr.metadata.contains(FILE_SOURCE_METADATA_COL_ATTR_KEY)
+          && attr.metadata.getBoolean(FILE_SOURCE_METADATA_COL_ATTR_KEY) => Some(attr)
+      case _ => None
+    }
+
+  /**
+   * Cleanup the internal metadata information of an attribute if it is
+   * a [[FileSourceMetadataAttribute]], it will remove both [[METADATA_COL_ATTR_KEY]] and
+   * [[FILE_SOURCE_METADATA_COL_ATTR_KEY]] from the attribute [[Metadata]]
+   */
+  def cleanupFileSourceMetadataInformation(attr: Attribute): Attribute = attr match {
+    case FileSourceMetadataAttribute(attr) => attr.withMetadata(
+      new MetadataBuilder().withMetadata(attr.metadata)
+        .remove(METADATA_COL_ATTR_KEY)
+        .remove(FILE_SOURCE_METADATA_COL_ATTR_KEY)
+        .build()
+    )
+    case attr => attr
   }
 }

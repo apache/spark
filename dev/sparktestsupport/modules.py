@@ -453,6 +453,7 @@ pyspark_sql = Module(
         "pyspark.sql.tests.test_pandas_udf_grouped_agg",
         "pyspark.sql.tests.test_pandas_udf_scalar",
         "pyspark.sql.tests.test_pandas_udf_typehints",
+        "pyspark.sql.tests.test_pandas_udf_typehints_with_future_annotations",
         "pyspark.sql.tests.test_pandas_udf_window",
         "pyspark.sql.tests.test_readwriter",
         "pyspark.sql.tests.test_serde",

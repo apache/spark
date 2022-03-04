@@ -3210,7 +3210,8 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             # Falls back to schema inference if it fails to get signature.
             should_infer_schema = True
 
-        apply_each = lambda s: s.apply(func, args=args, **kwds)
+        def apply_each(s: Any) -> pd.Series:
+            return s.apply(func, args=args, **kwds)
 
         if should_infer_schema:
             return self.pandas_on_spark._transform_batch(apply_each, None)
@@ -3611,9 +3612,9 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             raise NotImplementedError("rank do not support MultiIndex now")
 
         if ascending:
-            asc_func = lambda scol: scol.asc()
+            asc_func = Column.asc
         else:
-            asc_func = lambda scol: scol.desc()
+            asc_func = Column.desc
 
         if method == "first":
             window = (
@@ -6429,12 +6430,12 @@ def unpack_scalar(sdf: SparkDataFrame) -> Any:
     Takes a dataframe that is supposed to contain a single row with a single scalar value,
     and returns this value.
     """
-    l = cast(pd.DataFrame, sdf.limit(2).toPandas())
-    assert len(l) == 1, (sdf, l)
-    row = l.iloc[0]
-    l2 = list(row)
-    assert len(l2) == 1, (row, l2)
-    return l2[0]
+    lst = cast(pd.DataFrame, sdf.limit(2).toPandas())
+    assert len(lst) == 1, (sdf, lst)
+    row = lst.iloc[0]
+    lst2 = list(row)
+    assert len(lst2) == 1, (row, lst2)
+    return lst2[0]
 
 
 @overload

@@ -103,7 +103,7 @@ class StreamingQueryPageSuite extends SharedSparkSession with BeforeAndAfter {
     when(summary.isActive).thenReturn(true)
     when(summary.name).thenReturn("query")
     when(summary.id).thenReturn(id)
-    when(summary.runId).thenReturn(id)
+    when(summary.runId).thenReturn(id.toString)
     when(summary.startTimestamp).thenReturn(1L)
     when(summary.exception).thenReturn(None)
 

@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.catalyst.util.GenericArrayData
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 /**
@@ -441,9 +442,12 @@ class ComplexTypesSuite extends PlanTest with ExpressionEvalHelper {
       MapType(BinaryType, StringType))
     val mb1 = Literal.create(Map[Array[Byte], String](), MapType(BinaryType, StringType))
 
-    checkEvaluation(GetMapValue(mb0, Literal(Array[Byte](1, 2, 3))), null)
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
+      // ANSI will throw exception
+      checkEvaluation(GetMapValue(mb0, Literal(Array[Byte](1, 2, 3))), null)
+      checkEvaluation(GetMapValue(mb1, Literal(Array[Byte](1, 2))), null)
+    }
 
-    checkEvaluation(GetMapValue(mb1, Literal(Array[Byte](1, 2))), null)
     checkEvaluation(GetMapValue(mb0, Literal(Array[Byte](2, 1), BinaryType)), "2")
     checkEvaluation(GetMapValue(mb0, Literal(Array[Byte](3, 4))), null)
   }

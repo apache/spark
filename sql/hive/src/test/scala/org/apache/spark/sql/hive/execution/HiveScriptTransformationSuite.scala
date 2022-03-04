@@ -34,8 +34,10 @@ import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.types.DayTimeIntervalType._
 import org.apache.spark.sql.types.YearMonthIntervalType._
+import org.apache.spark.tags.SlowHiveTest
 import org.apache.spark.unsafe.types.CalendarInterval
 
+@SlowHiveTest
 class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with TestHiveSingleton {
   import testImplicits._
 
@@ -617,6 +619,23 @@ class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with T
           df.select($"a").collect())
       }.getMessage
       assert(e.contains("java.lang.ArithmeticException: long overflow"))
+    }
+  }
+
+  test("SPARK-38075: ORDER BY with LIMIT should not add fake rows") {
+    withTempView("v") {
+      val df = Seq((1), (2), (3)).toDF("a")
+      df.createTempView("v")
+      checkAnswer(sql(
+        """
+          |SELECT TRANSFORM(a)
+          |  USING 'cat' AS (a)
+          |FROM v
+          |ORDER BY a
+          |LIMIT 10
+          |""".stripMargin),
+        identity,
+        Row("1") :: Row("2") :: Row("3") :: Nil)
     }
   }
 }

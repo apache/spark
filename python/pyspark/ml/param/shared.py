@@ -19,7 +19,7 @@
 
 from typing import List
 
-from pyspark.ml.param import *
+from pyspark.ml.param import Param, Params, TypeConverters
 
 
 class HasMaxIter(Params):
