@@ -5257,8 +5257,8 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
         if np.nan in where:
             # When `where` is np.nan, pandas returns the last index value.
-            max_index = self._internal.spark_frame.select(F.last(index_scol)).take(1)[0][0]
-            modified_where = [max_index if x is np.nan else x for x in where]
+            last_index = self._internal.spark_frame.select(F.last(index_scol)).take(1)[0][0]
+            modified_where = [last_index if x is np.nan else x for x in where]
         else:
             modified_where = where
 
@@ -5269,7 +5269,6 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             )
             for idx, index in enumerate(modified_where)
         ]
-
         sdf = self._internal.spark_frame.select(cond)
         if not should_return_series:
             with sql_conf({SPARK_CONF_ARROW_ENABLED: False}):
