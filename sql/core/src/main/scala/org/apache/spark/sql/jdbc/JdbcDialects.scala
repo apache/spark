@@ -35,7 +35,7 @@ import org.apache.spark.sql.connector.catalog.index.TableIndex
 import org.apache.spark.sql.connector.expressions.{FieldReference, GeneralSQLExpression, NamedReference}
 import org.apache.spark.sql.connector.expressions.aggregate.{AggregateFunc, Avg, Count, CountStar, Max, Min, Sum}
 import org.apache.spark.sql.errors.QueryCompilationErrors
-import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JdbcUtils}
+import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JDBCPartition, JdbcUtils}
 import org.apache.spark.sql.execution.datasources.v2.TableSampleInfo
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -98,6 +98,16 @@ abstract class JdbcDialect extends Serializable with Logging{
    * @return The new JdbcType if there is an override for this DataType
    */
   def getJDBCType(dt: DataType): Option[JdbcType] = None
+
+  /**
+   * Get the factory method for create JDBC connection.
+   * In general, creating a connection has nothing to do with JDBC partition.
+   * But sometimes it is needed, such as a database with multiple shard nodes.
+   * @param options JDBC options.
+   * @return The factory method for create JDBC connection.
+   */
+  def getConnection(options: JDBCOptions): JDBCPartition => Connection =
+    JDBCPartition => JdbcUtils.createConnectionFactory(options)()
 
   /**
    * Quotes the identifier. This is used to put quotes around the identifier in case the column

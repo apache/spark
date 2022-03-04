@@ -182,7 +182,7 @@ object JDBCRDD extends Logging {
     }
     new JDBCRDD(
       sc,
-      JdbcUtils.createConnectionFactory(options),
+      dialect.getConnection(options),
       outputSchema.getOrElse(pruneSchema(schema, requiredColumns)),
       quotedColumns,
       filters,
@@ -204,7 +204,7 @@ object JDBCRDD extends Logging {
  */
 private[jdbc] class JDBCRDD(
     sc: SparkContext,
-    getConnection: () => Connection,
+    getConnection: JDBCPartition => Connection,
     schema: StructType,
     columns: Array[String],
     filters: Array[Filter],
@@ -318,7 +318,7 @@ private[jdbc] class JDBCRDD(
 
     val inputMetrics = context.taskMetrics().inputMetrics
     val part = thePart.asInstanceOf[JDBCPartition]
-    conn = getConnection()
+    conn = getConnection(part)
     val dialect = JdbcDialects.get(url)
     import scala.collection.JavaConverters._
     dialect.beforeFetch(conn, options.asProperties.asScala.toMap)
