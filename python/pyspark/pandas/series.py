@@ -1142,8 +1142,8 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             frame.set_index(new_index_name, inplace=True)
             frame.index.name = self.index.name
             return first_series(frame).rename(self.name)
-        elif isinstance(index, dict):
-            raise ValueError("dict 'index' is not supported yet")
+        elif isinstance(index, (pd.Series, dict)):
+            raise ValueError("'index' of %s type is not supported yet" % type(index).__name__)
         elif not is_hashable(index):
             raise TypeError("Series.name must be a hashable type")
         elif not isinstance(index, tuple):
