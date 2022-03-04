@@ -1087,7 +1087,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
     def name(self, name: Name) -> None:
         self.rename(name, inplace=True)
 
-    # TODO: Currently, changing index labels taking dictionary is not supported.
+    # TODO: Currently, changing index labels taking dictionary/Series is not supported.
     def rename(
         self, index: Optional[Union[Name, Callable[[Any], Any]]] = None, **kwargs: Any
     ) -> "Series":

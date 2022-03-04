@@ -179,7 +179,6 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
         psser = ps.from_pandas(pser)
 
         self.assert_eq(psser.rename("y"), pser.rename("y"))
-        self.assert_eq(psser.rename(("y", "z")), pser.rename(("y", "z")))
         self.assertEqual(psser.name, "x")  # no mutation
         self.assert_eq(psser.rename(), pser.rename())
 
