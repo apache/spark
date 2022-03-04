@@ -977,6 +977,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             return sdf.select(F.covar_samp(*sdf.columns)).head(1)[0][0]
 
     # TODO: NaN and None when ``arg`` is an empty dict
+    # TODO: Support ps.Series ``arg``
     def map(
         self, arg: Union[Dict, Callable[[Any], Any], pd.Series], na_action: Optional[str] = None
     ) -> "Series":
@@ -1031,6 +1032,16 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         value (e.g. ``defaultdict``):
 
         >>> s.map({'cat': 'kitten', 'dog': 'puppy'})
+        0    kitten
+        1     puppy
+        2      None
+        3      None
+        dtype: object
+
+        It also accepts a pandas Series:
+
+        >>> pser = pd.Series(['kitten', 'puppy'], index=['cat', 'dog'])
+        >>> s.map(pser)
         0    kitten
         1     puppy
         2      None

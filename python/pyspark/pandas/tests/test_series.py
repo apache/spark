@@ -1164,7 +1164,7 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
 
         # dict correspondence
         # Currently pandas API on Spark doesn't return NaN as pandas does.
-        self.assert_eq(psser.map({}), pser.map({}).replace({pd.np.nan: None}))
+        self.assert_eq(psser.map({}), pser.map({}).replace({np.nan: None}))
 
         d = defaultdict(lambda: "abc")
         self.assertTrue("abc" in repr(psser.map(d)))
