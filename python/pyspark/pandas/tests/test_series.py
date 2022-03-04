@@ -194,8 +194,12 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
             psser.rename(["0", "1"])
 
         # Function index
-        res = psser.rename(lambda x: x ** 2)
-        self.assert_eq(res, pser.rename(lambda x: x ** 2))
+        self.assert_eq(psser.rename(lambda x: x ** 2), pser.rename(lambda x: x ** 2))
+        self.assert_eq((psser + 1).rename(lambda x: x ** 2), (pser + 1).rename(lambda x: x ** 2))
+
+        expected_error_message = "inplace True is not supported yet for a function 'index'"
+        with self.assertRaisesRegex(ValueError, expected_error_message):
+            psser.rename(lambda x: x ** 2, inplace=True)
 
         # Series index
         # pser = pd.Series(['a', 'b', 'c', 'd', 'e', 'f', 'g'], name='x')
