@@ -20,7 +20,7 @@ package org.apache.spark.sql.jdbc
 import java.sql.{Connection, DriverManager}
 import java.util.Properties
 
-import org.apache.spark.SparkConf
+import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.sql.{DataFrame, ExplainSuiteHelper, QueryTest, Row}
 import org.apache.spark.sql.catalyst.analysis.CannotReplaceMissingTableException
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, Sort}
@@ -28,6 +28,7 @@ import org.apache.spark.sql.connector.expressions.{FieldReference, NullOrdering,
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2ScanRelation, V1ScanWrapper}
 import org.apache.spark.sql.execution.datasources.v2.jdbc.JDBCTableCatalog
 import org.apache.spark.sql.functions.{avg, count, lit, sum, udf}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.util.Utils
 
@@ -839,6 +840,34 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
     checkAnswer(df, Seq(Row(1, 1, 1, 1, 1, 0d, 12000d, 0d, 12000d, 12000d, 0d, 0d, 2, 0d),
       Row(2, 2, 2, 2, 2, 0d, 10000d, 0d, 10000d, 10000d, 0d, 0d, 2, 0d),
       Row(2, 2, 2, 2, 2, 0d, 12000d, 0d, 12000d, 12000d, 0d, 0d, 3, 0d)))
+  }
+
+  test("scan with aggregate push-down: aggregate function with binary arithmetic") {
+    Seq(false, true).foreach { ansiMode =>
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> ansiMode.toString) {
+        val df = sql("SELECT SUM(2147483647 + DEPT) FROM h2.test.employee")
+        checkAggregateRemoved(df, ansiMode)
+        val expected_plan_fragment = if (ansiMode) {
+          "PushedAggregates: [SUM((2147483647) + (DEPT))], " +
+            "PushedFilters: [], PushedGroupByColumns: []"
+        } else {
+          "PushedFilters: []"
+        }
+        df.queryExecution.optimizedPlan.collect {
+          case _: DataSourceV2ScanRelation =>
+            checkKeywordsExistsInExplain(df, expected_plan_fragment)
+        }
+        if (ansiMode) {
+          val e = intercept[SparkException] {
+            checkAnswer(df, Seq(Row(-10737418233L)))
+          }
+          assert(e.getMessage.contains(
+            "org.h2.jdbc.JdbcSQLDataException: Numeric value out of range: \"2147483648\""))
+        } else {
+          checkAnswer(df, Seq(Row(-10737418233L)))
+        }
+      }
+    }
   }
 
   test("scan with aggregate push-down: aggregate function with UDF") {

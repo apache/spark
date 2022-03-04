@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.connector
 
-import java.util
-
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.sql.{DataFrame, QueryTest, SaveMode}
@@ -97,7 +95,7 @@ class InMemoryTableSessionCatalog extends TestV2SessionCatalogBase[InMemoryTable
       name: String,
       schema: StructType,
       partitions: Array[Transform],
-      properties: util.Map[String, String]): InMemoryTable = {
+      properties: java.util.Map[String, String]): InMemoryTable = {
     new InMemoryTable(name, schema, partitions, properties)
   }
 
