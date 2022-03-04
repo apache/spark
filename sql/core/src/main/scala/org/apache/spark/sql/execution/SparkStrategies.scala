@@ -141,6 +141,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
    *
    * - Broadcast hash join (BHJ):
    *     Only supported for equi-joins, while the join keys do not need to be sortable.
+   *     md: why except full outer join? 因为通过hash表来反向匹配单分区，如果某条记录不存在，不代表在其他分区不存在，因此局部判断无效
    *     Supported for all join types except full outer joins.
    *     BHJ usually performs faster than the other join algorithms when the broadcast side is
    *     small. However, broadcasting tables is a network-intensive operation and it could cause

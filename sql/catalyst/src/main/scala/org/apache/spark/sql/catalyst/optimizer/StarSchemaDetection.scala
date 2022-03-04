@@ -30,6 +30,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
  */
 object StarSchemaDetection extends PredicateHelper with SQLConfHelper {
 
+  // md: RI应该是指：reference information
   /**
    * Star schema consists of one or more fact tables referencing a number of dimension
    * tables. In general, star-schema joins are detected using the following conditions:
@@ -70,6 +71,12 @@ object StarSchemaDetection extends PredicateHelper with SQLConfHelper {
    * table. If their relative difference is within certain limits (i.e. ndvMaxError * 2, adjusted
    * based on 1TB TPC-DS data), the column is assumed to be unique.
    */
+  // md: 整体要求还是非常严格的：
+  //  1）inner join；
+  //  2）大表要足够大，相比于其他dim table（表级统计信息）；
+  //  3）必须equi-join；
+  //  4）fact table join dim table on pk（列级统计信息）
+  //  5）……
   def findStarJoins(
       input: Seq[LogicalPlan],
       conditions: Seq[Expression]): Seq[LogicalPlan] = {
@@ -83,6 +90,7 @@ object StarSchemaDetection extends PredicateHelper with SQLConfHelper {
       // An eligible plan is a base table access with valid statistics.
       val foundEligibleJoin = input.forall {
         case NodeWithOnlyDeterministicProjectAndFilter(t: LeafNode)
+          // md: 这里很关键，rowCount作为fact table的判断依据，非常重要
             if t.stats.rowCount.isDefined => true
         case _ => false
       }
@@ -104,15 +112,18 @@ object StarSchemaDetection extends PredicateHelper with SQLConfHelper {
         sortedFactTables match {
           case Nil =>
             emptyStarJoinPlan
-          case table1 :: table2 :: _
+          case table1 :: table2 :: _ // md： 还可以这种匹配的用法。。
+            // md: 如果最大的两张表的行数差别不大，就不认为是star-schema
             if table2.size.get.toDouble > conf.starSchemaFTRatio * table1.size.get.toDouble =>
             // If the top largest tables have comparable number of rows, return an empty star plan.
             // This restriction will be lifted when the algorithm is generalized
             // to return multiple star plans.
             emptyStarJoinPlan
+          // md: 看起来，这里已经执行过第一个case，两张表的数据量有较大差异了
           case TableAccessCardinality(factTable, _) :: rest =>
             // Find the fact table joins.
             val allFactJoins = rest.collect { case TableAccessCardinality(plan, _)
+              // md: 这里可以简单优化下，conditions其实是可以减少范围的（多次迭代之后），如果找到了某些表的话
               if findJoinConditions(factTable, plan, conditions).nonEmpty =>
               plan
             }
@@ -129,6 +140,7 @@ object StarSchemaDetection extends PredicateHelper with SQLConfHelper {
             // tables.
             val areStatsAvailable = allFactJoins.forall { dimTable =>
               allFactJoinCond.exists {
+                // md: 这里相当于又做了更严格要求的cast，条件必须是AttributeReference才行
                 case BinaryComparison(lhs: AttributeReference, rhs: AttributeReference) =>
                   val dimCol = if (dimTable.outputSet.contains(lhs)) lhs else rhs
                   val factCol = if (factTable.outputSet.contains(lhs)) lhs else rhs
@@ -145,7 +157,9 @@ object StarSchemaDetection extends PredicateHelper with SQLConfHelper {
               // between a fact and a dimension table to avoid expanding joins.
               val eligibleDimPlans = allFactJoins.filter { dimTable =>
                 allFactJoinCond.exists {
+                  // md: 通过Equality来判断，这是属于starSchemaJoin形态的特点，也就是inner-equi-join
                   case cond @ Equality(lhs: AttributeReference, rhs: AttributeReference) =>
+                    // md: 通过对dimTable做列的唯一性判断，来决定这个值是dimTable的主键或唯一键，从而这是一个外键约束
                     val dimCol = if (dimTable.outputSet.contains(lhs)) lhs else rhs
                     isUnique(dimCol, dimTable)
                   case _ => false
@@ -191,6 +205,7 @@ object StarSchemaDetection extends PredicateHelper with SQLConfHelper {
                   false
                 } else {
                   val distinctCount = colStats.distinctCount.get
+                  // md: 如果发现预估的唯一性小于一定的误差，那就认为其就是唯一的
                   val relDiff = math.abs((distinctCount.toDouble / rowCount.toDouble) - 1.0d)
                   // ndvMaxErr adjusted based on TPCDS 1TB data results
                   relDiff <= conf.ndvMaxError * 2
@@ -205,7 +220,9 @@ object StarSchemaDetection extends PredicateHelper with SQLConfHelper {
     case _ => false
   }
 
+  // md: 这里相当于，一直递归到最底层叶子节点，然后再使用这个叶子节点的统计信息
   /**
+   *
    * Given a column over a base table access, it returns
    * the leaf node column from which the input column is derived.
    */
@@ -249,6 +266,8 @@ object StarSchemaDetection extends PredicateHelper with SQLConfHelper {
    * Returns the join predicates between two input plans. It only
    * considers basic comparison operators.
    */
+  // md: 思路挺有意思，就是所有不能只在一个表中预估值，但其涉及到的列（attribute）又都是属于这两个表的条件，
+  //  就是真正关联着这两张表的join条件
   @inline
   private def findJoinConditions(
       plan1: LogicalPlan,
@@ -268,6 +287,7 @@ object StarSchemaDetection extends PredicateHelper with SQLConfHelper {
    * to be selective if there are local predicates on the dimension
    * tables.
    */
+  // md: local predicates应该是指能够只在某个plan内部执行evaluate的条件
   private def isSelectiveStarJoin(
       dimTables: Seq[LogicalPlan],
       conditions: Seq[Expression]): Boolean = dimTables.exists {
@@ -309,6 +329,7 @@ object StarSchemaDetection extends PredicateHelper with SQLConfHelper {
   /**
    * Reorders a star join based on heuristics. It is called from ReorderJoin if CBO is disabled.
    *   1) Finds the star join with the largest fact table.
+   *   md: 虽然fact table是处于left-deep位置，但实际执行过程中，到底是左表先执行还是右表，需要看具体物理算子实现
    *   2) Places the fact table the driving arm of the left-deep tree.
    *     This plan avoids large table access on the inner, and thus favor hash joins.
    *   3) Applies the most selective dimensions early in the plan to reduce the amount of
@@ -323,6 +344,7 @@ object StarSchemaDetection extends PredicateHelper with SQLConfHelper {
 
     // Find the eligible star plans. Currently, it only returns
     // the star join with the largest fact table.
+    // md: 这里从innerLike --> inner，过滤掉了cartesian join
     val eligibleJoins = input.collect{ case (plan, Inner) => plan }
     val starPlan = findStarJoins(eligibleJoins, conditions)
 

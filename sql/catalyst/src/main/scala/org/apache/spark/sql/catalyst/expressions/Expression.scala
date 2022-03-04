@@ -122,6 +122,8 @@ abstract class Expression extends TreeNode[Expression] {
    * Workaround scala compiler so that we can call super on lazy vals
    */
   @transient
+  // md: 这里是指所有这个Expression包含的真正的列（attribute），比如一个复杂的函数f1(f2(f3(xx,yy),zz))，
+  //  那么这里的xx、yy、zz就是这些attributes
   private lazy val _references: AttributeSet =
     AttributeSet.fromAttributeSets(children.map(_.references))
 

@@ -197,12 +197,15 @@ object ExtractFiltersAndInnerJoins extends PredicateHelper {
    * was involved in an explicit cross join. Also returns the entire list of join conditions for
    * the left-deep tree.
    */
+  // md: 持续将左深的inner join节点，以及其condition收集起来
   def flattenJoin(plan: LogicalPlan, parentJoinType: InnerLike = Inner)
       : (Seq[(LogicalPlan, InnerLike)], Seq[Expression]) = plan match {
     case Join(left, right, joinType: InnerLike, cond, hint) if hint == JoinHint.NONE =>
       val (plans, conditions) = flattenJoin(left, joinType)
       (plans ++ Seq((right, joinType)), conditions ++
         cond.toSeq.flatMap(splitConjunctivePredicates))
+    // md: 这里如果两层filter，下面才是join的话，怎么办呢？还是说多层filter会自动合并掉？
+    //  确实有[[CombineFilters]]，但是其位置比当前rule更靠后，比较奇怪；不过正常所有的条件where条件在解析式是合并在一起的
     case Filter(filterCondition, j @ Join(_, _, _: InnerLike, _, hint)) if hint == JoinHint.NONE =>
       val (plans, conditions) = flattenJoin(j)
       (plans, conditions ++ splitConjunctivePredicates(filterCondition))
@@ -210,6 +213,7 @@ object ExtractFiltersAndInnerJoins extends PredicateHelper {
     case _ => (Seq((plan, parentJoinType)), Seq.empty)
   }
 
+  // md: 返回的结果是：左深的inner join中的plan，以及join condition或者filter中的条件（且条件都是AND关系）
   def unapply(plan: LogicalPlan)
       : Option[(Seq[(LogicalPlan, InnerLike)], Seq[Expression])]
       = plan match {

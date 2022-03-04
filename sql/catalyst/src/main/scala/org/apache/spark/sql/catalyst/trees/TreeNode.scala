@@ -131,6 +131,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product with Tre
    * Default tree pattern [[BitSet] for a [[TreeNode]].
    */
   protected def getDefaultTreePatternBits: BitSet = {
+    // md: 相当于把所有的算子，都分配一个TreePattern的枚举（对应一个id），然后通过bitset来统计这些id
     val bits: BitSet = new BitSet(TreePattern.maxId)
     // Propagate node pattern bits
     val nodePatternIterator = nodePatterns.iterator
@@ -505,6 +506,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product with Tre
   def transformDownWithPruning(cond: TreePatternBits => Boolean,
     ruleId: RuleId = UnknownRuleId)(rule: PartialFunction[BaseType, BaseType])
   : BaseType = {
+    // md: 这里是为了剪枝，如果当前TreeNode根本没有这个rule所能支持的TreeNode结构（通过对rules的bitset做判断），那就没有必要进行了
     if (!cond.apply(this) || isRuleIneffective(ruleId)) {
       return this
     }
@@ -516,6 +518,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product with Tre
     if (this fastEquals afterRule) {
       val rewritten_plan = mapChildren(_.transformDownWithPruning(cond, ruleId)(rule))
       if (this eq rewritten_plan) {
+        // md： 如果apply之后，还是没有任何变化，说明这个rule对当前这种结构无效
         markRuleAsIneffective(ruleId)
         this
       } else {

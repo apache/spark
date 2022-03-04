@@ -68,8 +68,11 @@ object ReorderJoin extends Rule[LogicalPlan] with PredicateHelper {
         join
       }
     } else {
+      // md: 新的用法
       val (left, _) :: rest = input.toList
       // find out the first join that have at least one join condition
+      // md: 在这里先查找出与第一个表有紧密join关系的表，从而控制中间结果大小；因为传入进来的已经按大小排序过（star-schema），
+      //  或者就是原始的表顺序，在这里通过find是优先找第一个匹配的，找不到就用原始顺序
       val conditionalJoin = rest.find { planJoinPair =>
         val plan = planJoinPair._1
         val refs = left.outputSet ++ plan.outputSet
@@ -83,6 +86,7 @@ object ReorderJoin extends Rule[LogicalPlan] with PredicateHelper {
 
       val joinedRefs = left.outputSet ++ right.outputSet
       val (joinConditions, others) = conditions.partition(
+        // md: 然后过滤出所有属于left+right表的条件并且可直接估值，作为join的条件而构建，尽可能的减少中间结果
         e => e.references.subsetOf(joinedRefs) && canEvaluateWithinJoin(e))
       val joined = Join(left, right, innerJoinType,
         joinConditions.reduceLeftOption(And), JoinHint.NONE)
@@ -93,6 +97,7 @@ object ReorderJoin extends Rule[LogicalPlan] with PredicateHelper {
   }
 
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
+    // md: 从这里看到，这个rule只适用于ast中有inner join的场景
     _.containsPattern(INNER_LIKE_JOIN), ruleId) {
     case p @ ExtractFiltersAndInnerJoins(input, conditions)
         if input.size > 2 && conditions.nonEmpty =>

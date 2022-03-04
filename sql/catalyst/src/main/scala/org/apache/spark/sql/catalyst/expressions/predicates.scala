@@ -111,6 +111,7 @@ object Predicate extends CodeGeneratorWithInterpretedFallback[Expression, BasePr
 }
 
 trait PredicateHelper extends AliasHelper with Logging {
+  // md: 提炼出一系列顶层就是用AND组成在一起的各种条件表达式
   protected def splitConjunctivePredicates(condition: Expression): Seq[Expression] = {
     condition match {
       case And(cond1, cond2) =>
@@ -200,6 +201,7 @@ trait PredicateHelper extends AliasHelper with Logging {
   protected def canEvaluate(expr: Expression, plan: LogicalPlan): Boolean =
     expr.references.subsetOf(plan.outputSet)
 
+  // md： 需要判断的是：这些表达式是否可以在join的plan得到答案，
   /**
    * Returns true iff `expr` could be evaluated as a condition within join.
    */

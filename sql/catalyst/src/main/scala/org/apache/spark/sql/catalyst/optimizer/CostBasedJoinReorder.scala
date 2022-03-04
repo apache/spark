@@ -39,12 +39,19 @@ object CostBasedJoinReorder extends Rule[LogicalPlan] with PredicateHelper {
     if (!conf.cboEnabled || !conf.joinReorderEnabled) {
       plan
     } else {
+      // md: 从这里可以看到，cbo-join-reorder只针对inner-like-join，因为reorder针对非inner join，可能会导致语义错误，比如：
+      //  'A left join B join C'，如果reorder成 'A left join C join B'语义就错误了，改成'A join C left join B'也不一定对，
+      //  所以，只有inner-like-join是可以任意更换位置而不影响语义的
       val result = plan.transformDownWithPruning(_.containsPattern(INNER_LIKE_JOIN), ruleId) {
         // Start reordering with a joinable item, which is an InnerLike join with conditions.
         // Avoid reordering if a join hint is present.
+        // md: 这里新的用法：'_: InnerLike'
         case j @ Join(_, _, _: InnerLike, Some(cond), JoinHint.NONE) =>
           reorder(j, j.output)
+        // md: 如果这里是project套一个project呢？还是说会提前把多个相邻的project合并起来？
+        //  另一个问题是，在这里filter不需要考虑吗？
         case p @ Project(projectList, Join(_, _, _: InnerLike, Some(cond), JoinHint.NONE))
+          // md: 这里为什么一定要instanceOf？?
           if projectList.forall(_.isInstanceOf[Attribute]) =>
           reorder(p, p.output)
       }
@@ -56,6 +63,7 @@ object CostBasedJoinReorder extends Rule[LogicalPlan] with PredicateHelper {
   }
 
   private def reorder(plan: LogicalPlan, output: Seq[Attribute]): LogicalPlan = {
+    // md: 这里的Conditions，是所有join condition中and表达式拆分出来的一个个条件表达式
     val (items, conditions) = extractInnerJoins(plan)
     val result =
       // Do reordering if the number of items is appropriate and join conditions exist.
@@ -85,6 +93,7 @@ object CostBasedJoinReorder extends Rule[LogicalPlan] with PredicateHelper {
         if projectList.forall(_.isInstanceOf[Attribute]) =>
         extractInnerJoins(j)
       case _ =>
+        // md: 如果当前算子是inner join算子但条件不满足，或者不是inner join算子，就到此为止了
         (Seq(plan), ExpressionSet())
     }
   }
@@ -352,6 +361,7 @@ object JoinReorderDP extends PredicateHelper with Logging {
       }
     }
 
+    // md: weighted geometric mean --> http://www.tjxzj.net/263.html; why use this method？
     /**
      * To identify the plan with smaller computational cost,
      * we use the weighted geometric mean of ratio of rows and the ratio of sizes in bytes.
