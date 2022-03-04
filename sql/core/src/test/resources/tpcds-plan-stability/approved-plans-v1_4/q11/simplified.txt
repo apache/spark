@@ -7,7 +7,7 @@ TakeOrderedAndProject [customer_preferred_cust_flag]
             Project [customer_id,year_total,customer_preferred_cust_flag,year_total]
               BroadcastHashJoin [customer_id,customer_id]
                 Filter [year_total]
-                  HashAggregate [c_customer_id,c_first_name,c_last_name,d_year,c_preferred_cust_flag,c_birth_country,c_login,c_email_address,sum] [sum(UnscaledValue(CheckOverflow((promote_precision(cast(ss_ext_list_price as decimal(8,2))) - promote_precision(cast(ss_ext_discount_amt as decimal(8,2)))), DecimalType(8,2), true))),customer_id,year_total,sum]
+                  HashAggregate [c_customer_id,c_first_name,c_last_name,d_year,c_preferred_cust_flag,c_birth_country,c_login,c_email_address,sum] [sum(UnscaledValue(CheckOverflow((promote_precision(cast(ss_ext_list_price as decimal(8,2))) - promote_precision(cast(ss_ext_discount_amt as decimal(8,2)))), DecimalType(8,2)))),customer_id,year_total,sum]
                     InputAdapter
                       Exchange [c_customer_id,c_first_name,c_last_name,d_year,c_preferred_cust_flag,c_birth_country,c_login,c_email_address] #1
                         WholeStageCodegen (3)
@@ -39,7 +39,7 @@ TakeOrderedAndProject [customer_preferred_cust_flag]
                 InputAdapter
                   BroadcastExchange #4
                     WholeStageCodegen (7)
-                      HashAggregate [c_customer_id,c_first_name,c_last_name,d_year,c_preferred_cust_flag,c_birth_country,c_login,c_email_address,sum] [sum(UnscaledValue(CheckOverflow((promote_precision(cast(ss_ext_list_price as decimal(8,2))) - promote_precision(cast(ss_ext_discount_amt as decimal(8,2)))), DecimalType(8,2), true))),customer_id,customer_preferred_cust_flag,year_total,sum]
+                      HashAggregate [c_customer_id,c_first_name,c_last_name,d_year,c_preferred_cust_flag,c_birth_country,c_login,c_email_address,sum] [sum(UnscaledValue(CheckOverflow((promote_precision(cast(ss_ext_list_price as decimal(8,2))) - promote_precision(cast(ss_ext_discount_amt as decimal(8,2)))), DecimalType(8,2)))),customer_id,customer_preferred_cust_flag,year_total,sum]
                         InputAdapter
                           Exchange [c_customer_id,c_first_name,c_last_name,d_year,c_preferred_cust_flag,c_birth_country,c_login,c_email_address] #5
                             WholeStageCodegen (6)
@@ -72,7 +72,7 @@ TakeOrderedAndProject [customer_preferred_cust_flag]
               BroadcastExchange #8
                 WholeStageCodegen (11)
                   Filter [year_total]
-                    HashAggregate [c_customer_id,c_first_name,c_last_name,c_preferred_cust_flag,c_birth_country,c_login,c_email_address,d_year,sum] [sum(UnscaledValue(CheckOverflow((promote_precision(cast(ws_ext_list_price as decimal(8,2))) - promote_precision(cast(ws_ext_discount_amt as decimal(8,2)))), DecimalType(8,2), true))),customer_id,year_total,sum]
+                    HashAggregate [c_customer_id,c_first_name,c_last_name,c_preferred_cust_flag,c_birth_country,c_login,c_email_address,d_year,sum] [sum(UnscaledValue(CheckOverflow((promote_precision(cast(ws_ext_list_price as decimal(8,2))) - promote_precision(cast(ws_ext_discount_amt as decimal(8,2)))), DecimalType(8,2)))),customer_id,year_total,sum]
                       InputAdapter
                         Exchange [c_customer_id,c_first_name,c_last_name,c_preferred_cust_flag,c_birth_country,c_login,c_email_address,d_year] #9
                           WholeStageCodegen (10)
@@ -98,7 +98,7 @@ TakeOrderedAndProject [customer_preferred_cust_flag]
         InputAdapter
           BroadcastExchange #11
             WholeStageCodegen (15)
-              HashAggregate [c_customer_id,c_first_name,c_last_name,c_preferred_cust_flag,c_birth_country,c_login,c_email_address,d_year,sum] [sum(UnscaledValue(CheckOverflow((promote_precision(cast(ws_ext_list_price as decimal(8,2))) - promote_precision(cast(ws_ext_discount_amt as decimal(8,2)))), DecimalType(8,2), true))),customer_id,year_total,sum]
+              HashAggregate [c_customer_id,c_first_name,c_last_name,c_preferred_cust_flag,c_birth_country,c_login,c_email_address,d_year,sum] [sum(UnscaledValue(CheckOverflow((promote_precision(cast(ws_ext_list_price as decimal(8,2))) - promote_precision(cast(ws_ext_discount_amt as decimal(8,2)))), DecimalType(8,2)))),customer_id,year_total,sum]
                 InputAdapter
                   Exchange [c_customer_id,c_first_name,c_last_name,c_preferred_cust_flag,c_birth_country,c_login,c_email_address,d_year] #12
                     WholeStageCodegen (14)

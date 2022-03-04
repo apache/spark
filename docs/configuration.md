@@ -1822,8 +1822,9 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.files.overwrite</code></td>
   <td>false</td>
   <td>
-    Whether to overwrite files added through SparkContext.addFile() when the target file exists and
-    its contents do not match those of the source.
+    Whether to overwrite any files which exist at the startup. Users can not overwrite the files added by
+    <code>SparkContext.addFile</code> or <code>SparkContext.addJar</code> before even if this option is set 
+    <code>true</code>.
   </td>
   <td>1.0.0</td>
 </tr>
@@ -2461,9 +2462,10 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.task.maxFailures</code></td>
   <td>4</td>
   <td>
-    Number of failures of any particular task before giving up on the job.
+    Number of continuous failures of any particular task before giving up on the job.
     The total number of failures spread across different tasks will not cause the job
-    to fail; a particular task has to fail this number of attempts.
+    to fail; a particular task has to fail this number of attempts continuously.
+    If any attempt succeeds, the failure count for the task will be reset.
     Should be greater than or equal to 1. Number of allowed retries = this value - 1.
   </td>
   <td>0.8.0</td>

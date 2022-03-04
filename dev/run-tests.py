@@ -653,14 +653,14 @@ def main():
     run_scala_tests(build_tool, extra_profiles, test_modules, excluded_tags, included_tags)
 
     modules_with_python_tests = [m for m in test_modules if m.python_test_goals]
-    if modules_with_python_tests:
+    if modules_with_python_tests and not os.environ.get("SKIP_PYTHON"):
         run_python_tests(
             modules_with_python_tests,
             opts.parallelism,
             with_coverage=os.environ.get("PYSPARK_CODECOV", "false") == "true",
         )
         run_python_packaging_tests()
-    if any(m.should_run_r_tests for m in test_modules):
+    if any(m.should_run_r_tests for m in test_modules) and not os.environ.get("SKIP_R"):
         run_sparkr_tests()
 
 

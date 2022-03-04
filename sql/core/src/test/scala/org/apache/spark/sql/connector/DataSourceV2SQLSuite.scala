@@ -2773,8 +2773,9 @@ class DataSourceV2SQLSuite
       val properties = table.properties
       assert(properties.get(TableCatalog.PROP_PROVIDER) == "parquet")
       assert(properties.get(TableCatalog.PROP_COMMENT) == "This is a comment")
-      assert(properties.get(TableCatalog.PROP_LOCATION) == "file:/tmp")
+      assert(properties.get(TableCatalog.PROP_LOCATION) == "file:///tmp")
       assert(properties.containsKey(TableCatalog.PROP_OWNER))
+      assert(properties.get(TableCatalog.PROP_EXTERNAL) == "true")
       assert(properties.get(s"${TableCatalog.OPTION_PREFIX}from") == "0")
       assert(properties.get(s"${TableCatalog.OPTION_PREFIX}to") == "1")
       assert(properties.get("prop1") == "1")

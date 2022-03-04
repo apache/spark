@@ -69,8 +69,10 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
       val queryCaseWhen = sql("select case when true then 1.0 else '1' end from src ")
       val queryCoalesce = sql("select coalesce(null, 1, '1') from src ")
 
-      checkAnswer(queryCaseWhen, Row("1.0") :: Nil)
-      checkAnswer(queryCoalesce, Row("1") :: Nil)
+      if (!conf.ansiEnabled) {
+        checkAnswer(queryCaseWhen, Row("1.0") :: Nil)
+        checkAnswer(queryCoalesce, Row("1") :: Nil)
+      }
     }
   }
 
@@ -393,10 +395,14 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
       testCodeGen(
         "SELECT max(key), min(key), avg(key), count(key), count(distinct key) FROM testData3x",
         Row(100, 1, 50.5, 300, 100) :: Nil)
-      // Aggregate with Code generation handling all null values
-      testCodeGen(
-        "SELECT  sum('a'), avg('a'), count(null) FROM testData",
-        Row(null, null, 0) :: Nil)
+      // Aggregate with Code generation handling all null values.
+      // If ANSI mode is on, there will be an error since 'a' cannot converted as Numeric.
+      // Here we simply test it when ANSI mode is off.
+      if (!conf.ansiEnabled) {
+        testCodeGen(
+          "SELECT  sum('a'), avg('a'), count(null) FROM testData",
+          Row(null, null, 0) :: Nil)
+      }
     } finally {
       spark.catalog.dropTempView("testData3x")
     }
@@ -488,9 +494,11 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
         Seq(Row(Timestamp.valueOf("1969-12-31 16:00:00.001")),
           Row(Timestamp.valueOf("1969-12-31 16:00:00.002"))))
 
-      checkAnswer(sql(
-        "SELECT time FROM timestamps WHERE time='123'"),
-        Nil)
+      if (!conf.ansiEnabled) {
+        checkAnswer(sql(
+          "SELECT time FROM timestamps WHERE time='123'"),
+          Nil)
+      }
     }
   }
 
@@ -939,9 +947,13 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
       Row(1, "A") :: Row(1, "a") :: Row(2, "B") :: Row(2, "b") :: Row(3, "C") :: Row(3, "c") ::
       Row(4, "D") :: Row(4, "d") :: Row(5, "E") :: Row(6, "F") :: Nil)
     // Column type mismatches are not allowed, forcing a type coercion.
-    checkAnswer(
-      sql("SELECT n FROM lowerCaseData UNION SELECT L FROM upperCaseData"),
-      ("1" :: "2" :: "3" :: "4" :: "A" :: "B" :: "C" :: "D" :: "E" :: "F" :: Nil).map(Row(_)))
+    // When ANSI mode is on, the String input will be cast as Int in the following Union, which will
+    // cause a runtime error. Here we simply test the case when ANSI mode is off.
+    if (!conf.ansiEnabled) {
+      checkAnswer(
+        sql("SELECT n FROM lowerCaseData UNION SELECT L FROM upperCaseData"),
+        ("1" :: "2" :: "3" :: "4" :: "A" :: "B" :: "C" :: "D" :: "E" :: "F" :: Nil).map(Row(_)))
+    }
     // Column type mismatches where a coercion is not possible, in this case between integer
     // and array types, trigger a TreeNodeException.
     intercept[AnalysisException] {
@@ -1038,32 +1050,35 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
         Row(Row(3, true), Map("C3" -> null)) ::
         Row(Row(4, true), Map("D4" -> 2147483644)) :: Nil)
 
-      checkAnswer(
-        sql("SELECT f1.f11, f2['D4'] FROM applySchema2"),
-        Row(1, null) ::
-        Row(2, null) ::
-        Row(3, null) ::
-        Row(4, 2147483644) :: Nil)
+      // If ANSI mode is on, there will be an error "Key D4 does not exist".
+      if (!conf.ansiEnabled) {
+        checkAnswer(
+          sql("SELECT f1.f11, f2['D4'] FROM applySchema2"),
+          Row(1, null) ::
+            Row(2, null) ::
+            Row(3, null) ::
+            Row(4, 2147483644) :: Nil)
 
-      // The value of a MapType column can be a mutable map.
-      val rowRDD3 = unparsedStrings.map { r =>
-        val values = r.split(",").map(_.trim)
-        val v4 = try values(3).toInt catch {
-          case _: NumberFormatException => null
+        // The value of a MapType column can be a mutable map.
+        val rowRDD3 = unparsedStrings.map { r =>
+          val values = r.split(",").map(_.trim)
+          val v4 = try values(3).toInt catch {
+            case _: NumberFormatException => null
+          }
+          Row(Row(values(0).toInt, values(2).toBoolean),
+            scala.collection.mutable.Map(values(1) -> v4))
         }
-        Row(Row(values(0).toInt, values(2).toBoolean),
-          scala.collection.mutable.Map(values(1) -> v4))
+
+        val df3 = spark.createDataFrame(rowRDD3, schema2)
+        df3.createOrReplaceTempView("applySchema3")
+
+        checkAnswer(
+          sql("SELECT f1.f11, f2['D4'] FROM applySchema3"),
+          Row(1, null) ::
+            Row(2, null) ::
+            Row(3, null) ::
+            Row(4, 2147483644) :: Nil)
       }
-
-      val df3 = spark.createDataFrame(rowRDD3, schema2)
-      df3.createOrReplaceTempView("applySchema3")
-
-      checkAnswer(
-        sql("SELECT f1.f11, f2['D4'] FROM applySchema3"),
-        Row(1, null) ::
-        Row(2, null) ::
-        Row(3, null) ::
-        Row(4, 2147483644) :: Nil)
     }
   }
 
@@ -1403,22 +1418,25 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
   }
 
   test("SPARK-7952: fix the equality check between boolean and numeric types") {
-    withTempView("t") {
-      // numeric field i, boolean field j, result of i = j, result of i <=> j
-      Seq[(Integer, java.lang.Boolean, java.lang.Boolean, java.lang.Boolean)](
-        (1, true, true, true),
-        (0, false, true, true),
-        (2, true, false, false),
-        (2, false, false, false),
-        (null, true, null, false),
-        (null, false, null, false),
-        (0, null, null, false),
-        (1, null, null, false),
-        (null, null, null, true)
-      ).toDF("i", "b", "r1", "r2").createOrReplaceTempView("t")
+    // If ANSI mode is on, Spark disallows comparing Int with Boolean.
+    if (!conf.ansiEnabled) {
+      withTempView("t") {
+        // numeric field i, boolean field j, result of i = j, result of i <=> j
+        Seq[(Integer, java.lang.Boolean, java.lang.Boolean, java.lang.Boolean)](
+          (1, true, true, true),
+          (0, false, true, true),
+          (2, true, false, false),
+          (2, false, false, false),
+          (null, true, null, false),
+          (null, false, null, false),
+          (0, null, null, false),
+          (1, null, null, false),
+          (null, null, null, true)
+        ).toDF("i", "b", "r1", "r2").createOrReplaceTempView("t")
 
-      checkAnswer(sql("select i = b from t"), sql("select r1 from t"))
-      checkAnswer(sql("select i <=> b from t"), sql("select r2 from t"))
+        checkAnswer(sql("select i = b from t"), sql("select r1 from t"))
+        checkAnswer(sql("select i <=> b from t"), sql("select r2 from t"))
+      }
     }
   }
 
@@ -3048,15 +3066,17 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
           val df = spark.read.format(format).load(dir.getCanonicalPath)
           checkPushedFilters(
             format,
-            df.where(('id < 2 and 's.contains("foo")) or ('id > 10 and 's.contains("bar"))),
+            df.where((Symbol("id") < 2 and Symbol("s").contains("foo")) or
+              (Symbol("id") > 10 and Symbol("s").contains("bar"))),
             Array(sources.Or(sources.LessThan("id", 2), sources.GreaterThan("id", 10))))
           checkPushedFilters(
             format,
-            df.where('s.contains("foo") or ('id > 10 and 's.contains("bar"))),
+            df.where(Symbol("s").contains("foo") or
+              (Symbol("id") > 10 and Symbol("s").contains("bar"))),
             Array.empty)
           checkPushedFilters(
             format,
-            df.where('id < 2 and not('id > 10 and 's.contains("bar"))),
+            df.where(Symbol("id") < 2 and not(Symbol("id") > 10 and Symbol("s").contains("bar"))),
             Array(sources.IsNotNull("id"), sources.LessThan("id", 2)))
         }
       }
@@ -3137,16 +3157,20 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
       checkAnswer(sql("select * from t1 where d >= '2000-01-01'"), Row(result))
       checkAnswer(sql("select * from t1 where d >= '2000-01-02'"), Nil)
       checkAnswer(sql("select * from t1 where '2000' >= d"), Row(result))
-      checkAnswer(sql("select * from t1 where d > '2000-13'"), Nil)
+      if (!conf.ansiEnabled) {
+        checkAnswer(sql("select * from t1 where d > '2000-13'"), Nil)
+      }
 
       withSQLConf(SQLConf.LEGACY_CAST_DATETIME_TO_STRING.key -> "true") {
         checkAnswer(sql("select * from t1 where d < '2000'"), Nil)
         checkAnswer(sql("select * from t1 where d < '2001'"), Row(result))
-        checkAnswer(sql("select * from t1 where d < '2000-1-1'"), Row(result))
         checkAnswer(sql("select * from t1 where d <= '1999'"), Nil)
         checkAnswer(sql("select * from t1 where d >= '2000'"), Row(result))
-        checkAnswer(sql("select * from t1 where d > '1999-13'"), Row(result))
-        checkAnswer(sql("select to_date('2000-01-01') > '1'"), Row(true))
+        if (!conf.ansiEnabled) {
+          checkAnswer(sql("select * from t1 where d < '2000-1-1'"), Row(result))
+          checkAnswer(sql("select * from t1 where d > '1999-13'"), Row(result))
+          checkAnswer(sql("select to_date('2000-01-01') > '1'"), Row(true))
+        }
       }
     }
   }
@@ -3179,17 +3203,21 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     checkAnswer(sql("select * from t1 where d >= '2000-01-01 01:10:00.000'"), Row(result))
     checkAnswer(sql("select * from t1 where d >= '2000-01-02 01:10:00.000'"), Nil)
     checkAnswer(sql("select * from t1 where '2000' >= d"), Nil)
-    checkAnswer(sql("select * from t1 where d > '2000-13'"), Nil)
+    if (!conf.ansiEnabled) {
+      checkAnswer(sql("select * from t1 where d > '2000-13'"), Nil)
+    }
 
     withSQLConf(SQLConf.LEGACY_CAST_DATETIME_TO_STRING.key -> "true") {
       checkAnswer(sql("select * from t1 where d < '2000'"), Nil)
       checkAnswer(sql("select * from t1 where d < '2001'"), Row(result))
-      checkAnswer(sql("select * from t1 where d <= '2000-1-1'"), Row(result))
       checkAnswer(sql("select * from t1 where d <= '2000-01-02'"), Row(result))
       checkAnswer(sql("select * from t1 where d <= '1999'"), Nil)
       checkAnswer(sql("select * from t1 where d >= '2000'"), Row(result))
-      checkAnswer(sql("select * from t1 where d > '1999-13'"), Row(result))
-      checkAnswer(sql("select to_timestamp('2000-01-01 01:10:00') > '1'"), Row(true))
+      if (!conf.ansiEnabled) {
+        checkAnswer(sql("select * from t1 where d <= '2000-1-1'"), Row(result))
+        checkAnswer(sql("select * from t1 where d > '1999-13'"), Row(result))
+        checkAnswer(sql("select to_timestamp('2000-01-01 01:10:00') > '1'"), Row(true))
+      }
     }
     sql("DROP VIEW t1")
   }
@@ -3254,28 +3282,31 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
   }
 
   test("SPARK-29213: FilterExec should not throw NPE") {
-    withTempView("t1", "t2", "t3") {
-      sql("SELECT ''").as[String].map(identity).toDF("x").createOrReplaceTempView("t1")
-      sql("SELECT * FROM VALUES 0, CAST(NULL AS BIGINT)")
-        .as[java.lang.Long]
-        .map(identity)
-        .toDF("x")
-        .createOrReplaceTempView("t2")
-      sql("SELECT ''").as[String].map(identity).toDF("x").createOrReplaceTempView("t3")
-      sql(
-        """
-          |SELECT t1.x
-          |FROM t1
-          |LEFT JOIN (
-          |    SELECT x FROM (
-          |        SELECT x FROM t2
-          |        UNION ALL
-          |        SELECT SUBSTR(x,5) x FROM t3
-          |    ) a
-          |    WHERE LENGTH(x)>0
-          |) t3
-          |ON t1.x=t3.x
+    // Under ANSI mode, casting string '' as numeric will cause runtime error
+    if (!conf.ansiEnabled) {
+      withTempView("t1", "t2", "t3") {
+        sql("SELECT ''").as[String].map(identity).toDF("x").createOrReplaceTempView("t1")
+        sql("SELECT * FROM VALUES 0, CAST(NULL AS BIGINT)")
+          .as[java.lang.Long]
+          .map(identity)
+          .toDF("x")
+          .createOrReplaceTempView("t2")
+        sql("SELECT ''").as[String].map(identity).toDF("x").createOrReplaceTempView("t3")
+        sql(
+          """
+            |SELECT t1.x
+            |FROM t1
+            |LEFT JOIN (
+            |    SELECT x FROM (
+            |        SELECT x FROM t2
+            |        UNION ALL
+            |        SELECT SUBSTR(x,5) x FROM t3
+            |    ) a
+            |    WHERE LENGTH(x)>0
+            |) t3
+            |ON t1.x=t3.x
         """.stripMargin).collect()
+      }
     }
   }
 
@@ -3295,7 +3326,6 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
       sql("CREATE TEMPORARY VIEW tc AS SELECT * FROM VALUES(CAST(1 AS DOUBLE)) AS tc(id)")
       sql("CREATE TEMPORARY VIEW td AS SELECT * FROM VALUES(CAST(1 AS FLOAT)) AS td(id)")
       sql("CREATE TEMPORARY VIEW te AS SELECT * FROM VALUES(CAST(1 AS BIGINT)) AS te(id)")
-      sql("CREATE TEMPORARY VIEW tf AS SELECT * FROM VALUES(CAST(1 AS DECIMAL(38, 38))) AS tf(id)")
       val df1 = sql("SELECT id FROM ta WHERE id IN (SELECT id FROM tb)")
       checkAnswer(df1, Row(new java.math.BigDecimal(1)))
       val df2 = sql("SELECT id FROM ta WHERE id IN (SELECT id FROM tc)")
@@ -3304,8 +3334,12 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
       checkAnswer(df3, Row(new java.math.BigDecimal(1)))
       val df4 = sql("SELECT id FROM ta WHERE id IN (SELECT id FROM te)")
       checkAnswer(df4, Row(new java.math.BigDecimal(1)))
-      val df5 = sql("SELECT id FROM ta WHERE id IN (SELECT id FROM tf)")
-      checkAnswer(df5, Array.empty[Row])
+      if (!conf.ansiEnabled) {
+        sql(
+          "CREATE TEMPORARY VIEW tf AS SELECT * FROM VALUES(CAST(1 AS DECIMAL(38, 38))) AS tf(id)")
+        val df5 = sql("SELECT id FROM ta WHERE id IN (SELECT id FROM tf)")
+        checkAnswer(df5, Array.empty[Row])
+      }
     }
   }
 
@@ -4241,6 +4275,57 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
       val df3 = sql("SELECT * FROM test TABLESAMPLE (BUCKET 4 OUT OF 10) REPEATABLE (6789)")
       val df4 = sql("SELECT * FROM test TABLESAMPLE (BUCKET 4 OUT OF 10) REPEATABLE (6789)")
       checkAnswer(df3, df4)
+    }
+  }
+
+  test("SPARK-27442: Spark support read/write parquet file with invalid char in field name") {
+    withTempDir { dir =>
+      Seq((1, 2, 3, 4, 5, 6, 7, 8, 9, 10), (2, 4, 6, 8, 10, 12, 14, 16, 18, 20))
+        .toDF("max(t)", "max(t", "=", "\n", ";", "a b", "{", ".", "a.b", "a")
+        .repartition(1)
+        .write.mode(SaveMode.Overwrite).parquet(dir.getAbsolutePath)
+      val df = spark.read.parquet(dir.getAbsolutePath)
+      checkAnswer(df,
+        Row(1, 2, 3, 4, 5, 6, 7, 8, 9, 10) ::
+          Row(2, 4, 6, 8, 10, 12, 14, 16, 18, 20) :: Nil)
+      assert(df.schema.names.sameElements(
+        Array("max(t)", "max(t", "=", "\n", ";", "a b", "{", ".", "a.b", "a")))
+      checkAnswer(df.select("`max(t)`", "`a b`", "`{`", "`.`", "`a.b`"),
+        Row(1, 6, 7, 8, 9) :: Row(2, 12, 14, 16, 18) :: Nil)
+      checkAnswer(df.where("`a.b` > 10"),
+        Row(2, 4, 6, 8, 10, 12, 14, 16, 18, 20) :: Nil)
+    }
+  }
+
+  test("SPARK-37965: Spark support read/write orc file with invalid char in field name") {
+    withTempDir { dir =>
+      Seq((1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11), (2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22))
+        .toDF("max(t)", "max(t", "=", "\n", ";", "a b", "{", ".", "a.b", "a", ",")
+        .repartition(1)
+        .write.mode(SaveMode.Overwrite).orc(dir.getAbsolutePath)
+      val df = spark.read.orc(dir.getAbsolutePath)
+      checkAnswer(df,
+        Row(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11) ::
+          Row(2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22) :: Nil)
+      assert(df.schema.names.sameElements(
+        Array("max(t)", "max(t", "=", "\n", ";", "a b", "{", ".", "a.b", "a", ",")))
+      checkAnswer(df.select("`max(t)`", "`a b`", "`{`", "`.`", "`a.b`"),
+        Row(1, 6, 7, 8, 9) :: Row(2, 12, 14, 16, 18) :: Nil)
+      checkAnswer(df.where("`a.b` > 10"),
+        Row(2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22) :: Nil)
+    }
+  }
+
+  test("SPARK-38173: Quoted column cannot be recognized correctly " +
+    "when quotedRegexColumnNames is true") {
+    withSQLConf(SQLConf.SUPPORT_QUOTED_REGEX_COLUMN_NAME.key -> "true") {
+      checkAnswer(
+        sql(
+          """
+            |SELECT `(C3)?+.+`,T.`C1` * `C2` AS CC
+            |FROM (SELECT 3 AS C1,2 AS C2,1 AS C3) T
+            |""".stripMargin),
+        Row(3, 2, 6) :: Nil)
     }
   }
 }

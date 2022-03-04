@@ -24,3 +24,5 @@
 
     BinaryClassificationEvaluator().setMetricName("foo")  # E: Argument 1 to "setMetricName" of "BinaryClassificationEvaluator" has incompatible type "Literal['foo']"; expected "Union[Literal['areaUnderROC'], Literal['areaUnderPR']]"  [arg-type]
     BinaryClassificationEvaluator(metricName="bar")  # E: Argument "metricName" to "BinaryClassificationEvaluator" has incompatible type "Literal['bar']"; expected "Union[Literal['areaUnderROC'], Literal['areaUnderPR']]"  [arg-type]
+
+    reveal_type(BinaryClassificationEvaluator.load("foo"))  # N: Revealed type is "pyspark.ml.evaluation.BinaryClassificationEvaluator*"

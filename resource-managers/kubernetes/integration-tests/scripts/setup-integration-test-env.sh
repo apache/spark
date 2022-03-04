@@ -23,7 +23,7 @@ IMAGE_TAG_OUTPUT_FILE="$TEST_ROOT_DIR/target/image-tag.txt"
 DEPLOY_MODE="minikube"
 IMAGE_REPO="docker.io/kubespark"
 IMAGE_TAG="N/A"
-JAVA_IMAGE_TAG="8-jre-slim"
+JAVA_IMAGE_TAG="N/A"
 SPARK_TGZ="N/A"
 MVN="$TEST_ROOT_DIR/build/mvn"
 DOCKER_FILE="N/A"
@@ -106,7 +106,11 @@ then
     # OpenJDK base-image tag (e.g. 8-jre-slim, 11-jre-slim)
     JAVA_IMAGE_TAG_BUILD_ARG="-b java_image_tag=$JAVA_IMAGE_TAG"
   else
-    JAVA_IMAGE_TAG_BUILD_ARG="-f $DOCKER_FILE"
+    if [[ $DOCKER_FILE = /* ]]; then
+      JAVA_IMAGE_TAG_BUILD_ARG="-f $DOCKER_FILE"
+    else
+      JAVA_IMAGE_TAG_BUILD_ARG="-f $DOCKER_FILE_BASE_PATH/$DOCKER_FILE"
+    fi
   fi
 
   # Build PySpark image
@@ -136,7 +140,7 @@ then
       fi
       ;;
 
-    docker-for-desktop)
+    docker-desktop | docker-for-desktop)
        # Only need to build as this will place it in our local Docker repo which is all
        # we need for Docker for Desktop to work so no need to also push
        $SPARK_INPUT_DIR/bin/docker-image-tool.sh -r $IMAGE_REPO -t $IMAGE_TAG $JAVA_IMAGE_TAG_BUILD_ARG $LANGUAGE_BINDING_BUILD_ARGS build

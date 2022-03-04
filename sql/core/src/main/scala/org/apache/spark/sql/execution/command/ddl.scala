@@ -469,7 +469,7 @@ case class AlterTableAddPartitionCommand(
     // Also the request to metastore times out when adding lot of partitions in one shot.
     // we should split them into smaller batches
     val batchSize = conf.getConf(SQLConf.ADD_PARTITION_BATCH_SIZE)
-    parts.toIterator.grouped(batchSize).foreach { batch =>
+    parts.iterator.grouped(batchSize).foreach { batch =>
       catalog.createPartitions(table.identifier, batch, ignoreIfExists = ifNotExists)
     }
 
@@ -772,7 +772,7 @@ case class RepairTableCommand(
     // we should split them into smaller batches. Since Hive client is not thread safe, we cannot
     // do this in parallel.
     val batchSize = spark.conf.get(SQLConf.ADD_PARTITION_BATCH_SIZE)
-    partitionSpecsAndLocs.toIterator.grouped(batchSize).foreach { batch =>
+    partitionSpecsAndLocs.iterator.grouped(batchSize).foreach { batch =>
       val now = MILLISECONDS.toSeconds(System.currentTimeMillis())
       val parts = batch.map { case (spec, location) =>
         val params = partitionStats.get(location.toString).map {

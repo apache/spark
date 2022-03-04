@@ -161,7 +161,10 @@ class DStream:
         """
         if func.__code__.co_argcount == 1:
             old_func = func
-            func = lambda t, rdd: old_func(rdd)
+
+            def func(_, rdd):
+                return old_func(rdd)
+
         jfunc = TransformFunction(self._sc, func, self._jrdd_deserializer)
         api = self._ssc._jvm.PythonDStream
         api.callForeachRDD(self._jdstream, jfunc)
@@ -194,7 +197,10 @@ class DStream:
         Return a new DStream by applying a map function to the value of
         each key-value pairs in this DStream without changing the key.
         """
-        map_values_fn = lambda kv: (kv[0], f(kv[1]))
+
+        def map_values_fn(kv):
+            return kv[0], f(kv[1])
+
         return self.map(map_values_fn, preservesPartitioning=True)
 
     def flatMapValues(self, f):
@@ -202,7 +208,10 @@ class DStream:
         Return a new DStream by applying a flatmap function to the value
         of each key-value pairs in this DStream without changing the key.
         """
-        flat_map_fn = lambda kv: ((kv[0], x) for x in f(kv[1]))
+
+        def flat_map_fn(kv):
+            return ((kv[0], x) for x in f(kv[1]))
+
         return self.flatMap(flat_map_fn, preservesPartitioning=True)
 
     def glom(self):
@@ -308,7 +317,10 @@ class DStream:
         """
         if func.__code__.co_argcount == 1:
             oldfunc = func
-            func = lambda t, rdd: oldfunc(rdd)
+
+            def func(_, rdd):
+                return oldfunc(rdd)
+
         assert func.__code__.co_argcount == 2, "func should take one or two arguments"
         return TransformedDStream(self, func)
 
@@ -322,7 +334,10 @@ class DStream:
         """
         if func.__code__.co_argcount == 2:
             oldfunc = func
-            func = lambda t, a, b: oldfunc(a, b)
+
+            def func(_, a, b):
+                return oldfunc(a, b)
+
         assert func.__code__.co_argcount == 3, "func should take two or three arguments"
         jfunc = TransformFunction(self._sc, func, self._jrdd_deserializer, other._jrdd_deserializer)
         dstream = self._sc._jvm.PythonTransformed2DStream(

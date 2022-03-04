@@ -324,8 +324,8 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
     }
     checkEndOfRowGroup();
 
-    int num = (int) Math.min((long) capacity,
-        Math.min((long) limit - rowsReturned, totalCountLoadedSoFar - rowsReturned));
+    int num = (int) Math.min(capacity,
+        Math.min(limit - rowsReturned, totalCountLoadedSoFar - rowsReturned));
     for (int i = 0; i < columnReaders.length; ++i) {
       if (columnReaders[i] == null) continue;
       columnReaders[i].readBatch(num, columnVectors[i]);

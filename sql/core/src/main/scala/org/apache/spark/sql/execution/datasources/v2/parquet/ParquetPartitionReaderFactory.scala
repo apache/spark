@@ -204,7 +204,7 @@ case class ParquetPartitionReaderFactory(
   private def buildReaderBase[T](
       file: PartitionedFile,
       buildReaderFunc: (
-        FileSplit, InternalRow, TaskAttemptContextImpl,
+        InternalRow,
           Option[FilterPredicate], Option[ZoneId],
           RebaseSpec,
           RebaseSpec) => RecordReader[Void, T]): RecordReader[Void, T] = {
@@ -263,9 +263,7 @@ case class ParquetPartitionReaderFactory(
       footerFileMetaData.getKeyValueMetaData.get,
       int96RebaseModeInRead)
     val reader = buildReaderFunc(
-      split,
       file.partitionValues,
-      hadoopAttemptContext,
       pushed,
       convertTz,
       datetimeRebaseSpec,
@@ -279,9 +277,7 @@ case class ParquetPartitionReaderFactory(
   }
 
   private def createRowBaseParquetReader(
-      split: FileSplit,
       partitionValues: InternalRow,
-      hadoopAttemptContext: TaskAttemptContextImpl,
       pushed: Option[FilterPredicate],
       convertTz: Option[ZoneId],
       datetimeRebaseSpec: RebaseSpec,
@@ -314,9 +310,7 @@ case class ParquetPartitionReaderFactory(
   }
 
   private def createParquetVectorizedReader(
-      split: FileSplit,
       partitionValues: InternalRow,
-      hadoopAttemptContext: TaskAttemptContextImpl,
       pushed: Option[FilterPredicate],
       convertTz: Option[ZoneId],
       datetimeRebaseSpec: RebaseSpec,

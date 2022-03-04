@@ -24,6 +24,7 @@ from functools import reduce
 from typing import (
     Any,
     Callable,
+    Dict,
     Iterable,
     IO,
     List,
@@ -581,7 +582,7 @@ class Frame(object, metaclass=ABCMeta):
             "`to_numpy` loads all data into the driver's memory. "
             "It should only be used if the resulting NumPy ndarray is expected to be small."
         )
-        return self._to_pandas().values
+        return cast(np.ndarray, self._to_pandas().values)
 
     @property
     def values(self) -> np.ndarray:
@@ -905,6 +906,9 @@ class Frame(object, metaclass=ABCMeta):
         .. note:: output JSON format is different from pandas'. It always use `orient='records'`
             for its output. This behaviour might have to change in the near future.
 
+        .. note:: Set `ignoreNullFields` keyword argument to `True` to omit `None` or `NaN` values
+            when writing JSON objects. It works only when `path` is provided.
+
         Note NaN's and None will be converted to null and datetime objects
         will be converted to UNIX timestamps.
 
@@ -980,6 +984,9 @@ class Frame(object, metaclass=ABCMeta):
         """
         if "options" in options and isinstance(options.get("options"), dict) and len(options) == 1:
             options = options.get("options")
+
+        default_options: Dict[str, Any] = {"ignoreNullFields": False}
+        options = {**default_options, **options}
 
         if not lines:
             raise NotImplementedError("lines=False is not implemented yet.")

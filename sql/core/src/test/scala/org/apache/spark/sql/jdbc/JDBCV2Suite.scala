@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, Sort}
 import org.apache.spark.sql.connector.expressions.{FieldReference, NullOrdering, SortDirection, SortValue}
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2ScanRelation, V1ScanWrapper}
 import org.apache.spark.sql.execution.datasources.v2.jdbc.JDBCTableCatalog
-import org.apache.spark.sql.functions.{lit, sum, udf}
+import org.apache.spark.sql.functions.{avg, count, lit, sum, udf}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.util.Utils
 
@@ -806,17 +806,53 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
     checkAnswer(query, Seq(Row(29000.0)))
   }
 
-  test("scan with aggregate push-down: SUM(CASE WHEN) with group by") {
-    val df =
-      sql("SELECT SUM(CASE WHEN SALARY > 0 THEN 1 ELSE 0 END) FROM h2.test.employee GROUP BY DEPT")
-    checkAggregateRemoved(df, false)
+  test("scan with aggregate push-down: aggregate function with CASE WHEN") {
+    val df = sql(
+      """
+        |SELECT
+        |  COUNT(CASE WHEN SALARY > 8000 AND SALARY < 10000 THEN SALARY ELSE 0 END),
+        |  COUNT(CASE WHEN SALARY > 8000 AND SALARY <= 13000 THEN SALARY ELSE 0 END),
+        |  COUNT(CASE WHEN SALARY > 11000 OR SALARY < 10000 THEN SALARY ELSE 0 END),
+        |  COUNT(CASE WHEN SALARY >= 12000 OR SALARY < 9000 THEN SALARY ELSE 0 END),
+        |  COUNT(CASE WHEN SALARY >= 12000 OR NOT(SALARY >= 9000) THEN SALARY ELSE 0 END),
+        |  MAX(CASE WHEN NOT(SALARY > 8000) AND SALARY >= 8000 THEN SALARY ELSE 0 END),
+        |  MAX(CASE WHEN NOT(SALARY > 8000) OR SALARY > 8000 THEN SALARY ELSE 0 END),
+        |  MAX(CASE WHEN NOT(SALARY > 8000) AND NOT(SALARY < 8000) THEN SALARY ELSE 0 END),
+        |  MAX(CASE WHEN NOT(SALARY != 0) OR NOT(SALARY < 8000) THEN SALARY ELSE 0 END),
+        |  MAX(CASE WHEN NOT(SALARY > 8000 AND SALARY > 8000) THEN 0 ELSE SALARY END),
+        |  MIN(CASE WHEN NOT(SALARY > 8000 OR SALARY IS NULL) THEN SALARY ELSE 0 END),
+        |  SUM(CASE WHEN NOT(SALARY > 8000 AND SALARY IS NOT NULL) THEN SALARY ELSE 0 END),
+        |  SUM(CASE WHEN SALARY > 10000 THEN 2 WHEN SALARY > 8000 THEN 1 END),
+        |  AVG(CASE WHEN NOT(SALARY > 8000 OR SALARY IS NOT NULL) THEN SALARY ELSE 0 END)
+        |FROM h2.test.employee GROUP BY DEPT
+      """.stripMargin)
+    checkAggregateRemoved(df)
     df.queryExecution.optimizedPlan.collect {
       case _: DataSourceV2ScanRelation =>
         val expected_plan_fragment =
-          "PushedFilters: [], "
+          "PushedAggregates: [COUNT(CASE WHEN ((SALARY) > (8000.00)) AND ((SALARY) < (10000.00))" +
+            " THEN SALARY ELSE 0.00 END), C..., " +
+            "PushedFilters: [], " +
+            "PushedGroupByColumns: [DEPT]"
         checkKeywordsExistsInExplain(df, expected_plan_fragment)
     }
-    checkAnswer(df, Seq(Row(1), Row(2), Row(2)))
+    checkAnswer(df, Seq(Row(1, 1, 1, 1, 1, 0d, 12000d, 0d, 12000d, 12000d, 0d, 0d, 2, 0d),
+      Row(2, 2, 2, 2, 2, 0d, 10000d, 0d, 10000d, 10000d, 0d, 0d, 2, 0d),
+      Row(2, 2, 2, 2, 2, 0d, 12000d, 0d, 12000d, 12000d, 0d, 0d, 3, 0d)))
+  }
+
+  test("scan with aggregate push-down: aggregate function with UDF") {
+    val df = spark.table("h2.test.employee")
+    val decrease = udf { (x: Double, y: Double) => x - y }
+    val query = df.select(sum(decrease($"SALARY", $"BONUS")).as("value"))
+    checkAggregateRemoved(query, false)
+    query.queryExecution.optimizedPlan.collect {
+      case _: DataSourceV2ScanRelation =>
+        val expected_plan_fragment =
+          "PushedFilters: []"
+        checkKeywordsExistsInExplain(query, expected_plan_fragment)
+    }
+    checkAnswer(query, Seq(Row(47100.0)))
   }
 
   test("scan with aggregate push-down: partition columns with multi group by columns") {
@@ -873,5 +909,85 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
     }
     checkAnswer(df, Seq(Row(2)))
     // scalastyle:on
+  }
+
+  test("scan with aggregate push-down: complete push-down SUM, AVG, COUNT") {
+    val df = spark.read
+      .option("partitionColumn", "dept")
+      .option("lowerBound", "0")
+      .option("upperBound", "2")
+      .option("numPartitions", "1")
+      .table("h2.test.employee")
+      .agg(sum($"SALARY").as("sum"), avg($"SALARY").as("avg"), count($"SALARY").as("count"))
+    checkAggregateRemoved(df)
+    df.queryExecution.optimizedPlan.collect {
+      case _: DataSourceV2ScanRelation =>
+        val expected_plan_fragment =
+          "PushedAggregates: [SUM(SALARY), AVG(SALARY), COUNT(SALARY)]"
+        checkKeywordsExistsInExplain(df, expected_plan_fragment)
+    }
+    checkAnswer(df, Seq(Row(53000.00, 10600.000000, 5)))
+
+    val df2 = spark.read
+      .option("partitionColumn", "dept")
+      .option("lowerBound", "0")
+      .option("upperBound", "2")
+      .option("numPartitions", "1")
+      .table("h2.test.employee")
+      .groupBy($"name")
+      .agg(sum($"SALARY").as("sum"), avg($"SALARY").as("avg"), count($"SALARY").as("count"))
+    checkAggregateRemoved(df)
+    df.queryExecution.optimizedPlan.collect {
+      case _: DataSourceV2ScanRelation =>
+        val expected_plan_fragment =
+          "PushedAggregates: [SUM(SALARY), AVG(SALARY), COUNT(SALARY)]"
+        checkKeywordsExistsInExplain(df, expected_plan_fragment)
+    }
+    checkAnswer(df2, Seq(
+      Row("alex", 12000.00, 12000.000000, 1),
+      Row("amy", 10000.00, 10000.000000, 1),
+      Row("cathy", 9000.00, 9000.000000, 1),
+      Row("david", 10000.00, 10000.000000, 1),
+      Row("jen", 12000.00, 12000.000000, 1)))
+  }
+
+  test("scan with aggregate push-down: partial push-down SUM, AVG, COUNT") {
+    val df = spark.read
+      .option("partitionColumn", "dept")
+      .option("lowerBound", "0")
+      .option("upperBound", "2")
+      .option("numPartitions", "2")
+      .table("h2.test.employee")
+      .agg(sum($"SALARY").as("sum"), avg($"SALARY").as("avg"), count($"SALARY").as("count"))
+    checkAggregateRemoved(df, false)
+    df.queryExecution.optimizedPlan.collect {
+      case _: DataSourceV2ScanRelation =>
+        val expected_plan_fragment =
+          "PushedAggregates: [SUM(SALARY), COUNT(SALARY)]"
+        checkKeywordsExistsInExplain(df, expected_plan_fragment)
+    }
+    checkAnswer(df, Seq(Row(53000.00, 10600.000000, 5)))
+
+    val df2 = spark.read
+      .option("partitionColumn", "dept")
+      .option("lowerBound", "0")
+      .option("upperBound", "2")
+      .option("numPartitions", "2")
+      .table("h2.test.employee")
+      .groupBy($"name")
+      .agg(sum($"SALARY").as("sum"), avg($"SALARY").as("avg"), count($"SALARY").as("count"))
+    checkAggregateRemoved(df, false)
+    df.queryExecution.optimizedPlan.collect {
+      case _: DataSourceV2ScanRelation =>
+        val expected_plan_fragment =
+          "PushedAggregates: [SUM(SALARY), COUNT(SALARY)]"
+        checkKeywordsExistsInExplain(df, expected_plan_fragment)
+    }
+    checkAnswer(df2, Seq(
+      Row("alex", 12000.00, 12000.000000, 1),
+      Row("amy", 10000.00, 10000.000000, 1),
+      Row("cathy", 9000.00, 9000.000000, 1),
+      Row("david", 10000.00, 10000.000000, 1),
+      Row("jen", 12000.00, 12000.000000, 1)))
   }
 }

@@ -60,7 +60,7 @@ class RatePerMicroBatchProviderSuite extends StreamTest {
         .format("rate-micro-batch")
         .option("rowsPerBatch", "10")
         .load()
-        .select('value)
+        .select(Symbol("value"))
 
       val clock = new StreamManualClock
       testStream(input)(
@@ -97,7 +97,7 @@ class RatePerMicroBatchProviderSuite extends StreamTest {
         .format("rate-micro-batch")
         .option("rowsPerBatch", "10")
         .load()
-        .select('value)
+        .select(Symbol("value"))
 
       val clock = new StreamManualClock
       testStream(input)(

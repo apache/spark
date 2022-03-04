@@ -288,12 +288,12 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
     val s = ScriptTransformation("func", Seq.empty, p, null)
 
     compareTransformQuery("select transform(a, b) using 'func' from e where f < 10",
-      s.copy(child = p.copy(child = p.child.where('f < 10)),
-        output = Seq('key.string, 'value.string)))
+      s.copy(child = p.copy(child = p.child.where(Symbol("f") < 10)),
+        output = Seq(Symbol("key").string, Symbol("value").string)))
     compareTransformQuery("map a, b using 'func' as c, d from e",
-      s.copy(output = Seq('c.string, 'd.string)))
+      s.copy(output = Seq(Symbol("c").string, Symbol("d").string)))
     compareTransformQuery("reduce a, b using 'func' as (c int, d decimal(10, 0)) from e",
-      s.copy(output = Seq('c.int, 'd.decimal(10, 0))))
+      s.copy(output = Seq(Symbol("c").int, Symbol("d").decimal(10, 0))))
   }
 
   test("use backticks in output of Script Transform") {

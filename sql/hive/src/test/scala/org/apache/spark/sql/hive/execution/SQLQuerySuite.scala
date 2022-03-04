@@ -35,7 +35,7 @@ import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, SubqueryAlias}
 import org.apache.spark.sql.execution.TestUncaughtExceptionHandler
 import org.apache.spark.sql.execution.adaptive.{DisableAdaptiveExecutionSuite, EnableAdaptiveExecutionSuite}
-import org.apache.spark.sql.execution.command.LoadDataCommand
+import org.apache.spark.sql.execution.command.{InsertIntoDataSourceDirCommand, LoadDataCommand}
 import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.hive.{HiveExternalCatalog, HiveUtils}
@@ -2212,44 +2212,10 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
     }
   }
 
-  test("SPARK-21912 Parquet table should not create invalid column names") {
-    Seq(" ", ",", ";", "{", "}", "(", ")", "\n", "\t", "=").foreach { name =>
-      val source = "PARQUET"
-      withTable("t21912") {
-        val m = intercept[AnalysisException] {
-          sql(s"CREATE TABLE t21912(`col$name` INT) USING $source")
-        }.getMessage
-        assert(m.contains(s"contains invalid character(s)"))
-
-        val m1 = intercept[AnalysisException] {
-          sql(s"CREATE TABLE t21912 STORED AS $source AS SELECT 1 `col$name`")
-        }.getMessage
-        assert(m1.contains(s"contains invalid character(s)"))
-
-        val m2 = intercept[AnalysisException] {
-          sql(s"CREATE TABLE t21912 USING $source AS SELECT 1 `col$name`")
-        }.getMessage
-        assert(m2.contains(s"contains invalid character(s)"))
-
-        withSQLConf(HiveUtils.CONVERT_METASTORE_PARQUET.key -> "false") {
-          val m3 = intercept[AnalysisException] {
-            sql(s"CREATE TABLE t21912(`col$name` INT) USING hive OPTIONS (fileFormat '$source')")
-          }.getMessage
-          assert(m3.contains(s"contains invalid character(s)"))
-        }
-
-        sql(s"CREATE TABLE t21912(`col` INT) USING $source")
-        val m4 = intercept[AnalysisException] {
-          sql(s"ALTER TABLE t21912 ADD COLUMNS(`col$name` INT)")
-        }.getMessage
-        assert(m4.contains(s"contains invalid character(s)"))
-      }
-    }
-  }
-
   test("SPARK-32889: ORC table column name supports special characters") {
-    // " " "," is not allowed.
-    Seq("$", ";", "{", "}", "(", ")", "\n", "\t", "=").foreach { name =>
+    // "," is not allowed since cannot create a table having a column whose name
+    // contains commas in Hive metastore.
+    Seq("$", ";", "{", "}", "(", ")", "\n", "\t", "=", " ", "a b").foreach { name =>
       val source = "ORC"
       Seq(s"CREATE TABLE t32889(`$name` INT) USING $source",
           s"CREATE TABLE t32889 STORED AS $source AS SELECT 1 `$name`",
@@ -2683,6 +2649,46 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
 
           withSQLConf("hive.exec.max.dynamic.partitions" -> "3") {
             sql(insertSQL)
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-38215: Hive Insert Dir should use data source if it is convertible") {
+    withTempView("p") {
+      Seq(1, 2, 3).toDF("id").createOrReplaceTempView("p")
+
+      Seq("orc", "parquet").foreach { format =>
+        Seq(true, false).foreach { isConverted =>
+          withSQLConf(
+            HiveUtils.CONVERT_METASTORE_ORC.key -> s"$isConverted",
+            HiveUtils.CONVERT_METASTORE_PARQUET.key -> s"$isConverted") {
+            Seq(true, false).foreach { isConvertedCtas =>
+              withSQLConf(HiveUtils.CONVERT_METASTORE_INSERT_DIR.key -> s"$isConvertedCtas") {
+                withTempDir { dir =>
+                  val df = sql(
+                    s"""
+                       |INSERT OVERWRITE LOCAL DIRECTORY '${dir.getAbsolutePath}'
+                       |STORED AS $format
+                       |SELECT 1
+                  """.stripMargin)
+                  val insertIntoDSDir = df.queryExecution.analyzed.collect {
+                    case _: InsertIntoDataSourceDirCommand => true
+                  }.headOption
+                  val insertIntoHiveDir = df.queryExecution.analyzed.collect {
+                    case _: InsertIntoHiveDirCommand => true
+                  }.headOption
+                  if (isConverted && isConvertedCtas) {
+                    assert(insertIntoDSDir.nonEmpty)
+                    assert(insertIntoHiveDir.isEmpty)
+                  } else {
+                    assert(insertIntoDSDir.isEmpty)
+                    assert(insertIntoHiveDir.nonEmpty)
+                  }
+                }
+              }
+            }
           }
         }
       }

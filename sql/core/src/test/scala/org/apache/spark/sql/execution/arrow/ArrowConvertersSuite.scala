@@ -1377,7 +1377,7 @@ class ArrowConvertersSuite extends SharedSparkSession {
     val schema = StructType(Seq(StructField("int", IntegerType, nullable = true)))
 
     val ctx = TaskContext.empty()
-    val batchIter = ArrowConverters.toBatchIterator(inputRows.toIterator, schema, 5, null, ctx)
+    val batchIter = ArrowConverters.toBatchIterator(inputRows.iterator, schema, 5, null, ctx)
     val outputRowIter = ArrowConverters.fromBatchIterator(batchIter, schema, null, ctx)
 
     var count = 0
@@ -1398,7 +1398,7 @@ class ArrowConvertersSuite extends SharedSparkSession {
 
     val schema = StructType(Seq(StructField("int", IntegerType, nullable = true)))
     val ctx = TaskContext.empty()
-    val batchIter = ArrowConverters.toBatchIterator(inputRows.toIterator, schema, 5, null, ctx)
+    val batchIter = ArrowConverters.toBatchIterator(inputRows.iterator, schema, 5, null, ctx)
 
     // Write batches to Arrow stream format as a byte array
     val out = new ByteArrayOutputStream()

@@ -272,11 +272,14 @@ private[spark] class BasicExecutorFeatureStep(
       case "statefulset" => "Always"
       case _ => "Never"
     }
+    val annotations = kubernetesConf.annotations.map { case (k, v) =>
+      (k, Utils.substituteAppNExecIds(v, kubernetesConf.appId, kubernetesConf.executorId))
+    }
     val executorPodBuilder = new PodBuilder(pod.pod)
       .editOrNewMetadata()
         .withName(name)
         .addToLabels(kubernetesConf.labels.asJava)
-        .addToAnnotations(kubernetesConf.annotations.asJava)
+        .addToAnnotations(annotations.asJava)
         .addToOwnerReferences(ownerReference.toSeq: _*)
         .endMetadata()
       .editOrNewSpec()
@@ -299,7 +302,7 @@ private[spark] class BasicExecutorFeatureStep(
         .endSpec()
       .build()
     }
-    kubernetesConf.get(KUBERNETES_EXECUTOR_SCHEDULER_NAME)
+    kubernetesConf.schedulerName
       .foreach(executorPod.getSpec.setSchedulerName)
 
     SparkPod(executorPod, containerWithLifecycle)
