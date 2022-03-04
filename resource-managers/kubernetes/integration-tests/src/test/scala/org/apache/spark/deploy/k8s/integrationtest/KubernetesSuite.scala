@@ -197,16 +197,20 @@ class KubernetesSuite extends SparkFunSuite
     }
   }
 
-  before {
-    setUpTest()
-  }
-
-  after {
+  protected def cleanUpTest(): Unit = {
     if (!kubernetesTestComponents.hasUserSpecifiedNamespace) {
       kubernetesTestComponents.deleteNamespace()
     }
     deleteDriverPod()
     deleteExecutorPod()
+  }
+
+  before {
+    setUpTest()
+  }
+
+  after {
+    cleanUpTest()
   }
 
   protected def runSparkPiAndVerifyCompletion(

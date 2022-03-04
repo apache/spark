@@ -44,6 +44,14 @@ private[spark] trait VolcanoTestsSuite { k8sSuite: KubernetesSuite =>
   lazy val volcanoClient: VolcanoClient
     = kubernetesTestComponents.kubernetesClient.adapt(classOf[VolcanoClient])
   lazy val k8sClient: NamespacedKubernetesClient = kubernetesTestComponents.kubernetesClient
+  protected var testGroups: mutable.Set[String] = _
+
+  protected def generateGroupName(name: String): String = {
+    val groupName = GROUP_PREFIX + name
+    // Append to testGroups
+    testGroups += groupName
+    groupName
+  }
 
   protected def checkScheduler(pod: Pod): Unit = {
     assert(pod.getSpec.getSchedulerName === "volcano")
@@ -159,7 +167,8 @@ private[spark] trait VolcanoTestsSuite { k8sSuite: KubernetesSuite =>
     (1 to jobNum).foreach { i =>
       Future {
         val queueName = s"queue${i % 2}"
-        runJobAndVerify(i.toString, Option(s"$GROUP_PREFIX-$queueName"), Option(queueName))
+        val groupName = generateGroupName(s"-$queueName")
+        runJobAndVerify(i.toString, Option(groupName), Option(queueName))
       }
     }
     // There are two `Succeeded` jobs and two `Pending` jobs
@@ -173,6 +182,7 @@ private[spark] trait VolcanoTestsSuite { k8sSuite: KubernetesSuite =>
   }
 
   test("SPARK-38188: Run SparkPi jobs with 2 queues (all enable)", k8sTestTag, volcanoTag) {
+    val groupName = generateGroupName("queue-enable")
     // Enable all queues
     createOrReplaceYAMLResource(VOLCANO_ENABLE_Q0_AND_Q1_YAML)
     val jobNum = 4
@@ -180,12 +190,12 @@ private[spark] trait VolcanoTestsSuite { k8sSuite: KubernetesSuite =>
     (1 to jobNum).foreach { i =>
       Future {
         val queueName = s"queue${i % 2}"
-        runJobAndVerify(i.toString, Option(s"$GROUP_PREFIX"), Option(queueName))
+        runJobAndVerify(i.toString, Option(groupName), Option(queueName))
       }
     }
     // All jobs "Succeeded"
     Eventually.eventually(TIMEOUT, INTERVAL) {
-      val completedPods = getPods("driver", GROUP_PREFIX, "Succeeded")
+      val completedPods = getPods("driver", groupName, "Succeeded")
       assert(completedPods.size === jobNum)
     }
     deleteYAMLResource(VOLCANO_ENABLE_Q0_AND_Q1_YAML)
