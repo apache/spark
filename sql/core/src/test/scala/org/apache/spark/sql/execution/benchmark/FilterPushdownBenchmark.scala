@@ -423,7 +423,6 @@ object FilterPushdownBenchmark extends SqlBasedBenchmark {
               .union(df.withColumn("part", lit(1)))
               .union(df.withColumn("part", lit(2)))
             saveAsTable(partDf, dir, usePartition = true)
-            spark.read.parquet(dir.getAbsolutePath).createOrReplaceTempView("parquetTable")
             Seq("(a = 10 and part = 0) or (a = 10240 and part = 1) or (part = 2)",
               "(a > 10 and part = 0) or (a <= 10 and part >=1 and part < 3)")
               .foreach { whereExpr =>
