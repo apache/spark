@@ -164,7 +164,9 @@ import org.apache.spark.sql.connector.util.V2ExpressionSQLBuilder;
  *  </li>
  *  <li>Name: <code>CASE_WHEN</code>
  *   <ul>
- *    <li>SQL semantic: <code>CASE WHEN expr1 THEN expr2 [WHEN expr3 THEN expr4]* [ELSE expr5] END</code></li>
+ *    <li>SQL semantic:
+ *     <code>CASE WHEN expr1 THEN expr2 [WHEN expr3 THEN expr4]* [ELSE expr5] END</code>
+ *    </li>
  *    <li>Since version: 3.3.0</li>
  *   </ul>
  *  </li>
