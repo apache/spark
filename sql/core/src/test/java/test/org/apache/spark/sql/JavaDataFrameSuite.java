@@ -487,7 +487,6 @@ public class JavaDataFrameSuite {
     Assert.assertEquals(1, df.collectAsList().size());
   }
 
-  @SuppressWarnings("deprecation")
   @Test
   public void testJsonRDDToDataFrame() {
     // This is a test for the deprecated API in SPARK-15615.

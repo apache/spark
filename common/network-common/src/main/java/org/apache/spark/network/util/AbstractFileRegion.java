@@ -23,7 +23,6 @@ import io.netty.util.AbstractReferenceCounted;
 public abstract class AbstractFileRegion extends AbstractReferenceCounted implements FileRegion {
 
   @Override
-  @SuppressWarnings("deprecation")
   public final long transfered() {
     return transferred();
   }
