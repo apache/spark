@@ -34,10 +34,10 @@ import org.apache.parquet.schema.LogicalTypeAnnotation.{DecimalLogicalTypeAnnota
 import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName
 import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName._
 
-import org.apache.spark.sql.catalyst.{InternalRow, StructFilters}
-import org.apache.spark.sql.catalyst.expressions.{AttributeReference, BoundReference, Predicate}
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeUtils, IntervalUtils}
 import org.apache.spark.sql.catalyst.util.RebaseDateTime.{rebaseGregorianToJulianDays, rebaseGregorianToJulianMicros, RebaseSpec}
+import org.apache.spark.sql.execution.datasources.PartitioningUtils
 import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy
 import org.apache.spark.sql.sources
 import org.apache.spark.sql.types.StructType
@@ -799,36 +799,9 @@ class ParquetFilters(
         }
 
       case _ if canMakeFilterOnPart(predicate) =>
-        evaluateFilter(predicate)
+        PartitioningUtils.evaluateFilter(partitionSchema, partitionValues, predicate)
 
       case _ => None
-    }
-  }
-
-  private def evaluateFilter(filter: sources.Filter): Option[FilterPredicate] = {
-    val predicate = StructFilters.filterToExpression(filter, toRef)
-    if (predicate.isDefined) {
-      val boundPredicate = Predicate.createInterpreted(predicate.get.transform {
-        case a: AttributeReference =>
-          val index = partitionSchema.indexWhere(a.name == _.name)
-          BoundReference(index, partitionSchema(index).dataType, nullable = true)
-      })
-      if (partitionValues.exists(boundPredicate.eval)) {
-        None
-      } else {
-        // Empty FilterPredicate, will be removed later.
-        Some(null)
-      }
-    } else {
-      None
-    }
-  }
-
-  private def toRef(attr: String): Option[BoundReference] = {
-    // The names have been normalized and case sensitivity is not a concern here.
-    partitionSchema.getFieldIndex(attr).map { index =>
-      val field = partitionSchema(index)
-      BoundReference(index, field.dataType, field.nullable)
     }
   }
 }

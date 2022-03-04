@@ -61,18 +61,9 @@ abstract class StructFilters(pushedFilters: Seq[sources.Filter], schema: StructT
   def toPredicate(filters: Seq[sources.Filter]): BasePredicate = {
     val reducedExpr = filters
       .sortBy(_.references.length)
-      .flatMap(filterToExpression(_, toRef))
+      .flatMap(filterToExpression(_, toRef(schema)))
       .reduce(And)
     Predicate.create(reducedExpr)
-  }
-
-  // Finds a filter attribute in the schema and converts it to a `BoundReference`
-  private def toRef(attr: String): Option[BoundReference] = {
-    // The names have been normalized and case sensitivity is not a concern here.
-    schema.getFieldIndex(attr).map { index =>
-      val field = schema(index)
-      BoundReference(index, field.dataType, field.nullable)
-    }
   }
 }
 
@@ -157,6 +148,15 @@ object StructFilters {
         Some(Literal(false, BooleanType))
     }
     translate(filter)
+  }
+
+  // Finds a filter attribute in the schema and converts it to a `BoundReference`
+  private[sql] def toRef(schema: StructType)(attr: String): Option[BoundReference] = {
+    // The names have been normalized and case sensitivity is not a concern here.
+    schema.getFieldIndex(attr).map { index =>
+      val field = schema(index)
+      BoundReference(index, field.dataType, field.nullable)
+    }
   }
 }
 

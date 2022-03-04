@@ -28,14 +28,16 @@ import scala.util.Try
 import scala.util.control.NonFatal
 
 import org.apache.hadoop.fs.Path
+import org.apache.parquet.filter2.predicate.FilterPredicate
 
-import org.apache.spark.sql.catalyst.{InternalRow, SQLConfHelper}
+import org.apache.spark.sql.catalyst.{InternalRow, SQLConfHelper, StructFilters}
 import org.apache.spark.sql.catalyst.analysis.TypeCoercion
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.catalog.ExternalCatalogUtils.getPartitionValueString
-import org.apache.spark.sql.catalyst.expressions.{Attribute, Cast, Literal}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, BoundReference, Cast, Literal, Predicate}
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateFormatter, DateTimeUtils, TimestampFormatter}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
+import org.apache.spark.sql.sources
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.SchemaUtils
 import org.apache.spark.unsafe.types.UTF8String
@@ -629,5 +631,40 @@ object PartitioningUtils extends SQLConfHelper{
     case (DoubleType, _: DecimalType) | (_: DecimalType, DoubleType) => StringType
     case (DoubleType, LongType) | (LongType, DoubleType) => StringType
     case (t1, t2) => TypeCoercion.findWiderTypeForTwo(t1, t2).getOrElse(StringType)
+  }
+
+  /**
+   * Evaluating partition filter for datasource scan at runtime.
+   * This is mainly used to evaluate partition conditions during task runtime and
+   * complete further pruning of push-down dataFilter, which can reduce datasource scan IO.
+   * @param partitionSchema schema of partition.
+   * @param partitionValues partition values.
+   * @param partitionFilter partition filter.
+   * @return the result of evaluate result.
+   *         If true, None will be returned, as this can be ignored.
+   *         If false, Some(null), will be returned, which means invalid Filter.
+   *                    This should be removed before filter pushed down to datasource.
+   */
+  def evaluateFilter(
+      partitionSchema: StructType,
+      partitionValues: Option[InternalRow],
+      partitionFilter: sources.Filter): Option[FilterPredicate] = {
+    val predicate =
+      StructFilters.filterToExpression(partitionFilter, StructFilters.toRef(partitionSchema))
+    if (predicate.isDefined) {
+      val boundPredicate = Predicate.createInterpreted(predicate.get.transform {
+        case a: AttributeReference =>
+          val index = partitionSchema.indexWhere(a.name == _.name)
+          BoundReference(index, partitionSchema(index).dataType, nullable = true)
+      })
+      if (partitionValues.exists(boundPredicate.eval)) {
+        None
+      } else {
+        // Empty FilterPredicate, will be removed later.
+        Some(null)
+      }
+    } else {
+      None
+    }
   }
 }
