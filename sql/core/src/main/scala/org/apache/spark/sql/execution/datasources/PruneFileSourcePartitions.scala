@@ -59,6 +59,7 @@ private[sql] object PruneFileSourcePartitions
     )
     val extraPartitionFilter =
       dataFilters.flatMap(extractPredicatesWithinOutputSet(_, partitionSet))
+
     (ExpressionSet(partitionFilters ++ extraPartitionFilter), dataFilters)
   }
 
@@ -120,7 +121,6 @@ private[sql] object PruneFileSourcePartitions
     case op @ PhysicalOperation(projects, filters,
         v2Relation @ DataSourceV2ScanRelation(_, scan: FileScan, output))
         if filters.nonEmpty =>
-      val dataSchema = StructType(scan.readSchema().fields.diff(scan.readPartitionSchema.fields))
       val (partitionKeyFilters, dataFilters) =
         getPartitionKeyFiltersAndDataFilters(scan.sparkSession, v2Relation,
           scan.readPartitionSchema, filters, output)

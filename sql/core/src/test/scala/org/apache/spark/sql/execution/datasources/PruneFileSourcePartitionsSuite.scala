@@ -125,7 +125,7 @@ class PruneFileSourcePartitionsSuite extends PrunePartitionSuiteBase with Shared
         spark.range(10).coalesce(1).selectExpr("id", "id % 3 as p")
           .write.partitionBy("p").parquet(dir.getCanonicalPath)
         withTempView("tmp") {
-          spark.read.parquet(dir.getCanonicalPath).createOrReplaceTempView("tmp");
+          spark.read.parquet(dir.getCanonicalPath).createOrReplaceTempView("tmp")
           assertPrunedPartitions("SELECT * FROM tmp WHERE (p = 0 AND id > 0) OR (p = 1 AND id = 2)",
             2,
             "((tmp.p = 0) || (tmp.p = 1))")
