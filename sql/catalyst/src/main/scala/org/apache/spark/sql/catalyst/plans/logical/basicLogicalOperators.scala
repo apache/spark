@@ -1479,15 +1479,19 @@ object RepartitionByExpression {
  */
 case class RebalancePartitions(
     partitionExpressions: Seq[Expression],
-    child: LogicalPlan) extends UnaryNode {
+    child: LogicalPlan,
+    initialNumPartitionOpt: Option[Int] = None) extends UnaryNode {
   override def maxRows: Option[Long] = child.maxRows
   override def output: Seq[Attribute] = child.output
   override val nodePatterns: Seq[TreePattern] = Seq(REBALANCE_PARTITIONS)
 
-  def partitioning: Partitioning = if (partitionExpressions.isEmpty) {
-    RoundRobinPartitioning(conf.numShufflePartitions)
-  } else {
-    HashPartitioning(partitionExpressions, conf.numShufflePartitions)
+  def partitioning: Partitioning = {
+    val initialNumPartitions = initialNumPartitionOpt.getOrElse(conf.numShufflePartitions)
+    if (partitionExpressions.isEmpty) {
+      RoundRobinPartitioning(initialNumPartitions)
+    } else {
+      HashPartitioning(partitionExpressions, initialNumPartitions)
+    }
   }
 
   override protected def withNewChildInternal(newChild: LogicalPlan): RebalancePartitions =

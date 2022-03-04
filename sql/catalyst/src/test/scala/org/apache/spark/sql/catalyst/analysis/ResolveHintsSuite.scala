@@ -299,10 +299,18 @@ class ResolveHintsSuite extends AnalysisTest {
     }
   }
 
-  test("SPARK-35786: Support optimize repartition by expression in AQE") {
+  test("SPARK-35786: Support optimize rebalance by expression in AQE") {
     checkAnalysisWithoutViewWrapper(
       UnresolvedHint("REBALANCE", Seq(UnresolvedAttribute("a")), table("TaBlE")),
       RebalancePartitions(Seq(AttributeReference("a", IntegerType)()), testRelation))
+
+    checkAnalysisWithoutViewWrapper(
+      UnresolvedHint("REBALANCE", Seq(1, UnresolvedAttribute("a")), table("TaBlE")),
+      RebalancePartitions(Seq(AttributeReference("a", IntegerType)()), testRelation, Some(1)))
+
+    checkAnalysisWithoutViewWrapper(
+      UnresolvedHint("REBALANCE", Seq(Literal(1), UnresolvedAttribute("a")), table("TaBlE")),
+      RebalancePartitions(Seq(AttributeReference("a", IntegerType)()), testRelation, Some(1)))
 
     checkAnalysisWithoutViewWrapper(
       UnresolvedHint("REBALANCE", Seq.empty, table("TaBlE")),
@@ -314,12 +322,44 @@ class ResolveHintsSuite extends AnalysisTest {
         testRelation)
 
       checkAnalysisWithoutViewWrapper(
+        UnresolvedHint("REBALANCE", Seq(1, UnresolvedAttribute("a")), table("TaBlE")),
+        testRelation)
+
+      checkAnalysisWithoutViewWrapper(
+        UnresolvedHint("REBALANCE", Seq(Literal(1), UnresolvedAttribute("a")), table("TaBlE")),
+        testRelation)
+
+      checkAnalysisWithoutViewWrapper(
         UnresolvedHint("REBALANCE", Seq.empty, table("TaBlE")),
+        testRelation)
+
+      checkAnalysisWithoutViewWrapper(
+        UnresolvedHint("REBALANCE", 1 :: Nil, table("TaBlE")),
         testRelation)
     }
 
     assertAnalysisError(
-      UnresolvedHint("REBALANCE", Seq(Literal(1)), table("TaBlE")),
+      UnresolvedHint("REBALANCE", Seq(Literal(1), Literal(1)), table("TaBlE")),
       Seq("Hint parameter should include columns"))
+
+    assertAnalysisError(
+      UnresolvedHint("REBALANCE", Seq(1, Literal(1)), table("TaBlE")),
+      Seq("Hint parameter should include columns"))
+  }
+
+  test("SPARK-38410: Support specify initial partition number for rebalance") {
+    withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "3") {
+      assert(RebalancePartitions(Nil, table("TaBlE"))
+        .partitioning.numPartitions == 3)
+
+      assert(RebalancePartitions(Seq(UnresolvedAttribute("a")), table("TaBlE"))
+        .partitioning.numPartitions == 3)
+
+      assert(RebalancePartitions(Nil, table("TaBlE"), Some(1))
+        .partitioning.numPartitions == 1)
+
+      assert(RebalancePartitions(Seq(UnresolvedAttribute("a")), table("TaBlE"), Some(1))
+        .partitioning.numPartitions == 1)
+    }
   }
 }

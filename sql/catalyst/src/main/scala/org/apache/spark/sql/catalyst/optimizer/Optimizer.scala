@@ -1072,11 +1072,11 @@ object CollapseRepartition extends Rule[LogicalPlan] {
       r.withNewChildren(child.children)
     // Case 3: When a RebalancePartitions has a child of local or global Sort, Repartition or
     // RepartitionByExpression we can remove the child.
-    case r @ RebalancePartitions(_, child @ (_: Sort | _: RepartitionOperation)) =>
+    case r @ RebalancePartitions(_, child @ (_: Sort | _: RepartitionOperation), _) =>
       r.withNewChildren(child.children)
     // Case 4: When a RebalancePartitions has a child of RebalancePartitions we can remove the
     // child.
-    case r @ RebalancePartitions(_, child: RebalancePartitions) =>
+    case r @ RebalancePartitions(_, child: RebalancePartitions, _) =>
       r.withNewChildren(child.children)
   }
 }

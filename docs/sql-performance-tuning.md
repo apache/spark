@@ -229,7 +229,9 @@ The "REPARTITION_BY_RANGE" hint must have column names and a partition number is
     SELECT /*+ REPARTITION_BY_RANGE(c) */ * FROM t
     SELECT /*+ REPARTITION_BY_RANGE(3, c) */ * FROM t
     SELECT /*+ REBALANCE */ * FROM t
+    SELECT /*+ REBALANCE(3) */ * FROM t
     SELECT /*+ REBALANCE(c) */ * FROM t
+    SELECT /*+ REBALANCE(3, c) */ * FROM t
 
 For more details please refer to the documentation of [Partitioning Hints](sql-ref-syntax-qry-select-hints.html#partitioning-hints).
 

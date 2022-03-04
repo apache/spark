@@ -72,7 +72,11 @@ SELECT /*+ REPARTITION_BY_RANGE(3, c) */ * FROM t;
 
 SELECT /*+ REBALANCE */ * FROM t;
 
+SELECT /*+ REBALANCE(3) */ * FROM t;
+
 SELECT /*+ REBALANCE(c) */ * FROM t;
+
+SELECT /*+ REBALANCE(3, c) */ * FROM t;
 
 -- multiple partitioning hints
 EXPLAIN EXTENDED SELECT /*+ REPARTITION(100), COALESCE(500), REPARTITION_BY_RANGE(3, c) */ * FROM t;
