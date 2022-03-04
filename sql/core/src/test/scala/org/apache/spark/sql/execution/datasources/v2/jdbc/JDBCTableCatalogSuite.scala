@@ -425,20 +425,4 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
       assert(m.contains("\"TABLEENGINENAME\" not found"))
     }
   }
-
-  test("JDBC push down with delimited special identifiers") {
-    withConnection { conn =>
-      conn.prepareStatement(
-        """CREATE TABLE "test"."view1" ("|col1" INTEGER, "|col2" INTEGER)""")
-        .executeUpdate()
-      conn.prepareStatement(
-        """CREATE TABLE "test"."view2" ("|col1" INTEGER, "|col3" INTEGER)""")
-        .executeUpdate()
-    }
-    val result = sql(
-      """SELECT h2.test.view1.`|col1`, h2.test.view1.`|col2`, h2.test.view2.`|col3`
-        |FROM h2.test.view1 LEFT JOIN h2.test.view2
-        |ON h2.test.view1.`|col1` = h2.test.view2.`|col1`""".stripMargin).collect()
-    assert(result.length == 0)
-  }
 }
