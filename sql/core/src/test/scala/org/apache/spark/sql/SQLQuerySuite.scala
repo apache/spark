@@ -4294,6 +4294,37 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
         Row(3, 2, 6) :: Nil)
     }
   }
+
+  test("SC-93338: Cover the histogram_numeric aggregate function for many input types") {
+    for (query <- Seq(
+      "SELECT histogram_numeric(col, 3) FROM VALUES (1), (2), (3) AS tab(col)",
+      "SELECT histogram_numeric(col, 3) FROM VALUES (1L), (2L), (3L) AS tab(col)",
+      "SELECT histogram_numeric(col, 3) FROM VALUES (1F), (2F), (3F) AS tab(col)",
+      "SELECT histogram_numeric(col, 3) FROM VALUES (1D), (2D), (3D) AS tab(col)",
+      "SELECT histogram_numeric(col, 3) FROM VALUES (1S), (2S), (3S) AS tab(col)",
+      """SELECT histogram_numeric(col, 3) FROM VALUES
+        (CAST(1 AS BYTE)), (CAST(2 AS BYTE)), (CAST(3 AS BYTE)) AS tab(col)""",
+      """SELECT histogram_numeric(col, 3) FROM VALUES
+        (CAST(1 AS TINYINT)), (CAST(2 AS TINYINT)), (CAST(3 AS TINYINT)) AS tab(col)""",
+      """SELECT histogram_numeric(col, 3) FROM VALUES
+        (CAST(1 AS SMALLINT)), (CAST(2 AS SMALLINT)), (CAST(3 AS SMALLINT)) AS tab(col)""",
+      """SELECT histogram_numeric(col, 3) FROM VALUES
+        (CAST(1 AS BIGINT)), (CAST(2 AS BIGINT)), (CAST(3 AS BIGINT)) AS tab(col)""",
+      """SELECT histogram_numeric(col, 3) FROM VALUES (TIMESTAMP '2017-03-01 00:00:00'),
+        (TIMESTAMP '2017-04-01 00:00:00'), (TIMESTAMP '2017-05-01 00:00:00') AS tab(col)""",
+      """SELECT histogram_numeric(col, 3) FROM VALUES (INTERVAL '100-00' YEAR TO MONTH),
+        (INTERVAL '110-00' YEAR TO MONTH), (INTERVAL '120-00' YEAR TO MONTH) AS tab(col)""",
+      """SELECT histogram_numeric(col, 3) FROM VALUES (INTERVAL '12 20:4:0' DAY TO SECOND),
+        (INTERVAL '12 21:4:0' DAY TO SECOND), (INTERVAL '12 22:4:0' DAY TO SECOND) AS tab(col)"""
+    )) {
+      val df = sql(query)
+      val result = df.collect.head
+      // As a basic sanity check, ensure that the result is not NULL. This makes sure that we run
+      // all stages of the aggregate function and evaluate the result to some concrete value each
+      // time.
+      assert(!result.isNullAt(0))
+    }
+  }
 }
 
 case class Foo(bar: Option[String])

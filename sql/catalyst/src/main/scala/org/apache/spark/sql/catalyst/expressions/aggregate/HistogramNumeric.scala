@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{TypeCheckFailure,
 import org.apache.spark.sql.catalyst.expressions.{Expression, ExpressionDescription, ImplicitCastInputTypes}
 import org.apache.spark.sql.catalyst.trees.BinaryLike
 import org.apache.spark.sql.catalyst.util.GenericArrayData
-import org.apache.spark.sql.types.{AbstractDataType, ArrayType, DataType, DateType, DayTimeIntervalType, DoubleType, IntegerType, NumericType, StructField, StructType, TimestampNTZType, TimestampType, TypeCollection, YearMonthIntervalType}
+import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.NumericHistogram
 
 /**
@@ -125,7 +125,21 @@ case class HistogramNumeric(
     } else {
       val result = (0 until buffer.getUsedBins).map { index =>
         val coord = buffer.getBin(index)
-        InternalRow.apply(coord.x, coord.y)
+        // The 'coord.x' and 'coord.y' have double type here. If the expression is expected to
+        // return a result of double type, this is sufficient. Otherwise, we need to internally
+        // convert these values to the expected result type, for cases like timestamps and intervals
+        // which are valid inputs to the numeric histogram aggregate function.
+        val result: Any = left.dataType match {
+          case ByteType => coord.x.toByte
+          case IntegerType | DateType | _: YearMonthIntervalType =>
+            coord.x.toInt
+          case FloatType => coord.x.toFloat
+          case ShortType => coord.x.toShort
+          case _: DayTimeIntervalType | LongType | TimestampType | TimestampNTZType =>
+            coord.x.toLong
+          case _ => coord.x
+        }
+        InternalRow.apply(result, coord.y)
       }
       new GenericArrayData(result)
     }
@@ -158,8 +172,10 @@ case class HistogramNumeric(
   override def nullable: Boolean = true
 
   override def dataType: DataType =
+    // The output data type of this aggregate function is an array of structs, where each struct
+    // has two fields: one of the same data type as the left child and another of double type.
     ArrayType(new StructType(Array(
-      StructField("x", DoubleType, true),
+      StructField("x", left.dataType, true),
       StructField("y", DoubleType, true))), true)
 
   override def prettyName: String = "histogram_numeric"
