@@ -37,7 +37,7 @@ import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName._
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeUtils, IntervalUtils}
 import org.apache.spark.sql.catalyst.util.RebaseDateTime.{rebaseGregorianToJulianDays, rebaseGregorianToJulianMicros, RebaseSpec}
-import org.apache.spark.sql.execution.datasources.PartitioningUtils
+import org.apache.spark.sql.execution.datasources.PartitioningUtils.evaluatePartitionFilter
 import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy
 import org.apache.spark.sql.sources
 import org.apache.spark.sql.types.StructType
@@ -799,7 +799,12 @@ class ParquetFilters(
         }
 
       case _ if canMakeFilterOnPart(predicate) =>
-        PartitioningUtils.evaluateFilter(partitionSchema, partitionValues, predicate)
+        if (evaluatePartitionFilter(partitionSchema, partitionValues, predicate)) {
+          None
+        } else {
+          // Empty FilterPredicate, will be removed later.
+          Some(null)
+        }
 
       case _ => None
     }

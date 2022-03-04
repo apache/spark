@@ -28,7 +28,6 @@ import scala.util.Try
 import scala.util.control.NonFatal
 
 import org.apache.hadoop.fs.Path
-import org.apache.parquet.filter2.predicate.FilterPredicate
 
 import org.apache.spark.sql.catalyst.{InternalRow, SQLConfHelper, StructFilters}
 import org.apache.spark.sql.catalyst.analysis.TypeCoercion
@@ -641,14 +640,11 @@ object PartitioningUtils extends SQLConfHelper{
    * @param partitionValues partition values.
    * @param partitionFilter partition filter.
    * @return the result of evaluate result.
-   *         If true, None will be returned, as this can be ignored.
-   *         If false, Some(null), will be returned, which means invalid Filter.
-   *                    This should be removed before filter pushed down to datasource.
    */
-  def evaluateFilter(
+  def evaluatePartitionFilter(
       partitionSchema: StructType,
       partitionValues: Option[InternalRow],
-      partitionFilter: sources.Filter): Option[FilterPredicate] = {
+      partitionFilter: sources.Filter): Boolean = {
     val predicate =
       StructFilters.filterToExpression(partitionFilter, StructFilters.toRef(partitionSchema))
     if (predicate.isDefined) {
@@ -658,13 +654,12 @@ object PartitioningUtils extends SQLConfHelper{
           BoundReference(index, partitionSchema(index).dataType, nullable = true)
       })
       if (partitionValues.exists(boundPredicate.eval)) {
-        None
+        true
       } else {
-        // Empty FilterPredicate, will be removed later.
-        Some(null)
+        false
       }
     } else {
-      None
+      true
     }
   }
 }
