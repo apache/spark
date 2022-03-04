@@ -1080,47 +1080,44 @@ private[spark] class MapOutputTrackerMaster(
       startReducerIndex: Int,
       endReducerIndex: Int,
       fractionThreshold: Double): Seq[BlockManagerId] = {
+    if (startMapIndex >= endMapIndex || startMapIndex < 0) return Nil
     if (shuffleLocalityEnabled && dep.rdd.getNumPartitions < SHUFFLE_PREF_MAP_THRESHOLD &&
       dep.partitioner.numPartitions < SHUFFLE_PREF_REDUCE_THRESHOLD) {
       val shuffleStatus = shuffleStatuses.get(dep.shuffleId).orNull
-      if (shuffleStatus != null) {
-        shuffleStatus.withMapStatuses { statuses =>
-          if (statuses.nonEmpty && startMapIndex < endMapIndex &&
-            startMapIndex >= 0 && endMapIndex <= statuses.length) {
-            // HashMap to add up sizes of all blocks at the same location
-            val locs = new HashMap[BlockManagerId, Long]
-            var totalOutputSize = 0L
-            var mapIdx = startMapIndex
-            while (mapIdx < endMapIndex) {
-              val status = statuses(mapIdx)
-              // status may be null here if we are called between registerShuffle, which creates an
-              // array with null entries for each output, and registerMapOutputs, which populates it
-              // with valid status entries. This is possible if one thread schedules a job which
-              // depends on an RDD which is currently being computed by another thread.
-              if (status != null) {
-                var reducerIdx = startReducerIndex
-                while (reducerIdx < endReducerIndex) {
-                  val blockSize = status.getSizeForBlock(reducerIdx)
-                  if (blockSize > 0) {
-                    locs(status.location) = locs.getOrElse(status.location, 0L) + blockSize
-                    totalOutputSize = totalOutputSize + blockSize
-                  }
-                  reducerIdx = reducerIdx + 1
+      if (shuffleStatus ==  null) return Nil
+      shuffleStatus.withMapStatuses { statuses =>
+        if (statuses.nonEmpty && endMapIndex <= statuses.length) {
+          // HashMap to add up sizes of all blocks at the same location
+          val locs = new HashMap[BlockManagerId, Long]
+          var totalOutputSize = 0L
+          var mapIdx = startMapIndex
+          while (mapIdx < endMapIndex) {
+            val status = statuses(mapIdx)
+            // status may be null here if we are called between registerShuffle, which creates an
+            // array with null entries for each output, and registerMapOutputs, which populates it
+            // with valid status entries. This is possible if one thread schedules a job which
+            // depends on an RDD which is currently being computed by another thread.
+            if (status != null) {
+              var reducerIdx = startReducerIndex
+              while (reducerIdx < endReducerIndex) {
+                val blockSize = status.getSizeForBlock(reducerIdx)
+                if (blockSize > 0) {
+                  locs(status.location) = locs.getOrElse(status.location, 0L) + blockSize
+                  totalOutputSize += blockSize
                 }
+                reducerIdx += 1
               }
-              mapIdx = mapIdx + 1
             }
-            val topLocs = locs.filter { case (_, size) =>
-              size.toDouble / totalOutputSize >= fractionThreshold
-            }
-            // Return if we have any locations which satisfy the required threshold
-            topLocs.keys.toSeq
-          } else {
-            Nil
+            mapIdx += 1
           }
+          val topLocs = locs.filter { case (_, size) =>
+            size.toDouble / totalOutputSize >= fractionThreshold
+          }
+          // Return if we have any locations which satisfy the required threshold
+          topLocs.keys.toSeq
+        } else {
+          Nil
         }
-      } else {
-        Nil
       }
     } else {
       Nil
