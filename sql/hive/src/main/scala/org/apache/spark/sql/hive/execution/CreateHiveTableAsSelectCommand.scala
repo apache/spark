@@ -50,7 +50,8 @@ trait CreateHiveTableAsSelectBase extends V1Write with V1HiveWritesHelper {
     getDynamicPartitionColumns(table, query, partition)
   }
   override lazy val bucketSpec: Option[BucketSpec] = tableDesc.bucketSpec
-  override lazy val options: Map[String, String] = getOptionsWithHiveBucketWrite(tableDesc.bucketSpec)
+  override lazy val options: Map[String, String] =
+    getOptionsWithHiveBucketWrite(tableDesc.bucketSpec)
 
   protected val tableIdentifier = tableDesc.identifier
 
