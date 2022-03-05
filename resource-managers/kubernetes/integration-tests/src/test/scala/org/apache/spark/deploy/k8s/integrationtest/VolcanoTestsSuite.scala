@@ -62,11 +62,12 @@ private[spark] trait VolcanoTestsSuite extends BeforeAndAfterEach { k8sSuite: Ku
 
   override protected def beforeEach(): Unit = {
     testGroups = mutable.Set.empty
+    super.beforeEach()
   }
 
   override protected def afterEach(): Unit = {
-    super.afterEach()
     deletePodInTestGroup()
+    super.afterEach()
   }
 
   protected def generateGroupName(name: String): String = {
@@ -182,7 +183,7 @@ private[spark] trait VolcanoTestsSuite extends BeforeAndAfterEach { k8sSuite: Ku
     )
   }
 
-  test("SPARK-38188: Run SparkPi jobs with 2 queues (only 1 enable)", k8sTestTag, volcanoTag) {
+  test("SPARK-38188: Run SparkPi jobs with 2 queues (only 1 enabled)", k8sTestTag, volcanoTag) {
     // Disabled queue0 and enabled queue1
     createOrReplaceYAMLResource(VOLCANO_Q0_DISABLE_Q1_ENABLE_YAML)
     // Submit jobs into disabled queue0 and enabled queue1
@@ -190,21 +191,21 @@ private[spark] trait VolcanoTestsSuite extends BeforeAndAfterEach { k8sSuite: Ku
     (1 to jobNum).foreach { i =>
       Future {
         val queueName = s"queue${i % 2}"
-        val groupName = generateGroupName(s"-$queueName")
+        val groupName = generateGroupName(s"$queueName")
         runJobAndVerify(i.toString, Option(groupName), Option(queueName))
       }
     }
     // There are two `Succeeded` jobs and two `Pending` jobs
     Eventually.eventually(TIMEOUT, INTERVAL) {
-      val completedPods = getPods("driver", s"$GROUP_PREFIX-queue1", "Succeeded")
+      val completedPods = getPods("driver", s"${GROUP_PREFIX}queue1", "Succeeded")
       assert(completedPods.size === 2)
-      val pendingPods = getPods("driver", s"$GROUP_PREFIX-queue0", "Pending")
+      val pendingPods = getPods("driver", s"${GROUP_PREFIX}queue0", "Pending")
       assert(pendingPods.size === 2)
     }
     deleteYAMLResource(VOLCANO_Q0_DISABLE_Q1_ENABLE_YAML)
   }
 
-  test("SPARK-38188: Run SparkPi jobs with 2 queues (all enable)", k8sTestTag, volcanoTag) {
+  test("SPARK-38188: Run SparkPi jobs with 2 queues (all enabled)", k8sTestTag, volcanoTag) {
     val groupName = generateGroupName("queue-enable")
     // Enable all queues
     createOrReplaceYAMLResource(VOLCANO_ENABLE_Q0_AND_Q1_YAML)
@@ -233,5 +234,5 @@ private[spark] object VolcanoTestsSuite extends SparkFunSuite {
   val VOLCANO_Q0_DISABLE_Q1_ENABLE_YAML = new File(
     getClass.getResource("/volcano/disable-queue0-enable-queue1.yml").getFile
   ).getAbsolutePath
-  val GROUP_PREFIX = "volcano-test" + UUID.randomUUID().toString.replaceAll("-", "")
+  val GROUP_PREFIX = "volcano-test" + UUID.randomUUID().toString.replaceAll("-", "") + "-"
 }
