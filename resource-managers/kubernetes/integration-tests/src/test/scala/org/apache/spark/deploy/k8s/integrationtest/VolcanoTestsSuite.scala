@@ -29,6 +29,7 @@ import scala.concurrent.Future
 import io.fabric8.kubernetes.api.model.Pod
 import io.fabric8.kubernetes.client.NamespacedKubernetesClient
 import io.fabric8.volcano.client.VolcanoClient
+import org.scalatest.BeforeAndAfterEach
 import org.scalatest.concurrent.Eventually
 
 import org.apache.spark.SparkFunSuite
@@ -36,7 +37,7 @@ import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.features.VolcanoFeatureStep
 import org.apache.spark.internal.config.NETWORK_AUTH_ENABLED
 
-private[spark] trait VolcanoTestsSuite { k8sSuite: KubernetesSuite =>
+private[spark] trait VolcanoTestsSuite extends BeforeAndAfterEach { k8sSuite: KubernetesSuite =>
   import VolcanoTestsSuite._
   import org.apache.spark.deploy.k8s.integrationtest.VolcanoSuite.volcanoTag
   import org.apache.spark.deploy.k8s.integrationtest.KubernetesSuite.{k8sTestTag, INTERVAL, TIMEOUT}
@@ -45,6 +46,28 @@ private[spark] trait VolcanoTestsSuite { k8sSuite: KubernetesSuite =>
     = kubernetesTestComponents.kubernetesClient.adapt(classOf[VolcanoClient])
   lazy val k8sClient: NamespacedKubernetesClient = kubernetesTestComponents.kubernetesClient
   protected var testGroups: mutable.Set[String] = _
+
+  private def deletePodInTestGroup(): Unit = {
+    testGroups.map{ g =>
+      kubernetesTestComponents.kubernetesClient.pods().withLabel("spark-group-locator", g).delete()
+      Eventually.eventually(TIMEOUT, INTERVAL) {
+        val size = kubernetesTestComponents.kubernetesClient
+          .pods()
+          .withLabel("spark-app-locator", g)
+          .list().getItems.size()
+        assert(size === 0)
+      }
+    }
+  }
+
+  override protected def beforeEach(): Unit = {
+    testGroups = mutable.Set.empty
+  }
+
+  override protected def afterEach(): Unit = {
+    super.afterEach()
+    deletePodInTestGroup()
+  }
 
   protected def generateGroupName(name: String): String = {
     val groupName = GROUP_PREFIX + name

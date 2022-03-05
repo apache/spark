@@ -16,12 +16,7 @@
  */
 package org.apache.spark.deploy.k8s.integrationtest
 
-import scala.collection.mutable
-
 import org.scalatest.Tag
-import org.scalatest.concurrent.Eventually
-
-import org.apache.spark.deploy.k8s.integrationtest.KubernetesSuite.{INTERVAL, TIMEOUT}
 
 class VolcanoSuite extends KubernetesSuite with VolcanoTestsSuite {
 
@@ -30,25 +25,6 @@ class VolcanoSuite extends KubernetesSuite with VolcanoTestsSuite {
     sparkAppConf
       .set("spark.kubernetes.driver.scheduler.name", "volcano")
       .set("spark.kubernetes.executor.scheduler.name", "volcano")
-    testGroups = mutable.Set.empty
-  }
-
-  private def deletePodInTestGroup(): Unit = {
-    testGroups.map{ g =>
-      kubernetesTestComponents.kubernetesClient.pods().withLabel("spark-group-locator", g).delete()
-      Eventually.eventually(TIMEOUT, INTERVAL) {
-        val size = kubernetesTestComponents.kubernetesClient
-          .pods()
-          .withLabel("spark-app-locator", g)
-          .list().getItems.size()
-        assert(size === 0)
-      }
-    }
-  }
-
-  override protected def cleanUpTest(): Unit = {
-    super.cleanUpTest()
-    deletePodInTestGroup()
   }
 }
 
