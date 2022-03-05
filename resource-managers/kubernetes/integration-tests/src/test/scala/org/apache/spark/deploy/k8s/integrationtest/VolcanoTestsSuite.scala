@@ -69,9 +69,9 @@ private[spark] trait VolcanoTestsSuite extends BeforeAndAfterEach { k8sSuite: Ku
   }
 
   override protected def beforeEach(): Unit = {
+    super.beforeEach()
     testGroups = mutable.Set.empty
     testYAMLPaths = mutable.Set.empty
-    super.beforeEach()
   }
 
   override protected def afterEach(): Unit = {
