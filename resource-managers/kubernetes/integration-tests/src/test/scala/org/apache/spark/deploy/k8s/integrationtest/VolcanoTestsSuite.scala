@@ -45,28 +45,38 @@ private[spark] trait VolcanoTestsSuite extends BeforeAndAfterEach { k8sSuite: Ku
   lazy val volcanoClient: VolcanoClient
     = kubernetesTestComponents.kubernetesClient.adapt(classOf[VolcanoClient])
   lazy val k8sClient: NamespacedKubernetesClient = kubernetesTestComponents.kubernetesClient
-  protected var testGroups: mutable.Set[String] = _
+  private var testGroups: mutable.Set[String] = mutable.Set.empty
+  private var testYAMLPaths: mutable.Set[String] = mutable.Set.empty
 
   private def deletePodInTestGroup(): Unit = {
-    testGroups.map{ g =>
-      kubernetesTestComponents.kubernetesClient.pods().withLabel("spark-group-locator", g).delete()
+    testGroups.foreach { g =>
+      k8sClient.pods().withLabel("spark-group-locator", g).delete()
       Eventually.eventually(TIMEOUT, INTERVAL) {
-        val size = kubernetesTestComponents.kubernetesClient
-          .pods()
-          .withLabel("spark-app-locator", g)
-          .list().getItems.size()
-        assert(size === 0)
+        assert(k8sClient.pods().withLabel("spark-group-locator", g).list().getItems.isEmpty)
+      }
+    }
+  }
+
+  private def deleteYamlResources(): Unit = {
+    testYAMLPaths.foreach { yaml =>
+      deleteYAMLResource(yaml)
+      Eventually.eventually(TIMEOUT, INTERVAL) {
+        val resources = k8sClient.load(new FileInputStream(yaml)).fromServer.get.asScala
+        // Make sure all elements are null (no specific resources in cluster)
+        resources.foreach { r => assert(r === null) }
       }
     }
   }
 
   override protected def beforeEach(): Unit = {
     testGroups = mutable.Set.empty
+    testYAMLPaths = mutable.Set.empty
     super.beforeEach()
   }
 
   override protected def afterEach(): Unit = {
     deletePodInTestGroup()
+    deleteYamlResources()
     super.afterEach()
   }
 
@@ -99,6 +109,7 @@ private[spark] trait VolcanoTestsSuite extends BeforeAndAfterEach { k8sSuite: Ku
 
   private def createOrReplaceYAMLResource(yamlPath: String): Unit = {
     k8sClient.load(new FileInputStream(yamlPath)).createOrReplace()
+    testYAMLPaths += yamlPath
   }
 
   private def deleteYAMLResource(yamlPath: String): Unit = {
@@ -191,7 +202,7 @@ private[spark] trait VolcanoTestsSuite extends BeforeAndAfterEach { k8sSuite: Ku
     (1 to jobNum).foreach { i =>
       Future {
         val queueName = s"queue${i % 2}"
-        val groupName = generateGroupName(s"$queueName")
+        val groupName = generateGroupName(queueName)
         runJobAndVerify(i.toString, Option(groupName), Option(queueName))
       }
     }
@@ -202,7 +213,6 @@ private[spark] trait VolcanoTestsSuite extends BeforeAndAfterEach { k8sSuite: Ku
       val pendingPods = getPods("driver", s"${GROUP_PREFIX}queue0", "Pending")
       assert(pendingPods.size === 2)
     }
-    deleteYAMLResource(VOLCANO_Q0_DISABLE_Q1_ENABLE_YAML)
   }
 
   test("SPARK-38188: Run SparkPi jobs with 2 queues (all enabled)", k8sTestTag, volcanoTag) {
@@ -222,7 +232,6 @@ private[spark] trait VolcanoTestsSuite extends BeforeAndAfterEach { k8sSuite: Ku
       val completedPods = getPods("driver", groupName, "Succeeded")
       assert(completedPods.size === jobNum)
     }
-    deleteYAMLResource(VOLCANO_ENABLE_Q0_AND_Q1_YAML)
   }
 }
 
