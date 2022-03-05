@@ -1707,6 +1707,30 @@ Spark automatically handles translating the Spark configs <code>spark.{driver/ex
 
 Kubernetes does not tell Spark the addresses of the resources allocated to each container. For that reason, the user must specify a discovery script that gets run by the executor on startup to discover what resources are available to that executor. You can find an example scripts in `examples/src/main/scripts/getGpusResources.sh`. The script must have execute permissions set and the user should setup permissions to not allow malicious users to modify it. The script should write to STDOUT a JSON string in the format of the ResourceInformation class. This has the resource name and an array of resource addresses available to just that executor.
 
+### Resource Level Scheduling Overview
+
+There are several resource level scheduling features supported by Spark on Kubernetes.
+
+#### Priority Scheduling
+
+Kubernetes supports [Pod priority](https://kubernetes.io/docs/concepts/scheduling-eviction/pod-priority-preemption) by default.
+
+Spark on Kubernetes allows defining the priority of jobs by [Pod template](#pod-template). The user can specify the <code>priorityClassName</code> in driver or executor Pod template <code>spec</code> section. Below is an example to show how to specify it:
+
+```
+apiVersion: v1
+Kind: Pod
+metadata:
+  labels:
+    template-label-key: driver-template-label-value
+spec:
+  # Specify the priority in here 
+  priorityClassName: system-node-critical
+  containers:
+  - name: test-driver-container
+    image: will-be-overwritten
+```
+
 ### Stage Level Scheduling Overview
 
 Stage level scheduling is supported on Kubernetes when dynamic allocation is enabled. This also requires <code>spark.dynamicAllocation.shuffleTracking.enabled</code> to be enabled since Kubernetes doesn't support an external shuffle service at this time. The order in which containers for different profiles is requested from Kubernetes is not guaranteed. Note that since dynamic allocation on Kubernetes requires the shuffle tracking feature, this means that executors from previous stages that used a different ResourceProfile may not idle timeout due to having shuffle data on them. This could result in using more cluster resources and in the worst case if there are no remaining resources on the Kubernetes cluster then Spark could potentially hang. You may consider looking at config <code>spark.dynamicAllocation.shuffleTracking.timeout</code> to set a timeout, but that could result in data having to be recomputed if the shuffle data is really needed.
