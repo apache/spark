@@ -18,6 +18,7 @@ package org.apache.spark.sql.execution.vectorized;
 
 import java.math.BigDecimal;
 import java.math.BigInteger;
+import java.nio.ByteBuffer;
 
 import com.google.common.annotations.VisibleForTesting;
 
@@ -442,6 +443,8 @@ public abstract class WritableColumnVector extends ColumnVector {
       return dictionary.decodeToBinary(dictionaryIds.getDictId(rowId));
     }
   }
+
+  public abstract ByteBuffer getBytesUnsafe(int rowId, int count);
 
   /**
    * Append APIs. These APIs all behave similarly and will append data to the current vector.  It

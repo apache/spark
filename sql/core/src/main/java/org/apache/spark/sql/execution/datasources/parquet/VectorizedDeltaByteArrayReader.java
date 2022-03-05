@@ -39,16 +39,18 @@ public class VectorizedDeltaByteArrayReader extends VectorizedReaderBase
   private final VectorizedDeltaBinaryPackedReader prefixLengthReader;
   private final VectorizedDeltaLengthByteArrayReader suffixReader;
   private WritableColumnVector prefixLengthVector;
-  private ByteBuffer previous = null;
+  private ByteBuffer previous;
   private int currentRow = 0;
 
   // temporary variable used by getBinary
   private final WritableColumnVector binaryValVector;
+  private final WritableColumnVector tempBinaryValVector;
 
   VectorizedDeltaByteArrayReader() {
     this.prefixLengthReader = new VectorizedDeltaBinaryPackedReader();
     this.suffixReader = new VectorizedDeltaLengthByteArrayReader();
     binaryValVector = new OnHeapColumnVector(1, BinaryType);
+    tempBinaryValVector = new OnHeapColumnVector(1, BinaryType);
   }
 
   @Override
@@ -62,12 +64,11 @@ public class VectorizedDeltaByteArrayReader extends VectorizedReaderBase
 
   @Override
   public Binary readBinary(int len) {
-    readValues(1, binaryValVector, 0, ByteBufferOutputWriter::writeArrayByteBuffer);
+    readValues(1, binaryValVector, 0);
     return Binary.fromConstantByteArray(binaryValVector.getBinary(0));
   }
 
-  private void readValues(int total, WritableColumnVector c, int rowId,
-      ByteBufferOutputWriter outputWriter) {
+  private void readValues(int total, WritableColumnVector c, int rowId) {
     for (int i = 0; i < total; i++) {
       // NOTE: due to PARQUET-246, it is important that we
       // respect prefixLength which was read from prefixLengthReader,
@@ -81,29 +82,21 @@ public class VectorizedDeltaByteArrayReader extends VectorizedReaderBase
       int length = prefixLength + suffixLength;
 
       // We have to do this to materialize the output
+      WritableColumnVector arrayData = c.arrayData();
+      int offset = arrayData.getElementsAppended();
       if (prefixLength != 0) {
-        // We could do
-        //  c.putByteArray(rowId + i, previous, 0, prefixLength);
-        //  c.putByteArray(rowId+i, suffix, prefixLength, suffix.length);
-        //  previous =  c.getBinary(rowId+1);
-        // but it incurs the same cost of copying the values twice _and_ c.getBinary
-        // is a _slow_ byte by byte copy
-        // The following always uses the faster system arraycopy method
-        byte[] out = new byte[length];
-        System.arraycopy(previous.array(), previous.position(), out, 0, prefixLength);
-        System.arraycopy(suffixArray, suffix.position(), out, prefixLength, suffixLength);
-        previous = ByteBuffer.wrap(out);
-      } else {
-        previous = suffix;
+        arrayData.appendBytes(prefixLength, previous.array(), previous.position());
       }
-      outputWriter.write(c, rowId + i, previous, previous.limit() - previous.position());
+      arrayData.appendBytes(suffixLength, suffixArray, suffix.position());
+      c.putArray(rowId + i, offset, length);
+      previous = arrayData.getBytesUnsafe(offset, length);
       currentRow++;
     }
   }
 
   @Override
   public void readBinary(int total, WritableColumnVector c, int rowId) {
-    readValues(total, c, rowId, ByteBufferOutputWriter::writeArrayByteBuffer);
+    readValues(total, c, rowId);
   }
 
   /**
@@ -121,9 +114,29 @@ public class VectorizedDeltaByteArrayReader extends VectorizedReaderBase
 
   @Override
   public void skipBinary(int total) {
-    // we have to read all the values so that we always have the correct 'previous'
-    // we just don't write it to the output vector
-    readValues(total, null, currentRow, ByteBufferOutputWriter::skipWrite);
+    WritableColumnVector c1 = tempBinaryValVector;
+    WritableColumnVector c2 = binaryValVector;
+
+    for (int i = 0; i < total; i++) {
+      int prefixLength = prefixLengthVector.getInt(currentRow);
+      ByteBuffer suffix = suffixReader.getBytes(currentRow);
+      byte[] suffixArray = suffix.array();
+      int suffixLength = suffix.limit() - suffix.position();
+      int length = prefixLength + suffixLength;
+
+      WritableColumnVector arrayData = c1.arrayData();
+      c1.reset();
+      if (prefixLength != 0) {
+        arrayData.appendBytes(prefixLength, previous.array(), previous.position());
+      }
+      arrayData.appendBytes(suffixLength, suffixArray, suffix.position());
+      previous = arrayData.getBytesUnsafe(0, length);
+      currentRow++;
+
+      WritableColumnVector tmp = c1;
+      c1 = c2;
+      c2 = tmp;
+    }
   }
 
 }

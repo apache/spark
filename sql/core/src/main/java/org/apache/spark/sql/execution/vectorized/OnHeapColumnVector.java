@@ -219,6 +219,12 @@ public final class OnHeapColumnVector extends WritableColumnVector {
     return UTF8String.fromBytes(byteData, rowId, count);
   }
 
+  @Override
+  public ByteBuffer getBytesUnsafe(int rowId, int count) {
+    return ByteBuffer.wrap(byteData, rowId, count);
+  }
+
+
   //
   // APIs dealing with Shorts
   //
