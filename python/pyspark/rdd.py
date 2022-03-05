@@ -474,6 +474,11 @@ class RDD(Generic[T_co]):
 
         .. versionadded:: 3.3.0
 
+        Parameters
+        ----------
+        blocking : bool, optional
+           block on shuffle cleanup tasks. Disabled by default.
+
         Notes
         -----
         This API is a developer API.
