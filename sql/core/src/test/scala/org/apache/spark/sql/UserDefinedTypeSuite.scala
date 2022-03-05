@@ -82,14 +82,14 @@ class UserDefinedTypeSuite extends QueryTest with SharedSparkSession with Parque
   }
 
   test("register user type: MyDenseVector for MyLabeledPoint") {
-    val labels: RDD[Double] = pointsRDD.select('label).rdd.map { case Row(v: Double) => v }
+    val labels: RDD[Double] = pointsRDD.select(Symbol("label")).rdd.map { case Row(v: Double) => v }
     val labelsArrays: Array[Double] = labels.collect()
     assert(labelsArrays.size === 2)
     assert(labelsArrays.contains(1.0))
     assert(labelsArrays.contains(0.0))
 
     val features: RDD[TestUDT.MyDenseVector] =
-      pointsRDD.select('features).rdd.map { case Row(v: TestUDT.MyDenseVector) => v }
+      pointsRDD.select(Symbol("features")).rdd.map { case Row(v: TestUDT.MyDenseVector) => v }
     val featuresArrays: Array[TestUDT.MyDenseVector] = features.collect()
     assert(featuresArrays.size === 2)
     assert(featuresArrays.contains(new TestUDT.MyDenseVector(Array(0.1, 1.0))))
@@ -137,8 +137,9 @@ class UserDefinedTypeSuite extends QueryTest with SharedSparkSession with Parque
     val df = Seq((1, vec)).toDF("int", "vec")
     assert(vec === df.collect()(0).getAs[TestUDT.MyDenseVector](1))
     assert(vec === df.take(1)(0).getAs[TestUDT.MyDenseVector](1))
-    checkAnswer(df.limit(1).groupBy('int).agg(first('vec)), Row(1, vec))
-    checkAnswer(df.orderBy('int).limit(1).groupBy('int).agg(first('vec)), Row(1, vec))
+    checkAnswer(df.limit(1).groupBy(Symbol("int")).agg(first(Symbol("vec"))), Row(1, vec))
+    checkAnswer(df.orderBy(Symbol("int")).limit(1).groupBy(Symbol("int"))
+      .agg(first(Symbol("vec"))), Row(1, vec))
   }
 
   test("UDTs with JSON") {

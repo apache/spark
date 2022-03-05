@@ -575,7 +575,7 @@ class SparkContext:
         with SparkContext._lock:
             SparkContext._active_spark_context = None  # type: ignore[assignment]
 
-    def emptyRDD(self) -> "RDD[Any]":
+    def emptyRDD(self) -> RDD[Any]:
         """
         Create an RDD that has no partitions or elements.
         """
@@ -583,7 +583,7 @@ class SparkContext:
 
     def range(
         self, start: int, end: Optional[int] = None, step: int = 1, numSlices: Optional[int] = None
-    ) -> "RDD[int]":
+    ) -> RDD[int]:
         """
         Create a new RDD of int containing elements from `start` to `end`
         (exclusive), increased by `step` every element. Can be called the same
@@ -621,7 +621,7 @@ class SparkContext:
 
         return self.parallelize(range(start, end, step), numSlices)
 
-    def parallelize(self, c: Iterable[T], numSlices: Optional[int] = None) -> "RDD[T]":
+    def parallelize(self, c: Iterable[T], numSlices: Optional[int] = None) -> RDD[T]:
         """
         Distribute a local Python collection to form an RDD. Using range
         is recommended if the input represents a range for performance.
@@ -725,7 +725,7 @@ class SparkContext:
                 # we eagerly reads the file so we can delete right after.
                 os.unlink(tempFile.name)
 
-    def pickleFile(self, name: str, minPartitions: Optional[int] = None) -> "RDD[Any]":
+    def pickleFile(self, name: str, minPartitions: Optional[int] = None) -> RDD[Any]:
         """
         Load an RDD previously saved using :meth:`RDD.saveAsPickleFile` method.
 
@@ -742,7 +742,7 @@ class SparkContext:
 
     def textFile(
         self, name: str, minPartitions: Optional[int] = None, use_unicode: bool = True
-    ) -> "RDD[str]":
+    ) -> RDD[str]:
         """
         Read a text file from HDFS, a local file system (available on all
         nodes), or any Hadoop-supported file system URI, and return it as an
@@ -767,7 +767,7 @@ class SparkContext:
 
     def wholeTextFiles(
         self, path: str, minPartitions: Optional[int] = None, use_unicode: bool = True
-    ) -> "RDD[Tuple[str, str]]":
+    ) -> RDD[Tuple[str, str]]:
         """
         Read a directory of text files from HDFS, a local file system
         (available on all nodes), or any  Hadoop-supported file system
@@ -822,9 +822,7 @@ class SparkContext:
             PairDeserializer(UTF8Deserializer(use_unicode), UTF8Deserializer(use_unicode)),
         )
 
-    def binaryFiles(
-        self, path: str, minPartitions: Optional[int] = None
-    ) -> "RDD[Tuple[str, bytes]]":
+    def binaryFiles(self, path: str, minPartitions: Optional[int] = None) -> RDD[Tuple[str, bytes]]:
         """
         Read a directory of binary files from HDFS, a local file system
         (available on all nodes), or any Hadoop-supported file system URI
@@ -843,7 +841,7 @@ class SparkContext:
             PairDeserializer(UTF8Deserializer(), NoOpSerializer()),
         )
 
-    def binaryRecords(self, path: str, recordLength: int) -> "RDD[bytes]":
+    def binaryRecords(self, path: str, recordLength: int) -> RDD[bytes]:
         """
         Load data from a flat binary file, assuming each record is a set of numbers
         with the specified numerical format (see ByteBuffer), and the number of
@@ -876,7 +874,7 @@ class SparkContext:
         valueConverter: Optional[str] = None,
         minSplits: Optional[int] = None,
         batchSize: int = 0,
-    ) -> "RDD[Tuple[T, U]]":
+    ) -> RDD[Tuple[T, U]]:
         """
         Read a Hadoop SequenceFile with arbitrary key and value Writable class from HDFS,
         a local file system (available on all nodes), or any Hadoop-supported file system URI.
@@ -931,7 +929,7 @@ class SparkContext:
         valueConverter: Optional[str] = None,
         conf: Optional[Dict[str, str]] = None,
         batchSize: int = 0,
-    ) -> "RDD[Tuple[T, U]]":
+    ) -> RDD[Tuple[T, U]]:
         """
         Read a 'new API' Hadoop InputFormat with arbitrary key and value class from HDFS,
         a local file system (available on all nodes), or any Hadoop-supported file system URI.
@@ -990,7 +988,7 @@ class SparkContext:
         valueConverter: Optional[str] = None,
         conf: Optional[Dict[str, str]] = None,
         batchSize: int = 0,
-    ) -> "RDD[Tuple[T, U]]":
+    ) -> RDD[Tuple[T, U]]:
         """
         Read a 'new API' Hadoop InputFormat with arbitrary key and value class, from an arbitrary
         Hadoop configuration, which is passed in as a Python dict.
@@ -1043,7 +1041,7 @@ class SparkContext:
         valueConverter: Optional[str] = None,
         conf: Optional[Dict[str, str]] = None,
         batchSize: int = 0,
-    ) -> "RDD[Tuple[T, U]]":
+    ) -> RDD[Tuple[T, U]]:
         """
         Read an 'old' Hadoop InputFormat with arbitrary key and value class from HDFS,
         a local file system (available on all nodes), or any Hadoop-supported file system URI.
@@ -1098,7 +1096,7 @@ class SparkContext:
         valueConverter: Optional[str] = None,
         conf: Optional[Dict[str, str]] = None,
         batchSize: int = 0,
-    ) -> "RDD[Tuple[T, U]]":
+    ) -> RDD[Tuple[T, U]]:
         """
         Read an 'old' Hadoop InputFormat with arbitrary key and value class, from an arbitrary
         Hadoop configuration, which is passed in as a Python dict.
@@ -1145,7 +1143,7 @@ class SparkContext:
         jrdd = self._jsc.checkpointFile(name)
         return RDD(jrdd, self, input_deserializer)
 
-    def union(self, rdds: List["RDD[T]"]) -> "RDD[T]":
+    def union(self, rdds: List[RDD[T]]) -> RDD[T]:
         """
         Build the union of a list of RDDs.
 
@@ -1464,7 +1462,7 @@ class SparkContext:
 
     def runJob(
         self,
-        rdd: "RDD[T]",
+        rdd: RDD[T],
         partitionFunc: Callable[[Iterable[T]], Iterable[U]],
         partitions: Optional[Sequence[int]] = None,
         allowLocal: bool = False,

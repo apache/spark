@@ -132,6 +132,23 @@ CREATE TABLE student (id INT, name STRING, age INT)
     USING CSV
     PARTITIONED BY (age)
     CLUSTERED BY (Id) INTO 4 buckets;
+
+--Create partitioned and bucketed table through CTAS
+CREATE TABLE student_partition_bucket
+    USING parquet
+    PARTITIONED BY (age)
+    CLUSTERED BY (id) INTO 4 buckets
+    AS SELECT * FROM student;
+
+--Create bucketed table through CTAS and CTE
+CREATE TABLE student_bucket
+    USING parquet
+    CLUSTERED BY (id) INTO 4 buckets (
+    WITH tmpTable AS (
+        SELECT * FROM student WHERE id > 100
+    )
+    SELECT * FROM tmpTable
+);
 ```
 
 ### Related Statements

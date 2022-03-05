@@ -38,10 +38,10 @@ import org.apache.spark.sql.catalyst.planning.ScanOperation
 import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoDir, InsertIntoStatement, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
-import org.apache.spark.sql.catalyst.util.ExpressionSQLBuilder
+import org.apache.spark.sql.catalyst.util.V2ExpressionBuilder
 import org.apache.spark.sql.connector.catalog.SupportsRead
 import org.apache.spark.sql.connector.catalog.TableCapability._
-import org.apache.spark.sql.connector.expressions.{Expression => ExpressionV2, FieldReference, GeneralSQLExpression, NullOrdering, SortDirection, SortOrder => SortOrderV2, SortValue}
+import org.apache.spark.sql.connector.expressions.{Expression => V2Expression, FieldReference, NullOrdering, SortDirection, SortOrder => V2SortOrder, SortValue}
 import org.apache.spark.sql.connector.expressions.aggregate.{AggregateFunc, Aggregation, Avg, Count, CountStar, GeneralAggregateFunc, Max, Min, Sum}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.{InSubqueryExec, RowDataSourceScanExec, SparkPlan}
@@ -776,8 +776,8 @@ object DataSourceStrategy
     Some(new Aggregation(translatedAggregates.toArray, translatedGroupBys.toArray))
   }
 
-  protected[sql] def translateSortOrders(sortOrders: Seq[SortOrder]): Seq[SortOrderV2] = {
-    def translateOortOrder(sortOrder: SortOrder): Option[SortOrderV2] = sortOrder match {
+  protected[sql] def translateSortOrders(sortOrders: Seq[SortOrder]): Seq[V2SortOrder] = {
+    def translateOortOrder(sortOrder: SortOrder): Option[V2SortOrder] = sortOrder match {
       case SortOrder(PushableColumnWithoutNestedColumn(name), directionV1, nullOrderingV1, _) =>
         val directionV2 = directionV1 match {
           case Ascending => SortDirection.ASCENDING
@@ -864,8 +864,8 @@ object PushableColumnWithoutNestedColumn extends PushableColumnBase {
  * Get the expression of DS V2 to represent catalyst expression that can be pushed down.
  */
 object PushableExpression {
-  def unapply(e: Expression): Option[ExpressionV2] = e match {
+  def unapply(e: Expression): Option[V2Expression] = e match {
     case PushableColumnWithoutNestedColumn(name) => Some(FieldReference.column(name))
-    case _ => new ExpressionSQLBuilder(e).build().map(new GeneralSQLExpression(_))
+    case _ => new V2ExpressionBuilder(e).build()
   }
 }

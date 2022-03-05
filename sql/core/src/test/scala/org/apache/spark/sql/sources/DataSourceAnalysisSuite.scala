@@ -36,7 +36,7 @@ class DataSourceAnalysisSuite extends SparkFunSuite with BeforeAndAfterAll with 
 
   override def beforeAll(): Unit = {
     super.beforeAll()
-    targetAttributes = Seq('a.int, 'd.int, 'b.int, 'c.int)
+    targetAttributes = Seq(Symbol("a").int, Symbol("d").int, Symbol("b").int, Symbol("c").int)
     targetPartitionSchema = new StructType()
       .add("b", IntegerType)
       .add("c", IntegerType)
@@ -74,7 +74,7 @@ class DataSourceAnalysisSuite extends SparkFunSuite with BeforeAndAfterAll with 
         caseSensitive) {
       intercept[AssertionError] {
         rule.convertStaticPartitions(
-          sourceAttributes = Seq('e.int, 'f.int),
+          sourceAttributes = Seq(Symbol("e").int, Symbol("f").int),
           providedPartitions = Map("b" -> None, "c" -> None),
           targetAttributes = targetAttributes,
           targetPartitionSchema = targetPartitionSchema)
@@ -85,7 +85,7 @@ class DataSourceAnalysisSuite extends SparkFunSuite with BeforeAndAfterAll with 
       // Missing columns.
       intercept[AnalysisException] {
         rule.convertStaticPartitions(
-          sourceAttributes = Seq('e.int),
+          sourceAttributes = Seq(Symbol("e").int),
           providedPartitions = Map("b" -> Some("1"), "c" -> None),
           targetAttributes = targetAttributes,
           targetPartitionSchema = targetPartitionSchema)
@@ -96,7 +96,7 @@ class DataSourceAnalysisSuite extends SparkFunSuite with BeforeAndAfterAll with 
       // Missing partitioning columns.
       intercept[AnalysisException] {
         rule.convertStaticPartitions(
-          sourceAttributes = Seq('e.int, 'f.int),
+          sourceAttributes = Seq(Symbol("e").int, Symbol("f").int),
           providedPartitions = Map("b" -> Some("1")),
           targetAttributes = targetAttributes,
           targetPartitionSchema = targetPartitionSchema)
@@ -105,7 +105,7 @@ class DataSourceAnalysisSuite extends SparkFunSuite with BeforeAndAfterAll with 
       // Missing partitioning columns.
       intercept[AnalysisException] {
         rule.convertStaticPartitions(
-          sourceAttributes = Seq('e.int, 'f.int, 'g.int),
+          sourceAttributes = Seq(Symbol("e").int, Symbol("f").int, Symbol("g").int),
           providedPartitions = Map("b" -> Some("1")),
           targetAttributes = targetAttributes,
           targetPartitionSchema = targetPartitionSchema)
@@ -114,7 +114,7 @@ class DataSourceAnalysisSuite extends SparkFunSuite with BeforeAndAfterAll with 
       // Wrong partitioning columns.
       intercept[AnalysisException] {
         rule.convertStaticPartitions(
-          sourceAttributes = Seq('e.int, 'f.int),
+          sourceAttributes = Seq(Symbol("e").int, Symbol("f").int),
           providedPartitions = Map("b" -> Some("1"), "d" -> None),
           targetAttributes = targetAttributes,
           targetPartitionSchema = targetPartitionSchema)
@@ -125,7 +125,7 @@ class DataSourceAnalysisSuite extends SparkFunSuite with BeforeAndAfterAll with 
       // Wrong partitioning columns.
       intercept[AnalysisException] {
         rule.convertStaticPartitions(
-          sourceAttributes = Seq('e.int, 'f.int),
+          sourceAttributes = Seq(Symbol("e").int, Symbol("f").int),
           providedPartitions = Map("b" -> Some("1"), "d" -> Some("2")),
           targetAttributes = targetAttributes,
           targetPartitionSchema = targetPartitionSchema)
@@ -134,7 +134,7 @@ class DataSourceAnalysisSuite extends SparkFunSuite with BeforeAndAfterAll with 
       // Wrong partitioning columns.
       intercept[AnalysisException] {
         rule.convertStaticPartitions(
-          sourceAttributes = Seq('e.int),
+          sourceAttributes = Seq(Symbol("e").int),
           providedPartitions = Map("b" -> Some("1"), "c" -> Some("3"), "d" -> Some("2")),
           targetAttributes = targetAttributes,
           targetPartitionSchema = targetPartitionSchema)
@@ -144,7 +144,7 @@ class DataSourceAnalysisSuite extends SparkFunSuite with BeforeAndAfterAll with 
         // Wrong partitioning columns.
         intercept[AnalysisException] {
           rule.convertStaticPartitions(
-            sourceAttributes = Seq('e.int, 'f.int),
+            sourceAttributes = Seq(Symbol("e").int, Symbol("f").int),
             providedPartitions = Map("b" -> Some("1"), "C" -> Some("3")),
             targetAttributes = targetAttributes,
             targetPartitionSchema = targetPartitionSchema)

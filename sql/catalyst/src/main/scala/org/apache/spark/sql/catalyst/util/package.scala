@@ -22,6 +22,8 @@ import java.nio.charset.Charset
 import java.nio.charset.StandardCharsets.UTF_8
 import java.util.concurrent.atomic.AtomicBoolean
 
+import com.google.common.io.ByteStreams
+
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.internal.SQLConf
@@ -48,42 +50,22 @@ package object util extends Logging {
 
   def fileToString(file: File, encoding: Charset = UTF_8): String = {
     val inStream = new FileInputStream(file)
-    val outStream = new ByteArrayOutputStream
     try {
-      var reading = true
-      while ( reading ) {
-        inStream.read() match {
-          case -1 => reading = false
-          case c => outStream.write(c)
-        }
-      }
-      outStream.flush()
-    }
-    finally {
+      new String(ByteStreams.toByteArray(inStream), encoding)
+    } finally {
       inStream.close()
     }
-    new String(outStream.toByteArray, encoding)
   }
 
   def resourceToBytes(
       resource: String,
       classLoader: ClassLoader = Utils.getSparkClassLoader): Array[Byte] = {
     val inStream = classLoader.getResourceAsStream(resource)
-    val outStream = new ByteArrayOutputStream
     try {
-      var reading = true
-      while ( reading ) {
-        inStream.read() match {
-          case -1 => reading = false
-          case c => outStream.write(c)
-        }
-      }
-      outStream.flush()
-    }
-    finally {
+      ByteStreams.toByteArray(inStream)
+    } finally {
       inStream.close()
     }
-    outStream.toByteArray
   }
 
   def resourceToString(
