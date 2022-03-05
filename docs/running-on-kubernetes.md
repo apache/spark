@@ -1709,11 +1709,11 @@ Kubernetes does not tell Spark the addresses of the resources allocated to each 
 
 ### Resource Level Scheduling Overview
 
-There are several resource level scheduling features are supported by Spark on Kubernetes.
+There are several resource level scheduling features supported by Spark on Kubernetes.
 
 #### Priority Scheduling
 
-Kubernetes support [Pod priority](https://kubernetes.io/docs/concepts/scheduling-eviction/pod-priority-preemption) by default.
+Kubernetes supports [Pod priority](https://kubernetes.io/docs/concepts/scheduling-eviction/pod-priority-preemption) by default.
 
 Spark on Kubernetes allows defining the priority of jobs by [Pod template](#pod-template). The user can specify the <code>priorityClassName</code> in driver or executor Pod template <code>spec</code> section. Below is an example to show how to specify it:
 
