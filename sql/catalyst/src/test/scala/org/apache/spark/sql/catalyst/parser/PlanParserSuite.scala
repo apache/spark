@@ -1300,32 +1300,32 @@ class PlanParserSuite extends AnalysisTest {
   }
 
   test("PERCENTILE_CONT & PERCENTILE_DISC") {
-    def assertPercentileContPlans(inputSQL: String, expectedExpression: Expression): Unit = {
+    def assertPercentilePlans(inputSQL: String, expectedExpression: Expression): Unit = {
       comparePlans(
         parsePlan(inputSQL),
         Project(Seq(UnresolvedAlias(expectedExpression)), OneRowRelation())
       )
     }
 
-    assertPercentileContPlans(
+    assertPercentilePlans(
       "SELECT PERCENTILE_CONT(0.1) WITHIN GROUP (ORDER BY col)",
       PercentileCont(UnresolvedAttribute("col"), Literal(Decimal(0.1), DecimalType(1, 1)))
         .toAggregateExpression()
     )
 
-    assertPercentileContPlans(
+    assertPercentilePlans(
       "SELECT PERCENTILE_CONT(0.1) WITHIN GROUP (ORDER BY col DESC)",
       PercentileCont(UnresolvedAttribute("col"),
         Subtract(Literal(1), Literal(Decimal(0.1), DecimalType(1, 1)))).toAggregateExpression()
     )
 
-    assertPercentileContPlans(
+    assertPercentilePlans(
       "SELECT PERCENTILE_DISC(0.1) WITHIN GROUP (ORDER BY col)",
       new PercentileDisc(UnresolvedAttribute("col"), Literal(Decimal(0.1), DecimalType(1, 1)))
         .toAggregateExpression()
     )
 
-    assertPercentileContPlans(
+    assertPercentilePlans(
       "SELECT PERCENTILE_DISC(0.1) WITHIN GROUP (ORDER BY col DESC)",
       new PercentileDisc(UnresolvedAttribute("col"),
         Literal(Decimal(0.1), DecimalType(1, 1)), true).toAggregateExpression()

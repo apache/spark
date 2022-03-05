@@ -340,7 +340,7 @@ case class Percentile(
 }
 
 /**
- * The Percentile aggregate function returns a percentile(s) based on a discrete distribution of
+ * The Percentile aggregate function returns the percentile(s) based on a discrete distribution of
  * numeric column `expr` at the given percentage(s) with value range in [0.0, 1.0].
  *
  * Because the number of elements and their partial order cannot be determined in advance.
@@ -350,7 +350,7 @@ case class Percentile(
 case class PercentileDisc(
     child: Expression,
     percentageExpression: Expression,
-    frequencyExpression : Expression,
+    frequencyExpression: Expression,
     reverse: Boolean = false,
     mutableAggBufferOffset: Int = 0,
     inputAggBufferOffset: Int = 0) extends PercentileBase {
@@ -361,6 +361,23 @@ case class PercentileDisc(
 
   def this(child: Expression, percentageExpression: Expression, reverse: Boolean) = {
     this(child, percentageExpression, Literal(1L), reverse, 0, 0)
+  }
+
+  protected lazy val frequency = frequencyExpression.eval()
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    val defaultCheck = super.checkInputDataTypes()
+    if (defaultCheck.isFailure) {
+      defaultCheck
+    } else if (!frequencyExpression.foldable) {
+      // percentageExpression must be foldable
+      TypeCheckFailure("The frequency of PercentileDisc must be a constant literal, " +
+        s"but got $frequencyExpression")
+    } else if (frequency != 1) {
+      TypeCheckFailure("Frequency value must not be 1 for PercentileDisc")
+    } else {
+      TypeCheckSuccess
+    }
   }
 
   override def prettyName: String = "percentile_disc"
