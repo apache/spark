@@ -39,8 +39,7 @@ public class VectorizedDeltaByteArrayReader extends VectorizedReaderBase
   private final VectorizedDeltaBinaryPackedReader prefixLengthReader;
   private final VectorizedDeltaLengthByteArrayReader suffixReader;
   private WritableColumnVector prefixLengthVector;
-  private WritableColumnVector suffixVector;
-  private byte[] previous = new byte[0];
+  private ByteBuffer previous = null;
   private int currentRow = 0;
 
   // temporary variable used by getBinary
@@ -55,12 +54,10 @@ public class VectorizedDeltaByteArrayReader extends VectorizedReaderBase
   @Override
   public void initFromPage(int valueCount, ByteBufferInputStream in) throws IOException {
     prefixLengthVector = new OnHeapColumnVector(valueCount, IntegerType);
-    suffixVector = new OnHeapColumnVector(valueCount, BinaryType);
     prefixLengthReader.initFromPage(valueCount, in);
     prefixLengthReader.readIntegers(prefixLengthReader.getTotalValueCount(),
         prefixLengthVector, 0);
     suffixReader.initFromPage(valueCount, in);
-    suffixReader.readBinary(prefixLengthReader.getTotalValueCount(), suffixVector, 0);
   }
 
   @Override
@@ -78,8 +75,10 @@ public class VectorizedDeltaByteArrayReader extends VectorizedReaderBase
       // value of the page should have an empty prefix, it may not
       // because of PARQUET-246.
       int prefixLength = prefixLengthVector.getInt(currentRow);
-      byte[] suffix = suffixVector.getBinary(currentRow);
-      int length = prefixLength + suffix.length;
+      ByteBuffer suffix = suffixReader.getBytes(currentRow);
+      byte[] suffixArray = suffix.array();
+      int suffixLength = suffix.limit() - suffix.position();
+      int length = prefixLength + suffixLength;
 
       // We have to do this to materialize the output
       if (prefixLength != 0) {
@@ -91,13 +90,13 @@ public class VectorizedDeltaByteArrayReader extends VectorizedReaderBase
         // is a _slow_ byte by byte copy
         // The following always uses the faster system arraycopy method
         byte[] out = new byte[length];
-        System.arraycopy(previous, 0, out, 0, prefixLength);
-        System.arraycopy(suffix, 0, out, prefixLength, suffix.length);
-        previous = out;
+        System.arraycopy(previous.array(), previous.position(), out, 0, prefixLength);
+        System.arraycopy(suffixArray, suffix.position(), out, prefixLength, suffixLength);
+        previous = ByteBuffer.wrap(out);
       } else {
         previous = suffix;
       }
-      outputWriter.write(c, rowId + i, ByteBuffer.wrap(previous), previous.length);
+      outputWriter.write(c, rowId + i, previous, previous.limit() - previous.position());
       currentRow++;
     }
   }

@@ -67,6 +67,15 @@ public class VectorizedDeltaLengthByteArrayReader extends VectorizedReaderBase i
     currentRow += total;
   }
 
+  public ByteBuffer getBytes(int rowId) {
+    int length = lengthsVector.getInt(rowId);
+    try {
+      return in.slice(length);
+    } catch (EOFException e) {
+      throw new ParquetDecodingException("Failed to read " + length + " bytes");
+    }
+  }
+
   @Override
   public void skipBinary(int total) {
     if (total == 0) {
