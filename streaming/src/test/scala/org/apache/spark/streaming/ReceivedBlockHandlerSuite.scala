@@ -363,7 +363,7 @@ abstract class BaseReceivedBlockHandlerSuite(enableEncryption: Boolean)
 
     val blocks = data.grouped(10).toSeq
 
-    storeAndVerify(blocks.map { b => IteratorBlock(b.toIterator) })
+    storeAndVerify(blocks.map { b => IteratorBlock(b.iterator) })
     storeAndVerify(blocks.map { b => ArrayBufferBlock(new ArrayBuffer ++= b) })
     storeAndVerify(blocks.map { b => ByteBufferBlock(dataToByteBuffer(b).toByteBuffer) })
   }
@@ -372,7 +372,7 @@ abstract class BaseReceivedBlockHandlerSuite(enableEncryption: Boolean)
   private def testErrorHandling(receivedBlockHandler: ReceivedBlockHandler): Unit = {
     // Handle error in iterator (e.g. divide-by-zero error)
     intercept[Exception] {
-      val iterator = (10 to (-10, -1)).toIterator.map { _ / 0 }
+      val iterator = (10 to (-10, -1)).iterator.map { _ / 0 }
       receivedBlockHandler.storeBlock(StreamBlockId(1, 1), IteratorBlock(iterator))
     }
 

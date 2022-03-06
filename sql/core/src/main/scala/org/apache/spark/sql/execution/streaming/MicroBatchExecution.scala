@@ -21,7 +21,7 @@ import scala.collection.mutable.{Map => MutableMap}
 
 import org.apache.spark.sql.{Dataset, SparkSession}
 import org.apache.spark.sql.catalyst.encoders.RowEncoder
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, CurrentBatchTimestamp, CurrentDate, CurrentTimestamp, LocalTimestamp}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, CurrentBatchTimestamp, CurrentDate, CurrentTimestamp, FileSourceMetadataAttribute, LocalTimestamp}
 import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LocalRelation, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.streaming.{StreamingRelationV2, WriteToStream}
 import org.apache.spark.sql.catalyst.trees.TreePattern.CURRENT_LIKE
@@ -30,6 +30,7 @@ import org.apache.spark.sql.connector.catalog.{SupportsRead, SupportsWrite, Tabl
 import org.apache.spark.sql.connector.read.streaming.{MicroBatchStream, Offset => OffsetV2, ReadLimit, SparkDataStream, SupportsAdmissionControl, SupportsTriggerAvailableNow}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.SQLExecution
+import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, StreamingDataSourceV2Relation, StreamWriterCommitProgress, WriteToDataSourceV2Exec}
 import org.apache.spark.sql.execution.streaming.sources.WriteToMicroBatchDataSource
 import org.apache.spark.sql.internal.SQLConf
@@ -315,6 +316,12 @@ class MicroBatchExecution(
          * is the second latest batch id in the offset log. */
         if (latestBatchId != 0) {
           val secondLatestOffsets = offsetLog.get(latestBatchId - 1).getOrElse {
+            logError(s"The offset log for batch ${latestBatchId - 1} doesn't exist, " +
+              s"which is required to restart the query from the latest batch $latestBatchId " +
+              "from the offset log. Please ensure there are two subsequent offset logs " +
+              "available for the latest batch via manually deleting the offset file(s). " +
+              "Please also ensure the latest batch for commit log is equal or one batch " +
+              "earlier than the latest batch for offset log.")
             throw new IllegalStateException(s"batch ${latestBatchId - 1} doesn't exist")
           }
           committedOffsets = secondLatestOffsets.toStreamProgress(sources)
@@ -571,15 +578,23 @@ class MicroBatchExecution(
       // For v1 sources.
       case StreamingExecutionRelation(source, output) =>
         newData.get(source).map { dataPlan =>
+          val hasFileMetadata = output.exists {
+            case FileSourceMetadataAttribute(_) => true
+            case _ => false
+          }
+          val finalDataPlan = dataPlan match {
+            case l: LogicalRelation if hasFileMetadata => l.withMetadataColumns()
+            case _ => dataPlan
+          }
           val maxFields = SQLConf.get.maxToStringFields
-          assert(output.size == dataPlan.output.size,
+          assert(output.size == finalDataPlan.output.size,
             s"Invalid batch: ${truncatedString(output, ",", maxFields)} != " +
-              s"${truncatedString(dataPlan.output, ",", maxFields)}")
+              s"${truncatedString(finalDataPlan.output, ",", maxFields)}")
 
-          val aliases = output.zip(dataPlan.output).map { case (to, from) =>
+          val aliases = output.zip(finalDataPlan.output).map { case (to, from) =>
             Alias(from, to.name)(exprId = to.exprId, explicitMetadata = Some(from.metadata))
           }
-          Project(aliases, dataPlan)
+          Project(aliases, finalDataPlan)
         }.getOrElse {
           LocalRelation(output, isStreaming = true)
         }

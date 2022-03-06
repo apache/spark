@@ -93,7 +93,7 @@ class FileScanRDD(
         inputMetrics.setBytesRead(existingBytesRead + getBytesReadCallback())
       }
 
-      private[this] val files = split.asInstanceOf[FilePartition].files.toIterator
+      private[this] val files = split.asInstanceOf[FilePartition].files.iterator
       private[this] var currentFile: PartitionedFile = null
       private[this] var currentIterator: Iterator[Object] = null
 

@@ -54,7 +54,7 @@ import org.apache.spark.util.random.RandomSampler
  * The AstBuilder converts an ANTLR4 ParseTree into a catalyst Expression, LogicalPlan or
  * TableIdentifier.
  */
-class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logging {
+class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper with Logging {
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
   import ParserUtils._
 
@@ -4507,5 +4507,16 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
       expression(ctx.unitsAmount),
       expression(ctx.timestamp))
     UnresolvedFunction("timestampadd", arguments, isDistinct = false)
+  }
+
+  /**
+   * Create a TimestampDiff expression.
+   */
+  override def visitTimestampdiff(ctx: TimestampdiffContext): Expression = withOrigin(ctx) {
+    val arguments = Seq(
+      Literal(ctx.unit.getText),
+      expression(ctx.startTimestamp),
+      expression(ctx.endTimestamp))
+    UnresolvedFunction("timestampdiff", arguments, isDistinct = false)
   }
 }

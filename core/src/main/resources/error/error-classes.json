@@ -43,6 +43,12 @@
   "FAILED_SET_ORIGINAL_PERMISSION_BACK" : {
     "message" : [ "Failed to set original permission %s back to the created path: %s. Exception: %s" ]
   },
+  "GRAPHITE_SINK_INVALID_PROTOCOL" : {
+    "message" : [ "Invalid Graphite protocol: %s" ]
+  },
+  "GRAPHITE_SINK_PROPERTY_MISSING" : {
+    "message" : [ "Graphite sink requires '%s' property." ]
+  },
   "GROUPING_COLUMN_MISMATCH" : {
     "message" : [ "Column of grouping (%s) can't be found in grouping columns %s" ],
     "sqlState" : "42000"
