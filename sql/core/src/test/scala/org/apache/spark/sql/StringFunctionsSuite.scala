@@ -112,9 +112,11 @@ class StringFunctionsSuite extends QueryTest with SharedSparkSession {
     val df = Seq[(String, String, String, Int)](("hello", "world", null, 15))
       .toDF("a", "b", "c", "d")
 
-    checkAnswer(
-      df.selectExpr("elt(0, a, b, c)", "elt(1, a, b, c)", "elt(4, a, b, c)"),
-      Row(null, "hello", null))
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
+      checkAnswer(
+        df.selectExpr("elt(0, a, b, c)", "elt(1, a, b, c)", "elt(4, a, b, c)"),
+        Row(null, "hello", null))
+    }
 
     // check implicit type cast
     checkAnswer(
@@ -383,9 +385,11 @@ class StringFunctionsSuite extends QueryTest with SharedSparkSession {
       Row("host", "/file;param", "query;p2", null, "http", "/file;param?query;p2",
         "user:pass@host", "user:pass", null))
 
-    testUrl(
-      "inva lid://user:pass@host/file;param?query;p2",
-      Row(null, null, null, null, null, null, null, null, null))
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
+      testUrl(
+        "inva lid://user:pass@host/file;param?query;p2",
+        Row(null, null, null, null, null, null, null, null, null))
+    }
 
   }
 

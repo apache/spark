@@ -380,7 +380,7 @@ SELECT every(udf(1))
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'every(CAST(udf(cast(1 as string)) AS INT))' due to data type mismatch: Input to function 'every' should have been boolean, but it's [int].; line 1 pos 7
+cannot resolve 'every(CAST(udf(cast(1 as string)) AS INT))' due to data type mismatch: argument 1 requires boolean type, however, 'CAST(udf(cast(1 as string)) AS INT)' is of int type.; line 1 pos 7
 
 
 -- !query
@@ -389,7 +389,7 @@ SELECT some(udf(1S))
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'some(CAST(udf(cast(1 as string)) AS SMALLINT))' due to data type mismatch: Input to function 'some' should have been boolean, but it's [smallint].; line 1 pos 7
+cannot resolve 'some(CAST(udf(cast(1 as string)) AS SMALLINT))' due to data type mismatch: argument 1 requires boolean type, however, 'CAST(udf(cast(1 as string)) AS SMALLINT)' is of smallint type.; line 1 pos 7
 
 
 -- !query
@@ -398,7 +398,7 @@ SELECT any(udf(1L))
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'any(CAST(udf(cast(1 as string)) AS BIGINT))' due to data type mismatch: Input to function 'any' should have been boolean, but it's [bigint].; line 1 pos 7
+cannot resolve 'any(CAST(udf(cast(1 as string)) AS BIGINT))' due to data type mismatch: argument 1 requires boolean type, however, 'CAST(udf(cast(1 as string)) AS BIGINT)' is of bigint type.; line 1 pos 7
 
 
 -- !query
@@ -407,7 +407,7 @@ SELECT udf(every("true"))
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'every('true')' due to data type mismatch: Input to function 'every' should have been boolean, but it's [string].; line 1 pos 11
+cannot resolve 'every('true')' due to data type mismatch: argument 1 requires boolean type, however, ''true'' is of string type.; line 1 pos 11
 
 
 -- !query

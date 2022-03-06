@@ -108,7 +108,7 @@ Input [8]: [i_item_desc#7, i_category#10, i_class#9, i_current_price#8, itemreve
 Arguments: [sum(_w1#19) windowspecdefinition(i_class#9, specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS _we0#21], [i_class#9]
 
 (19) Project [codegen id : 6]
-Output [7]: [i_item_desc#7, i_category#10, i_class#9, i_current_price#8, itemrevenue#17, CheckOverflow((promote_precision(cast(CheckOverflow((promote_precision(_w0#18) * 100.00), DecimalType(21,2), true) as decimal(27,2))) / promote_precision(_we0#21)), DecimalType(38,17), true) AS revenueratio#22, i_item_id#6]
+Output [7]: [i_item_desc#7, i_category#10, i_class#9, i_current_price#8, itemrevenue#17, CheckOverflow((promote_precision(cast(CheckOverflow((promote_precision(_w0#18) * 100.00), DecimalType(21,2)) as decimal(27,2))) / promote_precision(_we0#21)), DecimalType(38,17)) AS revenueratio#22, i_item_id#6]
 Input [9]: [i_item_desc#7, i_category#10, i_class#9, i_current_price#8, itemrevenue#17, _w0#18, _w1#19, i_item_id#6, _we0#21]
 
 (20) Exchange

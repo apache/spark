@@ -57,7 +57,7 @@ class FailureSafeParser[IN](
 
   def parse(input: IN): Iterator[InternalRow] = {
     try {
-      rawParser.apply(input).toIterator.map(row => toResultRow(Some(row), () => null))
+      rawParser.apply(input).iterator.map(row => toResultRow(Some(row), () => null))
     } catch {
       case e: BadRecordException => mode match {
         case PermissiveMode =>

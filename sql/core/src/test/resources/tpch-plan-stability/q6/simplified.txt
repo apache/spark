@@ -1,5 +1,5 @@
 WholeStageCodegen (2)
-  HashAggregate [sum,isEmpty] [sum(CheckOverflow((promote_precision(l_extendedprice) * promote_precision(l_discount)), DecimalType(21,0), true)),revenue,sum,isEmpty]
+  HashAggregate [sum,isEmpty] [sum(CheckOverflow((promote_precision(l_extendedprice) * promote_precision(l_discount)), DecimalType(21,0))),revenue,sum,isEmpty]
     InputAdapter
       Exchange #1
         WholeStageCodegen (1)

@@ -59,6 +59,9 @@ abstract class JsonSuite
 
   override protected def dataSourceFormat = "json"
 
+  override protected def sparkConf: SparkConf =
+    super.sparkConf.set(SQLConf.ANSI_STRICT_INDEX_OPERATOR.key, "false")
+
   test("Type promotion") {
     def checkTypePromotion(expected: Any, actual: Any): Unit = {
       assert(expected.getClass == actual.getClass,
@@ -452,12 +455,6 @@ abstract class JsonSuite
           Row(null, 21474836570L, 1.1, 21474836470L, "92233720368547758070", null) :: Nil
       )
 
-      // Number and Boolean conflict: resolve the type as number in this query.
-      checkAnswer(
-        sql("select num_bool - 10 from jsonTable where num_bool > 11"),
-        Row(2)
-      )
-
       // Widening to LongType
       checkAnswer(
         sql("select num_num_1 - 100 from jsonTable where num_num_1 > 11"),
@@ -482,17 +479,27 @@ abstract class JsonSuite
         Row(101.2) :: Row(21474836471.2) :: Nil
       )
 
-      // Number and String conflict: resolve the type as number in this query.
-      checkAnswer(
-        sql("select num_str + 1.2 from jsonTable where num_str > 14d"),
-        Row(92233720368547758071.2)
-      )
+      // The following tests are about type coercion instead of JSON data source.
+      // Here we simply forcus on the behavior of non-Ansi.
+      if(!SQLConf.get.ansiEnabled) {
+        // Number and Boolean conflict: resolve the type as number in this query.
+        checkAnswer(
+          sql("select num_bool - 10 from jsonTable where num_bool > 11"),
+          Row(2)
+        )
 
-      // Number and String conflict: resolve the type as number in this query.
-      checkAnswer(
-        sql("select num_str + 1.2 from jsonTable where num_str >= 92233720368547758060"),
-        Row(new java.math.BigDecimal("92233720368547758071.2").doubleValue)
-      )
+        // Number and String conflict: resolve the type as number in this query.
+        checkAnswer(
+          sql("select num_str + 1.2 from jsonTable where num_str > 14d"),
+          Row(92233720368547758071.2)
+        )
+
+        // Number and String conflict: resolve the type as number in this query.
+        checkAnswer(
+          sql("select num_str + 1.2 from jsonTable where num_str >= 92233720368547758060"),
+          Row(new java.math.BigDecimal("92233720368547758071.2").doubleValue)
+        )
+      }
 
       // String and Boolean conflict: resolve the type as string.
       checkAnswer(
@@ -2021,12 +2028,18 @@ abstract class JsonSuite
   test("SPARK-18772: Parse special floats correctly") {
     val jsons = Seq(
       """{"a": "NaN"}""",
+      """{"a": "+INF"}""",
+      """{"a": "-INF"}""",
       """{"a": "Infinity"}""",
+      """{"a": "+Infinity"}""",
       """{"a": "-Infinity"}""")
 
     // positive cases
     val checks: Seq[Double => Boolean] = Seq(
       _.isNaN,
+      _.isPosInfinity,
+      _.isNegInfinity,
+      _.isPosInfinity,
       _.isPosInfinity,
       _.isNegInfinity)
 

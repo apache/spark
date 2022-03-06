@@ -203,16 +203,38 @@ private[parquet] class ParquetRowConverter(
   private[this] val fieldConverters: Array[Converter with HasParentContainerUpdater] = {
     // (SPARK-31116) Use case insensitive map if spark.sql.caseSensitive is false
     // to prevent throwing IllegalArgumentException when searching catalyst type's field index
-    val catalystFieldNameToIndex = if (SQLConf.get.caseSensitiveAnalysis) {
-      catalystType.fieldNames.zipWithIndex.toMap
+    def nameToIndex: Map[String, Int] = catalystType.fieldNames.zipWithIndex.toMap
+
+    val catalystFieldIdxByName = if (SQLConf.get.caseSensitiveAnalysis) {
+      nameToIndex
     } else {
-      CaseInsensitiveMap(catalystType.fieldNames.zipWithIndex.toMap)
+      CaseInsensitiveMap(nameToIndex)
     }
+
+    // (SPARK-38094) parquet field ids, if exist, should be prioritized for matching
+    val catalystFieldIdxByFieldId =
+      if (SQLConf.get.parquetFieldIdReadEnabled && ParquetUtils.hasFieldIds(catalystType)) {
+        catalystType.fields
+          .zipWithIndex
+          .filter { case (f, _) => ParquetUtils.hasFieldId(f) }
+          .map { case (f, idx) => (ParquetUtils.getFieldId(f), idx) }
+          .toMap
+      } else {
+        Map.empty[Int, Int]
+      }
+
     parquetType.getFields.asScala.map { parquetField =>
-      val fieldIndex = catalystFieldNameToIndex(parquetField.getName)
-      val catalystField = catalystType(fieldIndex)
+      val catalystFieldIndex = Option(parquetField.getId).flatMap { fieldId =>
+        // field has id, try to match by id first before falling back to match by name
+        catalystFieldIdxByFieldId.get(fieldId.intValue())
+      }.getOrElse {
+        // field doesn't have id, just match by name
+        catalystFieldIdxByName(parquetField.getName)
+      }
+      val catalystField = catalystType(catalystFieldIndex)
       // Converted field value should be set to the `fieldIndex`-th cell of `currentRow`
-      newConverter(parquetField, catalystField.dataType, new RowUpdater(currentRow, fieldIndex))
+      newConverter(parquetField,
+        catalystField.dataType, new RowUpdater(currentRow, catalystFieldIndex))
     }.toArray
   }
 

@@ -100,7 +100,7 @@ private[sql] class JsonInferSchema(options: JSONOptions) extends Serializable {
             wrappedCharException.initCause(e)
             handleJsonErrorsByParseMode(parseMode, columnNameOfCorruptRecord, wrappedCharException)
         }
-      }.reduceOption(typeMerger).toIterator
+      }.reduceOption(typeMerger).iterator
     }
 
     // Here we manually submit a fold-like Spark job, so that we can set the SQLConf when running

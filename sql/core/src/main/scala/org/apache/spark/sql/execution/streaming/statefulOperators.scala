@@ -340,7 +340,8 @@ case class StateStoreRestoreExec(
     if (keyExpressions.isEmpty) {
       AllTuples :: Nil
     } else {
-      ClusteredDistribution(keyExpressions, stateInfo.map(_.numPartitions)) :: Nil
+      ClusteredDistribution(keyExpressions,
+        requiredNumPartitions = stateInfo.map(_.numPartitions)) :: Nil
     }
   }
 
@@ -502,7 +503,8 @@ case class StateStoreSaveExec(
     if (keyExpressions.isEmpty) {
       AllTuples :: Nil
     } else {
-      ClusteredDistribution(keyExpressions, stateInfo.map(_.numPartitions)) :: Nil
+      ClusteredDistribution(keyExpressions,
+        requiredNumPartitions = stateInfo.map(_.numPartitions)) :: Nil
     }
   }
 
@@ -582,7 +584,8 @@ case class SessionWindowStateStoreRestoreExec(
     // NOTE: Please read through the NOTE on the classdoc of StatefulOpClusteredDistribution
     // before making any changes.
     // TODO(SPARK-38204)
-    ClusteredDistribution(keyWithoutSessionExpressions, stateInfo.map(_.numPartitions)) :: Nil
+    ClusteredDistribution(keyWithoutSessionExpressions,
+      requiredNumPartitions = stateInfo.map(_.numPartitions)) :: Nil
   }
 
   override def requiredChildOrdering: Seq[Seq[SortOrder]] = {
@@ -696,7 +699,8 @@ case class SessionWindowStateStoreSaveExec(
     // NOTE: Please read through the NOTE on the classdoc of StatefulOpClusteredDistribution
     // before making any changes.
     // TODO(SPARK-38204)
-    ClusteredDistribution(keyExpressions, stateInfo.map(_.numPartitions)) :: Nil
+    ClusteredDistribution(keyExpressions,
+      requiredNumPartitions = stateInfo.map(_.numPartitions)) :: Nil
   }
 
   override def shouldRunAnotherBatch(newMetadata: OffsetSeqMetadata): Boolean = {
@@ -757,7 +761,8 @@ case class StreamingDeduplicateExec(
     // NOTE: Please read through the NOTE on the classdoc of StatefulOpClusteredDistribution
     // before making any changes.
     // TODO(SPARK-38204)
-    ClusteredDistribution(keyExpressions, stateInfo.map(_.numPartitions)) :: Nil
+    ClusteredDistribution(keyExpressions,
+      requiredNumPartitions = stateInfo.map(_.numPartitions)) :: Nil
   }
 
   override protected def doExecute(): RDD[InternalRow] = {

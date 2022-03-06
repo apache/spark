@@ -766,7 +766,7 @@ class DistributedLDAModel private[clustering] (
   @Since("1.3.0")
   def topicDistributions: RDD[(Long, Vector)] = {
     graph.vertices.filter(LDA.isDocumentVertex).map { case (docID, topicCounts) =>
-      (docID.toLong, Vectors.fromBreeze(normalize(topicCounts, 1.0)))
+      (docID, Vectors.fromBreeze(normalize(topicCounts, 1.0)))
     }
   }
 
@@ -792,7 +792,7 @@ class DistributedLDAModel private[clustering] (
       } else {
         topicCounts(topIndices).toArray
       }
-      (docID.toLong, topIndices.toArray, weights)
+      (docID, topIndices.toArray, weights)
     }
   }
 

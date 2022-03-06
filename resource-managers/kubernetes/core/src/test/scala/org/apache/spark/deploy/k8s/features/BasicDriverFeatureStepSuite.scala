@@ -21,7 +21,7 @@ import scala.collection.JavaConverters._
 import io.fabric8.kubernetes.api.model.{ContainerPort, ContainerPortBuilder, LocalObjectReferenceBuilder, Quantity}
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
-import org.apache.spark.deploy.k8s.{KubernetesTestConf, SparkPod}
+import org.apache.spark.deploy.k8s.{KubernetesDriverConf, KubernetesTestConf, SparkPod}
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.features.KubernetesFeaturesTestUtils.TestResourceInformation
@@ -36,7 +36,9 @@ class BasicDriverFeatureStepSuite extends SparkFunSuite {
 
   private val CUSTOM_DRIVER_LABELS = Map("labelkey" -> "labelvalue")
   private val CONTAINER_IMAGE_PULL_POLICY = "IfNotPresent"
-  private val DRIVER_ANNOTATIONS = Map("customAnnotation" -> "customAnnotationValue")
+  private val DRIVER_ANNOTATIONS = Map(
+    "customAnnotation" -> "customAnnotationValue",
+    "yunikorn.apache.org/app-id" -> "{{APPID}}")
   private val DRIVER_ENVS = Map(
     "customDriverEnv1" -> "customDriverEnv2",
     "customDriverEnv2" -> "customDriverEnv2")
@@ -62,7 +64,7 @@ class BasicDriverFeatureStepSuite extends SparkFunSuite {
       sparkConf.set(testRInfo.rId.amountConf, testRInfo.count)
       sparkConf.set(testRInfo.rId.vendorConf, testRInfo.vendor)
     }
-    val kubernetesConf = KubernetesTestConf.createDriverConf(
+    val kubernetesConf: KubernetesDriverConf = KubernetesTestConf.createDriverConf(
       sparkConf = sparkConf,
       labels = CUSTOM_DRIVER_LABELS,
       environment = DRIVER_ENVS,
@@ -123,7 +125,10 @@ class BasicDriverFeatureStepSuite extends SparkFunSuite {
     }
     assert(driverPodMetadata.getLabels === kubernetesConf.labels.asJava)
 
-    assert(driverPodMetadata.getAnnotations.asScala === DRIVER_ANNOTATIONS)
+    val annotations = driverPodMetadata.getAnnotations.asScala
+    DRIVER_ANNOTATIONS.foreach { case (k, v) =>
+      assert(annotations(k) === Utils.substituteAppNExecIds(v, KubernetesTestConf.APP_ID, ""))
+    }
     assert(configuredPod.pod.getSpec.getRestartPolicy === "Never")
     val expectedSparkConf = Map(
       KUBERNETES_DRIVER_POD_NAME.key -> "spark-driver-pod",
