@@ -86,7 +86,7 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("SPARK-35789: INVALID_SQL_SYNTAX - LATERAL can only be used with subquery") {
+  test("INVALID_SQL_SYNTAX: LATERAL can only be used with subquery") {
     Seq(
       "SELECT * FROM t1, LATERAL t2" -> 26,
       "SELECT * FROM t1 JOIN LATERAL t2" -> 30,
@@ -125,7 +125,7 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession {
           |""".stripMargin)
   }
 
-  test("SPARK:38104: INVALID_SQL_SYNTAX - redefine window") {
+  test("INVALID_SQL_SYNTAX: redefine window") {
     validateParsingError(
       sqlText = "SELECT min(a) OVER win FROM t1 WINDOW win AS win, win AS win2",
       errorClass = "INVALID_SQL_SYNTAX",
@@ -140,7 +140,7 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession {
           |""".stripMargin)
   }
 
-  test("SPARK:38104: INVALID_SQL_SYNTAX- invalid window reference") {
+  test("INVALID_SQL_SYNTAX: invalid window reference") {
     validateParsingError(
       sqlText = "SELECT min(a) OVER win FROM t1 WINDOW win AS win",
       errorClass = "INVALID_SQL_SYNTAX",
@@ -155,7 +155,7 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession {
           |""".stripMargin)
   }
 
-  test("SPARK:38104: INVALID_SQL_SYNTAX - window reference cannot be resolved") {
+  test("INVALID_SQL_SYNTAX: window reference cannot be resolved") {
     validateParsingError(
       sqlText = "SELECT min(a) OVER win FROM t1 WINDOW win AS win2",
       errorClass = "INVALID_SQL_SYNTAX",
