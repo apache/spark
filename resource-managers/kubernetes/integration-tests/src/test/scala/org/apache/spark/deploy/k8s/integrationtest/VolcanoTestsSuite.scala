@@ -278,7 +278,7 @@ private[spark] trait VolcanoTestsSuite extends BeforeAndAfterEach { k8sSuite: Ku
     }
   }
 
-  test("SPARK-38189: Run SparkPi Jobs with priorityClassName", k8sTestTag, volcanoTag) {
+  test("SPARK-38423: Run SparkPi Jobs with priorityClassName", k8sTestTag, volcanoTag) {
     // Prepare the priority resource
     createOrReplaceYAMLResource(VOLCANO_PRIORITY_YAML)
     val priorities = Seq("low", "medium", "high")
@@ -301,9 +301,9 @@ private[spark] trait VolcanoTestsSuite extends BeforeAndAfterEach { k8sSuite: Ku
     }
   }
 
-  test("SPARK-38189: Run driver job to validate priority order", k8sTestTag, volcanoTag) {
-    // Prepare the priority resource
-    createOrReplaceYAMLResource(ENABLE_QUEUE)
+  test("SPARK-38423: Run driver job to validate priority order", k8sTestTag, volcanoTag) {
+    // Prepare the priority resource and queue
+    createOrReplaceYAMLResource(DISABLE_QUEUE)
     createOrReplaceYAMLResource(VOLCANO_PRIORITY_YAML)
     // Submit 3 jobs with different priority
     val priorities = Seq("low", "medium", "high")
@@ -328,17 +328,22 @@ private[spark] trait VolcanoTestsSuite extends BeforeAndAfterEach { k8sSuite: Ku
         assert(pods.size === 1)
       }
     }
-    // Enable queue to let job enqueue
+
+    // Enable queue to let jobs running one by one
     createOrReplaceYAMLResource(ENABLE_QUEUE)
+
+    // Verify scheduling order follow the specified priority
     Eventually.eventually(TIMEOUT, INTERVAL) {
       var m = Map.empty[String, Instant]
       priorities.foreach { p =>
         val pods = getPods(role = "driver", s"$GROUP_PREFIX$p", statusPhase = "Succeeded")
+        assert(pods.size === 1)
         val conditions = pods.head.getStatus.getConditions.asScala
         val scheduledTime
           = conditions.filter(_.getType === "PodScheduled").head.getLastTransitionTime
         m += (p -> Instant.parse(scheduledTime))
       }
+      // high --> medium --> low
       assert(m("high").isBefore(m("medium")))
       assert(m("medium").isBefore(m("low")))
     }
@@ -356,15 +361,6 @@ private[spark] object VolcanoTestsSuite extends SparkFunSuite {
   val GROUP_PREFIX = "volcano-test" + UUID.randomUUID().toString.replaceAll("-", "") + "-"
   val VOLCANO_PRIORITY_YAML
     = new File(getClass.getResource("/volcano/priorityClasses.yml").getFile).getAbsolutePath
-  val HIGH_PRIORITY_DRIVER_TEMPLATE = new File(
-    getClass.getResource("/volcano/high-priority-driver-template.yml").getFile
-  ).getAbsolutePath
-  val MEDIUM_PRIORITY_DRIVER_TEMPLATE = new File(
-    getClass.getResource("/volcano/medium-priority-driver-template.yml").getFile
-  ).getAbsolutePath
-  val LOW_PRIORITY_DRIVER_TEMPLATE = new File(
-    getClass.getResource("/volcano/low-priority-driver-template.yml").getFile
-  ).getAbsolutePath
   val ENABLE_QUEUE = new File(
     getClass.getResource("/volcano/enable-queue.yml").getFile
   ).getAbsolutePath

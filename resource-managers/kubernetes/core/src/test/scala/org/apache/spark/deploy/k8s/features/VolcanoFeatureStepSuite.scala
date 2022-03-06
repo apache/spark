@@ -59,7 +59,7 @@ class VolcanoFeatureStepSuite extends SparkFunSuite {
     assert(annotations.get("scheduling.k8s.io/group-name") === s"${kubernetesConf.appId}-podgroup")
   }
 
-  test("SPARK-38819: Support priorityClassName") {
+  test("SPARK-38423: Support priorityClassName") {
     // test null priority
     val podWithNullPriority = SparkPod.initialPod()
     assert(podWithNullPriority.pod.getSpec.getPriorityClassName === null)
