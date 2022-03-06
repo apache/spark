@@ -79,7 +79,7 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
     // Assume the execution plan is
     // PhysicalRDD(nodeId = 1) -> Filter(nodeId = 0)
     Seq((0L, false), (1L, true)).foreach { case (nodeId, enableWholeStage) =>
-      val df = person.filter('age < 25)
+      val df = person.filter(Symbol("age") < 25)
       testSparkPlanMetrics(df, 1, Map(
         nodeId -> (("Filter", Map(
           "number of output rows" -> 1L)))),
@@ -94,7 +94,7 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
     //   Filter(nodeId = 1)
     //     Range(nodeId = 2)
     // TODO: update metrics in generated operators
-    val ds = spark.range(10).filter('id < 5)
+    val ds = spark.range(10).filter(Symbol("id") < 5)
     testSparkPlanMetricsWithPredicates(ds.toDF(), 1, Map(
       0L -> (("WholeStageCodegen (1)", Map(
         "duration" -> {
@@ -128,7 +128,7 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
     )
 
     // 2 partitions and each partition contains 2 keys
-    val df2 = testData2.groupBy('a).count()
+    val df2 = testData2.groupBy(Symbol("a")).count()
     val expected2 = Seq(
       Map("number of output rows" -> 4L,
         "avg hash probe bucket list iters" ->
@@ -176,7 +176,7 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
     //           Exchange(nodeId = 5)
     //             LocalTableScan(nodeId = 6)
     Seq(true, false).foreach { enableWholeStage =>
-      val df = generateRandomBytesDF().repartition(2).groupBy('a).count()
+      val df = generateRandomBytesDF().repartition(2).groupBy(Symbol("a")).count()
       val nodeIds = if (enableWholeStage) {
         Set(4L, 1L)
       } else {
@@ -204,7 +204,7 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
     // Assume the execution plan is
     // ... -> ObjectHashAggregate(nodeId = 2) -> Exchange(nodeId = 1)
     // -> ObjectHashAggregate(nodeId = 0)
-    val df = testData2.groupBy().agg(collect_set('a)) // 2 partitions
+    val df = testData2.groupBy().agg(collect_set(Symbol("a"))) // 2 partitions
     testSparkPlanMetrics(df, 1, Map(
       2L -> (("ObjectHashAggregate", Map("number of output rows" -> 2L))),
       1L -> (("Exchange", Map(
@@ -216,7 +216,7 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
     )
 
     // 2 partitions and each partition contains 2 keys
-    val df2 = testData2.groupBy('a).agg(collect_set('a))
+    val df2 = testData2.groupBy(Symbol("a")).agg(collect_set(Symbol("a")))
     testSparkPlanMetrics(df2, 1, Map(
       2L -> (("ObjectHashAggregate", Map(
         "number of output rows" -> 4L,
@@ -233,7 +233,7 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
 
     // 2 partitions and each partition contains 2 keys, with fallback to sort-based aggregation
     withSQLConf(SQLConf.OBJECT_AGG_SORT_BASED_FALLBACK_THRESHOLD.key -> "1") {
-      val df3 = testData2.groupBy('a).agg(collect_set('a))
+      val df3 = testData2.groupBy(Symbol("a")).agg(collect_set(Symbol("a")))
       testSparkPlanMetrics(df3, 1, Map(
         2L -> (("ObjectHashAggregate", Map(
           "number of output rows" -> 4L,
@@ -263,7 +263,7 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
     //       LocalTableScan(nodeId = 3)
     // Because of SPARK-25267, ConvertToLocalRelation is disabled in the test cases of sql/core,
     // so Project here is not collapsed into LocalTableScan.
-    val df = Seq(1, 3, 2).toDF("id").sort('id)
+    val df = Seq(1, 3, 2).toDF("id").sort(Symbol("id"))
     testSparkPlanMetricsWithPredicates(df, 2, Map(
       0L -> (("Sort", Map(
         "sort time" -> {
@@ -281,7 +281,7 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
   test("SortMergeJoin metrics") {
     // Because SortMergeJoin may skip different rows if the number of partitions is different, this
     // test should use the deterministic number of partitions.
-    val testDataForJoin = testData2.filter('a < 2) // TestData2(1, 1) :: TestData2(1, 2)
+    val testDataForJoin = testData2.filter(Symbol("a") < 2) // TestData2(1, 1) :: TestData2(1, 2)
     testDataForJoin.createOrReplaceTempView("testDataForJoin")
     withTempView("testDataForJoin") {
       // Assume the execution plan is
@@ -314,7 +314,7 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
   test("SortMergeJoin(outer) metrics") {
     // Because SortMergeJoin may skip different rows if the number of partitions is different,
     // this test should use the deterministic number of partitions.
-    val testDataForJoin = testData2.filter('a < 2) // TestData2(1, 1) :: TestData2(1, 2)
+    val testDataForJoin = testData2.filter(Symbol("a") < 2) // TestData2(1, 1) :: TestData2(1, 2)
     testDataForJoin.createOrReplaceTempView("testDataForJoin")
     withTempView("testDataForJoin") {
       // Assume the execution plan is
@@ -459,7 +459,7 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
   }
 
   test("BroadcastNestedLoopJoin metrics") {
-    val testDataForJoin = testData2.filter('a < 2) // TestData2(1, 1) :: TestData2(1, 2)
+    val testDataForJoin = testData2.filter(Symbol("a") < 2) // TestData2(1, 1) :: TestData2(1, 2)
     testDataForJoin.createOrReplaceTempView("testDataForJoin")
     withSQLConf(SQLConf.CROSS_JOINS_ENABLED.key -> "true") {
       withTempView("testDataForJoin") {
@@ -512,7 +512,7 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
 
   test("CartesianProduct metrics") {
     withSQLConf(SQLConf.CROSS_JOINS_ENABLED.key -> "true") {
-      val testDataForJoin = testData2.filter('a < 2) // TestData2(1, 1) :: TestData2(1, 2)
+      val testDataForJoin = testData2.filter(Symbol("a") < 2) // TestData2(1, 1) :: TestData2(1, 2)
       testDataForJoin.createOrReplaceTempView("testDataForJoin")
       withTempView("testDataForJoin") {
         // Assume the execution plan is
@@ -547,7 +547,7 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
   test("save metrics") {
     withTempPath { file =>
       // person creates a temporary view. get the DF before listing previous execution IDs
-      val data = person.select('name)
+      val data = person.select(Symbol("name"))
       val previousExecutionIds = currentExecutionIds()
       // Assume the execution plan is
       // PhysicalRDD(nodeId = 0)
@@ -704,7 +704,8 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
     withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true") {
       // A special query that only has one partition, so there is no shuffle and the entire query
       // can be whole-stage-codegened.
-      val df = spark.range(0, 1500, 1, 1).limit(10).groupBy('id).count().limit(1).filter('id >= 0)
+      val df = spark.range(0, 1500, 1, 1).limit(10).groupBy(Symbol("id"))
+        .count().limit(1).filter('id >= 0)
       df.collect()
       val plan = df.queryExecution.executedPlan
 
