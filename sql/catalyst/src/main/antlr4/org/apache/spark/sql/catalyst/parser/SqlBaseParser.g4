@@ -927,7 +927,7 @@ colType
     ;
 
 createOrReplaceTableColTypeList
-    : createOrReplaceTableColType (',' createOrReplaceTableColType)*
+    : createOrReplaceTableColType (COMMA createOrReplaceTableColType)*
     ;
 
 createOrReplaceTableColType
@@ -1951,6 +1951,3 @@ WS
 UNRECOGNIZED
     : .
     ;
-
-=======
->>>>>>> master:sql/catalyst/src/main/antlr4/org/apache/spark/sql/catalyst/parser/SqlBaseParser.g4
