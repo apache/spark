@@ -195,7 +195,7 @@ class QueryExecutionErrorsSuite extends QueryTest
 
       assert(e.getErrorClass === "INCONSISTENT_BEHAVIOR_CROSS_VERSION")
       assert(e.getMessage
-        .startsWith("You may get a different result due to the upgrading of Spark 3.0: \n" +
+        .startsWith("You may get a different result due to the upgrading to Spark >= 3.0: \n" +
           "reading dates before"))
     }
 
@@ -209,7 +209,7 @@ class QueryExecutionErrorsSuite extends QueryTest
 
         assert(e.getErrorClass === "INCONSISTENT_BEHAVIOR_CROSS_VERSION")
         assert(e.getMessage
-          .startsWith("You may get a different result due to the upgrading of Spark 3.0: \n" +
+          .startsWith("You may get a different result due to the upgrading to Spark >= 3.0: \n" +
             "writing dates before"))
       }
     }

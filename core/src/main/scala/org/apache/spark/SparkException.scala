@@ -72,33 +72,20 @@ private[spark] case class ExecutorDeadException(message: String)
  * Exception thrown when Spark returns different result after upgrading to a new version.
  */
 private[spark] class SparkUpgradeException(
-    version: String,
-    message: String,
-    cause: Throwable,
-    errorClass: Option[String],
-    messageParameters: Array[String])
-  extends RuntimeException(message, cause) with SparkThrowable {
+    errorClass: String,
+    messageParameters: Array[String],
+    cause: Throwable)
+  extends RuntimeException(SparkThrowableHelper.getMessage(errorClass, messageParameters), cause)
+    with SparkThrowable {
 
   def this(version: String, message: String, cause: Throwable) =
     this (
-      version = version,
-      message = s"You may get a different result due to the upgrading of Spark $version: $message",
-      cause = cause,
-      errorClass = None,
-      messageParameters = Array.empty
+      errorClass = "INCONSISTENT_BEHAVIOR_CROSS_VERSION",
+      messageParameters = Array(version, message),
+      cause = cause
     )
 
-  def this(version: String, errorClass: String,
-      messageParameters: Array[String], cause: Throwable) =
-    this(
-      version = version,
-      message = SparkThrowableHelper.getMessage(errorClass, messageParameters),
-      cause = cause,
-      errorClass = Some(errorClass),
-      messageParameters = messageParameters
-    )
-
-  override def getErrorClass: String = errorClass.orNull
+  override def getErrorClass: String = errorClass
 }
 
 /**

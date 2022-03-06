@@ -65,7 +65,7 @@
     "message" : [ "Detected an incompatible DataSourceRegister. Please remove the incompatible library from classpath or upgrade it. Error: %s" ]
   },
   "INCONSISTENT_BEHAVIOR_CROSS_VERSION" : {
-    "message" : [ "You may get a different result due to the upgrading of Spark %s: %s" ]
+    "message" : [ "You may get a different result due to the upgrading to Spark >= %s: %s" ]
   },
   "INDEX_OUT_OF_BOUNDS" : {
     "message" : [ "Index %s must be between 0 and the length of the ArrayData." ],

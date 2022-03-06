@@ -534,7 +534,6 @@ object QueryExecutionErrors {
   def sparkUpgradeInReadingDatesError(
       format: String, config: String, option: String): SparkUpgradeException = {
     new SparkUpgradeException(
-      version = "3.0",
       errorClass = "INCONSISTENT_BEHAVIOR_CROSS_VERSION",
       messageParameters = Array(
         "3.0",
@@ -553,7 +552,6 @@ object QueryExecutionErrors {
 
   def sparkUpgradeInWritingDatesError(format: String, config: String): SparkUpgradeException = {
     new SparkUpgradeException(
-      version = "3.0",
       errorClass = "INCONSISTENT_BEHAVIOR_CROSS_VERSION",
       messageParameters = Array(
         "3.0",
