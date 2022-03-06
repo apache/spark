@@ -23,7 +23,7 @@ import java.util.{Arrays, Properties}
 import scala.collection.immutable.Map
 import scala.collection.mutable
 import scala.collection.mutable.Set
-import scala.io.Source
+import scala.io.{Codec, Source}
 
 import org.apache.hadoop.fs.Path
 import org.json4s.jackson.JsonMethods._
@@ -661,7 +661,7 @@ class EventLoggingListenerSuite extends SparkFunSuite with LocalSparkContext wit
   }
 
   private def readLines(in: InputStream): Seq[String] = {
-    Source.fromInputStream(in).getLines().toSeq
+    Source.fromInputStream(in)(Codec.UTF8).getLines().toSeq
   }
 
   /**
