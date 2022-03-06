@@ -39,8 +39,13 @@ on:
         required: true
         default: '1'
 
+permissions:
+  contents: read
+
 jobs:
   matrix-gen:
+    permissions:
+      contents: none
     name: Generate matrix for job splits
     runs-on: ubuntu-20.04
     outputs:
@@ -76,7 +81,7 @@ jobs:
       with:
         fetch-depth: 0
     - name: Cache Scala, SBT and Maven
-      uses: actions/cache@v2
+      uses: actions/cache@661fd3eb7f2f20d8c7c84bc2b0509efd7a826628 # v2
       with:
         path: |
           build/apache-maven-*
@@ -87,14 +92,14 @@ jobs:
         restore-keys: |
           build-
     - name: Cache Coursier local repository
-      uses: actions/cache@v2
+      uses: actions/cache@661fd3eb7f2f20d8c7c84bc2b0509efd7a826628 # v2
       with:
         path: ~/.cache/coursier
         key: benchmark-coursier-${{ github.event.inputs.jdk }}-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
         restore-keys: |
           benchmark-coursier-${{ github.event.inputs.jdk }}
     - name: Install Java ${{ github.event.inputs.jdk }}
-      uses: actions/setup-java@v1
+      uses: actions/setup-java@e54a62b3df9364d4b4c1c29c7225e57fe605d7dd # v1
       with:
         java-version: ${{ github.event.inputs.jdk }}
     - name: Run benchmarks
@@ -114,7 +119,7 @@ jobs:
         echo "Preparing the benchmark results:"
         tar -cvf benchmark-results-${{ github.event.inputs.jdk }}.tar `git diff --name-only` `git ls-files --others --exclude-standard`
     - name: Upload benchmark results
-      uses: actions/upload-artifact@v2
+      uses: actions/upload-artifact@82c141cc518b40d92cc801eee768e7aafc9c2fa2 # v2
       with:
         name: benchmark-results-${{ github.event.inputs.jdk }}-${{ matrix.split }}
         path: benchmark-results-${{ github.event.inputs.jdk }}.tar

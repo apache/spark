@@ -26,8 +26,14 @@
 name: "On pull requests"
 on: pull_request_target
 
+permissions:
+  contents: read
+
 jobs:
   label:
+    permissions:
+      contents: read  # for actions/labeler to determine modified files
+      pull-requests: write  # for actions/labeler to add labels to PRs
     name: Label pull requests
     runs-on: ubuntu-latest
     steps:

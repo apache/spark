@@ -23,6 +23,9 @@ on:
   schedule:
   - cron: '0 0 * * *'
 
+permissions:
+  contents: read
+
 jobs:
   publish-snapshot:
     if: github.repository == 'apache/spark'
