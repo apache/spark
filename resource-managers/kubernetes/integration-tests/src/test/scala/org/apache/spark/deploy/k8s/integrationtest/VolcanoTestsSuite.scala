@@ -17,6 +17,7 @@
 package org.apache.spark.deploy.k8s.integrationtest
 
 import java.io.{File, FileInputStream}
+import java.time.Instant
 import java.util.UUID
 
 import scala.collection.JavaConverters._
@@ -40,7 +41,8 @@ import org.apache.spark.internal.config.NETWORK_AUTH_ENABLED
 private[spark] trait VolcanoTestsSuite extends BeforeAndAfterEach { k8sSuite: KubernetesSuite =>
   import VolcanoTestsSuite._
   import org.apache.spark.deploy.k8s.integrationtest.VolcanoSuite.volcanoTag
-  import org.apache.spark.deploy.k8s.integrationtest.KubernetesSuite.{k8sTestTag, INTERVAL, TIMEOUT}
+  import org.apache.spark.deploy.k8s.integrationtest.KubernetesSuite.{k8sTestTag, INTERVAL, TIMEOUT,
+    SPARK_DRIVER_MAIN_CLASS}
 
   lazy val volcanoClient: VolcanoClient
     = kubernetesTestComponents.kubernetesClient.adapt(classOf[VolcanoClient])
@@ -95,12 +97,15 @@ private[spark] trait VolcanoTestsSuite extends BeforeAndAfterEach { k8sSuite: Ku
 
   protected def checkPodGroup(
       pod: Pod,
-      queue: Option[String] = None): Unit = {
+      queue: Option[String] = None,
+      priorityClassName: Option[String] = None): Unit = {
     val appId = pod.getMetadata.getLabels.get("spark-app-selector")
     val podGroupName = s"$appId-podgroup"
     val podGroup = volcanoClient.podGroups().withName(podGroupName).get()
     assert(podGroup.getMetadata.getOwnerReferences.get(0).getName === pod.getMetadata.getName)
     queue.foreach(q => assert(q === podGroup.getSpec.getQueue))
+    priorityClassName.foreach(_ =>
+      assert(pod.getSpec.getPriorityClassName === podGroup.getSpec.getPriorityClassName))
   }
 
   private def createOrReplaceYAMLResource(yamlPath: String): Unit = {
@@ -128,31 +133,73 @@ private[spark] trait VolcanoTestsSuite extends BeforeAndAfterEach { k8sSuite: Ku
   def runJobAndVerify(
       batchSuffix: String,
       groupLoc: Option[String] = None,
-      queue: Option[String] = None): Unit = {
+      queue: Option[String] = None,
+      driverTemplate: Option[String] = None,
+      isDriverJob: Boolean = false): Unit = {
     val appLoc = s"${appLocator}${batchSuffix}"
     val podName = s"${driverPodName}-${batchSuffix}"
     // create new configuration for every job
-    val conf = createVolcanoSparkConf(podName, appLoc, groupLoc, queue)
-    runSparkPiAndVerifyCompletion(
-      driverPodChecker = (driverPod: Pod) => {
-        checkScheduler(driverPod)
-        checkAnnotaion(driverPod)
-        checkPodGroup(driverPod, queue)
-      },
-      executorPodChecker = (executorPod: Pod) => {
-        checkScheduler(executorPod)
-        checkAnnotaion(executorPod)
-      },
-      customSparkConf = Option(conf),
-      customAppLocator = Option(appLoc)
-    )
+    val conf = createVolcanoSparkConf(podName, appLoc, groupLoc, queue, driverTemplate)
+    if (isDriverJob) {
+      runSparkDriverSubmissionAndVerifyCompletion(
+        driverPodChecker = (driverPod: Pod) => {
+          checkScheduler(driverPod)
+          checkAnnotaion(driverPod)
+          checkPodGroup(driverPod, queue)
+        },
+        customSparkConf = Option(conf),
+        customAppLocator = Option(appLoc)
+      )
+    } else {
+      runSparkPiAndVerifyCompletion(
+        driverPodChecker = (driverPod: Pod) => {
+          checkScheduler(driverPod)
+          checkAnnotaion(driverPod)
+          checkPodGroup(driverPod, queue)
+        },
+        executorPodChecker = (executorPod: Pod) => {
+          checkScheduler(executorPod)
+          checkAnnotaion(executorPod)
+        },
+        customSparkConf = Option(conf),
+        customAppLocator = Option(appLoc)
+      )
+    }
+  }
+
+  protected def runSparkDriverSubmissionAndVerifyCompletion(
+      appResource: String = containerLocalSparkDistroExamplesJar,
+      mainClass: String = SPARK_DRIVER_MAIN_CLASS,
+      driverPodChecker: Pod => Unit = doBasicDriverPodCheck,
+      appArgs: Array[String] = Array("2"),
+      customSparkConf: Option[SparkAppConf] = None,
+      customAppLocator: Option[String] = None): Unit = {
+    val appArguments = SparkAppArguments(
+      mainAppResource = appResource,
+      mainClass = mainClass,
+      appArgs = appArgs)
+    SparkAppLauncher.launch(
+      appArguments,
+      customSparkConf.getOrElse(sparkAppConf),
+      TIMEOUT.value.toSeconds.toInt,
+      sparkHomeDir,
+      true)
+    val driverPod = kubernetesTestComponents.kubernetesClient
+      .pods()
+      .withLabel("spark-app-locator", customAppLocator.getOrElse(appLocator))
+      .withLabel("spark-role", "driver")
+      .list()
+      .getItems
+      .get(0)
+    driverPodChecker(driverPod)
   }
 
   private def createVolcanoSparkConf(
       driverPodName: String = driverPodName,
       appLoc: String = appLocator,
       groupLoc: Option[String] = None,
-      queue: Option[String] = None): SparkAppConf = {
+      queue: Option[String] = None,
+      driverTemplate: Option[String] = None): SparkAppConf = {
     val conf = kubernetesTestComponents.newSparkAppConf()
       .set(CONTAINER_IMAGE.key, image)
       .set(KUBERNETES_DRIVER_POD_NAME.key, driverPodName)
@@ -168,6 +215,7 @@ private[spark] trait VolcanoTestsSuite extends BeforeAndAfterEach { k8sSuite: Ku
       conf.set(s"${KUBERNETES_DRIVER_LABEL_PREFIX}spark-group-locator", locator)
       conf.set(s"${KUBERNETES_EXECUTOR_LABEL_PREFIX}spark-group-locator", locator)
     }
+    driverTemplate.foreach(conf.set(KUBERNETES_DRIVER_PODTEMPLATE_FILE.key, _))
     conf
   }
 
@@ -229,6 +277,77 @@ private[spark] trait VolcanoTestsSuite extends BeforeAndAfterEach { k8sSuite: Ku
       assert(completedPods.size === jobNum)
     }
   }
+
+  test("SPARK-38423: Run SparkPi Jobs with priorityClassName", k8sTestTag, volcanoTag) {
+    // Prepare the priority resource
+    createOrReplaceYAMLResource(VOLCANO_PRIORITY_YAML)
+    val priorities = Seq("low", "medium", "high")
+    val groupName = generateGroupName("priority")
+    priorities.foreach { p =>
+      Future {
+        val templatePath = new File(
+          getClass.getResource(s"/volcano/$p-priority-driver-template.yml").getFile
+        ).getAbsolutePath
+        runJobAndVerify(
+          p, groupLoc = Option(groupName),
+          driverTemplate = Option(templatePath)
+        )
+      }
+    }
+    // Make sure all jobs are Succeeded
+    Eventually.eventually(TIMEOUT, INTERVAL) {
+        val pods = getPods(role = "driver", groupName, statusPhase = "Succeeded")
+        assert(pods.size === priorities.size)
+    }
+  }
+
+  test("SPARK-38423: Run driver job to validate priority order", k8sTestTag, volcanoTag) {
+    // Prepare the priority resource and queue
+    createOrReplaceYAMLResource(DISABLE_QUEUE)
+    createOrReplaceYAMLResource(VOLCANO_PRIORITY_YAML)
+    // Submit 3 jobs with different priority
+    val priorities = Seq("low", "medium", "high")
+    priorities.foreach { p =>
+      Future {
+        val templatePath = new File(
+          getClass.getResource(s"/volcano/$p-priority-driver-template.yml").getFile
+        ).getAbsolutePath
+        val groupName = generateGroupName(p)
+        runJobAndVerify(
+          p, groupLoc = Option(groupName),
+          queue = Option("queue"),
+          driverTemplate = Option(templatePath),
+          isDriverJob = true
+        )
+      }
+    }
+    // Make sure 3 jobs are pending
+    Eventually.eventually(TIMEOUT, INTERVAL) {
+      priorities.foreach { p =>
+        val pods = getPods(role = "driver", s"$GROUP_PREFIX$p", statusPhase = "Pending")
+        assert(pods.size === 1)
+      }
+    }
+
+    // Enable queue to let jobs running one by one
+    createOrReplaceYAMLResource(ENABLE_QUEUE)
+
+    // Verify scheduling order follow the specified priority
+    Eventually.eventually(TIMEOUT, INTERVAL) {
+      var m = Map.empty[String, Instant]
+      priorities.foreach { p =>
+        val pods = getPods(role = "driver", s"$GROUP_PREFIX$p", statusPhase = "Succeeded")
+        assert(pods.size === 1)
+        val conditions = pods.head.getStatus.getConditions.asScala
+        val scheduledTime
+          = conditions.filter(_.getType === "PodScheduled").head.getLastTransitionTime
+        m += (p -> Instant.parse(scheduledTime))
+      }
+      // high --> medium --> low
+      assert(m("high").isBefore(m("medium")))
+      assert(m("medium").isBefore(m("low")))
+    }
+  }
 }
 
 private[spark] object VolcanoTestsSuite extends SparkFunSuite {
@@ -240,4 +359,12 @@ private[spark] object VolcanoTestsSuite extends SparkFunSuite {
     getClass.getResource("/volcano/disable-queue0-enable-queue1.yml").getFile
   ).getAbsolutePath
   val GROUP_PREFIX = "volcano-test" + UUID.randomUUID().toString.replaceAll("-", "") + "-"
+  val VOLCANO_PRIORITY_YAML
+    = new File(getClass.getResource("/volcano/priorityClasses.yml").getFile).getAbsolutePath
+  val ENABLE_QUEUE = new File(
+    getClass.getResource("/volcano/enable-queue.yml").getFile
+  ).getAbsolutePath
+  val DISABLE_QUEUE = new File(
+    getClass.getResource("/volcano/disable-queue.yml").getFile
+  ).getAbsolutePath
 }
