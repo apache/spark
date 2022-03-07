@@ -629,7 +629,7 @@ class HashedRelationSuite extends SharedSparkSession {
 
   test("EmptyHashedRelation override methods behavior test") {
     val buildKey = Seq(BoundReference(0, LongType, false))
-    val hashed = HashedRelation(Seq.empty[InternalRow].toIterator, buildKey, 1, mm)
+    val hashed = HashedRelation(Seq.empty[InternalRow].iterator, buildKey, 1, mm)
     assert(hashed == EmptyHashedRelation)
 
     val key = InternalRow(1L)

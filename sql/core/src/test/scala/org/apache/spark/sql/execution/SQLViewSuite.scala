@@ -593,7 +593,8 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
       spark.range(10).write.saveAsTable("add_col")
       withView("v") {
         sql("CREATE VIEW v AS SELECT * FROM add_col")
-        spark.range(10).select('id, 'id as 'a).write.mode("overwrite").saveAsTable("add_col")
+        spark.range(10).select(Symbol("id"), 'id as Symbol("a"))
+          .write.mode("overwrite").saveAsTable("add_col")
         checkAnswer(sql("SELECT * FROM v"), spark.range(10).toDF())
       }
     }
@@ -904,6 +905,25 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
           sql("SELECT * FROM v1").collect()
         }.getMessage
         assert(e.contains("divide by zero"))
+      }
+    }
+  }
+
+  test("SPARK-37932: view join with same view") {
+    withTable("t") {
+      withView("v1") {
+        Seq((1, "test1"), (2, "test2"), (1, "test2")).toDF("id", "name")
+          .write.format("parquet").saveAsTable("t")
+        sql("CREATE VIEW v1 (id, name) AS SELECT id, name FROM t")
+
+        checkAnswer(
+          sql("""SELECT l1.id FROM v1 l1
+                |INNER JOIN (
+                |   SELECT id FROM v1
+                |   GROUP BY id HAVING COUNT(DISTINCT name) > 1
+                | ) l2 ON l1.id = l2.id GROUP BY l1.name, l1.id;
+                |""".stripMargin),
+          Seq(Row(1), Row(1)))
       }
     }
   }

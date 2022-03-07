@@ -269,3 +269,28 @@ to the wrapper scripts and using the wrapper scripts will simply set these appro
     <td></td>
   </tr>
 </table>
+
+# Running the Kubernetes Integration Tests with SBT
+
+You can use SBT in the same way to build image and run all K8s integration tests except Minikube-only ones.
+
+    build/sbt -Psparkr -Pkubernetes -Pkubernetes-integration-tests \
+        -Dtest.exclude.tags=minikube \
+        -Dspark.kubernetes.test.deployMode=docker-desktop \
+        -Dspark.kubernetes.test.imageTag=2022-03-06 \
+        'kubernetes-integration-tests/test'
+
+The following is an example to rerun tests with the pre-built image.
+
+    build/sbt -Psparkr -Pkubernetes -Pkubernetes-integration-tests \
+        -Dtest.exclude.tags=minikube \
+        -Dspark.kubernetes.test.deployMode=docker-desktop \
+        -Dspark.kubernetes.test.imageTag=2022-03-06 \
+        'kubernetes-integration-tests/runIts'
+
+In addition, you can run a single test selectively.
+
+    build/sbt -Psparkr -Pkubernetes -Pkubernetes-integration-tests \
+        -Dspark.kubernetes.test.deployMode=docker-desktop \
+        -Dspark.kubernetes.test.imageTag=2022-03-06 \
+        'kubernetes-integration-tests/testOnly -- -z "Run SparkPi with a very long application name"'

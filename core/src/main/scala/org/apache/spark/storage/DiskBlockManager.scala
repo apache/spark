@@ -79,7 +79,7 @@ private[spark] class DiskBlockManager(
 
   /** Looks up a file by hashing it into one of our local subdirectories. */
   // This method should be kept in sync with
-  // org.apache.spark.network.shuffle.ExecutorDiskUtils#getFile().
+  // org.apache.spark.network.shuffle.ExecutorDiskUtils#getFilePath().
   def getFile(filename: String): File = {
     // Figure out which local directory it hashes to, and which subdirectory in that
     val hash = Utils.nonNegativeHash(filename)
@@ -130,7 +130,7 @@ private[spark] class DiskBlockManager(
       throw new IllegalArgumentException(
         s"Cannot read $filename because merged shuffle dirs is empty")
     }
-    ExecutorDiskUtils.getFile(dirs.get, subDirsPerLocalDir, filename)
+    new File(ExecutorDiskUtils.getFilePath(dirs.get, subDirsPerLocalDir, filename))
   }
 
   /** Check if disk block manager has a block. */

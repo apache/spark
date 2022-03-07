@@ -275,7 +275,7 @@ class ParseException(
 /**
  * The post-processor validates & cleans-up the parse tree during the parse process.
  */
-case object PostProcessor extends SqlBaseBaseListener {
+case object PostProcessor extends SqlBaseParserBaseListener {
 
   /** Throws error message when exiting a explicitly captured wrong identifier rule */
   override def exitErrorIdent(ctx: SqlBaseParser.ErrorIdentContext): Unit = {
@@ -319,7 +319,7 @@ case object PostProcessor extends SqlBaseBaseListener {
  * The post-processor checks the unclosed bracketed comment.
  */
 case class UnclosedCommentProcessor(
-    command: String, tokenStream: CommonTokenStream) extends SqlBaseBaseListener {
+    command: String, tokenStream: CommonTokenStream) extends SqlBaseParserBaseListener {
 
   override def exitSingleDataType(ctx: SqlBaseParser.SingleDataTypeContext): Unit = {
     checkUnclosedComment(tokenStream, command)
