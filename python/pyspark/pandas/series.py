@@ -4481,6 +4481,15 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         4     new
         5     zoo
         dtype: object
+
+        >>> psser.replace(value='new', regex=r'^.oo$')
+        0     bat
+        1     foo
+        2    bait
+        3     abc
+        4     bar
+        5     zoo
+        dtype: object
         """
         if isinstance(regex, str):
             if to_replace is not None:
