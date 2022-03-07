@@ -78,9 +78,6 @@ public class VectorizedDeltaLengthByteArrayReader extends VectorizedReaderBase i
 
   @Override
   public void skipBinary(int total) {
-    if (total == 0) {
-      return;
-    }
     int length;
     for (int i = 0; i < total; i++) {
       length = lengthsVector.getInt(currentRow + i);
