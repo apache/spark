@@ -134,7 +134,7 @@ class QueryPlanningTracker extends Logging {
     }
     logInfo(
       s"""Query planning time spent:\n ${timeSpentSummary.toString}
-         |Total time spent: $totalTimeSpent ms
+         |Total time spent: $totalTimeSpent ms.
        """.stripMargin)
   }
 
