@@ -135,10 +135,10 @@ case class HistogramNumeric(
         if (propagateInputType) {
           // If the SQLConf.spark.sql.legacy.histogramNumericPropagateInputType is set to true,
           // we need to internally convert the 'coord.x' value to the expected result type, for
-          // cases like timestamps and intervals which are valid inputs to the numeric histogram
-          // aggregate function. For example, in this case: 'SELECT histogram_numeric(val, 3)
-          // FROM VALUES (0L), (1L), (2L), (10L) AS tab(col)' returns an array of structs where the
-          // first field has LongType.
+          // cases like integer types, timestamps, and intervals which are valid inputs to the
+          // numeric histogram aggregate function. For example, in this case:
+          // 'SELECT histogram_numeric(val, 3) FROM VALUES (0L), (1L), (2L), (10L) AS tab(col)'
+          // returns an array of structs where the first field has LongType.
           val result: Any = left.dataType match {
             case ByteType => coord.x.toByte
             case IntegerType | DateType | _: YearMonthIntervalType =>
