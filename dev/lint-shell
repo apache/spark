@@ -29,7 +29,7 @@ fi
 
 pushd "$SPARK_ROOT_DIR" &> /dev/null
 
-SHELL_SOURCE="$(git ls-files '*.sh')"
+SHELL_SOURCE="$(git ls-files '*.sh' '*.bash')"
 echo ${SHELL_SOURCE[*]} | xargs shellcheck -S error;
 lint_status=$?
 
