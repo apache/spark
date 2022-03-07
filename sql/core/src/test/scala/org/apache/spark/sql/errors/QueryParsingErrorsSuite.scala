@@ -132,7 +132,8 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession {
       sqlState = "0A000",
       message =
         """
-          |The feature is not supported: TRANSFORM does not support DISTINCT/ALL in inputs(line 1, pos 17)
+          |The feature is not supported: """.stripMargin +
+        """TRANSFORM does not support DISTINCT/ALL in inputs(line 1, pos 17)
           |
           |== SQL ==
           |SELECT TRANSFORM(DISTINCT a) USING 'a' FROM t
@@ -148,10 +149,12 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession {
       sqlState = "0A000",
       message =
         """
-          |The feature is not supported: TRANSFORM with serde is only supported in hive mode(line 1, pos 0)
+          |The feature is not supported: """.stripMargin +
+        """TRANSFORM with serde is only supported in hive mode(line 1, pos 0)
           |
           |== SQL ==
-          |SELECT TRANSFORM(a) ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.OpenCSVSerde' USING 'a' FROM t
+          |SELECT TRANSFORM(a) ROW FORMAT SERDE """.stripMargin +
+        """'org.apache.hadoop.hive.serde2.OpenCSVSerde' USING 'a' FROM t
           |^^^
           |""".stripMargin)
   }
