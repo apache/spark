@@ -118,7 +118,7 @@ then
 
   # Build SparkR image
   tags=(${EXCLUDE_TAGS//,/ })
-  if [[ ! ${tags[@]} =~ "r" ]]; then
+  if [[ ! "${tags[*]}" =~ "r" ]]; then
     LANGUAGE_BINDING_BUILD_ARGS="$LANGUAGE_BINDING_BUILD_ARGS -R $DOCKER_FILE_BASE_PATH/bindings/R/Dockerfile"
   fi
 

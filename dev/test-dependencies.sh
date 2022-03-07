@@ -119,7 +119,7 @@ for HADOOP_HIVE_PROFILE in "${HADOOP_HIVE_PROFILES[@]}"; do
     }' | sort | grep -v spark > dev/pr-deps/spark-deps-$HADOOP_HIVE_PROFILE
 done
 
-if [[ $@ == **replace-manifest** ]]; then
+if [[ "$*" == **replace-manifest** ]]; then
   echo "Replacing manifests and creating new files at dev/deps"
   rm -rf dev/deps
   mv dev/pr-deps dev/deps

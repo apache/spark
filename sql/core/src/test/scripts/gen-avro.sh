@@ -1,3 +1,5 @@
+#!/usr/bin/env bash
+
 #
 # Licensed to the Apache Software Foundation (ASF) under one or more
 # contributor license agreements.  See the NOTICE file distributed with
@@ -22,7 +24,7 @@ cd -
 rm -rf $BASEDIR/gen-java
 mkdir -p $BASEDIR/gen-java
 
-for input in `ls $BASEDIR/avro/*.avdl`; do
+for input in $BASEDIR/avro/*.avdl; do
     filename=$(basename "$input")
     filename="${filename%.*}"
     avro-tools idl $input> $BASEDIR/avro/${filename}.avpr

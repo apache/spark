@@ -62,13 +62,13 @@ acquire_sbt_jar () {
         mv "${JAR_DL}" "${JAR}"
     else
       printf "You do not have curl or wget installed, please install sbt manually from https://www.scala-sbt.org/\n"
-      exit -1
+      exit 255
     fi
     fi
     if [ ! -f "${JAR}" ]; then
     # We failed to download
     printf "Our attempt to download sbt locally to ${JAR} failed. Please install sbt manually from https://www.scala-sbt.org/\n"
-    exit -1
+    exit 255
     fi
     printf "Launching sbt from ${JAR}\n"
   fi
@@ -186,7 +186,7 @@ run() {
     ${SBT_OPTS:-$default_sbt_opts} \
     $(get_mem_opts $sbt_mem) \
     ${java_opts} \
-    ${java_args[@]} \
+    "${java_args[@]}" \
     -jar "$sbt_jar" \
     "${sbt_commands[@]}" \
     "${residual_args[@]}"

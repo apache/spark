@@ -32,7 +32,7 @@ fi
 # Any changes need to be reflected there.
 CLASS="org.apache.spark.deploy.history.HistoryServer"
 
-if [[ "$@" = *--help ]] || [[ "$@" = *-h ]]; then
+if [[ "$*" = *--help ]] || [[ "$*" = *-h ]]; then
   echo "Usage: ./sbin/start-history-server.sh [options]"
   pattern="Usage:"
   pattern+="\|Using Spark's default log4j profile:"

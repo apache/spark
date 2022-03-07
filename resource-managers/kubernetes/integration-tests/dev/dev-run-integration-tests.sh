@@ -200,5 +200,5 @@ properties+=(
     -P$HADOOP_PROFILE \
     -Pkubernetes \
     -Pkubernetes-integration-tests \
-    ${properties[@]}
+    "${properties[@]}"
 )
