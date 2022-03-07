@@ -520,6 +520,9 @@ jobs:
       run: |
         apt update
         apt-get install -y nodejs npm
+    - name: Install SHELL linter dependencies
+      run: |
+        apt-get install -y shellcheck
     - name: Install dependencies for documentation generation
       run: |
         # pandoc is required to generate PySpark APIs as well in nbsphinx.
@@ -555,6 +558,8 @@ jobs:
       run: ./dev/lint-r
     - name: JS linter
       run: ./dev/lint-js
+    - name: SHELL linter
+      run: ./dev/lint-shell
     - name: License test
       run: ./dev/check-license
     - name: Dependencies test
@@ -821,27 +826,3 @@ jobs:
       with:
         name: unit-tests-log-docker-integration--8-${{ needs.configure-jobs.outputs.hadoop }}-hive2.3
         path: "**/target/unit-tests.log"
-
-  shellcheck:
-    needs: [configure-jobs, precondition]
-    name: Run shell code style check
-    if: needs.configure-jobs.outputs.type == 'regular' && fromJson(needs.precondition.outputs.required).build == 'true'
-    runs-on: ubuntu-20.04
-    steps:
-      - name: Checkout Spark repository
-        uses: actions/checkout@v2
-        with:
-          fetch-depth: 0
-          repository: apache/spark
-          ref: master
-      - name: Sync the current branch with the latest in Apache Spark
-        if: github.repository != 'apache/spark'
-        run: |
-          git fetch https://github.com/$GITHUB_REPOSITORY.git ${GITHUB_REF#refs/heads/}
-          git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' merge --no-commit --progress --squash FETCH_HEAD
-          git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' commit -m "Merged commit"
-      - name: Run ShellCheck
-        uses: ludeeus/action-shellcheck@master
-        with:
-          severity: error
-          format: tty
