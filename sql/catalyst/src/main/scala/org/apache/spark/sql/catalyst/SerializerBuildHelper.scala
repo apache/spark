@@ -86,20 +86,11 @@ object SerializerBuildHelper {
       returnNullable = false)
   }
 
-  def createSerializerForJavaLocalDate(inputObject: Expression): Expression = {
+  def createSerializerForDate(inputObject: Expression): Expression = {
     StaticInvoke(
       DateTimeUtils.getClass,
       DateType,
-      "localDateToDays",
-      inputObject :: Nil,
-      returnNullable = false)
-  }
-
-  def createSerializerForSqlDate(inputObject: Expression): Expression = {
-    StaticInvoke(
-      DateTimeUtils.getClass,
-      DateType,
-      "fromJavaDate",
+      "objectToDays",
       inputObject :: Nil,
       returnNullable = false)
   }

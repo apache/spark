@@ -415,9 +415,8 @@ object JavaTypeInference {
         case c if c == classOf[java.time.LocalDateTime] =>
           createSerializerForLocalDateTime(inputObject)
 
-        case c if c == classOf[java.time.LocalDate] => createSerializerForJavaLocalDate(inputObject)
-
-        case c if c == classOf[java.sql.Date] => createSerializerForSqlDate(inputObject)
+        case c if c == classOf[java.sql.Date] || c == classOf[java.time.LocalDate] =>
+          createSerializerForDate(inputObject)
 
         case c if c == classOf[java.time.Duration] => createSerializerForJavaDuration(inputObject)
 

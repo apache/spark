@@ -103,12 +103,7 @@ object RowEncoder {
 
     case TimestampNTZType => createSerializerForLocalDateTime(inputObject)
 
-    case DateType =>
-      if (SQLConf.get.datetimeJava8ApiEnabled) {
-        createSerializerForJavaLocalDate(inputObject)
-      } else {
-        createSerializerForSqlDate(inputObject)
-      }
+    case DateType => createSerializerForDate(inputObject)
 
     case _: DayTimeIntervalType => createSerializerForJavaDuration(inputObject)
 
