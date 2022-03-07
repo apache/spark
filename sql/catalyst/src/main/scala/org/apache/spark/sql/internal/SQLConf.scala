@@ -3562,6 +3562,18 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val HISTOGRAM_NUMERIC_PROPAGATE_INPUT_TYPE =
+    buildConf("spark.sql.legacy.histogramNumericPropagateInputType")
+      .internal()
+      .doc("The histogram_numeric function computes a histogram on numeric 'expr' using nb bins. " +
+        "The return value is an array of (x,y) pairs representing the centers of the histogram's " +
+        "bins. If this config is set to true, the output type of the 'x' field in the return " +
+        "value is propagated from the input value consumed in the aggregate function. Otherwise, " +
+        "'x' always has double type.")
+      .version("3.4.0")
+      .booleanConf
+      .createWithDefault(true)
+
   /**
    * Holds information about keys that have been deprecated.
    *
@@ -4299,6 +4311,9 @@ class SQLConf extends Serializable with Logging {
   def ignoreMissingParquetFieldId: Boolean = getConf(SQLConf.IGNORE_MISSING_PARQUET_FIELD_ID)
 
   def useV1Command: Boolean = getConf(SQLConf.LEGACY_USE_V1_COMMAND)
+
+  def histogramNumericPropagateInputType: Boolean =
+    getConf(SQLConf.HISTOGRAM_NUMERIC_PROPAGATE_INPUT_TYPE)
 
   /** ********************** SQLConf functionality methods ************ */
 

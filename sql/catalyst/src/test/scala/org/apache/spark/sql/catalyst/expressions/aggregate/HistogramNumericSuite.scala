@@ -208,16 +208,32 @@ class HistogramNumericSuite extends SparkFunSuite {
         Literal(Period.ofMonths(11)),
         Literal(Period.ofMonths(12))))
     for ((left, middle, right) <- inputs) {
-      val agg = new HistogramNumeric(
+      // Check that the 'propagateInputType' bit correctly toggles the output type.
+      val aggDoubleOutputType = new HistogramNumeric(
+        BoundReference(0, left.dataType, nullable = true), Literal(5), false)
+      val aggPropagateOutputType = new HistogramNumeric(
         BoundReference(0, left.dataType, nullable = true), Literal(5), true)
+      assert(aggDoubleOutputType.dataType match {
+        case ArrayType(StructType(Array(
+        StructField("x", DoubleType, _, _),
+        StructField("y", _, _, _))), true) => true
+      })
+      assert(aggPropagateOutputType.left.dataType ==
+        (aggPropagateOutputType.dataType match {
+          case
+            ArrayType(StructType(Array(
+            StructField("x", lhs@_, true, _),
+            StructField("y", _, true, _))), true) => lhs
+        }))
+      // Now consume some input values and check the result.
       val buffer = new GenericInternalRow(new Array[Any](1))
-      agg.initialize(buffer)
+      aggPropagateOutputType.initialize(buffer)
       // Consume three non-empty rows in the aggregation.
-      agg.update(buffer, InternalRow(left.value))
-      agg.update(buffer, InternalRow(middle.value))
-      agg.update(buffer, InternalRow(right.value))
+      aggPropagateOutputType.update(buffer, InternalRow(left.value))
+      aggPropagateOutputType.update(buffer, InternalRow(middle.value))
+      aggPropagateOutputType.update(buffer, InternalRow(right.value))
       // Evaluate the aggregate function.
-      val result = agg.eval(buffer)
+      val result = aggPropagateOutputType.eval(buffer)
       assert(result != null)
       // Sanity-check the sum of the heights.
       var ys = 0.0
