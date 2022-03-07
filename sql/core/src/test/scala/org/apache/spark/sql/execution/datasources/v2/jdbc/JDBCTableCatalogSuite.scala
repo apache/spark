@@ -425,4 +425,19 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
       assert(m.contains("\"TABLEENGINENAME\" not found"))
     }
   }
+
+  test("DELETE FROM TABLE WHERE Clause") {
+    sql("insert into h2.test.people values('tony', 1)")
+    sql("insert into h2.test.people values('any', 2)")
+    sql("insert into h2.test.people values('gina', 3)")
+    val preCount = sql("select * from h2.test.people").count()
+    sql("delete from h2.test.people where id = 1")
+    val aftCount = sql("select * from h2.test.people").count()
+    assert((aftCount + 1) == preCount)
+    sql("insert into h2.test.people values('an', 4)")
+    val preCount1 = sql("select * from h2.test.people").count()
+    sql("delete from h2.test.people where id > 3")
+    val aftCount1 = sql("select * from h2.test.people").count()
+    assert(aftCount1 < preCount1)
+  }
 }

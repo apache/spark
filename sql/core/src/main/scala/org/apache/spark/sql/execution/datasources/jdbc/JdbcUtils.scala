@@ -22,12 +22,10 @@ import java.time.{Instant, LocalDate}
 import java.util
 import java.util.Locale
 import java.util.concurrent.TimeUnit
-
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
 import scala.util.Try
 import scala.util.control.NonFatal
-
 import org.apache.spark.TaskContext
 import org.apache.spark.executor.InputMetrics
 import org.apache.spark.internal.Logging
@@ -45,6 +43,7 @@ import org.apache.spark.sql.connector.expressions.NamedReference
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.datasources.jdbc.connection.ConnectionProvider
 import org.apache.spark.sql.jdbc.{JdbcDialect, JdbcDialects, JdbcType}
+import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.SchemaUtils
 import org.apache.spark.unsafe.types.UTF8String
@@ -888,6 +887,107 @@ object JdbcUtils extends Logging with SQLConfHelper {
     repartitionedDF.rdd.foreachPartition { iterator => savePartition(
       getConnection, table, iterator, rddSchema, insertStmt, batchSize, dialect, isolationLevel,
       options)
+    }
+  }
+
+  /**
+   * delete from table where clause
+   * @param filters where clause
+   * @param options table options
+   */
+  def deleteFromTable(filters: Array[Filter], options: JdbcOptionsInWrite): Unit = {
+    val url = options.url
+    val table = options.table
+    val getConnection: () => Connection = createConnectionFactory(options)
+    val isolationLevel = options.isolationLevel
+
+    val filterWhereClause: String = filters
+      .flatMap(JDBCRDD.compileFilter(_, JdbcDialects.get(url)))
+      .map(p => s"($p)").mkString(" AND ")
+
+    val deleteSql = s"DELETE FROM $table WHERE $filterWhereClause"
+
+    val conn = getConnection()
+    var committed = false
+
+    var finalIsolationLevel = Connection.TRANSACTION_NONE
+    if (isolationLevel != Connection.TRANSACTION_NONE) {
+      try {
+        val metadata = conn.getMetaData
+        if (metadata.supportsTransactions()) {
+          // Update to at least use the default isolation, if any transaction level
+          // has been chosen and transactions are supported
+          val defaultIsolation = metadata.getDefaultTransactionIsolation
+          finalIsolationLevel = defaultIsolation
+          if (metadata.supportsTransactionIsolationLevel(isolationLevel))  {
+            // Finally update to actually requested level if possible
+            finalIsolationLevel = isolationLevel
+          } else {
+            logWarning(s"Requested isolation level $isolationLevel is not supported; " +
+              s"falling back to default isolation level $defaultIsolation")
+          }
+        } else {
+          logWarning(s"Requested isolation level $isolationLevel, but transactions are unsupported")
+        }
+      } catch {
+        case NonFatal(e) => logWarning("Exception while detecting transaction support", e)
+      }
+    }
+
+    val supportsTransactions = finalIsolationLevel != Connection.TRANSACTION_NONE
+    try {
+      if (supportsTransactions) {
+        // Everything in the same db transaction
+        conn.setAutoCommit(false)
+        conn.setTransactionIsolation(finalIsolationLevel)
+      }
+      val stmt = conn.prepareStatement(deleteSql)
+      try {
+        stmt.setQueryTimeout(options.queryTimeout)
+        val totalRowCountUpdated = stmt.executeUpdate()
+        if (totalRowCountUpdated > 0) {
+          logInfo(s"SQL: $deleteSql, JDBC Deleted Rows: $totalRowCountUpdated")
+        } else {
+          logWarning(s"SQL: $deleteSql, No Rows Affected, JDBC Deleted Rows: 0")
+        }
+      } finally {
+        stmt.close()
+      }
+      if (supportsTransactions) {
+        conn.commit()
+      }
+      committed = true
+    } catch {
+      case e: SQLException =>
+        val cause = e.getNextException
+        if (cause != null && e.getCause != cause) {
+          if (e.getCause == null) {
+            try {
+              e.initCause(cause)
+            } catch {
+              case _: IllegalStateException => e.addSuppressed(cause)
+            }
+          } else {
+            e.addSuppressed(cause)
+          }
+        }
+        throw e
+    } finally {
+      if (!committed) {
+        // The stage must fail
+        if (supportsTransactions) {
+          // rollback update
+          conn.rollback()
+        }
+        conn.close()
+      } else {
+        // The stage must succeed
+        try {
+          conn.close()
+        } catch {
+          case e: Exception => logWarning("Transaction succeeded, but closing failed", e)
+        }
+      }
     }
   }
 

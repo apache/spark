@@ -28,11 +28,12 @@ import org.apache.spark.sql.connector.expressions.NamedReference
 import org.apache.spark.sql.connector.write.{LogicalWriteInfo, WriteBuilder}
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JdbcOptionsInWrite, JdbcUtils}
 import org.apache.spark.sql.jdbc.JdbcDialects
+import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 case class JDBCTable(ident: Identifier, schema: StructType, jdbcOptions: JDBCOptions)
-  extends Table with SupportsRead with SupportsWrite with SupportsIndex {
+  extends Table with SupportsRead with SupportsWrite with SupportsIndex with SupportsDelete {
 
   override def name(): String = ident.toString
 
@@ -85,5 +86,27 @@ case class JDBCTable(ident: Identifier, schema: StructType, jdbcOptions: JDBCOpt
     JdbcUtils.withConnection(jdbcOptions) { conn =>
       JdbcUtils.listIndexes(conn, name, jdbcOptions)
     }
+  }
+
+  /**
+   * Delete data from a data source table that matches filter expressions. Note that this method
+   * will be invoked only if {@link #canDeleteWhere   (   Filter   [   ]   )} returns true.
+   * <p>
+   * Rows are deleted from the data source iff all of the filter expressions match. That is, the
+   * expressions must be interpreted as a set of filters that are ANDed together.
+   * <p>
+   * Implementations may reject a delete operation if the delete isn't possible without significant
+   * effort. For example, partitioned data sources may reject deletes that do not filter by
+   * partition columns because the filter may require rewriting files without deleted records.
+   * To reject a delete implementations should throw {@link IllegalArgumentException} with a clear
+   * error message that identifies which expression was rejected.
+   *
+   * @param filters filter expressions, used to select rows to delete when all expressions match
+   * @throws IllegalArgumentException If the delete is rejected due to required effort
+   */
+  override def deleteWhere(filters: Array[Filter]): Unit = {
+    val mergedOptions = new JdbcOptionsInWrite(
+      jdbcOptions.parameters.originalMap)
+    JdbcUtils.deleteFromTable(filters, mergedOptions)
   }
 }
