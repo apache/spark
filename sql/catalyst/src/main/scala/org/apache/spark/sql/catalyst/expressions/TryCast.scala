@@ -57,6 +57,8 @@ case class TryCast(child: Expression, dataType: DataType, timeZoneId: Option[Str
 
   override def nullable: Boolean = true
 
+  // If the target data type is a complex type which can't have Null values, we should guarantee
+  // that the casting between the element types won't produce Null results.
   override def canCast(from: DataType, to: DataType): Boolean = (from, to) match {
     case (ArrayType(fromType, fn), ArrayType(toType, tn)) =>
       canCast(fromType, toType) &&
