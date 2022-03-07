@@ -56,7 +56,8 @@ class HistogramNumericSuite extends SparkFunSuite {
     assert(compareEquals(buffer,
       NumericHistogramSerializer.deserialize(NumericHistogramSerializer.serialize(buffer))))
 
-    val agg = new HistogramNumeric(BoundReference(0, DoubleType, true), Literal(5))
+    val agg = new HistogramNumeric(
+      BoundReference(0, DoubleType, true), Literal(5), true)
     assert(compareEquals(agg.deserialize(agg.serialize(buffer)), buffer))
   }
 
@@ -81,16 +82,17 @@ class HistogramNumericSuite extends SparkFunSuite {
 
   test("class HistogramNumeric, sql string") {
     assertEqual(s"histogram_numeric(a, 3)",
-      new HistogramNumeric("a".attr, Literal(3)).sql: String)
+      new HistogramNumeric("a".attr, Literal(3), true).sql: String)
 
     // sql(isDistinct = true), array of percentile
     assertEqual(s"histogram_numeric(DISTINCT a, 3)",
-      new HistogramNumeric("a".attr, Literal(3)).sql(isDistinct = true))
+      new HistogramNumeric("a".attr, Literal(3), true).sql(isDistinct = true))
   }
 
   test("class HistogramNumeric, fails analysis if nBins is not a constant") {
     val attribute = AttributeReference("a", IntegerType)()
-    val wrongNB = new HistogramNumeric(attribute, nBins = AttributeReference("b", IntegerType)())
+    val wrongNB = new HistogramNumeric(
+      attribute, nBins = AttributeReference("b", IntegerType)(), true)
 
     assertEqual(
       wrongNB.checkInputDataTypes(),
@@ -100,7 +102,7 @@ class HistogramNumericSuite extends SparkFunSuite {
 
   test("class HistogramNumeric, fails analysis if nBins is invalid") {
     val attribute = AttributeReference("a", IntegerType)()
-    val wrongNB = new HistogramNumeric(attribute, nBins = Literal(1))
+    val wrongNB = new HistogramNumeric(attribute, nBins = Literal(1), propagateInputType = true)
 
     assertEqual(
       wrongNB.checkInputDataTypes(),
@@ -134,7 +136,7 @@ class HistogramNumericSuite extends SparkFunSuite {
       // We expect each relation under test to have exactly one output attribute.
       assert(relation.output.length == 1)
       val relationAttributeType = relation.output(0).dataType
-      val agg = new HistogramNumeric(UnresolvedAttribute("a"), nBins)
+      val agg = new HistogramNumeric(UnresolvedAttribute("a"), nBins, true)
       val analyzed = relation.select(agg).analyze.expressions.head
       analyzed match {
         case Alias(agg: HistogramNumeric, _) =>
@@ -158,13 +160,14 @@ class HistogramNumericSuite extends SparkFunSuite {
   test("HistogramNumeric: nulls in nBins expression") {
     assert(new HistogramNumeric(
       AttributeReference("a", DoubleType)(),
-      Literal(null, IntegerType)).checkInputDataTypes() ===
+      Literal(null, IntegerType),
+      true).checkInputDataTypes() ===
       TypeCheckFailure("histogram_numeric needs nBins value must not be null."))
   }
 
   test("class HistogramNumeric, null handling") {
     val childExpression = Cast(BoundReference(0, IntegerType, nullable = true), DoubleType)
-    val agg = new HistogramNumeric(childExpression, Literal(5))
+    val agg = new HistogramNumeric(childExpression, Literal(5), true)
     val buffer = new GenericInternalRow(new Array[Any](1))
     agg.initialize(buffer)
     // Empty aggregation buffer
@@ -205,7 +208,8 @@ class HistogramNumericSuite extends SparkFunSuite {
         Literal(Period.ofMonths(11)),
         Literal(Period.ofMonths(12))))
     for ((left, middle, right) <- inputs) {
-      val agg = new HistogramNumeric(BoundReference(0, left.dataType, nullable = true), Literal(5))
+      val agg = new HistogramNumeric(
+        BoundReference(0, left.dataType, nullable = true), Literal(5), true)
       val buffer = new GenericInternalRow(new Array[Any](1))
       agg.initialize(buffer)
       // Consume three non-empty rows in the aggregation.

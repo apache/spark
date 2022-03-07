@@ -46,7 +46,9 @@ import org.apache.spark.sql.util.NumericHistogram
       smaller datasets. Note that this function creates a histogram with non-uniform
       bin widths. It offers no guarantees in terms of the mean-squared-error of the
       histogram, but in practice is comparable to the histograms produced by the R/S-Plus
-      statistical computing packages.
+      statistical computing packages. Note: if spark.sql.legacy.numericHistogramPropagateInputType
+      is set to true, the output type of the 'x' field in the return value is propagated from the
+      input value consumed in the aggregate function. Otherwise, 'x' always has double type.
     """,
   examples = """
     Examples:
@@ -58,13 +60,14 @@ import org.apache.spark.sql.util.NumericHistogram
 case class HistogramNumeric(
     child: Expression,
     nBins: Expression,
+    propagateInputType: Boolean,
     override val mutableAggBufferOffset: Int,
     override val inputAggBufferOffset: Int)
   extends TypedImperativeAggregate[NumericHistogram] with ImplicitCastInputTypes
   with BinaryLike[Expression] {
 
-  def this(child: Expression, nBins: Expression) = {
-    this(child, nBins, 0, 0)
+  def this(child: Expression, nBins: Expression, propagateInputType: Boolean) = {
+    this(child, nBins, propagateInputType, 0, 0)
   }
 
   private lazy val nb = nBins.eval() match {
