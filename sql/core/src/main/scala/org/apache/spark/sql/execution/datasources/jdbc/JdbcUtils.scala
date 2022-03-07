@@ -632,7 +632,6 @@ object JdbcUtils extends Logging with SQLConfHelper {
    * updated even with error if it doesn't support transaction, as there're dirty outputs.
    */
   def savePartition(
-      getConnection: Int => Connection,
       table: String,
       iterator: Iterator[Row],
       rddSchema: StructType,
@@ -648,7 +647,7 @@ object JdbcUtils extends Logging with SQLConfHelper {
 
     val outMetrics = TaskContext.get().taskMetrics().outputMetrics
 
-    val conn = getConnection(-1)
+    val conn = dialect.createConnectionFactory(options)(-1)
     var committed = false
 
     var finalIsolationLevel = Connection.TRANSACTION_NONE
@@ -855,7 +854,6 @@ object JdbcUtils extends Logging with SQLConfHelper {
     val table = options.table
     val dialect = JdbcDialects.get(url)
     val rddSchema = df.schema
-    val getConnection: Int => Connection = dialect.createConnectionFactory(options)
     val batchSize = options.batchSize
     val isolationLevel = options.isolationLevel
 
@@ -867,8 +865,7 @@ object JdbcUtils extends Logging with SQLConfHelper {
       case _ => df
     }
     repartitionedDF.rdd.foreachPartition { iterator => savePartition(
-      getConnection, table, iterator, rddSchema, insertStmt, batchSize, dialect, isolationLevel,
-      options)
+      table, iterator, rddSchema, insertStmt, batchSize, dialect, isolationLevel, options)
     }
   }
 
