@@ -3107,6 +3107,26 @@ class DataFrameSuite extends QueryTest
 
     assert(res.collect.length == 2)
   }
+
+  test("SPARK-38285: Fix ClassCastException: GenericArrayData cannot be cast to InternalRow") {
+    withTempView("v1") {
+      val sqlText =
+        """
+          |CREATE OR REPLACE TEMP VIEW v1 AS
+          |SELECT * FROM VALUES
+          |(array(
+          |  named_struct('s', 'string1', 'b', array(named_struct('e', 'string2'))),
+          |  named_struct('s', 'string4', 'b', array(named_struct('e', 'string5')))
+          |  )
+          |)
+          |v1(o);
+          |""".stripMargin
+      sql(sqlText)
+
+      val df = sql("SELECT eo.b.e FROM (SELECT explode(o) AS eo FROM v1)")
+      checkAnswer(df, Row(Seq("string2")) :: Row(Seq("string5")) :: Nil)
+    }
+  }
 }
 
 case class GroupByKey(a: Int, b: Int)
