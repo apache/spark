@@ -37,7 +37,7 @@ import org.apache.spark.sql.internal.SQLConf
  */
 object DynamicJoinSelection extends Rule[LogicalPlan] with JoinSelectionHelper {
 
-  private def shouldDemoteBroadcastHashJoin(mapStats: MapOutputStatistics): Boolean = {
+  private def hasManyEmptyPartitions(mapStats: MapOutputStatistics): Boolean = {
     val partitionCnt = mapStats.bytesByPartitionId.length
     val nonZeroCnt = mapStats.bytesByPartitionId.count(_ > 0)
     partitionCnt > 0 && nonZeroCnt > 0 &&
@@ -54,64 +54,67 @@ object DynamicJoinSelection extends Rule[LogicalPlan] with JoinSelectionHelper {
 
   private def selectJoinStrategy(
       join: Join,
-      plan: LogicalPlan): Option[JoinStrategyHint] = plan match {
-    case LogicalQueryStage(_, stage: ShuffleQueryStageExec) if stage.isMaterialized
-      && stage.mapStats.isDefined =>
+      isLeft: Boolean): Option[JoinStrategyHint] = {
+    val plan = if (isLeft) join.left else join.right
+    plan match {
+      case LogicalQueryStage(_, stage: ShuffleQueryStageExec) if stage.isMaterialized
+        && stage.mapStats.isDefined =>
 
-      val manyEmptyInPlan = shouldDemoteBroadcastHashJoin(stage.mapStats.get)
-      val canBroadcastPlan = (canBuildBroadcastLeft(join.joinType) && join.left == plan) ||
-        (canBuildBroadcastRight(join.joinType) && join.right == plan)
-      val manyEmptyInOther = (if (join.left == plan) join.right else join.left) match {
-        case LogicalQueryStage(_, stage: ShuffleQueryStageExec) if stage.isMaterialized
-          && stage.mapStats.isDefined => shouldDemoteBroadcastHashJoin(stage.mapStats.get)
-        case _ => false
-      }
-
-      val demoteBroadcastHash = if (manyEmptyInPlan && canBroadcastPlan) {
-        join.joinType match {
-          // don't demote BHJ since you cannot short circuit local join if inner (null-filled)
-          // side is empty
-          case LeftOuter | RightOuter | LeftAnti => false
-          case _ => true
-        }
-      } else if (manyEmptyInOther && canBroadcastPlan) {
-        // for example, LOJ, 'plan' is RHS but it's the LHS that has many empty partitions
-        // if we proceed with shuffle.  But if we proceed with BHJ, the OptimizeShuffleWithLocalRead
-        // will assemble partitions as they were before the shuffle and that may no longer have
-        // many empty partitions and thus cannot short-circuit local join
-        join.joinType match {
-          case LeftOuter | RightOuter | LeftAnti => true
+        val manyEmptyInPlan = hasManyEmptyPartitions(stage.mapStats.get)
+        val canBroadcastPlan = (isLeft && canBuildBroadcastLeft(join.joinType)) ||
+          (!isLeft && canBuildBroadcastRight(join.joinType))
+        val manyEmptyInOther = (if (isLeft) join.right else join.left) match {
+          case LogicalQueryStage(_, stage: ShuffleQueryStageExec) if stage.isMaterialized
+            && stage.mapStats.isDefined => hasManyEmptyPartitions(stage.mapStats.get)
           case _ => false
         }
-      } else {
-        false
-      }
 
-      val preferShuffleHash = preferShuffledHashJoin(stage.mapStats.get)
-      if (demoteBroadcastHash && preferShuffleHash) {
-        Some(SHUFFLE_HASH)
-      } else if (demoteBroadcastHash) {
-        Some(NO_BROADCAST_HASH)
-      } else if (preferShuffleHash) {
-        Some(PREFER_SHUFFLE_HASH)
-      } else {
-        None
-      }
+        val demoteBroadcastHash = if (manyEmptyInPlan && canBroadcastPlan) {
+          join.joinType match {
+            // don't demote BHJ since you cannot short circuit local join if inner (null-filled)
+            // side is empty
+            case LeftOuter | RightOuter | LeftAnti => false
+            case _ => true
+          }
+        } else if (manyEmptyInOther && canBroadcastPlan) {
+          // for example, LOJ, !isLeft but it's the LHS that has many empty partitions if we
+          // proceed with shuffle.  But if we proceed with BHJ, the OptimizeShuffleWithLocalRead
+          // will assemble partitions as they were before the shuffle and that may no longer have
+          // many empty partitions and thus cannot short-circuit local join
+          join.joinType match {
+            case LeftOuter | RightOuter | LeftAnti => true
+            case _ => false
+          }
+        } else {
+          false
+        }
 
-    case _ => None
+        val preferShuffleHash = preferShuffledHashJoin(stage.mapStats.get)
+        if (demoteBroadcastHash && preferShuffleHash) {
+          Some(SHUFFLE_HASH)
+        } else if (demoteBroadcastHash) {
+          Some(NO_BROADCAST_HASH)
+        } else if (preferShuffleHash) {
+          Some(PREFER_SHUFFLE_HASH)
+        } else {
+          None
+        }
+
+      case _ => None
+    }
   }
 
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformDown {
-    case j @ ExtractEquiJoinKeys(joinType, _, _, _, _, left, right, hint) =>
+    case j @ ExtractEquiJoinKeys(_, _, _, _, _, _, _, hint) =>
       var newHint = hint
       if (!hint.leftHint.exists(_.strategy.isDefined)) {
-        selectJoinStrategy(j, left).foreach { strategy =>
+        selectJoinStrategy(j, true).foreach { strategy =>
           newHint = newHint.copy(leftHint =
             Some(hint.leftHint.getOrElse(HintInfo()).copy(strategy = Some(strategy))))
         }
       }
       if (!hint.rightHint.exists(_.strategy.isDefined)) {
-        selectJoinStrategy(j, right).foreach { strategy =>
+        selectJoinStrategy(j, false).foreach { strategy =>
           newHint = newHint.copy(rightHint =
             Some(hint.rightHint.getOrElse(HintInfo()).copy(strategy = Some(strategy))))
         }
