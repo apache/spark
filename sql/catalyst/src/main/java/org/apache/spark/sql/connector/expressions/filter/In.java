@@ -22,8 +22,8 @@ import java.util.Objects;
 import java.util.stream.Collectors;
 
 import org.apache.spark.annotation.Evolving;
+import org.apache.spark.sql.connector.expressions.Expression;
 import org.apache.spark.sql.connector.expressions.Literal;
-import org.apache.spark.sql.connector.expressions.NamedReference;
 
 /**
  * A filter that evaluates to {@code true} iff the {@code column} evaluates to one of the
@@ -34,15 +34,15 @@ import org.apache.spark.sql.connector.expressions.NamedReference;
 @Evolving
 public final class In extends Filter {
   static final int MAX_LEN_TO_PRINT = 50;
-  private final NamedReference column;
+  private final Expression column;
   private final Literal<?>[] values;
 
-  public In(NamedReference column, Literal<?>[] values) {
+  public In(Expression column, Literal<?>[] values) {
     this.column = column;
     this.values = values;
   }
 
-  public NamedReference column() { return column; }
+  public Expression column() { return column; }
   public Literal<?>[] values() { return values; }
 
   @Override
@@ -72,5 +72,5 @@ public final class In extends Filter {
   }
 
   @Override
-  public NamedReference[] references() { return new NamedReference[] { column }; }
+  public Expression[] references() { return new Expression[] { column }; }
 }

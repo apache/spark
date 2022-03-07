@@ -20,8 +20,7 @@ package org.apache.spark.sql.connector.expressions.filter;
 import java.util.Objects;
 
 import org.apache.spark.annotation.Evolving;
-import org.apache.spark.sql.connector.expressions.Literal;
-import org.apache.spark.sql.connector.expressions.NamedReference;
+import org.apache.spark.sql.connector.expressions.Expression;
 
 /**
  * Base class for {@link EqualNullSafe}, {@link EqualTo}, {@link GreaterThan},
@@ -31,16 +30,16 @@ import org.apache.spark.sql.connector.expressions.NamedReference;
  */
 @Evolving
 abstract class BinaryComparison extends Filter {
-  protected final NamedReference column;
-  protected final Literal<?> value;
+  protected final Expression column;
+  protected final Expression value;
 
-  protected BinaryComparison(NamedReference column, Literal<?> value) {
+  protected BinaryComparison(Expression column, Expression value) {
     this.column = column;
     this.value = value;
   }
 
-  public NamedReference column() { return column; }
-  public Literal<?> value() { return value; }
+  public Expression column() { return column; }
+  public Expression value() { return value; }
 
   @Override
   public boolean equals(Object o) {
@@ -56,5 +55,5 @@ abstract class BinaryComparison extends Filter {
   }
 
   @Override
-  public NamedReference[] references() { return new NamedReference[] { column }; }
+  public Expression[] references() { return new Expression[] { column }; }
 }

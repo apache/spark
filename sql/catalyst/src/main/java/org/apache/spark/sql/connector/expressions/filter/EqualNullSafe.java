@@ -18,8 +18,7 @@
 package org.apache.spark.sql.connector.expressions.filter;
 
 import org.apache.spark.annotation.Evolving;
-import org.apache.spark.sql.connector.expressions.Literal;
-import org.apache.spark.sql.connector.expressions.NamedReference;
+import org.apache.spark.sql.connector.expressions.Expression;
 
 /**
  * Performs equality comparison, similar to {@link EqualTo}. However, this differs from
@@ -31,7 +30,7 @@ import org.apache.spark.sql.connector.expressions.NamedReference;
 @Evolving
 public final class EqualNullSafe extends BinaryComparison {
 
-  public EqualNullSafe(NamedReference column, Literal<?> value) {
+  public EqualNullSafe(Expression column, Expression value) {
     super(column, value);
   }
 

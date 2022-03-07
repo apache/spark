@@ -22,12 +22,12 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.connector.expressions.SortOrder
 import org.apache.spark.sql.connector.expressions.aggregate.Aggregation
-import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownAggregates, SupportsPushDownFilters, SupportsPushDownLimit, SupportsPushDownRequiredColumns, SupportsPushDownTableSample, SupportsPushDownTopN}
+import org.apache.spark.sql.connector.expressions.filter.Filter
+import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownAggregates, SupportsPushDownLimit, SupportsPushDownRequiredColumns, SupportsPushDownTableSample, SupportsPushDownTopN, SupportsPushDownV2Filters}
 import org.apache.spark.sql.execution.datasources.PartitioningUtils
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JDBCRDD, JDBCRelation}
 import org.apache.spark.sql.execution.datasources.v2.TableSampleInfo
 import org.apache.spark.sql.jdbc.JdbcDialects
-import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.types.StructType
 
 case class JDBCScanBuilder(
@@ -35,7 +35,7 @@ case class JDBCScanBuilder(
     schema: StructType,
     jdbcOptions: JDBCOptions)
   extends ScanBuilder
-    with SupportsPushDownFilters
+    with SupportsPushDownV2Filters
     with SupportsPushDownRequiredColumns
     with SupportsPushDownAggregates
     with SupportsPushDownLimit
@@ -54,6 +54,15 @@ case class JDBCScanBuilder(
   private var pushedLimit = 0
 
   private var sortOrders: Array[SortOrder] = Array.empty[SortOrder]
+
+  override def pushFilters(filters: Array[Filter]): Array[Filter] = {
+    if (jdbcOptions.pushDownPredicate) {
+      val dialect = JdbcDialects.get(jdbcOptions.url)
+      val (pushed, unSupported) = filters.partition(dialect.compileFilter(_).isDefined)
+    } else {
+      filters
+    }
+  }
 
   override def pushFilters(filters: Array[Filter]): Array[Filter] = {
     if (jdbcOptions.pushDownPredicate) {

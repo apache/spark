@@ -18,8 +18,7 @@
 package org.apache.spark.sql.connector.expressions.filter;
 
 import org.apache.spark.annotation.Evolving;
-import org.apache.spark.sql.connector.expressions.Literal;
-import org.apache.spark.sql.connector.expressions.NamedReference;
+import org.apache.spark.sql.connector.expressions.Expression;
 
 /**
  * A filter that evaluates to {@code true} iff the {@code column} evaluates to a value
@@ -30,7 +29,7 @@ import org.apache.spark.sql.connector.expressions.NamedReference;
 @Evolving
 public final class EqualTo extends BinaryComparison {
 
-  public EqualTo(NamedReference column, Literal<?> value) {
+  public EqualTo(Expression column, Expression value) {
     super(column, value);
   }
 

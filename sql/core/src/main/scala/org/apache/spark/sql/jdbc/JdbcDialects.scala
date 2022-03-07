@@ -34,6 +34,7 @@ import org.apache.spark.sql.connector.catalog.TableChange._
 import org.apache.spark.sql.connector.catalog.index.TableIndex
 import org.apache.spark.sql.connector.expressions.{Expression, FieldReference, NamedReference}
 import org.apache.spark.sql.connector.expressions.aggregate.{AggregateFunc, Avg, Count, CountStar, Max, Min, Sum}
+import org.apache.spark.sql.connector.expressions.filter.{EqualNullSafe => V2EqualNullSafe, EqualTo => V2EqualTo, Filter}
 import org.apache.spark.sql.connector.util.V2ExpressionSQLBuilder
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JdbcUtils}
@@ -217,6 +218,34 @@ abstract class JdbcDialect extends Serializable with Logging{
       Some(jdbcSQLBuilder.build(expr))
     } catch {
       case _: IllegalArgumentException => None
+    }
+  }
+
+  @Since("3.3.0")
+  def compileFilter(filter: Filter): Option[String] = {
+    filter match {
+      case eq: V2EqualTo =>
+        val l = compileExpression(eq.column())
+        val r = compileExpression(eq.value())
+        if (l.isDefined && r.isDefined) {
+          Some(s"${l.get} = ${r.get}")
+        } else {
+          None
+        }
+      case eq: V2EqualNullSafe =>
+        val l = compileExpression(eq.column())
+        val r = compileExpression(eq.value())
+        if (l.isDefined && r.isDefined) {
+          Some(
+            s"""
+               |(NOT (${l.get} != ${r.get} OR ${l.get} IS NULL OR
+               |${r.get} IS NULL) OR
+               |(${l.get} IS NULL AND ${r.get} IS NULL))
+               |""".stripMargin)
+        } else {
+          None
+        }
+      case _ => None
     }
   }
 

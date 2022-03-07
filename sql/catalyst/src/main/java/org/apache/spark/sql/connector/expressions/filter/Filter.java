@@ -21,7 +21,6 @@ import java.io.Serializable;
 
 import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.connector.expressions.Expression;
-import org.apache.spark.sql.connector.expressions.NamedReference;
 
 /**
  * Filter base class
@@ -31,10 +30,10 @@ import org.apache.spark.sql.connector.expressions.NamedReference;
 @Evolving
 public abstract class Filter implements Expression, Serializable {
 
-  protected static final NamedReference[] EMPTY_REFERENCE = new NamedReference[0];
+  protected static final Expression[] EMPTY_EXPRESSION = new Expression[0];
 
   /**
    * Returns list of columns that are referenced by this filter.
    */
-  public abstract NamedReference[] references();
+  public abstract Expression[] references();
 }

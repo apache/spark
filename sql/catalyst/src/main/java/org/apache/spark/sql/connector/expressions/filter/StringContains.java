@@ -18,7 +18,7 @@
 package org.apache.spark.sql.connector.expressions.filter;
 
 import org.apache.spark.annotation.Evolving;
-import org.apache.spark.sql.connector.expressions.NamedReference;
+import org.apache.spark.sql.connector.expressions.Expression;
 import org.apache.spark.unsafe.types.UTF8String;
 
 /**
@@ -30,7 +30,7 @@ import org.apache.spark.unsafe.types.UTF8String;
 @Evolving
 public final class StringContains extends StringPredicate {
 
-  public StringContains(NamedReference column, UTF8String value) {
+  public StringContains(Expression column, UTF8String value) {
     super(column, value);
   }
 

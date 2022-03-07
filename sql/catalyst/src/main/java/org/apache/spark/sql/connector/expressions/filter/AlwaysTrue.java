@@ -20,6 +20,7 @@ package org.apache.spark.sql.connector.expressions.filter;
 import java.util.Objects;
 
 import org.apache.spark.annotation.Evolving;
+import org.apache.spark.sql.connector.expressions.Expression;
 import org.apache.spark.sql.connector.expressions.NamedReference;
 
 /**
@@ -46,5 +47,5 @@ public final class AlwaysTrue extends Filter {
   public String toString() { return "TRUE"; }
 
   @Override
-  public NamedReference[] references() { return EMPTY_REFERENCE; }
+  public Expression[] references() { return EMPTY_EXPRESSION; }
 }

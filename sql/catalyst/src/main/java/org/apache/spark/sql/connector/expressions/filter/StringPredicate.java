@@ -20,7 +20,7 @@ package org.apache.spark.sql.connector.expressions.filter;
 import java.util.Objects;
 
 import org.apache.spark.annotation.Evolving;
-import org.apache.spark.sql.connector.expressions.NamedReference;
+import org.apache.spark.sql.connector.expressions.Expression;
 import org.apache.spark.unsafe.types.UTF8String;
 
 /**
@@ -31,15 +31,15 @@ import org.apache.spark.unsafe.types.UTF8String;
  */
 @Evolving
 abstract class StringPredicate extends Filter {
-  protected final NamedReference column;
+  protected final Expression column;
   protected final UTF8String value;
 
-  protected StringPredicate(NamedReference column, UTF8String value) {
+  protected StringPredicate(Expression column, UTF8String value) {
     this.column = column;
     this.value = value;
   }
 
-  public NamedReference column() { return column; }
+  public Expression column() { return column; }
   public UTF8String value() { return value; }
 
   @Override
@@ -56,5 +56,5 @@ abstract class StringPredicate extends Filter {
   }
 
   @Override
-  public NamedReference[] references() { return new NamedReference[] { column }; }
+  public Expression[] references() { return new Expression[] { column }; }
 }

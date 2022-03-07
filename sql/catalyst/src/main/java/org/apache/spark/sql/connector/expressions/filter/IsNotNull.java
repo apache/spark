@@ -20,7 +20,7 @@ package org.apache.spark.sql.connector.expressions.filter;
 import java.util.Objects;
 
 import org.apache.spark.annotation.Evolving;
-import org.apache.spark.sql.connector.expressions.NamedReference;
+import org.apache.spark.sql.connector.expressions.Expression;
 
 /**
  * A filter that evaluates to {@code true} iff the {@code column} evaluates to a non-null value.
@@ -29,13 +29,13 @@ import org.apache.spark.sql.connector.expressions.NamedReference;
  */
 @Evolving
 public final class IsNotNull extends Filter {
-  private final NamedReference column;
+  private final Expression column;
 
-  public IsNotNull(NamedReference column) {
+  public IsNotNull(Expression column) {
     this.column = column;
   }
 
-  public NamedReference column() { return column; }
+  public Expression column() { return column; }
 
   @Override
   public String toString() { return column.describe() + " IS NOT NULL"; }
@@ -54,5 +54,5 @@ public final class IsNotNull extends Filter {
   }
 
   @Override
-  public NamedReference[] references() { return new NamedReference[] { column }; }
+  public Expression[] references() { return new Expression[] { column }; }
 }
