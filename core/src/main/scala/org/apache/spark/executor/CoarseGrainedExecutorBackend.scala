@@ -42,7 +42,6 @@ import org.apache.spark.resource.ResourceUtils._
 import org.apache.spark.rpc._
 import org.apache.spark.scheduler.{ExecutorLossMessage, ExecutorLossReason, TaskDescription}
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages._
-import org.apache.spark.serializer.SerializerInstance
 import org.apache.spark.util.{ChildFirstURLClassLoader, MutableURLClassLoader, SignalUtils, ThreadUtils, Utils}
 
 private[spark] class CoarseGrainedExecutorBackend(
@@ -64,10 +63,6 @@ private[spark] class CoarseGrainedExecutorBackend(
   private[spark] val stopping = new AtomicBoolean(false)
   var executor: Executor = null
   @volatile var driver: Option[RpcEndpointRef] = None
-
-  // If this CoarseGrainedExecutorBackend is changed to support multiple threads, then this may need
-  // to be changed so that we don't share the serializer instance across threads
-  private[this] val ser: SerializerInstance = env.closureSerializer.newInstance()
 
   private var _resources = Map.empty[String, ResourceInformation]
 
@@ -106,6 +101,7 @@ private[spark] class CoarseGrainedExecutorBackend(
     rpcEnv.asyncSetupEndpointRefByURI(driverUrl).flatMap { ref =>
       // This is a very fast action so we can use "ThreadUtils.sameThread"
       driver = Some(ref)
+      env.executorBackend = Option(this)
       ref.ask[Boolean](RegisterExecutor(executorId, self, hostname, cores, extractLogUrls,
         extractAttributes, _resources, resourceProfile.id))
     }(ThreadUtils.sameThread).onComplete {
@@ -160,6 +156,11 @@ private[spark] class CoarseGrainedExecutorBackend(
     val prefix = "SPARK_EXECUTOR_ATTRIBUTE_"
     sys.env.filterKeys(_.startsWith(prefix))
       .map(e => (e._1.substring(prefix.length).toUpperCase(Locale.ROOT), e._2)).toMap
+  }
+
+  def notifyDriverAboutPushCompletion(shuffleId: Int, shuffleMergeId: Int, mapIndex: Int): Unit = {
+    val msg = ShufflePushCompletion(shuffleId, shuffleMergeId, mapIndex)
+    driver.foreach(_.send(msg))
   }
 
   override def receive: PartialFunction[Any, Unit] = {

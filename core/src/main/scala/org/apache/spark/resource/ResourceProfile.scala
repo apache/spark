@@ -87,7 +87,7 @@ class ResourceProfile(
   }
 
   private[spark] def getPySparkMemory: Option[Long] = {
-    executorResources.get(ResourceProfile.PYSPARK_MEM).map(_.amount.toLong)
+    executorResources.get(ResourceProfile.PYSPARK_MEM).map(_.amount)
   }
 
   /*
@@ -463,14 +463,14 @@ object ResourceProfile extends Logging {
           case ResourceProfile.CORES =>
             cores = execReq.amount.toInt
           case rName =>
-            val nameToUse = resourceMappings.get(rName).getOrElse(rName)
+            val nameToUse = resourceMappings.getOrElse(rName, rName)
             customResources(nameToUse) = execReq
         }
       }
       customResources.toMap
     } else {
       defaultResources.customResources.map { case (rName, execReq) =>
-        val nameToUse = resourceMappings.get(rName).getOrElse(rName)
+        val nameToUse = resourceMappings.getOrElse(rName, rName)
         (nameToUse, execReq)
       }
     }

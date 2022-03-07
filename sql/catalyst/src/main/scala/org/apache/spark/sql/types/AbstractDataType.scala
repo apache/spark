@@ -227,6 +227,8 @@ private[sql] object AnyTimestampType extends AbstractDataType with Serializable 
   def unapply(e: Expression): Boolean = acceptsType(e.dataType)
 }
 
+private[sql] abstract class DatetimeType extends AtomicType
+
 /**
  * The interval type which conforms to the ANSI SQL standard.
  */

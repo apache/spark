@@ -143,7 +143,7 @@ class DatetimeOps(DataTypeOps):
         if isinstance(dtype, CategoricalDtype):
             return _as_categorical_type(index_ops, dtype, spark_type)
         elif isinstance(spark_type, BooleanType):
-            raise TypeError("cannot astype a datetimelike from [datetime64[ns]] to [bool]")
+            raise TypeError("cannot astype a %s to [bool]" % self.pretty_name)
         elif isinstance(spark_type, StringType):
             return _as_string_type(index_ops, dtype, null_str=str(pd.NaT))
         else:

@@ -295,6 +295,37 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     assert(cast("abcdef", FloatType).nullable)
   }
 
+  test("cast from timestamp") {
+    val millis = 15 * 1000 + 3
+    val seconds = millis * 1000 + 3
+    val ts = new Timestamp(millis)
+    val tss = new Timestamp(seconds)
+    checkEvaluation(cast(ts, ShortType), 15.toShort)
+    checkEvaluation(cast(ts, IntegerType), 15)
+    checkEvaluation(cast(ts, LongType), 15.toLong)
+    checkEvaluation(cast(ts, FloatType), 15.003f)
+    checkEvaluation(cast(ts, DoubleType), 15.003)
+
+    checkEvaluation(cast(cast(tss, ShortType), TimestampType),
+      fromJavaTimestamp(ts) * MILLIS_PER_SECOND)
+    checkEvaluation(cast(cast(tss, IntegerType), TimestampType),
+      fromJavaTimestamp(ts) * MILLIS_PER_SECOND)
+    checkEvaluation(cast(cast(tss, LongType), TimestampType),
+      fromJavaTimestamp(ts) * MILLIS_PER_SECOND)
+    checkEvaluation(
+      cast(cast(millis.toFloat / MILLIS_PER_SECOND, TimestampType), FloatType),
+      millis.toFloat / MILLIS_PER_SECOND)
+    checkEvaluation(
+      cast(cast(millis.toDouble / MILLIS_PER_SECOND, TimestampType), DoubleType),
+      millis.toDouble / MILLIS_PER_SECOND)
+    checkEvaluation(
+      cast(cast(Decimal(1), TimestampType), DecimalType.SYSTEM_DEFAULT),
+      Decimal(1))
+
+    // A test for higher precision than millis
+    checkEvaluation(cast(cast(0.000001, TimestampType), DoubleType), 0.000001)
+  }
+
   test("data type casting") {
     val sd = "1970-01-01"
     val d = Date.valueOf(sd)

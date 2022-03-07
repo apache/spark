@@ -37,7 +37,4 @@ public abstract class Filter implements Expression, Serializable {
    * Returns list of columns that are referenced by this filter.
    */
   public abstract NamedReference[] references();
-
-  @Override
-  public String describe() { return this.toString(); }
 }

@@ -11,7 +11,7 @@
   "failedTasks" : 0,
   "completedTasks" : 0,
   "totalTasks" : 0,
-  "totalDuration" : 0,
+  "totalDuration" : 10671,
   "totalGCTime" : 0,
   "totalInputBytes" : 0,
   "totalShuffleRead" : 0,
@@ -57,7 +57,7 @@
     "stdout" : "http://172.22.0.167:51466/logPage/?appId=app-20161116163331-0000&executorId=3&logType=stdout",
     "stderr" : "http://172.22.0.167:51466/logPage/?appId=app-20161116163331-0000&executorId=3&logType=stderr"
   },
-  "memoryMetrics": {
+  "memoryMetrics" : {
     "usedOnHeapStorageMemory" : 0,
     "usedOffHeapStorageMemory" : 0,
     "totalOnHeapStorageMemory" : 384093388,
@@ -84,14 +84,15 @@
     "MinorGCCount" : 0,
     "MinorGCTime" : 0,
     "MajorGCCount" : 0,
-    "MajorGCTime" : 0
+    "MajorGCTime" : 0,
+    "TotalGCTime" : 0
   },
   "attributes" : { },
   "resources" : { },
   "resourceProfileId" : 0,
   "isExcluded" : true,
   "excludedInStages" : [ ]
-} ,{
+}, {
   "id" : "2",
   "hostPort" : "172.22.0.167:51487",
   "isActive" : true,
@@ -116,7 +117,7 @@
     "stdout" : "http://172.22.0.167:51469/logPage/?appId=app-20161116163331-0000&executorId=2&logType=stdout",
     "stderr" : "http://172.22.0.167:51469/logPage/?appId=app-20161116163331-0000&executorId=2&logType=stderr"
   },
-  "memoryMetrics": {
+  "memoryMetrics" : {
     "usedOnHeapStorageMemory" : 0,
     "usedOffHeapStorageMemory" : 0,
     "totalOnHeapStorageMemory" : 384093388,
@@ -143,7 +144,8 @@
     "MinorGCCount" : 0,
     "MinorGCTime" : 0,
     "MajorGCCount" : 0,
-    "MajorGCTime" : 0
+    "MajorGCTime" : 0,
+    "TotalGCTime" : 0
   },
   "attributes" : { },
   "resources" : { },
@@ -175,11 +177,11 @@
     "stdout" : "http://172.22.0.167:51467/logPage/?appId=app-20161116163331-0000&executorId=1&logType=stdout",
     "stderr" : "http://172.22.0.167:51467/logPage/?appId=app-20161116163331-0000&executorId=1&logType=stderr"
   },
-  "memoryMetrics": {
-    "usedOnHeapStorageMemory": 0,
-    "usedOffHeapStorageMemory": 0,
-    "totalOnHeapStorageMemory": 384093388,
-    "totalOffHeapStorageMemory": 524288000
+  "memoryMetrics" : {
+    "usedOnHeapStorageMemory" : 0,
+    "usedOffHeapStorageMemory" : 0,
+    "totalOnHeapStorageMemory" : 384093388,
+    "totalOffHeapStorageMemory" : 524288000
   },
   "blacklistedInStages" : [ ],
   "peakMemoryMetrics" : {
@@ -202,7 +204,8 @@
     "MinorGCCount" : 0,
     "MinorGCTime" : 0,
     "MajorGCCount" : 0,
-    "MajorGCTime" : 0
+    "MajorGCTime" : 0,
+    "TotalGCTime" : 0
   },
   "attributes" : { },
   "resources" : { },
@@ -234,7 +237,7 @@
     "stdout" : "http://172.22.0.167:51465/logPage/?appId=app-20161116163331-0000&executorId=0&logType=stdout",
     "stderr" : "http://172.22.0.167:51465/logPage/?appId=app-20161116163331-0000&executorId=0&logType=stderr"
   },
-  "memoryMetrics": {
+  "memoryMetrics" : {
     "usedOnHeapStorageMemory" : 0,
     "usedOffHeapStorageMemory" : 0,
     "totalOnHeapStorageMemory" : 384093388,
@@ -261,7 +264,8 @@
     "MinorGCCount" : 0,
     "MinorGCTime" : 0,
     "MajorGCCount" : 0,
-    "MajorGCTime" : 0
+    "MajorGCTime" : 0,
+    "TotalGCTime" : 0
   },
   "attributes" : { },
   "resources" : { },

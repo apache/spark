@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.datasources.orc
 import java.math.MathContext
 import java.nio.charset.StandardCharsets
 import java.sql.{Date, Timestamp}
-import java.time.{Duration, Period}
+import java.time.{Duration, LocalDateTime, Period}
 
 import scala.collection.JavaConverters._
 
@@ -323,6 +323,39 @@ class OrcFilterSuite extends OrcTest with SharedSparkSession {
             checkFilterPredicate(Literal(timestamps(3)) <= $"_1", PredicateLeaf.Operator.LESS_THAN)
           }
         }
+      }
+    }
+  }
+
+  test("SPARK-36357: filter pushdown - timestamp_ntz") {
+    val localDateTimes = Seq(
+      LocalDateTime.of(1000, 1, 1, 1, 2, 3, 456000000),
+      LocalDateTime.of(1582, 10, 1, 0, 11, 22, 456000000),
+      LocalDateTime.of(1900, 1, 1, 23, 59, 59, 456000000),
+      LocalDateTime.of(2020, 5, 25, 10, 11, 12, 456000000))
+    withOrcFile(localDateTimes.map(Tuple1(_))) { path =>
+      readFile(path) { implicit df =>
+        checkFilterPredicate($"_1".isNull, PredicateLeaf.Operator.IS_NULL)
+
+        checkFilterPredicate($"_1" === localDateTimes(0), PredicateLeaf.Operator.EQUALS)
+        checkFilterPredicate($"_1" <=> localDateTimes(0), PredicateLeaf.Operator.NULL_SAFE_EQUALS)
+
+        checkFilterPredicate($"_1" < localDateTimes(1), PredicateLeaf.Operator.LESS_THAN)
+        checkFilterPredicate($"_1" > localDateTimes(2), PredicateLeaf.Operator.LESS_THAN_EQUALS)
+        checkFilterPredicate($"_1" <= localDateTimes(0), PredicateLeaf.Operator.LESS_THAN_EQUALS)
+        checkFilterPredicate($"_1" >= localDateTimes(3), PredicateLeaf.Operator.LESS_THAN)
+
+        checkFilterPredicate(Literal(localDateTimes(0)) === $"_1", PredicateLeaf.Operator.EQUALS)
+        checkFilterPredicate(
+          Literal(localDateTimes(0)) <=> $"_1", PredicateLeaf.Operator.NULL_SAFE_EQUALS)
+        checkFilterPredicate(Literal(localDateTimes(1)) > $"_1", PredicateLeaf.Operator.LESS_THAN)
+        checkFilterPredicate(
+          Literal(localDateTimes(2)) < $"_1",
+          PredicateLeaf.Operator.LESS_THAN_EQUALS)
+        checkFilterPredicate(
+          Literal(localDateTimes(0)) >= $"_1",
+          PredicateLeaf.Operator.LESS_THAN_EQUALS)
+        checkFilterPredicate(Literal(localDateTimes(3)) <= $"_1", PredicateLeaf.Operator.LESS_THAN)
       }
     }
   }

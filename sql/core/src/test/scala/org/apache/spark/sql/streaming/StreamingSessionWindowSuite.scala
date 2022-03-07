@@ -51,7 +51,7 @@ class StreamingSessionWindowSuite extends StreamTest
       (SQLConf.STATE_STORE_PROVIDER_CLASS.key, value.stripSuffix("$"))
     }
     // RocksDB doesn't support Apple Silicon yet
-    if (Utils.isMac && System.getProperty("os.arch").equals("aarch64")) {
+    if (Utils.isMacOnAppleSilicon) {
       providerOptions = providerOptions
         .filterNot(_._2.contains(classOf[RocksDBStateStoreProvider].getSimpleName))
     }
@@ -417,7 +417,7 @@ class StreamingSessionWindowSuite extends StreamTest
       .selectExpr("explode(split(value, ' ')) AS sessionId", "eventTime")
 
     events
-      .groupBy(sessionWindow as 'session, 'sessionId)
+      .groupBy(sessionWindow as Symbol("session"), Symbol("sessionId"))
       .agg(count("*").as("numEvents"))
       .selectExpr("sessionId", "CAST(session.start AS LONG)", "CAST(session.end AS LONG)",
         "CAST(session.end AS LONG) - CAST(session.start AS LONG) AS durationMs",
@@ -429,8 +429,8 @@ class StreamingSessionWindowSuite extends StreamTest
       .selectExpr("*")
       .withColumn("eventTime", $"value".cast("timestamp"))
       .withWatermark("eventTime", "10 seconds")
-      .groupBy(session_window($"eventTime", "5 seconds") as 'session)
-      .agg(count("*") as 'count, sum("value") as 'sum)
+      .groupBy(session_window($"eventTime", "5 seconds") as Symbol("session"))
+      .agg(count("*") as Symbol("count"), sum("value") as Symbol("sum"))
       .select($"session".getField("start").cast("long").as[Long],
         $"session".getField("end").cast("long").as[Long], $"count".as[Long], $"sum".as[Long])
   }

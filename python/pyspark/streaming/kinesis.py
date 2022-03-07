@@ -35,7 +35,7 @@ def utf8_decoder(s: Optional[bytes]) -> Optional[str]:
     return s.decode("utf-8")
 
 
-class KinesisUtils(object):
+class KinesisUtils:
     @staticmethod
     @overload
     def createStream(
@@ -156,10 +156,10 @@ class KinesisUtils(object):
         jlevel = ssc._sc._getJavaStorageLevel(storageLevel)  # type: ignore[attr-defined]
         jduration = ssc._jduration(checkpointInterval)  # type: ignore[attr-defined]
 
+        jvm = ssc._jvm  # type: ignore[attr-defined]
+
         try:
-            helper = (
-                ssc._jvm.org.apache.spark.streaming.kinesis.KinesisUtilsPythonHelper()  # type: ignore[attr-defined]
-            )
+            helper = jvm.org.apache.spark.streaming.kinesis.KinesisUtilsPythonHelper()
         except TypeError as e:
             if str(e) == "'JavaPackage' object is not callable":
                 _print_missing_jar(
@@ -188,5 +188,5 @@ class KinesisUtils(object):
         return stream.map(lambda v: decoder(v))
 
 
-class InitialPositionInStream(object):
+class InitialPositionInStream:
     LATEST, TRIM_HORIZON = (0, 1)

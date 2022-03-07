@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst
 
 import java.sql.{Date, Timestamp}
-import java.time.{Duration, Instant, LocalDate, Period}
+import java.time.{Duration, Instant, LocalDate, LocalDateTime, Period}
 
 import scala.language.implicitConversions
 
@@ -138,6 +138,14 @@ package object dsl {
       }
     }
 
+    def castNullable(): Expression = {
+      if (expr.resolved && expr.nullable) {
+        expr
+      } else {
+        KnownNullable(expr)
+      }
+    }
+
     def asc: SortOrder = SortOrder(expr, Ascending)
     def asc_nullsLast: SortOrder = SortOrder(expr, Ascending, NullsLast, Seq.empty)
     def desc: SortOrder = SortOrder(expr, Descending)
@@ -165,6 +173,7 @@ package object dsl {
     implicit def bigDecimalToLiteral(d: java.math.BigDecimal): Literal = Literal(d)
     implicit def decimalToLiteral(d: Decimal): Literal = Literal(d)
     implicit def timestampToLiteral(t: Timestamp): Literal = Literal(t)
+    implicit def timestampNTZToLiteral(l: LocalDateTime): Literal = Literal(l)
     implicit def instantToLiteral(i: Instant): Literal = Literal(i)
     implicit def binaryToLiteral(a: Array[Byte]): Literal = Literal(a)
     implicit def periodToLiteral(p: Period): Literal = Literal(p)
@@ -431,7 +440,7 @@ package object dsl {
       def groupBy(groupingExprs: Expression*)(aggregateExprs: Expression*): LogicalPlan = {
         val aliasedExprs = aggregateExprs.map {
           case ne: NamedExpression => ne
-          case e => Alias(e, e.toString)()
+          case e => UnresolvedAlias(e)
         }
         Aggregate(groupingExprs, aliasedExprs, logicalPlan)
       }
@@ -488,6 +497,9 @@ package object dsl {
 
       def distribute(exprs: Expression*)(n: Int): LogicalPlan =
         RepartitionByExpression(exprs, logicalPlan, numPartitions = n)
+
+      def rebalance(exprs: Expression*): LogicalPlan =
+        RebalancePartitions(exprs, logicalPlan)
 
       def analyze: LogicalPlan = {
         val analyzed = analysis.SimpleAnalyzer.execute(logicalPlan)

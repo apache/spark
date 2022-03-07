@@ -79,7 +79,8 @@
         "MinorGCCount" : 0,
         "MinorGCTime" : 0,
         "MajorGCCount" : 0,
-        "MajorGCTime" : 0
+        "MajorGCTime" : 0,
+        "TotalGCTime" : 0
       },
       "isExcludedForStage" : false
     }
@@ -106,6 +107,7 @@
     "MinorGCCount" : 0,
     "MinorGCTime" : 0,
     "MajorGCCount" : 0,
-    "MajorGCTime" : 0
+    "MajorGCTime" : 0,
+    "TotalGCTime" : 0
   }
 }

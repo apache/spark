@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.jdbc
 
-import java.sql.{Connection, Date, Timestamp}
+import java.sql.{Connection, Date, Statement, Timestamp}
 import java.time.{Instant, LocalDate}
 import java.util
 
@@ -32,7 +32,9 @@ import org.apache.spark.sql.catalyst.util.{DateFormatter, DateTimeUtils, Timesta
 import org.apache.spark.sql.connector.catalog.TableChange
 import org.apache.spark.sql.connector.catalog.TableChange._
 import org.apache.spark.sql.connector.catalog.index.TableIndex
-import org.apache.spark.sql.connector.expressions.NamedReference
+import org.apache.spark.sql.connector.expressions.{Expression, FieldReference, NamedReference}
+import org.apache.spark.sql.connector.expressions.aggregate.{AggregateFunc, Avg, Count, CountStar, Max, Min, Sum}
+import org.apache.spark.sql.connector.util.V2ExpressionSQLBuilder
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JdbcUtils}
 import org.apache.spark.sql.execution.datasources.v2.TableSampleInfo
@@ -193,6 +195,97 @@ abstract class JdbcDialect extends Serializable with Logging{
     case _ => value
   }
 
+  class JDBCSQLBuilder extends V2ExpressionSQLBuilder {
+    override def visitFieldReference(fieldRef: FieldReference): String = {
+      if (fieldRef.fieldNames().length != 1) {
+        throw new IllegalArgumentException(
+          "FieldReference with field name has multiple or zero parts unsupported: " + fieldRef);
+      }
+      quoteIdentifier(fieldRef.fieldNames.head)
+    }
+  }
+
+  /**
+   * Converts V2 expression to String representing a SQL expression.
+   * @param expr The V2 expression to be converted.
+   * @return Converted value.
+   */
+  @Since("3.3.0")
+  def compileExpression(expr: Expression): Option[String] = {
+    val jdbcSQLBuilder = new JDBCSQLBuilder()
+    try {
+      Some(jdbcSQLBuilder.build(expr))
+    } catch {
+      case _: IllegalArgumentException => None
+    }
+  }
+
+  /**
+   * Converts aggregate function to String representing a SQL expression.
+   * @param aggFunction The aggregate function to be converted.
+   * @return Converted value.
+   */
+  @Since("3.3.0")
+  def compileAggregate(aggFunction: AggregateFunc): Option[String] = {
+    aggFunction match {
+      case min: Min =>
+        compileExpression(min.column).map(v => s"MIN($v)")
+      case max: Max =>
+        compileExpression(max.column).map(v => s"MAX($v)")
+      case count: Count =>
+        val distinct = if (count.isDistinct) "DISTINCT " else ""
+        compileExpression(count.column).map(v => s"COUNT($distinct$v)")
+      case sum: Sum =>
+        val distinct = if (sum.isDistinct) "DISTINCT " else ""
+        compileExpression(sum.column).map(v => s"SUM($distinct$v)")
+      case _: CountStar =>
+        Some("COUNT(*)")
+      case avg: Avg =>
+        val distinct = if (avg.isDistinct) "DISTINCT " else ""
+        compileExpression(avg.column).map(v => s"AVG($distinct$v)")
+      case _ => None
+    }
+  }
+
+  /**
+   * Create schema with an optional comment. Empty string means no comment.
+   */
+  def createSchema(statement: Statement, schema: String, comment: String): Unit = {
+    val schemaCommentQuery = if (comment.nonEmpty) {
+      // We generate comment query here so that it can fail earlier without creating the schema.
+      getSchemaCommentQuery(schema, comment)
+    } else {
+      comment
+    }
+    statement.executeUpdate(s"CREATE SCHEMA ${quoteIdentifier(schema)}")
+    if (comment.nonEmpty) {
+      statement.executeUpdate(schemaCommentQuery)
+    }
+  }
+
+  /**
+   * Check schema exists or not.
+   */
+  def schemasExists(conn: Connection, options: JDBCOptions, schema: String): Boolean = {
+    val rs = conn.getMetaData.getSchemas(null, schema)
+    while (rs.next()) {
+      if (rs.getString(1) == schema) return true;
+    }
+    false
+  }
+
+  /**
+   * Lists all the schemas in this table.
+   */
+  def listSchemas(conn: Connection, options: JDBCOptions): Array[Array[String]] = {
+    val schemaBuilder = ArrayBuilder.make[Array[String]]
+    val rs = conn.getMetaData.getSchemas()
+    while (rs.next()) {
+      schemaBuilder += Array(rs.getString(1))
+    }
+    schemaBuilder.result
+  }
+
   /**
    * Return Some[true] iff `TRUNCATE TABLE` causes cascading default.
    * Some[true] : TRUNCATE TABLE causes cascading.
@@ -291,6 +384,14 @@ abstract class JdbcDialect extends Serializable with Logging{
     s"COMMENT ON SCHEMA ${quoteIdentifier(schema)} IS NULL"
   }
 
+  def dropSchema(schema: String, cascade: Boolean): String = {
+    if (cascade) {
+      s"DROP SCHEMA ${quoteIdentifier(schema)} CASCADE"
+    } else {
+      s"DROP SCHEMA ${quoteIdentifier(schema)}"
+    }
+  }
+
   /**
    * Build a create index SQL statement.
    *
@@ -364,11 +465,6 @@ abstract class JdbcDialect extends Serializable with Logging{
   def getLimitClause(limit: Integer): String = {
     if (limit > 0 ) s"LIMIT $limit" else ""
   }
-
-  /**
-   * returns whether the dialect supports limit or not
-   */
-  def supportsLimit(): Boolean = true
 
   def supportsTableSample: Boolean = false
 

@@ -73,7 +73,7 @@ class KubernetesClusterSchedulerBackendSuite extends SparkFunSuite with BeforeAn
   private var configMapsOperations: CONFIG_MAPS = _
 
   @Mock
-  private var labledConfigMaps: LABELED_CONFIG_MAPS = _
+  private var labeledConfigMaps: LABELED_CONFIG_MAPS = _
 
   @Mock
   private var taskScheduler: TaskSchedulerImpl = _
@@ -145,15 +145,15 @@ class KubernetesClusterSchedulerBackendSuite extends SparkFunSuite with BeforeAn
     when(podOperations.withLabel(SPARK_APP_ID_LABEL, TEST_SPARK_APP_ID)).thenReturn(labeledPods)
     when(labeledPods.withLabel(SPARK_ROLE_LABEL, SPARK_POD_EXECUTOR_ROLE)).thenReturn(labeledPods)
     when(configMapsOperations.withLabel(SPARK_APP_ID_LABEL, TEST_SPARK_APP_ID))
-      .thenReturn(labledConfigMaps)
-    when(labledConfigMaps.withLabel(SPARK_ROLE_LABEL, SPARK_POD_EXECUTOR_ROLE))
-      .thenReturn(labledConfigMaps)
+      .thenReturn(labeledConfigMaps)
+    when(labeledConfigMaps.withLabel(SPARK_ROLE_LABEL, SPARK_POD_EXECUTOR_ROLE))
+      .thenReturn(labeledConfigMaps)
     schedulerBackendUnderTest.stop()
     verify(eventQueue).stop()
     verify(watchEvents).stop()
     verify(pollEvents).stop()
     verify(podAllocator).stop(TEST_SPARK_APP_ID)
-    verify(labledConfigMaps).delete()
+    verify(labeledConfigMaps).delete()
     verify(kubernetesClient).close()
   }
 

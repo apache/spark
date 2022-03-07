@@ -386,3 +386,19 @@ Time-specific operations
    DatetimeIndex.ceil
    DatetimeIndex.month_name
    DatetimeIndex.day_name
+
+TimedeltaIndex
+--------------
+.. autosummary::
+   :toctree: api/
+
+   TimedeltaIndex
+
+Components
+~~~~~~~~~~
+.. autosummary::
+   :toctree: api/
+
+   TimedeltaIndex.days
+   TimedeltaIndex.seconds
+   TimedeltaIndex.microseconds

@@ -31,6 +31,7 @@ import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.exchange.{ENSURE_REQUIREMENTS, EnsureRequirements, ValidateRequirements}
 import org.apache.spark.sql.execution.joins.{ShuffledHashJoinExec, SortMergeJoinExec}
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.util.Utils
 
 /**
  * A rule to optimize skewed joins to avoid straggler tasks whose share of data are significantly
@@ -64,16 +65,6 @@ case class OptimizeSkewedJoin(ensureRequirements: EnsureRequirements)
   def getSkewThreshold(medianSize: Long): Long = {
     conf.getConf(SQLConf.SKEW_JOIN_SKEWED_PARTITION_THRESHOLD).max(
       medianSize * conf.getConf(SQLConf.SKEW_JOIN_SKEWED_PARTITION_FACTOR))
-  }
-
-  private def medianSize(sizes: Array[Long]): Long = {
-    val numPartitions = sizes.length
-    val bytes = sizes.sorted
-    numPartitions match {
-      case _ if (numPartitions % 2 == 0) =>
-        math.max((bytes(numPartitions / 2) + bytes(numPartitions / 2 - 1)) / 2, 1)
-      case _ => math.max(bytes(numPartitions / 2), 1)
-    }
   }
 
   /**
@@ -130,8 +121,8 @@ case class OptimizeSkewedJoin(ensureRequirements: EnsureRequirements)
     assert(leftSizes.length == rightSizes.length)
     val numPartitions = leftSizes.length
     // We use the median size of the original shuffle partitions to detect skewed partitions.
-    val leftMedSize = medianSize(leftSizes)
-    val rightMedSize = medianSize(rightSizes)
+    val leftMedSize = Utils.median(leftSizes)
+    val rightMedSize = Utils.median(rightSizes)
     logDebug(
       s"""
          |Optimizing skewed join.
@@ -231,44 +222,24 @@ case class OptimizeSkewedJoin(ensureRequirements: EnsureRequirements)
       return plan
     }
 
-    def collectShuffleStages(plan: SparkPlan): Seq[ShuffleQueryStageExec] = plan match {
-      case stage: ShuffleQueryStageExec => Seq(stage)
-      case _ => plan.children.flatMap(collectShuffleStages)
+    // We try to optimize every skewed sort-merge/shuffle-hash joins in the query plan. If this
+    // introduces extra shuffles, we give up the optimization and return the original query plan, or
+    // accept the extra shuffles if the force-apply config is true.
+    // TODO: It's possible that only one skewed join in the query plan leads to extra shuffles and
+    //       we only need to skip optimizing that join. We should make the strategy smarter here.
+    val optimized = optimizeSkewJoin(plan)
+    val requirementSatisfied = if (ensureRequirements.requiredDistribution.isDefined) {
+      ValidateRequirements.validate(optimized, ensureRequirements.requiredDistribution.get)
+    } else {
+      ValidateRequirements.validate(optimized)
     }
-
-    val shuffleStages = collectShuffleStages(plan)
-
-    if (shuffleStages.length == 2) {
-      // When multi table join, there will be too many complex combination to consider.
-      // Currently we only handle 2 table join like following use case.
-      // SMJ
-      //   Sort
-      //     Shuffle
-      //   Sort
-      //     Shuffle
-      // Or
-      // SHJ
-      //   Shuffle
-      //   Shuffle
-      val optimized = optimizeSkewJoin(plan)
-      val requirementSatisfied = if (ensureRequirements.requiredDistribution.isDefined) {
-        ValidateRequirements.validate(optimized, ensureRequirements.requiredDistribution.get)
-      } else {
-        ValidateRequirements.validate(optimized)
+    if (requirementSatisfied) {
+      optimized.transform {
+        case SkewJoinChildWrapper(child) => child
       }
-      // Two cases we will apply the skewed join optimization:
-      //   1. optimize the skew join without extra shuffle
-      //   2. optimize the skew join with extra shuffle but the force-apply config is true.
-      if (requirementSatisfied) {
-        optimized.transform {
-          case SkewJoinChildWrapper(child) => child
-        }
-      } else if (conf.getConf(SQLConf.ADAPTIVE_FORCE_OPTIMIZE_SKEWED_JOIN)) {
-        ensureRequirements.apply(optimized).transform {
-          case SkewJoinChildWrapper(child) => child
-        }
-      } else {
-        plan
+    } else if (conf.getConf(SQLConf.ADAPTIVE_FORCE_OPTIMIZE_SKEWED_JOIN)) {
+      ensureRequirements.apply(optimized).transform {
+        case SkewJoinChildWrapper(child) => child
       }
     } else {
       plan

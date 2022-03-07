@@ -388,7 +388,7 @@ FROM (VALUES(1,1),(2,2),(3,(cast('nan' as int))),(4,3),(5,4)) t(a,b);
 -- Tests for problems with failure to walk or mutate expressions
 -- within window frame clauses.
 
--- [SPARK-27974] Add built-in Aggregate Function: array_agg
+-- [SPARK-37612] Support window frame ORDER BY i ROWS BETWEEN (('foo' < 'foobar')::integer) PRECEDING AND CURRENT ROW
 -- test walker (fails with collation error if expressions are not walked)
 -- SELECT array_agg(i) OVER w
 --   FROM range(1,6) i

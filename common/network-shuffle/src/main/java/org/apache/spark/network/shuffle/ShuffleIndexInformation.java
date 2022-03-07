@@ -29,25 +29,28 @@ import java.nio.file.Files;
  * as an in-memory LongBuffer.
  */
 public class ShuffleIndexInformation {
+
+  // The estimate of `ShuffleIndexInformation` memory footprint which is relevant in case of small
+  // index files (i.e. storing only 2 offsets = 16 bytes).
+  static final int INSTANCE_MEMORY_FOOTPRINT = 176;
+
   /** offsets as long buffer */
   private final LongBuffer offsets;
-  private int size;
 
-  public ShuffleIndexInformation(File indexFile) throws IOException {
-    size = (int)indexFile.length();
-    ByteBuffer buffer = ByteBuffer.allocate(size);
+  public ShuffleIndexInformation(String indexFilePath) throws IOException {
+    File indexFile = new File(indexFilePath);
+    ByteBuffer buffer = ByteBuffer.allocate((int)indexFile.length());
     offsets = buffer.asLongBuffer();
     try (DataInputStream dis = new DataInputStream(Files.newInputStream(indexFile.toPath()))) {
       dis.readFully(buffer.array());
     }
   }
 
-  /**
-   * Size of the index file
-   * @return size
-   */
-  public int getSize() {
-    return size;
+  public int getRetainedMemorySize() {
+    // SPARK-33206: here the offsets' capacity is multiplied by 8 as offsets stores long values.
+    // Integer overflow won't be an issue here as long as the number of reducers is under
+    // (Integer.MAX_VALUE - INSTANCE_MEMORY_FOOTPRINT) / 8 - 1 = 268435432.
+    return (offsets.capacity() << 3) + INSTANCE_MEMORY_FOOTPRINT;
   }
 
   /**

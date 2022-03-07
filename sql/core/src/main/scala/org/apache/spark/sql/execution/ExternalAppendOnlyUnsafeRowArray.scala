@@ -73,6 +73,7 @@ private[sql] class ExternalAppendOnlyUnsafeRowArray(
   }
 
   private var spillableArray: UnsafeExternalSorter = _
+  private var totalSpillBytes: Long = 0
   private var numRows = 0
 
   // A counter to keep track of total modifications done to this array since its creation.
@@ -86,10 +87,22 @@ private[sql] class ExternalAppendOnlyUnsafeRowArray(
   def isEmpty: Boolean = numRows == 0
 
   /**
+   * Total number of bytes that has been spilled into disk so far.
+   */
+  def spillSize: Long = {
+    if (spillableArray != null) {
+      totalSpillBytes + spillableArray.getSpillSize
+    } else {
+      totalSpillBytes
+    }
+  }
+
+  /**
    * Clears up resources (e.g. memory) held by the backing storage
    */
   def clear(): Unit = {
     if (spillableArray != null) {
+      totalSpillBytes += spillableArray.getSpillSize
       // The last `spillableArray` of this task will be cleaned up via task completion listener
       // inside `UnsafeExternalSorter`
       spillableArray.cleanupResources()

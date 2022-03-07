@@ -61,7 +61,7 @@ class MLUtilsTests(MLlibTestCase):
             self.assertEqual(len(ret), 2)
             self.assertEqual(ret[0], DenseVector([1.0, 2.0, 3.0]))
             self.assertEqual(ret[1], DenseVector([1.0, 2.0, 3.0]))
-        except:
+        except BaseException:
             self.fail()
         finally:
             shutil.rmtree(load_vectors_path)

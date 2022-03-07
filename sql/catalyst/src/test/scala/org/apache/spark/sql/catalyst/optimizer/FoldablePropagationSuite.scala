@@ -204,4 +204,12 @@ class FoldablePropagationSuite extends PlanTest {
       .select('a, 'b, Literal(1).as('c)).analyze
     comparePlans(optimized, correctAnswer)
   }
+
+  test("SPARK-37904: Improve rebalance in FoldablePropagation") {
+    val foldableAttr = Literal(1).as("x")
+    val plan = testRelation.select(foldableAttr, $"a").rebalance($"x", $"a").analyze
+    val optimized = Optimize.execute(plan)
+    val expected = testRelation.select(foldableAttr, $"a").rebalance(foldableAttr, $"a").analyze
+    comparePlans(optimized, expected)
+  }
 }

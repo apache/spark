@@ -33,6 +33,7 @@ import org.junit.*;
 
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
+import org.apache.spark.sql.Column;
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.RowFactory;
@@ -316,6 +317,21 @@ public class JavaDataFrameSuite {
     Assert.assertTrue(0 <= actual.get(0).getLong(1) && actual.get(0).getLong(1) <= 8);
     Assert.assertEquals(1, actual.get(1).getLong(0));
     Assert.assertTrue(2 <= actual.get(1).getLong(1) && actual.get(1).getLong(1) <= 13);
+  }
+
+  @Test
+  public void testwithColumns() {
+    Dataset<Row> df = spark.table("testData2");
+    Map<String, Column> colMaps = new HashMap<>();
+    colMaps.put("a1", col("a"));
+    colMaps.put("b1", col("b"));
+
+    StructType expected = df.withColumn("a1", col("a")).withColumn("b1", col("b")).schema();
+    StructType actual = df.withColumns(colMaps).schema();
+    // Validate geting same result with withColumn loop call
+    Assert.assertEquals(expected, actual);
+    // Validate the col names
+    Assert.assertArrayEquals(actual.fieldNames(), new String[] {"a", "b", "a1", "b1"});
   }
 
   @Test

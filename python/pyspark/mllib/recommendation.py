@@ -217,7 +217,7 @@ class MatrixFactorizationModel(JavaModelWrapper, JavaSaveable, JavaLoader):
         return MatrixFactorizationModel(wrapper)
 
 
-class ALS(object):
+class ALS:
     """Alternating Least Squares matrix factorization
 
     .. versionadded:: 0.9.0

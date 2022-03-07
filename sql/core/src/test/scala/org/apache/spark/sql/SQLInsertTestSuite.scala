@@ -286,20 +286,43 @@ trait SQLInsertTestSuite extends QueryTest with SQLTestUtils {
     } else {
       SQLConf.StoreAssignmentPolicy.values
     }
+
+    def shouldThrowException(policy: SQLConf.StoreAssignmentPolicy.Value): Boolean = policy match {
+      case SQLConf.StoreAssignmentPolicy.ANSI | SQLConf.StoreAssignmentPolicy.STRICT =>
+        true
+      case SQLConf.StoreAssignmentPolicy.LEGACY =>
+        false
+    }
+
     testingPolicies.foreach { policy =>
-      withSQLConf(
-        SQLConf.STORE_ASSIGNMENT_POLICY.key -> policy.toString) {
+      withSQLConf(SQLConf.STORE_ASSIGNMENT_POLICY.key -> policy.toString) {
         withTable("t") {
           sql("create table t(a int, b string) using parquet partitioned by (a)")
-          policy match {
-            case SQLConf.StoreAssignmentPolicy.ANSI | SQLConf.StoreAssignmentPolicy.STRICT =>
-              val errorMsg = intercept[NumberFormatException] {
-                sql("insert into t partition(a='ansi') values('ansi')")
-              }.getMessage
-              assert(errorMsg.contains("invalid input syntax for type numeric: ansi"))
-            case SQLConf.StoreAssignmentPolicy.LEGACY =>
+          if (shouldThrowException(policy)) {
+            val errorMsg = intercept[NumberFormatException] {
               sql("insert into t partition(a='ansi') values('ansi')")
-              checkAnswer(sql("select * from t"), Row("ansi", null) :: Nil)
+            }.getMessage
+            assert(errorMsg.contains("invalid input syntax for type numeric: ansi"))
+          } else {
+            sql("insert into t partition(a='ansi') values('ansi')")
+            checkAnswer(sql("select * from t"), Row("ansi", null) :: Nil)
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-38228: legacy store assignment should not fail on error under ANSI mode") {
+    // DS v2 doesn't support the legacy policy
+    if (format != "foo") {
+      Seq(true, false).foreach { ansiEnabled =>
+        withSQLConf(
+          SQLConf.STORE_ASSIGNMENT_POLICY.key -> SQLConf.StoreAssignmentPolicy.LEGACY.toString,
+          SQLConf.ANSI_ENABLED.key -> ansiEnabled.toString) {
+          withTable("t") {
+            sql("create table t(a int) using parquet")
+            sql("insert into t values('ansi')")
+            checkAnswer(spark.table("t"), Row(null))
           }
         }
       }

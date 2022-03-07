@@ -29,7 +29,7 @@ from pyspark.resource import ExecutorResourceRequests, ResourceProfileBuilder, T
 from pyspark.serializers import (
     CloudPickleSerializer,
     BatchedSerializer,
-    PickleSerializer,
+    CPickleSerializer,
     MarshalSerializer,
     UTF8Deserializer,
     NoOpSerializer,
@@ -37,7 +37,7 @@ from pyspark.serializers import (
 from pyspark.testing.utils import ReusedPySparkTestCase, SPARK_HOME, QuietTest
 
 
-global_func = lambda: "Hi"
+global_func = lambda: "Hi"  # noqa: E731
 
 
 class RDDTests(ReusedPySparkTestCase):
@@ -116,7 +116,7 @@ class RDDTests(ReusedPySparkTestCase):
         rdd1 = self.sc.parallelize([1, 2])
         rdd2 = self.sc.parallelize([3, 4])
         cart = rdd1.cartesian(rdd2)
-        result = cart.map(lambda x_y3: x_y3[0] + x_y3[1]).collect()
+        cart.map(lambda x_y3: x_y3[0] + x_y3[1]).collect()
 
     def test_transforming_pickle_file(self):
         # Regression test for SPARK-2601
@@ -446,7 +446,7 @@ class RDDTests(ReusedPySparkTestCase):
         a = self.sc.parallelize(range(5))
         b = self.sc.parallelize(range(100, 105))
         self.assertEqual(a.zip(b).collect(), [(0, 100), (1, 101), (2, 102), (3, 103), (4, 104)])
-        a = a._reserialize(BatchedSerializer(PickleSerializer(), 2))
+        a = a._reserialize(BatchedSerializer(CPickleSerializer(), 2))
         b = b._reserialize(MarshalSerializer())
         self.assertEqual(a.zip(b).collect(), [(0, 100), (1, 101), (2, 102), (3, 103), (4, 104)])
         # regression test for SPARK-4841
@@ -615,11 +615,11 @@ class RDDTests(ReusedPySparkTestCase):
     def test_repartition_no_skewed(self):
         num_partitions = 20
         a = self.sc.parallelize(range(int(1000)), 2)
-        l = a.repartition(num_partitions).glom().map(len).collect()
-        zeros = len([x for x in l if x == 0])
+        xs = a.repartition(num_partitions).glom().map(len).collect()
+        zeros = len([x for x in xs if x == 0])
         self.assertTrue(zeros == 0)
-        l = a.coalesce(num_partitions, True).glom().map(len).collect()
-        zeros = len([x for x in l if x == 0])
+        xs = a.coalesce(num_partitions, True).glom().map(len).collect()
+        zeros = len([x for x in xs if x == 0])
         self.assertTrue(zeros == 0)
 
     def test_repartition_on_textfile(self):
@@ -764,7 +764,7 @@ class RDDTests(ReusedPySparkTestCase):
         # Regression test for SPARK-27000
         global global_func
         self.assertEqual(self.sc.parallelize([1]).map(lambda _: global_func()).first(), "Hi")
-        global_func = lambda: "Yeah"
+        global_func = lambda: "Yeah"  # noqa: E731
         self.assertEqual(self.sc.parallelize([1]).map(lambda _: global_func()).first(), "Yeah")
 
     def test_to_local_iterator_failure(self):

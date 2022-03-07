@@ -371,7 +371,7 @@ abstract class OrcQueryTest extends OrcTest {
     withTempPath { dir =>
       val path = dir.getCanonicalPath
 
-      spark.range(0, 10).select('id as "Acol").write.orc(path)
+      spark.range(0, 10).select(Symbol("id") as "Acol").write.orc(path)
       spark.read.orc(path).schema("Acol")
       intercept[IllegalArgumentException] {
         spark.read.orc(path).schema("acol")
@@ -416,19 +416,19 @@ abstract class OrcQueryTest extends OrcTest {
             s"No data was filtered for predicate: $pred")
         }
 
-        checkPredicate('a === 5, List(5).map(Row(_, null)))
-        checkPredicate('a <=> 5, List(5).map(Row(_, null)))
-        checkPredicate('a < 5, List(1, 3).map(Row(_, null)))
-        checkPredicate('a <= 5, List(1, 3, 5).map(Row(_, null)))
-        checkPredicate('a > 5, List(7, 9).map(Row(_, null)))
-        checkPredicate('a >= 5, List(5, 7, 9).map(Row(_, null)))
-        checkPredicate('a.isNull, List(null).map(Row(_, null)))
-        checkPredicate('b.isNotNull, List())
-        checkPredicate('a.isin(3, 5, 7), List(3, 5, 7).map(Row(_, null)))
-        checkPredicate('a > 0 && 'a < 3, List(1).map(Row(_, null)))
-        checkPredicate('a < 1 || 'a > 8, List(9).map(Row(_, null)))
-        checkPredicate(!('a > 3), List(1, 3).map(Row(_, null)))
-        checkPredicate(!('a > 0 && 'a < 3), List(3, 5, 7, 9).map(Row(_, null)))
+        checkPredicate(Symbol("a") === 5, List(5).map(Row(_, null)))
+        checkPredicate(Symbol("a") <=> 5, List(5).map(Row(_, null)))
+        checkPredicate(Symbol("a") < 5, List(1, 3).map(Row(_, null)))
+        checkPredicate(Symbol("a") <= 5, List(1, 3, 5).map(Row(_, null)))
+        checkPredicate(Symbol("a") > 5, List(7, 9).map(Row(_, null)))
+        checkPredicate(Symbol("a") >= 5, List(5, 7, 9).map(Row(_, null)))
+        checkPredicate(Symbol("a").isNull, List(null).map(Row(_, null)))
+        checkPredicate(Symbol("b").isNotNull, List())
+        checkPredicate(Symbol("a").isin(3, 5, 7), List(3, 5, 7).map(Row(_, null)))
+        checkPredicate(Symbol("a") > 0 && Symbol("a") < 3, List(1).map(Row(_, null)))
+        checkPredicate(Symbol("a") < 1 || Symbol("a") > 8, List(9).map(Row(_, null)))
+        checkPredicate(!(Symbol("a") > 3), List(1, 3).map(Row(_, null)))
+        checkPredicate(!(Symbol("a") > 0 && Symbol("a") < 3), List(3, 5, 7, 9).map(Row(_, null)))
       }
     }
   }
@@ -744,6 +744,28 @@ abstract class OrcQuerySuite extends OrcQueryTest with SharedSparkSession {
     }
   }
 
+  test("SPARK-37728: Reading nested columns with ORC vectorized reader should not " +
+    "cause ArrayIndexOutOfBoundsException") {
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+      val df = spark.range(100).map { _ =>
+        val arrayColumn = (0 until 50).map(_ => (0 until 1000).map(k => k.toString))
+        arrayColumn
+      }.toDF("record").repartition(1)
+      df.write.format("orc").save(path)
+
+      withSQLConf(SQLConf.ORC_VECTORIZED_READER_NESTED_COLUMN_ENABLED.key -> "true") {
+        val readDf = spark.read.orc(path)
+        val vectorizationEnabled = readDf.queryExecution.executedPlan.find {
+          case scan @ (_: FileSourceScanExec | _: BatchScanExec) => scan.supportsColumnar
+          case _ => false
+        }.isDefined
+        assert(vectorizationEnabled)
+        checkAnswer(readDf, df)
+      }
+    }
+  }
+
   test("SPARK-36594: ORC vectorized reader should properly check maximal number of fields") {
     withTempPath { dir =>
       val path = dir.getCanonicalPath
@@ -776,7 +798,7 @@ abstract class OrcQuerySuite extends OrcQueryTest with SharedSparkSession {
     } :+ (null, null)
 
     withOrcFile(data) { file =>
-      withAllOrcReaders {
+      withAllNativeOrcReaders {
         checkAnswer(spark.read.orc(file), data.toDF().collect())
       }
     }
@@ -799,7 +821,7 @@ abstract class OrcQuerySuite extends OrcQueryTest with SharedSparkSession {
     withTempPath { file =>
       val df = spark.createDataFrame(sparkContext.parallelize(data), actualSchema)
       df.write.orc(file.getCanonicalPath)
-      withAllOrcReaders {
+      withAllNativeOrcReaders {
         val msg = intercept[SparkException] {
           spark.read.schema(providedSchema).orc(file.getCanonicalPath).collect()
         }.getMessage
@@ -825,7 +847,7 @@ abstract class OrcQuerySuite extends OrcQueryTest with SharedSparkSession {
     withTempPath { file =>
       val df = spark.createDataFrame(sparkContext.parallelize(data), actualSchema)
       df.write.orc(file.getCanonicalPath)
-      withAllOrcReaders {
+      withAllNativeOrcReaders {
         checkAnswer(spark.read.schema(providedSchema).orc(file.getCanonicalPath), answer)
       }
     }
