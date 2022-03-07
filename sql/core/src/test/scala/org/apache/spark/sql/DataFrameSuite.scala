@@ -3092,8 +3092,8 @@ class DataFrameSuite extends QueryTest
     withTempView("v1") {
       val sqlText =
         """
-          |create or replace temp view v1 as
-          |select * from values
+          |CREATE OR REPLACE TEMP VIEW v1 AS
+          |SELECT * FROM VALUES
           |(array(
           |  named_struct('s', 'string1', 'b', array(named_struct('e', 'string2'))),
           |  named_struct('s', 'string4', 'b', array(named_struct('e', 'string5')))
@@ -3103,7 +3103,7 @@ class DataFrameSuite extends QueryTest
           |""".stripMargin
       sql(sqlText)
 
-      val df = sql("select eo.b.e from (select explode(o) as eo from v1)")
+      val df = sql("SELECT eo.b.e FROM (SELECT explode(o) AS eo FROM v1)")
       checkAnswer(df, Row(Seq("string2")) :: Row(Seq("string5")) :: Nil)
     }
   }
