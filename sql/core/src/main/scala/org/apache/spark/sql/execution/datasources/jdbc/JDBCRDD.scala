@@ -60,7 +60,7 @@ object JDBCRDD extends Logging {
 
   def getQueryOutputSchema(
       query: String, options: JDBCOptions, dialect: JdbcDialect): StructType = {
-    val conn: Connection = JdbcUtils.createConnectionFactory(options)()
+    val conn: Connection = dialect.createConnectionFactory(options)(-1)
     try {
       val statement = conn.prepareStatement(query)
       try {
@@ -182,7 +182,7 @@ object JDBCRDD extends Logging {
     }
     new JDBCRDD(
       sc,
-      dialect.getConnection(options),
+      dialect.createConnectionFactory(options),
       outputSchema.getOrElse(pruneSchema(schema, requiredColumns)),
       quotedColumns,
       filters,

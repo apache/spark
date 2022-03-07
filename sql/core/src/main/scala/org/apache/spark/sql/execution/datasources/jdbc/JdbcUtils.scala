@@ -55,18 +55,6 @@ import org.apache.spark.util.NextIterator
 object JdbcUtils extends Logging with SQLConfHelper {
 
   /**
-   * Returns a factory for creating connections to the given JDBC URL.
-   *
-   * @param options - JDBC options that contains url, table and other information.
-   * @throws IllegalArgumentException if the driver could not open a JDBC connection.
-   */
-  def createConnectionFactory(options: JDBCOptions): () => Connection = {
-    val dialect = JdbcDialects.get(options.url)
-    // Driver side don't know the partition info, so pass -1 as partition id.
-    () => dialect.getConnection(options)(-1)
-  }
-
-  /**
    * Returns true if the table already exists in the JDBC database.
    */
   def tableExists(conn: Connection, options: JdbcOptionsInWrite): Boolean = {
@@ -644,7 +632,7 @@ object JdbcUtils extends Logging with SQLConfHelper {
    * updated even with error if it doesn't support transaction, as there're dirty outputs.
    */
   def savePartition(
-      getConnection: () => Connection,
+      getConnection: Int => Connection,
       table: String,
       iterator: Iterator[Row],
       rddSchema: StructType,
@@ -660,7 +648,7 @@ object JdbcUtils extends Logging with SQLConfHelper {
 
     val outMetrics = TaskContext.get().taskMetrics().outputMetrics
 
-    val conn = getConnection()
+    val conn = getConnection(-1)
     var committed = false
 
     var finalIsolationLevel = Connection.TRANSACTION_NONE
@@ -867,7 +855,7 @@ object JdbcUtils extends Logging with SQLConfHelper {
     val table = options.table
     val dialect = JdbcDialects.get(url)
     val rddSchema = df.schema
-    val getConnection: () => Connection = createConnectionFactory(options)
+    val getConnection: Int => Connection = dialect.createConnectionFactory(options)
     val batchSize = options.batchSize
     val isolationLevel = options.isolationLevel
 
@@ -1170,7 +1158,8 @@ object JdbcUtils extends Logging with SQLConfHelper {
   }
 
   def withConnection[T](options: JDBCOptions)(f: Connection => T): T = {
-    val conn = createConnectionFactory(options)()
+    val dialect = JdbcDialects.get(options.url)
+    val conn = dialect.createConnectionFactory(options)(-1)
     try {
       f(conn)
     } finally {
