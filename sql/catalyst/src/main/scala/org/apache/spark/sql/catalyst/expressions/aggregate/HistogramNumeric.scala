@@ -47,9 +47,10 @@ import org.apache.spark.sql.util.NumericHistogram
       smaller datasets. Note that this function creates a histogram with non-uniform
       bin widths. It offers no guarantees in terms of the mean-squared-error of the
       histogram, but in practice is comparable to the histograms produced by the R/S-Plus
-      statistical computing packages. Note: if spark.sql.legacy.histogramNumericPropagateInputType
-      is set to true, the output type of the 'x' field in the return value is propagated from the
-      input value consumed in the aggregate function. Otherwise, 'x' always has double type.
+      statistical computing packages. Note: if
+      SQLConf.spark.sql.legacy.histogramNumericPropagateInputType is set to true, the output type
+      of the 'x' field in the return value is propagated from the input value consumed in the
+      aggregate function. Otherwise, 'x' always has double type.
     """,
   examples = """
     Examples:
