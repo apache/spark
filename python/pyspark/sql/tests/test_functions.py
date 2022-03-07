@@ -43,6 +43,13 @@ from pyspark.sql.functions import (
     csc,
     cot,
     make_date,
+    date_add,
+    date_sub,
+    add_months,
+    array_repeat,
+    size,
+    slice,
+    least,
 )
 from pyspark.testing.sqlutils import ReusedSQLTestCase, SQLTestUtils
 
@@ -286,6 +293,60 @@ class FunctionsTests(ReusedSQLTestCase):
         row = df.select(dayofweek(df.date)).first()
         self.assertEqual(row[0], 2)
 
+    # Test added for SPARK-37738; change Python API to accept both col & int as input
+    def test_date_add_function(self):
+        dt = datetime.date(2021, 12, 27)
+
+        # Note; number var in Python gets converted to LongType column;
+        # this is not supported by the function, so cast to Integer explicitly
+        df = self.spark.createDataFrame([Row(date=dt, add=2)], "date date, add integer")
+
+        self.assertTrue(
+            all(
+                df.select(
+                    date_add(df.date, df.add) == datetime.date(2021, 12, 29),
+                    date_add(df.date, "add") == datetime.date(2021, 12, 29),
+                    date_add(df.date, 3) == datetime.date(2021, 12, 30),
+                ).first()
+            )
+        )
+
+    # Test added for SPARK-37738; change Python API to accept both col & int as input
+    def test_date_sub_function(self):
+        dt = datetime.date(2021, 12, 27)
+
+        # Note; number var in Python gets converted to LongType column;
+        # this is not supported by the function, so cast to Integer explicitly
+        df = self.spark.createDataFrame([Row(date=dt, sub=2)], "date date, sub integer")
+
+        self.assertTrue(
+            all(
+                df.select(
+                    date_sub(df.date, df.sub) == datetime.date(2021, 12, 25),
+                    date_sub(df.date, "sub") == datetime.date(2021, 12, 25),
+                    date_sub(df.date, 3) == datetime.date(2021, 12, 24),
+                ).first()
+            )
+        )
+
+    # Test added for SPARK-37738; change Python API to accept both col & int as input
+    def test_add_months_function(self):
+        dt = datetime.date(2021, 12, 27)
+
+        # Note; number in Python gets converted to LongType column;
+        # this is not supported by the function, so cast to Integer explicitly
+        df = self.spark.createDataFrame([Row(date=dt, add=2)], "date date, add integer")
+
+        self.assertTrue(
+            all(
+                df.select(
+                    add_months(df.date, df.add) == datetime.date(2022, 2, 27),
+                    add_months(df.date, "add") == datetime.date(2022, 2, 27),
+                    add_months(df.date, 3) == datetime.date(2022, 3, 27),
+                ).first()
+            )
+        )
+
     def test_make_date(self):
         # SPARK-36554: expose make_date expression
         df = self.spark.createDataFrame([(2020, 6, 26)], ["Y", "M", "D"])
@@ -429,13 +490,31 @@ class FunctionsTests(ReusedSQLTestCase):
             self.assertEqual(result[0], "")
 
     def test_slice(self):
-        from pyspark.sql.functions import lit, size, slice
+        df = self.spark.createDataFrame(
+            [
+                (
+                    [1, 2, 3],
+                    2,
+                    2,
+                ),
+                (
+                    [4, 5],
+                    2,
+                    2,
+                ),
+            ],
+            ["x", "index", "len"],
+        )
 
-        df = self.spark.createDataFrame([([1, 2, 3],), ([4, 5],)], ["x"])
-
-        self.assertEqual(
-            df.select(slice(df.x, 2, 2).alias("sliced")).collect(),
-            df.select(slice(df.x, lit(2), lit(2)).alias("sliced")).collect(),
+        expected = [Row(sliced=[2, 3]), Row(sliced=[5])]
+        self.assertTrue(
+            all(
+                [
+                    df.select(slice(df.x, 2, 2).alias("sliced")).collect() == expected,
+                    df.select(slice(df.x, lit(2), lit(2)).alias("sliced")).collect() == expected,
+                    df.select(slice("x", "index", "len").alias("sliced")).collect() == expected,
+                ]
+            )
         )
 
         self.assertEqual(
@@ -448,13 +527,18 @@ class FunctionsTests(ReusedSQLTestCase):
         )
 
     def test_array_repeat(self):
-        from pyspark.sql.functions import array_repeat, lit
-
         df = self.spark.range(1)
+        df = df.withColumn("repeat_n", lit(3))
 
-        self.assertEqual(
-            df.select(array_repeat("id", 3)).toDF("val").collect(),
-            df.select(array_repeat("id", lit(3))).toDF("val").collect(),
+        expected = [Row(val=[0, 0, 0])]
+        self.assertTrue(
+            all(
+                [
+                    df.select(array_repeat("id", 3).alias("val")).collect() == expected,
+                    df.select(array_repeat("id", lit(3)).alias("val")).collect() == expected,
+                    df.select(array_repeat("id", "repeat_n").alias("val")).collect() == expected,
+                ]
+            )
         )
 
     def test_input_file_name_udf(self):
@@ -462,6 +546,20 @@ class FunctionsTests(ReusedSQLTestCase):
         df = df.select(udf(lambda x: x)("value"), input_file_name().alias("file"))
         file_name = df.collect()[0].file
         self.assertTrue("python/test_support/hello/hello.txt" in file_name)
+
+    def test_least(self):
+        df = self.spark.createDataFrame([(1, 4, 3)], ["a", "b", "c"])
+
+        expected = [Row(least=1)]
+        self.assertTrue(
+            all(
+                [
+                    df.select(least(df.a, df.b, df.c).alias("least")).collect() == expected,
+                    df.select(least(lit(3), lit(5), lit(1)).alias("least")).collect() == expected,
+                    df.select(least("a", "b", "c").alias("least")).collect() == expected,
+                ]
+            )
+        )
 
     def test_overlay(self):
         from pyspark.sql.functions import col, lit, overlay
@@ -494,6 +592,19 @@ class FunctionsTests(ReusedSQLTestCase):
         ]
 
         self.assertListEqual(actual, expected)
+
+        df = self.spark.createDataFrame([("SPARK_SQL", "CORE", 7, 0)], ("x", "y", "pos", "len"))
+
+        exp = [Row(ol="SPARK_CORESQL")]
+        self.assertTrue(
+            all(
+                [
+                    df.select(overlay(df.x, df.y, 7, 0).alias("ol")).collect() == exp,
+                    df.select(overlay(df.x, df.y, lit(7), lit(0)).alias("ol")).collect() == exp,
+                    df.select(overlay("x", "y", "pos", "len").alias("ol")).collect() == exp,
+                ]
+            )
+        )
 
     def test_percentile_approx(self):
         actual = list(

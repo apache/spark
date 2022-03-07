@@ -145,7 +145,10 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
             col("id").cast("boolean").alias("bool"),
             array(col("id")).alias("array_long"),
         )
-        f = lambda x: x
+
+        def f(x):
+            return x
+
         for udf_type in [PandasUDFType.SCALAR, PandasUDFType.SCALAR_ITER]:
             str_f = pandas_udf(f, StringType(), udf_type)
             int_f = pandas_udf(f, IntegerType(), udf_type)
@@ -283,7 +286,9 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
 
     def test_vectorized_udf_string_in_udf(self):
         df = self.spark.range(10)
-        scalar_f = lambda x: pd.Series(map(str, x))
+
+        def scalar_f(x):
+            return pd.Series(map(str, x))
 
         def iter_f(it):
             for i in it:
@@ -305,7 +310,10 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
             col("id").cast("decimal").alias("decimal"),
             col("id").cast("boolean").alias("bool"),
         )
-        f = lambda x: x
+
+        def f(x):
+            return x
+
         for udf_type in [PandasUDFType.SCALAR, PandasUDFType.SCALAR_ITER]:
             str_f = pandas_udf(f, "string", udf_type)
             int_f = pandas_udf(f, "integer", udf_type)
@@ -697,8 +705,8 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
             return pd.Series(msgs)
 
         def iter_check_data(it):
-            for idx, date, date_copy in it:
-                yield scalar_check_data(idx, date, date_copy)
+            for idx, test_date, date_copy in it:
+                yield scalar_check_data(idx, test_date, date_copy)
 
         pandas_scalar_check_data = pandas_udf(scalar_check_data, StringType())
         pandas_iter_check_data = pandas_udf(

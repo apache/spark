@@ -60,10 +60,10 @@ private[sql] class AvroSerializer(
     converter.apply(catalystData)
   }
 
-  private val dateRebaseFunc = DataSourceUtils.creteDateRebaseFuncInWrite(
+  private val dateRebaseFunc = DataSourceUtils.createDateRebaseFuncInWrite(
     datetimeRebaseMode, "Avro")
 
-  private val timestampRebaseFunc = DataSourceUtils.creteTimestampRebaseFuncInWrite(
+  private val timestampRebaseFunc = DataSourceUtils.createTimestampRebaseFuncInWrite(
     datetimeRebaseMode, "Avro")
 
   private val converter: Any => Any = {
@@ -262,7 +262,7 @@ private[sql] class AvroSerializer(
       avroStruct, catalystStruct, avroPath, catalystPath, positionalFieldMatch)
 
     avroSchemaHelper.validateNoExtraCatalystFields(ignoreNullable = false)
-    avroSchemaHelper.validateNoExtraAvroFields()
+    avroSchemaHelper.validateNoExtraRequiredAvroFields()
 
     val (avroIndices, fieldConverters) = avroSchemaHelper.matchedFields.map {
       case AvroMatchedField(catalystField, _, avroField) =>

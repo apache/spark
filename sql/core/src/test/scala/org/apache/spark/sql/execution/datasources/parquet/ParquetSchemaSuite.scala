@@ -944,7 +944,8 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
     withTempPath { dir =>
       val path = dir.getCanonicalPath
       spark.range(3).write.parquet(s"$path/p=1")
-      spark.range(3).select('id cast IntegerType as 'id).write.parquet(s"$path/p=2")
+      spark.range(3).select(Symbol("id") cast IntegerType as Symbol("id"))
+        .write.parquet(s"$path/p=2")
 
       val message = intercept[SparkException] {
         spark.read.option("mergeSchema", "true").parquet(path).schema
@@ -2257,7 +2258,10 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
       caseSensitive: Boolean): Unit = {
     test(s"Clipping - $testName") {
       val actual = ParquetReadSupport.clipParquetSchema(
-        MessageTypeParser.parseMessageType(parquetSchema), catalystSchema, caseSensitive)
+        MessageTypeParser.parseMessageType(parquetSchema),
+        catalystSchema,
+        caseSensitive,
+        useFieldId = false)
 
       try {
         expectedSchema.checkContains(actual)
@@ -2821,7 +2825,10 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
       }
       assertThrows[RuntimeException] {
         ParquetReadSupport.clipParquetSchema(
-          MessageTypeParser.parseMessageType(parquetSchema), catalystSchema, caseSensitive = false)
+         MessageTypeParser.parseMessageType(parquetSchema),
+          catalystSchema,
+          caseSensitive = false,
+          useFieldId = false)
       }
     }
 }

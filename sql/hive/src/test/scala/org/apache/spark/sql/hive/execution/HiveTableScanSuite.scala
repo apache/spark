@@ -26,8 +26,10 @@ import org.apache.spark.sql.hive.test.TestHive._
 import org.apache.spark.sql.hive.test.TestHive.implicits._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SQLTestUtils
+import org.apache.spark.tags.SlowHiveTest
 import org.apache.spark.util.Utils
 
+@SlowHiveTest
 class HiveTableScanSuite extends HiveComparisonTest with SQLTestUtils with TestHiveSingleton {
 
   createQueryTest("partition_based_table_scan_with_different_serde",

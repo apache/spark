@@ -210,6 +210,7 @@ object NestedColumnAliasing {
     case _: Repartition => true
     case _: Sample => true
     case _: RepartitionByExpression => true
+    case _: RebalancePartitions => true
     case _: Join => true
     case _: Window => true
     case _: Sort => true
@@ -245,11 +246,13 @@ object NestedColumnAliasing {
     val otherRootReferences = new mutable.ArrayBuffer[AttributeReference]()
     exprList.foreach { e =>
       collectRootReferenceAndExtractValue(e).foreach {
-        case ev: ExtractValue =>
+        // we can not alias the attr from lambda variable whose expr id is not available
+        case ev: ExtractValue if ev.find(_.isInstanceOf[NamedLambdaVariable]).isEmpty =>
           if (ev.references.size == 1) {
             nestedFieldReferences.append(ev)
           }
         case ar: AttributeReference => otherRootReferences.append(ar)
+        case _ => // ignore
       }
     }
     val exclusiveAttrSet = AttributeSet(exclusiveAttrs ++ otherRootReferences)
@@ -365,12 +368,7 @@ object GeneratorNestedColumnAliasing {
             //       df.select(explode($"items.a").as("item.a"))
             val rewrittenG = newG.transformExpressions {
               case e: ExplodeBase =>
-                val extractor = nestedFieldOnGenerator.transformUp {
-                  case _: Attribute =>
-                    e.child
-                  case g: GetStructField =>
-                    ExtractValue(g.child, Literal(g.extractFieldName), SQLConf.get.resolver)
-                }
+                val extractor = replaceGenerator(e, nestedFieldOnGenerator)
                 e.withNewChildren(Seq(extractor))
             }
 
@@ -412,6 +410,25 @@ object GeneratorNestedColumnAliasing {
 
     case _ =>
       None
+  }
+
+  /**
+   * Replace the reference attribute of extractor expression with generator input.
+   */
+  private def replaceGenerator(generator: ExplodeBase, expr: Expression): Expression = {
+    expr match {
+      case a: Attribute if expr.references.contains(a) =>
+        generator.child
+      case g: GetStructField =>
+        // We cannot simply do a transformUp instead because if we replace the attribute
+        // `extractFieldName` could cause `ClassCastException` error. We need to get the
+        // field name before replacing down the attribute/other extractor.
+        val fieldName = g.extractFieldName
+        val newChild = replaceGenerator(generator, g.child)
+        ExtractValue(newChild, Literal(fieldName), SQLConf.get.resolver)
+      case other =>
+        other.mapChildren(replaceGenerator(generator, _))
+    }
   }
 
   /**

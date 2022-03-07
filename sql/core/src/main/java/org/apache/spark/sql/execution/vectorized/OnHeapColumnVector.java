@@ -148,6 +148,18 @@ public final class OnHeapColumnVector extends WritableColumnVector {
   }
 
   @Override
+  public void putBooleans(int rowId, byte src) {
+    byteData[rowId] = (byte)(src & 1);
+    byteData[rowId + 1] = (byte)(src >>> 1 & 1);
+    byteData[rowId + 2] = (byte)(src >>> 2 & 1);
+    byteData[rowId + 3] = (byte)(src >>> 3 & 1);
+    byteData[rowId + 4] = (byte)(src >>> 4 & 1);
+    byteData[rowId + 5] = (byte)(src >>> 5 & 1);
+    byteData[rowId + 6] = (byte)(src >>> 6 & 1);
+    byteData[rowId + 7] = (byte)(src >>> 7 & 1);
+  }
+
+  @Override
   public boolean getBoolean(int rowId) {
     return byteData[rowId] == 1;
   }

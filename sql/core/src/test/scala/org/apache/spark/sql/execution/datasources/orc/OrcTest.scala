@@ -143,7 +143,7 @@ abstract class OrcTest extends QueryTest with FileBasedDataSourceTest with Befor
     spark.read.orc(file.getAbsolutePath)
   }
 
-  def withAllOrcReaders(code: => Unit): Unit = {
+  def withAllNativeOrcReaders(code: => Unit): Unit = {
     // test the row-based reader
     withSQLConf(SQLConf.ORC_VECTORIZED_READER_ENABLED.key -> "false")(code)
     // test the vectorized reader

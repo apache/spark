@@ -23,6 +23,8 @@ import java.util
 import java.util.Locale
 import java.util.concurrent.TimeUnit
 
+import scala.collection.JavaConverters._
+import scala.collection.mutable.ArrayBuffer
 import scala.util.Try
 import scala.util.control.NonFatal
 
@@ -38,7 +40,7 @@ import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeUtils, GenericArrayData}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.{instantToMicros, localDateToDays, toJavaDate, toJavaTimestamp}
 import org.apache.spark.sql.connector.catalog.TableChange
-import org.apache.spark.sql.connector.catalog.index.TableIndex
+import org.apache.spark.sql.connector.catalog.index.{SupportsIndex, TableIndex}
 import org.apache.spark.sql.connector.expressions.NamedReference
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.datasources.jdbc.connection.ConnectionProvider
@@ -969,52 +971,57 @@ object JdbcUtils extends Logging with SQLConfHelper {
   }
 
   /**
-   * Creates a namespace.
+   * Creates a schema.
    */
-  def createNamespace(
+  def createSchema(
       conn: Connection,
       options: JDBCOptions,
-      namespace: String,
+      schema: String,
       comment: String): Unit = {
-    val dialect = JdbcDialects.get(options.url)
-    executeStatement(conn, options, s"CREATE SCHEMA ${dialect.quoteIdentifier(namespace)}")
-    if (!comment.isEmpty) createNamespaceComment(conn, options, namespace, comment)
-  }
-
-  def createNamespaceComment(
-      conn: Connection,
-      options: JDBCOptions,
-      namespace: String,
-      comment: String): Unit = {
-    val dialect = JdbcDialects.get(options.url)
+    val statement = conn.createStatement
     try {
-      executeStatement(
-        conn, options, dialect.getSchemaCommentQuery(namespace, comment))
-    } catch {
-      case e: Exception =>
-        logWarning("Cannot create JDBC catalog comment. The catalog comment will be ignored.")
+      statement.setQueryTimeout(options.queryTimeout)
+      val dialect = JdbcDialects.get(options.url)
+      dialect.createSchema(statement, schema, comment)
+    } finally {
+      statement.close()
     }
   }
 
-  def removeNamespaceComment(
+  def schemaExists(conn: Connection, options: JDBCOptions, schema: String): Boolean = {
+    val dialect = JdbcDialects.get(options.url)
+    dialect.schemasExists(conn, options, schema)
+  }
+
+  def listSchemas(conn: Connection, options: JDBCOptions): Array[Array[String]] = {
+    val dialect = JdbcDialects.get(options.url)
+    dialect.listSchemas(conn, options)
+  }
+
+  def alterSchemaComment(
       conn: Connection,
       options: JDBCOptions,
-      namespace: String): Unit = {
+      schema: String,
+      comment: String): Unit = {
     val dialect = JdbcDialects.get(options.url)
-    try {
-      executeStatement(conn, options, dialect.removeSchemaCommentQuery(namespace))
-    } catch {
-      case e: Exception =>
-        logWarning("Cannot drop JDBC catalog comment.")
-    }
+    executeStatement(conn, options, dialect.getSchemaCommentQuery(schema, comment))
+  }
+
+  def removeSchemaComment(
+      conn: Connection,
+      options: JDBCOptions,
+      schema: String): Unit = {
+    val dialect = JdbcDialects.get(options.url)
+    executeStatement(conn, options, dialect.removeSchemaCommentQuery(schema))
   }
 
   /**
-   * Drops a namespace from the JDBC database.
+   * Drops a schema from the JDBC database.
    */
-  def dropNamespace(conn: Connection, options: JDBCOptions, namespace: String): Unit = {
+  def dropSchema(
+      conn: Connection, options: JDBCOptions, schema: String, cascade: Boolean): Unit = {
     val dialect = JdbcDialects.get(options.url)
-    executeStatement(conn, options, s"DROP SCHEMA ${dialect.quoteIdentifier(namespace)}")
+    executeStatement(conn, options, dialect.dropSchema(schema, cascade))
   }
 
   /**
@@ -1078,11 +1085,84 @@ object JdbcUtils extends Logging with SQLConfHelper {
     }
   }
 
-  def executeQuery(conn: Connection, options: JDBCOptions, sql: String): ResultSet = {
+  /**
+   * Check if index exists in a table
+   */
+  def checkIfIndexExists(
+      conn: Connection,
+      sql: String,
+      options: JDBCOptions): Boolean = {
     val statement = conn.createStatement
     try {
       statement.setQueryTimeout(options.queryTimeout)
-      statement.executeQuery(sql)
+      val rs = statement.executeQuery(sql)
+      rs.next
+    } catch {
+      case _: Exception =>
+        logWarning("Cannot retrieved index info.")
+        false
+    } finally {
+      statement.close()
+    }
+  }
+
+  /**
+   * Process index properties and return tuple of indexType and list of the other index properties.
+   */
+  def processIndexProperties(
+      properties: util.Map[String, String],
+      catalogName: String): (String, Array[String]) = {
+    var indexType = ""
+    val indexPropertyList: ArrayBuffer[String] = ArrayBuffer[String]()
+    val supportedIndexTypeList = getSupportedIndexTypeList(catalogName)
+
+    if (!properties.isEmpty) {
+      properties.asScala.foreach { case (k, v) =>
+        if (k.equals(SupportsIndex.PROP_TYPE)) {
+          if (containsIndexTypeIgnoreCase(supportedIndexTypeList, v)) {
+            indexType = s"USING $v"
+          } else {
+            throw new UnsupportedOperationException(s"Index Type $v is not supported." +
+              s" The supported Index Types are: ${supportedIndexTypeList.mkString(" AND ")}")
+          }
+        } else {
+          indexPropertyList.append(s"$k = $v")
+        }
+      }
+    }
+    (indexType, indexPropertyList.toArray)
+  }
+
+  def containsIndexTypeIgnoreCase(supportedIndexTypeList: Array[String], value: String): Boolean = {
+    if (supportedIndexTypeList.isEmpty) {
+      throw new UnsupportedOperationException(
+        "Cannot specify 'USING index_type' in 'CREATE INDEX'")
+    }
+    for (indexType <- supportedIndexTypeList) {
+      if (value.equalsIgnoreCase(indexType)) return true
+    }
+    false
+  }
+
+  def getSupportedIndexTypeList(catalogName: String): Array[String] = {
+    catalogName match {
+      case "mysql" => Array("BTREE", "HASH")
+      case "postgresql" => Array("BTREE", "HASH", "BRIN")
+      case _ => Array.empty
+    }
+  }
+
+  def executeQuery(conn: Connection, options: JDBCOptions, sql: String)(
+    f: ResultSet => Unit): Unit = {
+    val statement = conn.createStatement
+    try {
+      statement.setQueryTimeout(options.queryTimeout)
+      val rs = statement.executeQuery(sql)
+      try {
+        f(rs)
+      } finally {
+        rs.close()
+      }
     } finally {
       statement.close()
     }

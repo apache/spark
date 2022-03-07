@@ -860,8 +860,8 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
     val baseDf = Seq((1, "A"), (2, "b")).toDF("num", "char").where("char = 'A'")
     val otherDf = stream.toDF().toDF("num", "numSq")
       .join(broadcast(baseDf), "num")
-      .groupBy('char)
-      .agg(sum('numSq))
+      .groupBy(Symbol("char"))
+      .agg(sum(Symbol("numSq")))
 
     testStream(otherDf, OutputMode.Complete())(
       AddData(stream, (1, 1), (2, 4)),
@@ -1229,7 +1229,7 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
       q.processAllAvailable()
       q
     } finally {
-      spark.streams.active.map(_.stop())
+      spark.streams.active.foreach(_.stop())
     }
   }
 

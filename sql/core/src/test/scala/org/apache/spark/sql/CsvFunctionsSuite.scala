@@ -82,16 +82,16 @@ class CsvFunctionsSuite extends QueryTest with SharedSparkSession {
   test("schema_of_csv - infers schemas") {
     checkAnswer(
       spark.range(1).select(schema_of_csv(lit("0.1,1"))),
-      Seq(Row("STRUCT<`_c0`: DOUBLE, `_c1`: INT>")))
+      Seq(Row("STRUCT<_c0: DOUBLE, _c1: INT>")))
     checkAnswer(
       spark.range(1).select(schema_of_csv("0.1,1")),
-      Seq(Row("STRUCT<`_c0`: DOUBLE, `_c1`: INT>")))
+      Seq(Row("STRUCT<_c0: DOUBLE, _c1: INT>")))
   }
 
   test("schema_of_csv - infers schemas using options") {
     val df = spark.range(1)
       .select(schema_of_csv(lit("0.1 1"), Map("sep" -> " ").asJava))
-    checkAnswer(df, Seq(Row("STRUCT<`_c0`: DOUBLE, `_c1`: INT>")))
+    checkAnswer(df, Seq(Row("STRUCT<_c0: DOUBLE, _c1: INT>")))
   }
 
   test("to_csv - struct") {
@@ -220,7 +220,7 @@ class CsvFunctionsSuite extends QueryTest with SharedSparkSession {
     val input = concat_ws(",", lit(0.1), lit(1))
     checkAnswer(
       spark.range(1).select(schema_of_csv(input)),
-      Seq(Row("STRUCT<`_c0`: DOUBLE, `_c1`: INT>")))
+      Seq(Row("STRUCT<_c0: DOUBLE, _c1: INT>")))
   }
 
   test("optional datetime parser does not affect csv time formatting") {
@@ -367,5 +367,16 @@ class CsvFunctionsSuite extends QueryTest with SharedSparkSession {
           Map.empty[String, String]) as "value")
       .selectExpr("value.a")
     checkAnswer(fromCsvDF, Row(localDT))
+  }
+
+  test("SPARK-37326: Handle incorrectly formatted timestamp_ntz values in from_csv") {
+    val fromCsvDF = Seq("2021-08-12T15:16:23.000+11:00").toDF("csv")
+      .select(
+        from_csv(
+          $"csv",
+          StructType(StructField("a", TimestampNTZType) :: Nil),
+          Map.empty[String, String]) as "value")
+      .selectExpr("value.a")
+    checkAnswer(fromCsvDF, Row(null))
   }
 }

@@ -52,7 +52,7 @@ public class LevelDBSuite {
 
   @Before
   public void setup() throws Exception {
-    assumeFalse(SystemUtils.IS_OS_MAC_OSX && System.getProperty("os.arch").equals("aarch64"));
+    assumeFalse(SystemUtils.IS_OS_MAC_OSX && SystemUtils.OS_ARCH.equals("aarch64"));
     dbpath = File.createTempFile("test.", ".ldb");
     dbpath.delete();
     db = new LevelDB(dbpath);
@@ -329,13 +329,14 @@ public class LevelDBSuite {
     byte[] prefix = db.getTypeInfo(type).keyPrefix();
     int count = 0;
 
-    DBIterator it = db.db().iterator();
-    it.seek(prefix);
+    try (DBIterator it = db.db().iterator()) {
+      it.seek(prefix);
 
-    while (it.hasNext()) {
-      byte[] key = it.next().getKey();
-      if (LevelDBIterator.startsWith(key, prefix)) {
-        count++;
+      while (it.hasNext()) {
+        byte[] key = it.next().getKey();
+        if (LevelDBIterator.startsWith(key, prefix)) {
+          count++;
+        }
       }
     }
 

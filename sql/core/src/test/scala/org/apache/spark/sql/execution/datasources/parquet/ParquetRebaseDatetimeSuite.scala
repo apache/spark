@@ -20,8 +20,8 @@ package org.apache.spark.sql.execution.datasources.parquet
 import java.nio.file.{Files, Paths, StandardCopyOption}
 import java.sql.{Date, Timestamp}
 
-import org.apache.spark.{SparkConf, SparkException, SparkUpgradeException}
-import org.apache.spark.sql.{QueryTest, Row, SPARK_LEGACY_DATETIME, SPARK_LEGACY_INT96}
+import org.apache.spark.{SPARK_VERSION_SHORT, SparkConf, SparkException, SparkUpgradeException}
+import org.apache.spark.sql.{QueryTest, Row, SPARK_LEGACY_DATETIME_METADATA_KEY, SPARK_LEGACY_INT96_METADATA_KEY, SPARK_TIMEZONE_METADATA_KEY}
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.{LegacyBehaviorPolicy, ParquetOutputTimestampType}
@@ -37,10 +37,10 @@ abstract class ParquetRebaseDatetimeSuite
   import testImplicits._
 
   // It generates input files for the test below:
-  // "SPARK-31159: compatibility with Spark 2.4 in reading dates/timestamps"
-  ignore("SPARK-31806: generate test files for checking compatibility with Spark 2.4") {
+  // "SPARK-31159, SPARK-37705: compatibility with Spark 2.4/3.2 in reading dates/timestamps"
+  ignore("SPARK-31806: generate test files for checking compatibility with Spark 2.4/3.2") {
     val resourceDir = "sql/core/src/test/resources/test-data"
-    val version = "2_4_5"
+    val version = SPARK_VERSION_SHORT.replaceAll("\\.", "_")
     val N = 8
     def save(
         in: Seq[(String, String)],
@@ -62,7 +62,10 @@ abstract class ParquetRebaseDatetimeSuite
       }
     }
     DateTimeTestUtils.withDefaultTimeZone(DateTimeTestUtils.LA) {
-      withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> DateTimeTestUtils.LA.getId) {
+      withSQLConf(
+        SQLConf.SESSION_LOCAL_TIMEZONE.key -> DateTimeTestUtils.LA.getId,
+        SQLConf.PARQUET_REBASE_MODE_IN_WRITE.key -> LEGACY.toString,
+        SQLConf.PARQUET_INT96_REBASE_MODE_IN_WRITE.key -> LEGACY.toString) {
         save(
           (1 to N).map(i => ("1001-01-01", s"1001-01-0$i")),
           "date",
@@ -119,7 +122,7 @@ abstract class ParquetRebaseDatetimeSuite
     }
   }
 
-  test("SPARK-31159: compatibility with Spark 2.4 in reading dates/timestamps") {
+  test("SPARK-31159, SPARK-37705: compatibility with Spark 2.4/3.2 in reading dates/timestamps") {
     val N = 8
     // test reading the existing 2.4 files and new 3.0 files (with rebase on/off) together.
     def checkReadMixedFiles[T](
@@ -131,33 +134,35 @@ abstract class ParquetRebaseDatetimeSuite
         tsOutputType: String = "TIMESTAMP_MICROS",
         inWriteConf: String = SQLConf.PARQUET_REBASE_MODE_IN_WRITE.key,
         inReadConf: String = SQLConf.PARQUET_REBASE_MODE_IN_READ.key): Unit = {
-      withTempPaths(2) { paths =>
-        paths.foreach(_.delete())
-        val path2_4 = getResourceParquetFilePath("test-data/" + fileName)
-        val path3_0 = paths(0).getCanonicalPath
-        val path3_0_rebase = paths(1).getCanonicalPath
-        val df = Seq.tabulate(N)(rowFunc).toDF("dict", "plain")
-          .select($"dict".cast(catalystType), $"plain".cast(catalystType))
-        withSQLConf(SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE.key -> tsOutputType) {
-          checkDefaultLegacyRead(path2_4)
-          withSQLConf(inWriteConf -> CORRECTED.toString) {
-            df.write.mode("overwrite").parquet(path3_0)
+      withAllParquetWriters {
+        withTempPaths(2) { paths =>
+          paths.foreach(_.delete())
+        val oldPath = getResourceParquetFilePath("test-data/" + fileName)
+        val path3_x = paths(0).getCanonicalPath
+        val path3_x_rebase = paths(1).getCanonicalPath
+          val df = Seq.tabulate(N)(rowFunc).toDF("dict", "plain")
+            .select($"dict".cast(catalystType), $"plain".cast(catalystType))
+          withSQLConf(SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE.key -> tsOutputType) {
+            checkDefaultLegacyRead(oldPath)
+            withSQLConf(inWriteConf -> CORRECTED.toString) {
+              df.write.mode("overwrite").parquet(path3_x)
+            }
+            withSQLConf(inWriteConf -> LEGACY.toString) {
+              df.write.parquet(path3_x_rebase)
+            }
           }
-          withSQLConf(inWriteConf -> LEGACY.toString) {
-            df.write.parquet(path3_0_rebase)
+          // For Parquet files written by Spark 3.0, we know the writer info and don't need the
+          // config to guide the rebase behavior.
+          runInMode(inReadConf, Seq(LEGACY)) { options =>
+            checkAnswer(
+            spark.read.format("parquet").options(options).load(oldPath, path3_x, path3_x_rebase),
+              (0 until N).flatMap { i =>
+                val (dictS, plainS) = rowFunc(i)
+                Seq.tabulate(3) { _ =>
+                  Row(toJavaType(dictS), toJavaType(plainS))
+                }
+              })
           }
-        }
-        // For Parquet files written by Spark 3.0, we know the writer info and don't need the
-        // config to guide the rebase behavior.
-        runInMode(inReadConf, Seq(LEGACY)) { options =>
-          checkAnswer(
-            spark.read.format("parquet").options(options).load(path2_4, path3_0, path3_0_rebase),
-            (0 until N).flatMap { i =>
-              val (dictS, plainS) = rowFunc(i)
-              Seq.tabulate(3) { _ =>
-                Row(toJavaType(dictS), toJavaType(plainS))
-              }
-            })
         }
       }
     }
@@ -170,7 +175,8 @@ abstract class ParquetRebaseDatetimeSuite
       // By default we should fail to read ancient datetime values when parquet files don't
       // contain Spark version.
       "2_4_5" -> failInRead _,
-      "2_4_6" -> successInRead _).foreach { case (version, checkDefaultRead) =>
+      "2_4_6" -> successInRead _,
+      "3_2_0" -> successInRead _).foreach { case (version, checkDefaultRead) =>
       withAllParquetReaders {
         checkReadMixedFiles(
           s"before_1582_date_v$version.snappy.parquet",
@@ -212,58 +218,66 @@ abstract class ParquetRebaseDatetimeSuite
     }
   }
 
-  test("SPARK-31159: rebasing timestamps in write") {
+  test("SPARK-31159, SPARK-37705: rebasing timestamps in write") {
     val N = 8
     Seq(false, true).foreach { dictionaryEncoding =>
-      Seq(
-        (
-          "TIMESTAMP_MILLIS",
-          "1001-01-01 01:02:03.123",
-          "1001-01-07 01:09:05.123",
-          SQLConf.PARQUET_REBASE_MODE_IN_WRITE.key,
-          SQLConf.PARQUET_REBASE_MODE_IN_READ.key),
-        (
-          "TIMESTAMP_MICROS",
-          "1001-01-01 01:02:03.123456",
-          "1001-01-07 01:09:05.123456",
-          SQLConf.PARQUET_REBASE_MODE_IN_WRITE.key,
-          SQLConf.PARQUET_REBASE_MODE_IN_READ.key),
-        (
-          "INT96",
-          "1001-01-01 01:02:03.123456",
-          "1001-01-07 01:09:05.123456",
-          SQLConf.PARQUET_INT96_REBASE_MODE_IN_WRITE.key,
-          SQLConf.PARQUET_INT96_REBASE_MODE_IN_READ.key
-        )
-      ).foreach { case (outType, tsStr, nonRebased, inWriteConf, inReadConf) =>
-        withClue(s"output type $outType") {
-          withSQLConf(SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE.key -> outType) {
-            withTempPath { dir =>
-              val path = dir.getAbsolutePath
-              withSQLConf(inWriteConf -> LEGACY.toString) {
-                Seq.tabulate(N)(_ => tsStr).toDF("tsS")
-                  .select($"tsS".cast("timestamp").as("ts"))
-                  .repartition(1)
-                  .write
-                  .option("parquet.enable.dictionary", dictionaryEncoding)
-                  .parquet(path)
-              }
+      withAllParquetWriters {
+        Seq(
+          (
+            "TIMESTAMP_MILLIS",
+            "1001-01-01 01:02:03.123",
+            "1001-01-07 01:09:05.123",
+            SQLConf.PARQUET_REBASE_MODE_IN_WRITE.key,
+            SQLConf.PARQUET_REBASE_MODE_IN_READ.key),
+          (
+            "TIMESTAMP_MICROS",
+            "1001-01-01 01:02:03.123456",
+            "1001-01-07 01:09:05.123456",
+            SQLConf.PARQUET_REBASE_MODE_IN_WRITE.key,
+            SQLConf.PARQUET_REBASE_MODE_IN_READ.key),
+          (
+            "INT96",
+            "1001-01-01 01:02:03.123456",
+            "1001-01-07 01:09:05.123456",
+            SQLConf.PARQUET_INT96_REBASE_MODE_IN_WRITE.key,
+            SQLConf.PARQUET_INT96_REBASE_MODE_IN_READ.key
+          )
+        ).foreach { case (outType, tsStr, nonRebased, inWriteConf, inReadConf) =>
+          // Ignore the default JVM time zone and use the session time zone instead of
+          // it in rebasing.
+          DateTimeTestUtils.withDefaultTimeZone(DateTimeTestUtils.JST) {
+            withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> DateTimeTestUtils.LA.getId) {
+              withClue(s"output type $outType") {
+                withSQLConf(SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE.key -> outType) {
+                  withTempPath { dir =>
+                    val path = dir.getAbsolutePath
+                    withSQLConf(inWriteConf -> LEGACY.toString) {
+                      Seq.tabulate(N)(_ => tsStr).toDF("tsS")
+                        .select($"tsS".cast("timestamp").as("ts"))
+                        .repartition(1)
+                        .write
+                        .option("parquet.enable.dictionary", dictionaryEncoding)
+                        .parquet(path)
+                    }
 
-              withAllParquetReaders {
-                // The file metadata indicates if it needs rebase or not, so we can always get the
-                // correct result regardless of the "rebase mode" config.
-                runInMode(inReadConf, Seq(LEGACY, CORRECTED, EXCEPTION)) { options =>
-                  checkAnswer(
-                    spark.read.options(options).parquet(path),
-                    Seq.tabulate(N)(_ => Row(Timestamp.valueOf(tsStr))))
-                }
+                    withAllParquetReaders {
+                      // The file metadata indicates if it needs rebase or not, so we can always get
+                      // the correct result regardless of the "rebase mode" config.
+                      runInMode(inReadConf, Seq(LEGACY, CORRECTED, EXCEPTION)) { options =>
+                        checkAnswer(
+                          spark.read.options(options).parquet(path).select($"ts".cast("string")),
+                          Seq.tabulate(N)(_ => Row(tsStr)))
+                      }
 
-                // Force to not rebase to prove the written datetime values are rebased
-                // and we will get wrong result if we don't rebase while reading.
-                withSQLConf("spark.test.forceNoRebase" -> "true") {
-                  checkAnswer(
-                    spark.read.parquet(path),
-                    Seq.tabulate(N)(_ => Row(Timestamp.valueOf(nonRebased))))
+                      // Force to not rebase to prove the written datetime values are rebased
+                      // and we will get wrong result if we don't rebase while reading.
+                      withSQLConf("spark.test.forceNoRebase" -> "true") {
+                        checkAnswer(
+                          spark.read.parquet(path).select($"ts".cast("string")),
+                          Seq.tabulate(N)(_ => Row(nonRebased)))
+                      }
+                    }
+                  }
                 }
               }
             }
@@ -276,41 +290,44 @@ abstract class ParquetRebaseDatetimeSuite
   test("SPARK-31159: rebasing dates in write") {
     val N = 8
     Seq(false, true).foreach { dictionaryEncoding =>
-      withTempPath { dir =>
-        val path = dir.getAbsolutePath
-        withSQLConf(SQLConf.PARQUET_REBASE_MODE_IN_WRITE.key -> LEGACY.toString) {
-          Seq.tabulate(N)(_ => "1001-01-01").toDF("dateS")
-            .select($"dateS".cast("date").as("date"))
-            .repartition(1)
-            .write
-            .option("parquet.enable.dictionary", dictionaryEncoding)
-            .parquet(path)
-        }
-
-        withAllParquetReaders {
-          // The file metadata indicates if it needs rebase or not, so we can always get the
-          // correct result regardless of the "rebase mode" config.
-          runInMode(
-            SQLConf.PARQUET_REBASE_MODE_IN_READ.key,
-            Seq(LEGACY, CORRECTED, EXCEPTION)) { options =>
-            checkAnswer(
-              spark.read.options(options).parquet(path),
-              Seq.tabulate(N)(_ => Row(Date.valueOf("1001-01-01"))))
+      withAllParquetWriters {
+        withTempPath { dir =>
+          val path = dir.getAbsolutePath
+          withSQLConf(SQLConf.PARQUET_REBASE_MODE_IN_WRITE.key -> LEGACY.toString) {
+            Seq.tabulate(N)(_ => "1001-01-01").toDF("dateS")
+              .select($"dateS".cast("date").as("date"))
+              .repartition(1)
+              .write
+              .option("parquet.enable.dictionary", dictionaryEncoding)
+              .parquet(path)
           }
 
-          // Force to not rebase to prove the written datetime values are rebased and we will get
-          // wrong result if we don't rebase while reading.
-          withSQLConf("spark.test.forceNoRebase" -> "true") {
-            checkAnswer(
-              spark.read.parquet(path),
-              Seq.tabulate(N)(_ => Row(Date.valueOf("1001-01-07"))))
+          withAllParquetReaders {
+            // The file metadata indicates if it needs rebase or not, so we can always get the
+            // correct result regardless of the "rebase mode" config.
+            runInMode(
+              SQLConf.PARQUET_REBASE_MODE_IN_READ.key,
+              Seq(LEGACY, CORRECTED, EXCEPTION)) { options =>
+              checkAnswer(
+                spark.read.options(options).parquet(path),
+                Seq.tabulate(N)(_ => Row(Date.valueOf("1001-01-01"))))
+            }
+
+            // Force to not rebase to prove the written datetime values are rebased and we will get
+            // wrong result if we don't rebase while reading.
+            withSQLConf("spark.test.forceNoRebase" -> "true") {
+              checkAnswer(
+                spark.read.parquet(path),
+                Seq.tabulate(N)(_ => Row(Date.valueOf("1001-01-07"))))
+            }
           }
         }
       }
     }
   }
 
-  test("SPARK-33163: write the metadata key 'org.apache.spark.legacyDateTime'") {
+  test("SPARK-33163, SPARK-37705: write the metadata keys 'org.apache.spark.legacyDateTime' " +
+    "and 'org.apache.spark.timeZone'") {
     def checkMetadataKey(dir: java.io.File, exists: Boolean): Unit = {
       Seq("timestamp '1000-01-01 01:02:03'", "date '1000-01-01'").foreach { dt =>
         withSQLConf(SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE.key ->
@@ -322,51 +339,67 @@ abstract class ParquetRebaseDatetimeSuite
             .parquet(dir.getAbsolutePath)
           val metaData = getMetaData(dir)
           val expected = if (exists) Some("") else None
-          assert(metaData.get(SPARK_LEGACY_DATETIME) === expected)
+          assert(metaData.get(SPARK_LEGACY_DATETIME_METADATA_KEY) === expected)
+          val expectedTz = if (exists) Some(SQLConf.get.sessionLocalTimeZone) else None
+          assert(metaData.get(SPARK_TIMEZONE_METADATA_KEY) === expectedTz)
         }
       }
     }
-    withSQLConf(SQLConf.PARQUET_REBASE_MODE_IN_WRITE.key -> LEGACY.toString) {
-      withTempPath { dir =>
-        checkMetadataKey(dir, exists = true)
+    withAllParquetWriters {
+      withSQLConf(SQLConf.PARQUET_REBASE_MODE_IN_WRITE.key -> LEGACY.toString) {
+        withTempPath { dir =>
+          checkMetadataKey(dir, exists = true)
+        }
       }
-    }
-    withSQLConf(SQLConf.PARQUET_REBASE_MODE_IN_WRITE.key -> CORRECTED.toString) {
-      withTempPath { dir =>
-        checkMetadataKey(dir, exists = false)
+      withSQLConf(SQLConf.PARQUET_REBASE_MODE_IN_WRITE.key -> CORRECTED.toString) {
+        withTempPath { dir =>
+          checkMetadataKey(dir, exists = false)
+        }
       }
-    }
-    withSQLConf(SQLConf.PARQUET_REBASE_MODE_IN_WRITE.key -> EXCEPTION.toString) {
-      withTempPath { dir => intercept[SparkException] { checkMetadataKey(dir, exists = false) } }
+      withSQLConf(SQLConf.PARQUET_REBASE_MODE_IN_WRITE.key -> EXCEPTION.toString) {
+        withTempPath { dir => intercept[SparkException] {
+          checkMetadataKey(dir, exists = false)
+        }
+        }
+      }
     }
   }
 
-  test("SPARK-33160: write the metadata key 'org.apache.spark.legacyINT96'") {
+  test("SPARK-33160, SPARK-37705: write the metadata key 'org.apache.spark.legacyINT96' " +
+    "and 'org.apache.spark.timeZone'") {
     def saveTs(dir: java.io.File, ts: String = "1000-01-01 01:02:03"): Unit = {
       Seq(Timestamp.valueOf(ts)).toDF()
         .repartition(1)
         .write
         .parquet(dir.getAbsolutePath)
     }
-    withSQLConf(SQLConf.PARQUET_INT96_REBASE_MODE_IN_WRITE.key -> LEGACY.toString) {
-      withTempPath { dir =>
-        saveTs(dir)
-        assert(getMetaData(dir)(SPARK_LEGACY_INT96) === "")
+    withAllParquetWriters {
+      withSQLConf(SQLConf.PARQUET_INT96_REBASE_MODE_IN_WRITE.key -> LEGACY.toString) {
+        withTempPath { dir =>
+          saveTs(dir)
+        assert(getMetaData(dir)(SPARK_LEGACY_INT96_METADATA_KEY) === "")
+        assert(getMetaData(dir)(SPARK_TIMEZONE_METADATA_KEY) === SQLConf.get.sessionLocalTimeZone)
+        }
       }
-    }
-    withSQLConf(SQLConf.PARQUET_INT96_REBASE_MODE_IN_WRITE.key -> CORRECTED.toString) {
-      withTempPath { dir =>
-        saveTs(dir)
-        assert(getMetaData(dir).get(SPARK_LEGACY_INT96).isEmpty)
+      withSQLConf(SQLConf.PARQUET_INT96_REBASE_MODE_IN_WRITE.key -> CORRECTED.toString) {
+        withTempPath { dir =>
+          saveTs(dir)
+        assert(getMetaData(dir).get(SPARK_LEGACY_INT96_METADATA_KEY).isEmpty)
+        assert(getMetaData(dir).get(SPARK_TIMEZONE_METADATA_KEY).isEmpty)
+        }
       }
-    }
-    withSQLConf(SQLConf.PARQUET_INT96_REBASE_MODE_IN_WRITE.key -> EXCEPTION.toString) {
-      withTempPath { dir => intercept[SparkException] { saveTs(dir) } }
-    }
-    withSQLConf(SQLConf.PARQUET_INT96_REBASE_MODE_IN_WRITE.key -> EXCEPTION.toString) {
-      withTempPath { dir =>
-        saveTs(dir, "2020-10-22 01:02:03")
-        assert(getMetaData(dir).get(SPARK_LEGACY_INT96).isEmpty)
+      withSQLConf(SQLConf.PARQUET_INT96_REBASE_MODE_IN_WRITE.key -> EXCEPTION.toString) {
+        withTempPath { dir => intercept[SparkException] {
+          saveTs(dir)
+        }
+        }
+      }
+      withSQLConf(SQLConf.PARQUET_INT96_REBASE_MODE_IN_WRITE.key -> EXCEPTION.toString) {
+        withTempPath { dir =>
+          saveTs(dir, "2020-10-22 01:02:03")
+        assert(getMetaData(dir).get(SPARK_LEGACY_INT96_METADATA_KEY).isEmpty)
+        assert(getMetaData(dir).get(SPARK_TIMEZONE_METADATA_KEY).isEmpty)
+        }
       }
     }
   }
@@ -384,25 +417,27 @@ abstract class ParquetRebaseDatetimeSuite
         assert(errMsg.contains("You may get a different result due to the upgrading"))
       }
     }
-    withSQLConf(SQLConf.PARQUET_REBASE_MODE_IN_WRITE.key -> EXCEPTION.toString) {
-      Seq(TIMESTAMP_MICROS, TIMESTAMP_MILLIS).foreach { tsType =>
-        withSQLConf(SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE.key -> tsType.toString) {
-          checkTsWrite()
+    withAllParquetWriters {
+      withSQLConf(SQLConf.PARQUET_REBASE_MODE_IN_WRITE.key -> EXCEPTION.toString) {
+        Seq(TIMESTAMP_MICROS, TIMESTAMP_MILLIS).foreach { tsType =>
+          withSQLConf(SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE.key -> tsType.toString) {
+            checkTsWrite()
+          }
+        }
+        withTempPath { dir =>
+          val df = Seq(java.sql.Date.valueOf("1001-01-01")).toDF("dt")
+          val e = intercept[SparkException] {
+            df.write.parquet(dir.getCanonicalPath)
+          }
+          val errMsg = e.getCause.getCause.getCause.asInstanceOf[SparkUpgradeException].getMessage
+          assert(errMsg.contains("You may get a different result due to the upgrading"))
         }
       }
-      withTempPath { dir =>
-        val df = Seq(java.sql.Date.valueOf("1001-01-01")).toDF("dt")
-        val e = intercept[SparkException] {
-          df.write.parquet(dir.getCanonicalPath)
-        }
-        val errMsg = e.getCause.getCause.getCause.asInstanceOf[SparkUpgradeException].getMessage
-        assert(errMsg.contains("You may get a different result due to the upgrading"))
+      withSQLConf(
+        SQLConf.PARQUET_INT96_REBASE_MODE_IN_WRITE.key -> EXCEPTION.toString,
+        SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE.key -> INT96.toString) {
+        checkTsWrite()
       }
-    }
-    withSQLConf(
-      SQLConf.PARQUET_INT96_REBASE_MODE_IN_WRITE.key -> EXCEPTION.toString,
-      SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE.key -> INT96.toString) {
-      checkTsWrite()
     }
 
     def checkRead(fileName: String): Unit = {
@@ -412,14 +447,16 @@ abstract class ParquetRebaseDatetimeSuite
       val errMsg = e.getCause.asInstanceOf[SparkUpgradeException].getMessage
       assert(errMsg.contains("You may get a different result due to the upgrading"))
     }
-    withSQLConf(SQLConf.PARQUET_REBASE_MODE_IN_READ.key -> EXCEPTION.toString) {
-      Seq(
-        "before_1582_date_v2_4_5.snappy.parquet",
-        "before_1582_timestamp_micros_v2_4_5.snappy.parquet",
-        "before_1582_timestamp_millis_v2_4_5.snappy.parquet").foreach(checkRead)
-    }
-    withSQLConf(SQLConf.PARQUET_INT96_REBASE_MODE_IN_READ.key -> EXCEPTION.toString) {
-      checkRead("before_1582_timestamp_int96_dict_v2_4_5.snappy.parquet")
+    withAllParquetWriters {
+      withSQLConf(SQLConf.PARQUET_REBASE_MODE_IN_READ.key -> EXCEPTION.toString) {
+        Seq(
+          "before_1582_date_v2_4_5.snappy.parquet",
+          "before_1582_timestamp_micros_v2_4_5.snappy.parquet",
+          "before_1582_timestamp_millis_v2_4_5.snappy.parquet").foreach(checkRead)
+      }
+      withSQLConf(SQLConf.PARQUET_INT96_REBASE_MODE_IN_READ.key -> EXCEPTION.toString) {
+        checkRead("before_1582_timestamp_int96_dict_v2_4_5.snappy.parquet")
+      }
     }
   }
 }

@@ -154,13 +154,13 @@ class PythonOnlyPoint(ExamplePoint):
     __UDT__ = PythonOnlyUDT()  # type: ignore
 
 
-class MyObject(object):
+class MyObject:
     def __init__(self, key, value):
         self.key = key
         self.value = value
 
 
-class SQLTestUtils(object):
+class SQLTestUtils:
     """
     This util assumes the instance of this to have 'spark' attribute, having a spark session.
     It is usually used with 'ReusedSQLTestCase' class but can be used if you feel sure the

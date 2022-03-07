@@ -37,6 +37,7 @@ trait LogicalPlanVisitor[T] {
     case p: Project => visitProject(p)
     case p: Repartition => visitRepartition(p)
     case p: RepartitionByExpression => visitRepartitionByExpr(p)
+    case p: RebalancePartitions => visitRebalancePartitions(p)
     case p: Sample => visitSample(p)
     case p: ScriptTransformation => visitScriptTransform(p)
     case p: Union => visitUnion(p)
@@ -76,6 +77,8 @@ trait LogicalPlanVisitor[T] {
   def visitRepartition(p: Repartition): T
 
   def visitRepartitionByExpr(p: RepartitionByExpression): T
+
+  def visitRebalancePartitions(p: RebalancePartitions): T
 
   def visitSample(p: Sample): T
 

@@ -427,9 +427,10 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest {
       timeoutConf: GroupStateTimeout,
       procTime: Long,
       watermarkPresent: Boolean): GroupState[Int] = {
-      val eventTimeWatermarkMs = watermarkPresent match {
-        case true => Optional.of(1000L)
-        case false => Optional.empty[Long]
+      val eventTimeWatermarkMs = if (watermarkPresent) {
+        Optional.of(1000L)
+      } else {
+        Optional.empty[Long]
       }
       TestGroupState.create[Int](
         Optional.of(1000), timeoutConf, procTime, eventTimeWatermarkMs, hasTimedOut = false)

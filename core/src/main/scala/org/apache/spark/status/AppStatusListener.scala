@@ -600,6 +600,12 @@ private[spark] class AppStatusListener(
     liveUpdate(task, now)
 
     Option(liveStages.get((event.stageId, event.stageAttemptId))).foreach { stage =>
+      if (event.taskInfo.speculative) {
+        stage.speculationStageSummary.numActiveTasks += 1
+        stage.speculationStageSummary.numTasks += 1
+        update(stage.speculationStageSummary, now)
+      }
+
       stage.activeTasks += 1
       stage.firstLaunchTime = math.min(stage.firstLaunchTime, event.taskInfo.launchTime)
 
@@ -745,6 +751,14 @@ private[spark] class AppStatusListener(
         update(esummary, now)
       } else {
         maybeUpdate(esummary, now)
+      }
+
+      if (event.taskInfo.speculative) {
+        stage.speculationStageSummary.numActiveTasks -= 1
+        stage.speculationStageSummary.numCompletedTasks += completedDelta
+        stage.speculationStageSummary.numFailedTasks += failedDelta
+        stage.speculationStageSummary.numKilledTasks += killedDelta
+        update(stage.speculationStageSummary, now)
       }
 
       if (!stage.cleaning && stage.savedTasks.get() > maxTasksPerStage) {

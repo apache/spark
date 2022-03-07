@@ -24,12 +24,21 @@ import io.fabric8.kubernetes.client.KubernetesClient
 import scala.collection.JavaConverters._
 
 import org.apache.spark.SparkConf
+import org.apache.spark.annotation.{DeveloperApi, Since, Stable}
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.internal.Logging
 import org.apache.spark.util.{ThreadUtils, Utils}
 
-private[spark] class ExecutorPodsPollingSnapshotSource(
+/**
+ * :: DeveloperApi ::
+ *
+ * A class used for polling K8s executor pods by ExternalClusterManagers.
+ * @since 3.1.3
+ */
+@Stable
+@DeveloperApi
+class ExecutorPodsPollingSnapshotSource(
     conf: SparkConf,
     kubernetesClient: KubernetesClient,
     snapshotsStore: ExecutorPodsSnapshotsStore,
@@ -39,6 +48,7 @@ private[spark] class ExecutorPodsPollingSnapshotSource(
 
   private var pollingFuture: Future[_] = _
 
+  @Since("3.1.3")
   def start(applicationId: String): Unit = {
     require(pollingFuture == null, "Cannot start polling more than once.")
     logDebug(s"Starting to check for executor pod state every $pollingInterval ms.")
@@ -46,6 +56,7 @@ private[spark] class ExecutorPodsPollingSnapshotSource(
       new PollRunnable(applicationId), pollingInterval, pollingInterval, TimeUnit.MILLISECONDS)
   }
 
+  @Since("3.1.3")
   def stop(): Unit = {
     if (pollingFuture != null) {
       pollingFuture.cancel(true)

@@ -93,7 +93,7 @@ private[thriftserver] class HiveThriftServer2Listener(
     val execList = executionList.values().asScala.filter(_.groupId == groupId).toSeq
     if (execList.nonEmpty) {
       execList.foreach { exec =>
-        exec.jobId += jobId.toString
+        exec.jobId += jobId
         updateLiveStore(exec)
       }
     } else {
@@ -105,7 +105,7 @@ private[thriftserver] class HiveThriftServer2Listener(
       storeExecInfo.foreach { exec =>
         val liveExec = getOrCreateExecution(exec.execId, exec.statement, exec.sessionId,
           exec.startTimestamp, exec.userName)
-        liveExec.jobId += jobId.toString
+        liveExec.jobId += jobId
         updateStoreWithTriggerEnabled(liveExec)
         executionList.remove(liveExec.execId)
       }

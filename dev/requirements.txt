@@ -19,7 +19,9 @@ coverage
 
 # Linter
 mypy
-flake8
+pytest-mypy-plugins==1.9.3
+flake8==3.9.0
+pandas-stubs
 
 # Documentation (SQL)
 mkdocs

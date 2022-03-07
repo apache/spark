@@ -217,7 +217,7 @@ class ClientSuite extends SparkFunSuite with Matchers {
   }
 
   test("specify a more specific type for the application") {
-    // TODO (SPARK-31733) Make this test case pass with Hadoop-3.2
+    // TODO (SPARK-31733) Make this test case pass with hadoop-3
     assume(!isYarnResourceTypesAvailable)
     // When the type exceeds 20 characters will be truncated by yarn
     val appTypes = Map(

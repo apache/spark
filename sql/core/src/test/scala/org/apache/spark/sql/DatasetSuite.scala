@@ -25,6 +25,8 @@ import org.scalatest.exceptions.TestFailedException
 import org.scalatest.prop.TableDrivenPropertyChecks._
 
 import org.apache.spark.{SparkException, TaskContext}
+import org.apache.spark.TestUtils.withListener
+import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
 import org.apache.spark.sql.catalyst.{FooClassWithEnum, FooEnum, ScroogeLikeExample}
 import org.apache.spark.sql.catalyst.encoders.{OuterScopes, RowEncoder}
 import org.apache.spark.sql.catalyst.plans.{LeftAnti, LeftSemi}
@@ -46,10 +48,12 @@ object TestForTypeAlias {
   type TwoInt = (Int, Int)
   type ThreeInt = (TwoInt, Int)
   type SeqOfTwoInt = Seq[TwoInt]
+  type IntArray = Array[Int]
 
   def tupleTypeAlias: TwoInt = (1, 1)
   def nestedTupleTypeAlias: ThreeInt = ((1, 1), 2)
   def seqOfTupleTypeAlias: SeqOfTwoInt = Seq((1, 1), (2, 2))
+  def aliasedArrayInTuple: (Int, IntArray) = (1, Array(1))
 }
 
 class DatasetSuite extends QueryTest
@@ -1457,8 +1461,29 @@ class DatasetSuite extends QueryTest
       }
 
       testCheckpointing("basic") {
-        val ds = spark.range(10).repartition($"id" % 2).filter($"id" > 5).orderBy($"id".desc)
-        val cp = if (reliable) ds.checkpoint(eager) else ds.localCheckpoint(eager)
+        val ds = spark
+          .range(10)
+          // Num partitions is set to 1 to avoid a RangePartitioner in the orderBy below
+          .repartition(1, $"id" % 2)
+          .filter($"id" > 5)
+          .orderBy($"id".desc)
+        @volatile var jobCounter = 0
+        val listener = new SparkListener {
+          override def onJobStart(jobStart: SparkListenerJobStart): Unit = {
+            jobCounter += 1
+          }
+        }
+        var cp = ds
+        withListener(spark.sparkContext, listener) { _ =>
+          // AQE adds a job per shuffle. The expression above does multiple shuffles and
+          // that screws up the job counting
+          withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+            cp = if (reliable) ds.checkpoint(eager) else ds.localCheckpoint(eager)
+          }
+        }
+        if (eager) {
+          assert(jobCounter === 1)
+        }
 
         val logicalRDD = cp.logicalPlan match {
           case plan: LogicalRDD => plan
@@ -1622,6 +1647,12 @@ class DatasetSuite extends QueryTest
     checkDataset(
       Seq(1).toDS().map(_ => ("", TestForTypeAlias.seqOfTupleTypeAlias)),
       ("", Seq((1, 1), (2, 2))))
+  }
+
+  test("SPARK-38042: Dataset should work with a product containing an aliased array type") {
+    checkDataset(
+      Seq(1).toDS().map(_ => ("", TestForTypeAlias.aliasedArrayInTuple)),
+      ("", (1, Array(1))))
   }
 
   test("Check RelationalGroupedDataset toString: Single data") {

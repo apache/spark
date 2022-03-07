@@ -139,6 +139,7 @@ trait ThriftServerWithSparkContextSuite extends SharedThriftServer {
       }
 
       exec(s"set ${SQLConf.ANSI_ENABLED.key}=true")
+      exec(s"set ${SQLConf.ENFORCE_RESERVED_KEYWORDS.key}=true")
       val opHandle2 = exec("select current_user")
       assert(client.fetchResults(opHandle2).toTRowSet.getColumns.get(0)
         .getStringVal.getValues.get(0) === clientUser)

@@ -82,7 +82,7 @@ class CategoricalIndexTest(PandasOnSparkTestCase, TestUtils):
 
         pidx.categories = ["z", "y", "x"]
         psidx.categories = ["z", "y", "x"]
-        if LooseVersion(pd.__version__) >= LooseVersion("1.0.5"):
+        if LooseVersion(pd.__version__) >= LooseVersion("1.1"):
             self.assert_eq(pidx, psidx)
             self.assert_eq(pdf, psdf)
         else:

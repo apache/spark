@@ -21,6 +21,7 @@ import java.sql.{Date, Timestamp, Types}
 import java.util.{Locale, TimeZone}
 
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.connector.expressions.aggregate.{AggregateFunc, GeneralAggregateFunc}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
@@ -32,6 +33,38 @@ private case object OracleDialect extends JdbcDialect {
 
   override def canHandle(url: String): Boolean =
     url.toLowerCase(Locale.ROOT).startsWith("jdbc:oracle")
+
+  // scalastyle:off line.size.limit
+  // https://docs.oracle.com/en/database/oracle/oracle-database/19/sqlrf/Aggregate-Functions.html#GUID-62BE676B-AF18-4E63-BD14-25206FEA0848
+  // scalastyle:on line.size.limit
+  override def compileAggregate(aggFunction: AggregateFunc): Option[String] = {
+    super.compileAggregate(aggFunction).orElse(
+      aggFunction match {
+        case f: GeneralAggregateFunc if f.name() == "VAR_POP" && f.isDistinct == false =>
+          assert(f.inputs().length == 1)
+          Some(s"VAR_POP(${f.inputs().head})")
+        case f: GeneralAggregateFunc if f.name() == "VAR_SAMP" && f.isDistinct == false =>
+          assert(f.inputs().length == 1)
+          Some(s"VAR_SAMP(${f.inputs().head})")
+        case f: GeneralAggregateFunc if f.name() == "STDDEV_POP" && f.isDistinct == false =>
+          assert(f.inputs().length == 1)
+          Some(s"STDDEV_POP(${f.inputs().head})")
+        case f: GeneralAggregateFunc if f.name() == "STDDEV_SAMP" && f.isDistinct == false =>
+          assert(f.inputs().length == 1)
+          Some(s"STDDEV_SAMP(${f.inputs().head})")
+        case f: GeneralAggregateFunc if f.name() == "COVAR_POP" && f.isDistinct == false =>
+          assert(f.inputs().length == 2)
+          Some(s"COVAR_POP(${f.inputs().head}, ${f.inputs().last})")
+        case f: GeneralAggregateFunc if f.name() == "COVAR_SAMP" && f.isDistinct == false =>
+          assert(f.inputs().length == 2)
+          Some(s"COVAR_SAMP(${f.inputs().head}, ${f.inputs().last})")
+        case f: GeneralAggregateFunc if f.name() == "CORR" && f.isDistinct == false =>
+          assert(f.inputs().length == 2)
+          Some(s"CORR(${f.inputs().head}, ${f.inputs().last})")
+        case _ => None
+      }
+    )
+  }
 
   private def supportTimeZoneTypes: Boolean = {
     val timeZone = DateTimeUtils.getTimeZone(SQLConf.get.sessionLocalTimeZone)

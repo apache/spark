@@ -20,7 +20,7 @@ package org.apache.spark.sql.internal
 import java.util.TimeZone
 
 import org.apache.hadoop.fs.Path
-import org.apache.log4j.Level
+import org.apache.logging.log4j.Level
 
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.parser.ParseException
@@ -415,7 +415,7 @@ class SQLConfSuite extends QueryTest with SharedSparkSession {
     def check(config: String): Unit = {
       assert(logAppender.loggingEvents.exists(
         e => e.getLevel == Level.WARN &&
-        e.getRenderedMessage.contains(config)))
+        e.getMessage.getFormattedMessage.contains(config)))
     }
 
     val config1 = SQLConf.HIVE_VERIFY_PARTITION_PATH.key
@@ -469,7 +469,7 @@ class SQLConfSuite extends QueryTest with SharedSparkSession {
       if (i == 0) {
         assert(zone === "Z")
       } else {
-        assert(zone === String.format("%+03d:00", new Integer(i)))
+        assert(zone === String.format("%+03d:00", Integer.valueOf(i)))
       }
     }
     val e2 = intercept[ParseException](sql("set time zone interval 19 hours"))

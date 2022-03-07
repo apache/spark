@@ -19,7 +19,6 @@ package org.apache.spark.sql.execution.command.v1
 
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.execution.command
-import org.apache.spark.sql.internal.SQLConf
 
 /**
  * This base suite contains unified tests for the `SHOW TBLPROPERTIES` command that checks V1
@@ -33,17 +32,6 @@ import org.apache.spark.sql.internal.SQLConf
 trait ShowTblPropertiesSuiteBase extends command.ShowTblPropertiesSuiteBase
     with command.TestsV1AndV2Commands {
 
-  test("SHOW TBLPROPERTIES WITH LEGACY_KEEP_COMMAND_OUTPUT_SCHEMA") {
-    withNamespaceAndTable("ns1", "tbl") { tbl =>
-      spark.sql(s"CREATE TABLE $tbl (id bigint, data string) $defaultUsing " +
-        s"TBLPROPERTIES ('user'='andrew', 'status'='new')")
-      withSQLConf(SQLConf.LEGACY_KEEP_COMMAND_OUTPUT_SCHEMA.key -> "true") {
-        checkAnswer(sql(s"SHOW TBLPROPERTIES $tbl('user')"), Row("andrew"))
-        checkAnswer(sql(s"SHOW TBLPROPERTIES $tbl('status')"), Row("new"))
-      }
-    }
-  }
-
   test("SHOW TBLPROPERTIES FOR VIEW") {
     val v = "testview"
     withView(v) {
@@ -56,7 +44,7 @@ trait ShowTblPropertiesSuiteBase extends command.ShowTblPropertiesSuiteBase
     }
   }
 
-  test("SHOW TBLPROPERTIES FOR TEMPORARY IEW") {
+  test("SHOW TBLPROPERTIES FOR TEMPORARY VIEW") {
     val v = "testview"
     withView(v) {
       spark.sql(s"CREATE TEMPORARY VIEW $v AS SELECT 1 AS c1;")

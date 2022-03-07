@@ -25,7 +25,7 @@ if TYPE_CHECKING:
     from pyspark.sql.pandas._typing import PandasMapIterFunction, ArrowMapIterFunction
 
 
-class PandasMapOpsMixin(object):
+class PandasMapOpsMixin:
     """
     Min-in for pandas map operations. Currently, only :class:`DataFrame`
     can use this class.
@@ -90,7 +90,7 @@ class PandasMapOpsMixin(object):
         )  # type: ignore[call-overload]
         udf_column = udf(*[self[col] for col in self.columns])
         jdf = self._jdf.mapInPandas(udf_column._jc.expr())  # type: ignore[operator]
-        return DataFrame(jdf, self.sql_ctx)
+        return DataFrame(jdf, self.sparkSession)
 
     def mapInArrow(
         self, func: "ArrowMapIterFunction", schema: Union[StructType, str]
@@ -153,7 +153,7 @@ class PandasMapOpsMixin(object):
         )  # type: ignore[call-overload]
         udf_column = udf(*[self[col] for col in self.columns])
         jdf = self._jdf.pythonMapInArrow(udf_column._jc.expr())
-        return DataFrame(jdf, self.sql_ctx)
+        return DataFrame(jdf, self.sparkSession)
 
 
 def _test() -> None:
