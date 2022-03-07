@@ -802,6 +802,10 @@ class JDBCSuite extends QueryTest
         === """((NOT ("col0" != 'abc' OR "col0" IS NULL OR 'abc' IS NULL) """
         + """OR ("col0" IS NULL AND 'abc' IS NULL))) AND ("col1" = 'def')""")
     }
+    val e = intercept[AnalysisException] {
+      doCompileFilter(EqualTo("col0.nested", 3))
+    }.getMessage
+    assert(e.contains("Filter push down does not support nested column: col0.nested"))
   }
 
   test("Dialect unregister") {
