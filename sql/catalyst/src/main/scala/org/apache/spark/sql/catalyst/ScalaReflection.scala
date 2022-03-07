@@ -521,11 +521,9 @@ object ScalaReflection extends ScalaReflection {
 
       case t if isSubtype(t, localTypeOf[String]) => createSerializerForString(inputObject)
 
-      case t if isSubtype(t, localTypeOf[java.time.Instant]) =>
-        createSerializerForJavaInstant(inputObject)
-
-      case t if isSubtype(t, localTypeOf[java.sql.Timestamp]) =>
-        createSerializerForSqlTimestamp(inputObject)
+      case t if isSubtype(t, localTypeOf[java.time.Instant]) ||
+        isSubtype(t, localTypeOf[java.sql.Timestamp]) =>
+        createSerializerForTimestamp(inputObject)
 
       case t if isSubtype(t, localTypeOf[java.time.LocalDateTime]) =>
         createSerializerForLocalDateTime(inputObject)

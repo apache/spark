@@ -65,26 +65,17 @@ object SerializerBuildHelper {
       returnNullable = false)
   }
 
-  def createSerializerForJavaInstant(inputObject: Expression): Expression = {
+  def createSerializerForTimestamp(inputObject: Expression): Expression = {
     StaticInvoke(
       DateTimeUtils.getClass,
       TimestampType,
-      "instantToMicros",
+      "objectToMicros",
       inputObject :: Nil,
       returnNullable = false)
   }
 
   def createSerializerForJavaEnum(inputObject: Expression): Expression =
     createSerializerForString(Invoke(inputObject, "name", ObjectType(classOf[String])))
-
-  def createSerializerForSqlTimestamp(inputObject: Expression): Expression = {
-    StaticInvoke(
-      DateTimeUtils.getClass,
-      TimestampType,
-      "fromJavaTimestamp",
-      inputObject :: Nil,
-      returnNullable = false)
-  }
 
   def createSerializerForLocalDateTime(inputObject: Expression): Expression = {
     StaticInvoke(

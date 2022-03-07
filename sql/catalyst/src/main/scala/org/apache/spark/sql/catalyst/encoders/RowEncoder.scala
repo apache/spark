@@ -99,12 +99,7 @@ object RowEncoder {
         dataType = ObjectType(udtClass), false)
       Invoke(obj, "serialize", udt, inputObject :: Nil, returnNullable = false)
 
-    case TimestampType =>
-      if (SQLConf.get.datetimeJava8ApiEnabled) {
-        createSerializerForJavaInstant(inputObject)
-      } else {
-        createSerializerForSqlTimestamp(inputObject)
-      }
+    case TimestampType => createSerializerForTimestamp(inputObject)
 
     case TimestampNTZType => createSerializerForLocalDateTime(inputObject)
 

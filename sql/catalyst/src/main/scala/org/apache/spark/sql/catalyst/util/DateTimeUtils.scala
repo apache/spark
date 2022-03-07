@@ -181,6 +181,17 @@ object DateTimeUtils {
   }
 
   /**
+   * Converts an Java object to microseconds.
+   *
+   * @param obj Either an object of `java.sql.Timestamp` or `java.time.Instant`.
+   * @return The number of micros since the epoch.
+   */
+  def objectToMicros(obj: Any): Long = obj match {
+    case t: Timestamp => fromJavaTimestamp(t)
+    case i: Instant => instantToMicros(i)
+  }
+
+  /**
    * Returns the number of microseconds since epoch from Julian day and nanoseconds in a day.
    */
   def fromJulianDay(days: Int, nanos: Long): Long = {
