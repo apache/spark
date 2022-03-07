@@ -4307,12 +4307,12 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         """
         return self.index
 
-    # TODO: 'regex', 'method' parameter
+    # TODO: introduce 'method', 'limit', 'in_place'; fully support 'regex'
     def replace(
         self,
         to_replace: Optional[Union[Any, List, Tuple, Dict]] = None,
         value: Optional[Union[List, Tuple]] = None,
-        regex: bool = False,
+        regex: Union[str, bool] = False,
     ) -> "Series":
         """
         Replace values given in to_replace with value.
@@ -4353,6 +4353,11 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             For a DataFrame a dict of values can be used to specify which value to use
             for each column (columns not in the dict will not be filled).
             Regular expressions, strings and lists or dicts of such objects are also allowed.
+
+        regex: bool or str, default False
+            Whether to interpret to_replace and/or value as regular expressions.
+            If this is True then to_replace must be a string.
+            Alternatively, this could be a regular expression in which case to_replace must be None.
 
         Returns
         -------
@@ -4464,13 +4469,36 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
                 weight      1.0
                 length      0.3
         dtype: float64
+
+        Regular expression `to_replace`
+
+        >>> psser = ps.Series(['bat', 'foo', 'bait', 'abc', 'bar', 'zoo'])
+        >>> psser.replace(to_replace=r'^ba.$', value='new', regex=True)
+        0     new
+        1     foo
+        2    bait
+        3     abc
+        4     new
+        5     zoo
+        dtype: object
         """
+        if isinstance(regex, str):
+            if to_replace is not None:
+                raise ValueError("'to_replace' must be 'None' if 'regex' is not a bool")
+            to_replace = regex
+            regex = True
+        elif not isinstance(regex, bool):
+            raise NotImplementedError("regex of %s type is supported" % type(regex).__name__)
+        elif regex is True:
+            assert isinstance(
+                to_replace, str
+            ), "If 'regex' is True then 'to_replace' must be a string"
+
         if to_replace is None:
             return self.fillna(method="ffill")
         if not isinstance(to_replace, (str, list, tuple, dict, int, float)):
             raise TypeError("'to_replace' should be one of str, list, tuple, dict, int, float")
-        if regex:
-            raise NotImplementedError("replace currently not support for regex")
+
         to_replace = list(to_replace) if isinstance(to_replace, tuple) else to_replace
         value = list(value) if isinstance(value, tuple) else value
         if isinstance(to_replace, list) and isinstance(value, list):
@@ -4499,10 +4527,14 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
                         current = current.when(cond, value)
                 current = current.otherwise(self.spark.column)
         else:
-            cond = self.spark.column.isin(to_replace)
-            # to_replace may be a scalar
-            if np.array(pd.isna(to_replace)).any():
-                cond = cond | F.isnan(self.spark.column) | self.spark.column.isNull()
+            if regex:
+                # to_replace must be a string
+                cond = self.spark.column.rlike(to_replace)
+            else:
+                cond = self.spark.column.isin(to_replace)
+                # to_replace may be a scalar
+                if np.array(pd.isna(to_replace)).any():
+                    cond = cond | F.isnan(self.spark.column) | self.spark.column.isNull()
             current = F.when(cond, value).otherwise(self.spark.column)
 
         return self._with_new_scol(current)  # TODO: dtype?
