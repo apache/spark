@@ -1187,9 +1187,7 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
         def to_upper(string) -> str:
             return string.upper() if string else ""
 
-        self.assert_eq(
-            psser.map(to_upper), pser.map(to_upper),
-        )
+        self.assert_eq(psser.map(to_upper), pser.map(to_upper))
 
         def tomorrow(date) -> datetime:
             return date + timedelta(days=1)
