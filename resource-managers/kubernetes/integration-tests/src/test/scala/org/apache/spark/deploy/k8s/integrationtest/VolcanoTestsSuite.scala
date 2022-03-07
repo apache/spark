@@ -45,8 +45,8 @@ private[spark] trait VolcanoTestsSuite extends BeforeAndAfterEach { k8sSuite: Ku
   lazy val volcanoClient: VolcanoClient
     = kubernetesTestComponents.kubernetesClient.adapt(classOf[VolcanoClient])
   lazy val k8sClient: NamespacedKubernetesClient = kubernetesTestComponents.kubernetesClient
-  private var testGroups: mutable.Set[String] = mutable.Set.empty
-  private var testYAMLPaths: mutable.Set[String] = mutable.Set.empty
+  private val testGroups: mutable.Set[String] = mutable.Set.empty
+  private val testYAMLPaths: mutable.Set[String] = mutable.Set.empty
 
   private def deletePodInTestGroup(): Unit = {
     testGroups.foreach { g =>
@@ -55,6 +55,7 @@ private[spark] trait VolcanoTestsSuite extends BeforeAndAfterEach { k8sSuite: Ku
         assert(k8sClient.pods().withLabel("spark-group-locator", g).list().getItems.isEmpty)
       }
     }
+    testGroups.clear()
   }
 
   private def deleteYamlResources(): Unit = {
@@ -66,12 +67,7 @@ private[spark] trait VolcanoTestsSuite extends BeforeAndAfterEach { k8sSuite: Ku
         resources.foreach { r => assert(r === null) }
       }
     }
-  }
-
-  override protected def beforeEach(): Unit = {
-    super.beforeEach()
-    testGroups = mutable.Set.empty
-    testYAMLPaths = mutable.Set.empty
+    testYAMLPaths.clear()
   }
 
   override protected def afterEach(): Unit = {
