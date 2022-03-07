@@ -39,7 +39,7 @@ fi
 # Any changes need to be reflected there.
 CLASS="org.apache.spark.deploy.worker.Worker"
 
-if [[ $# -lt 1 ]] || [[ "$@" = *--help ]] || [[ "$@" = *-h ]]; then
+if [[ $# -lt 1 ]] || [[ "$*" = *--help ]] || [[ "$*" = *-h ]]; then
   echo "Usage: ./sbin/start-worker.sh <master> [options]"
   pattern="Usage:"
   pattern+="\|Using Spark's default log4j profile:"

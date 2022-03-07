@@ -82,7 +82,7 @@ spark_rotate_log ()
       num=${SPARK_LOG_MAX_FILES}
     else
       echo "Error: SPARK_LOG_MAX_FILES must be a positive number, but got ${SPARK_LOG_MAX_FILES}"
-      exit -1
+      exit 255
     fi
 
     if [ -f "$log" ]; then # rotate logs
@@ -149,7 +149,7 @@ execute_command() {
       sleep 2
       # Check if the process has died; in that case we'll tail the log so the user can see
       if [[ ! $(ps -p "$newpid" -o comm=) =~ "java" ]]; then
-        echo "failed to launch: $@"
+        echo "failed to launch: $*"
         tail -10 "$log" | sed 's/^/  /'
         echo "full log in $log"
       fi
