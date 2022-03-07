@@ -2580,11 +2580,10 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
             }
             if (values(i).MINUS() == null) {
               value
+            } else if (value.startsWith("-")) {
+              value.replaceFirst("-", "")
             } else {
-              value.startsWith("-") match {
-                case true => value.replaceFirst("-", "")
-                case false => s"-$value"
-              }
+              s"-$value"
             }
           } else {
             values(i).getText
@@ -2609,11 +2608,10 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
       val value = Option(ctx.intervalValue.STRING).map(string).map { interval =>
         if (ctx.intervalValue().MINUS() == null) {
           interval
+        } else if (interval.startsWith("-")) {
+          interval.replaceFirst("-", "")
         } else {
-          interval.startsWith("-") match {
-            case true => interval.replaceFirst("-", "")
-            case false => s"-$interval"
-          }
+          s"-$interval"
         }
       }.getOrElse {
         throw QueryParsingErrors.invalidFromToUnitValueError(ctx.intervalValue)
