@@ -118,15 +118,18 @@ object QueryParsingErrors {
   }
 
   def repetitiveWindowDefinitionError(name: String, ctx: WindowClauseContext): Throwable = {
-    new ParseException(s"The definition of window '$name' is repetitive", ctx)
+    new ParseException("INVALID_SQL_SYNTAX",
+      Array(s"The definition of window '$name' is repetitive."), ctx)
   }
 
   def invalidWindowReferenceError(name: String, ctx: WindowClauseContext): Throwable = {
-    new ParseException(s"Window reference '$name' is not a window specification", ctx)
+    new ParseException("INVALID_SQL_SYNTAX",
+      Array(s"Window reference '$name' is not a window specification."), ctx)
   }
 
   def cannotResolveWindowReferenceError(name: String, ctx: WindowClauseContext): Throwable = {
-    new ParseException(s"Cannot resolve window reference '$name'", ctx)
+    new ParseException("INVALID_SQL_SYNTAX",
+      Array(s"Cannot resolve window reference '$name'."), ctx)
   }
 
   def naturalCrossJoinUnsupportedError(ctx: RelationContext): Throwable = {
