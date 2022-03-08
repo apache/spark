@@ -67,7 +67,7 @@ class BinaryClassificationMetrics(JavaModelWrapper):
     0.88...
     """
 
-    def __init__(self, scoreAndLabels: RDD[Tuple[float, float]]) -> None:
+    def __init__(self, scoreAndLabels: RDD[Tuple[float, float]]):
         sc = scoreAndLabels.ctx
         sql_ctx = SQLContext.getOrCreate(sc)
         numCol = len(scoreAndLabels.first())
