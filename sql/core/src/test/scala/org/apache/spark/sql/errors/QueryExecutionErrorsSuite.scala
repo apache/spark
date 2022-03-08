@@ -17,12 +17,22 @@
 
 package org.apache.spark.sql.errors
 
-import org.apache.spark.{SparkException, SparkIllegalArgumentException, SparkRuntimeException, SparkUnsupportedOperationException}
-import org.apache.spark.sql.{DataFrame, QueryTest}
-import org.apache.spark.sql.functions.{lit, lower, struct, sum}
-import org.apache.spark.sql.test.SharedSparkSession
+import java.sql.Timestamp
 
-class QueryExecutionErrorsSuite extends QueryTest with SharedSparkSession {
+import org.apache.spark.{SparkException, SparkIllegalArgumentException, SparkRuntimeException, SparkUnsupportedOperationException, SparkUpgradeException}
+import org.apache.spark.sql.{DataFrame, QueryTest, Row}
+import org.apache.spark.sql.execution.datasources.orc.OrcTest
+import org.apache.spark.sql.execution.datasources.parquet.ParquetTest
+import org.apache.spark.sql.functions.{lit, lower, struct, sum}
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy.EXCEPTION
+import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.types.{StructField, StructType, TimestampNTZType, TimestampType}
+import org.apache.spark.sql.util.ArrowUtils
+
+class QueryExecutionErrorsSuite extends QueryTest
+  with ParquetTest with OrcTest with SharedSparkSession {
+
   import testImplicits._
 
   private def getAesInputs(): (DataFrame, DataFrame) = {
@@ -180,5 +190,98 @@ class QueryExecutionErrorsSuite extends QueryTest with SharedSparkSession {
     assert(e2.getErrorClass === "UNSUPPORTED_FEATURE")
     assert(e2.getSqlState === "0A000")
     assert(e2.getMessage === "The feature is not supported: Pivot not after a groupBy.")
+  }
+
+  test("INCONSISTENT_BEHAVIOR_CROSS_VERSION: " +
+    "compatibility with Spark 2.4/3.2 in reading/writing dates") {
+
+    // Fail to read ancient datetime values.
+    withSQLConf(SQLConf.PARQUET_REBASE_MODE_IN_READ.key -> EXCEPTION.toString) {
+      val fileName = "before_1582_date_v2_4_5.snappy.parquet"
+      val filePath = getResourceParquetFilePath("test-data/" + fileName)
+      val e = intercept[SparkException] {
+        spark.read.parquet(filePath).collect()
+      }.getCause.asInstanceOf[SparkUpgradeException]
+
+      val format = "Parquet"
+      val config = SQLConf.PARQUET_REBASE_MODE_IN_READ.key
+      val option = "datetimeRebaseMode"
+      assert(e.getErrorClass === "INCONSISTENT_BEHAVIOR_CROSS_VERSION")
+      assert(e.getMessage ===
+        "You may get a different result due to the upgrading to Spark >= 3.0: " +
+          s"""
+             |reading dates before 1582-10-15 or timestamps before 1900-01-01T00:00:00Z
+             |from $format files can be ambiguous, as the files may be written by
+             |Spark 2.x or legacy versions of Hive, which uses a legacy hybrid calendar
+             |that is different from Spark 3.0+'s Proleptic Gregorian calendar.
+             |See more details in SPARK-31404. You can set the SQL config '$config' or
+             |the datasource option '$option' to 'LEGACY' to rebase the datetime values
+             |w.r.t. the calendar difference during reading. To read the datetime values
+             |as it is, set the SQL config '$config' or the datasource option '$option'
+             |to 'CORRECTED'.
+             |""".stripMargin)
+    }
+
+    // Fail to write ancient datetime values.
+    withSQLConf(SQLConf.PARQUET_REBASE_MODE_IN_WRITE.key -> EXCEPTION.toString) {
+      withTempPath { dir =>
+        val df = Seq(java.sql.Date.valueOf("1001-01-01")).toDF("dt")
+        val e = intercept[SparkException] {
+          df.write.parquet(dir.getCanonicalPath)
+        }.getCause.getCause.getCause.asInstanceOf[SparkUpgradeException]
+
+        val format = "Parquet"
+        val config = SQLConf.PARQUET_REBASE_MODE_IN_WRITE.key
+        assert(e.getErrorClass === "INCONSISTENT_BEHAVIOR_CROSS_VERSION")
+        assert(e.getMessage ===
+          "You may get a different result due to the upgrading to Spark >= 3.0: " +
+            s"""
+               |writing dates before 1582-10-15 or timestamps before 1900-01-01T00:00:00Z
+               |into $format files can be dangerous, as the files may be read by Spark 2.x
+               |or legacy versions of Hive later, which uses a legacy hybrid calendar that
+               |is different from Spark 3.0+'s Proleptic Gregorian calendar. See more
+               |details in SPARK-31404. You can set $config to 'LEGACY' to rebase the
+               |datetime values w.r.t. the calendar difference during writing, to get maximum
+               |interoperability. Or set $config to 'CORRECTED' to write the datetime values
+               |as it is, if you are 100% sure that the written files will only be read by
+               |Spark 3.0+ or other systems that use Proleptic Gregorian calendar.
+               |""".stripMargin)
+      }
+    }
+  }
+
+  test("UNSUPPORTED_OPERATION: timeZoneId not specified while converting TimestampType to Arrow") {
+    val schema = new StructType().add("value", TimestampType)
+    val e = intercept[SparkUnsupportedOperationException] {
+      ArrowUtils.toArrowSchema(schema, null)
+    }
+
+    assert(e.getErrorClass === "UNSUPPORTED_OPERATION")
+    assert(e.getMessage === "The operation is not supported: " +
+      "timestamp must supply timeZoneId parameter while converting to ArrowType")
+  }
+
+  test("UNSUPPORTED_OPERATION - SPARK-36346: can't read Timestamp as TimestampNTZ") {
+    val data = (1 to 10).map { i =>
+      val ts = new Timestamp(i)
+      Row(ts)
+    }
+
+    val actualSchema = StructType(Seq(StructField("time", TimestampType, false)))
+    val providedSchema = StructType(Seq(StructField("time", TimestampNTZType, false)))
+
+    withTempPath { file =>
+      val df = spark.createDataFrame(sparkContext.parallelize(data), actualSchema)
+      df.write.orc(file.getCanonicalPath)
+      withAllNativeOrcReaders {
+        val e = intercept[SparkException] {
+          spark.read.schema(providedSchema).orc(file.getCanonicalPath).collect()
+        }.getCause.asInstanceOf[SparkUnsupportedOperationException]
+
+        assert(e.getErrorClass === "UNSUPPORTED_OPERATION")
+        assert(e.getMessage === "The operation is not supported: " +
+          "Unable to convert timestamp of Orc to data type 'timestamp_ntz'")
+      }
+    }
   }
 }
