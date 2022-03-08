@@ -4318,6 +4318,9 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         Replace values given in to_replace with value.
         Values of the Series are replaced with other values dynamically.
 
+        .. note:: The API supports pattern matching (and replacement) on the whole string only,
+            which is different from pandas'.
+
         Parameters
         ----------
         to_replace : str, list, tuple, dict, Series, int, float, or None
@@ -4358,6 +4361,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             Whether to interpret to_replace and/or value as regular expressions.
             If this is True then to_replace must be a string.
             Alternatively, this could be a regular expression in which case to_replace must be None.
+
 
         Returns
         -------
