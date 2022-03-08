@@ -213,11 +213,8 @@ class ReshapeTest(PandasOnSparkTestCase):
         )
         psdf = ps.from_pandas(pdf)
 
-        if LooseVersion("0.23.0") <= LooseVersion(pd.__version__):
-            exp = pd.get_dummies(pdf, dtype="float64")
-        else:
-            exp = pd.get_dummies(pdf)
-            exp = exp.astype({"A_a": "float64", "A_b": "float64"})
+        exp = pd.get_dummies(pdf)
+        exp = exp.astype({"A_a": "float64", "A_b": "float64"})
         res = ps.get_dummies(psdf, dtype="float64")
         self.assert_eq(res, exp)
 

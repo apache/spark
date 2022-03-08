@@ -36,7 +36,8 @@ object PartitionedFileUtil {
         val remaining = file.getLen - offset
         val size = if (remaining > maxSplitBytes) maxSplitBytes else remaining
         val hosts = getBlockHosts(getBlockLocations(file), offset, size)
-        PartitionedFile(partitionValues, filePath.toUri.toString, offset, size, hosts)
+        PartitionedFile(partitionValues, filePath.toUri.toString, offset, size, hosts,
+          file.getModificationTime, file.getLen)
       }
     } else {
       Seq(getPartitionedFile(file, filePath, partitionValues))
@@ -48,7 +49,8 @@ object PartitionedFileUtil {
       filePath: Path,
       partitionValues: InternalRow): PartitionedFile = {
     val hosts = getBlockHosts(getBlockLocations(file), 0, file.getLen)
-    PartitionedFile(partitionValues, filePath.toUri.toString, 0, file.getLen, hosts)
+    PartitionedFile(partitionValues, filePath.toUri.toString, 0, file.getLen, hosts,
+      file.getModificationTime, file.getLen)
   }
 
   private def getBlockLocations(file: FileStatus): Array[BlockLocation] = file match {

@@ -277,4 +277,58 @@ executor side, which can be enabled by setting ``spark.python.profile`` configur
            12    0.000    0.000    0.001    0.000 context.py:506(f)
     ...
 
-This feature is supported only with RDD APIs.
+Python/Pandas UDF
+~~~~~~~~~~~~~~~~~
+
+To use this on Python/Pandas UDFs, PySpark provides remote `Python Profilers <https://docs.python.org/3/library/profile.html>`_ for
+Python/Pandas UDFs, which can be enabled by setting ``spark.python.profile`` configuration to ``true``.
+
+.. code-block:: bash
+
+    pyspark --conf spark.python.profile=true
+
+
+.. code-block:: python
+
+    >>> from pyspark.sql.functions import pandas_udf
+    >>> df = spark.range(10)
+    >>> @pandas_udf("long")
+    ... def add1(x):
+    ...     return x + 1
+    ...
+    >>> added = df.select(add1("id"))
+
+    >>> added.show()
+    +--------+
+    |add1(id)|
+    +--------+
+    ...
+    +--------+
+
+    >>> sc.show_profiles()
+    ============================================================
+    Profile of UDF<id=2>
+    ============================================================
+             2300 function calls (2270 primitive calls) in 0.006 seconds
+
+       Ordered by: internal time, cumulative time
+
+       ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+           10    0.001    0.000    0.005    0.001 series.py:5515(_arith_method)
+           10    0.001    0.000    0.001    0.000 _ufunc_config.py:425(__init__)
+           10    0.000    0.000    0.000    0.000 {built-in method _operator.add}
+           10    0.000    0.000    0.002    0.000 series.py:315(__init__)
+    ...
+
+The UDF IDs can be seen in the query plan, for example, ``add1(...)#2L`` in ``ArrowEvalPython`` below.
+
+.. code-block:: python
+
+    >>> added.explain()
+    == Physical Plan ==
+    *(2) Project [pythonUDF0#11L AS add1(id)#3L]
+    +- ArrowEvalPython [add1(id#0L)#2L], [pythonUDF0#11L], 200
+       +- *(1) Range (0, 10, step=1, splits=16)
+
+
+This feature is not supported with registered UDFs.

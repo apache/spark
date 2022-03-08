@@ -977,37 +977,33 @@ struct<repeat(Pg, -4):string>
 -- !query
 SELECT trim(binary('\\000') from binary('\\000Tom\\000'))
 -- !query schema
-struct<>
+struct<TRIM(BOTH \000 FROM \000Tom\000):string>
 -- !query output
-org.apache.spark.sql.AnalysisException
-cannot resolve 'TRIM(BOTH CAST('\\000' AS BINARY) FROM CAST('\\000Tom\\000' AS BINARY))' due to data type mismatch: argument 1 requires string type, however, 'CAST('\\000Tom\\000' AS BINARY)' is of binary type. argument 2 requires string type, however, 'CAST('\\000' AS BINARY)' is of binary type.; line 1 pos 7
+Tom
 
 
 -- !query
 SELECT btrim(binary('\\000trim\\000'), binary('\\000'))
 -- !query schema
-struct<>
+struct<btrim(\000trim\000, \000):string>
 -- !query output
-org.apache.spark.sql.AnalysisException
-cannot resolve 'TRIM(BOTH CAST('\\000' AS BINARY) FROM CAST('\\000trim\\000' AS BINARY))' due to data type mismatch: argument 1 requires string type, however, 'CAST('\\000trim\\000' AS BINARY)' is of binary type. argument 2 requires string type, however, 'CAST('\\000' AS BINARY)' is of binary type.; line 1 pos 7
+trim
 
 
 -- !query
 SELECT btrim(binary(''), binary('\\000'))
 -- !query schema
-struct<>
+struct<btrim(, \000):string>
 -- !query output
-org.apache.spark.sql.AnalysisException
-cannot resolve 'TRIM(BOTH CAST('\\000' AS BINARY) FROM CAST('' AS BINARY))' due to data type mismatch: argument 1 requires string type, however, 'CAST('' AS BINARY)' is of binary type. argument 2 requires string type, however, 'CAST('\\000' AS BINARY)' is of binary type.; line 1 pos 7
+
 
 
 -- !query
 SELECT btrim(binary('\\000trim\\000'), binary(''))
 -- !query schema
-struct<>
+struct<btrim(\000trim\000, ):string>
 -- !query output
-org.apache.spark.sql.AnalysisException
-cannot resolve 'TRIM(BOTH CAST('' AS BINARY) FROM CAST('\\000trim\\000' AS BINARY))' due to data type mismatch: argument 1 requires string type, however, 'CAST('\\000trim\\000' AS BINARY)' is of binary type. argument 2 requires string type, however, 'CAST('' AS BINARY)' is of binary type.; line 1 pos 7
+\000trim\000
 
 
 -- !query

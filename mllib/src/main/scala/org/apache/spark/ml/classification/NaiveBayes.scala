@@ -597,7 +597,7 @@ object NaiveBayesModel extends MLReadable[NaiveBayesModel] {
       val data = sparkSession.read.parquet(dataPath)
       val vecConverted = MLUtils.convertVectorColumnsToML(data, "pi")
 
-      val model = if (major.toInt < 3) {
+      val model = if (major < 3) {
         val Row(pi: Vector, theta: Matrix) =
           MLUtils.convertMatrixColumnsToML(vecConverted, "theta")
             .select("pi", "theta")

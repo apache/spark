@@ -23,13 +23,15 @@ import tempfile
 import unittest
 import zipfile
 
+from pyspark.testing.utils import SPARK_HOME
+
 
 class SparkSubmitTests(unittest.TestCase):
     def setUp(self):
         self.programDir = tempfile.mkdtemp()
         tmp_dir = tempfile.gettempdir()
         self.sparkSubmit = [
-            os.path.join(os.environ.get("SPARK_HOME"), "bin", "spark-submit"),
+            os.path.join(SPARK_HOME, "bin", "spark-submit"),
             "--conf",
             "spark.driver.extraJavaOptions=-Djava.io.tmpdir={0}".format(tmp_dir),
             "--conf",

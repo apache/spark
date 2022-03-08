@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, AttributeSet, In}
 import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
 import org.apache.spark.sql.columnar.CachedBatch
-import org.apache.spark.sql.execution.{ColumnarToRowExec, FilterExec, InputAdapter, WholeStageCodegenExec}
+import org.apache.spark.sql.execution.{FilterExec, InputAdapter, WholeStageCodegenExec}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -152,7 +152,7 @@ class InMemoryColumnarQuerySuite extends QueryTest with SharedSparkSession {
   }
 
   test("projection") {
-    val logicalPlan = testData.select('value, 'key).logicalPlan
+    val logicalPlan = testData.select(Symbol("value"), Symbol("key")).logicalPlan
     val plan = spark.sessionState.executePlan(logicalPlan).sparkPlan
     val scan = InMemoryRelation(new TestCachedBatchSerializer(useCompression = true, 5),
       MEMORY_ONLY, plan, None, logicalPlan)
@@ -504,8 +504,8 @@ class InMemoryColumnarQuerySuite extends QueryTest with SharedSparkSession {
     val df2 = df1.where("y = 3")
 
     val planBeforeFilter = df2.queryExecution.executedPlan.collect {
-      case FilterExec(_, c: ColumnarToRowExec) => c.child
-      case WholeStageCodegenExec(FilterExec(_, ColumnarToRowExec(i: InputAdapter))) => i.child
+      case f: FilterExec => f.child
+      case WholeStageCodegenExec(FilterExec(_, i: InputAdapter)) => i.child
     }
     assert(planBeforeFilter.head.isInstanceOf[InMemoryTableScanExec])
 

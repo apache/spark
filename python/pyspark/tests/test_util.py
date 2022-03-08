@@ -23,7 +23,7 @@ from pyspark.testing.utils import PySparkTestCase
 
 
 class KeywordOnlyTests(unittest.TestCase):
-    class Wrapped(object):
+    class Wrapped:
         @keyword_only
         def set(self, x=None, y=None):
             if "x" in self._input_kwargs:
@@ -46,7 +46,7 @@ class KeywordOnlyTests(unittest.TestCase):
 
     def test_kwarg_ownership(self):
         # test _input_kwargs is owned by each class instance and not a shared static variable
-        class Setter(object):
+        class Setter:
             @keyword_only
             def set(self, x=None, other=None, other_x=None):
                 if "other" in self._input_kwargs:

@@ -25,7 +25,7 @@ from typing import Any, Callable, Optional, Sequence, Tuple, Union, cast, TYPE_C
 
 import numpy as np
 import pandas as pd
-from pandas.api.types import is_list_like, CategoricalDtype
+from pandas.api.types import is_list_like, CategoricalDtype  # type: ignore[attr-defined]
 from pyspark.sql import functions as F, Column, Window
 from pyspark.sql.types import LongType, BooleanType
 
@@ -876,7 +876,9 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
                 " to isin(), you passed a [{values_type}]".format(values_type=type(values).__name__)
             )
 
-        values = values.tolist() if isinstance(values, np.ndarray) else list(values)
+        values = (
+            cast(np.ndarray, values).tolist() if isinstance(values, np.ndarray) else list(values)
+        )
 
         other = [SF.lit(v) for v in values]
         scol = self.spark.column.isin(other)

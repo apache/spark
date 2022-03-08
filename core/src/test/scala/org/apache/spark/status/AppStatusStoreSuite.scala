@@ -19,7 +19,11 @@ package org.apache.spark.status
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.executor.TaskMetrics
-import org.apache.spark.scheduler.{TaskInfo, TaskLocality}
+import org.apache.spark.internal.config.History.{HYBRID_STORE_DISK_BACKEND, HybridStoreDiskBackend}
+import org.apache.spark.internal.config.Status.LIVE_ENTITY_UPDATE_PERIOD
+import org.apache.spark.resource.ResourceProfile
+import org.apache.spark.scheduler.{SparkListenerStageSubmitted, SparkListenerTaskStart, StageInfo, TaskInfo, TaskLocality}
+import org.apache.spark.status.api.v1.SpeculationStageSummary
 import org.apache.spark.util.{Distribution, Utils}
 import org.apache.spark.util.kvstore._
 
@@ -78,7 +82,8 @@ class AppStatusStoreSuite extends SparkFunSuite {
     assert(store.count(classOf[CachedQuantile]) === 2)
   }
 
-  private def createAppStore(disk: Boolean, live: Boolean): AppStatusStore = {
+  private def createAppStore(disk: Boolean, diskStoreType: HybridStoreDiskBackend.Value = null,
+      live: Boolean): AppStatusStore = {
     val conf = new SparkConf()
     if (live) {
       return AppStatusStore.createLiveStore(conf)
@@ -89,8 +94,9 @@ class AppStatusStoreSuite extends SparkFunSuite {
     }
 
     val store: KVStore = if (disk) {
+      conf.set(HYBRID_STORE_DISK_BACKEND, diskStoreType.toString)
       val testDir = Utils.createTempDir()
-      val diskStore = KVUtils.open(testDir, getClass.getName)
+      val diskStore = KVUtils.open(testDir, getClass.getName, conf)
       new ElementTrackingStore(diskStore, conf)
     } else {
       new ElementTrackingStore(new InMemoryStore, conf)
@@ -99,7 +105,8 @@ class AppStatusStoreSuite extends SparkFunSuite {
   }
 
   Seq(
-    "disk" -> createAppStore(disk = true, live = false),
+    "disk leveldb" -> createAppStore(disk = true, HybridStoreDiskBackend.LEVELDB, live = false),
+    "disk rocksdb" -> createAppStore(disk = true, HybridStoreDiskBackend.ROCKSDB, live = false),
     "in memory" -> createAppStore(disk = false, live = false),
     "in memory live" -> createAppStore(disk = false, live = true)
   ).foreach { case (hint, appStore) =>
@@ -139,6 +146,45 @@ class AppStatusStoreSuite extends SparkFunSuite {
       }
       appStore.close()
     }
+  }
+
+  test("SPARK-36038: speculation summary") {
+    val store = new InMemoryStore()
+    val expectedSpeculationSummary = newSpeculationSummaryData(stageId, attemptId)
+    store.write(expectedSpeculationSummary)
+
+    val appStore = new AppStatusStore(store)
+    val info = appStore.speculationSummary(stageId, attemptId)
+    assert(info.isDefined)
+    val expectedSpeculationSummaryInfo = expectedSpeculationSummary.info
+    info.foreach { metric =>
+      assert(metric.numTasks == expectedSpeculationSummaryInfo.numTasks)
+      assert(metric.numActiveTasks == expectedSpeculationSummaryInfo.numActiveTasks)
+      assert(metric.numCompletedTasks == expectedSpeculationSummaryInfo.numCompletedTasks)
+      assert(metric.numFailedTasks == expectedSpeculationSummaryInfo.numFailedTasks)
+      assert(metric.numKilledTasks == expectedSpeculationSummaryInfo.numKilledTasks)
+    }
+  }
+
+  test("SPARK-36038: speculation summary should not be present if there are no speculative tasks") {
+    val conf = new SparkConf(false).set(LIVE_ENTITY_UPDATE_PERIOD, 0L)
+    val statusStore = AppStatusStore.createLiveStore(conf)
+
+    val listener = statusStore.listener.get
+
+    // Simulate a stage in job progress listener
+    val stageInfo = new StageInfo(stageId = 0, attemptId = 0, name = "dummy", numTasks = 1,
+      rddInfos = Seq.empty, parentIds = Seq.empty, details = "details",
+      resourceProfileId = ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
+    (1 to 2).foreach {
+      taskId =>
+        val taskInfo = new TaskInfo(taskId, taskId, 0, 0, "0", "localhost", TaskLocality.ANY,
+          false)
+        listener.onStageSubmitted(SparkListenerStageSubmitted(stageInfo))
+        listener.onTaskStart(SparkListenerTaskStart(0, 0, taskInfo))
+    }
+
+    assert(statusStore.speculationSummary(0, 0).isEmpty)
   }
 
   private def compareQuantiles(count: Int, quantiles: Array[Double]): Unit = {
@@ -208,5 +254,12 @@ class AppStatusStoreSuite extends SparkFunSuite {
     taskMetrics.shuffleWriteMetrics.incWriteTime(i)
     taskMetrics.shuffleWriteMetrics.incRecordsWritten(i)
     taskMetrics
+  }
+
+  private def newSpeculationSummaryData(
+      stageId: Int,
+      stageAttemptId: Int): SpeculationStageSummaryWrapper = {
+    val speculationStageSummary = new SpeculationStageSummary(10, 2, 5, 1, 2)
+    new SpeculationStageSummaryWrapper(stageId, stageAttemptId, speculationStageSummary)
   }
 }

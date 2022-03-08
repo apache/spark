@@ -20,6 +20,7 @@ import unittest
 
 from pyspark import SparkConf, SparkContext
 from pyspark.sql import SparkSession, SQLContext, Row
+from pyspark.sql.functions import col
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 from pyspark.testing.utils import PySparkTestCase
 
@@ -93,7 +94,7 @@ class SparkSessionTests3(unittest.TestCase):
         active = SparkSession.getActiveSession()
         self.assertEqual(active, None)
 
-    def test_SparkSession(self):
+    def test_spark_session(self):
         spark = SparkSession.builder.master("local").config("some-config", "v2").getOrCreate()
         try:
             self.assertEqual(spark.conf.get("some-config"), "v2")
@@ -105,6 +106,13 @@ class SparkSessionTests3(unittest.TestCase):
             spark.sql("CREATE TABLE table1 (name STRING, age INT) USING parquet")
             self.assertEqual(spark.table("table1").columns, ["name", "age"])
             self.assertEqual(spark.range(3).count(), 3)
+
+            # SPARK-37516: Only plain column references work as variable in SQL.
+            self.assertEqual(
+                spark.sql("select {c} from range(1)", c=col("id")).first(), spark.range(1).first()
+            )
+            with self.assertRaisesRegex(ValueError, "Column"):
+                spark.sql("select {c} from range(10)", c=col("id") + 1)
         finally:
             spark.sql("DROP DATABASE test_db CASCADE")
             spark.stop()
@@ -216,28 +224,26 @@ class SparkSessionTests5(unittest.TestCase):
     def test_sqlcontext_with_stopped_sparksession(self):
         # SPARK-30856: test that SQLContext.getOrCreate() returns a usable instance after
         # the SparkSession is restarted.
-        sql_context = self.spark._wrapped
+        sql_context = SQLContext.getOrCreate(self.spark.sparkContext)
         self.spark.stop()
-        sc = SparkContext("local[4]", self.sc.appName)
-        spark = SparkSession(sc)  # Instantiate the underlying SQLContext
-        new_sql_context = spark._wrapped
+        spark = SparkSession.builder.master("local[4]").appName(self.sc.appName).getOrCreate()
+        new_sql_context = SQLContext.getOrCreate(spark.sparkContext)
 
         self.assertIsNot(new_sql_context, sql_context)
-        self.assertIs(SQLContext.getOrCreate(sc).sparkSession, spark)
+        self.assertIs(SQLContext.getOrCreate(spark.sparkContext).sparkSession, spark)
         try:
             df = spark.createDataFrame([(1, 2)], ["c", "c"])
             df.collect()
         finally:
             spark.stop()
             self.assertIsNone(SQLContext._instantiatedContext)
-            sc.stop()
 
     def test_sqlcontext_with_stopped_sparkcontext(self):
         # SPARK-30856: test initialization via SparkSession when only the SparkContext is stopped
         self.sc.stop()
-        self.sc = SparkContext("local[4]", self.sc.appName)
-        self.spark = SparkSession(self.sc)
-        self.assertIs(SQLContext.getOrCreate(self.sc).sparkSession, self.spark)
+        spark = SparkSession.builder.master("local[4]").appName(self.sc.appName).getOrCreate()
+        self.sc = spark.sparkContext
+        self.assertIs(SQLContext.getOrCreate(self.sc).sparkSession, spark)
 
     def test_get_sqlcontext_with_stopped_sparkcontext(self):
         # SPARK-30856: test initialization via SQLContext.getOrCreate() when only the SparkContext
@@ -273,12 +279,14 @@ class SparkSessionBuilderTests(unittest.TestCase):
         session2 = None
         try:
             session1 = SparkSession.builder.config("key1", "value1").getOrCreate()
-            session2 = SparkSession.builder.config("key2", "value2").getOrCreate()
+            session2 = SparkSession.builder.config(
+                "spark.sql.codegen.comments", "true"
+            ).getOrCreate()
 
             self.assertEqual(session1.conf.get("key1"), "value1")
             self.assertEqual(session2.conf.get("key1"), "value1")
-            self.assertEqual(session1.conf.get("key2"), "value2")
-            self.assertEqual(session2.conf.get("key2"), "value2")
+            self.assertEqual(session1.conf.get("spark.sql.codegen.comments"), "false")
+            self.assertEqual(session2.conf.get("spark.sql.codegen.comments"), "false")
             self.assertEqual(session1.sparkContext, session2.sparkContext)
 
             self.assertEqual(session1.sparkContext.getConf().get("key1"), "value1")
@@ -289,18 +297,23 @@ class SparkSessionBuilderTests(unittest.TestCase):
             if session2 is not None:
                 session2.stop()
 
-    def test_create_spark_context_first_and_copy_options_to_sharedState(self):
+    def test_create_spark_context_with_initial_session_options(self):
         sc = None
         session = None
         try:
             conf = SparkConf().set("key1", "value1")
             sc = SparkContext("local[4]", "SessionBuilderTests", conf=conf)
             session = (
-                SparkSession.builder.config("key2", "value2").enableHiveSupport().getOrCreate()
+                SparkSession.builder.config("spark.sql.codegen.comments", "true")
+                .enableHiveSupport()
+                .getOrCreate()
             )
 
             self.assertEqual(session._jsparkSession.sharedState().conf().get("key1"), "value1")
-            self.assertEqual(session._jsparkSession.sharedState().conf().get("key2"), "value2")
+            self.assertEqual(
+                session._jsparkSession.sharedState().conf().get("spark.sql.codegen.comments"),
+                "true",
+            )
             self.assertEqual(
                 session._jsparkSession.sharedState().conf().get("spark.sql.catalogImplementation"),
                 "hive",

@@ -106,7 +106,9 @@ object EnumTypeSetBenchmark extends BenchmarkBase {
     }
 
     benchmark.addCase("Use EnumSet") { _: Int =>
-      capabilities.foreach(enumSet.contains)
+      for (_ <- 0L until valuesPerIteration) {
+        capabilities.foreach(enumSet.contains)
+      }
     }
     benchmark.run()
   }
@@ -131,7 +133,9 @@ object EnumTypeSetBenchmark extends BenchmarkBase {
     }
 
     benchmark.addCase("Use EnumSet") { _: Int =>
-      capabilities.foreach(creatEnumSetFunctions.apply().contains)
+      for (_ <- 0L until valuesPerIteration) {
+        capabilities.foreach(creatEnumSetFunctions.apply().contains)
+      }
     }
     benchmark.run()
   }

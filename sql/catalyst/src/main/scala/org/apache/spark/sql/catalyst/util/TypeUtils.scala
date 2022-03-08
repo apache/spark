@@ -78,6 +78,7 @@ object TypeUtils {
     }
   }
 
+  @scala.annotation.tailrec
   def getInterpretedOrdering(t: DataType): Ordering[Any] = {
     t match {
       case i: AtomicType => i.ordering.asInstanceOf[Ordering[Any]]

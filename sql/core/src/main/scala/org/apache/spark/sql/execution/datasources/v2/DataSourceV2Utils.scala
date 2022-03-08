@@ -25,10 +25,11 @@ import com.fasterxml.jackson.databind.ObjectMapper
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{DataFrame, Dataset, SparkSession}
+import org.apache.spark.sql.catalyst.analysis.TimeTravelSpec
+import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.connector.catalog.{CatalogV2Util, SessionConfigSupport, SupportsCatalogOptions, SupportsRead, Table, TableProvider}
 import org.apache.spark.sql.connector.catalog.TableCapability.BATCH_READ
-import org.apache.spark.sql.connector.expressions.TimeTravelSpec
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType
@@ -100,8 +101,8 @@ private[sql] object DataSourceV2Utils extends Logging {
       source: String,
       paths: String*): Option[DataFrame] = {
     val catalogManager = sparkSession.sessionState.catalogManager
-    val sessionOptions = DataSourceV2Utils.extractSessionConfigs(
-      source = provider, conf = sparkSession.sessionState.conf)
+    val conf = sparkSession.sessionState.conf
+    val sessionOptions = DataSourceV2Utils.extractSessionConfigs(provider, conf)
 
     val optionsWithPath = getOptionsWithPaths(extraOptions, paths: _*)
 
@@ -123,8 +124,8 @@ private[sql] object DataSourceV2Utils extends Logging {
         val timestamp = hasCatalog.extractTimeTravelTimestamp(dsOptions)
 
         val timeTravelVersion = if (version.isPresent) Some(version.get) else None
-        val timeTravelTimestamp = if (timestamp.isPresent) Some(timestamp.get) else None
-        val timeTravel = TimeTravelSpec.create(timeTravelTimestamp, timeTravelVersion)
+        val timeTravelTimestamp = if (timestamp.isPresent) Some(Literal(timestamp.get)) else None
+        val timeTravel = TimeTravelSpec.create(timeTravelTimestamp, timeTravelVersion, conf)
         (CatalogV2Util.loadTable(catalog, ident, timeTravel).get, Some(catalog), Some(ident))
       case _ =>
         // TODO: Non-catalog paths for DSV2 are currently not well defined.

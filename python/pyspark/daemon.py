@@ -196,7 +196,7 @@ def manager():
                                     pass
                                 break
                             gc.collect()
-                    except:
+                    except BaseException:
                         traceback.print_exc()
                         os._exit(1)
                     else:

@@ -40,7 +40,15 @@ object MimaExcludes {
     // The followings are necessary for Scala 2.13.
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.executor.CoarseGrainedExecutorBackend#Arguments.*"),
     ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.executor.CoarseGrainedExecutorBackend#Arguments.*"),
-    ProblemFilters.exclude[MissingTypesProblem]("org.apache.spark.executor.CoarseGrainedExecutorBackend$Arguments$")
+    ProblemFilters.exclude[MissingTypesProblem]("org.apache.spark.executor.CoarseGrainedExecutorBackend$Arguments$"),
+
+    // [SPARK-37391][SQL] JdbcConnectionProvider tells if it modifies security context
+    ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.sql.jdbc.JdbcConnectionProvider.modifiesSecurityContext"),
+
+    // [SPARK-37780][SQL] QueryExecutionListener support SQLConf as constructor parameter
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.util.ExecutionListenerManager.this"),
+    // [SPARK-37786][SQL] StreamingQueryListener support use SQLConf.get to get corresponding SessionState's SQLConf
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.streaming.StreamingQueryManager.this")
   )
 
   // Exclude rules for 3.2.x from 3.1.1
@@ -58,6 +66,12 @@ object MimaExcludes {
     ProblemFilters.exclude[Problem]("org.apache.spark.sql.catalyst.*"),
     ProblemFilters.exclude[Problem]("org.apache.spark.sql.execution.*"),
     ProblemFilters.exclude[Problem]("org.apache.spark.sql.internal.*"),
+    ProblemFilters.exclude[Problem]("org.apache.spark.sql.errors.*"),
+    // DSv2 catalog and expression APIs are unstable yet. We should enable this back.
+    ProblemFilters.exclude[Problem]("org.apache.spark.sql.connector.catalog.*"),
+    ProblemFilters.exclude[Problem]("org.apache.spark.sql.connector.expressions.*"),
+    // Avro source implementation is internal.
+    ProblemFilters.exclude[Problem]("org.apache.spark.sql.v2.avro.*"),
 
     // [SPARK-34848][CORE] Add duration to TaskMetricDistributions
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.status.api.v1.TaskMetricDistributions.this"),

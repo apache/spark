@@ -22,6 +22,7 @@ import org.antlr.v4.runtime.ParserRuleContext
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.parser.SqlBaseParser._
 import org.apache.spark.sql.catalyst.trees.Origin
+import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 
 /**
  * Object for grouping all error messages of the query parsing.
@@ -101,39 +102,38 @@ object QueryParsingErrors {
   }
 
   def lateralJoinWithNaturalJoinUnsupportedError(ctx: ParserRuleContext): Throwable = {
-    new ParseException("LATERAL join with NATURAL join is not supported", ctx)
+    new ParseException("UNSUPPORTED_FEATURE", Array("LATERAL join with NATURAL join."), ctx)
   }
 
   def lateralJoinWithUsingJoinUnsupportedError(ctx: ParserRuleContext): Throwable = {
-    new ParseException("LATERAL join with USING join is not supported", ctx)
+    new ParseException("UNSUPPORTED_FEATURE", Array("LATERAL join with USING join."), ctx)
   }
 
   def unsupportedLateralJoinTypeError(ctx: ParserRuleContext, joinType: String): Throwable = {
-    new ParseException(s"Unsupported LATERAL join type $joinType", ctx)
+    new ParseException("UNSUPPORTED_FEATURE", Array(s"LATERAL join type '$joinType'."), ctx)
   }
 
   def invalidLateralJoinRelationError(ctx: RelationPrimaryContext): Throwable = {
-    new ParseException(s"LATERAL can only be used with subquery", ctx)
+    new ParseException("INVALID_SQL_SYNTAX", Array("LATERAL can only be used with subquery."), ctx)
   }
 
   def repetitiveWindowDefinitionError(name: String, ctx: WindowClauseContext): Throwable = {
-    new ParseException(s"The definition of window '$name' is repetitive", ctx)
+    new ParseException("INVALID_SQL_SYNTAX",
+      Array(s"The definition of window '$name' is repetitive."), ctx)
   }
 
   def invalidWindowReferenceError(name: String, ctx: WindowClauseContext): Throwable = {
-    new ParseException(s"Window reference '$name' is not a window specification", ctx)
+    new ParseException("INVALID_SQL_SYNTAX",
+      Array(s"Window reference '$name' is not a window specification."), ctx)
   }
 
   def cannotResolveWindowReferenceError(name: String, ctx: WindowClauseContext): Throwable = {
-    new ParseException(s"Cannot resolve window reference '$name'", ctx)
-  }
-
-  def joinCriteriaUnimplementedError(join: JoinCriteriaContext, ctx: RelationContext): Throwable = {
-    new ParseException(s"Unimplemented joinCriteria: $join", ctx)
+    new ParseException("INVALID_SQL_SYNTAX",
+      Array(s"Cannot resolve window reference '$name'."), ctx)
   }
 
   def naturalCrossJoinUnsupportedError(ctx: RelationContext): Throwable = {
-    new ParseException("NATURAL CROSS JOIN is not supported", ctx)
+    new ParseException("UNSUPPORTED_FEATURE", Array("NATURAL CROSS JOIN."), ctx)
   }
 
   def emptyInputForTableSampleError(ctx: ParserRuleContext): Throwable = {
@@ -248,10 +248,6 @@ object QueryParsingErrors {
     new ParseException("Either PROPERTIES or DBPROPERTIES is allowed.", ctx)
   }
 
-  def fromOrInNotAllowedInShowDatabasesError(ctx: ShowNamespacesContext): Throwable = {
-    new ParseException(s"FROM/IN operator is not allowed in SHOW DATABASES", ctx)
-  }
-
   def cannotCleanReservedTablePropertyError(
       property: String, ctx: ParserRuleContext, msg: String): Throwable = {
     new ParseException(s"$property is a reserved table property, $msg.", ctx)
@@ -306,6 +302,11 @@ object QueryParsingErrors {
     new ParseException(s"SHOW $identifier FUNCTIONS not supported", ctx)
   }
 
+  def showFunctionsInvalidPatternError(pattern: String, ctx: ParserRuleContext): Throwable = {
+    new ParseException(s"Invalid pattern in SHOW FUNCTIONS: $pattern. It must be " +
+      "a string literal.", ctx)
+  }
+
   def duplicateCteDefinitionNamesError(duplicateNames: String, ctx: CtesContext): Throwable = {
     new ParseException(s"CTE definition can't have duplicate names: $duplicateNames.", ctx)
   }
@@ -328,7 +329,7 @@ object QueryParsingErrors {
     new ParseException(errorClass = "DUPLICATE_KEY", messageParameters = Array(key), ctx)
   }
 
-  def unexpectedFomatForSetConfigurationError(ctx: SetConfigurationContext): Throwable = {
+  def unexpectedFomatForSetConfigurationError(ctx: ParserRuleContext): Throwable = {
     new ParseException(
       s"""
          |Expected format is 'SET', 'SET key', or 'SET key=value'. If you want to include
@@ -338,13 +339,13 @@ object QueryParsingErrors {
   }
 
   def invalidPropertyKeyForSetQuotedConfigurationError(
-      keyCandidate: String, valueStr: String, ctx: SetQuotedConfigurationContext): Throwable = {
+      keyCandidate: String, valueStr: String, ctx: ParserRuleContext): Throwable = {
     new ParseException(s"'$keyCandidate' is an invalid property key, please " +
       s"use quotes, e.g. SET `$keyCandidate`=`$valueStr`", ctx)
   }
 
   def invalidPropertyValueForSetQuotedConfigurationError(
-      valueCandidate: String, keyStr: String, ctx: SetQuotedConfigurationContext): Throwable = {
+      valueCandidate: String, keyStr: String, ctx: ParserRuleContext): Throwable = {
     new ParseException(s"'$valueCandidate' is an invalid property value, please " +
       s"use quotes, e.g. SET `$keyStr`=`$valueCandidate`", ctx)
   }
@@ -424,5 +425,22 @@ object QueryParsingErrors {
       ctx: CreateFunctionContext): Throwable = {
     new ParseException(
       s"Specifying a database in CREATE TEMPORARY FUNCTION is not allowed: '$databaseName'", ctx)
+  }
+
+  def unclosedBracketedCommentError(command: String, position: Origin): Throwable = {
+    new ParseException(Some(command), "Unclosed bracketed comment", position, position)
+  }
+
+  def invalidTimeTravelSpec(reason: String, ctx: ParserRuleContext): Throwable = {
+    new ParseException(s"Invalid time travel spec: $reason.", ctx)
+  }
+
+  def invalidNameForDropTempFunc(name: Seq[String], ctx: ParserRuleContext): Throwable = {
+    new ParseException(
+      s"DROP TEMPORARY FUNCTION requires a single part name but got: ${name.quoted}", ctx)
+  }
+
+  def defaultColumnNotImplementedYetError(ctx: ParserRuleContext): Throwable = {
+    new ParseException("Support for DEFAULT column values is not implemented yet", ctx)
   }
 }

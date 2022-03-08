@@ -22,7 +22,7 @@ Serializers for PyArrow and pandas conversions. See `pyspark.serializers` for mo
 from pyspark.serializers import Serializer, read_int, write_int, UTF8Deserializer
 
 
-class SpecialLengths(object):
+class SpecialLengths:
     END_OF_DATA_SECTION = -1
     PYTHON_EXCEPTION_THROWN = -2
     TIMING_DATA = -3
@@ -215,7 +215,10 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
         series = ((s, None) if not isinstance(s, (list, tuple)) else s for s in series)
 
         def create_array(s, t):
-            mask = s.isnull()
+            if hasattr(s.array, "__arrow_array__"):
+                mask = None
+            else:
+                mask = s.isnull()
             # Ensure timestamp series are in expected form for Spark internal representation
             if t is not None and pa.types.is_timestamp(t) and t.tz is not None:
                 s = _check_series_convert_timestamps_internal(s, self._timezone)

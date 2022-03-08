@@ -109,7 +109,8 @@ case object GarbageCollectionMetrics extends ExecutorMetricType with Logging {
     "MinorGCCount",
     "MinorGCTime",
     "MajorGCCount",
-    "MajorGCTime"
+    "MajorGCTime",
+    "TotalGCTime"
   )
 
   /* We builtin some common GC collectors which categorized as young generation and old */
@@ -136,8 +137,10 @@ case object GarbageCollectionMetrics extends ExecutorMetricType with Logging {
   }
 
   override private[spark] def getMetricValues(memoryManager: MemoryManager): Array[Long] = {
-    val gcMetrics = new Array[Long](names.length) // minorCount, minorTime, majorCount, majorTime
-    ManagementFactory.getGarbageCollectorMXBeans.asScala.foreach { mxBean =>
+    val gcMetrics = new Array[Long](names.length)
+    val mxBeans = ManagementFactory.getGarbageCollectorMXBeans.asScala
+    gcMetrics(4) = mxBeans.map(_.getCollectionTime).sum
+    mxBeans.foreach { mxBean =>
       if (youngGenerationGarbageCollector.contains(mxBean.getName)) {
         gcMetrics(0) = mxBean.getCollectionCount
         gcMetrics(1) = mxBean.getCollectionTime

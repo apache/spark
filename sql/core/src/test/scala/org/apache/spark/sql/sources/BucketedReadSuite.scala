@@ -282,7 +282,7 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils with Adapti
     withTable("bucketed_table") {
       val numBuckets = NumBucketsForPruningNullDf
       val bucketSpec = BucketSpec(numBuckets, Seq("j"), Nil)
-      val naNDF = nullDF.selectExpr("i", "cast(if(isnull(j), 'NaN', j) as double) as j", "k")
+      val naNDF = nullDF.selectExpr("i", "try_cast(if(isnull(j), 'NaN', j) as double) as j", "k")
       // json does not support predicate push-down, and thus json is used here
       naNDF.write
         .format("json")

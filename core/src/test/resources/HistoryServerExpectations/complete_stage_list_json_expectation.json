@@ -63,7 +63,8 @@
     "MinorGCCount" : 0,
     "MinorGCTime" : 0,
     "MajorGCCount" : 0,
-    "MajorGCTime" : 0
+    "MajorGCTime" : 0,
+    "TotalGCTime" : 0
   }
 }, {
   "status" : "COMPLETE",
@@ -130,7 +131,8 @@
     "MinorGCCount" : 0,
     "MinorGCTime" : 0,
     "MajorGCCount" : 0,
-    "MajorGCTime" : 0
+    "MajorGCTime" : 0,
+    "TotalGCTime" : 0
   }
 }, {
   "status" : "COMPLETE",
@@ -197,6 +199,7 @@
     "MinorGCCount" : 0,
     "MinorGCTime" : 0,
     "MajorGCCount" : 0,
-    "MajorGCTime" : 0
+    "MajorGCTime" : 0,
+    "TotalGCTime" : 0
   }
 } ]
