@@ -4484,11 +4484,11 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
         >>> psser.replace(value='new', regex=r'^.oo$')
         0     bat
-        1     foo
+        1     new
         2    bait
         3     abc
         4     bar
-        5     zoo
+        5     new
         dtype: object
         """
         if isinstance(regex, str):
