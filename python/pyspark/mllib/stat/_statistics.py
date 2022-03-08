@@ -66,7 +66,7 @@ class MultivariateStatisticalSummary(JavaModelWrapper):
 
 class Statistics:
     @staticmethod
-    def colStats(rdd: "RDD[Vector]") -> MultivariateStatisticalSummary:
+    def colStats(rdd: RDD[Vector]) -> MultivariateStatisticalSummary:
         """
         Computes column-wise summary statistics for the input RDD[Vector].
 
@@ -106,20 +106,20 @@ class Statistics:
 
     @overload
     @staticmethod
-    def corr(x: "RDD[Vector]", *, method: Optional["CorrelationMethod"] = ...) -> Matrix:
+    def corr(x: RDD[Vector], *, method: Optional["CorrelationMethod"] = ...) -> Matrix:
         ...
 
     @overload
     @staticmethod
     def corr(
-        x: "RDD[float]", y: "RDD[float]", method: Optional["CorrelationMethod"] = ...
+        x: RDD[float], y: RDD[float], method: Optional["CorrelationMethod"] = ...
     ) -> float:
         ...
 
     @staticmethod
     def corr(
-        x: Union["RDD[Vector]", "RDD[float]"],
-        y: Optional["RDD[float]"] = None,
+        x: Union[RDD[Vector], RDD[float]],
+        y: Optional[RDD[float]] = None,
         method: Optional["CorrelationMethod"] = None,
     ) -> Union[float, Matrix]:
         """
@@ -196,7 +196,7 @@ class Statistics:
         else:
             return cast(
                 float,
-                callMLlibFunc("corr", cast("RDD[float]", x).map(float), y.map(float), method),
+                callMLlibFunc("corr", cast(RDD[float], x).map(float), y.map(float), method),
             )
 
     @overload
@@ -211,12 +211,12 @@ class Statistics:
 
     @overload
     @staticmethod
-    def chiSqTest(observed: "RDD[LabeledPoint]") -> List[ChiSqTestResult]:
+    def chiSqTest(observed: RDD[LabeledPoint]) -> List[ChiSqTestResult]:
         ...
 
     @staticmethod
     def chiSqTest(
-        observed: Union[Matrix, "RDD[LabeledPoint]", Vector], expected: Optional[Vector] = None
+        observed: Union[Matrix, RDD[LabeledPoint], Vector], expected: Optional[Vector] = None
     ) -> Union[ChiSqTestResult, List[ChiSqTestResult]]:
         """
         If `observed` is Vector, conduct Pearson's chi-squared goodness
@@ -315,7 +315,7 @@ class Statistics:
 
     @staticmethod
     def kolmogorovSmirnovTest(
-        data: "RDD[float]", distName: "DistName" = "norm", *params: float
+        data: RDD[float], distName: "DistName" = "norm", *params: float
     ) -> KolmogorovSmirnovTestResult:
         """
         Performs the Kolmogorov-Smirnov (KS) test for data sampled from
