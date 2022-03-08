@@ -22,6 +22,7 @@ import scala.collection.JavaConverters._
 import org.apache.spark.internal.Logging
 import org.apache.spark.util.BoundedPriorityQueue
 
+
 /**
  * A simple utility for tracking runtime and associated stats in query planning.
  *
@@ -125,7 +126,7 @@ class QueryPlanningTracker extends Logging {
    */
   def logTimeSpent(): Unit = {
     var totalTimeSpent = 0L
-    val timeSpentSummary: StringBuffer = new StringBuffer()
+    val timeSpentSummary: StringBuilder = new StringBuilder()
     Seq(QueryPlanningTracker.PARSING, QueryPlanningTracker.ANALYSIS,
       QueryPlanningTracker.OPTIMIZATION, QueryPlanningTracker.PLANNING).foreach { phase =>
       val duration = phasesMap.getOrDefault(phase, new PhaseSummary(-1, -1)).durationMs
