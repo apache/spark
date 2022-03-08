@@ -65,17 +65,35 @@ object SerializerBuildHelper {
       returnNullable = false)
   }
 
-  def createSerializerForTimestamp(inputObject: Expression): Expression = {
+  def createSerializerForJavaInstant(inputObject: Expression): Expression = {
     StaticInvoke(
       DateTimeUtils.getClass,
       TimestampType,
-      "objectToMicros",
+      "instantToMicros",
       inputObject :: Nil,
       returnNullable = false)
   }
 
   def createSerializerForJavaEnum(inputObject: Expression): Expression =
     createSerializerForString(Invoke(inputObject, "name", ObjectType(classOf[String])))
+
+  def createSerializerForSqlTimestamp(inputObject: Expression): Expression = {
+    StaticInvoke(
+      DateTimeUtils.getClass,
+      TimestampType,
+      "fromJavaTimestamp",
+      inputObject :: Nil,
+      returnNullable = false)
+  }
+
+  def createSerializerForAnyTimestamp(inputObject: Expression): Expression = {
+    StaticInvoke(
+      DateTimeUtils.getClass,
+      TimestampType,
+      "anyToMicros",
+      inputObject :: Nil,
+      returnNullable = false)
+  }
 
   def createSerializerForLocalDateTime(inputObject: Expression): Expression = {
     StaticInvoke(
@@ -86,11 +104,29 @@ object SerializerBuildHelper {
       returnNullable = false)
   }
 
-  def createSerializerForDate(inputObject: Expression): Expression = {
+  def createSerializerForJavaLocalDate(inputObject: Expression): Expression = {
     StaticInvoke(
       DateTimeUtils.getClass,
       DateType,
-      "objectToDays",
+      "localDateToDays",
+      inputObject :: Nil,
+      returnNullable = false)
+  }
+
+  def createSerializerForSqlDate(inputObject: Expression): Expression = {
+    StaticInvoke(
+      DateTimeUtils.getClass,
+      DateType,
+      "fromJavaDate",
+      inputObject :: Nil,
+      returnNullable = false)
+  }
+
+  def createSerializerForAnyDate(inputObject: Expression): Expression = {
+    StaticInvoke(
+      DateTimeUtils.getClass,
+      DateType,
+      "anyToDays",
       inputObject :: Nil,
       returnNullable = false)
   }

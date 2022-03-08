@@ -435,4 +435,14 @@ class RowEncoderSuite extends CodegenInterpretedPlanTest {
       }
     }
   }
+
+  test("SPARK-38437: encoding TimestampType from java.time.Instant or java.sql.Timestamp") {
+    val schema = new StructType().add("t0", TimestampType).add("t1", TimestampType)
+    val encoder = RowEncoder(schema, lenient = true).resolveAndBind()
+    val instant = java.time.Instant.parse("2019-02-26T16:56:00Z")
+    val row = encoder.createSerializer().apply(Row(instant, java.sql.Timestamp.from(instant)))
+    val expectedMicros = DateTimeUtils.instantToMicros(instant)
+    assert(row.getLong(0) === expectedMicros)
+    assert(row.getLong(1) === expectedMicros)
+  }
 }

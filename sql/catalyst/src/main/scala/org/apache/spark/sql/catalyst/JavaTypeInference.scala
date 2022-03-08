@@ -409,14 +409,16 @@ object JavaTypeInference {
       typeToken.getRawType match {
         case c if c == classOf[String] => createSerializerForString(inputObject)
 
-        case c if c == classOf[java.time.Instant] || c == classOf[java.sql.Timestamp] =>
-          createSerializerForTimestamp(inputObject)
+        case c if c == classOf[java.time.Instant] => createSerializerForJavaInstant(inputObject)
+
+        case c if c == classOf[java.sql.Timestamp] => createSerializerForSqlTimestamp(inputObject)
 
         case c if c == classOf[java.time.LocalDateTime] =>
           createSerializerForLocalDateTime(inputObject)
 
-        case c if c == classOf[java.sql.Date] || c == classOf[java.time.LocalDate] =>
-          createSerializerForDate(inputObject)
+        case c if c == classOf[java.time.LocalDate] => createSerializerForJavaLocalDate(inputObject)
+
+        case c if c == classOf[java.sql.Date] => createSerializerForSqlDate(inputObject)
 
         case c if c == classOf[java.time.Duration] => createSerializerForJavaDuration(inputObject)
 

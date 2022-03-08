@@ -113,7 +113,7 @@ object DateTimeUtils {
    * @param obj Either an object of `java.sql.Date` or `java.time.LocalDate`.
    * @return The number of days since 1970-01-01.
    */
-  def objectToDays(obj: Any): Int = obj match {
+  def anyToDays(obj: Any): Int = obj match {
     case d: Date => fromJavaDate(d)
     case ld: LocalDate => localDateToDays(ld)
   }
@@ -197,7 +197,7 @@ object DateTimeUtils {
    * @param obj Either an object of `java.sql.Timestamp` or `java.time.Instant`.
    * @return The number of micros since the epoch.
    */
-  def objectToMicros(obj: Any): Long = obj match {
+  def anyToMicros(obj: Any): Long = obj match {
     case t: Timestamp => fromJavaTimestamp(t)
     case i: Instant => instantToMicros(i)
   }
