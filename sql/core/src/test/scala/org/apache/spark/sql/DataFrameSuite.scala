@@ -3128,7 +3128,7 @@ class DataFrameSuite extends QueryTest
     }
   }
 
-  test("SPARK-37865: Do not deduplicate grouping expressions in union") {
+  test("SPARK-37865: Do not deduplicate union output columns") {
     val df1 = Seq((1, 1), (1, 2)).toDF("a", "b")
     val df2 = Seq((2, 2), (2, 3)).toDF("c", "d")
 
