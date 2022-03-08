@@ -17,8 +17,7 @@
 
 import sys
 
-from collections import namedtuple
-from typing import Generic, List, TypeVar
+from typing import Any, Generic, List, NamedTuple, TypeVar
 
 from pyspark import since, SparkContext
 from pyspark.mllib.common import JavaModelWrapper, callMLlibFunc
@@ -31,7 +30,7 @@ T = TypeVar("T")
 
 
 @inherit_doc
-class FPGrowthModel(JavaModelWrapper, JavaSaveable, JavaLoader["FPGrowthModel"], Generic[T]):
+class FPGrowthModel(JavaModelWrapper, JavaSaveable, JavaLoader["FPGrowthModel"]):
     """
     A FP-Growth model for mining frequent itemsets
     using the Parallel FP-Growth algorithm.
@@ -53,7 +52,7 @@ class FPGrowthModel(JavaModelWrapper, JavaSaveable, JavaLoader["FPGrowthModel"],
     """
 
     @since("1.4.0")
-    def freqItemsets(self) -> RDD["FPGrowth.FreqItemset[T]"]:  # type: ignore[misc]
+    def freqItemsets(self) -> RDD["FPGrowth.FreqItemset"]:
         """
         Returns the frequent itemsets of this model.
         """
@@ -65,7 +64,7 @@ class FPGrowthModel(JavaModelWrapper, JavaSaveable, JavaLoader["FPGrowthModel"],
         """
         Load a model from the given path.
         """
-        model = cls._load_java(sc, path)  # type: ignore[attr-defined]
+        model = cls._load_java(sc, path)
         assert sc._jvm is not None
         wrapper = sc._jvm.org.apache.spark.mllib.api.python.FPGrowthModelWrapper(model)
         return FPGrowthModel(wrapper)
@@ -81,7 +80,7 @@ class FPGrowth:
     @classmethod
     def train(
         cls, data: RDD[List[T]], minSupport: float = 0.3, numPartitions: int = -1
-    ) -> FPGrowthModel[T]:
+    ) -> "FPGrowthModel":
         """
         Computes an FP-Growth model that contains frequent itemsets.
 
@@ -102,12 +101,15 @@ class FPGrowth:
         model = callMLlibFunc("trainFPGrowthModel", data, float(minSupport), int(numPartitions))
         return FPGrowthModel(model)
 
-    class FreqItemset(Generic[T], namedtuple("FreqItemset", ["items", "freq"])):
+    class FreqItemset(NamedTuple):
         """
         Represents an (items, freq) tuple.
 
         .. versionadded:: 1.4.0
         """
+
+        items: List[Any]
+        freq: int
 
 
 @inherit_doc
@@ -131,7 +133,7 @@ class PrefixSpanModel(JavaModelWrapper, Generic[T]):
     """
 
     @since("1.6.0")
-    def freqSequences(self) -> RDD["PrefixSpan.FreqSequence[T]"]:  # type: ignore[misc]
+    def freqSequences(self) -> RDD["PrefixSpan.FreqSequence"]:
         """Gets frequent sequences"""
         return self.call("getFreqSequences").map(lambda x: PrefixSpan.FreqSequence(x[0], x[1]))
 
@@ -190,12 +192,15 @@ class PrefixSpan:
         )
         return PrefixSpanModel(model)
 
-    class FreqSequence(Generic[T], namedtuple("FreqSequence", ["sequence", "freq"])):
+    class FreqSequence(NamedTuple):
         """
         Represents a (sequence, freq) tuple.
 
         .. versionadded:: 1.6.0
         """
+
+        sequence: List[List[Any]]
+        freq: int
 
 
 def _test() -> None:
