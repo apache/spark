@@ -2580,11 +2580,10 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
             }
             if (values(i).MINUS() == null) {
               value
+            } else if (value.startsWith("-")) {
+              value.replaceFirst("-", "")
             } else {
-              value.startsWith("-") match {
-                case true => value.replaceFirst("-", "")
-                case false => s"-$value"
-              }
+              s"-$value"
             }
           } else {
             values(i).getText
@@ -2609,11 +2608,10 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
       val value = Option(ctx.intervalValue.STRING).map(string).map { interval =>
         if (ctx.intervalValue().MINUS() == null) {
           interval
+        } else if (interval.startsWith("-")) {
+          interval.replaceFirst("-", "")
         } else {
-          interval.startsWith("-") match {
-            case true => interval.replaceFirst("-", "")
-            case false => s"-$interval"
-          }
+          s"-$interval"
         }
       }.getOrElse {
         throw QueryParsingErrors.invalidFromToUnitValueError(ctx.intervalValue)
@@ -2731,6 +2729,13 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
   }
 
   /**
+   * Create top level table schema.
+   */
+  protected def createSchema(ctx: CreateOrReplaceTableColTypeListContext): StructType = {
+    StructType(Option(ctx).toSeq.flatMap(visitCreateOrReplaceTableColTypeList))
+  }
+
+  /**
    * Create a [[StructType]] from a number of column definitions.
    */
   override def visitColTypeList(ctx: ColTypeListContext): Seq[StructField] = withOrigin(ctx) {
@@ -2751,6 +2756,41 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
 
     StructField(
       name = colName.getText,
+      dataType = typedVisit[DataType](ctx.dataType),
+      nullable = NULL == null,
+      metadata = builder.build())
+  }
+
+  /**
+   * Create a [[StructType]] from a number of CREATE TABLE column definitions.
+   */
+  override def visitCreateOrReplaceTableColTypeList(
+      ctx: CreateOrReplaceTableColTypeListContext): Seq[StructField] = withOrigin(ctx) {
+    ctx.createOrReplaceTableColType().asScala.map(visitCreateOrReplaceTableColType).toSeq
+  }
+
+  /**
+   * Create a top level [[StructField]] from a CREATE TABLE column definition.
+   */
+  override def visitCreateOrReplaceTableColType(
+      ctx: CreateOrReplaceTableColTypeContext): StructField = withOrigin(ctx) {
+    import ctx._
+
+    val builder = new MetadataBuilder
+    // Add comment to metadata
+    Option(commentSpec()).map(visitCommentSpec).foreach {
+      builder.putString("comment", _)
+    }
+
+    // Process the 'DEFAULT expression' clause in the column definition, if any.
+    val name: String = colName.getText
+    val defaultExpr = Option(ctx.defaultExpression()).map(visitDefaultExpression)
+    if (defaultExpr.isDefined) {
+      throw QueryParsingErrors.defaultColumnNotImplementedYetError(ctx)
+    }
+
+    StructField(
+      name = name,
       dataType = typedVisit[DataType](ctx.dataType),
       nullable = NULL == null,
       metadata = builder.build())
@@ -3459,7 +3499,8 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
   override def visitCreateTable(ctx: CreateTableContext): LogicalPlan = withOrigin(ctx) {
     val (table, temp, ifNotExists, external) = visitCreateTableHeader(ctx.createTableHeader)
 
-    val columns = Option(ctx.colTypeList()).map(visitColTypeList).getOrElse(Nil)
+    val columns = Option(ctx.createOrReplaceTableColTypeList())
+      .map(visitCreateOrReplaceTableColTypeList).getOrElse(Nil)
     val provider = Option(ctx.tableProvider).map(_.multipartIdentifier.getText)
     val (partTransforms, partCols, bucketSpec, properties, options, location, comment, serdeInfo) =
       visitCreateTableClauses(ctx.createTableClauses())
@@ -3538,7 +3579,8 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
     val orCreate = ctx.replaceTableHeader().CREATE() != null
     val (partTransforms, partCols, bucketSpec, properties, options, location, comment, serdeInfo) =
       visitCreateTableClauses(ctx.createTableClauses())
-    val columns = Option(ctx.colTypeList()).map(visitColTypeList).getOrElse(Nil)
+    val columns = Option(ctx.createOrReplaceTableColTypeList())
+      .map(visitCreateOrReplaceTableColTypeList).getOrElse(Nil)
     val provider = Option(ctx.tableProvider).map(_.multipartIdentifier.getText)
 
     if (provider.isDefined && serdeInfo.isDefined) {
@@ -3657,6 +3699,10 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
   override def visitQualifiedColTypeWithPosition(
       ctx: QualifiedColTypeWithPositionContext): QualifiedColType = withOrigin(ctx) {
     val name = typedVisit[Seq[String]](ctx.name)
+    val defaultExpr = Option(ctx.defaultExpression()).map(visitDefaultExpression)
+    if (defaultExpr.isDefined) {
+      throw QueryParsingErrors.defaultColumnNotImplementedYetError(ctx)
+    }
     QualifiedColType(
       path = if (name.length > 1) Some(UnresolvedFieldName(name.init)) else None,
       colName = name.last,
@@ -3745,6 +3791,12 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
     } else {
       None
     }
+    if (action.defaultExpression != null) {
+      throw QueryParsingErrors.defaultColumnNotImplementedYetError(ctx)
+    }
+    if (action.dropDefault != null) {
+      throw QueryParsingErrors.defaultColumnNotImplementedYetError(ctx)
+    }
 
     assert(Seq(dataType, nullable, comment, position).count(_.nonEmpty) == 1)
 
@@ -3812,6 +3864,9 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
         if (col.path.isDefined) {
           throw QueryParsingErrors.operationInHiveStyleCommandUnsupportedError(
             "Replacing with a nested column", "REPLACE COLUMNS", ctx)
+        }
+        if (Option(colType.defaultExpression()).map(visitDefaultExpression).isDefined) {
+          throw QueryParsingErrors.defaultColumnNotImplementedYetError(ctx)
         }
         col
       }.toSeq

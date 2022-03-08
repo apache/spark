@@ -104,6 +104,7 @@ abstract class AbstractSqlParser extends ParserInterface with SQLConfHelper with
     parser.addParseListener(UnclosedCommentProcessor(command, tokenStream))
     parser.removeErrorListeners()
     parser.addErrorListener(ParseErrorListener)
+    parser.setErrorHandler(new SparkParserErrorStrategy())
     parser.legacy_setops_precedence_enabled = conf.setOpsPrecedenceEnforced
     parser.legacy_exponent_literal_as_decimal_enabled = conf.exponentLiteralAsDecimalEnabled
     parser.SQL_standard_keyword_behavior = conf.enforceReservedKeywords
@@ -207,7 +208,12 @@ case object ParseErrorListener extends BaseErrorListener {
         val start = Origin(Some(line), Some(charPositionInLine))
         (start, start)
     }
-    throw new ParseException(None, msg, start, stop)
+    e match {
+      case sre: SparkRecognitionException if sre.errorClass.isDefined =>
+        throw new ParseException(None, start, stop, sre.errorClass.get, sre.messageParameters)
+      case _ =>
+        throw new ParseException(None, msg, start, stop)
+    }
   }
 }
 
@@ -243,6 +249,21 @@ class ParseException(
       SparkThrowableHelper.getMessage(errorClass, messageParameters),
       ParserUtils.position(ctx.getStart),
       ParserUtils.position(ctx.getStop),
+      Some(errorClass),
+      messageParameters)
+
+  /** Compose the message through SparkThrowableHelper given errorClass and messageParameters. */
+  def this(
+      command: Option[String],
+      start: Origin,
+      stop: Origin,
+      errorClass: String,
+      messageParameters: Array[String]) =
+    this(
+      command,
+      SparkThrowableHelper.getMessage(errorClass, messageParameters),
+      start,
+      stop,
       Some(errorClass),
       messageParameters)
 

@@ -1746,7 +1746,6 @@ abstract class RDD[T: ClassTag](
   }
 
   /**
-   * :: Experimental ::
    * Removes an RDD's shuffles and it's non-persisted ancestors.
    * When running without a shuffle service, cleaning up shuffle files enables downscaling.
    * If you use the RDD after this call, you should checkpoint and materialize it first.
@@ -1755,7 +1754,6 @@ abstract class RDD[T: ClassTag](
    *   * Tuning the driver GC to be more aggressive, so the regular context cleaner is triggered
    *   * Setting an appropriate TTL for shuffle files to be auto cleaned
    */
-  @Experimental
   @DeveloperApi
   @Since("3.1.0")
   def cleanShuffleDependencies(blocking: Boolean = false): Unit = {
