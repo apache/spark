@@ -18,8 +18,8 @@ package org.apache.spark.sql.vectorized;
 
 import org.apache.spark.annotation.DeveloperApi;
 import org.apache.spark.sql.catalyst.InternalRow;
-import org.apache.spark.sql.catalyst.InternalRow$;
 import org.apache.spark.sql.catalyst.expressions.GenericInternalRow;
+import org.apache.spark.sql.catalyst.expressions.SpecializedGettersReader;
 import org.apache.spark.sql.types.*;
 import org.apache.spark.unsafe.types.CalendarInterval;
 import org.apache.spark.unsafe.types.UTF8String;
@@ -146,7 +146,7 @@ public final class ColumnarBatchRow extends InternalRow {
 
   @Override
   public Object get(int ordinal, DataType dataType) {
-    return InternalRow$.MODULE$.getGetter(ordinal, dataType).apply(this);
+    return SpecializedGettersReader.read(this, ordinal, dataType, false, false);
   }
 
   @Override

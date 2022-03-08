@@ -20,8 +20,8 @@ package org.apache.spark.sql.execution.vectorized;
 import java.math.BigDecimal;
 
 import org.apache.spark.sql.catalyst.InternalRow;
-import org.apache.spark.sql.catalyst.InternalRow$;
 import org.apache.spark.sql.catalyst.expressions.GenericInternalRow;
+import org.apache.spark.sql.catalyst.expressions.SpecializedGettersReader;
 import org.apache.spark.sql.types.*;
 import org.apache.spark.sql.vectorized.ColumnarArray;
 import org.apache.spark.sql.vectorized.ColumnarBatch;
@@ -155,7 +155,7 @@ public final class MutableColumnarRow extends InternalRow {
 
   @Override
   public Object get(int ordinal, DataType dataType) {
-    return InternalRow$.MODULE$.getGetter(ordinal, dataType).apply(this);
+    return SpecializedGettersReader.read(this, ordinal, dataType, false, false);
   }
 
   @Override
