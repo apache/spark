@@ -18,6 +18,7 @@ package org.apache.spark.sql.execution.datasources.v2.jdbc
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{Row, SQLContext}
+import org.apache.spark.sql.connector.expressions.SortOrder
 import org.apache.spark.sql.connector.read.V1Scan
 import org.apache.spark.sql.execution.datasources.jdbc.JDBCRelation
 import org.apache.spark.sql.execution.datasources.v2.TableSampleInfo
@@ -31,7 +32,8 @@ case class JDBCScan(
     pushedAggregateColumn: Array[String] = Array(),
     groupByColumns: Option[Array[String]],
     tableSample: Option[TableSampleInfo],
-    pushedLimit: Int) extends V1Scan {
+    pushedLimit: Int,
+    sortOrders: Array[SortOrder]) extends V1Scan {
 
   override def readSchema(): StructType = prunedSchema
 
@@ -46,8 +48,8 @@ case class JDBCScan(
         } else {
           pushedAggregateColumn
         }
-        relation.buildScan(
-          columnList, prunedSchema, pushedFilters, groupByColumns, tableSample, pushedLimit)
+        relation.buildScan(columnList, prunedSchema, pushedFilters, groupByColumns, tableSample,
+          pushedLimit, sortOrders)
       }
     }.asInstanceOf[T]
   }

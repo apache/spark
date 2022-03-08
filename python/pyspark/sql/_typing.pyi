@@ -25,7 +25,7 @@ from typing import (
     TypeVar,
     Union,
 )
-from typing_extensions import Protocol
+from typing_extensions import Literal, Protocol
 
 import datetime
 import decimal
@@ -35,6 +35,7 @@ import pyspark.sql.types
 from pyspark.sql.column import Column
 
 ColumnOrName = Union[Column, str]
+ColumnOrName_ = TypeVar("ColumnOrName_", bound=ColumnOrName)
 DecimalLiteral = decimal.Decimal
 DateTimeLiteral = Union[datetime.datetime, datetime.date]
 LiteralType = PrimitiveType
@@ -54,6 +55,8 @@ AtomicValue = TypeVar(
 )
 
 RowLike = TypeVar("RowLike", List[Any], Tuple[Any, ...], pyspark.sql.types.Row)
+
+SQLBatchedUDFType = Literal[100]
 
 class SupportsOpen(Protocol):
     def open(self, partition_id: int, epoch_id: int) -> bool: ...

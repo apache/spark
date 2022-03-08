@@ -107,6 +107,13 @@ private[scheduler] abstract class Stage(
     nextAttemptId += 1
   }
 
+  /** Forward the nextAttemptId if skipped and get visited for the first time. */
+  def increaseAttemptIdOnFirstSkip(): Unit = {
+    if (nextAttemptId == 0) {
+      nextAttemptId = 1
+    }
+  }
+
   /** Returns the StageInfo for the most recent attempt for this stage. */
   def latestInfo: StageInfo = _latestInfo
 

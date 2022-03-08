@@ -21,6 +21,7 @@ import java.io.File
 
 import org.scalactic.Equality
 
+import org.apache.spark.SparkConf
 import org.apache.spark.sql.{DataFrame, QueryTest, Row}
 import org.apache.spark.sql.catalyst.SchemaPruningTest
 import org.apache.spark.sql.catalyst.expressions.Concat
@@ -31,7 +32,7 @@ import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types._
 
 abstract class SchemaPruningSuite
   extends QueryTest
@@ -56,6 +57,9 @@ abstract class SchemaPruningSuite
     depName: String,
     contactId: Int,
     employer: Employer)
+
+  override protected def sparkConf: SparkConf =
+    super.sparkConf.set(SQLConf.ANSI_STRICT_INDEX_OPERATOR.key, "false")
 
   val janeDoe = FullName("Jane", "X.", "Doe")
   val johnDoe = FullName("John", "Y.", "Doe")
@@ -569,7 +573,7 @@ abstract class SchemaPruningSuite
         Seq(Concat(Seq($"name.first", $"name.last")),
           Concat(Seq($"name.last", $"name.first")))
       ),
-      Seq('a.string, 'b.string),
+      Seq(Symbol("a").string, Symbol("b").string),
       sql("select * from contacts").logicalPlan
     ).toDF()
     checkScan(query1, "struct<name:struct<first:string,last:string>>")
@@ -586,7 +590,7 @@ abstract class SchemaPruningSuite
     val name = StructType.fromDDL("first string, middle string, last string")
     val query2 = Expand(
       Seq(Seq($"name", $"name.last")),
-      Seq('a.struct(name), 'b.string),
+      Seq(Symbol("a").struct(name), Symbol("b").string),
       sql("select * from contacts").logicalPlan
     ).toDF()
     checkScan(query2, "struct<name:struct<first:string,middle:string,last:string>>")
@@ -881,5 +885,54 @@ abstract class SchemaPruningSuite
           Row("r1c1", 2) ::
           Nil)
     }
+  }
+
+  test("SPARK-37450: Prunes unnecessary fields from Explode for count aggregation") {
+    import testImplicits._
+
+    withTempView("table") {
+      withTempPath { dir =>
+        val path = dir.getCanonicalPath
+
+        val jsonStr =
+          """
+            |{
+            |  "items": [
+            |  {"itemId": 1, "itemData": "a"},
+            |  {"itemId": 2, "itemData": "b"}
+            |]}
+            |""".stripMargin
+        val df = spark.read.json(Seq(jsonStr).toDS)
+        makeDataSourceFile(df, new File(path))
+
+        spark.read.format(dataSourceName).load(path)
+          .createOrReplaceTempView("table")
+
+        val read = spark.table("table")
+        val query = read.select(explode($"items").as(Symbol("item"))).select(count($"*"))
+
+        checkScan(query, "struct<items:array<struct<itemId:long>>>")
+        checkAnswer(query, Row(2) :: Nil)
+      }
+    }
+  }
+
+  test("SPARK-37577: Fix ClassCastException: ArrayType cannot be cast to StructType") {
+    import testImplicits._
+
+    val schema = StructType(Seq(
+      StructField("array", ArrayType(StructType(
+        Seq(StructField("string", StringType, false),
+          StructField("inner_array", ArrayType(StructType(
+            Seq(StructField("inner_string", StringType, false))), true), false)
+        )), false))
+    ))
+
+    val count = spark.createDataFrame(sparkContext.emptyRDD[Row], schema)
+      .select(explode($"array").alias("element"))
+      .select("element.*")
+      .select(explode($"inner_array"))
+      .count()
+    assert(count == 0)
   }
 }

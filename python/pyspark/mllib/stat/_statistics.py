@@ -64,7 +64,7 @@ class MultivariateStatisticalSummary(JavaModelWrapper):
         return cast(JavaObject, self.call("normL2")).toArray()
 
 
-class Statistics(object):
+class Statistics:
     @staticmethod
     def colStats(rdd: "RDD[Vector]") -> MultivariateStatisticalSummary:
         """

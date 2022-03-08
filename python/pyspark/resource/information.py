@@ -18,7 +18,7 @@
 from typing import List
 
 
-class ResourceInformation(object):
+class ResourceInformation:
 
     """
     Class to hold information about a type of Resource. A resource could be a GPU, FPGA, etc.

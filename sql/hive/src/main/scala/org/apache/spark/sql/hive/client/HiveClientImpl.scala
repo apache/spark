@@ -28,6 +28,7 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
+import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.hive.common.StatsSetupConst
 import org.apache.hadoop.hive.conf.HiveConf
@@ -48,7 +49,7 @@ import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.internal.Logging
 import org.apache.spark.metrics.source.HiveCatalogMetrics
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.analysis.{NoSuchDatabaseException, NoSuchPartitionException, NoSuchPartitionsException, NoSuchTableException, PartitionAlreadyExistsException, PartitionsAlreadyExistException}
+import org.apache.spark.sql.catalyst.analysis.{DatabaseAlreadyExistsException, NoSuchDatabaseException, NoSuchPartitionException, NoSuchPartitionsException, NoSuchTableException, PartitionAlreadyExistsException, PartitionsAlreadyExistException}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.Expression
@@ -200,18 +201,6 @@ private[hive] class HiveClientImpl(
     hiveConf
   }
 
-  private def getHive(conf: HiveConf): Hive = {
-    try {
-      classOf[Hive].getMethod("getWithoutRegisterFns", classOf[HiveConf])
-        .invoke(null, conf).asInstanceOf[Hive]
-    } catch {
-      // SPARK-37069: not all Hive versions have the above method (e.g., Hive 2.3.9 has it but
-      // 2.3.8 don't), therefore here we fallback when encountering the exception.
-      case _: NoSuchMethodException =>
-        Hive.get(conf)
-    }
-  }
-
   override val userName = UserGroupInformation.getCurrentUser.getShortUserName
 
   override def getConf(key: String, defaultValue: String): String = {
@@ -343,14 +332,24 @@ private[hive] class HiveClientImpl(
       database: CatalogDatabase,
       ignoreIfExists: Boolean): Unit = withHiveState {
     val hiveDb = toHiveDatabase(database, Some(userName))
-    shim.createDatabase(client, hiveDb, ignoreIfExists)
+    try {
+      shim.createDatabase(client, hiveDb, ignoreIfExists)
+    } catch {
+      case _: AlreadyExistsException =>
+        throw new DatabaseAlreadyExistsException(database.name)
+    }
   }
 
   override def dropDatabase(
       name: String,
       ignoreIfNotExists: Boolean,
       cascade: Boolean): Unit = withHiveState {
-    shim.dropDatabase(client, name, true, ignoreIfNotExists, cascade)
+    try {
+      shim.dropDatabase(client, name, true, ignoreIfNotExists, cascade)
+    } catch {
+      case e: HiveException if e.getMessage.contains(s"Database $name is not empty") =>
+        throw QueryCompilationErrors.cannotDropNonemptyDatabaseError(name)
+    }
   }
 
   override def alterDatabase(database: CatalogDatabase): Unit = withHiveState {
@@ -645,7 +644,7 @@ private[hive] class HiveClientImpl(
         }
         parts.map(_.getValues)
       }.distinct
-    var droppedParts = ArrayBuffer.empty[java.util.List[String]]
+    val droppedParts = ArrayBuffer.empty[java.util.List[String]]
     matchingParts.foreach { partition =>
       try {
         shim.dropPartition(client, db, table, partition, !retainData, purge)
@@ -1286,5 +1285,28 @@ private[hive] object HiveClientImpl extends Logging {
       hiveConf.set("hive.execution.engine", "mr")
     }
     hiveConf
+  }
+
+  /**
+   * Initialize Hive through Configuration.
+   * First try to use getWithoutRegisterFns to initialize to avoid loading all functions,
+   * if there is no such method, fallback to Hive.get.
+   */
+  def getHive(conf: Configuration): Hive = {
+    val hiveConf = conf match {
+      case hiveConf: HiveConf =>
+        hiveConf
+      case _ =>
+        new HiveConf(conf, classOf[HiveConf])
+    }
+    try {
+      classOf[Hive].getMethod("getWithoutRegisterFns", classOf[HiveConf])
+        .invoke(null, hiveConf).asInstanceOf[Hive]
+    } catch {
+      // SPARK-37069: not all Hive versions have the above method (e.g., Hive 2.3.9 has it but
+      // 2.3.8 don't), therefore here we fallback when encountering the exception.
+      case _: NoSuchMethodException =>
+        Hive.get(hiveConf)
+    }
   }
 }

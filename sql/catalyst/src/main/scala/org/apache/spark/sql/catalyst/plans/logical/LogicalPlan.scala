@@ -41,7 +41,8 @@ abstract class LogicalPlan
   def metadataOutput: Seq[Attribute] = children.flatMap(_.metadataOutput)
 
   /** Returns true if this subtree has data from a streaming data source. */
-  def isStreaming: Boolean = children.exists(_.isStreaming)
+  def isStreaming: Boolean = _isStreaming
+  private[this] lazy val _isStreaming = children.exists(_.isStreaming)
 
   override def verboseStringWithSuffix(maxFields: Int): String = {
     super.verboseString(maxFields) + statsCache.map(", " + _.toString).getOrElse("")
@@ -182,7 +183,7 @@ trait UnaryNode extends LogicalPlan with UnaryLike[LogicalPlan] {
     projectList.foreach {
       case a @ Alias(l: Literal, _) =>
         allConstraints += EqualNullSafe(a.toAttribute, l)
-      case a @ Alias(e, _) =>
+      case a @ Alias(e, _) if e.deterministic =>
         // For every alias in `projectList`, replace the reference in constraints by its attribute.
         allConstraints ++= allConstraints.map(_ transform {
           case expr: Expression if expr.semanticEquals(e) =>
@@ -275,4 +276,11 @@ object LogicalPlanIntegrity {
   def checkIfExprIdsAreGloballyUnique(plan: LogicalPlan): Boolean = {
     checkIfSameExprIdNotReused(plan) && hasUniqueExprIdsForOutput(plan)
   }
+}
+
+/**
+ * A logical plan node that can generate metadata columns
+ */
+trait ExposesMetadataColumns extends LogicalPlan {
+  def withMetadataColumns(): LogicalPlan
 }

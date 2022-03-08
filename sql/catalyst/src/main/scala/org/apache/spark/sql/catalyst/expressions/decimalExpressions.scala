@@ -114,7 +114,7 @@ case class PromotePrecision(child: Expression) extends UnaryExpression {
     child.genCode(ctx)
   override def prettyName: String = "promote_precision"
   override def sql: String = child.sql
-  override lazy val canonicalized: Expression = child.canonicalized
+  override lazy val preCanonicalized: Expression = child.preCanonicalized
 
   override protected def withNewChildInternal(newChild: Expression): Expression =
     copy(child = newChild)
@@ -149,7 +149,7 @@ case class CheckOverflow(
     })
   }
 
-  override def toString: String = s"CheckOverflow($child, $dataType, $nullOnOverflow)"
+  override def toString: String = s"CheckOverflow($child, $dataType)"
 
   override def sql: String = child.sql
 

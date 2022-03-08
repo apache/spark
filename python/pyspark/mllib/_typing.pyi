@@ -30,3 +30,4 @@ JavaObjectOrPickleDump = Union[JavaObject, bytearray, bytes]
 
 CorrelationMethod = Union[Literal["spearman"], Literal["pearson"]]
 DistName = Literal["norm"]
+NormType = Union[None, float, Literal["fro"], Literal["nuc"]]

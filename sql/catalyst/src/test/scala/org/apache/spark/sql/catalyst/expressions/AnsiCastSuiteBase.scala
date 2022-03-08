@@ -17,15 +17,15 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import java.sql.{Date, Timestamp}
+import java.sql.Timestamp
 import java.time.DateTimeException
 
 import org.apache.spark.SparkArithmeticException
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.util.DateTimeConstants.MILLIS_PER_SECOND
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils
-import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.{withDefaultTimeZone, UTC, UTC_OPT}
-import org.apache.spark.sql.catalyst.util.DateTimeUtils.fromJavaTimestamp
+import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.{withDefaultTimeZone, UTC}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -137,20 +137,6 @@ abstract class AnsiCastSuiteBase extends CastSuiteBase {
       cast(Literal(BigDecimal(134.12)), DecimalType(3, 2)), "cannot be represented")
     checkExceptionInExpression[ArithmeticException](
       cast(Literal(134.12), DecimalType(3, 2)), "cannot be represented")
-  }
-
-  test("ANSI mode: disallow type conversions between Numeric types and Timestamp type") {
-    import DataTypeTestUtils.numericTypes
-    checkInvalidCastFromNumericType(TimestampType)
-    var errorMsg =
-      "you can use functions TIMESTAMP_SECONDS/TIMESTAMP_MILLIS/TIMESTAMP_MICROS instead"
-    verifyCastFailure(cast(Literal(0L), TimestampType), Some(errorMsg))
-
-    val timestampLiteral = Literal(1L, TimestampType)
-    errorMsg = "you can use functions UNIX_SECONDS/UNIX_MILLIS/UNIX_MICROS instead."
-    numericTypes.foreach { numericType =>
-      verifyCastFailure(cast(timestampLiteral, numericType), Some(errorMsg))
-    }
   }
 
   test("ANSI mode: disallow type conversions between Numeric types and Date type") {
@@ -276,95 +262,38 @@ abstract class AnsiCastSuiteBase extends CastSuiteBase {
   }
 
   test("cast from timestamp II") {
-    withSQLConf(SQLConf.ALLOW_CAST_BETWEEN_DATETIME_AND_NUMERIC_IN_ANSI.key -> "true") {
-      checkCastToTimestampError(Literal(Double.NaN), TimestampType)
-      checkCastToTimestampError(Literal(1.0 / 0.0), TimestampType)
-      checkCastToTimestampError(Literal(Float.NaN), TimestampType)
-      checkCastToTimestampError(Literal(1.0f / 0.0f), TimestampType)
-      Seq(Long.MinValue.toDouble, Long.MaxValue.toDouble, Long.MinValue.toFloat,
-        Long.MaxValue.toFloat).foreach { v =>
-        checkExceptionInExpression[SparkArithmeticException](
-          cast(Literal(v), TimestampType), "overflow")
-      }
+    checkCastToTimestampError(Literal(Double.NaN), TimestampType)
+    checkCastToTimestampError(Literal(1.0 / 0.0), TimestampType)
+    checkCastToTimestampError(Literal(Float.NaN), TimestampType)
+    checkCastToTimestampError(Literal(1.0f / 0.0f), TimestampType)
+    Seq(Long.MinValue.toDouble, Long.MaxValue.toDouble, Long.MinValue.toFloat,
+      Long.MaxValue.toFloat).foreach { v =>
+      checkExceptionInExpression[SparkArithmeticException](
+        cast(Literal(v), TimestampType), "overflow")
     }
   }
 
   test("cast a timestamp before the epoch 1970-01-01 00:00:00Z II") {
-    withSQLConf(SQLConf.ALLOW_CAST_BETWEEN_DATETIME_AND_NUMERIC_IN_ANSI.key -> "true") {
-      withDefaultTimeZone(UTC) {
-        val negativeTs = Timestamp.valueOf("1900-05-05 18:34:56.1")
-        assert(negativeTs.getTime < 0)
-        Seq(ByteType, ShortType, IntegerType).foreach { dt =>
-          checkExceptionInExpression[SparkArithmeticException](
-            cast(negativeTs, dt), s"to ${dt.catalogString} causes overflow")
-        }
+    withDefaultTimeZone(UTC) {
+      val negativeTs = Timestamp.valueOf("1900-05-05 18:34:56.1")
+      assert(negativeTs.getTime < 0)
+      Seq(ByteType, ShortType, IntegerType).foreach { dt =>
+        checkExceptionInExpression[SparkArithmeticException](
+          cast(negativeTs, dt), s"to ${dt.catalogString} causes overflow")
       }
-    }
-  }
-
-  test("cast from timestamp") {
-    withSQLConf(SQLConf.ALLOW_CAST_BETWEEN_DATETIME_AND_NUMERIC_IN_ANSI.key -> "true") {
-      val millis = 15 * 1000 + 3
-      val seconds = millis * 1000 + 3
-      val ts = new Timestamp(millis)
-      val tss = new Timestamp(seconds)
-      checkEvaluation(cast(ts, ShortType), 15.toShort)
-      checkEvaluation(cast(ts, IntegerType), 15)
-      checkEvaluation(cast(ts, LongType), 15.toLong)
-      checkEvaluation(cast(ts, FloatType), 15.003f)
-      checkEvaluation(cast(ts, DoubleType), 15.003)
-
-      checkEvaluation(cast(cast(tss, ShortType), TimestampType),
-        fromJavaTimestamp(ts) * MILLIS_PER_SECOND)
-      checkEvaluation(cast(cast(tss, IntegerType), TimestampType),
-        fromJavaTimestamp(ts) * MILLIS_PER_SECOND)
-      checkEvaluation(cast(cast(tss, LongType), TimestampType),
-        fromJavaTimestamp(ts) * MILLIS_PER_SECOND)
-      checkEvaluation(
-        cast(cast(millis.toFloat / MILLIS_PER_SECOND, TimestampType), FloatType),
-        millis.toFloat / MILLIS_PER_SECOND)
-      checkEvaluation(
-        cast(cast(millis.toDouble / MILLIS_PER_SECOND, TimestampType), DoubleType),
-        millis.toDouble / MILLIS_PER_SECOND)
-      checkEvaluation(
-        cast(cast(Decimal(1), TimestampType), DecimalType.SYSTEM_DEFAULT),
-        Decimal(1))
-
-      // A test for higher precision than millis
-      checkEvaluation(cast(cast(0.000001, TimestampType), DoubleType), 0.000001)
     }
   }
 
   test("cast a timestamp before the epoch 1970-01-01 00:00:00Z") {
-    withSQLConf(SQLConf.ALLOW_CAST_BETWEEN_DATETIME_AND_NUMERIC_IN_ANSI.key -> "true") {
-      withDefaultTimeZone(UTC) {
-        val negativeTs = Timestamp.valueOf("1900-05-05 18:34:56.1")
-        assert(negativeTs.getTime < 0)
-        Seq(ByteType, ShortType, IntegerType).foreach { dt =>
-          checkExceptionInExpression[SparkArithmeticException](
-            cast(negativeTs, dt), s"to ${dt.catalogString} causes overflow")
-        }
-        val expectedSecs = Math.floorDiv(negativeTs.getTime, MILLIS_PER_SECOND)
-        checkEvaluation(cast(negativeTs, LongType), expectedSecs)
+    withDefaultTimeZone(UTC) {
+      val negativeTs = Timestamp.valueOf("1900-05-05 18:34:56.1")
+      assert(negativeTs.getTime < 0)
+      Seq(ByteType, ShortType, IntegerType).foreach { dt =>
+        checkExceptionInExpression[SparkArithmeticException](
+          cast(negativeTs, dt), s"to ${dt.catalogString} causes overflow")
       }
-    }
-  }
-
-  test("cast from date") {
-    withSQLConf(SQLConf.ALLOW_CAST_BETWEEN_DATETIME_AND_NUMERIC_IN_ANSI.key -> "true") {
-      val d = Date.valueOf("1970-01-01")
-      checkEvaluation(cast(d, ShortType), null)
-      checkEvaluation(cast(d, IntegerType), null)
-      checkEvaluation(cast(d, LongType), null)
-      checkEvaluation(cast(d, FloatType), null)
-      checkEvaluation(cast(d, DoubleType), null)
-      checkEvaluation(cast(d, DecimalType.SYSTEM_DEFAULT), null)
-      checkEvaluation(cast(d, DecimalType(10, 2)), null)
-      checkEvaluation(cast(d, StringType), "1970-01-01")
-
-      checkEvaluation(
-        cast(cast(d, TimestampType, UTC_OPT), StringType, UTC_OPT),
-        "1970-01-01 00:00:00")
+      val expectedSecs = Math.floorDiv(negativeTs.getTime, MILLIS_PER_SECOND)
+      checkEvaluation(cast(negativeTs, LongType), expectedSecs)
     }
   }
 
@@ -386,6 +315,28 @@ abstract class AnsiCastSuiteBase extends CastSuiteBase {
       val ret = cast(array_notNull, to)
       assert(ret.resolved)
       checkCastToBooleanError(array_notNull, to, Seq(null, true, false))
+    }
+
+    {
+      val ret = cast(array_notNull, ArrayType(BooleanType, containsNull = false))
+      assert(ret.resolved == !isTryCast)
+      if (!isTryCast) {
+        checkExceptionInExpression[UnsupportedOperationException](
+          ret, "invalid input syntax for type boolean")
+      }
+    }
+  }
+
+  test("cast from array III") {
+    if (!isTryCast) {
+      val from: DataType = ArrayType(DoubleType, containsNull = false)
+      val array = Literal.create(Seq(1.0, 2.0), from)
+      val to: DataType = ArrayType(IntegerType, containsNull = false)
+      val answer = Literal.create(Seq(1, 2), to).value
+      checkEvaluation(cast(array, to), answer)
+
+      val overflowArray = Literal.create(Seq(Int.MaxValue + 1.0D), from)
+      checkExceptionInExpression[ArithmeticException](cast(overflowArray, to), "overflow")
     }
   }
 
@@ -411,6 +362,49 @@ abstract class AnsiCastSuiteBase extends CastSuiteBase {
       val ret = cast(map_notNull, to)
       assert(ret.resolved)
       checkCastToBooleanError(map_notNull, to, Map("a" -> null, "b" -> true, "c" -> false))
+    }
+
+    {
+      val ret = cast(map, MapType(IntegerType, StringType, valueContainsNull = true))
+      assert(ret.resolved == !isTryCast)
+      if (!isTryCast) {
+        checkExceptionInExpression[NumberFormatException](
+          ret, "invalid input syntax for type numeric")
+      }
+    }
+
+    {
+      val ret = cast(map_notNull, MapType(StringType, BooleanType, valueContainsNull = false))
+      assert(ret.resolved == !isTryCast)
+      if (!isTryCast) {
+        checkExceptionInExpression[UnsupportedOperationException](
+          ret, "invalid input syntax for type boolean")
+      }
+    }
+
+    {
+      val ret = cast(map_notNull, MapType(IntegerType, StringType, valueContainsNull = true))
+      assert(ret.resolved == !isTryCast)
+      if (!isTryCast) {
+        checkExceptionInExpression[NumberFormatException](
+          ret, "invalid input syntax for type numeric")
+      }
+    }
+  }
+
+  test("cast from map III") {
+    if (!isTryCast) {
+      val from: DataType = MapType(DoubleType, DoubleType, valueContainsNull = false)
+      val map = Literal.create(Map(1.0 -> 2.0), from)
+      val to: DataType = MapType(IntegerType, IntegerType, valueContainsNull = false)
+      val answer = Literal.create(Map(1 -> 2), to).value
+      checkEvaluation(cast(map, to), answer)
+
+      Seq(
+        Literal.create(Map((Int.MaxValue + 1.0) -> 2.0), from),
+        Literal.create(Map(1.0 -> (Int.MinValue - 1.0)), from)).foreach { overflowMap =>
+        checkExceptionInExpression[ArithmeticException](cast(overflowMap, to), "overflow")
+      }
     }
   }
 
@@ -463,6 +457,62 @@ abstract class AnsiCastSuiteBase extends CastSuiteBase {
       val ret = cast(struct_notNull, to)
       assert(ret.resolved)
       checkCastToBooleanError(struct_notNull, to, InternalRow(null, true, false))
+    }
+
+    {
+      val ret = cast(struct_notNull, StructType(Seq(
+        StructField("a", BooleanType, nullable = true),
+        StructField("b", BooleanType, nullable = true),
+        StructField("c", BooleanType, nullable = false))))
+      assert(ret.resolved == !isTryCast)
+      if (!isTryCast) {
+        checkExceptionInExpression[UnsupportedOperationException](
+          ret, "invalid input syntax for type boolean")
+      }
+    }
+  }
+
+  test("cast from struct III") {
+    if (!isTryCast) {
+      val from: DataType = StructType(Seq(StructField("a", DoubleType, nullable = false)))
+      val struct = Literal.create(InternalRow(1.0), from)
+      val to: DataType = StructType(Seq(StructField("a", IntegerType, nullable = false)))
+      val answer = Literal.create(InternalRow(1), to).value
+      checkEvaluation(cast(struct, to), answer)
+
+      val overflowStruct = Literal.create(InternalRow(Int.MaxValue + 1.0), from)
+      checkExceptionInExpression[ArithmeticException](cast(overflowStruct, to), "overflow")
+    }
+  }
+
+  test("complex casting") {
+    val complex = Literal.create(
+      Row(
+        Seq("123", "true", "f"),
+        Map("a" -> "123", "b" -> "true", "c" -> "f"),
+        Row(0)),
+      StructType(Seq(
+        StructField("a",
+          ArrayType(StringType, containsNull = false), nullable = true),
+        StructField("m",
+          MapType(StringType, StringType, valueContainsNull = false), nullable = true),
+        StructField("s",
+          StructType(Seq(
+            StructField("i", IntegerType, nullable = true)))))))
+
+    val ret = cast(complex, StructType(Seq(
+      StructField("a",
+        ArrayType(IntegerType, containsNull = true), nullable = true),
+      StructField("m",
+        MapType(StringType, BooleanType, valueContainsNull = false), nullable = true),
+      StructField("s",
+        StructType(Seq(
+          StructField("l", LongType, nullable = true)))))))
+
+    assert(ret.resolved === !isTryCast)
+    if (!isTryCast) {
+      checkExceptionInExpression[NumberFormatException](
+        ret, "invalid input syntax for type numeric")
     }
   }
 

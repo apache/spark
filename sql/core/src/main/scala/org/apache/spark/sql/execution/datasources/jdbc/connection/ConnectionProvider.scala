@@ -86,16 +86,20 @@ protected abstract class ConnectionProviderBase extends Logging {
         filteredProviders.head
     }
 
-    SecurityConfigurationLock.synchronized {
-      // Inside getConnection it's safe to get parent again because SecurityConfigurationLock
-      // makes sure it's untouched
-      val parent = Configuration.getConfiguration
-      try {
-        selectedProvider.getConnection(driver, options)
-      } finally {
-        logDebug("Restoring original security configuration")
-        Configuration.setConfiguration(parent)
+    if (selectedProvider.modifiesSecurityContext(driver, options)) {
+      SecurityConfigurationLock.synchronized {
+        // Inside getConnection it's safe to get parent again because SecurityConfigurationLock
+        // makes sure it's untouched
+        val parent = Configuration.getConfiguration
+        try {
+          selectedProvider.getConnection(driver, options)
+        } finally {
+          logDebug("Restoring original security configuration")
+          Configuration.setConfiguration(parent)
+        }
       }
+    } else {
+      selectedProvider.getConnection(driver, options)
     }
   }
 }

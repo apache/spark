@@ -24,9 +24,26 @@ import warnings
 import importlib
 from threading import RLock
 from tempfile import NamedTemporaryFile
+from types import TracebackType
+from typing import (
+    Any,
+    Callable,
+    cast,
+    ClassVar,
+    Dict,
+    Iterable,
+    List,
+    NoReturn,
+    Optional,
+    Sequence,
+    Tuple,
+    Type,
+    TYPE_CHECKING,
+    TypeVar,
+)
 
+from py4j.java_collections import JavaMap
 from py4j.protocol import Py4JError
-from py4j.java_gateway import is_instance_of
 
 from pyspark import accumulators, since
 from pyspark.accumulators import Accumulator
@@ -35,8 +52,9 @@ from pyspark.conf import SparkConf
 from pyspark.files import SparkFiles
 from pyspark.java_gateway import launch_gateway, local_connect_and_auth
 from pyspark.serializers import (
-    PickleSerializer,
+    CPickleSerializer,
     BatchedSerializer,
+    Serializer,
     UTF8Deserializer,
     PairDeserializer,
     AutoBatchedSerializer,
@@ -45,25 +63,31 @@ from pyspark.serializers import (
 )
 from pyspark.storagelevel import StorageLevel
 from pyspark.resource.information import ResourceInformation
-from pyspark.rdd import RDD, _load_from_socket
+from pyspark.rdd import RDD, _load_from_socket  # type: ignore[attr-defined]
 from pyspark.taskcontext import TaskContext
 from pyspark.traceback_utils import CallSite, first_spark_call
 from pyspark.status import StatusTracker
-from pyspark.profiler import ProfilerCollector, BasicProfiler
+from pyspark.profiler import ProfilerCollector, BasicProfiler, UDFBasicProfiler
+from py4j.java_gateway import is_instance_of, JavaGateway, JavaObject, JVMView
 
+if TYPE_CHECKING:
+    from pyspark.accumulators import AccumulatorParam
 
 __all__ = ["SparkContext"]
 
 
 # These are special default configs for PySpark, they will overwrite
 # the default ones for Spark if they are not configured by user.
-DEFAULT_CONFIGS = {
+DEFAULT_CONFIGS: Dict[str, Any] = {
     "spark.serializer.objectStreamReset": 100,
     "spark.rdd.compress": True,
 }
 
+T = TypeVar("T")
+U = TypeVar("U")
 
-class SparkContext(object):
+
+class SparkContext:
 
     """
     Main entry point for Spark functionality. A SparkContext represents the
@@ -105,6 +129,9 @@ class SparkContext(object):
     profiler_cls : type, optional
         A class of custom Profiler used to do profiling
         (default is :class:`pyspark.profiler.BasicProfiler`).
+    udf_profiler_cls : type, optional
+        A class of custom Profiler used to do udf profiling
+        (default is :class:`pyspark.profiler.UDFBasicProfiler`).
 
     Notes
     -----
@@ -125,30 +152,39 @@ class SparkContext(object):
     ValueError: ...
     """
 
-    _gateway = None
-    _jvm = None
+    _gateway: ClassVar[Optional[JavaGateway]] = None
+    _jvm: ClassVar[Optional[JVMView]] = None
     _next_accum_id = 0
-    _active_spark_context = None
+    _active_spark_context: ClassVar[Optional["SparkContext"]] = None
     _lock = RLock()
-    _python_includes = None  # zip and egg files that need to be added to PYTHONPATH
+    _python_includes: Optional[
+        List[str]
+    ] = None  # zip and egg files that need to be added to PYTHONPATH
+    serializer: Serializer
+    profiler_collector: ProfilerCollector
 
-    PACKAGE_EXTENSIONS = (".zip", ".egg", ".jar")
+    PACKAGE_EXTENSIONS: Iterable[str] = (".zip", ".egg", ".jar")
 
     def __init__(
         self,
-        master=None,
-        appName=None,
-        sparkHome=None,
-        pyFiles=None,
-        environment=None,
-        batchSize=0,
-        serializer=PickleSerializer(),
-        conf=None,
-        gateway=None,
-        jsc=None,
-        profiler_cls=BasicProfiler,
+        master: Optional[str] = None,
+        appName: Optional[str] = None,
+        sparkHome: Optional[str] = None,
+        pyFiles: Optional[List[str]] = None,
+        environment: Optional[Dict[str, Any]] = None,
+        batchSize: int = 0,
+        serializer: "Serializer" = CPickleSerializer(),
+        conf: Optional[SparkConf] = None,
+        gateway: Optional[JavaGateway] = None,
+        jsc: Optional[JavaObject] = None,
+        profiler_cls: Type[BasicProfiler] = BasicProfiler,
+        udf_profiler_cls: Type[UDFBasicProfiler] = UDFBasicProfiler,
     ):
-        if conf is None or conf.get("spark.executor.allowSparkContext", "false").lower() != "true":
+
+        if (
+            conf is None
+            or cast(str, conf.get("spark.executor.allowSparkContext", "false")).lower() != "true"
+        ):
             # In order to prevent SparkContext from being created in executors.
             SparkContext._assert_on_driver()
 
@@ -172,25 +208,27 @@ class SparkContext(object):
                 conf,
                 jsc,
                 profiler_cls,
+                udf_profiler_cls,
             )
-        except:
+        except BaseException:
             # If an error occurs, clean up in order to allow future SparkContext creation:
             self.stop()
             raise
 
     def _do_init(
         self,
-        master,
-        appName,
-        sparkHome,
-        pyFiles,
-        environment,
-        batchSize,
-        serializer,
-        conf,
-        jsc,
-        profiler_cls,
-    ):
+        master: Optional[str],
+        appName: Optional[str],
+        sparkHome: Optional[str],
+        pyFiles: Optional[List[str]],
+        environment: Optional[Dict[str, Any]],
+        batchSize: int,
+        serializer: Serializer,
+        conf: Optional[SparkConf],
+        jsc: JavaObject,
+        profiler_cls: Type[BasicProfiler] = BasicProfiler,
+        udf_profiler_cls: Type[UDFBasicProfiler] = UDFBasicProfiler,
+    ) -> None:
         self.environment = environment or {}
         # java gateway must have been launched at this point.
         if conf is not None and conf._jconf is not None:
@@ -250,9 +288,12 @@ class SparkContext(object):
 
         # Create a single Accumulator in Java that we'll send all our updates through;
         # they will be passed back to us through a TCP server
+        assert self._gateway is not None
         auth_token = self._gateway.gateway_parameters.auth_token
-        self._accumulatorServer = accumulators._start_update_server(auth_token)
+        start_update_server = accumulators._start_update_server  # type: ignore[attr-defined]
+        self._accumulatorServer = start_update_server(auth_token)
         (host, port) = self._accumulatorServer.server_address
+        assert self._jvm is not None
         self._javaAccumulator = self._jvm.PythonAccumulatorV2(host, port, auth_token)
         self._jsc.sc().register(self._javaAccumulator)
 
@@ -267,11 +308,6 @@ class SparkContext(object):
 
         self.pythonExec = os.environ.get("PYSPARK_PYTHON", "python3")
         self.pythonVer = "%d.%d" % sys.version_info[:2]
-
-        if sys.version_info[:2] < (3, 7):
-            with warnings.catch_warnings():
-                warnings.simplefilter("once")
-                warnings.warn("Python 3.6 support is deprecated in Spark 3.2.", FutureWarning)
 
         # Broadcast's __reduce__ method stores Broadcast instances here.
         # This allows other code to determine which Broadcast instances have
@@ -290,7 +326,7 @@ class SparkContext(object):
 
         # Deploy code dependencies set by spark-submit; these will already have been added
         # with SparkContext.addFile, so we just need to add them to the PYTHONPATH
-        for path in self._conf.get("spark.submit.pyFiles", "").split(","):
+        for path in cast(str, self._conf.get("spark.submit.pyFiles", "")).split(","):
             if path != "":
                 (dirname, filename) = os.path.split(path)
                 try:
@@ -311,6 +347,7 @@ class SparkContext(object):
                     )
 
         # Create a temporary directory inside spark.local.dir:
+        assert self._jvm is not None
         local_dir = self._jvm.org.apache.spark.util.Utils.getLocalDir(self._jsc.sc().conf())
         self._temp_dir = self._jvm.org.apache.spark.util.Utils.createTempDir(
             local_dir, "pyspark"
@@ -319,26 +356,28 @@ class SparkContext(object):
         # profiling stats collected for each PythonRDD
         if self._conf.get("spark.python.profile", "false") == "true":
             dump_path = self._conf.get("spark.python.profile.dump", None)
-            self.profiler_collector = ProfilerCollector(profiler_cls, dump_path)
+            self.profiler_collector = ProfilerCollector(profiler_cls, udf_profiler_cls, dump_path)
         else:
-            self.profiler_collector = None
+            self.profiler_collector = None  # type: ignore[assignment]
 
         # create a signal handler which would be invoked on receiving SIGINT
-        def signal_handler(signal, frame):
+        def signal_handler(signal: Any, frame: Any) -> NoReturn:
             self.cancelAllJobs()
             raise KeyboardInterrupt()
 
         # see http://stackoverflow.com/questions/23206787/
-        if isinstance(threading.current_thread(), threading._MainThread):
+        if isinstance(
+            threading.current_thread(), threading._MainThread  # type: ignore[attr-defined]
+        ):
             signal.signal(signal.SIGINT, signal_handler)
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return "<SparkContext master={master} appName={appName}>".format(
             master=self.master,
             appName=self.appName,
         )
 
-    def _repr_html_(self):
+    def _repr_html_(self) -> str:
         return """
         <div>
             <p><b>SparkContext</b></p>
@@ -358,14 +397,20 @@ class SparkContext(object):
             sc=self
         )
 
-    def _initialize_context(self, jconf):
+    def _initialize_context(self, jconf: JavaObject) -> JavaObject:
         """
         Initialize SparkContext in function to allow subclass specific initialization
         """
+        assert self._jvm is not None
         return self._jvm.JavaSparkContext(jconf)
 
     @classmethod
-    def _ensure_initialized(cls, instance=None, gateway=None, conf=None):
+    def _ensure_initialized(
+        cls,
+        instance: Optional["SparkContext"] = None,
+        gateway: Optional[JavaGateway] = None,
+        conf: Optional[SparkConf] = None,
+    ) -> None:
         """
         Checks whether a SparkContext is initialized or not.
         Throws error if a SparkContext is already running.
@@ -400,7 +445,7 @@ class SparkContext(object):
                 else:
                     SparkContext._active_spark_context = instance
 
-    def __getnewargs__(self):
+    def __getnewargs__(self) -> NoReturn:
         # This method is called when attempting to pickle SparkContext, which is always an error:
         raise RuntimeError(
             "It appears that you are attempting to reference SparkContext from a broadcast "
@@ -408,13 +453,18 @@ class SparkContext(object):
             "not in code that it run on workers. For more information, see SPARK-5063."
         )
 
-    def __enter__(self):
+    def __enter__(self) -> "SparkContext":
         """
         Enable 'with SparkContext(...) as sc: app(sc)' syntax.
         """
         return self
 
-    def __exit__(self, type, value, trace):
+    def __exit__(
+        self,
+        type: Optional[Type[BaseException]],
+        value: Optional[BaseException],
+        trace: Optional[TracebackType],
+    ) -> None:
         """
         Enable 'with SparkContext(...) as sc: app' syntax.
 
@@ -423,7 +473,7 @@ class SparkContext(object):
         self.stop()
 
     @classmethod
-    def getOrCreate(cls, conf=None):
+    def getOrCreate(cls, conf: Optional[SparkConf] = None) -> "SparkContext":
         """
         Get or instantiate a SparkContext and register it as a singleton object.
 
@@ -434,9 +484,10 @@ class SparkContext(object):
         with SparkContext._lock:
             if SparkContext._active_spark_context is None:
                 SparkContext(conf=conf or SparkConf())
+            assert SparkContext._active_spark_context is not None
             return SparkContext._active_spark_context
 
-    def setLogLevel(self, logLevel):
+    def setLogLevel(self, logLevel: str) -> None:
         """
         Control our logLevel. This overrides any user-defined log settings.
         Valid log levels include: ALL, DEBUG, ERROR, FATAL, INFO, OFF, TRACE, WARN
@@ -444,23 +495,24 @@ class SparkContext(object):
         self._jsc.setLogLevel(logLevel)
 
     @classmethod
-    def setSystemProperty(cls, key, value):
+    def setSystemProperty(cls, key: str, value: str) -> None:
         """
         Set a Java system property, such as spark.executor.memory. This must
         must be invoked before instantiating SparkContext.
         """
         SparkContext._ensure_initialized()
+        assert SparkContext._jvm is not None
         SparkContext._jvm.java.lang.System.setProperty(key, value)
 
     @property
-    def version(self):
+    def version(self) -> str:
         """
         The version of Spark on which this application is running.
         """
         return self._jsc.version()
 
     @property
-    def applicationId(self):
+    def applicationId(self) -> str:
         """
         A unique identifier for the Spark application.
         Its format depends on the scheduler implementation.
@@ -476,17 +528,17 @@ class SparkContext(object):
         return self._jsc.sc().applicationId()
 
     @property
-    def uiWebUrl(self):
+    def uiWebUrl(self) -> str:
         """Return the URL of the SparkUI instance started by this SparkContext"""
         return self._jsc.sc().uiWebUrl().get()
 
     @property
-    def startTime(self):
+    def startTime(self) -> int:
         """Return the epoch time when the Spark Context was started."""
         return self._jsc.startTime()
 
     @property
-    def defaultParallelism(self):
+    def defaultParallelism(self) -> int:
         """
         Default level of parallelism to use when not given by user (e.g. for
         reduce tasks)
@@ -494,13 +546,13 @@ class SparkContext(object):
         return self._jsc.sc().defaultParallelism()
 
     @property
-    def defaultMinPartitions(self):
+    def defaultMinPartitions(self) -> int:
         """
         Default min number of partitions for Hadoop RDDs when not given by user
         """
         return self._jsc.sc().defaultMinPartitions()
 
-    def stop(self):
+    def stop(self) -> None:
         """
         Shut down the SparkContext.
         """
@@ -519,17 +571,19 @@ class SparkContext(object):
                 self._jsc = None
         if getattr(self, "_accumulatorServer", None):
             self._accumulatorServer.shutdown()
-            self._accumulatorServer = None
+            self._accumulatorServer = None  # type: ignore[assignment]
         with SparkContext._lock:
-            SparkContext._active_spark_context = None
+            SparkContext._active_spark_context = None  # type: ignore[assignment]
 
-    def emptyRDD(self):
+    def emptyRDD(self) -> RDD[Any]:
         """
         Create an RDD that has no partitions or elements.
         """
         return RDD(self._jsc.emptyRDD(), self, NoOpSerializer())
 
-    def range(self, start, end=None, step=1, numSlices=None):
+    def range(
+        self, start: int, end: Optional[int] = None, step: int = 1, numSlices: Optional[int] = None
+    ) -> RDD[int]:
         """
         Create a new RDD of int containing elements from `start` to `end`
         (exclusive), increased by `step` every element. Can be called the same
@@ -567,7 +621,7 @@ class SparkContext(object):
 
         return self.parallelize(range(start, end, step), numSlices)
 
-    def parallelize(self, c, numSlices=None):
+    def parallelize(self, c: Iterable[T], numSlices: Optional[int] = None) -> RDD[T]:
         """
         Distribute a local Python collection to form an RDD. Using range
         is recommended if the input represents a range for performance.
@@ -584,13 +638,14 @@ class SparkContext(object):
             size = len(c)
             if size == 0:
                 return self.parallelize([], numSlices)
-            step = c[1] - c[0] if size > 1 else 1
-            start0 = c[0]
+            step = c[1] - c[0] if size > 1 else 1  # type: ignore[index]
+            start0 = c[0]  # type: ignore[index]
 
-            def getStart(split):
+            def getStart(split: int) -> int:
+                assert numSlices is not None
                 return start0 + int((split * size / numSlices)) * step
 
-            def f(split, iterator):
+            def f(split: int, iterator: Iterable[T]) -> Iterable:
                 # it's an empty iterator here but we need this line for triggering the
                 # logic of signal handling in FramedSerializer.load_stream, for instance,
                 # SpecialLengths.END_OF_DATA_SECTION in _read_with_length. Since
@@ -606,19 +661,29 @@ class SparkContext(object):
         # Make sure we distribute data evenly if it's smaller than self.batchSize
         if "__len__" not in dir(c):
             c = list(c)  # Make it a list so we can compute its length
-        batchSize = max(1, min(len(c) // numSlices, self._batchSize or 1024))
+        batchSize = max(
+            1, min(len(c) // numSlices, self._batchSize or 1024)  # type: ignore[arg-type]
+        )
         serializer = BatchedSerializer(self._unbatched_serializer, batchSize)
 
-        def reader_func(temp_filename):
+        def reader_func(temp_filename: str) -> JavaObject:
+            assert self._jvm is not None
             return self._jvm.PythonRDD.readRDDFromFile(self._jsc, temp_filename, numSlices)
 
-        def createRDDServer():
+        def createRDDServer() -> JavaObject:
+            assert self._jvm is not None
             return self._jvm.PythonParallelizeServer(self._jsc.sc(), numSlices)
 
         jrdd = self._serialize_to_jvm(c, serializer, reader_func, createRDDServer)
         return RDD(jrdd, self, serializer)
 
-    def _serialize_to_jvm(self, data, serializer, reader_func, createRDDServer):
+    def _serialize_to_jvm(
+        self,
+        data: Iterable[T],
+        serializer: Serializer,
+        reader_func: Callable,
+        createRDDServer: Callable,
+    ) -> JavaObject:
         """
         Using py4j to send a large dataset to the jvm is really slow, so we use either a file
         or a socket if we have encryption enabled.
@@ -660,7 +725,7 @@ class SparkContext(object):
                 # we eagerly reads the file so we can delete right after.
                 os.unlink(tempFile.name)
 
-    def pickleFile(self, name, minPartitions=None):
+    def pickleFile(self, name: str, minPartitions: Optional[int] = None) -> RDD[Any]:
         """
         Load an RDD previously saved using :meth:`RDD.saveAsPickleFile` method.
 
@@ -675,7 +740,9 @@ class SparkContext(object):
         minPartitions = minPartitions or self.defaultMinPartitions
         return RDD(self._jsc.objectFile(name, minPartitions), self)
 
-    def textFile(self, name, minPartitions=None, use_unicode=True):
+    def textFile(
+        self, name: str, minPartitions: Optional[int] = None, use_unicode: bool = True
+    ) -> RDD[str]:
         """
         Read a text file from HDFS, a local file system (available on all
         nodes), or any Hadoop-supported file system URI, and return it as an
@@ -698,7 +765,9 @@ class SparkContext(object):
         minPartitions = minPartitions or min(self.defaultParallelism, 2)
         return RDD(self._jsc.textFile(name, minPartitions), self, UTF8Deserializer(use_unicode))
 
-    def wholeTextFiles(self, path, minPartitions=None, use_unicode=True):
+    def wholeTextFiles(
+        self, path: str, minPartitions: Optional[int] = None, use_unicode: bool = True
+    ) -> RDD[Tuple[str, str]]:
         """
         Read a directory of text files from HDFS, a local file system
         (available on all nodes), or any  Hadoop-supported file system
@@ -753,7 +822,7 @@ class SparkContext(object):
             PairDeserializer(UTF8Deserializer(use_unicode), UTF8Deserializer(use_unicode)),
         )
 
-    def binaryFiles(self, path, minPartitions=None):
+    def binaryFiles(self, path: str, minPartitions: Optional[int] = None) -> RDD[Tuple[str, bytes]]:
         """
         Read a directory of binary files from HDFS, a local file system
         (available on all nodes), or any Hadoop-supported file system URI
@@ -772,7 +841,7 @@ class SparkContext(object):
             PairDeserializer(UTF8Deserializer(), NoOpSerializer()),
         )
 
-    def binaryRecords(self, path, recordLength):
+    def binaryRecords(self, path: str, recordLength: int) -> RDD[bytes]:
         """
         Load data from a flat binary file, assuming each record is a set of numbers
         with the specified numerical format (see ByteBuffer), and the number of
@@ -787,7 +856,8 @@ class SparkContext(object):
         """
         return RDD(self._jsc.binaryRecords(path, recordLength), self, NoOpSerializer())
 
-    def _dictToJavaMap(self, d):
+    def _dictToJavaMap(self, d: Optional[Dict[str, str]]) -> JavaMap:
+        assert self._jvm is not None
         jm = self._jvm.java.util.HashMap()
         if not d:
             d = {}
@@ -797,14 +867,14 @@ class SparkContext(object):
 
     def sequenceFile(
         self,
-        path,
-        keyClass=None,
-        valueClass=None,
-        keyConverter=None,
-        valueConverter=None,
-        minSplits=None,
-        batchSize=0,
-    ):
+        path: str,
+        keyClass: Optional[str] = None,
+        valueClass: Optional[str] = None,
+        keyConverter: Optional[str] = None,
+        valueConverter: Optional[str] = None,
+        minSplits: Optional[int] = None,
+        batchSize: int = 0,
+    ) -> RDD[Tuple[T, U]]:
         """
         Read a Hadoop SequenceFile with arbitrary key and value Writable class from HDFS,
         a local file system (available on all nodes), or any Hadoop-supported file system URI.
@@ -814,7 +884,7 @@ class SparkContext(object):
                and value Writable classes
             2. Serialization is attempted via Pickle pickling
             3. If this fails, the fallback is to call 'toString' on each key and value
-            4. :class:`PickleSerializer` is used to deserialize pickled objects on the Python side
+            4. :class:`CPickleSerializer` is used to deserialize pickled objects on the Python side
 
         Parameters
         ----------
@@ -836,6 +906,7 @@ class SparkContext(object):
             Java object. (default 0, choose batchSize automatically)
         """
         minSplits = minSplits or min(self.defaultParallelism, 2)
+        assert self._jvm is not None
         jrdd = self._jvm.PythonRDD.sequenceFile(
             self._jsc,
             path,
@@ -850,15 +921,15 @@ class SparkContext(object):
 
     def newAPIHadoopFile(
         self,
-        path,
-        inputFormatClass,
-        keyClass,
-        valueClass,
-        keyConverter=None,
-        valueConverter=None,
-        conf=None,
-        batchSize=0,
-    ):
+        path: str,
+        inputFormatClass: str,
+        keyClass: str,
+        valueClass: str,
+        keyConverter: Optional[str] = None,
+        valueConverter: Optional[str] = None,
+        conf: Optional[Dict[str, str]] = None,
+        batchSize: int = 0,
+    ) -> RDD[Tuple[T, U]]:
         """
         Read a 'new API' Hadoop InputFormat with arbitrary key and value class from HDFS,
         a local file system (available on all nodes), or any Hadoop-supported file system URI.
@@ -894,6 +965,7 @@ class SparkContext(object):
             Java object. (default 0, choose batchSize automatically)
         """
         jconf = self._dictToJavaMap(conf)
+        assert self._jvm is not None
         jrdd = self._jvm.PythonRDD.newAPIHadoopFile(
             self._jsc,
             path,
@@ -909,14 +981,14 @@ class SparkContext(object):
 
     def newAPIHadoopRDD(
         self,
-        inputFormatClass,
-        keyClass,
-        valueClass,
-        keyConverter=None,
-        valueConverter=None,
-        conf=None,
-        batchSize=0,
-    ):
+        inputFormatClass: str,
+        keyClass: str,
+        valueClass: str,
+        keyConverter: Optional[str] = None,
+        valueConverter: Optional[str] = None,
+        conf: Optional[Dict[str, str]] = None,
+        batchSize: int = 0,
+    ) -> RDD[Tuple[T, U]]:
         """
         Read a 'new API' Hadoop InputFormat with arbitrary key and value class, from an arbitrary
         Hadoop configuration, which is passed in as a Python dict.
@@ -946,6 +1018,7 @@ class SparkContext(object):
             Java object. (default 0, choose batchSize automatically)
         """
         jconf = self._dictToJavaMap(conf)
+        assert self._jvm is not None
         jrdd = self._jvm.PythonRDD.newAPIHadoopRDD(
             self._jsc,
             inputFormatClass,
@@ -960,15 +1033,15 @@ class SparkContext(object):
 
     def hadoopFile(
         self,
-        path,
-        inputFormatClass,
-        keyClass,
-        valueClass,
-        keyConverter=None,
-        valueConverter=None,
-        conf=None,
-        batchSize=0,
-    ):
+        path: str,
+        inputFormatClass: str,
+        keyClass: str,
+        valueClass: str,
+        keyConverter: Optional[str] = None,
+        valueConverter: Optional[str] = None,
+        conf: Optional[Dict[str, str]] = None,
+        batchSize: int = 0,
+    ) -> RDD[Tuple[T, U]]:
         """
         Read an 'old' Hadoop InputFormat with arbitrary key and value class from HDFS,
         a local file system (available on all nodes), or any Hadoop-supported file system URI.
@@ -1000,6 +1073,7 @@ class SparkContext(object):
             Java object. (default 0, choose batchSize automatically)
         """
         jconf = self._dictToJavaMap(conf)
+        assert self._jvm is not None
         jrdd = self._jvm.PythonRDD.hadoopFile(
             self._jsc,
             path,
@@ -1015,14 +1089,14 @@ class SparkContext(object):
 
     def hadoopRDD(
         self,
-        inputFormatClass,
-        keyClass,
-        valueClass,
-        keyConverter=None,
-        valueConverter=None,
-        conf=None,
-        batchSize=0,
-    ):
+        inputFormatClass: str,
+        keyClass: str,
+        valueClass: str,
+        keyConverter: Optional[str] = None,
+        valueConverter: Optional[str] = None,
+        conf: Optional[Dict[str, str]] = None,
+        batchSize: int = 0,
+    ) -> RDD[Tuple[T, U]]:
         """
         Read an 'old' Hadoop InputFormat with arbitrary key and value class, from an arbitrary
         Hadoop configuration, which is passed in as a Python dict.
@@ -1052,6 +1126,7 @@ class SparkContext(object):
             Java object. (default 0, choose batchSize automatically)
         """
         jconf = self._dictToJavaMap(conf)
+        assert self._jvm is not None
         jrdd = self._jvm.PythonRDD.hadoopRDD(
             self._jsc,
             inputFormatClass,
@@ -1064,11 +1139,11 @@ class SparkContext(object):
         )
         return RDD(jrdd, self)
 
-    def _checkpointFile(self, name, input_deserializer):
+    def _checkpointFile(self, name: str, input_deserializer: PairDeserializer) -> RDD:
         jrdd = self._jsc.checkpointFile(name)
         return RDD(jrdd, self, input_deserializer)
 
-    def union(self, rdds):
+    def union(self, rdds: List[RDD[T]]) -> RDD[T]:
         """
         Build the union of a list of RDDs.
 
@@ -1088,29 +1163,36 @@ class SparkContext(object):
         >>> sorted(sc.union([textFile, parallelized]).collect())
         ['Hello', 'World!']
         """
-        first_jrdd_deserializer = rdds[0]._jrdd_deserializer
-        if any(x._jrdd_deserializer != first_jrdd_deserializer for x in rdds):
-            rdds = [x._reserialize() for x in rdds]
+        first_jrdd_deserializer = rdds[0]._jrdd_deserializer  # type: ignore[attr-defined]
+        if any(
+            x._jrdd_deserializer != first_jrdd_deserializer  # type: ignore[attr-defined]
+            for x in rdds
+        ):
+            rdds = [x._reserialize() for x in rdds]  # type: ignore[attr-defined]
         gw = SparkContext._gateway
+        assert gw is not None
         jvm = SparkContext._jvm
+        assert jvm is not None
         jrdd_cls = jvm.org.apache.spark.api.java.JavaRDD
         jpair_rdd_cls = jvm.org.apache.spark.api.java.JavaPairRDD
         jdouble_rdd_cls = jvm.org.apache.spark.api.java.JavaDoubleRDD
-        if is_instance_of(gw, rdds[0]._jrdd, jrdd_cls):
+        if is_instance_of(gw, rdds[0]._jrdd, jrdd_cls):  # type: ignore[attr-defined]
             cls = jrdd_cls
-        elif is_instance_of(gw, rdds[0]._jrdd, jpair_rdd_cls):
+        elif is_instance_of(gw, rdds[0]._jrdd, jpair_rdd_cls):  # type: ignore[attr-defined]
             cls = jpair_rdd_cls
-        elif is_instance_of(gw, rdds[0]._jrdd, jdouble_rdd_cls):
+        elif is_instance_of(gw, rdds[0]._jrdd, jdouble_rdd_cls):  # type: ignore[attr-defined]
             cls = jdouble_rdd_cls
         else:
-            cls_name = rdds[0]._jrdd.getClass().getCanonicalName()
+            cls_name = rdds[0]._jrdd.getClass().getCanonicalName()  # type: ignore[attr-defined]
             raise TypeError("Unsupported Java RDD class %s" % cls_name)
         jrdds = gw.new_array(cls, len(rdds))
         for i in range(0, len(rdds)):
-            jrdds[i] = rdds[i]._jrdd
-        return RDD(self._jsc.union(jrdds), self, rdds[0]._jrdd_deserializer)
+            jrdds[i] = rdds[i]._jrdd  # type: ignore[attr-defined]
+        return RDD(
+            self._jsc.union(jrdds), self, rdds[0]._jrdd_deserializer  # type: ignore[attr-defined]
+        )
 
-    def broadcast(self, value):
+    def broadcast(self, value: T) -> "Broadcast[T]":
         """
         Broadcast a read-only variable to the cluster, returning a :class:`Broadcast`
         object for reading it in distributed functions. The variable will
@@ -1118,7 +1200,9 @@ class SparkContext(object):
         """
         return Broadcast(self, value, self._pickled_broadcast_vars)
 
-    def accumulator(self, value, accum_param=None):
+    def accumulator(
+        self, value: T, accum_param: Optional["AccumulatorParam[T]"] = None
+    ) -> "Accumulator[T]":
         """
         Create an :class:`Accumulator` with the given initial value, using a given
         :class:`AccumulatorParam` helper object to define how to add values of the
@@ -1128,17 +1212,17 @@ class SparkContext(object):
         """
         if accum_param is None:
             if isinstance(value, int):
-                accum_param = accumulators.INT_ACCUMULATOR_PARAM
+                accum_param = cast("AccumulatorParam[T]", accumulators.INT_ACCUMULATOR_PARAM)
             elif isinstance(value, float):
-                accum_param = accumulators.FLOAT_ACCUMULATOR_PARAM
+                accum_param = cast("AccumulatorParam[T]", accumulators.FLOAT_ACCUMULATOR_PARAM)
             elif isinstance(value, complex):
-                accum_param = accumulators.COMPLEX_ACCUMULATOR_PARAM
+                accum_param = cast("AccumulatorParam[T]", accumulators.COMPLEX_ACCUMULATOR_PARAM)
             else:
                 raise TypeError("No default accumulator param for type %s" % type(value))
         SparkContext._next_accum_id += 1
         return Accumulator(SparkContext._next_accum_id - 1, value, accum_param)
 
-    def addFile(self, path, recursive=False):
+    def addFile(self, path: str, recursive: bool = False) -> None:
         """
         Add a file to be downloaded with this Spark job on every node.
         The `path` passed can be either a local file, a file in HDFS
@@ -1171,7 +1255,7 @@ class SparkContext(object):
         """
         self._jsc.sc().addFile(path, recursive)
 
-    def addPyFile(self, path):
+    def addPyFile(self, path: str) -> None:
         """
         Add a .py or .zip dependency for all tasks to be executed on this
         SparkContext in the future.  The `path` passed can be either a local
@@ -1185,13 +1269,58 @@ class SparkContext(object):
         self.addFile(path)
         (dirname, filename) = os.path.split(path)  # dirname may be directory or HDFS/S3 prefix
         if filename[-4:].lower() in self.PACKAGE_EXTENSIONS:
+            assert self._python_includes is not None
             self._python_includes.append(filename)
             # for tests in local mode
             sys.path.insert(1, os.path.join(SparkFiles.getRootDirectory(), filename))
 
         importlib.invalidate_caches()
 
-    def setCheckpointDir(self, dirName):
+    def addArchive(self, path: str) -> None:
+        """
+        Add an archive to be downloaded with this Spark job on every node.
+        The `path` passed can be either a local file, a file in HDFS
+        (or other Hadoop-supported filesystems), or an HTTP, HTTPS or
+        FTP URI.
+
+        To access the file in Spark jobs, use :meth:`SparkFiles.get` with the
+        filename to find its download/unpacked location. The given path should
+        be one of .zip, .tar, .tar.gz, .tgz and .jar.
+
+        .. versionadded:: 3.3.0
+
+        Notes
+        -----
+        A path can be added only once. Subsequent additions of the same path are ignored.
+        This API is experimental.
+
+        Examples
+        --------
+        Creates a zipped file that contains a text file written '100'.
+
+        >>> import zipfile
+        >>> from pyspark import SparkFiles
+        >>> path = os.path.join(tempdir, "test.txt")
+        >>> zip_path = os.path.join(tempdir, "test.zip")
+        >>> with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zipped:
+        ...     with open(path, "w") as f:
+        ...         _ = f.write("100")
+        ...     zipped.write(path, os.path.basename(path))
+        >>> sc.addArchive(zip_path)
+
+        Reads the '100' as an integer in the zipped file, and processes
+        it with the data in the RDD.
+
+        >>> def func(iterator):
+        ...    with open("%s/test.txt" % SparkFiles.get("test.zip")) as f:
+        ...        v = int(f.readline())
+        ...        return [x * int(v) for x in iterator]
+        >>> sc.parallelize([1, 2, 3, 4]).mapPartitions(func).collect()
+        [100, 200, 300, 400]
+        """
+        self._jsc.sc().addArchive(path)
+
+    def setCheckpointDir(self, dirName: str) -> None:
         """
         Set the directory under which RDDs are going to be checkpointed. The
         directory must be an HDFS path if running on a cluster.
@@ -1199,7 +1328,7 @@ class SparkContext(object):
         self._jsc.sc().setCheckpointDir(dirName)
 
     @since(3.1)
-    def getCheckpointDir(self):
+    def getCheckpointDir(self) -> Optional[str]:
         """
         Return the directory where RDDs are checkpointed. Returns None if no
         checkpoint directory has been set.
@@ -1208,13 +1337,13 @@ class SparkContext(object):
             return self._jsc.sc().getCheckpointDir().get()
         return None
 
-    def _getJavaStorageLevel(self, storageLevel):
+    def _getJavaStorageLevel(self, storageLevel: StorageLevel) -> JavaObject:
         """
         Returns a Java StorageLevel based on a pyspark.StorageLevel.
         """
         if not isinstance(storageLevel, StorageLevel):
             raise TypeError("storageLevel must be of type pyspark.StorageLevel")
-
+        assert self._jvm is not None
         newStorageLevel = self._jvm.org.apache.spark.storage.StorageLevel
         return newStorageLevel(
             storageLevel.useDisk,
@@ -1224,7 +1353,7 @@ class SparkContext(object):
             storageLevel.replication,
         )
 
-    def setJobGroup(self, groupId, description, interruptOnCancel=False):
+    def setJobGroup(self, groupId: str, description: str, interruptOnCancel: bool = False) -> None:
         """
         Assigns a group ID to all the jobs started by this thread until the group ID is set to a
         different value or cleared.
@@ -1276,7 +1405,7 @@ class SparkContext(object):
         """
         self._jsc.setJobGroup(groupId, description, interruptOnCancel)
 
-    def setLocalProperty(self, key, value):
+    def setLocalProperty(self, key: str, value: str) -> None:
         """
         Set a local property that affects jobs submitted from this thread, such as the
         Spark fair scheduler pool.
@@ -1288,14 +1417,14 @@ class SparkContext(object):
         """
         self._jsc.setLocalProperty(key, value)
 
-    def getLocalProperty(self, key):
+    def getLocalProperty(self, key: str) -> Optional[str]:
         """
         Get a local property set in this thread, or null if it is missing. See
         :meth:`setLocalProperty`.
         """
         return self._jsc.getLocalProperty(key)
 
-    def setJobDescription(self, value):
+    def setJobDescription(self, value: str) -> None:
         """
         Set a human readable description of the current job.
 
@@ -1306,32 +1435,38 @@ class SparkContext(object):
         """
         self._jsc.setJobDescription(value)
 
-    def sparkUser(self):
+    def sparkUser(self) -> str:
         """
         Get SPARK_USER for user who is running SparkContext.
         """
         return self._jsc.sc().sparkUser()
 
-    def cancelJobGroup(self, groupId):
+    def cancelJobGroup(self, groupId: str) -> None:
         """
         Cancel active jobs for the specified group. See :meth:`SparkContext.setJobGroup`.
         for more information.
         """
         self._jsc.sc().cancelJobGroup(groupId)
 
-    def cancelAllJobs(self):
+    def cancelAllJobs(self) -> None:
         """
         Cancel all jobs that have been scheduled or are running.
         """
         self._jsc.sc().cancelAllJobs()
 
-    def statusTracker(self):
+    def statusTracker(self) -> StatusTracker:
         """
         Return :class:`StatusTracker` object
         """
         return StatusTracker(self._jsc.statusTracker())
 
-    def runJob(self, rdd, partitionFunc, partitions=None, allowLocal=False):
+    def runJob(
+        self,
+        rdd: RDD[T],
+        partitionFunc: Callable[[Iterable[T]], Iterable[U]],
+        partitions: Optional[Sequence[int]] = None,
+        allowLocal: bool = False,
+    ) -> List[U]:
         """
         Executes the given partitionFunc on the specified set of partitions,
         returning the result as an array of elements.
@@ -1349,16 +1484,21 @@ class SparkContext(object):
         [0, 1, 16, 25]
         """
         if partitions is None:
-            partitions = range(rdd._jrdd.partitions().size())
+            partitions = list(range(rdd._jrdd.partitions().size()))  # type: ignore[attr-defined]
 
         # Implementation note: This is implemented as a mapPartitions followed
         # by runJob() in order to avoid having to pass a Python lambda into
         # SparkContext#runJob.
         mappedRDD = rdd.mapPartitions(partitionFunc)
-        sock_info = self._jvm.PythonRDD.runJob(self._jsc.sc(), mappedRDD._jrdd, partitions)
-        return list(_load_from_socket(sock_info, mappedRDD._jrdd_deserializer))
+        assert self._jvm is not None
+        sock_info = self._jvm.PythonRDD.runJob(
+            self._jsc.sc(), mappedRDD._jrdd, partitions  # type: ignore[attr-defined]
+        )
+        return list(
+            _load_from_socket(sock_info, mappedRDD._jrdd_deserializer)  # type: ignore[attr-defined]
+        )
 
-    def show_profiles(self):
+    def show_profiles(self) -> None:
         """Print the profile stats to stdout"""
         if self.profiler_collector is not None:
             self.profiler_collector.show_profiles()
@@ -1368,7 +1508,7 @@ class SparkContext(object):
                 "to 'true' to enable Python profile."
             )
 
-    def dump_profiles(self, path):
+    def dump_profiles(self, path: str) -> None:
         """Dump the profile stats into directory `path`"""
         if self.profiler_collector is not None:
             self.profiler_collector.dump_profiles(path)
@@ -1378,13 +1518,13 @@ class SparkContext(object):
                 "to 'true' to enable Python profile."
             )
 
-    def getConf(self):
+    def getConf(self) -> SparkConf:
         conf = SparkConf()
         conf.setAll(self._conf.getAll())
         return conf
 
     @property
-    def resources(self):
+    def resources(self) -> Dict[str, ResourceInformation]:
         resources = {}
         jresources = self._jsc.resources()
         for x in jresources:
@@ -1395,7 +1535,7 @@ class SparkContext(object):
         return resources
 
     @staticmethod
-    def _assert_on_driver():
+    def _assert_on_driver() -> None:
         """
         Called to ensure that SparkContext is created only on the Driver.
 
@@ -1405,7 +1545,7 @@ class SparkContext(object):
             raise RuntimeError("SparkContext should only be created and accessed on the driver.")
 
 
-def _test():
+def _test() -> None:
     import atexit
     import doctest
     import tempfile

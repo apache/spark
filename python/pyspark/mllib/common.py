@@ -27,7 +27,7 @@ from py4j.java_collections import JavaArray, JavaList
 
 import pyspark.context
 from pyspark import RDD, SparkContext
-from pyspark.serializers import PickleSerializer, AutoBatchedSerializer
+from pyspark.serializers import CPickleSerializer, AutoBatchedSerializer
 from pyspark.sql import DataFrame, SparkSession
 
 # Hack for support float('inf') in Py4j
@@ -67,8 +67,11 @@ def _to_java_object_rdd(rdd: RDD) -> JavaObject:
     It will convert each Python object into Java object by Pickle, whenever the
     RDD is serialized in batch or not.
     """
-    rdd = rdd._reserialize(AutoBatchedSerializer(PickleSerializer()))  # type: ignore[attr-defined]
-    return rdd.ctx._jvm.org.apache.spark.mllib.api.python.SerDe.pythonToJava(rdd._jrdd, True)  # type: ignore[attr-defined]
+    rdd = rdd._reserialize(AutoBatchedSerializer(CPickleSerializer()))  # type: ignore[attr-defined]
+    assert rdd.ctx._jvm is not None
+    return rdd.ctx._jvm.org.apache.spark.mllib.api.python.SerDe.pythonToJava(
+        rdd._jrdd, True  # type: ignore[attr-defined]
+    )
 
 
 def _py2java(sc: SparkContext, obj: Any) -> JavaObject:
@@ -86,8 +89,9 @@ def _py2java(sc: SparkContext, obj: Any) -> JavaObject:
     elif isinstance(obj, (int, float, bool, bytes, str)):
         pass
     else:
-        data = bytearray(PickleSerializer().dumps(obj))
-        obj = sc._jvm.org.apache.spark.mllib.api.python.SerDe.loads(data)  # type: ignore[attr-defined]
+        data = bytearray(CPickleSerializer().dumps(obj))
+        assert sc._jvm is not None
+        obj = sc._jvm.org.apache.spark.mllib.api.python.SerDe.loads(data)
     return obj
 
 
@@ -99,42 +103,45 @@ def _java2py(sc: SparkContext, r: "JavaObjectOrPickleDump", encoding: str = "byt
             r = r.toJavaRDD()
             clsName = "JavaRDD"
 
+        assert sc._jvm is not None
+
         if clsName == "JavaRDD":
-            jrdd = sc._jvm.org.apache.spark.mllib.api.python.SerDe.javaToPython(r)  # type: ignore[attr-defined]
+            jrdd = sc._jvm.org.apache.spark.mllib.api.python.SerDe.javaToPython(r)
             return RDD(jrdd, sc)
 
         if clsName == "Dataset":
-            return DataFrame(r, SparkSession(sc)._wrapped)
+            return DataFrame(r, SparkSession._getActiveSessionOrCreate())
 
         if clsName in _picklable_classes:
-            r = sc._jvm.org.apache.spark.mllib.api.python.SerDe.dumps(r)  # type: ignore[attr-defined]
+            r = sc._jvm.org.apache.spark.mllib.api.python.SerDe.dumps(r)
         elif isinstance(r, (JavaArray, JavaList)):
             try:
-                r = sc._jvm.org.apache.spark.mllib.api.python.SerDe.dumps(r)  # type: ignore[attr-defined]
+                r = sc._jvm.org.apache.spark.mllib.api.python.SerDe.dumps(r)
             except Py4JJavaError:
                 pass  # not pickable
 
     if isinstance(r, (bytearray, bytes)):
-        r = PickleSerializer().loads(bytes(r), encoding=encoding)
+        r = CPickleSerializer().loads(bytes(r), encoding=encoding)
     return r
 
 
 def callJavaFunc(
     sc: pyspark.context.SparkContext, func: Callable[..., "JavaObjectOrPickleDump"], *args: Any
-) -> "JavaObjectOrPickleDump":
+) -> Any:
     """Call Java Function"""
     java_args = [_py2java(sc, a) for a in args]
     return _java2py(sc, func(*java_args))
 
 
-def callMLlibFunc(name: str, *args: Any) -> "JavaObjectOrPickleDump":
+def callMLlibFunc(name: str, *args: Any) -> Any:
     """Call API in PythonMLLibAPI"""
     sc = SparkContext.getOrCreate()
-    api = getattr(sc._jvm.PythonMLLibAPI(), name)  # type: ignore[attr-defined]
+    assert sc._jvm is not None
+    api = getattr(sc._jvm.PythonMLLibAPI(), name)
     return callJavaFunc(sc, api, *args)
 
 
-class JavaModelWrapper(object):
+class JavaModelWrapper:
     """
     Wrapper for the model in JVM
     """
@@ -144,9 +151,10 @@ class JavaModelWrapper(object):
         self._java_model = java_model
 
     def __del__(self) -> None:
-        self._sc._gateway.detach(self._java_model)  # type: ignore[attr-defined]
+        assert self._sc._gateway is not None
+        self._sc._gateway.detach(self._java_model)
 
-    def call(self, name: str, *a: Any) -> "JavaObjectOrPickleDump":
+    def call(self, name: str, *a: Any) -> Any:
         """Call method of java_model"""
         return callJavaFunc(self._sc, getattr(self._java_model, name), *a)
 

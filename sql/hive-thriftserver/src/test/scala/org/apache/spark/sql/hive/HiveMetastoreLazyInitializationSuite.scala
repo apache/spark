@@ -17,6 +17,9 @@
 
 package org.apache.spark.sql.hive
 
+import org.apache.logging.log4j.LogManager
+import org.apache.logging.log4j.core.Logger
+
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.{AnalysisException, SparkSession}
 import org.apache.spark.util.Utils
@@ -30,7 +33,7 @@ class HiveMetastoreLazyInitializationSuite extends SparkFunSuite {
       .enableHiveSupport()
       .config("spark.hadoop.hive.metastore.uris", "thrift://127.0.0.1:11111")
       .getOrCreate()
-    val originalLevel = org.apache.log4j.Logger.getRootLogger().getLevel
+    val originalLevel = LogManager.getRootLogger.asInstanceOf[Logger].getLevel
     val originalClassLoader = Thread.currentThread().getContextClassLoader
     try {
       // Avoid outputting a lot of expected warning logs

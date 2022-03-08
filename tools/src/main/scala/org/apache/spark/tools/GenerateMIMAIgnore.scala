@@ -69,7 +69,7 @@ object GenerateMIMAIgnore {
         /* Inner classes defined within a private[spark] class or object are effectively
          invisible, so we account for them as package private. */
         lazy val indirectlyPrivateSpark = {
-          val maybeOuter = className.toString.takeWhile(_ != '$')
+          val maybeOuter = className.takeWhile(_ != '$')
           if (maybeOuter != className) {
             isPackagePrivate(mirror.classSymbol(Class.forName(maybeOuter, false, classLoader))) ||
               isPackagePrivateModule(mirror.staticModule(maybeOuter))

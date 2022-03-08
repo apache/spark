@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution
 import org.apache.spark.sql.{Dataset, QueryTest, Row, SaveMode}
 import org.apache.spark.sql.catalyst.expressions.codegen.{ByteCodeStats, CodeAndComment, CodeGenerator}
 import org.apache.spark.sql.execution.adaptive.DisableAdaptiveExecutionSuite
-import org.apache.spark.sql.execution.aggregate.HashAggregateExec
+import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, SortAggregateExec}
 import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, BroadcastNestedLoopJoinExec, ShuffledHashJoinExec, SortMergeJoinExec}
 import org.apache.spark.sql.functions._
@@ -41,13 +41,24 @@ class WholeStageCodegenSuite extends QueryTest with SharedSparkSession
     assert(df.collect() === Array(Row(2)))
   }
 
-  test("Aggregate should be included in WholeStageCodegen") {
+  test("HashAggregate should be included in WholeStageCodegen") {
     val df = spark.range(10).groupBy().agg(max(col("id")), avg(col("id")))
     val plan = df.queryExecution.executedPlan
     assert(plan.find(p =>
       p.isInstanceOf[WholeStageCodegenExec] &&
         p.asInstanceOf[WholeStageCodegenExec].child.isInstanceOf[HashAggregateExec]).isDefined)
     assert(df.collect() === Array(Row(9, 4.5)))
+  }
+
+  test("SortAggregate should be included in WholeStageCodegen") {
+    val df = spark.range(10).agg(max(col("id")), avg(col("id")))
+    withSQLConf("spark.sql.test.forceApplySortAggregate" -> "true") {
+      val plan = df.queryExecution.executedPlan
+      assert(plan.find(p =>
+        p.isInstanceOf[WholeStageCodegenExec] &&
+          p.asInstanceOf[WholeStageCodegenExec].child.isInstanceOf[SortAggregateExec]).isDefined)
+      assert(df.collect() === Array(Row(9, 4.5)))
+    }
   }
 
   testWithWholeStageCodegenOnAndOff("GenerateExec should be" +
@@ -129,7 +140,7 @@ class WholeStageCodegenSuite extends QueryTest with SharedSparkSession
           Map("hair" -> "black", "eye" -> "brown"), "eye", "brown")))
   }
 
-  test("Aggregate with grouping keys should be included in WholeStageCodegen") {
+  test("HashAggregate with grouping keys should be included in WholeStageCodegen") {
     val df = spark.range(3).groupBy(col("id") * 2).count().orderBy(col("id") * 2)
     val plan = df.queryExecution.executedPlan
     assert(plan.find(p =>
@@ -467,7 +478,7 @@ class WholeStageCodegenSuite extends QueryTest with SharedSparkSession
     val planInt = dsIntFilter.queryExecution.executedPlan
     assert(planInt.collect {
       case WholeStageCodegenExec(FilterExec(_,
-          ColumnarToRowExec(InputAdapter(_: InMemoryTableScanExec)))) => ()
+          InputAdapter(_: InMemoryTableScanExec))) => ()
     }.length == 1)
     assert(dsIntFilter.collect() === Array(1, 2))
 
@@ -562,7 +573,7 @@ class WholeStageCodegenSuite extends QueryTest with SharedSparkSession
     import testImplicits._
     withTempPath { dir =>
       val path = dir.getCanonicalPath
-      val df = spark.range(10).select(Seq.tabulate(201) {i => ('id + i).as(s"c$i")} : _*)
+      val df = spark.range(10).select(Seq.tabulate(201) {i => (Symbol("id") + i).as(s"c$i")} : _*)
       df.write.mode(SaveMode.Overwrite).parquet(path)
 
       withSQLConf(SQLConf.WHOLESTAGE_MAX_NUM_FIELDS.key -> "202",
@@ -579,7 +590,7 @@ class WholeStageCodegenSuite extends QueryTest with SharedSparkSession
 
   test("Control splitting consume function by operators with config") {
     import testImplicits._
-    val df = spark.range(10).select(Seq.tabulate(2) {i => ('id + i).as(s"c$i")} : _*)
+    val df = spark.range(10).select(Seq.tabulate(2) {i => (Symbol("id") + i).as(s"c$i")} : _*)
 
     Seq(true, false).foreach { config =>
       withSQLConf(SQLConf.WHOLESTAGE_SPLIT_CONSUME_FUNC_BY_OPERATOR.key -> s"$config") {
@@ -642,9 +653,9 @@ class WholeStageCodegenSuite extends QueryTest with SharedSparkSession
     withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_USE_ID_IN_CLASS_NAME.key -> "true") {
       // the same query run twice should produce identical code, which would imply a hit in
       // the generated code cache.
-      val ds1 = spark.range(3).select('id + 2)
+      val ds1 = spark.range(3).select(Symbol("id") + 2)
       val code1 = genCode(ds1)
-      val ds2 = spark.range(3).select('id + 2)
+      val ds2 = spark.range(3).select(Symbol("id") + 2)
       val code2 = genCode(ds2) // same query shape as above, deliberately
       assert(code1 == code2, "Should produce same code")
     }

@@ -89,7 +89,7 @@ case class AvroPartitionReaderFactory(
 
       reader.sync(partitionedFile.start)
 
-      val datetimeRebaseMode = DataSourceUtils.datetimeRebaseMode(
+      val datetimeRebaseMode = DataSourceUtils.datetimeRebaseSpec(
         reader.asInstanceOf[DataFileReader[_]].getMetaString,
         datetimeRebaseModeInRead)
 

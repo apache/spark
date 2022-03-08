@@ -22,7 +22,7 @@ import java.io.File
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.hadoop.fs.Path
-import org.apache.log4j.Level
+import org.apache.logging.log4j.Level
 
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
@@ -1440,7 +1440,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
         "Persisting data source table `default`.`t` into Hive metastore in " +
         "Spark SQL specific format, which is NOT compatible with Hive."
       val actualMessages = logAppender.loggingEvents
-        .map(_.getRenderedMessage)
+        .map(_.getMessage.getFormattedMessage)
         .filter(_.contains("incompatible"))
       assert(actualMessages.contains(expectedMsg))
       assert(hiveClient.getTable("default", "t").schema

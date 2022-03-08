@@ -198,7 +198,7 @@ object SQLConf {
    * run unit tests (that does not involve SparkSession) in serial order.
    */
   def get: SQLConf = {
-    if (TaskContext.get != null) {
+    if (Utils.isInRunningSparkTask) {
       val conf = existingConf.get()
       if (conf != null) {
         conf
@@ -395,6 +395,29 @@ object SQLConf {
     .version("2.0.0")
     .booleanConf
     .createWithDefault(true)
+
+  val REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION =
+    buildConf("spark.sql.requireAllClusterKeysForCoPartition")
+      .internal()
+      .doc("When true, the planner requires all the clustering keys as the hash partition keys " +
+        "of the children, to eliminate the shuffles for the operator that needs its children to " +
+        "be co-partitioned, such as JOIN node. This is to avoid data skews which can lead to " +
+        "significant performance regression if shuffles are eliminated.")
+      .version("3.3.0")
+      .booleanConf
+      .createWithDefault(true)
+
+  val REQUIRE_ALL_CLUSTER_KEYS_FOR_DISTRIBUTION =
+    buildConf("spark.sql.requireAllClusterKeysForDistribution")
+      .internal()
+      .doc("When true, the planner requires all the clustering keys as the partition keys " +
+        "(with same ordering) of the children, to eliminate the shuffle for the operator that " +
+        "requires its children be clustered distributed, such as AGGREGATE and WINDOW node. " +
+        "This is to avoid data skews which can lead to significant performance regression if " +
+        "shuffle is eliminated.")
+      .version("3.3.0")
+      .booleanConf
+      .createWithDefault(false)
 
   val RADIX_SORT_ENABLED = buildConf("spark.sql.sort.enableRadixSort")
     .internal()
@@ -662,6 +685,15 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val  ADAPTIVE_REBALANCE_PARTITIONS_SMALL_PARTITION_FACTOR =
+    buildConf("spark.sql.adaptive.rebalancePartitionsSmallPartitionFactor")
+      .doc(s"A partition will be merged during splitting if its size is small than this factor " +
+        s"multiply ${ADVISORY_PARTITION_SIZE_IN_BYTES.key}.")
+      .version("3.3.0")
+      .doubleConf
+      .checkValue(v => v > 0 && v < 1, "the factor must be in (0, 1)")
+      .createWithDefault(0.2)
+
   val ADAPTIVE_FORCE_OPTIMIZE_SKEWED_JOIN =
     buildConf("spark.sql.adaptive.forceOptimizeSkewedJoin")
       .doc("When true, force enable OptimizeSkewedJoin even if it introduces extra shuffle.")
@@ -913,6 +945,33 @@ object SQLConf {
     .version("2.4.0")
     .intConf
     .createWithDefault(4096)
+
+   val PARQUET_FIELD_ID_WRITE_ENABLED =
+    buildConf("spark.sql.parquet.fieldId.write.enabled")
+      .doc("Field ID is a native field of the Parquet schema spec. When enabled, " +
+        "Parquet writers will populate the field Id " +
+        "metadata (if present) in the Spark schema to the Parquet schema.")
+      .version("3.3.0")
+      .booleanConf
+      .createWithDefault(true)
+
+  val PARQUET_FIELD_ID_READ_ENABLED =
+    buildConf("spark.sql.parquet.fieldId.read.enabled")
+      .doc("Field ID is a native field of the Parquet schema spec. When enabled, Parquet readers " +
+        "will use field IDs (if present) in the requested Spark schema to look up Parquet " +
+        "fields instead of using column names")
+      .version("3.3.0")
+      .booleanConf
+      .createWithDefault(false)
+
+  val IGNORE_MISSING_PARQUET_FIELD_ID =
+    buildConf("spark.sql.parquet.fieldId.read.ignoreMissing")
+      .doc("When the Parquet file doesn't have any field IDs but the " +
+        "Spark read schema is using field IDs to read, we will silently return nulls " +
+        "when this flag is enabled, or error otherwise.")
+      .version("3.3.0")
+      .booleanConf
+      .createWithDefault(false)
 
   val ORC_COMPRESSION = buildConf("spark.sql.orc.compression.codec")
     .doc("Sets the compression codec used when writing ORC files. If either `compression` or " +
@@ -1504,6 +1563,13 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
+  val REPLACE_HASH_WITH_SORT_AGG_ENABLED = buildConf("spark.sql.execution.replaceHashWithSortAgg")
+    .internal()
+    .doc("Whether to replace hash aggregate node with sort aggregate based on children's ordering")
+    .version("3.3.0")
+    .booleanConf
+    .createWithDefault(false)
+
   val STATE_STORE_PROVIDER_CLASS =
     buildConf("spark.sql.streaming.stateStore.providerClass")
       .internal()
@@ -1762,6 +1828,14 @@ object SQLConf {
         "instead of a single big method. This can be used to avoid oversized function that " +
         "can miss the opportunity of JIT optimization.")
       .version("3.0.0")
+      .booleanConf
+      .createWithDefault(true)
+
+  val ENABLE_SORT_AGGREGATE_CODEGEN =
+    buildConf("spark.sql.codegen.aggregate.sortAggregate.enabled")
+      .internal()
+      .doc("When true, enable code-gen for sort aggregate.")
+      .version("3.3.0")
       .booleanConf
       .createWithDefault(true)
 
@@ -2348,7 +2422,8 @@ object SQLConf {
         "and shows a Python-friendly exception only.")
       .version("3.0.0")
       .booleanConf
-      .createWithDefault(false)
+      // show full stacktrace in tests but hide in production by default.
+      .createWithDefault(Utils.isTesting)
 
   val ARROW_SPARKR_EXECUTION_ENABLED =
     buildConf("spark.sql.execution.arrow.sparkr.enabled")
@@ -2405,7 +2480,8 @@ object SQLConf {
         "shows the exception messages from UDFs. Note that this works only with CPython 3.7+.")
       .version("3.1.0")
       .booleanConf
-      .createWithDefault(true)
+      // show full stacktrace in tests but hide in production by default.
+      .createWithDefault(!Utils.isTesting)
 
   val PANDAS_GROUPED_MAP_ASSIGN_COLUMNS_BY_NAME =
     buildConf("spark.sql.legacy.execution.pandas.groupedMap.assignColumnsByName")
@@ -2639,16 +2715,15 @@ object SQLConf {
       "and/or identifiers for table, view, function, etc.")
     .version("3.3.0")
     .booleanConf
-    .createWithDefault(true)
+    .createWithDefault(false)
 
-  val ALLOW_CAST_BETWEEN_DATETIME_AND_NUMERIC_IN_ANSI =
-    buildConf("spark.sql.ansi.allowCastBetweenDatetimeAndNumeric")
-      .doc("When true, the data type conversions between datetime types and numeric types are " +
-        "allowed in ANSI SQL mode. This configuration is only effective when " +
-        s"'${ANSI_ENABLED.key}' is true.")
-      .version("3.3.0")
-      .booleanConf
-      .createWithDefault(false)
+  val ANSI_STRICT_INDEX_OPERATOR = buildConf("spark.sql.ansi.strictIndexOperator")
+    .doc(s"When true and '${ANSI_ENABLED.key}' is true, accessing complex SQL types via [] " +
+      "operator will throw an exception if array index is out of bound, or map key does not " +
+      "exist. Otherwise, Spark will return a null result when accessing an invalid index.")
+    .version("3.3.0")
+    .booleanConf
+    .createWithDefault(true)
 
   val SORT_BEFORE_REPARTITION =
     buildConf("spark.sql.execution.sortBeforeRepartition")
@@ -4115,8 +4190,7 @@ class SQLConf extends Serializable with Logging {
 
   def enforceReservedKeywords: Boolean = ansiEnabled && getConf(ENFORCE_RESERVED_KEYWORDS)
 
-  def allowCastBetweenDatetimeAndNumericInAnsi: Boolean =
-    getConf(ALLOW_CAST_BETWEEN_DATETIME_AND_NUMERIC_IN_ANSI)
+  def strictIndexOperator: Boolean = ansiEnabled && getConf(ANSI_STRICT_INDEX_OPERATOR)
 
   def timestampType: AtomicType = getConf(TIMESTAMP_TYPE) match {
     case "TIMESTAMP_LTZ" =>
@@ -4217,6 +4291,12 @@ class SQLConf extends Serializable with Logging {
   def maxConcurrentOutputFileWriters: Int = getConf(SQLConf.MAX_CONCURRENT_OUTPUT_FILE_WRITERS)
 
   def inferDictAsStruct: Boolean = getConf(SQLConf.INFER_NESTED_DICT_AS_STRUCT)
+
+  def parquetFieldIdReadEnabled: Boolean = getConf(SQLConf.PARQUET_FIELD_ID_READ_ENABLED)
+
+  def parquetFieldIdWriteEnabled: Boolean = getConf(SQLConf.PARQUET_FIELD_ID_WRITE_ENABLED)
+
+  def ignoreMissingParquetFieldId: Boolean = getConf(SQLConf.IGNORE_MISSING_PARQUET_FIELD_ID)
 
   def useV1Command: Boolean = getConf(SQLConf.LEGACY_USE_V1_COMMAND)
 
