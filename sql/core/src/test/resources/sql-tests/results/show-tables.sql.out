@@ -168,7 +168,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 
-Syntax error at or near '<EOF>'(line 1, pos 19)
+Syntax error at or near end of input(line 1, pos 19)
 
 == SQL ==
 SHOW TABLE EXTENDED
