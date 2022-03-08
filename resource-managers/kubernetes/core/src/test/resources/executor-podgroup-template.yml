@@ -1,0 +1,9 @@
+apiVersion: scheduling.volcano.sh/v1beta1
+kind: PodGroup
+spec:
+  minMember: 1000
+  minResources:
+    cpu: "4"
+    memory: "16Gi"
+  priorityClassName: executor-priority
+  queue: executor-queue

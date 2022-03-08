@@ -1,0 +1,9 @@
+apiVersion: scheduling.volcano.sh/v1beta1
+kind: PodGroup
+spec:
+  minMember: 1
+  minResources:
+    cpu: "2"
+    memory: "2048Mi"
+  priorityClassName: driver-priority
+  queue: driver-queue
