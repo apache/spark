@@ -80,7 +80,7 @@ class VolcanoFeatureStepSuite extends SparkFunSuite {
     verifyPriority(podWithPriority)
   }
 
-  test("Support driver podgroup template") {
+  test("SPARK-38455: Support driver podgroup template") {
     val templatePath = new File(
       getClass.getResource("/driver-podgroup-template.yml").getFile).getAbsolutePath
     val sparkConf = new SparkConf()
@@ -98,7 +98,7 @@ class VolcanoFeatureStepSuite extends SparkFunSuite {
     assert(podGroup.getSpec.getQueue == "driver-queue")
   }
 
-  test("Support executor podgroup template") {
+  test("SPARK-38455: Support executor podgroup template") {
     val templatePath = new File(
       getClass.getResource("/executor-podgroup-template.yml").getFile).getAbsolutePath
     val sparkConf = new SparkConf()
