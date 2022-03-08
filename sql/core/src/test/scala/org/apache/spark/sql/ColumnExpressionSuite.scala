@@ -281,9 +281,11 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
       testData.select(isnan($"a"), isnan($"b")),
       Row(true, true) :: Row(true, true) :: Row(false, false) :: Row(false, false) :: Nil)
 
-    checkAnswer(
-      sql("select isnan(15), isnan('invalid')"),
-      Row(false, false))
+    if (!conf.ansiEnabled) {
+      checkAnswer(
+        sql("select isnan(15), isnan('invalid')"),
+        Row(false, false))
+    }
   }
 
   test("nanvl") {

@@ -1648,7 +1648,7 @@ class AdaptiveQueryExecSuite
           |  SELECT * FROM testData WHERE key = 1
           |)
           |RIGHT OUTER JOIN testData2
-          |ON value = b
+          |ON CAST(value AS INT) = b
         """.stripMargin)
 
       withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "80") {
