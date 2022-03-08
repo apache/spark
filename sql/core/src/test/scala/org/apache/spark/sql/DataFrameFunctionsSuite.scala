@@ -1031,15 +1031,17 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       Seq(Row(false))
     )
 
-    val e1 = intercept[AnalysisException] {
-      OneRowRelation().selectExpr("array_contains(array(1), .01234567890123456790123456780)")
-    }
-    val errorMsg1 =
-      s"""
-         |Input to function array_contains should have been array followed by a
-         |value with same element type, but it's [array<int>, decimal(38,29)].
+    if (!conf.ansiEnabled) {
+      val e1 = intercept[AnalysisException] {
+        OneRowRelation().selectExpr("array_contains(array(1), .01234567890123456790123456780)")
+      }
+      val errorMsg1 =
+        s"""
+           |Input to function array_contains should have been array followed by a
+           |value with same element type, but it's [array<int>, decimal(38,29)].
        """.stripMargin.replace("\n", " ").trim()
-    assert(e1.message.contains(errorMsg1))
+      assert(e1.message.contains(errorMsg1))
+    }
 
     val e2 = intercept[AnalysisException] {
       OneRowRelation().selectExpr("array_contains(array(1), 'foo')")
