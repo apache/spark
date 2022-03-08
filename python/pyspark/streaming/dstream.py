@@ -390,9 +390,7 @@ class DStream(Generic[T_co]):
         ...
 
     @overload
-    def transform(
-        self, func: Callable[[datetime, RDD[T_co]], RDD[U]]
-    ) -> "TransformedDStream[U]":
+    def transform(self, func: Callable[[datetime, RDD[T_co]], RDD[U]]) -> "TransformedDStream[U]":
         ...
 
     def transform(
