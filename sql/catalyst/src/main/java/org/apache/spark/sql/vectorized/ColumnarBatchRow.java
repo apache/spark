@@ -145,15 +145,18 @@ public final class ColumnarBatchRow extends InternalRow {
 
   @Override
   public Object get(int ordinal, DataType dataType) {
+    // return InternalRow.getReader(ordinal, dataType).apply(this);
     if (dataType instanceof BooleanType) {
       return getBoolean(ordinal);
     } else if (dataType instanceof ByteType) {
       return getByte(ordinal);
     } else if (dataType instanceof ShortType) {
       return getShort(ordinal);
-    } else if (dataType instanceof IntegerType || dataType instanceof YearMonthIntervalType) {
+    } else if (dataType instanceof IntegerType || dataType instanceof DateType ||
+      dataType instanceof YearMonthIntervalType) {
       return getInt(ordinal);
-    } else if (dataType instanceof LongType || dataType instanceof DayTimeIntervalType) {
+    } else if (dataType instanceof LongType || dataType instanceof TimestampType ||
+      dataType instanceof DayTimeIntervalType) {
       return getLong(ordinal);
     } else if (dataType instanceof FloatType) {
       return getFloat(ordinal);
@@ -166,10 +169,6 @@ public final class ColumnarBatchRow extends InternalRow {
     } else if (dataType instanceof DecimalType) {
       DecimalType t = (DecimalType) dataType;
       return getDecimal(ordinal, t.precision(), t.scale());
-    } else if (dataType instanceof DateType) {
-      return getInt(ordinal);
-    } else if (dataType instanceof TimestampType) {
-      return getLong(ordinal);
     } else if (dataType instanceof ArrayType) {
       return getArray(ordinal);
     } else if (dataType instanceof StructType) {

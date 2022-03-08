@@ -154,15 +154,16 @@ public final class MutableColumnarRow extends InternalRow {
 
   @Override
   public Object get(int ordinal, DataType dataType) {
+    // return InternalRow.getReader(ordinal, dataType).apply(this);
     if (dataType instanceof BooleanType) {
       return getBoolean(ordinal);
     } else if (dataType instanceof ByteType) {
       return getByte(ordinal);
     } else if (dataType instanceof ShortType) {
       return getShort(ordinal);
-    } else if (dataType instanceof IntegerType) {
+    } else if (dataType instanceof IntegerType || dataType instanceof DateType) {
       return getInt(ordinal);
-    } else if (dataType instanceof LongType) {
+    } else if (dataType instanceof LongType || dataType instanceof TimestampType) {
       return getLong(ordinal);
     } else if (dataType instanceof FloatType) {
       return getFloat(ordinal);
@@ -175,10 +176,6 @@ public final class MutableColumnarRow extends InternalRow {
     } else if (dataType instanceof DecimalType) {
       DecimalType t = (DecimalType) dataType;
       return getDecimal(ordinal, t.precision(), t.scale());
-    } else if (dataType instanceof DateType) {
-      return getInt(ordinal);
-    } else if (dataType instanceof TimestampType) {
-      return getLong(ordinal);
     } else if (dataType instanceof ArrayType) {
       return getArray(ordinal);
     } else if (dataType instanceof StructType) {

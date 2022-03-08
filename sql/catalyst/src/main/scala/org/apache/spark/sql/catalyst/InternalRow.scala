@@ -98,6 +98,9 @@ abstract class InternalRow extends SpecializedGetters with Serializable {
 }
 
 object InternalRow {
+
+  import org.apache.spark.sql.vectorized.ColumnVector
+
   /**
    * This method can be used to construct a [[InternalRow]] with the given values.
    */
@@ -187,5 +190,27 @@ object InternalRow {
     case _: ArrayType => (input, v) => input.update(ordinal, v.asInstanceOf[ArrayData].copy())
     case _: MapType => (input, v) => input.update(ordinal, v.asInstanceOf[MapData].copy())
     case _ => (input, v) => input.update(ordinal, v)
+  }
+
+  def getReader(ordinal: Int, dt: DataType): InternalRow => Any = dt match {
+    case BooleanType => row => row.getBoolean(ordinal)
+    case ByteType => row => row.getByte(ordinal)
+    case ShortType => row => row.getShort(ordinal)
+    case IntegerType | DateType | _: YearMonthIntervalType =>
+      row => row.getInt(ordinal)
+    case LongType | TimestampType | _: DayTimeIntervalType =>
+      row => row.getLong(ordinal)
+    case FloatType => row => row.getFloat(ordinal)
+    case DoubleType => row => row.getDouble(ordinal)
+    case StringType => row => row.getUTF8String(ordinal)
+    case BinaryType => row => row.getBinary(ordinal)
+    case DecimalType.Fixed(precision, scale) =>
+      row => row.getDecimal(ordinal, precision, scale)
+    case _: ArrayType => row => row.getArray(ordinal)
+    case struct: StructType =>
+      row => row.getStruct(ordinal, struct.fields.length)
+    case _: MapType => row => row.getMap(ordinal)
+    case otherType =>
+      throw new UnsupportedOperationException(s"Datatype not supported $otherType")
   }
 }
