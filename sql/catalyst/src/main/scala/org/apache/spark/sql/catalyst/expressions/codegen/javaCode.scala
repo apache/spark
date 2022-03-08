@@ -176,7 +176,7 @@ trait Block extends TreeNode[Block] with JavaCode {
 
     @inline def transform(e: ExprValue): ExprValue = {
       val newE = f lift e
-      if (!newE.isDefined || newE.get.equals(e)) {
+      if (newE.isEmpty || newE.get.equals(e)) {
         e
       } else {
         changed = true

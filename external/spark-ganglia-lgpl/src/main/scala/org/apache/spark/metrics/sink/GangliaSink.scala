@@ -50,11 +50,11 @@ class GangliaSink(
 
   def propertyToOption(prop: String): Option[String] = Option(property.getProperty(prop))
 
-  if (!propertyToOption(GANGLIA_KEY_HOST).isDefined) {
+  if (propertyToOption(GANGLIA_KEY_HOST).isEmpty) {
     throw new Exception("Ganglia sink requires 'host' property.")
   }
 
-  if (!propertyToOption(GANGLIA_KEY_PORT).isDefined) {
+  if (propertyToOption(GANGLIA_KEY_PORT).isEmpty) {
     throw new Exception("Ganglia sink requires 'port' property.")
   }
 
