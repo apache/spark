@@ -21,7 +21,6 @@ import java.nio.ByteBuffer
 
 import com.google.common.primitives.{Doubles, Ints}
 
-import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{TypeCheckFailure, TypeCheckSuccess}
@@ -65,7 +64,7 @@ case class HistogramNumeric(
     nBins: Expression,
     override val mutableAggBufferOffset: Int,
     override val inputAggBufferOffset: Int)
-  extends TypedImperativeAggregate[NumericHistogram] with ImplicitCastInputTypes with Logging
+  extends TypedImperativeAggregate[NumericHistogram] with ImplicitCastInputTypes
   with BinaryLike[Expression] {
 
   def this(child: Expression, nBins: Expression) = {
@@ -194,16 +193,11 @@ case class HistogramNumeric(
     // the output data type of this aggregate function is an array of structs, where each struct
     // has two fields (x, y): one of the same data type as the left child and another of double
     // type. Otherwise, the 'x' field always has double type.
-    val result =
     ArrayType(new StructType(Array(
       StructField(name = "x",
         dataType = if (propagateInputType) left.dataType else DoubleType,
         nullable = true),
       StructField("y", DoubleType, true))), true)
-    logWarning("@@@@@@@")
-    logWarning("@@@ " + left.dataType)
-    logWarning("@@@ " + result)
-    result
   }
 
   override def prettyName: String = "histogram_numeric"
