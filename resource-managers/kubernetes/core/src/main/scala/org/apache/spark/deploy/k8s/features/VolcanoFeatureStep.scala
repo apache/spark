@@ -48,6 +48,8 @@ private[spark] class VolcanoFeatureStep extends KubernetesDriverCustomFeatureCon
         .withName(podGroupName)
         .withNamespace(namespace)
       .endMetadata()
+      .editOrNewSpec()
+      .endSpec()
 
     queue.foreach(podGroup.editOrNewSpec().withQueue(_).endSpec())
 
@@ -58,7 +60,7 @@ private[spark] class VolcanoFeatureStep extends KubernetesDriverCustomFeatureCon
 
   override def configurePod(pod: SparkPod): SparkPod = {
 
-    priorityClassName = Some(pod.pod.getSpec.getPriorityClassName)
+    priorityClassName = Option(pod.pod.getSpec.getPriorityClassName)
 
     val k8sPodBuilder = new PodBuilder(pod.pod)
       .editMetadata()
