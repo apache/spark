@@ -2055,29 +2055,29 @@ class ParquetV2FilterSuite extends ParquetFilterSuite {
   }
 
   test("SPARK-38041: Data filter push down with partition filter") {
-    val data = spark.createDataFrame((1 to 4).map(i => Tuple1(Option(i))))
-    withNestedDataFrame(data).foreach { case (inputDF, colName, resultFun) =>
-      withTempPath { file =>
+    withTempPath { file =>
+      val colName = "id"
+      val partName = "part"
+      val inputDF = spark.createDataFrame((1 to 4).map(i => Tuple1(Option(i)))).toDF(colName)
+      inputDF.withColumn(partName, lit(0))
+        .write.mode(SaveMode.Overwrite)
+        .format(dataSourceName).partitionBy(partName).save(file.getCanonicalPath)
+      inputDF.withColumn(partName, lit(1))
+        .write.mode(SaveMode.Append)
+        .format(dataSourceName).partitionBy(partName).save(file.getCanonicalPath)
 
-        val partName = "part"
-        inputDF.withColumn(partName, lit(0))
-          .write.format(dataSourceName).mode(SaveMode.Overwrite).save(file.getCanonicalPath)
-        inputDF.withColumn(partName, lit(1))
-          .write.format(dataSourceName).mode(SaveMode.Append).save(file.getCanonicalPath)
+      readParquetFile(file.getPath) { df =>
+        val intAttr = df(colName).expr
+        assert(df(colName).expr.dataType === IntegerType)
+        val partAttr = df(partName).expr
+        assert(df(partName).expr.dataType === IntegerType)
 
-        readParquetFile(file.getPath) { df =>
-          val intAttr = df(colName).expr
-          assert(df(colName).expr.dataType === IntegerType)
-          val partAttr = df(partName).expr
-          assert(df(partName).expr.dataType === IntegerType)
-
-          checkFilterPredicate(
-            df,
-            (intAttr < 2 && partAttr === 0) || (intAttr > 3 && partAttr === 1),
-            classOf[Operators.Or],
-            checkAnswer(_, _: Seq[Row]),
-            Seq(Row(resultFun(1), 0), Row(resultFun(4), 1)))
-        }
+        checkFilterPredicate(
+          df,
+          (intAttr < 2 && partAttr === 0) || (intAttr > 3 && partAttr === 1),
+          classOf[Operators.Or],
+          checkAnswer(_, _: Seq[Row]),
+          Seq(Row(1, 0), Row(4, 1)))
       }
     }
   }
