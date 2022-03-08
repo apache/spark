@@ -593,7 +593,7 @@ class ExplainSuiteAE extends ExplainSuiteHelper with EnableAdaptiveExecutionSuit
   }
 
   test("SPARK-35884: Explain should only display one plan before AQE takes effect") {
-    val df = (0 to 10).toDF("id").where('id > 5)
+    val df = (0 to 10).toDF("id").where(Symbol("id") > 5)
     val modes = Seq(SimpleMode, ExtendedMode, CostMode, FormattedMode)
     modes.foreach { mode =>
       checkKeywordsExistsInExplain(df, mode, "AdaptiveSparkPlan")
@@ -608,7 +608,8 @@ class ExplainSuiteAE extends ExplainSuiteHelper with EnableAdaptiveExecutionSuit
 
   test("SPARK-35884: Explain formatted with subquery") {
     withTempView("t1", "t2") {
-      spark.range(100).select('id % 10 as "key", 'id as "value").createOrReplaceTempView("t1")
+      spark.range(100).select(Symbol("id") % 10 as "key", Symbol("id") as "value")
+        .createOrReplaceTempView("t1")
       spark.range(10).createOrReplaceTempView("t2")
       val query =
         """
@@ -734,6 +735,22 @@ class ExplainSuiteAE extends ExplainSuiteHelper with EnableAdaptiveExecutionSuit
         assert(output.contains(expected))
       }
     }
+  }
+
+  test("SPARK-38322: Support query stage show runtime statistics in formatted explain mode") {
+    val df = Seq(1, 2).toDF("c").distinct()
+    val statistics = "Statistics(sizeInBytes=32.0 B, rowCount=2)"
+
+    checkKeywordsNotExistsInExplain(
+      df,
+      FormattedMode,
+      statistics)
+
+    df.collect()
+    checkKeywordsExistsInExplain(
+      df,
+      FormattedMode,
+      statistics)
   }
 }
 

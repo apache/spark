@@ -16,6 +16,7 @@
  */
 package org.apache.spark.sql.catalyst.parser
 
+import org.apache.spark.SparkThrowableHelper
 import org.apache.spark.sql.catalyst.analysis.AnalysisTest
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 
@@ -31,26 +32,49 @@ class ErrorParserSuite extends AnalysisTest {
     assert(parsePlan(sqlCommand) == plan)
   }
 
-  def intercept(sqlCommand: String, messages: String*): Unit =
-    interceptParseException(CatalystSqlParser.parsePlan)(sqlCommand, messages: _*)
-
-  def intercept(sql: String, line: Int, startPosition: Int, stopPosition: Int,
-                messages: String*): Unit = {
+  private def interceptImpl(sql: String, messages: String*)(
+      line: Option[Int] = None,
+      startPosition: Option[Int] = None,
+      stopPosition: Option[Int] = None,
+      errorClass: Option[String] = None): Unit = {
     val e = intercept[ParseException](CatalystSqlParser.parsePlan(sql))
-
-    // Check position.
-    assert(e.line.isDefined)
-    assert(e.line.get === line)
-    assert(e.startPosition.isDefined)
-    assert(e.startPosition.get === startPosition)
-    assert(e.stop.startPosition.isDefined)
-    assert(e.stop.startPosition.get === stopPosition)
 
     // Check messages.
     val error = e.getMessage
     messages.foreach { message =>
       assert(error.contains(message))
     }
+
+    // Check position.
+    if (line.isDefined) {
+      assert(line.isDefined && startPosition.isDefined && stopPosition.isDefined)
+      assert(e.line.isDefined)
+      assert(e.line.get === line.get)
+      assert(e.startPosition.isDefined)
+      assert(e.startPosition.get === startPosition.get)
+      assert(e.stop.startPosition.isDefined)
+      assert(e.stop.startPosition.get === stopPosition.get)
+    }
+
+    // Check error class.
+    if (errorClass.isDefined) {
+      assert(e.getErrorClass == errorClass.get)
+    }
+  }
+
+  def intercept(sqlCommand: String, errorClass: Option[String], messages: String*): Unit = {
+    interceptImpl(sqlCommand, messages: _*)(errorClass = errorClass)
+  }
+
+  def intercept(
+      sql: String, line: Int, startPosition: Int, stopPosition: Int, messages: String*): Unit = {
+    interceptImpl(sql, messages: _*)(Some(line), Some(startPosition), Some(stopPosition))
+  }
+
+  def intercept(sql: String, errorClass: String, line: Int, startPosition: Int, stopPosition: Int,
+      messages: String*): Unit = {
+    interceptImpl(sql, messages: _*)(
+      Some(line), Some(startPosition), Some(stopPosition), Some(errorClass))
   }
 
   test("no viable input") {
@@ -64,10 +88,14 @@ class ErrorParserSuite extends AnalysisTest {
   }
 
   test("mismatched input") {
-    intercept("select * from r order by q from t", 1, 27, 31,
-      "mismatched input",
-      "---------------------------^^^")
-    intercept("select *\nfrom r\norder by q\nfrom t", 4, 0, 4, "mismatched input", "^^^")
+    intercept("select * from r order by q from t", "PARSE_INPUT_MISMATCHED",
+      1, 27, 31,
+      "Syntax error at or near",
+      "---------------------------^^^"
+    )
+    intercept("select *\nfrom r\norder by q\nfrom t", "PARSE_INPUT_MISMATCHED",
+      4, 0, 4,
+      "Syntax error at or near", "^^^")
   }
 
   test("semantic errors") {
@@ -77,9 +105,11 @@ class ErrorParserSuite extends AnalysisTest {
   }
 
   test("SPARK-21136: misleading error message due to problematic antlr grammar") {
-    intercept("select * from a left join_ b on a.id = b.id", "missing 'JOIN' at 'join_'")
-    intercept("select * from test where test.t is like 'test'", "mismatched input 'is' expecting")
-    intercept("SELECT * FROM test WHERE x NOT NULL", "mismatched input 'NOT' expecting")
+    intercept("select * from a left join_ b on a.id = b.id", None, "missing 'JOIN' at 'join_'")
+    intercept("select * from test where test.t is like 'test'", Some("PARSE_INPUT_MISMATCHED"),
+      SparkThrowableHelper.getMessage("PARSE_INPUT_MISMATCHED", Array("'is'")))
+    intercept("SELECT * FROM test WHERE x NOT NULL", Some("PARSE_INPUT_MISMATCHED"),
+      SparkThrowableHelper.getMessage("PARSE_INPUT_MISMATCHED", Array("'NOT'")))
   }
 
   test("hyphen in identifier - DDL tests") {

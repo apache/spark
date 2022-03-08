@@ -356,7 +356,7 @@ case class BroadcastNestedLoopJoinExec(
           i += 1
         }
       }
-      Seq(matched).toIterator
+      Seq(matched).iterator
     }
 
     matchedBuildRows.fold(new BitSet(relation.value.length))(_ | _)
