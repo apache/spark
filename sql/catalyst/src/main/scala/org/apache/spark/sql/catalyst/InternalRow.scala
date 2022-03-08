@@ -98,7 +98,6 @@ abstract class InternalRow extends SpecializedGetters with Serializable {
 }
 
 object InternalRow {
-
   /**
    * This method can be used to construct a [[InternalRow]] with the given values.
    */
