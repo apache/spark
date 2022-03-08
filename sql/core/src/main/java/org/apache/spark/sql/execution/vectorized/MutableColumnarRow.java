@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.vectorized;
 import java.math.BigDecimal;
 
 import org.apache.spark.sql.catalyst.InternalRow;
+import org.apache.spark.sql.catalyst.InternalRow$;
 import org.apache.spark.sql.catalyst.expressions.GenericInternalRow;
 import org.apache.spark.sql.types.*;
 import org.apache.spark.sql.vectorized.ColumnarArray;
@@ -154,37 +155,7 @@ public final class MutableColumnarRow extends InternalRow {
 
   @Override
   public Object get(int ordinal, DataType dataType) {
-    // return InternalRow.getReader(ordinal, dataType).apply(this);
-    if (dataType instanceof BooleanType) {
-      return getBoolean(ordinal);
-    } else if (dataType instanceof ByteType) {
-      return getByte(ordinal);
-    } else if (dataType instanceof ShortType) {
-      return getShort(ordinal);
-    } else if (dataType instanceof IntegerType || dataType instanceof DateType) {
-      return getInt(ordinal);
-    } else if (dataType instanceof LongType || dataType instanceof TimestampType) {
-      return getLong(ordinal);
-    } else if (dataType instanceof FloatType) {
-      return getFloat(ordinal);
-    } else if (dataType instanceof DoubleType) {
-      return getDouble(ordinal);
-    } else if (dataType instanceof StringType) {
-      return getUTF8String(ordinal);
-    } else if (dataType instanceof BinaryType) {
-      return getBinary(ordinal);
-    } else if (dataType instanceof DecimalType) {
-      DecimalType t = (DecimalType) dataType;
-      return getDecimal(ordinal, t.precision(), t.scale());
-    } else if (dataType instanceof ArrayType) {
-      return getArray(ordinal);
-    } else if (dataType instanceof StructType) {
-      return getStruct(ordinal, ((StructType)dataType).fields().length);
-    } else if (dataType instanceof MapType) {
-      return getMap(ordinal);
-    } else {
-      throw new UnsupportedOperationException("Datatype not supported " + dataType);
-    }
+    return InternalRow$.MODULE$.getReader(ordinal, dataType).apply(this);
   }
 
   @Override

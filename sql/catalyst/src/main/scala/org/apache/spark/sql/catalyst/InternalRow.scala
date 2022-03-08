@@ -99,8 +99,6 @@ abstract class InternalRow extends SpecializedGetters with Serializable {
 
 object InternalRow {
 
-  import org.apache.spark.sql.vectorized.ColumnVector
-
   /**
    * This method can be used to construct a [[InternalRow]] with the given values.
    */
