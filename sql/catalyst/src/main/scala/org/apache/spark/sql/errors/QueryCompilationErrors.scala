@@ -721,8 +721,20 @@ object QueryCompilationErrors {
       s"Acceptable modes are ${PermissiveMode.name} and ${FailFastMode.name}.")
   }
 
-  def unfoldableFieldUnsupportedError(): Throwable = {
-    new AnalysisException("The field parameter needs to be a foldable string value.")
+  def requireLiteralParameter(
+      funcName: String, argName: String, requiredType: String): Throwable = {
+    new AnalysisException(
+      s"The '$argName' parameter of function '$funcName' needs to be a $requiredType literal.")
+  }
+
+  def invalidStringLiteralParameter(
+      funcName: String,
+      argName: String,
+      invalidValue: String,
+      allowedValues: Option[String] = None): Throwable = {
+    val endingMsg = allowedValues.map(" " + _).getOrElse("")
+    new AnalysisException(s"Invalid value for the '$argName' parameter of function '$funcName': " +
+      s"$invalidValue.$endingMsg")
   }
 
   def literalTypeUnsupportedForSourceTypeError(field: String, source: Expression): Throwable = {
@@ -2374,13 +2386,5 @@ object QueryCompilationErrors {
   def writeDistributionAndOrderingNotSupportedInContinuousExecution(): Throwable = {
     new AnalysisException(
       "Sinks cannot request distribution and ordering in continuous execution mode")
-  }
-
-  def invalidScaleParameterRoundBase(function: String): Throwable = {
-    new AnalysisException(s"The 'scale' parameter of function '$function' must be an int constant.")
-  }
-
-  def invalidNumberOfFunctionParameters(function: String): Throwable = {
-    new AnalysisException(s"Invalid number of parameters to the function '$function'.")
   }
 }

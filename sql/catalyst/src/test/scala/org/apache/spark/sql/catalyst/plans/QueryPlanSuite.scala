@@ -129,4 +129,35 @@ class QueryPlanSuite extends SparkFunSuite {
     )
     assert(!nonDeterministicPlan.deterministic)
   }
+
+  test("SPARK-38347: Nullability propagation in transformUpWithNewOutput") {
+    // A test rule that replaces Attributes in Project's project list.
+    val testRule = new Rule[LogicalPlan] {
+      override def apply(plan: LogicalPlan): LogicalPlan = plan.transformUpWithNewOutput {
+        case p @ Project(projectList, _) =>
+          val newProjectList = projectList.map {
+            case a: AttributeReference => a.newInstance()
+            case ne => ne
+          }
+          val newProject = p.copy(projectList = newProjectList)
+          newProject -> p.output.zip(newProject.output)
+      }
+    }
+
+    // Test a Left Outer Join plan in which right-hand-side input attributes are not nullable.
+    // Those attributes should be nullable after join even with a `transformUpWithNewOutput`
+    // started below the Left Outer join.
+    val t1 = LocalRelation('a.int.withNullability(false),
+      'b.int.withNullability(false), 'c.int.withNullability(false))
+    val t2 = LocalRelation('c.int.withNullability(false),
+      'd.int.withNullability(false), 'e.int.withNullability(false))
+    val plan = t1.select($"a", $"b")
+      .join(t2.select($"c", $"d"), LeftOuter, Some($"a" === $"c"))
+      .select($"a" + $"d").analyze
+    // The output Attribute of `plan` is nullable even though `d` is not nullable before the join.
+    assert(plan.output(0).nullable)
+    // The test rule with `transformUpWithNewOutput` should not change the nullability.
+    val planAfterTestRule = testRule(plan)
+    assert(planAfterTestRule.output(0).nullable)
+  }
 }

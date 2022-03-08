@@ -269,28 +269,32 @@ case class Ceil(child: Expression) extends UnaryMathExpression(math.ceil, "CEIL"
   override protected def withNewChildInternal(newChild: Expression): Ceil = copy(child = newChild)
 }
 
-trait CeilFloorExpressionBuilder extends ExpressionBuilder {
-  val functionName: String
-  def build(expressions: Seq[Expression]): Expression
+trait CeilFloorExpressionBuilderBase extends ExpressionBuilder {
+  protected def buildWithOneParam(param: Expression): Expression
+  protected def buildWithTwoParams(param1: Expression, param2: Expression): Expression
 
-  def extractChildAndScaleParam(expressions: Seq[Expression]): (Expression, Expression) = {
-    val child = expressions(0)
-    val scale = expressions(1)
-    if (! (scale.foldable && scale.dataType == DataTypes.IntegerType)) {
-      throw QueryCompilationErrors.invalidScaleParameterRoundBase(functionName)
+  override def build(funcName: String, expressions: Seq[Expression]): Expression = {
+    val numArgs = expressions.length
+    if (numArgs == 1) {
+      buildWithOneParam(expressions.head)
+    } else if (numArgs == 2) {
+      val scale = expressions(1)
+      if (!(scale.foldable && scale.dataType == IntegerType)) {
+        throw QueryCompilationErrors.requireLiteralParameter(funcName, "scale", "int")
+      }
+      if (scale.eval() == null) {
+        throw QueryCompilationErrors.requireLiteralParameter(funcName, "scale", "int")
+      }
+      buildWithTwoParams(expressions(0), scale)
+    } else {
+      throw QueryCompilationErrors.invalidFunctionArgumentNumberError(Seq(2), funcName, numArgs)
     }
-    val scaleV = scale.eval(EmptyRow)
-    if (scaleV == null) {
-      throw QueryCompilationErrors.invalidScaleParameterRoundBase(functionName)
-    }
-    (child, scale)
   }
 }
 
+// scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = """
-  _FUNC_(expr[, scale]) - Returns the smallest number after rounding up that is not smaller
-  than `expr`. A optional `scale` parameter can be specified to control the rounding behavior.""",
+  usage = "_FUNC_(expr[, scale]) - Returns the smallest number after rounding up that is not smaller than `expr`. An optional `scale` parameter can be specified to control the rounding behavior.",
   examples = """
     Examples:
       > SELECT _FUNC_(-0.1);
@@ -304,24 +308,17 @@ trait CeilFloorExpressionBuilder extends ExpressionBuilder {
   """,
   since = "3.3.0",
   group = "math_funcs")
-object CeilExpressionBuilder extends CeilFloorExpressionBuilder {
-  val functionName: String = "ceil"
+// scalastyle:on line.size.limit
+object CeilExpressionBuilder extends CeilFloorExpressionBuilderBase {
+  override protected def buildWithOneParam(param: Expression): Expression = Ceil(param)
 
-  def build(expressions: Seq[Expression]): Expression = {
-    if (expressions.length == 1) {
-      Ceil(expressions.head)
-    } else if (expressions.length == 2) {
-      val (child, scale) = extractChildAndScaleParam(expressions)
-      RoundCeil(child, scale)
-    } else {
-      throw QueryCompilationErrors.invalidNumberOfFunctionParameters(functionName)
-    }
-  }
+  override protected def buildWithTwoParams(param1: Expression, param2: Expression): Expression =
+    RoundCeil(param1, param2)
 }
 
 case class RoundCeil(child: Expression, scale: Expression)
   extends RoundBase(child, scale, BigDecimal.RoundingMode.CEILING, "ROUND_CEILING")
-    with Serializable with ImplicitCastInputTypes {
+    with ImplicitCastInputTypes {
 
   override def inputTypes: Seq[AbstractDataType] = Seq(DecimalType, IntegerType)
 
@@ -335,9 +332,11 @@ case class RoundCeil(child: Expression, scale: Expression)
     case t => t
   }
 
-  override protected def withNewChildrenInternal(newLeft: Expression, newRight: Expression)
-  : RoundCeil = copy(child = newLeft, scale = newRight)
   override def nodeName: String = "ceil"
+
+  override protected def withNewChildrenInternal(
+      newLeft: Expression, newRight: Expression): RoundCeil =
+    copy(child = newLeft, scale = newRight)
 }
 
 @ExpressionDescription(
@@ -539,10 +538,9 @@ case class Floor(child: Expression) extends UnaryMathExpression(math.floor, "FLO
   copy(child = newChild)
 }
 
+// scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = """
-  _FUNC_(expr[, scale]) - Returns the largest number after rounding down that is not greater
-  than `expr`. An optional `scale` parameter can be specified to control the rounding behavior.""",
+  usage = " _FUNC_(expr[, scale]) - Returns the largest number after rounding down that is not greater than `expr`. An optional `scale` parameter can be specified to control the rounding behavior.",
   examples = """
     Examples:
       > SELECT _FUNC_(-0.1);
@@ -556,24 +554,17 @@ case class Floor(child: Expression) extends UnaryMathExpression(math.floor, "FLO
   """,
   since = "3.3.0",
   group = "math_funcs")
-object FloorExpressionBuilder extends CeilFloorExpressionBuilder {
-  val functionName: String = "floor"
+// scalastyle:on line.size.limit
+object FloorExpressionBuilder extends CeilFloorExpressionBuilderBase {
+  override protected def buildWithOneParam(param: Expression): Expression = Floor(param)
 
-  def build(expressions: Seq[Expression]): Expression = {
-    if (expressions.length == 1) {
-      Floor(expressions.head)
-    } else if (expressions.length == 2) {
-      val(child, scale) = extractChildAndScaleParam(expressions)
-      RoundFloor(child, scale)
-    } else {
-      throw QueryCompilationErrors.invalidNumberOfFunctionParameters(functionName)
-    }
-  }
+  override protected def buildWithTwoParams(param1: Expression, param2: Expression): Expression =
+    RoundFloor(param1, param2)
 }
 
 case class RoundFloor(child: Expression, scale: Expression)
   extends RoundBase(child, scale, BigDecimal.RoundingMode.FLOOR, "ROUND_FLOOR")
-    with Serializable with ImplicitCastInputTypes {
+    with ImplicitCastInputTypes {
 
   override def inputTypes: Seq[AbstractDataType] = Seq(DecimalType, IntegerType)
 
@@ -587,9 +578,11 @@ case class RoundFloor(child: Expression, scale: Expression)
     case t => t
   }
 
-  override protected def withNewChildrenInternal(newLeft: Expression, newRight: Expression)
-  : RoundFloor = copy(child = newLeft, scale = newRight)
   override def nodeName: String = "floor"
+
+  override protected def withNewChildrenInternal(
+      newLeft: Expression, newRight: Expression): RoundFloor =
+    copy(child = newLeft, scale = newRight)
 }
 
 object Factorial {

@@ -463,7 +463,7 @@ private[spark] object JsonProtocol {
       case ExecutorLostFailure(executorId, exitCausedByApp, reason) =>
         ("Executor ID" -> executorId) ~
         ("Exit Caused By App" -> exitCausedByApp) ~
-        ("Loss Reason" -> reason.map(_.toString))
+        ("Loss Reason" -> reason)
       case taskKilled: TaskKilled =>
         val accumUpdates = JArray(taskKilled.accumUpdates.map(accumulableInfoToJson).toList)
         ("Kill Reason" -> taskKilled.reason) ~

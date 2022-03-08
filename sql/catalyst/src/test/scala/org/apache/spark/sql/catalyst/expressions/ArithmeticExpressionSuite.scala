@@ -78,10 +78,12 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
       checkEvaluation(UnaryMinus(input), convert(-1))
       checkEvaluation(UnaryMinus(Literal.create(null, dataType)), null)
     }
-    checkEvaluation(UnaryMinus(Literal(Long.MinValue)), Long.MinValue)
-    checkEvaluation(UnaryMinus(Literal(Int.MinValue)), Int.MinValue)
-    checkEvaluation(UnaryMinus(Literal(Short.MinValue)), Short.MinValue)
-    checkEvaluation(UnaryMinus(Literal(Byte.MinValue)), Byte.MinValue)
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
+      checkEvaluation(UnaryMinus(Literal(Long.MinValue)), Long.MinValue)
+      checkEvaluation(UnaryMinus(Literal(Int.MinValue)), Int.MinValue)
+      checkEvaluation(UnaryMinus(Literal(Short.MinValue)), Short.MinValue)
+      checkEvaluation(UnaryMinus(Literal(Byte.MinValue)), Byte.MinValue)
+    }
     withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
       checkExceptionInExpression[ArithmeticException](
         UnaryMinus(Literal(Long.MinValue)), "overflow")
@@ -170,7 +172,13 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
       checkEvaluation(Divide(left, right), convert(2))
       checkEvaluation(Divide(Literal.create(null, left.dataType), right), null)
       checkEvaluation(Divide(left, Literal.create(null, right.dataType)), null)
-      checkEvaluation(Divide(left, Literal(convert(0))), null)  // divide by zero
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
+        checkEvaluation(Divide(left, Literal(convert(0))), null) // divide by zero
+      }
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+        checkExceptionInExpression[ArithmeticException](
+          Divide(left, Literal(convert(0))), "divide by zero")
+      }
     }
 
     Seq("true", "false").foreach { failOnError =>
@@ -194,7 +202,13 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
       checkEvaluation(IntegralDivide(left, right), 0L)
       checkEvaluation(IntegralDivide(Literal.create(null, left.dataType), right), null)
       checkEvaluation(IntegralDivide(left, Literal.create(null, right.dataType)), null)
-      checkEvaluation(IntegralDivide(left, Literal(convert(0))), null)  // divide by zero
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
+        checkEvaluation(IntegralDivide(left, Literal(convert(0))), null) // divide by zero
+      }
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+        checkExceptionInExpression[ArithmeticException](
+          IntegralDivide(left, Literal(convert(0))), "divide by zero")
+      }
     }
     checkEvaluation(IntegralDivide(positiveLongLit, negativeLongLit), 0L)
 
@@ -222,7 +236,13 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
       checkEvaluation(Remainder(left, right), convert(1))
       checkEvaluation(Remainder(Literal.create(null, left.dataType), right), null)
       checkEvaluation(Remainder(left, Literal.create(null, right.dataType)), null)
-      checkEvaluation(Remainder(left, Literal(convert(0))), null)  // mod by 0
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
+        checkEvaluation(Remainder(left, Literal(convert(0))), null) // mod by 0
+      }
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+        checkExceptionInExpression[ArithmeticException](
+          Remainder(left, Literal(convert(0))), "divide by zero")
+      }
     }
     checkEvaluation(Remainder(positiveShortLit, positiveShortLit), 0.toShort)
     checkEvaluation(Remainder(negativeShortLit, negativeShortLit), 0.toShort)
@@ -304,7 +324,13 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
       checkEvaluation(Pmod(left, right), convert(1))
       checkEvaluation(Pmod(Literal.create(null, left.dataType), right), null)
       checkEvaluation(Pmod(left, Literal.create(null, right.dataType)), null)
-      checkEvaluation(Pmod(left, Literal(convert(0))), null)  // mod by 0
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
+        checkEvaluation(Pmod(left, Literal(convert(0))), null) // mod by 0
+      }
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+        checkExceptionInExpression[ArithmeticException](
+          Pmod(left, Literal(convert(0))), "divide by zero")
+      }
     }
     checkEvaluation(Pmod(Literal(-7), Literal(3)), 2)
     checkEvaluation(Pmod(Literal(7.2D), Literal(4.1D)), 3.1000000000000005)
@@ -461,15 +487,24 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
     checkEvaluation(IntegralDivide(Literal(Decimal(1)), Literal(Decimal(2))), 0L)
     checkEvaluation(IntegralDivide(Literal(Decimal(2.4)), Literal(Decimal(1.1))), 2L)
     checkEvaluation(IntegralDivide(Literal(Decimal(1.2)), Literal(Decimal(1.1))), 1L)
-    checkEvaluation(IntegralDivide(Literal(Decimal(0.2)), Literal(Decimal(0.0))), null)
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
+      checkEvaluation(
+        IntegralDivide(Literal(Decimal(0.2)), Literal(Decimal(0.0))), null) // mod by 0
+    }
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      checkExceptionInExpression[ArithmeticException](
+        IntegralDivide(Literal(Decimal(0.2)), Literal(Decimal(0.0))), "divide by zero")
+    }
     // overflows long and so returns a wrong result
     checkEvaluation(DecimalPrecision.decimalAndDecimal.apply(IntegralDivide(
       Literal(Decimal("99999999999999999999999999999999999")), Literal(Decimal(0.001)))),
       687399551400672280L)
     // overflow during promote precision
-    checkEvaluation(DecimalPrecision.decimalAndDecimal.apply(IntegralDivide(
-      Literal(Decimal("99999999999999999999999999999999999999")), Literal(Decimal(0.00001)))),
-      null)
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
+      checkEvaluation(DecimalPrecision.decimalAndDecimal.apply(IntegralDivide(
+        Literal(Decimal("99999999999999999999999999999999999999")), Literal(Decimal(0.00001)))),
+        null)
+    }
   }
 
   test("SPARK-24598: overflow on long returns wrong result") {
@@ -701,13 +736,25 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
   }
 
   test("SPARK-36921: Support YearMonthIntervalType by div") {
-    checkEvaluation(IntegralDivide(Literal(Period.ZERO), Literal(Period.ZERO)), null)
-    checkEvaluation(IntegralDivide(Literal(Period.ofYears(1)),
-      Literal(Period.ZERO)), null)
-    checkEvaluation(IntegralDivide(Period.ofMonths(Int.MinValue),
-      Literal(Period.ZERO)), null)
-    checkEvaluation(IntegralDivide(Period.ofMonths(Int.MaxValue),
-      Literal(Period.ZERO)), null)
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
+      checkEvaluation(IntegralDivide(Literal(Period.ZERO), Literal(Period.ZERO)), null)
+      checkEvaluation(IntegralDivide(Literal(Period.ofYears(1)),
+        Literal(Period.ZERO)), null)
+      checkEvaluation(IntegralDivide(Period.ofMonths(Int.MinValue),
+        Literal(Period.ZERO)), null)
+      checkEvaluation(IntegralDivide(Period.ofMonths(Int.MaxValue),
+        Literal(Period.ZERO)), null)
+    }
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      checkExceptionInExpression[ArithmeticException](
+        IntegralDivide(Literal(Period.ZERO), Literal(Period.ZERO)), "divide by zero")
+      checkExceptionInExpression[ArithmeticException](
+        IntegralDivide(Literal(Period.ofYears(1)), Literal(Period.ZERO)), "divide by zero")
+      checkExceptionInExpression[ArithmeticException](
+        IntegralDivide(Period.ofMonths(Int.MinValue), Literal(Period.ZERO)), "divide by zero")
+      checkExceptionInExpression[ArithmeticException](
+        IntegralDivide(Period.ofMonths(Int.MaxValue), Literal(Period.ZERO)), "divide by zero")
+    }
 
     checkEvaluation(IntegralDivide(Literal.create(null, YearMonthIntervalType()),
       Literal.create(null, YearMonthIntervalType())), null)
@@ -741,13 +788,28 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
       Literal(Period.ofMonths(-5))), -2L)
   }
   test("SPARK-36921: Support DayTimeIntervalType by div") {
-    checkEvaluation(IntegralDivide(Literal(Duration.ZERO), Literal(Duration.ZERO)), null)
-    checkEvaluation(IntegralDivide(Literal(Duration.ofDays(1)),
-      Literal(Duration.ZERO)), null)
-    checkEvaluation(IntegralDivide(Literal(Duration.of(Long.MaxValue, ChronoUnit.MICROS)),
-      Literal(Duration.ZERO)), null)
-    checkEvaluation(IntegralDivide(Literal(Duration.of(Long.MinValue, ChronoUnit.MICROS)),
-      Literal(Duration.ZERO)), null)
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
+      checkEvaluation(IntegralDivide(Literal(Duration.ZERO), Literal(Duration.ZERO)), null)
+      checkEvaluation(IntegralDivide(Literal(Duration.ofDays(1)),
+        Literal(Duration.ZERO)), null)
+      checkEvaluation(IntegralDivide(Literal(Duration.of(Long.MaxValue, ChronoUnit.MICROS)),
+        Literal(Duration.ZERO)), null)
+      checkEvaluation(IntegralDivide(Literal(Duration.of(Long.MinValue, ChronoUnit.MICROS)),
+        Literal(Duration.ZERO)), null)
+    }
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      checkExceptionInExpression[ArithmeticException](
+        IntegralDivide(Literal(Duration.ZERO), Literal(Duration.ZERO)), "divide by zero")
+      checkExceptionInExpression[ArithmeticException](
+        IntegralDivide(Literal(Duration.ofDays(1)),
+          Literal(Duration.ZERO)), "divide by zero")
+      checkExceptionInExpression[ArithmeticException](
+        IntegralDivide(Literal(Duration.of(Long.MaxValue, ChronoUnit.MICROS)),
+          Literal(Duration.ZERO)), "divide by zero")
+      checkExceptionInExpression[ArithmeticException](
+        IntegralDivide(Literal(Duration.of(Long.MinValue, ChronoUnit.MICROS)),
+          Literal(Duration.ZERO)), "divide by zero")
+    }
 
     checkEvaluation(IntegralDivide(Literal.create(null, DayTimeIntervalType()),
       Literal.create(null, DayTimeIntervalType())), null)

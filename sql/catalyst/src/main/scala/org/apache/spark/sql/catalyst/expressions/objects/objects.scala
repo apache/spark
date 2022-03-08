@@ -828,7 +828,7 @@ case class MapObjects private(
 
   private def executeFuncOnCollection(inputCollection: Seq[_]): Iterator[_] = {
     val row = new GenericInternalRow(1)
-    inputCollection.toIterator.map { element =>
+    inputCollection.iterator.map { element =>
       row.update(0, element)
       lambdaFunction.eval(row)
     }

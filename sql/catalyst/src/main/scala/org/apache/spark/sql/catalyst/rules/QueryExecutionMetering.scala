@@ -79,7 +79,7 @@ case class QueryExecutionMetering() {
     val maxLengthRuleNames = if (map.isEmpty) {
       0
     } else {
-      map.keys.map(_.toString.length).max
+      map.keys.map(_.length).max
     }
 
     val colRuleName = "Rule".padTo(maxLengthRuleNames, " ").mkString
