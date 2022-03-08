@@ -62,21 +62,21 @@ import org.apache.spark.sql.util.NumericHistogram
 case class HistogramNumeric(
     child: Expression,
     nBins: Expression,
-    propagateInputType: Boolean,
     override val mutableAggBufferOffset: Int,
     override val inputAggBufferOffset: Int)
   extends TypedImperativeAggregate[NumericHistogram] with ImplicitCastInputTypes
   with BinaryLike[Expression] {
 
-  def this(child: Expression, nBins: Expression, propagateInputType: Boolean =
-  SQLConf.get.histogramNumericPropagateInputType) = {
-    this(child, nBins, propagateInputType, 0, 0)
+  def this(child: Expression, nBins: Expression) = {
+    this(child, nBins, 0, 0)
   }
 
   private lazy val nb = nBins.eval() match {
     case null => null
     case n: Int => n
   }
+
+  private val propagateInputType: Boolean = SQLConf.get.histogramNumericPropagateInputType
 
   override def inputTypes: Seq[AbstractDataType] = {
     // Support NumericType, DateType, TimestampType and TimestampNTZType, YearMonthIntervalType,

@@ -708,7 +708,7 @@ FROM VALUES
  (31), (32), (33), (34), (35), (3), (37), (38), (39), (40),
  (41), (42), (43), (44), (45), (46), (47), (48), (49), (50) AS tab(col)
 -- !query schema
-struct<histogram_2:array<struct<x:double,y:double>>,histogram_3:array<struct<x:double,y:double>>,histogram_5:array<struct<x:double,y:double>>,histogram_10:array<struct<x:double,y:double>>>
+struct<histogram_2:array<struct<x:int,y:double>>,histogram_3:array<struct<x:int,y:double>>,histogram_5:array<struct<x:int,y:double>>,histogram_10:array<struct<x:int,y:double>>>
 -- !query output
 [{"x":12,"y":26.0},{"x":38,"y":24.0}]	[{"x":9,"y":20.0},{"x":25,"y":11.0},{"x":40,"y":19.0}]	[{"x":5,"y":11.0},{"x":14,"y":8.0},{"x":22,"y":7.0},{"x":30,"y":10.0},{"x":43,"y":14.0}]	[{"x":3,"y":6.0},{"x":8,"y":6.0},{"x":13,"y":4.0},{"x":17,"y":3.0},{"x":20,"y":4.0},{"x":25,"y":6.0},{"x":31,"y":7.0},{"x":39,"y":5.0},{"x":43,"y":4.0},{"x":48,"y":5.0}]
 
