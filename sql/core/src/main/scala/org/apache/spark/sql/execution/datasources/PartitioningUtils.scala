@@ -33,7 +33,7 @@ import org.apache.spark.sql.catalyst.{InternalRow, SQLConfHelper, StructFilters}
 import org.apache.spark.sql.catalyst.analysis.TypeCoercion
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.catalog.ExternalCatalogUtils.getPartitionValueString
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, BoundReference, Cast, Literal, Predicate}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, BoundReference, Cast, Expression, InterpretedPredicate, Literal, Predicate}
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateFormatter, DateTimeUtils, TimestampFormatter}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.sources
@@ -645,21 +645,16 @@ object PartitioningUtils extends SQLConfHelper{
       partitionSchema: StructType,
       partitionValues: Option[InternalRow],
       partitionFilter: sources.Filter): Boolean = {
-    val predicate =
-      StructFilters.filterToExpression(partitionFilter, StructFilters.toRef(partitionSchema))
-    if (predicate.isDefined) {
-      val boundPredicate = Predicate.createInterpreted(predicate.get.transform {
+    def createInterpreted(expr: Expression): InterpretedPredicate = {
+      Predicate.createInterpreted(expr.transform {
         case a: AttributeReference =>
           val index = partitionSchema.indexWhere(a.name == _.name)
           BoundReference(index, partitionSchema(index).dataType, nullable = true)
       })
-      if (partitionValues.exists(boundPredicate.eval)) {
-        true
-      } else {
-        false
-      }
-    } else {
-      true
     }
+
+    val predicate =
+      StructFilters.filterToExpression(partitionFilter, StructFilters.toRef(partitionSchema))
+    predicate.isEmpty || partitionValues.exists(createInterpreted(predicate.get).eval)
   }
 }
