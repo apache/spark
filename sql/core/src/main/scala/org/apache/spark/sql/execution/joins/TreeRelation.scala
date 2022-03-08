@@ -127,7 +127,6 @@ case class DoubleArrayTrieTree[V](
             pos = newPos
           }
         } else {
-          i = j
           stopped = true
         }
       }
