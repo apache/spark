@@ -47,12 +47,12 @@ class MathFunctionsSuite extends QueryTest with SharedSparkSession {
       c: Column => Column,
       f: T => U): Unit = {
     checkAnswer(
-      doubleData.select(c('a)),
+      doubleData.select(c(Symbol("a"))),
       (1 to 10).map(n => Row(f((n * 0.2 - 1).asInstanceOf[T])))
     )
 
     checkAnswer(
-      doubleData.select(c('b)),
+      doubleData.select(c(Symbol("b"))),
       (1 to 10).map(n => Row(f((-n * 0.2 + 1).asInstanceOf[T])))
     )
 
@@ -65,13 +65,13 @@ class MathFunctionsSuite extends QueryTest with SharedSparkSession {
   private def testOneToOneNonNegativeMathFunction(c: Column => Column, f: Double => Double): Unit =
   {
     checkAnswer(
-      nnDoubleData.select(c('a)),
+      nnDoubleData.select(c(Symbol("a"))),
       (1 to 10).map(n => Row(f(n * 0.1)))
     )
 
     if (f(-1) === StrictMath.log1p(-1)) {
       checkAnswer(
-        nnDoubleData.select(c('b)),
+        nnDoubleData.select(c(Symbol("b"))),
         (1 to 9).map(n => Row(f(n * -0.1))) :+ Row(null)
       )
     }
@@ -87,12 +87,12 @@ class MathFunctionsSuite extends QueryTest with SharedSparkSession {
       d: (Column, Double) => Column,
       f: (Double, Double) => Double): Unit = {
     checkAnswer(
-      nnDoubleData.select(c('a, 'a)),
+      nnDoubleData.select(c('a, Symbol("a"))),
       nnDoubleData.collect().toSeq.map(r => Row(f(r.getDouble(0), r.getDouble(0))))
     )
 
     checkAnswer(
-      nnDoubleData.select(c('a, 'b)),
+      nnDoubleData.select(c('a, Symbol("b"))),
       nnDoubleData.collect().toSeq.map(r => Row(f(r.getDouble(0), r.getDouble(1))))
     )
 
@@ -109,7 +109,7 @@ class MathFunctionsSuite extends QueryTest with SharedSparkSession {
     val nonNull = nullDoubles.collect().toSeq.filter(r => r.get(0) != null)
 
     checkAnswer(
-      nullDoubles.select(c('a, 'a)).orderBy('a.asc),
+      nullDoubles.select(c('a, Symbol("a"))).orderBy(Symbol("a").asc),
       Row(null) +: nonNull.map(r => Row(f(r.getDouble(0), r.getDouble(0))))
     )
   }
@@ -255,7 +255,7 @@ class MathFunctionsSuite extends QueryTest with SharedSparkSession {
   test("factorial") {
     val df = (0 to 5).map(i => (i, i)).toDF("a", "b")
     checkAnswer(
-      df.select(factorial('a)),
+      df.select(factorial(Symbol("a"))),
       Seq(Row(1), Row(1), Row(2), Row(6), Row(24), Row(120))
     )
     checkAnswer(
@@ -271,11 +271,11 @@ class MathFunctionsSuite extends QueryTest with SharedSparkSession {
   test("round/bround/ceil/floor") {
     val df = Seq(5, 55, 555).map(Tuple1(_)).toDF("a")
     checkAnswer(
-      df.select(round('a), round('a, -1), round('a, -2)),
+      df.select(round(Symbol("a")), round('a, -1), round('a, -2)),
       Seq(Row(5, 10, 0), Row(55, 60, 100), Row(555, 560, 600))
     )
     checkAnswer(
-      df.select(bround('a), bround('a, -1), bround('a, -2)),
+      df.select(bround(Symbol("a")), bround('a, -1), bround('a, -2)),
       Seq(Row(5, 0, 0), Row(55, 60, 100), Row(555, 560, 600))
     )
     checkAnswer(
@@ -343,11 +343,11 @@ class MathFunctionsSuite extends QueryTest with SharedSparkSession {
   test("round/bround/ceil/floor with data frame from a local Seq of Product") {
     val df = spark.createDataFrame(Seq(Tuple1(BigDecimal("5.9")))).toDF("value")
     checkAnswer(
-      df.withColumn("value_rounded", round('value)),
+      df.withColumn("value_rounded", round(Symbol("value"))),
       Seq(Row(BigDecimal("5.9"), BigDecimal("6")))
     )
     checkAnswer(
-      df.withColumn("value_brounded", bround('value)),
+      df.withColumn("value_brounded", bround(Symbol("value"))),
       Seq(Row(BigDecimal("5.9"), BigDecimal("6")))
     )
     checkAnswer(
@@ -423,10 +423,10 @@ class MathFunctionsSuite extends QueryTest with SharedSparkSession {
 
   test("hex") {
     val data = Seq((28, -28, 100800200404L, "hello")).toDF("a", "b", "c", "d")
-    checkAnswer(data.select(hex('a)), Seq(Row("1C")))
-    checkAnswer(data.select(hex('b)), Seq(Row("FFFFFFFFFFFFFFE4")))
-    checkAnswer(data.select(hex('c)), Seq(Row("177828FED4")))
-    checkAnswer(data.select(hex('d)), Seq(Row("68656C6C6F")))
+    checkAnswer(data.select(hex(Symbol("a"))), Seq(Row("1C")))
+    checkAnswer(data.select(hex(Symbol("b"))), Seq(Row("FFFFFFFFFFFFFFE4")))
+    checkAnswer(data.select(hex(Symbol("c"))), Seq(Row("177828FED4")))
+    checkAnswer(data.select(hex(Symbol("d"))), Seq(Row("68656C6C6F")))
     checkAnswer(data.selectExpr("hex(a)"), Seq(Row("1C")))
     checkAnswer(data.selectExpr("hex(b)"), Seq(Row("FFFFFFFFFFFFFFE4")))
     checkAnswer(data.selectExpr("hex(c)"), Seq(Row("177828FED4")))
@@ -436,8 +436,8 @@ class MathFunctionsSuite extends QueryTest with SharedSparkSession {
 
   test("unhex") {
     val data = Seq(("1C", "737472696E67")).toDF("a", "b")
-    checkAnswer(data.select(unhex('a)), Row(Array[Byte](28.toByte)))
-    checkAnswer(data.select(unhex('b)), Row("string".getBytes(StandardCharsets.UTF_8)))
+    checkAnswer(data.select(unhex(Symbol("a"))), Row(Array[Byte](28.toByte)))
+    checkAnswer(data.select(unhex(Symbol("b"))), Row("string".getBytes(StandardCharsets.UTF_8)))
     checkAnswer(data.selectExpr("unhex(a)"), Row(Array[Byte](28.toByte)))
     checkAnswer(data.selectExpr("unhex(b)"), Row("string".getBytes(StandardCharsets.UTF_8)))
     checkAnswer(data.selectExpr("""unhex("##")"""), Row(null))

@@ -1951,7 +1951,7 @@ object QueryExecutionErrors {
       s"The input string '$input' does not match the given number format: '$format'")
   }
 
-  def MultipleBucketTransformsError(): Throwable = {
+  def multipleBucketTransformsError(): Throwable = {
     new UnsupportedOperationException("Multiple bucket transforms are not supported.")
   }
 
@@ -1971,5 +1971,11 @@ object QueryExecutionErrors {
     new SparkIllegalArgumentException(
       errorClass = "INVALID_PARAMETER_VALUE",
       messageParameters = Array("unit", "timestampadd", unit))
+  }
+
+  def invalidUnitInTimestampDiff(unit: String): Throwable = {
+    new SparkIllegalArgumentException(
+      errorClass = "INVALID_PARAMETER_VALUE",
+      messageParameters = Array("unit", "timestampdiff", unit))
   }
 }

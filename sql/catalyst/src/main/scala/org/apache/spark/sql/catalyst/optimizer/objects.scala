@@ -186,7 +186,7 @@ object ObjectSerializerPruning extends Rule[LogicalPlan] {
       serializer: NamedExpression,
       prunedDataType: DataType): NamedExpression = {
     val prunedStructTypes = collectStructType(prunedDataType, ArrayBuffer.empty[StructType])
-      .toIterator
+      .iterator
 
     def transformer: PartialFunction[Expression, Expression] = {
       case m: ExternalMapToCatalyst =>

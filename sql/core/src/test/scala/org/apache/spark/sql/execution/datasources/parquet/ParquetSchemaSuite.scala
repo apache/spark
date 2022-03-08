@@ -944,7 +944,8 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
     withTempPath { dir =>
       val path = dir.getCanonicalPath
       spark.range(3).write.parquet(s"$path/p=1")
-      spark.range(3).select('id cast IntegerType as 'id).write.parquet(s"$path/p=2")
+      spark.range(3).select(Symbol("id") cast IntegerType as Symbol("id"))
+        .write.parquet(s"$path/p=2")
 
       val message = intercept[SparkException] {
         spark.read.option("mergeSchema", "true").parquet(path).schema

@@ -940,29 +940,33 @@ class DataFrameSuite extends QueryTest
 
     def getSchemaAsSeq(df: DataFrame): Seq[String] = df.schema.map(_.name)
 
-    val describeAllCols = person2.describe()
-    assert(getSchemaAsSeq(describeAllCols) === Seq("summary", "name", "age", "height"))
-    checkAnswer(describeAllCols, describeResult)
-    // All aggregate value should have been cast to string
-    describeAllCols.collect().foreach { row =>
-      row.toSeq.foreach { value =>
-        if (value != null) {
-          assert(value.isInstanceOf[String], "expected string but found " + value.getClass)
+    Seq("true", "false").foreach { ansiEnabled =>
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> ansiEnabled) {
+        val describeAllCols = person2.describe()
+        assert(getSchemaAsSeq(describeAllCols) === Seq("summary", "name", "age", "height"))
+        checkAnswer(describeAllCols, describeResult)
+        // All aggregate value should have been cast to string
+        describeAllCols.collect().foreach { row =>
+          row.toSeq.foreach { value =>
+            if (value != null) {
+              assert(value.isInstanceOf[String], "expected string but found " + value.getClass)
+            }
+          }
         }
+
+        val describeOneCol = person2.describe("age")
+        assert(getSchemaAsSeq(describeOneCol) === Seq("summary", "age"))
+        checkAnswer(describeOneCol, describeResult.map { case Row(s, _, d, _) => Row(s, d) })
+
+        val describeNoCol = person2.select().describe()
+        assert(getSchemaAsSeq(describeNoCol) === Seq("summary"))
+        checkAnswer(describeNoCol, describeResult.map { case Row(s, _, _, _) => Row(s) })
+
+        val emptyDescription = person2.limit(0).describe()
+        assert(getSchemaAsSeq(emptyDescription) === Seq("summary", "name", "age", "height"))
+        checkAnswer(emptyDescription, emptyDescribeResult)
       }
     }
-
-    val describeOneCol = person2.describe("age")
-    assert(getSchemaAsSeq(describeOneCol) === Seq("summary", "age"))
-    checkAnswer(describeOneCol, describeResult.map { case Row(s, _, d, _) => Row(s, d)} )
-
-    val describeNoCol = person2.select().describe()
-    assert(getSchemaAsSeq(describeNoCol) === Seq("summary"))
-    checkAnswer(describeNoCol, describeResult.map { case Row(s, _, _, _) => Row(s)} )
-
-    val emptyDescription = person2.limit(0).describe()
-    assert(getSchemaAsSeq(emptyDescription) === Seq("summary", "name", "age", "height"))
-    checkAnswer(emptyDescription, emptyDescribeResult)
   }
 
   test("summary") {
@@ -988,30 +992,34 @@ class DataFrameSuite extends QueryTest
 
     def getSchemaAsSeq(df: DataFrame): Seq[String] = df.schema.map(_.name)
 
-    val summaryAllCols = person2.summary()
+    Seq("true", "false").foreach { ansiEnabled =>
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> ansiEnabled) {
+        val summaryAllCols = person2.summary()
 
-    assert(getSchemaAsSeq(summaryAllCols) === Seq("summary", "name", "age", "height"))
-    checkAnswer(summaryAllCols, summaryResult)
-    // All aggregate value should have been cast to string
-    summaryAllCols.collect().foreach { row =>
-      row.toSeq.foreach { value =>
-        if (value != null) {
-          assert(value.isInstanceOf[String], "expected string but found " + value.getClass)
+        assert(getSchemaAsSeq(summaryAllCols) === Seq("summary", "name", "age", "height"))
+        checkAnswer(summaryAllCols, summaryResult)
+        // All aggregate value should have been cast to string
+        summaryAllCols.collect().foreach { row =>
+          row.toSeq.foreach { value =>
+            if (value != null) {
+              assert(value.isInstanceOf[String], "expected string but found " + value.getClass)
+            }
+          }
         }
+
+        val summaryOneCol = person2.select("age").summary()
+        assert(getSchemaAsSeq(summaryOneCol) === Seq("summary", "age"))
+        checkAnswer(summaryOneCol, summaryResult.map { case Row(s, _, d, _) => Row(s, d) })
+
+        val summaryNoCol = person2.select().summary()
+        assert(getSchemaAsSeq(summaryNoCol) === Seq("summary"))
+        checkAnswer(summaryNoCol, summaryResult.map { case Row(s, _, _, _) => Row(s) })
+
+        val emptyDescription = person2.limit(0).summary()
+        assert(getSchemaAsSeq(emptyDescription) === Seq("summary", "name", "age", "height"))
+        checkAnswer(emptyDescription, emptySummaryResult)
       }
     }
-
-    val summaryOneCol = person2.select("age").summary()
-    assert(getSchemaAsSeq(summaryOneCol) === Seq("summary", "age"))
-    checkAnswer(summaryOneCol, summaryResult.map { case Row(s, _, d, _) => Row(s, d)} )
-
-    val summaryNoCol = person2.select().summary()
-    assert(getSchemaAsSeq(summaryNoCol) === Seq("summary"))
-    checkAnswer(summaryNoCol, summaryResult.map { case Row(s, _, _, _) => Row(s)} )
-
-    val emptyDescription = person2.limit(0).summary()
-    assert(getSchemaAsSeq(emptyDescription) === Seq("summary", "name", "age", "height"))
-    checkAnswer(emptyDescription, emptySummaryResult)
   }
 
   test("SPARK-34165: Add count_distinct to summary") {
@@ -3098,6 +3106,26 @@ class DataFrameSuite extends QueryTest
     ))
 
     assert(res.collect.length == 2)
+  }
+
+  test("SPARK-38285: Fix ClassCastException: GenericArrayData cannot be cast to InternalRow") {
+    withTempView("v1") {
+      val sqlText =
+        """
+          |CREATE OR REPLACE TEMP VIEW v1 AS
+          |SELECT * FROM VALUES
+          |(array(
+          |  named_struct('s', 'string1', 'b', array(named_struct('e', 'string2'))),
+          |  named_struct('s', 'string4', 'b', array(named_struct('e', 'string5')))
+          |  )
+          |)
+          |v1(o);
+          |""".stripMargin
+      sql(sqlText)
+
+      val df = sql("SELECT eo.b.e FROM (SELECT explode(o) AS eo FROM v1)")
+      checkAnswer(df, Row(Seq("string2")) :: Row(Seq("string5")) :: Nil)
+    }
   }
 }
 

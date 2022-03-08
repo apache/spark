@@ -428,11 +428,6 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     }
 
     {
-      val ret = cast(array_notNull, ArrayType(BooleanType, containsNull = false))
-      assert(ret.resolved === false)
-    }
-
-    {
       val ret = cast(array, IntegerType)
       assert(ret.resolved === false)
     }
@@ -450,18 +445,6 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
 
     {
       val ret = cast(map, MapType(StringType, BooleanType, valueContainsNull = false))
-      assert(ret.resolved === false)
-    }
-    {
-      val ret = cast(map, MapType(IntegerType, StringType, valueContainsNull = true))
-      assert(ret.resolved === false)
-    }
-    {
-      val ret = cast(map_notNull, MapType(StringType, BooleanType, valueContainsNull = false))
-      assert(ret.resolved === false)
-    }
-    {
-      val ret = cast(map_notNull, MapType(IntegerType, StringType, valueContainsNull = true))
       assert(ret.resolved === false)
     }
 
@@ -511,14 +494,6 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     }
 
     {
-      val ret = cast(struct_notNull, StructType(Seq(
-        StructField("a", BooleanType, nullable = true),
-        StructField("b", BooleanType, nullable = true),
-        StructField("c", BooleanType, nullable = false))))
-      assert(ret.resolved === false)
-    }
-
-    {
       val ret = cast(struct, StructType(Seq(
         StructField("a", StringType, nullable = true),
         StructField("b", StringType, nullable = true),
@@ -539,33 +514,6 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     val inp = Literal.create(InternalRow(0L), originalSchema)
     val expected = InternalRow(0L)
     checkEvaluation(cast(inp, targetSchema), expected)
-  }
-
-  test("complex casting") {
-    val complex = Literal.create(
-      Row(
-        Seq("123", "true", "f"),
-        Map("a" -> "123", "b" -> "true", "c" -> "f"),
-        Row(0)),
-      StructType(Seq(
-        StructField("a",
-          ArrayType(StringType, containsNull = false), nullable = true),
-        StructField("m",
-          MapType(StringType, StringType, valueContainsNull = false), nullable = true),
-        StructField("s",
-          StructType(Seq(
-            StructField("i", IntegerType, nullable = true)))))))
-
-    val ret = cast(complex, StructType(Seq(
-      StructField("a",
-        ArrayType(IntegerType, containsNull = true), nullable = true),
-      StructField("m",
-        MapType(StringType, BooleanType, valueContainsNull = false), nullable = true),
-      StructField("s",
-        StructType(Seq(
-          StructField("l", LongType, nullable = true)))))))
-
-    assert(ret.resolved === false)
   }
 
   test("cast between string and interval") {

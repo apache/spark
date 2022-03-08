@@ -32,8 +32,9 @@ import org.apache.spark.sql.catalyst.util.{DateFormatter, DateTimeUtils, Timesta
 import org.apache.spark.sql.connector.catalog.TableChange
 import org.apache.spark.sql.connector.catalog.TableChange._
 import org.apache.spark.sql.connector.catalog.index.TableIndex
-import org.apache.spark.sql.connector.expressions.{FieldReference, GeneralSQLExpression, NamedReference}
+import org.apache.spark.sql.connector.expressions.{Expression, FieldReference, NamedReference}
 import org.apache.spark.sql.connector.expressions.aggregate.{AggregateFunc, Avg, Count, CountStar, Max, Min, Sum}
+import org.apache.spark.sql.connector.util.V2ExpressionSQLBuilder
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JdbcUtils}
 import org.apache.spark.sql.execution.datasources.v2.TableSampleInfo
@@ -194,6 +195,31 @@ abstract class JdbcDialect extends Serializable with Logging{
     case _ => value
   }
 
+  class JDBCSQLBuilder extends V2ExpressionSQLBuilder {
+    override def visitFieldReference(fieldRef: FieldReference): String = {
+      if (fieldRef.fieldNames().length != 1) {
+        throw new IllegalArgumentException(
+          "FieldReference with field name has multiple or zero parts unsupported: " + fieldRef);
+      }
+      quoteIdentifier(fieldRef.fieldNames.head)
+    }
+  }
+
+  /**
+   * Converts V2 expression to String representing a SQL expression.
+   * @param expr The V2 expression to be converted.
+   * @return Converted value.
+   */
+  @Since("3.3.0")
+  def compileExpression(expr: Expression): Option[String] = {
+    val jdbcSQLBuilder = new JDBCSQLBuilder()
+    try {
+      Some(jdbcSQLBuilder.build(expr))
+    } catch {
+      case _: IllegalArgumentException => None
+    }
+  }
+
   /**
    * Converts aggregate function to String representing a SQL expression.
    * @param aggFunction The aggregate function to be converted.
@@ -203,55 +229,20 @@ abstract class JdbcDialect extends Serializable with Logging{
   def compileAggregate(aggFunction: AggregateFunc): Option[String] = {
     aggFunction match {
       case min: Min =>
-        val sql = min.column match {
-          case field: FieldReference =>
-            if (field.fieldNames.length != 1) return None
-            quoteIdentifier(field.fieldNames.head)
-          case expr: GeneralSQLExpression =>
-            expr.sql()
-        }
-        Some(s"MIN($sql)")
+        compileExpression(min.column).map(v => s"MIN($v)")
       case max: Max =>
-        val sql = max.column match {
-          case field: FieldReference =>
-            if (field.fieldNames.length != 1) return None
-            quoteIdentifier(field.fieldNames.head)
-          case expr: GeneralSQLExpression =>
-            expr.sql()
-        }
-        Some(s"MAX($sql)")
+        compileExpression(max.column).map(v => s"MAX($v)")
       case count: Count =>
-        val sql = count.column match {
-          case field: FieldReference =>
-            if (field.fieldNames.length != 1) return None
-            quoteIdentifier(field.fieldNames.head)
-          case expr: GeneralSQLExpression =>
-            expr.sql()
-        }
         val distinct = if (count.isDistinct) "DISTINCT " else ""
-        Some(s"COUNT($distinct$sql)")
+        compileExpression(count.column).map(v => s"COUNT($distinct$v)")
       case sum: Sum =>
-        val sql = sum.column match {
-          case field: FieldReference =>
-            if (field.fieldNames.length != 1) return None
-            quoteIdentifier(field.fieldNames.head)
-          case expr: GeneralSQLExpression =>
-            expr.sql()
-        }
         val distinct = if (sum.isDistinct) "DISTINCT " else ""
-        Some(s"SUM($distinct$sql)")
+        compileExpression(sum.column).map(v => s"SUM($distinct$v)")
       case _: CountStar =>
         Some("COUNT(*)")
       case avg: Avg =>
-        val sql = avg.column match {
-          case field: FieldReference =>
-            if (field.fieldNames.length != 1) return None
-            quoteIdentifier(field.fieldNames.head)
-          case expr: GeneralSQLExpression =>
-            expr.sql()
-        }
         val distinct = if (avg.isDistinct) "DISTINCT " else ""
-        Some(s"AVG($distinct$sql)")
+        compileExpression(avg.column).map(v => s"AVG($distinct$v)")
       case _ => None
     }
   }
