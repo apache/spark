@@ -90,14 +90,16 @@ class TransposeWindowSuite extends PlanTest {
   }
 
   test("don't transpose two adjacent windows with intersection of partition and output set") {
-    val query = testRelation
-      .window(Seq(('a + 'b).as('e), sum(c).as('sum_a_2)), partitionSpec3, Seq.empty)
-      .window(Seq(sum(c).as('sum_a_1)), Seq(a, 'e), Seq.empty)
+    if (!conf.ansiEnabled) {
+      val query = testRelation
+        .window(Seq(('a + 'b).as('e), sum(c).as('sum_a_2)), partitionSpec3, Seq.empty)
+        .window(Seq(sum(c).as('sum_a_1)), Seq(a, 'e), Seq.empty)
 
-    val analyzed = query.analyze
-    val optimized = Optimize.execute(analyzed)
+      val analyzed = query.analyze
+      val optimized = Optimize.execute(analyzed)
 
-    comparePlans(optimized, analyzed)
+      comparePlans(optimized, analyzed)
+    }
   }
 
   test("don't transpose two adjacent windows with non-deterministic expressions") {
