@@ -1225,6 +1225,12 @@ Note that there are some restrictions when you use session window in streaming q
 
 For batch query, global window (only having `session_window` in grouping key) is supported.
 
+Due to implementation details of session window in streaming query, for each input row in same session,
+it will be assigned initial session window and then merged into real session after shuffling. If the RPS
+of input rows is high and there are too many rows in same session in a batch, the output of shuffle write
+might be significant. For such case, you can enable `spark.sql.streaming.sessionWindow.merge.sessions.in.local.partition`
+to sort and merge session in local partition prior to shuffle.
+
 ##### Conditions for watermarking to clean aggregation state
 {:.no_toc}
 
