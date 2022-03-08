@@ -474,7 +474,7 @@ def default_session() -> SparkSession:
     # the behavior of pandas API on Spark follows pandas, not SQL.
     if is_testing():
         spark.conf.set("spark.sql.ansi.enabled", False)  # type: ignore[arg-type]
-    if spark.conf.get("spark.sql.ansi.enabled"):
+    if spark.conf.get("spark.sql.ansi.enabled") == "true":
         log_advice(
             "The config 'spark.sql.ansi.enabled' is set to True. "
             "This can cause unexpected behavior "
