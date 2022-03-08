@@ -109,6 +109,7 @@ abstract class JdbcDialect extends Serializable with Logging{
              the connection is being created at the driver side.
    * @throws IllegalArgumentException if the driver could not open a JDBC connection.
    */
+  @Since("3.3.0")
   def createConnectionFactory(options: JDBCOptions): Int => Connection = {
     val driverClass: String = options.driverClass
     (partitionId: Int) => {
