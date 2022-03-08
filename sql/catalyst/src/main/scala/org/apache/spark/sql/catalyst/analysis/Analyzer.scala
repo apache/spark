@@ -1385,7 +1385,7 @@ class Analyzer(override val catalogManager: CatalogManager)
           if children.exists(c => c.output.map(_.exprId).distinct.length < c.output.length) =>
         val newChildren = children.map { c =>
           if (c.output.map(_.exprId).distinct.length < c.output.length) {
-            val existingExprIds = mutable.Set[ExprId]()
+            val existingExprIds = mutable.HashSet[ExprId]()
             val projectList = c.output.map { attr =>
               if (existingExprIds.contains(attr.exprId)) {
                 // replace non-first duplicates with aliases and tag them
@@ -1403,7 +1403,7 @@ class Analyzer(override val catalogManager: CatalogManager)
             c
           }
         }
-        u.copy(children = newChildren)
+        u.withNewChildren(newChildren)
 
       // When resolve `SortOrder`s in Sort based on child, don't report errors as
       // we still have chance to resolve it based on its descendants
