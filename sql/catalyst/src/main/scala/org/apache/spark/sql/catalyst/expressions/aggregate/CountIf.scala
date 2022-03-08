@@ -34,8 +34,7 @@ import org.apache.spark.sql.types.{AbstractDataType, BooleanType}
   """,
   group = "agg_funcs",
   since = "3.0.0")
-case class CountIf(
-    child: Expression)
+case class CountIf(child: Expression)
   extends AggregateFunction
   with RuntimeReplaceableAggregate
   with ImplicitCastInputTypes

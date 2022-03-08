@@ -36,9 +36,7 @@ import org.apache.spark.sql.types.{AbstractDataType, NumericType}
   """,
   group = "agg_funcs",
   since = "3.3.0")
-case class RegrCount(
-    left: Expression,
-    right: Expression)
+case class RegrCount(left: Expression, right: Expression)
   extends AggregateFunction
   with RuntimeReplaceableAggregate
   with ImplicitCastInputTypes
