@@ -230,7 +230,7 @@ object RowEncoder {
     case _: DecimalType => ObjectType(classOf[java.lang.Object])
     // In order to support both Array and Seq in external row, we make this as java.lang.Object.
     case _: ArrayType => ObjectType(classOf[java.lang.Object])
-    case _: TimestampType if lenient => ObjectType(classOf[java.lang.Object])
+    case _: DateType | _: TimestampType if lenient => ObjectType(classOf[java.lang.Object])
     case _ => externalDataTypeFor(dt)
   }
 

@@ -1896,6 +1896,10 @@ case class ValidateExternalType(child: Expression, expected: DataType, lenient: 
       (value: Any) => {
         value.getClass.isArray || value.isInstanceOf[Seq[_]]
       }
+    case _: DateType =>
+      (value: Any) => {
+        value.isInstanceOf[java.sql.Date] || value.isInstanceOf[java.time.LocalDate]
+      }
     case _: TimestampType =>
       (value: Any) => {
         value.isInstanceOf[java.sql.Timestamp] || value.isInstanceOf[java.time.Instant]
@@ -1933,10 +1937,10 @@ case class ValidateExternalType(child: Expression, expected: DataType, lenient: 
           classOf[Decimal]))
       case _: ArrayType =>
         s"$obj.getClass().isArray() || $obj instanceof ${classOf[scala.collection.Seq[_]].getName}"
+      case _: DateType =>
+        genCheckTypes(Seq(classOf[java.sql.Date], classOf[java.time.LocalDate]))
       case _: TimestampType =>
-        genCheckTypes(Seq(
-          classOf[java.sql.Timestamp],
-          classOf[java.time.Instant]))
+        genCheckTypes(Seq(classOf[java.sql.Timestamp], classOf[java.time.Instant]))
       case _ =>
         s"$obj instanceof ${CodeGenerator.boxedType(dataType)}"
     }
