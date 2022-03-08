@@ -231,7 +231,11 @@ SELECT histogram_numeric(col, 3) FROM VALUES (INTERVAL '100-00' YEAR TO MONTH),
 SELECT histogram_numeric(col, 3) FROM VALUES (INTERVAL '12 20:4:0' DAY TO SECOND),
   (INTERVAL '12 21:4:0' DAY TO SECOND), (INTERVAL '12 22:4:0' DAY TO SECOND) AS tab(col);
 SELECT histogram_numeric(col, 3)
-FROM VALUES (null), (null), (null) AS tab(col);
+FROM VALUES (NULL), (NULL), (NULL) AS tab(col);
+SELECT histogram_numeric(col, 3)
+FROM VALUES (CAST(NULL AS DOUBLE)), (CAST(NULL AS DOUBLE)), (CAST(NULL AS DOUBLE)) AS tab(col);
+SELECT histogram_numeric(col, 3)
+FROM VALUES (CAST(NULL AS INT)), (CAST(NULL AS INT)), (CAST(NULL AS INT)) AS tab(col);
 
 
 -- SPARK-37613: Support ANSI Aggregate Function: regr_count
