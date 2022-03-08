@@ -105,7 +105,8 @@ abstract class JdbcDialect extends Serializable with Logging{
    * In general, creating a connection has nothing to do with JDBC partition id.
    * But sometimes it is needed, such as a database with multiple shard nodes.
    * @param options - JDBC options that contains url, table and other information.
-   * @return The factory method for creating JDBC connections.
+   * @return The factory method for creating JDBC connections with the RDD partition ID. -1 means
+           the connection is being created at the driver side.
    * @throws IllegalArgumentException if the driver could not open a JDBC connection.
    */
   def createConnectionFactory(options: JDBCOptions): Int => Connection = {
