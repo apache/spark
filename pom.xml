@@ -163,6 +163,13 @@
     <scala.version>2.12.15</scala.version>
     <scala.binary.version>2.12</scala.binary.version>
     <scalatest-maven-plugin.version>2.0.2</scalatest-maven-plugin.version>
+    <!--
+      This needs to be managed in different profiles to avoid
+      errors building different Hadoop versions.
+      See: SPARK-36547, SPARK-38394.
+       -->
+
+    <scala-maven-plugin.version>4.4.0</scala-maven-plugin.version>
     <scalafmt.parameters>--test</scalafmt.parameters>
     <!-- for now, not running scalafmt as part of default verify pipeline -->
     <scalafmt.skip>true</scalafmt.skip>
@@ -187,7 +194,7 @@
     <joda.version>2.10.13</joda.version>
     <jodd.version>3.5.2</jodd.version>
     <jsr305.version>3.0.0</jsr305.version>
-    <libthrift.version>0.16.0</libthrift.version>
+    <libthrift.version>0.12.0</libthrift.version>
     <antlr4.version>4.8</antlr4.version>
     <jpam.version>1.1</jpam.version>
     <selenium.version>3.141.59</selenium.version>
@@ -2585,10 +2592,6 @@
             <groupId>org.slf4j</groupId>
             <artifactId>slf4j-api</artifactId>
           </exclusion>
-          <exclusion>
-            <groupId>javax.annotation</groupId>
-            <artifactId>javax.annotation-api</artifactId>
-          </exclusion>
         </exclusions>
       </dependency>
       <dependency>
@@ -2779,8 +2782,7 @@
         <plugin>
           <groupId>net.alchim31.maven</groupId>
           <artifactId>scala-maven-plugin</artifactId>
-          <!-- SPARK-36547: Please don't upgrade the version below, otherwise there will be an error on building Hadoop 2.7 package -->
-          <version>4.3.0</version>
+          <version>${scala-maven-plugin.version}</version>
           <executions>
             <execution>
               <id>eclipse-add-source</id>
@@ -3434,6 +3436,8 @@
         <hadoop-client-api.artifact>hadoop-client</hadoop-client-api.artifact>
         <hadoop-client-runtime.artifact>hadoop-yarn-api</hadoop-client-runtime.artifact>
         <hadoop-client-minicluster.artifact>hadoop-client</hadoop-client-minicluster.artifact>
+        <!-- SPARK-36547: Please don't upgrade the version below, otherwise there will be an error on building Hadoop 2.7 package -->
+        <scala-maven-plugin.version>4.3.0</scala-maven-plugin.version>
       </properties>
     </profile>
 

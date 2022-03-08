@@ -277,7 +277,7 @@ private[ui] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
         s"if (window.confirm('Are you sure you want to kill application ${app.id} ?')) " +
           "{ this.parentNode.submit(); return true; } else { return false; }"
       <form action="app/kill/" method="POST" style="display:inline">
-        <input type="hidden" name="id" value={app.id.toString}/>
+        <input type="hidden" name="id" value={app.id}/>
         <input type="hidden" name="terminate" value="true"/>
         <a href="#" onclick={confirm} class="kill-link">(kill)</a>
       </form>
@@ -328,7 +328,7 @@ private[ui] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
         s"if (window.confirm('Are you sure you want to kill driver ${driver.id} ?')) " +
           "{ this.parentNode.submit(); return true; } else { return false; }"
       <form action="driver/kill/" method="POST" style="display:inline">
-        <input type="hidden" name="id" value={driver.id.toString}/>
+        <input type="hidden" name="id" value={driver.id}/>
         <input type="hidden" name="terminate" value="true"/>
         <a href="#" onclick={confirm} class="kill-link">(kill)</a>
       </form>
@@ -339,10 +339,10 @@ private[ui] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
       <td>{driver.worker.map(w =>
         if (w.isAlive()) {
           <a href={UIUtils.makeHref(parent.master.reverseProxy, w.id, w.webUiAddress)}>
-            {w.id.toString}
+            {w.id}
           </a>
         } else {
-          w.id.toString
+          w.id
         }).getOrElse("None")}
       </td>
       <td>{driver.state}</td>

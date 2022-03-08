@@ -728,7 +728,7 @@ private[kafka010] object KafkaSourceProvider extends Logging {
     parameters
       .keySet
       .filter(_.toLowerCase(Locale.ROOT).startsWith("kafka."))
-      .map { k => k.drop(6).toString -> parameters(k) }
+      .map { k => k.drop(6) -> parameters(k) }
       .toMap
   }
 }
