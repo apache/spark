@@ -3570,7 +3570,7 @@ object SQLConf {
         "bins. If this config is set to true, the output type of the 'x' field in the return " +
         "value is propagated from the input value consumed in the aggregate function. Otherwise, " +
         "'x' always has double type.")
-      .version("3.4.0")
+      .version("3.3.0")
       .booleanConf
       .createWithDefault(true)
 

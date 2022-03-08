@@ -21,19 +21,21 @@ import java.sql.Timestamp
 import java.time.{Duration, Period}
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.TypeCheckFailure
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.dsl.expressions.{DslString, DslSymbol}
 import org.apache.spark.sql.catalyst.dsl.plans.DslLogicalPlan
 import org.apache.spark.sql.catalyst.expressions.{Alias, AttributeReference, BoundReference, Cast, GenericInternalRow, Literal}
+import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
 import org.apache.spark.sql.catalyst.util.GenericArrayData
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.NumericHistogram
 
-class HistogramNumericSuite extends SparkFunSuite {
+class HistogramNumericSuite extends SparkFunSuite with SQLHelper with Logging {
 
   private val random = new java.util.Random()
 
@@ -57,8 +59,7 @@ class HistogramNumericSuite extends SparkFunSuite {
     assert(compareEquals(buffer,
       NumericHistogramSerializer.deserialize(NumericHistogramSerializer.serialize(buffer))))
 
-    val agg = new HistogramNumeric(
-      BoundReference(0, DoubleType, true), Literal(5))
+    val agg = new HistogramNumeric(BoundReference(0, DoubleType, true), Literal(5))
     assert(compareEquals(agg.deserialize(agg.serialize(buffer)), buffer))
   }
 
@@ -92,8 +93,7 @@ class HistogramNumericSuite extends SparkFunSuite {
 
   test("class HistogramNumeric, fails analysis if nBins is not a constant") {
     val attribute = AttributeReference("a", IntegerType)()
-    val wrongNB = new HistogramNumeric(
-      attribute, nBins = AttributeReference("b", IntegerType)())
+    val wrongNB = new HistogramNumeric(attribute, nBins = AttributeReference("b", IntegerType)())
 
     assertEqual(
       wrongNB.checkInputDataTypes(),
@@ -209,8 +209,7 @@ class HistogramNumericSuite extends SparkFunSuite {
         Literal(Period.ofMonths(12))))
     for ((left, middle, right) <- inputs) {
       // Check that the 'propagateInputType' bit correctly toggles the output type.
-      SQLConf.withExistingConf(
-        new SQLConf().copy(SQLConf.HISTOGRAM_NUMERIC_PROPAGATE_INPUT_TYPE -> false)) {
+      withSQLConf(SQLConf.HISTOGRAM_NUMERIC_PROPAGATE_INPUT_TYPE.key -> "false") {
         val aggDoubleOutputType = new HistogramNumeric(
           BoundReference(0, left.dataType, nullable = true), Literal(5))
         assert(aggDoubleOutputType.dataType match {
