@@ -92,14 +92,24 @@ class QueryExecutionErrorsSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("INVALID_PARAMETER_VALUE: invalid unit passed to timestampadd") {
-    val e = intercept[SparkIllegalArgumentException] {
-      sql("select timestampadd('nanosecond', 100, timestamp'2022-02-13 18:00:00')").collect()
+  test("INVALID_PARAMETER_VALUE: invalid unit passed to timestampadd/timestampdiff") {
+    Seq(
+      "timestampadd" ->
+        "select timestampadd('nanosecond', 100, timestamp'2022-02-13 18:00:00')",
+      "timestampdiff" ->
+        """select timestampdiff(
+          |  'nanosecond',
+          |  timestamp'2022-02-13 18:00:00',
+          |  timestamp'2022-02-22 12:52:00')""".stripMargin
+    ).foreach { case (funcName, sqlStmt) =>
+      val e = intercept[SparkIllegalArgumentException] {
+        sql(sqlStmt).collect()
+      }
+      assert(e.getErrorClass === "INVALID_PARAMETER_VALUE")
+      assert(e.getSqlState === "22023")
+      assert(e.getMessage ===
+        s"The value of parameter(s) 'unit' in $funcName is invalid: nanosecond")
     }
-    assert(e.getErrorClass === "INVALID_PARAMETER_VALUE")
-    assert(e.getSqlState === "22023")
-    assert(e.getMessage ===
-      "The value of parameter(s) 'unit' in timestampadd is invalid: nanosecond")
   }
 
   test("UNSUPPORTED_FEATURE: unsupported combinations of AES modes and padding") {

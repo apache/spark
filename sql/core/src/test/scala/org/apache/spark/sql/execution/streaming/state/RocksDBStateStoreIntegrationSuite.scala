@@ -67,7 +67,7 @@ class RocksDBStateStoreIntegrationSuite extends StreamTest {
         val inputData = MemoryStream[Int]
 
         val query = inputData.toDS().toDF("value")
-          .select('value)
+          .select(Symbol("value"))
           .groupBy($"value")
           .agg(count("*"))
           .writeStream
@@ -119,7 +119,7 @@ class RocksDBStateStoreIntegrationSuite extends StreamTest {
 
         def startQuery(): StreamingQuery = {
           inputData.toDS().toDF("value")
-            .select('value)
+            .select(Symbol("value"))
             .groupBy($"value")
             .agg(count("*"))
             .writeStream
@@ -156,7 +156,7 @@ class RocksDBStateStoreIntegrationSuite extends StreamTest {
       SQLConf.STATE_STORE_ROCKSDB_FORMAT_VERSION.key -> "100") {
       val inputData = MemoryStream[Int]
       val query = inputData.toDS().toDF("value")
-        .select('value)
+        .select(Symbol("value"))
         .groupBy($"value")
         .agg(count("*"))
         .writeStream
@@ -179,7 +179,7 @@ class RocksDBStateStoreIntegrationSuite extends StreamTest {
         val inputData = MemoryStream[Int]
 
         val query = inputData.toDS().toDF("value")
-          .select('value)
+          .select(Symbol("value"))
           .groupBy($"value")
           .agg(count("*"))
           .writeStream

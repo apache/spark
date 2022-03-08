@@ -44,7 +44,10 @@ class DDLParserSuite extends AnalysisTest {
   }
 
   private def intercept(sqlCommand: String, messages: String*): Unit =
-    interceptParseException(parsePlan)(sqlCommand, messages: _*)
+    interceptParseException(parsePlan)(sqlCommand, messages: _*)()
+
+  private def intercept(sqlCommand: String, errorClass: Option[String], messages: String*): Unit =
+    interceptParseException(parsePlan)(sqlCommand, messages: _*)(errorClass)
 
   private def parseCompare(sql: String, expected: LogicalPlan): Unit = {
     comparePlans(parsePlan(sql), expected, checkAnalysis = false)
@@ -1774,7 +1777,7 @@ class DDLParserSuite extends AnalysisTest {
         allColumns = true))
 
     intercept("ANALYZE TABLE a.b.c COMPUTE STATISTICS FOR ALL COLUMNS key, value",
-      "mismatched input 'key' expecting {<EOF>, ';'}")
+      Some("PARSE_INPUT_MISMATCHED"), "Syntax error at or near 'key'") // expecting {<EOF>, ';'}
     intercept("ANALYZE TABLE a.b.c COMPUTE STATISTICS FOR ALL",
       "missing 'COLUMNS' at '<EOF>'")
   }
@@ -2234,5 +2237,58 @@ class DDLParserSuite extends AnalysisTest {
       insertPartitionPlan("INTERVAL '1 02:03:04.128462' DAY TO SECOND"))
     comparePlans(parsePlan(timestampTypeSql), insertPartitionPlan(timestamp))
     comparePlans(parsePlan(binaryTypeSql), insertPartitionPlan(binaryStr))
+  }
+
+  test("SPARK-38335: Implement parser support for DEFAULT values for columns in tables") {
+    // The following commands will support DEFAULT columns, but this has not been implemented yet.
+    for (sql <- Seq(
+      "ALTER TABLE t1 ADD COLUMN x int NOT NULL DEFAULT 42",
+      "ALTER TABLE t1 ALTER COLUMN a.b.c SET DEFAULT 42",
+      "ALTER TABLE t1 ALTER COLUMN a.b.c DROP DEFAULT",
+      "ALTER TABLE t1 REPLACE COLUMNS (x STRING DEFAULT 42)",
+      "CREATE TABLE my_tab(a INT COMMENT 'test', b STRING NOT NULL DEFAULT \"abc\") USING parquet",
+      "REPLACE TABLE my_tab(a INT COMMENT 'test', b STRING NOT NULL DEFAULT \"xyz\") USING parquet"
+    )) {
+      val exc = intercept[ParseException] {
+        parsePlan(sql);
+      }
+      assert(exc.getMessage.contains("Support for DEFAULT column values is not implemented yet"));
+    }
+    // In each of the following cases, the DEFAULT reference parses as an unresolved attribute
+    // reference. We can handle these cases after the parsing stage, at later phases of analysis.
+    comparePlans(parsePlan("VALUES (1, 2, DEFAULT) AS val"),
+      SubqueryAlias("val",
+        UnresolvedInlineTable(Seq("col1", "col2", "col3"), Seq(Seq(Literal(1), Literal(2),
+          UnresolvedAttribute("DEFAULT"))))))
+    comparePlans(parsePlan(
+      "INSERT INTO t PARTITION(part = date'2019-01-02') VALUES ('a', DEFAULT)"),
+      InsertIntoStatement(
+        UnresolvedRelation(Seq("t")),
+        Map("part" -> Some("2019-01-02")),
+        userSpecifiedCols = Seq.empty[String],
+        query = UnresolvedInlineTable(Seq("col1", "col2"), Seq(Seq(Literal("a"),
+          UnresolvedAttribute("DEFAULT")))),
+        overwrite = false, ifPartitionNotExists = false))
+    parseCompare(
+      """
+        |MERGE INTO testcat1.ns1.ns2.tbl AS target
+        |USING testcat2.ns1.ns2.tbl AS source
+        |ON target.col1 = source.col1
+        |WHEN MATCHED AND (target.col2='delete') THEN DELETE
+        |WHEN MATCHED AND (target.col2='update') THEN UPDATE SET target.col2 = DEFAULT
+        |WHEN NOT MATCHED AND (target.col2='insert')
+        |THEN INSERT (target.col1, target.col2) VALUES (source.col1, DEFAULT)
+      """.stripMargin,
+      MergeIntoTable(
+        SubqueryAlias("target", UnresolvedRelation(Seq("testcat1", "ns1", "ns2", "tbl"))),
+        SubqueryAlias("source", UnresolvedRelation(Seq("testcat2", "ns1", "ns2", "tbl"))),
+        EqualTo(UnresolvedAttribute("target.col1"), UnresolvedAttribute("source.col1")),
+        Seq(DeleteAction(Some(EqualTo(UnresolvedAttribute("target.col2"), Literal("delete")))),
+          UpdateAction(Some(EqualTo(UnresolvedAttribute("target.col2"), Literal("update"))),
+            Seq(Assignment(UnresolvedAttribute("target.col2"),
+              UnresolvedAttribute("DEFAULT"))))),
+        Seq(InsertAction(Some(EqualTo(UnresolvedAttribute("target.col2"), Literal("insert"))),
+          Seq(Assignment(UnresolvedAttribute("target.col1"), UnresolvedAttribute("source.col1")),
+            Assignment(UnresolvedAttribute("target.col2"), UnresolvedAttribute("DEFAULT")))))))
   }
 }

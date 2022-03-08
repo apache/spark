@@ -16,10 +16,12 @@
  */
 package org.apache.spark.deploy.k8s.features
 
+import io.fabric8.kubernetes.api.model.{ContainerBuilder, PodBuilder}
 import io.fabric8.volcano.scheduling.v1beta1.PodGroup
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.k8s._
+import org.apache.spark.deploy.k8s.Config._
 
 class VolcanoFeatureStepSuite extends SparkFunSuite {
 
@@ -37,6 +39,16 @@ class VolcanoFeatureStepSuite extends SparkFunSuite {
     assert(podGroup.getMetadata.getName === s"${kubernetesConf.appId}-podgroup")
   }
 
+  test("SPARK-38818: Support `spark.kubernetes.job.queue`") {
+    val sparkConf = new SparkConf()
+      .set(KUBERNETES_JOB_QUEUE.key, "queue1")
+    val kubernetesConf = KubernetesTestConf.createDriverConf(sparkConf)
+    val step = new VolcanoFeatureStep()
+    step.init(kubernetesConf)
+    val podGroup = step.getAdditionalPreKubernetesResources().head.asInstanceOf[PodGroup]
+    assert(podGroup.getSpec.getQueue === "queue1")
+  }
+
   test("SPARK-36061: Executor Pod with Volcano PodGroup") {
     val sparkConf = new SparkConf()
     val kubernetesConf = KubernetesTestConf.createExecutorConf(sparkConf)
@@ -45,5 +57,34 @@ class VolcanoFeatureStepSuite extends SparkFunSuite {
     val configuredPod = step.configurePod(SparkPod.initialPod())
     val annotations = configuredPod.pod.getMetadata.getAnnotations
     assert(annotations.get("scheduling.k8s.io/group-name") === s"${kubernetesConf.appId}-podgroup")
+  }
+
+  test("SPARK-38423: Support priorityClassName") {
+    // test null priority
+    val podWithNullPriority = SparkPod.initialPod()
+    assert(podWithNullPriority.pod.getSpec.getPriorityClassName === null)
+    verifyPriority(SparkPod.initialPod())
+    // test normal priority
+    val podWithPriority = SparkPod(
+      new PodBuilder()
+        .withNewMetadata()
+        .endMetadata()
+        .withNewSpec()
+          .withPriorityClassName("priority")
+        .endSpec()
+        .build(),
+      new ContainerBuilder().build())
+    assert(podWithPriority.pod.getSpec.getPriorityClassName === "priority")
+    verifyPriority(podWithPriority)
+  }
+
+  private def verifyPriority(pod: SparkPod): Unit = {
+    val sparkConf = new SparkConf()
+    val kubernetesConf = KubernetesTestConf.createDriverConf(sparkConf)
+    val step = new VolcanoFeatureStep()
+    step.init(kubernetesConf)
+    val sparkPod = step.configurePod(pod)
+    val podGroup = step.getAdditionalPreKubernetesResources().head.asInstanceOf[PodGroup]
+    assert(podGroup.getSpec.getPriorityClassName === sparkPod.pod.getSpec.getPriorityClassName)
   }
 }

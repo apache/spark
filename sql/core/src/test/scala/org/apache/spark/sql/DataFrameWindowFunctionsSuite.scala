@@ -97,7 +97,8 @@ class DataFrameWindowFunctionsSuite extends QueryTest
   }
 
   test("corr, covar_pop, stddev_pop functions in specific window") {
-    withSQLConf(SQLConf.LEGACY_STATISTICAL_AGGREGATE.key -> "true") {
+    withSQLConf(SQLConf.LEGACY_STATISTICAL_AGGREGATE.key -> "true",
+      SQLConf.ANSI_ENABLED.key -> "false") {
       val df = Seq(
         ("a", "p1", 10.0, 20.0),
         ("b", "p1", 20.0, 10.0),
@@ -150,7 +151,8 @@ class DataFrameWindowFunctionsSuite extends QueryTest
   test("SPARK-13860: " +
     "corr, covar_pop, stddev_pop functions in specific window " +
     "LEGACY_STATISTICAL_AGGREGATE off") {
-    withSQLConf(SQLConf.LEGACY_STATISTICAL_AGGREGATE.key -> "false") {
+    withSQLConf(SQLConf.LEGACY_STATISTICAL_AGGREGATE.key -> "false",
+      SQLConf.ANSI_ENABLED.key -> "false") {
       val df = Seq(
         ("a", "p1", 10.0, 20.0),
         ("b", "p1", 20.0, 10.0),
@@ -407,22 +409,24 @@ class DataFrameWindowFunctionsSuite extends QueryTest
   }
 
   test("numerical aggregate functions on string column") {
-    val df = Seq((1, "a", "b")).toDF("key", "value1", "value2")
-    checkAnswer(
-      df.select($"key",
-        var_pop("value1").over(),
-        variance("value1").over(),
-        stddev_pop("value1").over(),
-        stddev("value1").over(),
-        sum("value1").over(),
-        mean("value1").over(),
-        avg("value1").over(),
-        corr("value1", "value2").over(),
-        covar_pop("value1", "value2").over(),
-        covar_samp("value1", "value2").over(),
-        skewness("value1").over(),
-        kurtosis("value1").over()),
-      Seq(Row(1, null, null, null, null, null, null, null, null, null, null, null, null)))
+    if (!conf.ansiEnabled) {
+      val df = Seq((1, "a", "b")).toDF("key", "value1", "value2")
+      checkAnswer(
+        df.select($"key",
+          var_pop("value1").over(),
+          variance("value1").over(),
+          stddev_pop("value1").over(),
+          stddev("value1").over(),
+          sum("value1").over(),
+          mean("value1").over(),
+          avg("value1").over(),
+          corr("value1", "value2").over(),
+          covar_pop("value1", "value2").over(),
+          covar_samp("value1", "value2").over(),
+          skewness("value1").over(),
+          kurtosis("value1").over()),
+        Seq(Row(1, null, null, null, null, null, null, null, null, null, null, null, null)))
+    }
   }
 
   test("statistical functions") {
