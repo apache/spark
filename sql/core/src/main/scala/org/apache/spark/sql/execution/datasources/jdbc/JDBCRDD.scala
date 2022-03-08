@@ -181,7 +181,7 @@ object JDBCRDD extends Logging {
     val quotedColumns = requiredColumns.map(colName => dialect.quoteIdentifier(colName))
     new JDBCRDD(
       sc,
-      JdbcUtils.createConnectionFactory(options),
+      dialect.createConnectionFactory(options),
       pruneSchema(schema, requiredColumns),
       quotedColumns,
       filters,
