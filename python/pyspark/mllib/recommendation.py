@@ -18,7 +18,7 @@
 import array
 import sys
 from collections import namedtuple
-from typing import Tuple, Type, List, Union, Optional, Any
+from typing import Any, List, Optional, Tuple, Type, Union
 
 from pyspark import SparkContext, since
 from pyspark.rdd import RDD
