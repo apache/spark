@@ -77,7 +77,7 @@ class JDBCSuite extends QueryTest
     }
   }
 
-  val defaultMetadata = new MetadataBuilder().putLong("scale", 0).build()
+  val defaultMetadata = new MetadataBuilder().putLong("scale", 0)
 
   override def beforeAll(): Unit = {
     super.beforeAll()
@@ -1300,8 +1300,8 @@ class JDBCSuite extends QueryTest
   }
 
   test("SPARK-16848: jdbc API throws an exception for user specified schema") {
-    val schema = StructType(Seq(StructField("name", StringType, false, defaultMetadata),
-      StructField("theid", IntegerType, false, defaultMetadata)))
+    val schema = StructType(Seq(StructField("name", StringType, false, defaultMetadata.build()),
+      StructField("theid", IntegerType, false, defaultMetadata.build())))
     val parts = Array[String]("THEID < 2", "THEID >= 2")
     val e1 = intercept[AnalysisException] {
       spark.read.schema(schema).jdbc(urlWithUserAndPass, "TEST.PEOPLE", parts, new Properties())
@@ -1322,7 +1322,8 @@ class JDBCSuite extends QueryTest
     val df = spark.read.jdbc(urlWithUserAndPass, "TEST.PEOPLE", parts, props)
     assert(df.schema.size === 2)
     val expectedSchema = new StructType(CatalystSqlParser.parseTableSchema(customSchema).map(
-      f => StructField(f.name, f.dataType, f.nullable, defaultMetadata)).toArray)
+      f => StructField(f.name, f.dataType, f.nullable,
+        defaultMetadata.putBoolean("isIndexKey", false).build())).toArray)
     assert(df.schema === expectedSchema)
     assert(df.count() === 3)
   }
@@ -1340,7 +1341,7 @@ class JDBCSuite extends QueryTest
       val df = sql("select * from people_view")
       assert(df.schema.length === 2)
       val expectedSchema = new StructType(CatalystSqlParser.parseTableSchema(customSchema)
-        .map(f => StructField(f.name, f.dataType, f.nullable, defaultMetadata)).toArray)
+        .map(f => StructField(f.name, f.dataType, f.nullable, defaultMetadata.build())).toArray)
       assert(df.schema === expectedSchema)
       assert(df.count() === 3)
     }
@@ -1456,8 +1457,8 @@ class JDBCSuite extends QueryTest
     }
 
   test("jdbc data source shouldn't have unnecessary metadata in its schema") {
-    val schema = StructType(Seq(StructField("NAME", StringType, true, defaultMetadata),
-      StructField("THEID", IntegerType, true, defaultMetadata)))
+    val schema = StructType(Seq(StructField("NAME", StringType, true, defaultMetadata.build()),
+      StructField("THEID", IntegerType, true, defaultMetadata.build())))
 
     val df = spark.read.format("jdbc")
       .option("Url", urlWithUserAndPass)
@@ -1878,7 +1879,10 @@ class JDBCSuite extends QueryTest
     when(mockDialect.getCatalystType(anyInt(), anyString(), anyInt(), any[MetadataBuilder]))
       .thenReturn(None)
 
-    val schema = JdbcUtils.getSchema(mockRs, mockDialect)
+    val dbrs = mock(classOf[java.sql.ResultSet])
+    val dbMetaData = mock(classOf[java.sql.DatabaseMetaData])
+    when(dbMetaData.getPrimaryKeys(anyString(), anyString(), anyString())).thenReturn(dbrs)
+    val schema = JdbcUtils.getSchema(dbMetaData, mockRs, mockDialect)
     val fields = schema.fields
     assert(fields.length === 1)
     assert(fields(0).dataType === StringType)

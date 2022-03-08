@@ -161,7 +161,8 @@ case class JDBCScanBuilder(
   override def build(): Scan = {
     val resolver = session.sessionState.conf.resolver
     val timeZoneId = session.sessionState.conf.sessionLocalTimeZone
-    val parts = JDBCRelation.columnPartition(schema, resolver, timeZoneId, jdbcOptions)
+    val parts = JDBCRelation.columnPartition(schema, resolver, timeZoneId, jdbcOptions,
+      pushedFilter)
 
     // the `finalSchema` is either pruned in pushAggregation (if aggregates are
     // pushed down), or pruned in pruneColumns (in regular column pruning). These

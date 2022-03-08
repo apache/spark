@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources.jdbc
 
-import java.sql.{Connection, Driver, JDBCType, PreparedStatement, ResultSet, ResultSetMetaData, SQLException}
+import java.sql.{Connection, DatabaseMetaData, Driver, JDBCType, PreparedStatement, ResultSet, ResultSetMetaData, SQLException}
 import java.time.{Instant, LocalDate}
 import java.util
 import java.util.Locale
@@ -261,7 +261,7 @@ object JdbcUtils extends Logging with SQLConfHelper {
       val statement = conn.prepareStatement(dialect.getSchemaQuery(options.tableOrQuery))
       try {
         statement.setQueryTimeout(options.queryTimeout)
-        Some(getSchema(statement.executeQuery(), dialect))
+        Some(getSchema(conn.getMetaData, statement.executeQuery(), dialect))
       } catch {
         case _: SQLException => None
       } finally {
@@ -280,6 +280,7 @@ object JdbcUtils extends Logging with SQLConfHelper {
    * @throws SQLException if the schema contains an unsupported type.
    */
   def getSchema(
+      dbMetaData: DatabaseMetaData,
       resultSet: ResultSet,
       dialect: JdbcDialect,
       alwaysNullable: Boolean = false): StructType = {
@@ -287,6 +288,17 @@ object JdbcUtils extends Logging with SQLConfHelper {
     val ncols = rsmd.getColumnCount
     val fields = new Array[StructField](ncols)
     var i = 0
+
+    // to get table primary key
+    val catalogName = rsmd.getCatalogName(i + 1)
+    val tableName = rsmd.getTableName(i + 1)
+    val dbName = rsmd.getSchemaName(i + 1)
+    val pkrs = dbMetaData.getPrimaryKeys(catalogName, dbName, tableName)
+    val list = new util.ArrayList[String]()
+    while (pkrs.next()) {
+      list.add(pkrs.getString("COLUMN_NAME"))
+    }
+
     while (i < ncols) {
       val columnName = rsmd.getColumnLabel(i + 1)
       val dataType = rsmd.getColumnType(i + 1)
@@ -325,6 +337,12 @@ object JdbcUtils extends Logging with SQLConfHelper {
       val columnType =
         dialect.getCatalystType(dataType, typeName, fieldSize, metadata).getOrElse(
           getCatalystType(dataType, fieldSize, fieldScale, isSigned))
+      list.contains(columnName) match {
+        case true =>
+          metadata.putBoolean("isIndexKey", true)
+        case _ =>
+          metadata.putBoolean("isIndexKey", false)
+      }
       fields(i) = StructField(columnName, columnType, nullable, metadata.build())
       i = i + 1
     }

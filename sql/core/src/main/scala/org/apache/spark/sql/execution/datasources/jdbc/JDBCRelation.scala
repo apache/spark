@@ -17,6 +17,9 @@
 
 package org.apache.spark.sql.execution.datasources.jdbc
 
+import java.sql.SQLException
+import java.util
+
 import scala.collection.mutable.ArrayBuffer
 import scala.math.BigDecimal.RoundingMode
 
@@ -62,14 +65,16 @@ private[sql] object JDBCRelation extends Logging {
    * @param resolver function used to determine if two identifiers are equal
    * @param timeZoneId timezone ID to be used if a partition column type is date or timestamp
    * @param jdbcOptions JDBC options that contains url
+   * @param filters filters in Where clause
    * @return an array of partitions with where clause for each partition
    */
   def columnPartition(
       schema: StructType,
       resolver: Resolver,
       timeZoneId: String,
-      jdbcOptions: JDBCOptions): Array[Partition] = {
-    val partitioning = {
+      jdbcOptions: JDBCOptions,
+      filters: Array[Filter] = Array.empty): Array[Partition] = {
+    var partitioning = {
       import JDBCOptions._
 
       val partitionColumn = jdbcOptions.partitionColumn
@@ -98,7 +103,11 @@ private[sql] object JDBCRelation extends Logging {
 
     if (partitioning == null || partitioning.numPartitions <= 1 ||
       partitioning.lowerBound == partitioning.upperBound) {
-      return Array[Partition](JDBCPartition(null, 0))
+      val partitioningInfo = getPartitionBound(schema, resolver, timeZoneId, jdbcOptions, filters)
+      if (partitioningInfo == null) {
+        return Array[Partition](JDBCPartition(null, 0))
+      }
+      partitioning = partitioningInfo
     }
 
     val lowerBound = partitioning.lowerBound
@@ -166,6 +175,70 @@ private[sql] object JDBCRelation extends Logging {
     logInfo(s"Number of partitions: $numPartitions, WHERE clauses of these partitions: " +
       partitions.map(_.asInstanceOf[JDBCPartition].whereClause).mkString(", "))
     partitions
+  }
+
+  /**
+   * get the min and max value by the column
+   * @param schema resolved schema of a JDBC table
+   * @param resolver function used to determine if two identifiers are equal
+   * @param timeZoneId timezone ID to be used if a partition column type is date or timestamp
+   * @param jdbcOptions JDBC options that contains url
+   * @param filters filters in Where clause
+   * @return JDBCPartitioningInfo
+   */
+  def getPartitionBound(
+                         schema: StructType,
+                         resolver: Resolver,
+                         timeZoneId: String,
+                         jdbcOptions: JDBCOptions,
+                         filters: Array[Filter] = Array.empty): JDBCPartitioningInfo = {
+    // columns in filters
+    val filterColumns = new util.ArrayList[String]()
+    filters.map(filter => filter.references.distinct.map(r => filterColumns.add(r)))
+    // primary keys used for partitioning
+    val prks = schema.fields.filter(
+      f => f.metadata.getBoolean("isIndexKey") &&
+        !filterColumns.contains(f.name) &&
+        (f.dataType.isInstanceOf[NumericType] ||
+          f.dataType.isInstanceOf[DateType] ||
+          f.dataType.isInstanceOf[TimestampType]))
+
+    if (prks.length > 0) {
+      val prk = prks.head
+      val dataType = prk.dataType
+      var lBound: String = null
+      var uBound: String = null
+      val sql = s"select min(${prk.name}) as lBound, max(${prk.name}) as uBound " +
+        s"from ${jdbcOptions.tableOrQuery} limit 1"
+      val conn = JdbcUtils.createConnectionFactory(jdbcOptions)()
+      try {
+        val statement = conn.prepareStatement(sql)
+        try {
+          statement.setQueryTimeout(jdbcOptions.queryTimeout)
+          val resultSet = statement.executeQuery()
+          while (resultSet.next()) {
+            lBound = resultSet.getString("lBound")
+            uBound = resultSet.getString("uBound")
+          }
+          assert(lBound != null && uBound != null,
+            "partition column lowerBound and upperBound can not be null")
+        } catch {
+          case _: SQLException =>
+        } finally {
+          statement.close()
+        }
+      } catch {
+        case _: SQLException =>
+      }
+      JDBCPartitioningInfo(
+        prk.name,
+        dataType,
+        toInternalBoundValue(lBound, dataType, timeZoneId),
+        toInternalBoundValue(uBound, dataType, timeZoneId),
+        jdbcOptions.defaultNumPartitions)
+    } else {
+      null
+    }
   }
 
   // Verify column name and type based on the JDBC resolved schema

@@ -111,6 +111,9 @@ class JDBCOptions(
   // the number of partitions
   val numPartitions = parameters.get(JDBC_NUM_PARTITIONS).map(_.toInt)
 
+  // the default number of partitions
+  val defaultNumPartitions = parameters.getOrElse(DEFAULT_NUM_PARTITIONS, "10").toInt
+
   // the number of seconds the driver will wait for a Statement object to execute to the given
   // number of seconds. Zero means there is no limit.
   val queryTimeout = parameters.getOrElse(JDBC_QUERY_TIMEOUT, "0").toInt
@@ -282,4 +285,5 @@ object JDBCOptions {
   val JDBC_TABLE_COMMENT = newOption("tableComment")
   val JDBC_REFRESH_KRB5_CONFIG = newOption("refreshKrb5Config")
   val JDBC_CONNECTION_PROVIDER = newOption("connectionProvider")
+  val DEFAULT_NUM_PARTITIONS = newOption("defaultNumPartitions")
 }

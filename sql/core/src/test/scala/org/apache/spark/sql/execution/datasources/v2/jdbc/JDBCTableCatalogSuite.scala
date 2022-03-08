@@ -34,7 +34,7 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
 
   val tempDir = Utils.createTempDir()
   val url = s"jdbc:h2:${tempDir.getCanonicalPath};user=testUser;password=testPass"
-  val defaultMetadata = new MetadataBuilder().putLong("scale", 0).build()
+  val defaultMetadata = new MetadataBuilder().putLong("scale", 0)
   var conn: java.sql.Connection = null
 
   override def sparkConf: SparkConf = super.sparkConf
@@ -140,8 +140,8 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
   test("load a table") {
     val t = spark.table("h2.test.people")
     val expectedSchema = new StructType()
-      .add("NAME", StringType, true, defaultMetadata)
-      .add("ID", IntegerType, true, defaultMetadata)
+      .add("NAME", StringType, true, defaultMetadata.putBoolean("isIndexKey", false).build())
+      .add("ID", IntegerType, true, defaultMetadata.putBoolean("isIndexKey", false).build())
     assert(t.schema === expectedSchema)
     Seq("h2.test.not_existing_table", "h2.bad_test.not_existing_table").foreach { table =>
       val msg = intercept[AnalysisException] {
@@ -179,13 +179,14 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
       sql(s"ALTER TABLE $tableName ADD COLUMNS (C1 INTEGER, C2 STRING)")
       var t = spark.table(tableName)
       var expectedSchema = new StructType()
-        .add("ID", IntegerType, true, defaultMetadata)
-        .add("C1", IntegerType, true, defaultMetadata)
-        .add("C2", StringType, true, defaultMetadata)
+        .add("ID", IntegerType, true, defaultMetadata.putBoolean("isIndexKey", false).build())
+        .add("C1", IntegerType, true, defaultMetadata.putBoolean("isIndexKey", false).build())
+        .add("C2", StringType, true, defaultMetadata.putBoolean("isIndexKey", false).build())
       assert(t.schema === expectedSchema)
       sql(s"ALTER TABLE $tableName ADD COLUMNS (c3 DOUBLE)")
       t = spark.table(tableName)
-      expectedSchema = expectedSchema.add("c3", DoubleType, true, defaultMetadata)
+      expectedSchema = expectedSchema.add("c3", DoubleType, true,
+        defaultMetadata.putBoolean("isIndexKey", false).build())
       assert(t.schema === expectedSchema)
       // Add already existing column
       val msg = intercept[AnalysisException] {
@@ -209,8 +210,8 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
       sql(s"ALTER TABLE $tableName RENAME COLUMN id TO C")
       val t = spark.table(tableName)
       val expectedSchema = new StructType()
-        .add("C", IntegerType, true, defaultMetadata)
-        .add("C0", IntegerType, true, defaultMetadata)
+        .add("C", IntegerType, true, defaultMetadata.putBoolean("isIndexKey", false).build())
+        .add("C0", IntegerType, true, defaultMetadata.putBoolean("isIndexKey", false).build())
       assert(t.schema === expectedSchema)
       // Rename to already existing column
       val msg = intercept[AnalysisException] {
@@ -234,7 +235,8 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
       sql(s"ALTER TABLE $tableName DROP COLUMN C1")
       sql(s"ALTER TABLE $tableName DROP COLUMN c3")
       val t = spark.table(tableName)
-      val expectedSchema = new StructType().add("C2", IntegerType, true, defaultMetadata)
+      val expectedSchema = new StructType().add("C2", IntegerType, true,
+        defaultMetadata.putBoolean("isIndexKey", false).build())
       assert(t.schema === expectedSchema)
       // Drop not existing column
       val msg = intercept[AnalysisException] {
@@ -259,8 +261,8 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
       sql(s"ALTER TABLE $tableName ALTER COLUMN deptno TYPE DOUBLE")
       val t = spark.table(tableName)
       val expectedSchema = new StructType()
-        .add("ID", DoubleType, true, defaultMetadata)
-        .add("deptno", DoubleType, true, defaultMetadata)
+        .add("ID", DoubleType, true, defaultMetadata.putBoolean("isIndexKey", false).build())
+        .add("deptno", DoubleType, true, defaultMetadata.putBoolean("isIndexKey", false).build())
       assert(t.schema === expectedSchema)
       // Update not existing column
       val msg1 = intercept[AnalysisException] {
@@ -290,8 +292,8 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
       sql(s"ALTER TABLE $tableName ALTER COLUMN deptno DROP NOT NULL")
       val t = spark.table(tableName)
       val expectedSchema = new StructType()
-        .add("ID", IntegerType, true, defaultMetadata)
-        .add("deptno", IntegerType, true, defaultMetadata)
+        .add("ID", IntegerType, true, defaultMetadata.putBoolean("isIndexKey", false).build())
+        .add("deptno", IntegerType, true, defaultMetadata.putBoolean("isIndexKey", false).build())
       assert(t.schema === expectedSchema)
       // Update nullability of not existing column
       val msg = intercept[AnalysisException] {
@@ -338,8 +340,8 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
       sql(s"CREATE TABLE $tableName (c1 INTEGER NOT NULL, c2 INTEGER)")
       var t = spark.table(tableName)
       var expectedSchema = new StructType()
-        .add("c1", IntegerType, true, defaultMetadata)
-        .add("c2", IntegerType, true, defaultMetadata)
+        .add("c1", IntegerType, true, defaultMetadata.putBoolean("isIndexKey", false).build())
+        .add("c2", IntegerType, true, defaultMetadata.putBoolean("isIndexKey", false).build())
       assert(t.schema === expectedSchema)
 
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
@@ -352,8 +354,8 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
         sql(s"ALTER TABLE $tableName RENAME COLUMN C2 TO c3")
         expectedSchema = new StructType()
-          .add("c1", IntegerType, true, defaultMetadata)
-          .add("c3", IntegerType, true, defaultMetadata)
+          .add("c1", IntegerType, true, defaultMetadata.putBoolean("isIndexKey", false).build())
+          .add("c3", IntegerType, true, defaultMetadata.putBoolean("isIndexKey", false).build())
         t = spark.table(tableName)
         assert(t.schema === expectedSchema)
       }
@@ -367,7 +369,8 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
 
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
         sql(s"ALTER TABLE $tableName DROP COLUMN C3")
-        expectedSchema = new StructType().add("c1", IntegerType, true, defaultMetadata)
+        expectedSchema = new StructType().add("c1", IntegerType, true,
+          defaultMetadata.putBoolean("isIndexKey", false).build())
         t = spark.table(tableName)
         assert(t.schema === expectedSchema)
       }
@@ -381,7 +384,8 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
 
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
         sql(s"ALTER TABLE $tableName ALTER COLUMN C1 TYPE DOUBLE")
-        expectedSchema = new StructType().add("c1", DoubleType, true, defaultMetadata)
+        expectedSchema = new StructType().add("c1", DoubleType, true,
+          defaultMetadata.putBoolean("isIndexKey", false).build())
         t = spark.table(tableName)
         assert(t.schema === expectedSchema)
       }
@@ -395,7 +399,8 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
 
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
         sql(s"ALTER TABLE $tableName ALTER COLUMN C1 DROP NOT NULL")
-        expectedSchema = new StructType().add("c1", DoubleType, true, defaultMetadata)
+        expectedSchema = new StructType().add("c1", DoubleType, true,
+          defaultMetadata.putBoolean("isIndexKey", false).build())
         t = spark.table(tableName)
         assert(t.schema === expectedSchema)
       }
@@ -424,5 +429,45 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
       }.cause.get.getMessage
       assert(m.contains("\"TABLEENGINENAME\" not found"))
     }
+  }
+
+  test("test scan data partition optimization") {
+    withConnection {conn =>
+      conn.prepareStatement(
+        """CREATE TABLE "test"."employee" (id INTEGER PRIMARY KEY NOT NULL,
+          |name TEXT(32) NOT NULL)""".stripMargin)
+        .executeUpdate()
+    }
+    sql("insert overwrite h2.test.employee select 1000 as id, 'a' as name")
+    for (id <- 1 to 100) {
+      sql(s"insert into h2.test.employee values($id, 'a')")
+    }
+    val df = sql("select id, name from h2.test.employee")
+    // default partition num is 15
+    assert(df.rdd.getNumPartitions == 10)
+  }
+
+  test("test scan data partition optimization when primary key in where clause") {
+    sql("insert overwrite h2.test.employee select 1000 as id, 'a' as name")
+    for (id <- 1 to 100) {
+      sql(s"insert into h2.test.employee values($id, 'a')")
+    }
+    val df = sql("select id, name from h2.test.employee where id > 30")
+    // default partition num is 15
+    assert(df.rdd.getNumPartitions == 1)
+  }
+
+  test("test scan data no partition optimization") {
+    val ss = spark.cloneSession()
+    ss.sql("set spark.sql.catalog.h2.partitionColumn=id")
+    ss.sql("set spark.sql.catalog.h2.numPartitions=5")
+    ss.sql("set spark.sql.catalog.h2.lowerBound=20")
+    ss.sql("set spark.sql.catalog.h2.upperBound=80")
+    ss.sql("insert overwrite h2.test.employee select 1000 as id, 'a' as name")
+    for (id <- 1 to 100) {
+      ss.sql(s"insert into h2.test.employee values($id, 'a')")
+    }
+    val df = ss.sql("select id, name from h2.test.people")
+    assert(df.rdd.getNumPartitions == 5)
   }
 }

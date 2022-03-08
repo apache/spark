@@ -69,7 +69,7 @@ object JDBCRDD extends Logging {
         statement.setQueryTimeout(options.queryTimeout)
         val rs = statement.executeQuery()
         try {
-          JdbcUtils.getSchema(rs, dialect, alwaysNullable = true)
+          JdbcUtils.getSchema(conn.getMetaData, rs, dialect, alwaysNullable = true)
         } finally {
           rs.close()
         }
