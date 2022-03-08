@@ -100,6 +100,9 @@ private[spark] object CoarseGrainedClusterMessages {
   case class RemoveExecutor(executorId: String, reason: ExecutorLossReason)
     extends CoarseGrainedClusterMessage
 
+  case class ClusterAvailableResources(availableMemory: Long, availableVCores: Int)
+    extends CoarseGrainedClusterMessage
+
   // A message that sent from executor to driver to tell driver that the executor has started
   // decommissioning. It's used for the case where decommission is triggered at executor (e.g., K8S)
   case class ExecutorDecommissioning(executorId: String) extends CoarseGrainedClusterMessage

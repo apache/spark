@@ -152,4 +152,14 @@ private[spark] trait ExecutorAllocationClient {
       countFailures = false)
     killedExecutors.nonEmpty && killedExecutors(0).equals(executorId)
   }
+
+  /**
+   * Get Available Memory in Cluster MBs
+   */
+  def getAvailableMemory: Long
+
+  /**
+   * Get Available VCores in Clustr
+   */
+  def getAvailableVCores: Long
 }

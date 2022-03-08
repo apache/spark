@@ -26,6 +26,7 @@ import scala.collection.mutable
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
 import scala.util.control.NonFatal
 
+import org.apache.hadoop.yarn.api.protocolrecords.AllocateResponse
 import org.apache.hadoop.yarn.api.records._
 import org.apache.hadoop.yarn.client.api.AMRMClient
 import org.apache.hadoop.yarn.client.api.AMRMClient.ContainerRequest
@@ -41,9 +42,8 @@ import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.resource.ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID
 import org.apache.spark.rpc.{RpcCallContext, RpcEndpointRef}
 import org.apache.spark.scheduler.{ExecutorExited, ExecutorLossReason}
-import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages.RemoveExecutor
-import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages.RetrieveLastAllocatedExecutorId
-import org.apache.spark.scheduler.cluster.SchedulerBackendUtils
+import org.apache.spark.scheduler.cluster.{CoarseGrainedClusterMessage, SchedulerBackendUtils}
+import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages.{ClusterAvailableResources, RemoveExecutor, RetrieveLastAllocatedExecutorId}
 import org.apache.spark.util.{Clock, SystemClock, ThreadUtils}
 
 /**
@@ -138,6 +138,13 @@ private[yarn] class YarnAllocator(
   @GuardedBy("this")
   private[yarn] var numLocalityAwareTasksPerResourceProfileId: Map[Int, Int] =
     Map(DEFAULT_RESOURCE_PROFILE_ID -> 0)
+
+  // Available Memory in cluster
+  private var clusterAvailableMemoryMB : Long = 0L
+
+  // Available VCores in cluster
+  private var clusterAvailableVCores : Int = 0
+
 
   /**
    * Used to generate a unique ID per executor
@@ -398,6 +405,8 @@ private[yarn] class YarnAllocator(
     val allocatedContainers = allocateResponse.getAllocatedContainers()
     allocatorNodeHealthTracker.setNumClusterNodes(allocateResponse.getNumClusterNodes)
 
+    sendAvailableResources(allocateResponse)
+
     if (allocatedContainers.size > 0) {
       logDebug(("Allocated containers: %d. Current executor count: %d. " +
         "Launching executor count: %d. Cluster resources: %s.")
@@ -531,6 +540,28 @@ private[yarn] class YarnAllocator(
         val cancelRequests = (staleRequests ++ anyHostRequests ++ localRequests).take(numToCancel)
         cancelRequests.foreach(amClient.removeContainerRequest)
       }
+    }
+  }
+
+  private def sendAvailableResources(response: AllocateResponse): Unit = {
+    val availableResourcesMetadata = response.getAvailableResources
+    if (availableResourcesMetadata != null) {
+      val availableMemory = availableResourcesMetadata.getMemorySize
+      val availableVCores = availableResourcesMetadata.getVirtualCores
+      if (availableMemory != clusterAvailableMemoryMB) {
+        clusterAvailableMemoryMB = availableMemory
+        clusterAvailableVCores = availableVCores
+        sendToDriverSafely(ClusterAvailableResources(availableMemory, availableVCores))
+      }
+    }
+  }
+
+  private def sendToDriverSafely(message: CoarseGrainedClusterMessage): Unit = {
+    try {
+      driverRef.send(message)
+    } catch {
+      case e: Exception =>
+        logError("Failed to send to driver", e)
     }
   }
 

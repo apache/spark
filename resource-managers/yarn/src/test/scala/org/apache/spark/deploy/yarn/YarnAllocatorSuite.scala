@@ -23,11 +23,12 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable
 
 import org.apache.hadoop.net.{Node, NodeBase}
+import org.apache.hadoop.yarn.api.protocolrecords.AllocateResponse
 import org.apache.hadoop.yarn.api.records._
 import org.apache.hadoop.yarn.client.api.AMRMClient
 import org.apache.hadoop.yarn.client.api.AMRMClient.ContainerRequest
 import org.apache.hadoop.yarn.conf.YarnConfiguration
-import org.mockito.ArgumentCaptor
+import org.mockito.{ArgumentCaptor, Mockito}
 import org.mockito.Mockito._
 import org.scalatest.BeforeAndAfterEach
 import org.scalatest.matchers.must.Matchers
@@ -43,6 +44,8 @@ import org.apache.spark.resource.ResourceUtils.{AMOUNT, GPU}
 import org.apache.spark.resource.TestResourceIDs._
 import org.apache.spark.rpc.RpcEndpointRef
 import org.apache.spark.scheduler.SplitInfo
+import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessage
+import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages.ClusterAvailableResources
 import org.apache.spark.util.ManualClock
 
 class MockResolver extends SparkRackResolver(SparkHadoopUtil.get.conf) {
@@ -75,6 +78,8 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
   var clock: ManualClock = _
 
   var containerNum = 0
+
+  var rpcEndPoint: RpcEndpointRef = _
 
   // priority has to be 0 to match default profile id
   val RM_REQUEST_PRIORITY = Priority.newInstance(0)
@@ -122,9 +127,10 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
     ResourceProfile.clearDefaultProfile()
     defaultRP = ResourceProfile.getOrCreateDefaultProfile(sparkConfClone)
 
+    rpcEndPoint = mock(classOf[RpcEndpointRef])
     val allocator = new YarnAllocator(
       "not used",
-      mock(classOf[RpcEndpointRef]),
+      rpcEndPoint,
       conf,
       sparkConfClone,
       rmClient,
@@ -705,5 +711,28 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
       sparkConf.set(MEMORY_OFFHEAP_ENABLED, originalOffHeapEnabled)
       sparkConf.set(MEMORY_OFFHEAP_SIZE, originalOffHeapSize)
     }
+  }
+
+  test("send cluster available resources to driver") {
+
+    val rmClient: AMRMClient[ContainerRequest] = AMRMClient.createAMRMClient()
+    val rmClientSpy = spy(rmClient)
+    val allocateResponse = mock(classOf[AllocateResponse])
+    val mockResource = mock(classOf[Resource])
+    val handler = createAllocator(3, rmClientSpy)
+
+    val argumentCaptor = ArgumentCaptor.forClass(classOf[CoarseGrainedClusterMessage])
+
+    Mockito.doReturn(allocateResponse).when(rmClientSpy).allocate(
+      org.mockito.ArgumentMatchers.anyFloat())
+    Mockito.doReturn(mockResource).when(allocateResponse).getAvailableResources
+    Mockito.doReturn(1000L).when(mockResource).getMemorySize
+    Mockito.doReturn(4).when(mockResource).getVirtualCores
+
+    handler._1.allocateResources()
+
+    verify(rpcEndPoint).send(argumentCaptor.capture())
+    argumentCaptor.getAllValues should contain only ClusterAvailableResources(1000L, 4)
+    reset(rpcEndPoint)
   }
 }

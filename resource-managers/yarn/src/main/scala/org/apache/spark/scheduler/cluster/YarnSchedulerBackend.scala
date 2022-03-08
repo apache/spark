@@ -343,6 +343,9 @@ private[spark] abstract class YarnSchedulerBackend(
           driverEndpoint.send(r)
         }
 
+      case s @ ClusterAvailableResources(memory, vcores) =>
+        driverEndpoint.send(s)
+
       // In case of yarn Miscellaneous Process is Spark AM Container
       // Launched for the deploy mode client
       case processInfo @ MiscellaneousProcessAdded(_, _, _) =>

@@ -107,6 +107,12 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
   // The num of current max ExecutorId used to re-register appMaster
   @volatile protected var currentExecutorIdCounter = 0
 
+  @GuardedBy("CoarseGrainedSchedulerBackend.this")
+  protected var availableMemoryMB: Long = 0
+
+  @GuardedBy("CoarseGrainedSchedulerBackend.this")
+  protected var availableVCores: Int = 0
+
   // Current set of delegation tokens to send to executors.
   private val delegationTokens = new AtomicReference[Array[Byte]]()
 
@@ -221,6 +227,9 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
       case MiscellaneousProcessAdded(time: Long,
           processId: String, info: MiscellaneousProcessDetails) =>
         listenerBus.post(SparkListenerMiscellaneousProcessAdded(time, processId, info))
+
+      case ClusterAvailableResources(memory, vCores) =>
+        updateAvailableResources(memory, vCores)
 
       case e =>
         logError(s"Received unexpected message. ${e}")
@@ -680,6 +689,13 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
     executorDataMap.mapValues(v => v.registrationTs).toMap
   }
 
+  private def updateAvailableResources(memory: Long, vCores: Int): Unit = {
+    logInfo(s"Updating available memory in cluster from $availableMemoryMB MB(s) to " +
+      s"$memory MB(s) and available vcores in cluster from $availableVCores to $vCores.")
+    availableMemoryMB = memory
+    availableVCores = vCores
+  }
+
   override def isExecutorActive(id: String): Boolean = synchronized {
     executorDataMap.contains(id) &&
       !executorsPendingToRemove.contains(id) &&
@@ -927,6 +943,14 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
     // Kill all the executors on this host in an event loop to ensure serialization.
     driverEndpoint.send(KillExecutorsOnHost(host))
     true
+  }
+
+  final override def getAvailableMemory: Long = CoarseGrainedSchedulerBackend.this.synchronized {
+    availableMemoryMB
+  }
+
+  final override def getAvailableVCores: Long = CoarseGrainedSchedulerBackend.this.synchronized {
+    availableVCores
   }
 
   /**
