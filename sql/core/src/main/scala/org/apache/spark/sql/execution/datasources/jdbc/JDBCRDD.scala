@@ -24,8 +24,10 @@ import scala.util.control.NonFatal
 import org.apache.spark.{InterruptibleIterator, Partition, SparkContext, TaskContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.connector.expressions.SortOrder
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.v2.TableSampleInfo
 import org.apache.spark.sql.jdbc.{JdbcDialect, JdbcDialects}
 import org.apache.spark.sql.sources._
@@ -97,7 +99,14 @@ object JDBCRDD extends Logging {
    * Returns None for an unhandled filter.
    */
   def compileFilter(f: Filter, dialect: JdbcDialect): Option[String] = {
-    def quote(colName: String): String = dialect.quoteIdentifier(colName)
+
+    def quote(colName: String): String = {
+      val nameParts = SparkSession.active.sessionState.sqlParser.parseMultipartIdentifier(colName)
+      if(nameParts.length > 1) {
+        throw QueryCompilationErrors.commandNotSupportNestedColumnError("Filter push down", colName)
+      }
+      dialect.quoteIdentifier(nameParts.head)
+    }
 
     Option(f match {
       case EqualTo(attr, value) => s"${quote(attr)} = ${dialect.compileValue(value)}"
