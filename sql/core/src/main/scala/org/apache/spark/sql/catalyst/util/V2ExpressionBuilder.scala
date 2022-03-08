@@ -17,13 +17,16 @@
 
 package org.apache.spark.sql.catalyst.util
 
-import org.apache.spark.sql.catalyst.expressions.{Add, And, Attribute, BinaryComparison, BinaryOperator, BitwiseAnd, BitwiseNot, BitwiseOr, BitwiseXor, CaseWhen, Divide, EqualTo, Expression, IsNotNull, IsNull, Literal, Multiply, Not, Or, Remainder, Subtract, UnaryMinus}
-import org.apache.spark.sql.connector.expressions.{Expression => V2Expression, FieldReference, GeneralScalarExpression, LiteralValue}
+import org.apache.spark.sql.catalyst.expressions.{Add, And, BinaryComparison, BinaryOperator, BitwiseAnd, BitwiseNot, BitwiseOr, BitwiseXor, CaseWhen, Divide, EqualTo, Expression, In, InSet, IsNotNull, IsNull, Literal, Multiply, Not, Or, Predicate, Remainder, StringPredicate, Subtract, UnaryMinus}
+import org.apache.spark.sql.connector.expressions.{Expression => V2Expression, FieldReference, GeneralScalarExpression, LiteralValue, Predicate => V2Predicate}
+import org.apache.spark.sql.execution.datasources.PushableColumn
 
 /**
  * The builder to generate V2 expressions from catalyst expressions.
  */
-class V2ExpressionBuilder(e: Expression) {
+class V2ExpressionBuilder(e: Expression, nestedPredicatePushdownEnabled: Boolean = false) {
+
+  val pushableColumn = PushableColumn(nestedPredicatePushdownEnabled)
 
   def build(): Option[V2Expression] = generateExpression(e)
 
@@ -41,16 +44,52 @@ class V2ExpressionBuilder(e: Expression) {
 
   private def generateExpression(expr: Expression): Option[V2Expression] = expr match {
     case Literal(value, dataType) => Some(LiteralValue(value, dataType))
-    case attr: Attribute => Some(FieldReference.column(attr.name))
+    case pushableColumn(name) =>
+      if (nestedPredicatePushdownEnabled) {
+        Some(FieldReference(name))
+      } else {
+        Some(FieldReference.column(name))
+      }
+    case in @ InSet(child, hset) =>
+      generateExpression(child).map { v =>
+        val children =
+          (v +: hset.toSeq.map(elem => LiteralValue(elem, in.dataType))).toArray[V2Expression]
+        new V2Predicate("IN", children)
+      }
+    // Because we only convert In to InSet in Optimizer when there are more than certain
+    // items. So it is possible we still get an In expression here that needs to be pushed
+    // down.
+    case In(value, list) =>
+      val v = generateExpression(value)
+      val listExpressions = list.flatMap(generateExpression)
+      if (v.isDefined && list.length == listExpressions.length) {
+        val children = (v.get +: listExpressions).toArray[V2Expression]
+        // The children looks like [expr, value1, ..., valueN]
+        Some(new V2Predicate("IN", children))
+      } else {
+        None
+      }
     case IsNull(col) => generateExpression(col)
-      .map(c => new GeneralScalarExpression("IS_NULL", Array[V2Expression](c)))
+      .map(c => new V2Predicate("IS_NULL", Array[V2Expression](c)))
     case IsNotNull(col) => generateExpression(col)
-      .map(c => new GeneralScalarExpression("IS_NOT_NULL", Array[V2Expression](c)))
+      .map(c => new V2Predicate("IS_NOT_NULL", Array[V2Expression](c)))
+    case p: StringPredicate =>
+      val left = generateExpression(p.left)
+      val right = generateExpression(p.right)
+      if (left.isDefined && right.isDefined) {
+        Some(new V2Predicate(p.nodeName, Array[V2Expression](left.get, right.get)))
+      } else {
+        None
+      }
     case b: BinaryOperator if canTranslate(b) =>
       val left = generateExpression(b.left)
       val right = generateExpression(b.right)
       if (left.isDefined && right.isDefined) {
-        Some(new GeneralScalarExpression(b.sqlOperator, Array[V2Expression](left.get, right.get)))
+        if (b.isInstanceOf[Predicate]) {
+          Some(new V2Predicate(b.sqlOperator, Array[V2Expression](left.get, right.get)))
+        } else {
+          Some(new GeneralScalarExpression(b.sqlOperator, Array[V2Expression](left.get, right.get)))
+        }
       } else {
         None
       }
@@ -58,12 +97,12 @@ class V2ExpressionBuilder(e: Expression) {
       val left = generateExpression(eq.left)
       val right = generateExpression(eq.right)
       if (left.isDefined && right.isDefined) {
-        Some(new GeneralScalarExpression("!=", Array[V2Expression](left.get, right.get)))
+        Some(new V2Predicate("!=", Array[V2Expression](left.get, right.get)))
       } else {
         None
       }
     case Not(child) => generateExpression(child)
-      .map(v => new GeneralScalarExpression("NOT", Array[V2Expression](v)))
+      .map(v => new V2Predicate("NOT", Array[V2Expression](v)))
     case UnaryMinus(child, true) => generateExpression(child)
       .map(v => new GeneralScalarExpression("-", Array[V2Expression](v)))
     case BitwiseNot(child) => generateExpression(child)

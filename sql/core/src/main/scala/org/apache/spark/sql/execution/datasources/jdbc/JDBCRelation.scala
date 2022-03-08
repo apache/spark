@@ -27,7 +27,7 @@ import org.apache.spark.sql.{DataFrame, Row, SaveMode, SparkSession, SQLContext}
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.util.{DateFormatter, DateTimeUtils, TimestampFormatter}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.{getZoneId, stringToDate, stringToTimestamp}
-import org.apache.spark.sql.connector.expressions.SortOrder
+import org.apache.spark.sql.connector.expressions.{Predicate, SortOrder}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.v2.TableSampleInfo
 import org.apache.spark.sql.internal.SQLConf
@@ -299,7 +299,7 @@ private[sql] case class JDBCRelation(
   def buildScan(
       requiredColumns: Array[String],
       finalSchema: StructType,
-      filters: Array[Filter],
+      predicates: Array[Predicate],
       groupByColumns: Option[Array[String]],
       tableSample: Option[TableSampleInfo],
       limit: Int,
@@ -309,7 +309,7 @@ private[sql] case class JDBCRelation(
       sparkSession.sparkContext,
       schema,
       requiredColumns,
-      filters,
+      predicates,
       parts,
       jdbcOptions,
       Some(finalSchema),

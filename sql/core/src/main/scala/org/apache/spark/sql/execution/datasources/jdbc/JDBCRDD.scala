@@ -26,7 +26,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.connector.expressions.SortOrder
+import org.apache.spark.sql.connector.expressions.{Predicate, SortOrder}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.v2.TableSampleInfo
 import org.apache.spark.sql.jdbc.{JdbcDialect, JdbcDialects}
@@ -175,6 +175,27 @@ object JDBCRDD extends Logging {
       requiredColumns: Array[String],
       filters: Array[Filter],
       parts: Array[Partition],
+      options: JDBCOptions): RDD[InternalRow] = {
+    val url = options.url
+    val dialect = JdbcDialects.get(url)
+    val quotedColumns = requiredColumns.map(colName => dialect.quoteIdentifier(colName))
+    new JDBCRDD(
+      sc,
+      JdbcUtils.createConnectionFactory(options),
+      pruneSchema(schema, requiredColumns),
+      quotedColumns,
+      filters,
+      parts,
+      url,
+      options)
+  }
+
+  def scanTable(
+      sc: SparkContext,
+      schema: StructType,
+      requiredColumns: Array[String],
+      predicates: Array[Predicate],
+      parts: Array[Partition],
       options: JDBCOptions,
       outputSchema: Option[StructType] = None,
       groupByColumns: Option[Array[String]] = None,
@@ -194,14 +215,15 @@ object JDBCRDD extends Logging {
       dialect.createConnectionFactory(options),
       outputSchema.getOrElse(pruneSchema(schema, requiredColumns)),
       quotedColumns,
-      filters,
+      Array.empty,
       parts,
       url,
       options,
       groupByColumns,
       sample,
       limit,
-      sortOrders)
+      sortOrders,
+      predicates)
   }
   // scalastyle:on argcount
 }
@@ -220,10 +242,11 @@ private[jdbc] class JDBCRDD(
     partitions: Array[Partition],
     url: String,
     options: JDBCOptions,
-    groupByColumns: Option[Array[String]],
-    sample: Option[TableSampleInfo],
-    limit: Int,
-    sortOrders: Array[SortOrder])
+    groupByColumns: Option[Array[String]] = None,
+    sample: Option[TableSampleInfo] = None,
+    limit: Int = 0,
+    sortOrders: Array[SortOrder] = Array.empty[SortOrder],
+    predicates: Array[Predicate] = Array.empty)
   extends RDD[InternalRow](sc, Nil) {
 
   /**
@@ -239,10 +262,18 @@ private[jdbc] class JDBCRDD(
   /**
    * `filters`, but as a WHERE clause suitable for injection into a SQL query.
    */
-  private val filterWhereClause: String =
-    filters
-      .flatMap(JDBCRDD.compileFilter(_, JdbcDialects.get(url)))
-      .map(p => s"($p)").mkString(" AND ")
+  private val filterWhereClause: String = {
+    val dialect = JdbcDialects.get(url)
+    if (filters.nonEmpty) {
+      filters
+        .flatMap(JDBCRDD.compileFilter(_, dialect))
+        .map(p => s"($p)").mkString(" AND ")
+    } else {
+      predicates
+        .flatMap(dialect.compileExpression(_))
+        .map(p => s"($p)").mkString(" AND ")
+    }
+  }
 
   /**
    * A WHERE clause representing both `filters`, if any, and the current partition.

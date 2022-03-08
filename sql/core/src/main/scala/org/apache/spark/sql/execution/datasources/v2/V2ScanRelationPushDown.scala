@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.planning.ScanOperation
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, LeafNode, Limit, LocalLimit, LogicalPlan, Project, Sample, Sort}
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.connector.expressions.SortOrder
+import org.apache.spark.sql.connector.expressions.{Predicate, SortOrder}
 import org.apache.spark.sql.connector.expressions.aggregate.{Aggregation, Avg, Count, GeneralAggregateFunc, Sum}
 import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownAggregates, SupportsPushDownFilters, V1Scan}
 import org.apache.spark.sql.execution.datasources.DataSourceStrategy
@@ -72,6 +72,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
       val pushedFiltersStr = if (pushedFilters.isLeft) {
         pushedFilters.left.get.mkString(", ")
       } else {
+        sHolder.pushedPredicates = pushedFilters.right.get
         pushedFilters.right.get.mkString(", ")
       }
 
@@ -406,7 +407,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
           case _ => Array.empty[sources.Filter]
         }
         val pushedDownOperators = PushedDownOperators(aggregation,
-          sHolder.pushedSample, sHolder.pushedLimit, sHolder.sortOrders)
+          sHolder.pushedSample, sHolder.pushedLimit, sHolder.sortOrders, sHolder.pushedPredicates)
         V1ScanWrapper(v1, pushedFilters, pushedDownOperators)
       case _ => scan
     }
@@ -422,6 +423,8 @@ case class ScanBuilderHolder(
   var sortOrders: Seq[SortOrder] = Seq.empty[SortOrder]
 
   var pushedSample: Option[TableSampleInfo] = None
+
+  var pushedPredicates: Seq[Predicate] = Seq.empty[Predicate]
 }
 
 

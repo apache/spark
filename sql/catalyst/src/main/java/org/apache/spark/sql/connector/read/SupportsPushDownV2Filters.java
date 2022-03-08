@@ -18,11 +18,11 @@
 package org.apache.spark.sql.connector.read;
 
 import org.apache.spark.annotation.Evolving;
-import org.apache.spark.sql.connector.expressions.filter.Filter;
+import org.apache.spark.sql.connector.expressions.Predicate;
 
 /**
  * A mix-in interface for {@link ScanBuilder}. Data sources can implement this interface to
- * push down V2 {@link Filter} to the data source and reduce the size of the data to be read.
+ * push down V2 {@link Predicate} to the data source and reduce the size of the data to be read.
  * Please Note that this interface is preferred over {@link SupportsPushDownFilters}, which uses
  * V1 {@link org.apache.spark.sql.sources.Filter} and is less efficient due to the
  * internal -&gt; external data conversion.
@@ -33,15 +33,15 @@ import org.apache.spark.sql.connector.expressions.filter.Filter;
 public interface SupportsPushDownV2Filters extends ScanBuilder {
 
   /**
-   * Pushes down filters, and returns filters that need to be evaluated after scanning.
+   * Pushes down predicates, and returns predicates that need to be evaluated after scanning.
    * <p>
-   * Rows should be returned from the data source if and only if all of the filters match. That is,
-   * filters must be interpreted as ANDed together.
+   * Rows should be returned from the data source if and only if all of the predicates match.
+   * That is, predicates must be interpreted as ANDed together.
    */
-  Filter[] pushFilters(Filter[] filters);
+  Predicate[] pushPredicates(Predicate[] predicates);
 
   /**
-   * Returns the filters that are pushed to the data source via {@link #pushFilters(Filter[])}.
+   * Returns the filters that are pushed to the data source via {@link #pushPredicates(Predicate[])}.
    * <p>
    * There are 3 kinds of filters:
    * <ol>
@@ -53,8 +53,8 @@ public interface SupportsPushDownV2Filters extends ScanBuilder {
    * <p>
    * Both case 1 and 2 should be considered as pushed filters and should be returned by this method.
    * <p>
-   * It's possible that there is no filters in the query and {@link #pushFilters(Filter[])}
+   * It's possible that there is no filters in the query and {@link #pushPredicates(Predicate[])}
    * is never called, empty array should be returned for this case.
    */
-  Filter[] pushedFilters();
+  Predicate[] pushedPredicates();
 }

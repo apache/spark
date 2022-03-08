@@ -155,7 +155,8 @@ case class RowDataSourceScanExec(
 
     Map(
       "ReadSchema" -> requiredSchema.catalogString,
-      "PushedFilters" -> seqToString(markedFilters.toSeq)) ++
+      "PushedFilters" -> seqToString(markedFilters.toSeq),
+      "PushedPredicates" -> seqToString(pushedDownOperators.pushedPredicates.map(_.describe()))) ++
       pushedDownOperators.aggregation.fold(Map[String, String]()) { v =>
         Map("PushedAggregates" -> seqToString(v.aggregateExpressions.map(_.describe())),
           "PushedGroupByColumns" -> seqToString(v.groupByColumns.map(_.describe())))} ++

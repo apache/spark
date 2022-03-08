@@ -19,11 +19,11 @@ package org.apache.spark.sql.connector.expressions;
 
 import java.io.Serializable;
 import java.util.Arrays;
+import java.util.Objects;
 
 import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.connector.util.V2ExpressionSQLBuilder;
 
-// scalastyle:off line.size.limit
 /**
  * The general representation of SQL scalar expressions, which contains the upper-cased
  * expression name and all the children expressions.
@@ -39,6 +39,12 @@ import org.apache.spark.sql.connector.util.V2ExpressionSQLBuilder;
  *  <li>Name: <code>IS_NOT_NULL</code>
  *   <ul>
  *    <li>SQL semantic: <code>expr IS NOT NULL</code></li>
+ *    <li>Since version: 3.3.0</li>
+ *   </ul>
+ *  </li>
+ *  <li>Name: <code>IN</code>
+ *   <ul>
+ *    <li>SQL semantic: <code>expr IN (expr1, expr2, ...)</code></li>
  *    <li>Since version: 3.3.0</li>
  *   </ul>
  *  </li>
@@ -176,7 +182,6 @@ import org.apache.spark.sql.connector.util.V2ExpressionSQLBuilder;
  *
  * @since 3.3.0
  */
-// scalastyle:on line.size.limit
 @Evolving
 public class GeneralScalarExpression implements Expression, Serializable {
   private String name;
@@ -189,6 +194,19 @@ public class GeneralScalarExpression implements Expression, Serializable {
 
   public String name() { return name; }
   public Expression[] children() { return children; }
+
+  @Override
+  public boolean equals(Object o) {
+    if (this == o) return true;
+    if (o == null || getClass() != o.getClass()) return false;
+    GeneralScalarExpression that = (GeneralScalarExpression) o;
+    return Objects.equals(name, that.name) && Arrays.equals(children, that.children);
+  }
+
+  @Override
+  public int hashCode() {
+    return Objects.hash(name, children);
+  }
 
   @Override
   public String toString() {

@@ -15,19 +15,19 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.datasources.v2
+package org.apache.spark.sql.connector.expressions;
 
-import org.apache.spark.sql.connector.expressions.{Predicate, SortOrder}
-import org.apache.spark.sql.connector.expressions.aggregate.Aggregation
+import org.apache.spark.annotation.Evolving;
 
 /**
- * Pushed down operators
+ * The general representation of catalyst predicate.
+ *
+ * @since 3.3.0
  */
-case class PushedDownOperators(
-    aggregation: Option[Aggregation],
-    sample: Option[TableSampleInfo],
-    limit: Option[Int],
-    sortValues: Seq[SortOrder],
-    pushedPredicates: Seq[Predicate]) {
-  assert((limit.isEmpty && sortValues.isEmpty) || limit.isDefined)
+@Evolving
+public class Predicate extends GeneralScalarExpression {
+
+    public Predicate(String name, Expression[] children) {
+        super(name, children);
+    }
 }
