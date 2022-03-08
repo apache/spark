@@ -21,7 +21,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{RowOrdering, SortOrder}
 import org.apache.spark.sql.catalyst.plans.physical
-import org.apache.spark.sql.catalyst.plans.physical.{ClusteredDistribution, DataSourcePartitioning, Distribution, SinglePartition}
+import org.apache.spark.sql.catalyst.plans.physical.{ClusteredDistribution, DataSourceHashPartitioning, Distribution, SinglePartition}
 import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.connector.read.{HasPartitionKey, InputPartition, PartitionReaderFactory, Scan}
 import org.apache.spark.sql.execution.{ExplainUtils, LeafExecNode}
@@ -93,7 +93,7 @@ trait DataSourceV2ScanExecBase extends LeafExecNode {
     else groupedPartitions.map { partitionValues =>
       assert(distribution.isInstanceOf[ClusteredDistribution])
       val clustering = distribution.asInstanceOf[ClusteredDistribution].clustering
-      DataSourcePartitioning(clustering, partitionValues.size, Some(partitionValues.map(_._1)))
+      DataSourceHashPartitioning(clustering, partitionValues.size, Some(partitionValues.map(_._1)))
     }.getOrElse(super.outputPartitioning)
   }
 

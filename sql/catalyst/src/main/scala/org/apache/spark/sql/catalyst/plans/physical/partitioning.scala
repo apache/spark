@@ -326,7 +326,7 @@ case class HashPartitioning(expressions: Seq[Expression], numPartitions: Int)
  * @param partitionValuesOpt if set, the values for the cluster keys of the distribution, must be
  *                           in ascending order.
  */
-case class DataSourcePartitioning(
+case class DataSourceHashPartitioning(
     expressions: Seq[Expression],
     numPartitions: Int,
     partitionValuesOpt: Option[Seq[InternalRow]] = None) extends Partitioning {
@@ -334,9 +334,16 @@ case class DataSourcePartitioning(
   override def satisfies0(required: Distribution): Boolean = {
     super.satisfies0(required) || {
       required match {
-        case d: ClusteredDistribution =>
-          val attributes = expressions.flatMap(_.collectLeaves())
-          attributes.forall(c => d.clustering.exists(_.semanticEquals(c)))
+        case c @ ClusteredDistribution(requiredClustering, requireAllClusterKeys, _) =>
+          if (requireAllClusterKeys) {
+            // Checks `HashPartitioning` is partitioned on exactly same clustering keys of
+            // `ClusteredDistribution`.
+            c.areAllClusterKeysMatched(expressions)
+          } else {
+            // We'll need to find leaf attributes from the partition expressions first.
+            val attributes = expressions.flatMap(_.collectLeaves())
+            attributes.forall(x => requiredClustering.exists(_.semanticEquals(x)))
+          }
 
         case _ =>
           false
@@ -348,11 +355,11 @@ case class DataSourcePartitioning(
     DataSourceShuffleSpec(this, distribution)
 }
 
-object DataSourcePartitioning {
+object DataSourceHashPartitioning {
   def apply(
       expressions: Seq[Expression],
-      partitionValues: Seq[InternalRow]): DataSourcePartitioning = {
-    DataSourcePartitioning(expressions, partitionValues.size, Some(partitionValues))
+      partitionValues: Seq[InternalRow]): DataSourceHashPartitioning = {
+    DataSourceHashPartitioning(expressions, partitionValues.size, Some(partitionValues))
   }
 }
 
@@ -628,7 +635,7 @@ case class HashShuffleSpec(
 }
 
 case class DataSourceShuffleSpec(
-    partitioning: DataSourcePartitioning,
+    partitioning: DataSourceHashPartitioning,
     distribution: ClusteredDistribution) extends ShuffleSpec {
 
   /**
@@ -676,7 +683,7 @@ case class DataSourceShuffleSpec(
    * @param otherPartitioning the partitioning from the other side
    * @return true if the clustering expressions are compatible, false otherwise
    */
-  private def isClusteringCompatibleWith(otherPartitioning: DataSourcePartitioning): Boolean = {
+  private def isClusteringCompatibleWith(otherPartitioning: DataSourceHashPartitioning): Boolean = {
     val expressions = partitioning.expressions
     val otherExpressions = otherPartitioning.expressions
 

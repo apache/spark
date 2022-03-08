@@ -24,7 +24,7 @@ import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Ascending, DataSourceBucketTransformExpression, DataSourceTransformExpression, SortOrder => V1SortOrder}
 import org.apache.spark.sql.catalyst.plans.{physical => v1}
-import org.apache.spark.sql.catalyst.plans.physical.DataSourcePartitioning
+import org.apache.spark.sql.catalyst.plans.physical.DataSourceHashPartitioning
 import org.apache.spark.sql.connector.catalog.Identifier
 import org.apache.spark.sql.connector.catalog.InMemoryTableCatalog
 import org.apache.spark.sql.connector.catalog.functions._
@@ -41,7 +41,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf._
 import org.apache.spark.sql.types._
 
-class DataSourcePartitioningSuite extends DistributionAndOrderingSuiteBase {
+class DataSourceHashPartitioningSuite extends DistributionAndOrderingSuiteBase {
   private var originalV2BucketingEnabled: Boolean = false
   private var originalAutoBroadcastJoinThreshold: Long = -1
 
@@ -99,12 +99,12 @@ class DataSourcePartitioningSuite extends DistributionAndOrderingSuiteBase {
     val partitionValues = Seq(50, 51, 52).map(v => InternalRow.fromSeq(Seq(v)))
 
     checkQueryPlan(df, v1Distribution, Seq.empty,
-      DataSourcePartitioning(v1Distribution.clustering, partitionValues))
+      DataSourceHashPartitioning(v1Distribution.clustering, partitionValues))
 
     // multiple group keys should work too as long as partition keys are subset of them
     df = sql(s"SELECT count(*) FROM testcat.ns.$table GROUP BY id, ts")
     checkQueryPlan(df, v1Distribution, Seq.empty,
-      DataSourcePartitioning(v1Distribution.clustering, partitionValues))
+      DataSourceHashPartitioning(v1Distribution.clustering, partitionValues))
   }
 
   test("non-clustered distribution: fallback to super.partitioning") {
