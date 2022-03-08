@@ -655,7 +655,6 @@ object KubernetesIntegrationTests {
         } else {
           Seq("-f", s"$dockerFile")
         }
-
         val cmd = Seq(dockerTool,
           "-r", imageRepo,
           "-t", imageTag.getOrElse("dev"),
