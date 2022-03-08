@@ -232,6 +232,10 @@ SELECT histogram_numeric(col, 3) FROM VALUES (INTERVAL '100-00' YEAR TO MONTH),
 SELECT histogram_numeric(col, 3) FROM VALUES (INTERVAL '12 20:4:0' DAY TO SECOND),
   (INTERVAL '12 21:4:0' DAY TO SECOND), (INTERVAL '12 22:4:0' DAY TO SECOND) AS tab(col);
 
+-- Histogram aggregate with void input type.
+SELECT histogram_numeric(col, 3)
+FROM VALUES (null), (null), (null) AS tab(col);
+
 -- SPARK-37613: Support ANSI Aggregate Function: regr_count
 SELECT regr_count(y, x) FROM testRegression;
 SELECT regr_count(y, x) FROM testRegression WHERE x IS NOT NULL;
