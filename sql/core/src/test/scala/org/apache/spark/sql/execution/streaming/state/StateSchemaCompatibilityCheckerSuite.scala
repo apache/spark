@@ -142,18 +142,18 @@ class StateSchemaCompatibilityCheckerSuite extends SharedSparkSession {
     verifySuccess(keySchema, valueSchema, nonNullChangedKeySchema, valueSchema)
   }
 
-  test("storing non-nullable to nullable in value schema should be allowed") {
+  test("storing non-nullable column into nullable column in value schema should be allowed") {
     val nonNullChangedValueSchema = StructType(valueSchema.map(_.copy(nullable = false)))
     verifySuccess(keySchema, valueSchema, keySchema, nonNullChangedValueSchema)
   }
 
-  test("storing non-nullable to nullable in nested field in key should be allowed") {
+  test("storing non-nullable into nullable in nested field in key should be allowed") {
     val typeChangedNestedSchema = StructType(structSchema.map(_.copy(nullable = false)))
     val newKeySchema = applyNewSchemaToNestedFieldInKey(typeChangedNestedSchema)
     verifySuccess(keySchema, valueSchema, newKeySchema, valueSchema)
   }
 
-  test("storing non-nullable to nullable in nested field in value should be allowed") {
+  test("storing non-nullable into nullable in nested field in value should be allowed") {
     val typeChangedNestedSchema = StructType(structSchema.map(_.copy(nullable = false)))
     val newValueSchema = applyNewSchemaToNestedFieldInValue(typeChangedNestedSchema)
     verifySuccess(keySchema, valueSchema, keySchema, newValueSchema)
