@@ -1314,7 +1314,7 @@ See the [configuration page](configuration.html) for information on Spark config
   <td>3.0.0</td>
 </tr>
 <tr>
-  <td><code>spark.kubernetes.executor.decommmissionLabel</code></td>
+  <td><code>spark.kubernetes.executor.decommissionLabel</code></td>
   <td>(none)</td>
   <td>
     Label to be applied to pods which are exiting or being decommissioned. Intended for use
@@ -1323,11 +1323,11 @@ See the [configuration page](configuration.html) for information on Spark config
   <td>3.3.0</td>
 </tr>
 <tr>
-  <td><code>spark.kubernetes.executor.decommmissionLabelValue</code></td>
+  <td><code>spark.kubernetes.executor.decommissionLabelValue</code></td>
   <td>(none)</td>
   <td>
     Value to be applied with the label when
-    <code>spark.kubernetes.executor.decommmissionLabel</code> is enabled.
+    <code>spark.kubernetes.executor.decommissionLabel</code> is enabled.
   </td>
   <td>3.3.0</td>
 </tr>
