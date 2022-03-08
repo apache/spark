@@ -111,9 +111,7 @@ class Statistics:
 
     @overload
     @staticmethod
-    def corr(
-        x: RDD[float], y: RDD[float], method: Optional["CorrelationMethod"] = ...
-    ) -> float:
+    def corr(x: RDD[float], y: RDD[float], method: Optional["CorrelationMethod"] = ...) -> float:
         ...
 
     @staticmethod
