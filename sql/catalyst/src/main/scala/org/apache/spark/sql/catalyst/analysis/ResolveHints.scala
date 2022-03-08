@@ -257,7 +257,9 @@ object ResolveHints {
           val hintName = hint.name.toUpperCase(Locale.ROOT)
           throw QueryCompilationErrors.invalidHintParameterError(hintName, invalidParams)
         }
-        RebalancePartitions(partitionExprs.map(_.asInstanceOf[Expression]), hint.child,
+        RebalancePartitions(
+          partitionExprs.map(_.asInstanceOf[Expression]),
+          hint.child,
           initialNumPartitions)
       }
 

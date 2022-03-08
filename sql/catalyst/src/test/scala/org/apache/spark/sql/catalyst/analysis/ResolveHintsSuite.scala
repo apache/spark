@@ -349,17 +349,14 @@ class ResolveHintsSuite extends AnalysisTest {
 
   test("SPARK-38410: Support specify initial partition number for rebalance") {
     withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "3") {
-      assert(RebalancePartitions(Nil, table("TaBlE"))
-        .partitioning.numPartitions == 3)
-
-      assert(RebalancePartitions(Seq(UnresolvedAttribute("a")), table("TaBlE"))
-        .partitioning.numPartitions == 3)
-
-      assert(RebalancePartitions(Nil, table("TaBlE"), Some(1))
-        .partitioning.numPartitions == 1)
-
-      assert(RebalancePartitions(Seq(UnresolvedAttribute("a")), table("TaBlE"), Some(1))
-        .partitioning.numPartitions == 1)
+      Seq(
+        Nil -> 3,
+        Seq(1) -> 1,
+        Seq(UnresolvedAttribute("a")) -> 3,
+        Seq(1, UnresolvedAttribute("a")) -> 1).foreach { case (param, initialNumPartitions) =>
+        assert(UnresolvedHint("REBALANCE", param, testRelation).analyze
+          .asInstanceOf[RebalancePartitions].partitioning.numPartitions == initialNumPartitions)
+      }
     }
   }
 }
