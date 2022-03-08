@@ -545,7 +545,7 @@ object QueryExecutionErrors {
            |'$config' or the datasource option '$option' to 'LEGACY' to rebase the datetime values
            |w.r.t. the calendar difference during reading. To read the datetime values as it is,
            |set the SQL config '$config' or the datasource option '$option' to 'CORRECTED'.
-       """.stripMargin),
+           |""".stripMargin),
       cause = null
     )
   }
@@ -564,7 +564,7 @@ object QueryExecutionErrors {
            |interoperability. Or set $config to 'CORRECTED' to write the datetime values as it is,
            |if you are 100% sure that the written files will only be read by Spark 3.0+ or other
            |systems that use Proleptic Gregorian calendar.
-       """.stripMargin),
+           |""".stripMargin),
       cause = null
     )
   }

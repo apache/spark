@@ -203,10 +203,21 @@ class QueryExecutionErrorsSuite extends QueryTest
         spark.read.parquet(filePath).collect()
       }.getCause.asInstanceOf[SparkUpgradeException]
 
+      val format = "Parquet"
+      val config = SQLConf.PARQUET_REBASE_MODE_IN_READ.key
+      val option = "datetimeRebaseMode"
       assert(e.getErrorClass === "INCONSISTENT_BEHAVIOR_CROSS_VERSION")
-      assert(e.getMessage
-        .startsWith("You may get a different result due to the upgrading to Spark >= 3.0: \n" +
-          "reading dates before"))
+      assert(e.getMessage ===
+        "You may get a different result due to the upgrading to Spark >= 3.0: " +
+          s"""
+             |reading dates before 1582-10-15 or timestamps before 1900-01-01T00:00:00Z from $format
+             |files can be ambiguous, as the files may be written by Spark 2.x or legacy versions of
+             |Hive, which uses a legacy hybrid calendar that is different from Spark 3.0+'s Proleptic
+             |Gregorian calendar. See more details in SPARK-31404. You can set the SQL config
+             |'$config' or the datasource option '$option' to 'LEGACY' to rebase the datetime values
+             |w.r.t. the calendar difference during reading. To read the datetime values as it is,
+             |set the SQL config '$config' or the datasource option '$option' to 'CORRECTED'.
+             |""".stripMargin)
     }
 
     // Fail to write ancient datetime values.
@@ -217,10 +228,21 @@ class QueryExecutionErrorsSuite extends QueryTest
           df.write.parquet(dir.getCanonicalPath)
         }.getCause.getCause.getCause.asInstanceOf[SparkUpgradeException]
 
+        val format = "Parquet"
+        val config = SQLConf.PARQUET_REBASE_MODE_IN_WRITE.key
         assert(e.getErrorClass === "INCONSISTENT_BEHAVIOR_CROSS_VERSION")
-        assert(e.getMessage
-          .startsWith("You may get a different result due to the upgrading to Spark >= 3.0: \n" +
-            "writing dates before"))
+        assert(e.getMessage ===
+          "You may get a different result due to the upgrading to Spark >= 3.0: " +
+            s"""
+               |writing dates before 1582-10-15 or timestamps before 1900-01-01T00:00:00Z into $format
+               |files can be dangerous, as the files may be read by Spark 2.x or legacy versions of Hive
+               |later, which uses a legacy hybrid calendar that is different from Spark 3.0+'s Proleptic
+               |Gregorian calendar. See more details in SPARK-31404. You can set $config to 'LEGACY' to
+               |rebase the datetime values w.r.t. the calendar difference during writing, to get maximum
+               |interoperability. Or set $config to 'CORRECTED' to write the datetime values as it is,
+               |if you are 100% sure that the written files will only be read by Spark 3.0+ or other
+               |systems that use Proleptic Gregorian calendar.
+               |""".stripMargin)
       }
     }
   }
