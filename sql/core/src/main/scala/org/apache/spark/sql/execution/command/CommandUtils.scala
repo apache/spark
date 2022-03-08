@@ -99,8 +99,10 @@ object CommandUtils extends Logging {
     totalSize
   }
 
-  def getPartitionPaths(partitions: Seq[CatalogTablePartition]
-                        , isSymlinkTable: Boolean, fs: => FileSystem): Seq[Option[URI]] = {
+  def getPartitionPaths(
+      partitions: Seq[CatalogTablePartition],
+      isSymlinkTable: Boolean,
+      fs: => FileSystem): Seq[Option[URI]] = {
     partitions.flatMap { catalogTablePartition =>
         if (isSymlinkTable) {
           catalogTablePartition.storage.locationUri
