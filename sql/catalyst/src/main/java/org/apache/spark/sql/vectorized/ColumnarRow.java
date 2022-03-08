@@ -155,7 +155,7 @@ public final class ColumnarRow extends InternalRow {
 
   @Override
   public Object get(int ordinal, DataType dataType) {
-    return InternalRow$.MODULE$.getReader(ordinal, dataType).apply(this);
+    return InternalRow$.MODULE$.getGetter(ordinal, dataType).apply(this);
   }
 
   @Override

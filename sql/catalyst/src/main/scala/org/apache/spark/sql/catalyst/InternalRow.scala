@@ -190,7 +190,10 @@ object InternalRow {
     case _ => (input, v) => input.update(ordinal, v)
   }
 
-  def getReader(ordinal: Int, dt: DataType): InternalRow => Any = dt match {
+  /**
+   * Returns a Getter for an `InternalRow` with given data type.
+   */
+  def getGetter(ordinal: Int, dt: DataType): InternalRow => Any = dt match {
     case BooleanType => row => row.getBoolean(ordinal)
     case ByteType => row => row.getByte(ordinal)
     case ShortType => row => row.getShort(ordinal)
