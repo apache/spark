@@ -101,7 +101,7 @@ Input [6]: [o_orderkey#3, o_orderdate#5, o_shippriority#6, l_orderkey#8, l_exten
 (18) HashAggregate [codegen id : 3]
 Input [5]: [o_orderdate#5, o_shippriority#6, l_orderkey#8, l_extendedprice#9, l_discount#10]
 Keys [3]: [l_orderkey#8, o_orderdate#5, o_shippriority#6]
-Functions [1]: [partial_sum(CheckOverflow((promote_precision(cast(l_extendedprice#9 as decimal(11,0))) * promote_precision(CheckOverflow((1 - promote_precision(cast(l_discount#10 as decimal(11,0)))), DecimalType(11,0), true))), DecimalType(22,0), true))]
+Functions [1]: [partial_sum(CheckOverflow((promote_precision(cast(l_extendedprice#9 as decimal(11,0))) * promote_precision(CheckOverflow((1 - promote_precision(cast(l_discount#10 as decimal(11,0)))), DecimalType(11,0)))), DecimalType(22,0)))]
 Aggregate Attributes [2]: [sum#13, isEmpty#14]
 Results [5]: [l_orderkey#8, o_orderdate#5, o_shippriority#6, sum#15, isEmpty#16]
 
@@ -112,9 +112,9 @@ Arguments: hashpartitioning(l_orderkey#8, o_orderdate#5, o_shippriority#6, 5), E
 (20) HashAggregate [codegen id : 4]
 Input [5]: [l_orderkey#8, o_orderdate#5, o_shippriority#6, sum#15, isEmpty#16]
 Keys [3]: [l_orderkey#8, o_orderdate#5, o_shippriority#6]
-Functions [1]: [sum(CheckOverflow((promote_precision(cast(l_extendedprice#9 as decimal(11,0))) * promote_precision(CheckOverflow((1 - promote_precision(cast(l_discount#10 as decimal(11,0)))), DecimalType(11,0), true))), DecimalType(22,0), true))]
-Aggregate Attributes [1]: [sum(CheckOverflow((promote_precision(cast(l_extendedprice#9 as decimal(11,0))) * promote_precision(CheckOverflow((1 - promote_precision(cast(l_discount#10 as decimal(11,0)))), DecimalType(11,0), true))), DecimalType(22,0), true))#18]
-Results [4]: [l_orderkey#8, sum(CheckOverflow((promote_precision(cast(l_extendedprice#9 as decimal(11,0))) * promote_precision(CheckOverflow((1 - promote_precision(cast(l_discount#10 as decimal(11,0)))), DecimalType(11,0), true))), DecimalType(22,0), true))#18 AS revenue#19, o_orderdate#5, o_shippriority#6]
+Functions [1]: [sum(CheckOverflow((promote_precision(cast(l_extendedprice#9 as decimal(11,0))) * promote_precision(CheckOverflow((1 - promote_precision(cast(l_discount#10 as decimal(11,0)))), DecimalType(11,0)))), DecimalType(22,0)))]
+Aggregate Attributes [1]: [sum(CheckOverflow((promote_precision(cast(l_extendedprice#9 as decimal(11,0))) * promote_precision(CheckOverflow((1 - promote_precision(cast(l_discount#10 as decimal(11,0)))), DecimalType(11,0)))), DecimalType(22,0)))#18]
+Results [4]: [l_orderkey#8, sum(CheckOverflow((promote_precision(cast(l_extendedprice#9 as decimal(11,0))) * promote_precision(CheckOverflow((1 - promote_precision(cast(l_discount#10 as decimal(11,0)))), DecimalType(11,0)))), DecimalType(22,0)))#18 AS revenue#19, o_orderdate#5, o_shippriority#6]
 
 (21) TakeOrderedAndProject
 Input [4]: [l_orderkey#8, revenue#19, o_orderdate#5, o_shippriority#6]

@@ -60,6 +60,10 @@ license: |
 
   - Since Spark 3.3, DROP FUNCTION fails if the function name matches one of the built-in functions' name and is not qualified. In Spark 3.2 or earlier, DROP FUNCTION can still drop a persistent function even if the name is not qualified and is the same as a built-in function's name.
 
+  - Since Spark 3.3, when reading values from a JSON attribute defined as `FloatType` or `DoubleType`, the strings `"+Infinity"`, `"+INF"`, and `"-INF"` are now parsed to the appropriate values, in addition to the already supported `"Infinity"` and `"-Infinity"` variations. This change was made to improve consistency with Jackson's parsing of the unquoted versions of these values. Also, the `allowNonNumericNumbers` option is now respected so these strings will now be considered invalid if this option is disabled.
+
+  - Since Spark 3.3, Spark will try to use built-in data source writer instead of Hive serde in `INSERT OVERWRITE DIRECTORY`. This behavior is effective only if `spark.sql.hive.convertMetastoreParquet` or `spark.sql.hive.convertMetastoreOrc` is enabled respectively for Parquet and ORC formats. To restore the behavior before Spark 3.3, you can set `spark.sql.hive.convertMetastoreInsertDir` to `false`.
+
 ## Upgrading from Spark SQL 3.1 to 3.2
 
   - Since Spark 3.2, ADD FILE/JAR/ARCHIVE commands require each path to be enclosed by `"` or `'` if the path contains whitespaces.
@@ -193,7 +197,7 @@ license: |
 
   - In Spark 3.0.2, `PARTITION(col=null)` is always parsed as a null literal in the partition spec. In Spark 3.0.1 or earlier, it is parsed as a string literal of its text representation, e.g., string "null", if the partition column is string type. To restore the legacy behavior, you can set `spark.sql.legacy.parseNullPartitionSpecAsStringLiteral` as true.
 
-  - In Spark 3.0.0, the output schema of `SHOW DATABASES` becomes `namespace: string`. In Spark version 2.4 and earlier, the schema was `databaseName: string`. Since Spark 3.0.2, you can restore the old schema by setting `spark.sql.legacy.keepCommandOutputSchema` to `true`.
+  - In Spark 3.0.2, the output schema of `SHOW DATABASES` becomes `namespace: string`. In Spark version 3.0.1 and earlier, the schema was `databaseName: string`. Since Spark 3.0.2, you can restore the old schema by setting `spark.sql.legacy.keepCommandOutputSchema` to `true`.
 
 ## Upgrading from Spark SQL 3.0 to 3.0.1
 
@@ -209,7 +213,7 @@ license: |
 
   - In Spark 2.4 and below, `Dataset.groupByKey` results to a grouped dataset with key attribute is wrongly named as "value", if the key is non-struct type, for example, int, string, array, etc. This is counterintuitive and makes the schema of aggregation queries unexpected. For example, the schema of `ds.groupByKey(...).count()` is `(value, count)`. Since Spark 3.0, we name the grouping attribute to "key". The old behavior is preserved under a newly added configuration `spark.sql.legacy.dataset.nameNonStructGroupingKeyAsValue` with a default value of `false`.
 
-  - In Spark 3.0, the column metadata will always be propagated in the API `Column.name` and `Column.as`. In Spark version 2.4 and earlier, the metadata of `NamedExpression` is set as the `explicitMetadata` for the new column at the time the API is called, it won't change even if the underlying `NamedExpression` changes metadata. To restore the behavior before Spark 2.4, you can use the API `as(alias: String, metadata: Metadata)` with explicit metadata.
+  - In Spark 3.0, the column metadata will always be propagated in the API `Column.name` and `Column.as`. In Spark version 2.4 and earlier, the metadata of `NamedExpression` is set as the `explicitMetadata` for the new column at the time the API is called, it won't change even if the underlying `NamedExpression` changes metadata. To restore the behavior before Spark 3.0, you can use the API `as(alias: String, metadata: Metadata)` with explicit metadata.
 
 ### DDL Statements
 
@@ -350,6 +354,10 @@ license: |
 
   - In Spark 3.0, datetime pattern letter `F` is **aligned day of week in month** that represents the concept of the count of days within the period of a week where the weeks are aligned to the start of the month. In Spark version 2.4 and earlier, it is **week of month** that represents the concept of the count of weeks within the month where weeks start on a fixed day-of-week, e.g. `2020-07-30` is 30 days (4 weeks and 2 days) after the first day of the month, so `date_format(date '2020-07-30', 'F')` returns 2 in Spark 3.0, but as a week count in Spark 2.x, it returns 5 because it locates in the 5th week of July 2020, where week one is 2020-07-01 to 07-04.
 
+  - In Spark 3.0, Spark will try to use built-in data source writer instead of Hive serde in `CTAS`. This behavior is effective only if `spark.sql.hive.convertMetastoreParquet` or `spark.sql.hive.convertMetastoreOrc` is enabled respectively for Parquet and ORC formats. To restore the behavior before Spark 3.0, you can set `spark.sql.hive.convertMetastoreCtas` to `false`.
+
+  - In Spark 3.0, Spark will try to use built-in data source writer instead of Hive serde to process inserting into partitioned ORC/Parquet tables created by using the HiveSQL syntax. This behavior is effective only if `spark.sql.hive.convertMetastoreParquet` or `spark.sql.hive.convertMetastoreOrc` is enabled respectively for Parquet and ORC formats. To restore the behavior before Spark 3.0, you can set `spark.sql.hive.convertInsertingPartitionedTable` to `false`.
+
 ### Data Sources
 
   - In Spark version 2.4 and below, when reading a Hive SerDe table with Spark native data sources(parquet/orc), Spark infers the actual file schema and update the table schema in metastore. In Spark 3.0, Spark doesn't infer the schema anymore. This should not cause any problems to end users, but if it does, set `spark.sql.hive.caseSensitiveInferenceMode` to `INFER_AND_SAVE`.
@@ -420,7 +428,7 @@ license: |
     need to specify a value with units like "30s" now, to avoid being interpreted as milliseconds; otherwise,
     the extremely short interval that results will likely cause applications to fail.
 
-  - When turning a Dataset to another Dataset, Spark will up cast the fields in the original Dataset to the type of corresponding fields in the target DataSet. In version 2.4 and earlier, this up cast is not very strict, e.g. `Seq("str").toDS.as[Int]` fails, but `Seq("str").toDS.as[Boolean]` works and throw NPE during execution. In Spark 3.0, the up cast is stricter and turning String into something else is not allowed, i.e. `Seq("str").toDS.as[Boolean]` will fail during analysis.
+  - When turning a Dataset to another Dataset, Spark will up cast the fields in the original Dataset to the type of corresponding fields in the target DataSet. In version 2.4 and earlier, this up cast is not very strict, e.g. `Seq("str").toDS.as[Int]` fails, but `Seq("str").toDS.as[Boolean]` works and throw NPE during execution. In Spark 3.0, the up cast is stricter and turning String into something else is not allowed, i.e. `Seq("str").toDS.as[Boolean]` will fail during analysis. To restore the behavior before 2.4.1, set `spark.sql.legacy.looseUpcast` to `true`.
 
 ## Upgrading from Spark SQL 2.3 to 2.4
 

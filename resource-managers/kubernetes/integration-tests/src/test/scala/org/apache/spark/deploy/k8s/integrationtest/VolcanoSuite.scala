@@ -14,28 +14,20 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+package org.apache.spark.deploy.k8s.integrationtest
 
-package org.apache.spark.sql.connector.expressions;
+import org.scalatest.Tag
 
-import java.io.Serializable;
+class VolcanoSuite extends KubernetesSuite with VolcanoTestsSuite {
 
-import org.apache.spark.annotation.Evolving;
+  override protected def setUpTest(): Unit = {
+    super.setUpTest()
+    sparkAppConf
+      .set("spark.kubernetes.driver.scheduler.name", "volcano")
+      .set("spark.kubernetes.executor.scheduler.name", "volcano")
+  }
+}
 
-/**
- * The general SQL string corresponding to expression.
- *
- * @since 3.3.0
- */
-@Evolving
-public class GeneralSQLExpression implements Expression, Serializable {
-    private String sql;
-
-    public GeneralSQLExpression(String sql) {
-        this.sql = sql;
-    }
-
-    public String sql() { return sql; }
-
-    @Override
-    public String toString() { return sql; }
+private[spark] object VolcanoSuite {
+  val volcanoTag = Tag("volcano")
 }

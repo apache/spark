@@ -81,6 +81,10 @@ case class ParquetWrite(
 
     conf.set(SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE.key, sqlConf.parquetOutputTimestampType.toString)
 
+    conf.set(
+      SQLConf.PARQUET_FIELD_ID_WRITE_ENABLED.key,
+      sqlConf.parquetFieldIdWriteEnabled.toString)
+
     // Sets compression scheme
     conf.set(ParquetOutputFormat.COMPRESSION, parquetOptions.compressionCodecClassName)
 

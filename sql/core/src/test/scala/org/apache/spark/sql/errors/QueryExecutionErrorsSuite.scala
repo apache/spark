@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.errors
 
-import org.apache.spark.{SparkException, SparkRuntimeException, SparkUnsupportedOperationException}
+import org.apache.spark.{SparkException, SparkIllegalArgumentException, SparkRuntimeException, SparkUnsupportedOperationException}
 import org.apache.spark.sql.{DataFrame, QueryTest}
 import org.apache.spark.sql.functions.{lit, lower, struct, sum}
 import org.apache.spark.sql.test.SharedSparkSession
@@ -89,6 +89,26 @@ class QueryExecutionErrorsSuite extends QueryTest with SharedSparkSession {
         "is invalid: Detail message: " +
         "Given final block not properly padded. " +
         "Such issues can arise if a bad key is used during decryption.")
+    }
+  }
+
+  test("INVALID_PARAMETER_VALUE: invalid unit passed to timestampadd/timestampdiff") {
+    Seq(
+      "timestampadd" ->
+        "select timestampadd('nanosecond', 100, timestamp'2022-02-13 18:00:00')",
+      "timestampdiff" ->
+        """select timestampdiff(
+          |  'nanosecond',
+          |  timestamp'2022-02-13 18:00:00',
+          |  timestamp'2022-02-22 12:52:00')""".stripMargin
+    ).foreach { case (funcName, sqlStmt) =>
+      val e = intercept[SparkIllegalArgumentException] {
+        sql(sqlStmt).collect()
+      }
+      assert(e.getErrorClass === "INVALID_PARAMETER_VALUE")
+      assert(e.getSqlState === "22023")
+      assert(e.getMessage ===
+        s"The value of parameter(s) 'unit' in $funcName is invalid: nanosecond")
     }
   }
 

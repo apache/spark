@@ -593,7 +593,8 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
       spark.range(10).write.saveAsTable("add_col")
       withView("v") {
         sql("CREATE VIEW v AS SELECT * FROM add_col")
-        spark.range(10).select('id, 'id as 'a).write.mode("overwrite").saveAsTable("add_col")
+        spark.range(10).select(Symbol("id"), 'id as Symbol("a"))
+          .write.mode("overwrite").saveAsTable("add_col")
         checkAnswer(sql("SELECT * FROM v"), spark.range(10).toDF())
       }
     }
@@ -765,7 +766,9 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
     withTable("t") {
       Seq(2, 3, 1).toDF("c1").write.format("parquet").saveAsTable("t")
       withTempView("v1") {
-        sql("CREATE TEMPORARY VIEW v1 AS SELECT 1/0")
+        withSQLConf(ANSI_ENABLED.key -> "false") {
+          sql("CREATE TEMPORARY VIEW v1 AS SELECT 1/0")
+        }
         withSQLConf(
           USE_CURRENT_SQL_CONFIGS_FOR_VIEW.key -> "true",
           ANSI_ENABLED.key -> "true") {
@@ -838,7 +841,9 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
         sql("CREATE VIEW v2 (c1) AS SELECT c1 FROM t ORDER BY 1 ASC, c1 DESC")
         sql("CREATE VIEW v3 (c1, count) AS SELECT c1, count(c1) AS cnt FROM t GROUP BY 1")
         sql("CREATE VIEW v4 (a, count) AS SELECT c1 as a, count(c1) AS cnt FROM t GROUP BY a")
-        sql("CREATE VIEW v5 (c1) AS SELECT 1/0 AS invalid")
+        withSQLConf(ANSI_ENABLED.key -> "false") {
+          sql("CREATE VIEW v5 (c1) AS SELECT 1/0 AS invalid")
+        }
 
         withSQLConf(CASE_SENSITIVE.key -> "true") {
           checkAnswer(sql("SELECT * FROM v1"), Seq(Row(2), Row(3), Row(1)))
@@ -900,6 +905,25 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
           sql("SELECT * FROM v1").collect()
         }.getMessage
         assert(e.contains("divide by zero"))
+      }
+    }
+  }
+
+  test("SPARK-37932: view join with same view") {
+    withTable("t") {
+      withView("v1") {
+        Seq((1, "test1"), (2, "test2"), (1, "test2")).toDF("id", "name")
+          .write.format("parquet").saveAsTable("t")
+        sql("CREATE VIEW v1 (id, name) AS SELECT id, name FROM t")
+
+        checkAnswer(
+          sql("""SELECT l1.id FROM v1 l1
+                |INNER JOIN (
+                |   SELECT id FROM v1
+                |   GROUP BY id HAVING COUNT(DISTINCT name) > 1
+                | ) l2 ON l1.id = l2.id GROUP BY l1.name, l1.id;
+                |""".stripMargin),
+          Seq(Row(1), Row(1)))
       }
     }
   }

@@ -407,6 +407,18 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val REQUIRE_ALL_CLUSTER_KEYS_FOR_DISTRIBUTION =
+    buildConf("spark.sql.requireAllClusterKeysForDistribution")
+      .internal()
+      .doc("When true, the planner requires all the clustering keys as the partition keys " +
+        "(with same ordering) of the children, to eliminate the shuffle for the operator that " +
+        "requires its children be clustered distributed, such as AGGREGATE and WINDOW node. " +
+        "This is to avoid data skews which can lead to significant performance regression if " +
+        "shuffle is eliminated.")
+      .version("3.3.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val RADIX_SORT_ENABLED = buildConf("spark.sql.sort.enableRadixSort")
     .internal()
     .doc("When true, enable use of radix sort when possible. Radix sort is much faster but " +
@@ -933,6 +945,33 @@ object SQLConf {
     .version("2.4.0")
     .intConf
     .createWithDefault(4096)
+
+   val PARQUET_FIELD_ID_WRITE_ENABLED =
+    buildConf("spark.sql.parquet.fieldId.write.enabled")
+      .doc("Field ID is a native field of the Parquet schema spec. When enabled, " +
+        "Parquet writers will populate the field Id " +
+        "metadata (if present) in the Spark schema to the Parquet schema.")
+      .version("3.3.0")
+      .booleanConf
+      .createWithDefault(true)
+
+  val PARQUET_FIELD_ID_READ_ENABLED =
+    buildConf("spark.sql.parquet.fieldId.read.enabled")
+      .doc("Field ID is a native field of the Parquet schema spec. When enabled, Parquet readers " +
+        "will use field IDs (if present) in the requested Spark schema to look up Parquet " +
+        "fields instead of using column names")
+      .version("3.3.0")
+      .booleanConf
+      .createWithDefault(false)
+
+  val IGNORE_MISSING_PARQUET_FIELD_ID =
+    buildConf("spark.sql.parquet.fieldId.read.ignoreMissing")
+      .doc("When the Parquet file doesn't have any field IDs but the " +
+        "Spark read schema is using field IDs to read, we will silently return nulls " +
+        "when this flag is enabled, or error otherwise.")
+      .version("3.3.0")
+      .booleanConf
+      .createWithDefault(false)
 
   val ORC_COMPRESSION = buildConf("spark.sql.orc.compression.codec")
     .doc("Sets the compression codec used when writing ORC files. If either `compression` or " +
@@ -4252,6 +4291,12 @@ class SQLConf extends Serializable with Logging {
   def maxConcurrentOutputFileWriters: Int = getConf(SQLConf.MAX_CONCURRENT_OUTPUT_FILE_WRITERS)
 
   def inferDictAsStruct: Boolean = getConf(SQLConf.INFER_NESTED_DICT_AS_STRUCT)
+
+  def parquetFieldIdReadEnabled: Boolean = getConf(SQLConf.PARQUET_FIELD_ID_READ_ENABLED)
+
+  def parquetFieldIdWriteEnabled: Boolean = getConf(SQLConf.PARQUET_FIELD_ID_WRITE_ENABLED)
+
+  def ignoreMissingParquetFieldId: Boolean = getConf(SQLConf.IGNORE_MISSING_PARQUET_FIELD_ID)
 
   def useV1Command: Boolean = getConf(SQLConf.LEGACY_USE_V1_COMMAND)
 

@@ -444,21 +444,25 @@ class DataFrameNaFunctionsSuite extends QueryTest with SharedSparkSession {
   }
 
   test("replace float with nan") {
-    checkAnswer(
-      createNaNDF().na.replace("*", Map(
-        1.0f -> Float.NaN
-      )),
-      Row(0, 0L, 0.toShort, 0.toByte, Float.NaN, Double.NaN) ::
-      Row(0, 0L, 0.toShort, 0.toByte, Float.NaN, Double.NaN) :: Nil)
+    if (!conf.ansiEnabled) {
+      checkAnswer(
+        createNaNDF().na.replace("*", Map(
+          1.0f -> Float.NaN
+        )),
+        Row(0, 0L, 0.toShort, 0.toByte, Float.NaN, Double.NaN) ::
+          Row(0, 0L, 0.toShort, 0.toByte, Float.NaN, Double.NaN) :: Nil)
+    }
   }
 
   test("replace double with nan") {
-    checkAnswer(
-      createNaNDF().na.replace("*", Map(
-        1.0 -> Double.NaN
-      )),
-      Row(0, 0L, 0.toShort, 0.toByte, Float.NaN, Double.NaN) ::
-      Row(0, 0L, 0.toShort, 0.toByte, Float.NaN, Double.NaN) :: Nil)
+    if (!conf.ansiEnabled) {
+      checkAnswer(
+        createNaNDF().na.replace("*", Map(
+          1.0 -> Double.NaN
+        )),
+        Row(0, 0L, 0.toShort, 0.toByte, Float.NaN, Double.NaN) ::
+          Row(0, 0L, 0.toShort, 0.toByte, Float.NaN, Double.NaN) :: Nil)
+    }
   }
 
   test("SPARK-34417: test fillMap() for column with a dot in the name") {

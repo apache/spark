@@ -488,7 +488,7 @@ class FileIndexSuite extends SharedSparkSession {
             new Path("file")), Array(new BlockLocation()))
       )
     when(dfs.listLocatedStatus(path)).thenReturn(new RemoteIterator[LocatedFileStatus] {
-      val iter = statuses.toIterator
+      val iter = statuses.iterator
       override def hasNext: Boolean = iter.hasNext
       override def next(): LocatedFileStatus = iter.next
     })
@@ -518,6 +518,18 @@ class FileIndexSuite extends SharedSparkSession {
       }
     } finally {
       SQLConf.get.setConf(StaticSQLConf.METADATA_CACHE_TTL_SECONDS, previousValue)
+    }
+  }
+
+  test("SPARK-38182: Fix NoSuchElementException if pushed filter does not contain any " +
+    "references") {
+    withTable("t") {
+      withSQLConf(SQLConf.OPTIMIZER_EXCLUDED_RULES.key ->
+        "org.apache.spark.sql.catalyst.optimizer.BooleanSimplification") {
+
+        sql("CREATE TABLE t (c1 int) USING PARQUET")
+        assert(sql("SELECT * FROM t WHERE c1 = 1 AND 2 > 1").count() == 0)
+      }
     }
   }
 }

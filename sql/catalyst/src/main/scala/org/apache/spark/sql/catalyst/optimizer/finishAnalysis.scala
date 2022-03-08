@@ -21,7 +21,6 @@ import scala.collection.mutable
 
 import org.apache.spark.sql.catalyst.CurrentUserContext.CURRENT_USER
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.catalyst.trees.TreePattern._
@@ -32,26 +31,18 @@ import org.apache.spark.util.Utils
 
 
 /**
- * Finds all the expressions that are unevaluable and replace/rewrite them with semantically
- * equivalent expressions that can be evaluated. Currently we replace two kinds of expressions:
- * 1) [[RuntimeReplaceable]] expressions
- * 2) [[UnevaluableAggregate]] expressions such as Every, Some, Any, CountIf
+ * Finds all the [[RuntimeReplaceable]] expressions that are unevaluable and replace them
+ * with semantically equivalent expressions that can be evaluated.
+ *
  * This is mainly used to provide compatibility with other databases.
  * Few examples are:
- *   we use this to support "nvl" by replacing it with "coalesce".
+ *   we use this to support "left" by replacing it with "substring".
  *   we use this to replace Every and Any with Min and Max respectively.
- *
- * TODO: In future, explore an option to replace aggregate functions similar to
- * how RuntimeReplaceable does.
  */
 object ReplaceExpressions extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformAllExpressionsWithPruning(
-    _.containsAnyPattern(RUNTIME_REPLACEABLE, COUNT_IF, BOOL_AGG, REGR_COUNT)) {
-    case e: RuntimeReplaceable => e.child
-    case CountIf(predicate) => Count(new NullIf(predicate, Literal.FalseLiteral))
-    case BoolOr(arg) => Max(arg)
-    case BoolAnd(arg) => Min(arg)
-    case RegrCount(left, right) => Count(Seq(left, right))
+    _.containsAnyPattern(RUNTIME_REPLACEABLE)) {
+    case e: RuntimeReplaceable => e.replacement
   }
 }
 
