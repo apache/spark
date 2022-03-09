@@ -183,6 +183,9 @@ class HistogramNumericSuite extends SparkFunSuite with SQLHelper with Logging {
 
   test("class HistogramNumeric, exercise many different numeric input types") {
     val inputs = Seq(
+      (Literal(null),
+        Literal(null),
+        Literal(null)),
       (Literal(0),
         Literal(1),
         Literal(2)),
@@ -236,21 +239,23 @@ class HistogramNumericSuite extends SparkFunSuite with SQLHelper with Logging {
       aggPropagateOutputType.update(buffer, InternalRow(right.value))
       // Evaluate the aggregate function.
       val result = aggPropagateOutputType.eval(buffer)
-      assert(result != null)
-      // Sanity-check the sum of the heights.
-      var ys = 0.0
-      result match {
-        case v: GenericArrayData =>
-          for (row <- v.array) {
-            row match {
-              case r: GenericInternalRow =>
-                assert(r.values.length == 2)
-                ys += r.values(1).asInstanceOf[Double]
+      if (left.dataType != NullType) {
+        assert(result != null)
+        // Sanity-check the sum of the heights.
+        var ys = 0.0
+        result match {
+          case v: GenericArrayData =>
+            for (row <- v.array) {
+              row match {
+                case r: GenericInternalRow =>
+                  assert(r.values.length == 2)
+                  ys += r.values(1).asInstanceOf[Double]
+              }
             }
-          }
+        }
+        assert(ys > 1)
       }
       // As a basic sanity check, the sum of the heights of the bins should be greater than one.
-      assert(ys > 1)
     }
   }
 
