@@ -168,13 +168,17 @@ class RemoveRedundantAggregatesSuite extends PlanTest {
     }
   }
 
-  test("Keep non-redundant aggregate - upper references non-deterministic non-grouping") {
+  test("Remove non-redundant aggregate - upper references non-deterministic non-grouping") {
     val query = relation
       .groupBy('a)('a, ('a + rand(0)) as 'c)
       .groupBy('a, 'c)('a, 'c)
       .analyze
+    val expected = relation
+      .groupBy('a)('a, ('a + rand(0)) as 'c)
+      .select('a, 'c)
+      .analyze
     val optimized = Optimize.execute(query)
-    comparePlans(optimized, query)
+    comparePlans(optimized, expected)
   }
 
   test("SPARK-36194: Remove aggregation from left semi/anti join if aggregation the same") {
@@ -282,14 +286,5 @@ class RemoveRedundantAggregatesSuite extends PlanTest {
   test("SPARK-36194: Negative case: child distinct keys is empty") {
     val originalQuery = Distinct(x.groupBy('a, 'b)('a, TrueLiteral)).analyze
     comparePlans(Optimize.execute(originalQuery), originalQuery)
-  }
-
-  test("SPARK-36194: Negative case: Remove aggregation from contains non-deterministic") {
-    val query = relation
-      .groupBy('a)('a, (count('b) + rand(0)).as("cnt"))
-      .groupBy('a, 'cnt)('a, 'cnt)
-      .analyze
-    val optimized = Optimize.execute(query)
-    comparePlans(optimized, query)
   }
 }

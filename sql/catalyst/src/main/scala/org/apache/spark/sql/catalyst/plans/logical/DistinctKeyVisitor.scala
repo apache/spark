@@ -38,6 +38,7 @@ object DistinctKeyVisitor extends LogicalPlanVisitor[Set[ExpressionSet]] {
         expressionSet.map { expression =>
           expression transform {
             case expr: Expression =>
+              // TODO: Expand distinctKeys for redundant aliases on the same expression
               aliases
                 .collectFirst { case a: Alias if a.child.semanticEquals(expr) => a.toAttribute }
                 .getOrElse(expr)
@@ -60,7 +61,7 @@ object DistinctKeyVisitor extends LogicalPlanVisitor[Set[ExpressionSet]] {
   override def visitDistinct(p: Distinct): Set[ExpressionSet] = Set(ExpressionSet(p.output))
 
   override def visitExcept(p: Except): Set[ExpressionSet] =
-    if (!p.isAll && p.deterministic) Set(ExpressionSet(p.output)) else default(p)
+    if (!p.isAll) Set(ExpressionSet(p.output)) else default(p)
 
   override def visitExpand(p: Expand): Set[ExpressionSet] = default(p)
 
@@ -76,7 +77,7 @@ object DistinctKeyVisitor extends LogicalPlanVisitor[Set[ExpressionSet]] {
   }
 
   override def visitIntersect(p: Intersect): Set[ExpressionSet] = {
-    if (!p.isAll && p.deterministic) Set(ExpressionSet(p.output)) else default(p)
+    if (!p.isAll) Set(ExpressionSet(p.output)) else default(p)
   }
 
   override def visitJoin(p: Join): Set[ExpressionSet] = {
@@ -108,7 +109,7 @@ object DistinctKeyVisitor extends LogicalPlanVisitor[Set[ExpressionSet]] {
 
   override def visitProject(p: Project): Set[ExpressionSet] = {
     if (p.child.distinctKeys.nonEmpty) {
-      projectDistinctKeys(p.child.distinctKeys.map(ExpressionSet(_)), p.projectList)
+      projectDistinctKeys(p.child.distinctKeys, p.projectList)
     } else {
       default(p)
     }

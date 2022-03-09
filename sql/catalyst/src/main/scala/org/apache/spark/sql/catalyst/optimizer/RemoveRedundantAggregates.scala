@@ -48,14 +48,12 @@ object RemoveRedundantAggregates extends Rule[LogicalPlan] with AliasHelper {
         newAggregate
       }
 
-     case agg @ Aggregate(groupingExps, _, child)
-         if agg.groupOnly && child.deterministic &&
-           child.distinctKeys.exists(_.subsetOf(ExpressionSet(groupingExps))) =>
+    case agg @ Aggregate(groupingExps, _, child)
+        if agg.groupOnly && child.distinctKeys.exists(_.subsetOf(ExpressionSet(groupingExps))) =>
       Project(agg.aggregateExpressions, child)
 
     case agg @ Aggregate(groupingExps, aggregateExps, child)
         if aggregateExps.forall(a => a.isInstanceOf[Alias] && a.children.forall(_.foldable)) &&
-          child.deterministic &&
           child.distinctKeys.exists(_.subsetOf(ExpressionSet(groupingExps))) =>
       Project(agg.aggregateExpressions, child)
   }
