@@ -18,7 +18,9 @@
 package org.apache.spark.sql.connector.util;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
+import java.util.stream.Collectors;
 
 import org.apache.spark.sql.connector.expressions.Expression;
 import org.apache.spark.sql.connector.expressions.FieldReference;
@@ -36,8 +38,12 @@ public class V2ExpressionSQLBuilder {
       return visitFieldReference((FieldReference) expr);
     } else if (expr instanceof GeneralScalarExpression) {
       GeneralScalarExpression e = (GeneralScalarExpression) expr;
+      List<String> children;
       String name = e.name();
       switch (name) {
+        case "IN":
+          children = Arrays.stream(e.children()).map(c -> build(c)).collect(Collectors.toList());
+          return visitIn(children.get(0), children.subList(1, children.size()));
         case "IS_NULL":
           return visitIsNull(build(e.children()[0]));
         case "IS_NOT_NULL":
@@ -73,10 +79,7 @@ public class V2ExpressionSQLBuilder {
         case "~":
           return visitUnaryArithmetic(name, build(e.children()[0]));
         case "CASE_WHEN":
-          List<String> children = new ArrayList<>();
-          for (Expression child : e.children()) {
-            children.add(build(child));
-          }
+          children = Arrays.stream(e.children()).map(c -> build(c)).collect(Collectors.toList());
           return visitCaseWhen(children.toArray(new String[e.children().length]));
         // TODO supports other expressions
         default:
@@ -93,6 +96,10 @@ public class V2ExpressionSQLBuilder {
 
   protected String visitFieldReference(FieldReference fieldRef) {
     return fieldRef.toString();
+  }
+
+  protected String visitIn(String v, List<String> list) {
+    return v + " IN (" + list.stream().collect(Collectors.joining(", ")) + ")";
   }
 
   protected String visitIsNull(String v) {

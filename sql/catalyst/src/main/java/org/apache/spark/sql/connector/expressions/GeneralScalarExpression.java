@@ -42,6 +42,24 @@ import org.apache.spark.sql.connector.util.V2ExpressionSQLBuilder;
  *    <li>Since version: 3.3.0</li>
  *   </ul>
  *  </li>
+ *  <li>Name: <code>StartsWith</code>
+ *   <ul>
+ *    <li>SQL semantic: <code>StartsWith(expr1, expr2)</code></li>
+ *    <li>Since version: 3.3.0</li>
+ *   </ul>
+ *  </li>
+ *  <li>Name: <code>EndsWith</code>
+ *   <ul>
+ *    <li>SQL semantic: <code>EndsWith(expr1, expr2)</code></li>
+ *    <li>Since version: 3.3.0</li>
+ *   </ul>
+ *  </li>
+ *  <li>Name: <code>Contains</code>
+ *   <ul>
+ *    <li>SQL semantic: <code>Contains(expr1, expr2)</code></li>
+ *    <li>Since version: 3.3.0</li>
+ *   </ul>
+ *  </li>
  *  <li>Name: <code>IN</code>
  *   <ul>
  *    <li>SQL semantic: <code>expr IN (expr1, expr2, ...)</code></li>

@@ -44,12 +44,10 @@ class V2ExpressionBuilder(e: Expression, nestedPredicatePushdownEnabled: Boolean
 
   private def generateExpression(expr: Expression): Option[V2Expression] = expr match {
     case Literal(value, dataType) => Some(LiteralValue(value, dataType))
-    case pushableColumn(name) =>
-      if (nestedPredicatePushdownEnabled) {
-        Some(FieldReference(name))
-      } else {
-        Some(FieldReference.column(name))
-      }
+    case pushableColumn(name) if nestedPredicatePushdownEnabled =>
+      Some(FieldReference(name))
+    case pushableColumn(name) if !nestedPredicatePushdownEnabled =>
+      Some(FieldReference.column(name))
     case in @ InSet(child, hset) =>
       generateExpression(child).map { v =>
         val children =

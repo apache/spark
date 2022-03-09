@@ -269,6 +269,75 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
     }
 
     checkAnswer(df, Row("mary", 2))
+
+    val df2 = spark.table("h2.test.employee").filter($"name".isin("amy", "cathy"))
+
+    checkFiltersRemoved(df2)
+
+    df2.queryExecution.optimizedPlan.collect {
+      case _: DataSourceV2ScanRelation =>
+        val expected_plan_fragment =
+          "PushedPredicates: [NAME IN ('amy', 'cathy')]"
+        checkKeywordsExistsInExplain(df2, expected_plan_fragment)
+    }
+
+    checkAnswer(df2, Seq(Row(1, "amy", 10000, 1000), Row(1, "cathy", 9000, 1200)))
+
+    // JdbcDialect doesn't support compile function StartsWith.
+    val df3 = spark.table("h2.test.employee").filter($"name".startsWith("a"))
+
+    checkFiltersRemoved(df3, false)
+
+    df3.queryExecution.optimizedPlan.collect {
+      case _: DataSourceV2ScanRelation =>
+        val expected_plan_fragment =
+          "PushedPredicates: [NAME IS NOT NULL]"
+        checkKeywordsExistsInExplain(df3, expected_plan_fragment)
+    }
+
+    checkAnswer(df3, Seq(Row(1, "amy", 10000, 1000), Row(2, "alex", 12000, 1200)))
+  }
+
+  test("scan with complex filter push-down") {
+    Seq(false, true).foreach { ansiMode =>
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> ansiMode.toString) {
+        val df = spark.table("h2.test.people").filter($"id" + 1 > 1)
+
+        checkFiltersRemoved(df, ansiMode)
+
+        df.queryExecution.optimizedPlan.collect {
+          case _: DataSourceV2ScanRelation =>
+            val expected_plan_fragment = if (ansiMode) {
+              "PushedPredicates: [ID IS NOT NULL, ((ID) + (1)) > (1)]"
+            } else {
+              "PushedPredicates: [ID IS NOT NULL]"
+            }
+            checkKeywordsExistsInExplain(df, expected_plan_fragment)
+        }
+
+        checkAnswer(df, Seq(Row("fred", 1), Row("mary", 2)))
+
+        val df2 = sql("""
+                       |SELECT * FROM h2.test.employee
+                       |WHERE (CASE WHEN SALARY > 10000 THEN BONUS ELSE BONUS + 200 END) > 1200
+                       |""".stripMargin)
+
+        checkFiltersRemoved(df2, ansiMode)
+
+        df2.queryExecution.optimizedPlan.collect {
+          case _: DataSourceV2ScanRelation =>
+            val expected_plan_fragment = if (ansiMode) {
+              "PushedPredicates: [(CASE WHEN (SALARY) > (10000.00) THEN BONUS" +
+                " ELSE (BONUS) + (200.0) END) > (1200.0)]"
+            } else {
+              "PushedPredicates: []"
+            }
+            checkKeywordsExistsInExplain(df2, expected_plan_fragment)
+        }
+
+        checkAnswer(df2, Seq(Row(1, "cathy", 9000, 1200), Row(2, "david", 10000, 1300)))
+      }
+    }
   }
 
   test("scan with column pruning") {
@@ -420,11 +489,15 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
     checkAnswer(df, Seq(Row(10000, 1100.0), Row(12000, 1250.0), Row(12000, 1200.0)))
   }
 
-  private def checkFiltersRemoved(df: DataFrame): Unit = {
+  private def checkFiltersRemoved(df: DataFrame, removed: Boolean = true): Unit = {
     val filters = df.queryExecution.optimizedPlan.collect {
       case f: Filter => f
     }
-    assert(filters.isEmpty)
+    if (removed) {
+      assert(filters.isEmpty)
+    } else {
+      assert(filters.nonEmpty)
+    }
   }
 
   test("scan with aggregate push-down: MAX AVG with filter without group by") {

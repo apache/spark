@@ -36,7 +36,7 @@ import org.apache.spark.sql.connector.read.streaming.{ContinuousStream, MicroBat
 import org.apache.spark.sql.connector.write.V1Write
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.{FilterExec, LeafExecNode, LocalTableScanExec, ProjectExec, RowDataSourceScanExec, SparkPlan}
-import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, PushableColumn}
+import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, PushableColumn, PushableColumnBase}
 import org.apache.spark.sql.execution.streaming.continuous.{WriteToContinuousDataSource, WriteToContinuousDataSourceExec}
 import org.apache.spark.sql.internal.StaticSQLConf.WAREHOUSE_PATH
 import org.apache.spark.sql.sources.{BaseRelation, TableScan}
@@ -470,75 +470,13 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
 private[sql] object DataSourceV2Strategy {
 
   private def translateLeafNodeFilterV2(
-      predicate: Expression): Option[V2Predicate] = predicate match {
-    case PushablePredicate(expr) => Some(expr)
-//    case expressions.EqualTo(pushableColumn(name), Literal(v, t)) =>
-//      Some(new V2EqualTo(FieldReference(name), LiteralValue(v, t)))
-//    case expressions.EqualTo(Literal(v, t), pushableColumn(name)) =>
-//      Some(new V2EqualTo(FieldReference(name), LiteralValue(v, t)))
-//
-//    case expressions.EqualNullSafe(pushableColumn(name), Literal(v, t)) =>
-//      Some(new V2EqualNullSafe(FieldReference(name), LiteralValue(v, t)))
-//    case expressions.EqualNullSafe(Literal(v, t), pushableColumn(name)) =>
-//      Some(new V2EqualNullSafe(FieldReference(name), LiteralValue(v, t)))
-//
-//    case expressions.GreaterThan(pushableColumn(name), Literal(v, t)) =>
-//      Some(new V2GreaterThan(FieldReference(name), LiteralValue(v, t)))
-//    case expressions.GreaterThan(Literal(v, t), pushableColumn(name)) =>
-//      Some(new V2LessThan(FieldReference(name), LiteralValue(v, t)))
-//
-//    case expressions.LessThan(pushableColumn(name), Literal(v, t)) =>
-//      Some(new V2LessThan(FieldReference(name), LiteralValue(v, t)))
-//    case expressions.LessThan(Literal(v, t), pushableColumn(name)) =>
-//      Some(new V2GreaterThan(FieldReference(name), LiteralValue(v, t)))
-//
-//    case expressions.GreaterThanOrEqual(pushableColumn(name), Literal(v, t)) =>
-//      Some(new V2GreaterThanOrEqual(FieldReference(name), LiteralValue(v, t)))
-//    case expressions.GreaterThanOrEqual(Literal(v, t), pushableColumn(name)) =>
-//      Some(new V2LessThanOrEqual(FieldReference(name), LiteralValue(v, t)))
-//
-//    case expressions.LessThanOrEqual(pushableColumn(name), Literal(v, t)) =>
-//      Some(new V2LessThanOrEqual(FieldReference(name), LiteralValue(v, t)))
-//    case expressions.LessThanOrEqual(Literal(v, t), pushableColumn(name)) =>
-//      Some(new V2GreaterThanOrEqual(FieldReference(name), LiteralValue(v, t)))
-//
-//    case in @ expressions.InSet(pushableColumn(name), set) =>
-//      val values: Array[V2Literal[_]] =
-//        set.toSeq.map(elem => LiteralValue(elem, in.dataType)).toArray
-//      Some(new V2In(FieldReference(name), values))
-//
-//    // Because we only convert In to InSet in Optimizer when there are more than certain
-//    // items. So it is possible we still get an In expression here that needs to be pushed
-//    // down.
-// case in @ expressions.In(pushableColumn(name), list) if list.forall(_.isInstanceOf[Literal]) =>
-//      val hSet = list.map(_.eval(EmptyRow))
-//      Some(new V2In(FieldReference(name),
-//        hSet.toArray.map(LiteralValue(_, in.value.dataType))))
-//
-//    case expressions.IsNull(pushableColumn(name)) =>
-//      Some(new V2IsNull(FieldReference(name)))
-//    case expressions.IsNotNull(pushableColumn(name)) =>
-//      Some(new V2IsNotNull(FieldReference(name)))
-//
-//    case expressions.StartsWith(pushableColumn(name), Literal(v: UTF8String, StringType)) =>
-//      Some(new V2StringStartsWith(FieldReference(name), v))
-//
-//    case expressions.EndsWith(pushableColumn(name), Literal(v: UTF8String, StringType)) =>
-//      Some(new V2StringEndsWith(FieldReference(name), v))
-//
-//    case expressions.Contains(pushableColumn(name), Literal(v: UTF8String, StringType)) =>
-//      Some(new V2StringContains(FieldReference(name), v))
-//
-//    case expressions.Literal(true, BooleanType) =>
-//      Some(new V2AlwaysTrue)
-//
-//    case expressions.Literal(false, BooleanType) =>
-//      Some(new V2AlwaysFalse)
-//
-//    case e @ pushableColumn(name) if e.dataType.isInstanceOf[BooleanType] =>
-//      Some(new V2EqualTo(FieldReference(name), LiteralValue(true, BooleanType)))
-
-    case _ => None
+      predicate: Expression,
+      supportNestedPredicatePushdown: Boolean): Option[V2Predicate] = {
+    val pushablePredicate = PushablePredicate(supportNestedPredicatePushdown)
+    predicate match {
+      case pushablePredicate(expr) => Some(expr)
+      case _ => None
+    }
   }
 
   /**
@@ -596,7 +534,7 @@ private[sql] object DataSourceV2Strategy {
         translateFilterV2WithMapping(child, translatedFilterToExpr, nestedPredicatePushdownEnabled)
           .map(v => new V2Predicate("NOT", Array(v)))
       case other =>
-        val filter = translateLeafNodeFilterV2(other)
+        val filter = translateLeafNodeFilterV2(other, nestedPredicatePushdownEnabled)
         if (filter.isDefined && translatedFilterToExpr.isDefined) {
           translatedFilterToExpr.get(filter.get) = predicate
         }
@@ -630,11 +568,10 @@ private[sql] object DataSourceV2Strategy {
   }
 }
 
-/**
- * Get the expression of DS V2 to represent catalyst predicate that can be pushed down.
- */
-object PushablePredicate {
-  val pushableColumn = PushableColumn(true)
+abstract class PushablePredicateBase {
+  val nestedPredicatePushdownEnabled: Boolean
+  val pushableColumn: PushableColumnBase = PushableColumn(nestedPredicatePushdownEnabled)
+
   def unapply(e: Expression): Option[V2Predicate] = e match {
     case expressions.Literal(true, BooleanType) =>
       Some(new V2Predicate("TRUE", Array.empty))
@@ -643,9 +580,30 @@ object PushablePredicate {
     case col @ pushableColumn(name) if col.dataType.isInstanceOf[BooleanType] =>
       Some(new V2Predicate(name, Array.empty))
     case _ =>
-      new V2ExpressionBuilder(e, true).build().map { v =>
+      new V2ExpressionBuilder(e, nestedPredicatePushdownEnabled).build().map { v =>
         assert(v.isInstanceOf[V2Predicate])
         v.asInstanceOf[V2Predicate]
       }
+  }
+}
+
+object PushablePredicateWithNestedColumn extends PushablePredicateBase {
+  override val nestedPredicatePushdownEnabled = true
+}
+
+object PushablePredicateWithoutNestedColumn extends PushablePredicateBase {
+  override val nestedPredicatePushdownEnabled = false
+}
+
+/**
+ * Get the expression of DS V2 to represent catalyst predicate that can be pushed down.
+ */
+object PushablePredicate {
+  def apply(nestedPredicatePushdownEnabled: Boolean): PushablePredicateBase = {
+    if (nestedPredicatePushdownEnabled) {
+      PushablePredicateWithNestedColumn
+    } else {
+      PushablePredicateWithoutNestedColumn
+    }
   }
 }

@@ -25,8 +25,7 @@ import org.apache.spark.sql.test.SharedSparkSession
 
 class DataSourceV2StrategySuite extends PlanTest with SharedSparkSession {
   test("SPARK-36644: Push down boolean column filter") {
-    testTranslateFilter(Symbol("col").boolean,
-      Some(new Predicate("col", Array.empty)))
+    testTranslateFilter(Symbol("col").boolean, Some(new Predicate("col", Array.empty)))
   }
 
   /**

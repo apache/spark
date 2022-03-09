@@ -41,20 +41,23 @@ public interface SupportsPushDownV2Filters extends ScanBuilder {
   Predicate[] pushPredicates(Predicate[] predicates);
 
   /**
-   * Returns the filters that are pushed to the data source via {@link #pushPredicates(Predicate[])}.
+   * Returns the predicates that are pushed to the data source via
+   * {@link #pushPredicates(Predicate[])}.
    * <p>
-   * There are 3 kinds of filters:
+   * There are 3 kinds of predicates:
    * <ol>
-   *  <li>pushable filters which don't need to be evaluated again after scanning.</li>
-   *  <li>pushable filters which still need to be evaluated after scanning, e.g. parquet row
-   *  group filter.</li>
-   *  <li>non-pushable filters.</li>
+   *  <li>pushable predicates which don't need to be evaluated again after scanning.</li>
+   *  <li>pushable predicates which still need to be evaluated after scanning, e.g. parquet row
+   *  group predicate.</li>
+   *  <li>non-pushable predicates.</li>
    * </ol>
    * <p>
-   * Both case 1 and 2 should be considered as pushed filters and should be returned by this method.
+   * Both case 1 and 2 should be considered as pushed predicates and should be returned
+   * by this method.
    * <p>
-   * It's possible that there is no filters in the query and {@link #pushPredicates(Predicate[])}
-   * is never called, empty array should be returned for this case.
+   * It's possible that there is no predicates in the query and
+   * {@link #pushPredicates(Predicate[])} is never called,
+   * empty array should be returned for this case.
    */
   Predicate[] pushedPredicates();
 }

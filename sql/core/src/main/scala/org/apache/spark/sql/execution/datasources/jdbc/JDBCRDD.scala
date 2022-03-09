@@ -246,7 +246,7 @@ private[jdbc] class JDBCRDD(
     sample: Option[TableSampleInfo] = None,
     limit: Int = 0,
     sortOrders: Array[SortOrder] = Array.empty[SortOrder],
-    predicates: Array[Predicate] = Array.empty)
+    predicates: Array[Predicate] = Array.empty[Predicate])
   extends RDD[InternalRow](sc, Nil) {
 
   /**
