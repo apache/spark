@@ -150,6 +150,13 @@ class RemoveRedundantAggregatesSuite extends PlanTest {
     comparePlans(optimized, expected)
   }
 
+  test("Remove redundant aggregate - upper has contains foldable expressions") {
+    val originalQuery = x.groupBy('a, 'b)('a, 'b).groupBy('a)('a, TrueLiteral).analyze
+    val correctAnswer = x.groupBy('a)('a, TrueLiteral).analyze
+    val optimized = Optimize.execute(originalQuery)
+    comparePlans(optimized, correctAnswer)
+  }
+
   test("Keep non-redundant aggregate - upper references agg expression") {
     for (agg <- aggregates('b)) {
       val query = relation

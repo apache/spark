@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.plans.logical
 
 import org.apache.spark.sql.catalyst.expressions.{Alias, Expression, ExpressionSet, NamedExpression}
 import org.apache.spark.sql.catalyst.planning.ExtractEquiJoinKeys
-import org.apache.spark.sql.catalyst.plans.{Inner, LeftSemiOrAnti}
+import org.apache.spark.sql.catalyst.plans.{Inner, LeftOuter, LeftSemiOrAnti, RightOuter}
 
 /**
  * A visitor pattern for traversing a [[LogicalPlan]] tree and propagate the distinct attributes.
@@ -83,10 +83,21 @@ object DistinctKeyVisitor extends LogicalPlanVisitor[Set[ExpressionSet]] {
     p match {
       case Join(_, _, LeftSemiOrAnti(_), _, _) =>
         p.left.distinctKeys
-      case ExtractEquiJoinKeys(Inner, leftKeys, rightKeys, _, _, _, _, _)
-        if p.left.distinctKeys.exists(_.subsetOf(ExpressionSet(leftKeys))) &&
-          p.right.distinctKeys.exists(_.subsetOf(ExpressionSet(rightKeys))) =>
-        Set(ExpressionSet(leftKeys), ExpressionSet(rightKeys))
+      case ExtractEquiJoinKeys(joinType, leftKeys, rightKeys, _, _, left, right, _)
+          if left.distinctKeys.nonEmpty || right.distinctKeys.nonEmpty =>
+        val rightJoinKeySet = ExpressionSet(rightKeys)
+        val leftJoinKeySet = ExpressionSet(leftKeys)
+        joinType match {
+          case Inner if left.distinctKeys.exists(_.subsetOf(leftJoinKeySet)) &&
+            right.distinctKeys.exists(_.subsetOf(rightJoinKeySet)) =>
+            left.distinctKeys ++ right.distinctKeys
+          case Inner | LeftOuter if right.distinctKeys.exists(_.subsetOf(rightJoinKeySet)) =>
+            p.left.distinctKeys
+          case Inner | RightOuter if left.distinctKeys.exists(_.subsetOf(leftJoinKeySet)) =>
+            p.right.distinctKeys
+          case _ =>
+            default(p)
+        }
       case _ => default(p)
     }
   }

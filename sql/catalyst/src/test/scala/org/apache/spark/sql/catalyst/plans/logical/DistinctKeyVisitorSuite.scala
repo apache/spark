@@ -104,19 +104,29 @@ class DistinctKeyVisitorSuite extends PlanTest {
       Distinct(t1).join(Distinct(t2), Inner, Some('a === 'x && 'b === 'y && 'c === 'z)),
       Set(ExpressionSet(Seq(a, b, c)), ExpressionSet(Seq(x, y, z))))
 
-    checkDistinctAttributes(t1.join(t2, LeftSemi, Some('a === 'x)),
-      Set.empty)
     checkDistinctAttributes(
-      Distinct(t1).join(Distinct(t2), Inner, Some('a === 'x && 'b === 'y)),
-      Set.empty)
+      Distinct(t1).join(Distinct(t2), LeftOuter, Some('a === 'x && 'b === 'y && 'c === 'z)),
+      Set(ExpressionSet(Seq(a, b, c))))
+
     checkDistinctAttributes(
-      Distinct(t1).join(Distinct(t2), Inner, Some('a === 'x && 'b === 'y && 'c % 5 === 'z % 5)),
-      Set.empty)
-    Seq(LeftOuter, Cross, RightOuter).foreach { joinType =>
+      Distinct(t1).join(Distinct(t2), RightOuter, Some('a === 'x && 'b === 'y && 'c === 'z)),
+      Set(ExpressionSet(Seq(x, y, z))))
+
+    Seq(Inner, Cross, LeftOuter, RightOuter).foreach { joinType =>
+      checkDistinctAttributes(t1.join(t2, joinType, Some('a === 'x)),
+        Set.empty)
       checkDistinctAttributes(
-        Distinct(t1).join(Distinct(t2), joinType, Some('a === 'x && 'b === 'y && 'c === 'z)),
+        Distinct(t1).join(Distinct(t2), joinType, Some('a === 'x && 'b === 'y)),
+        Set.empty)
+      checkDistinctAttributes(
+        Distinct(t1).join(Distinct(t2), joinType,
+          Some('a === 'x && 'b === 'y && 'c % 5 === 'z % 5)),
         Set.empty)
     }
+
+    checkDistinctAttributes(
+      Distinct(t1).join(Distinct(t2), Cross, Some('a === 'x && 'b === 'y && 'c === 'z)),
+      Set.empty)
   }
 
   test("Project's distinct attributes") {
