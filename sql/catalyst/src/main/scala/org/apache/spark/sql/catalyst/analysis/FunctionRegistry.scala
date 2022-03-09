@@ -344,9 +344,10 @@ object FunctionRegistry {
   //     will be replaced by the actual expression at the end of analysis. See `Left` as an example.
   //   - The function can be implemented by combining some existing expressions. We can use
   //     `RuntimeReplaceable` to define the combination. See `ParseToDate` as an example.
-  //     We can also inherit the analysis behavior from the replacement expression, by
-  //     mixing `InheritAnalysisRules`. See `TryAdd` as an example.
-  //   - Similarly, we can use `RuntimeReplaceableAggregate` to implement new aggregate functions.
+  //     To inherit the analysis behavior from the replacement expression
+  //     mix-in `InheritAnalysisRules` with `RuntimeReplaceable`. See `TryAdd` as an example.
+  //   - For `AggregateFunction`, `RuntimeReplaceableAggregate` should be mixed-in. See
+  //     `CountIf` as an example.
   //
   // Sometimes, multiple functions share the same/similar expression replacement logic and it's
   // tedious to create many similar `RuntimeReplaceable` expressions. We can use `ExpressionBuilder`

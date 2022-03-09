@@ -70,6 +70,9 @@
   "INCOMPATIBLE_DATASOURCE_REGISTER" : {
     "message" : [ "Detected an incompatible DataSourceRegister. Please remove the incompatible library from classpath or upgrade it. Error: %s" ]
   },
+  "INCONSISTENT_BEHAVIOR_CROSS_VERSION" : {
+    "message" : [ "You may get a different result due to the upgrading to Spark >= %s: %s" ]
+  },
   "INDEX_OUT_OF_BOUNDS" : {
     "message" : [ "Index %s must be between 0 and the length of the ArrayData." ],
     "sqlState" : "22023"
@@ -161,6 +164,9 @@
   },
   "UNSUPPORTED_GROUPING_EXPRESSION" : {
     "message" : [ "grouping()/grouping_id() can only be used with GroupingSets/Cube/Rollup" ]
+  },
+  "UNSUPPORTED_OPERATION" : {
+    "message" : [ "The operation is not supported: %s" ]
   },
   "WRITING_JOB_ABORTED" : {
     "message" : [ "Writing job aborted" ],

@@ -292,6 +292,20 @@ private[spark] object Config extends Logging {
       .stringConf
       .createOptional
 
+  val KUBERNETES_DRIVER_PODGROUP_TEMPLATE_FILE =
+    ConfigBuilder("spark.kubernetes.driver.podGroupTemplateFile")
+      .doc("File containing a template pod group spec for driver")
+      .version("3.3.0")
+      .stringConf
+      .createOptional
+
+  val KUBERNETES_EXECUTOR_PODGROUP_TEMPLATE_FILE =
+    ConfigBuilder("spark.kubernetes.executor.podGroupTemplateFile")
+      .doc("File containing a template pod group spec for executors")
+      .version("3.3.0")
+      .stringConf
+      .createOptional
+
   val KUBERNETES_JOB_QUEUE = ConfigBuilder("spark.kubernetes.job.queue")
     .doc("The name of the queue to which the job is submitted. This info " +
       "will be stored in configuration and passed to specific feature step.")
@@ -381,7 +395,7 @@ private[spark] object Config extends Logging {
       .createWithDefault(Nil)
 
   val KUBERNETES_EXECUTOR_DECOMMISSION_LABEL =
-    ConfigBuilder("spark.kubernetes.executor.decommmissionLabel")
+    ConfigBuilder("spark.kubernetes.executor.decommissionLabel")
       .doc("Label to apply to a pod which is being decommissioned." +
         " Designed for use with pod disruption budgets and similar mechanism" +
         " such as pod-deletion-cost.")
@@ -390,7 +404,7 @@ private[spark] object Config extends Logging {
       .createOptional
 
   val KUBERNETES_EXECUTOR_DECOMMISSION_LABEL_VALUE =
-    ConfigBuilder("spark.kubernetes.executor.decommmissionLabelValue")
+    ConfigBuilder("spark.kubernetes.executor.decommissionLabelValue")
       .doc("Label value to apply to a pod which is being decommissioned." +
         " Designed for use with pod disruption budgets and similar mechanism" +
         " such as pod-deletion-cost.")
