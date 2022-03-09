@@ -26,9 +26,9 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.metrics.sink.Sink
 
 class KafkaSinkMetrics(
-                        val properties: Properties,
-                        val registry: MetricRegistry,
-                        securityMgr: SecurityManager) extends Sink with Logging {
+    val properties: Properties,
+    val registry: MetricRegistry,
+    securityMgr: SecurityManager) extends Sink with Logging {
   val KAFKA_SINK_DEFAULT_PERIOD = "10"
   val KAFKA_SINK_DEFAULT_UNIT = "SECONDS"
   private def getProp(prop: String): Option[String] = Option(properties.getProperty(prop))

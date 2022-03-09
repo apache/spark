@@ -33,10 +33,10 @@ import org.json4s.jackson.JsonMethods._
 import org.apache.spark.internal.Logging
 
 class KafkaReporter(
-                     registry: MetricRegistry,
-                     kafkaEndpoint: String,
-                     kafkaTopic: String,
-                     properties: Properties) extends ScheduledReporter (
+    registry: MetricRegistry,
+    kafkaEndpoint: String,
+    kafkaTopic: String,
+    properties: Properties) extends ScheduledReporter (
   registry,
   "kafka-reporter",
   MetricFilter.ALL,
