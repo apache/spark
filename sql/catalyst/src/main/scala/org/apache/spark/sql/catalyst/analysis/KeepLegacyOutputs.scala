@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import org.apache.spark.sql.catalyst.plans.logical.{DescribeNamespace, LogicalPlan, ShowNamespaces, ShowTableProperties, ShowTables}
+import org.apache.spark.sql.catalyst.plans.logical.{DescribeNamespace, LogicalPlan, ShowNamespaces, ShowTableExtended, ShowTableProperties, ShowTables, ShowViews}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.COMMAND
 import org.apache.spark.sql.internal.SQLConf
@@ -33,6 +33,14 @@ object KeepLegacyOutputs extends Rule[LogicalPlan] {
       plan.resolveOperatorsUpWithPruning(
         _.containsPattern(COMMAND)) {
         case s: ShowTables =>
+          assert(s.output.length == 3)
+          val newOutput = s.output.head.withName("database") +: s.output.tail
+          s.copy(output = newOutput)
+        case s: ShowTableExtended =>
+          assert(s.output.length == 4)
+          val newOutput = s.output.head.withName("database") +: s.output.tail
+          s.copy(output = newOutput)
+        case s: ShowViews =>
           assert(s.output.length == 3)
           val newOutput = s.output.head.withName("database") +: s.output.tail
           s.copy(output = newOutput)

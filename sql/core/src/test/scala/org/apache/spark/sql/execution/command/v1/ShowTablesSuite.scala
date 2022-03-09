@@ -136,6 +136,24 @@ trait ShowTablesSuiteBase extends command.ShowTablesSuiteBase with command.Tests
     assert(msg.matches("(Database|Namespace) 'unknown' not found"))
   }
 
+  test("[SPARK-2222] keep the legacy output schema") {
+    Seq(true, false).foreach { keepLegacySchema =>
+      withSQLConf(SQLConf.LEGACY_KEEP_COMMAND_OUTPUT_SCHEMA.key -> keepLegacySchema.toString) {
+        withNamespaceAndTable("ns1", "tbl") { tbl =>
+          spark.sql(s"CREATE TABLE $tbl (id bigint, data string) $defaultUsing ")
+
+          val extended = sql(s"SHOW TABLE EXTENDED LIKE '$tbl'")
+          val schema = extended.schema.fieldNames.toSeq.head
+          if (keepLegacySchema) {
+            assert(schema === Seq("database"))
+          } else {
+            assert(schema === Seq("namespace"))
+          }
+        }
+      }
+    }
+  }
+
 }
 
 /**
