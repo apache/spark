@@ -352,7 +352,8 @@ case class Percentile(
   usage =
     """
       _FUNC_(percentage) WITHIN GROUP (ORDER BY col) - Returns the percentile(s) based on a
-       discrete distribution of numeric column `col` at the given percentage(s) with value range in [0.0, 1.0].
+       discrete distribution of numeric column `col` at the given percentage(s) with value range
+       in [0.0, 1.0].
       """,
   examples = """
     Examples:
