@@ -256,6 +256,14 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product with Tre
     children.exists(_.exists(f))
   }
 
+  def exists1(pf: PartialFunction[BaseType, Boolean]): Boolean = {
+    if (pf.applyOrElse(this, { _: Any => false})) {
+      true
+    } else {
+      children.exists(c => pf.applyOrElse(c, { _: Any => false}))
+    }
+  }
+
   /**
    * Runs the given function on this node and then recursively on [[children]].
    * @param f the function to be applied to each node in the tree.
