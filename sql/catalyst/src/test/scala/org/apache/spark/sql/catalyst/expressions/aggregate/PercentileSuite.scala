@@ -167,14 +167,14 @@ class PercentileSuite extends SparkFunSuite {
   }
 
   private def withPercentiles(
-      child: Expression, percentage: Expression)(f: PercentileBase => Unit) {
+      child: Expression, percentage: Expression)(f: PercentileBase => Unit): Unit = {
     Seq(new Percentile(child, percentage), new PercentileDisc(child, percentage)).foreach(f)
   }
 
   private def withPercentiles(child: Expression,
-      percentage: Expression, frequency: Expression)(f: PercentileBase => Unit) {
+      percentage: Expression, frequency: Expression)(f: PercentileBase => Unit): Unit = {
     Seq(new Percentile(child, percentage, frequency),
-      new PercentileDisc(child, percentage, frequency)).foreach(f)
+      PercentileDisc(child, percentage, frequency)).foreach(f)
   }
 
   test("fail analysis if childExpression is invalid") {
