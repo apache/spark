@@ -294,3 +294,14 @@ In addition, you can run a single test selectively.
         -Dspark.kubernetes.test.deployMode=docker-desktop \
         -Dspark.kubernetes.test.imageTag=2022-03-06 \
         'kubernetes-integration-tests/testOnly -- -z "Run SparkPi with a very long application name"'
+
+You can also specify your specific dockerfile to build JVM/Python/R based image to test.
+
+    build/sbt -Psparkr -Pkubernetes -Pkubernetes-integration-tests \
+        -Dtest.exclude.tags=minikube \
+        -Dspark.kubernetes.test.deployMode=docker-desktop \
+        -Dspark.kubernetes.test.imageTag=2022-03-06 \
+        -Dspark.kubernetes.test.dockerFile=/path/to/Dockerfile \
+        -Dspark.kubernetes.test.pyDockerFile=/path/to/py/Dockerfile \
+        -Dspark.kubernetes.test.rDockerFile=/path/to/r/Dockerfile \
+        'kubernetes-integration-tests/test'
