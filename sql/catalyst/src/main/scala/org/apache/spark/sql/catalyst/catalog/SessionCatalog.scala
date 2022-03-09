@@ -365,10 +365,12 @@ class SessionCatalog(
       if (!ignoreIfExists) {
         throw new TableAlreadyExistsException(db = db, table = table)
       }
-    } else if (validateLocation) {
-      validateTableLocation(newTableDefinition)
+    } else {
+      if (validateLocation) {
+        validateTableLocation(newTableDefinition)
+      }
+      externalCatalog.createTable(newTableDefinition, ignoreIfExists)
     }
-    externalCatalog.createTable(newTableDefinition, ignoreIfExists)
   }
 
   def validateTableLocation(table: CatalogTable): Unit = {
