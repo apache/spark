@@ -210,7 +210,7 @@ private[sql] object JDBCRelation extends Logging {
       var uBound: String = null
       val sql = s"select min(${prk.name}) as lBound, max(${prk.name}) as uBound " +
         s"from ${jdbcOptions.tableOrQuery} limit 1"
-      val conn = JdbcUtils.createConnectionFactory(jdbcOptions)()
+      val conn = JdbcDialects.get(jdbcOptions.url).createConnectionFactory(jdbcOptions)(-1)
       try {
         val statement = conn.prepareStatement(sql)
         try {
