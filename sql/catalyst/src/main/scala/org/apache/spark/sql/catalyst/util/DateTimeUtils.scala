@@ -108,6 +108,17 @@ object DateTimeUtils {
   }
 
   /**
+   * Converts an Java object to days.
+   *
+   * @param obj Either an object of `java.sql.Date` or `java.time.LocalDate`.
+   * @return The number of days since 1970-01-01.
+   */
+  def anyToDays(obj: Any): Int = obj match {
+    case d: Date => fromJavaDate(d)
+    case ld: LocalDate => localDateToDays(ld)
+  }
+
+  /**
    * Converts days since the epoch 1970-01-01 in Proleptic Gregorian calendar to a local date
    * at the default JVM time zone in the hybrid calendar (Julian + Gregorian). It rebases the given
    * days from Proleptic Gregorian to the hybrid calendar at UTC time zone for simplicity because
@@ -178,6 +189,17 @@ object DateTimeUtils {
   def fromJavaTimestamp(t: Timestamp): Long = {
     val micros = millisToMicros(t.getTime) + (t.getNanos / NANOS_PER_MICROS) % MICROS_PER_MILLIS
     rebaseJulianToGregorianMicros(micros)
+  }
+
+  /**
+   * Converts an Java object to microseconds.
+   *
+   * @param obj Either an object of `java.sql.Timestamp` or `java.time.Instant`.
+   * @return The number of micros since the epoch.
+   */
+  def anyToMicros(obj: Any): Long = obj match {
+    case t: Timestamp => fromJavaTimestamp(t)
+    case i: Instant => instantToMicros(i)
   }
 
   /**
