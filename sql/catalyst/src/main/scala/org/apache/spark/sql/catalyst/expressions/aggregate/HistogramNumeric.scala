@@ -74,7 +74,7 @@ case class HistogramNumeric(
     case n: Int => n
   }
 
-  private def propagateInputType: Boolean = SQLConf.get.histogramNumericPropagateInputType
+  private lazy val propagateInputType: Boolean = SQLConf.get.histogramNumericPropagateInputType
 
   override def inputTypes: Seq[AbstractDataType] = {
     // Support NumericType, DateType, TimestampType and TimestampNTZType, YearMonthIntervalType,
