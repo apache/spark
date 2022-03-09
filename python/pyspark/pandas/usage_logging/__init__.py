@@ -15,8 +15,6 @@
 # limitations under the License.
 #
 
-import functools
-import threading
 from types import ModuleType
 from typing import Union
 
