@@ -166,14 +166,25 @@ class PercentileSuite extends SparkFunSuite {
     }
   }
 
+  private def withPercentiles(
+      child: Expression, percentage: Expression)(f: PercentileBase => Unit) {
+    Seq(new Percentile(child, percentage), new PercentileDisc(child, percentage)).foreach(f)
+  }
+
+  private def withPercentiles(child: Expression,
+      percentage: Expression, frequency: Expression)(f: PercentileBase => Unit) {
+    Seq(new Percentile(child, percentage, frequency),
+      new PercentileDisc(child, percentage, frequency)).foreach(f)
+  }
+
   test("fail analysis if childExpression is invalid") {
     val validDataTypes = Seq(ByteType, ShortType, IntegerType, LongType, FloatType, DoubleType)
     val percentage = Literal(0.5)
 
     validDataTypes.foreach { dataType =>
       val child = AttributeReference("a", dataType)()
-      Seq(new Percentile(child, percentage), new PercentileDisc(child, percentage)).foreach {
-        percentile => assertEqual(percentile.checkInputDataTypes(), TypeCheckSuccess)
+      withPercentiles(child, percentage) { percentile =>
+        assertEqual(percentile.checkInputDataTypes(), TypeCheckSuccess)
       }
     }
 
@@ -195,11 +206,10 @@ class PercentileSuite extends SparkFunSuite {
 
     invalidDataTypes.foreach { dataType =>
       val child = AttributeReference("a", dataType)()
-      Seq(new Percentile(child, percentage), new PercentileDisc(child, percentage)).foreach {
-        percentile =>
-          assertEqual(percentile.checkInputDataTypes(),
-            TypeCheckFailure(s"argument 1 requires (numeric or interval year to month or " +
-              s"interval day to second) type, however, 'a' is of ${dataType.simpleString} type."))
+      withPercentiles(child, percentage) { percentile =>
+        assertEqual(percentile.checkInputDataTypes(),
+          TypeCheckFailure(s"argument 1 requires (numeric or interval year to month or " +
+            s"interval day to second) type, however, 'a' is of ${dataType.simpleString} type."))
       }
     }
 
@@ -211,11 +221,10 @@ class PercentileSuite extends SparkFunSuite {
         frequencyType <- validFrequencyTypes) {
       val child = AttributeReference("a", dataType)()
       val frq = AttributeReference("frq", frequencyType)()
-      Seq(new Percentile(child, percentage, frq), PercentileDisc(child, percentage, frq)).foreach {
-        percentile =>
-          assertEqual(percentile.checkInputDataTypes(),
-            TypeCheckFailure(s"argument 1 requires (numeric or interval year to month or " +
-              s"interval day to second) type, however, 'a' is of ${dataType.simpleString} type."))
+      withPercentiles(child, percentage, frq) { percentile =>
+        assertEqual(percentile.checkInputDataTypes(),
+          TypeCheckFailure(s"argument 1 requires (numeric or interval year to month or " +
+            s"interval day to second) type, however, 'a' is of ${dataType.simpleString} type."))
       }
     }
 
@@ -223,11 +232,10 @@ class PercentileSuite extends SparkFunSuite {
         frequencyType <- invalidFrequencyDataTypes) {
       val child = AttributeReference("a", dataType)()
       val frq = AttributeReference("frq", frequencyType)()
-      Seq(new Percentile(child, percentage, frq), PercentileDisc(child, percentage, frq)).foreach {
-        percentile =>
-          assertEqual(percentile.checkInputDataTypes(),
-            TypeCheckFailure(s"argument 3 requires integral type, however, " +
-              s"'frq' is of ${frequencyType.simpleString} type."))
+      withPercentiles(child, percentage, frq) { percentile =>
+        assertEqual(percentile.checkInputDataTypes(),
+          TypeCheckFailure(s"argument 3 requires integral type, however, " +
+            s"'frq' is of ${frequencyType.simpleString} type."))
       }
     }
   }
@@ -240,8 +248,7 @@ class PercentileSuite extends SparkFunSuite {
       CreateArray(Seq(0, 0.5, 1).map(Literal(_))))
 
     validPercentages.foreach { percentage =>
-      Seq(new Percentile(child, percentage),
-        new PercentileDisc(child, percentage)).foreach { percentile =>
+      withPercentiles(child, percentage) { percentile =>
         assertEqual(percentile.checkInputDataTypes(), TypeCheckSuccess)
       }
     }
@@ -250,8 +257,7 @@ class PercentileSuite extends SparkFunSuite {
       CreateArray(Seq(-0.5, 0, 2).map(Literal(_))))
 
     invalidPercentages.foreach { percentage =>
-      Seq(new Percentile(child, percentage),
-        new PercentileDisc(child, percentage)).foreach { percentile =>
+      withPercentiles(child, percentage) { percentile =>
         assertEqual(percentile.checkInputDataTypes(),
           TypeCheckFailure(s"Percentage(s) must be between 0.0 and 1.0, " +
             s"but got ${percentage.simpleString(100)}"))
@@ -262,11 +268,9 @@ class PercentileSuite extends SparkFunSuite {
       CreateArray(Seq(0, 0.5, 1).map(NonFoldableLiteral(_))))
 
     nonFoldablePercentage.foreach { percentage =>
-      Seq(new Percentile(child, percentage),
-        new PercentileDisc(child, percentage)).foreach { percentile =>
-        assertEqual(percentile.checkInputDataTypes(),
-          TypeCheckFailure(s"The percentage(s) must be a constant literal, " +
-            s"but got ${percentage}"))
+      withPercentiles(child, percentage) { percentile =>
+        assertEqual(percentile.checkInputDataTypes(), TypeCheckFailure(s"The percentage(s) must " +
+          s"be a constant literal, but got ${percentage}"))
       }
     }
 
@@ -275,8 +279,7 @@ class PercentileSuite extends SparkFunSuite {
 
     invalidDataTypes.foreach { dataType =>
       val percentage = Literal.default(dataType)
-      Seq(new Percentile(child, percentage),
-        new PercentileDisc(child, percentage)).foreach { percentile =>
+      withPercentiles(child, percentage) { percentile =>
         val checkResult = percentile.checkInputDataTypes()
         assert(checkResult.isFailure)
         Seq("argument 2 requires double type, however, ",
@@ -311,27 +314,19 @@ class PercentileSuite extends SparkFunSuite {
   }
 
   test("nulls in percentage expression") {
-
-    assert(new Percentile(
-      AttributeReference("a", DoubleType)(),
-      percentageExpression = Literal(null, DoubleType)).checkInputDataTypes() ===
-      TypeCheckFailure("Percentage value must not be null"))
-    assert(new PercentileDisc(
-      AttributeReference("a", DoubleType)(),
-      percentageExpression = Literal(null, DoubleType)).checkInputDataTypes() ===
-      TypeCheckFailure("Percentage value must not be null"))
+    withPercentiles(
+      AttributeReference("a", DoubleType)(), Literal(null, DoubleType)) { percentile =>
+      assertEqual(
+        percentile.checkInputDataTypes(), TypeCheckFailure("Percentage value must not be null"))
+    }
 
     val nullPercentageExprs =
       Seq(CreateArray(Seq(null).map(Literal(_))), CreateArray(Seq(0.1D, null).map(Literal(_))))
 
     nullPercentageExprs.foreach { percentageExpression =>
-      val percentage = new Percentile(AttributeReference("a", DoubleType)(),
-        percentageExpression = percentageExpression)
-      val percentageDisc = new PercentileDisc(AttributeReference("a", DoubleType)(),
-        percentageExpression = percentageExpression)
-      Seq(percentage, percentageDisc).foreach { wrongPercentage =>
+      withPercentiles(AttributeReference("a", DoubleType)(), percentageExpression) { percentile =>
         assert(
-          wrongPercentage.checkInputDataTypes() match {
+          percentile.checkInputDataTypes() match {
             case TypeCheckFailure(msg) if msg.contains("argument 2 requires array<double>") => true
             case _ => false
           })
@@ -370,8 +365,7 @@ class PercentileSuite extends SparkFunSuite {
 
     // Percentile without frequency column
     val childExpression = Cast(BoundReference(0, IntegerType, nullable = true), DoubleType)
-    Seq(new Percentile(childExpression, Literal(0.5)),
-      new PercentileDisc(childExpression, Literal(0.5))).foreach { agg =>
+    withPercentiles(childExpression, Literal(0.5)) { agg =>
       val buffer = new GenericInternalRow(new Array[Any](1))
       agg.initialize(buffer)
 
@@ -385,37 +379,34 @@ class PercentileSuite extends SparkFunSuite {
 
     // Percentile with Frequency column
     val frequencyExpression = Cast(BoundReference(1, IntegerType, nullable = true), IntegerType)
-    Seq(new Percentile(childExpression, Literal(0.5), frequencyExpression),
-      PercentileDisc(childExpression, Literal(0.5), frequencyExpression)).foreach {
-      aggWithFrequency =>
-        val bufferWithFrequency = new GenericInternalRow(new Array[Any](2))
-        aggWithFrequency.initialize(bufferWithFrequency)
+    withPercentiles(childExpression, Literal(0.5), frequencyExpression) { aggWithFrequency =>
+      val bufferWithFrequency = new GenericInternalRow(new Array[Any](2))
+      aggWithFrequency.initialize(bufferWithFrequency)
 
-        // Empty aggregation buffer
-        assert(aggWithFrequency.eval(bufferWithFrequency) == null)
-        // Empty input row
-        aggWithFrequency.update(bufferWithFrequency, InternalRow(null, null))
-        assert(aggWithFrequency.eval(bufferWithFrequency) == null)
+      // Empty aggregation buffer
+      assert(aggWithFrequency.eval(bufferWithFrequency) == null)
+      // Empty input row
+      aggWithFrequency.update(bufferWithFrequency, InternalRow(null, null))
+      assert(aggWithFrequency.eval(bufferWithFrequency) == null)
 
-        // Add some non-empty row with empty frequency column
-        aggWithFrequency.update(bufferWithFrequency, InternalRow(0, null))
-        assert(aggWithFrequency.eval(bufferWithFrequency) == null)
+      // Add some non-empty row with empty frequency column
+      aggWithFrequency.update(bufferWithFrequency, InternalRow(0, null))
+      assert(aggWithFrequency.eval(bufferWithFrequency) == null)
 
-        // Add some non-empty row with zero frequency
-        aggWithFrequency.update(bufferWithFrequency, InternalRow(1, 0))
-        assert(aggWithFrequency.eval(bufferWithFrequency) == null)
+      // Add some non-empty row with zero frequency
+      aggWithFrequency.update(bufferWithFrequency, InternalRow(1, 0))
+      assert(aggWithFrequency.eval(bufferWithFrequency) == null)
 
-        // Add some non-empty row with positive frequency
-        aggWithFrequency.update(bufferWithFrequency, InternalRow(0, 1))
-        assert(aggWithFrequency.eval(bufferWithFrequency) != null)
+      // Add some non-empty row with positive frequency
+      aggWithFrequency.update(bufferWithFrequency, InternalRow(0, 1))
+      assert(aggWithFrequency.eval(bufferWithFrequency) != null)
     }
   }
 
   test("negatives frequency column handling") {
     val childExpression = Cast(BoundReference(0, IntegerType, nullable = true), DoubleType)
     val freqExpression = Cast(BoundReference(1, IntegerType, nullable = true), IntegerType)
-    Seq(new Percentile(childExpression, Literal(0.5), freqExpression),
-      PercentileDisc(childExpression, Literal(0.5), freqExpression)).foreach { agg =>
+    withPercentiles(childExpression, Literal(0.5), freqExpression) { agg =>
       val buffer = new GenericInternalRow(new Array[Any](2))
       agg.initialize(buffer)
 
