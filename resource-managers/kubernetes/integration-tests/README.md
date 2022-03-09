@@ -288,7 +288,14 @@ The following is an example to rerun tests with the pre-built image.
         -Dspark.kubernetes.test.imageTag=2022-03-06 \
         'kubernetes-integration-tests/runIts'
 
-You can also specify your specific dockerfile to build JVM/Python/R based image to test:
+In addition, you can run a single test selectively.
+
+    build/sbt -Psparkr -Pkubernetes -Pkubernetes-integration-tests \
+        -Dspark.kubernetes.test.deployMode=docker-desktop \
+        -Dspark.kubernetes.test.imageTag=2022-03-06 \
+        'kubernetes-integration-tests/testOnly -- -z "Run SparkPi with a very long application name"'
+
+You can also specify your specific dockerfile to build JVM/Python/R based image to test.
 
     build/sbt -Psparkr -Pkubernetes -Pkubernetes-integration-tests \
         -Dtest.exclude.tags=minikube \
@@ -297,10 +304,3 @@ You can also specify your specific dockerfile to build JVM/Python/R based image 
         -Dspark.kubernetes.test.pyDockerFile=/path/to/Dockerfile.py \
         -Dspark.kubernetes.test.rDockerFile=/path/to/Dockerfile.r \
         'kubernetes-integration-tests/test'
-
-In addition, you can run a single test selectively.
-
-    build/sbt -Psparkr -Pkubernetes -Pkubernetes-integration-tests \
-        -Dspark.kubernetes.test.deployMode=docker-desktop \
-        -Dspark.kubernetes.test.imageTag=2022-03-06 \
-        'kubernetes-integration-tests/testOnly -- -z "Run SparkPi with a very long application name"'
