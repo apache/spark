@@ -425,7 +425,9 @@ class InheritableThread(threading.Thread):
             finally:
                 thread_connection.close()
 
-local = threading.local()
+
+_local = threading.local()
+
 
 def _wrap_function(class_name, function_name, func, logger):
 
@@ -569,8 +571,6 @@ def _attach(logger_module: Union[str, ModuleType], modules, classes, missings):
 
         for name, prop in inspect.getmembers(missing, lambda o: isinstance(o, property)):
             setattr(missing, name, _wrap_missing_property(original.__name__, name, prop, logger))
-
-
 
 
 if __name__ == "__main__":
