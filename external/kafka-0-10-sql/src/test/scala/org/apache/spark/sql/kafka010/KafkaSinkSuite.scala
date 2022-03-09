@@ -17,20 +17,20 @@
 
 package org.apache.spark.sql.kafka010
 
+import com.codahale.metrics.{Counter, Gauge, MetricRegistry}
 import java.nio.charset.StandardCharsets.UTF_8
+import java.util.Properties
 import java.util.concurrent.atomic.AtomicInteger
-
-import scala.reflect.ClassTag
-import scala.util.Try
-
 import org.apache.kafka.clients.producer.ProducerConfig
 import org.apache.kafka.clients.producer.internals.DefaultPartitioner
 import org.apache.kafka.common.Cluster
 import org.apache.kafka.common.serialization.ByteArraySerializer
 import org.scalatest.concurrent.TimeLimits.failAfter
 import org.scalatest.time.SpanSugar._
+import scala.reflect.ClassTag
+import scala.util.Try
 
-import org.apache.spark.{SparkConf, SparkContext, SparkException, TestUtils}
+import org.apache.spark.{SecurityManager, SparkConf, SparkContext, SparkException, TestUtils}
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, SpecificInternalRow, UnsafeProjection}
 import org.apache.spark.sql.execution.streaming.{MemoryStream, MemoryStreamBase}
@@ -319,6 +319,51 @@ class KafkaSinkMicroBatchStreamingSuite extends KafkaSinkStreamingSuiteBase {
     } finally {
       writer.stop()
     }
+  }
+}
+
+abstract class KafkaSinkMetricSuite extends KafkaSinkStreamingSuiteBase {
+
+  test("KafkaSinkMetric - write Spark Metrics into using KafkaSink") {
+    val topic = newTopic()
+    testUtils.createTopic(topic)
+
+    val props = new Properties
+    props.put("broker", testUtils.brokerAddress)
+    props.put("topic", topic)
+    val registry = new MetricRegistry
+    val securityMgr = new SecurityManager(new SparkConf(false))
+    val sink = new KafkaSinkMetrics(props, registry, securityMgr)
+    val gauge = new Gauge[Double] {
+      override def getValue: Double = 1.23
+    }
+    val counter = new Counter
+    counter.inc(10)
+
+    sink.registry.register("gauge", gauge)
+    sink.registry.register("counter", counter)
+
+    val metricKeys = sink.registry.getGauges.keySet
+    assert(metricKeys.equals(Set("gauge")), "Should contain registered gauge metric")
+
+    val gaugeValues = sink.registry.getGauges.values
+    assert(gaugeValues.size == 1)
+    assert(gauge.getValue == 1.23)
+
+    val metricCounterKeys = sink.registry.getCounters.keySet
+    assert(metricCounterKeys.equals(Set("counter")), "Should contain registered counter metric")
+
+    val counterValues = sink.registry.getCounters.values
+    assert(counterValues.size == 1)
+    assert(counter.getCount == 10)
+
+    sink.report()
+    val reportedMetrics = createKafkaReader(topic).collect().toString
+    assert(reportedMetrics.contains("gauge")
+      && reportedMetrics.contains("1.23"), "Should contain registered gauge metric")
+
+    assert(reportedMetrics.contains("counter")
+      && reportedMetrics.contains("10"), "Should contain registered counter metric")
   }
 }
 
