@@ -16,6 +16,8 @@
  */
 package org.apache.spark.deploy.k8s.features
 
+import java.io.File
+
 import io.fabric8.kubernetes.api.model.{ContainerBuilder, PodBuilder}
 import io.fabric8.volcano.scheduling.v1beta1.PodGroup
 
@@ -76,6 +78,42 @@ class VolcanoFeatureStepSuite extends SparkFunSuite {
       new ContainerBuilder().build())
     assert(podWithPriority.pod.getSpec.getPriorityClassName === "priority")
     verifyPriority(podWithPriority)
+  }
+
+  test("SPARK-38455: Support driver podgroup template") {
+    val templatePath = new File(
+      getClass.getResource("/driver-podgroup-template.yml").getFile).getAbsolutePath
+    val sparkConf = new SparkConf()
+      .set(KUBERNETES_DRIVER_PODGROUP_TEMPLATE_FILE.key, templatePath)
+    val kubernetesConf = KubernetesTestConf.createDriverConf(sparkConf)
+    val step = new VolcanoFeatureStep()
+    step.init(kubernetesConf)
+    step.configurePod(SparkPod.initialPod())
+    val podGroup = step.getAdditionalPreKubernetesResources().head.asInstanceOf[PodGroup]
+    assert(podGroup.getSpec.getMinMember == 1)
+    assert(podGroup.getSpec.getMinResources.get("cpu").getAmount == "2")
+    assert(podGroup.getSpec.getMinResources.get("memory").getAmount == "2048")
+    assert(podGroup.getSpec.getMinResources.get("memory").getFormat == "Mi")
+    assert(podGroup.getSpec.getPriorityClassName == "driver-priority")
+    assert(podGroup.getSpec.getQueue == "driver-queue")
+  }
+
+  test("SPARK-38455: Support executor podgroup template") {
+    val templatePath = new File(
+      getClass.getResource("/executor-podgroup-template.yml").getFile).getAbsolutePath
+    val sparkConf = new SparkConf()
+      .set(KUBERNETES_EXECUTOR_PODGROUP_TEMPLATE_FILE.key, templatePath)
+    val kubernetesConf = KubernetesTestConf.createExecutorConf(sparkConf)
+    val step = new VolcanoFeatureStep()
+    step.init(kubernetesConf)
+    step.configurePod(SparkPod.initialPod())
+    val podGroup = step.getAdditionalPreKubernetesResources().head.asInstanceOf[PodGroup]
+    assert(podGroup.getSpec.getMinMember == 1000)
+    assert(podGroup.getSpec.getMinResources.get("cpu").getAmount == "4")
+    assert(podGroup.getSpec.getMinResources.get("memory").getAmount == "16")
+    assert(podGroup.getSpec.getMinResources.get("memory").getFormat == "Gi")
+    assert(podGroup.getSpec.getPriorityClassName == "executor-priority")
+    assert(podGroup.getSpec.getQueue == "executor-queue")
   }
 
   private def verifyPriority(pod: SparkPod): Unit = {
