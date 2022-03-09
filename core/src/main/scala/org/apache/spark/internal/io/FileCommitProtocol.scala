@@ -177,10 +177,19 @@ abstract class FileCommitProtocol extends Logging {
 
   /**
    * Specifies that a file should be deleted with the commit of this job. The default
-   * implementation deletes the file immediately.
+   * implementation deletes the file immediately or moves file to trash based on whether
+   * the trash feature is enabled.
+   *
+   * See https://hadoop.apache.org/docs/stable/hadoop-project-dist/hadoop-common/core-default.xml
+   * for the relevant trash configuration
    */
   def deleteWithJob(fs: FileSystem, path: Path, recursive: Boolean): Boolean = {
-    fs.delete(path, recursive)
+    if (fs.getConf.getInt("fs.trash.interval", 0) > 0 &&
+      Trash.moveToAppropriateTrash(fs, path, fs.getConf)) {
+      true
+    } else {
+      fs.delete(path, recursive);
+    }
   }
 
   /**
