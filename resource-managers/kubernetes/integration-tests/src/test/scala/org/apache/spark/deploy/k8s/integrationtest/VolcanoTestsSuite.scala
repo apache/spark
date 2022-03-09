@@ -200,7 +200,7 @@ private[spark] trait VolcanoTestsSuite extends BeforeAndAfterEach { k8sSuite: Ku
       groupLoc: Option[String] = None,
       queue: Option[String] = None,
       driverTemplate: Option[String] = None): SparkAppConf = {
-    var conf = kubernetesTestComponents.newSparkAppConf()
+    val conf = kubernetesTestComponents.newSparkAppConf()
       .set(CONTAINER_IMAGE.key, image)
       .set(KUBERNETES_DRIVER_POD_NAME.key, driverPodName)
       .set(s"${KUBERNETES_DRIVER_LABEL_PREFIX}spark-app-locator", appLoc)
@@ -211,7 +211,7 @@ private[spark] trait VolcanoTestsSuite extends BeforeAndAfterEach { k8sSuite: Ku
       .set(KUBERNETES_DRIVER_POD_FEATURE_STEPS.key, VOLCANO_FEATURE_STEP)
       .set(KUBERNETES_EXECUTOR_POD_FEATURE_STEPS.key, VOLCANO_FEATURE_STEP)
     queue.foreach { q =>
-      conf = conf.set(KUBERNETES_DRIVER_PODGROUP_TEMPLATE_FILE.key,
+      conf.set(KUBERNETES_DRIVER_PODGROUP_TEMPLATE_FILE.key,
         new File(
           getClass.getResource(s"/volcano/$q-driver-podgroup-template.yml").getFile
         ).getAbsolutePath)
