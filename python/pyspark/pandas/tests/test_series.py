@@ -1757,6 +1757,10 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
         msg = "If 'regex' is True then 'to_replace' must be a string"
         with self.assertRaisesRegex(AssertionError, msg):
             psser.replace(["bat", "foo", "bait"], regex=True)
+        unsupported_regex = [r"^.oo$", r"^ba.$"]
+        msg = "'regex' of %s type is not supported" % type(unsupported_regex).__name__
+        with self.assertRaisesRegex(NotImplementedError, msg):
+            psser.replace(regex=unsupported_regex, value="new")
 
     def test_xs(self):
         midx = pd.MultiIndex(

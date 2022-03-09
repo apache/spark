@@ -4494,6 +4494,17 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         4     bar
         5     new
         dtype: object
+
+        Only supports pattern matching (and replacement) on the whole string
+
+        >>> psser.replace('ba', 'xx', regex=True)
+        0     xx
+        1    foo
+        2     xx
+        3    abc
+        4     xx
+        5    zoo
+        dtype: object
         """
         if isinstance(regex, str):
             if to_replace is not None:
@@ -4501,7 +4512,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             to_replace = regex
             regex = True
         elif not isinstance(regex, bool):
-            raise NotImplementedError("regex of %s type is supported" % type(regex).__name__)
+            raise NotImplementedError("'regex' of %s type is not supported" % type(regex).__name__)
         elif regex is True:
             assert isinstance(
                 to_replace, str
