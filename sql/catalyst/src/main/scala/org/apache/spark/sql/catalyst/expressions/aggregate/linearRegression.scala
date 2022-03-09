@@ -142,9 +142,9 @@ case class RegrAvgY(
 case class RegrR2(x: Expression, y: Expression) extends PearsonCorrelation(x, y, true) {
   override def prettyName: String = "regr_r2"
   override val evaluateExpression: Expression = {
-    lazy val corr = ck / sqrt(xMk * yMk)
-    If(n === 0.0, Literal.create(null, DoubleType),
-      If(n === 1.0, divideByZeroEvalResult, corr * corr))
+    val corr = ck / sqrt(xMk * yMk)
+    If(xMk === 0.0, Literal.create(null, DoubleType),
+      If(yMk === 0.0, Literal.create(1, DoubleType), corr * corr))
   }
   override protected def withNewChildrenInternal(
       newLeft: Expression, newRight: Expression): RegrR2 =
