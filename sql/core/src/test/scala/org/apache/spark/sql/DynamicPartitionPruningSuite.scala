@@ -1492,14 +1492,14 @@ abstract class DynamicPartitionPruningSuiteBase
         "f.store_id <=> 1" -> false,
         "1 <=> f.store_id" -> false,
         "f.store_id > 1" -> true,
-        "5 > f.store_id" -> true).foreach { case (condition, withBroadcast) =>
+        "5 > f.store_id" -> true).foreach { case (condition, hasDPP) =>
         // partitioned table at left side
         val df1 = sql(
           s"""
              |SELECT /*+ broadcast(s) */ * FROM fact_sk f
              |JOIN dim_store s ON f.store_id = s.store_id AND $condition
             """.stripMargin)
-        checkPartitionPruningPredicate(df1, false, withBroadcast)
+        checkPartitionPruningPredicate(df1, false, withBroadcast = hasDPP)
 
         val df2 = sql(
           s"""
@@ -1507,7 +1507,7 @@ abstract class DynamicPartitionPruningSuiteBase
              |JOIN dim_store s ON f.store_id = s.store_id
              |WHERE $condition
             """.stripMargin)
-        checkPartitionPruningPredicate(df2, false, withBroadcast)
+        checkPartitionPruningPredicate(df2, false, withBroadcast = hasDPP)
 
         // partitioned table at right side
         val df3 = sql(
@@ -1515,7 +1515,7 @@ abstract class DynamicPartitionPruningSuiteBase
              |SELECT /*+ broadcast(s) */ * FROM dim_store s
              |JOIN fact_sk f ON f.store_id = s.store_id AND $condition
             """.stripMargin)
-        checkPartitionPruningPredicate(df3, false, withBroadcast)
+        checkPartitionPruningPredicate(df3, false, withBroadcast = hasDPP)
 
         val df4 = sql(
           s"""
@@ -1523,7 +1523,7 @@ abstract class DynamicPartitionPruningSuiteBase
              |JOIN fact_sk f ON f.store_id = s.store_id
              |WHERE $condition
             """.stripMargin)
-        checkPartitionPruningPredicate(df4, false, withBroadcast)
+        checkPartitionPruningPredicate(df4, false, withBroadcast = hasDPP)
       }
     }
   }
