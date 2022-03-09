@@ -32,7 +32,6 @@ private[spark] class VolcanoFeatureStep extends KubernetesDriverCustomFeatureCon
 
   private lazy val podGroupName = s"${kubernetesConf.appId}-podgroup"
   private lazy val namespace = kubernetesConf.namespace
-  private lazy val queue = kubernetesConf.get(KUBERNETES_JOB_QUEUE)
   private var priorityClassName: Option[String] = None
 
   override def init(config: KubernetesDriverConf): Unit = {
@@ -60,7 +59,6 @@ private[spark] class VolcanoFeatureStep extends KubernetesDriverCustomFeatureCon
 
     var spec = pg.getSpec
     if (spec == null) spec = new PodGroupSpec
-    queue.foreach(spec.setQueue(_))
     priorityClassName.foreach(spec.setPriorityClassName(_))
     pg.setSpec(spec)
 
