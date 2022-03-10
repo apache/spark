@@ -29,10 +29,9 @@ object DistinctKeyVisitor extends LogicalPlanVisitor[Set[ExpressionSet]] {
   private def projectDistinctKeys(
       keys: Set[ExpressionSet], projectList: Seq[NamedExpression]): Set[ExpressionSet] = {
     val outputSet = ExpressionSet(projectList.map(_.toAttribute))
-    val distinctKeys = keys.filter(_.subsetOf(outputSet))
     val aliases = projectList.filter(_.isInstanceOf[Alias])
     if (aliases.isEmpty) {
-      distinctKeys
+      keys.filter(_.subsetOf(outputSet))
     } else {
       val aliasedDistinctKeys = keys.map { expressionSet =>
         expressionSet.map { expression =>
@@ -47,7 +46,7 @@ object DistinctKeyVisitor extends LogicalPlanVisitor[Set[ExpressionSet]] {
       }
       aliasedDistinctKeys.collect {
         case es: ExpressionSet if es.subsetOf(outputSet) => ExpressionSet(es)
-      } ++ distinctKeys
+      } ++ keys.filter(_.subsetOf(outputSet))
     }.filter(_.nonEmpty)
   }
 
