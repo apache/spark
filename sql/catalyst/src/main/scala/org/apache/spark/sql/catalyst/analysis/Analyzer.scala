@@ -2088,7 +2088,7 @@ class Analyzer(override val catalogManager: CatalogManager)
         }
 
       case q: LogicalPlan =>
-        q.transformExpressionsWithPruning(
+        q.transformExpressionsUpWithPruning(
           _.containsAnyPattern(UNRESOLVED_FUNCTION, GENERATOR), ruleId) {
           case u @ UnresolvedFunction(nameParts, arguments, _, _, _)
               if hasLambdaAndResolvedArguments(arguments) => withPosition(u) {
