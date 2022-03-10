@@ -37,7 +37,7 @@ class SQLHadoopMapReduceCommitProtocol(
   extends HadoopMapReduceCommitProtocol(jobId, path, dynamicPartitionOverwrite)
     with Serializable with Logging {
 
-  @transient override val stagingDir: Path =
+  @transient override lazy val stagingDir: Path =
     FileCommitProtocol.externalTempPath(new Path(path), SparkHadoopUtil.get.conf,
       SQLConf.get.stagingDir, "spark", jobId)
 
