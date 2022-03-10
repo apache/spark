@@ -305,3 +305,24 @@ You can also specify your specific dockerfile to build JVM/Python/R based image 
         -Dspark.kubernetes.test.pyDockerFile=/path/to/py/Dockerfile \
         -Dspark.kubernetes.test.rDockerFile=/path/to/r/Dockerfile \
         'kubernetes-integration-tests/test'
+
+# Running the Volcano Integration Tests
+
+Prerequisites
+- Install Volcano according to [link](https://volcano.sh/en/docs/installation/).
+- A minimum of 6 CPUs and 9G of memory is required to complete all Volcano test cases.
+
+You can specify `-Pvolcano` to enable volcano module to run all Kubernetes and Volcano tests
+
+    build/sbt -Pvolcano -Pkubernetes -Pkubernetes-integration-tests \
+        -Dtest.exclude.tags=minikube \
+        -Dspark.kubernetes.test.deployMode=docker-desktop \
+        'kubernetes-integration-tests/test'
+
+You can also specify `volcano` tag to only run Volcano test:
+
+    build/sbt -Pvolcano -Pkubernetes -Pkubernetes-integration-tests \
+        -Dtest.include.tags=volcano \
+        -Dtest.exclude.tags=minikube \
+        -Dspark.kubernetes.test.deployMode=docker-desktop \
+        'kubernetes-integration-tests/test'
