@@ -131,6 +131,10 @@
     "message" : [ "PARTITION clause cannot contain a non-partition column name: %s" ],
     "sqlState" : "42000"
   },
+  "PARSE_EMPTY_STATEMENT" : {
+    "message" : [ "Syntax error, unexpected empty statement" ],
+    "sqlState" : "42000"
+  },
   "PARSE_INPUT_MISMATCHED" : {
     "message" : [ "Syntax error at or near %s" ],
     "sqlState" : "42000"

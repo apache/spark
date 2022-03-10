@@ -60,6 +60,11 @@ class SparkRecognitionException(
  * message framework to these exceptions.
  */
 class SparkParserErrorStrategy() extends DefaultErrorStrategy {
+  private val userWordDict : Map[String, String] = Map("'<EOF>'" -> "end of input")
+  private def getUserFacingLanguage(input: String) = {
+    userWordDict.getOrElse(input, input)
+  }
+
   override def reportInputMismatch(recognizer: Parser, e: InputMismatchException): Unit = {
     // Keep the original error message in ANTLR
     val msg = "mismatched input " +
@@ -70,7 +75,7 @@ class SparkParserErrorStrategy() extends DefaultErrorStrategy {
     val exceptionWithErrorClass = new SparkRecognitionException(
       e,
       "PARSE_INPUT_MISMATCHED",
-      Array(getTokenErrorDisplay(e.getOffendingToken)))
+      Array(getUserFacingLanguage(getTokenErrorDisplay(e.getOffendingToken))))
     recognizer.notifyErrorListeners(e.getOffendingToken, msg, exceptionWithErrorClass)
   }
 }
