@@ -3114,7 +3114,7 @@ case class TimestampAdd(
     val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
     val zid = ctx.addReferenceObj("zoneId", zoneIdInEval, classOf[ZoneId].getName)
     defineCodeGen(ctx, ev, (q, micros) =>
-      s"""$dtu.timestampAdd($unit, $q, $micros, $zid)""")
+      s"""$dtu.timestampAdd("$unit", $q, $micros, $zid)""")
   }
 
   override def prettyName: String = "timestampadd"
@@ -3196,7 +3196,7 @@ case class TimestampDiff(
     val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
     val zid = ctx.addReferenceObj("zoneId", zoneIdInEval, classOf[ZoneId].getName)
     defineCodeGen(ctx, ev, (s, e) =>
-      s"""$dtu.timestampDiff($unit, $s, $e, $zid)""")
+      s"""$dtu.timestampDiff("$unit", $s, $e, $zid)""")
   }
 
   override def prettyName: String = "timestampdiff"
