@@ -37,6 +37,12 @@ on:
     - cron: '0 13 * * *'
     # Java 17
     - cron: '0 16 * * *'
+  workflow_call:
+    inputs:
+      ansi_enabled:
+        required: false
+        type: boolean
+        default: false
 
 jobs:
   configure-jobs:
@@ -92,7 +98,7 @@ jobs:
           echo '::set-output name=java::8'
           echo '::set-output name=branch::master' # Default branch to run on. CHANGE here when a branch is cut out.
           echo '::set-output name=type::regular'
-          echo '::set-output name=envs::{}'
+          echo '::set-output name=envs::{"SPARK_ANSI_SQL_MODE": "${{ inputs.ansi_enabled }}"}'
           echo '::set-output name=hadoop::hadoop3'
         fi
 
@@ -311,6 +317,7 @@ jobs:
       SKIP_UNIDOC: true
       SKIP_MIMA: true
       METASPACE_SIZE: 1g
+      SPARK_ANSI_SQL_MODE: ${{ inputs.ansi_enabled }}
     steps:
     - name: Checkout Spark repository
       uses: actions/checkout@v2
@@ -398,6 +405,7 @@ jobs:
       GITHUB_PREV_SHA: ${{ github.event.before }}
       SPARK_LOCAL_IP: localhost
       SKIP_MIMA: true
+      SPARK_ANSI_SQL_MODE: ${{ inputs.ansi_enabled }}
     steps:
     - name: Checkout Spark repository
       uses: actions/checkout@v2
@@ -671,6 +679,7 @@ jobs:
     runs-on: ubuntu-20.04
     env:
       SPARK_LOCAL_IP: localhost
+      SPARK_ANSI_SQL_MODE: ${{ inputs.ansi_enabled }}
     steps:
     - name: Checkout Spark repository
       uses: actions/checkout@v2
