@@ -124,19 +124,14 @@ class QueryPlanningTracker extends Logging {
   /**
    * print out the timeSpent for each phase of a SQL
    */
-  def logTimeSpent(): Unit = {
-    var totalTimeSpent = 0L
+  def acquireParsingTime(): String = {
     val timeSpentSummary: StringBuilder = new StringBuilder()
     Seq(QueryPlanningTracker.PARSING, QueryPlanningTracker.ANALYSIS,
       QueryPlanningTracker.OPTIMIZATION, QueryPlanningTracker.PLANNING).foreach { phase =>
       val duration = phasesMap.getOrDefault(phase, new PhaseSummary(-1, -1)).durationMs
-      timeSpentSummary.append(s"phase: $phase, timeSpent: $duration ms\n")
-      totalTimeSpent += duration
+      timeSpentSummary.append(s"$phase: $duration ms\n")
     }
-    logInfo(
-      s"""Query planning time spent:\n ${timeSpentSummary.toString}
-         |Total time spent: $totalTimeSpent ms.
-       """.stripMargin)
+    timeSpentSummary.toString()
   }
 
   /**

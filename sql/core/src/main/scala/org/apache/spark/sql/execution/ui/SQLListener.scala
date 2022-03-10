@@ -52,6 +52,12 @@ case class SparkListenerSQLExecutionStart(
   extends SparkListenerEvent
 
 @DeveloperApi
+case class SparkListenerSQLParsingEnd(
+    executionId: Long,
+    parsingTime: String)
+  extends SparkListenerEvent
+
+@DeveloperApi
 case class SparkListenerSQLExecutionEnd(executionId: Long, time: Long)
   extends SparkListenerEvent {
 

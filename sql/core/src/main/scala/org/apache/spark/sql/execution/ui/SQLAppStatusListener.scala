@@ -97,6 +97,7 @@ class SQLAppStatusListener(
           executionData.metrics = sqlStoreData.metrics
           executionData.submissionTime = sqlStoreData.submissionTime
           executionData.completionTime = sqlStoreData.completionTime
+          executionData.parsingTime = sqlStoreData.parsingTime
           executionData.jobs = sqlStoreData.jobs
           executionData.stages = sqlStoreData.stages
           executionData.metricsValues = sqlStoreData.metricValues
@@ -485,6 +486,7 @@ private class LiveExecutionData(val executionId: Long) extends LiveEntity {
   var metrics = Seq[SQLPlanMetric]()
   var submissionTime = -1L
   var completionTime: Option[Date] = None
+  var parsingTime: String = null
 
   var jobs = Map[Int, JobExecutionStatus]()
   var stages = Set[Int]()
@@ -506,6 +508,7 @@ private class LiveExecutionData(val executionId: Long) extends LiveEntity {
       metrics,
       submissionTime,
       completionTime,
+      parsingTime,
       jobs,
       stages,
       metricsValues)

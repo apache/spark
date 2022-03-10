@@ -90,6 +90,7 @@ class SQLExecutionUIData(
     val metrics: Seq[SQLPlanMetric],
     val submissionTime: Long,
     val completionTime: Option[Date],
+    val parsingTime: String,
     @JsonDeserialize(keyAs = classOf[Integer])
     val jobs: Map[Int, JobExecutionStatus],
     @JsonDeserialize(contentAs = classOf[Integer])
