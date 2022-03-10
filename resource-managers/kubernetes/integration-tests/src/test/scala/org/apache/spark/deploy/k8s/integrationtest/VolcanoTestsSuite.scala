@@ -135,11 +135,13 @@ private[spark] trait VolcanoTestsSuite extends BeforeAndAfterEach { k8sSuite: Ku
       groupLoc: Option[String] = None,
       queue: Option[String] = None,
       driverTemplate: Option[String] = None,
-      isDriverJob: Boolean = false): Unit = {
+      isDriverJob: Boolean = false,
+      driverPodGroupTemplate: Option[String] = None): Unit = {
     val appLoc = s"${appLocator}${batchSuffix}"
     val podName = s"${driverPodName}-${batchSuffix}"
     // create new configuration for every job
-    val conf = createVolcanoSparkConf(podName, appLoc, groupLoc, queue, driverTemplate)
+    val conf = createVolcanoSparkConf(podName, appLoc, groupLoc, queue, driverTemplate,
+      driverPodGroupTemplate)
     if (isDriverJob) {
       runSparkDriverSubmissionAndVerifyCompletion(
         driverPodChecker = (driverPod: Pod) => {
@@ -199,7 +201,8 @@ private[spark] trait VolcanoTestsSuite extends BeforeAndAfterEach { k8sSuite: Ku
       appLoc: String = appLocator,
       groupLoc: Option[String] = None,
       queue: Option[String] = None,
-      driverTemplate: Option[String] = None): SparkAppConf = {
+      driverTemplate: Option[String] = None,
+      driverPodGroupTemplate: Option[String] = None): SparkAppConf = {
     val conf = kubernetesTestComponents.newSparkAppConf()
       .set(CONTAINER_IMAGE.key, image)
       .set(KUBERNETES_DRIVER_POD_NAME.key, driverPodName)
@@ -216,6 +219,7 @@ private[spark] trait VolcanoTestsSuite extends BeforeAndAfterEach { k8sSuite: Ku
           getClass.getResource(s"/volcano/$q-driver-podgroup-template.yml").getFile
         ).getAbsolutePath)
     }
+    driverPodGroupTemplate.foreach(conf.set(KUBERNETES_DRIVER_PODGROUP_TEMPLATE_FILE.key, _))
     groupLoc.foreach { locator =>
       conf.set(s"${KUBERNETES_DRIVER_LABEL_PREFIX}spark-group-locator", locator)
       conf.set(s"${KUBERNETES_EXECUTOR_LABEL_PREFIX}spark-group-locator", locator)
@@ -241,6 +245,55 @@ private[spark] trait VolcanoTestsSuite extends BeforeAndAfterEach { k8sSuite: Ku
         checkAnnotaion(executorPod)
       }
     )
+  }
+
+  private def verifyJobsSucceededOneByOne(jobNum: Int, groupName: String): Unit = {
+    // Check Pending jobs completed one by one
+    (1 until jobNum).map { completedNum =>
+      Eventually.eventually(TIMEOUT, INTERVAL) {
+        val pendingPods = getPods(role = "driver", groupName, statusPhase = "Pending")
+        assert(pendingPods.size === jobNum - completedNum)
+      }
+    }
+    // All jobs succeeded finally
+    Eventually.eventually(TIMEOUT, INTERVAL) {
+      val succeededPods = getPods(role = "driver", groupName, statusPhase = "Succeeded")
+      assert(succeededPods.size === jobNum)
+    }
+  }
+
+  test("SPARK-38187: Run SparkPi Jobs with minCPU", k8sTestTag, volcanoTag) {
+    val groupName = generateGroupName("min-cpu")
+    // Create a queue with 2 CPU, 3G memory capacity
+    createOrReplaceYAMLResource(QUEUE_2U_3G_YAML)
+    // Submit 3 jobs with minCPU = 2
+    val jobNum = 3
+    (1 to jobNum).map { i =>
+      Future {
+        runJobAndVerify(
+          i.toString,
+          groupLoc = Option(groupName),
+          driverPodGroupTemplate = Option(DRIVER_PG_TEMPLATE_CPU_2U))
+      }
+    }
+    verifyJobsSucceededOneByOne(jobNum, groupName)
+  }
+
+  test("SPARK-38187: Run SparkPi Jobs with minMemory", k8sTestTag, volcanoTag) {
+    val groupName = generateGroupName("min-mem")
+    // Create a queue with 2 CPU, 3G memory capacity
+    createOrReplaceYAMLResource(QUEUE_2U_3G_YAML)
+    // Submit 3 jobs with minMemory = 3g
+    val jobNum = 3
+    (1 to jobNum).map { i =>
+      Future {
+        runJobAndVerify(
+          i.toString,
+          groupLoc = Option(groupName),
+          driverPodGroupTemplate = Option(DRIVER_PG_TEMPLATE_MEMORY_3G))
+      }
+    }
+    verifyJobsSucceededOneByOne(jobNum, groupName)
   }
 
   test("SPARK-38188: Run SparkPi jobs with 2 queues (only 1 enabled)", k8sTestTag, volcanoTag) {
@@ -371,5 +424,14 @@ private[spark] object VolcanoTestsSuite extends SparkFunSuite {
   ).getAbsolutePath
   val DISABLE_QUEUE = new File(
     getClass.getResource("/volcano/disable-queue.yml").getFile
+  ).getAbsolutePath
+  val QUEUE_2U_3G_YAML = new File(
+    getClass.getResource("/volcano/queue-2u-3g.yml").getFile
+  ).getAbsolutePath
+  val DRIVER_PG_TEMPLATE_CPU_2U = new File(
+    getClass.getResource("/volcano/driver-podgroup-template-cpu-2u.yml").getFile
+  ).getAbsolutePath
+  val DRIVER_PG_TEMPLATE_MEMORY_3G = new File(
+    getClass.getResource("/volcano/driver-podgroup-template-memory-3g.yml").getFile
   ).getAbsolutePath
 }
