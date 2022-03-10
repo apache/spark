@@ -540,9 +540,9 @@ class TimSort<K, Buffer> {
 
       // Merge remaining runs, using tmp array with min(len1, len2) elements
       if (len1 <= len2)
-          mergeLo(base1, len1, base2, len2);
+        mergeLo(base1, len1, base2, len2);
       else
-          mergeHi(base1, len1, base2, len2);
+        mergeHi(base1, len1, base2, len2);
     }
 
     /**
@@ -619,9 +619,9 @@ class TimSort<K, Buffer> {
         int m = lastOfs + ((ofs - lastOfs) >>> 1);
 
         if (c.compare(key, s.getKey(a, base + m, key0)) > 0)
-            lastOfs = m + 1;  // a[base + m] < key
+          lastOfs = m + 1;  // a[base + m] < key
         else
-            ofs = m;          // key <= a[base + m]
+          ofs = m;          // key <= a[base + m]
       }
       assert lastOfs == ofs;    // so a[base + ofs - 1] < key <= a[base + ofs]
       return ofs;
@@ -697,9 +697,9 @@ class TimSort<K, Buffer> {
         int m = lastOfs + ((ofs - lastOfs) >>> 1);
 
         if (c.compare(key, s.getKey(a, base + m, key1)) < 0)
-            ofs = m;          // key < a[b + m]
+          ofs = m;          // key < a[b + m]
         else
-            lastOfs = m + 1;  // a[b + m] <= key
+          lastOfs = m + 1;  // a[b + m] <= key
       }
       assert lastOfs == ofs;    // so a[b + ofs - 1] <= key < a[b + ofs]
       return ofs;
@@ -990,9 +990,9 @@ class TimSort<K, Buffer> {
         newSize++;
 
         if (newSize < 0) // Not bloody likely!
-            newSize = minCapacity;
+          newSize = minCapacity;
         else
-            newSize = Math.min(newSize, aLength >>> 1);
+          newSize = Math.min(newSize, aLength >>> 1);
 
         tmp = s.allocate(newSize);
         tmpLength = newSize;
