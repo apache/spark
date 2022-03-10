@@ -207,10 +207,10 @@ abstract class DynamicPartitionPruningSuiteBase
         case _: ReusedExchangeExec => // reuse check ok.
         case BroadcastQueryStageExec(_, _: ReusedExchangeExec, _) => // reuse check ok.
         case b: BroadcastExchangeLike =>
-          val hasReuse = plan.find {
+          val hasReuse = plan.exists {
             case ReusedExchangeExec(_, e) => e eq b
             case _ => false
-          }.isDefined
+          }
           assert(hasReuse, s"$s\nshould have been reused in\n$plan")
         case a: AdaptiveSparkPlanExec =>
           val broadcastQueryStage = collectFirst(a) {
@@ -234,7 +234,7 @@ abstract class DynamicPartitionPruningSuiteBase
         case r: ReusedSubqueryExec => r.child
         case o => o
       }
-      assert(subquery.find(_.isInstanceOf[AdaptiveSparkPlanExec]).isDefined == isMainQueryAdaptive)
+      assert(subquery.exists(_.isInstanceOf[AdaptiveSparkPlanExec]) == isMainQueryAdaptive)
     }
   }
 
@@ -344,12 +344,12 @@ abstract class DynamicPartitionPruningSuiteBase
            | )
        """.stripMargin)
 
-      val found = df.queryExecution.executedPlan.find {
+      val found = df.queryExecution.executedPlan.exists {
         case BroadcastHashJoinExec(_, _, p: ExistenceJoin, _, _, _, _, _) => true
         case _ => false
       }
 
-      assert(found.isEmpty)
+      assert(!found)
     }
   }
 
@@ -1560,14 +1560,14 @@ abstract class DynamicPartitionPruningDataSourceSuiteBase
       }
       // search dynamic pruning predicates on the executed plan
       val plan = query.asInstanceOf[StreamingQueryWrapper].streamingQuery.lastExecution.executedPlan
-      val ret = plan.find {
+      val ret = plan.exists {
         case s: FileSourceScanExec => s.partitionFilters.exists {
           case _: DynamicPruningExpression => true
           case _ => false
         }
         case _ => false
       }
-      assert(ret.isDefined == false)
+      assert(!ret)
     }
   }
 }
@@ -1607,10 +1607,10 @@ abstract class DynamicPartitionPruningV1Suite extends DynamicPartitionPruningDat
           val scanOption =
             find(plan) {
               case s: FileSourceScanExec =>
-                s.output.exists(_.find(_.argString(maxFields = 100).contains("fid")).isDefined)
+                s.output.exists(_.exists(_.argString(maxFields = 100).contains("fid")))
               case s: BatchScanExec =>
                 // we use f1 col for v2 tables due to schema pruning
-                s.output.exists(_.find(_.argString(maxFields = 100).contains("f1")).isDefined)
+                s.output.exists(_.exists(_.argString(maxFields = 100).contains("f1")))
               case _ => false
             }
           assert(scanOption.isDefined)

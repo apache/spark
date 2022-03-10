@@ -728,7 +728,7 @@ object OptimizeOneRowRelationSubquery extends Rule[LogicalPlan] {
   }
 
   private def hasCorrelatedSubquery(plan: LogicalPlan): Boolean = {
-    plan.find(_.expressions.exists(SubqueryExpression.hasCorrelatedSubquery)).isDefined
+    plan.exists(_.expressions.exists(SubqueryExpression.hasCorrelatedSubquery))
   }
 
   /**
