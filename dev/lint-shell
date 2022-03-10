@@ -36,15 +36,18 @@ pushd "$SPARK_ROOT_DIR" &> /dev/null
 
 SHELL_SOURCE="$(shfmt -f $SPARK_ROOT_DIR)"
 
+echo "checking shell code style"
 # https://github.com/koalaman/shellcheck/wiki
 echo ${SHELL_SOURCE[*]} | xargs shellcheck -S error;
 code_style_check_status=$?
 
+echo "checking shell indentition style"
 # https://github.com/mvdan/sh/blob/master/cmd/shfmt/shfmt.1.scd
 # -i 2 Indent with 2 spaces
 # -sr Redirect operators will be followed by a space.
 # -bn Binary ops like && and | may start a line.
-echo ${SHELL_SOURCE[*]} | xargs shfmt -d -i 2 -sr -bn;
+# -ci Switch cases will be indented.
+echo ${SHELL_SOURCE[*]} | xargs shfmt -d -i 2 -sr -bn -ci;
 indentition_check_status=$?
 
 popd &> /dev/null
