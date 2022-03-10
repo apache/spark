@@ -3562,7 +3562,7 @@ object SQLConf {
       .version("3.3.0")
       .internal()
       .stringConf
-      .checkValue(!_.isEmpty, "Should not pass an empty string as staging diretory.")
+      .checkValue(!_.isEmpty, "Should not pass an empty string as staging directory.")
       .createWithDefault(".spark-staging")
 
   val LEGACY_USE_V1_COMMAND =
