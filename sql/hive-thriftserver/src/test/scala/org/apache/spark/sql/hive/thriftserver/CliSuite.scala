@@ -560,17 +560,17 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
     runCliWithin(
       1.minute,
       extraArgs = Seq("--hiveconf", "hive.session.silent=false",
-        "-e", "select date_sub(date'2011-11-11', '1.2');"),
+        "-e", "select from_json('a', 'a INT', map('mode', 'FAILFAST'));"),
       errorResponses = Seq("NumberFormatException"))(
-      ("", "Error in query: The second argument of 'date_sub' function needs to be an integer."),
-      ("", "NumberFormatException: invalid input syntax for type numeric: 1.2"))
+      ("", "SparkException: Malformed records are detected in record parsing"),
+      ("", "JsonParseException: Unrecognized token 'a'"))
     // If it is in silent mode, will print the error message only
     runCliWithin(
       1.minute,
       extraArgs = Seq("--conf", "spark.hive.session.silent=true",
-        "-e", "select date_sub(date'2011-11-11', '1.2');"),
+        "-e", "select from_json('a', 'a INT', map('mode', 'FAILFAST'));"),
       errorResponses = Seq("AnalysisException"))(
-      ("", "Error in query: The second argument of 'date_sub' function needs to be an integer."))
+      ("", "SparkException: Malformed records are detected in record parsing"))
   }
 
   test("SPARK-30808: use Java 8 time API in Thrift SQL CLI by default") {
