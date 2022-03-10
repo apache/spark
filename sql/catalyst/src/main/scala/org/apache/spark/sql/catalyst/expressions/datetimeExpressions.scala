@@ -3070,9 +3070,9 @@ case class ConvertTimezone(
   """,
   examples = """
     Examples:
-      > SELECT _FUNC_('HOUR', 8, timestamp_ntz'2022-02-11 20:30:00');
+      > SELECT _FUNC_(HOUR, 8, timestamp_ntz'2022-02-11 20:30:00');
        2022-02-12 04:30:00
-      > SELECT _FUNC_('MONTH', 1, timestamp_ltz'2022-01-31 00:00:00');
+      > SELECT _FUNC_(MONTH, 1, timestamp_ltz'2022-01-31 00:00:00');
        2022-02-28 00:00:00
       > SELECT _FUNC_(SECOND, -10, date'2022-01-01');
        2021-12-31 23:59:50
@@ -3148,9 +3148,9 @@ case class TimestampAdd(
   """,
   examples = """
     Examples:
-      > SELECT _FUNC_('HOUR', timestamp_ntz'2022-02-11 20:30:00', timestamp_ntz'2022-02-12 04:30:00');
+      > SELECT _FUNC_(HOUR, timestamp_ntz'2022-02-11 20:30:00', timestamp_ntz'2022-02-12 04:30:00');
        8
-      > SELECT _FUNC_('MONTH', timestamp_ltz'2022-01-01 00:00:00', timestamp_ltz'2022-02-28 00:00:00');
+      > SELECT _FUNC_(MONTH, timestamp_ltz'2022-01-01 00:00:00', timestamp_ltz'2022-02-28 00:00:00');
        1
       > SELECT _FUNC_(SECOND, date'2022-01-01', timestamp'2021-12-31 23:59:50');
        -10
