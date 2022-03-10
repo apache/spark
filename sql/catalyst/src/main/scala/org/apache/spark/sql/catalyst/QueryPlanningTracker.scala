@@ -19,7 +19,6 @@ package org.apache.spark.sql.catalyst
 
 import scala.collection.JavaConverters._
 
-import org.apache.spark.internal.Logging
 import org.apache.spark.util.BoundedPriorityQueue
 
 
@@ -91,7 +90,7 @@ object QueryPlanningTracker {
 }
 
 
-class QueryPlanningTracker extends Logging {
+class QueryPlanningTracker {
 
   import QueryPlanningTracker._
 
