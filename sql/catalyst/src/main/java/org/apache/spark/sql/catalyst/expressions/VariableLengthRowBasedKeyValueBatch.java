@@ -137,7 +137,9 @@ public final class VariableLengthRowBasedKeyValueBatch extends RowBasedKeyValueB
 
       @Override
       public boolean next() {
-        if (!initialized) init();
+        if (!initialized) {
+            init();
+        }
         //searching for the next non empty page is records is now zero
         if (recordsInPage == 0) {
           freeCurrentPage();

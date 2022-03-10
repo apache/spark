@@ -191,11 +191,17 @@ public final class ByteArray {
   // equal to `len`. If the input byte sequence is not less than `len` bytes, its first `len` bytes
   // are returned. Otherwise, the remaining missing bytes are filled in with the provided pattern.
   public static byte[] lpad(byte[] bytes, int len, byte[] pad) {
-    if (bytes == null || pad == null) return null;
+    if (bytes == null || pad == null) {
+        return null;
+    }
     // If the input length is 0, return the empty byte sequence.
-    if (len == 0) return EMPTY_BYTE;
+    if (len == 0) {
+        return EMPTY_BYTE;
+    }
     // The padding pattern is empty.
-    if (pad.length == 0) return padWithEmptyPattern(bytes, len);
+    if (pad.length == 0) {
+        return padWithEmptyPattern(bytes, len);
+    }
     // The general case.
     // 1. Copy the first `len` bytes of the input byte sequence into the output if they exist.
     final byte[] result = new byte[len];
@@ -219,11 +225,17 @@ public final class ByteArray {
   // equal to `len`. If the input byte sequence is not less than `len` bytes, its first `len` bytes
   // are returned. Otherwise, the remaining missing bytes are filled in with the provided pattern.
   public static byte[] rpad(byte[] bytes, int len, byte[] pad) {
-    if (bytes == null || pad == null) return null;
+    if (bytes == null || pad == null) {
+        return null;
+    }
     // If the input length is 0, return the empty byte sequence.
-    if (len == 0) return EMPTY_BYTE;
+    if (len == 0) {
+        return EMPTY_BYTE;
+    }
     // The padding pattern is empty.
-    if (pad.length == 0) return padWithEmptyPattern(bytes, len);
+    if (pad.length == 0) {
+        return padWithEmptyPattern(bytes, len);
+    }
     // The general case.
     // 1. Copy the first `len` bytes of the input sequence into the output if they exist.
     final byte[] result = new byte[len];

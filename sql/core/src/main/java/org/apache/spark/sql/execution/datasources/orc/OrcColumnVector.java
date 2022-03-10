@@ -60,7 +60,9 @@ public abstract class OrcColumnVector extends org.apache.spark.sql.vectorized.Co
     } else {
       int count = 0;
       for (int i = 0; i < batchSize; i++) {
-        if (baseData.isNull[i]) count++;
+        if (baseData.isNull[i]) {
+            count++;
+        }
       }
       return count;
     }

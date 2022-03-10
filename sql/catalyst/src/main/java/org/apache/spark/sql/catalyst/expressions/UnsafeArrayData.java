@@ -188,7 +188,9 @@ public final class UnsafeArrayData extends ArrayData implements Externalizable, 
 
   @Override
   public Decimal getDecimal(int ordinal, int precision, int scale) {
-    if (isNullAt(ordinal)) return null;
+    if (isNullAt(ordinal)) {
+        return null;
+    }
     if (precision <= Decimal.MAX_LONG_DIGITS()) {
       return Decimal.apply(getLong(ordinal), precision, scale);
     } else {
@@ -201,7 +203,9 @@ public final class UnsafeArrayData extends ArrayData implements Externalizable, 
 
   @Override
   public UTF8String getUTF8String(int ordinal) {
-    if (isNullAt(ordinal)) return null;
+    if (isNullAt(ordinal)) {
+        return null;
+    }
     final long offsetAndSize = getLong(ordinal);
     final int offset = (int) (offsetAndSize >> 32);
     final int size = (int) offsetAndSize;
@@ -210,7 +214,9 @@ public final class UnsafeArrayData extends ArrayData implements Externalizable, 
 
   @Override
   public byte[] getBinary(int ordinal) {
-    if (isNullAt(ordinal)) return null;
+    if (isNullAt(ordinal)) {
+        return null;
+    }
     final long offsetAndSize = getLong(ordinal);
     final int offset = (int) (offsetAndSize >> 32);
     final int size = (int) offsetAndSize;
@@ -221,7 +227,9 @@ public final class UnsafeArrayData extends ArrayData implements Externalizable, 
 
   @Override
   public CalendarInterval getInterval(int ordinal) {
-    if (isNullAt(ordinal)) return null;
+    if (isNullAt(ordinal)) {
+        return null;
+    }
     final long offsetAndSize = getLong(ordinal);
     final int offset = (int) (offsetAndSize >> 32);
     final int months = Platform.getInt(baseObject, baseOffset + offset);
@@ -232,7 +240,9 @@ public final class UnsafeArrayData extends ArrayData implements Externalizable, 
 
   @Override
   public UnsafeRow getStruct(int ordinal, int numFields) {
-    if (isNullAt(ordinal)) return null;
+    if (isNullAt(ordinal)) {
+        return null;
+    }
     final long offsetAndSize = getLong(ordinal);
     final int offset = (int) (offsetAndSize >> 32);
     final int size = (int) offsetAndSize;
@@ -243,7 +253,9 @@ public final class UnsafeArrayData extends ArrayData implements Externalizable, 
 
   @Override
   public UnsafeArrayData getArray(int ordinal) {
-    if (isNullAt(ordinal)) return null;
+    if (isNullAt(ordinal)) {
+        return null;
+    }
     final long offsetAndSize = getLong(ordinal);
     final int offset = (int) (offsetAndSize >> 32);
     final int size = (int) offsetAndSize;
@@ -254,7 +266,9 @@ public final class UnsafeArrayData extends ArrayData implements Externalizable, 
 
   @Override
   public UnsafeMapData getMap(int ordinal) {
-    if (isNullAt(ordinal)) return null;
+    if (isNullAt(ordinal)) {
+        return null;
+    }
     final long offsetAndSize = getLong(ordinal);
     final int offset = (int) (offsetAndSize >> 32);
     final int size = (int) offsetAndSize;

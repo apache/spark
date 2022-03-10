@@ -114,8 +114,12 @@ final class BitArray {
 
   @Override
   public boolean equals(Object other) {
-    if (this == other) return true;
-    if (!(other instanceof BitArray)) return false;
+    if (this == other) {
+      return true;
+    }
+    if (!(other instanceof BitArray)) {
+      return false;
+    }
     BitArray that = (BitArray) other;
     return Arrays.equals(data, that.data);
   }

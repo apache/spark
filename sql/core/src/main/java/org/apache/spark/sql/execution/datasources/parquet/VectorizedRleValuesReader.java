@@ -197,7 +197,9 @@ public final class VectorizedRleValuesReader extends ValuesReader
     int leftInPage = state.valuesToReadInPage;
 
     while (leftInBatch > 0 && leftInPage > 0) {
-      if (this.currentCount == 0) this.readNextGroup();
+      if (this.currentCount == 0) {
+        this.readNextGroup();
+      }
       int n = Math.min(leftInBatch, Math.min(leftInPage, this.currentCount));
 
       long rangeStart = state.currentRangeStart();
@@ -264,7 +266,9 @@ public final class VectorizedRleValuesReader extends ValuesReader
       VectorizedValuesReader valuesReader,
       ParquetVectorUpdater updater) {
     while (n > 0) {
-      if (this.currentCount == 0) this.readNextGroup();
+      if (this.currentCount == 0) {
+        this.readNextGroup();
+      }
       int num = Math.min(n, this.currentCount);
       switch (mode) {
         case RLE:
@@ -295,7 +299,9 @@ public final class VectorizedRleValuesReader extends ValuesReader
   public void readIntegers(int total, WritableColumnVector c, int rowId) {
     int left = total;
     while (left > 0) {
-      if (this.currentCount == 0) this.readNextGroup();
+      if (this.currentCount == 0) {
+        this.readNextGroup();
+      }
       int n = Math.min(left, this.currentCount);
       switch (mode) {
         case RLE:
@@ -372,7 +378,9 @@ public final class VectorizedRleValuesReader extends ValuesReader
   public void readBooleans(int total, WritableColumnVector c, int rowId) {
     int left = total;
     while (left > 0) {
-      if (this.currentCount == 0) this.readNextGroup();
+      if (this.currentCount == 0) {
+        this.readNextGroup();
+      }
       int n = Math.min(left, this.currentCount);
       switch (mode) {
         case RLE:
@@ -546,7 +554,9 @@ public final class VectorizedRleValuesReader extends ValuesReader
   private void skipValues(int n) {
     int left = n;
     while (left > 0) {
-      if (this.currentCount == 0) this.readNextGroup();
+      if (this.currentCount == 0) {
+        this.readNextGroup();
+      }
       int num = Math.min(left, this.currentCount);
       switch (mode) {
         case RLE:

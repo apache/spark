@@ -63,8 +63,12 @@ public final class CalendarInterval implements Serializable {
 
   @Override
   public boolean equals(Object o) {
-    if (this == o) return true;
-    if (o == null || getClass() != o.getClass()) return false;
+    if (this == o) {
+      return true;
+    }
+    if (o == null || getClass() != o.getClass()) {
+      return false;
+    }
     CalendarInterval that = (CalendarInterval) o;
     return months == that.months &&
       days == that.days &&

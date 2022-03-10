@@ -52,7 +52,9 @@ public abstract class WritableColumnVector extends ColumnVector {
    * Resets this column for writing. The currently stored values are no longer accessible.
    */
   public void reset() {
-    if (isConstant) return;
+    if (isConstant) {
+      return;
+    }
 
     if (childColumns != null) {
       for (WritableColumnVector c: childColumns) {
@@ -384,7 +386,9 @@ public abstract class WritableColumnVector extends ColumnVector {
 
   @Override
   public Decimal getDecimal(int rowId, int precision, int scale) {
-    if (isNullAt(rowId)) return null;
+    if (isNullAt(rowId)) {
+      return null;
+    }
     if (precision <= Decimal.MAX_INT_DIGITS()) {
       return Decimal.createUnsafe(getInt(rowId), precision, scale);
     } else if (precision <= Decimal.MAX_LONG_DIGITS()) {
@@ -417,7 +421,9 @@ public abstract class WritableColumnVector extends ColumnVector {
 
   @Override
   public UTF8String getUTF8String(int rowId) {
-    if (isNullAt(rowId)) return null;
+    if (isNullAt(rowId)) {
+      return null;
+    }
     if (dictionary == null) {
       return arrayData().getBytesAsUTF8String(getArrayOffset(rowId), getArrayLength(rowId));
     } else {
@@ -435,7 +441,9 @@ public abstract class WritableColumnVector extends ColumnVector {
 
   @Override
   public byte[] getBinary(int rowId) {
-    if (isNullAt(rowId)) return null;
+    if (isNullAt(rowId)) {
+      return null;
+    }
     if (dictionary == null) {
       return arrayData().getBytes(getArrayOffset(rowId), getArrayLength(rowId));
     } else {
@@ -683,7 +691,9 @@ public abstract class WritableColumnVector extends ColumnVector {
   // array offsets and lengths in the current column vector.
   @Override
   public final ColumnarArray getArray(int rowId) {
-    if (isNullAt(rowId)) return null;
+    if (isNullAt(rowId)) {
+      return null;
+    }
     return new ColumnarArray(arrayData(), getArrayOffset(rowId), getArrayLength(rowId));
   }
 
@@ -691,7 +701,9 @@ public abstract class WritableColumnVector extends ColumnVector {
   // second child column vector, and puts the offsets and lengths in the current column vector.
   @Override
   public final ColumnarMap getMap(int rowId) {
-    if (isNullAt(rowId)) return null;
+    if (isNullAt(rowId)) {
+      return null;
+    }
     return new ColumnarMap(getChild(0), getChild(1), getArrayOffset(rowId), getArrayLength(rowId));
   }
 

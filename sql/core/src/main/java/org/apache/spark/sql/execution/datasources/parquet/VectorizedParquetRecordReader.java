@@ -206,10 +206,14 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
   public boolean nextKeyValue() throws IOException {
     resultBatch();
 
-    if (returnColumnarBatch) return nextBatch();
+    if (returnColumnarBatch) {
+      return nextBatch();
+    }
 
     if (batchIdx >= numBatched) {
-      if (!nextBatch()) return false;
+      if (!nextBatch()) {
+        return false;
+      }
     }
     ++batchIdx;
     return true;
@@ -217,7 +221,9 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
 
   @Override
   public Object getCurrentValue() {
-    if (returnColumnarBatch) return columnarBatch;
+    if (returnColumnarBatch) {
+      return columnarBatch;
+    }
     return columnarBatch.getRow(batchIdx - 1);
   }
 
@@ -283,7 +289,9 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
    * before any calls to nextKeyValue/nextBatch.
    */
   public ColumnarBatch resultBatch() {
-    if (columnarBatch == null) initBatch();
+    if (columnarBatch == null) {
+      initBatch();
+    }
     return columnarBatch;
   }
 
@@ -302,12 +310,16 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
       vector.reset();
     }
     columnarBatch.setNumRows(0);
-    if (rowsReturned >= totalRowCount) return false;
+    if (rowsReturned >= totalRowCount) {
+      return false;
+    }
     checkEndOfRowGroup();
 
     int num = (int) Math.min(capacity, totalCountLoadedSoFar - rowsReturned);
     for (int i = 0; i < columnReaders.length; ++i) {
-      if (columnReaders[i] == null) continue;
+      if (columnReaders[i] == null) {
+        continue;
+      }
       columnReaders[i].readBatch(num, columnVectors[i]);
     }
     rowsReturned += num;
@@ -347,7 +359,9 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
   }
 
   private void checkEndOfRowGroup() throws IOException {
-    if (rowsReturned != totalCountLoadedSoFar) return;
+    if (rowsReturned != totalCountLoadedSoFar) {
+      return;
+    }
     PageReadStore pages = reader.readNextRowGroup();
     if (pages == null) {
       throw new IOException("expecting more rows but reached last block. Read "
@@ -357,7 +371,9 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
     List<Type> types = requestedSchema.asGroupType().getFields();
     columnReaders = new VectorizedColumnReader[columns.size()];
     for (int i = 0; i < columns.size(); ++i) {
-      if (missingColumns[i]) continue;
+      if (missingColumns[i]) {
+        continue;
+      }
       columnReaders[i] = new VectorizedColumnReader(
         columns.get(i),
         types.get(i).getLogicalTypeAnnotation(),

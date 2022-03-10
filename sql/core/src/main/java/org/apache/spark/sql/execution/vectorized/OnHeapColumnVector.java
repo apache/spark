@@ -119,7 +119,9 @@ public final class OnHeapColumnVector extends WritableColumnVector {
 
   @Override
   public void putNotNulls(int rowId, int count) {
-    if (!hasNull()) return;
+    if (!hasNull()) {
+        return;
+    }
     for (int i = 0; i < count; ++i) {
       nulls[rowId + i] = (byte)0;
     }
@@ -537,26 +539,34 @@ public final class OnHeapColumnVector extends WritableColumnVector {
     } else if (type instanceof BooleanType) {
       if (byteData == null || byteData.length < newCapacity) {
         byte[] newData = new byte[newCapacity];
-        if (byteData != null) System.arraycopy(byteData, 0, newData, 0, capacity);
+        if (byteData != null) {
+            System.arraycopy(byteData, 0, newData, 0, capacity);
+        }
         byteData = newData;
       }
     } else if (type instanceof ByteType) {
       if (byteData == null || byteData.length < newCapacity) {
         byte[] newData = new byte[newCapacity];
-        if (byteData != null) System.arraycopy(byteData, 0, newData, 0, capacity);
+        if (byteData != null) {
+            System.arraycopy(byteData, 0, newData, 0, capacity);
+        }
         byteData = newData;
       }
     } else if (type instanceof ShortType) {
       if (shortData == null || shortData.length < newCapacity) {
         short[] newData = new short[newCapacity];
-        if (shortData != null) System.arraycopy(shortData, 0, newData, 0, capacity);
+        if (shortData != null) {
+            System.arraycopy(shortData, 0, newData, 0, capacity);
+        }
         shortData = newData;
       }
     } else if (type instanceof IntegerType || type instanceof DateType ||
       DecimalType.is32BitDecimalType(type) || type instanceof YearMonthIntervalType) {
       if (intData == null || intData.length < newCapacity) {
         int[] newData = new int[newCapacity];
-        if (intData != null) System.arraycopy(intData, 0, newData, 0, capacity);
+        if (intData != null) {
+            System.arraycopy(intData, 0, newData, 0, capacity);
+        }
         intData = newData;
       }
     } else if (type instanceof LongType ||
@@ -564,19 +574,25 @@ public final class OnHeapColumnVector extends WritableColumnVector {
         DecimalType.is64BitDecimalType(type) || type instanceof DayTimeIntervalType) {
       if (longData == null || longData.length < newCapacity) {
         long[] newData = new long[newCapacity];
-        if (longData != null) System.arraycopy(longData, 0, newData, 0, capacity);
+        if (longData != null) {
+            System.arraycopy(longData, 0, newData, 0, capacity);
+        }
         longData = newData;
       }
     } else if (type instanceof FloatType) {
       if (floatData == null || floatData.length < newCapacity) {
         float[] newData = new float[newCapacity];
-        if (floatData != null) System.arraycopy(floatData, 0, newData, 0, capacity);
+        if (floatData != null) {
+            System.arraycopy(floatData, 0, newData, 0, capacity);
+        }
         floatData = newData;
       }
     } else if (type instanceof DoubleType) {
       if (doubleData == null || doubleData.length < newCapacity) {
         double[] newData = new double[newCapacity];
-        if (doubleData != null) System.arraycopy(doubleData, 0, newData, 0, capacity);
+        if (doubleData != null) {
+            System.arraycopy(doubleData, 0, newData, 0, capacity);
+        }
         doubleData = newData;
       }
     } else if (childColumns != null) {
@@ -586,7 +602,9 @@ public final class OnHeapColumnVector extends WritableColumnVector {
     }
 
     byte[] newNulls = new byte[newCapacity];
-    if (nulls != null) System.arraycopy(nulls, 0, newNulls, 0, capacity);
+    if (nulls != null) {
+        System.arraycopy(nulls, 0, newNulls, 0, capacity);
+    }
     nulls = newNulls;
 
     capacity = newCapacity;

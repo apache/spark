@@ -125,7 +125,9 @@ public final class FixedLengthRowBasedKeyValueBatch extends RowBasedKeyValueBatc
 
       @Override
       public boolean next() {
-        if (!initialized) init();
+        if (!initialized) {
+            init();
+        }
         //searching for the next non empty page is records is now zero
         if (recordsInPage == 0) {
           freeCurrentPage();

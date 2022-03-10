@@ -1126,17 +1126,23 @@ public class ParquetVectorUpdaterFactory {
   }
 
   private static boolean canReadAsIntDecimal(ColumnDescriptor descriptor, DataType dt) {
-    if (!DecimalType.is32BitDecimalType(dt)) return false;
+    if (!DecimalType.is32BitDecimalType(dt)) {
+      return false;
+    }
     return isDecimalTypeMatched(descriptor, dt);
   }
 
   private static boolean canReadAsLongDecimal(ColumnDescriptor descriptor, DataType dt) {
-    if (!DecimalType.is64BitDecimalType(dt)) return false;
+    if (!DecimalType.is64BitDecimalType(dt)) {
+      return false;
+    }
     return isDecimalTypeMatched(descriptor, dt);
   }
 
   private static boolean canReadAsBinaryDecimal(ColumnDescriptor descriptor, DataType dt) {
-    if (!DecimalType.isByteArrayDecimalType(dt)) return false;
+    if (!DecimalType.isByteArrayDecimalType(dt)) {
+      return false;
+    }
     return isDecimalTypeMatched(descriptor, dt);
   }
 

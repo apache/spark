@@ -42,8 +42,12 @@ public final class IsNotNull extends Filter {
 
   @Override
   public boolean equals(Object o) {
-    if (this == o) return true;
-    if (o == null || getClass() != o.getClass()) return false;
+    if (this == o) {
+      return true;
+    }
+    if (o == null || getClass() != o.getClass()) {
+      return false;
+    }
     IsNotNull isNotNull = (IsNotNull) o;
     return Objects.equals(column, isNotNull.column);
   }

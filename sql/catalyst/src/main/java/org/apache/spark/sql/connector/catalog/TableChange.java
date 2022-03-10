@@ -254,8 +254,12 @@ public interface TableChange {
 
     @Override
     public boolean equals(Object o) {
-      if (this == o) return true;
-      if (o == null || getClass() != o.getClass()) return false;
+      if (this == o) {
+        return true;
+      }
+      if (o == null || getClass() != o.getClass()) {
+        return false;
+      }
       SetProperty that = (SetProperty) o;
       return property.equals(that.property) &&
         value.equals(that.value);
@@ -285,8 +289,12 @@ public interface TableChange {
 
     @Override
     public boolean equals(Object o) {
-      if (this == o) return true;
-      if (o == null || getClass() != o.getClass()) return false;
+      if (this == o) {
+        return true;
+      }
+      if (o == null || getClass() != o.getClass()) {
+        return false;
+      }
       RemoveProperty that = (RemoveProperty) o;
       return property.equals(that.property);
     }
@@ -348,8 +356,12 @@ public interface TableChange {
 
     @Override
     public boolean equals(Object o) {
-      if (this == o) return true;
-      if (o == null || getClass() != o.getClass()) return false;
+      if (this == o) {
+        return true;
+      }
+      if (o == null || getClass() != o.getClass()) {
+        return false;
+      }
       After after = (After) o;
       return column.equals(after.column);
     }
@@ -416,8 +428,12 @@ public interface TableChange {
 
     @Override
     public boolean equals(Object o) {
-      if (this == o) return true;
-      if (o == null || getClass() != o.getClass()) return false;
+      if (this == o) {
+        return true;
+      }
+      if (o == null || getClass() != o.getClass()) {
+        return false;
+      }
       AddColumn addColumn = (AddColumn) o;
       return isNullable == addColumn.isNullable &&
         Arrays.equals(fieldNames, addColumn.fieldNames) &&
@@ -462,8 +478,12 @@ public interface TableChange {
 
     @Override
     public boolean equals(Object o) {
-      if (this == o) return true;
-      if (o == null || getClass() != o.getClass()) return false;
+      if (this == o) {
+        return true;
+      }
+      if (o == null || getClass() != o.getClass()) {
+        return false;
+      }
       RenameColumn that = (RenameColumn) o;
       return Arrays.equals(fieldNames, that.fieldNames) &&
         newName.equals(that.newName);
@@ -504,8 +524,12 @@ public interface TableChange {
 
     @Override
     public boolean equals(Object o) {
-      if (this == o) return true;
-      if (o == null || getClass() != o.getClass()) return false;
+      if (this == o) {
+        return true;
+      }
+      if (o == null || getClass() != o.getClass()) {
+        return false;
+      }
       UpdateColumnType that = (UpdateColumnType) o;
       return Arrays.equals(fieldNames, that.fieldNames) &&
         newDataType.equals(that.newDataType);
@@ -545,8 +569,12 @@ public interface TableChange {
 
     @Override
     public boolean equals(Object o) {
-      if (this == o) return true;
-      if (o == null || getClass() != o.getClass()) return false;
+      if (this == o) {
+        return true;
+      }
+      if (o == null || getClass() != o.getClass()) {
+        return false;
+      }
       UpdateColumnNullability that = (UpdateColumnNullability) o;
       return nullable == that.nullable &&
         Arrays.equals(fieldNames, that.fieldNames);
@@ -587,8 +615,12 @@ public interface TableChange {
 
     @Override
     public boolean equals(Object o) {
-      if (this == o) return true;
-      if (o == null || getClass() != o.getClass()) return false;
+      if (this == o) {
+        return true;
+      }
+      if (o == null || getClass() != o.getClass()) {
+        return false;
+      }
       UpdateColumnComment that = (UpdateColumnComment) o;
       return Arrays.equals(fieldNames, that.fieldNames) &&
         newComment.equals(that.newComment);
@@ -629,8 +661,12 @@ public interface TableChange {
 
     @Override
     public boolean equals(Object o) {
-      if (this == o) return true;
-      if (o == null || getClass() != o.getClass()) return false;
+      if (this == o) {
+        return true;
+      }
+      if (o == null || getClass() != o.getClass()) {
+        return false;
+      }
       UpdateColumnPosition that = (UpdateColumnPosition) o;
       return Arrays.equals(fieldNames, that.fieldNames) &&
         position.equals(that.position);
@@ -663,8 +699,12 @@ public interface TableChange {
 
     @Override
     public boolean equals(Object o) {
-      if (this == o) return true;
-      if (o == null || getClass() != o.getClass()) return false;
+      if (this == o) {
+        return true;
+      }
+      if (o == null || getClass() != o.getClass()) {
+        return false;
+      }
       DeleteColumn that = (DeleteColumn) o;
       return Arrays.equals(fieldNames, that.fieldNames);
     }

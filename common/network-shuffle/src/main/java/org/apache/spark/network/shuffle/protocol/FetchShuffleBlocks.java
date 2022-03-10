@@ -71,13 +71,23 @@ public class FetchShuffleBlocks extends AbstractFetchShuffleBlocks {
 
   @Override
   public boolean equals(Object o) {
-    if (this == o) return true;
-    if (o == null || getClass() != o.getClass()) return false;
+    if (this == o) {
+      return true;
+    }
+    if (o == null || getClass() != o.getClass()) {
+      return false;
+    }
 
     FetchShuffleBlocks that = (FetchShuffleBlocks) o;
-    if (!super.equals(that)) return false;
-    if (batchFetchEnabled != that.batchFetchEnabled) return false;
-    if (!Arrays.equals(mapIds, that.mapIds)) return false;
+    if (!super.equals(that)) {
+      return false;
+    }
+    if (batchFetchEnabled != that.batchFetchEnabled) {
+      return false;
+    }
+    if (!Arrays.equals(mapIds, that.mapIds)) {
+      return false;
+    }
     return Arrays.deepEquals(reduceIds, that.reduceIds);
   }
 

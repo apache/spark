@@ -217,7 +217,9 @@ public abstract class ColumnVector implements AutoCloseable {
    * struct field.
    */
   public final ColumnarRow getStruct(int rowId) {
-    if (isNullAt(rowId)) return null;
+    if (isNullAt(rowId)) {
+        return null;
+    }
     return new ColumnarRow(this, rowId);
   }
 
@@ -289,7 +291,9 @@ public abstract class ColumnVector implements AutoCloseable {
    * vector.
    */
   public final CalendarInterval getInterval(int rowId) {
-    if (isNullAt(rowId)) return null;
+    if (isNullAt(rowId)) {
+        return null;
+    }
     final int months = getChild(0).getInt(rowId);
     final int days = getChild(1).getInt(rowId);
     final long microseconds = getChild(2).getLong(rowId);

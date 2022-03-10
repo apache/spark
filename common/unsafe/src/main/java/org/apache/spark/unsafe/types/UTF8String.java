@@ -506,14 +506,18 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
   public UTF8String trim() {
     int s = 0;
     // skip all of the space (0x20) in the left side
-    while (s < this.numBytes && getByte(s) == ' ') s++;
+    while (s < this.numBytes && getByte(s) == ' ') {
+      s++;
+    }
     if (s == this.numBytes) {
       // Everything trimmed
       return EMPTY_UTF8;
     }
     // skip all of the space (0x20) in the right side
     int e = this.numBytes - 1;
-    while (e > s && getByte(e) == ' ') e--;
+    while (e > s && getByte(e) == ' ') {
+      e--;
+    }
     if (s == 0 && e == numBytes - 1) {
       // Nothing trimmed
       return this;
@@ -534,14 +538,18 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
   public UTF8String trimAll() {
     int s = 0;
     // skip all of the whitespaces in the left side
-    while (s < this.numBytes && Character.isWhitespace(getByte(s))) s++;
+    while (s < this.numBytes && Character.isWhitespace(getByte(s))) {
+      s++;
+    }
     if (s == this.numBytes) {
       // Everything trimmed
       return EMPTY_UTF8;
     }
     // skip all of the whitespaces in the right side
     int e = this.numBytes - 1;
-    while (e > s && Character.isWhitespace(getByte(e))) e--;
+    while (e > s && Character.isWhitespace(getByte(e))) {
+      e--;
+    }
     if (s == 0 && e == numBytes - 1) {
       // Nothing trimmed
       return this;
@@ -572,7 +580,9 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
   public UTF8String trimLeft() {
     int s = 0;
     // skip all of the space (0x20) in the left side
-    while (s < this.numBytes && getByte(s) == 0x20) s++;
+    while (s < this.numBytes && getByte(s) == 0x20) {
+      s++;
+    }
     if (s == 0) {
       // Nothing trimmed
       return this;
@@ -592,7 +602,9 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
    *  if `trimString` is `null`
    */
   public UTF8String trimLeft(UTF8String trimString) {
-    if (trimString == null) return null;
+    if (trimString == null) {
+      return null;
+    }
     // the searching byte position in the source string
     int searchIdx = 0;
     // the first beginning byte position of a non-matching character
@@ -630,7 +642,9 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
   public UTF8String trimRight() {
     int e = numBytes - 1;
     // skip all of the space (0x20) in the right side
-    while (e >= 0 && getByte(e) == 0x20) e--;
+    while (e >= 0 && getByte(e) == 0x20) {
+      e--;
+    }
     if (e == numBytes - 1) {
       // Nothing trimmed
       return this;
@@ -649,7 +663,9 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     assert numSpaces > 0;
     int endIdx = numBytes - 1;
     int trimTo = numBytes - numSpaces;
-    while (endIdx >= trimTo && getByte(endIdx) == 0x20) endIdx--;
+    while (endIdx >= trimTo && getByte(endIdx) == 0x20) {
+      endIdx--;
+    }
     return copyUTF8String(0, endIdx);
   }
 
@@ -661,7 +677,9 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
    *  if `trimString` is `null`
    */
   public UTF8String trimRight(UTF8String trimString) {
-    if (trimString == null) return null;
+    if (trimString == null) {
+      return null;
+    }
     int charIdx = 0;
     // number of characters from the source string
     int numChars = 0;
@@ -1097,11 +1115,17 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
 
   private boolean toLong(LongWrapper toLongResult, boolean allowDecimal) {
     int offset = 0;
-    while (offset < this.numBytes && Character.isWhitespace(getByte(offset))) offset++;
-    if (offset == this.numBytes) return false;
+    while (offset < this.numBytes && Character.isWhitespace(getByte(offset))) {
+      offset++;
+    }
+    if (offset == this.numBytes) {
+      return false;
+    }
 
     int end = this.numBytes - 1;
-    while (end > offset && Character.isWhitespace(getByte(end))) end--;
+    while (end > offset && Character.isWhitespace(getByte(end))) {
+      end--;
+    }
 
     byte b = getByte(offset);
     final boolean negative = b == '-';
@@ -1194,11 +1218,17 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
 
   private boolean toInt(IntWrapper intWrapper, boolean allowDecimal) {
     int offset = 0;
-    while (offset < this.numBytes && Character.isWhitespace(getByte(offset))) offset++;
-    if (offset == this.numBytes) return false;
+    while (offset < this.numBytes && Character.isWhitespace(getByte(offset))) {
+      offset++;
+    }
+    if (offset == this.numBytes) {
+      return false;
+    }
 
     int end = this.numBytes - 1;
-    while (end > offset && Character.isWhitespace(getByte(end))) end--;
+    while (end > offset && Character.isWhitespace(getByte(end))) {
+      end--;
+    }
 
     byte b = getByte(offset);
     final boolean negative = b == '-';
@@ -1484,7 +1514,9 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
       } else {
         if (code != '0' && code != lastCode) {
           sx[sxi++] = code;
-          if (sxi > 3) break;
+          if (sxi > 3) {
+            break;
+          }
         }
         lastCode = code;
       }

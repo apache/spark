@@ -47,8 +47,12 @@ public final class In extends Filter {
 
   @Override
   public boolean equals(Object o) {
-    if (this == o) return true;
-    if (o == null || getClass() != o.getClass()) return false;
+    if (this == o) {
+      return true;
+    }
+    if (o == null || getClass() != o.getClass()) {
+      return false;
+    }
     In in = (In) o;
     return Objects.equals(column, in.column) && values.length == in.values.length
       && Arrays.asList(values).containsAll(Arrays.asList(in.values));

@@ -69,18 +69,36 @@ public class DiagnoseCorruption extends BlockTransferMessage {
 
   @Override
   public boolean equals(Object o) {
-    if (this == o) return true;
-    if (o == null || getClass() != o.getClass()) return false;
+    if (this == o) {
+      return true;
+    }
+    if (o == null || getClass() != o.getClass()) {
+      return false;
+    }
 
     DiagnoseCorruption that = (DiagnoseCorruption) o;
 
-    if (checksum != that.checksum) return false;
-    if (shuffleId != that.shuffleId) return false;
-    if (mapId != that.mapId) return false;
-    if (reduceId != that.reduceId) return false;
-    if (!algorithm.equals(that.algorithm)) return false;
-    if (!appId.equals(that.appId)) return false;
-    if (!execId.equals(that.execId)) return false;
+    if (checksum != that.checksum) {
+      return false;
+    }
+    if (shuffleId != that.shuffleId) {
+      return false;
+    }
+    if (mapId != that.mapId) {
+      return false;
+    }
+    if (reduceId != that.reduceId) {
+      return false;
+    }
+    if (!algorithm.equals(that.algorithm)) {
+      return false;
+    }
+    if (!appId.equals(that.appId)) {
+      return false;
+    }
+    if (!execId.equals(that.execId)) {
+      return false;
+    }
     return true;
   }
 

@@ -42,8 +42,12 @@ abstract class BinaryFilter extends Filter {
 
   @Override
   public boolean equals(Object o) {
-    if (this == o) return true;
-    if (o == null || getClass() != o.getClass()) return false;
+    if (this == o) {
+      return true;
+    }
+    if (o == null || getClass() != o.getClass()) {
+      return false;
+    }
     BinaryFilter and = (BinaryFilter) o;
     return Objects.equals(left, and.left) && Objects.equals(right, and.right);
   }

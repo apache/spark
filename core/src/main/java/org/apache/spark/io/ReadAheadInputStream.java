@@ -163,7 +163,9 @@ public class ReadAheadInputStream extends InputStream {
         // if a reader is waiting, possibly return early.
         do {
           read = underlyingInputStream.read(arr, off, len);
-          if (read <= 0) break;
+          if (read <= 0) {
+            break;
+          }
           off += read;
           len -= read;
         } while (len > 0 && !isWaiting.get());

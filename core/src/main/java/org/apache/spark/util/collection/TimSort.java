@@ -120,8 +120,9 @@ class TimSort<K, Buffer> {
     assert c != null;
 
     int nRemaining  = hi - lo;
-    if (nRemaining < 2)
-      return;  // Arrays of size 0 and 1 are always sorted
+    if (nRemaining < 2) {
+        return;  // Arrays of size 0 and 1 are always sorted
+    }
 
     // If array is small, do a "mini-TimSort" with no merges
     if (nRemaining < MIN_MERGE) {
@@ -184,8 +185,9 @@ class TimSort<K, Buffer> {
   @SuppressWarnings("fallthrough")
   private void binarySort(Buffer a, int lo, int hi, int start, Comparator<? super K> c) {
     assert lo <= start && start <= hi;
-    if (start == lo)
-      start++;
+    if (start == lo) {
+        start++;
+    }
 
     K key0 = s.newKey();
     K key1 = s.newKey();
@@ -260,20 +262,23 @@ class TimSort<K, Buffer> {
   private int countRunAndMakeAscending(Buffer a, int lo, int hi, Comparator<? super K> c) {
     assert lo < hi;
     int runHi = lo + 1;
-    if (runHi == hi)
-      return 1;
+    if (runHi == hi) {
+        return 1;
+    }
 
     K key0 = s.newKey();
     K key1 = s.newKey();
 
     // Find end of run, and reverse range if descending
     if (c.compare(s.getKey(a, runHi++, key0), s.getKey(a, lo, key1)) < 0) { // Descending
-      while (runHi < hi && c.compare(s.getKey(a, runHi, key0), s.getKey(a, runHi - 1, key1)) < 0)
-        runHi++;
+      while (runHi < hi && c.compare(s.getKey(a, runHi, key0), s.getKey(a, runHi - 1, key1)) < 0) {
+          runHi++;
+      }
       reverseRange(a, lo, runHi);
     } else {                              // Ascending
-      while (runHi < hi && c.compare(s.getKey(a, runHi, key0), s.getKey(a, runHi - 1, key1)) >= 0)
-        runHi++;
+      while (runHi < hi && c.compare(s.getKey(a, runHi, key0), s.getKey(a, runHi - 1, key1)) >= 0) {
+          runHi++;
+      }
     }
 
     return runHi - lo;
@@ -454,8 +459,9 @@ class TimSort<K, Buffer> {
         int n = stackSize - 2;
         if (n > 0 && runLen[n-1] <= runLen[n] + runLen[n+1] ||
             n > 1 && runLen[n-2] <= runLen[n] + runLen[n-1]) {
-          if (runLen[n - 1] < runLen[n + 1])
-            n--;
+          if (runLen[n - 1] < runLen[n + 1]) {
+              n--;
+          }
         } else if (n < 0 || runLen[n] > runLen[n + 1]) {
           break; // Invariant is established
         }
@@ -470,8 +476,9 @@ class TimSort<K, Buffer> {
     private void mergeForceCollapse() {
       while (stackSize > 1) {
         int n = stackSize - 2;
-        if (n > 0 && runLen[n - 1] < runLen[n + 1])
-          n--;
+        if (n > 0 && runLen[n - 1] < runLen[n + 1]) {
+            n--;
+        }
         mergeAt(n);
       }
     }
@@ -517,8 +524,9 @@ class TimSort<K, Buffer> {
       assert k >= 0;
       base1 += k;
       len1 -= k;
-      if (len1 == 0)
-        return;
+      if (len1 == 0) {
+          return;
+      }
 
       /*
        * Find where the last element of run1 goes in run2. Subsequent elements
@@ -526,14 +534,15 @@ class TimSort<K, Buffer> {
        */
       len2 = gallopLeft(s.getKey(a, base1 + len1 - 1, key0), a, base2, len2, len2 - 1, c);
       assert len2 >= 0;
-      if (len2 == 0)
-        return;
+      if (len2 == 0) {
+          return;
+      }
 
       // Merge remaining runs, using tmp array with min(len1, len2) elements
       if (len1 <= len2)
-        mergeLo(base1, len1, base2, len2);
+          mergeLo(base1, len1, base2, len2);
       else
-        mergeHi(base1, len1, base2, len2);
+          mergeHi(base1, len1, base2, len2);
     }
 
     /**
@@ -567,10 +576,13 @@ class TimSort<K, Buffer> {
           lastOfs = ofs;
           ofs = (ofs << 1) + 1;
           if (ofs <= 0)   // int overflow
+          {
+              ofs = maxOfs;
+          }
+        }
+        if (ofs > maxOfs) {
             ofs = maxOfs;
         }
-        if (ofs > maxOfs)
-          ofs = maxOfs;
 
         // Make offsets relative to base
         lastOfs += hint;
@@ -582,10 +594,13 @@ class TimSort<K, Buffer> {
           lastOfs = ofs;
           ofs = (ofs << 1) + 1;
           if (ofs <= 0)   // int overflow
+          {
+              ofs = maxOfs;
+          }
+        }
+        if (ofs > maxOfs) {
             ofs = maxOfs;
         }
-        if (ofs > maxOfs)
-          ofs = maxOfs;
 
         // Make offsets relative to base
         int tmp = lastOfs;
@@ -604,9 +619,9 @@ class TimSort<K, Buffer> {
         int m = lastOfs + ((ofs - lastOfs) >>> 1);
 
         if (c.compare(key, s.getKey(a, base + m, key0)) > 0)
-          lastOfs = m + 1;  // a[base + m] < key
+            lastOfs = m + 1;  // a[base + m] < key
         else
-          ofs = m;          // key <= a[base + m]
+            ofs = m;          // key <= a[base + m]
       }
       assert lastOfs == ofs;    // so a[base + ofs - 1] < key <= a[base + ofs]
       return ofs;
@@ -639,10 +654,13 @@ class TimSort<K, Buffer> {
           lastOfs = ofs;
           ofs = (ofs << 1) + 1;
           if (ofs <= 0)   // int overflow
+          {
+              ofs = maxOfs;
+          }
+        }
+        if (ofs > maxOfs) {
             ofs = maxOfs;
         }
-        if (ofs > maxOfs)
-          ofs = maxOfs;
 
         // Make offsets relative to b
         int tmp = lastOfs;
@@ -655,10 +673,13 @@ class TimSort<K, Buffer> {
           lastOfs = ofs;
           ofs = (ofs << 1) + 1;
           if (ofs <= 0)   // int overflow
+          {
+              ofs = maxOfs;
+          }
+        }
+        if (ofs > maxOfs) {
             ofs = maxOfs;
         }
-        if (ofs > maxOfs)
-          ofs = maxOfs;
 
         // Make offsets relative to b
         lastOfs += hint;
@@ -676,9 +697,9 @@ class TimSort<K, Buffer> {
         int m = lastOfs + ((ofs - lastOfs) >>> 1);
 
         if (c.compare(key, s.getKey(a, base + m, key1)) < 0)
-          ofs = m;          // key < a[b + m]
+            ofs = m;          // key < a[b + m]
         else
-          lastOfs = m + 1;  // a[b + m] <= key
+            lastOfs = m + 1;  // a[b + m] <= key
       }
       assert lastOfs == ofs;    // so a[b + ofs - 1] <= key < a[b + ofs]
       return ofs;
@@ -744,14 +765,16 @@ class TimSort<K, Buffer> {
             s.copyElement(a, cursor2++, a, dest++);
             count2++;
             count1 = 0;
-            if (--len2 == 0)
-              break outer;
+            if (--len2 == 0) {
+                break outer;
+            }
           } else {
             s.copyElement(tmp, cursor1++, a, dest++);
             count1++;
             count2 = 0;
-            if (--len1 == 1)
-              break outer;
+            if (--len1 == 1) {
+                break outer;
+            }
           }
         } while ((count1 | count2) < minGallop);
 
@@ -769,11 +792,14 @@ class TimSort<K, Buffer> {
             cursor1 += count1;
             len1 -= count1;
             if (len1 <= 1) // len1 == 1 || len1 == 0
-              break outer;
+            {
+                break outer;
+            }
           }
           s.copyElement(a, cursor2++, a, dest++);
-          if (--len2 == 0)
-            break outer;
+          if (--len2 == 0) {
+              break outer;
+          }
 
           count2 = gallopLeft(s.getKey(tmp, cursor1, key0), a, cursor2, len2, 0, c);
           if (count2 != 0) {
@@ -781,16 +807,19 @@ class TimSort<K, Buffer> {
             dest += count2;
             cursor2 += count2;
             len2 -= count2;
-            if (len2 == 0)
-              break outer;
+            if (len2 == 0) {
+                break outer;
+            }
           }
           s.copyElement(tmp, cursor1++, a, dest++);
-          if (--len1 == 1)
-            break outer;
+          if (--len1 == 1) {
+              break outer;
+          }
           minGallop--;
         } while (count1 >= MIN_GALLOP | count2 >= MIN_GALLOP);
-        if (minGallop < 0)
-          minGallop = 0;
+        if (minGallop < 0) {
+            minGallop = 0;
+        }
         minGallop += 2;  // Penalize for leaving gallop mode
       }  // End of "outer" loop
       this.minGallop = minGallop < 1 ? 1 : minGallop;  // Write back to field
@@ -866,14 +895,16 @@ class TimSort<K, Buffer> {
             s.copyElement(a, cursor1--, a, dest--);
             count1++;
             count2 = 0;
-            if (--len1 == 0)
-              break outer;
+            if (--len1 == 0) {
+                break outer;
+            }
           } else {
             s.copyElement(tmp, cursor2--, a, dest--);
             count2++;
             count1 = 0;
-            if (--len2 == 1)
-              break outer;
+            if (--len2 == 1) {
+                break outer;
+            }
           }
         } while ((count1 | count2) < minGallop);
 
@@ -890,12 +921,14 @@ class TimSort<K, Buffer> {
             cursor1 -= count1;
             len1 -= count1;
             s.copyRange(a, cursor1 + 1, a, dest + 1, count1);
-            if (len1 == 0)
-              break outer;
+            if (len1 == 0) {
+                break outer;
+            }
           }
           s.copyElement(tmp, cursor2--, a, dest--);
-          if (--len2 == 1)
-            break outer;
+          if (--len2 == 1) {
+              break outer;
+          }
 
           count2 = len2 - gallopLeft(s.getKey(a, cursor1, key0), tmp, 0, len2, len2 - 1, c);
           if (count2 != 0) {
@@ -904,15 +937,19 @@ class TimSort<K, Buffer> {
             len2 -= count2;
             s.copyRange(tmp, cursor2 + 1, a, dest + 1, count2);
             if (len2 <= 1)  // len2 == 1 || len2 == 0
-              break outer;
+            {
+                break outer;
+            }
           }
           s.copyElement(a, cursor1--, a, dest--);
-          if (--len1 == 0)
-            break outer;
+          if (--len1 == 0) {
+              break outer;
+          }
           minGallop--;
         } while (count1 >= MIN_GALLOP | count2 >= MIN_GALLOP);
-        if (minGallop < 0)
-          minGallop = 0;
+        if (minGallop < 0) {
+            minGallop = 0;
+        }
         minGallop += 2;  // Penalize for leaving gallop mode
       }  // End of "outer" loop
       this.minGallop = minGallop < 1 ? 1 : minGallop;  // Write back to field
@@ -953,9 +990,9 @@ class TimSort<K, Buffer> {
         newSize++;
 
         if (newSize < 0) // Not bloody likely!
-          newSize = minCapacity;
+            newSize = minCapacity;
         else
-          newSize = Math.min(newSize, aLength >>> 1);
+            newSize = Math.min(newSize, aLength >>> 1);
 
         tmp = s.allocate(newSize);
         tmpLength = newSize;

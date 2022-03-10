@@ -101,31 +101,41 @@ public class ArrowColumnVector extends ColumnVector {
 
   @Override
   public Decimal getDecimal(int rowId, int precision, int scale) {
-    if (isNullAt(rowId)) return null;
+    if (isNullAt(rowId)) {
+      return null;
+    }
     return accessor.getDecimal(rowId, precision, scale);
   }
 
   @Override
   public UTF8String getUTF8String(int rowId) {
-    if (isNullAt(rowId)) return null;
+    if (isNullAt(rowId)) {
+      return null;
+    }
     return accessor.getUTF8String(rowId);
   }
 
   @Override
   public byte[] getBinary(int rowId) {
-    if (isNullAt(rowId)) return null;
+    if (isNullAt(rowId)) {
+      return null;
+    }
     return accessor.getBinary(rowId);
   }
 
   @Override
   public ColumnarArray getArray(int rowId) {
-    if (isNullAt(rowId)) return null;
+    if (isNullAt(rowId)) {
+      return null;
+    }
     return accessor.getArray(rowId);
   }
 
   @Override
   public ColumnarMap getMap(int rowId) {
-    if (isNullAt(rowId)) return null;
+    if (isNullAt(rowId)) {
+      return null;
+    }
     return accessor.getMap(rowId);
   }
 
@@ -379,7 +389,9 @@ public class ArrowColumnVector extends ColumnVector {
 
     @Override
     final Decimal getDecimal(int rowId, int precision, int scale) {
-      if (isNullAt(rowId)) return null;
+      if (isNullAt(rowId)) {
+        return null;
+      }
       return Decimal.apply(accessor.getObject(rowId), precision, scale);
     }
   }

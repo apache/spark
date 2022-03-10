@@ -44,8 +44,12 @@ public final class ReadMaxRows implements ReadLimit {
 
   @Override
   public boolean equals(Object o) {
-    if (this == o) return true;
-    if (o == null || getClass() != o.getClass()) return false;
+    if (this == o) {
+      return true;
+    }
+    if (o == null || getClass() != o.getClass()) {
+      return false;
+    }
     ReadMaxRows other = (ReadMaxRows) o;
     return other.maxRows() == maxRows();
   }

@@ -57,8 +57,12 @@ public abstract class AbstractFetchShuffleBlocks extends BlockTransferMessage {
 
   @Override
   public boolean equals(Object o) {
-    if (this == o) return true;
-    if (o == null || getClass() != o.getClass()) return false;
+    if (this == o) {
+      return true;
+    }
+    if (o == null || getClass() != o.getClass()) {
+      return false;
+    }
     AbstractFetchShuffleBlocks that = (AbstractFetchShuffleBlocks) o;
     return shuffleId == that.shuffleId
       && Objects.equal(appId, that.appId) && Objects.equal(execId, that.execId);

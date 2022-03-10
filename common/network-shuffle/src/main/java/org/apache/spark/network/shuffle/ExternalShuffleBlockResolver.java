@@ -414,8 +414,12 @@ public class ExternalShuffleBlockResolver {
 
     @Override
     public boolean equals(Object o) {
-      if (this == o) return true;
-      if (o == null || getClass() != o.getClass()) return false;
+      if (this == o) {
+        return true;
+      }
+      if (o == null || getClass() != o.getClass()) {
+        return false;
+      }
 
       AppExecId appExecId = (AppExecId) o;
       return Objects.equals(appId, appExecId.appId) && Objects.equals(execId, appExecId.execId);

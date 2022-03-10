@@ -44,8 +44,12 @@ abstract class StringPredicate extends Filter {
 
   @Override
   public boolean equals(Object o) {
-    if (this == o) return true;
-    if (o == null || getClass() != o.getClass()) return false;
+    if (this == o) {
+        return true;
+    }
+    if (o == null || getClass() != o.getClass()) {
+        return false;
+    }
     StringPredicate that = (StringPredicate) o;
     return Objects.equals(column, that.column) && Objects.equals(value, that.value);
   }

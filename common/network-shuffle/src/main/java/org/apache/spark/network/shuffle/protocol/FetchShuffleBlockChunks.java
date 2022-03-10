@@ -69,11 +69,17 @@ public class FetchShuffleBlockChunks extends AbstractFetchShuffleBlocks {
 
   @Override
   public boolean equals(Object o) {
-    if (this == o) return true;
-    if (o == null || getClass() != o.getClass()) return false;
+    if (this == o) {
+      return true;
+    }
+    if (o == null || getClass() != o.getClass()) {
+      return false;
+    }
 
     FetchShuffleBlockChunks that = (FetchShuffleBlockChunks) o;
-    if (!super.equals(that)) return false;
+    if (!super.equals(that)) {
+      return false;
+    }
     if (shuffleMergeId != that.shuffleMergeId ||
       !Arrays.equals(reduceIds, that.reduceIds)) {
       return false;

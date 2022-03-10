@@ -399,7 +399,9 @@ public final class UnsafeRow extends InternalRow implements Externalizable, Kryo
 
   @Override
   public UTF8String getUTF8String(int ordinal) {
-    if (isNullAt(ordinal)) return null;
+    if (isNullAt(ordinal)) {
+        return null;
+    }
     final long offsetAndSize = getLong(ordinal);
     final int offset = (int) (offsetAndSize >> 32);
     final int size = (int) offsetAndSize;
@@ -582,7 +584,9 @@ public final class UnsafeRow extends InternalRow implements Externalizable, Kryo
   public String toString() {
     StringBuilder build = new StringBuilder("[");
     for (int i = 0; i < sizeInBytes; i += 8) {
-      if (i != 0) build.append(',');
+      if (i != 0) {
+          build.append(',');
+      }
       build.append(java.lang.Long.toHexString(Platform.getLong(baseObject, baseOffset + i)));
     }
     build.append(']');
