@@ -123,8 +123,7 @@ class AggregateOptimizeSuite extends AnalysisTest {
       Optimize.execute(
         x.join(y, LeftOuter, Some("x.a".attr === "y.a".attr))
           .groupBy("x.a".attr)("x.a".attr, Literal(1)).analyze),
-      x.join(y, LeftOuter, Some("x.a".attr === "y.a".attr))
-        .groupBy("x.a".attr)("x.a".attr, Literal(1)).analyze)
+      x.groupBy("x.a".attr)("x.a".attr, Literal(1)).analyze)
   }
 
   test("SPARK-37292: Removes outer join if it only has DISTINCT on streamed side with alias") {
