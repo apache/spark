@@ -1722,7 +1722,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         4     True
         dtype: bool
         """
-        return self._psdf[[self.name]].duplicated(keep=keep)
+        return self._psdf[[self.name]].duplicated(keep=keep).rename(self.name)
 
     def drop_duplicates(
         self, keep: Union[bool, str] = "first", inplace: bool = False
