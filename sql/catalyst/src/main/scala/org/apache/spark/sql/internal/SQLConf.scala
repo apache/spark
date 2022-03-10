@@ -407,6 +407,18 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val REQUIRE_ALL_CLUSTER_KEYS_FOR_DISTRIBUTION =
+    buildConf("spark.sql.requireAllClusterKeysForDistribution")
+      .internal()
+      .doc("When true, the planner requires all the clustering keys as the partition keys " +
+        "(with same ordering) of the children, to eliminate the shuffle for the operator that " +
+        "requires its children be clustered distributed, such as AGGREGATE and WINDOW node. " +
+        "This is to avoid data skews which can lead to significant performance regression if " +
+        "shuffle is eliminated.")
+      .version("3.3.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val RADIX_SORT_ENABLED = buildConf("spark.sql.sort.enableRadixSort")
     .internal()
     .doc("When true, enable use of radix sort when possible. Radix sort is much faster but " +
@@ -1708,7 +1720,6 @@ object SQLConf {
 
   val STREAMING_SESSION_WINDOW_MERGE_SESSIONS_IN_LOCAL_PARTITION =
     buildConf("spark.sql.streaming.sessionWindow.merge.sessions.in.local.partition")
-      .internal()
       .doc("When true, streaming session window sorts and merge sessions in local partition " +
         "prior to shuffle. This is to reduce the rows to shuffle, but only beneficial when " +
         "there're lots of rows in a batch being assigned to same sessions.")

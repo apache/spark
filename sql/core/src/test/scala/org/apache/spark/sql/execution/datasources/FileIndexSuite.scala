@@ -488,7 +488,7 @@ class FileIndexSuite extends SharedSparkSession {
             new Path("file")), Array(new BlockLocation()))
       )
     when(dfs.listLocatedStatus(path)).thenReturn(new RemoteIterator[LocatedFileStatus] {
-      val iter = statuses.toIterator
+      val iter = statuses.iterator
       override def hasNext: Boolean = iter.hasNext
       override def next(): LocatedFileStatus = iter.next
     })

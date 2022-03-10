@@ -282,4 +282,18 @@ class DecorrelateInnerQuerySuite extends PlanTest {
       ).analyze
     check(innerPlan, outerPlan, correctAnswer, Seq(y <=> y, x === a, y === z))
   }
+
+  test("SPARK-38155: distinct with non-equality correlated predicates") {
+    val outerPlan = testRelation2
+    val innerPlan =
+      Distinct(
+        Project(Seq(b),
+          Filter(OuterReference(x) > a, testRelation)))
+    val correctAnswer =
+      Distinct(
+        Project(Seq(b, x),
+          Filter(x > a,
+            DomainJoin(Seq(x), testRelation))))
+    check(innerPlan, outerPlan, correctAnswer, Seq(x <=> x))
+  }
 }

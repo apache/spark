@@ -645,7 +645,11 @@ object KubernetesIntegrationTests {
         val bindingsDir = s"$sparkHome/resource-managers/kubernetes/docker/src/main/dockerfiles/spark/bindings"
         val javaImageTag = sys.props.get("spark.kubernetes.test.javaImageTag")
         val dockerFile = sys.props.getOrElse("spark.kubernetes.test.dockerFile",
-            "resource-managers/kubernetes/docker/src/main/dockerfiles/spark/Dockerfile.java17")
+            s"$sparkHome/resource-managers/kubernetes/docker/src/main/dockerfiles/spark/Dockerfile.java17")
+        val pyDockerFile = sys.props.getOrElse("spark.kubernetes.test.pyDockerFile",
+            s"$bindingsDir/python/Dockerfile")
+        val rDockerFile = sys.props.getOrElse("spark.kubernetes.test.rDockerFile",
+            s"$bindingsDir/R/Dockerfile")
         val extraOptions = if (javaImageTag.isDefined) {
           Seq("-b", s"java_image_tag=$javaImageTag")
         } else {
@@ -654,8 +658,8 @@ object KubernetesIntegrationTests {
         val cmd = Seq(dockerTool,
           "-r", imageRepo,
           "-t", imageTag.getOrElse("dev"),
-          "-p", s"$bindingsDir/python/Dockerfile",
-          "-R", s"$bindingsDir/R/Dockerfile") ++
+          "-p", pyDockerFile,
+          "-R", rDockerFile) ++
           (if (deployMode != Some("minikube")) Seq.empty else Seq("-m")) ++
           extraOptions :+
           "build"
@@ -1227,7 +1231,7 @@ object TestSettings {
     (Test / testOptions) += Tests.Argument(TestFrameworks.ScalaTest, "-W", "120", "300"),
     (Test / testOptions) += Tests.Argument(TestFrameworks.JUnit, "-v", "-a"),
     // Enable Junit testing.
-    libraryDependencies += "com.novocode" % "junit-interface" % "0.11" % "test",
+    libraryDependencies += "com.github.sbt" % "junit-interface" % "0.13.3" % "test",
     // `parallelExecutionInTest` controls whether test suites belonging to the same SBT project
     // can run in parallel with one another. It does NOT control whether tests execute in parallel
     // within the same JVM (which is controlled by `testForkedParallel`) or whether test cases

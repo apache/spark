@@ -1153,7 +1153,8 @@ abstract class DynamicPartitionPruningSuiteBase
 
   test("join key with multiple references on the filtering plan") {
     withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "true",
-      SQLConf.ADAPTIVE_OPTIMIZER_EXCLUDED_RULES.key -> AQEPropagateEmptyRelation.ruleName
+      SQLConf.ADAPTIVE_OPTIMIZER_EXCLUDED_RULES.key -> AQEPropagateEmptyRelation.ruleName,
+      SQLConf.ANSI_ENABLED.key -> "false" // ANSI mode doesn't support "String + String"
     ) {
       // when enable AQE, the reusedExchange is inserted when executed.
       withTable("fact", "dim") {
@@ -1480,6 +1481,51 @@ abstract class DynamicPartitionPruningSuiteBase
 
       checkPartitionPruningPredicate(df, false, true)
       checkAnswer(df, Row(1150, 1) :: Row(1130, 4) :: Row(1140, 4) :: Nil)
+    }
+  }
+
+  test("SPARK-38148: Do not add dynamic partition pruning if there exists static partition " +
+    "pruning") {
+    withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true") {
+      Seq(
+        "f.store_id = 1" -> false,
+        "1 = f.store_id" -> false,
+        "f.store_id <=> 1" -> false,
+        "1 <=> f.store_id" -> false,
+        "f.store_id > 1" -> true,
+        "5 > f.store_id" -> true).foreach { case (condition, hasDPP) =>
+        // partitioned table at left side
+        val df1 = sql(
+          s"""
+             |SELECT /*+ broadcast(s) */ * FROM fact_sk f
+             |JOIN dim_store s ON f.store_id = s.store_id AND $condition
+            """.stripMargin)
+        checkPartitionPruningPredicate(df1, false, withBroadcast = hasDPP)
+
+        val df2 = sql(
+          s"""
+             |SELECT /*+ broadcast(s) */ * FROM fact_sk f
+             |JOIN dim_store s ON f.store_id = s.store_id
+             |WHERE $condition
+            """.stripMargin)
+        checkPartitionPruningPredicate(df2, false, withBroadcast = hasDPP)
+
+        // partitioned table at right side
+        val df3 = sql(
+          s"""
+             |SELECT /*+ broadcast(s) */ * FROM dim_store s
+             |JOIN fact_sk f ON f.store_id = s.store_id AND $condition
+            """.stripMargin)
+        checkPartitionPruningPredicate(df3, false, withBroadcast = hasDPP)
+
+        val df4 = sql(
+          s"""
+             |SELECT /*+ broadcast(s) */ * FROM dim_store s
+             |JOIN fact_sk f ON f.store_id = s.store_id
+             |WHERE $condition
+            """.stripMargin)
+        checkPartitionPruningPredicate(df4, false, withBroadcast = hasDPP)
+      }
     }
   }
 }

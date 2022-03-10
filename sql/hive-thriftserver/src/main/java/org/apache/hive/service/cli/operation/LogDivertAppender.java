@@ -267,7 +267,7 @@ public class LogDivertAppender extends AbstractWriterAppender<WriterManager> {
       Appender ap = entry.getValue();
       if (ap.getClass().equals(ConsoleAppender.class)) {
         Layout l = ap.getLayout();
-        if (l.getClass().equals(StringLayout.class)) {
+        if (l instanceof StringLayout) {
           layout = (StringLayout) l;
           break;
         }

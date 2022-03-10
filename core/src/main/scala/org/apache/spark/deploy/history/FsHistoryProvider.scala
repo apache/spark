@@ -26,7 +26,7 @@ import java.util.zip.ZipOutputStream
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
-import scala.io.Source
+import scala.io.{Codec, Source}
 import scala.util.control.NonFatal
 import scala.xml.Node
 
@@ -144,8 +144,8 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     val dbPath = Files.createDirectories(new File(path, dir).toPath()).toFile()
     Utils.chmod700(dbPath)
 
-    val metadata = new FsHistoryProviderMetadata(CURRENT_LISTING_VERSION,
-      AppStatusStore.CURRENT_VERSION, logDir.toString())
+    val metadata = FsHistoryProviderMetadata(CURRENT_LISTING_VERSION,
+      AppStatusStore.CURRENT_VERSION, logDir)
 
     try {
       open(dbPath, metadata, conf)
@@ -414,7 +414,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     } else {
       Map()
     }
-    Map("Event log directory" -> logDir.toString) ++ safeMode
+    Map("Event log directory" -> logDir) ++ safeMode
   }
 
   override def start(): Unit = {
@@ -819,7 +819,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
           }
         }
 
-        val source = Source.fromInputStream(in).getLines()
+        val source = Source.fromInputStream(in)(Codec.UTF8).getLines()
 
         // Because skipping may leave the stream in the middle of a line, read the next line
         // before replaying.

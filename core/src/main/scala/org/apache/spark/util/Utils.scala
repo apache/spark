@@ -593,6 +593,9 @@ private[spark] object Utils extends Logging {
    * basically copied from `org.apache.hadoop.yarn.util.FSDownload.unpack`.
    */
   def unpack(source: File, dest: File): Unit = {
+    if (!source.exists()) {
+      throw new FileNotFoundException(source.getAbsolutePath)
+    }
     val lowerSrc = StringUtils.toLowerCase(source.getName)
     if (lowerSrc.endsWith(".jar")) {
       RunJar.unJar(source, dest, RunJar.MATCH_ANY)
