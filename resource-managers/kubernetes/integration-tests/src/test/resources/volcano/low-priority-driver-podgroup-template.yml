@@ -18,3 +18,4 @@ apiVersion: scheduling.volcano.sh/v1beta1
 kind: PodGroup
 spec:
   priorityClassName: low
+  queue: queue
