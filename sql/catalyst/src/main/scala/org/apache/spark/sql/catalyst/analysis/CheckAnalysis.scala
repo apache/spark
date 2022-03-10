@@ -435,7 +435,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
               // Check if the data types match.
               dataTypes(child).zip(ref).zipWithIndex.foreach { case ((dt1, dt2), ci) =>
                 // SPARK-18058: we shall not care about the nullability of columns
-                if (dataTypesAreCompatibleFn(dt1, dt2)) {
+                if (!dataTypesAreCompatibleFn(dt1, dt2)) {
                   val errorMessage =
                     s"""
                        |${operator.nodeName} can only be performed on tables with the compatible
@@ -607,11 +607,11 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
     val isUnion = plan.isInstanceOf[Union]
     if (isUnion) {
       (dt1: DataType, dt2: DataType) =>
-        !DataType.equalsStructurally(dt1, dt2, true)
+        DataType.equalsStructurally(dt1, dt2, true)
     } else {
       // SPARK-18058: we shall not care about the nullability of columns
       (dt1: DataType, dt2: DataType) =>
-        TypeCoercion.findWiderTypeForTwo(dt1.asNullable, dt2.asNullable).isEmpty
+        TypeCoercion.findWiderTypeForTwo(dt1.asNullable, dt2.asNullable).nonEmpty
     }
   }
 
@@ -662,7 +662,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
           nonAnsiPlan.children.tail.zipWithIndex.foreach { case (child, ti) =>
             // Check if the data types match.
             dataTypes(child).zip(ref).zipWithIndex.foreach { case ((dt1, dt2), ci) =>
-              if (dataTypesAreCompatibleFn(dt1, dt2)) {
+              if (!dataTypesAreCompatibleFn(dt1, dt2)) {
                 issueFixedIfAnsiOff = false
               }
             }

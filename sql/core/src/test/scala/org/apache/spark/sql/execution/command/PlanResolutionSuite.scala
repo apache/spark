@@ -1750,7 +1750,7 @@ class PlanResolutionSuite extends AnalysisTest {
 
     interceptParseException(parsePlan)(
       "CREATE TABLE my_tab(a: INT COMMENT 'test', b: STRING)",
-      "extraneous input ':'")
+      "extraneous input ':'")()
   }
 
   test("create hive table - table file format") {
@@ -1875,7 +1875,7 @@ class PlanResolutionSuite extends AnalysisTest {
 
   test("Duplicate clauses - create hive table") {
     def intercept(sqlCommand: String, messages: String*): Unit =
-      interceptParseException(parsePlan)(sqlCommand, messages: _*)
+      interceptParseException(parsePlan)(sqlCommand, messages: _*)()
 
     def createTableHeader(duplicateClause: String): String = {
       s"CREATE TABLE my_tab(a INT, b STRING) STORED AS parquet $duplicateClause $duplicateClause"

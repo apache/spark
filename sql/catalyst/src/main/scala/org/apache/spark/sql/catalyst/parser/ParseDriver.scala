@@ -104,6 +104,7 @@ abstract class AbstractSqlParser extends ParserInterface with SQLConfHelper with
     parser.addParseListener(UnclosedCommentProcessor(command, tokenStream))
     parser.removeErrorListeners()
     parser.addErrorListener(ParseErrorListener)
+    parser.setErrorHandler(new SparkParserErrorStrategy())
     parser.legacy_setops_precedence_enabled = conf.setOpsPrecedenceEnforced
     parser.legacy_exponent_literal_as_decimal_enabled = conf.exponentLiteralAsDecimalEnabled
     parser.SQL_standard_keyword_behavior = conf.enforceReservedKeywords
@@ -207,7 +208,12 @@ case object ParseErrorListener extends BaseErrorListener {
         val start = Origin(Some(line), Some(charPositionInLine))
         (start, start)
     }
-    throw new ParseException(None, msg, start, stop)
+    e match {
+      case sre: SparkRecognitionException if sre.errorClass.isDefined =>
+        throw new ParseException(None, start, stop, sre.errorClass.get, sre.messageParameters)
+      case _ =>
+        throw new ParseException(None, msg, start, stop)
+    }
   }
 }
 
@@ -246,6 +252,21 @@ class ParseException(
       Some(errorClass),
       messageParameters)
 
+  /** Compose the message through SparkThrowableHelper given errorClass and messageParameters. */
+  def this(
+      command: Option[String],
+      start: Origin,
+      stop: Origin,
+      errorClass: String,
+      messageParameters: Array[String]) =
+    this(
+      command,
+      SparkThrowableHelper.getMessage(errorClass, messageParameters),
+      start,
+      stop,
+      Some(errorClass),
+      messageParameters)
+
   override def getMessage: String = {
     val builder = new StringBuilder
     builder ++= "\n" ++= message
@@ -268,14 +289,19 @@ class ParseException(
   }
 
   def withCommand(cmd: String): ParseException = {
-    new ParseException(Option(cmd), message, start, stop, errorClass, messageParameters)
+    // PARSE_EMPTY_STATEMENT error class overrides the PARSE_INPUT_MISMATCHED when cmd is empty
+    if (cmd.trim().isEmpty && errorClass.isDefined && errorClass.get == "PARSE_INPUT_MISMATCHED") {
+      new ParseException(Option(cmd), start, stop, "PARSE_EMPTY_STATEMENT", Array[String]())
+    } else {
+      new ParseException(Option(cmd), message, start, stop, errorClass, messageParameters)
+    }
   }
 }
 
 /**
  * The post-processor validates & cleans-up the parse tree during the parse process.
  */
-case object PostProcessor extends SqlBaseBaseListener {
+case object PostProcessor extends SqlBaseParserBaseListener {
 
   /** Throws error message when exiting a explicitly captured wrong identifier rule */
   override def exitErrorIdent(ctx: SqlBaseParser.ErrorIdentContext): Unit = {
@@ -319,7 +345,7 @@ case object PostProcessor extends SqlBaseBaseListener {
  * The post-processor checks the unclosed bracketed comment.
  */
 case class UnclosedCommentProcessor(
-    command: String, tokenStream: CommonTokenStream) extends SqlBaseBaseListener {
+    command: String, tokenStream: CommonTokenStream) extends SqlBaseParserBaseListener {
 
   override def exitSingleDataType(ctx: SqlBaseParser.SingleDataTypeContext): Unit = {
     checkUnclosedComment(tokenStream, command)

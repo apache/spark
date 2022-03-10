@@ -976,9 +976,11 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         else:
             return sdf.select(F.covar_samp(*sdf.columns)).head(1)[0][0]
 
-    # TODO: arg should support Series
-    # TODO: NaN and None
-    def map(self, arg: Union[Dict, Callable]) -> "Series":
+    # TODO: NaN and None when ``arg`` is an empty dict
+    # TODO: Support ps.Series ``arg``
+    def map(
+        self, arg: Union[Dict, Callable[[Any], Any], pd.Series], na_action: Optional[str] = None
+    ) -> "Series":
         """
         Map values of Series according to input correspondence.
 
@@ -992,8 +994,10 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
         Parameters
         ----------
-        arg : function or dict
+        arg : function, dict or pd.Series
             Mapping correspondence.
+        na_action :
+            If `ignore`, propagate NA values, without passing them to the mapping correspondence.
 
         Returns
         -------
@@ -1034,6 +1038,16 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         3      None
         dtype: object
 
+        It also accepts a pandas Series:
+
+        >>> pser = pd.Series(['kitten', 'puppy'], index=['cat', 'dog'])
+        >>> s.map(pser)
+        0    kitten
+        1     puppy
+        2      None
+        3      None
+        dtype: object
+
         It also accepts a function:
 
         >>> def format(x) -> str:
@@ -1045,8 +1059,18 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         2      I am a None
         3    I am a rabbit
         dtype: object
+
+        To avoid applying the function to missing values (and keep them as NaN)
+        na_action='ignore' can be used:
+
+        >>> s.map('I am a {}'.format, na_action='ignore')
+        0       I am a cat
+        1       I am a dog
+        2             None
+        3    I am a rabbit
+        dtype: object
         """
-        if isinstance(arg, dict):
+        if isinstance(arg, (dict, pd.Series)):
             is_start = True
             # In case dictionary is empty.
             current = F.when(SF.lit(False), SF.lit(None).cast(self.spark.data_type))
@@ -1067,7 +1091,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
                 current = current.otherwise(SF.lit(None).cast(self.spark.data_type))
             return self._with_new_scol(current)
         else:
-            return self.apply(arg)
+            return self.pandas_on_spark.transform_batch(lambda pser: pser.map(arg, na_action))
 
     @property
     def shape(self) -> Tuple[int]:

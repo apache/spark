@@ -372,6 +372,17 @@ object GeneratorNestedColumnAliasing {
                 e.withNewChildren(Seq(extractor))
             }
 
+            // If after replacing generator expression with nested extractor, there
+            // is invalid extractor pattern like
+            // `GetArrayStructFields(GetArrayStructFields(...), ...), we cannot do
+            // pruning but fallback to original query plan.
+            val invalidExtractor = rewrittenG.generator.children.head.collect {
+              case GetArrayStructFields(_: GetArrayStructFields, _, _, _, _) => true
+            }
+            if (invalidExtractor.nonEmpty) {
+              return Some(pushedThrough)
+            }
+
             // As we change the child of the generator, its output data type must be updated.
             val updatedGeneratorOutput = rewrittenG.generatorOutput
               .zip(rewrittenG.generator.elementSchema.toAttributes)

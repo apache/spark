@@ -1875,14 +1875,14 @@ case class GetExternalRowField(
  * Validates the actual data type of input expression at runtime.  If it doesn't match the
  * expectation, throw an exception.
  */
-case class ValidateExternalType(child: Expression, expected: DataType)
+case class ValidateExternalType(child: Expression, expected: DataType, lenient: Boolean)
   extends UnaryExpression with NonSQLExpression with ExpectsInputTypes {
 
   override def inputTypes: Seq[AbstractDataType] = Seq(ObjectType(classOf[Object]))
 
   override def nullable: Boolean = child.nullable
 
-  override val dataType: DataType = RowEncoder.externalDataTypeForInput(expected)
+  override val dataType: DataType = RowEncoder.externalDataTypeForInput(expected, lenient)
 
   private lazy val errMsg = s" is not a valid external type for schema of ${expected.simpleString}"
 
@@ -1895,6 +1895,14 @@ case class ValidateExternalType(child: Expression, expected: DataType)
     case _: ArrayType =>
       (value: Any) => {
         value.getClass.isArray || value.isInstanceOf[Seq[_]]
+      }
+    case _: DateType =>
+      (value: Any) => {
+        value.isInstanceOf[java.sql.Date] || value.isInstanceOf[java.time.LocalDate]
+      }
+    case _: TimestampType =>
+      (value: Any) => {
+        value.isInstanceOf[java.sql.Timestamp] || value.isInstanceOf[java.time.Instant]
       }
     case _ =>
       val dataTypeClazz = ScalaReflection.javaBoxedType(dataType)
@@ -1918,13 +1926,21 @@ case class ValidateExternalType(child: Expression, expected: DataType)
     val errMsgField = ctx.addReferenceObj("errMsg", errMsg)
     val input = child.genCode(ctx)
     val obj = input.value
-
+    def genCheckTypes(classes: Seq[Class[_]]): String = {
+      classes.map(cls => s"$obj instanceof ${cls.getName}").mkString(" || ")
+    }
     val typeCheck = expected match {
       case _: DecimalType =>
-        Seq(classOf[java.math.BigDecimal], classOf[scala.math.BigDecimal], classOf[Decimal])
-          .map(cls => s"$obj instanceof ${cls.getName}").mkString(" || ")
+        genCheckTypes(Seq(
+          classOf[java.math.BigDecimal],
+          classOf[scala.math.BigDecimal],
+          classOf[Decimal]))
       case _: ArrayType =>
         s"$obj.getClass().isArray() || $obj instanceof ${classOf[scala.collection.Seq[_]].getName}"
+      case _: DateType =>
+        genCheckTypes(Seq(classOf[java.sql.Date], classOf[java.time.LocalDate]))
+      case _: TimestampType =>
+        genCheckTypes(Seq(classOf[java.sql.Timestamp], classOf[java.time.Instant]))
       case _ =>
         s"$obj instanceof ${CodeGenerator.boxedType(dataType)}"
     }

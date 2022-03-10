@@ -64,7 +64,7 @@ private[sql] class StreamingQueryStatusListener(
       .take(numInactiveQueries - inactiveQueryStatusRetention)
     val runIds = toDelete.map { e =>
       store.delete(e.getClass, e.runId)
-      e.runId.toString
+      e.runId
     }
     // Delete wrappers in one pass, as deleting them for each summary is slow
     store.removeAllByIndexValues(classOf[StreamingQueryProgressWrapper], "runId", runIds)

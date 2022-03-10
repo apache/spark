@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.util
 
 import java.sql.{Date, Timestamp}
 import java.time._
-import java.time.temporal.{ChronoField, ChronoUnit, IsoFields}
+import java.time.temporal.{ChronoField, ChronoUnit, IsoFields, Temporal}
 import java.util.{Locale, TimeZone}
 import java.util.concurrent.TimeUnit._
 
@@ -108,6 +108,17 @@ object DateTimeUtils {
   }
 
   /**
+   * Converts an Java object to days.
+   *
+   * @param obj Either an object of `java.sql.Date` or `java.time.LocalDate`.
+   * @return The number of days since 1970-01-01.
+   */
+  def anyToDays(obj: Any): Int = obj match {
+    case d: Date => fromJavaDate(d)
+    case ld: LocalDate => localDateToDays(ld)
+  }
+
+  /**
    * Converts days since the epoch 1970-01-01 in Proleptic Gregorian calendar to a local date
    * at the default JVM time zone in the hybrid calendar (Julian + Gregorian). It rebases the given
    * days from Proleptic Gregorian to the hybrid calendar at UTC time zone for simplicity because
@@ -178,6 +189,17 @@ object DateTimeUtils {
   def fromJavaTimestamp(t: Timestamp): Long = {
     val micros = millisToMicros(t.getTime) + (t.getNanos / NANOS_PER_MICROS) % MICROS_PER_MILLIS
     rebaseJulianToGregorianMicros(micros)
+  }
+
+  /**
+   * Converts an Java object to microseconds.
+   *
+   * @param obj Either an object of `java.sql.Timestamp` or `java.time.Instant`.
+   * @return The number of micros since the epoch.
+   */
+  def anyToMicros(obj: Any): Long = obj match {
+    case t: Timestamp => fromJavaTimestamp(t)
+    case i: Instant => instantToMicros(i)
   }
 
   /**
@@ -1197,6 +1219,40 @@ object DateTimeUtils {
         timestampAddMonths(micros, quantity * MONTHS_PER_YEAR, zoneId)
       case _ =>
         throw QueryExecutionErrors.invalidUnitInTimestampAdd(unit)
+    }
+  }
+
+  private val timestampDiffMap = Map[String, (Temporal, Temporal) => Long](
+    "MICROSECOND" -> ChronoUnit.MICROS.between,
+    "MILLISECOND" -> ChronoUnit.MILLIS.between,
+    "SECOND" -> ChronoUnit.SECONDS.between,
+    "MINUTE" -> ChronoUnit.MINUTES.between,
+    "HOUR" -> ChronoUnit.HOURS.between,
+    "DAY" -> ChronoUnit.DAYS.between,
+    "WEEK" -> ChronoUnit.WEEKS.between,
+    "MONTH" -> ChronoUnit.MONTHS.between,
+    "QUARTER" -> ((startTs: Temporal, endTs: Temporal) =>
+      ChronoUnit.MONTHS.between(startTs, endTs) / 3),
+    "YEAR" -> ChronoUnit.YEARS.between)
+
+  /**
+   * Gets the difference between two timestamps.
+   *
+   * @param unit Specifies the interval units in which to express the difference between
+   *             the two timestamp parameters.
+   * @param startTs A timestamp which the function subtracts from `endTs`.
+   * @param endTs A timestamp from which the function subtracts `startTs`.
+   * @param zoneId The time zone ID at which the operation is performed.
+   * @return The time span between two timestamp values, in the units specified.
+   */
+  def timestampDiff(unit: String, startTs: Long, endTs: Long, zoneId: ZoneId): Long = {
+    val unitInUpperCase = unit.toUpperCase(Locale.ROOT)
+    if (timestampDiffMap.contains(unitInUpperCase)) {
+      val startLocalTs = getLocalDateTime(startTs, zoneId)
+      val endLocalTs = getLocalDateTime(endTs, zoneId)
+      timestampDiffMap(unitInUpperCase)(startLocalTs, endLocalTs)
+    } else {
+      throw QueryExecutionErrors.invalidUnitInTimestampDiff(unit)
     }
   }
 }

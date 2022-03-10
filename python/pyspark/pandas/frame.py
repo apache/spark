@@ -7283,7 +7283,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         )
         return internal
 
-    # TODO:  add keep = First
+    # TODO: add keep = First
     def nlargest(self, n: int, columns: Union[Name, List[Name]]) -> "DataFrame":
         """
         Return the first `n` rows ordered by `columns` in descending order.
@@ -7340,7 +7340,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         6  NaN  12
 
         In the following example, we will use ``nlargest`` to select the three
-        rows having the largest values in column "population".
+        rows having the largest values in column "X".
 
         >>> df.nlargest(n=3, columns='X')
              X   Y
@@ -7348,12 +7348,14 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         4  6.0  10
         3  5.0   9
 
+        To order by the largest values in column "Y" and then "X", we can
+        specify multiple columns like in the next example.
+
         >>> df.nlargest(n=3, columns=['Y', 'X'])
              X   Y
         6  NaN  12
         5  7.0  11
         4  6.0  10
-
         """
         return self.sort_values(by=columns, ascending=False).head(n=n)
 
@@ -7403,7 +7405,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         6  NaN  12
 
         In the following example, we will use ``nsmallest`` to select the
-        three rows having the smallest values in column "a".
+        three rows having the smallest values in column "X".
 
         >>> df.nsmallest(n=3, columns='X') # doctest: +NORMALIZE_WHITESPACE
              X   Y
@@ -7411,7 +7413,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         1  2.0   7
         2  3.0   8
 
-        To order by the largest values in column "a" and then "c", we can
+        To order by the smallest values in column "Y" and then "X", we can
         specify multiple columns like in the next example.
 
         >>> df.nsmallest(n=3, columns=['Y', 'X']) # doctest: +NORMALIZE_WHITESPACE

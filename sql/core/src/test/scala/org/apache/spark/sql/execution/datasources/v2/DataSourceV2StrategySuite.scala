@@ -27,7 +27,7 @@ import org.apache.spark.sql.types.BooleanType
 
 class DataSourceV2StrategySuite extends PlanTest with SharedSparkSession {
   test("SPARK-36644: Push down boolean column filter") {
-    testTranslateFilter('col.boolean,
+    testTranslateFilter(Symbol("col").boolean,
       Some(new V2EqualTo(FieldReference("col"), LiteralValue(true, BooleanType))))
   }
 
