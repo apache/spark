@@ -246,6 +246,7 @@ class StreamingListenerSuite extends TestSuiteBase with LocalStreamingContext wi
     val inputStream = ssc.receiverStream(new StreamingListenerSuiteReceiver)
     inputStream.foreachRDD(_.count)
     ssc.start()
+    ssc.sparkContext.listenerBus.waitUntilEmpty()
     ssc.stop()
     assert(CustomizedBatchCounter.COMPLETED_BATCH == 1)
   }
