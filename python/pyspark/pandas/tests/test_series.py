@@ -400,12 +400,26 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
             self.assert_eq(psser.isin([1, 5, 0, None]), expected)
 
     def test_duplicated(self):
-        pser = pd.Series(["beetle", "lama", "cow", "lama", "beetle", "lama"], name="animal")
-        psser = ps.from_pandas(pser)
-        self.assert_eq(psser.duplicated().sort_index(), pser.duplicated())
-        self.assert_eq(psser.duplicated(keep="first").sort_index(), pser.duplicated(keep="first"))
-        self.assert_eq(psser.duplicated(keep="last").sort_index(), pser.duplicated(keep="last"))
-        self.assert_eq(psser.duplicated(keep=False).sort_index(), pser.duplicated(keep=False))
+        for pser in [
+            pd.Series(["beetle", None, "beetle", None, "lama", "beetle"], name="objects"),
+            pd.Series([1, np.nan, 1, np.nan], name="numbers"),
+            pd.Series(
+                [
+                    pd.Timestamp("2022-01-01"),
+                    pd.Timestamp("2022-02-02"),
+                    pd.Timestamp("2022-01-01"),
+                    pd.Timestamp("2022-02-02"),
+                ],
+                name="times",
+            ),
+        ]:
+            psser = ps.from_pandas(pser)
+            self.assert_eq(psser.duplicated().sort_index(), pser.duplicated())
+            self.assert_eq(
+                psser.duplicated(keep="first").sort_index(), pser.duplicated(keep="first")
+            )
+            self.assert_eq(psser.duplicated(keep="last").sort_index(), pser.duplicated(keep="last"))
+            self.assert_eq(psser.duplicated(keep=False).sort_index(), pser.duplicated(keep=False))
 
     def test_drop_duplicates(self):
         pdf = pd.DataFrame({"animal": ["lama", "cow", "lama", "beetle", "lama", "hippo"]})
