@@ -282,8 +282,9 @@ case class ScalarSubquery(
 
 object ScalarSubquery {
   def hasCorrelatedScalarSubquery(e: Expression): Boolean = {
-    e.exists1 {
+    e.exists {
       case s: ScalarSubquery => s.isCorrelated
+      case _ => false
     }
   }
 }
