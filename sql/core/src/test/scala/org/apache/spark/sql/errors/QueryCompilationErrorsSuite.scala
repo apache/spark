@@ -111,9 +111,9 @@ class QueryCompilationErrorsSuite extends QueryTest with SharedSparkSession {
       (536363, "86123A", 6, 17851)
     ).toDF("InvoiceNo", "StockCode", "Quantity", "CustomerID")
     val e = intercept[AnalysisException] {
-        val pandasTestUDF = TestGroupedAggPandasUDF(name = "pandas_udf")
-        df.groupBy("CustomerId")
-          .agg(pandasTestUDF(df("Quantity")), sum(df("Quantity"))).collect()
+      val pandasTestUDF = TestGroupedAggPandasUDF(name = "pandas_udf")
+      df.groupBy("CustomerId")
+        .agg(pandasTestUDF(df("Quantity")), sum(df("Quantity"))).collect()
     }
 
     assert(e.errorClass === Some("CANNOT_USE_MIXTURE"))
@@ -136,12 +136,13 @@ class QueryCompilationErrorsSuite extends QueryTest with SharedSparkSession {
     ).toDF("CustomerName", "CustomerID")
 
     val e = intercept[AnalysisException] {
-        val pythonTestUDF = TestPythonUDF(name = "python_udf")
-        df1.join(
-          df2, pythonTestUDF(df1("CustomerID") === df2("CustomerID")), "leftouter").collect()
+      val pythonTestUDF = TestPythonUDF(name = "python_udf")
+      df1.join(
+        df2, pythonTestUDF(df1("CustomerID") === df2("CustomerID")), "leftouter").collect()
     }
 
     assert(e.errorClass === Some("UNSUPPORTED_FEATURE"))
+    assert(e.getSqlState === "0A000")
     assert(e.message ===
       "The feature is not supported: " +
       "Using PythonUDF in join condition of join type LeftOuter is not supported")
@@ -157,11 +158,12 @@ class QueryCompilationErrorsSuite extends QueryTest with SharedSparkSession {
     ).toDF("InvoiceNo", "StockCode", "Quantity", "CustomerID")
 
     val e = intercept[AnalysisException] {
-        val pandasTestUDF = TestGroupedAggPandasUDF(name = "pandas_udf")
-        df.groupBy(df("CustomerID")).pivot(df("CustomerID")).agg(pandasTestUDF(df("Quantity")))
+      val pandasTestUDF = TestGroupedAggPandasUDF(name = "pandas_udf")
+      df.groupBy(df("CustomerID")).pivot(df("CustomerID")).agg(pandasTestUDF(df("Quantity")))
     }
 
     assert(e.errorClass === Some("UNSUPPORTED_FEATURE"))
+    assert(e.getSqlState === "0A000")
     assert(e.message ===
       "The feature is not supported: " +
       "Pandas UDF aggregate expressions don't support pivot.")
