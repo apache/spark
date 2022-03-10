@@ -199,6 +199,7 @@ class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTestUtils
       df.queryExecution.toString,
       SparkPlanInfo.fromSparkPlan(df.queryExecution.executedPlan),
       System.currentTimeMillis(),
+      "parsing: 0 ms\nanalysis: 34 ms\noptimization: 71 ms\nplanning: 153 ms",
       Map.empty))
 
     listener.onJobStart(SparkListenerJobStart(
@@ -346,7 +347,7 @@ class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTestUtils
       val listener = new SparkListener {
         override def onOtherEvent(event: SparkListenerEvent): Unit = {
           event match {
-            case SparkListenerSQLExecutionStart(_, _, _, planDescription, _, _, _) =>
+            case SparkListenerSQLExecutionStart(_, _, _, planDescription, _, _, _, _) =>
               assert(expected.forall(planDescription.contains))
               checkDone = true
             case _ => // ignore other events
@@ -389,6 +390,7 @@ class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTestUtils
       df.queryExecution.toString,
       SparkPlanInfo.fromSparkPlan(df.queryExecution.executedPlan),
       System.currentTimeMillis(),
+      "parsing: 0 ms\nanalysis: 34 ms\noptimization: 71 ms\nplanning: 153 ms",
       Map.empty))
     listener.onJobStart(SparkListenerJobStart(
       jobId = 0,
@@ -419,6 +421,7 @@ class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTestUtils
       df.queryExecution.toString,
       SparkPlanInfo.fromSparkPlan(df.queryExecution.executedPlan),
       System.currentTimeMillis(),
+      "parsing: 0 ms\nanalysis: 34 ms\noptimization: 71 ms\nplanning: 153 ms",
       Map.empty))
     listener.onJobStart(SparkListenerJobStart(
       jobId = 0,
@@ -460,6 +463,7 @@ class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTestUtils
       df.queryExecution.toString,
       SparkPlanInfo.fromSparkPlan(df.queryExecution.executedPlan),
       System.currentTimeMillis(),
+      "parsing: 0 ms\nanalysis: 34 ms\noptimization: 71 ms\nplanning: 153 ms",
       Map.empty))
     listener.onJobStart(SparkListenerJobStart(
       jobId = 0,
@@ -490,6 +494,7 @@ class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTestUtils
       df.queryExecution.toString,
       SparkPlanInfo.fromSparkPlan(df.queryExecution.executedPlan),
       System.currentTimeMillis(),
+      "parsing: 0 ms\nanalysis: 34 ms\noptimization: 71 ms\nplanning: 153 ms",
       Map.empty))
     listener.onOtherEvent(SparkListenerSQLExecutionEnd(
       executionId, System.currentTimeMillis()))
@@ -521,6 +526,7 @@ class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTestUtils
       df.queryExecution.toString,
       SparkPlanInfo.fromSparkPlan(df.queryExecution.executedPlan),
       System.currentTimeMillis(),
+      "parsing: 0 ms\nanalysis: 34 ms\noptimization: 71 ms\nplanning: 153 ms",
       Map.empty))
 
     var stageId = 0
@@ -661,6 +667,7 @@ class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTestUtils
       df.queryExecution.toString,
       SparkPlanInfo.fromSparkPlan(df.queryExecution.executedPlan),
       time,
+      "parsing: 0 ms\nanalysis: 34 ms\noptimization: 71 ms\nplanning: 153 ms",
       Map.empty))
     time += 1
     listener.onOtherEvent(SparkListenerSQLExecutionStart(
@@ -670,6 +677,7 @@ class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTestUtils
       df.queryExecution.toString,
       SparkPlanInfo.fromSparkPlan(df.queryExecution.executedPlan),
       time,
+      "parsing: 0 ms\nanalysis: 34 ms\noptimization: 71 ms\nplanning: 153 ms",
       Map.empty))
 
     // Stop execution 2 before execution 1
@@ -687,6 +695,7 @@ class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTestUtils
       df.queryExecution.toString,
       SparkPlanInfo.fromSparkPlan(df.queryExecution.executedPlan),
       time,
+      "parsing: 0 ms\nanalysis: 34 ms\noptimization: 71 ms\nplanning: 153 ms",
       Map.empty))
     assert(statusStore.executionsCount === 2)
     assert(statusStore.execution(2) === None)
@@ -723,6 +732,7 @@ class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTestUtils
       df.queryExecution.toString,
       oldPlan,
       System.currentTimeMillis(),
+      "parsing: 0 ms\nanalysis: 34 ms\noptimization: 71 ms\nplanning: 153 ms",
       Map.empty))
 
     listener.onJobStart(SparkListenerJobStart(

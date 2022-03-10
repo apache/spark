@@ -105,6 +105,7 @@ object SQLExecution {
             // will be caught and reported in the `SparkListenerSQLExecutionEnd`
             sparkPlanInfo = SparkPlanInfo.fromSparkPlan(queryExecution.executedPlan),
             time = System.currentTimeMillis(),
+            queryExecution.tracker.acquireParsingTime(),
             redactedConfigs))
           body
         } catch {

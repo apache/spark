@@ -80,6 +80,7 @@ object MetricsAggregationBenchmark extends BenchmarkBase {
       getClass().getName(),
       planInfo,
       System.currentTimeMillis(),
+      "parsing: 0 ms\nanalysis: 34 ms\noptimization: 71 ms\nplanning: 153 ms",
       Map.empty)
 
     val executionEnd = SparkListenerSQLExecutionEnd(executionId, System.currentTimeMillis())

@@ -248,7 +248,9 @@ private[ui] class ExecutionPagedTable(
         ("Description", true, None),
         ("Submitted", true, None),
         ("Duration", true, Some("Time from query submission to completion (or if still executing," +
-          "time since submission)"))) ++ {
+          "time since submission)")),
+        ("ParsingTime", true, Some("Time spent for parsing SQL on every phase " +
+          "about parse, analyze, optimize, planning"))) ++ {
         if (showRunningJobs && showSucceededJobs && showFailedJobs) {
           Seq(
             ("Running Job IDs", true, None),
@@ -293,6 +295,9 @@ private[ui] class ExecutionPagedTable(
       <td sorttable_customkey={duration.toString}>
         {UIUtils.formatDuration(duration)}
       </td>
+      <td>
+        parsingTimeCell(executionUIData)
+      </td>
       {if (showRunningJobs) {
         <td>
           {jobLinks(executionTableRow.runningJobData)}
@@ -329,6 +334,29 @@ private[ui] class ExecutionPagedTable(
         {execution.description}</a>
     } else {
       <a href={executionURL(execution.executionId)}>{execution.executionId}</a>
+    }
+
+    <div>{desc}{details}</div>
+  }
+
+  private def parsingTimeCell(execution: SQLExecutionUIData): Seq[Node] = {
+    val details = if (execution.parsingTime != null && execution.parsingTime.nonEmpty) {
+      <span onclick="this.parentNode.querySelector('.stage-details').classList.toggle('collapsed')"
+            class="expand-details">
+        +details
+      </span> ++
+        <div class="stage-details collapsed">
+          <pre>{execution.parsingTime.substring(0, execution.parsingTime.charAt('\n'))}
+            <br></br>{execution.parsingTime}</pre>
+        </div>
+    } else {
+      Nil
+    }
+
+    val desc = if (execution.parsingTime != null && execution.parsingTime.nonEmpty) {
+      {execution.parsingTime}
+    } else {
+      {"No ParsingTime"}
     }
 
     <div>{desc}{details}</div>
@@ -406,6 +434,7 @@ private[ui] class ExecutionDataSource(
       case "Description" => Ordering.by(_.executionUIData.description)
       case "Submitted" => Ordering.by(_.executionUIData.submissionTime)
       case "Duration" => Ordering.by(_.duration)
+      case "ParsingTime" => Ordering.by(_.executionUIData.parsingTime)
       case "Job IDs" | "Succeeded Job IDs" => Ordering by (_.completedJobData.headOption)
       case "Running Job IDs" => Ordering.by(_.runningJobData.headOption)
       case "Failed Job IDs" => Ordering.by(_.failedJobData.headOption)
