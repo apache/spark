@@ -317,6 +317,7 @@ jobs:
       SKIP_UNIDOC: true
       SKIP_MIMA: true
       METASPACE_SIZE: 1g
+      SPARK_ANSI_SQL_MODE: ${{ inputs.ansi_enabled }}
     steps:
     - name: Checkout Spark repository
       uses: actions/checkout@v2
@@ -404,6 +405,7 @@ jobs:
       GITHUB_PREV_SHA: ${{ github.event.before }}
       SPARK_LOCAL_IP: localhost
       SKIP_MIMA: true
+      SPARK_ANSI_SQL_MODE: ${{ inputs.ansi_enabled }}
     steps:
     - name: Checkout Spark repository
       uses: actions/checkout@v2
@@ -677,6 +679,7 @@ jobs:
     runs-on: ubuntu-20.04
     env:
       SPARK_LOCAL_IP: localhost
+      SPARK_ANSI_SQL_MODE: ${{ inputs.ansi_enabled }}
     steps:
     - name: Checkout Spark repository
       uses: actions/checkout@v2
