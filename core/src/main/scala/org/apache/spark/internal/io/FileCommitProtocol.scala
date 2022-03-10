@@ -321,7 +321,7 @@ object FileCommitProtocol extends Logging {
 
     val dir = fs.makeQualified(
       new Path(stagingPathName + "_" + executionId(engineType) + "-" + jobId))
-    logDebug("Created staging dir = " + dir + " for path = " + inputPath)
+    logDebug(s"Created staging dir = $dir for path = $inputPath")
     dir
   }
 
