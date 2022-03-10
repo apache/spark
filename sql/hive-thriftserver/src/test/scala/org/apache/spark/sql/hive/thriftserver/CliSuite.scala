@@ -555,13 +555,13 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
     )
   }
 
-  test("AnalysisException with root cause will be printStacktrace") {
+  test("SparkException with root cause will be printStacktrace") {
     // If it is not in silent mode, will print the stacktrace
     runCliWithin(
       1.minute,
       extraArgs = Seq("--hiveconf", "hive.session.silent=false",
         "-e", "select from_json('a', 'a INT', map('mode', 'FAILFAST'));"),
-      errorResponses = Seq("NumberFormatException"))(
+      errorResponses = Seq("JsonParseException"))(
       ("", "SparkException: Malformed records are detected in record parsing"),
       ("", "JsonParseException: Unrecognized token 'a'"))
     // If it is in silent mode, will print the error message only
@@ -569,7 +569,7 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
       1.minute,
       extraArgs = Seq("--conf", "spark.hive.session.silent=true",
         "-e", "select from_json('a', 'a INT', map('mode', 'FAILFAST'));"),
-      errorResponses = Seq("AnalysisException"))(
+      errorResponses = Seq("SparkException"))(
       ("", "SparkException: Malformed records are detected in record parsing"))
   }
 
