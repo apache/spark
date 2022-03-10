@@ -47,11 +47,12 @@ code_style_check_status=$?
 echo ${SHELL_SOURCE[*]} | xargs shfmt -d -i 2 -sr -bn;
 indentition_check_status=$?
 
+popd &> /dev/null
+
 if [ "$code_style_check_status" = "0" ] && [ "$indentition_check_status" = "0" ]; then
    echo "lint-shell checks passed."
+   exit 0
 else
   echo "lint-shell checks failed."
+  exit 1
 fi
-
-popd &> /dev/null
-exit "$lint_status"
