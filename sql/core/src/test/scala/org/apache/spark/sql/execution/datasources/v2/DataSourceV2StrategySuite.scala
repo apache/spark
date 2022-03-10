@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.datasources.v2
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.plans.PlanTest
-import org.apache.spark.sql.connector.expressions.Predicate
+import org.apache.spark.sql.connector.expressions.filter.Predicate
 import org.apache.spark.sql.test.SharedSparkSession
 
 class DataSourceV2StrategySuite extends PlanTest with SharedSparkSession {

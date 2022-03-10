@@ -18,7 +18,7 @@
 package org.apache.spark.sql.connector.read;
 
 import org.apache.spark.annotation.Evolving;
-import org.apache.spark.sql.connector.expressions.Predicate;
+import org.apache.spark.sql.connector.expressions.filter.Predicate;
 
 /**
  * A mix-in interface for {@link ScanBuilder}. Data sources can implement this interface to

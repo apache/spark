@@ -15,15 +15,17 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.connector.expressions;
+package org.apache.spark.sql.connector.expressions.filter;
 
 import org.apache.spark.annotation.Evolving;
+import org.apache.spark.sql.connector.expressions.Expression;
+import org.apache.spark.sql.connector.expressions.GeneralScalarExpression;
 
 /**
- * The general representation of catalyst predicates, which contains the upper-cased
+ * The general representation of predicate expressions, which contains the upper-cased
  * expression name and all the children expressions.
  * <p>
- * The currently supported catalyst predicates:
+ * The currently supported predicate expressions:
  * <ol>
  *  <li>Name: <code>IS_NULL</code>
  *   <ul>
@@ -37,19 +39,19 @@ import org.apache.spark.annotation.Evolving;
  *    <li>Since version: 3.3.0</li>
  *   </ul>
  *  </li>
- *  <li>Name: <code>StartsWith</code>
+ *  <li>Name: <code>STARTS_WITH</code>
  *   <ul>
  *    <li>SQL semantic: <code>StartsWith(expr1, expr2)</code></li>
  *    <li>Since version: 3.3.0</li>
  *   </ul>
  *  </li>
- *  <li>Name: <code>EndsWith</code>
+ *  <li>Name: <code>ENDS_WITH</code>
  *   <ul>
  *    <li>SQL semantic: <code>EndsWith(expr1, expr2)</code></li>
  *    <li>Since version: 3.3.0</li>
  *   </ul>
  *  </li>
- *  <li>Name: <code>Contains</code>
+ *  <li>Name: <code>CONTAINS</code>
  *   <ul>
  *    <li>SQL semantic: <code>Contains(expr1, expr2)</code></li>
  *    <li>Since version: 3.3.0</li>

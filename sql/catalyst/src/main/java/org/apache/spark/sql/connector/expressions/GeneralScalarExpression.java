@@ -22,6 +22,7 @@ import java.util.Arrays;
 import java.util.Objects;
 
 import org.apache.spark.annotation.Evolving;
+import org.apache.spark.sql.connector.expressions.filter.Predicate;
 import org.apache.spark.sql.connector.util.V2ExpressionSQLBuilder;
 
 /**

@@ -21,7 +21,8 @@ import scala.collection.mutable
 
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, AttributeSet, Expression, NamedExpression, PredicateHelper, SchemaPruning}
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
-import org.apache.spark.sql.connector.expressions.{Predicate => V2Predicate, SortOrder}
+import org.apache.spark.sql.connector.expressions.SortOrder
+import org.apache.spark.sql.connector.expressions.filter.Predicate
 import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownFilters, SupportsPushDownLimit, SupportsPushDownRequiredColumns, SupportsPushDownTableSample, SupportsPushDownTopN, SupportsPushDownV2Filters}
 import org.apache.spark.sql.execution.datasources.DataSourceStrategy
 import org.apache.spark.sql.internal.SQLConf
@@ -35,7 +36,7 @@ object PushDownUtils extends PredicateHelper {
    * @return pushed filter and post-scan filters.
    */
   def pushFilters(scanBuilder: ScanBuilder, filters: Seq[Expression])
-      : (Either[Seq[sources.Filter], Seq[V2Predicate]], Seq[Expression]) = {
+      : (Either[Seq[sources.Filter], Seq[Predicate]], Seq[Expression]) = {
     scanBuilder match {
       case r: SupportsPushDownFilters =>
         // A map from translated data source leaf node filters to original catalyst filter
@@ -71,8 +72,8 @@ object PushDownUtils extends PredicateHelper {
         // expressions. For a `And`/`Or` predicate, it is possible that the predicate is partially
         // pushed down. This map can be used to construct a catalyst filter expression from the
         // input filter, or a superset(partial push down filter) of the input filter.
-        val translatedFilterToExpr = mutable.HashMap.empty[V2Predicate, Expression]
-        val translatedFilters = mutable.ArrayBuffer.empty[V2Predicate]
+        val translatedFilterToExpr = mutable.HashMap.empty[Predicate, Expression]
+        val translatedFilters = mutable.ArrayBuffer.empty[Predicate]
         // Catalyst filter expression that can't be translated to data source filters.
         val untranslatableExprs = mutable.ArrayBuffer.empty[Expression]
 

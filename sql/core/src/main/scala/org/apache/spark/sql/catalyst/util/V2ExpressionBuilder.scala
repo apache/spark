@@ -17,8 +17,9 @@
 
 package org.apache.spark.sql.catalyst.util
 
-import org.apache.spark.sql.catalyst.expressions.{Add, And, BinaryComparison, BinaryOperator, BitwiseAnd, BitwiseNot, BitwiseOr, BitwiseXor, CaseWhen, Divide, EqualTo, Expression, In, InSet, IsNotNull, IsNull, Literal, Multiply, Not, Or, Predicate, Remainder, StringPredicate, Subtract, UnaryMinus}
-import org.apache.spark.sql.connector.expressions.{Expression => V2Expression, FieldReference, GeneralScalarExpression, LiteralValue, Predicate => V2Predicate}
+import org.apache.spark.sql.catalyst.expressions.{Add, And, BinaryComparison, BinaryOperator, BitwiseAnd, BitwiseNot, BitwiseOr, BitwiseXor, CaseWhen, Contains, Divide, EndsWith, EqualTo, Expression, In, InSet, IsNotNull, IsNull, Literal, Multiply, Not, Or, Predicate, Remainder, StartsWith, StringPredicate, Subtract, UnaryMinus}
+import org.apache.spark.sql.connector.expressions.{Expression => V2Expression, FieldReference, GeneralScalarExpression, LiteralValue}
+import org.apache.spark.sql.connector.expressions.filter.{Predicate => V2Predicate}
 import org.apache.spark.sql.execution.datasources.PushableColumn
 
 /**
@@ -75,7 +76,12 @@ class V2ExpressionBuilder(e: Expression, nestedPredicatePushdownEnabled: Boolean
       val left = generateExpression(p.left)
       val right = generateExpression(p.right)
       if (left.isDefined && right.isDefined) {
-        Some(new V2Predicate(p.nodeName, Array[V2Expression](left.get, right.get)))
+        val name = p match {
+          case _: StartsWith => "STARTS_WITH"
+          case _: EndsWith => "ENDS_WITH"
+          case _: Contains => "CONTAINS"
+        }
+        Some(new V2Predicate(name, Array[V2Expression](left.get, right.get)))
       } else {
         None
       }

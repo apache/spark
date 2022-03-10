@@ -153,15 +153,14 @@ case class RowDataSourceScanExec(
       pushedDownOperators.limit.map(value => "PushedLimit" -> s"LIMIT $value")
     }
 
-    val filterOrPredicateInfo = if (pushedDownOperators.createdInV2) {
-      val pushedPredicates = seqToString(pushedDownOperators.pushedPredicates.map(_.describe()))
-      Some("PushedPredicates" -> pushedPredicates)
+    val pushedFilters = if (pushedDownOperators.pushedPredicates.nonEmpty) {
+      seqToString(pushedDownOperators.pushedPredicates.map(_.describe()))
     } else {
-      Some("PushedFilters" -> seqToString(markedFilters.toSeq))
+      seqToString(markedFilters.toSeq)
     }
 
-    Map("ReadSchema" -> requiredSchema.catalogString) ++
-      filterOrPredicateInfo ++
+    Map("ReadSchema" -> requiredSchema.catalogString,
+      "PushedFilters" -> pushedFilters) ++
       pushedDownOperators.aggregation.fold(Map[String, String]()) { v =>
         Map("PushedAggregates" -> seqToString(v.aggregateExpressions.map(_.describe())),
           "PushedGroupByColumns" -> seqToString(v.groupByColumns.map(_.describe())))} ++

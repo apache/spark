@@ -15,20 +15,27 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.datasources.v2
+package org.apache.spark.sql.connector.expressions.filter;
 
-import org.apache.spark.sql.connector.expressions.SortOrder
-import org.apache.spark.sql.connector.expressions.aggregate.Aggregation
-import org.apache.spark.sql.connector.expressions.filter.Predicate
+import org.apache.spark.annotation.Evolving;
 
 /**
- * Pushed down operators
+ * A predicate that evaluates to {@code true} if at least one of {@code left} or {@code right}
+ * evaluates to {@code true}.
+ *
+ * @since 3.3.0
  */
-case class PushedDownOperators(
-    aggregation: Option[Aggregation],
-    sample: Option[TableSampleInfo],
-    limit: Option[Int],
-    sortValues: Seq[SortOrder],
-    pushedPredicates: Seq[Predicate]) {
-  assert((limit.isEmpty && sortValues.isEmpty) || limit.isDefined)
+@Evolving
+public class Or extends Predicate {
+  private Predicate left;
+  private Predicate right;
+
+  public Or(Predicate left, Predicate right) {
+    super("AND", new Predicate[]{left, right});
+    this.left = left;
+    this.right = right;
+  }
+
+  public Predicate left() { return left; }
+  public Predicate right() { return right; }
 }
