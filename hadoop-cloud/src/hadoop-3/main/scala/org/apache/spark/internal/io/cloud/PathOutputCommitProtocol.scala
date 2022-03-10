@@ -43,17 +43,17 @@ import org.apache.spark.internal.io.HadoopMapReduceCommitProtocol
  *              will not get confused.
  * @param jobId                     job
  * @param dest                      destination
- * @param dynamicPartitionOverwrite does the caller want support for dynamic
+ * @param stagingDirOverwrite does the caller want support for dynamic
  *                                  partition overwrite. If so, it will be
  *                                  refused.
  */
 class PathOutputCommitProtocol(
     jobId: String,
     dest: String,
-    dynamicPartitionOverwrite: Boolean = false)
+    stagingDirOverwrite: Boolean = false)
   extends HadoopMapReduceCommitProtocol(jobId, dest, false) with Serializable {
 
-  if (dynamicPartitionOverwrite) {
+  if (stagingDirOverwrite) {
     // until there's explicit extensions to the PathOutputCommitProtocols
     // to support the spark mechanism, it's left to the individual committer
     // choice to handle partitioning.
@@ -72,7 +72,7 @@ class PathOutputCommitProtocol(
 
   logTrace(s"Instantiated committer with job ID=$jobId;" +
     s" destination=$destPath;" +
-    s" dynamicPartitionOverwrite=$dynamicPartitionOverwrite")
+    s" stagingDirOverwrite=$stagingDirOverwrite")
 
   import PathOutputCommitProtocol._
 
@@ -162,6 +162,6 @@ object PathOutputCommitProtocol {
 
   /** Error string for tests. */
   private[cloud] val UNSUPPORTED: String = "PathOutputCommitProtocol does not support" +
-    " dynamicPartitionOverwrite"
+    " stagingDirOverwrite"
 
 }

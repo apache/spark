@@ -841,8 +841,8 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
 case class CustomFileCommitProtocol(
     jobId: String,
     path: String,
-    dynamicPartitionOverwrite: Boolean = false)
-  extends SQLHadoopMapReduceCommitProtocol(jobId, path, dynamicPartitionOverwrite) {
+    stagingDirOverwrite: Boolean = false)
+  extends SQLHadoopMapReduceCommitProtocol(jobId, path, stagingDirOverwrite) {
   override def commitTask(
       taskContext: TaskAttemptContext): FileCommitProtocol.TaskCommitMessage = {
     Thread.sleep(100)

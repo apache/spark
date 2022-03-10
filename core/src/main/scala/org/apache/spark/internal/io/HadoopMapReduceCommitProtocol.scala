@@ -96,13 +96,13 @@ class HadoopMapReduceCommitProtocol(
   /**
    * Tracks partitions with default path that have new files written into them by this task,
    * e.g. a=1/b=2. Files under these partitions will be saved into staging directory and moved to
-   * destination directory at the end, if `dynamicPartitionOverwrite` is true.
+   * destination directory at the end, if `stagingDirOverwrite` is true.
    */
   @transient private var partitionPaths: mutable.Set[String] = null
 
   /**
    * The staging directory of this write job. Spark uses it to deal with files with absolute output
-   * path, or writing data into partitioned directory with dynamicPartitionOverwrite=true.
+   * path, or writing data into partitioned directory with stagingDirOverwrite=true.
    */
   protected def stagingDir = getStagingDir(path, jobId)
 
@@ -130,7 +130,7 @@ class HadoopMapReduceCommitProtocol(
       case f: FileOutputCommitter =>
         if (stagingDirOverwrite) {
           assert(dir.isDefined,
-            "The dataset to be written must be partitioned when dynamicPartitionOverwrite is true.")
+            "The dataset to be written must be partitioned when stagingDirOverwrite is true.")
           partitionPaths += dir.get
         }
         new Path(Option(f.getWorkPath).map(_.toString).getOrElse(path))

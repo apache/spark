@@ -32,7 +32,7 @@ import org.apache.spark.util.Utils
  *    will be used for tasks on executors.
  * 2. Implementations should have a constructor with 2 or 3 arguments:
  *      (jobId: String, path: String) or
- *      (jobId: String, path: String, dynamicPartitionOverwrite: Boolean)
+ *      (jobId: String, path: String, stagingDirOverwrite: Boolean)
  * 3. A committer should not be reused across multiple Spark jobs.
  *
  * The proper call sequence is:
@@ -212,7 +212,7 @@ object FileCommitProtocol extends Logging {
       s" staging=$stagingDirOverwrite")
     val clazz = Utils.classForName[FileCommitProtocol](className)
     // First try the constructor with arguments (jobId: String, outputPath: String,
-    // dynamicPartitionOverwrite: Boolean).
+    // stagingDirOverwrite: Boolean).
     // If that doesn't exist, try the one with (jobId: string, outputPath: String).
     try {
       val ctor = clazz.getDeclaredConstructor(classOf[String], classOf[String], classOf[Boolean])
