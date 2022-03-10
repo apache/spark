@@ -63,7 +63,7 @@ case class JDBCScan(
       ("[]", "[]")
     }
     super.description()  + ", prunedSchema: " + seqToString(prunedSchema) +
-      ", PushedAggregates: " + seqToString(pushedPredicates) +
+      ", PushedPredicates: " + seqToString(pushedPredicates) +
       ", PushedAggregates: " + aggString + ", PushedGroupBy: " + groupByString
   }
 
