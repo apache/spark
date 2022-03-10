@@ -410,8 +410,8 @@ private[spark] trait VolcanoTestsSuite extends BeforeAndAfterEach { k8sSuite: Ku
         m += (p -> Instant.parse(scheduledTime))
       }
       // high --> medium --> low
-      assert(m("high").isBefore(m("medium")) || m("high").equals(m("medium")))
-      assert(m("medium").isBefore(m("low")) || m("medium").equals(m("low")))
+      assert(m("high").isBefore(m("medium")))
+      assert(m("medium").isBefore(m("low")))
     }
   }
 }
