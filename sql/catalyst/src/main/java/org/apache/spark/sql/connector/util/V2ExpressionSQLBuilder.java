@@ -37,12 +37,13 @@ public class V2ExpressionSQLBuilder {
       return visitFieldReference((FieldReference) expr);
     } else if (expr instanceof GeneralScalarExpression) {
       GeneralScalarExpression e = (GeneralScalarExpression) expr;
-      List<String> children;
       String name = e.name();
       switch (name) {
-        case "IN":
-          children = Arrays.stream(e.children()).map(c -> build(c)).collect(Collectors.toList());
+        case "IN": {
+          List<String> children =
+            Arrays.stream(e.children()).map(c -> build(c)).collect(Collectors.toList());
           return visitIn(children.get(0), children.subList(1, children.size()));
+        }
         case "IS_NULL":
           return visitIsNull(build(e.children()[0]));
         case "IS_NOT_NULL":
@@ -77,9 +78,11 @@ public class V2ExpressionSQLBuilder {
           return visitNot(build(e.children()[0]));
         case "~":
           return visitUnaryArithmetic(name, build(e.children()[0]));
-        case "CASE_WHEN":
-          children = Arrays.stream(e.children()).map(c -> build(c)).collect(Collectors.toList());
+        case "CASE_WHEN": {
+          List<String> children =
+            Arrays.stream(e.children()).map(c -> build(c)).collect(Collectors.toList());
           return visitCaseWhen(children.toArray(new String[e.children().length]));
+        }
         // TODO supports other expressions
         default:
           return visitUnexpectedExpr(expr);

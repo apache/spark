@@ -406,8 +406,8 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
             f.pushedFilters()
           case _ => Array.empty[sources.Filter]
         }
-        val pushedDownOperators = PushedDownOperators(aggregation,
-          sHolder.pushedSample, sHolder.pushedLimit, sHolder.sortOrders, sHolder.pushedPredicates)
+        val pushedDownOperators = PushedDownOperators(aggregation, sHolder.pushedSample,
+          sHolder.pushedLimit, sHolder.sortOrders, sHolder.pushedPredicates, true)
         V1ScanWrapper(v1, pushedFilters, pushedDownOperators)
       case _ => scan
     }

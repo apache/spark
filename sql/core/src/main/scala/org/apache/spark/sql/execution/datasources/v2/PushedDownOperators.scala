@@ -28,6 +28,7 @@ case class PushedDownOperators(
     sample: Option[TableSampleInfo],
     limit: Option[Int],
     sortValues: Seq[SortOrder],
-    pushedPredicates: Seq[Predicate]) {
+    pushedPredicates: Seq[Predicate],
+    createdInV2: Boolean = false) {
   assert((limit.isEmpty && sortValues.isEmpty) || limit.isDefined)
 }

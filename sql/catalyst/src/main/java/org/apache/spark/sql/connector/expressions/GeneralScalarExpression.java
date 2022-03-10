@@ -22,98 +22,16 @@ import java.util.Arrays;
 import java.util.Objects;
 
 import org.apache.spark.annotation.Evolving;
+import org.apache.spark.sql.connector.expressions.Predicate;
 import org.apache.spark.sql.connector.util.V2ExpressionSQLBuilder;
 
 /**
  * The general representation of SQL scalar expressions, which contains the upper-cased
- * expression name and all the children expressions.
+ * expression name and all the children expressions. Please also see {@link Predicate}
+ * for the supported predicate expressions.
  * <p>
  * The currently supported SQL scalar expressions:
  * <ol>
- *  <li>Name: <code>IS_NULL</code>
- *   <ul>
- *    <li>SQL semantic: <code>expr IS NULL</code></li>
- *    <li>Since version: 3.3.0</li>
- *   </ul>
- *  </li>
- *  <li>Name: <code>IS_NOT_NULL</code>
- *   <ul>
- *    <li>SQL semantic: <code>expr IS NOT NULL</code></li>
- *    <li>Since version: 3.3.0</li>
- *   </ul>
- *  </li>
- *  <li>Name: <code>StartsWith</code>
- *   <ul>
- *    <li>SQL semantic: <code>StartsWith(expr1, expr2)</code></li>
- *    <li>Since version: 3.3.0</li>
- *   </ul>
- *  </li>
- *  <li>Name: <code>EndsWith</code>
- *   <ul>
- *    <li>SQL semantic: <code>EndsWith(expr1, expr2)</code></li>
- *    <li>Since version: 3.3.0</li>
- *   </ul>
- *  </li>
- *  <li>Name: <code>Contains</code>
- *   <ul>
- *    <li>SQL semantic: <code>Contains(expr1, expr2)</code></li>
- *    <li>Since version: 3.3.0</li>
- *   </ul>
- *  </li>
- *  <li>Name: <code>IN</code>
- *   <ul>
- *    <li>SQL semantic: <code>expr IN (expr1, expr2, ...)</code></li>
- *    <li>Since version: 3.3.0</li>
- *   </ul>
- *  </li>
- *  <li>Name: <code>=</code>
- *   <ul>
- *    <li>SQL semantic: <code>expr1 = expr2</code></li>
- *    <li>Since version: 3.3.0</li>
- *   </ul>
- *  </li>
- *  <li>Name: <code>!=</code>
- *   <ul>
- *    <li>SQL semantic: <code>expr1 != expr2</code></li>
- *    <li>Since version: 3.3.0</li>
- *   </ul>
- *  </li>
- *  <li>Name: <code>&lt;&gt;</code>
- *   <ul>
- *    <li>SQL semantic: <code>expr1 &lt;&gt; expr2</code></li>
- *    <li>Since version: 3.3.0</li>
- *   </ul>
- *  </li>
- *  <li>Name: <code>&lt;=&gt;</code>
- *   <ul>
- *    <li>SQL semantic: <code>expr1 &lt;=&gt; expr2</code></li>
- *    <li>Since version: 3.3.0</li>
- *   </ul>
- *  </li>
- *  <li>Name: <code>&lt;</code>
- *   <ul>
- *    <li>SQL semantic: <code>expr1 &lt; expr2</code></li>
- *    <li>Since version: 3.3.0</li>
- *   </ul>
- *  </li>
- *  <li>Name: <code>&lt;=</code>
- *   <ul>
- *    <li>SQL semantic: <code>expr1 &lt;= expr2</code></li>
- *    <li>Since version: 3.3.0</li>
- *   </ul>
- *  </li>
- *  <li>Name: <code>&gt;</code>
- *   <ul>
- *    <li>SQL semantic: <code>expr1 &gt; expr2</code></li>
- *    <li>Since version: 3.3.0</li>
- *   </ul>
- *  </li>
- *  <li>Name: <code>&gt;=</code>
- *   <ul>
- *    <li>SQL semantic: <code>expr1 &gt;= expr2</code></li>
- *    <li>Since version: 3.3.0</li>
- *   </ul>
- *  </li>
  *  <li>Name: <code>+</code>
  *   <ul>
  *    <li>SQL semantic: <code>expr1 + expr2</code></li>
@@ -159,24 +77,6 @@ import org.apache.spark.sql.connector.util.V2ExpressionSQLBuilder;
  *  <li>Name: <code>^</code>
  *   <ul>
  *    <li>SQL semantic: <code>expr1 ^ expr2</code></li>
- *    <li>Since version: 3.3.0</li>
- *   </ul>
- *  </li>
- *  <li>Name: <code>AND</code>
- *   <ul>
- *    <li>SQL semantic: <code>expr1 AND expr2</code></li>
- *    <li>Since version: 3.3.0</li>
- *   </ul>
- *  </li>
- *  <li>Name: <code>OR</code>
- *   <ul>
- *    <li>SQL semantic: <code>expr1 OR expr2</code></li>
- *    <li>Since version: 3.3.0</li>
- *   </ul>
- *  </li>
- *  <li>Name: <code>NOT</code>
- *   <ul>
- *    <li>SQL semantic: <code>NOT expr</code></li>
  *    <li>Since version: 3.3.0</li>
  *   </ul>
  *  </li>

@@ -20,14 +20,120 @@ package org.apache.spark.sql.connector.expressions;
 import org.apache.spark.annotation.Evolving;
 
 /**
- * The general representation of catalyst predicate.
+ * The general representation of catalyst predicates, which contains the upper-cased
+ * expression name and all the children expressions.
+ * <p>
+ * The currently supported catalyst predicates:
+ * <ol>
+ *  <li>Name: <code>IS_NULL</code>
+ *   <ul>
+ *    <li>SQL semantic: <code>expr IS NULL</code></li>
+ *    <li>Since version: 3.3.0</li>
+ *   </ul>
+ *  </li>
+ *  <li>Name: <code>IS_NOT_NULL</code>
+ *   <ul>
+ *    <li>SQL semantic: <code>expr IS NOT NULL</code></li>
+ *    <li>Since version: 3.3.0</li>
+ *   </ul>
+ *  </li>
+ *  <li>Name: <code>StartsWith</code>
+ *   <ul>
+ *    <li>SQL semantic: <code>StartsWith(expr1, expr2)</code></li>
+ *    <li>Since version: 3.3.0</li>
+ *   </ul>
+ *  </li>
+ *  <li>Name: <code>EndsWith</code>
+ *   <ul>
+ *    <li>SQL semantic: <code>EndsWith(expr1, expr2)</code></li>
+ *    <li>Since version: 3.3.0</li>
+ *   </ul>
+ *  </li>
+ *  <li>Name: <code>Contains</code>
+ *   <ul>
+ *    <li>SQL semantic: <code>Contains(expr1, expr2)</code></li>
+ *    <li>Since version: 3.3.0</li>
+ *   </ul>
+ *  </li>
+ *  <li>Name: <code>IN</code>
+ *   <ul>
+ *    <li>SQL semantic: <code>expr IN (expr1, expr2, ...)</code></li>
+ *    <li>Since version: 3.3.0</li>
+ *   </ul>
+ *  </li>
+ *  <li>Name: <code>=</code>
+ *   <ul>
+ *    <li>SQL semantic: <code>expr1 = expr2</code></li>
+ *    <li>Since version: 3.3.0</li>
+ *   </ul>
+ *  </li>
+ *  <li>Name: <code>!=</code>
+ *   <ul>
+ *    <li>SQL semantic: <code>expr1 != expr2</code></li>
+ *    <li>Since version: 3.3.0</li>
+ *   </ul>
+ *  </li>
+ *  <li>Name: <code>&lt;&gt;</code>
+ *   <ul>
+ *    <li>SQL semantic: <code>expr1 &lt;&gt; expr2</code></li>
+ *    <li>Since version: 3.3.0</li>
+ *   </ul>
+ *  </li>
+ *  <li>Name: <code>&lt;=&gt;</code>
+ *   <ul>
+ *    <li>SQL semantic: <code>expr1 &lt;=&gt; expr2</code></li>
+ *    <li>Since version: 3.3.0</li>
+ *   </ul>
+ *  </li>
+ *  <li>Name: <code>&lt;</code>
+ *   <ul>
+ *    <li>SQL semantic: <code>expr1 &lt; expr2</code></li>
+ *    <li>Since version: 3.3.0</li>
+ *   </ul>
+ *  </li>
+ *  <li>Name: <code>&lt;=</code>
+ *   <ul>
+ *    <li>SQL semantic: <code>expr1 &lt;= expr2</code></li>
+ *    <li>Since version: 3.3.0</li>
+ *   </ul>
+ *  </li>
+ *  <li>Name: <code>&gt;</code>
+ *   <ul>
+ *    <li>SQL semantic: <code>expr1 &gt; expr2</code></li>
+ *    <li>Since version: 3.3.0</li>
+ *   </ul>
+ *  </li>
+ *  <li>Name: <code>&gt;=</code>
+ *   <ul>
+ *    <li>SQL semantic: <code>expr1 &gt;= expr2</code></li>
+ *    <li>Since version: 3.3.0</li>
+ *   </ul>
+ *  </li>
+ *  <li>Name: <code>AND</code>
+ *   <ul>
+ *    <li>SQL semantic: <code>expr1 AND expr2</code></li>
+ *    <li>Since version: 3.3.0</li>
+ *   </ul>
+ *  </li>
+ *  <li>Name: <code>OR</code>
+ *   <ul>
+ *    <li>SQL semantic: <code>expr1 OR expr2</code></li>
+ *    <li>Since version: 3.3.0</li>
+ *   </ul>
+ *  </li>
+ *  <li>Name: <code>NOT</code>
+ *   <ul>
+ *    <li>SQL semantic: <code>NOT expr</code></li>
+ *    <li>Since version: 3.3.0</li>
+ *   </ul>
+ *  </li>
+ * </ol>
  *
  * @since 3.3.0
  */
 @Evolving
 public class Predicate extends GeneralScalarExpression {
-
-    public Predicate(String name, Expression[] children) {
-        super(name, children);
-    }
+  public Predicate(String name, Expression[] children) {
+    super(name, children);
+  }
 }

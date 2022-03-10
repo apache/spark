@@ -34,9 +34,8 @@ object PushDownUtils extends PredicateHelper {
    *
    * @return pushed filter and post-scan filters.
    */
-  def pushFilters(
-      scanBuilder: ScanBuilder, filters: Seq[Expression]): (
-    Either[Seq[sources.Filter], Seq[V2Predicate]], Seq[Expression]) = {
+  def pushFilters(scanBuilder: ScanBuilder, filters: Seq[Expression])
+      : (Either[Seq[sources.Filter], Seq[V2Predicate]], Seq[Expression]) = {
     scanBuilder match {
       case r: SupportsPushDownFilters =>
         // A map from translated data source leaf node filters to original catalyst filter
