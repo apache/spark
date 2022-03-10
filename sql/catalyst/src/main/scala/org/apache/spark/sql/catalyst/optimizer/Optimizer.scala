@@ -1690,9 +1690,9 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
    */
   private def canPushThroughCondition(plan: LogicalPlan, condition: Expression): Boolean = {
     val attributes = plan.outputSet
-    condition.exists {
-      case s: SubqueryExpression => s.plan.outputSet.intersect(attributes).isEmpty
-      case _ => true
+    !condition.exists {
+      case s: SubqueryExpression => s.plan.outputSet.intersect(attributes).nonEmpty
+      case _ => false
     }
   }
 }
