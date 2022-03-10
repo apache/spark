@@ -346,9 +346,13 @@ private[spark] trait VolcanoTestsSuite extends BeforeAndAfterEach { k8sSuite: Ku
         val templatePath = new File(
           getClass.getResource(s"/volcano/$p-priority-driver-template.yml").getFile
         ).getAbsolutePath
+        val pgTemplatePath = new File(
+          getClass.getResource(s"/volcano/$p-priority-driver-podgroup-template.yml").getFile
+        ).getAbsolutePath
         runJobAndVerify(
           p, groupLoc = Option(groupName),
-          driverTemplate = Option(templatePath)
+          driverTemplate = Option(templatePath),
+          driverPodGroupTemplate = Option(pgTemplatePath)
         )
       }
     }
@@ -370,11 +374,15 @@ private[spark] trait VolcanoTestsSuite extends BeforeAndAfterEach { k8sSuite: Ku
         val templatePath = new File(
           getClass.getResource(s"/volcano/$p-priority-driver-template.yml").getFile
         ).getAbsolutePath
+        val pgTemplatePath = new File(
+          getClass.getResource(s"/volcano/$p-priority-driver-podgroup-template.yml").getFile
+        ).getAbsolutePath
         val groupName = generateGroupName(p)
         runJobAndVerify(
           p, groupLoc = Option(groupName),
           queue = Option("queue"),
           driverTemplate = Option(templatePath),
+          driverPodGroupTemplate = Option(pgTemplatePath),
           isDriverJob = true
         )
       }
@@ -402,8 +410,8 @@ private[spark] trait VolcanoTestsSuite extends BeforeAndAfterEach { k8sSuite: Ku
         m += (p -> Instant.parse(scheduledTime))
       }
       // high --> medium --> low
-      assert(m("high").isBefore(m("medium")))
-      assert(m("medium").isBefore(m("low")))
+      assert(m("high").isBefore(m("medium")) || m("high").equals(m("medium")))
+      assert(m("medium").isBefore(m("low")) || m("medium").equals(m("low")))
     }
   }
 }
