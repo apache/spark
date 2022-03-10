@@ -214,12 +214,12 @@ private[spark] trait VolcanoTestsSuite extends BeforeAndAfterEach { k8sSuite: Ku
       .set(KUBERNETES_DRIVER_POD_FEATURE_STEPS.key, VOLCANO_FEATURE_STEP)
       .set(KUBERNETES_EXECUTOR_POD_FEATURE_STEPS.key, VOLCANO_FEATURE_STEP)
     queue.foreach { q =>
-      conf.set(KUBERNETES_DRIVER_PODGROUP_TEMPLATE_FILE.key,
+      conf.set(VolcanoFeatureStep.POD_GROUP_TEMPLATE_FILE_KEY,
         new File(
           getClass.getResource(s"/volcano/$q-driver-podgroup-template.yml").getFile
         ).getAbsolutePath)
     }
-    driverPodGroupTemplate.foreach(conf.set(KUBERNETES_DRIVER_PODGROUP_TEMPLATE_FILE.key, _))
+    driverPodGroupTemplate.foreach(conf.set(VolcanoFeatureStep.POD_GROUP_TEMPLATE_FILE_KEY, _))
     groupLoc.foreach { locator =>
       conf.set(s"${KUBERNETES_DRIVER_LABEL_PREFIX}spark-group-locator", locator)
       conf.set(s"${KUBERNETES_EXECUTOR_LABEL_PREFIX}spark-group-locator", locator)
