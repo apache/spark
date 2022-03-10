@@ -18,6 +18,7 @@
 package org.apache.spark.sql.errors
 
 import java.sql.Timestamp
+import java.time.{LocalDateTime, ZoneOffset}
 
 import org.apache.spark.{SparkArithmeticException, SparkException, SparkIllegalArgumentException, SparkRuntimeException, SparkUnsupportedOperationException, SparkUpgradeException}
 import org.apache.spark.sql.{DataFrame, QueryTest, Row}
@@ -293,5 +294,31 @@ class QueryExecutionErrorsSuite extends QueryTest
     assert(e.getSqlState === "22008")
     assert(e.getMessage ===
       "Datetime operation overflow: add 1000000 YEAR to '2022-03-09T09:02:03Z'.")
+  }
+
+  test("UNSUPPORTED_OPERATION - SPARK-38504: can't read TimestampNTZ as TimestampLTZ") {
+    val data = (1 to 10).map { i =>
+      // The second parameter is `nanoOfSecond`, while java.sql.Timestamp accepts milliseconds
+      // as input. So here we multiple the `nanoOfSecond` by NANOS_PER_MILLIS
+      val ts = LocalDateTime.ofEpochSecond(0, i * 1000000, ZoneOffset.UTC)
+      Row(ts)
+    }
+
+    val actualSchema = StructType(Seq(StructField("time", TimestampNTZType, false)))
+    val providedSchema = StructType(Seq(StructField("time", TimestampType, false)))
+
+    withTempPath { file =>
+      val df = spark.createDataFrame(sparkContext.parallelize(data), actualSchema)
+      df.write.orc(file.getCanonicalPath)
+      withAllNativeOrcReaders {
+        val e = intercept[SparkException] {
+          spark.read.schema(providedSchema).orc(file.getCanonicalPath).collect()
+        }.getCause.asInstanceOf[SparkUnsupportedOperationException]
+
+        assert(e.getErrorClass === "UNSUPPORTED_OPERATION")
+        assert(e.getMessage === "The operation is not supported: " +
+          "Unable to convert timestamp ntz of Orc to data type 'timestamp_ltz'")
+      }
+    }
   }
 }
