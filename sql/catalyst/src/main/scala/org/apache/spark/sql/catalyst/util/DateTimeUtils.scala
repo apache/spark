@@ -1196,29 +1196,36 @@ object DateTimeUtils {
    * @return A timestamp value, expressed in microseconds since 1970-01-01 00:00:00Z.
    */
   def timestampAdd(unit: String, quantity: Int, micros: Long, zoneId: ZoneId): Long = {
-    unit.toUpperCase(Locale.ROOT) match {
-      case "MICROSECOND" =>
-        timestampAddDayTime(micros, quantity, zoneId)
-      case "MILLISECOND" =>
-        timestampAddDayTime(micros, quantity * MICROS_PER_MILLIS, zoneId)
-      case "SECOND" =>
-        timestampAddDayTime(micros, quantity * MICROS_PER_SECOND, zoneId)
-      case "MINUTE" =>
-        timestampAddDayTime(micros, quantity * MICROS_PER_MINUTE, zoneId)
-      case "HOUR" =>
-        timestampAddDayTime(micros, quantity * MICROS_PER_HOUR, zoneId)
-      case "DAY" | "DAYOFYEAR" =>
-        timestampAddDayTime(micros, quantity * MICROS_PER_DAY, zoneId)
-      case "WEEK" =>
-        timestampAddDayTime(micros, quantity * MICROS_PER_DAY * DAYS_PER_WEEK, zoneId)
-      case "MONTH" =>
-        timestampAddMonths(micros, quantity, zoneId)
-      case "QUARTER" =>
-        timestampAddMonths(micros, quantity * 3, zoneId)
-      case "YEAR" =>
-        timestampAddMonths(micros, quantity * MONTHS_PER_YEAR, zoneId)
-      case _ =>
+    try {
+      unit.toUpperCase(Locale.ROOT) match {
+        case "MICROSECOND" =>
+          timestampAddDayTime(micros, quantity, zoneId)
+        case "MILLISECOND" =>
+          timestampAddDayTime(micros, quantity * MICROS_PER_MILLIS, zoneId)
+        case "SECOND" =>
+          timestampAddDayTime(micros, quantity * MICROS_PER_SECOND, zoneId)
+        case "MINUTE" =>
+          timestampAddDayTime(micros, quantity * MICROS_PER_MINUTE, zoneId)
+        case "HOUR" =>
+          timestampAddDayTime(micros, quantity * MICROS_PER_HOUR, zoneId)
+        case "DAY" | "DAYOFYEAR" =>
+          timestampAddDayTime(micros, quantity * MICROS_PER_DAY, zoneId)
+        case "WEEK" =>
+          timestampAddDayTime(micros, quantity * MICROS_PER_DAY * DAYS_PER_WEEK, zoneId)
+        case "MONTH" =>
+          timestampAddMonths(micros, quantity, zoneId)
+        case "QUARTER" =>
+          timestampAddMonths(micros, quantity * 3, zoneId)
+        case "YEAR" =>
+          timestampAddMonths(micros, quantity * MONTHS_PER_YEAR, zoneId)
+      }
+    } catch {
+      case _: scala.MatchError =>
         throw QueryExecutionErrors.invalidUnitInTimestampAdd(unit)
+      case _: ArithmeticException | _: DateTimeException =>
+        throw QueryExecutionErrors.timestampAddOverflowError(micros, quantity, unit)
+      case e: Throwable =>
+        throw new IllegalStateException(s"Failure of 'timestampAdd': ${e.getMessage}")
     }
   }
 

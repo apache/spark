@@ -19,7 +19,7 @@ package org.apache.spark.sql.errors
 
 import java.sql.Timestamp
 
-import org.apache.spark.{SparkException, SparkIllegalArgumentException, SparkRuntimeException, SparkUnsupportedOperationException, SparkUpgradeException}
+import org.apache.spark.{SparkArithmeticException, SparkException, SparkIllegalArgumentException, SparkRuntimeException, SparkUnsupportedOperationException, SparkUpgradeException}
 import org.apache.spark.sql.{DataFrame, QueryTest, Row}
 import org.apache.spark.sql.execution.datasources.orc.OrcTest
 import org.apache.spark.sql.execution.datasources.parquet.ParquetTest
@@ -283,5 +283,15 @@ class QueryExecutionErrorsSuite extends QueryTest
           "Unable to convert timestamp of Orc to data type 'timestamp_ntz'")
       }
     }
+  }
+
+  test("DATETIME_OVERFLOW: timestampadd() overflows its input timestamp") {
+    val e = intercept[SparkArithmeticException] {
+      sql("select timestampadd(YEAR, 1000000, timestamp'2022-03-09 01:02:03')").collect()
+    }
+    assert(e.getErrorClass === "DATETIME_OVERFLOW")
+    assert(e.getSqlState === "22008")
+    assert(e.getMessage ===
+      "Datetime operation overflow: add 1000000 YEAR to '2022-03-09T09:02:03Z'.")
   }
 }
