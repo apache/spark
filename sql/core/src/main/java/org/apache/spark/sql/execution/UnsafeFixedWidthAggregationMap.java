@@ -227,6 +227,10 @@ public final class UnsafeFixedWidthAggregationMap {
     return map.getAvgHashProbeBucketListIterations();
   }
 
+  public int getNumKeys() {
+    return map.numKeys();
+  }
+
   /**
    * Sorts the map's records in place, spill them to disk, and returns an [[UnsafeKVExternalSorter]]
    *

@@ -75,6 +75,8 @@ abstract class HashMapGenerator(
        |
        |${generateRowIterator()}
        |
+       |${generateGetNumKeys()}
+       |
        |${generateClose()}
        |}
      """.stripMargin
@@ -132,6 +134,14 @@ abstract class HashMapGenerator(
     s"""
        |public void close() {
        |  batch.close();
+       |}
+     """.stripMargin
+  }
+
+  protected final def generateGetNumKeys(): String = {
+    s"""
+       |public int getNumKeys() {
+       |  return batch.numRows();
        |}
      """.stripMargin
   }
