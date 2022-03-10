@@ -6904,6 +6904,16 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         3     D     7     2
         2  None     8     4
 
+        Ignore index for the resulting axis
+
+        >>> df.sort_values(by=['col1'], ignore_index=True)
+           col1  col2  col3
+        0     A     2     0
+        1     B     9     9
+        2     C     4     3
+        3     D     7     2
+        4  None     8     4
+
         Sort Descending
 
         >>> df.sort_values(by='col1', ascending=False)
