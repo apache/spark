@@ -27,7 +27,7 @@ fi
 # Any changes need to be reflected there.
 CLASS="org.apache.spark.deploy.master.Master"
 
-if [[ "$*" = *--help ]] || [[ "$*" = *-h ]]; then
+if [[ "$@" = *--help ]] || [[ "$@" = *-h ]]; then
   echo "Usage: ./sbin/start-master.sh [options]"
   pattern="Usage:"
   pattern+="\|Using Spark's default log4j profile:"

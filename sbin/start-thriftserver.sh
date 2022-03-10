@@ -50,7 +50,7 @@ function usage {
   "${SPARK_HOME}"/bin/spark-class $CLASS --help 2>&1 | grep -v "$pattern" 1>&2
 }
 
-if [[ "$*" = *--help ]] || [[ "$*" = *-h ]]; then
+if [[ "$@" = *--help ]] || [[ "$@" = *-h ]]; then
   usage
   exit 1
 fi

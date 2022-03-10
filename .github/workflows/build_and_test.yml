@@ -522,7 +522,7 @@ jobs:
         apt-get install -y nodejs npm
     - name: Install SHELL linter dependencies
       run: |
-        apt-get install -y shellcheck
+        apt-get install -y shellcheck shfmt
     - name: Install dependencies for documentation generation
       run: |
         # pandoc is required to generate PySpark APIs as well in nbsphinx.

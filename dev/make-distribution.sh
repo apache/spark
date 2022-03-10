@@ -108,7 +108,7 @@ fi
 
 if [ -z "$JAVA_HOME" ]; then
   echo "Error: JAVA_HOME is not set, cannot proceed."
-  exit 255
+  exit -1
 fi
 
 if [ $(command -v git) ]; then
@@ -123,26 +123,26 @@ fi
 if [ ! "$(command -v "$MVN")" ] ; then
     echo -e "Could not locate Maven command: '$MVN'."
     echo -e "Specify the Maven command with the --mvn flag"
-    exit 255;
+    exit -1;
 fi
 
-VERSION=$("$MVN" help:evaluate -Dexpression=project.version "$@" \
+VERSION=$("$MVN" help:evaluate -Dexpression=project.version $@ \
     | grep -v "INFO"\
     | grep -v "WARNING"\
     | tail -n 1)
-SCALA_VERSION=$("$MVN" help:evaluate -Dexpression=scala.binary.version "$@" \
+SCALA_VERSION=$("$MVN" help:evaluate -Dexpression=scala.binary.version $@ \
     | grep -v "INFO"\
     | grep -v "WARNING"\
     | tail -n 1)
-SPARK_HADOOP_VERSION=$("$MVN" help:evaluate -Dexpression=hadoop.version "$@" \
+SPARK_HADOOP_VERSION=$("$MVN" help:evaluate -Dexpression=hadoop.version $@ \
     | grep -v "INFO"\
     | grep -v "WARNING"\
     | tail -n 1)
-SPARK_HIVE=$("$MVN" help:evaluate -Dexpression=project.activeProfiles -pl sql/hive "$@" \
+SPARK_HIVE=$("$MVN" help:evaluate -Dexpression=project.activeProfiles -pl sql/hive $@ \
     | grep -v "INFO"\
     | grep -v "WARNING"\
     | fgrep --count "<id>hive</id>";\
-    # Reset exit status to 0, otherwise the script stops here if the last grep finds nothing
+    # Reset exit status to 0, otherwise the script stops here if the last grep finds nothing\
     # because we use "set -o pipefail"
     echo -n)
 
@@ -170,7 +170,7 @@ BUILD_COMMAND=("$MVN" clean package -DskipTests $@)
 
 # Actually build the jar
 echo -e "\nBuilding with..."
-echo -e "\$ ${BUILD_COMMAND[*]}\n"
+echo -e "\$ ${BUILD_COMMAND[@]}\n"
 
 "${BUILD_COMMAND[@]}"
 
@@ -178,20 +178,16 @@ echo -e "\$ ${BUILD_COMMAND[*]}\n"
 rm -rf "$DISTDIR"
 mkdir -p "$DISTDIR/jars"
 echo "Spark $VERSION$GITREVSTRING built for Hadoop $SPARK_HADOOP_VERSION" > "$DISTDIR/RELEASE"
-echo "Build flags: $*" >> "$DISTDIR/RELEASE"
+echo "Build flags: $@" >> "$DISTDIR/RELEASE"
 
 # Copy jars
 cp "$SPARK_HOME"/assembly/target/scala*/jars/* "$DISTDIR/jars/"
 
 # Only create the yarn directory if the yarn artifacts were built.
-for file in "$SPARK_HOME"/common/network-yarn/target/scala*/spark-*-yarn-shuffle.jar
-do
-  if [ -f "$file" ]; then
-    mkdir "$DISTDIR/yarn"
-    cp "$SPARK_HOME"/common/network-yarn/target/scala*/spark-*-yarn-shuffle.jar "$DISTDIR/yarn"
-    break
-  fi
-done
+if [ -f "$SPARK_HOME"/common/network-yarn/target/scala*/spark-*-yarn-shuffle.jar ]; then
+  mkdir "$DISTDIR/yarn"
+  cp "$SPARK_HOME"/common/network-yarn/target/scala*/spark-*-yarn-shuffle.jar "$DISTDIR/yarn"
+fi
 
 # Only create and copy the dockerfiles directory if the kubernetes artifacts were built.
 if [ -d "$SPARK_HOME"/resource-managers/kubernetes/core/target/ ]; then

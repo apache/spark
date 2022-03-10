@@ -1,5 +1,3 @@
-#!/usr/bin/env bash
-
 #
 # Licensed to the Apache Software Foundation (ASF) under one or more
 # contributor license agreements.  See the NOTICE file distributed with
@@ -24,6 +22,6 @@ cd -
 rm -rf $BASEDIR/gen-java
 mkdir -p $BASEDIR/gen-java
 
-for input in $BASEDIR/thrift/*.thrift; do
+for input in `ls $BASEDIR/thrift/*.thrift`; do
     thrift --gen java -out $BASEDIR/gen-java $input
 done

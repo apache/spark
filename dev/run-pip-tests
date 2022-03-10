@@ -105,7 +105,7 @@ for python in "${PYTHON_EXECS[@]}"; do
     sdists=(*.tar.gz)
     if [ ${#sdists[@]} -ne 1 ]; then
       echo "Unexpected number of targets found in dist directory - please cleanup existing sdists first."
-      exit 255
+      exit -1
     fi
     # Do the actual installation
     cd "$FWDIR"

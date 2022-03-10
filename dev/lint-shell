@@ -27,13 +27,27 @@ if ! type "shellcheck" > /dev/null; then
   exit 1
 fi
 
+if ! type "shfmt" > /dev/null; then
+  echo "ERROR: You should install shfmt"
+  exit 1
+fi
+
 pushd "$SPARK_ROOT_DIR" &> /dev/null
 
-SHELL_SOURCE="$(git ls-files '*.sh' '*.bash')"
-echo ${SHELL_SOURCE[*]} | xargs shellcheck -S error;
-lint_status=$?
+SHELL_SOURCE="$(shfmt -f $SPARK_ROOT_DIR)"
 
-if [ "$lint_status" = "0" ] ; then
+# https://github.com/koalaman/shellcheck/wiki
+echo ${SHELL_SOURCE[*]} | xargs shellcheck -S error;
+code_style_check_status=$?
+
+# https://github.com/mvdan/sh/blob/master/cmd/shfmt/shfmt.1.scd
+# -i 2 Indent with 2 spaces
+# -sr Redirect operators will be followed by a space.
+# -bn Binary ops like && and | may start a line.
+echo ${SHELL_SOURCE[*]} | xargs shfmt -d -i 2 -sr -bn;
+indentition_check_status=$?
+
+if [ "$code_style_check_status" = "0" ] && [ "$indentition_check_status" = "0" ]; then
    echo "lint-shell checks passed."
 else
   echo "lint-shell checks failed."

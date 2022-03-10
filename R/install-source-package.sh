@@ -40,7 +40,7 @@ fi
 if [ ! -f "$FWDIR/SparkR_$VERSION.tar.gz" ]; then
   echo -e "R source package file '$FWDIR/SparkR_$VERSION.tar.gz' is not found."
   echo -e "Please build R source package with check-cran.sh"
-  exit 255;
+  exit -1;
 fi
 
 echo "Removing lib path and installing from source package"

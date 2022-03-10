@@ -42,7 +42,7 @@ EOF
 set -e
 set -o pipefail
 
-if [[ "$*" == *"help"* ]]; then
+if [[ $@ == *"help"* ]]; then
   exit_with_usage
 fi
 
