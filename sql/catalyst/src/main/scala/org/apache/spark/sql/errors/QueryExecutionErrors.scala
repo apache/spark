@@ -1998,14 +1998,9 @@ object QueryExecutionErrors {
       messageParameters = Array("unit", "timestampdiff", unit))
   }
 
-  def datetimeOverflowError(
-      func: String,
-      micros: Long,
-      amount: Int,
-      unit: String): ArithmeticException = {
-    val instant = DateTimeUtils.microsToInstant(micros).toString
+  def timestampAddOverflowError(micros: Long, amount: Int, unit: String): ArithmeticException = {
     new SparkArithmeticException(
       errorClass = "DATETIME_OVERFLOW",
-      messageParameters = Array(func, instant, amount.toString, unit))
+      messageParameters = Array(s"add $amount $unit to '${DateTimeUtils.microsToInstant(micros)}'"))
   }
 }

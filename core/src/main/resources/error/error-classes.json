@@ -26,7 +26,7 @@
     "message" : [ "Another instance of this query was just started by a concurrent session." ]
   },
   "DATETIME_OVERFLOW" : {
-    "message" : [ "The '%s' function overflows the input '%s' timestamp by %s %s." ],
+    "message" : [ "Datetime operation overflow: %s." ],
     "sqlState" : "22008"
   },
   "DIVIDE_BY_ZERO" : {

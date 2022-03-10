@@ -1201,9 +1201,9 @@ object DateTimeUtils {
       case _: scala.MatchError =>
         throw QueryExecutionErrors.invalidUnitInTimestampAdd(unit)
       case _: ArithmeticException | _: DateTimeException =>
-        throw QueryExecutionErrors.datetimeOverflowError("timestampadd", micros, quantity, unit)
+        throw QueryExecutionErrors.timestampAddOverflowError(micros, quantity, unit)
       case e: Throwable =>
-        throw new IllegalStateException(s"Failure of 'timestampadd': ${e.getMessage}")
+        throw new IllegalStateException(s"Failure of 'timestampAdd': ${e.getMessage}")
     }
   }
 
