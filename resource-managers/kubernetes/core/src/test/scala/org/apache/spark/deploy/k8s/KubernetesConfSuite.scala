@@ -170,4 +170,12 @@ class KubernetesConfSuite extends SparkFunSuite {
         "executorEnvVars4-var4" -> "executorEnvVars4",
         "executorEnvVars5-var5" -> "executorEnvVars5/var5"))
   }
+
+  test("SPARK-37735: access appId in KubernetesConf") {
+    val sparkConf = new SparkConf(false)
+    val driverConf = KubernetesTestConf.createDriverConf(sparkConf)
+    val execConf = KubernetesTestConf.createExecutorConf(sparkConf)
+    assert(driverConf.asInstanceOf[KubernetesConf].appId === KubernetesTestConf.APP_ID)
+    assert(execConf.asInstanceOf[KubernetesConf].appId === KubernetesTestConf.APP_ID)
+  }
 }

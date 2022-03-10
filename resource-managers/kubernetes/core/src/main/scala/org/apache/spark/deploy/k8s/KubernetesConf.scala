@@ -41,6 +41,7 @@ private[spark] abstract class KubernetesConf(val sparkConf: SparkConf) {
   def secretEnvNamesToKeyRefs: Map[String, String]
   def secretNamesToMountPaths: Map[String, String]
   def volumes: Seq[KubernetesVolumeSpec]
+  def appId: String
 
   def appName: String = get("spark.app.name", "spark")
 
