@@ -6885,24 +6885,25 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         ...     'col2': [2, 9, 8, 7, 4],
         ...     'col3': [0, 9, 4, 2, 3],
         ...   },
-        ...   columns=['col1', 'col2', 'col3'])
+        ...   columns=['col1', 'col2', 'col3'],
+        ...   index=['a', 'b', 'c', 'd', 'e'])
         >>> df
            col1  col2  col3
-        0     A     2     0
-        1     B     9     9
-        2  None     8     4
-        3     D     7     2
-        4     C     4     3
+        a     A     2     0
+        b     B     9     9
+        c  None     8     4
+        d     D     7     2
+        e     C     4     3
 
         Sort by col1
 
         >>> df.sort_values(by=['col1'])
            col1  col2  col3
-        0     A     2     0
-        1     B     9     9
-        4     C     4     3
-        3     D     7     2
-        2  None     8     4
+        a     A     2     0
+        b     B     9     9
+        e     C     4     3
+        d     D     7     2
+        c  None     8     4
 
         Ignore index for the resulting axis
 
@@ -6918,11 +6919,11 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         >>> df.sort_values(by='col1', ascending=False)
            col1  col2  col3
-        3     D     7     2
-        4     C     4     3
-        1     B     9     9
-        0     A     2     0
-        2  None     8     4
+        d     D     7     2
+        e     C     4     3
+        b     B     9     9
+        a     A     2     0
+        c  None     8     4
 
         Sort by multiple columns
 
