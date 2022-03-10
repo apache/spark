@@ -98,6 +98,21 @@ class ErrorParserSuite extends AnalysisTest {
       "Syntax error at or near", "^^^")
   }
 
+  test("empty input") {
+    val expectedErrMsg = SparkThrowableHelper.getMessage("PARSE_EMPTY_STATEMENT", Array[String]())
+    intercept("", Some("PARSE_EMPTY_STATEMENT"), expectedErrMsg)
+    intercept("   ", Some("PARSE_EMPTY_STATEMENT"), expectedErrMsg)
+    intercept(" \n", Some("PARSE_EMPTY_STATEMENT"), expectedErrMsg)
+  }
+
+  test("jargon token substitute to user-facing language") {
+    // '<EOF>' -> end of input
+    intercept("select count(*", "PARSE_INPUT_MISMATCHED",
+      1, 14, 14, "Syntax error at or near end of input")
+    intercept("select 1 as a from", "PARSE_INPUT_MISMATCHED",
+      1, 18, 18, "Syntax error at or near end of input")
+  }
+
   test("semantic errors") {
     intercept("select *\nfrom r\norder by q\ncluster by q", 3, 0, 11,
       "Combination of ORDER BY/SORT BY/DISTRIBUTE BY/CLUSTER BY is not supported",

@@ -1003,7 +1003,7 @@ case class Aggregate(
     groupingExpressions.nonEmpty && aggregateExpressions.map {
       case Alias(child, _) => child
       case e => e
-    }.forall(a => groupingExpressions.exists(g => a.semanticEquals(g)))
+    }.forall(a => a.foldable || groupingExpressions.exists(g => a.semanticEquals(g)))
   }
 }
 

@@ -28,7 +28,7 @@ To run tests with Hadoop 2.x instead of Hadoop 3.x, use `--hadoop-profile`.
 
     ./dev/dev-run-integration-tests.sh --hadoop-profile hadoop-2
 
-The minimum tested version of Minikube is 1.7.3. The kube-dns addon must be enabled. Minikube should
+The minimum tested version of Minikube is 1.18.0. The kube-dns addon must be enabled. Minikube should
 run with a minimum of 4 CPUs and 6G of memory:
 
     minikube start --cpus 4 --memory 6144
@@ -47,7 +47,7 @@ default this is set to `minikube`, the available backends are their prerequisite
 
 ### `minikube`
 
-Uses the local `minikube` cluster, this requires that `minikube` 1.7.3 or greater be installed and that it be allocated
+Uses the local `minikube` cluster, this requires that `minikube` 1.18.0 or greater be installed and that it be allocated
 at least 4 CPUs and 6GB memory (some users have reported success with as few as 3 CPUs and 4GB memory).  The tests will 
 check if `minikube` is started and abort early if it isn't currently running.
 
@@ -304,4 +304,25 @@ You can also specify your specific dockerfile to build JVM/Python/R based image 
         -Dspark.kubernetes.test.dockerFile=/path/to/Dockerfile \
         -Dspark.kubernetes.test.pyDockerFile=/path/to/py/Dockerfile \
         -Dspark.kubernetes.test.rDockerFile=/path/to/r/Dockerfile \
+        'kubernetes-integration-tests/test'
+
+# Running the Volcano Integration Tests
+
+Prerequisites
+- Install Volcano according to [link](https://volcano.sh/en/docs/installation/).
+- A minimum of 6 CPUs and 9G of memory is required to complete all Volcano test cases.
+
+You can specify `-Pvolcano` to enable volcano module to run all Kubernetes and Volcano tests
+
+    build/sbt -Pvolcano -Pkubernetes -Pkubernetes-integration-tests \
+        -Dtest.exclude.tags=minikube \
+        -Dspark.kubernetes.test.deployMode=docker-desktop \
+        'kubernetes-integration-tests/test'
+
+You can also specify `volcano` tag to only run Volcano test:
+
+    build/sbt -Pvolcano -Pkubernetes -Pkubernetes-integration-tests \
+        -Dtest.include.tags=volcano \
+        -Dtest.exclude.tags=minikube \
+        -Dspark.kubernetes.test.deployMode=docker-desktop \
         'kubernetes-integration-tests/test'

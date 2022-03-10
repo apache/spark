@@ -2837,6 +2837,9 @@ class Analyzer(override val catalogManager: CatalogManager)
           p
         }
 
+      case g @ Generate(GeneratorOuter(generator), _, _, _, _, _) =>
+        g.copy(generator = generator, outer = true)
+
       case g: Generate => g
 
       case p if p.expressions.exists(hasGenerator) =>
