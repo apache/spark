@@ -40,7 +40,12 @@ case class ReferenceEqualPlanWrapper(plan: LogicalPlan) {
 
 object DeduplicateRelations extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = {
-    renewDuplicatedRelations(mutable.HashSet.empty, plan)._1.resolveOperatorsUpWithPruning(
+    val newPlan = renewDuplicatedRelations(mutable.HashSet.empty, plan)._1
+    if (newPlan.find(p => p.resolved && p.missingInput.nonEmpty).isDefined) {
+      // Wait for `ResolveMissingReferences` to resolve missing attributes first
+      return newPlan
+    }
+    newPlan.resolveOperatorsUpWithPruning(
       _.containsAnyPattern(JOIN, LATERAL_JOIN, AS_OF_JOIN, INTERSECT, EXCEPT, UNION, COMMAND),
       ruleId) {
       case p: LogicalPlan if !p.childrenResolved => p

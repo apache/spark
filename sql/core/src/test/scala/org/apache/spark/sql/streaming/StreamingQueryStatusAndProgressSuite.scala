@@ -237,7 +237,7 @@ class StreamingQueryStatusAndProgressSuite extends StreamTest with Eventually {
       val inputData = MemoryStream[Int]
 
       val query = inputData.toDS().toDF("value")
-        .select('value)
+        .select(Symbol("value"))
         .groupBy($"value")
         .agg(count("*"))
         .writeStream

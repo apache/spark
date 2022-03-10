@@ -21,7 +21,7 @@ import java.io.{File, FileOutputStream, IOException}
 import java.net.URI
 
 import scala.collection.mutable
-import scala.io.Source
+import scala.io.{Codec, Source}
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, FileSystem, Path}
@@ -114,7 +114,7 @@ abstract class EventLogFileWritersSuite extends SparkFunSuite with LocalSparkCon
   protected def readLinesFromEventLogFile(log: Path, fs: FileSystem): List[String] = {
     val logDataStream = EventLogFileReader.openEventLog(log, fs)
     try {
-      Source.fromInputStream(logDataStream).getLines().toList
+      Source.fromInputStream(logDataStream)(Codec.UTF8).getLines().toList
     } finally {
       logDataStream.close()
     }

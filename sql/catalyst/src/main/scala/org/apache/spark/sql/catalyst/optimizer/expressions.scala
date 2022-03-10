@@ -21,7 +21,7 @@ import scala.collection.immutable.HashSet
 import scala.collection.mutable.{ArrayBuffer, Stack}
 
 import org.apache.spark.sql.catalyst.analysis._
-import org.apache.spark.sql.catalyst.expressions.{BinaryExpression, MultiLikeBase, _}
+import org.apache.spark.sql.catalyst.expressions.{MultiLikeBase, _}
 import org.apache.spark.sql.catalyst.expressions.Literal.{FalseLiteral, TrueLiteral}
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.expressions.objects.AssertNotNull
@@ -615,17 +615,6 @@ object PushFoldableIntoBranches extends Rule[LogicalPlan] with PredicateHelper {
     case _ => false
   }
 
-  // Not all BinaryExpression can be pushed into (if / case) branches.
-  private def supportedBinaryExpression(e: BinaryExpression): Boolean = e match {
-    case _: BinaryComparison | _: StringPredicate | _: StringRegexExpression => true
-    case _: BinaryArithmetic => true
-    case _: BinaryMathExpression => true
-    case _: AddMonths | _: DateAdd | _: DateAddInterval | _: DateDiff | _: DateSub |
-         _: DateAddYMInterval | _: TimestampAddYMInterval | _: TimeAdd => true
-    case _: FindInSet | _: RoundBase => true
-    case _ => false
-  }
-
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
     _.containsAnyPattern(CASE_WHEN, IF), ruleId) {
     case q: LogicalPlan => q.transformExpressionsUpWithPruning(
@@ -642,30 +631,26 @@ object PushFoldableIntoBranches extends Rule[LogicalPlan] with PredicateHelper {
           branches.map(e => e.copy(_2 = u.withNewChildren(Array(e._2)))),
           Some(u.withNewChildren(Array(elseValue.getOrElse(Literal(null, c.dataType))))))
 
-      case b @ BinaryExpression(i @ If(_, trueValue, falseValue), right)
-          if supportedBinaryExpression(b) && right.foldable &&
-            atMostOneUnfoldable(Seq(trueValue, falseValue)) =>
+      case SupportedBinaryExpr(b, i @ If(_, trueValue, falseValue), right)
+          if right.foldable && atMostOneUnfoldable(Seq(trueValue, falseValue)) =>
         i.copy(
           trueValue = b.withNewChildren(Array(trueValue, right)),
           falseValue = b.withNewChildren(Array(falseValue, right)))
 
-      case b @ BinaryExpression(left, i @ If(_, trueValue, falseValue))
-          if supportedBinaryExpression(b) && left.foldable &&
-            atMostOneUnfoldable(Seq(trueValue, falseValue)) =>
+      case SupportedBinaryExpr(b, left, i @ If(_, trueValue, falseValue))
+          if left.foldable && atMostOneUnfoldable(Seq(trueValue, falseValue)) =>
         i.copy(
           trueValue = b.withNewChildren(Array(left, trueValue)),
           falseValue = b.withNewChildren(Array(left, falseValue)))
 
-      case b @ BinaryExpression(c @ CaseWhen(branches, elseValue), right)
-          if supportedBinaryExpression(b) && right.foldable &&
-            atMostOneUnfoldable(branches.map(_._2) ++ elseValue) =>
+      case SupportedBinaryExpr(b, c @ CaseWhen(branches, elseValue), right)
+          if right.foldable && atMostOneUnfoldable(branches.map(_._2) ++ elseValue) =>
         c.copy(
           branches.map(e => e.copy(_2 = b.withNewChildren(Array(e._2, right)))),
           Some(b.withNewChildren(Array(elseValue.getOrElse(Literal(null, c.dataType)), right))))
 
-      case b @ BinaryExpression(left, c @ CaseWhen(branches, elseValue))
-          if supportedBinaryExpression(b) && left.foldable &&
-            atMostOneUnfoldable(branches.map(_._2) ++ elseValue) =>
+      case SupportedBinaryExpr(b, left, c @ CaseWhen(branches, elseValue))
+          if left.foldable && atMostOneUnfoldable(branches.map(_._2) ++ elseValue) =>
         c.copy(
           branches.map(e => e.copy(_2 = b.withNewChildren(Array(left, e._2)))),
           Some(b.withNewChildren(Array(left, elseValue.getOrElse(Literal(null, c.dataType))))))
@@ -673,6 +658,21 @@ object PushFoldableIntoBranches extends Rule[LogicalPlan] with PredicateHelper {
   }
 }
 
+object SupportedBinaryExpr {
+  def unapply(expr: Expression): Option[(Expression, Expression, Expression)] = expr match {
+    case _: BinaryComparison | _: StringPredicate | _: StringRegexExpression =>
+      Some(expr, expr.children.head, expr.children.last)
+    case _: BinaryArithmetic => Some(expr, expr.children.head, expr.children.last)
+    case _: BinaryMathExpression => Some(expr, expr.children.head, expr.children.last)
+    case _: AddMonths | _: DateAdd | _: DateAddInterval | _: DateDiff | _: DateSub |
+         _: DateAddYMInterval | _: TimestampAddYMInterval | _: TimeAdd =>
+      Some(expr, expr.children.head, expr.children.last)
+    case _: FindInSet | _: RoundBase => Some(expr, expr.children.head, expr.children.last)
+    case BinaryPredicate(expr) =>
+      Some(expr, expr.arguments.head, expr.arguments.last)
+    case _ => None
+  }
+}
 
 /**
  * Simplifies LIKE expressions that do not need full regular expressions to evaluate the condition.

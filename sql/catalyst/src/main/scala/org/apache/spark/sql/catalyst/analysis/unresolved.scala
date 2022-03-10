@@ -591,7 +591,7 @@ case class GetViewColumnByNameAndOrdinal(
   override def dataType: DataType = throw new UnresolvedException("dataType")
   override def nullable: Boolean = throw new UnresolvedException("nullable")
   override lazy val resolved = false
-  override def stringArgs: Iterator[Any] = super.stringArgs.toSeq.dropRight(1).toIterator
+  override def stringArgs: Iterator[Any] = super.stringArgs.toSeq.dropRight(1).iterator
 }
 
 /**

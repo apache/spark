@@ -341,7 +341,7 @@ class DataFrameSetOperationsSuite extends QueryTest with SharedSparkSession {
     ).toDF("date", "timestamp", "decimal")
 
     val widenTypedRows = Seq(
-      (new Timestamp(2), 10.5D, "string")
+      (new Timestamp(2), 10.5D, "2021-01-01 00:00:00")
     ).toDF("date", "timestamp", "decimal")
 
     dates.union(widenTypedRows).collect()
@@ -538,24 +538,25 @@ class DataFrameSetOperationsSuite extends QueryTest with SharedSparkSession {
   }
 
   test("union by name - type coercion") {
-    var df1 = Seq((1, "a")).toDF("c0", "c1")
-    var df2 = Seq((3, 1L)).toDF("c1", "c0")
-    checkAnswer(df1.unionByName(df2), Row(1L, "a") :: Row(1L, "3") :: Nil)
-
-    df1 = Seq((1, 1.0)).toDF("c0", "c1")
-    df2 = Seq((8L, 3.0)).toDF("c1", "c0")
+    var df1 = Seq((1, 1.0)).toDF("c0", "c1")
+    var df2 = Seq((8L, 3.0)).toDF("c1", "c0")
     checkAnswer(df1.unionByName(df2), Row(1.0, 1.0) :: Row(3.0, 8.0) :: Nil)
+    if (!conf.ansiEnabled) {
+      df1 = Seq((1, "a")).toDF("c0", "c1")
+      df2 = Seq((3, 1L)).toDF("c1", "c0")
+      checkAnswer(df1.unionByName(df2), Row(1L, "a") :: Row(1L, "3") :: Nil)
 
-    df1 = Seq((2.0f, 7.4)).toDF("c0", "c1")
-    df2 = Seq(("a", 4.0)).toDF("c1", "c0")
-    checkAnswer(df1.unionByName(df2), Row(2.0, "7.4") :: Row(4.0, "a") :: Nil)
+      df1 = Seq((2.0f, 7.4)).toDF("c0", "c1")
+      df2 = Seq(("a", 4.0)).toDF("c1", "c0")
+      checkAnswer(df1.unionByName(df2), Row(2.0, "7.4") :: Row(4.0, "a") :: Nil)
 
-    df1 = Seq((1, "a", 3.0)).toDF("c0", "c1", "c2")
-    df2 = Seq((1.2, 2, "bc")).toDF("c2", "c0", "c1")
-    val df3 = Seq(("def", 1.2, 3)).toDF("c1", "c2", "c0")
-    checkAnswer(df1.unionByName(df2.unionByName(df3)),
-      Row(1, "a", 3.0) :: Row(2, "bc", 1.2) :: Row(3, "def", 1.2) :: Nil
-    )
+      df1 = Seq((1, "a", 3.0)).toDF("c0", "c1", "c2")
+      df2 = Seq((1.2, 2, "bc")).toDF("c2", "c0", "c1")
+      val df3 = Seq(("def", 1.2, 3)).toDF("c1", "c2", "c0")
+      checkAnswer(df1.unionByName(df2.unionByName(df3)),
+        Row(1, "a", 3.0) :: Row(2, "bc", 1.2) :: Row(3, "def", 1.2) :: Nil
+      )
+    }
   }
 
   test("union by name - check case sensitivity") {
