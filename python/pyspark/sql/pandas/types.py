@@ -93,7 +93,16 @@ def to_arrow_type(dt: DataType) -> "pa.DataType":
                 raise TypeError(
                     "Array of StructType is only supported with pyarrow 2.0.0 and above"
                 )
-        arrow_type = pa.list_(to_arrow_type(dt.elementType))
+            dt_nested = dt.elementType
+            if any(type(field.dataType) == StructType for field in dt_nested):
+                raise TypeError("Nested StructType not supported in conversion to Arrow")
+            fields = [
+                pa.field(field.name, to_arrow_type(field.dataType), nullable=field.nullable)
+                for field in dt_nested
+            ]
+            arrow_type = pa.list_(pa.struct(fields))
+        else:
+            arrow_type = pa.list_(to_arrow_type(dt.elementType))
     elif type(dt) == MapType:
         if LooseVersion(pa.__version__) < LooseVersion("2.0.0"):
             raise TypeError("MapType is only supported with pyarrow 2.0.0 and above")
