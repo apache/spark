@@ -5252,24 +5252,33 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         if not is_list_like(where):
             should_return_series = False
             where = [where]
-        index_scol = self._internal.index_spark_columns[0]
-        index_type = self._internal.spark_type_for(index_scol)
-
-        if np.nan in where:
-            # When `where` is np.nan, pandas returns the last index value.
-            last_index = self._internal.spark_frame.select(F.last(index_scol)).take(1)[0][0]
-            modified_where = [last_index if x is np.nan else x for x in where]
-        else:
-            modified_where = where
-
+        internal = self._internal.resolved_copy
+        index_scol = internal.index_spark_columns[0]
+        index_type = internal.spark_type_for(index_scol)
+        spark_column = internal.data_spark_columns[0]
+        monotonically_increasing_id_column = verify_temp_column_name(
+            internal.spark_frame, "__monotonically_increasing_id__"
+        )
         cond = [
-            F.last(
-                F.when(index_scol <= SF.lit(index).cast(index_type), self.spark.column),
-                ignorenulls=True,
+            F.max_by(
+                spark_column,
+                F.when(
+                    (index_scol <= SF.lit(index).cast(index_type)) & spark_column.isNotNull()
+                    if pd.notna(index)
+                    # If index is nan then return monotonically_increasing_id,
+                    # if the value of col is not null.This will let max by
+                    # to return last index value , which is the behaviour of pandas
+                    else spark_column.isNotNull(),
+                    monotonically_increasing_id_column,
+                ),
             )
-            for idx, index in enumerate(modified_where)
+            for index in where
         ]
-        sdf = self._internal.spark_frame.select(cond)
+
+        sdf = internal.spark_frame.withColumn(
+            monotonically_increasing_id_column, F.monotonically_increasing_id()
+        ).select(cond)
+
         if not should_return_series:
             with sql_conf({SPARK_CONF_ARROW_ENABLED: False}):
                 # Disable Arrow to keep row ordering.
