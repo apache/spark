@@ -135,21 +135,6 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
       REGEXP_EXTRACT_FAMILY, REGEXP_REPLACE)
   }
 
-  /**
-   * Returns whether an expression is likely to be selective
-   */
-  private def isLikelySelective(e: Expression): Boolean = e match {
-    case Not(expr) => isLikelySelective(expr)
-    case And(l, r) => isLikelySelective(l) || isLikelySelective(r)
-    case Or(l, r) => isLikelySelective(l) && isLikelySelective(r)
-    case _: StringRegexExpression => true
-    case _: BinaryComparison => true
-    case _: In | _: InSet => true
-    case _: StringPredicate => true
-    case _: MultiLikeBase => true
-    case _ => false
-  }
-
   private def canFilterLeft(joinType: JoinType): Boolean = joinType match {
     case Inner | RightOuter => true
     case _ => false
