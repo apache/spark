@@ -1353,12 +1353,12 @@ abstract class JsonSuite
   }
 
   test("Dataset toJSON doesn't construct rdd") {
-    val containsRDD = spark.emptyDataFrame.toJSON.queryExecution.logical.find {
+    val containsRDDExists = spark.emptyDataFrame.toJSON.queryExecution.logical.exists {
       case ExternalRDD(_, _) => true
       case _ => false
     }
 
-    assert(containsRDD.isEmpty, "Expected logical plan of toJSON to not contain an RDD")
+    assert(!containsRDDExists, "Expected logical plan of toJSON to not contain an RDD")
   }
 
   test("JSONRelation equality test") {

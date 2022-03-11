@@ -25,6 +25,10 @@
   "CONCURRENT_QUERY" : {
     "message" : [ "Another instance of this query was just started by a concurrent session." ]
   },
+  "DATETIME_OVERFLOW" : {
+    "message" : [ "Datetime operation overflow: %s." ],
+    "sqlState" : "22008"
+  },
   "DIVIDE_BY_ZERO" : {
     "message" : [ "divide by zero. To return NULL instead, use 'try_divide'. If necessary set %s to false (except for ANSI interval type) to bypass this error." ],
     "sqlState" : "22012"
@@ -129,6 +133,10 @@
   },
   "NON_PARTITION_COLUMN" : {
     "message" : [ "PARTITION clause cannot contain a non-partition column name: %s" ],
+    "sqlState" : "42000"
+  },
+  "PARSE_EMPTY_STATEMENT" : {
+    "message" : [ "Syntax error, unexpected empty statement" ],
     "sqlState" : "42000"
   },
   "PARSE_INPUT_MISMATCHED" : {
