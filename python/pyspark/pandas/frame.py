@@ -6855,6 +6855,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         ascending: Union[bool, List[bool]] = True,
         inplace: bool = False,
         na_position: str = "last",
+        ignore_index: bool = False,
     ) -> Optional["DataFrame"]:
         """
         Sort by the values along either axis.
@@ -6870,6 +6871,8 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
              if True, perform operation in-place
         na_position : {'first', 'last'}, default 'last'
              `first` puts NaNs at the beginning, `last` puts NaNs at the end
+        ignore_index : bool, default False
+            If True, the resulting axis will be labeled 0, 1, …, n - 1.
 
         Returns
         -------
@@ -6882,34 +6885,45 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         ...     'col2': [2, 9, 8, 7, 4],
         ...     'col3': [0, 9, 4, 2, 3],
         ...   },
-        ...   columns=['col1', 'col2', 'col3'])
+        ...   columns=['col1', 'col2', 'col3'],
+        ...   index=['a', 'b', 'c', 'd', 'e'])
         >>> df
            col1  col2  col3
-        0     A     2     0
-        1     B     9     9
-        2  None     8     4
-        3     D     7     2
-        4     C     4     3
+        a     A     2     0
+        b     B     9     9
+        c  None     8     4
+        d     D     7     2
+        e     C     4     3
 
         Sort by col1
 
         >>> df.sort_values(by=['col1'])
            col1  col2  col3
+        a     A     2     0
+        b     B     9     9
+        e     C     4     3
+        d     D     7     2
+        c  None     8     4
+
+        Ignore index for the resulting axis
+
+        >>> df.sort_values(by=['col1'], ignore_index=True)
+           col1  col2  col3
         0     A     2     0
         1     B     9     9
-        4     C     4     3
+        2     C     4     3
         3     D     7     2
-        2  None     8     4
+        4  None     8     4
 
         Sort Descending
 
         >>> df.sort_values(by='col1', ascending=False)
            col1  col2  col3
-        3     D     7     2
-        4     C     4     3
-        1     B     9     9
-        0     A     2     0
-        2  None     8     4
+        d     D     7     2
+        e     C     4     3
+        b     B     9     9
+        a     A     2     0
+        c  None     8     4
 
         Sort by multiple columns
 
@@ -6945,11 +6959,14 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             new_by.append(ser.spark.column)
 
         psdf = self._sort(by=new_by, ascending=ascending, na_position=na_position)
+
         if inplace:
+            if ignore_index:
+                psdf.reset_index(drop=True, inplace=inplace)
             self._update_internal_frame(psdf._internal)
             return None
         else:
-            return psdf
+            return psdf.reset_index(drop=True) if ignore_index else psdf
 
     def sort_index(
         self,
