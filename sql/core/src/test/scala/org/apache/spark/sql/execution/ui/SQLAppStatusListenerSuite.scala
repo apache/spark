@@ -878,7 +878,8 @@ class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTestUtils
       val oldCount = statusStore.executionsList().size
 
       val cls = classOf[CustomMetricsDataSource].getName
-      spark.range(10).select('id as 'i, -'id as 'j).write.format(cls)
+      spark.range(10).select(Symbol("id") as Symbol("i"), -Symbol("id") as Symbol("j"))
+        .write.format(cls)
         .option("path", dir.getCanonicalPath).mode("append").save()
 
       // Wait until the new execution is started and being tracked.
@@ -919,7 +920,8 @@ class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTestUtils
 
       try {
         val cls = classOf[CustomMetricsDataSource].getName
-        spark.range(0, 10, 1, 2).select('id as 'i, -'id as 'j).write.format(cls)
+        spark.range(0, 10, 1, 2).select(Symbol("id") as Symbol("i"), -'id as Symbol("j"))
+          .write.format(cls)
           .option("path", dir.getCanonicalPath).mode("append").save()
 
         // Wait until the new execution is started and being tracked.

@@ -465,6 +465,26 @@ class RDD(Generic[T_co]):
 
         return checkpointFile.get() if checkpointFile.isDefined() else None
 
+    def cleanShuffleDependencies(self, blocking: bool = False) -> None:
+        """
+        Removes an RDD's shuffles and it's non-persisted ancestors.
+
+        When running without a shuffle service, cleaning up shuffle files enables downscaling.
+        If you use the RDD after this call, you should checkpoint and materialize it first.
+
+        .. versionadded:: 3.3.0
+
+        Parameters
+        ----------
+        blocking : bool, optional
+           block on shuffle cleanup tasks. Disabled by default.
+
+        Notes
+        -----
+        This API is a developer API.
+        """
+        self._jrdd.rdd().cleanShuffleDependencies(blocking)
+
     def map(self: "RDD[T]", f: Callable[[T], U], preservesPartitioning: bool = False) -> "RDD[U]":
         """
         Return a new RDD by applying a function to each element of this RDD.

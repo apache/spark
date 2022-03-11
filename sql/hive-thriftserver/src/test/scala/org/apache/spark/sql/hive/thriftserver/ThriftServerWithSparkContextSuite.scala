@@ -56,7 +56,7 @@ trait ThriftServerWithSparkContextSuite extends SharedThriftServer {
   }
 
   test("Full stack traces as error message for jdbc or thrift client") {
-    val sql = "select date_sub(date'2011-11-11', '1.2')"
+    val sql = "select from_json('a', 'a INT', map('mode', 'FAILFAST'))"
     withCLIServiceClient() { client =>
       val sessionHandle = client.openSession(user, "")
 
@@ -67,24 +67,18 @@ trait ThriftServerWithSparkContextSuite extends SharedThriftServer {
           sql,
           confOverlay)
       }
-
-      assert(e.getMessage
-        .contains("The second argument of 'date_sub' function needs to be an integer."))
-      assert(!e.getMessage.contains("" +
-        "java.lang.NumberFormatException: invalid input syntax for type numeric: 1.2"))
-      assert(e.getSQLState == "22023")
+      assert(e.getMessage.contains("JsonParseException: Unrecognized token 'a'"))
+      assert(!e.getMessage.contains(
+        "SparkException: Malformed records are detected in record parsing"))
     }
 
     withJdbcStatement { statement =>
       val e = intercept[SQLException] {
         statement.executeQuery(sql)
       }
-      assert(e.getMessage
-        .contains("The second argument of 'date_sub' function needs to be an integer."))
-      assert(e.getMessage.contains("[SECOND_FUNCTION_ARGUMENT_NOT_INTEGER]"))
-      assert(e.getMessage.contains("" +
-        "java.lang.NumberFormatException: invalid input syntax for type numeric: 1.2"))
-      assert(e.getSQLState == "22023")
+      assert(e.getMessage.contains("JsonParseException: Unrecognized token 'a'"))
+      assert(e.getMessage.contains(
+        "SparkException: Malformed records are detected in record parsing"))
     }
   }
 

@@ -93,7 +93,7 @@ class DataSourceV2DataFrameSuite
       assert(spark.table(t1).count() === 0)
 
       // appends are by name not by position
-      df.select('data, 'id).write.mode("append").saveAsTable(t1)
+      df.select(Symbol("data"), Symbol("id")).write.mode("append").saveAsTable(t1)
       checkAnswer(spark.table(t1), df)
     }
   }

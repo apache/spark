@@ -46,7 +46,7 @@ private[spark] class ReliableRDDCheckpointData[T: ClassTag](@transient private v
    */
   def getCheckpointDir: Option[String] = RDDCheckpointData.synchronized {
     if (isCheckpointed) {
-      Some(cpDir.toString)
+      Some(cpDir)
     } else {
       None
     }

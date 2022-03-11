@@ -86,7 +86,7 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("SPARK-35789: INVALID_SQL_SYNTAX - LATERAL can only be used with subquery") {
+  test("INVALID_SQL_SYNTAX: LATERAL can only be used with subquery") {
     Seq(
       "SELECT * FROM t1, LATERAL t2" -> 26,
       "SELECT * FROM t1 JOIN LATERAL t2" -> 30,
@@ -122,6 +122,51 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession {
           |== SQL ==
           |SELECT * FROM a NATURAL CROSS JOIN b
           |--------------^^^
+          |""".stripMargin)
+  }
+
+  test("INVALID_SQL_SYNTAX: redefine window") {
+    validateParsingError(
+      sqlText = "SELECT min(a) OVER win FROM t1 WINDOW win AS win, win AS win2",
+      errorClass = "INVALID_SQL_SYNTAX",
+      sqlState = "42000",
+      message =
+        """
+          |Invalid SQL syntax: The definition of window 'win' is repetitive.(line 1, pos 31)
+          |
+          |== SQL ==
+          |SELECT min(a) OVER win FROM t1 WINDOW win AS win, win AS win2
+          |-------------------------------^^^
+          |""".stripMargin)
+  }
+
+  test("INVALID_SQL_SYNTAX: invalid window reference") {
+    validateParsingError(
+      sqlText = "SELECT min(a) OVER win FROM t1 WINDOW win AS win",
+      errorClass = "INVALID_SQL_SYNTAX",
+      sqlState = "42000",
+      message =
+        """
+          |Invalid SQL syntax: Window reference 'win' is not a window specification.(line 1, pos 31)
+          |
+          |== SQL ==
+          |SELECT min(a) OVER win FROM t1 WINDOW win AS win
+          |-------------------------------^^^
+          |""".stripMargin)
+  }
+
+  test("INVALID_SQL_SYNTAX: window reference cannot be resolved") {
+    validateParsingError(
+      sqlText = "SELECT min(a) OVER win FROM t1 WINDOW win AS win2",
+      errorClass = "INVALID_SQL_SYNTAX",
+      sqlState = "42000",
+      message =
+        """
+          |Invalid SQL syntax: Cannot resolve window reference 'win2'.(line 1, pos 31)
+          |
+          |== SQL ==
+          |SELECT min(a) OVER win FROM t1 WINDOW win AS win2
+          |-------------------------------^^^
           |""".stripMargin)
   }
 }

@@ -318,7 +318,7 @@ class SparkSqlAstBuilder extends AstBuilder {
       val (_, _, _, _, options, location, _, _) = visitCreateTableClauses(ctx.createTableClauses())
       val provider = Option(ctx.tableProvider).map(_.multipartIdentifier.getText).getOrElse(
         throw QueryParsingErrors.createTempTableNotSpecifyProviderError(ctx))
-      val schema = Option(ctx.colTypeList()).map(createSchema)
+      val schema = Option(ctx.createOrReplaceTableColTypeList()).map(createSchema)
 
       logWarning(s"CREATE TEMPORARY TABLE ... USING ... is deprecated, please use " +
           "CREATE TEMPORARY VIEW ... USING ... instead")

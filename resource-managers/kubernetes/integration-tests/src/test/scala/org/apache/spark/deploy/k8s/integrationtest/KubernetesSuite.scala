@@ -35,6 +35,7 @@ import org.scalatest.matchers.should.Matchers._
 import org.scalatest.time.{Minutes, Seconds, Span}
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.deploy.k8s.Constants.ENV_APPLICATION_ID
 import org.apache.spark.deploy.k8s.integrationtest.TestConstants._
 import org.apache.spark.deploy.k8s.integrationtest.backend.{IntegrationTestBackend, IntegrationTestBackendFactory}
 import org.apache.spark.internal.Logging
@@ -183,7 +184,8 @@ class KubernetesSuite extends SparkFunSuite
 
   protected def setUpTest(): Unit = {
     appLocator = UUID.randomUUID().toString.replaceAll("-", "")
-    driverPodName = "spark-test-app-" + UUID.randomUUID().toString.replaceAll("-", "")
+    driverPodName = "spark-test-app-" +
+      UUID.randomUUID().toString.replaceAll("-", "") + "-driver"
     sparkAppConf = kubernetesTestComponents.newSparkAppConf()
       .set("spark.kubernetes.container.image", image)
       .set("spark.kubernetes.driver.pod.name", driverPodName)
@@ -563,6 +565,7 @@ class KubernetesSuite extends SparkFunSuite
     assert(pod.getMetadata.getLabels.get("label2") === "label2-value")
     assert(pod.getMetadata.getAnnotations.get("annotation1") === "annotation1-value")
     assert(pod.getMetadata.getAnnotations.get("annotation2") === "annotation2-value")
+    val appId = pod.getMetadata.getAnnotations.get("yunikorn.apache.org/app-id")
 
     val container = pod.getSpec.getContainers.get(0)
     val envVars = container
@@ -574,6 +577,7 @@ class KubernetesSuite extends SparkFunSuite
       .toMap
     assert(envVars("ENV1") === "VALUE1")
     assert(envVars("ENV2") === "VALUE2")
+    assert(appId === envVars(ENV_APPLICATION_ID))
   }
 
   private def deleteDriverPod(): Unit = {
@@ -607,6 +611,7 @@ class KubernetesSuite extends SparkFunSuite
 private[spark] object KubernetesSuite {
   val k8sTestTag = Tag("k8s")
   val localTestTag = Tag("local")
+  val schedulingTestTag = Tag("schedule")
   val rTestTag = Tag("r")
   val MinikubeTag = Tag("minikube")
   val SPARK_PI_MAIN_CLASS: String = "org.apache.spark.examples.SparkPi"

@@ -2903,25 +2903,25 @@ case class SubtractTimestamps(
   @transient private lazy val zoneIdInEval: ZoneId = zoneIdForType(left.dataType)
 
   @transient
-  private lazy val evalFunc: (Long, Long) => Any = legacyInterval match {
-    case false => (leftMicros, rightMicros) =>
-      subtractTimestamps(leftMicros, rightMicros, zoneIdInEval)
-    case true => (leftMicros, rightMicros) =>
+  private lazy val evalFunc: (Long, Long) => Any = if (legacyInterval) {
+    (leftMicros, rightMicros) =>
       new CalendarInterval(0, 0, leftMicros - rightMicros)
+  } else {
+    (leftMicros, rightMicros) =>
+      subtractTimestamps(leftMicros, rightMicros, zoneIdInEval)
   }
 
   override def nullSafeEval(leftMicros: Any, rightMicros: Any): Any = {
     evalFunc(leftMicros.asInstanceOf[Long], rightMicros.asInstanceOf[Long])
   }
 
-  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = legacyInterval match {
-    case false =>
-      val zid = ctx.addReferenceObj("zoneId", zoneIdInEval, classOf[ZoneId].getName)
-      val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
-      defineCodeGen(ctx, ev, (l, r) => s"""$dtu.subtractTimestamps($l, $r, $zid)""")
-    case true =>
-      defineCodeGen(ctx, ev, (end, start) =>
-        s"new org.apache.spark.unsafe.types.CalendarInterval(0, 0, $end - $start)")
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = if (legacyInterval) {
+    defineCodeGen(ctx, ev, (end, start) =>
+      s"new org.apache.spark.unsafe.types.CalendarInterval(0, 0, $end - $start)")
+  } else {
+    val zid = ctx.addReferenceObj("zoneId", zoneIdInEval, classOf[ZoneId].getName)
+    val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
+    defineCodeGen(ctx, ev, (l, r) => s"""$dtu.subtractTimestamps($l, $r, $zid)""")
   }
 
   override def toString: String = s"($left - $right)"
@@ -2961,26 +2961,26 @@ case class SubtractDates(
   }
 
   @transient
-  private lazy val evalFunc: (Int, Int) => Any = legacyInterval match {
-    case false => (leftDays: Int, rightDays: Int) =>
+  private lazy val evalFunc: (Int, Int) => Any = if (legacyInterval) {
+    (leftDays: Int, rightDays: Int) => subtractDates(leftDays, rightDays)
+  } else {
+    (leftDays: Int, rightDays: Int) =>
       Math.multiplyExact(Math.subtractExact(leftDays, rightDays), MICROS_PER_DAY)
-    case true => (leftDays: Int, rightDays: Int) => subtractDates(leftDays, rightDays)
   }
 
   override def nullSafeEval(leftDays: Any, rightDays: Any): Any = {
     evalFunc(leftDays.asInstanceOf[Int], rightDays.asInstanceOf[Int])
   }
 
-  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = legacyInterval match {
-    case false =>
-      val m = classOf[Math].getName
-      defineCodeGen(ctx, ev, (leftDays, rightDays) =>
-        s"$m.multiplyExact($m.subtractExact($leftDays, $rightDays), ${MICROS_PER_DAY}L)")
-    case true =>
-      defineCodeGen(ctx, ev, (leftDays, rightDays) => {
-        val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
-        s"$dtu.subtractDates($leftDays, $rightDays)"
-      })
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = if (legacyInterval) {
+    defineCodeGen(ctx, ev, (leftDays, rightDays) => {
+      val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
+      s"$dtu.subtractDates($leftDays, $rightDays)"
+    })
+  } else {
+    val m = classOf[Math].getName
+    defineCodeGen(ctx, ev, (leftDays, rightDays) =>
+      s"$m.multiplyExact($m.subtractExact($leftDays, $rightDays), ${MICROS_PER_DAY}L)")
   }
 
   override def toString: String = s"($left - $right)"

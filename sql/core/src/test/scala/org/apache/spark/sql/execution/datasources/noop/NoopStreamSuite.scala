@@ -90,7 +90,7 @@ class NoopStreamSuite extends StreamTest {
       .option("numPartitions", "1")
       .option("rowsPerSecond", "5")
       .load()
-      .select('value)
+      .select(Symbol("value"))
   }
 }
 

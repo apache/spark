@@ -463,18 +463,18 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils with Adapti
 
         // check existence of shuffle
         assert(
-          joinOperator.left.find(_.isInstanceOf[ShuffleExchangeExec]).isDefined == shuffleLeft,
+          joinOperator.left.exists(_.isInstanceOf[ShuffleExchangeExec]) == shuffleLeft,
           s"expected shuffle in plan to be $shuffleLeft but found\n${joinOperator.left}")
         assert(
-          joinOperator.right.find(_.isInstanceOf[ShuffleExchangeExec]).isDefined == shuffleRight,
+          joinOperator.right.exists(_.isInstanceOf[ShuffleExchangeExec]) == shuffleRight,
           s"expected shuffle in plan to be $shuffleRight but found\n${joinOperator.right}")
 
         // check existence of sort
         assert(
-          joinOperator.left.find(_.isInstanceOf[SortExec]).isDefined == sortLeft,
+          joinOperator.left.exists(_.isInstanceOf[SortExec]) == sortLeft,
           s"expected sort in the left child to be $sortLeft but found\n${joinOperator.left}")
         assert(
-          joinOperator.right.find(_.isInstanceOf[SortExec]).isDefined == sortRight,
+          joinOperator.right.exists(_.isInstanceOf[SortExec]) == sortRight,
           s"expected sort in the right child to be $sortRight but found\n${joinOperator.right}")
 
         // check the output partitioning
@@ -678,7 +678,7 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils with Adapti
         df1.groupBy("i", "j").agg(max("k")).sort("i", "j"))
 
       assert(
-        aggregated.queryExecution.executedPlan.find(_.isInstanceOf[ShuffleExchangeExec]).isEmpty)
+        !aggregated.queryExecution.executedPlan.exists(_.isInstanceOf[ShuffleExchangeExec]))
     }
   }
 
@@ -719,7 +719,7 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils with Adapti
         df1.groupBy("i", "j").agg(max("k")).sort("i", "j"))
 
       assert(
-        aggregated.queryExecution.executedPlan.find(_.isInstanceOf[ShuffleExchangeExec]).isEmpty)
+        !aggregated.queryExecution.executedPlan.exists(_.isInstanceOf[ShuffleExchangeExec]))
     }
   }
 

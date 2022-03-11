@@ -1737,7 +1737,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
             exprSeq2.foreach(pair =>
               checkExceptionInExpression[SparkUpgradeException](
                 pair._1,
-                  "You may get a different result due to the upgrading of Spark 3.0"))
+                  "You may get a different result due to the upgrading to Spark >= 3.0"))
           } else {
             if (ansiEnabled) {
               exprSeq2.foreach(pair =>
