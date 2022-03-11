@@ -220,8 +220,6 @@ private[sql] object JDBCRelation extends Logging {
             lBound = resultSet.getString("lBound")
             uBound = resultSet.getString("uBound")
           }
-          assert(lBound != null && uBound != null,
-            "partition column lowerBound and upperBound can not be null")
         } catch {
           case _: SQLException =>
         } finally {
@@ -230,12 +228,15 @@ private[sql] object JDBCRelation extends Logging {
       } catch {
         case _: SQLException =>
       }
-      JDBCPartitioningInfo(
-        prk.name,
-        dataType,
-        toInternalBoundValue(lBound, dataType, timeZoneId),
-        toInternalBoundValue(uBound, dataType, timeZoneId),
-        jdbcOptions.defaultNumPartitions)
+      if (lBound != null && uBound != null) {
+        return JDBCPartitioningInfo(
+          prk.name,
+          dataType,
+          toInternalBoundValue(lBound, dataType, timeZoneId),
+          toInternalBoundValue(uBound, dataType, timeZoneId),
+          jdbcOptions.defaultNumPartitions)
+      }
+      null
     } else {
       null
     }
