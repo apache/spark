@@ -89,6 +89,7 @@ object SqlResourceSuite {
       metrics = metrics,
       submissionTime = 1586768888233L,
       completionTime = Some(new Date(1586768888999L)),
+      parsingTime = "parsing: 0 ms\nanalysis: 34 ms\noptimization:71 ms\nplanning: 153 ms",
       jobs = Map[Int, JobExecutionStatus](
         0 -> JobExecutionStatus.SUCCEEDED,
         1 -> JobExecutionStatus.SUCCEEDED),

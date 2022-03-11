@@ -51,6 +51,7 @@ class SQLJsonProtocolSuite extends SparkFunSuite with LocalSparkSession {
           |    "metrics":[]
           |  },
           |  "time":0,
+          |  "parsingTime":"",
           |  "modifiedConfigs": {
           |    "k1":"v1"
           |  }
