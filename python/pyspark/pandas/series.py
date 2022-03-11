@@ -4318,7 +4318,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         Replace values given in to_replace with value.
         Values of the Series are replaced with other values dynamically.
 
-        .. note:: The API supports pattern matching (and replacement) on the whole string only,
+        .. note:: For partial pattern matching, the replacement is against the whole string,
             which is different from pandas'.
 
         Parameters
@@ -4495,7 +4495,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         5     new
         dtype: object
 
-        Only supports pattern matching (and replacement) on the whole string
+        For partial pattern matching, the replacement is against the whole string
 
         >>> psser.replace('ba', 'xx', regex=True)
         0     xx
