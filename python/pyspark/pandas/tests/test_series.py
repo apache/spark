@@ -838,13 +838,20 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
             pd.Series([True, False], name="x"),
             pd.Series([0, 1], name="x"),
             pd.Series([1, 2, 3], name="x"),
+            pd.Series([np.nan, 0, 1], name="x"),
+            pd.Series([np.nan, 1, 2, 3], name="x"),
             pd.Series([True, True, None], name="x"),
             pd.Series([True, False, None], name="x"),
             pd.Series([], name="x"),
             pd.Series([np.nan], name="x"),
+            pd.Series([np.nan, np.nan], name="x"),
+            pd.Series([None], name="x"),
+            pd.Series([None, None], name="x"),
         ]:
             psser = ps.from_pandas(pser)
             self.assert_eq(psser.all(), pser.all())
+            self.assert_eq(psser.all(skipna=False), pser.all(skipna=False))
+            self.assert_eq(psser.all(skipna=True), pser.all(skipna=True))
 
         pser = pd.Series([1, 2, 3, 4], name="x")
         psser = ps.from_pandas(pser)
