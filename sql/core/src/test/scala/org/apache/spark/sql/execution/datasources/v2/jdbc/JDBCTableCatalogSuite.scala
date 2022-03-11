@@ -438,6 +438,10 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
           |name TEXT(32) NOT NULL)""".stripMargin)
         .executeUpdate()
     }
+    // scan empty table
+    val empty_df = sql("select id, name from h2.test.employee")
+    // default partition num is 10
+    assert(empty_df.rdd.getNumPartitions == 1)
     sql("insert overwrite h2.test.employee select 1000 as id, 'a' as name")
     for (id <- 1 to 100) {
       sql(s"insert into h2.test.employee values($id, 'a')")
