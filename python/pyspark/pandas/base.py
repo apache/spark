@@ -1015,6 +1015,9 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
         >>> ps.Series([np.nan]).all()
         True
 
+        >>> ps.Series([np.nan]).all(skipna=False)
+        True
+
         >>> ps.Series([None]).all()
         True
 
