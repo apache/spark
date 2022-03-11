@@ -174,9 +174,9 @@ class KeyValueGroupedDataset[K, V] private[sql](
   /**
    * (Scala-specific)
    * Applies the given function to each group of data.  For each unique group, the function will
-   * be passed the group key and an iterator that contains all of the elements in the group. The
-   * function can return an iterator containing elements of an arbitrary type which will be returned
-   * as a new [[Dataset]].
+   * be passed the group key and a sorted iterator that contains all of the elements in the group.
+   * The function can return an iterator containing elements of an arbitrary type which will be
+   * returned as a new [[Dataset]].
    *
    * This function does not support partial aggregation, and as a result requires shuffling all
    * the data in the [[Dataset]]. If an application intends to perform an aggregation over each
@@ -207,6 +207,26 @@ class KeyValueGroupedDataset[K, V] private[sql](
     )
   }
 
+
+  /**
+   * (Scala-specific)
+   * Applies the given function to each group of data.  For each unique group, the function will
+   * be passed the group key and a sorted iterator that contains all of the elements in the group.
+   * The function can return an iterator containing elements of an arbitrary type which will be
+   * returned as a new [[Dataset]].
+   *
+   * This function does not support partial aggregation, and as a result requires shuffling all
+   * the data in the [[Dataset]]. If an application intends to perform an aggregation over each
+   * key, it is best to use the reduce function or an
+   * `org.apache.spark.sql.expressions#Aggregator`.
+   *
+   * Internally, the implementation will spill to disk if any given group is too large to fit into
+   * memory.  However, users must take care to avoid materializing the whole iterator for a group
+   * (for example, by calling `toList`) unless they are sure that this is possible given the memory
+   * constraints of their cluster.
+   *
+   * @since 3.3.0
+   */
   def flatMapSortedGroups[U : Encoder]
       (sortExpr: Column, sortExprs: Column*)
       (f: (K, Iterator[V]) => TraversableOnce[U]): Dataset[U] = {
