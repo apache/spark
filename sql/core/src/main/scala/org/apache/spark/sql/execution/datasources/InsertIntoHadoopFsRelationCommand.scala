@@ -126,7 +126,7 @@ case class InsertIntoHadoopFsRelationCommand(
             // For dynamic partition overwrite, do not delete partition directories ahead.
             true
           } else {
-            assert(dynamicPartition && !partitionsTrackedByCatalog,
+            assert(!dynamicPartition || !partitionsTrackedByCatalog,
               "'partitionOverwriteMode' in table properties should be set to 'overwrite' " +
                 "while partitions are managed by catalogs")
             deleteMatchingPartitions(fs, qualifiedOutputPath, customPartitionLocations, committer)
