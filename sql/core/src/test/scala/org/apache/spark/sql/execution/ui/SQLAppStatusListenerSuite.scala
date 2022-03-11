@@ -553,7 +553,7 @@ class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTestUtils
     assert(statusStore.execution(0).get.stages === (0 to 3).toSet)
 
     // Check stage and attemptID are gathered correctly.
-    val stageAttempt = statusStore.getStageAttempt(executionId)
+    val stageAttempt = statusStore.getStageAttempts(executionId)
     assert(stageAttempt.length == 4)
   }
 

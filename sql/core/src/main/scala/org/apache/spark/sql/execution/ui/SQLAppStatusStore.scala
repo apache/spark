@@ -80,7 +80,7 @@ class SQLAppStatusStore(
     store.read(classOf[SparkPlanGraphWrapper], executionId).toSparkPlanGraph()
   }
 
-  def getStageAttempt(executionId: Long): List[(Int, Int)] = {
+  def getStageAttempts(executionId: Long): List[(Int, Int)] = {
     store.read(classOf[StageAttempt], executionId).stageAttempts
   }
 

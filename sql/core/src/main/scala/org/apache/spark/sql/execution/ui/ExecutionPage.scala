@@ -77,7 +77,7 @@ class ExecutionPage(parent: SQLTab) extends WebUIPage("execution") with Logging 
             {jobLinks(JobExecutionStatus.FAILED, "Failed Jobs:")}
             <li>
               <strong>Completed Stages: </strong>
-              {sqlStore.getStageAttempt(executionId).sorted.map { case (stage, attempt) =>
+              {sqlStore.getStageAttempts(executionId).sorted.map { case (stage, attempt) =>
               <a href={stageURL(request, stage, attempt)}>{stage}</a><span>&nbsp;</span>
             }}
             </li>
@@ -147,7 +147,7 @@ class ExecutionPage(parent: SQLTab) extends WebUIPage("execution") with Logging 
     "%s/jobs/job/?id=%s".format(UIUtils.prependBaseUri(request, parent.basePath), jobId)
 
   private def stageURL(request: HttpServletRequest, stageId: Int, attemptId: Int): String =
-    "%s/stages/stage/?id=%s&attempt=%s".format(
+    "%s/stages/stage/?id=%d&attempt=%d".format(
       UIUtils.prependBaseUri(request, parent.basePath), stageId, attemptId)
 
   private def physicalPlanDescription(physicalPlanDescription: String): Seq[Node] = {

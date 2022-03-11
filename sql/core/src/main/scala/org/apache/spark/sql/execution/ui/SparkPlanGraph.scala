@@ -55,9 +55,7 @@ case class SparkPlanGraph(
   }
 
   def getAllIds: Seq[Long] = {
-    allNodes.map {
-      node => node.id
-    }
+    allNodes.map(_.id)
   }
 }
 
@@ -185,8 +183,8 @@ class SparkPlanGraphNode(
       // Note: whitespace between two "\n"s is to create an empty line between the name of
       // SparkPlan and metrics. If removing it, it won't display the empty line in UI.
       builder ++= "<br><br>"
-      if (!stagesGraph.getOrElse(id, List()).isEmpty) {
-        builder ++= "Stages: " + stagesGraph.getOrElse(id, List()).mkString(",") + "\n"
+      if (!stagesGraph.getOrElse(id, Nil).isEmpty) {
+        builder ++= "Stages: " + stagesGraph.getOrElse(id, Nil).mkString(",") + "\n"
       }
       builder ++= values.mkString("<br>")
       val labelStr = StringEscapeUtils.escapeJava(builder.toString().replaceAll("\n", "<br>"))
