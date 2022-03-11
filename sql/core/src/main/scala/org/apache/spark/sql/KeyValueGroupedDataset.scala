@@ -175,6 +175,42 @@ class KeyValueGroupedDataset[K, V] private[sql](
    * (Scala-specific)
    * Applies the given function to each group of data.  For each unique group, the function will
    * be passed the group key and an iterator that contains all of the elements in the group. The
+   * function can return an iterator containing elements of an arbitrary type which will be returned
+   * as a new [[Dataset]].
+   *
+   * This function does not support partial aggregation, and as a result requires shuffling all
+   * the data in the [[Dataset]]. If an application intends to perform an aggregation over each
+   * key, it is best to use the reduce function or an
+   * `org.apache.spark.sql.expressions#Aggregator`.
+   *
+   * Internally, the implementation will spill to disk if any given group is too large to fit into
+   * memory.  However, users must take care to avoid materializing the whole iterator for a group
+   * (for example, by calling `toList`) unless they are sure that this is possible given the memory
+   * constraints of their cluster.
+   *
+   * @since 3.3.0
+   */
+  def flatMapSortedGroups[S: Encoder, U : Encoder]
+      (s: V => S)(f: (K, Iterator[V]) => TraversableOnce[U]): Dataset[U] = {
+    val withSortKey = AppendColumns(s, dataAttributes, logicalPlan)
+    val executed = sparkSession.sessionState.executePlan(withSortKey)
+
+    Dataset[U](
+      sparkSession,
+      MapGroups(
+        f,
+        groupingAttributes,
+        withSortKey.newColumns,
+        dataAttributes,
+        executed.analyzed
+      )
+    )
+  }
+
+  /**
+   * (Scala-specific)
+   * Applies the given function to each group of data.  For each unique group, the function will
+   * be passed the group key and an iterator that contains all of the elements in the group. The
    * function can return an element of arbitrary type which will be returned as a new [[Dataset]].
    *
    * This function does not support partial aggregation, and as a result requires shuffling all

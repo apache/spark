@@ -553,6 +553,23 @@ class DatasetSuite extends QueryTest
       "a", "30", "b", "3", "c", "1")
   }
 
+  test("groupBy function, flatMapSorted") {
+    val ds = Seq(("a", 1, 10), ("a", 2, 20), ("b", 2, 1), ("b", 1, 2), ("c", 1, 1)).toDS()
+    val grouped = ds.groupByKey(v => (v._1, "word"))
+    val aggregated = grouped.flatMapSortedGroups(v => v._2) { (g, iter) =>
+      Iterator(
+        g._1,
+        iter.mkString(", ")
+      )
+    }
+
+    checkDatasetUnorderly(
+      aggregated,
+      "a", "(a,1,10), (a,2,20)",
+      "b", "(b,1,2), (b,2,1)",
+      "c", "(c,1,1)")
+  }
+
   test("groupBy function, mapValues, flatMap") {
     val ds = Seq(("a", 10), ("a", 20), ("b", 1), ("b", 2), ("c", 1)).toDS()
     val keyValue = ds.groupByKey(_._1).mapValues(_._2)

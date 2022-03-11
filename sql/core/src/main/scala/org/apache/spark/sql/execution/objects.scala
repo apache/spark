@@ -391,13 +391,15 @@ case class AppendColumnsWithObjectExec(
 
 /**
  * Groups the input rows together and calls the function with each group and an iterator containing
- * all elements in the group.  The result of this function is flattened before being output.
+ * all elements in the group. The iterator is sorted according to `sortAttributes` if given.
+ * The result of this function is flattened before being output.
  */
 case class MapGroupsExec(
     func: (Any, Iterator[Any]) => TraversableOnce[Any],
     keyDeserializer: Expression,
     valueDeserializer: Expression,
     groupingAttributes: Seq[Attribute],
+    sortAttributes: Option[Seq[Attribute]],
     dataAttributes: Seq[Attribute],
     outputObjAttr: Attribute,
     child: SparkPlan) extends UnaryExecNode with ObjectProducerExec {
@@ -408,7 +410,7 @@ case class MapGroupsExec(
     ClusteredDistribution(groupingAttributes) :: Nil
 
   override def requiredChildOrdering: Seq[Seq[SortOrder]] =
-    Seq(groupingAttributes.map(SortOrder(_, Ascending)))
+    Seq((groupingAttributes ++ sortAttributes.getOrElse(Seq.empty)).map(SortOrder(_, Ascending)))
 
   override protected def doExecute(): RDD[InternalRow] = {
     child.execute().mapPartitionsInternal { iter =>
@@ -437,6 +439,7 @@ object MapGroupsExec {
       keyDeserializer: Expression,
       valueDeserializer: Expression,
       groupingAttributes: Seq[Attribute],
+      sortAttributes: Option[Seq[Attribute]],
       dataAttributes: Seq[Attribute],
       outputObjAttr: Attribute,
       timeoutConf: GroupStateTimeout,
@@ -449,7 +452,7 @@ object MapGroupsExec {
       func(key, values, GroupStateImpl.createForBatch(timeoutConf, watermarkPresent))
     }
     new MapGroupsExec(f, keyDeserializer, valueDeserializer,
-      groupingAttributes, dataAttributes, outputObjAttr, child)
+      groupingAttributes, sortAttributes, dataAttributes, outputObjAttr, child)
   }
 }
 
