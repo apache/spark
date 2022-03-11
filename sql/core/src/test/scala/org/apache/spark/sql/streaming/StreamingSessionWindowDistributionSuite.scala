@@ -114,14 +114,7 @@ class StreamingSessionWindowDistributionSuite extends StreamTest
 
     withSQLConf(
       // exclude partial merging session to simplify test
-      SQLConf.STREAMING_SESSION_WINDOW_MERGE_SESSIONS_IN_LOCAL_PARTITION.key -> "false",
-      // explode(split(value, ' ')) with value as nullable field seems to give different
-      // nullability between Spark 3.2 and 3.3 (nullable in 3.2 and non-null in 3.3)
-      // This should be allowed, but unfortunately, nullability check in state store schema
-      // checker seems to have a bug (`from` and `to` are swapped). Applying temporary
-      // workaround for now.
-      // TODO: investigate the schema checker and remove this once it is resolved.
-      SQLConf.STATE_SCHEMA_CHECK_ENABLED.key -> "false") {
+      SQLConf.STREAMING_SESSION_WINDOW_MERGE_SESSIONS_IN_LOCAL_PARTITION.key -> "false") {
 
       val inputData = MemoryStream[(String, String, Long)]
 
