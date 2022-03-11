@@ -21,6 +21,7 @@ import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.BloomFilterAggregate
+import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanExec
 import org.apache.spark.sql.execution.aggregate.BaseAggregateExec
 import org.apache.spark.sql.test.SharedSparkSession
 
@@ -196,7 +197,8 @@ class BloomFilterAggregateQuerySuite extends QueryTest with SharedSparkSession {
   }
 
   test("Test that a query with bloom_filter_agg has partial aggregates") {
-    spark.sql("""SELECT bloom_filter_agg(cast(id as long)) from range(1, 1000000)""")
-      .queryExecution.executedPlan.collect({case agg: BaseAggregateExec => agg}).size == 2
+    assert(spark.sql("""SELECT bloom_filter_agg(cast(id as long)) from range(1, 1000000)""")
+      .queryExecution.executedPlan.asInstanceOf[AdaptiveSparkPlanExec].inputPlan
+      .collect({case agg: BaseAggregateExec => agg}).size == 2)
   }
 }
