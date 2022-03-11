@@ -395,6 +395,25 @@ object MapGroups {
       UnresolvedDeserializer(encoderFor[K].deserializer, groupingAttributes),
       UnresolvedDeserializer(encoderFor[T].deserializer, dataAttributes),
       groupingAttributes,
+      None,
+      dataAttributes,
+      CatalystSerde.generateObjAttr[U],
+      child)
+    CatalystSerde.serialize[U](mapped)
+  }
+
+  def apply[K : Encoder, T : Encoder, U : Encoder](
+    func: (K, Iterator[T]) => TraversableOnce[U],
+    groupingAttributes: Seq[Attribute],
+    sortAttributes: Seq[Attribute],
+    dataAttributes: Seq[Attribute],
+    child: LogicalPlan): LogicalPlan = {
+    val mapped = new MapGroups(
+      func.asInstanceOf[(Any, Iterator[Any]) => TraversableOnce[Any]],
+      UnresolvedDeserializer(encoderFor[K].deserializer, groupingAttributes),
+      UnresolvedDeserializer(encoderFor[T].deserializer, dataAttributes),
+      groupingAttributes,
+      Some(sortAttributes),
       dataAttributes,
       CatalystSerde.generateObjAttr[U],
       child)
@@ -405,7 +424,8 @@ object MapGroups {
 /**
  * Applies func to each unique group in `child`, based on the evaluation of `groupingAttributes`.
  * Func is invoked with an object representation of the grouping key an iterator containing the
- * object representation of all the rows with that key.
+ * object representation of all the rows with that key. Given an optional `sortAttributes` data
+ * in the iterator will be sorted accordingly. That sorting does not add computational complexity.
  *
  * @param keyDeserializer used to extract the key object for each group.
  * @param valueDeserializer used to extract the items in the iterator from an input row.
@@ -415,6 +435,7 @@ case class MapGroups(
     keyDeserializer: Expression,
     valueDeserializer: Expression,
     groupingAttributes: Seq[Attribute],
+    sortAttributes: Option[Seq[Attribute]],
     dataAttributes: Seq[Attribute],
     outputObjAttr: Attribute,
     child: LogicalPlan) extends UnaryNode with ObjectProducer {
