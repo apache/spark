@@ -144,13 +144,13 @@ select from_json('{"t":"26/October/2015"}', 't Timestamp', map('timestampFormat'
 select from_csv('26/October/2015', 't Timestamp', map('timestampFormat', 'dd/MMMMM/yyyy'));
 
 -- Add a number of units to a timestamp or a date
-select timestampadd('MONTH', -1, timestamp'2022-02-14 01:02:03');
+select timestampadd(MONTH, -1, timestamp'2022-02-14 01:02:03');
 select timestampadd(MINUTE, 58, timestamp'2022-02-14 01:02:03');
 select timestampadd(YEAR, 1, date'2022-02-15');
-select timestampadd('SECOND', -1, date'2022-02-15');
+select timestampadd(SECOND, -1, date'2022-02-15');
 
 -- Get the difference between timestamps in the specified units
-select timestampdiff('MONTH', timestamp'2022-02-14 01:02:03', timestamp'2022-01-14 01:02:03');
+select timestampdiff(MONTH, timestamp'2022-02-14 01:02:03', timestamp'2022-01-14 01:02:03');
 select timestampdiff(MINUTE, timestamp'2022-02-14 01:02:03', timestamp'2022-02-14 02:00:03');
 select timestampdiff(YEAR, date'2022-02-15', date'2023-02-15');
-select timestampdiff('SECOND', date'2022-02-15', timestamp'2022-02-14 23:59:59');
+select timestampdiff(SECOND, date'2022-02-15', timestamp'2022-02-14 23:59:59');

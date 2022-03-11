@@ -4557,21 +4557,13 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
    * Create a TimestampAdd expression.
    */
   override def visitTimestampadd(ctx: TimestampaddContext): Expression = withOrigin(ctx) {
-    val arguments = Seq(
-      Literal(ctx.unit.getText),
-      expression(ctx.unitsAmount),
-      expression(ctx.timestamp))
-    UnresolvedFunction("timestampadd", arguments, isDistinct = false)
+    TimestampAdd(ctx.unit.getText, expression(ctx.unitsAmount), expression(ctx.timestamp))
   }
 
   /**
    * Create a TimestampDiff expression.
    */
   override def visitTimestampdiff(ctx: TimestampdiffContext): Expression = withOrigin(ctx) {
-    val arguments = Seq(
-      Literal(ctx.unit.getText),
-      expression(ctx.startTimestamp),
-      expression(ctx.endTimestamp))
-    UnresolvedFunction("timestampdiff", arguments, isDistinct = false)
+    TimestampDiff(ctx.unit.getText, expression(ctx.startTimestamp), expression(ctx.endTimestamp))
   }
 }

@@ -105,10 +105,10 @@ class QueryExecutionErrorsSuite extends QueryTest
   test("INVALID_PARAMETER_VALUE: invalid unit passed to timestampadd/timestampdiff") {
     Seq(
       "timestampadd" ->
-        "select timestampadd('nanosecond', 100, timestamp'2022-02-13 18:00:00')",
+        "select timestampadd(nanosecond, 100, timestamp'2022-02-13 18:00:00')",
       "timestampdiff" ->
         """select timestampdiff(
-          |  'nanosecond',
+          |  nanosecond,
           |  timestamp'2022-02-13 18:00:00',
           |  timestamp'2022-02-22 12:52:00')""".stripMargin
     ).foreach { case (funcName, sqlStmt) =>
