@@ -45,11 +45,12 @@ case class ParquetScanBuilder(
     sparkSession.sessionState.newHadoopConfWithOptions(caseSensitiveMap)
   }
 
+  private lazy val sqlConf = sparkSession.sessionState.conf
+
   private lazy val pushDownDynamically =
-    sparkSession.sessionState.conf.parquetFilterPushDownDynamically
+    sqlConf.parquetFilterPushDown && sqlConf.parquetFilterPushDownDynamically
 
   lazy val pushedParquetFilters = {
-    val sqlConf = sparkSession.sessionState.conf
     if (sqlConf.parquetFilterPushDown) {
       val pushDownDate = sqlConf.parquetFilterPushDownDate
       val pushDownTimestamp = sqlConf.parquetFilterPushDownTimestamp
