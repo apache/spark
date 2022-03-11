@@ -110,6 +110,11 @@ private[spark] trait VolcanoTestsSuite extends BeforeAndAfterEach { k8sSuite: Ku
 
   private def createOrReplaceYAMLResource(yamlPath: String): Unit = {
     k8sClient.load(new FileInputStream(yamlPath)).createOrReplace()
+    Eventually.eventually(TIMEOUT, INTERVAL) {
+      val resources = k8sClient.load(new FileInputStream(yamlPath)).fromServer.get.asScala
+      // Make sure all elements are not null (get specific resources in cluster)
+      resources.foreach { r => assert(r != null) }
+    }
     testYAMLPaths += yamlPath
   }
 
