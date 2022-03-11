@@ -2769,6 +2769,7 @@ class Analyzer(override val catalogManager: CatalogManager)
 
         val projectExprs = Array.ofDim[NamedExpression](aggList.length)
         val newAggList = aggList
+          .toIndexedSeq
           .map(trimNonTopLevelAliases)
           .zipWithIndex
           .flatMap {

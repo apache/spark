@@ -358,7 +358,7 @@ class GeneratorFunctionSuite extends QueryTest with SharedSparkSession {
     checkAnswer(df.select(explode(array(min($"v"), max($"v")))), Row(1) :: Row(3) :: Nil)
   }
 
-  test("Generator in stream of aggregate expressions") {
+  test("generator in stream of aggregate expressions") {
     val df = Seq(1, 2, 3).toDF("v")
     checkAnswer(
       df.select(Stream(explode(array(min($"v"), max($"v"))), sum($"v")): _*),
