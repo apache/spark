@@ -55,7 +55,7 @@ class ParquetFilters(
     pushDownInFilterThreshold: Int,
     caseSensitive: Boolean,
     datetimeRebaseSpec: RebaseSpec,
-    pushDownPartition: Boolean,
+    pushDownDynamically: Boolean,
     partitionSchema: StructType = StructType(Seq.empty),
     partitionValues: Option[InternalRow] = None) {
   // A map which contains parquet field name and data type, if predicate push down applies.
@@ -623,8 +623,8 @@ class ParquetFilters(
     nameToParquetField.contains(name) && valueCanMakeFilterOn(name, value)
   }
 
-  private def canMakeFilterOnPart(filter: sources.Filter): Boolean = {
-    pushDownPartition && filter.references.forall(partitionSchema.names.contains)
+  private def canDynamicallyPushDownDataFilter(filter: sources.Filter): Boolean = {
+    pushDownDynamically && filter.references.forall(partitionSchema.names.contains)
   }
 
   /**
@@ -798,7 +798,7 @@ class ParquetFilters(
           )
         }
 
-      case _ if canMakeFilterOnPart(predicate) =>
+      case _ if canDynamicallyPushDownDataFilter(predicate) =>
         if (evaluatePartitionFilter(partitionSchema, partitionValues, predicate)) {
           None
         } else {

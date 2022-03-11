@@ -828,11 +828,13 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
-  val PARQUET_FILTER_PUSHDOWN_PARTITION_ENABLED =
-    buildConf("spark.sql.parquet.filterPushdown.partition")
-      .doc("If true, enables Parquet data filter push-down optimization for partition. " +
+  val PARQUET_FILTER_DYNAMICALLY_PUSHDOWN_ENABLED =
+    buildConf("spark.sql.parquet.filterPushdown.dynamically")
+      .doc("If true, enables Parquet data filter push-down optimization dynamically. " +
+        "Data filter will be pushed down to ParquetScan with partition Filters, " +
+        "and prune partition filters before pushing to parquet at runtime. " +
         s"This configuration only has an effect when '${PARQUET_FILTER_PUSHDOWN_ENABLED.key}' " +
-        s"is enabled.")
+        "is enabled.")
       .version("3.3.0")
       .booleanConf
       .createWithDefault(true)
@@ -3792,7 +3794,8 @@ class SQLConf extends Serializable with Logging {
 
   def parquetFilterPushDown: Boolean = getConf(PARQUET_FILTER_PUSHDOWN_ENABLED)
 
-  def parquetFilterPushDownPartition: Boolean = getConf(PARQUET_FILTER_PUSHDOWN_PARTITION_ENABLED)
+  def parquetFilterPushDownDynamically: Boolean =
+    getConf(PARQUET_FILTER_DYNAMICALLY_PUSHDOWN_ENABLED)
 
   def parquetFilterPushDownDate: Boolean = getConf(PARQUET_FILTER_PUSHDOWN_DATE_ENABLED)
 

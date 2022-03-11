@@ -144,7 +144,7 @@ object FilterPushdownBenchmark extends SqlBasedBenchmark {
     benchmark.run()
   }
 
-  def partitionFilterPushDownBenchmark(
+  def dynamicallyFilterPushDownBenchmark(
       values: Int,
       title: String,
       whereExpr: String,
@@ -153,14 +153,15 @@ object FilterPushdownBenchmark extends SqlBasedBenchmark {
 
     Seq(
       (false, false), (true, false), (true, true)
-    ).foreach { case (pushDownEnabled, partPushDownEnabled) =>
+    ).foreach { case (pushDownEnabled, dynamicallyPushDownEnabled) =>
       val name = s"Parquet Vectorized " +
         s"${if (pushDownEnabled) s"(FilterPushdown " +
-          s"${if (partPushDownEnabled) "with Partition" else "without Partition"}) " else ""}"
+          s"${if (dynamicallyPushDownEnabled) "Dynamically" else ""}) " else ""}"
       benchmark.addCase(name) { _ =>
         withSQLConf(
           SQLConf.PARQUET_FILTER_PUSHDOWN_ENABLED.key -> s"$pushDownEnabled",
-          SQLConf.PARQUET_FILTER_PUSHDOWN_PARTITION_ENABLED.key -> s"$partPushDownEnabled") {
+          SQLConf.PARQUET_FILTER_DYNAMICALLY_PUSHDOWN_ENABLED.key -> s"$dynamicallyPushDownEnabled"
+        ) {
           spark.sql(s"SELECT $selectExpr FROM parquetTable WHERE $whereExpr").noop()
         }
       }
@@ -413,7 +414,7 @@ object FilterPushdownBenchmark extends SqlBasedBenchmark {
       }
     }
 
-    runBenchmark("Pushdown benchmark for Partition Filter") {
+    runBenchmark("Pushdown benchmark for Dynamical Filter") {
       withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> "") {
         withTempPath { dir =>
           withTempTable("orcTable", "parquetTable") {
@@ -426,8 +427,8 @@ object FilterPushdownBenchmark extends SqlBasedBenchmark {
             Seq("(a = 10 and part = 0) or (a = 10240 and part = 1) or (part = 2)",
               "(a > 10 and part = 0) or (a <= 10 and part >=1 and part < 3)")
               .foreach { whereExpr =>
-                val title = s"Data filter with partitions: (${whereExpr})"
-                partitionFilterPushDownBenchmark(numRows, title, whereExpr)
+                val title = s"Dynamical Filters: (${whereExpr})"
+                dynamicallyFilterPushDownBenchmark(numRows, title, whereExpr)
               }
           }
         }

@@ -81,7 +81,7 @@ case class ParquetPartitionReaderFactory(
   private val pushDownDecimal = sqlConf.parquetFilterPushDownDecimal
   private val pushDownStringStartWith = sqlConf.parquetFilterPushDownStringStartWith
   private val pushDownInFilterThreshold = sqlConf.parquetFilterPushDownInFilterThreshold
-  private val pushDownPartition = sqlConf.parquetFilterPushDownPartition
+  private val pushDownDynamically = sqlConf.parquetFilterPushDownDynamically
   private val datetimeRebaseModeInRead = parquetOptions.datetimeRebaseModeInRead
   private val int96RebaseModeInRead = parquetOptions.int96RebaseModeInRead
 
@@ -226,7 +226,7 @@ case class ParquetPartitionReaderFactory(
         pushDownInFilterThreshold,
         isCaseSensitive,
         datetimeRebaseSpec,
-        pushDownPartition,
+        pushDownDynamically,
         partitionSchema,
         Some(file.partitionValues))
       filters

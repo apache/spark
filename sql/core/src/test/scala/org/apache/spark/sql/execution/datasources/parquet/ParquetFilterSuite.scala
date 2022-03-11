@@ -84,7 +84,7 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
       conf.parquetFilterPushDownDecimal, conf.parquetFilterPushDownStringStartWith,
       conf.parquetFilterPushDownInFilterThreshold,
       caseSensitive.getOrElse(conf.caseSensitiveAnalysis),
-      datetimeRebaseSpec, conf.parquetFilterPushDownPartition)
+      datetimeRebaseSpec, conf.parquetFilterPushDownDynamically)
 
   override def beforeEach(): Unit = {
     super.beforeEach()
@@ -2054,7 +2054,7 @@ class ParquetV2FilterSuite extends ParquetFilterSuite {
     }
   }
 
-  test("SPARK-38041: Data filter push down with partition filter") {
+  test("SPARK-38041: Data filter push down dynamically") {
     withTempPath { file =>
       val colName = "id"
       val partName = "part"

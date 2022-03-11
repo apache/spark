@@ -45,6 +45,9 @@ case class ParquetScanBuilder(
     sparkSession.sessionState.newHadoopConfWithOptions(caseSensitiveMap)
   }
 
+  private lazy val pushDownDynamically =
+    sparkSession.sessionState.conf.parquetFilterPushDownDynamically
+
   lazy val pushedParquetFilters = {
     val sqlConf = sparkSession.sessionState.conf
     if (sqlConf.parquetFilterPushDown) {
@@ -53,7 +56,6 @@ case class ParquetScanBuilder(
       val pushDownDecimal = sqlConf.parquetFilterPushDownDecimal
       val pushDownStringStartWith = sqlConf.parquetFilterPushDownStringStartWith
       val pushDownInFilterThreshold = sqlConf.parquetFilterPushDownInFilterThreshold
-      val pushDownPartition = sqlConf.parquetFilterPushDownPartition
       val isCaseSensitive = sqlConf.caseSensitiveAnalysis
       val parquetSchema =
         new SparkToParquetSchemaConverter(sparkSession.sessionState.conf).convert(readDataSchema())
@@ -68,7 +70,7 @@ case class ParquetScanBuilder(
         // The rebase mode doesn't matter here because the filters are used to determine
         // whether they is convertible.
         RebaseSpec(LegacyBehaviorPolicy.CORRECTED),
-        pushDownPartition,
+        pushDownDynamically,
         readPartitionSchema())
       parquetFilters.convertibleFilters(pushedDataFilters).toArray
     } else {
@@ -117,6 +119,6 @@ case class ParquetScanBuilder(
     }
     ParquetScan(sparkSession, hadoopConf, fileIndex, dataSchema, finalSchema,
       readPartitionSchema(), pushedParquetFilters, options, pushedAggregations,
-      partitionFilters, dataFilters)
+      partitionFilters, dataFilters, pushDownDynamically)
   }
 }
