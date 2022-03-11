@@ -48,13 +48,8 @@ case class SparkListenerSQLExecutionStart(
     physicalPlanDescription: String,
     sparkPlanInfo: SparkPlanInfo,
     time: Long,
+    parsingTime: String,
     modifiedConfigs: Map[String, String] = Map.empty)
-  extends SparkListenerEvent
-
-@DeveloperApi
-case class SparkListenerSQLParsingEnd(
-    executionId: Long,
-    parsingTime: String)
   extends SparkListenerEvent
 
 @DeveloperApi

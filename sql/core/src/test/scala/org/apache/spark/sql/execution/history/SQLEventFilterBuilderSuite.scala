@@ -58,7 +58,8 @@ class SQLEventFilterBuilderSuite extends SparkFunSuite {
 
     // Start SQL Execution
     listener.onOtherEvent(SparkListenerSQLExecutionStart(1, "desc1", "details1", "plan",
-      new SparkPlanInfo("node", "str", Seq.empty, Map.empty, Seq.empty), time, Map.empty))
+      new SparkPlanInfo("node", "str", Seq.empty, Map.empty, Seq.empty), time,
+      "parsingTime", Map.empty))
 
     time += 1
 
