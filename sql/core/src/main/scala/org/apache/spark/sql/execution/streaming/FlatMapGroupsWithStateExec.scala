@@ -172,7 +172,7 @@ case class FlatMapGroupsWithStateExec(
           timeoutProcessingStartTimeNs = System.nanoTime
         })
 
-    // SPARK-38204: Late-bind the timeout processing iterator so it is created *after* the input is
+    // SPARK-38320: Late-bind the timeout processing iterator so it is created *after* the input is
     // processed (the input iterator is exhausted) and the state updates are written into the
     // state store. Otherwise the iterator may not see the updates (e.g. with RocksDB state store).
     val timeoutProcessorIter = new Iterator[InternalRow] {
