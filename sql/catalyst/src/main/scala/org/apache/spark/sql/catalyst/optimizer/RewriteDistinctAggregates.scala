@@ -314,7 +314,7 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
                 // only because `distinctAggChildAttrLookup`'s keys have been de-duped
                 // based on semantic equivalence. So we need to translate x to the
                 // semantic equivalent that we are actually using.
-                val x2 = funcChildrenLookup(x)
+                val x2 = funcChildrenLookup.getOrElse(x, x)
                 distinctAggChildAttrLookup.get(x2)
               }
             }
