@@ -391,7 +391,7 @@ case class AppendColumnsWithObjectExec(
 
 /**
  * Groups the input rows together and calls the function with each group and an iterator containing
- * all elements in the group. The iterator is sorted according to `sortAttributes` if given.
+ * all elements in the group. The iterator is sorted according to `dataOrder` if given.
  * The result of this function is flattened before being output.
  */
 case class MapGroupsExec(
@@ -399,8 +399,8 @@ case class MapGroupsExec(
     keyDeserializer: Expression,
     valueDeserializer: Expression,
     groupingAttributes: Seq[Attribute],
-    sortAttributes: Option[Seq[Attribute]],
     dataAttributes: Seq[Attribute],
+    dataOrder: Option[Seq[SortOrder]],
     outputObjAttr: Attribute,
     child: SparkPlan) extends UnaryExecNode with ObjectProducerExec {
 
@@ -410,7 +410,7 @@ case class MapGroupsExec(
     ClusteredDistribution(groupingAttributes) :: Nil
 
   override def requiredChildOrdering: Seq[Seq[SortOrder]] =
-    Seq((groupingAttributes ++ sortAttributes.getOrElse(Seq.empty)).map(SortOrder(_, Ascending)))
+    Seq(groupingAttributes.map(SortOrder(_, Ascending)) ++ dataOrder.getOrElse(Seq.empty))
 
   override protected def doExecute(): RDD[InternalRow] = {
     child.execute().mapPartitionsInternal { iter =>
@@ -439,8 +439,8 @@ object MapGroupsExec {
       keyDeserializer: Expression,
       valueDeserializer: Expression,
       groupingAttributes: Seq[Attribute],
-      sortAttributes: Option[Seq[Attribute]],
       dataAttributes: Seq[Attribute],
+      dataOrder: Option[Seq[SortOrder]],
       outputObjAttr: Attribute,
       timeoutConf: GroupStateTimeout,
       child: SparkPlan): MapGroupsExec = {
@@ -452,7 +452,7 @@ object MapGroupsExec {
       func(key, values, GroupStateImpl.createForBatch(timeoutConf, watermarkPresent))
     }
     new MapGroupsExec(f, keyDeserializer, valueDeserializer,
-      groupingAttributes, sortAttributes, dataAttributes, outputObjAttr, child)
+      groupingAttributes, dataAttributes, dataOrder, outputObjAttr, child)
   }
 }
 

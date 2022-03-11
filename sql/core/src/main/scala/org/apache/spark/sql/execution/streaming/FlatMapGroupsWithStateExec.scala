@@ -474,7 +474,7 @@ object FlatMapGroupsWithStateExec {
     } else {
       MapGroupsExec(
         userFunc, keyDeserializer, valueDeserializer, groupingAttributes,
-        None, dataAttributes, outputObjAttr, timeoutConf, child)
+        dataAttributes, None, outputObjAttr, timeoutConf, child)
     }
   }
 }

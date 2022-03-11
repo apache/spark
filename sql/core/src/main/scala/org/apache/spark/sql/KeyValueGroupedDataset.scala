@@ -21,7 +21,7 @@ import scala.collection.JavaConverters._
 
 import org.apache.spark.api.java.function._
 import org.apache.spark.sql.catalyst.encoders.{encoderFor, ExpressionEncoder}
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, CreateStruct}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Ascending, Attribute, CreateStruct, Expression, SortOrder}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.expressions.ReduceAggregator
@@ -200,9 +200,33 @@ class KeyValueGroupedDataset[K, V] private[sql](
       MapGroups(
         f,
         groupingAttributes,
-        withSortKey.newColumns,
         dataAttributes,
+        withSortKey.newColumns.map(SortOrder(_, Ascending)),
         executed.analyzed
+      )
+    )
+  }
+
+  def flatMapSortedGroups[U : Encoder]
+      (sortExpr: Column, sortExprs: Column*)
+      (f: (K, Iterator[V]) => TraversableOnce[U]): Dataset[U] = {
+    val sortOrder: Seq[SortOrder] = (Seq(sortExpr) ++ sortExprs).map { col =>
+      col.expr match {
+        case expr: SortOrder =>
+          expr
+        case expr: Expression =>
+          SortOrder(expr, Ascending)
+      }
+    }
+
+    Dataset[U](
+      sparkSession,
+      MapGroups(
+        f,
+        groupingAttributes,
+        dataAttributes,
+        sortOrder,
+        logicalPlan
       )
     )
   }
