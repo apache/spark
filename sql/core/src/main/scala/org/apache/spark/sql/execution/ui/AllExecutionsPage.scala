@@ -296,7 +296,7 @@ private[ui] class ExecutionPagedTable(
         {UIUtils.formatDuration(duration)}
       </td>
       <td>
-        parsingTimeCell(executionUIData)
+        {parsingTimeCell(executionUIData)}
       </td>
       {if (showRunningJobs) {
         <td>
@@ -346,15 +346,14 @@ private[ui] class ExecutionPagedTable(
         +details
       </span> ++
         <div class="stage-details collapsed">
-          <pre>{execution.parsingTime.substring(0, execution.parsingTime.charAt('\n'))}
-            <br></br>{execution.parsingTime}</pre>
+          <pre>{execution.parsingTime}</pre>
         </div>
     } else {
       Nil
     }
 
     val desc = if (execution.parsingTime != null && execution.parsingTime.nonEmpty) {
-      {execution.parsingTime}
+      {execution.parsingTime.substring(0, execution.parsingTime.indexOf('\n'))}
     } else {
       {"No ParsingTime"}
     }
