@@ -18,7 +18,7 @@
 package org.apache.spark.sql.errors
 
 import java.sql.Timestamp
-import java.time.{LocalDateTime, ZoneOffset}
+import java.time.LocalDateTime
 
 import org.apache.spark.{SparkArithmeticException, SparkException, SparkIllegalArgumentException, SparkRuntimeException, SparkUnsupportedOperationException, SparkUpgradeException}
 import org.apache.spark.sql.{DataFrame, QueryTest, Row}
@@ -298,9 +298,7 @@ class QueryExecutionErrorsSuite extends QueryTest
 
   test("UNSUPPORTED_OPERATION - SPARK-38504: can't read TimestampNTZ as TimestampLTZ") {
     val data = (1 to 10).map { i =>
-      // The second parameter is `nanoOfSecond`, while java.sql.Timestamp accepts milliseconds
-      // as input. So here we multiple the `nanoOfSecond` by NANOS_PER_MILLIS
-      val ts = LocalDateTime.ofEpochSecond(0, i * 1000000, ZoneOffset.UTC)
+      val ts = LocalDateTime.of(2019, 3, 21, 0, 2, 3, 456000000 + i)
       Row(ts)
     }
 
