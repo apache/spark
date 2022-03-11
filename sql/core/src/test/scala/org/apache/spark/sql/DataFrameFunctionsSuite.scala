@@ -579,8 +579,10 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
   }
 
   test("array size function - legacy") {
-    withSQLConf(SQLConf.LEGACY_SIZE_OF_NULL.key -> "true") {
-      testSizeOfArray(sizeOfNull = -1)
+    if (!conf.ansiEnabled) {
+      withSQLConf(SQLConf.LEGACY_SIZE_OF_NULL.key -> "true") {
+        testSizeOfArray(sizeOfNull = -1)
+      }
     }
   }
 
@@ -732,8 +734,10 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
   }
 
   test("map size function - legacy") {
-    withSQLConf(SQLConf.LEGACY_SIZE_OF_NULL.key -> "true") {
-      testSizeOfMap(sizeOfNull = -1: Int)
+    if (!conf.ansiEnabled) {
+      withSQLConf(SQLConf.LEGACY_SIZE_OF_NULL.key -> "true") {
+        testSizeOfMap(sizeOfNull = -1: Int)
+      }
     }
   }
 
@@ -1027,15 +1031,17 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       Seq(Row(false))
     )
 
-    val e1 = intercept[AnalysisException] {
-      OneRowRelation().selectExpr("array_contains(array(1), .01234567890123456790123456780)")
-    }
-    val errorMsg1 =
-      s"""
-         |Input to function array_contains should have been array followed by a
-         |value with same element type, but it's [array<int>, decimal(38,29)].
+    if (!conf.ansiEnabled) {
+      val e1 = intercept[AnalysisException] {
+        OneRowRelation().selectExpr("array_contains(array(1), .01234567890123456790123456780)")
+      }
+      val errorMsg1 =
+        s"""
+           |Input to function array_contains should have been array followed by a
+           |value with same element type, but it's [array<int>, decimal(38,29)].
        """.stripMargin.replace("\n", " ").trim()
-    assert(e1.message.contains(errorMsg1))
+      assert(e1.message.contains(errorMsg1))
+    }
 
     val e2 = intercept[AnalysisException] {
       OneRowRelation().selectExpr("array_contains(array(1), 'foo')")
@@ -1464,41 +1470,43 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
         Seq(Row(null), Row(null), Row(null))
       )
     }
-    checkAnswer(
-      df.select(element_at(df("a"), 4)),
-      Seq(Row(null), Row(null), Row(null))
-    )
-    checkAnswer(
-      df.select(element_at(df("a"), df("b"))),
-      Seq(Row("1"), Row(""), Row(null))
-    )
-    checkAnswer(
-      df.selectExpr("element_at(a, b)"),
-      Seq(Row("1"), Row(""), Row(null))
-    )
+    if (!conf.ansiEnabled) {
+      checkAnswer(
+        df.select(element_at(df("a"), 4)),
+        Seq(Row(null), Row(null), Row(null))
+      )
+      checkAnswer(
+        df.select(element_at(df("a"), df("b"))),
+        Seq(Row("1"), Row(""), Row(null))
+      )
+      checkAnswer(
+        df.selectExpr("element_at(a, b)"),
+        Seq(Row("1"), Row(""), Row(null))
+      )
 
-    checkAnswer(
-      df.select(element_at(df("a"), 1)),
-      Seq(Row("1"), Row(null), Row(null))
-    )
-    checkAnswer(
-      df.select(element_at(df("a"), -1)),
-      Seq(Row("3"), Row(""), Row(null))
-    )
+      checkAnswer(
+        df.select(element_at(df("a"), 1)),
+        Seq(Row("1"), Row(null), Row(null))
+      )
+      checkAnswer(
+        df.select(element_at(df("a"), -1)),
+        Seq(Row("3"), Row(""), Row(null))
+      )
 
-    checkAnswer(
-      df.selectExpr("element_at(a, 4)"),
-      Seq(Row(null), Row(null), Row(null))
-    )
+      checkAnswer(
+        df.selectExpr("element_at(a, 4)"),
+        Seq(Row(null), Row(null), Row(null))
+      )
 
-    checkAnswer(
-      df.selectExpr("element_at(a, 1)"),
-      Seq(Row("1"), Row(null), Row(null))
-    )
-    checkAnswer(
-      df.selectExpr("element_at(a, -1)"),
-      Seq(Row("3"), Row(""), Row(null))
-    )
+      checkAnswer(
+        df.selectExpr("element_at(a, 1)"),
+        Seq(Row("1"), Row(null), Row(null))
+      )
+      checkAnswer(
+        df.selectExpr("element_at(a, -1)"),
+        Seq(Row("3"), Row(""), Row(null))
+      )
+    }
 
     val e1 = intercept[AnalysisException] {
       Seq(("a string element", 1)).toDF().selectExpr("element_at(_1, _2)")
@@ -1560,10 +1568,12 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       Seq(Row("a"))
     )
 
-    checkAnswer(
-      OneRowRelation().selectExpr("element_at(map(1, 'a', 2, 'b'), 1.23D)"),
-      Seq(Row(null))
-    )
+    if (!conf.ansiEnabled) {
+      checkAnswer(
+        OneRowRelation().selectExpr("element_at(map(1, 'a', 2, 'b'), 1.23D)"),
+        Seq(Row(null))
+      )
+    }
 
     val e3 = intercept[AnalysisException] {
       OneRowRelation().selectExpr("element_at(map(1, 'a', 2, 'b'), '1')")
@@ -1638,10 +1648,12 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
 
     // Simple test cases
     def simpleTest(): Unit = {
-      checkAnswer (
-        df.select(concat($"i1", $"s1")),
-        Seq(Row(Seq("1", "a", "b", "c")), Row(Seq("1", "0", "a")))
-      )
+      if (!conf.ansiEnabled) {
+        checkAnswer(
+          df.select(concat($"i1", $"s1")),
+          Seq(Row(Seq("1", "a", "b", "c")), Row(Seq("1", "0", "a")))
+        )
+      }
       checkAnswer(
         df.select(concat($"i1", $"i2", $"i3")),
         Seq(Row(Seq(1, 2, 3, 5, 6)), Row(Seq(1, 0, 2)))

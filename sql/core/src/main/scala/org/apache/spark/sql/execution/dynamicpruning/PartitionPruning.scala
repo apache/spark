@@ -205,6 +205,7 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper {
     case _: BinaryComparison => true
     case _: In | _: InSet => true
     case _: StringPredicate => true
+    case BinaryPredicate(_) => true
     case _: MultiLikeBase => true
     case _ => false
   }
@@ -213,10 +214,10 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper {
    * Search a filtering predicate in a given logical plan
    */
   private def hasSelectivePredicate(plan: LogicalPlan): Boolean = {
-    plan.find {
+    plan.exists {
       case f: Filter => isLikelySelective(f.condition)
       case _ => false
-    }.isDefined
+    }
   }
 
   /**

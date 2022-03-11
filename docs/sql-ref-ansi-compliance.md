@@ -391,9 +391,10 @@ Below is a list of all the keywords in Spark SQL.
 |DATABASE|non-reserved|non-reserved|non-reserved|
 |DATABASES|non-reserved|non-reserved|non-reserved|
 |DATEADD|non-reserved|non-reserved|non-reserved|
-|DATE_ADD|non-reserved|non-reserved|non-reserved|
+|DATEDIFF|non-reserved|non-reserved|non-reserved|
 |DAY|non-reserved|non-reserved|non-reserved|
 |DBPROPERTIES|non-reserved|non-reserved|non-reserved|
+|DEFAULT|non-reserved|non-reserved|non-reserved|
 |DEFINED|non-reserved|non-reserved|non-reserved|
 |DELETE|non-reserved|non-reserved|reserved|
 |DELIMITED|non-reserved|non-reserved|non-reserved|
@@ -576,6 +577,7 @@ Below is a list of all the keywords in Spark SQL.
 |TIME|reserved|non-reserved|reserved|
 |TIMESTAMP|non-reserved|non-reserved|non-reserved|
 |TIMESTAMPADD|non-reserved|non-reserved|non-reserved|
+|TIMESTAMPDIFF|non-reserved|non-reserved|non-reserved|
 |TO|reserved|non-reserved|reserved|
 |TOUCH|non-reserved|non-reserved|non-reserved|
 |TRAILING|reserved|non-reserved|reserved|

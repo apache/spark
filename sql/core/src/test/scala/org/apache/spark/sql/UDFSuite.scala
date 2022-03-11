@@ -424,7 +424,7 @@ class UDFSuite extends QueryTest with SharedSparkSession {
       ("N", Integer.valueOf(3), null)).toDF("a", "b", "c")
 
     val udf1 = udf((a: String, b: Int, c: Any) => a + b + c)
-    val df = input.select(udf1('a, 'b, 'c))
+    val df = input.select(udf1(Symbol("a"), 'b, 'c))
     checkAnswer(df, Seq(Row("null1x"), Row(null), Row("N3null")))
 
     // test Java UDF. Java UDF can't have primitive inputs, as it's generic typed.
@@ -554,7 +554,7 @@ class UDFSuite extends QueryTest with SharedSparkSession {
     spark.udf.register("buildLocalDateInstantType",
       udf((d: LocalDate, i: Instant) => LocalDateInstantType(d, i)))
     checkAnswer(df.selectExpr(s"buildLocalDateInstantType(d, i) as di")
-      .select('di.cast(StringType)),
+      .select(Symbol("di").cast(StringType)),
       Row(s"{$expectedDate, $expectedInstant}") :: Nil)
 
     // test null cases
@@ -584,7 +584,7 @@ class UDFSuite extends QueryTest with SharedSparkSession {
     spark.udf.register("buildTimestampInstantType",
       udf((t: Timestamp, i: Instant) => TimestampInstantType(t, i)))
     checkAnswer(df.selectExpr("buildTimestampInstantType(t, i) as ti")
-      .select('ti.cast(StringType)),
+      .select(Symbol("ti").cast(StringType)),
       Row(s"{$expectedTimestamp, $expectedInstant}"))
 
     // test null cases
