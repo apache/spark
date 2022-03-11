@@ -821,15 +821,13 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
         |  COUNT(CASE WHEN SALARY > 11000 OR SALARY < 10000 THEN SALARY ELSE 0 END),
         |  COUNT(CASE WHEN SALARY >= 12000 OR SALARY < 9000 THEN SALARY ELSE 0 END),
         |  COUNT(CASE WHEN SALARY >= 12000 OR NOT(SALARY >= 9000) THEN SALARY ELSE 0 END),
-        |  MAX(CASE WHEN NOT(SALARY > 8000) AND SALARY >= 8000 THEN SALARY ELSE 0 END),
-        |  MAX(CASE WHEN NOT(SALARY > 8000) OR SALARY > 8000 THEN SALARY ELSE 0 END),
-        |  MAX(CASE WHEN NOT(SALARY > 8000) AND NOT(SALARY < 8000) THEN SALARY ELSE 0 END),
+        |  MAX(CASE WHEN NOT(SALARY > 8000) AND SALARY >= 1000 THEN SALARY ELSE 0 END),
+        |  MAX(CASE WHEN NOT(SALARY > 8000) OR SALARY > 9000 THEN SALARY ELSE 0 END),
+        |  MAX(CASE WHEN NOT(SALARY > 8000) AND NOT(SALARY < 1000) THEN SALARY ELSE 0 END),
         |  MAX(CASE WHEN NOT(SALARY != 0) OR NOT(SALARY < 8000) THEN SALARY ELSE 0 END),
-        |  MAX(CASE WHEN NOT(SALARY > 8000 AND SALARY > 8000) THEN 0 ELSE SALARY END),
-        |  MIN(CASE WHEN NOT(SALARY > 8000 OR SALARY IS NULL) THEN SALARY ELSE 0 END),
-        |  SUM(CASE WHEN NOT(SALARY > 8000 AND SALARY IS NOT NULL) THEN SALARY ELSE 0 END),
+        |  MIN(CASE WHEN SALARY IS NULL THEN -1 ELSE 0 END),
         |  SUM(CASE WHEN SALARY > 10000 THEN 2 WHEN SALARY > 8000 THEN 1 END),
-        |  AVG(CASE WHEN NOT(SALARY > 8000 OR SALARY IS NOT NULL) THEN SALARY ELSE 0 END)
+        |  AVG(CASE WHEN SALARY > 10000 THEN 2 WHEN SALARY > 8000 THEN 1 END)
         |FROM h2.test.employee GROUP BY DEPT
       """.stripMargin)
     checkAggregateRemoved(df)
@@ -842,9 +840,9 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
             "PushedGroupByColumns: [DEPT]"
         checkKeywordsExistsInExplain(df, expected_plan_fragment)
     }
-    checkAnswer(df, Seq(Row(1, 1, 1, 1, 1, 0d, 12000d, 0d, 12000d, 12000d, 0d, 0d, 2, 0d),
-      Row(2, 2, 2, 2, 2, 0d, 10000d, 0d, 10000d, 10000d, 0d, 0d, 2, 0d),
-      Row(2, 2, 2, 2, 2, 0d, 12000d, 0d, 12000d, 12000d, 0d, 0d, 3, 0d)))
+    checkAnswer(df, Seq(Row(1, 1, 1, 1, 1, 0.0, 12000.0, 0.0, 12000.0, 0, 2, 2.0),
+      Row(2, 2, 2, 2, 2, 0.0, 10000.0, 0.0, 10000.0, 0, 2, 1.0),
+      Row(2, 2, 2, 2, 2, 0.0, 12000.0, 0.0, 12000.0, 0, 3, 1.0)))
   }
 
   test("scan with aggregate push-down: aggregate function with binary arithmetic") {
