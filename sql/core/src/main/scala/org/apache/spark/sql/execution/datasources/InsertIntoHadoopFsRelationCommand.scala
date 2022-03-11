@@ -61,6 +61,8 @@ case class InsertIntoHadoopFsRelationCommand(
 
   private lazy val parameters = CaseInsensitiveMap(options)
 
+  private lazy val dynamicPartition = staticPartitions.size < partitionColumns.length
+
   private[sql] lazy val dynamicPartitionOverwrite: Boolean = {
     val partitionOverwriteMode = parameters.get("partitionOverwriteMode")
       // scalastyle:off caselocale
@@ -70,8 +72,7 @@ case class InsertIntoHadoopFsRelationCommand(
     val enableDynamicOverwrite = partitionOverwriteMode == PartitionOverwriteMode.DYNAMIC
     // This config only makes sense when we are overwriting a partitioned dataset with dynamic
     // partition columns.
-    enableDynamicOverwrite && mode == SaveMode.Overwrite &&
-      staticPartitions.size < partitionColumns.length
+    enableDynamicOverwrite && mode == SaveMode.Overwrite && dynamicPartition
   }
 
   override def run(sparkSession: SparkSession, child: SparkPlan): Seq[Row] = {
@@ -125,6 +126,9 @@ case class InsertIntoHadoopFsRelationCommand(
             // For dynamic partition overwrite, do not delete partition directories ahead.
             true
           } else {
+            assert(dynamicPartition && !partitionsTrackedByCatalog,
+              "'partitionOverwriteMode' in table properties should be set to 'overwrite' " +
+                "while partitions are managed by catalogs")
             deleteMatchingPartitions(fs, qualifiedOutputPath, customPartitionLocations, committer)
             true
           }
@@ -187,8 +191,7 @@ case class InsertIntoHadoopFsRelationCommand(
 
 
       // update metastore partition metadata
-      if (updatedPartitionPaths.isEmpty && staticPartitions.nonEmpty
-        && partitionColumns.length == staticPartitions.size) {
+      if (updatedPartitionPaths.isEmpty && staticPartitions.nonEmpty && !dynamicPartition) {
         // Avoid empty static partition can't loaded to datasource table.
         val staticPathFragment =
           PartitioningUtils.getPathFragment(staticPartitions, partitionColumns)
@@ -234,7 +237,7 @@ case class InsertIntoHadoopFsRelationCommand(
     if (fs.exists(staticPrefixPath) && !committer.deleteWithJob(fs, staticPrefixPath, true)) {
       throw QueryExecutionErrors.cannotClearOutputDirectoryError(staticPrefixPath)
     }
-    // now clear all custom partition locations (e.g. /custom/dir/where/foo=2/bar=4)
+    // now clear custom static partition locations (e.g. /custom/dir/where/foo=1)
     for ((spec, customLoc) <- customPartitionLocations) {
       assert(
         (staticPartitions.toSet -- spec).isEmpty,

@@ -4262,6 +4262,25 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     }
   }
 
+  test("SPARK-38521: Throw Exception if overwriting hive partition table with " +
+    "dynamic and staticPartitionOverwriteMode") {
+    withTable("test") {
+      sql("CREATE TABLE test(a int, b int, c int) USING PARQUET PARTITIONED BY (b, c) " +
+        "OPTIONS(partitionOverwriteMode='STATIC')")
+      for (i <- 0 to 2) {
+        for (j <- 0 to 2) {
+          sql(s"INSERT INTO test VALUES ($i, $i, $j)")
+        }
+      }
+      val msg = intercept[AssertionError] {
+        sql("INSERT OVERWRITE test SELECT 0 AS a, 0 AS b, 3 AS c")
+      }.getMessage
+      assert(msg.contains(
+        "'partitionOverwriteMode' in table properties should be set to 'overwrite' " +
+          "while partitions are managed by catalogs"))
+    }
+  }
+
   test("TABLE SAMPLE") {
     withTable("test") {
       sql("CREATE TABLE test(c int) USING PARQUET")
