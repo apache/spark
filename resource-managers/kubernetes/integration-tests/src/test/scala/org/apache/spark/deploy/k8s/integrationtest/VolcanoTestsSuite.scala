@@ -336,29 +336,6 @@ private[spark] trait VolcanoTestsSuite extends BeforeAndAfterEach { k8sSuite: Ku
     }
   }
 
-  test("SPARK-38423: Run SparkPi Jobs with priorityClassName", k8sTestTag, volcanoTag) {
-    // Prepare the priority resource
-    createOrReplaceYAMLResource(VOLCANO_PRIORITY_YAML)
-    val priorities = Seq("low", "medium", "high")
-    val groupName = generateGroupName("priority")
-    priorities.foreach { p =>
-      Future {
-        val templatePath = new File(
-          getClass.getResource(s"/volcano/$p-priority-driver-template.yml").getFile
-        ).getAbsolutePath
-        runJobAndVerify(
-          p, groupLoc = Option(groupName),
-          driverTemplate = Option(templatePath)
-        )
-      }
-    }
-    // Make sure all jobs are Succeeded
-    Eventually.eventually(TIMEOUT, INTERVAL) {
-        val pods = getPods(role = "driver", groupName, statusPhase = "Succeeded")
-        assert(pods.size === priorities.size)
-    }
-  }
-
   test("SPARK-38423: Run driver job to validate priority order", k8sTestTag, volcanoTag) {
     // Prepare the priority resource and queue
     createOrReplaceYAMLResource(DISABLE_QUEUE)
@@ -370,11 +347,15 @@ private[spark] trait VolcanoTestsSuite extends BeforeAndAfterEach { k8sSuite: Ku
         val templatePath = new File(
           getClass.getResource(s"/volcano/$p-priority-driver-template.yml").getFile
         ).getAbsolutePath
+        val pgTemplatePath = new File(
+          getClass.getResource(s"/volcano/$p-priority-driver-podgroup-template.yml").getFile
+        ).getAbsolutePath
         val groupName = generateGroupName(p)
         runJobAndVerify(
           p, groupLoc = Option(groupName),
           queue = Option("queue"),
           driverTemplate = Option(templatePath),
+          driverPodGroupTemplate = Option(pgTemplatePath),
           isDriverJob = true
         )
       }
