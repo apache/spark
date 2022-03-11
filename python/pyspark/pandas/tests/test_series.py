@@ -421,6 +421,10 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
             self.assert_eq(psser.duplicated(keep="last").sort_index(), pser.duplicated(keep="last"))
             self.assert_eq(psser.duplicated(keep=False).sort_index(), pser.duplicated(keep=False))
 
+        pser = pd.Series([1, 2, 1, 2, 3], name="numbers")
+        psser = ps.from_pandas(pser)
+        self.assert_eq((psser + 1).duplicated(), (pser + 1).duplicated())
+
     def test_drop_duplicates(self):
         pdf = pd.DataFrame({"animal": ["lama", "cow", "lama", "beetle", "lama", "hippo"]})
         psdf = ps.from_pandas(pdf)
