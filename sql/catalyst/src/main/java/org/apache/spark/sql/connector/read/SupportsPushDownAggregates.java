@@ -25,11 +25,11 @@ import org.apache.spark.sql.connector.expressions.aggregate.Aggregation;
  * push down aggregates.
  * <p>
  * If the data source can't fully complete the grouping work, then
- * {@link #supportCompleteAggregationPushDown(Aggregation)} should return false, and Spark will
- * group the data source output again.
- * For queries like "SELECT min(value) AS m FROM t GROUP BY key", after pushing down the aggregate
- * to the data source, the data source can still output data with duplicated keys, which is OK as
- * Spark will do GROUP BY key again. The final query plan can be something like this:
+ * {@link #supportCompletePushDown(Aggregation)} should return false, and Spark will group the data
+ * source output again. For queries like "SELECT min(value) AS m FROM t GROUP BY key", after
+ * pushing down the aggregate to the data source, the data source can still output data with
+ * duplicated keys, which is OK as Spark will do GROUP BY key again. The final query plan can be
+ * something like this:
  * <pre>
  *   Aggregate [key#1], [min(min_value#2) AS m#3]
  *     +- RelationV2[key#1, min_value#2]
@@ -54,7 +54,7 @@ public interface SupportsPushDownAggregates extends ScanBuilder {
    * @param aggregation Aggregation in SQL statement.
    * @return true if the aggregation can be pushed down to datasource completely, false otherwise.
    */
-  default boolean supportCompleteAggregationPushDown(Aggregation aggregation) { return false; }
+  default boolean supportCompletePushDown(Aggregation aggregation) { return false; }
 
   /**
    * Pushes down Aggregation to datasource. The order of the datasource scan output columns should

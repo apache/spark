@@ -72,7 +72,7 @@ case class JDBCScanBuilder(
 
   private var pushedGroupByCols: Option[Array[String]] = None
 
-  override def supportCompleteAggregationPushDown(aggregation: Aggregation): Boolean = {
+  override def supportCompletePushDown(aggregation: Aggregation): Boolean = {
     lazy val fieldNames = aggregation.groupByColumns()(0).fieldNames()
     jdbcOptions.numPartitions.map(_ == 1).getOrElse(true) ||
       (aggregation.groupByColumns().length == 1 && fieldNames.length == 1 &&
@@ -137,10 +137,6 @@ case class JDBCScanBuilder(
     false
   }
 
-  override def supportCompleteSortPushDown(): Boolean = {
-    jdbcOptions.numPartitions.map(_ == 1).getOrElse(true)
-  }
-
   override def pushTopN(orders: Array[SortOrder], limit: Int): Boolean = {
     if (jdbcOptions.pushDownLimit) {
       pushedLimit = limit
@@ -149,6 +145,8 @@ case class JDBCScanBuilder(
     }
     false
   }
+
+  override def isPartiallyPushed(): Boolean = jdbcOptions.numPartitions.map(_ > 1).getOrElse(false)
 
   override def pruneColumns(requiredSchema: StructType): Unit = {
     // JDBC doesn't support nested column pruning.
