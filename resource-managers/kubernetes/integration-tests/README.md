@@ -312,7 +312,6 @@ Volcano integration is experimental in Aapche Spark 3.3.0 and the test coverage 
 
 ## Requirements
 - A minimum of 6 CPUs and 9G of memory is required to complete all Volcano test cases.
-- Kubernetes v1.22.5+
 - Volcano v1.5.0.
 
 ## Installation
