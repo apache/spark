@@ -530,10 +530,7 @@ class Analyzer(override val catalogManager: CatalogManager)
 
   object ResolveGroupingAnalytics extends Rule[LogicalPlan] {
     private[analysis] def hasGroupingFunction(e: Expression): Boolean = {
-      e.collectFirst {
-        case g: Grouping => g
-        case g: GroupingID => g
-      }.isDefined
+      e.exists (g => g.isInstanceOf[Grouping] || g.isInstanceOf[GroupingID])
     }
 
     private def replaceGroupingFunc(
@@ -2523,11 +2520,11 @@ class Analyzer(override val catalogManager: CatalogManager)
       }.toSet
 
       // Find the first Aggregate Expression that is not Windowed.
-      exprs.exists(_.collectFirst {
-        case ae: AggregateExpression if !windowedAggExprs.contains(ae) => ae
-        case e: PythonUDF if PythonUDF.isGroupedAggPandasUDF(e) &&
-          !windowedAggExprs.contains(e) => e
-      }.isDefined)
+      exprs.exists(_.exists {
+        case ae: AggregateExpression => !windowedAggExprs.contains(ae)
+        case e: PythonUDF => PythonUDF.isGroupedAggPandasUDF(e) && !windowedAggExprs.contains(e)
+        case _ => false
+      })
     }
   }
 
