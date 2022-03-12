@@ -48,6 +48,10 @@ public class V2ExpressionSQLBuilder {
           return visitIsNull(build(e.children()[0]));
         case "IS_NOT_NULL":
           return visitIsNotNull(build(e.children()[0]));
+        case "STARTS_WITH":
+        case "ENDS_WITH":
+        case "CONTAINS":
+          return visitStringPredicate(name, build(e.children()[0]), build(e.children()[1]));
         case "=":
         case "!=":
         case "<=>":
@@ -112,8 +116,26 @@ public class V2ExpressionSQLBuilder {
     return v + " IS NOT NULL";
   }
 
+  protected String visitStringPredicate(String name, String l, String r) {
+    String value = r.replaceAll("'", "");
+    switch (name) {
+      case "STARTS_WITH":
+        return l + " LIKE '" + value + "%'";
+      case "ENDS_WITH":
+        return l + " LIKE '%" + value + "'";
+      default: // "CONTAINS"
+        return l + " LIKE '%" + value + "%'";
+    }
+  }
+
   protected String visitBinaryComparison(String name, String l, String r) {
-    return "(" + l + ") " + name + " (" + r + ")";
+    switch (name) {
+      case "<=>":
+        return "(NOT (" + l + " != " + r + " OR " + l + " IS NULL OR " + r + " IS NULL) OR " +
+          "(" + l + " IS NULL AND " + r + " IS NULL))";
+      default:
+        return "(" + l + ") " + name + " (" + r + ")";
+    }
   }
 
   protected String visitBinaryArithmetic(String name, String l, String r) {

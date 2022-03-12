@@ -139,9 +139,11 @@ object JDBCRDD extends Logging {
         new Predicate("CONTAINS", Array(FieldReference.column(attr),
           LiteralValue(literal.value, literal.dataType)))
       case In(attr, value) =>
-        val literal = Literal(value)
-        new Predicate("IN", Array(FieldReference.column(attr),
-          LiteralValue(literal.value, literal.dataType)))
+        val literals = value.map { v =>
+          val literal = Literal(v)
+          LiteralValue(literal.value, literal.dataType)
+        }
+        new Predicate("IN", FieldReference.column(attr) +: literals)
       case Not(f) =>
         translateFilterV1ToV2(f).map(p => new Predicate("NOT", Array(p))).getOrElse(null)
       case Or(f1, f2) =>
