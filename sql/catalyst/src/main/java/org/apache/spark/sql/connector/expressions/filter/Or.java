@@ -29,7 +29,7 @@ import org.apache.spark.annotation.Evolving;
 public final class Or extends Predicate {
 
   public Or(Predicate left, Predicate right) {
-    super("AND", new Predicate[]{left, right});
+    super("OR", new Predicate[]{left, right});
   }
 
   public Predicate left() { return (Predicate) children()[0]; }
