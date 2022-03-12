@@ -25,8 +25,10 @@ import org.apache.spark.{InterruptibleIterator, Partition, SparkContext, TaskCon
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.catalyst.CatalystTypeConverters.convertToCatalyst
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.connector.expressions.SortOrder
+import org.apache.spark.sql.catalyst.expressions.Literal
+import org.apache.spark.sql.connector.expressions.{FieldReference, LiteralValue, SortOrder}
 import org.apache.spark.sql.connector.expressions.filter.Predicate
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.v2.TableSampleInfo
@@ -93,6 +95,72 @@ object JDBCRDD extends Logging {
   private def pruneSchema(schema: StructType, columns: Array[String]): StructType = {
     val fieldMap = Map(schema.fields.map(x => x.name -> x): _*)
     new StructType(columns.map(name => fieldMap(name)))
+  }
+
+  def translateFilterV1ToV2(f: Filter): Option[Predicate] = {
+    Option(f match {
+      case EqualTo(attr, value) =>
+        val literal = Literal(value)
+        new Predicate("=",
+          Array(FieldReference.column(attr), LiteralValue(literal.value, literal.dataType)))
+      case EqualNullSafe(attr, value) =>
+        val literal = Literal(value)
+        new Predicate("<=>",
+          Array(FieldReference.column(attr), LiteralValue(literal.value, literal.dataType)))
+      case LessThan(attr, value) =>
+        val literal = Literal(value)
+        new Predicate("<",
+          Array(FieldReference.column(attr), LiteralValue(literal.value, literal.dataType)))
+      case GreaterThan(attr, value) =>
+        val literal = Literal(value)
+        new Predicate(">",
+          Array(FieldReference.column(attr), LiteralValue(literal.value, literal.dataType)))
+      case LessThanOrEqual(attr, value) =>
+        val literal = Literal(value)
+        new Predicate("<=",
+          Array(FieldReference.column(attr), LiteralValue(literal.value, literal.dataType)))
+      case GreaterThanOrEqual(attr, value) =>
+        val literal = Literal(value)
+        new Predicate(">=", Array(FieldReference.column(attr),
+          LiteralValue(literal.value, literal.dataType)))
+      case IsNull(attr) =>
+        new Predicate("IS_NULL", Array(FieldReference.column(attr)))
+      case IsNotNull(attr) =>
+        new Predicate("IS_NOT_NULL", Array(FieldReference.column(attr)))
+      case StringStartsWith(attr, value) =>
+        val literal = Literal(value)
+        new Predicate("STARTS_WITH", Array(FieldReference.column(attr),
+          LiteralValue(literal.value, literal.dataType)))
+      case StringEndsWith(attr, value) =>
+        val literal = Literal(value)
+        new Predicate("ENDS_WITH", Array(FieldReference.column(attr),
+          LiteralValue(literal.value, literal.dataType)))
+      case StringContains(attr, value) =>
+        val literal = Literal(value)
+        new Predicate("CONTAINS", Array(FieldReference.column(attr),
+          LiteralValue(literal.value, literal.dataType)))
+      case In(attr, value) =>
+        val literal = Literal(value)
+        new Predicate("IN", Array(FieldReference.column(attr),
+          LiteralValue(literal.value, literal.dataType)))
+      case Not(f) =>
+        translateFilterV1ToV2(f).map(p => new Predicate("NOT", Array(p))).getOrElse(null)
+      case Or(f1, f2) =>
+        val or = Seq(f1, f2).flatMap(translateFilterV1ToV2(_))
+        if (or.size == 2) {
+          new Predicate("OR", or.toArray)
+        } else {
+          null
+        }
+      case And(f1, f2) =>
+        val and = Seq(f1, f2).flatMap(translateFilterV1ToV2(_))
+        if (and.size == 2) {
+          new Predicate("AND", and.toArray)
+        } else {
+          null
+        }
+      case _ => null
+    })
   }
 
   /**
@@ -180,12 +248,13 @@ object JDBCRDD extends Logging {
     val url = options.url
     val dialect = JdbcDialects.get(url)
     val quotedColumns = requiredColumns.map(colName => dialect.quoteIdentifier(colName))
+    val predicates = filters.flatMap(translateFilterV1ToV2)
     new JDBCRDD(
       sc,
       dialect.createConnectionFactory(options),
       pruneSchema(schema, requiredColumns),
       quotedColumns,
-      filters,
+      predicates,
       parts,
       url,
       options)
@@ -216,15 +285,14 @@ object JDBCRDD extends Logging {
       dialect.createConnectionFactory(options),
       outputSchema.getOrElse(pruneSchema(schema, requiredColumns)),
       quotedColumns,
-      Array.empty,
+      predicates,
       parts,
       url,
       options,
       groupByColumns,
       sample,
       limit,
-      sortOrders,
-      predicates)
+      sortOrders)
   }
   // scalastyle:on argcount
 }
@@ -239,15 +307,14 @@ private[jdbc] class JDBCRDD(
     getConnection: Int => Connection,
     schema: StructType,
     columns: Array[String],
-    filters: Array[Filter],
+    predicates: Array[Predicate],
     partitions: Array[Partition],
     url: String,
     options: JDBCOptions,
     groupByColumns: Option[Array[String]] = None,
     sample: Option[TableSampleInfo] = None,
     limit: Int = 0,
-    sortOrders: Array[SortOrder] = Array.empty[SortOrder],
-    predicates: Array[Predicate] = Array.empty[Predicate])
+    sortOrders: Array[SortOrder] = Array.empty[SortOrder])
   extends RDD[InternalRow](sc, Nil) {
 
   /**
@@ -265,15 +332,7 @@ private[jdbc] class JDBCRDD(
    */
   private val filterWhereClause: String = {
     val dialect = JdbcDialects.get(url)
-    if (filters.nonEmpty) {
-      filters
-        .flatMap(JDBCRDD.compileFilter(_, dialect))
-        .map(p => s"($p)").mkString(" AND ")
-    } else {
-      predicates
-        .flatMap(dialect.compileExpression(_))
-        .map(p => s"($p)").mkString(" AND ")
-    }
+    predicates.flatMap(dialect.compileExpression(_)).map(p => s"($p)").mkString(" AND ")
   }
 
   /**

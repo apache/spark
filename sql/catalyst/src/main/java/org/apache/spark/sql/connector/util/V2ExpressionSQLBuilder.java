@@ -24,15 +24,15 @@ import java.util.stream.Collectors;
 import org.apache.spark.sql.connector.expressions.Expression;
 import org.apache.spark.sql.connector.expressions.FieldReference;
 import org.apache.spark.sql.connector.expressions.GeneralScalarExpression;
-import org.apache.spark.sql.connector.expressions.LiteralValue;
+import org.apache.spark.sql.connector.expressions.Literal;
 
 /**
  * The builder to generate SQL from V2 expressions.
  */
 public class V2ExpressionSQLBuilder {
   public String build(Expression expr) {
-    if (expr instanceof LiteralValue) {
-      return visitLiteral((LiteralValue) expr);
+    if (expr instanceof Literal) {
+      return visitLiteral((Literal) expr);
     } else if (expr instanceof FieldReference) {
       return visitFieldReference((FieldReference) expr);
     } else if (expr instanceof GeneralScalarExpression) {
@@ -92,8 +92,8 @@ public class V2ExpressionSQLBuilder {
     }
   }
 
-  protected String visitLiteral(LiteralValue literalValue) {
-    return literalValue.toString();
+  protected String visitLiteral(Literal literal) {
+    return literal.toString();
   }
 
   protected String visitFieldReference(FieldReference fieldRef) {

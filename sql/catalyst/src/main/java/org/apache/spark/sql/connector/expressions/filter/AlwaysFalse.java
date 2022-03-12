@@ -18,18 +18,31 @@
 package org.apache.spark.sql.connector.expressions.filter;
 
 import org.apache.spark.annotation.Evolving;
+import org.apache.spark.sql.connector.expressions.Literal;
+import org.apache.spark.sql.types.DataType;
+import org.apache.spark.sql.types.DataTypes;
 
 /**
- * A predicate that evaluates to {@code true} if {@code child} is evaluated to {@code false}.
+ * A predicate that always evaluates to {@code false}.
  *
  * @since 3.3.0
  */
 @Evolving
-public final class Not extends Predicate {
+public class AlwaysFalse extends Predicate implements Literal<Boolean> {
 
-  public Not(Predicate child) {
-    super("NOT", new Predicate[]{child});
+  private DataType dataType = DataTypes.BooleanType;
+
+  public AlwaysFalse() {
+    super("FALSE", new Predicate[]{});
   }
 
-  public Predicate child() { return (Predicate) children()[0]; }
+  public Boolean value() {
+    return false;
+  }
+
+  public DataType dataType() {
+    return dataType;
+  }
+
+  public String toString() { return "false"; }
 }

@@ -30,8 +30,8 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util.{toPrettySQL, V2ExpressionBuilder}
 import org.apache.spark.sql.connector.catalog.{Identifier, StagingTableCatalog, SupportsNamespaces, SupportsPartitionManagement, SupportsWrite, Table, TableCapability, TableCatalog}
 import org.apache.spark.sql.connector.catalog.index.SupportsIndex
-import org.apache.spark.sql.connector.expressions.FieldReference
-import org.apache.spark.sql.connector.expressions.filter.{And => V2And, Not => V2Not, Or => V2Or, Predicate}
+import org.apache.spark.sql.connector.expressions.{FieldReference, LiteralValue}
+import org.apache.spark.sql.connector.expressions.filter.{AlwaysFalse, AlwaysTrue, And => V2And, Not => V2Not, Or => V2Or, Predicate}
 import org.apache.spark.sql.connector.read.LocalScan
 import org.apache.spark.sql.connector.read.streaming.{ContinuousStream, MicroBatchStream}
 import org.apache.spark.sql.connector.write.V1Write
@@ -570,11 +570,11 @@ abstract class PushablePredicateBase {
 
   def unapply(e: Expression): Option[Predicate] = e match {
     case expressions.Literal(true, BooleanType) =>
-      Some(new Predicate("TRUE", Array.empty))
+      Some(new AlwaysTrue())
     case expressions.Literal(false, BooleanType) =>
-      Some(new Predicate("FALSE", Array.empty))
+      Some(new AlwaysFalse())
     case col @ pushableColumn(name) if col.dataType.isInstanceOf[BooleanType] =>
-      Some(new Predicate(name, Array.empty))
+      Some(new Predicate("=", Array(FieldReference(name), LiteralValue(true, BooleanType))))
     case _ =>
       new V2ExpressionBuilder(e, nestedPredicatePushdownEnabled).build().map { v =>
         assert(v.isInstanceOf[Predicate])

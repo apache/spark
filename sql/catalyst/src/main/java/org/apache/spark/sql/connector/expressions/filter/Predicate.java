@@ -23,7 +23,8 @@ import org.apache.spark.sql.connector.expressions.GeneralScalarExpression;
 
 /**
  * The general representation of predicate expressions, which contains the upper-cased
- * expression name and all the children expressions.
+ * expression name and all the children expressions. Please also see {@link And},
+ * {@link Or}, {@link Not}, {@link AlwaysTrue}, {@link AlwaysFalse} for better type safety.
  * <p>
  * The currently supported predicate expressions:
  * <ol>
@@ -126,6 +127,18 @@ import org.apache.spark.sql.connector.expressions.GeneralScalarExpression;
  *  <li>Name: <code>NOT</code>
  *   <ul>
  *    <li>SQL semantic: <code>NOT expr</code></li>
+ *    <li>Since version: 3.3.0</li>
+ *   </ul>
+ *  </li>
+ *  <li>Name: <code>TRUE</code>
+ *   <ul>
+ *    <li>SQL semantic: <code>true</code></li>
+ *    <li>Since version: 3.3.0</li>
+ *   </ul>
+ *  </li>
+ *  <li>Name: <code>FALSE</code>
+ *   <ul>
+ *    <li>SQL semantic: <code>false</code></li>
  *    <li>Since version: 3.3.0</li>
  *   </ul>
  *  </li>

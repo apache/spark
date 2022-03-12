@@ -26,16 +26,12 @@ import org.apache.spark.annotation.Evolving;
  * @since 3.3.0
  */
 @Evolving
-public class And extends Predicate {
-  private Predicate left;
-  private Predicate right;
+public final class And extends Predicate {
 
   public And(Predicate left, Predicate right) {
     super("AND", new Predicate[]{left, right});
-    this.left = left;
-    this.right = right;
   }
 
-  public Predicate left() { return left; }
-  public Predicate right() { return right; }
+  public Predicate left() { return (Predicate) children()[0]; }
+  public Predicate right() { return (Predicate) children()[1]; }
 }
