@@ -1221,7 +1221,7 @@ object DateTimeUtils {
       }
     } catch {
       case _: scala.MatchError =>
-        throw QueryExecutionErrors.invalidUnitInTimestampAdd(unit)
+        throw new IllegalStateException(s"Got the unexpected unit '$unit'.")
       case _: ArithmeticException | _: DateTimeException =>
         throw QueryExecutionErrors.timestampAddOverflowError(micros, quantity, unit)
       case e: Throwable =>
@@ -1259,7 +1259,7 @@ object DateTimeUtils {
       val endLocalTs = getLocalDateTime(endTs, zoneId)
       timestampDiffMap(unitInUpperCase)(startLocalTs, endLocalTs)
     } else {
-      throw QueryExecutionErrors.invalidUnitInTimestampDiff(unit)
+      throw new IllegalStateException(s"Got the unexpected unit '$unit'.")
     }
   }
 }
