@@ -120,7 +120,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
                 newGroupingExpressions, sHolder.relation.output)
               val translatedAggregates = DataSourceStrategy.translateAggregation(
                 normalizedAggregates, normalizedGroupingExpressions)
-              val (finalResultExpressions, finalAggregates, finalTranslatedAggregates) = {
+              val (selectedResultExpressions, selectedAggregates, selectedTranslatedAggregates) = {
                 if (translatedAggregates.isEmpty ||
                   r.supportCompletePushDown(translatedAggregates.get) ||
                   translatedAggregates.get.aggregateExpressions().forall(!_.isInstanceOf[Avg])) {
@@ -172,13 +172,13 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
                 }
               }
 
-              if (finalTranslatedAggregates.isEmpty) {
+              if (selectedTranslatedAggregates.isEmpty) {
                 aggNode // return original plan node
-              } else if (!r.supportCompletePushDown(finalTranslatedAggregates.get) &&
-                !supportPartialAggPushDown(finalTranslatedAggregates.get)) {
+              } else if (!r.supportCompletePushDown(selectedTranslatedAggregates.get) &&
+                !supportPartialAggPushDown(selectedTranslatedAggregates.get)) {
                 aggNode // return original plan node
               } else {
-                val pushedAggregates = finalTranslatedAggregates.filter(r.pushAggregation)
+                val pushedAggregates = selectedTranslatedAggregates.filter(r.pushAggregation)
                 if (pushedAggregates.isEmpty) {
                   aggNode // return original plan node
                 } else {
@@ -198,7 +198,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
                   // +- RelationV2[c2#10, min(c1)#21, max(c1)#22]
                   // scalastyle:on
                   val newOutput = scan.readSchema().toAttributes
-                  assert(newOutput.length == groupingExpressions.length + finalAggregates.length)
+                  assert(newOutput.length == groupingExpressions.length + selectedAggregates.length)
                   val groupAttrs = normalizedGroupingExpressions.zip(newOutput).map {
                     case (a: Attribute, b: Attribute) => b.withExprId(a.exprId)
                     case (_, b) => b
@@ -219,7 +219,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
                   val wrappedScan = getWrappedScan(scan, sHolder, pushedAggregates)
                   val scanRelation =
                     DataSourceV2ScanRelation(sHolder.relation, wrappedScan, output)
-                  val resultExpressionWithAliases = finalResultExpressions.map {
+                  val finalResultExpressions = selectedResultExpressions.map {
                     case attr: AttributeReference
                       if originAttrToAliasAttr.contains(attr.canonicalized) =>
                       val alias = originAttrToAliasAttr(attr.canonicalized)
@@ -227,7 +227,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
                     case other => other
                   }
                   if (r.supportCompletePushDown(pushedAggregates.get)) {
-                    val projectExpressions = resultExpressionWithAliases.map { expr =>
+                    val projectExpressions = finalResultExpressions.map { expr =>
                       // TODO At present, only push down group by attribute is supported.
                       // In future, more attribute conversion is extended here. e.g. GetStructField
                       expr.transform {
@@ -241,7 +241,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
                     Project(projectExpressions, scanRelation)
                   } else {
                     val plan = Aggregate(output.take(groupingExpressions.length),
-                      resultExpressionWithAliases, scanRelation)
+                      finalResultExpressions, scanRelation)
 
                     // scalastyle:off
                     // Change the optimized logical plan to reflect the pushed down aggregate
