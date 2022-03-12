@@ -889,6 +889,11 @@
         </exclusions>
       </dependency>
       <dependency>
+        <groupId>io.netty</groupId>
+        <artifactId>netty-tcnative-classes</artifactId>
+        <version>2.0.50.Final</version>
+      </dependency>
+      <dependency>
         <groupId>org.apache.derby</groupId>
         <artifactId>derby</artifactId>
         <version>${derby.version}</version>
