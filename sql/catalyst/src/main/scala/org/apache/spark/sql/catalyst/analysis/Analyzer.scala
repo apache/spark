@@ -4032,24 +4032,26 @@ object SessionWindowing extends Rule[LogicalPlan] {
           case s: SessionWindow => sessionAttr
         }
 
-        // As same as tumbling window, we add a filter to filter out nulls.
-        // And we also filter out events with negative or zero or invalid gap duration.
-        val children = gapDuration.child.children
-        val validGapDuration = if (children.size == 0) {
-          val child = gapDuration.child.toString
-          child.startsWith("-") || child.startsWith("0") || child.startsWith("null")
-        } else {
-          children.toStream
-            .filter(_.dataType != BooleanType)
-            .exists(e =>
-            e.toString.startsWith("-") ||
-              e.toString.startsWith("0") ||
-              IntervalUtils.safeStringToInterval(UTF8String.fromString(e.toString)) == null) ||
-            // User defined functions are not resolved here
-            !gapDuration.child.getField("udfName")
-              .child.toString.toLowerCase(Locale.ROOT).startsWith("case when")
+        // Judge whether all conditions are greater than 0 from the static gapDuration
+        def getSum(child: Expression) = {
+          val calendarInterval = IntervalUtils
+            .safeStringToInterval(UTF8String.fromString(child.toString))
+          calendarInterval == null ||
+            calendarInterval.months + calendarInterval.days + calendarInterval.microseconds <= 0
         }
-        val filterExpr = if (validGapDuration) {
+
+        val children = gapDuration.child.children
+        val needFilterTimeSize = if (children.size == 0) {
+          getSum(gapDuration.child)
+        } else {
+          children.filter(_.dataType != BooleanType).exists(e =>
+            // The user define function itself is origin, so there is no upward origin
+            e.origin.line.nonEmpty || getSum(e))
+        }
+
+        // As same as tumbling window, we add a filter to filter out nulls.
+        // And we also filter out events with negative or zero gap duration.
+        val filterExpr = if (needFilterTimeSize) {
           IsNotNull(session.timeColumn) &&
             (sessionAttr.getField(SESSION_END) > sessionAttr.getField(SESSION_START))
         } else {
