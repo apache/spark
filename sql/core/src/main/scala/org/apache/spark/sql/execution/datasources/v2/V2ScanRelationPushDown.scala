@@ -93,22 +93,38 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
     case aggNode @ Aggregate(groupingExpressions, resultExpressions, child) =>
       child match {
         case ScanOperation(project, filters, sHolder: ScanBuilderHolder)
-          if filters.isEmpty && project.forall(_.isInstanceOf[AttributeReference]) =>
+          if filters.isEmpty &&
+            project.forall(p => p.isInstanceOf[AttributeReference] || p.isInstanceOf[Alias]) =>
           sHolder.builder match {
             case r: SupportsPushDownAggregates =>
+              val aliasAttrToOriginAttr = mutable.HashMap.empty[Expression, AttributeReference]
+              val originAttrToAliasAttr = mutable.HashMap.empty[Expression, Attribute]
+              collectAliases(project, aliasAttrToOriginAttr, originAttrToAliasAttr)
+              val newResultExpressions = resultExpressions.map { expr =>
+                expr.transform {
+                  case r: AttributeReference if aliasAttrToOriginAttr.contains(r.canonicalized) =>
+                    aliasAttrToOriginAttr(r.canonicalized)
+                }
+              }.asInstanceOf[Seq[NamedExpression]]
+              val newGroupingExpressions = groupingExpressions.map { expr =>
+                expr.transform {
+                  case r: AttributeReference if aliasAttrToOriginAttr.contains(r.canonicalized) =>
+                    aliasAttrToOriginAttr(r.canonicalized)
+                }
+              }
               val aggExprToOutputOrdinal = mutable.HashMap.empty[Expression, Int]
-              val aggregates = collectAggregates(resultExpressions, aggExprToOutputOrdinal)
+              val aggregates = collectAggregates(newResultExpressions, aggExprToOutputOrdinal)
               val normalizedAggregates = DataSourceStrategy.normalizeExprs(
                 aggregates, sHolder.relation.output).asInstanceOf[Seq[AggregateExpression]]
               val normalizedGroupingExpressions = DataSourceStrategy.normalizeExprs(
-                groupingExpressions, sHolder.relation.output)
+                newGroupingExpressions, sHolder.relation.output)
               val translatedAggregates = DataSourceStrategy.translateAggregation(
                 normalizedAggregates, normalizedGroupingExpressions)
               val (finalResultExpressions, finalAggregates, finalTranslatedAggregates) = {
                 if (translatedAggregates.isEmpty ||
                   r.supportCompletePushDown(translatedAggregates.get) ||
                   translatedAggregates.get.aggregateExpressions().forall(!_.isInstanceOf[Avg])) {
-                  (resultExpressions, aggregates, translatedAggregates)
+                  (newResultExpressions, aggregates, translatedAggregates)
                 } else {
                   // scalastyle:off
                   // The data source doesn't support the complete push-down of this aggregation.
@@ -203,8 +219,15 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
                   val wrappedScan = getWrappedScan(scan, sHolder, pushedAggregates)
                   val scanRelation =
                     DataSourceV2ScanRelation(sHolder.relation, wrappedScan, output)
+                  val resultExpressionWithAliases = finalResultExpressions.map {
+                    case attr: AttributeReference
+                      if originAttrToAliasAttr.contains(attr.canonicalized) =>
+                      val alias = originAttrToAliasAttr(attr.canonicalized)
+                      Alias(attr, alias.name)(alias.exprId)
+                    case other => other
+                  }
                   if (r.supportCompletePushDown(pushedAggregates.get)) {
-                    val projectExpressions = resultExpressions.map { expr =>
+                    val projectExpressions = resultExpressionWithAliases.map { expr =>
                       // TODO At present, only push down group by attribute is supported.
                       // In future, more attribute conversion is extended here. e.g. GetStructField
                       expr.transform {
@@ -218,7 +241,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
                     Project(projectExpressions, scanRelation)
                   } else {
                     val plan = Aggregate(output.take(groupingExpressions.length),
-                      finalResultExpressions, scanRelation)
+                      resultExpressionWithAliases, scanRelation)
 
                     // scalastyle:off
                     // Change the optimized logical plan to reflect the pushed down aggregate
@@ -279,6 +302,18 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
           ordinal += 1
           agg
       }
+    }
+  }
+
+  private def collectAliases(project: Seq[NamedExpression],
+      aliasAttrToOriginAttr: mutable.HashMap[Expression, AttributeReference],
+      originAttrToAliasAttr: mutable.HashMap[Expression, Attribute]) = {
+    project.collect {
+      case alias @ Alias(attr: AttributeReference, _) =>
+        val output = alias.toAttribute
+        aliasAttrToOriginAttr(output.canonicalized) = attr
+        originAttrToAliasAttr(attr.canonicalized) = output
+      case other => other
     }
   }
 

@@ -17,8 +17,9 @@
 
 package org.apache.spark.sql.catalyst.util
 
-import org.apache.spark.sql.catalyst.expressions.{Add, And, Attribute, BinaryComparison, BinaryOperator, BitwiseAnd, BitwiseNot, BitwiseOr, BitwiseXor, CaseWhen, Divide, EqualTo, Expression, IsNotNull, IsNull, Literal, Multiply, Not, Or, Remainder, Subtract, UnaryMinus}
+import org.apache.spark.sql.catalyst.expressions.{Add, Alias, And, Attribute, BinaryComparison, BinaryOperator, BitwiseAnd, BitwiseNot, BitwiseOr, BitwiseXor, CaseWhen, Divide, EqualTo, Expression, IsNotNull, IsNull, Literal, Multiply, Not, Or, Remainder, Subtract, UnaryMinus}
 import org.apache.spark.sql.connector.expressions.{Expression => V2Expression, FieldReference, GeneralScalarExpression, LiteralValue}
+import org.apache.spark.sql.types.StringType
 
 /**
  * The builder to generate V2 expressions from catalyst expressions.
@@ -68,6 +69,8 @@ class V2ExpressionBuilder(e: Expression) {
       .map(v => new GeneralScalarExpression("-", Array[V2Expression](v)))
     case BitwiseNot(child) => generateExpression(child)
       .map(v => new GeneralScalarExpression("~", Array[V2Expression](v)))
+    case Alias(col, name) => generateExpression(col).map(c =>
+      new GeneralScalarExpression("AS", Array[V2Expression](c, LiteralValue(name, StringType))))
     case CaseWhen(branches, elseValue) =>
       val conditions = branches.map(_._1).flatMap(generateExpression)
       val values = branches.map(_._2).flatMap(generateExpression)

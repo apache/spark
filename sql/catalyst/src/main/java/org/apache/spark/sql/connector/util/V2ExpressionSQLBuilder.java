@@ -72,6 +72,8 @@ public class V2ExpressionSQLBuilder {
           return visitNot(build(e.children()[0]));
         case "~":
           return visitUnaryArithmetic(name, build(e.children()[0]));
+        case "AS":
+          return visitAs(build(e.children()[0]), build(e.children()[1]));
         case "CASE_WHEN":
           List<String> children = new ArrayList<>();
           for (Expression child : e.children()) {
@@ -124,6 +126,8 @@ public class V2ExpressionSQLBuilder {
   }
 
   protected String visitUnaryArithmetic(String name, String v) { return name +" (" + v + ")"; }
+
+  protected String visitAs(String v, String name) { return v +" AS " + name; }
 
   protected String visitCaseWhen(String[] children) {
     StringBuilder sb = new StringBuilder("CASE");
