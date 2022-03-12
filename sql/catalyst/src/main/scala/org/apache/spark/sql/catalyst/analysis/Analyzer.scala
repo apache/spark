@@ -4032,7 +4032,6 @@ object SessionWindowing extends Rule[LogicalPlan] {
           case s: SessionWindow => sessionAttr
         }
 
-        // Judge whether all conditions are greater than 0 from the static gapDuration
         def getSum(child: Expression) = {
           val calendarInterval = IntervalUtils
             .safeStringToInterval(UTF8String.fromString(child.toString))
@@ -4040,6 +4039,7 @@ object SessionWindowing extends Rule[LogicalPlan] {
             calendarInterval.months + calendarInterval.days + calendarInterval.microseconds <= 0
         }
 
+        // Judge whether all conditions are greater than 0 from the gapDuration
         val children = gapDuration.child.children
         val needFilterTimeSize = if (children.size == 0) {
           getSum(gapDuration.child)
