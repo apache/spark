@@ -327,6 +327,16 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product with Tre
     this.collect { case p if p.children.isEmpty => p }
   }
 
+  def collectUntil(f: BaseType => Boolean): Seq[BaseType] = {
+    val ret = new collection.mutable.ArrayBuffer[BaseType]()
+    if (f(this)) {
+      ret
+    } else {
+      ret.+=:(this)
+      ret ++ children.foldLeft(Seq.empty[BaseType]) { (l, r) => l ++ r.collectUntil(f) }
+    }
+  }
+
   /**
    * Finds and returns the first [[TreeNode]] of the tree for which the given partial function
    * is defined (pre-order), and applies the partial function to it.

@@ -156,9 +156,19 @@ case class HashAggregateExec(
   // but the vectorized hashmap can still be switched on for testing and benchmarking purposes.
   private var isVectorizedHashMapEnabled: Boolean = false
 
-  private val isAdaptivePartialAggregationEnabled = {
+  private lazy val isAdaptivePartialAggregationEnabled = {
     isSupportPartialAgg && conf.adaptivePartialAggregationThreshold > 0 &&
-      conf.adaptivePartialAggregationThreshold < (1 << conf.fastHashAggregateRowMaxCapacityBit)
+      conf.adaptivePartialAggregationThreshold < (1 << conf.fastHashAggregateRowMaxCapacityBit) && {
+      child
+        .collectUntil(p => p.isInstanceOf[WholeStageCodegenExec] ||
+          !p.isInstanceOf[CodegenSupport] ||
+          p.isInstanceOf[LeafExecNode]).forall {
+        case _: ProjectExec | _: FilterExec | _: ColumnarToRowExec => true
+        case _: InputAdapter => true
+        // HashAggregateExec, ExpandExec, SortMergeJoinExec ...
+        case _ => false
+      }
+    }
   }
 
   // The name for UnsafeRow HashMap
@@ -580,8 +590,6 @@ case class HashAggregateExec(
       } else {
         ""
       }
-
-    val limitNotReachedCondition = limitNotReachedCond
 
     def outputFromFastHashMap: String = {
       if (isFastHashMapEnabled) {
