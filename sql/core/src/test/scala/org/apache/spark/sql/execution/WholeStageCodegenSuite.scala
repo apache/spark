@@ -700,10 +700,11 @@ class WholeStageCodegenSuite extends QueryTest with SharedSparkSession
       // BroadcastHashJoinExec with a HashAggregateExec child containing no aggregate expressions
       val distinctWithId = baseTable.distinct().withColumn("id", monotonically_increasing_id())
         .join(baseTable, "idx")
-      assert(distinctWithId.queryExecution.executedPlan.collectFirst {
+      assert(distinctWithId.queryExecution.executedPlan.exists {
         case WholeStageCodegenExec(
           ProjectExec(_, BroadcastHashJoinExec(_, _, _, _, _, _: HashAggregateExec, _, _))) => true
-      }.isDefined)
+        case _ => false
+      })
       checkAnswer(distinctWithId, Seq(Row(1, 0), Row(1, 0)))
 
       // BroadcastHashJoinExec with a HashAggregateExec child containing a Final mode aggregate
@@ -711,10 +712,11 @@ class WholeStageCodegenSuite extends QueryTest with SharedSparkSession
       val groupByWithId =
         baseTable.groupBy("idx").sum().withColumn("id", monotonically_increasing_id())
         .join(baseTable, "idx")
-      assert(groupByWithId.queryExecution.executedPlan.collectFirst {
+      assert(groupByWithId.queryExecution.executedPlan.exists {
         case WholeStageCodegenExec(
           ProjectExec(_, BroadcastHashJoinExec(_, _, _, _, _, _: HashAggregateExec, _, _))) => true
-      }.isDefined)
+        case _ => false
+      })
       checkAnswer(groupByWithId, Seq(Row(1, 2, 0), Row(1, 2, 0)))
     }
   }
