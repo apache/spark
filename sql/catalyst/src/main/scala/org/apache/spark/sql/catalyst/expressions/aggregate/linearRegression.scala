@@ -144,7 +144,7 @@ case class RegrR2(x: Expression, y: Expression) extends PearsonCorrelation(x, y,
   override val evaluateExpression: Expression = {
     val corr = ck / sqrt(xMk * yMk)
     If(xMk === 0.0, Literal.create(null, DoubleType),
-      If(yMk === 0.0, Literal.create(1, DoubleType), corr * corr))
+      If(yMk === 0.0, Literal.create(1.0, DoubleType), corr * corr))
   }
   override protected def withNewChildrenInternal(
       newLeft: Expression, newRight: Expression): RegrR2 =
