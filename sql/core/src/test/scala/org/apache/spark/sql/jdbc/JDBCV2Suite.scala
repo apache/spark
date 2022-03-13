@@ -283,15 +283,14 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
 
     checkAnswer(df2, Seq(Row(1, "amy", 10000, 1000), Row(1, "cathy", 9000, 1200)))
 
-    // JdbcDialect doesn't support compile function StartsWith.
     val df3 = spark.table("h2.test.employee").filter($"name".startsWith("a"))
 
-    checkFiltersRemoved(df3, false)
+    checkFiltersRemoved(df3)
 
     df3.queryExecution.optimizedPlan.collect {
       case _: DataSourceV2ScanRelation =>
         val expected_plan_fragment =
-          "PushedFilters: [NAME IS NOT NULL]"
+          "PushedFilters: [NAME IS NOT NULL, NAME LIKE 'a%']"
         checkKeywordsExistsInExplain(df3, expected_plan_fragment)
     }
 
