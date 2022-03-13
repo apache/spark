@@ -194,7 +194,7 @@ trait FileSourceAggregatePushDownSuite
         query.queryExecution.optimizedPlan.collect {
           case _: DataSourceV2ScanRelation =>
             val expected_plan_fragment =
-              "PushedAggregation: [MIN(_1)]"  // aggregate alias not pushed down
+              "PushedAggregation: [MIN(_1)]"
             checkKeywordsExistsInExplain(query, expected_plan_fragment)
         }
         checkAnswer(query, Seq(Row(-2)))
