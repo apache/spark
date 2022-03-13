@@ -52,6 +52,11 @@ class NumberFormatter(originNumberFormat: String, isParse: Boolean = true) exten
 
   private val transformedFormat = transform(normalizedNumberFormat)
 
+  // Spark chose DecimalFormat as the underlying implementation because of its good compatibility.
+  // For example:
+  // to_number('1,116.11', '0,000.00') returns 1116.11. The underlying format is '#,###.00'.
+  // to_number('1,11,6.11', '000,,0.00') returns 1116.11. The underlying format is '###,,#.00'.
+  // to_number('1,11,6.11', '000,,,0.00') returns 1116.11. The underlying format is '###,,,#.00'.
   private lazy val numberDecimalFormat = {
     val decimalFormat = new DecimalFormat(transformedFormat)
     decimalFormat.setParseBigDecimal(true)

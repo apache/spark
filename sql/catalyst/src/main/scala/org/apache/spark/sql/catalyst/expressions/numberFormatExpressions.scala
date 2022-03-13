@@ -52,6 +52,11 @@ import org.apache.spark.unsafe.types.UTF8String
       > SELECT _FUNC_('12,454.8-', '99G999D9S');
        -12454.8
   """,
+  note = """
+    ToNumber chose DecimalFormat as the underlying implementation, so ToNumber keep
+    good compatibility with DecimalFormat. For example: to_number('1,11,6.11', '000,,0.00')
+    works good and returns 1116.11
+  """,
   since = "3.3.0",
   group = "string_funcs")
 case class ToNumber(left: Expression, right: Expression)
