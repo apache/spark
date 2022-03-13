@@ -888,6 +888,11 @@
           </exclusion>
         </exclusions>
       </dependency>
+      <!-- SPARK-38541: Add the explicit dependency on `netty-tcnative-classes` because the dependency on
+           `netty-tcnative-classes` is changed to `Optional` in [netty](https://github.com/netty/netty/pull/12146).
+           `netty-tcnative-classes` module is mainly used by SSL package in `netty-handler`.
+           We need to ensure that `netty-tcnative-classes` uses the corresponding version when Netty upgrade.
+      -->
       <dependency>
         <groupId>io.netty</groupId>
         <artifactId>netty-tcnative-classes</artifactId>
