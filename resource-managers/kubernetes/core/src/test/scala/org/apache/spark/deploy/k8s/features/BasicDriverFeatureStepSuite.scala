@@ -38,8 +38,8 @@ class BasicDriverFeatureStepSuite extends SparkFunSuite {
   private val CONTAINER_IMAGE_PULL_POLICY = "IfNotPresent"
   private val DRIVER_ANNOTATIONS = Map("customAnnotation" -> "customAnnotationValue")
   private val DRIVER_ENVS = Map(
-    "customDriverEnv1" -> "customDriverEnv2",
-    "customDriverEnv2" -> "customDriverEnv2")
+    "customDriverEnv1" -> "customDriverEnv1Value",
+    "customDriverEnv2" -> "customDriverEnv2Value")
   private val TEST_IMAGE_PULL_SECRETS = Seq("my-secret-1", "my-secret-2")
   private val TEST_IMAGE_PULL_SECRET_OBJECTS =
     TEST_IMAGE_PULL_SECRETS.map { secret =>
@@ -90,7 +90,7 @@ class BasicDriverFeatureStepSuite extends SparkFunSuite {
       .map { env => (env.getName, env.getValue) }
       .toMap
     DRIVER_ENVS.foreach { case (k, v) =>
-      assert(envs(v) === v)
+      assert(envs(k) === v)
     }
     assert(envs(ENV_SPARK_USER) === Utils.getCurrentUserName())
     assert(envs(ENV_APPLICATION_ID) === kubernetesConf.appId)
