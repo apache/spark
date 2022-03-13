@@ -92,9 +92,8 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
     // update the scan builder with agg pushdown and return a new plan with agg pushed
     case aggNode @ Aggregate(groupingExpressions, resultExpressions, child) =>
       child match {
-        case ScanOperation(project, filters, sHolder: ScanBuilderHolder)
-          if filters.isEmpty &&
-            project.forall(p => p.isInstanceOf[AttributeReference] || p.isInstanceOf[Alias]) =>
+        case ScanOperation(project, filters, sHolder: ScanBuilderHolder) if filters.isEmpty &&
+          project.forall(p => p.isInstanceOf[AttributeReference] || p.isInstanceOf[Alias]) =>
           sHolder.builder match {
             case r: SupportsPushDownAggregates =>
               val aliasAttrToOriginAttr = mutable.HashMap.empty[Expression, AttributeReference]
