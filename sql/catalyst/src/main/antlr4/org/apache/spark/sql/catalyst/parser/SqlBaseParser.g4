@@ -808,8 +808,8 @@ valueExpression
 
 primaryExpression
     : name=(CURRENT_DATE | CURRENT_TIMESTAMP | CURRENT_USER)                                   #currentLike
-    | name=(TIMESTAMPADD | DATEADD | DATE_ADD) LEFT_PAREN unit=identifier COMMA unitsAmount=valueExpression COMMA timestamp=valueExpression RIGHT_PAREN             #timestampadd
-    | name=(TIMESTAMPDIFF | DATEDIFF | DATE_DIFF) LEFT_PAREN unit=identifier COMMA startTimestamp=valueExpression COMMA endTimestamp=valueExpression RIGHT_PAREN    #timestampdiff
+    | name=(TIMESTAMPADD | DATEADD) LEFT_PAREN unit=identifier COMMA unitsAmount=valueExpression COMMA timestamp=valueExpression RIGHT_PAREN             #timestampadd
+    | name=(TIMESTAMPDIFF | DATEDIFF) LEFT_PAREN unit=identifier COMMA startTimestamp=valueExpression COMMA endTimestamp=valueExpression RIGHT_PAREN    #timestampdiff
     | CASE whenClause+ (ELSE elseExpression=expression)? END                                   #searchedCase
     | CASE value=expression whenClause+ (ELSE elseExpression=expression)? END                  #simpleCase
     | name=(CAST | TRY_CAST) LEFT_PAREN expression AS dataType RIGHT_PAREN                     #cast
@@ -1095,9 +1095,7 @@ ansiNonReserved
     | DATABASE
     | DATABASES
     | DATEADD
-    | DATE_ADD
     | DATEDIFF
-    | DATE_DIFF
     | DAY
     | DBPROPERTIES
     | DEFAULT
@@ -1348,9 +1346,7 @@ nonReserved
     | DATABASE
     | DATABASES
     | DATEADD
-    | DATE_ADD
     | DATEDIFF
-    | DATE_DIFF
     | DAY
     | DBPROPERTIES
     | DEFAULT

@@ -18,7 +18,6 @@ package org.apache.spark.deploy.k8s.features
 
 import java.io.File
 
-import io.fabric8.kubernetes.api.model.{ContainerBuilder, PodBuilder}
 import io.fabric8.volcano.scheduling.v1beta1.PodGroup
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
@@ -48,25 +47,6 @@ class VolcanoFeatureStepSuite extends SparkFunSuite {
     val configuredPod = step.configurePod(SparkPod.initialPod())
     val annotations = configuredPod.pod.getMetadata.getAnnotations
     assert(annotations.get("scheduling.k8s.io/group-name") === s"${kubernetesConf.appId}-podgroup")
-  }
-
-  test("SPARK-38423: Support priorityClassName") {
-    // test null priority
-    val podWithNullPriority = SparkPod.initialPod()
-    assert(podWithNullPriority.pod.getSpec.getPriorityClassName === null)
-    verifyPriority(SparkPod.initialPod())
-    // test normal priority
-    val podWithPriority = SparkPod(
-      new PodBuilder()
-        .withNewMetadata()
-        .endMetadata()
-        .withNewSpec()
-          .withPriorityClassName("priority")
-        .endSpec()
-        .build(),
-      new ContainerBuilder().build())
-    assert(podWithPriority.pod.getSpec.getPriorityClassName === "priority")
-    verifyPriority(podWithPriority)
   }
 
   test("SPARK-38455: Support driver podgroup template") {

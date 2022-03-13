@@ -308,9 +308,21 @@ You can also specify your specific dockerfile to build JVM/Python/R based image 
 
 # Running the Volcano Integration Tests
 
-Prerequisites
-- Install Volcano according to [link](https://volcano.sh/en/docs/installation/).
+Volcano integration is experimental in Aapche Spark 3.3.0 and the test coverage is limited.
+
+## Requirements
 - A minimum of 6 CPUs and 9G of memory is required to complete all Volcano test cases.
+- Volcano v1.5.0.
+
+## Installation
+
+    # x86_64
+    kubectl apply -f https://raw.githubusercontent.com/volcano-sh/volcano/release-1.5/installer/volcano-development.yaml
+
+    # arm64:
+    kubectl apply -f https://raw.githubusercontent.com/volcano-sh/volcano/release-1.5/installer/volcano-development-arm64.yaml
+
+## Run tests
 
 You can specify `-Pvolcano` to enable volcano module to run all Kubernetes and Volcano tests
 

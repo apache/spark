@@ -3070,9 +3070,9 @@ case class ConvertTimezone(
   """,
   examples = """
     Examples:
-      > SELECT _FUNC_('HOUR', 8, timestamp_ntz'2022-02-11 20:30:00');
+      > SELECT _FUNC_(HOUR, 8, timestamp_ntz'2022-02-11 20:30:00');
        2022-02-12 04:30:00
-      > SELECT _FUNC_('MONTH', 1, timestamp_ltz'2022-01-31 00:00:00');
+      > SELECT _FUNC_(MONTH, 1, timestamp_ltz'2022-01-31 00:00:00');
        2022-02-28 00:00:00
       > SELECT _FUNC_(SECOND, -10, date'2022-01-01');
        2021-12-31 23:59:50
@@ -3083,23 +3083,22 @@ case class ConvertTimezone(
   since = "3.3.0")
 // scalastyle:on line.size.limit
 case class TimestampAdd(
-    unit: Expression,
+    unit: String,
     quantity: Expression,
     timestamp: Expression,
     timeZoneId: Option[String] = None)
-  extends TernaryExpression
+  extends BinaryExpression
   with ImplicitCastInputTypes
   with NullIntolerant
   with TimeZoneAwareExpression {
 
-  def this(unit: Expression, quantity: Expression, timestamp: Expression) =
+  def this(unit: String, quantity: Expression, timestamp: Expression) =
     this(unit, quantity, timestamp, None)
 
-  override def first: Expression = unit
-  override def second: Expression = quantity
-  override def third: Expression = timestamp
+  override def left: Expression = quantity
+  override def right: Expression = timestamp
 
-  override def inputTypes: Seq[AbstractDataType] = Seq(StringType, IntegerType, AnyTimestampType)
+  override def inputTypes: Seq[AbstractDataType] = Seq(IntegerType, AnyTimestampType)
   override def dataType: DataType = timestamp.dataType
 
   override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
@@ -3107,28 +3106,23 @@ case class TimestampAdd(
 
   @transient private lazy val zoneIdInEval: ZoneId = zoneIdForType(timestamp.dataType)
 
-  override def nullSafeEval(u: Any, q: Any, micros: Any): Any = {
-    DateTimeUtils.timestampAdd(
-      u.asInstanceOf[UTF8String].toString,
-      q.asInstanceOf[Int],
-      micros.asInstanceOf[Long],
-      zoneIdInEval)
+  override def nullSafeEval(q: Any, micros: Any): Any = {
+    DateTimeUtils.timestampAdd(unit, q.asInstanceOf[Int], micros.asInstanceOf[Long], zoneIdInEval)
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
     val zid = ctx.addReferenceObj("zoneId", zoneIdInEval, classOf[ZoneId].getName)
-    defineCodeGen(ctx, ev, (u, q, micros) =>
-      s"""$dtu.timestampAdd($u.toString(), $q, $micros, $zid)""")
+    defineCodeGen(ctx, ev, (q, micros) =>
+      s"""$dtu.timestampAdd("$unit", $q, $micros, $zid)""")
   }
 
   override def prettyName: String = "timestampadd"
 
   override protected def withNewChildrenInternal(
-      newFirst: Expression,
-      newSecond: Expression,
-      newThird: Expression): TimestampAdd = {
-    copy(unit = newFirst, quantity = newSecond, timestamp = newThird)
+      newLeft: Expression,
+      newRight: Expression): TimestampAdd = {
+    copy(quantity = newLeft, timestamp = newRight)
   }
 }
 
@@ -3154,9 +3148,9 @@ case class TimestampAdd(
   """,
   examples = """
     Examples:
-      > SELECT _FUNC_('HOUR', timestamp_ntz'2022-02-11 20:30:00', timestamp_ntz'2022-02-12 04:30:00');
+      > SELECT _FUNC_(HOUR, timestamp_ntz'2022-02-11 20:30:00', timestamp_ntz'2022-02-12 04:30:00');
        8
-      > SELECT _FUNC_('MONTH', timestamp_ltz'2022-01-01 00:00:00', timestamp_ltz'2022-02-28 00:00:00');
+      > SELECT _FUNC_(MONTH, timestamp_ltz'2022-01-01 00:00:00', timestamp_ltz'2022-02-28 00:00:00');
        1
       > SELECT _FUNC_(SECOND, date'2022-01-01', timestamp'2021-12-31 23:59:50');
        -10
@@ -3167,23 +3161,22 @@ case class TimestampAdd(
   since = "3.3.0")
 // scalastyle:on line.size.limit
 case class TimestampDiff(
-    unit: Expression,
+    unit: String,
     startTimestamp: Expression,
     endTimestamp: Expression,
     timeZoneId: Option[String] = None)
-  extends TernaryExpression
+  extends BinaryExpression
   with ImplicitCastInputTypes
   with NullIntolerant
   with TimeZoneAwareExpression {
 
-  def this(unit: Expression, quantity: Expression, timestamp: Expression) =
+  def this(unit: String, quantity: Expression, timestamp: Expression) =
     this(unit, quantity, timestamp, None)
 
-  override def first: Expression = unit
-  override def second: Expression = startTimestamp
-  override def third: Expression = endTimestamp
+  override def left: Expression = startTimestamp
+  override def right: Expression = endTimestamp
 
-  override def inputTypes: Seq[AbstractDataType] = Seq(StringType, TimestampType, TimestampType)
+  override def inputTypes: Seq[AbstractDataType] = Seq(TimestampType, TimestampType)
   override def dataType: DataType = LongType
 
   override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
@@ -3191,9 +3184,9 @@ case class TimestampDiff(
 
   @transient private lazy val zoneIdInEval: ZoneId = zoneIdForType(endTimestamp.dataType)
 
-  override def nullSafeEval(u: Any, startMicros: Any, endMicros: Any): Any = {
+  override def nullSafeEval(startMicros: Any, endMicros: Any): Any = {
     DateTimeUtils.timestampDiff(
-      u.asInstanceOf[UTF8String].toString,
+      unit,
       startMicros.asInstanceOf[Long],
       endMicros.asInstanceOf[Long],
       zoneIdInEval)
@@ -3202,16 +3195,15 @@ case class TimestampDiff(
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
     val zid = ctx.addReferenceObj("zoneId", zoneIdInEval, classOf[ZoneId].getName)
-    defineCodeGen(ctx, ev, (u, s, e) =>
-      s"""$dtu.timestampDiff($u.toString(), $s, $e, $zid)""")
+    defineCodeGen(ctx, ev, (s, e) =>
+      s"""$dtu.timestampDiff("$unit", $s, $e, $zid)""")
   }
 
   override def prettyName: String = "timestampdiff"
 
   override protected def withNewChildrenInternal(
-      newFirst: Expression,
-      newSecond: Expression,
-      newThird: Expression): TimestampDiff = {
-    copy(unit = newFirst, startTimestamp = newSecond, endTimestamp = newThird)
+      newLeft: Expression,
+      newRight: Expression): TimestampDiff = {
+    copy(startTimestamp = newLeft, endTimestamp = newRight)
   }
 }

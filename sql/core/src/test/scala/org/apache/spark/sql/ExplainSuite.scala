@@ -106,7 +106,7 @@ class ExplainSuite extends ExplainSuiteHelper with DisableAdaptiveExecutionSuite
       keywords = "InMemoryRelation", "StorageLevel(disk, memory, deserialized, 1 replicas)")
   }
 
-  test("optimized plan should show the rewritten aggregate expression") {
+  test("optimized plan should show the rewritten expression") {
     withTempView("test_agg") {
       sql(
         """
@@ -124,6 +124,13 @@ class ExplainSuite extends ExplainSuiteHelper with DisableAdaptiveExecutionSuite
       checkKeywordsExistsInExplain(df,
         "Aggregate [k#x], [k#x, every(v#x) AS every(v)#x, some(v#x) AS some(v)#x, " +
           "any(v#x) AS any(v)#x]")
+    }
+
+    withTable("t") {
+      sql("CREATE TABLE t(col TIMESTAMP) USING parquet")
+      val df = sql("SELECT date_part('month', col) FROM t")
+      checkKeywordsExistsInExplain(df,
+        "Project [month(cast(col#x as date)) AS date_part(month, col)#x]")
     }
   }
 
