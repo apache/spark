@@ -31,6 +31,7 @@ import io.netty.handler.timeout.ReadTimeoutHandler
 import org.apache.spark.{SparkConf, SparkEnv}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.R._
+import org.apache.spark.network.util.{IOMode, NettyUtils}
 
 /**
  * Netty-based backend server that is used to communicate between R and Java.
@@ -45,7 +46,6 @@ private[spark] class RBackend {
   private[r] val jvmObjectTracker = new JVMObjectTracker
 
   def init(): (Int, RAuthHelper) = {
-    import org.apache.spark.network.util.{IOMode, NettyUtils}
     val conf = Option(SparkEnv.get).map(_.conf).getOrElse(new SparkConf())
     val backendConnectionTimeout = conf.get(R_BACKEND_CONNECTION_TIMEOUT)
     bossGroup = new NioEventLoopGroup(conf.get(R_NUM_BACKEND_THREADS))
