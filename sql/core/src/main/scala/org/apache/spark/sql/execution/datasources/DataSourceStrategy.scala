@@ -718,7 +718,7 @@ object DataSourceStrategy
             case PushableExpression(expr) => Some(new Count(expr, agg.isDistinct))
             case _ => None
           }
-        case aggregate.Sum(PushableExpression(expr), _, _) => Some(new Sum(expr, agg.isDistinct))
+        case aggregate.Sum(PushableExpression(expr), _) => Some(new Sum(expr, agg.isDistinct))
         case aggregate.Average(PushableExpression(expr), _) => Some(new Avg(expr, agg.isDistinct))
         case aggregate.VariancePop(PushableColumnWithoutNestedColumn(name), _) =>
           Some(new GeneralAggregateFunc(

@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions.aggregate
 
-import org.apache.spark.sql.catalyst.analysis.{ExpressionBuilder, TypeCheckResult}
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.trees.TreePattern.{SUM, TreePattern}
@@ -26,28 +26,11 @@ import org.apache.spark.sql.catalyst.util.TypeUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
-@ExpressionDescription(
-  usage = "_FUNC_(expr) - Returns the sum calculated from values of a group.",
-  examples = """
-    Examples:
-      > SELECT _FUNC_(col) FROM VALUES (5), (10), (15) AS tab(col);
-       30
-      > SELECT _FUNC_(col) FROM VALUES (NULL), (10), (15) AS tab(col);
-       25
-      > SELECT _FUNC_(col) FROM VALUES (NULL), (NULL) AS tab(col);
-       NULL
-  """,
-  group = "agg_funcs",
-  since = "1.0.0")
-case class Sum(
-    child: Expression,
-    failOnError: Boolean = SQLConf.get.ansiEnabled,
-    nullOnIntegralOverflow: Boolean = false)
-  extends DeclarativeAggregate
+abstract class SumBase(child: Expression) extends DeclarativeAggregate
   with ImplicitCastInputTypes
   with UnaryLike[Expression] {
 
-  def this(child: Expression) = this(child, failOnError = SQLConf.get.ansiEnabled)
+  def failOnError: Boolean
 
   override def nullable: Boolean = true
 
@@ -58,7 +41,7 @@ case class Sum(
     Seq(TypeCollection(NumericType, YearMonthIntervalType, DayTimeIntervalType))
 
   override def checkInputDataTypes(): TypeCheckResult =
-    TypeUtils.checkForAnsiIntervalOrNumericType(child.dataType, "sum")
+    TypeUtils.checkForAnsiIntervalOrNumericType(child.dataType, prettyName)
 
   final override val nodePatterns: Seq[TreePattern] = Seq(SUM)
 
@@ -77,35 +60,27 @@ case class Sum(
 
   private lazy val zero = Literal.default(resultType)
 
-  private lazy val trackIsEmpty: Boolean = child.dataType match {
-    case _: DecimalType => true
-    case _: IntegralType | _: YearMonthIntervalType | _: DayTimeIntervalType =>
-      nullOnIntegralOverflow
-    case _ => false
+  override lazy val aggBufferAttributes = resultType match {
+    case _: DecimalType => sum :: isEmpty :: Nil
+    case _ => sum :: Nil
   }
 
-  override lazy val aggBufferAttributes = if (trackIsEmpty) {
-    sum :: isEmpty :: Nil
-  } else {
-    sum :: Nil
+  override lazy val initialValues: Seq[Expression] = resultType match {
+    case _: DecimalType => Seq(zero, Literal(true, BooleanType))
+    case _ => Seq(Literal(null, resultType))
   }
 
-  override lazy val initialValues: Seq[Expression] = if (trackIsEmpty) {
-    Seq(zero, Literal(true, BooleanType))
-  } else {
-    Seq(Literal(null, resultType))
-  }
-
-  override lazy val updateExpressions: Seq[Expression] = {
+  protected def getUpdateExpressions: Seq[Expression] = {
     resultType match {
       case _: DecimalType =>
         // For decimal type, the initial value of `sum` is 0. We need to keep `sum` unchanged if
         // the input is null, as SUM function ignores null input. The `sum` can only be null if
         // overflow happens under non-ansi mode.
         val sumExpr = if (child.nullable) {
-          If(child.isNull, sum, sum + KnownNotNull(child).cast(resultType))
+          If(child.isNull, sum,
+            Add(sum, KnownNotNull(child).cast(resultType), failOnError = failOnError))
         } else {
-          sum + child.cast(resultType)
+          Add(sum, child.cast(resultType), failOnError = failOnError)
         }
         // The buffer becomes non-empty after seeing the first not-null input.
         val isEmptyExpr = if (child.nullable) {
@@ -114,32 +89,16 @@ case class Sum(
           Literal(false, BooleanType)
         }
         Seq(sumExpr, isEmptyExpr)
-
       case _ =>
-        if (!trackIsEmpty) {
-          // For non-decimal type, the initial value of `sum` is null, which indicates no value.
-          // We need `coalesce(sum, zero)` to start summing values. And we need an outer `coalesce`
-          // in case the input is nullable. The `sum` can only be null if there is no value, as
-          // non-decimal type can produce overflowed value under non-ansi mode.
-          if (child.nullable) {
-            Seq(coalesce(coalesce(sum, zero) + child.cast(resultType), sum))
-          } else {
-            Seq(coalesce(sum, zero) + child.cast(resultType))
-          }
+        // For non-decimal type, the initial value of `sum` is null, which indicates no value.
+        // We need `coalesce(sum, zero)` to start summing values. And we need an outer `coalesce`
+        // in case the input is nullable. The `sum` can only be null if there is no value, as
+        // non-decimal type can produce overflowed value under non-ansi mode.
+        if (child.nullable) {
+          Seq(coalesce(Add(coalesce(sum, zero), child.cast(resultType), failOnError = failOnError),
+            sum))
         } else {
-          val sumExpr = if (child.nullable) {
-            If(child.isNull, sum,
-              TryEval(Add(sum, KnownNotNull(child).cast(resultType), failOnError = true)))
-          } else {
-            TryEval(Add(coalesce(sum, zero), child.cast(resultType), failOnError = true))
-          }
-          // The buffer becomes non-empty after seeing the first not-null input.
-          val isEmptyExpr = if (child.nullable) {
-            isEmpty && child.isNull
-          } else {
-            Literal(false, BooleanType)
-          }
-          Seq(sumExpr, isEmptyExpr)
+          Seq(Add(coalesce(sum, zero), child.cast(resultType), failOnError = failOnError))
         }
     }
   }
@@ -156,27 +115,25 @@ case class Sum(
    * isEmpty:  Set to false if either one of the left or right is set to false. This
    * means we have seen atleast a value that was not null.
    */
-  override lazy val mergeExpressions: Seq[Expression] =
-    if (trackIsEmpty) {
-      val bufferOverflow = !isEmpty.left && sum.left.isNull
-      val inputOverflow = !isEmpty.right && sum.right.isNull
-      val addExpr = resultType match {
-        case _: DecimalType => KnownNotNull(sum.left) + KnownNotNull(sum.right)
-        case _ => TryEval(Add(KnownNotNull(sum.left), KnownNotNull(sum.right), failOnError = true))
-      }
-      Seq(
-        If(
-          bufferOverflow || inputOverflow,
-          Literal.create(null, resultType),
-          // If both the buffer and the input do not overflow, just add them, as they can't be
-          // null. See the comments inside `updateExpressions`: `sum` can only be null if
-          // overflow happens.
-          addExpr
-          ),
-        isEmpty.left && isEmpty.right)
-    } else {
-      Seq(coalesce(coalesce(sum.left, zero) + sum.right, sum.left))
+  protected def getMergeExpressions: Seq[Expression] = {
+    resultType match {
+      case _: DecimalType =>
+        val bufferOverflow = !isEmpty.left && sum.left.isNull
+        val inputOverflow = !isEmpty.right && sum.right.isNull
+        Seq(
+          If(
+            bufferOverflow || inputOverflow,
+            Literal.create(null, resultType),
+            // If both the buffer and the input do not overflow, just add them, as they can't be
+            // null. See the comments inside `updateExpressions`: `sum` can only be null if
+            // overflow happens.
+            KnownNotNull(sum.left) + KnownNotNull(sum.right)),
+          isEmpty.left && isEmpty.right)
+      case _ => Seq(coalesce(
+        Add(coalesce(sum.left, zero), sum.right, failOnError = failOnError),
+        sum.left))
     }
+  }
 
   /**
    * If the isEmpty is true, then it means there were no values to begin with or all the values
@@ -185,19 +142,43 @@ case class Sum(
    * So now, if ansi is enabled, then throw exception, if not then return null.
    * If sum is not null, then return the sum.
    */
-  override lazy val evaluateExpression: Expression = resultType match {
+  protected def getEvaluateExpression: Expression = resultType match {
     case d: DecimalType =>
       If(isEmpty, Literal.create(null, resultType),
         CheckOverflowInSum(sum, d, !failOnError))
-    case _ if trackIsEmpty =>
-      If(isEmpty, Literal.create(null, resultType), sum)
     case _ => sum
   }
 
-  override protected def withNewChildInternal(newChild: Expression): Sum = copy(child = newChild)
-
   // The flag `failOnError` won't be shown in the `toString` or `toAggString` methods
   override def flatArguments: Iterator[Any] = Iterator(child)
+}
+
+@ExpressionDescription(
+  usage = "_FUNC_(expr) - Returns the sum calculated from values of a group.",
+  examples = """
+    Examples:
+      > SELECT _FUNC_(col) FROM VALUES (5), (10), (15) AS tab(col);
+       30
+      > SELECT _FUNC_(col) FROM VALUES (NULL), (10), (15) AS tab(col);
+       25
+      > SELECT _FUNC_(col) FROM VALUES (NULL), (NULL) AS tab(col);
+       NULL
+  """,
+  group = "agg_funcs",
+  since = "1.0.0")
+case class Sum(
+    child: Expression,
+    failOnError: Boolean = SQLConf.get.ansiEnabled)
+  extends SumBase(child) {
+  def this(child: Expression) = this(child, failOnError = SQLConf.get.ansiEnabled)
+
+  override protected def withNewChildInternal(newChild: Expression): Sum = copy(child = newChild)
+
+  override lazy val updateExpressions: Seq[Expression] = getUpdateExpressions
+
+  override lazy val mergeExpressions: Seq[Expression] = getMergeExpressions
+
+  override lazy val evaluateExpression: Expression = getEvaluateExpression
 }
 
 // scalastyle:off line.size.limit
@@ -217,9 +198,40 @@ case class Sum(
   since = "3.3.0",
   group = "agg_funcs")
 // scalastyle:on line.size.limit
-object TrySumExpressionBuilder extends ExpressionBuilder {
-  override def build(funcName: String, expressions: Seq[Expression]): Expression = {
-    assert(expressions.length == 1)
-    Sum(expressions.head, failOnError = false, nullOnIntegralOverflow = true)
+case class TrySum(child: Expression) extends SumBase(child) {
+
+  override def failOnError: Boolean = dataType match {
+    // Double type won't fail, thus the failOnError is always false
+    // For decimal type, it returns NULL on overflow. It behaves the same as TrySum when
+    // `failOnError` is false.
+    case _: DoubleType | _: DecimalType => false
+    case _ => true
   }
+
+  override lazy val updateExpressions: Seq[Expression] =
+    if (failOnError) {
+      val expressions = getUpdateExpressions
+      Seq(TryEval(expressions.head)) ++ expressions.tail
+    } else {
+      getUpdateExpressions
+    }
+
+  override lazy val mergeExpressions: Seq[Expression] =
+    if (failOnError) {
+      getMergeExpressions.map(TryEval)
+    } else {
+      getMergeExpressions
+    }
+
+  override lazy val evaluateExpression: Expression =
+    if (failOnError) {
+      TryEval(getEvaluateExpression)
+    } else {
+      getEvaluateExpression
+    }
+
+  override protected def withNewChildInternal(newChild: Expression): Expression =
+    copy(child = newChild)
+
+  override def prettyName: String = "try_sum"
 }

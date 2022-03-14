@@ -5,7 +5,7 @@
 -- !query
 SELECT try_sum(col) FROM VALUES (5), (10), (15) AS tab(col)
 -- !query schema
-struct<sum(col):bigint>
+struct<try_sum(col):bigint>
 -- !query output
 30
 
@@ -13,7 +13,7 @@ struct<sum(col):bigint>
 -- !query
 SELECT try_sum(col) FROM VALUES (5.0), (10.0), (15.0) AS tab(col)
 -- !query schema
-struct<sum(col):decimal(13,1)>
+struct<try_sum(col):decimal(13,1)>
 -- !query output
 30.0
 
@@ -21,7 +21,7 @@ struct<sum(col):decimal(13,1)>
 -- !query
 SELECT try_sum(col) FROM VALUES (NULL), (10), (15) AS tab(col)
 -- !query schema
-struct<sum(col):bigint>
+struct<try_sum(col):bigint>
 -- !query output
 25
 
@@ -29,7 +29,7 @@ struct<sum(col):bigint>
 -- !query
 SELECT try_sum(col) FROM VALUES (NULL), (NULL) AS tab(col)
 -- !query schema
-struct<sum(col):double>
+struct<try_sum(col):double>
 -- !query output
 NULL
 
@@ -37,7 +37,7 @@ NULL
 -- !query
 SELECT try_sum(col) FROM VALUES (9223372036854775807L), (1L) AS tab(col)
 -- !query schema
-struct<sum(col):bigint>
+struct<try_sum(col):bigint>
 -- !query output
 NULL
 
@@ -45,6 +45,6 @@ NULL
 -- !query
 SELECT try_sum(col) FROM VALUES (98765432109876543210987654321098765432BD), (98765432109876543210987654321098765432BD) AS tab(col)
 -- !query schema
-struct<sum(col):decimal(38,0)>
+struct<try_sum(col):decimal(38,0)>
 -- !query output
 NULL
