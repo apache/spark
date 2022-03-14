@@ -193,13 +193,25 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
         with self.assertRaisesRegex(TypeError, expected_error_message):
             psser.rename(["0", "1"])
 
+        # Function index
+        self.assert_eq(psser.rename(lambda x: x ** 2), pser.rename(lambda x: x ** 2))
+        self.assert_eq((psser + 1).rename(lambda x: x ** 2), (pser + 1).rename(lambda x: x ** 2))
+
+        expected_error_message = "inplace True is not supported yet for a function 'index'"
+        with self.assertRaisesRegex(ValueError, expected_error_message):
+            psser.rename(lambda x: x ** 2, inplace=True)
+
+        unsupported_index_inputs = (pd.Series([2, 3, 4, 5, 6, 7, 8]), {0: "zero", 1: "one"})
+        for index in unsupported_index_inputs:
+            expected_error_message = (
+                "'index' of %s type is not supported yet" % type(index).__name__
+            )
+            with self.assertRaisesRegex(ValueError, expected_error_message):
+                psser.rename(index)
+
         # Series index
         # pser = pd.Series(['a', 'b', 'c', 'd', 'e', 'f', 'g'], name='x')
         # psser = ps.from_pandas(s)
-
-        # TODO: index
-        # res = psser.rename(lambda x: x ** 2)
-        # self.assert_eq(res, pser.rename(lambda x: x ** 2))
 
         # res = psser.rename(pser)
         # self.assert_eq(res, pser.rename(pser))
@@ -838,13 +850,20 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
             pd.Series([True, False], name="x"),
             pd.Series([0, 1], name="x"),
             pd.Series([1, 2, 3], name="x"),
+            pd.Series([np.nan, 0, 1], name="x"),
+            pd.Series([np.nan, 1, 2, 3], name="x"),
             pd.Series([True, True, None], name="x"),
             pd.Series([True, False, None], name="x"),
             pd.Series([], name="x"),
             pd.Series([np.nan], name="x"),
+            pd.Series([np.nan, np.nan], name="x"),
+            pd.Series([None], name="x"),
+            pd.Series([None, None], name="x"),
         ]:
             psser = ps.from_pandas(pser)
             self.assert_eq(psser.all(), pser.all())
+            self.assert_eq(psser.all(skipna=False), pser.all(skipna=False))
+            self.assert_eq(psser.all(skipna=True), pser.all(skipna=True))
 
         pser = pd.Series([1, 2, 3, 4], name="x")
         psser = ps.from_pandas(pser)

@@ -192,3 +192,7 @@ class TimedeltaIndex(Index):
             ).cast("int")
 
         return Index(self.to_series().spark.transform(get_microseconds))
+
+    @no_type_check
+    def all(self, *args, **kwargs) -> None:
+        raise TypeError("Cannot perform 'all' with this index type: %s" % type(self).__name__)

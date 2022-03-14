@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.datasources.orc
 import java.io.File
 import java.nio.charset.StandardCharsets
 import java.sql.Timestamp
-import java.time.{LocalDateTime, ZoneOffset}
+import java.time.LocalDateTime
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
@@ -800,29 +800,6 @@ abstract class OrcQuerySuite extends OrcQueryTest with SharedSparkSession {
     withOrcFile(data) { file =>
       withAllNativeOrcReaders {
         checkAnswer(spark.read.orc(file), data.toDF().collect())
-      }
-    }
-  }
-
-  test("SPARK-36346: read TimestampNTZ as TimestampLTZ") {
-    val data = (1 to 10).map { i =>
-      // The second parameter is `nanoOfSecond`, while java.sql.Timestamp accepts milliseconds
-      // as input. So here we multiple the `nanoOfSecond` by NANOS_PER_MILLIS
-      val ts = LocalDateTime.ofEpochSecond(0, i * 1000000, ZoneOffset.UTC)
-      Row(ts)
-    }
-    val answer = (1 to 10).map { i =>
-      val ts = new java.sql.Timestamp(i)
-      Row(ts)
-    }
-    val actualSchema = StructType(Seq(StructField("time", TimestampNTZType, false)))
-    val providedSchema = StructType(Seq(StructField("time", TimestampType, false)))
-
-    withTempPath { file =>
-      val df = spark.createDataFrame(sparkContext.parallelize(data), actualSchema)
-      df.write.orc(file.getCanonicalPath)
-      withAllNativeOrcReaders {
-        checkAnswer(spark.read.schema(providedSchema).orc(file.getCanonicalPath), answer)
       }
     }
   }

@@ -18,6 +18,9 @@
   "CANNOT_UP_CAST_DATATYPE" : {
     "message" : [ "Cannot up cast %s from %s to %s.\n%s" ]
   },
+  "CANNOT_USE_MIXTURE" : {
+    "message" : [ "Cannot use a mixture of aggregate function and group aggregate pandas UDF" ]
+  },
   "CAST_CAUSES_OVERFLOW" : {
     "message" : [ "Casting %s to %s causes overflow. To return NULL instead, use 'try_cast'. If necessary set %s to false to bypass this error." ],
     "sqlState" : "22005"

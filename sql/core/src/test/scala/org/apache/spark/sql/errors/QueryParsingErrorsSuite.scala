@@ -169,4 +169,53 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession {
           |-------------------------------^^^
           |""".stripMargin)
   }
+
+  test("UNSUPPORTED_FEATURE: TRANSFORM does not support DISTINCT/ALL") {
+    validateParsingError(
+      sqlText = "SELECT TRANSFORM(DISTINCT a) USING 'a' FROM t",
+      errorClass = "UNSUPPORTED_FEATURE",
+      sqlState = "0A000",
+      message =
+        """
+          |The feature is not supported: """.stripMargin +
+        """TRANSFORM does not support DISTINCT/ALL in inputs(line 1, pos 17)
+          |
+          |== SQL ==
+          |SELECT TRANSFORM(DISTINCT a) USING 'a' FROM t
+          |-----------------^^^
+          |""".stripMargin)
+  }
+
+  test("UNSUPPORTED_FEATURE: In-memory mode does not support TRANSFORM with serde") {
+    validateParsingError(
+      sqlText = "SELECT TRANSFORM(a) ROW FORMAT SERDE " +
+        "'org.apache.hadoop.hive.serde2.OpenCSVSerde' USING 'a' FROM t",
+      errorClass = "UNSUPPORTED_FEATURE",
+      sqlState = "0A000",
+      message =
+        """
+          |The feature is not supported: """.stripMargin +
+        """TRANSFORM with serde is only supported in hive mode(line 1, pos 0)
+          |
+          |== SQL ==
+          |SELECT TRANSFORM(a) ROW FORMAT SERDE """.stripMargin +
+        """'org.apache.hadoop.hive.serde2.OpenCSVSerde' USING 'a' FROM t
+          |^^^
+          |""".stripMargin)
+  }
+
+  test("INVALID_SQL_SYNTAX: Too many arguments for transform") {
+    validateParsingError(
+      sqlText = "CREATE TABLE table(col int) PARTITIONED BY (years(col,col))",
+      errorClass = "INVALID_SQL_SYNTAX",
+      sqlState = "42000",
+      message =
+        """
+          |Invalid SQL syntax: Too many arguments for transform years(line 1, pos 44)
+          |
+          |== SQL ==
+          |CREATE TABLE table(col int) PARTITIONED BY (years(col,col))
+          |--------------------------------------------^^^
+          |""".stripMargin)
+  }
 }

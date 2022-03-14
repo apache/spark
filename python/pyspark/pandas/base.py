@@ -27,7 +27,7 @@ import numpy as np
 import pandas as pd
 from pandas.api.types import is_list_like, CategoricalDtype  # type: ignore[attr-defined]
 from pyspark.sql import functions as F, Column, Window
-from pyspark.sql.types import LongType, BooleanType
+from pyspark.sql.types import LongType, BooleanType, NumericType
 
 from pyspark import pandas as ps  # For running doctests and reference resolution in PyCharm.
 from pyspark.pandas._typing import Axis, Dtype, IndexOpsLike, Label, SeriesOrIndex
@@ -965,8 +965,8 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
 
     notna = notnull
 
-    # TODO: axis, skipna, and many arguments should be implemented.
-    def all(self, axis: Axis = 0) -> bool:
+    # TODO: axis and many arguments should be implemented.
+    def all(self, axis: Axis = 0, skipna: bool = True) -> bool:
         """
         Return whether all elements are True.
 
@@ -980,6 +980,11 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
 
             * 0 / 'index' : reduce the index, return a Series whose index is the
               original column labels.
+
+        skipna : boolean, default True
+            Exclude NA/null values. If an entire row/column is NA and skipna is True,
+            then the result will be True, as for an empty row/column.
+            If skipna is False, then NA are treated as True, because these are not equal to zero.
 
         Examples
         --------
@@ -998,6 +1003,9 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
         >>> ps.Series([True, True, None]).all()
         True
 
+        >>> ps.Series([True, True, None]).all(skipna=False)
+        False
+
         >>> ps.Series([True, False, None]).all()
         False
 
@@ -1006,6 +1014,15 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
 
         >>> ps.Series([np.nan]).all()
         True
+
+        >>> ps.Series([np.nan]).all(skipna=False)
+        True
+
+        >>> ps.Series([None]).all()
+        True
+
+        >>> ps.Series([None]).all(skipna=False)
+        False
 
         >>> df = ps.Series([True, False, None]).rename("a").to_frame()
         >>> df.set_index("a").index.all()
@@ -1018,11 +1035,18 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
         sdf = self._internal.spark_frame.select(self.spark.column)
         col = scol_for(sdf, sdf.columns[0])
 
-        # Note that we're ignoring `None`s here for now.
-        # any and every was added as of Spark 3.0
+        # `any` and `every` was added as of Spark 3.0.
         # ret = sdf.select(F.expr("every(CAST(`%s` AS BOOLEAN))" % sdf.columns[0])).collect()[0][0]
-        # Here we use min as its alternative:
-        ret = sdf.select(F.min(F.coalesce(col.cast("boolean"), SF.lit(True)))).collect()[0][0]
+        # We use min as its alternative as below.
+        if isinstance(self.spark.data_type, NumericType) or skipna:
+            # np.nan takes no effect to the result; None takes no effect if `skipna`
+            ret = sdf.select(F.min(F.coalesce(col.cast("boolean"), SF.lit(True)))).collect()[0][0]
+        else:
+            # Take None as False when not `skipna`
+            ret = sdf.select(
+                F.min(F.when(col.isNull(), SF.lit(False)).otherwise(col.cast("boolean")))
+            ).collect()[0][0]
+
         if ret is None:
             return True
         else:
