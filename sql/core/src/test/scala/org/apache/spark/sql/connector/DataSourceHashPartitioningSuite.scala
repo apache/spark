@@ -16,10 +16,8 @@
  */
 package org.apache.spark.sql.connector
 
-import java.util
 import java.util.Collections
 
-import org.apache.spark.SparkException
 import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Ascending, DataSourceBucketTransformExpression, DataSourceTransformExpression, SortOrder => V1SortOrder}
@@ -73,7 +71,7 @@ class DataSourceHashPartitioningSuite extends DistributionAndOrderingSuiteBase {
     catalog.clearFunctions()
   }
 
-  private val emptyProps: util.Map[String, String] = {
+  private val emptyProps: java.util.Map[String, String] = {
     Collections.emptyMap[String, String]
   }
   private val table: String = "tbl"
@@ -464,13 +462,13 @@ class DataSourceHashPartitioningSuite extends DistributionAndOrderingSuiteBase {
 
       // number of unique partitions changed after dynamic filtering - should throw exception
       var df = sql(s"SELECT sum(p.price) from testcat.ns.$items i, testcat.ns.$purchases p WHERE " +
-          s"i.id = p.item_id AND i.id = 3")
-      val e = intercept[SparkException](df.collect())
+          s"i.id = p.item_id AND i.price > 40.0")
+      val e = intercept[Exception](df.collect())
       assert(e.getMessage.contains("number of unique partition values"))
 
       // dynamic filtering doesn't change partitioning so storage-partitioned join should kick in
       df = sql(s"SELECT sum(p.price) from testcat.ns.$items i, testcat.ns.$purchases p WHERE " +
-          s"i.id = p.item_id AND i.id > 0")
+          s"i.id = p.item_id AND i.price >= 10.0")
       val shuffles = collectShuffles(df.queryExecution.executedPlan)
       assert(shuffles.isEmpty, "should not add shuffle for both sides of the join")
       checkAnswer(df, Seq(Row(303.5)))

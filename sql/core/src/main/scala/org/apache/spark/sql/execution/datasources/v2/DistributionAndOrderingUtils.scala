@@ -32,7 +32,7 @@ object DistributionAndOrderingUtils {
       val numPartitions = write.requiredNumPartitions()
       val distribution = toCatalystDistribution(write.requiredDistribution(), query) match {
         case OrderedDistribution(ordering) => ordering
-        case ClusteredDistribution(clustering, _) => clustering
+        case ClusteredDistribution(clustering, _, _) => clustering
         case UnspecifiedDistribution => Seq.empty[Expression]
         case d => throw new IllegalArgumentException("Unexpected distribution type " +
             s"${d.getClass.getName}")

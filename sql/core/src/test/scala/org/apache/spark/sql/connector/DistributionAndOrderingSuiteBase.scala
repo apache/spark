@@ -52,7 +52,8 @@ class DistributionAndOrderingSuiteBase
     case HashPartitioning(exprs, numPartitions) =>
       HashPartitioning(exprs.map(resolveAttrs(_, plan)), numPartitions)
     case DataSourceHashPartitioning(clustering, numPartitions, partitionValues) =>
-      DataSourceHashPartitioning(clustering.map(resolveAttrs(_, plan)), numPartitions, partitionValues)
+      DataSourceHashPartitioning(clustering.map(resolveAttrs(_, plan)), numPartitions,
+        partitionValues)
     case PartitioningCollection(partitionings) =>
       PartitioningCollection(partitionings.map(resolvePartitioning(_, plan)))
     case RangePartitioning(ordering, numPartitions) =>
@@ -68,7 +69,7 @@ class DistributionAndOrderingSuiteBase
   protected def resolveDistribution[T <: QueryPlan[T]](
       distribution: physical.Distribution,
       plan: QueryPlan[T]): physical.Distribution = distribution match {
-    case physical.ClusteredDistribution(clustering, numPartitions) =>
+    case physical.ClusteredDistribution(clustering, numPartitions, _) =>
       physical.ClusteredDistribution(clustering.map(resolveAttrs(_, plan)), numPartitions)
     case physical.OrderedDistribution(ordering) =>
       physical.OrderedDistribution(ordering.map(resolveAttrs(_, plan).asInstanceOf[SortOrder]))
