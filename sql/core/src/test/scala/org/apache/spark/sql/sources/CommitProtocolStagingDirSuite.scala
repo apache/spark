@@ -23,22 +23,24 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.util.Utils
 
-class StagingInsertSuite extends QueryTest with SharedSparkSession {
+
+abstract class CommitProtocolStagingDirBaseSuite extends QueryTest with SharedSparkSession {
   import testImplicits._
 
-  val stagingDir = Utils.createTempDir()
+  def stagingDir: String
+  def cleanStagingDir(): Unit
 
   override def sparkConf: SparkConf =
-    super.sparkConf.set(SQLConf.EXEC_STAGING_DIR, stagingDir.getAbsolutePath)
+    super.sparkConf.set(SQLConf.EXEC_STAGING_DIR, stagingDir)
 
   override def beforeAll(): Unit = {
     super.beforeAll()
-    stagingDir.delete()
+    cleanStagingDir()
   }
 
   override def afterAll(): Unit = {
     try {
-      Utils.deleteRecursively(stagingDir)
+      cleanStagingDir()
     } finally {
       super.afterAll()
     }
@@ -66,5 +68,15 @@ class StagingInsertSuite extends QueryTest with SharedSparkSession {
         }
       }
     }
+  }
+}
+
+class LocalStagingDirSuite extends CommitProtocolStagingDirBaseSuite {
+  val stagingDirFile = Utils.createTempDir()
+  override val stagingDir = stagingDirFile.getAbsolutePath
+
+  println(s"stagingDirFile = ${stagingDirFile}")
+  override def cleanStagingDir(): Unit = {
+    Utils.deleteRecursively(stagingDirFile)
   }
 }

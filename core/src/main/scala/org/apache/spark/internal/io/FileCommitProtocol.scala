@@ -322,11 +322,8 @@ object FileCommitProtocol extends Logging {
       stagingPathName = new Path(inputPathName, s".$commitMethod-staging").toString
     }
 
-    val dir = fs.makeQualified(
-      new Path(stagingPathName + "_" + executionId(commitMethod) + "-" + jobId))
-
     if (commitMethod == USING_SPARK_COMMIT_METHOD) {
-      val stagingFS = dir.getFileSystem(hadoopConf)
+      val stagingFS = new Path(stagingPathName).getFileSystem(hadoopConf)
       // SPARK-36579: Current SQLHadoopMapReduceCommitProtocol's dynamic partition overwriting uses
       // rename operation to move partition's directories. This operation is not supported between
       // different FileSystems.
@@ -336,6 +333,12 @@ object FileCommitProtocol extends Logging {
           "directory.")
         stagingPathName = new Path(inputPathName, s".$commitMethod-staging").toString
       }
+    }
+    val dir = commitMethod match {
+      case USING_SPARK_COMMIT_METHOD =>
+        new Path(stagingPathName + "-" + jobId)
+      case USING_HIVE_COMMIT_METHOD =>
+        fs.makeQualified(new Path(stagingPathName + "_" + executionId(commitMethod) + "-" + jobId))
     }
     logDebug(s"Created staging dir = $dir for path = $inputPath")
     dir

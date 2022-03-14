@@ -238,6 +238,7 @@ class HadoopMapReduceCommitProtocol(
             // a parent that exists, otherwise we may get unexpected result on the rename.
             fs.mkdirs(finalPartPath.getParent)
           }
+          println(s"When commit job ${stagingDir}")
           val stagingPartPath = new Path(stagingDir, part)
           if (!fs.rename(stagingPartPath, finalPartPath)) {
             throw new IOException(s"Failed to rename $stagingPartPath to $finalPartPath when " +
