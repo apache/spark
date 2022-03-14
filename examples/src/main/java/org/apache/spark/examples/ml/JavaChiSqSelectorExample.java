@@ -24,7 +24,7 @@ import org.apache.spark.sql.SparkSession;
 import java.util.Arrays;
 import java.util.List;
 
-import org.apache.spark.ml.feature.ChiSqSelector;
+import org.apache.spark.ml.feature.UnivariateFeatureSelector;
 import org.apache.spark.ml.linalg.VectorUDT;
 import org.apache.spark.ml.linalg.Vectors;
 import org.apache.spark.sql.Row;
@@ -56,16 +56,20 @@ public class JavaChiSqSelectorExample {
 
     Dataset<Row> df = spark.createDataFrame(data, schema);
 
-    ChiSqSelector selector = new ChiSqSelector()
-      .setNumTopFeatures(1)
+    UnivariateFeatureSelector selector = new UnivariateFeatureSelector()
+      // for chi-squared
+      .setFeatureType("categorical")
+      .setLabelType("categorical")
+      .setSelectionMode("numTopFeatures")
+      .setSelectionThreshold(1)
       .setFeaturesCol("features")
       .setLabelCol("clicked")
       .setOutputCol("selectedFeatures");
 
     Dataset<Row> result = selector.fit(df).transform(df);
 
-    System.out.println("ChiSqSelector output with top " + selector.getNumTopFeatures()
-        + " features selected");
+    System.out.println("UnivariateFeatureSelector for chi-squared output with top " +
+        selector.getSelectionThreshold() + " features selected");
     result.show();
 
     // $example off$
