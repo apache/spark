@@ -119,9 +119,8 @@ case class BroadcastNestedLoopJoinExec(
 
   /**
    * The implementation for InnerJoin.
-   *
-   * md: 比较简单，streamed按分区迭代，针对每一行数据，再迭代build表中的每一行，然后组合成一个新的行用于条件评估；
    */
+  // md: 比较简单，streamed按分区迭代，针对每一行数据，再迭代build表中的每一行，然后组合成一个新的行用于条件评估；
   private def innerJoin(relation: Broadcast[Array[InternalRow]]): RDD[InternalRow] = {
     // md: 这里的streamedIter其实是单个分区下的数据迭代，是通过mapPartitionsInternal()方法
     //  来回调底层的RDD.compute(split)方式而产生的

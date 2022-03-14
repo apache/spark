@@ -47,6 +47,7 @@ class UnsafeCartesianRDD(
     // md: 对右表构建可复用的空间（在内存和磁盘中）来做迭代；
     //  为什么对右表做buffer，一般join-reorder之后形成left-deep tree，左表数量预估大于右表，所以缓存右表整体代价更低
     val partition = split.asInstanceOf[CartesianPartition]
+    // md: 这里的rdd2，有可能在其他task也被计算过，会存在重复计算的
     rdd2.iterator(partition.s2, context).foreach(rowArray.add)
 
     // Create an iterator from rowArray

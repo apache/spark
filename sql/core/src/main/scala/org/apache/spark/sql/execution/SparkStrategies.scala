@@ -267,6 +267,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         //  都是围绕这些被提炼出来的join key而展开的：首先按照join key来做ClusteredDistribution，将不同的数据按照join key来做hash分桶
         //  并shuffle数据；然后是sort，在单个shuffle分桶内按照join key来排序；最后是merge，基于排完序的左右两个表做merge操作；
         def createSortMergeJoin() = {
+          // md: 因为绝大部分数据类型都是可排序的，因此SMJ是可以解决很多问题的
           if (RowOrdering.isOrderable(leftKeys)) {
             Some(Seq(joins.SortMergeJoinExec(
               leftKeys, rightKeys, joinType, nonEquiCond, planLater(left), planLater(right))))
