@@ -45,8 +45,8 @@ class KubernetesClusterSchedulerBackendSuite extends SparkFunSuite with BeforeAn
   private val sparkConf = new SparkConf(false)
     .set("spark.executor.instances", "3")
     .set("spark.app.id", TEST_SPARK_APP_ID)
-    .set("spark.kubernetes.executor.decommmissionLabel", "soLong")
-    .set("spark.kubernetes.executor.decommmissionLabelValue", "cruelWorld")
+    .set(KUBERNETES_EXECUTOR_DECOMMISSION_LABEL.key, "soLong")
+    .set(KUBERNETES_EXECUTOR_DECOMMISSION_LABEL_VALUE.key, "cruelWorld")
 
   @Mock
   private var sc: SparkContext = _

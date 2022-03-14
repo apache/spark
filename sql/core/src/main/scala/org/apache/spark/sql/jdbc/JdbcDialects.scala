@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.jdbc
 
-import java.sql.{Connection, Date, Statement, Timestamp}
+import java.sql.{Connection, Date, Driver, Statement, Timestamp}
 import java.time.{Instant, LocalDate}
 import java.util
 
@@ -36,7 +36,8 @@ import org.apache.spark.sql.connector.expressions.{Expression, FieldReference, N
 import org.apache.spark.sql.connector.expressions.aggregate.{AggregateFunc, Avg, Count, CountStar, Max, Min, Sum}
 import org.apache.spark.sql.connector.util.V2ExpressionSQLBuilder
 import org.apache.spark.sql.errors.QueryCompilationErrors
-import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JdbcUtils}
+import org.apache.spark.sql.execution.datasources.jdbc.{DriverRegistry, JDBCOptions, JdbcUtils}
+import org.apache.spark.sql.execution.datasources.jdbc.connection.ConnectionProvider
 import org.apache.spark.sql.execution.datasources.v2.TableSampleInfo
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -99,6 +100,29 @@ abstract class JdbcDialect extends Serializable with Logging{
    * @return The new JdbcType if there is an override for this DataType
    */
   def getJDBCType(dt: DataType): Option[JdbcType] = None
+
+  /**
+   * Returns a factory for creating connections to the given JDBC URL.
+   * In general, creating a connection has nothing to do with JDBC partition id.
+   * But sometimes it is needed, such as a database with multiple shard nodes.
+   * @param options - JDBC options that contains url, table and other information.
+   * @return The factory method for creating JDBC connections with the RDD partition ID. -1 means
+             the connection is being created at the driver side.
+   * @throws IllegalArgumentException if the driver could not open a JDBC connection.
+   */
+  @Since("3.3.0")
+  def createConnectionFactory(options: JDBCOptions): Int => Connection = {
+    val driverClass: String = options.driverClass
+    (partitionId: Int) => {
+      DriverRegistry.register(driverClass)
+      val driver: Driver = DriverRegistry.get(driverClass)
+      val connection =
+        ConnectionProvider.create(driver, options.parameters, options.connectionProviderName)
+      require(connection != null,
+        s"The driver could not open a JDBC connection. Check the URL: ${options.url}")
+      connection
+    }
+  }
 
   /**
    * Quotes the identifier. This is used to put quotes around the identifier in case the column

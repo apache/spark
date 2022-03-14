@@ -221,7 +221,7 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
     val query = testData.select(Symbol("key"), Symbol("value"))
       .sort(Symbol("key")).limit(2).filter('key === 3)
     val planned = query.queryExecution.executedPlan
-    assert(planned.find(_.isInstanceOf[TakeOrderedAndProjectExec]).isDefined)
+    assert(planned.exists(_.isInstanceOf[TakeOrderedAndProjectExec]))
   }
 
   test("CollectLimit can appear in the middle of a plan when caching is used") {
@@ -234,11 +234,11 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
     withSQLConf(SQLConf.TOP_K_SORT_FALLBACK_THRESHOLD.key -> "1000") {
       val query0 = testData.select(Symbol("value")).orderBy(Symbol("key")).limit(100)
       val planned0 = query0.queryExecution.executedPlan
-      assert(planned0.find(_.isInstanceOf[TakeOrderedAndProjectExec]).isDefined)
+      assert(planned0.exists(_.isInstanceOf[TakeOrderedAndProjectExec]))
 
       val query1 = testData.select(Symbol("value")).orderBy(Symbol("key")).limit(2000)
       val planned1 = query1.queryExecution.executedPlan
-      assert(planned1.find(_.isInstanceOf[TakeOrderedAndProjectExec]).isEmpty)
+      assert(!planned1.exists(_.isInstanceOf[TakeOrderedAndProjectExec]))
     }
   }
 
