@@ -28,7 +28,7 @@ import org.apache.spark.sql.types.DataTypes;
  * @since 3.3.0
  */
 @Evolving
-public class AlwaysFalse extends Predicate implements Literal<Boolean> {
+public final class AlwaysFalse extends Predicate implements Literal<Boolean> {
 
   private DataType dataType = DataTypes.BooleanType;
 
@@ -44,5 +44,5 @@ public class AlwaysFalse extends Predicate implements Literal<Boolean> {
     return dataType;
   }
 
-  public String toString() { return "false"; }
+  public String toString() { return "FALSE"; }
 }

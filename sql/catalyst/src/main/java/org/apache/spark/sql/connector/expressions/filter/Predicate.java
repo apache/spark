@@ -132,13 +132,13 @@ import org.apache.spark.sql.connector.expressions.GeneralScalarExpression;
  *  </li>
  *  <li>Name: <code>TRUE</code>
  *   <ul>
- *    <li>SQL semantic: <code>true</code></li>
+ *    <li>SQL semantic: <code>TRUE</code></li>
  *    <li>Since version: 3.3.0</li>
  *   </ul>
  *  </li>
  *  <li>Name: <code>FALSE</code>
  *   <ul>
- *    <li>SQL semantic: <code>false</code></li>
+ *    <li>SQL semantic: <code>FALSE</code></li>
  *    <li>Since version: 3.3.0</li>
  *   </ul>
  *  </li>
