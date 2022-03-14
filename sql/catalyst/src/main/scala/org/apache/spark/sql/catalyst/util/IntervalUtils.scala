@@ -352,13 +352,16 @@ object IntervalUtils {
           val sign = finalSign(firstSign, secondSign)
           unit.toUpperCase(Locale.ROOT) match {
             case "DAY" if suffix == null && value.length <= 9 && checkTargetType(DT.DAY, DT.DAY) =>
-              sign * value.toLong * MICROS_PER_DAY
+              val days = toLongWithRange(dayStr, value, 0, MAX_DAY)
+              sign * days * MICROS_PER_DAY
             case "HOUR" if suffix == null && value.length <= 10
-              && checkTargetType(DT.HOUR, DT.HOUR) =>
-              sign * value.toLong * MICROS_PER_HOUR
+                && checkTargetType(DT.HOUR, DT.HOUR) =>
+              val hours = toLongWithRange(hourStr, value, 0, MAX_HOUR)
+              sign * hours * MICROS_PER_HOUR
             case "MINUTE" if suffix == null && value.length <= 12
-              && checkTargetType(DT.MINUTE, DT.MINUTE) =>
-              sign * value.toLong * MICROS_PER_MINUTE
+                && checkTargetType(DT.MINUTE, DT.MINUTE) =>
+              val minutes = toLongWithRange(minuteStr, value, 0, MAX_MINUTE)
+              sign * minutes * MICROS_PER_MINUTE
             case "SECOND" if value.length <= 13 && checkTargetType(DT.SECOND, DT.SECOND) =>
               sign match {
                 case 1 => parseSecondNano(secondAndMicro(value, suffix))
