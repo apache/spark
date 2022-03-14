@@ -28,7 +28,7 @@ from typing import (
 )
 
 from pyspark import keyword_only, since, SparkContext
-from pyspark.ml._typing import P
+from pyspark.ml._typing import P, JM
 from pyspark.ml.linalg import _convert_to_vector, DenseMatrix, DenseVector, Vector
 from pyspark.sql.dataframe import DataFrame
 from pyspark.ml.param.shared import (
@@ -56,8 +56,6 @@ from pyspark.ml.common import inherit_doc
 
 if TYPE_CHECKING:
     from py4j.java_gateway import JavaObject  # type: ignore[import]
-
-JM = TypeVar("JM", bound=JavaTransformer)
 
 __all__ = [
     "Binarizer",
@@ -127,7 +125,7 @@ class Binarizer(
     HasOutputCol,
     HasInputCols,
     HasOutputCols,
-    JavaMLReadable,
+    JavaMLReadable["Binarizer"],
     JavaMLWritable,
 ):
     """
