@@ -53,9 +53,9 @@ import org.apache.spark.unsafe.types.UTF8String
        -12454.8
   """,
   note = """
-    ToNumber chose DecimalFormat as the underlying implementation, so ToNumber keep
-    good compatibility with DecimalFormat. For example: to_number('1,11,6.11', '000,,0.00')
-    works good and returns 1116.11
+    ToNumber has better compatibility with number format based on the underlying implementation.
+    For example: to_number('1,11,6.11', '000,,0.00') works good and returns 1116.11. Please see
+    the implementation of NumberFormatter.
   """,
   since = "3.3.0",
   group = "string_funcs")
