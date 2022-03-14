@@ -1954,6 +1954,13 @@ object QueryExecutionErrors {
       messageParameters = Array("Unable to convert timestamp of Orc to data type 'timestamp_ntz'"))
   }
 
+  def cannotConvertOrcTimestampNTZToTimestampLTZError(): Throwable = {
+    new SparkUnsupportedOperationException(
+      errorClass = "UNSUPPORTED_OPERATION",
+      messageParameters =
+        Array("Unable to convert timestamp ntz of Orc to data type 'timestamp_ltz'"))
+  }
+
   def writePartitionExceedConfigSizeWhenDynamicPartitionError(
       numWrittenParts: Int,
       maxDynamicPartitions: Int,

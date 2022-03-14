@@ -18,7 +18,7 @@
 package org.apache.spark.sql.streaming
 
 import java.io.File
-import java.sql.Date
+import java.sql.{Date, Timestamp}
 
 import org.apache.commons.io.FileUtils
 import org.scalatest.exceptions.TestFailedException
@@ -34,7 +34,7 @@ import org.apache.spark.sql.catalyst.plans.physical.UnknownPartitioning
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes._
 import org.apache.spark.sql.execution.RDDScanExec
 import org.apache.spark.sql.execution.streaming._
-import org.apache.spark.sql.execution.streaming.state.{FlatMapGroupsWithStateExecHelper, MemoryStateStore, StateStore}
+import org.apache.spark.sql.execution.streaming.state.{FlatMapGroupsWithStateExecHelper, MemoryStateStore, RocksDBStateStoreProvider, StateStore}
 import org.apache.spark.sql.functions.timestamp_seconds
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.util.StreamManualClock
@@ -1518,6 +1518,50 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest {
       ),
       StopStream
     )
+  }
+
+  test("SPARK-38320 - flatMapGroupsWithState state with data should not timeout") {
+    withTempDir { dir =>
+      withSQLConf(
+        (SQLConf.STREAMING_NO_DATA_MICRO_BATCHES_ENABLED.key -> "false"),
+        (SQLConf.CHECKPOINT_LOCATION.key -> dir.getCanonicalPath),
+        (SQLConf.STATE_STORE_PROVIDER_CLASS.key -> classOf[RocksDBStateStoreProvider].getName)) {
+
+        val inputData = MemoryStream[Timestamp]
+        val stateFunc = (key: Int, values: Iterator[Timestamp], state: GroupState[Int]) => {
+          // Should never timeout. All batches should have data and even if a timeout is set,
+          // it should get cleared when the key receives data per contract.
+          require(!state.hasTimedOut, "The state should not have timed out!")
+          // Set state and timeout once, only on the first call. The timeout should get cleared
+          // in the subsequent batch which has data for the key.
+          if (!state.exists) {
+            state.update(0)
+            state.setTimeoutTimestamp(500)  // Timeout at 500 milliseconds.
+          }
+          0
+        }
+
+        val query = inputData.toDS()
+          .withWatermark("value", "0 seconds")
+          .groupByKey(_ => 0)  // Always the same key: 0.
+          .mapGroupsWithState(GroupStateTimeout.EventTimeTimeout())(stateFunc)
+          .writeStream
+          .format("console")
+          .outputMode("update")
+          .start()
+
+        try {
+          // 2 batches. Records are routed to the same key 0. The first batch sets timeout on
+          // the key, the second batch with data should clear the timeout.
+          (1 to 2).foreach {i =>
+            inputData.addData(new Timestamp(i * 1000))
+            query.processAllAvailable()
+          }
+        } finally {
+          query.stop()
+        }
+      }
+    }
   }
 
   testWithAllStateVersions("mapGroupsWithState - initial state - null key") {
