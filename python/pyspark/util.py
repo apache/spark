@@ -429,12 +429,12 @@ class InheritableThread(threading.Thread):
 _local = threading.local()
 
 
-def _wrap_function(class_name, function_name, func, logger):
+def _wrap_function(class_name: str, function_name: str, func: Callable, logger: Any) -> Callable:
 
     signature = inspect.signature(func)
 
     @functools.wraps(func)
-    def wrapper(*args, **kwargs):
+    def wrapper(*args: Any, **kwargs: Any) -> Any:
         if hasattr(_local, "logging") and _local.logging:
             # no need to log since this should be internal call.
             return func(*args, **kwargs)
@@ -458,9 +458,9 @@ def _wrap_function(class_name, function_name, func, logger):
     return wrapper
 
 
-def _wrap_property(class_name, property_name, prop, logger):
-    @property
-    def wrapper(self):
+def _wrap_property(class_name: str, property_name: str, prop: Any, logger: Any) -> Any:
+    @property  # type: ignore[misc]
+    def wrapper(self: Any) -> Any:
         if hasattr(_local, "logging") and _local.logging:
             # no need to log since this should be internal call.
             return prop.fget(self)
@@ -480,12 +480,16 @@ def _wrap_property(class_name, property_name, prop, logger):
     wrapper.__doc__ = prop.__doc__
 
     if prop.fset is not None:
-        wrapper = wrapper.setter(_wrap_function(class_name, prop.fset.__name__, prop.fset, logger))
+        wrapper = wrapper.setter(  # type: ignore[attr-defined]
+            _wrap_function(class_name, prop.fset.__name__, prop.fset, logger)
+        )
 
     return wrapper
 
 
-def _wrap_missing_function(class_name, function_name, func, original, logger):
+def _wrap_missing_function(
+    class_name: str, function_name: str, func: Callable, original: Any, logger: Any
+) -> Any:
 
     if not hasattr(original, function_name):
         return func
@@ -495,7 +499,7 @@ def _wrap_missing_function(class_name, function_name, func, original, logger):
     is_deprecated = func.__name__ == "deprecated_function"
 
     @functools.wraps(func)
-    def wrapper(*args, **kwargs):
+    def wrapper(*args: Any, **kwargs: Any) -> Any:
         try:
             return func(*args, **kwargs)
         finally:
@@ -504,12 +508,12 @@ def _wrap_missing_function(class_name, function_name, func, original, logger):
     return wrapper
 
 
-def _wrap_missing_property(class_name, property_name, prop, logger):
+def _wrap_missing_property(class_name: str, property_name: str, prop: Any, logger: Any) -> Any:
 
     is_deprecated = prop.fget.__name__ == "deprecated_property"
 
-    @property
-    def wrapper(self):
+    @property  # type: ignore[misc]
+    def wrapper(self: Any) -> Any:
         try:
             return prop.fget(self)
         finally:
@@ -518,7 +522,9 @@ def _wrap_missing_property(class_name, property_name, prop, logger):
     return wrapper
 
 
-def _attach(logger_module: Union[str, ModuleType], modules, classes, missings):
+def _attach(
+    logger_module: Union[str, ModuleType], modules: Any, classes: Any, missings: Any
+) -> None:
     if isinstance(logger_module, str):
         logger_module = importlib.import_module(logger_module)
 
