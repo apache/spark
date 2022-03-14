@@ -3024,7 +3024,7 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
       if (arguments.size > 1) {
         throw QueryParsingErrors.tooManyArgumentsForTransformError(name, ctx)
       } else if (arguments.isEmpty) {
-        throw QueryParsingErrors.notEnoughArgumentsForTransformError(name, ctx)
+        throw new IllegalStateException(s"Not enough arguments for transform $name")
       } else {
         getFieldReference(ctx, arguments.head)
       }
@@ -3085,7 +3085,7 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
           .map(typedVisit[Literal])
           .map(lit => LiteralValue(lit.value, lit.dataType))
       reference.orElse(literal)
-          .getOrElse(throw QueryParsingErrors.invalidTransformArgumentError(ctx))
+          .getOrElse(throw new IllegalStateException("Invalid transform argument"))
     }
   }
 
