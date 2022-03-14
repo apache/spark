@@ -39,7 +39,7 @@ class SQLHadoopMapReduceCommitProtocol(
 
   @transient override lazy val stagingDir: Path =
     FileCommitProtocol.externalTempPath(new Path(path), SparkHadoopUtil.get.conf,
-      SQLConf.get.stagingDir, "spark", jobId)
+      SQLConf.get.stagingDir, FileCommitProtocol.USING_SPARK_COMMIT_METHOD, jobId)
 
   override protected def setupCommitter(context: TaskAttemptContext): OutputCommitter = {
     var committer = super.setupCommitter(context)

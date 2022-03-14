@@ -216,6 +216,9 @@ abstract class FileCommitProtocol extends Logging {
 
 
 object FileCommitProtocol extends Logging {
+  val USING_SPARK_COMMIT_METHOD = "spark"
+  val USING_HIVE_COMMIT_METHOD = "hive"
+
   class TaskCommitMessage(val obj: Any) extends Serializable
 
   object EmptyTaskCommitMessage extends TaskCommitMessage(null)
@@ -262,7 +265,8 @@ object FileCommitProtocol extends Logging {
       jobId: String): Path = {
     val extURI = path.toUri
     if (extURI.getScheme == "viewfs") {
-      getExtTmpPathRelTo(path.getParent, hadoopConf, stagingDir, engineType, jobId)
+      new Path(getExtTmpPathRelTo(path.getParent, hadoopConf, stagingDir, engineType, jobId),
+        "-ext-10000")
     } else {
       new Path(getExternalScratchDir(extURI, hadoopConf, stagingDir, engineType, jobId),
         "-ext-10000")
@@ -275,8 +279,7 @@ object FileCommitProtocol extends Logging {
       stagingDir: String,
       engineType: String,
       jobId: String): Path = {
-    // Hive uses 10000
-    new Path(getStagingDir(path, hadoopConf, stagingDir, engineType, jobId), "-ext-10000")
+    getStagingDir(path, hadoopConf, stagingDir, engineType, jobId)
   }
 
   private def getExternalScratchDir(
@@ -321,6 +324,18 @@ object FileCommitProtocol extends Logging {
 
     val dir = fs.makeQualified(
       new Path(stagingPathName + "_" + executionId(engineType) + "-" + jobId))
+
+    if (engineType == "SPARK") {
+      val stagingFS = dir.getFileSystem(hadoopConf)
+      // SPARK-36579: Current SQLHadoopMapReduceCommitProtocol's dynamic partition overwriting uses
+      // rename operation to move partition's directories. This operation is not supported between
+      // different FileSystems.
+      if (equalsFileSystem(fs, stagingFS)) {
+        logDebug(s"The staging dir '$stagingPathName' should be in a same filesystem " +
+          s"with table location if we set `spark.sql.exec.stagingDir` under the table " +
+          "directory.")
+      }
+    }
     logDebug(s"Created staging dir = $dir for path = $inputPath")
     dir
   }
@@ -335,6 +350,10 @@ object FileCommitProtocol extends Logging {
     val rand: Random = new Random
     val format = new SimpleDateFormat("yyyy-MM-dd_HH-mm-ss_SSS", Locale.US)
     s"${engineType}_" + format.format(new Date) + "_" + Math.abs(rand.nextLong)
+  }
+
+  def equalsFileSystem(fs1: FileSystem, fs2: FileSystem): Boolean = {
+    fs1.getUri == fs2.getUri
   }
 }
 
