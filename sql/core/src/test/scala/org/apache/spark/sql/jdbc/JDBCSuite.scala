@@ -34,7 +34,6 @@ import org.apache.spark.sql.catalyst.{analysis, TableIdentifier}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.plans.logical.ShowCreateTable
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeTestUtils}
-import org.apache.spark.sql.connector.expressions.filter.Predicate
 import org.apache.spark.sql.execution.{DataSourceScanExec, ExtendedMode}
 import org.apache.spark.sql.execution.command.{ExplainCommand, ShowCreateTableCommand}
 import org.apache.spark.sql.execution.datasources.LogicalRelation
@@ -774,12 +773,8 @@ class JDBCSuite extends QueryTest
   }
 
   test("compile filters") {
-    val toV2 = PrivateMethod[Option[Predicate]](Symbol("toV2"))
-
-    def doToV2(f: Filter): Option[Predicate] =
-      JDBCRelation invokePrivate toV2(f)
     def doCompileFilter(f: Filter): String =
-      doToV2(f).flatMap(JdbcDialects.get("jdbc:").compileExpression(_)).getOrElse("")
+      f.toV2.flatMap(JdbcDialects.get("jdbc:").compileExpression(_)).getOrElse("")
 
     Seq(("col0", "col1"), ("`col0`", "`col1`")).foreach { case(col0, col1) =>
       assert(doCompileFilter(EqualTo(col0, 3)) === """("col0") = (3)""")
@@ -804,10 +799,10 @@ class JDBCSuite extends QueryTest
       assert(doCompileFilter(IsNull(col1)) === """"col1" IS NULL""")
       assert(doCompileFilter(IsNotNull(col1)) === """"col1" IS NOT NULL""")
       assert(doCompileFilter(And(EqualNullSafe(col0, "abc"), EqualTo(col1, "def")))
-        === """((NOT ("col0" != 'abc' OR "col0" IS NULL OR 'abc' IS NULL) """
-        + """OR ("col0" IS NULL AND 'abc' IS NULL))) AND (("col1") = ('def'))""")
+        === """(("col0" = 'abc') OR ("col0" IS NULL AND 'abc' IS NULL))"""
+        + """ AND (("col1") = ('def'))""")
     }
-    val e = intercept[AnalysisException] {
+    val e = intercept[IllegalArgumentException] {
       doCompileFilter(EqualTo("col0.nested", 3))
     }.getMessage
     assert(e.contains("Filter push down does not support nested column: col0.nested"))

@@ -227,9 +227,10 @@ abstract class JdbcDialect extends Serializable with Logging{
     }
 
     override def visitNamedReference(namedRef: NamedReference): String = {
-      if (namedRef.fieldNames().length != 1) {
+      if (namedRef.fieldNames().length > 1) {
         throw new IllegalArgumentException(
-          "FieldReference with field name has multiple or zero parts unsupported: " + namedRef);
+          QueryCompilationErrors.commandNotSupportNestedColumnError(
+            "Filter push down", namedRef.toString).getMessage);
       }
       quoteIdentifier(namedRef.fieldNames.head)
     }
@@ -243,11 +244,7 @@ abstract class JdbcDialect extends Serializable with Logging{
   @Since("3.3.0")
   def compileExpression(expr: Expression): Option[String] = {
     val jdbcSQLBuilder = new JDBCSQLBuilder()
-    try {
-      Some(jdbcSQLBuilder.build(expr))
-    } catch {
-      case _: IllegalArgumentException => None
-    }
+    Some(jdbcSQLBuilder.build(expr))
   }
 
   /**
