@@ -52,7 +52,7 @@ window_function [ nulls_option ] OVER
 
 * **nulls_option**
 
-    Specifies whether or not to skip null values when evaluating the window function. `RESECT NULLS` means not skipping null values, while `IGNORE NULLS` means skipping. If not specified, the default is `RESECT NULLS`.
+    Specifies whether or not to skip null values when evaluating the window function. `RESPECT NULLS` means not skipping null values, while `IGNORE NULLS` means skipping. If not specified, the default is `RESPECT NULLS`.
 
     **Syntax:**
 

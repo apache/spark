@@ -80,7 +80,7 @@ class StatefulSetAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
   @Mock
   private var driverPodOperations: PodResource[Pod] = _
 
-  private var podsAllocatorUnderTest: StatefulsetPodsAllocator = _
+  private var podsAllocatorUnderTest: StatefulSetPodsAllocator = _
 
   private var snapshotsStore: DeterministicExecutorPodsSnapshotsStore = _
 
@@ -111,7 +111,7 @@ class StatefulSetAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
     when(executorBuilder.buildFromFeatures(any(classOf[KubernetesExecutorConf]), meq(secMgr),
       meq(kubernetesClient), any(classOf[ResourceProfile]))).thenAnswer(executorPodAnswer())
     snapshotsStore = new DeterministicExecutorPodsSnapshotsStore()
-    podsAllocatorUnderTest = new StatefulsetPodsAllocator(
+    podsAllocatorUnderTest = new StatefulSetPodsAllocator(
       conf, secMgr, executorBuilder, kubernetesClient, snapshotsStore, null)
     when(schedulerBackend.getExecutorIds).thenReturn(Seq.empty)
     podsAllocatorUnderTest.start(TEST_SPARK_APP_ID, schedulerBackend)

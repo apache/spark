@@ -390,17 +390,17 @@ trait InheritAnalysisRules extends UnaryLike[Expression] { self: RuntimeReplacea
 }
 
 /**
- * An aggregate expression that gets rewritten (currently by the optimizer) into a
+ * An add-on of [[AggregateFunction]]. This gets rewritten (currently by the optimizer) into a
  * different aggregate expression for evaluation. This is mainly used to provide compatibility
  * with other databases. For example, we use this to support every, any/some aggregates by rewriting
  * them with Min and Max respectively.
  */
-abstract class RuntimeReplaceableAggregate extends AggregateFunction with RuntimeReplaceable {
-  def aggBufferSchema: StructType = throw new IllegalStateException(
+trait RuntimeReplaceableAggregate extends RuntimeReplaceable { self: AggregateFunction =>
+  override def aggBufferSchema: StructType = throw new IllegalStateException(
     "RuntimeReplaceableAggregate.aggBufferSchema should not be called")
-  def aggBufferAttributes: Seq[AttributeReference] = throw new IllegalStateException(
+  override def aggBufferAttributes: Seq[AttributeReference] = throw new IllegalStateException(
     "RuntimeReplaceableAggregate.aggBufferAttributes should not be called")
-  def inputAggBufferAttributes: Seq[AttributeReference] = throw new IllegalStateException(
+  override def inputAggBufferAttributes: Seq[AttributeReference] = throw new IllegalStateException(
     "RuntimeReplaceableAggregate.inputAggBufferAttributes should not be called")
 }
 

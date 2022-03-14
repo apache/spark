@@ -45,10 +45,10 @@ object ExtractPythonUDFFromAggregate extends Rule[LogicalPlan] {
   }
 
   private def hasPythonUdfOverAggregate(expr: Expression, agg: Aggregate): Boolean = {
-    expr.find {
+    expr.exists {
       e => PythonUDF.isScalarPythonUDF(e) &&
-        (e.references.isEmpty || e.find(belongAggregate(_, agg)).isDefined)
-    }.isDefined
+        (e.references.isEmpty || e.exists(belongAggregate(_, agg)))
+    }
   }
 
   private def extract(agg: Aggregate): LogicalPlan = {
@@ -90,7 +90,7 @@ object ExtractPythonUDFFromAggregate extends Rule[LogicalPlan] {
  */
 object ExtractGroupingPythonUDFFromAggregate extends Rule[LogicalPlan] {
   private def hasScalarPythonUDF(e: Expression): Boolean = {
-    e.find(PythonUDF.isScalarPythonUDF).isDefined
+    e.exists(PythonUDF.isScalarPythonUDF)
   }
 
   private def extract(agg: Aggregate): LogicalPlan = {
@@ -164,7 +164,7 @@ object ExtractPythonUDFs extends Rule[LogicalPlan] with PredicateHelper {
   private type EvalTypeChecker = EvalType => Boolean
 
   private def hasScalarPythonUDF(e: Expression): Boolean = {
-    e.find(PythonUDF.isScalarPythonUDF).isDefined
+    e.exists(PythonUDF.isScalarPythonUDF)
   }
 
   @scala.annotation.tailrec

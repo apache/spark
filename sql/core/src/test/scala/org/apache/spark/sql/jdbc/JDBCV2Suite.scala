@@ -92,6 +92,10 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
       // scalastyle:on
       conn.prepareStatement("INSERT INTO \"test\".\"person\" VALUES (1)").executeUpdate()
       conn.prepareStatement("INSERT INTO \"test\".\"person\" VALUES (2)").executeUpdate()
+      conn.prepareStatement(
+        """CREATE TABLE "test"."view1" ("|col1" INTEGER, "|col2" INTEGER)""").executeUpdate()
+      conn.prepareStatement(
+        """CREATE TABLE "test"."view2" ("|col1" INTEGER, "|col3" INTEGER)""").executeUpdate()
     }
   }
 
@@ -317,7 +321,8 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
   test("show tables") {
     checkAnswer(sql("SHOW TABLES IN h2.test"),
       Seq(Row("test", "people", false), Row("test", "empty_table", false),
-        Row("test", "employee", false), Row("test", "dept", false), Row("test", "person", false)))
+        Row("test", "employee", false), Row("test", "dept", false), Row("test", "person", false),
+        Row("test", "view1", false), Row("test", "view2", false)))
   }
 
   test("SQL API: create table as select") {
@@ -1018,5 +1023,13 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
       Row("cathy", 9000.00, 9000.000000, 1),
       Row("david", 10000.00, 10000.000000, 1),
       Row("jen", 12000.00, 12000.000000, 1)))
+  }
+
+  test("SPARK-37895: JDBC push down with delimited special identifiers") {
+    val df = sql(
+      """SELECT h2.test.view1.`|col1`, h2.test.view1.`|col2`, h2.test.view2.`|col3`
+        |FROM h2.test.view1 LEFT JOIN h2.test.view2
+        |ON h2.test.view1.`|col1` = h2.test.view2.`|col1`""".stripMargin)
+    checkAnswer(df, Seq.empty[Row])
   }
 }

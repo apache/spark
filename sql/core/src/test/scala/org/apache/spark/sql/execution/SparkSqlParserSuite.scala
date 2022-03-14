@@ -47,7 +47,7 @@ class SparkSqlParserSuite extends AnalysisTest {
   }
 
   private def intercept(sqlCommand: String, messages: String*): Unit =
-    interceptParseException(parser.parsePlan)(sqlCommand, messages: _*)
+    interceptParseException(parser.parsePlan)(sqlCommand, messages: _*)()
 
   test("Checks if SET/RESET can parse all the configurations") {
     // Force to build static SQL configurations
