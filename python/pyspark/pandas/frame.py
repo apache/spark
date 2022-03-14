@@ -6827,7 +6827,11 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             return DataFrame(internal)
 
     def _sort(
-        self, by: List[Column], ascending: Union[bool, List[bool]], na_position: str
+        self,
+        by: List[Column],
+        ascending: Union[bool, List[bool]],
+        na_position: str,
+        keep: str = "first",
     ) -> "DataFrame":
         if isinstance(ascending, bool):
             ascending = [ascending] * len(by)
@@ -6846,7 +6850,17 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             (False, "last"): Column.desc_nulls_last,
         }
         by = [mapper[(asc, na_position)](scol) for scol, asc in zip(by, ascending)]
-        sdf = self._internal.resolved_copy.spark_frame.sort(*by, NATURAL_ORDER_COLUMN_NAME)
+
+        natural_order_scol = F.col(NATURAL_ORDER_COLUMN_NAME)
+        if keep == "first":
+            natural_order_scol = Column.asc(natural_order_scol)
+        elif keep == "last":
+            natural_order_scol = Column.desc(natural_order_scol)
+        else:
+            raise NotImplementedError(
+                "`keep`=%s is not supported. Only 'first' and 'last' are supported." % keep
+            )
+        sdf = self._internal.resolved_copy.spark_frame.sort(*by, natural_order_scol)
         return DataFrame(self._internal.with_new_sdf(sdf))
 
     def sort_values(
@@ -6943,20 +6957,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         3  None     8     4
         """
         inplace = validate_bool_kwarg(inplace, "inplace")
-        if is_name_like_value(by):
-            by = [by]
-        else:
-            assert is_list_like(by), type(by)
-
-        new_by = []
-        for colname in by:
-            ser = self[colname]
-            if not isinstance(ser, ps.Series):
-                raise ValueError(
-                    "The column %s is not unique. For a multi-index, the label must be a tuple "
-                    "with elements corresponding to each level." % name_like_string(colname)
-                )
-            new_by.append(ser.spark.column)
+        new_by = self._prepare_sort_by_scols(by)
 
         psdf = self._sort(by=new_by, ascending=ascending, na_position=na_position)
 
@@ -6967,6 +6968,22 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             return None
         else:
             return psdf.reset_index(drop=True) if ignore_index else psdf
+
+    def _prepare_sort_by_scols(self, by: Union[Name, List[Name]]) -> List[Column]:
+        if is_name_like_value(by):
+            by = [by]
+        else:
+            assert is_list_like(by), type(by)
+        new_by = []
+        for colname in by:
+            ser = self[colname]
+            if not isinstance(ser, ps.Series):
+                raise ValueError(
+                    "The column %s is not unique. For a multi-index, the label must be a tuple "
+                    "with elements corresponding to each level." % name_like_string(colname)
+                )
+            new_by.append(ser.spark.column)
+        return new_by
 
     def sort_index(
         self,
@@ -7300,8 +7317,9 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         )
         return internal
 
-    # TODO: add keep = First
-    def nlargest(self, n: int, columns: Union[Name, List[Name]]) -> "DataFrame":
+    def nlargest(
+        self, n: int, columns: Union[Name, List[Name]], keep: str = "first"
+    ) -> "DataFrame":
         """
         Return the first `n` rows ordered by `columns` in descending order.
 
@@ -7321,6 +7339,10 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             Number of rows to return.
         columns : label or list of labels
             Column label(s) to order by.
+        keep : {'first', 'last'}, default 'first'
+            Determines which duplicates (if any) to keep.
+            - ``first`` : Keep the first occurrence.
+            - ``last`` : Keep the last occurrence.
 
         Returns
         -------
@@ -7374,10 +7396,12 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         5  7.0  11
         4  6.0  10
         """
-        return self.sort_values(by=columns, ascending=False).head(n=n)
+        by_scols = self._prepare_sort_by_scols(columns)
+        return self._sort(by=by_scols, ascending=False, na_position="last", keep=keep).head(n=n)
 
-    # TODO: add keep = First
-    def nsmallest(self, n: int, columns: Union[Name, List[Name]]) -> "DataFrame":
+    def nsmallest(
+        self, n: int, columns: Union[Name, List[Name]], keep: str = "first"
+    ) -> "DataFrame":
         """
         Return the first `n` rows ordered by `columns` in ascending order.
 
@@ -7395,6 +7419,10 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             Number of items to retrieve.
         columns : list or str
             Column name or names to order by.
+        keep : {'first', 'last'}, default 'first'
+            Determines which duplicates (if any) to keep.
+            - ``first`` : Keep the first occurrence.
+            - ``last`` : Keep the last occurrence.
 
         Returns
         -------
@@ -7439,7 +7467,8 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         1  2.0   7
         2  3.0   8
         """
-        return self.sort_values(by=columns, ascending=True).head(n=n)
+        by_scols = self._prepare_sort_by_scols(columns)
+        return self._sort(by=by_scols, ascending=True, na_position="last", keep=keep).head(n=n)
 
     def isin(self, values: Union[List, Dict]) -> "DataFrame":
         """
