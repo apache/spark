@@ -46,6 +46,7 @@ object DataSourceUtils extends PredicateHelper {
    * The key to use for storing partitionBy columns as options.
    */
   val PARTITIONING_COLUMNS_KEY = "__partition_columns"
+  val PARTITION_OVERWRITE_MODE = "partitionOverwriteMode"
 
   /**
    * Utility methods for converting partitionBy columns to options and back.
