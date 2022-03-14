@@ -211,6 +211,8 @@ case class TrySum(child: Expression) extends SumBase(child) {
   override lazy val updateExpressions: Seq[Expression] =
     if (failOnError) {
       val expressions = getUpdateExpressions
+      // If the lenght of updateExpressions is larger than 1, the tail expressions are for
+      // tracking whether the input is empty, which doesn't need `TryEval` execution.
       Seq(TryEval(expressions.head)) ++ expressions.tail
     } else {
       getUpdateExpressions
