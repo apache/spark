@@ -441,7 +441,10 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
 
       /** Ensures that this plan does not have a streaming aggregate in it. */
       def hasNoStreamingAgg: Boolean = {
-        plan.collectFirst { case a: Aggregate if a.isStreaming => a }.isEmpty
+        !plan.exists {
+          case a: Aggregate => a.isStreaming
+          case _ => false
+        }
       }
 
       // The following cases of limits on a streaming plan has to be executed with a stateful
