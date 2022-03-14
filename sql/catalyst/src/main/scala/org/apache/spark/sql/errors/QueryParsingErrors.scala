@@ -229,17 +229,8 @@ object QueryParsingErrors {
     new ParseException("INVALID_SQL_SYNTAX", Array(s"Too many arguments for transform $name"), ctx)
   }
 
-  def notEnoughArgumentsForTransformError(name: String, ctx: ApplyTransformContext): Throwable = {
-    new ParseException("INVALID_SQL_SYNTAX",
-      Array(s"Not enough arguments for transform $name"), ctx)
-  }
-
   def invalidBucketsNumberError(describe: String, ctx: ApplyTransformContext): Throwable = {
     new ParseException(s"Invalid number of buckets: $describe", ctx)
-  }
-
-  def invalidTransformArgumentError(ctx: TransformArgumentContext): Throwable = {
-    new ParseException("INVALID_SQL_SYNTAX", Array("Invalid transform argument"), ctx)
   }
 
   def cannotCleanReservedNamespacePropertyError(
