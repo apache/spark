@@ -163,10 +163,10 @@ private[jdbc] class JDBCRDD(
     partitions: Array[Partition],
     url: String,
     options: JDBCOptions,
-    groupByColumns: Option[Array[String]] = None,
-    sample: Option[TableSampleInfo] = None,
-    limit: Int = 0,
-    sortOrders: Array[SortOrder] = Array.empty[SortOrder])
+    groupByColumns: Option[Array[String]],
+    sample: Option[TableSampleInfo],
+    limit: Int,
+    sortOrders: Array[SortOrder])
   extends RDD[InternalRow](sc, Nil) {
 
   /**

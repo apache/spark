@@ -51,7 +51,7 @@ public class V2ExpressionSQLBuilder {
         case "STARTS_WITH":
         case "ENDS_WITH":
         case "CONTAINS":
-          return visitStringPredicate(name, build(e.children()[0]), build(e.children()[1]));
+          return visitStringPredicate(name, e);
         case "=":
         case "<>":
         case "<=>":
@@ -119,7 +119,9 @@ public class V2ExpressionSQLBuilder {
     return v + " IS NOT NULL";
   }
 
-  protected String visitStringPredicate(String name, String l, String r) {
+  protected String visitStringPredicate(String name, GeneralScalarExpression strPredicate) {
+    String l = build(strPredicate.children()[0]);
+    String r = build(strPredicate.children()[1]);
     String value = r.replaceAll("'", "");
     switch (name) {
       case "STARTS_WITH":
@@ -129,7 +131,7 @@ public class V2ExpressionSQLBuilder {
       case "CONTAINS":
         return l + " LIKE '%" + value + "%'";
       default:
-        throw new IllegalArgumentException("Unexpected V2 string predicate: " + name);
+        return visitUnexpectedExpr(strPredicate);
     }
   }
 

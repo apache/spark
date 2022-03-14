@@ -71,7 +71,7 @@ sealed abstract class Filter {
   /**
    * Converts V1 filter to V2 filter
    */
-  def toV2: Option[Predicate]
+  def toV2: Predicate
 }
 
 /**
@@ -86,8 +86,8 @@ sealed abstract class Filter {
 @Stable
 case class EqualTo(attribute: String, value: Any) extends Filter {
   override def references: Array[String] = Array(attribute) ++ findReferences(value)
-  override def toV2: Option[Predicate] = Some(new Predicate("=",
-    Array(FieldReference(attribute), LiteralValue(value, Literal(value).dataType))))
+  override def toV2: Predicate = new Predicate("=",
+    Array(FieldReference(attribute), LiteralValue(value, Literal(value).dataType)))
 }
 
 /**
@@ -103,8 +103,8 @@ case class EqualTo(attribute: String, value: Any) extends Filter {
 @Stable
 case class EqualNullSafe(attribute: String, value: Any) extends Filter {
   override def references: Array[String] = Array(attribute) ++ findReferences(value)
-  override def toV2: Option[Predicate] = Some(new Predicate("<=>",
-    Array(FieldReference(attribute), LiteralValue(value, Literal(value).dataType))))
+  override def toV2: Predicate = new Predicate("<=>",
+    Array(FieldReference(attribute), LiteralValue(value, Literal(value).dataType)))
 }
 
 /**
@@ -119,8 +119,8 @@ case class EqualNullSafe(attribute: String, value: Any) extends Filter {
 @Stable
 case class GreaterThan(attribute: String, value: Any) extends Filter {
   override def references: Array[String] = Array(attribute) ++ findReferences(value)
-  override def toV2: Option[Predicate] = Some(new Predicate(">",
-    Array(FieldReference(attribute), LiteralValue(value, Literal(value).dataType))))
+  override def toV2: Predicate = new Predicate(">",
+    Array(FieldReference(attribute), LiteralValue(value, Literal(value).dataType)))
 }
 
 /**
@@ -135,8 +135,8 @@ case class GreaterThan(attribute: String, value: Any) extends Filter {
 @Stable
 case class GreaterThanOrEqual(attribute: String, value: Any) extends Filter {
   override def references: Array[String] = Array(attribute) ++ findReferences(value)
-  override def toV2: Option[Predicate] = Some(new Predicate(">=",
-    Array(FieldReference(attribute), LiteralValue(value, Literal(value).dataType))))
+  override def toV2: Predicate = new Predicate(">=",
+    Array(FieldReference(attribute), LiteralValue(value, Literal(value).dataType)))
 }
 
 /**
@@ -151,8 +151,8 @@ case class GreaterThanOrEqual(attribute: String, value: Any) extends Filter {
 @Stable
 case class LessThan(attribute: String, value: Any) extends Filter {
   override def references: Array[String] = Array(attribute) ++ findReferences(value)
-  override def toV2: Option[Predicate] = Some(new Predicate("<",
-    Array(FieldReference(attribute), LiteralValue(value, Literal(value).dataType))))
+  override def toV2: Predicate = new Predicate("<",
+    Array(FieldReference(attribute), LiteralValue(value, Literal(value).dataType)))
 }
 
 /**
@@ -167,8 +167,8 @@ case class LessThan(attribute: String, value: Any) extends Filter {
 @Stable
 case class LessThanOrEqual(attribute: String, value: Any) extends Filter {
   override def references: Array[String] = Array(attribute) ++ findReferences(value)
-  override def toV2: Option[Predicate] = Some(new Predicate("<=",
-    Array(FieldReference(attribute), LiteralValue(value, Literal(value).dataType))))
+  override def toV2: Predicate = new Predicate("<=",
+    Array(FieldReference(attribute), LiteralValue(value, Literal(value).dataType)))
 }
 
 /**
@@ -205,9 +205,9 @@ case class In(attribute: String, values: Array[Any]) extends Filter {
   }
 
   override def references: Array[String] = Array(attribute) ++ values.flatMap(findReferences)
-  override def toV2: Option[Predicate] = {
+  override def toV2: Predicate = {
     val literals = values.map(v => LiteralValue(v, Literal(v).dataType))
-    Some(new Predicate("IN", FieldReference(attribute) +: literals))
+    new Predicate("IN", FieldReference(attribute) +: literals)
   }
 }
 
@@ -222,8 +222,7 @@ case class In(attribute: String, values: Array[Any]) extends Filter {
 @Stable
 case class IsNull(attribute: String) extends Filter {
   override def references: Array[String] = Array(attribute)
-  override def toV2: Option[Predicate] =
-    Some(new Predicate("IS_NULL", Array(FieldReference(attribute))))
+  override def toV2: Predicate = new Predicate("IS_NULL", Array(FieldReference(attribute)))
 }
 
 /**
@@ -237,8 +236,7 @@ case class IsNull(attribute: String) extends Filter {
 @Stable
 case class IsNotNull(attribute: String) extends Filter {
   override def references: Array[String] = Array(attribute)
-  override def toV2: Option[Predicate] =
-    Some(new Predicate("IS_NOT_NULL", Array(FieldReference(attribute))))
+  override def toV2: Predicate = new Predicate("IS_NOT_NULL", Array(FieldReference(attribute)))
 }
 
 /**
@@ -249,14 +247,7 @@ case class IsNotNull(attribute: String) extends Filter {
 @Stable
 case class And(left: Filter, right: Filter) extends Filter {
   override def references: Array[String] = left.references ++ right.references
-  override def toV2: Option[Predicate] = {
-    val and = Seq(left, right).flatMap(_.toV2)
-    if (and.size == 2) {
-      Some(new Predicate("AND", and.toArray))
-    } else {
-      None
-    }
-  }
+  override def toV2: Predicate = new Predicate("AND", Seq(left, right).map(_.toV2).toArray)
 }
 
 /**
@@ -267,14 +258,7 @@ case class And(left: Filter, right: Filter) extends Filter {
 @Stable
 case class Or(left: Filter, right: Filter) extends Filter {
   override def references: Array[String] = left.references ++ right.references
-  override def toV2: Option[Predicate] = {
-    val or = Seq(left, right).flatMap(_.toV2)
-    if (or.size == 2) {
-      Some(new Predicate("OR", or.toArray))
-    } else {
-      None
-    }
-  }
+  override def toV2: Predicate = new Predicate("OR", Seq(left, right).map(_.toV2).toArray)
 }
 
 /**
@@ -285,9 +269,7 @@ case class Or(left: Filter, right: Filter) extends Filter {
 @Stable
 case class Not(child: Filter) extends Filter {
   override def references: Array[String] = child.references
-  override def toV2: Option[Predicate] = {
-    child.toV2.map(p => new Predicate("NOT", Array(p)))
-  }
+  override def toV2: Predicate = new Predicate("NOT", Array(child.toV2))
 }
 
 /**
@@ -302,8 +284,8 @@ case class Not(child: Filter) extends Filter {
 @Stable
 case class StringStartsWith(attribute: String, value: String) extends Filter {
   override def references: Array[String] = Array(attribute)
-  override def toV2: Option[Predicate] = Some(new Predicate("STARTS_WITH",
-    Array(FieldReference(attribute), LiteralValue(value, Literal(value).dataType))))
+  override def toV2: Predicate = new Predicate("STARTS_WITH",
+    Array(FieldReference(attribute), LiteralValue(value, Literal(value).dataType)))
 }
 
 /**
@@ -318,8 +300,8 @@ case class StringStartsWith(attribute: String, value: String) extends Filter {
 @Stable
 case class StringEndsWith(attribute: String, value: String) extends Filter {
   override def references: Array[String] = Array(attribute)
-  override def toV2: Option[Predicate] = Some(new Predicate("ENDS_WITH",
-    Array(FieldReference(attribute), LiteralValue(value, Literal(value).dataType))))
+  override def toV2: Predicate = new Predicate("ENDS_WITH",
+    Array(FieldReference(attribute), LiteralValue(value, Literal(value).dataType)))
 }
 
 /**
@@ -334,8 +316,8 @@ case class StringEndsWith(attribute: String, value: String) extends Filter {
 @Stable
 case class StringContains(attribute: String, value: String) extends Filter {
   override def references: Array[String] = Array(attribute)
-  override def toV2: Option[Predicate] = Some(new Predicate("CONTAINS",
-    Array(FieldReference(attribute), LiteralValue(value, Literal(value).dataType))))
+  override def toV2: Predicate = new Predicate("CONTAINS",
+    Array(FieldReference(attribute), LiteralValue(value, Literal(value).dataType)))
 }
 
 /**
@@ -346,7 +328,7 @@ case class StringContains(attribute: String, value: String) extends Filter {
 @Evolving
 case class AlwaysTrue() extends Filter {
   override def references: Array[String] = Array.empty
-  override def toV2: Option[Predicate] = Some(new V2AlwaysTrue())
+  override def toV2: Predicate = new V2AlwaysTrue()
 }
 
 @Evolving
@@ -361,7 +343,7 @@ object AlwaysTrue extends AlwaysTrue {
 @Evolving
 case class AlwaysFalse() extends Filter {
   override def references: Array[String] = Array.empty
-  override def toV2: Option[Predicate] = Some(new V2AlwaysFalse())
+  override def toV2: Predicate = new V2AlwaysFalse()
 }
 
 @Evolving

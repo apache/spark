@@ -70,12 +70,6 @@ import org.apache.spark.sql.connector.expressions.GeneralScalarExpression;
  *    <li>Since version: 3.3.0</li>
  *   </ul>
  *  </li>
- *  <li>Name: <code>!=</code>
- *   <ul>
- *    <li>SQL semantic: <code>expr1 != expr2</code></li>
- *    <li>Since version: 3.3.0</li>
- *   </ul>
- *  </li>
  *  <li>Name: <code>&lt;&gt;</code>
  *   <ul>
  *    <li>SQL semantic: <code>expr1 &lt;&gt; expr2</code></li>
@@ -84,7 +78,7 @@ import org.apache.spark.sql.connector.expressions.GeneralScalarExpression;
  *  </li>
  *  <li>Name: <code>&lt;=&gt;</code>
  *   <ul>
- *    <li>SQL semantic: <code>expr1 &lt;=&gt; expr2</code></li>
+ *    <li>SQL semantic: null-safe version of <code>expr1 = expr2</code></li>
  *    <li>Since version: 3.3.0</li>
  *   </ul>
  *  </li>

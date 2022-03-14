@@ -534,6 +534,7 @@ private[sql] object DataSourceV2Strategy {
       case Not(child) =>
         translateFilterV2WithMapping(child, translatedFilterToExpr, nestedPredicatePushdownEnabled)
           .map(v => new V2Not(v))
+
       case other =>
         val filter = translateLeafNodeFilterV2(other, nestedPredicatePushdownEnabled)
         if (filter.isDefined && translatedFilterToExpr.isDefined) {
@@ -564,9 +565,11 @@ private[sql] object DataSourceV2Strategy {
   }
 }
 
-abstract class PushablePredicateBase {
-  val nestedPredicatePushdownEnabled: Boolean
-  val pushableColumn: PushableColumnBase = PushableColumn(nestedPredicatePushdownEnabled)
+/**
+ * Get the expression of DS V2 to represent catalyst predicate that can be pushed down.
+ */
+case class PushablePredicate(nestedPredicatePushdownEnabled: Boolean) {
+  private val pushableColumn: PushableColumnBase = PushableColumn(nestedPredicatePushdownEnabled)
 
   def unapply(e: Expression): Option[Predicate] = e match {
     case col @ pushableColumn(name) if col.dataType.isInstanceOf[BooleanType] =>
@@ -576,26 +579,5 @@ abstract class PushablePredicateBase {
         assert(v.isInstanceOf[Predicate])
         v.asInstanceOf[Predicate]
       }
-  }
-}
-
-object PushablePredicateWithNestedColumn extends PushablePredicateBase {
-  override val nestedPredicatePushdownEnabled = true
-}
-
-object PushablePredicateWithoutNestedColumn extends PushablePredicateBase {
-  override val nestedPredicatePushdownEnabled = false
-}
-
-/**
- * Get the expression of DS V2 to represent catalyst predicate that can be pushed down.
- */
-object PushablePredicate {
-  def apply(nestedPredicatePushdownEnabled: Boolean): PushablePredicateBase = {
-    if (nestedPredicatePushdownEnabled) {
-      PushablePredicateWithNestedColumn
-    } else {
-      PushablePredicateWithoutNestedColumn
-    }
   }
 }

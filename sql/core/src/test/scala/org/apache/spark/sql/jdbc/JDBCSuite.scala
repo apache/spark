@@ -774,7 +774,7 @@ class JDBCSuite extends QueryTest
 
   test("compile filters") {
     def doCompileFilter(f: Filter): String =
-      f.toV2.flatMap(JdbcDialects.get("jdbc:").compileExpression(_)).getOrElse("")
+      JdbcDialects.get("jdbc:").compileExpression(f.toV2).getOrElse("")
 
     Seq(("col0", "col1"), ("`col0`", "`col1`")).foreach { case(col0, col1) =>
       assert(doCompileFilter(EqualTo(col0, 3)) === """("col0") = (3)""")
