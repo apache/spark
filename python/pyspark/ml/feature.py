@@ -28,6 +28,7 @@ from typing import (
 )
 
 from pyspark import keyword_only, since, SparkContext
+from pyspark.ml._typing import P
 from pyspark.ml.linalg import _convert_to_vector, DenseMatrix, DenseVector, Vector
 from pyspark.sql.dataframe import DataFrame
 from pyspark.ml.param.shared import (
@@ -57,7 +58,6 @@ if TYPE_CHECKING:
     from py4j.java_gateway import JavaObject  # type: ignore[import]
 
 JM = TypeVar("JM", bound=JavaTransformer)
-P = TypeVar("P", bound=Params)
 
 __all__ = [
     "Binarizer",
@@ -203,7 +203,7 @@ class Binarizer(
         threshold: float = ...,
         inputCol: Optional[str] = ...,
         outputCol: Optional[str] = ...,
-    ) -> None:
+    ):
         ...
 
     @overload
@@ -213,7 +213,7 @@ class Binarizer(
         thresholds: Optional[List[float]] = ...,
         inputCols: Optional[List[str]] = ...,
         outputCols: Optional[List[str]] = ...,
-    ) -> None:
+    ):
         ...
 
     @keyword_only
@@ -226,7 +226,7 @@ class Binarizer(
         thresholds: Optional[List[float]] = None,
         inputCols: Optional[List[str]] = None,
         outputCols: Optional[List[str]] = None,
-    ) -> None:
+    ):
         """
         __init__(self, \\*, threshold=0.0, inputCol=None, outputCol=None, thresholds=None, \
                  inputCols=None, outputCols=None)
@@ -332,7 +332,7 @@ class _LSHParams(HasInputCol, HasOutputCol):
         typeConverter=TypeConverters.toInt,
     )
 
-    def __init__(self, *args: Any) -> None:
+    def __init__(self, *args: Any):
         super(_LSHParams, self).__init__(*args)
         self._setDefault(numHashTables=1)
 
@@ -343,7 +343,7 @@ class _LSHParams(HasInputCol, HasOutputCol):
         return self.getOrDefault(self.numHashTables)
 
 
-class _LSH(Generic[JM], JavaEstimator[JM], _LSHParams, JavaMLReadable, JavaMLWritable):
+class _LSH(JavaEstimator[JM], _LSHParams, JavaMLReadable, JavaMLWritable, Generic[JM]):
     """
     Mixin for Locality Sensitive Hashing (LSH).
     """
@@ -579,7 +579,7 @@ class BucketedRandomProjectionLSH(
         seed: Optional[int] = None,
         numHashTables: int = 1,
         bucketLength: Optional[float] = None,
-    ) -> None:
+    ):
         """
         __init__(self, \\*, inputCol=None, outputCol=None, seed=None, numHashTables=1, \
                  bucketLength=None)
@@ -771,7 +771,7 @@ class Bucketizer(
         inputCol: Optional[str] = ...,
         outputCol: Optional[str] = ...,
         handleInvalid: str = ...,
-    ) -> None:
+    ):
         ...
 
     @overload
@@ -782,7 +782,7 @@ class Bucketizer(
         splitsArray: Optional[List[List[float]]] = ...,
         inputCols: Optional[List[str]] = ...,
         outputCols: Optional[List[str]] = ...,
-    ) -> None:
+    ):
         ...
 
     @keyword_only
@@ -796,7 +796,7 @@ class Bucketizer(
         splitsArray: Optional[List[List[float]]] = None,
         inputCols: Optional[List[str]] = None,
         outputCols: Optional[List[str]] = None,
-    ) -> None:
+    ):
         """
         __init__(self, \\*, splits=None, inputCol=None, outputCol=None, handleInvalid="error", \
                  splitsArray=None, inputCols=None, outputCols=None)
@@ -965,7 +965,7 @@ class _CountVectorizerParams(JavaParams, HasInputCol, HasOutputCol):
         typeConverter=TypeConverters.toBoolean,
     )
 
-    def __init__(self, *args: Any) -> None:
+    def __init__(self, *args: Any):
         super(_CountVectorizerParams, self).__init__(*args)
         self._setDefault(minTF=1.0, minDF=1.0, maxDF=2 ** 63 - 1, vocabSize=1 << 18, binary=False)
 
@@ -1068,6 +1068,8 @@ class CountVectorizer(
     ...
     """
 
+    _input_kwargs: Dict[str, Any]
+
     @keyword_only
     def __init__(
         self,
@@ -1079,14 +1081,14 @@ class CountVectorizer(
         binary: bool = False,
         inputCol: Optional[str] = None,
         outputCol: Optional[str] = None,
-    ) -> None:
+    ):
         """
         __init__(self, \\*, minTF=1.0, minDF=1.0, maxDF=2 ** 63 - 1, vocabSize=1 << 18,\
                  binary=False, inputCol=None,outputCol=None)
         """
         super(CountVectorizer, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.CountVectorizer", self.uid)
-        kwargs = self._input_kwargs  # type: ignore[attr-defined]
+        kwargs = self._input_kwargs
         self.setParams(**kwargs)
 
     @keyword_only
@@ -1107,7 +1109,7 @@ class CountVectorizer(
                   binary=False, inputCol=None, outputCol=None)
         Set the params for the CountVectorizer
         """
-        kwargs = self._input_kwargs  # type: ignore[attr-defined]
+        kwargs = self._input_kwargs
         return self._set(**kwargs)
 
     @since("1.6.0")
@@ -1297,7 +1299,7 @@ class DCT(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable["DCT"], Jav
         inverse: bool = False,
         inputCol: Optional[str] = None,
         outputCol: Optional[str] = None,
-    ) -> None:
+    ):
         """
         __init__(self, \\*, inverse=False, inputCol=None, outputCol=None)
         """
@@ -1405,7 +1407,7 @@ class ElementwiseProduct(
         scalingVec: Optional[Vector] = None,
         inputCol: Optional[str] = None,
         outputCol: Optional[str] = None,
-    ) -> None:
+    ):
         """
         __init__(self, \\*, scalingVec=None, inputCol=None, outputCol=None)
         """
@@ -1542,7 +1544,7 @@ class FeatureHasher(
         inputCols: Optional[List[str]] = None,
         outputCol: Optional[str] = None,
         categoricalCols: Optional[List[str]] = None,
-    ) -> None:
+    ):
         """
         __init__(self, \\*, numFeatures=1 << 18, inputCols=None, outputCol=None, \
                  categoricalCols=None)
@@ -1666,7 +1668,7 @@ class HashingTF(
         binary: bool = False,
         inputCol: Optional[str] = None,
         outputCol: Optional[str] = None,
-    ) -> None:
+    ):
         """
         __init__(self, \\*, numFeatures=1 << 18, binary=False, inputCol=None, outputCol=None)
         """
@@ -1756,7 +1758,7 @@ class _IDFParams(HasInputCol, HasOutputCol):
         """
         return self.getOrDefault(self.minDocFreq)
 
-    def __init__(self, *args: Any) -> None:
+    def __init__(self, *args: Any):
         super(_IDFParams, self).__init__(*args)
         self._setDefault(minDocFreq=0)
 
@@ -1817,7 +1819,7 @@ class IDF(JavaEstimator["IDFModel"], _IDFParams, JavaMLReadable["IDF"], JavaMLWr
         minDocFreq: int = 0,
         inputCol: Optional[str] = None,
         outputCol: Optional[str] = None,
-    ) -> None:
+    ):
         """
         __init__(self, \\*, minDocFreq=0, inputCol=None, outputCol=None)
         """
@@ -1936,7 +1938,7 @@ class _ImputerParams(HasInputCol, HasInputCols, HasOutputCol, HasOutputCols, Has
         typeConverter=TypeConverters.toFloat,
     )
 
-    def __init__(self, *args: Any) -> None:
+    def __init__(self, *args: Any):
         super(_ImputerParams, self).__init__(*args)
         self._setDefault(strategy="mean", missingValue=float("nan"), relativeError=0.001)
 
@@ -2083,7 +2085,7 @@ class Imputer(
         inputCols: Optional[List[str]] = ...,
         outputCols: Optional[List[str]] = ...,
         relativeError: float = ...,
-    ) -> None:
+    ):
         ...
 
     @overload
@@ -2095,7 +2097,7 @@ class Imputer(
         inputCol: Optional[str] = ...,
         outputCol: Optional[str] = ...,
         relativeError: float = ...,
-    ) -> None:
+    ):
         ...
 
     @keyword_only
@@ -2109,7 +2111,7 @@ class Imputer(
         inputCol: Optional[str] = None,
         outputCol: Optional[str] = None,
         relativeError: float = 0.001,
-    ) -> None:
+    ):
         """
         __init__(self, \\*, strategy="mean", missingValue=float("nan"), inputCols=None, \
                  outputCols=None, inputCol=None, outputCol=None, relativeError=0.001):
@@ -2308,9 +2310,7 @@ class Interaction(
     _input_kwargs: Dict[str, Any]
 
     @keyword_only
-    def __init__(
-        self, *, inputCols: Optional[List[str]] = None, outputCol: Optional[str] = None
-    ) -> None:
+    def __init__(self, *, inputCols: Optional[List[str]] = None, outputCol: Optional[str] = None):
         """
         __init__(self, \\*, inputCols=None, outputCol=None):
         """
@@ -2408,7 +2408,7 @@ class MaxAbsScaler(
     _input_kwargs: Dict[str, Any]
 
     @keyword_only
-    def __init__(self, *, inputCol: Optional[str] = None, outputCol: Optional[str] = None) -> None:
+    def __init__(self, *, inputCol: Optional[str] = None, outputCol: Optional[str] = None):
         """
         __init__(self, \\*, inputCol=None, outputCol=None)
         """
@@ -2561,7 +2561,7 @@ class MinHashLSH(
         outputCol: Optional[str] = None,
         seed: Optional[int] = None,
         numHashTables: int = 1,
-    ) -> None:
+    ):
         """
         __init__(self, \\*, inputCol=None, outputCol=None, seed=None, numHashTables=1)
         """
@@ -2634,7 +2634,7 @@ class _MinMaxScalerParams(HasInputCol, HasOutputCol):
         typeConverter=TypeConverters.toFloat,
     )
 
-    def __init__(self, *args: Any) -> None:
+    def __init__(self, *args: Any):
         super(_MinMaxScalerParams, self).__init__(*args)
         self._setDefault(min=0.0, max=1.0)
 
@@ -2726,7 +2726,7 @@ class MinMaxScaler(
         max: float = 1.0,
         inputCol: Optional[str] = None,
         outputCol: Optional[str] = None,
-    ) -> None:
+    ):
         """
         __init__(self, \\*, min=0.0, max=1.0, inputCol=None, outputCol=None)
         """
@@ -2893,7 +2893,7 @@ class NGram(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable["NGram"],
     @keyword_only
     def __init__(
         self, *, n: int = 2, inputCol: Optional[str] = None, outputCol: Optional[str] = None
-    ) -> None:
+    ):
         """
         __init__(self, \\*, n=2, inputCol=None, outputCol=None)
         """
@@ -2988,7 +2988,7 @@ class Normalizer(
     @keyword_only
     def __init__(
         self, *, p: float = 2.0, inputCol: Optional[str] = None, outputCol: Optional[str] = None
-    ) -> None:
+    ):
         """
         __init__(self, \\*, p=2.0, inputCol=None, outputCol=None)
         """
@@ -3064,7 +3064,7 @@ class _OneHotEncoderParams(
         typeConverter=TypeConverters.toBoolean,
     )
 
-    def __init__(self, *args: Any) -> None:
+    def __init__(self, *args: Any):
         super(_OneHotEncoderParams, self).__init__(*args)
         self._setDefault(handleInvalid="error", dropLast=True)
 
@@ -3155,7 +3155,7 @@ class OneHotEncoder(
         outputCols: Optional[List[str]] = ...,
         handleInvalid: str = ...,
         dropLast: bool = ...,
-    ) -> None:
+    ):
         ...
 
     @overload
@@ -3166,7 +3166,7 @@ class OneHotEncoder(
         dropLast: bool = ...,
         inputCol: Optional[str] = ...,
         outputCol: Optional[str] = ...,
-    ) -> None:
+    ):
         ...
 
     @keyword_only
@@ -3179,7 +3179,7 @@ class OneHotEncoder(
         dropLast: bool = True,
         inputCol: Optional[str] = None,
         outputCol: Optional[str] = None,
-    ) -> None:
+    ):
         """
         __init__(self, \\*, inputCols=None, outputCols=None, handleInvalid="error", dropLast=True, \
                  inputCol=None, outputCol=None)
@@ -3389,7 +3389,7 @@ class PolynomialExpansion(
     @keyword_only
     def __init__(
         self, *, degree: int = 2, inputCol: Optional[str] = None, outputCol: Optional[str] = None
-    ) -> None:
+    ):
         """
         __init__(self, \\*, degree=2, inputCol=None, outputCol=None)
         """
@@ -3589,7 +3589,7 @@ class QuantileDiscretizer(
         outputCol: Optional[str] = ...,
         relativeError: float = ...,
         handleInvalid: str = ...,
-    ) -> None:
+    ):
         ...
 
     @overload
@@ -3601,7 +3601,7 @@ class QuantileDiscretizer(
         numBucketsArray: Optional[List[int]] = ...,
         inputCols: Optional[List[str]] = ...,
         outputCols: Optional[List[str]] = ...,
-    ) -> None:
+    ):
         ...
 
     @keyword_only
@@ -3616,7 +3616,7 @@ class QuantileDiscretizer(
         numBucketsArray: Optional[List[int]] = None,
         inputCols: Optional[List[str]] = None,
         outputCols: Optional[List[str]] = None,
-    ) -> None:
+    ):
         """
         __init__(self, \\*, numBuckets=2, inputCol=None, outputCol=None, relativeError=0.001, \
                  handleInvalid="error", numBucketsArray=None, inputCols=None, outputCols=None)
@@ -3795,7 +3795,7 @@ class _RobustScalerParams(HasInputCol, HasOutputCol, HasRelativeError):
         typeConverter=TypeConverters.toBoolean,
     )
 
-    def __init__(self, *args: Any) -> None:
+    def __init__(self, *args: Any):
         super(_RobustScalerParams, self).__init__(*args)
         self._setDefault(
             lower=0.25, upper=0.75, withCentering=False, withScaling=True, relativeError=0.001
@@ -3899,7 +3899,7 @@ class RobustScaler(
         inputCol: Optional[str] = None,
         outputCol: Optional[str] = None,
         relativeError: float = 0.001,
-    ) -> None:
+    ):
         """
         __init__(self, \\*, lower=0.25, upper=0.75, withCentering=False, withScaling=True, \
                  inputCol=None, outputCol=None, relativeError=0.001)
@@ -4243,7 +4243,7 @@ class SQLTransformer(JavaTransformer, JavaMLReadable["SQLTransformer"], JavaMLWr
     _input_kwargs: Dict[str, Any]
 
     @keyword_only
-    def __init__(self, *, statement: Optional[str] = None) -> None:
+    def __init__(self, *, statement: Optional[str] = None):
         """
         __init__(self, \\*, statement=None)
         """
@@ -4294,7 +4294,7 @@ class _StandardScalerParams(HasInputCol, HasOutputCol):
         typeConverter=TypeConverters.toBoolean,
     )
 
-    def __init__(self, *args: Any) -> None:
+    def __init__(self, *args: Any):
         super(_StandardScalerParams, self).__init__(*args)
         self._setDefault(withMean=False, withStd=True)
 
@@ -4378,7 +4378,7 @@ class StandardScaler(
         withStd: bool = True,
         inputCol: Optional[str] = None,
         outputCol: Optional[str] = None,
-    ) -> None:
+    ):
         """
         __init__(self, \\*, withMean=False, withStd=True, inputCol=None, outputCol=None)
         """
@@ -4505,7 +4505,7 @@ class _StringIndexerParams(
         typeConverter=TypeConverters.toString,
     )
 
-    def __init__(self, *args: Any) -> None:
+    def __init__(self, *args: Any):
         super(_StringIndexerParams, self).__init__(*args)
         self._setDefault(handleInvalid="error", stringOrderType="frequencyDesc")
 
@@ -4616,7 +4616,7 @@ class StringIndexer(
         outputCol: Optional[str] = ...,
         handleInvalid: str = ...,
         stringOrderType: str = ...,
-    ) -> None:
+    ):
         ...
 
     @overload
@@ -4627,7 +4627,7 @@ class StringIndexer(
         outputCols: Optional[List[str]] = ...,
         handleInvalid: str = ...,
         stringOrderType: str = ...,
-    ) -> None:
+    ):
         ...
 
     @keyword_only
@@ -4640,7 +4640,7 @@ class StringIndexer(
         outputCols: Optional[List[str]] = None,
         handleInvalid: str = "error",
         stringOrderType: str = "frequencyDesc",
-    ) -> None:
+    ):
         """
         __init__(self, \\*, inputCol=None, outputCol=None, inputCols=None, outputCols=None, \
                  handleInvalid="error", stringOrderType="frequencyDesc")
@@ -4890,7 +4890,7 @@ class IndexToString(
         inputCol: Optional[str] = None,
         outputCol: Optional[str] = None,
         labels: Optional[List[str]] = None,
-    ) -> None:
+    ):
         """
         __init__(self, \\*, inputCol=None, outputCol=None, labels=None)
         """
@@ -5025,7 +5025,7 @@ class StopWordsRemover(
         stopWords: Optional[List[str]] = ...,
         caseSensitive: bool = ...,
         locale: Optional[str] = ...,
-    ) -> None:
+    ):
         ...
 
     @overload
@@ -5037,7 +5037,7 @@ class StopWordsRemover(
         locale: Optional[str] = ...,
         inputCols: Optional[List[str]] = ...,
         outputCols: Optional[List[str]] = ...,
-    ) -> None:
+    ):
         ...
 
     @keyword_only
@@ -5051,7 +5051,7 @@ class StopWordsRemover(
         locale: Optional[str] = None,
         inputCols: Optional[List[str]] = None,
         outputCols: Optional[List[str]] = None,
-    ) -> None:
+    ):
         """
         __init__(self, \\*, inputCol=None, outputCol=None, stopWords=None, caseSensitive=false, \
                  locale=None, inputCols=None, outputCols=None)
@@ -5238,7 +5238,7 @@ class Tokenizer(
     _input_kwargs: Dict[str, Any]
 
     @keyword_only
-    def __init__(self, *, inputCol: Optional[str] = None, outputCol: Optional[str] = None) -> None:
+    def __init__(self, *, inputCol: Optional[str] = None, outputCol: Optional[str] = None):
         """
         __init__(self, \\*, inputCol=None, outputCol=None)
         """
@@ -5349,7 +5349,7 @@ class VectorAssembler(
         inputCols: Optional[List[str]] = None,
         outputCol: Optional[str] = None,
         handleInvalid: str = "error",
-    ) -> None:
+    ):
         """
         __init__(self, \\*, inputCols=None, outputCol=None, handleInvalid="error")
         """
@@ -5421,7 +5421,7 @@ class _VectorIndexerParams(HasInputCol, HasOutputCol, HasHandleInvalid):
         typeConverter=TypeConverters.toString,
     )
 
-    def __init__(self, *args: Any) -> None:
+    def __init__(self, *args: Any):
         super(_VectorIndexerParams, self).__init__(*args)
         self._setDefault(maxCategories=20, handleInvalid="error")
 
@@ -5538,7 +5538,7 @@ class VectorIndexer(
         inputCol: Optional[str] = None,
         outputCol: Optional[str] = None,
         handleInvalid: str = "error",
-    ) -> None:
+    ):
         """
         __init__(self, \\*, maxCategories=20, inputCol=None, outputCol=None, handleInvalid="error")
         """
@@ -5716,7 +5716,7 @@ class VectorSlicer(
         outputCol: Optional[str] = None,
         indices: Optional[List[int]] = None,
         names: Optional[List[str]] = None,
-    ) -> None:
+    ):
         """
         __init__(self, \\*, inputCol=None, outputCol=None, indices=None, names=None)
         """
@@ -5825,7 +5825,7 @@ class _Word2VecParams(HasStepSize, HasMaxIter, HasSeed, HasInputCol, HasOutputCo
         typeConverter=TypeConverters.toInt,
     )
 
-    def __init__(self, *args: Any) -> None:
+    def __init__(self, *args: Any):
         super(_Word2VecParams, self).__init__(*args)
         self._setDefault(
             vectorSize=100,
@@ -5959,7 +5959,7 @@ class Word2Vec(
         outputCol: Optional[str] = None,
         windowSize: int = 5,
         maxSentenceLength: int = 1000,
-    ) -> None:
+    ):
         """
         __init__(self, \\*, vectorSize=100, minCount=5, numPartitions=1, stepSize=0.025, \
                  maxIter=1, seed=None, inputCol=None, outputCol=None, windowSize=5, \
@@ -6209,7 +6209,7 @@ class PCA(JavaEstimator["PCAModel"], _PCAParams, JavaMLReadable["PCA"], JavaMLWr
         k: Optional[int] = None,
         inputCol: Optional[str] = None,
         outputCol: Optional[str] = None,
-    ) -> None:
+    ):
         """
         __init__(self, \\*, k=None, inputCol=None, outputCol=None)
         """
@@ -6337,7 +6337,7 @@ class _RFormulaParams(HasFeaturesCol, HasLabelCol, HasHandleInvalid):
         typeConverter=TypeConverters.toString,
     )
 
-    def __init__(self, *args: Any) -> None:
+    def __init__(self, *args: Any):
         super(_RFormulaParams, self).__init__(*args)
         self._setDefault(
             forceIndexLabel=False, stringIndexerOrderType="frequencyDesc", handleInvalid="error"
@@ -6456,7 +6456,7 @@ class RFormula(
         forceIndexLabel: bool = False,
         stringIndexerOrderType: str = "frequencyDesc",
         handleInvalid: str = "error",
-    ) -> None:
+    ):
         """
         __init__(self, \\*, formula=None, featuresCol="features", labelCol="label", \
                  forceIndexLabel=False, stringIndexerOrderType="frequencyDesc", \
@@ -6600,7 +6600,7 @@ class _SelectorParams(HasFeaturesCol, HasOutputCol, HasLabelCol):
         typeConverter=TypeConverters.toFloat,
     )
 
-    def __init__(self, *args: Any) -> None:
+    def __init__(self, *args: Any):
         super(_SelectorParams, self).__init__(*args)
         self._setDefault(
             numTopFeatures=50,
@@ -6835,7 +6835,7 @@ class ChiSqSelector(
         fpr: float = 0.05,
         fdr: float = 0.05,
         fwe: float = 0.05,
-    ) -> None:
+    ):
         """
         __init__(self, \\*, numTopFeatures=50, featuresCol="features", outputCol=None, \
                  labelCol="label", selectorType="numTopFeatures", percentile=0.1, fpr=0.05, \
@@ -6948,7 +6948,7 @@ class VectorSizeHint(
         inputCol: Optional[str] = None,
         size: Optional[int] = None,
         handleInvalid: str = "error",
-    ) -> None:
+    ):
         """
         __init__(self, \\*, inputCol=None, size=None, handleInvalid="error")
         """
@@ -7080,7 +7080,7 @@ class VarianceThresholdSelector(
         featuresCol: str = "features",
         outputCol: Optional[str] = None,
         varianceThreshold: float = 0.0,
-    ) -> None:
+    ):
         """
         __init__(self, \\*, featuresCol="features", outputCol=None, varianceThreshold=0.0)
         """
@@ -7206,7 +7206,7 @@ class _UnivariateFeatureSelectorParams(HasFeaturesCol, HasOutputCol, HasLabelCol
         typeConverter=TypeConverters.toFloat,
     )
 
-    def __init__(self, *args: Any) -> None:
+    def __init__(self, *args: Any):
         super(_UnivariateFeatureSelectorParams, self).__init__(*args)
         self._setDefault(selectionMode="numTopFeatures")
 
@@ -7328,7 +7328,7 @@ class UnivariateFeatureSelector(
         outputCol: Optional[str] = None,
         labelCol: str = "label",
         selectionMode: str = "numTopFeatures",
-    ) -> None:
+    ):
         """
         __init__(self, \\*, featuresCol="features", outputCol=None, \
                  labelCol="label", selectionMode="numTopFeatures")
