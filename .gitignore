@@ -120,4 +120,4 @@ node_modules
 
 # For Antlr
 sql/catalyst/gen/
-SqlBaseLexer.tokens
+*.tokens
