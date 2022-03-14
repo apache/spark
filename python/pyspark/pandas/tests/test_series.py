@@ -2111,6 +2111,48 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
         with ps.option_context("compute.eager_check", False):
             self.assert_eq(psser.asof(20), 4.0)
 
+        pser = pd.Series([2, 1, np.nan, 4], index=[10, 20, 30, 40], name="Koalas")
+        psser = ps.from_pandas(pser)
+        self.assert_eq(psser.asof([5, 20]), pser.asof([5, 20]))
+
+        pser = pd.Series([4, np.nan, np.nan, 2], index=[10, 20, 30, 40], name="Koalas")
+        psser = ps.from_pandas(pser)
+        self.assert_eq(psser.asof([5, 100]), pser.asof([5, 100]))
+
+        pser = pd.Series([np.nan, 4, 1, 2], index=[10, 20, 30, 40], name="Koalas")
+        psser = ps.from_pandas(pser)
+        self.assert_eq(psser.asof([5, 35]), pser.asof([5, 35]))
+
+        pser = pd.Series([2, 1, np.nan, 4], index=[10, 20, 30, 40], name="Koalas")
+        psser = ps.from_pandas(pser)
+        self.assert_eq(psser.asof([25, 25]), pser.asof([25, 25]))
+
+        pser = pd.Series([2, 1, np.nan, 4], index=["a", "b", "c", "d"], name="Koalas")
+        psser = ps.from_pandas(pser)
+        self.assert_eq(psser.asof(["a", "d"]), pser.asof(["a", "d"]))
+
+        pser = pd.Series(
+            [2, 1, np.nan, 4],
+            index=[
+                pd.Timestamp(2020, 1, 1),
+                pd.Timestamp(2020, 2, 2),
+                pd.Timestamp(2020, 3, 3),
+                pd.Timestamp(2020, 4, 4),
+            ],
+            name="Koalas",
+        )
+        psser = ps.from_pandas(pser)
+        self.assert_eq(
+            psser.asof([pd.Timestamp(2020, 1, 1)]),
+            pser.asof([pd.Timestamp(2020, 1, 1)]),
+        )
+
+        pser = pd.Series([2, np.nan, 1, 4], index=[10, 20, 30, 40], name="Koalas")
+        psser = ps.from_pandas(pser)
+        self.assert_eq(psser.asof(np.nan), pser.asof(np.nan))
+        self.assert_eq(psser.asof([np.nan, np.nan]), pser.asof([np.nan, np.nan]))
+        self.assert_eq(psser.asof([10, np.nan]), pser.asof([10, np.nan]))
+
     def test_squeeze(self):
         # Single value
         pser = pd.Series([90])

@@ -66,6 +66,7 @@ from pyspark.sql.types import (
     NumericType,
     Row,
     StructType,
+    TimestampType,
 )
 from pyspark.sql.window import Window
 
@@ -5270,13 +5271,33 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         if not is_list_like(where):
             should_return_series = False
             where = [where]
-        index_scol = self._internal.index_spark_columns[0]
-        index_type = self._internal.spark_type_for(index_scol)
+        internal = self._internal.resolved_copy
+        index_scol = internal.index_spark_columns[0]
+        index_type = internal.spark_type_for(index_scol)
+        spark_column = internal.data_spark_columns[0]
+        monotonically_increasing_id_column = verify_temp_column_name(
+            internal.spark_frame, "__monotonically_increasing_id__"
+        )
         cond = [
-            F.max(F.when(index_scol <= SF.lit(index).cast(index_type), self.spark.column))
+            F.max_by(
+                spark_column,
+                F.when(
+                    (index_scol <= SF.lit(index).cast(index_type)) & spark_column.isNotNull()
+                    if pd.notna(index)
+                    # If index is nan and the value of the col is not null
+                    # then return monotonically_increasing_id .This will let max by
+                    # to return last index value , which is the behaviour of pandas
+                    else spark_column.isNotNull(),
+                    monotonically_increasing_id_column,
+                ),
+            )
             for index in where
         ]
-        sdf = self._internal.spark_frame.select(cond)
+
+        sdf = internal.spark_frame.withColumn(
+            monotonically_increasing_id_column, F.monotonically_increasing_id()
+        ).select(cond)
+
         if not should_return_series:
             with sql_conf({SPARK_CONF_ARROW_ENABLED: False}):
                 # Disable Arrow to keep row ordering.
@@ -5285,9 +5306,16 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
         # The data is expected to be small so it's fine to transpose/use default index.
         with ps.option_context("compute.default_index_type", "distributed", "compute.max_rows", 1):
-            psdf: DataFrame = DataFrame(sdf)
-            psdf.columns = pd.Index(where)
-            return first_series(psdf.transpose()).rename(self.name)
+            if len(where) == len(set(where)) and not isinstance(index_type, TimestampType):
+                psdf: DataFrame = DataFrame(sdf)
+                psdf.columns = pd.Index(where)
+                return first_series(psdf.transpose()).rename(self.name)
+            else:
+                # If `where` has duplicate items, leverage the pandas directly
+                # since pandas API on Spark doesn't support the duplicate column name.
+                pdf: pd.DataFrame = sdf.limit(1).toPandas()
+                pdf.columns = pd.Index(where)
+                return first_series(DataFrame(pdf.transpose())).rename(self.name)
 
     def mad(self) -> float:
         """
