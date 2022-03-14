@@ -5265,6 +5265,9 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
                 F.when(
                     (index_scol <= SF.lit(index).cast(index_type)) & spark_column.isNotNull()
                     if pd.notna(index)
+                    # If index is nan and the value of the col is not null
+                    # then return monotonically_increasing_id .This will let max by
+                    # to return last index value , which is the behaviour of pandas
                     else spark_column.isNotNull(),
                     monotonically_increasing_id_column,
                 ),
