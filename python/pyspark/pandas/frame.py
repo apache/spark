@@ -6826,6 +6826,22 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                     )
             return DataFrame(internal)
 
+    def _prepare_sort_by_scols(self, by: Union[Name, List[Name]]) -> List[Column]:
+        if is_name_like_value(by):
+            by = [by]
+        else:
+            assert is_list_like(by), type(by)
+        new_by = []
+        for colname in by:
+            ser = self[colname]
+            if not isinstance(ser, ps.Series):
+                raise ValueError(
+                    "The column %s is not unique. For a multi-index, the label must be a tuple "
+                    "with elements corresponding to each level." % name_like_string(colname)
+                )
+            new_by.append(ser.spark.column)
+        return new_by
+
     def _sort(
         self,
         by: List[Column],
@@ -6967,22 +6983,6 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             return None
         else:
             return psdf.reset_index(drop=True) if ignore_index else psdf
-
-    def _prepare_sort_by_scols(self, by: Union[Name, List[Name]]) -> List[Column]:
-        if is_name_like_value(by):
-            by = [by]
-        else:
-            assert is_list_like(by), type(by)
-        new_by = []
-        for colname in by:
-            ser = self[colname]
-            if not isinstance(ser, ps.Series):
-                raise ValueError(
-                    "The column %s is not unique. For a multi-index, the label must be a tuple "
-                    "with elements corresponding to each level." % name_like_string(colname)
-                )
-            new_by.append(ser.spark.column)
-        return new_by
 
     def sort_index(
         self,
