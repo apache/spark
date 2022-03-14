@@ -4062,7 +4062,7 @@ object SessionWindowing extends Rule[LogicalPlan] {
         }
 
         // As same as tumbling window, we add a filter to filter out nulls.
-        // And we also filter out events with negative or zero gap duration.
+        // And we also filter out events with negative or zero or invalid gap duration.
         val filterExpr = IsNotNull(session.timeColumn) &&
           (sessionAttr.getField(SESSION_END) > sessionAttr.getField(SESSION_START))
 
