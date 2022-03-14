@@ -198,7 +198,9 @@ object QueryCompilationErrors {
   }
 
   def pandasUDFAggregateNotSupportedInPivotError(): Throwable = {
-    new AnalysisException("Pandas UDF aggregate expressions are currently not supported in pivot.")
+    new AnalysisException(
+      errorClass = "UNSUPPORTED_FEATURE",
+      messageParameters = Array("Pandas UDF aggregate expressions don't support pivot."))
   }
 
   def aggregateExpressionRequiredForPivotError(sql: String): Throwable = {
@@ -1330,10 +1332,6 @@ object QueryCompilationErrors {
       s"Expected: ${dataType.typeName}; Found: ${expression.dataType.typeName}")
   }
 
-  def groupAggPandasUDFUnsupportedByStreamingAggError(): Throwable = {
-    new AnalysisException("Streaming aggregation doesn't support group aggregate pandas UDF")
-  }
-
   def streamJoinStreamWithoutEqualityPredicateUnsupportedError(plan: LogicalPlan): Throwable = {
     new AnalysisException(
       "Stream-stream join without equality predicate is not supported", plan = Some(plan))
@@ -1341,7 +1339,8 @@ object QueryCompilationErrors {
 
   def cannotUseMixtureOfAggFunctionAndGroupAggPandasUDFError(): Throwable = {
     new AnalysisException(
-      "Cannot use a mixture of aggregate function and group aggregate pandas UDF")
+      errorClass = "CANNOT_USE_MIXTURE",
+      messageParameters = Array.empty)
   }
 
   def ambiguousAttributesInSelfJoinError(
@@ -1570,8 +1569,10 @@ object QueryCompilationErrors {
   }
 
   def usePythonUDFInJoinConditionUnsupportedError(joinType: JoinType): Throwable = {
-    new AnalysisException("Using PythonUDF in join condition of join type" +
-      s" $joinType is not supported.")
+    new AnalysisException(
+      errorClass = "UNSUPPORTED_FEATURE",
+      messageParameters = Array(
+        s"Using PythonUDF in join condition of join type $joinType is not supported"))
   }
 
   def conflictingAttributesInJoinConditionError(

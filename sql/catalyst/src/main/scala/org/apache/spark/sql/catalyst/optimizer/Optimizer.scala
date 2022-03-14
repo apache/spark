@@ -52,7 +52,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
       previousPlan: LogicalPlan,
       currentPlan: LogicalPlan): Boolean = {
     !Utils.isTesting || (currentPlan.resolved &&
-      currentPlan.find(PlanHelper.specialExpressionsInUnsupportedOperator(_).nonEmpty).isEmpty &&
+      !currentPlan.exists(PlanHelper.specialExpressionsInUnsupportedOperator(_).nonEmpty) &&
       LogicalPlanIntegrity.checkIfExprIdsAreGloballyUnique(currentPlan) &&
       DataType.equalsIgnoreNullability(previousPlan.schema, currentPlan.schema))
   }
@@ -1072,11 +1072,11 @@ object CollapseRepartition extends Rule[LogicalPlan] {
       r.withNewChildren(child.children)
     // Case 3: When a RebalancePartitions has a child of local or global Sort, Repartition or
     // RepartitionByExpression we can remove the child.
-    case r @ RebalancePartitions(_, child @ (_: Sort | _: RepartitionOperation)) =>
+    case r @ RebalancePartitions(_, child @ (_: Sort | _: RepartitionOperation), _) =>
       r.withNewChildren(child.children)
     // Case 4: When a RebalancePartitions has a child of RebalancePartitions we can remove the
     // child.
-    case r @ RebalancePartitions(_, child: RebalancePartitions) =>
+    case r @ RebalancePartitions(_, child: RebalancePartitions, _) =>
       r.withNewChildren(child.children)
   }
 }
@@ -1690,11 +1690,10 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
    */
   private def canPushThroughCondition(plan: LogicalPlan, condition: Expression): Boolean = {
     val attributes = plan.outputSet
-    val matched = condition.find {
+    !condition.exists {
       case s: SubqueryExpression => s.plan.outputSet.intersect(attributes).nonEmpty
       case _ => false
     }
-    matched.isEmpty
   }
 }
 
@@ -1956,7 +1955,7 @@ object ConvertToLocalRelation extends Rule[LogicalPlan] {
   }
 
   private def hasUnevaluableExpr(expr: Expression): Boolean = {
-    expr.find(e => e.isInstanceOf[Unevaluable] && !e.isInstanceOf[AttributeReference]).isDefined
+    expr.exists(e => e.isInstanceOf[Unevaluable] && !e.isInstanceOf[AttributeReference])
   }
 }
 

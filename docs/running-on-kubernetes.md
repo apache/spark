@@ -1314,7 +1314,7 @@ See the [configuration page](configuration.html) for information on Spark config
   <td>3.0.0</td>
 </tr>
 <tr>
-  <td><code>spark.kubernetes.executor.decommmissionLabel</code></td>
+  <td><code>spark.kubernetes.executor.decommissionLabel</code></td>
   <td>(none)</td>
   <td>
     Label to be applied to pods which are exiting or being decommissioned. Intended for use
@@ -1323,11 +1323,11 @@ See the [configuration page](configuration.html) for information on Spark config
   <td>3.3.0</td>
 </tr>
 <tr>
-  <td><code>spark.kubernetes.executor.decommmissionLabelValue</code></td>
+  <td><code>spark.kubernetes.executor.decommissionLabelValue</code></td>
   <td>(none)</td>
   <td>
     Value to be applied with the label when
-    <code>spark.kubernetes.executor.decommmissionLabel</code> is enabled.
+    <code>spark.kubernetes.executor.decommissionLabel</code> is enabled.
   </td>
   <td>3.3.0</td>
 </tr>
@@ -1353,15 +1353,6 @@ See the [configuration page](configuration.html) for information on Spark config
   <td>
     Specify the scheduler name for driver and executor pods. If `spark.kubernetes.driver.scheduler.name` or
     `spark.kubernetes.executor.scheduler.name` is set, will override this.
-  </td>
-  <td>3.3.0</td>
-</tr>
-<tr>
-  <td><code>spark.kubernetes.job.queue</code></td>
-  <td>(none)</td>
-  <td>
-    The name of the queue to which the job is submitted. This info will be stored in configuration
-    and passed to specific feature step.
   </td>
   <td>3.3.0</td>
 </tr>
