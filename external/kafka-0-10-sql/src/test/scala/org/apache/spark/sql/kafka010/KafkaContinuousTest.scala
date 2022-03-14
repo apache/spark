@@ -45,15 +45,11 @@ trait KafkaContinuousTest extends KafkaSourceTest {
     testUtils.addPartitions(topic, newCount)
     eventually(timeout(streamingTimeout)) {
       assert(
-        query.lastExecution.executedPlan.exists {
-          case scan: ContinuousScanExec =>
-            scan.stream match {
-              case stream: KafkaContinuousStream =>
-                stream.knownPartitions.size == newCount
-              case _ => false
-            }
-          case _ => false
-        },
+        query.lastExecution.executedPlan.collectFirst {
+          case scan: ContinuousScanExec
+              if scan.stream.isInstanceOf[KafkaContinuousStream] =>
+            scan.stream.asInstanceOf[KafkaContinuousStream]
+        }.exists(_.knownPartitions.size == newCount),
         s"query never reconfigured to $newCount partitions")
     }
   }
