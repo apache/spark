@@ -20,12 +20,15 @@ package org.apache.spark.sql.execution.datasources.v2
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.plans.PlanTest
+import org.apache.spark.sql.connector.expressions.{FieldReference, LiteralValue}
 import org.apache.spark.sql.connector.expressions.filter.Predicate
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.types.BooleanType
 
 class DataSourceV2StrategySuite extends PlanTest with SharedSparkSession {
   test("SPARK-36644: Push down boolean column filter") {
-    testTranslateFilter(Symbol("col").boolean, Some(new Predicate("col", Array.empty)))
+    testTranslateFilter(Symbol("col").boolean,
+      Some(new Predicate("=", Array(FieldReference("col"), LiteralValue(true, BooleanType)))))
   }
 
   /**

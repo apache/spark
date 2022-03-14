@@ -96,122 +96,74 @@ object JDBCRDD extends Logging {
     new StructType(columns.map(name => fieldMap(name)))
   }
 
-  def translateFilterV1ToV2(f: Filter): Option[Predicate] = {
+  private def checkColumnName(colName: String) = {
+    val nameParts = SparkSession.active.sessionState.sqlParser.parseMultipartIdentifier(colName)
+    if(nameParts.length > 1) {
+      throw QueryCompilationErrors.commandNotSupportNestedColumnError("Filter push down", colName)
+    }
+  }
+
+  private[sql] def toV2(f: Filter): Option[Predicate] = {
     Option(f match {
       case EqualTo(attr, value) =>
-        val literal = Literal(value)
+        checkColumnName(attr)
         new Predicate("=",
-          Array(FieldReference.column(attr), LiteralValue(literal.value, literal.dataType)))
+          Array(FieldReference(attr), LiteralValue(value, Literal(value).dataType)))
       case EqualNullSafe(attr, value) =>
-        val literal = Literal(value)
+        checkColumnName(attr)
         new Predicate("<=>",
-          Array(FieldReference.column(attr), LiteralValue(literal.value, literal.dataType)))
+          Array(FieldReference(attr), LiteralValue(value, Literal(value).dataType)))
       case LessThan(attr, value) =>
-        val literal = Literal(value)
+        checkColumnName(attr)
         new Predicate("<",
-          Array(FieldReference.column(attr), LiteralValue(literal.value, literal.dataType)))
+          Array(FieldReference(attr), LiteralValue(value, Literal(value).dataType)))
       case GreaterThan(attr, value) =>
-        val literal = Literal(value)
+        checkColumnName(attr)
         new Predicate(">",
-          Array(FieldReference.column(attr), LiteralValue(literal.value, literal.dataType)))
+          Array(FieldReference(attr), LiteralValue(value, Literal(value).dataType)))
       case LessThanOrEqual(attr, value) =>
-        val literal = Literal(value)
+        checkColumnName(attr)
         new Predicate("<=",
-          Array(FieldReference.column(attr), LiteralValue(literal.value, literal.dataType)))
+          Array(FieldReference(attr), LiteralValue(value, Literal(value).dataType)))
       case GreaterThanOrEqual(attr, value) =>
-        val literal = Literal(value)
-        new Predicate(">=", Array(FieldReference.column(attr),
-          LiteralValue(literal.value, literal.dataType)))
+        checkColumnName(attr)
+        new Predicate(">=", Array(FieldReference(attr),
+          LiteralValue(value, Literal(value).dataType)))
       case IsNull(attr) =>
-        new Predicate("IS_NULL", Array(FieldReference.column(attr)))
+        checkColumnName(attr)
+        new Predicate("IS_NULL", Array(FieldReference(attr)))
       case IsNotNull(attr) =>
-        new Predicate("IS_NOT_NULL", Array(FieldReference.column(attr)))
+        checkColumnName(attr)
+        new Predicate("IS_NOT_NULL", Array(FieldReference(attr)))
       case StringStartsWith(attr, value) =>
-        val literal = Literal(value)
-        new Predicate("STARTS_WITH", Array(FieldReference.column(attr),
-          LiteralValue(literal.value, literal.dataType)))
+        checkColumnName(attr)
+        new Predicate("STARTS_WITH", Array(FieldReference(attr),
+          LiteralValue(value, Literal(value).dataType)))
       case StringEndsWith(attr, value) =>
-        val literal = Literal(value)
-        new Predicate("ENDS_WITH", Array(FieldReference.column(attr),
-          LiteralValue(literal.value, literal.dataType)))
+        checkColumnName(attr)
+        new Predicate("ENDS_WITH", Array(FieldReference(attr),
+          LiteralValue(value, Literal(value).dataType)))
       case StringContains(attr, value) =>
-        val literal = Literal(value)
-        new Predicate("CONTAINS", Array(FieldReference.column(attr),
-          LiteralValue(literal.value, literal.dataType)))
+        checkColumnName(attr)
+        new Predicate("CONTAINS", Array(FieldReference(attr),
+          LiteralValue(value, Literal(value).dataType)))
       case In(attr, value) =>
-        val literals = value.map { v =>
-          val literal = Literal(v)
-          LiteralValue(literal.value, literal.dataType)
-        }
-        new Predicate("IN", FieldReference.column(attr) +: literals)
+        checkColumnName(attr)
+        val literals = value.map(v => LiteralValue(v, Literal(v).dataType))
+        new Predicate("IN", FieldReference(attr) +: literals)
       case Not(f) =>
-        translateFilterV1ToV2(f).map(p => new Predicate("NOT", Array(p))).getOrElse(null)
+        toV2(f).map(p => new Predicate("NOT", Array(p))).getOrElse(null)
       case Or(f1, f2) =>
-        val or = Seq(f1, f2).flatMap(translateFilterV1ToV2(_))
+        val or = Seq(f1, f2).flatMap(toV2(_))
         if (or.size == 2) {
           new Predicate("OR", or.toArray)
         } else {
           null
         }
       case And(f1, f2) =>
-        val and = Seq(f1, f2).flatMap(translateFilterV1ToV2(_))
+        val and = Seq(f1, f2).flatMap(toV2(_))
         if (and.size == 2) {
           new Predicate("AND", and.toArray)
-        } else {
-          null
-        }
-      case _ => null
-    })
-  }
-
-  /**
-   * Turns a single Filter into a String representing a SQL expression.
-   * Returns None for an unhandled filter.
-   */
-  def compileFilter(f: Filter, dialect: JdbcDialect): Option[String] = {
-
-    def quote(colName: String): String = {
-      val nameParts = SparkSession.active.sessionState.sqlParser.parseMultipartIdentifier(colName)
-      if(nameParts.length > 1) {
-        throw QueryCompilationErrors.commandNotSupportNestedColumnError("Filter push down", colName)
-      }
-      dialect.quoteIdentifier(nameParts.head)
-    }
-
-    Option(f match {
-      case EqualTo(attr, value) => s"${quote(attr)} = ${dialect.compileValue(value)}"
-      case EqualNullSafe(attr, value) =>
-        val col = quote(attr)
-        s"(NOT ($col != ${dialect.compileValue(value)} OR $col IS NULL OR " +
-          s"${dialect.compileValue(value)} IS NULL) OR " +
-          s"($col IS NULL AND ${dialect.compileValue(value)} IS NULL))"
-      case LessThan(attr, value) => s"${quote(attr)} < ${dialect.compileValue(value)}"
-      case GreaterThan(attr, value) => s"${quote(attr)} > ${dialect.compileValue(value)}"
-      case LessThanOrEqual(attr, value) => s"${quote(attr)} <= ${dialect.compileValue(value)}"
-      case GreaterThanOrEqual(attr, value) => s"${quote(attr)} >= ${dialect.compileValue(value)}"
-      case IsNull(attr) => s"${quote(attr)} IS NULL"
-      case IsNotNull(attr) => s"${quote(attr)} IS NOT NULL"
-      case StringStartsWith(attr, value) => s"${quote(attr)} LIKE '${value}%'"
-      case StringEndsWith(attr, value) => s"${quote(attr)} LIKE '%${value}'"
-      case StringContains(attr, value) => s"${quote(attr)} LIKE '%${value}%'"
-      case In(attr, value) if value.isEmpty =>
-        s"CASE WHEN ${quote(attr)} IS NULL THEN NULL ELSE FALSE END"
-      case In(attr, value) => s"${quote(attr)} IN (${dialect.compileValue(value)})"
-      case Not(f) => compileFilter(f, dialect).map(p => s"(NOT ($p))").getOrElse(null)
-      case Or(f1, f2) =>
-        // We can't compile Or filter unless both sub-filters are compiled successfully.
-        // It applies too for the following And filter.
-        // If we can make sure compileFilter supports all filters, we can remove this check.
-        val or = Seq(f1, f2).flatMap(compileFilter(_, dialect))
-        if (or.size == 2) {
-          or.map(p => s"($p)").mkString(" OR ")
-        } else {
-          null
-        }
-      case And(f1, f2) =>
-        val and = Seq(f1, f2).flatMap(compileFilter(_, dialect))
-        if (and.size == 2) {
-          and.map(p => s"($p)").mkString(" AND ")
         } else {
           null
         }
@@ -249,7 +201,7 @@ object JDBCRDD extends Logging {
     val url = options.url
     val dialect = JdbcDialects.get(url)
     val quotedColumns = requiredColumns.map(colName => dialect.quoteIdentifier(colName))
-    val predicates = filters.flatMap(translateFilterV1ToV2)
+    val predicates = filters.flatMap(toV2(_))
     new JDBCRDD(
       sc,
       dialect.createConnectionFactory(options),

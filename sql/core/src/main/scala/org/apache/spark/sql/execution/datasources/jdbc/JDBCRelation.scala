@@ -271,10 +271,11 @@ private[sql] case class JDBCRelation(
 
   override val needConversion: Boolean = false
 
-  // Check if JDBCRDD.compileFilter can accept input filters
+  // Check if JdbcDialect can compile input filters
   override def unhandledFilters(filters: Array[Filter]): Array[Filter] = {
     if (jdbcOptions.pushDownPredicate) {
-      filters.filter(JDBCRDD.compileFilter(_, JdbcDialects.get(jdbcOptions.url)).isEmpty)
+      val dialect = JdbcDialects.get(jdbcOptions.url)
+      filters.filter(JDBCRDD.toV2(_).flatMap(dialect.compileExpression(_)).isEmpty)
     } else {
       filters
     }

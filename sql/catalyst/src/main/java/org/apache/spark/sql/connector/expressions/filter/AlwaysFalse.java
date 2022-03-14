@@ -33,7 +33,7 @@ public class AlwaysFalse extends Predicate implements Literal<Boolean> {
   private DataType dataType = DataTypes.BooleanType;
 
   public AlwaysFalse() {
-    super("FALSE", new Predicate[]{});
+    super("ALWAYS_FALSE", new Predicate[]{});
   }
 
   public Boolean value() {

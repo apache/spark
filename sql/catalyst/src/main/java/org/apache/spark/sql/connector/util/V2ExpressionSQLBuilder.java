@@ -105,6 +105,9 @@ public class V2ExpressionSQLBuilder {
   }
 
   protected String visitIn(String v, List<String> list) {
+    if (list.isEmpty()) {
+      return "CASE WHEN " + v + " IS NULL THEN NULL ELSE FALSE END";
+    }
     return v + " IN (" + list.stream().collect(Collectors.joining(", ")) + ")";
   }
 

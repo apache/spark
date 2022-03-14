@@ -32,7 +32,7 @@ import org.apache.spark.sql.catalyst.util.{DateFormatter, DateTimeUtils, Timesta
 import org.apache.spark.sql.connector.catalog.TableChange
 import org.apache.spark.sql.connector.catalog.TableChange._
 import org.apache.spark.sql.connector.catalog.index.TableIndex
-import org.apache.spark.sql.connector.expressions.{Expression, FieldReference, NamedReference}
+import org.apache.spark.sql.connector.expressions.{Expression, FieldReference, Literal, NamedReference}
 import org.apache.spark.sql.connector.expressions.aggregate.{AggregateFunc, Avg, Count, CountStar, Max, Min, Sum}
 import org.apache.spark.sql.connector.util.V2ExpressionSQLBuilder
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -41,6 +41,7 @@ import org.apache.spark.sql.execution.datasources.jdbc.connection.ConnectionProv
 import org.apache.spark.sql.execution.datasources.v2.TableSampleInfo
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.UTF8String
 
 /**
  * :: DeveloperApi ::
@@ -220,6 +221,10 @@ abstract class JdbcDialect extends Serializable with Logging{
   }
 
   class JDBCSQLBuilder extends V2ExpressionSQLBuilder {
+    override def visitLiteral(literal: Literal[_]): String = literal.value() match {
+      case str: UTF8String => s"${compileValue(str.toString)}"
+      case other => s"${compileValue(other)}"
+    }
     override def visitFieldReference(fieldRef: FieldReference): String = {
       if (fieldRef.fieldNames().length != 1) {
         throw new IllegalArgumentException(
