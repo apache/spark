@@ -277,22 +277,22 @@ object FileCommitProtocol extends Logging {
       path: Path,
       hadoopConf: Configuration,
       stagingDir: String,
-      engineType: String,
+      commitMethod: String,
       jobId: String): Path = {
-    getStagingDir(path, hadoopConf, stagingDir, engineType, jobId)
+    getStagingDir(path, hadoopConf, stagingDir, commitMethod, jobId)
   }
 
   private def getExternalScratchDir(
       extURI: URI,
       hadoopConf: Configuration,
       stagingDir: String,
-      engineType: String,
+      commitMethod: String,
       jobId: String): Path = {
     getStagingDir(
       new Path(extURI.getScheme, extURI.getAuthority, extURI.getPath),
       hadoopConf,
       stagingDir,
-      engineType,
+      commitMethod,
       jobId)
   }
 
@@ -300,7 +300,7 @@ object FileCommitProtocol extends Logging {
       inputPath: Path,
       hadoopConf: Configuration,
       stagingDir: String,
-      engineType: String,
+      commitMethod: String,
       jobId: String): Path = {
     val inputPathName: String = inputPath.toString
     val fs: FileSystem = inputPath.getFileSystem(hadoopConf)
@@ -319,13 +319,13 @@ object FileCommitProtocol extends Logging {
       logDebug(s"The staging dir '$stagingPathName' should be a child directory starts " +
         "with '.' to avoid being deleted if we set hive.exec.stagingdir under the table " +
         "directory.")
-      stagingPathName = new Path(inputPathName, ".hive-staging").toString
+      stagingPathName = new Path(inputPathName, s".$commitMethod-staging").toString
     }
 
     val dir = fs.makeQualified(
-      new Path(stagingPathName + "_" + executionId(engineType) + "-" + jobId))
+      new Path(stagingPathName + "_" + executionId(commitMethod) + "-" + jobId))
 
-    if (engineType == "SPARK") {
+    if (commitMethod == USING_SPARK_COMMIT_METHOD) {
       val stagingFS = dir.getFileSystem(hadoopConf)
       // SPARK-36579: Current SQLHadoopMapReduceCommitProtocol's dynamic partition overwriting uses
       // rename operation to move partition's directories. This operation is not supported between
@@ -334,6 +334,7 @@ object FileCommitProtocol extends Logging {
         logDebug(s"The staging dir '$stagingPathName' should be in a same filesystem " +
           s"with table location if we set `spark.sql.exec.stagingDir` under the table " +
           "directory.")
+        stagingPathName = new Path(inputPathName, s".$commitMethod-staging").toString
       }
     }
     logDebug(s"Created staging dir = $dir for path = $inputPath")
