@@ -1116,6 +1116,6 @@ class RenameFromSparkStagingToFinalDirAlwaysTurnsFalseFilesystem extends RawLoca
   }
 
   private def isSparkStagingDir(path: Path): Boolean = {
-    path.toString.contains(".spark-staging_")
+    path.toString.contains(".spark-staging-")
   }
 }
