@@ -7395,6 +7395,39 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         6  NaN  12
         5  7.0  11
         4  6.0  10
+
+        The examples below show how ties are resolved, which is decided by `keep`.
+
+        >>> tied_df = ps.DataFrame({'X': [1, 2, 2, 3, 3]}, index=['a', 'b', 'c', 'd', 'e'])
+        >>> tied_df
+           X
+        a  1
+        b  2
+        c  2
+        d  3
+        e  3
+
+        When using keep='first' (by default), ties are resolved in order:
+
+        >>> tied_df.nlargest(3, 'X')
+           X
+        d  3
+        e  3
+        b  2
+
+        >>> tied_df.nlargest(3, 'X', keep='first')
+           X
+        d  3
+        e  3
+        b  2
+
+        When using keep='last', ties are resolved in reverse order:
+
+        >>> tied_df.nlargest(3, 'X', keep='last')
+           X
+        e  3
+        d  3
+        c  2
         """
         by_scols = self._prepare_sort_by_scols(columns)
         return self._sort(by=by_scols, ascending=False, na_position="last", keep=keep).head(n=n)
@@ -7466,6 +7499,39 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         0  1.0   6
         1  2.0   7
         2  3.0   8
+
+        The examples below show how ties are resolved, which is decided by `keep`.
+
+        >>> tied_df = ps.DataFrame({'X': [1, 1, 2, 2, 3]}, index=['a', 'b', 'c', 'd', 'e'])
+        >>> tied_df
+           X
+        a  1
+        b  1
+        c  2
+        d  2
+        e  3
+
+        When using keep='first' (by default), ties are resolved in order:
+
+        >>> tied_df.nsmallest(3, 'X')
+           X
+        a  1
+        b  1
+        c  2
+
+        >>> tied_df.nsmallest(3, 'X', keep='first')
+           X
+        a  1
+        b  1
+        c  2
+
+        When using keep='last', ties are resolved in reverse order:
+
+        >>> tied_df.nsmallest(3, 'X', keep='last')
+           X
+        b  1
+        a  1
+        d  2
         """
         by_scols = self._prepare_sort_by_scols(columns)
         return self._sort(by=by_scols, ascending=True, na_position="last", keep=keep).head(n=n)
