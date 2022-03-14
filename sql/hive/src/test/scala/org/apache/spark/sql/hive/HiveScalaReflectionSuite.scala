@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.ScalaReflection
  */
 class HiveScalaReflectionSuite extends SparkFunSuite {
 
-  test("SPARK-38510: ScalaReflection.getConstructorParameterNames should work for classes with" +
+  test("SPARK-38510: ScalaReflection.getConstructorParameterNames should work for classes with " +
     "cyclic annotation references") {
     assert(Seq("name", "funcWrapper", "children") ===
       ScalaReflection.getConstructorParameterNames(classOf[HiveGenericUDF]))
