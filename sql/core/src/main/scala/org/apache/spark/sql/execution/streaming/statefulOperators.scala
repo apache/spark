@@ -535,6 +535,12 @@ case class SessionWindowStateStoreRestoreExec(
     child: SparkPlan)
   extends UnaryExecNode with StateStoreReader with WatermarkSupport {
 
+  override lazy val metrics = Map(
+    "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"),
+    "numRowsDroppedByWatermark" -> SQLMetrics.createMetric(sparkContext,
+      "number of rows which are dropped by watermark")
+  )
+
   override def keyExpressions: Seq[Attribute] = keyWithoutSessionExpressions
 
   assert(keyExpressions.nonEmpty, "Grouping key must be specified when using sessionWindow")
@@ -555,7 +561,11 @@ case class SessionWindowStateStoreRestoreExec(
 
       // We need to filter out outdated inputs
       val filteredIterator = watermarkPredicateForData match {
-        case Some(predicate) => iter.filter((row: InternalRow) => !predicate.eval(row))
+        case Some(predicate) => iter.filter((row: InternalRow) => {
+          val shouldKeep = !predicate.eval(row)
+          if (!shouldKeep) longMetric("numRowsDroppedByWatermark") += 1
+          shouldKeep
+        })
         case None => iter
       }
 
