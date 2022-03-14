@@ -22,26 +22,29 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.connector.catalog.FunctionCatalog
 import org.apache.spark.sql.connector.read.SupportsReportPartitioning
+import org.apache.spark.sql.connector.read.partitioning.{HashPartitioning, UnknownPartitioning}
+import org.apache.spark.util.collection.Utils.sequenceToOption
 
 /**
- * Extract [[DataSourceV2ScanRelation]] from the input logical plan, convert any distribution and
- * ordering spec reported by data sources to their catalyst counterparts. Then, annotate the plan
- * with the result.
+ * Extract [[DataSourceV2ScanRelation]] from the input logical plan, convert any V2 partitioning
+ * reported by data sources to their catalyst counterparts. Then, annotate the plan with the result.
  */
 object V2ScanPartitioning extends Rule[LogicalPlan] with SQLConfHelper {
   override def apply(plan: LogicalPlan): LogicalPlan = plan transformDown {
-    case d @ DataSourceV2ScanRelation(relation, scan: SupportsReportPartitioning, _, _, _) =>
+    case d @ DataSourceV2ScanRelation(relation, scan: SupportsReportPartitioning, _, _) =>
       val funCatalogOpt = relation.catalog.flatMap {
         case c: FunctionCatalog => Some(c)
         case _ => None
       }
 
-      val outputPartitioning = scan.outputPartitioning()
-      val catalystDistribution = V2ExpressionUtils.toCatalystDistribution(
-        outputPartitioning.distribution(), relation, funCatalogOpt)
-      val catalystOrdering = V2ExpressionUtils.toCatalystOrdering(
-        outputPartitioning.ordering(), relation)
+      val catalystClustering = scan.outputPartitioning() match {
+        case hp: HashPartitioning => sequenceToOption(hp.clustering().map(
+          V2ExpressionUtils.toCatalyst(_, relation, funCatalogOpt)))
+        case _: UnknownPartitioning => None
+        case p => throw new IllegalArgumentException("Unsupported data source V2 partitioning " +
+            "type: " + p.getClass.getSimpleName)
+      }
 
-      d.copy(distribution = catalystDistribution, ordering = catalystOrdering)
+      d.copy(clustering = catalystClustering)
   }
 }

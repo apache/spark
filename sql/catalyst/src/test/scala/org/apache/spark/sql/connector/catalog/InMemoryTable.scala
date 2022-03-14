@@ -29,11 +29,11 @@ import org.scalatest.Assertions._
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, JoinedRow}
 import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, DateTimeUtils}
-import org.apache.spark.sql.connector.distributions.{Distribution, Distributions}
+import org.apache.spark.sql.connector.distributions.{ClusteredDistribution, Distribution, Distributions}
 import org.apache.spark.sql.connector.expressions._
 import org.apache.spark.sql.connector.metric.{CustomMetric, CustomTaskMetric}
 import org.apache.spark.sql.connector.read._
-import org.apache.spark.sql.connector.read.partitioning.Partitioning
+import org.apache.spark.sql.connector.read.partitioning.{HashPartitioning, Partitioning, UnknownPartitioning}
 import org.apache.spark.sql.connector.write._
 import org.apache.spark.sql.connector.write.streaming.{StreamingDataWriterFactory, StreamingWrite}
 import org.apache.spark.sql.internal.connector.SupportsStreamingUpdateAsAppend
@@ -280,9 +280,11 @@ class InMemoryTable(
       InMemoryStats(OptionalLong.of(sizeInBytes), OptionalLong.of(numRows))
     }
 
-    override def outputPartitioning(): Partitioning = new Partitioning {
-      override def distribution(): Distribution = InMemoryTable.this.distribution
-      override def ordering(): Array[SortOrder] = InMemoryTable.this.ordering
+    override def outputPartitioning(): Partitioning = {
+      InMemoryTable.this.distribution match {
+        case cd: ClusteredDistribution => new HashPartitioning(cd.clustering(), data.size)
+        case _ => new UnknownPartitioning(data.size)
+      }
     }
 
     override def planInputPartitions(): Array[InputPartition] = data.toArray

@@ -18,26 +18,22 @@
 package org.apache.spark.sql.connector.read.partitioning;
 
 import org.apache.spark.annotation.Evolving;
-import org.apache.spark.sql.connector.read.SupportsReportPartitioning;
 
 /**
- * An interface to represent the output data partitioning for a data source, which is returned by
- * {@link SupportsReportPartitioning#outputPartitioning()}.
- * <p>
- * Note: implementors <b>should NOT</b> directly implement this interface. Instead, they should
- * implement one of the following subclasses:
- * <ul>
- * <li>{@link HashPartitioning}</li>
- * <li>{@link UnknownPartitioning}</li>
- * </ul>
+ * Represents a partitioning where rows are split across partitions in an unknown pattern.
  *
- *
- * @since 3.0.0
+ * @since 3.3.0
  */
 @Evolving
-public interface Partitioning {
-  /**
-   * Returns the number of partitions that the data is split across.
-   */
-  int numPartitions();
+public class UnknownPartitioning implements Partitioning {
+  private final int numPartitions;
+
+  public UnknownPartitioning(int numPartitions) {
+    this.numPartitions = numPartitions;
+  }
+
+  @Override
+  public int numPartitions() {
+    return numPartitions;
+  }
 }

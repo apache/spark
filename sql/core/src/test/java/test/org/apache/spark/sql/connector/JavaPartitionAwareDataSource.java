@@ -23,14 +23,12 @@ import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.catalyst.expressions.GenericInternalRow;
 import org.apache.spark.sql.connector.TestingV2Source;
 import org.apache.spark.sql.connector.catalog.Table;
-import org.apache.spark.sql.connector.distributions.ClusteredDistribution;
-import org.apache.spark.sql.connector.distributions.Distribution;
 import org.apache.spark.sql.connector.expressions.Expression;
 import org.apache.spark.sql.connector.expressions.Expressions;
-import org.apache.spark.sql.connector.expressions.SortOrder;
 import org.apache.spark.sql.connector.expressions.Transform;
 import org.apache.spark.sql.connector.read.*;
 import org.apache.spark.sql.connector.read.partitioning.Partitioning;
+import org.apache.spark.sql.connector.read.partitioning.HashPartitioning;
 import org.apache.spark.sql.util.CaseInsensitiveStringMap;
 
 public class JavaPartitionAwareDataSource implements TestingV2Source {
@@ -52,7 +50,8 @@ public class JavaPartitionAwareDataSource implements TestingV2Source {
 
     @Override
     public Partitioning outputPartitioning() {
-      return new MyPartitioning();
+      Expression[] clustering = new Transform[] { Expressions.identity("i") };
+      return new HashPartitioning(clustering, 2);
     }
   }
 
@@ -69,24 +68,6 @@ public class JavaPartitionAwareDataSource implements TestingV2Source {
         return new MyScanBuilder();
       }
     };
-  }
-
-  static class MyDistribution implements ClusteredDistribution {
-    public Expression[] clustering() {
-      return new Transform[] { Expressions.identity("i") };
-    }
-  }
-
-  static class MyPartitioning implements Partitioning {
-    @Override
-    public Distribution distribution() {
-      return new MyDistribution();
-    }
-
-    @Override
-    public SortOrder[] ordering() {
-      return new SortOrder[0];
-    }
   }
 
   static class SpecificInputPartition implements InputPartition, HasPartitionKey {

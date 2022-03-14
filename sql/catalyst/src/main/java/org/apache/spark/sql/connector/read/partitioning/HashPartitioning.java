@@ -18,26 +18,37 @@
 package org.apache.spark.sql.connector.read.partitioning;
 
 import org.apache.spark.annotation.Evolving;
-import org.apache.spark.sql.connector.read.SupportsReportPartitioning;
+import org.apache.spark.sql.connector.expressions.Expression;
 
 /**
- * An interface to represent the output data partitioning for a data source, which is returned by
- * {@link SupportsReportPartitioning#outputPartitioning()}.
+ * Represents a partitioning where rows are split across partitions based on the expressions
+ * returned by {@link HashPartitioning#clustering}.
  * <p>
- * Note: implementors <b>should NOT</b> directly implement this interface. Instead, they should
- * implement one of the following subclasses:
- * <ul>
- * <li>{@link HashPartitioning}</li>
- * <li>{@link UnknownPartitioning}</li>
- * </ul>
+ * Data source implementations should make sure
+ * that all rows where {@link HashPartitioning#clustering} evaluate to the same value should be
+ * in the same partition.
  *
- *
- * @since 3.0.0
+ * @since 3.3.0
  */
 @Evolving
-public interface Partitioning {
+public class HashPartitioning implements Partitioning {
+  private final Expression[] clustering;
+  private final int numPartitions;
+
+  public HashPartitioning(Expression[] clustering, int numPartitions) {
+    this.clustering = clustering;
+    this.numPartitions = numPartitions;
+  }
+
   /**
-   * Returns the number of partitions that the data is split across.
+   * Returns the clustering expressions for this partitioning.
    */
-  int numPartitions();
+  public Expression[] clustering() {
+    return clustering;
+  }
+
+  @Override
+  public int numPartitions() {
+    return numPartitions;
+  }
 }

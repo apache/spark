@@ -24,7 +24,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.QueryPlan
-import org.apache.spark.sql.catalyst.plans.physical.{DataSourceHashPartitioning, Distribution, SinglePartition, UnspecifiedDistribution}
+import org.apache.spark.sql.catalyst.plans.physical.{DataSourceHashPartitioning, SinglePartition}
 import org.apache.spark.sql.catalyst.util.InternalRowSet
 import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.connector.read.{HasPartitionKey, InputPartition, PartitionReaderFactory, Scan, SupportsRuntimeFiltering}
@@ -37,8 +37,7 @@ case class BatchScanExec(
     output: Seq[AttributeReference],
     @transient scan: Scan,
     runtimeFilters: Seq[Expression],
-    distribution: Distribution = UnspecifiedDistribution,
-    ordering: Seq[SortOrder] = Seq.empty) extends DataSourceV2ScanExecBase {
+    clustering: Option[Seq[Expression]] = None) extends DataSourceV2ScanExecBase {
 
   @transient lazy val batch = scan.toBatch
 

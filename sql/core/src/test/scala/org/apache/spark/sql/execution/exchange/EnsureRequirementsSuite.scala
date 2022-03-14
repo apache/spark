@@ -708,10 +708,12 @@ class EnsureRequirementsSuite extends SharedSparkSession {
 
     // matching bucket transforms from both sides
     plan1 = DummySparkPlan(
-      outputPartitioning = DataSourceHashPartitioning(bucket(4, exprA) :: bucket(16, exprB) :: Nil, 4)
+      outputPartitioning = DataSourceHashPartitioning(
+        bucket(4, exprA) :: bucket(16, exprB) :: Nil, 4)
     )
     plan2 = DummySparkPlan(
-      outputPartitioning = DataSourceHashPartitioning(bucket(4, exprA) :: bucket(16, exprC) :: Nil, 4)
+      outputPartitioning = DataSourceHashPartitioning(
+        bucket(4, exprA) :: bucket(16, exprC) :: Nil, 4)
     )
     smjExec = SortMergeJoinExec(
       exprA :: exprB :: Nil, exprA :: exprC :: Nil, Inner, None, plan1, plan2)
@@ -726,7 +728,8 @@ class EnsureRequirementsSuite extends SharedSparkSession {
 
     // partition collections
     plan1 = DummySparkPlan(
-      outputPartitioning = DataSourceHashPartitioning(bucket(4, exprA) :: bucket(16, exprB) :: Nil, 4)
+      outputPartitioning = DataSourceHashPartitioning(
+        bucket(4, exprA) :: bucket(16, exprB) :: Nil, 4)
     )
     plan2 = DummySparkPlan(
       outputPartitioning = PartitioningCollection(Seq(
@@ -774,10 +777,12 @@ class EnsureRequirementsSuite extends SharedSparkSession {
     // by default spark.sql.requireAllClusterKeysForCoPartition is true, so when there isn't
     // exact match on all partition keys, Spark will fallback to shuffle.
     plan1 = DummySparkPlan(
-      outputPartitioning = DataSourceHashPartitioning(bucket(4, exprA) :: bucket(4, exprB) :: Nil, 4)
+      outputPartitioning = DataSourceHashPartitioning(
+        bucket(4, exprA) :: bucket(4, exprB) :: Nil, 4)
     )
     plan2 = DummySparkPlan(
-      outputPartitioning = DataSourceHashPartitioning(bucket(4, exprA) :: bucket(4, exprC) :: Nil, 4)
+      outputPartitioning = DataSourceHashPartitioning(
+        bucket(4, exprA) :: bucket(4, exprC) :: Nil, 4)
     )
     smjExec = SortMergeJoinExec(
       exprA :: exprB :: exprB :: Nil, exprA :: exprC :: exprC :: Nil, Inner, None, plan1, plan2)
@@ -806,10 +811,12 @@ class EnsureRequirementsSuite extends SharedSparkSession {
     // invalid case: different number of buckets (we don't support coalescing/repartitioning yet
     // for bucketing)
     plan1 = DummySparkPlan(
-      outputPartitioning = DataSourceHashPartitioning(bucket(4, exprA) :: bucket(4, exprB) :: Nil, 4)
+      outputPartitioning = DataSourceHashPartitioning(
+        bucket(4, exprA) :: bucket(4, exprB) :: Nil, 4)
     )
     plan2 = DummySparkPlan(
-      outputPartitioning = DataSourceHashPartitioning(bucket(4, exprA) :: bucket(8, exprC) :: Nil, 4)
+      outputPartitioning = DataSourceHashPartitioning(
+        bucket(4, exprA) :: bucket(8, exprC) :: Nil, 4)
     )
     smjExec = SortMergeJoinExec(
       exprA :: exprB :: exprB :: Nil, exprA :: exprC :: exprC :: Nil, Inner, None, plan1, plan2)

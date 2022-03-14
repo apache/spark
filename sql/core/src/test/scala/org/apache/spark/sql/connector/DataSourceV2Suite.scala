@@ -27,11 +27,12 @@ import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.connector.catalog.{SupportsRead, Table, TableCapability, TableProvider}
 import org.apache.spark.sql.connector.catalog.TableCapability._
-import org.apache.spark.sql.connector.distributions.Distributions
 import org.apache.spark.sql.connector.expressions.{FieldReference, Literal, SortOrder, Transform}
 import org.apache.spark.sql.connector.expressions.filter.Predicate
+import org.apache.spark.sql.connector.distributions.Distributions
+import org.apache.spark.sql.connector.expressions.{FieldReference, Literal, SortOrder, Transform}
 import org.apache.spark.sql.connector.read._
-import org.apache.spark.sql.connector.read.partitioning.Partitioning
+import org.apache.spark.sql.connector.read.partitioning.{HashPartitioning, Partitioning}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, DataSourceV2Relation, DataSourceV2ScanRelation}
 import org.apache.spark.sql.execution.exchange.{Exchange, ShuffleExchangeExec}
@@ -900,19 +901,14 @@ class PartitionAwareDataSource extends TestingV2Source {
       SpecificReaderFactory
     }
 
-    override def outputPartitioning(): Partitioning = new MyPartitioning
+    override def outputPartitioning(): Partitioning =
+      new HashPartitioning(Array(FieldReference("i")), 2)
   }
 
   override def getTable(options: CaseInsensitiveStringMap): Table = new SimpleBatchTable {
     override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
       new MyScanBuilder()
     }
-  }
-
-  class MyPartitioning extends Partitioning {
-    override def distribution(): distributions.Distribution =
-      Distributions.clustered(Array(FieldReference("i")))
-    override def ordering(): Array[SortOrder] = Array.empty
   }
 }
 

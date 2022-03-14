@@ -22,7 +22,7 @@ import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Ascending, DataSourceBucketTransformExpression, DataSourceTransformExpression, SortOrder => V1SortOrder}
 import org.apache.spark.sql.catalyst.plans.{physical => v1}
-import org.apache.spark.sql.catalyst.plans.physical.DataSourceHashPartitioning
+import org.apache.spark.sql.catalyst.plans.physical.{ClusteredDistribution, DataSourceHashPartitioning}
 import org.apache.spark.sql.connector.catalog.Identifier
 import org.apache.spark.sql.connector.catalog.InMemoryTableCatalog
 import org.apache.spark.sql.connector.catalog.functions._
@@ -96,12 +96,12 @@ class DataSourceHashPartitioningSuite extends DistributionAndOrderingSuiteBase {
       Seq(DataSourceTransformExpression(YearsFunction, Seq(attr("ts")))))
     val partitionValues = Seq(50, 51, 52).map(v => InternalRow.fromSeq(Seq(v)))
 
-    checkQueryPlan(df, v1Distribution, Seq.empty,
+    checkQueryPlan(df, v1Distribution,
       DataSourceHashPartitioning(v1Distribution.clustering, partitionValues))
 
     // multiple group keys should work too as long as partition keys are subset of them
     df = sql(s"SELECT count(*) FROM testcat.ns.$table GROUP BY id, ts")
-    checkQueryPlan(df, v1Distribution, Seq.empty,
+    checkQueryPlan(df, v1Distribution,
       DataSourceHashPartitioning(v1Distribution.clustering, partitionValues))
   }
 
@@ -120,7 +120,7 @@ class DataSourceHashPartitioningSuite extends DistributionAndOrderingSuiteBase {
     val v1Ordering = Seq(V1SortOrder(attr("ts"), Ascending))
     val v1Distribution = v1.OrderedDistribution(v1Ordering)
 
-    checkQueryPlan(df, v1Distribution, v1Ordering, v1.UnknownPartitioning(0))
+    checkQueryPlan(df, v1Distribution, v1.UnknownPartitioning(0))
   }
 
   test("non-clustered distribution: no partition") {
@@ -132,7 +132,7 @@ class DataSourceHashPartitioningSuite extends DistributionAndOrderingSuiteBase {
     val distribution = v1.ClusteredDistribution(
       Seq(DataSourceBucketTransformExpression(32, BucketFunction, Seq(attr("ts")))))
 
-    checkQueryPlan(df, distribution, Seq.empty, v1.UnknownPartitioning(0))
+    checkQueryPlan(df, distribution, v1.UnknownPartitioning(0))
   }
 
   test("non-clustered distribution: single partition") {
@@ -145,7 +145,7 @@ class DataSourceHashPartitioningSuite extends DistributionAndOrderingSuiteBase {
     val distribution = v1.ClusteredDistribution(
       Seq(DataSourceBucketTransformExpression(32, BucketFunction, Seq(attr("ts")))))
 
-    checkQueryPlan(df, distribution, Seq.empty, v1.SinglePartition)
+    checkQueryPlan(df, distribution, v1.SinglePartition)
   }
 
   test("non-clustered distribution: no V2 catalog") {
@@ -165,7 +165,7 @@ class DataSourceHashPartitioningSuite extends DistributionAndOrderingSuiteBase {
     val distribution = v1.UnspecifiedDistribution
 
     try {
-      checkQueryPlan(df, distribution, Seq.empty, v1.UnknownPartitioning(0))
+      checkQueryPlan(df, distribution, v1.UnknownPartitioning(0))
     } finally {
       spark.conf.unset("spark.sql.catalog.testcat2")
     }
@@ -185,7 +185,7 @@ class DataSourceHashPartitioningSuite extends DistributionAndOrderingSuiteBase {
     val df = sql(s"SELECT * FROM testcat.ns.$table")
     val distribution = v1.UnspecifiedDistribution
 
-    checkQueryPlan(df, distribution, Seq.empty, v1.UnknownPartitioning(0))
+    checkQueryPlan(df, distribution, v1.UnknownPartitioning(0))
   }
 
   test("non-clustered distribution: V2 bucketing disabled") {
@@ -202,7 +202,7 @@ class DataSourceHashPartitioningSuite extends DistributionAndOrderingSuiteBase {
       val distribution = v1.ClusteredDistribution(
         Seq(DataSourceBucketTransformExpression(32, BucketFunction, Seq(attr("ts")))))
 
-      checkQueryPlan(df, distribution, Seq.empty, v1.UnknownPartitioning(0))
+      checkQueryPlan(df, distribution, v1.UnknownPartitioning(0))
     }
   }
 
@@ -213,18 +213,18 @@ class DataSourceHashPartitioningSuite extends DistributionAndOrderingSuiteBase {
   private def checkQueryPlan(
       df: DataFrame,
       distribution: v1.Distribution,
-      ordering: Seq[V1SortOrder] = Seq.empty,
       partitioning: v1.Partitioning): Unit = {
     // check distribution & ordering are correctly populated in logical plan
     val relation = df.queryExecution.optimizedPlan.collect {
       case r: DataSourceV2ScanRelation => r
     }.head
 
-    val expectedDistribution = resolveDistribution(distribution, relation)
-    val expectedOrdering = ordering.map(resolveAttrs(_, relation).asInstanceOf[V1SortOrder])
-
-    assert(expectedDistribution == relation.distribution)
-    assert(expectedOrdering == relation.ordering)
+    resolveDistribution(distribution, relation) match {
+      case ClusteredDistribution(clustering, _, _) =>
+        assert(relation.clustering.isDefined && relation.clustering.get == clustering)
+      case _ =>
+        assert(relation.clustering.isEmpty)
+    }
 
     // check distribution, ordering and output partitioning are correctly populated in physical plan
     val scan = collect(df.queryExecution.executedPlan) {
@@ -232,9 +232,6 @@ class DataSourceHashPartitioningSuite extends DistributionAndOrderingSuiteBase {
     }.head
 
     val expectedPartitioning = resolvePartitioning(partitioning, scan)
-
-    assert(expectedDistribution == scan.distribution)
-    assert(expectedOrdering == scan.ordering)
     assert(expectedPartitioning == scan.outputPartitioning)
   }
 
