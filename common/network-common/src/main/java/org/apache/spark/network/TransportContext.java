@@ -25,7 +25,6 @@ import com.codahale.metrics.Counter;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelPipeline;
 import io.netty.channel.EventLoopGroup;
-import io.netty.channel.socket.SocketChannel;
 import io.netty.handler.timeout.IdleStateHandler;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -168,7 +167,7 @@ public class TransportContext implements Closeable {
     return createServer(0, new ArrayList<>());
   }
 
-  public TransportChannelHandler initializePipeline(SocketChannel channel) {
+  public TransportChannelHandler initializePipeline(Channel channel) {
     return initializePipeline(channel, rpcHandler);
   }
 
@@ -185,7 +184,7 @@ public class TransportContext implements Closeable {
    * ChannelHandler to ensure all users of the same channel get the same TransportClient object.
    */
   public TransportChannelHandler initializePipeline(
-      SocketChannel channel,
+      Channel channel,
       RpcHandler channelRpcHandler) {
     try {
       TransportChannelHandler channelHandler = createChannelHandler(channel, channelRpcHandler);

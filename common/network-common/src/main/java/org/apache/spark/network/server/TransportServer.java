@@ -28,11 +28,11 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import io.netty.bootstrap.ServerBootstrap;
 import io.netty.buffer.PooledByteBufAllocator;
+import io.netty.channel.Channel;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelInitializer;
 import io.netty.channel.ChannelOption;
 import io.netty.channel.EventLoopGroup;
-import io.netty.channel.socket.SocketChannel;
 import org.apache.commons.lang3.SystemUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -131,9 +131,9 @@ public class TransportServer implements Closeable {
       bootstrap.childOption(ChannelOption.SO_KEEPALIVE, true);
     }
 
-    bootstrap.childHandler(new ChannelInitializer<SocketChannel>() {
+    bootstrap.childHandler(new ChannelInitializer<Channel>() {
       @Override
-      protected void initChannel(SocketChannel ch) {
+      protected void initChannel(Channel ch) {
         logger.debug("New connection accepted for remote address {}.", ch.remoteAddress());
 
         RpcHandler rpcHandler = appRpcHandler;

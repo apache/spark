@@ -22,9 +22,8 @@ import java.net.{InetAddress, InetSocketAddress, ServerSocket, Socket}
 import java.util.concurrent.TimeUnit
 
 import io.netty.bootstrap.ServerBootstrap
-import io.netty.channel.{ChannelFuture, ChannelInitializer, EventLoopGroup}
+import io.netty.channel.{Channel, ChannelFuture, ChannelInitializer, EventLoopGroup}
 import io.netty.channel.nio.NioEventLoopGroup
-import io.netty.channel.socket.SocketChannel
 import io.netty.channel.socket.nio.NioServerSocketChannel
 import io.netty.handler.codec.LengthFieldBasedFrameDecoder
 import io.netty.handler.codec.bytes.{ByteArrayDecoder, ByteArrayEncoder}
@@ -58,8 +57,8 @@ private[spark] class RBackend {
       .group(bossGroup, workerGroup)
       .channel(classOf[NioServerSocketChannel])
 
-    bootstrap.childHandler(new ChannelInitializer[SocketChannel]() {
-      def initChannel(ch: SocketChannel): Unit = {
+    bootstrap.childHandler(new ChannelInitializer[Channel]() {
+      def initChannel(ch: Channel): Unit = {
         ch.pipeline()
           .addLast("encoder", new ByteArrayEncoder())
           .addLast("frameDecoder",

@@ -38,7 +38,6 @@ import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelInitializer;
 import io.netty.channel.ChannelOption;
 import io.netty.channel.EventLoopGroup;
-import io.netty.channel.socket.SocketChannel;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -85,7 +84,7 @@ public class TransportClientFactory implements Closeable {
   private final Random rand;
   private final int numConnectionsPerPeer;
 
-  private final Class<? extends Channel> socketChannelClass;
+  private final Class<? extends Channel> channelClass;
   private EventLoopGroup workerGroup;
   private final PooledByteBufAllocator pooledAllocator;
   private final NettyMemoryMetrics metrics;
@@ -102,7 +101,7 @@ public class TransportClientFactory implements Closeable {
     this.rand = new Random();
 
     IOMode ioMode = IOMode.valueOf(conf.ioMode());
-    this.socketChannelClass = NettyUtils.getClientChannelClass(ioMode);
+    this.channelClass = NettyUtils.getClientChannelClass(ioMode);
     this.workerGroup = NettyUtils.createEventLoop(
         ioMode,
         conf.clientThreads(),
@@ -250,7 +249,7 @@ public class TransportClientFactory implements Closeable {
 
     Bootstrap bootstrap = new Bootstrap();
     bootstrap.group(workerGroup)
-      .channel(socketChannelClass)
+      .channel(channelClass)
       // Disable Nagle's Algorithm since we don't want packets to wait
       .option(ChannelOption.TCP_NODELAY, true)
       .option(ChannelOption.SO_KEEPALIVE, true)
@@ -268,9 +267,9 @@ public class TransportClientFactory implements Closeable {
     final AtomicReference<TransportClient> clientRef = new AtomicReference<>();
     final AtomicReference<Channel> channelRef = new AtomicReference<>();
 
-    bootstrap.handler(new ChannelInitializer<SocketChannel>() {
+    bootstrap.handler(new ChannelInitializer<Channel>() {
       @Override
-      public void initChannel(SocketChannel ch) {
+      public void initChannel(Channel ch) {
         TransportChannelHandler clientHandler = context.initializePipeline(ch);
         clientRef.set(clientHandler.getClient());
         channelRef.set(ch);
