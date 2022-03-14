@@ -66,7 +66,8 @@ class SQLJsonProtocolSuite extends SparkFunSuite with LocalSparkSession {
         assert(reconstructedEvent == expectedEvent)
       } else {
         val expectedOldEvent = OldVersionSQLExecutionStart(0, "test desc", "test detail",
-          "test plan", new SparkPlanInfo("TestNode", "test string", Nil, Map(), Nil), 0)
+          "test plan", new SparkPlanInfo("TestNode", "test string", Nil, Map(), Nil),
+          0, "parsingTime")
         assert(reconstructedEvent == expectedOldEvent)
       }
     }
@@ -104,5 +105,6 @@ private case class OldVersionSQLExecutionStart(
     details: String,
     physicalPlanDescription: String,
     sparkPlanInfo: SparkPlanInfo,
-    time: Long)
+    time: Long,
+    parsingTime: String)
   extends SparkListenerEvent
