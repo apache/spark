@@ -1804,6 +1804,9 @@ class DataFrameTest(ComparisonTestBase, SQLTestUtils):
             psdf.nlargest(n=5, columns=["c"], keep="last"),
             pdf.nlargest(5, columns=["c"], keep="last"),
         )
+        msg = "`keep`=all is not supported. Only 'first' and 'last' are supported."
+        with self.assertRaisesRegex(NotImplementedError, msg):
+            psdf.nlargest(n=5, columns=["c"], keep="all")
 
     def test_nsmallest(self):
         pdf = pd.DataFrame(
@@ -1824,6 +1827,9 @@ class DataFrameTest(ComparisonTestBase, SQLTestUtils):
             psdf.nsmallest(n=5, columns=["c"], keep="last"),
             pdf.nsmallest(5, columns=["c"], keep="last"),
         )
+        msg = "`keep`=all is not supported. Only 'first' and 'last' are supported."
+        with self.assertRaisesRegex(NotImplementedError, msg):
+            psdf.nsmallest(n=5, columns=["c"], keep="all")
 
     def test_xs(self):
         d = {

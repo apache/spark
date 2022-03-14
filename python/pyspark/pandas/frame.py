@@ -6852,11 +6852,10 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         by = [mapper[(asc, na_position)](scol) for scol, asc in zip(by, ascending)]
 
         natural_order_scol = F.col(NATURAL_ORDER_COLUMN_NAME)
-        if keep == "first":
-            natural_order_scol = Column.asc(natural_order_scol)
-        elif keep == "last":
+
+        if keep == "last":
             natural_order_scol = Column.desc(natural_order_scol)
-        else:
+        elif keep != "first":
             raise NotImplementedError(
                 "`keep`=%s is not supported. Only 'first' and 'last' are supported." % keep
             )
