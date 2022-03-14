@@ -89,7 +89,6 @@ public class UnsafeShuffleWriterSuite implements ShuffleChecksumTestHelper {
   }
 
   @Before
-  @SuppressWarnings("unchecked")
   public void setUp() throws Exception {
     MockitoAnnotations.openMocks(this).close();
     tempDir = Utils.createTempDir(null, "test");

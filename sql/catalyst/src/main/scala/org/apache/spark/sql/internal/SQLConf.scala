@@ -1720,7 +1720,6 @@ object SQLConf {
 
   val STREAMING_SESSION_WINDOW_MERGE_SESSIONS_IN_LOCAL_PARTITION =
     buildConf("spark.sql.streaming.sessionWindow.merge.sessions.in.local.partition")
-      .internal()
       .doc("When true, streaming session window sorts and merge sessions in local partition " +
         "prior to shuffle. This is to reduce the rows to shuffle, but only beneficial when " +
         "there're lots of rows in a batch being assigned to same sessions.")
@@ -2707,7 +2706,7 @@ object SQLConf {
       "standard directly, but their behaviors align with ANSI SQL's style")
     .version("3.0.0")
     .booleanConf
-    .createWithDefault(false)
+    .createWithDefault(sys.env.get("SPARK_ANSI_SQL_MODE").contains("true"))
 
   val ENFORCE_RESERVED_KEYWORDS = buildConf("spark.sql.ansi.enforceReservedKeywords")
     .doc(s"When true and '${ANSI_ENABLED.key}' is true, the Spark SQL parser enforces the ANSI " +

@@ -739,6 +739,10 @@ class DatetimeIndex(Index):
             psdf = psdf.pandas_on_spark.apply_batch(pandas_at_time)
         return ps.Index(first_series(psdf).rename(self.name))
 
+    @no_type_check
+    def all(self, *args, **kwargs) -> None:
+        raise TypeError("Cannot perform 'all' with this index type: %s" % type(self).__name__)
+
 
 def disallow_nanoseconds(freq: Union[str, DateOffset]) -> None:
     if freq in ["N", "ns"]:

@@ -109,6 +109,19 @@ case class AllDataTypesScan(
   }
 }
 
+class LegacyTimestampSource extends RelationProvider {
+  override def createRelation(ctx: SQLContext, parameters: Map[String, String]): BaseRelation = {
+    new BaseRelation() with TableScan {
+      override val sqlContext: SQLContext = ctx
+      override val schema: StructType = StructType(StructField("col", TimestampType) :: Nil)
+      override def buildScan(): RDD[Row] = {
+        sqlContext.sparkContext.parallelize(
+          Row(java.sql.Timestamp.valueOf("2022-03-08 12:13:14")) :: Nil)
+      }
+    }
+  }
+}
+
 class TableScanSuite extends DataSourceTest with SharedSparkSession {
   protected override lazy val sql = spark.sql _
 
@@ -419,5 +432,19 @@ class TableScanSuite extends DataSourceTest with SharedSparkSession {
     val planned = sql("SELECT * FROM student").queryExecution.executedPlan
     val comments = planned.schema.fields.map(_.getComment().getOrElse("NO_COMMENT")).mkString(",")
     assert(comments === "SN,SA,NO_COMMENT")
+  }
+
+  test("SPARK-38437: accept java.sql.Timestamp even when Java 8 API is enabled") {
+    val tableName = "relationProviderWithLegacyTimestamps"
+    withSQLConf(SQLConf.DATETIME_JAVA8API_ENABLED.key -> "true") {
+      withTable (tableName) {
+        sql(s"""
+          |CREATE TABLE $tableName (col TIMESTAMP)
+          |USING org.apache.spark.sql.sources.LegacyTimestampSource""".stripMargin)
+        checkAnswer(
+          spark.table(tableName),
+          Row(java.sql.Timestamp.valueOf("2022-03-08 12:13:14").toInstant) :: Nil)
+      }
+    }
   }
 }

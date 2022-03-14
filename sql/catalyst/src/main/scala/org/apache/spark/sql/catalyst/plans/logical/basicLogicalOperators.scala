@@ -989,7 +989,7 @@ case class Aggregate(
   final override val nodePatterns : Seq[TreePattern] = Seq(AGGREGATE)
 
   override lazy val validConstraints: ExpressionSet = {
-    val nonAgg = aggregateExpressions.filter(_.find(_.isInstanceOf[AggregateExpression]).isEmpty)
+    val nonAgg = aggregateExpressions.filter(!_.exists(_.isInstanceOf[AggregateExpression]))
     getAllValidConstraints(nonAgg)
   }
 
@@ -1003,7 +1003,7 @@ case class Aggregate(
     groupingExpressions.nonEmpty && aggregateExpressions.map {
       case Alias(child, _) => child
       case e => e
-    }.forall(a => groupingExpressions.exists(g => a.semanticEquals(g)))
+    }.forall(a => a.foldable || groupingExpressions.exists(g => a.semanticEquals(g)))
   }
 }
 
