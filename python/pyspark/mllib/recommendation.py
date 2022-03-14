@@ -17,8 +17,7 @@
 
 import array
 import sys
-from collections import namedtuple
-from typing import Any, List, Optional, Tuple, Type, Union
+from typing import Any, List, NamedTuple, Optional, Tuple, Type, Union
 
 from pyspark import SparkContext, since
 from pyspark.rdd import RDD
@@ -29,7 +28,7 @@ from pyspark.sql import DataFrame
 __all__ = ["MatrixFactorizationModel", "ALS", "Rating"]
 
 
-class Rating(namedtuple("Rating", ["user", "product", "rating"])):
+class Rating(NamedTuple):
     """
     Represents a (user, product, rating) tuple.
 
@@ -43,6 +42,10 @@ class Rating(namedtuple("Rating", ["user", "product", "rating"])):
     >>> (r[0], r[1], r[2])
     (1, 2, 5.0)
     """
+
+    user: int
+    product: int
+    rating: float
 
     def __reduce__(self) -> Tuple[Type["Rating"], Tuple[int, int, float]]:
         return Rating, (int(self.user), int(self.product), float(self.rating))
@@ -228,7 +231,7 @@ class ALS:
     """
 
     @classmethod
-    def _prepare(cls, ratings: Any) -> RDD:
+    def _prepare(cls, ratings: Any) -> RDD[Rating]:
         if isinstance(ratings, RDD):
             pass
         elif isinstance(ratings, DataFrame):
@@ -257,7 +260,7 @@ class ALS:
         blocks: int = -1,
         nonnegative: bool = False,
         seed: Optional[int] = None,
-    ) -> "MatrixFactorizationModel":
+    ) -> MatrixFactorizationModel:
         """
         Train a matrix factorization model given an RDD of ratings by users
         for a subset of products. The ratings matrix is approximated as the
@@ -311,11 +314,11 @@ class ALS:
         rank: int,
         iterations: int = 5,
         lambda_: float = 0.01,
-        blocks: int = 1,
+        blocks: int = -1,
         alpha: float = 0.01,
         nonnegative: bool = False,
         seed: Optional[int] = None,
-    ) -> "MatrixFactorizationModel":
+    ) -> MatrixFactorizationModel:
         """
         Train a matrix factorization model given an RDD of 'implicit
         preferences' of users for a subset of products. The ratings matrix
