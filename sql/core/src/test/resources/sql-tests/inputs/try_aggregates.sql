@@ -6,3 +6,8 @@ SELECT try_sum(col) FROM VALUES (NULL), (NULL) AS tab(col);
 SELECT try_sum(col) FROM VALUES (9223372036854775807L), (1L) AS tab(col);
 -- test overflow in Decimal(38, 0)
 SELECT try_sum(col) FROM VALUES (98765432109876543210987654321098765432BD), (98765432109876543210987654321098765432BD) AS tab(col);
+
+SELECT try_sum(col) FROM VALUES (interval '1 months'), (interval '1 months') AS tab(col);
+SELECT try_sum(col) FROM VALUES (interval '2147483647 months'), (interval '1 months') AS tab(col);
+SELECT try_sum(col) FROM VALUES (interval '1 seconds'), (interval '1 seconds') AS tab(col);
+SELECT try_sum(col) FROM VALUES (interval '106751991 04:00:54.775808' DAY TO SECOND), (interval '1 seconds') AS tab(col);
