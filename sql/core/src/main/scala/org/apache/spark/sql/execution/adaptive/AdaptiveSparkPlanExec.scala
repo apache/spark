@@ -43,7 +43,7 @@ import org.apache.spark.sql.execution.exchange._
 import org.apache.spark.sql.execution.ui.{SparkListenerSQLAdaptiveExecutionUpdate, SparkListenerSQLAdaptiveSQLMetricUpdates, SQLPlanMetric}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.vectorized.ColumnarBatch
-import org.apache.spark.util.ThreadUtils
+import org.apache.spark.util.{SparkFatalException, ThreadUtils}
 
 /**
  * A root node to execute the query plan adaptively. It splits the query plan into independent
@@ -728,11 +728,16 @@ case class AdaptiveSparkPlanExec(
         }
       case _ =>
     }
-    val e = if (errors.size == 1) {
-      errors.head
+    // Respect SparkFatalException which can be thrown by BroadcastExchangeExec
+    val originalErrors = errors.map {
+      case fatal: SparkFatalException => fatal.throwable
+      case other => other
+    }
+    val e = if (originalErrors.size == 1) {
+      originalErrors.head
     } else {
-      val se = QueryExecutionErrors.multiFailuresInStageMaterializationError(errors.head)
-      errors.tail.foreach(se.addSuppressed)
+      val se = QueryExecutionErrors.multiFailuresInStageMaterializationError(originalErrors.head)
+      originalErrors.tail.foreach(se.addSuppressed)
       se
     }
     throw e
