@@ -75,7 +75,6 @@ class LocalStagingDirSuite extends CommitProtocolStagingDirBaseSuite {
   val stagingDirFile = Utils.createTempDir()
   override val stagingDir = stagingDirFile.getAbsolutePath
 
-  println(s"stagingDirFile = ${stagingDirFile}")
   override def cleanStagingDir(): Unit = {
     Utils.deleteRecursively(stagingDirFile)
   }
