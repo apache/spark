@@ -838,13 +838,20 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
             pd.Series([True, False], name="x"),
             pd.Series([0, 1], name="x"),
             pd.Series([1, 2, 3], name="x"),
+            pd.Series([np.nan, 0, 1], name="x"),
+            pd.Series([np.nan, 1, 2, 3], name="x"),
             pd.Series([True, True, None], name="x"),
             pd.Series([True, False, None], name="x"),
             pd.Series([], name="x"),
             pd.Series([np.nan], name="x"),
+            pd.Series([np.nan, np.nan], name="x"),
+            pd.Series([None], name="x"),
+            pd.Series([None, None], name="x"),
         ]:
             psser = ps.from_pandas(pser)
             self.assert_eq(psser.all(), pser.all())
+            self.assert_eq(psser.all(skipna=False), pser.all(skipna=False))
+            self.assert_eq(psser.all(skipna=True), pser.all(skipna=True))
 
         pser = pd.Series([1, 2, 3, 4], name="x")
         psser = ps.from_pandas(pser)
@@ -1161,12 +1168,33 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
     def test_map(self):
         pser = pd.Series(["cat", "dog", None, "rabbit"])
         psser = ps.from_pandas(pser)
-        # Currently Koalas doesn't return NaN as pandas does.
-        self.assert_eq(psser.map({}), pser.map({}).replace({pd.np.nan: None}))
+
+        # dict correspondence
+        # Currently pandas API on Spark doesn't return NaN as pandas does.
+        self.assert_eq(psser.map({}), pser.map({}).replace({np.nan: None}))
 
         d = defaultdict(lambda: "abc")
         self.assertTrue("abc" in repr(psser.map(d)))
         self.assert_eq(psser.map(d), pser.map(d))
+
+        # series correspondence
+        pser_to_apply = pd.Series(["one", "two", "four"], index=["cat", "dog", "rabbit"])
+        self.assert_eq(psser.map(pser_to_apply), pser.map(pser_to_apply))
+        self.assert_eq(
+            psser.map(pser_to_apply, na_action="ignore"),
+            pser.map(pser_to_apply, na_action="ignore"),
+        )
+
+        # function correspondence
+        self.assert_eq(
+            psser.map(lambda x: x.upper(), na_action="ignore"),
+            pser.map(lambda x: x.upper(), na_action="ignore"),
+        )
+
+        def to_upper(string) -> str:
+            return string.upper() if string else ""
+
+        self.assert_eq(psser.map(to_upper), pser.map(to_upper))
 
         def tomorrow(date) -> datetime:
             return date + timedelta(days=1)

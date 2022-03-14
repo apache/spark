@@ -141,10 +141,10 @@ object DisableUnnecessaryBucketedScan extends Rule[SparkPlan] {
   }
 
   def apply(plan: SparkPlan): SparkPlan = {
-    lazy val hasBucketedScan = plan.find {
+    lazy val hasBucketedScan = plan.exists {
       case scan: FileSourceScanExec => scan.bucketedScan
       case _ => false
-    }.isDefined
+    }
 
     if (!conf.bucketingEnabled || !conf.autoBucketedScanEnabled || !hasBucketedScan) {
       plan

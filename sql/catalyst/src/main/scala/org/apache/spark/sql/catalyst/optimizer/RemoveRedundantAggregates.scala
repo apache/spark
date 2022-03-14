@@ -52,10 +52,10 @@ object RemoveRedundantAggregates extends Rule[LogicalPlan] with AliasHelper {
   private def isLowerRedundant(upper: Aggregate, lower: Aggregate): Boolean = {
     val upperHasNoDuplicateSensitiveAgg = upper
       .aggregateExpressions
-      .forall(expr => expr.find {
+      .forall(expr => !expr.exists {
         case ae: AggregateExpression => isDuplicateSensitive(ae)
         case e => AggregateExpression.isAggregate(e)
-      }.isEmpty)
+      })
 
     lazy val upperRefsOnlyDeterministicNonAgg = upper.references.subsetOf(AttributeSet(
       lower
