@@ -1343,7 +1343,7 @@ class Analyzer(
         }
         u.copy(children = newChildren)
 
-      case u @ Union(children, _, _)
+      case u @ Union(children)
         // if there are duplicate output columns, give them unique expr ids
           if children.exists(c => c.output.map(_.exprId).distinct.length < c.output.length) =>
         val newChildren = children.map { c =>
