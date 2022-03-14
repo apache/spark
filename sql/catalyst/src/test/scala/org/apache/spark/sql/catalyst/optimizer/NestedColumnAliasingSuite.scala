@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.Cross
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
-import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
+import org.apache.spark.sql.types.{ArrayType, IntegerType, StringType, StructField, StructType}
 
 class NestedColumnAliasingSuite extends SchemaPruningTest {
 
@@ -812,6 +812,18 @@ class NestedColumnAliasingSuite extends SchemaPruningTest {
     val optimized3 = Optimize.execute(plan3)
     val expected3 = contact.select($"name").rebalance($"name").select($"name.first").analyze
     comparePlans(optimized3, expected3)
+  }
+
+  test("GeneratorNestedColumnAliasing does not pushdown for non-Explode") {
+    val employer = StructType.fromDDL("id int, company struct<name:string, address:string>")
+    val input = LocalRelation(
+      'col1.int,
+      'col2.array(ArrayType(StructType.fromDDL("field1 struct<col1: int, col2: int>, field2 int")))
+    )
+    val plan = input.generate(Inline('col2)).select('field1.getField("col1")).analyze
+    val optimized = GeneratorNestedColumnAliasing.unapply(plan)
+    // The plan is expected to be unchanged.
+    comparePlans(plan, RemoveNoopOperators.apply(optimized.get))
   }
 }
 
