@@ -32,7 +32,7 @@ import org.apache.spark.sql.catalyst.util.{DateFormatter, DateTimeUtils, Timesta
 import org.apache.spark.sql.connector.catalog.TableChange
 import org.apache.spark.sql.connector.catalog.TableChange._
 import org.apache.spark.sql.connector.catalog.index.TableIndex
-import org.apache.spark.sql.connector.expressions.{Expression, FieldReference, Literal, NamedReference}
+import org.apache.spark.sql.connector.expressions.{Expression, Literal, NamedReference}
 import org.apache.spark.sql.connector.expressions.aggregate.{AggregateFunc, Avg, Count, CountStar, Max, Min, Sum}
 import org.apache.spark.sql.connector.util.V2ExpressionSQLBuilder
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -225,12 +225,13 @@ abstract class JdbcDialect extends Serializable with Logging{
       case str: UTF8String => s"${compileValue(str.toString)}"
       case other => s"${compileValue(other)}"
     }
-    override def visitFieldReference(fieldRef: FieldReference): String = {
-      if (fieldRef.fieldNames().length != 1) {
+
+    override def visitNamedReference(namedRef: NamedReference): String = {
+      if (namedRef.fieldNames().length != 1) {
         throw new IllegalArgumentException(
-          "FieldReference with field name has multiple or zero parts unsupported: " + fieldRef);
+          "FieldReference with field name has multiple or zero parts unsupported: " + namedRef);
       }
-      quoteIdentifier(fieldRef.fieldNames.head)
+      quoteIdentifier(namedRef.fieldNames.head)
     }
   }
 

@@ -22,9 +22,9 @@ import org.apache.spark.sql.connector.expressions.Expression;
 import org.apache.spark.sql.connector.expressions.GeneralScalarExpression;
 
 /**
- * The general representation of predicate expressions, which contains the upper-cased
- * expression name and all the children expressions. Please also see {@link And},
- * {@link Or}, {@link Not}, {@link AlwaysTrue}, {@link AlwaysFalse} for better type safety.
+ * The general representation of predicate expressions, which contains the upper-cased expression
+ * name and all the children expressions. You can also use these concrete subclasses for better
+ * type safety: {@link And}, {@link Or}, {@link Not}, {@link AlwaysTrue}, {@link AlwaysFalse}.
  * <p>
  * The currently supported predicate expressions:
  * <ol>

@@ -25,9 +25,10 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, Row, SaveMode, SparkSession, SQLContext}
 import org.apache.spark.sql.catalyst.analysis._
+import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.catalyst.util.{DateFormatter, DateTimeUtils, TimestampFormatter}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.{getZoneId, stringToDate, stringToTimestamp}
-import org.apache.spark.sql.connector.expressions.SortOrder
+import org.apache.spark.sql.connector.expressions.{FieldReference, LiteralValue, SortOrder}
 import org.apache.spark.sql.connector.expressions.filter.Predicate
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.v2.TableSampleInfo
@@ -247,6 +248,81 @@ private[sql] object JDBCRelation extends Logging {
     }
   }
 
+  private def checkColumnName(colName: String) = {
+    val nameParts = SparkSession.active.sessionState.sqlParser.parseMultipartIdentifier(colName)
+    if (nameParts.length > 1) {
+      throw QueryCompilationErrors.commandNotSupportNestedColumnError("Filter push down", colName)
+    }
+  }
+
+  private def toV2(f: Filter): Option[Predicate] = {
+    Option(f match {
+      case EqualTo(attr, value) =>
+        checkColumnName(attr)
+        new Predicate("=",
+          Array(FieldReference(attr), LiteralValue(value, Literal(value).dataType)))
+      case EqualNullSafe(attr, value) =>
+        checkColumnName(attr)
+        new Predicate("<=>",
+          Array(FieldReference(attr), LiteralValue(value, Literal(value).dataType)))
+      case LessThan(attr, value) =>
+        checkColumnName(attr)
+        new Predicate("<",
+          Array(FieldReference(attr), LiteralValue(value, Literal(value).dataType)))
+      case GreaterThan(attr, value) =>
+        checkColumnName(attr)
+        new Predicate(">",
+          Array(FieldReference(attr), LiteralValue(value, Literal(value).dataType)))
+      case LessThanOrEqual(attr, value) =>
+        checkColumnName(attr)
+        new Predicate("<=",
+          Array(FieldReference(attr), LiteralValue(value, Literal(value).dataType)))
+      case GreaterThanOrEqual(attr, value) =>
+        checkColumnName(attr)
+        new Predicate(">=", Array(FieldReference(attr),
+          LiteralValue(value, Literal(value).dataType)))
+      case IsNull(attr) =>
+        checkColumnName(attr)
+        new Predicate("IS_NULL", Array(FieldReference(attr)))
+      case IsNotNull(attr) =>
+        checkColumnName(attr)
+        new Predicate("IS_NOT_NULL", Array(FieldReference(attr)))
+      case StringStartsWith(attr, value) =>
+        checkColumnName(attr)
+        new Predicate("STARTS_WITH", Array(FieldReference(attr),
+          LiteralValue(value, Literal(value).dataType)))
+      case StringEndsWith(attr, value) =>
+        checkColumnName(attr)
+        new Predicate("ENDS_WITH", Array(FieldReference(attr),
+          LiteralValue(value, Literal(value).dataType)))
+      case StringContains(attr, value) =>
+        checkColumnName(attr)
+        new Predicate("CONTAINS", Array(FieldReference(attr),
+          LiteralValue(value, Literal(value).dataType)))
+      case In(attr, value) =>
+        checkColumnName(attr)
+        val literals = value.map(v => LiteralValue(v, Literal(v).dataType))
+        new Predicate("IN", FieldReference(attr) +: literals)
+      case Not(f) =>
+        toV2(f).map(p => new Predicate("NOT", Array(p))).getOrElse(null)
+      case Or(f1, f2) =>
+        val or = Seq(f1, f2).flatMap(toV2(_))
+        if (or.size == 2) {
+          new Predicate("OR", or.toArray)
+        } else {
+          null
+        }
+      case And(f1, f2) =>
+        val and = Seq(f1, f2).flatMap(toV2(_))
+        if (and.size == 2) {
+          new Predicate("AND", and.toArray)
+        } else {
+          null
+        }
+      case _ => null
+    })
+  }
+
   /**
    * Resolves a Catalyst schema of a JDBC table and returns [[JDBCRelation]] with the schema.
    */
@@ -275,7 +351,7 @@ private[sql] case class JDBCRelation(
   override def unhandledFilters(filters: Array[Filter]): Array[Filter] = {
     if (jdbcOptions.pushDownPredicate) {
       val dialect = JdbcDialects.get(jdbcOptions.url)
-      filters.filter(JDBCRDD.toV2(_).flatMap(dialect.compileExpression(_)).isEmpty)
+      filters.filter(JDBCRelation.toV2(_).flatMap(dialect.compileExpression(_)).isEmpty)
     } else {
       filters
     }
@@ -283,17 +359,17 @@ private[sql] case class JDBCRelation(
 
   override def buildScan(requiredColumns: Array[String], filters: Array[Filter]): RDD[Row] = {
     // When pushDownPredicate is false, all Filters that need to be pushed down should be ignored
-    val pushedFilters = if (jdbcOptions.pushDownPredicate) {
-      filters
+    val pushedPredicates = if (jdbcOptions.pushDownPredicate) {
+      filters.flatMap(JDBCRelation.toV2)
     } else {
-      Array.empty[Filter]
+      Array.empty[Predicate]
     }
     // Rely on a type erasure hack to pass RDD[InternalRow] back as RDD[Row]
     JDBCRDD.scanTable(
       sparkSession.sparkContext,
       schema,
       requiredColumns,
-      pushedFilters,
+      pushedPredicates,
       parts,
       jdbcOptions).asInstanceOf[RDD[Row]]
   }

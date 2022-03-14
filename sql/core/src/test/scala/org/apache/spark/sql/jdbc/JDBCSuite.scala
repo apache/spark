@@ -38,7 +38,7 @@ import org.apache.spark.sql.connector.expressions.filter.Predicate
 import org.apache.spark.sql.execution.{DataSourceScanExec, ExtendedMode}
 import org.apache.spark.sql.execution.command.{ExplainCommand, ShowCreateTableCommand}
 import org.apache.spark.sql.execution.datasources.LogicalRelation
-import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JDBCPartition, JDBCRDD, JDBCRelation, JdbcUtils}
+import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JDBCPartition, JDBCRelation, JdbcUtils}
 import org.apache.spark.sql.execution.metric.InputOutputMetricsHelper
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources._
@@ -777,7 +777,7 @@ class JDBCSuite extends QueryTest
     val toV2 = PrivateMethod[Option[Predicate]](Symbol("toV2"))
 
     def doToV2(f: Filter): Option[Predicate] =
-      JDBCRDD invokePrivate toV2(f)
+      JDBCRelation invokePrivate toV2(f)
     def doCompileFilter(f: Filter): String =
       doToV2(f).flatMap(JdbcDialects.get("jdbc:").compileExpression(_)).getOrElse("")
 

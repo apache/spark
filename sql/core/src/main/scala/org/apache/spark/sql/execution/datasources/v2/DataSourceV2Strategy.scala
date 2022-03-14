@@ -31,7 +31,7 @@ import org.apache.spark.sql.catalyst.util.{toPrettySQL, V2ExpressionBuilder}
 import org.apache.spark.sql.connector.catalog.{Identifier, StagingTableCatalog, SupportsNamespaces, SupportsPartitionManagement, SupportsWrite, Table, TableCapability, TableCatalog}
 import org.apache.spark.sql.connector.catalog.index.SupportsIndex
 import org.apache.spark.sql.connector.expressions.{FieldReference, LiteralValue}
-import org.apache.spark.sql.connector.expressions.filter.{AlwaysFalse, AlwaysTrue, And => V2And, Not => V2Not, Or => V2Or, Predicate}
+import org.apache.spark.sql.connector.expressions.filter.{And => V2And, Not => V2Not, Or => V2Or, Predicate}
 import org.apache.spark.sql.connector.read.LocalScan
 import org.apache.spark.sql.connector.read.streaming.{ContinuousStream, MicroBatchStream}
 import org.apache.spark.sql.connector.write.V1Write
@@ -569,10 +569,6 @@ abstract class PushablePredicateBase {
   val pushableColumn: PushableColumnBase = PushableColumn(nestedPredicatePushdownEnabled)
 
   def unapply(e: Expression): Option[Predicate] = e match {
-    case expressions.Literal(true, BooleanType) =>
-      Some(new AlwaysTrue())
-    case expressions.Literal(false, BooleanType) =>
-      Some(new AlwaysFalse())
     case col @ pushableColumn(name) if col.dataType.isInstanceOf[BooleanType] =>
       Some(new Predicate("=", Array(FieldReference(name), LiteralValue(true, BooleanType))))
     case _ =>

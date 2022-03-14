@@ -24,15 +24,11 @@ import scala.util.control.NonFatal
 import org.apache.spark.{InterruptibleIterator, Partition, SparkContext, TaskContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.Literal
-import org.apache.spark.sql.connector.expressions.{FieldReference, LiteralValue, SortOrder}
+import org.apache.spark.sql.connector.expressions.SortOrder
 import org.apache.spark.sql.connector.expressions.filter.Predicate
-import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.v2.TableSampleInfo
 import org.apache.spark.sql.jdbc.{JdbcDialect, JdbcDialects}
-import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
 import org.apache.spark.util.CompletionIterator
 
@@ -96,88 +92,13 @@ object JDBCRDD extends Logging {
     new StructType(columns.map(name => fieldMap(name)))
   }
 
-  private def checkColumnName(colName: String) = {
-    val nameParts = SparkSession.active.sessionState.sqlParser.parseMultipartIdentifier(colName)
-    if(nameParts.length > 1) {
-      throw QueryCompilationErrors.commandNotSupportNestedColumnError("Filter push down", colName)
-    }
-  }
-
-  private[sql] def toV2(f: Filter): Option[Predicate] = {
-    Option(f match {
-      case EqualTo(attr, value) =>
-        checkColumnName(attr)
-        new Predicate("=",
-          Array(FieldReference(attr), LiteralValue(value, Literal(value).dataType)))
-      case EqualNullSafe(attr, value) =>
-        checkColumnName(attr)
-        new Predicate("<=>",
-          Array(FieldReference(attr), LiteralValue(value, Literal(value).dataType)))
-      case LessThan(attr, value) =>
-        checkColumnName(attr)
-        new Predicate("<",
-          Array(FieldReference(attr), LiteralValue(value, Literal(value).dataType)))
-      case GreaterThan(attr, value) =>
-        checkColumnName(attr)
-        new Predicate(">",
-          Array(FieldReference(attr), LiteralValue(value, Literal(value).dataType)))
-      case LessThanOrEqual(attr, value) =>
-        checkColumnName(attr)
-        new Predicate("<=",
-          Array(FieldReference(attr), LiteralValue(value, Literal(value).dataType)))
-      case GreaterThanOrEqual(attr, value) =>
-        checkColumnName(attr)
-        new Predicate(">=", Array(FieldReference(attr),
-          LiteralValue(value, Literal(value).dataType)))
-      case IsNull(attr) =>
-        checkColumnName(attr)
-        new Predicate("IS_NULL", Array(FieldReference(attr)))
-      case IsNotNull(attr) =>
-        checkColumnName(attr)
-        new Predicate("IS_NOT_NULL", Array(FieldReference(attr)))
-      case StringStartsWith(attr, value) =>
-        checkColumnName(attr)
-        new Predicate("STARTS_WITH", Array(FieldReference(attr),
-          LiteralValue(value, Literal(value).dataType)))
-      case StringEndsWith(attr, value) =>
-        checkColumnName(attr)
-        new Predicate("ENDS_WITH", Array(FieldReference(attr),
-          LiteralValue(value, Literal(value).dataType)))
-      case StringContains(attr, value) =>
-        checkColumnName(attr)
-        new Predicate("CONTAINS", Array(FieldReference(attr),
-          LiteralValue(value, Literal(value).dataType)))
-      case In(attr, value) =>
-        checkColumnName(attr)
-        val literals = value.map(v => LiteralValue(v, Literal(v).dataType))
-        new Predicate("IN", FieldReference(attr) +: literals)
-      case Not(f) =>
-        toV2(f).map(p => new Predicate("NOT", Array(p))).getOrElse(null)
-      case Or(f1, f2) =>
-        val or = Seq(f1, f2).flatMap(toV2(_))
-        if (or.size == 2) {
-          new Predicate("OR", or.toArray)
-        } else {
-          null
-        }
-      case And(f1, f2) =>
-        val and = Seq(f1, f2).flatMap(toV2(_))
-        if (and.size == 2) {
-          new Predicate("AND", and.toArray)
-        } else {
-          null
-        }
-      case _ => null
-    })
-  }
-
   /**
    * Build and return JDBCRDD from the given information.
    *
    * @param sc - Your SparkContext.
    * @param schema - The Catalyst schema of the underlying database table.
    * @param requiredColumns - The names of the columns or aggregate columns to SELECT.
-   * @param filters - The filters to include in all WHERE clauses.
+   * @param predicates - The predicates to include in all WHERE clauses.
    * @param parts - An array of JDBCPartitions specifying partition ids and
    *    per-partition WHERE clauses.
    * @param options - JDBC options that contains url, table and other information.
@@ -186,33 +107,11 @@ object JDBCRDD extends Logging {
    * @param sample - The pushed down tableSample.
    * @param limit - The pushed down limit. If the value is 0, it means no limit or limit
    *                is not pushed down.
-   * @param sortValues - The sort values cooperates with limit to realize top N.
+   * @param sortOrders - The sort orders cooperates with limit to realize top N.
    *
    * @return An RDD representing "SELECT requiredColumns FROM fqTable".
    */
   // scalastyle:off argcount
-  def scanTable(
-      sc: SparkContext,
-      schema: StructType,
-      requiredColumns: Array[String],
-      filters: Array[Filter],
-      parts: Array[Partition],
-      options: JDBCOptions): RDD[InternalRow] = {
-    val url = options.url
-    val dialect = JdbcDialects.get(url)
-    val quotedColumns = requiredColumns.map(colName => dialect.quoteIdentifier(colName))
-    val predicates = filters.flatMap(toV2(_))
-    new JDBCRDD(
-      sc,
-      dialect.createConnectionFactory(options),
-      pruneSchema(schema, requiredColumns),
-      quotedColumns,
-      predicates,
-      parts,
-      url,
-      options)
-  }
-
   def scanTable(
       sc: SparkContext,
       schema: StructType,

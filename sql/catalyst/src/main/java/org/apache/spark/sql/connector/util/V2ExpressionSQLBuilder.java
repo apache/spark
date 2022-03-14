@@ -22,7 +22,7 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 import org.apache.spark.sql.connector.expressions.Expression;
-import org.apache.spark.sql.connector.expressions.FieldReference;
+import org.apache.spark.sql.connector.expressions.NamedReference;
 import org.apache.spark.sql.connector.expressions.GeneralScalarExpression;
 import org.apache.spark.sql.connector.expressions.Literal;
 
@@ -33,8 +33,8 @@ public class V2ExpressionSQLBuilder {
   public String build(Expression expr) {
     if (expr instanceof Literal) {
       return visitLiteral((Literal) expr);
-    } else if (expr instanceof FieldReference) {
-      return visitFieldReference((FieldReference) expr);
+    } else if (expr instanceof NamedReference) {
+      return visitNamedReference((NamedReference) expr);
     } else if (expr instanceof GeneralScalarExpression) {
       GeneralScalarExpression e = (GeneralScalarExpression) expr;
       String name = e.name();
@@ -53,7 +53,7 @@ public class V2ExpressionSQLBuilder {
         case "CONTAINS":
           return visitStringPredicate(name, build(e.children()[0]), build(e.children()[1]));
         case "=":
-        case "!=":
+        case "<>":
         case "<=>":
         case "<":
         case "<=":
@@ -100,8 +100,8 @@ public class V2ExpressionSQLBuilder {
     return literal.toString();
   }
 
-  protected String visitFieldReference(FieldReference fieldRef) {
-    return fieldRef.toString();
+  protected String visitNamedReference(NamedReference namedRef) {
+    return namedRef.toString();
   }
 
   protected String visitIn(String v, List<String> list) {
@@ -126,8 +126,10 @@ public class V2ExpressionSQLBuilder {
         return l + " LIKE '" + value + "%'";
       case "ENDS_WITH":
         return l + " LIKE '%" + value + "'";
-      default: // "CONTAINS"
+      case "CONTAINS":
         return l + " LIKE '%" + value + "%'";
+      default:
+        throw new IllegalArgumentException("Unexpected V2 string predicate: " + name);
     }
   }
 
