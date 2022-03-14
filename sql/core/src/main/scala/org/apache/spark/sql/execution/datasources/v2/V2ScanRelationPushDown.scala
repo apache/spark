@@ -99,18 +99,17 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
               val aliasAttrToOriginAttr = mutable.HashMap.empty[Expression, AttributeReference]
               val originAttrToAliasAttr = mutable.HashMap.empty[Expression, Attribute]
               collectAliases(project, aliasAttrToOriginAttr, originAttrToAliasAttr)
-              val newResultExpressions = resultExpressions.map { expr =>
-                expr.transform {
-                  case r: AttributeReference if aliasAttrToOriginAttr.contains(r.canonicalized) =>
-                    aliasAttrToOriginAttr(r.canonicalized)
-                }
-              }.asInstanceOf[Seq[NamedExpression]]
-              val newGroupingExpressions = groupingExpressions.map { expr =>
-                expr.transform {
-                  case r: AttributeReference if aliasAttrToOriginAttr.contains(r.canonicalized) =>
-                    aliasAttrToOriginAttr(r.canonicalized)
-                }
+              def replaceAliasWithAttr(expressions: Seq[Expression]): Seq[NamedExpression] = {
+                expressions.map { expr =>
+                  expr.transform {
+                    case r: AttributeReference if aliasAttrToOriginAttr.contains(r.canonicalized) =>
+                      aliasAttrToOriginAttr(r.canonicalized)
+                  }
+                }.asInstanceOf[Seq[NamedExpression]]
               }
+
+              val newResultExpressions = replaceAliasWithAttr(resultExpressions)
+              val newGroupingExpressions = replaceAliasWithAttr(groupingExpressions)
               val aggExprToOutputOrdinal = mutable.HashMap.empty[Expression, Int]
               val aggregates = collectAggregates(newResultExpressions, aggExprToOutputOrdinal)
               val normalizedAggregates = DataSourceStrategy.normalizeExprs(
