@@ -1789,20 +1789,40 @@ class DataFrameTest(ComparisonTestBase, SQLTestUtils):
 
     def test_nlargest(self):
         pdf = pd.DataFrame(
-            {"a": [1, 2, 3, 4, 5, None, 7], "b": [7, 6, 5, 4, 3, 2, 1]}, index=np.random.rand(7)
+            {"a": [1, 2, 3, 4, 5, None, 7], "b": [7, 6, 5, 4, 3, 2, 1], "c": [1, 1, 2, 2, 3, 3, 3]},
+            index=np.random.rand(7),
         )
         psdf = ps.from_pandas(pdf)
         self.assert_eq(psdf.nlargest(n=5, columns="a"), pdf.nlargest(5, columns="a"))
         self.assert_eq(psdf.nlargest(n=5, columns=["a", "b"]), pdf.nlargest(5, columns=["a", "b"]))
+        self.assert_eq(psdf.nlargest(n=5, columns=["c"]), pdf.nlargest(5, columns=["c"]))
+        self.assert_eq(
+            psdf.nlargest(n=5, columns=["c"], keep="first"),
+            pdf.nlargest(5, columns=["c"], keep="first"),
+        )
+        self.assert_eq(
+            psdf.nlargest(n=5, columns=["c"], keep="last"),
+            pdf.nlargest(5, columns=["c"], keep="last"),
+        )
 
     def test_nsmallest(self):
         pdf = pd.DataFrame(
-            {"a": [1, 2, 3, 4, 5, None, 7], "b": [7, 6, 5, 4, 3, 2, 1]}, index=np.random.rand(7)
+            {"a": [1, 2, 3, 4, 5, None, 7], "b": [7, 6, 5, 4, 3, 2, 1], "c": [1, 1, 2, 2, 3, 3, 3]},
+            index=np.random.rand(7),
         )
         psdf = ps.from_pandas(pdf)
         self.assert_eq(psdf.nsmallest(n=5, columns="a"), pdf.nsmallest(5, columns="a"))
         self.assert_eq(
             psdf.nsmallest(n=5, columns=["a", "b"]), pdf.nsmallest(5, columns=["a", "b"])
+        )
+        self.assert_eq(psdf.nsmallest(n=5, columns=["c"]), pdf.nsmallest(5, columns=["c"]))
+        self.assert_eq(
+            psdf.nsmallest(n=5, columns=["c"], keep="first"),
+            pdf.nsmallest(5, columns=["c"], keep="first"),
+        )
+        self.assert_eq(
+            psdf.nsmallest(n=5, columns=["c"], keep="last"),
+            pdf.nsmallest(5, columns=["c"], keep="last"),
         )
 
     def test_xs(self):
