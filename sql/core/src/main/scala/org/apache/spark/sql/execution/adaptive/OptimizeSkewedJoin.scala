@@ -149,24 +149,21 @@ case class OptimizeSkewedJoin(ensureRequirements: EnsureRequirements)
    */
   private def optimizeShuffledJoin(join: ShuffledJoin): SparkPlan = {
     import OptimizeSkewedJoin._
-    val logPrefix = s"Optimizing ${join.nodeName} #${join.id}"
 
     // Step 1: Collect all ShuffledJoins/ShuffleQueryStages, and validate operators.
     val joins = mutable.ArrayBuffer.empty[ShuffledJoin]
     val stages = mutable.ArrayBuffer.empty[ShuffleQueryStageExec]
-    val invalids = mutable.ArrayBuffer.empty[SparkPlan]
 
-    join.foreach {
+    join foreach {
       // All leave must be QueryStage for now
       // TODO: support Bucket Join with other types of leaves.
       case s: ShuffleQueryStageExec if s.isMaterialized => stages.append(s)
-      case b: BroadcastQueryStageExec if b.isMaterialized =>
+      case _: BroadcastQueryStageExec =>
 
       case j: SortMergeJoinExec if !j.isSkewJoin => joins.append(j)
       case j: ShuffledHashJoinExec if !j.isSkewJoin => joins.append(j)
       case _: BroadcastHashJoinExec =>
       case _: BroadcastNestedLoopJoinExec =>
-      case _: CartesianProductExec =>
 
       case a: ObjectHashAggregateExec if !a.isSkew =>
       case a: HashAggregateExec if !a.isSkew =>
@@ -196,13 +193,9 @@ case class OptimizeSkewedJoin(ensureRequirements: EnsureRequirements)
 
       // There are more and more physical operators, this check is for data correctness
       // TODO: support more operators like AggregateInPandasExec/FlatMapCoGroupsInPandasExec/etc
-      case invalid => invalids.append(invalid)
-    }
-
-    if (invalids.nonEmpty) {
-      logDebug(s"$logPrefix: Do NOT support operators " +
-        s"${invalids.map(_.nodeName).mkString("[", ", ", "]")}")
-      return join
+      case invalid =>
+        logDebug(s"Do NOT support operator $invalid")
+        return join
     }
     if (joins.isEmpty || joins.size != stages.size - 1) {
       return join
@@ -218,7 +211,7 @@ case class OptimizeSkewedJoin(ensureRequirements: EnsureRequirements)
       return join
     }
     val stageIds = stageStats.keysIterator.toArray
-    logDebug(s"$logPrefix: ShuffleQueryStages: ${stageIds.mkString("[", ", ", "]")}")
+    logDebug(s"ShuffleQueryStages: ${stageIds.mkString("[", ", ", "]")}")
     val numPartitions = stageStats.head._2.bytesByPartitionId.length
 
     // Step 2: Collect all splittable ShuffleQueryStageExecs
@@ -242,8 +235,7 @@ case class OptimizeSkewedJoin(ensureRequirements: EnsureRequirements)
       case _ => plan.children.flatMap(collectSplittableStageIds)
     }
     val splittableStageIds = collectSplittableStageIds(join)
-    logDebug(s"$logPrefix: Splittable ShuffleQueryStages: " +
-      s"${splittableStageIds.mkString("[", ", ", "]")}")
+    logDebug(s"Splittable ShuffleQueryStages: ${splittableStageIds.mkString("[", ", ", "]")}")
     if (splittableStageIds.isEmpty ||
       !splittableStageIds.forall(stageStats.contains)) {
       return join
@@ -252,10 +244,10 @@ case class OptimizeSkewedJoin(ensureRequirements: EnsureRequirements)
     // Step 3: Precompute skewThreshold and targetSize for each splittable ShuffleQueryStageExec
     val splittableStageInfos = splittableStageIds.map { stageId =>
       val sizes = stageStats(stageId).bytesByPartitionId
-      val medSize = Utils.median(sizes)
+      val medSize = Utils.median(sizes, false)
       val threshold = getSkewThreshold(medSize)
       val target = targetSize(sizes, threshold)
-      logDebug(s"$logPrefix: Analyzing ShuffleQueryStage #$stageId in " +
+      logDebug(s"Analyzing ShuffleQueryStage #$stageId in " +
         s"skew join, size info: ${getSizeInfo(medSize, sizes)}")
       stageId -> (threshold, target)
     }.toMap
@@ -276,8 +268,8 @@ case class OptimizeSkewedJoin(ensureRequirements: EnsureRequirements)
           ShufflePartitionsUtil
             .createSkewPartitionSpecs(stats.shuffleId, partitionIndex, target)
             .foreach { splits =>
-              logDebug(s"$logPrefix: Splitting ShuffleQueryStage #$stageId: " +
-                s"partition $partitionIndex(${FileUtils.byteCountToDisplaySize(size)}) -> " +
+              logDebug(s"Splitting ShuffleQueryStage #$stageId: partition " +
+                s"$partitionIndex(${FileUtils.byteCountToDisplaySize(size)}) -> " +
                 s"${splits.size} splits")
               partSpecs(stageId) = splits
             }
@@ -289,7 +281,7 @@ case class OptimizeSkewedJoin(ensureRequirements: EnsureRequirements)
       if (numCombinations > maxCombinations) {
         val (splitStageIds, numSplits) = partSpecs.mapValues(_.size).toArray.unzip
         val combinedNumSplits = combine(maxCombinations, numSplits)
-        logDebug(s"$logPrefix: partition $partitionIndex: Combinatorial Explosion! " +
+        logDebug(s"partition $partitionIndex: Combinatorial Explosion! " +
           s"Try to combine $numCombinations(${numSplits.mkString("[", ", ", "]")}) " +
           s"to ${safeProduct(combinedNumSplits)}(${combinedNumSplits.mkString("[", ", ", "]")})")
 
@@ -305,8 +297,8 @@ case class OptimizeSkewedJoin(ensureRequirements: EnsureRequirements)
             ShufflePartitionsUtil
               .createSkewPartitionSpecs(stats.shuffleId, partitionIndex, newTarget)
               .foreach { splits =>
-                logDebug(s"$logPrefix: Re-splitting ShuffleQueryStage #$stageId: " +
-                  s"partition $partitionIndex(${FileUtils.byteCountToDisplaySize(size)}) -> " +
+                logDebug(s"Re-splitting ShuffleQueryStage #$stageId: partition " +
+                  s"$partitionIndex(${FileUtils.byteCountToDisplaySize(size)}) -> " +
                   s"${splits.size} splits")
                 partSpecs(stageId) = splits
               }
@@ -316,7 +308,7 @@ case class OptimizeSkewedJoin(ensureRequirements: EnsureRequirements)
       partSpecs.foreach { case (stageId, splits) => skewSpecs((partitionIndex, stageId)) = splits }
     }
     partSpecs.clear()
-    logDebug(s"$logPrefix: Totally ${skewSpecs.size} skew partitions found")
+    logDebug(s"Totally ${skewSpecs.size} skew partitions found")
     if (skewSpecs.isEmpty) return join
 
     // Step 5: Generate final specs
@@ -361,6 +353,7 @@ case class OptimizeSkewedJoin(ensureRequirements: EnsureRequirements)
     }
   }
 
+  // try to optimize at top join in each stage
   private def optimize(plan: SparkPlan): SparkPlan = {
     plan transformDown {
       case join: ShuffledJoin if !join.isSkewJoin => optimizeShuffledJoin(join)
