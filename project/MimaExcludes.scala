@@ -50,7 +50,7 @@ object MimaExcludes {
     ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.sql.jdbc.JdbcConnectionProvider.modifiesSecurityContext"),
 
     // [SPARK-38432][SQL] Reactor framework so as JDBC dialect could compile filter by self way
-    ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.sql.sources.Filter.toV2")
+    ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.sql.sources.Filter.toV2"),
 
     // [SPARK-37780][SQL] QueryExecutionListener support SQLConf as constructor parameter
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.util.ExecutionListenerManager.this"),
