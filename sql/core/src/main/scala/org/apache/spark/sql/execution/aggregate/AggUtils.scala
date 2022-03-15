@@ -147,7 +147,7 @@ object AggUtils {
     // If we have session window expression in aggregation, we add MergingSessionExec to
     // merge sessions with calculating aggregation values.
     val interExec: SparkPlan = mayAppendMergingSessionExec(groupingExpressions,
-      aggregateExpressions, partialAggregate, isStreaming = false)
+      aggregateExpressions, partialAggregate)
 
     // 2. Create an Aggregate Operator for final aggregations.
     val finalAggregateExpressions = aggregateExpressions.map(_.copy(mode = Final))
@@ -179,8 +179,7 @@ object AggUtils {
     // If we have session window expression in aggregation, we add UpdatingSessionsExec to
     // calculate sessions for input rows and update rows' session column, so that further
     // aggregations can aggregate input rows for the same session.
-    val maySessionChild = mayAppendUpdatingSessionExec(groupingExpressions, child,
-      isStreaming = false)
+    val maySessionChild = mayAppendUpdatingSessionExec(groupingExpressions, child)
 
     val distinctAttributes = normalizedNamedDistinctExpressions.map(_.toAttribute)
     val groupingAttributes = groupingExpressions.map(_.toAttribute)
@@ -522,7 +521,7 @@ object AggUtils {
   private def mayAppendUpdatingSessionExec(
       groupingExpressions: Seq[NamedExpression],
       maybeChildPlan: SparkPlan,
-      isStreaming: Boolean): SparkPlan = {
+      isStreaming: Boolean = false): SparkPlan = {
     groupingExpressions.find(_.metadata.contains(SessionWindow.marker)) match {
       case Some(sessionExpression) =>
         UpdatingSessionsExec(
@@ -542,7 +541,7 @@ object AggUtils {
       groupingExpressions: Seq[NamedExpression],
       aggregateExpressions: Seq[AggregateExpression],
       partialAggregate: SparkPlan,
-      isStreaming: Boolean): SparkPlan = {
+      isStreaming: Boolean = false): SparkPlan = {
     groupingExpressions.find(_.metadata.contains(SessionWindow.marker)) match {
       case Some(sessionExpression) =>
         val aggExpressions = aggregateExpressions.map(_.copy(mode = PartialMerge))

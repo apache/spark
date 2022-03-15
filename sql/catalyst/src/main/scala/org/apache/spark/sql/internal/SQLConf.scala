@@ -1776,7 +1776,8 @@ object SQLConf {
   val STATEFUL_OPERATOR_USE_STRICT_DISTRIBUTION =
     buildConf("spark.sql.streaming.statefulOperator.useStrictDistribution")
       .internal()
-      .doc("When true, the stateful operator for streaming query will use " +
+      .doc("The purpose of this config is only compatibility; DO NOT MANUALLY CHANGE THIS!!! " +
+        "When true, the stateful operator for streaming query will use " +
         "StatefulOpClusteredDistribution which guarantees stable state partitioning as long as " +
         "the operator provides consistent grouping keys across the lifetime of query. " +
         "When false, the stateful operator for streaming query will use ClusteredDistribution " +
@@ -1784,8 +1785,7 @@ object SQLConf {
         "provides consistent grouping keys across the lifetime of query. " +
         "This config will be set to true for new streaming queries to guarantee stable state " +
         "partitioning, and set to false for existing streaming queries to not break queries " +
-        "which are restored from existing checkpoints. Please refer SPARK-38204 for details. " +
-        "The purpose of this config is only compatibility; DO NOT MANUALLY CHANGE THIS!!!")
+        "which are restored from existing checkpoints. Please refer SPARK-38204 for details.")
       .version("3.3.0")
       .booleanConf
       .createWithDefault(true)

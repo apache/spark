@@ -29,7 +29,7 @@ import org.apache.spark.sql.internal.SQLConf.STATEFUL_OPERATOR_USE_STRICT_DISTRI
  * for details.
  *
  * Do not use methods in this object for stateful operators which already uses
- * StatefulOpClusteredDistribution as its required child distribution.
+ * [[StatefulOpClusteredDistribution]] as its required child distribution.
  */
 object StatefulOperatorPartitioning {
 
