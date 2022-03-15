@@ -296,7 +296,7 @@ class PartitionProviderCompatibilitySuite
             .write.partitionBy("A", "B").mode("overwrite")
             .saveAsTable("test")
           spark.sql("insert overwrite table test select id, id, 'x' from range(1)")
-          assert(spark.sql("select * from test").count() == 1)
+          assert(spark.sql("select * from test").count() == {if (enabled) 10 else 1})
 
           spark.range(10)
             .selectExpr("id", "id as A", "'x' as B")
@@ -304,7 +304,7 @@ class PartitionProviderCompatibilitySuite
             .saveAsTable("test")
           spark.sql(
             "insert overwrite table test partition (A, B) select id, id, 'x' from range(1)")
-          assert(spark.sql("select * from test").count() == 1)
+          assert(spark.sql("select * from test").count() == {if (enabled) 10 else 1})
         }
       }
     }
@@ -455,20 +455,20 @@ class PartitionProviderCompatibilitySuite
       assert(spark.sql("select * from test").count() == 10)
       assert(spark.sql("show partitions test").count() == 12)
       spark.sql("insert overwrite table test partition (P1=0, P2) select id, id from range(5)")
-      assert(spark.sql("select * from test").count() == 5)
-      assert(spark.sql("show partitions test").count() == 7)
+      assert(spark.sql("select * from test").count() == 10)
+      assert(spark.sql("show partitions test").count() == 12)
       spark.sql("insert overwrite table test partition (P1=0, P2) select id, id from range(1)")
-      assert(spark.sql("select * from test").count() == 1)
-      assert(spark.sql("show partitions test").count() == 3)
+      assert(spark.sql("select * from test").count() == 10)
+      assert(spark.sql("show partitions test").count() == 12)
       spark.sql("insert overwrite table test partition (P1=1, P2) select id, id from range(10)")
-      assert(spark.sql("select * from test").count() == 11)
-      assert(spark.sql("show partitions test").count() == 11)
+      assert(spark.sql("select * from test").count() == 20)
+      assert(spark.sql("show partitions test").count() == 20)
       spark.sql("insert overwrite table test partition (P1=1, P2) select id, id from range(1)")
-      assert(spark.sql("select * from test").count() == 2)
-      assert(spark.sql("show partitions test").count() == 2)
+      assert(spark.sql("select * from test").count() == 20)
+      assert(spark.sql("show partitions test").count() == 20)
       spark.sql("insert overwrite table test partition (P1=3, P2) select id, id from range(100)")
-      assert(spark.sql("select * from test").count() == 102)
-      assert(spark.sql("show partitions test").count() == 102)
+      assert(spark.sql("select * from test").count() == 120)
+      assert(spark.sql("show partitions test").count() == 120)
     }
   }
 
@@ -476,10 +476,10 @@ class PartitionProviderCompatibilitySuite
     testCustomLocations {
       spark.sql("insert overwrite table test partition (P1, P2) select id, id, id from range(10)")
       assert(spark.sql("select * from test").count() == 10)
-      assert(spark.sql("show partitions test").count() == 10)
+      assert(spark.sql("show partitions test").count() == 12)
       spark.sql("insert overwrite table test partition (P1, P2) select id, id, id from range(5)")
-      assert(spark.sql("select * from test").count() == 5)
-      assert(spark.sql("show partitions test").count() == 5)
+      assert(spark.sql("select * from test").count() == 10)
+      assert(spark.sql("show partitions test").count() == 12)
     }
   }
 

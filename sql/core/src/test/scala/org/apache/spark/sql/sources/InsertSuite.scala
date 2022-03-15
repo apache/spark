@@ -309,8 +309,8 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
             val message = intercept[AnalysisException] {
               sql(
                 """
-                  |INSERT OVERWRITE TABLE insertTable PARTITION(part1=1, part2)
-                  |SELECT i + 1, part2 FROM insertTable
+                  |INSERT OVERWRITE TABLE insertTable PARTITION(part1=1, part2=1)
+                  |SELECT i + 1 FROM insertTable
                 """.stripMargin)
             }.getMessage
             assert(
@@ -979,7 +979,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
         checkAnswer(spark.table("t"), Row(2, 1, 1) :: Row(2, 2, 2) :: Row(3, 1, 2) :: Nil)
 
         sql("insert overwrite table t partition(part1=1, part2) select 4, 1")
-        checkAnswer(spark.table("t"), Row(4, 1, 1) :: Row(2, 2, 2) :: Nil)
+        checkAnswer(spark.table("t"), Row(4, 1, 1) :: Row(2, 2, 2) :: Row(3, 1, 2) :: Nil)
       }
     }
   }
