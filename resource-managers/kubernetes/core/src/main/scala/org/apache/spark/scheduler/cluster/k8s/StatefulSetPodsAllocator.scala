@@ -34,7 +34,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.util.{Clock, Utils}
 
-class StatefulsetPodsAllocator(
+class StatefulSetPodsAllocator(
     conf: SparkConf,
     secMgr: SecurityManager,
     executorBuilder: KubernetesExecutorBuilder,

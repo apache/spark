@@ -836,9 +836,10 @@ class FileBasedDataSourceSuite extends QueryTest
           }
           assert(filterCondition.isDefined)
           // The partitions filters should be pushed down and no need to be reevaluated.
-          assert(filterCondition.get.collectFirst {
-            case a: AttributeReference if a.name == "p1" || a.name == "p2" => a
-          }.isEmpty)
+          assert(!filterCondition.get.exists {
+            case a: AttributeReference => a.name == "p1" || a.name == "p2"
+            case _ => false
+          })
 
           val fileScan = df.queryExecution.executedPlan collectFirst {
             case BatchScanExec(_, f: FileScan, _) => f

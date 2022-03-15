@@ -86,7 +86,9 @@ class DataFrameSuite extends QueryTest
 
   test("access complex data") {
     assert(complexData.filter(complexData("a").getItem(0) === 2).count() == 1)
-    assert(complexData.filter(complexData("m").getItem("1") === 1).count() == 1)
+    if (!conf.ansiEnabled) {
+      assert(complexData.filter(complexData("m").getItem("1") === 1).count() == 1)
+    }
     assert(complexData.filter(complexData("s").getField("key") === 1).count() == 1)
   }
 
@@ -1563,7 +1565,9 @@ class DataFrameSuite extends QueryTest
 
   test("SPARK-7133: Implement struct, array, and map field accessor") {
     assert(complexData.filter(complexData("a")(0) === 2).count() == 1)
-    assert(complexData.filter(complexData("m")("1") === 1).count() == 1)
+    if (!conf.ansiEnabled) {
+      assert(complexData.filter(complexData("m")("1") === 1).count() == 1)
+    }
     assert(complexData.filter(complexData("s")("key") === 1).count() == 1)
     assert(complexData.filter(complexData("m")(complexData("s")("value")) === 1).count() == 1)
     assert(complexData.filter(complexData("a")(complexData("s")("key")) === 1).count() == 1)
@@ -2458,8 +2462,10 @@ class DataFrameSuite extends QueryTest
       val aggPlusSort2 = df.groupBy(col("name")).agg(count(col("name"))).orderBy(col("name"))
       checkAnswer(aggPlusSort1, aggPlusSort2.collect())
 
-      val aggPlusFilter1 = df.groupBy(df("name")).agg(count(df("name"))).filter(df("name") === 0)
-      val aggPlusFilter2 = df.groupBy(col("name")).agg(count(col("name"))).filter(col("name") === 0)
+      val aggPlusFilter1 =
+        df.groupBy(df("name")).agg(count(df("name"))).filter(df("name") === "test1")
+      val aggPlusFilter2 =
+        df.groupBy(col("name")).agg(count(col("name"))).filter(col("name") === "test1")
       checkAnswer(aggPlusFilter1, aggPlusFilter2.collect())
     }
   }
@@ -3125,6 +3131,69 @@ class DataFrameSuite extends QueryTest
 
       val df = sql("SELECT eo.b.e FROM (SELECT explode(o) AS eo FROM v1)")
       checkAnswer(df, Row(Seq("string2")) :: Row(Seq("string5")) :: Nil)
+    }
+  }
+
+  test("SPARK-37865: Do not deduplicate union output columns") {
+    val df1 = Seq((1, 1), (1, 2)).toDF("a", "b")
+    val df2 = Seq((2, 2), (2, 3)).toDF("c", "d")
+
+    def sqlQuery(cols1: Seq[String], cols2: Seq[String], distinct: Boolean): String = {
+      val union = if (distinct) {
+        "UNION"
+      } else {
+        "UNION ALL"
+      }
+      s"""
+         |SELECT ${cols1.mkString(",")} FROM VALUES (1, 1), (1, 2) AS t1(a, b)
+         |$union SELECT ${cols2.mkString(",")} FROM VALUES (2, 2), (2, 3) AS t2(c, d)
+         |""".stripMargin
+    }
+
+    Seq(
+      (Seq("a", "a"), Seq("c", "d"), Seq(Row(1, 1), Row(1, 1), Row(2, 2), Row(2, 3))),
+      (Seq("a", "b"), Seq("c", "d"), Seq(Row(1, 1), Row(1, 2), Row(2, 2), Row(2, 3))),
+      (Seq("a", "b"), Seq("c", "c"), Seq(Row(1, 1), Row(1, 2), Row(2, 2), Row(2, 2)))
+    ).foreach { case (cols1, cols2, rows) =>
+      // UNION ALL (non-distinct)
+      val df3 = df1.selectExpr(cols1: _*).union(df2.selectExpr(cols2: _*))
+      checkAnswer(df3, rows)
+
+      val t3 = sqlQuery(cols1, cols2, false)
+      checkAnswer(sql(t3), rows)
+
+      // Avoid breaking change
+      var correctAnswer = rows.map(r => Row(r(0)))
+      checkAnswer(df3.select(df1.col("a")), correctAnswer)
+      checkAnswer(sql(s"select a from ($t3) t3"), correctAnswer)
+
+      // This has always been broken
+      intercept[AnalysisException] {
+        df3.select(df2.col("d")).collect()
+      }
+      intercept[AnalysisException] {
+        sql(s"select d from ($t3) t3")
+      }
+
+      // UNION (distinct)
+      val df4 = df3.distinct
+      checkAnswer(df4, rows.distinct)
+
+      val t4 = sqlQuery(cols1, cols2, true)
+      checkAnswer(sql(t4), rows.distinct)
+
+      // Avoid breaking change
+      correctAnswer = rows.distinct.map(r => Row(r(0)))
+      checkAnswer(df4.select(df1.col("a")), correctAnswer)
+      checkAnswer(sql(s"select a from ($t4) t4"), correctAnswer)
+
+      // This has always been broken
+      intercept[AnalysisException] {
+        df4.select(df2.col("d")).collect()
+      }
+      intercept[AnalysisException] {
+        sql(s"select d from ($t4) t4")
+      }
     }
   }
 }

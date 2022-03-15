@@ -37,7 +37,10 @@ import org.apache.spark.sql.types.{AbstractDataType, NumericType}
   group = "agg_funcs",
   since = "3.3.0")
 case class RegrCount(left: Expression, right: Expression)
-  extends RuntimeReplaceableAggregate with ImplicitCastInputTypes with BinaryLike[Expression] {
+  extends AggregateFunction
+  with RuntimeReplaceableAggregate
+  with ImplicitCastInputTypes
+  with BinaryLike[Expression] {
   override lazy val replacement: Expression = Count(Seq(left, right))
   override def nodeName: String = "regr_count"
   override def inputTypes: Seq[AbstractDataType] = Seq(NumericType, NumericType)
@@ -65,8 +68,13 @@ case class RegrCount(left: Expression, right: Expression)
   group = "agg_funcs",
   since = "3.3.0")
 // scalastyle:on line.size.limit
-case class RegrAvgX(left: Expression, right: Expression)
-  extends RuntimeReplaceableAggregate with ImplicitCastInputTypes with BinaryLike[Expression] {
+case class RegrAvgX(
+    left: Expression,
+    right: Expression)
+  extends AggregateFunction
+  with RuntimeReplaceableAggregate
+  with ImplicitCastInputTypes
+  with BinaryLike[Expression] {
   override lazy val replacement: Expression =
     Average(If(And(IsNotNull(left), IsNotNull(right)), right, Literal.create(null, right.dataType)))
   override def nodeName: String = "regr_avgx"
@@ -95,8 +103,13 @@ case class RegrAvgX(left: Expression, right: Expression)
   group = "agg_funcs",
   since = "3.3.0")
 // scalastyle:on line.size.limit
-case class RegrAvgY(left: Expression, right: Expression)
-  extends RuntimeReplaceableAggregate with ImplicitCastInputTypes with BinaryLike[Expression] {
+case class RegrAvgY(
+    left: Expression,
+    right: Expression)
+  extends AggregateFunction
+  with RuntimeReplaceableAggregate
+  with ImplicitCastInputTypes
+  with BinaryLike[Expression] {
   override lazy val replacement: Expression =
     Average(If(And(IsNotNull(left), IsNotNull(right)), left, Literal.create(null, left.dataType)))
   override def nodeName: String = "regr_avgy"

@@ -683,6 +683,41 @@ class AdaptiveQueryExecSuite
       }
     }
   }
+  test("SPARK-37753: Allow changing outer join to broadcast join even if too many empty" +
+    " partitions on broadcast side") {
+    withSQLConf(
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+      SQLConf.NON_EMPTY_PARTITION_RATIO_FOR_BROADCAST_JOIN.key -> "0.5") {
+      // `testData` is small enough to be broadcast but has empty partition ratio over the config.
+      withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "80") {
+        val (plan, adaptivePlan) = runAdaptiveAndVerifyResult(
+          "SELECT * FROM (select * from testData where value = '1') td" +
+            " right outer join testData2 ON key = a")
+        val smj = findTopLevelSortMergeJoin(plan)
+        assert(smj.size == 1)
+        val bhj = findTopLevelBroadcastHashJoin(adaptivePlan)
+        assert(bhj.size == 1)
+      }
+    }
+  }
+
+  test("SPARK-37753: Inhibit broadcast in left outer join when there are many empty" +
+    " partitions on outer/left side") {
+    withSQLConf(
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+      SQLConf.NON_EMPTY_PARTITION_RATIO_FOR_BROADCAST_JOIN.key -> "0.5") {
+      // `testData` is small enough to be broadcast but has empty partition ratio over the config.
+      withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "200") {
+        val (plan, adaptivePlan) = runAdaptiveAndVerifyResult(
+          "SELECT * FROM (select * from testData where value = '1') td" +
+            " left outer join testData2 ON key = a")
+        val smj = findTopLevelSortMergeJoin(plan)
+        assert(smj.size == 1)
+        val bhj = findTopLevelBroadcastHashJoin(adaptivePlan)
+        assert(bhj.isEmpty)
+      }
+    }
+  }
 
   test("SPARK-29906: AQE should not introduce extra shuffle for outermost limit") {
     var numStages = 0
@@ -1648,7 +1683,7 @@ class AdaptiveQueryExecSuite
           |  SELECT * FROM testData WHERE key = 1
           |)
           |RIGHT OUTER JOIN testData2
-          |ON value = b
+          |ON CAST(value AS INT) = b
         """.stripMargin)
 
       withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "80") {

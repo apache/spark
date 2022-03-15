@@ -2051,13 +2051,19 @@ test_that("date functions on a DataFrame", {
 })
 
 test_that("SPARK-37108: expose make_date expression in R", {
+  ansiEnabled <- sparkR.conf("spark.sql.ansi.enabled")[[1]] == "true"
   df <- createDataFrame(
-    list(list(2021, 10, 22), list(2021, 13, 1),
-         list(2021, 2, 29), list(2020, 2, 29)),
+    c(
+      list(list(2021, 10, 22), list(2020, 2, 29)),
+      if (ansiEnabled) list() else list(list(2021, 13, 1), list(2021, 2, 29))
+    ),
     list("year", "month", "day")
   )
   expect <- createDataFrame(
-    list(list(as.Date("2021-10-22")), NA, NA, list(as.Date("2020-02-29"))),
+    c(
+      list(list(as.Date("2021-10-22")), list(as.Date("2020-02-29"))),
+      if (ansiEnabled) list() else list(NA, NA)
+    ),
     list("make_date(year, month, day)")
   )
   actual <- select(df, make_date(df$year, df$month, df$day))

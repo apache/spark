@@ -169,7 +169,7 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
       return None
     }
     val constraintTerm = constraintTerms.head
-    if (constraintTerm.collectFirst { case u: UnaryMinus => u }.isEmpty) {
+    if (!constraintTerm.exists(_.isInstanceOf[UnaryMinus])) {
       // Incorrect condition. We want the constraint term in canonical form to be `-leftTime`
       // so that resolve for it as `-leftTime + watermark + c < 0` ==> `watermark + c < leftTime`.
       // Now, if the original conditions is `rightTime-with-watermark > leftTime` and watermark
