@@ -63,7 +63,7 @@ case class BloomFilterMightContain(
         TypeCheckResult.TypeCheckSuccess
       case _ =>
         TypeCheckResult.TypeCheckFailure(s"The Bloom filter binary input to $prettyName " +
-          s"should be either a constant value or a scalar subquery expression")
+          "should be either a constant value or a scalar subquery expression")
     }
   }
 
