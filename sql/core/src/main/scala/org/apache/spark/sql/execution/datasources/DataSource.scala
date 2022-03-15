@@ -48,6 +48,7 @@ import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.sources.{RateStreamProvider, TextSocketSourceProvider}
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.SQLConf.PartitionOverwriteMode
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.types.{DataType, StructField, StructType}
@@ -383,13 +384,21 @@ case class DataSource(
             format.toString, fileCatalog.allFiles().mkString(","))
         }
 
+        val options = if (catalogTable.isDefined &&
+          catalogTable.get.partitionColumnNames.nonEmpty &&
+          catalogTable.get.tracksPartitionsInCatalog) {
+          caseInsensitiveOptions +
+            (DataSourceUtils.PARTITION_OVERWRITE_MODE -> PartitionOverwriteMode.DYNAMIC.toString)
+        } else {
+          caseInsensitiveOptions
+        }
         HadoopFsRelation(
           fileCatalog,
           partitionSchema = fileCatalog.partitionSchema,
           dataSchema = dataSchema,
           bucketSpec = None,
           format,
-          caseInsensitiveOptions)(sparkSession)
+          options)(sparkSession)
 
       // This is a non-streaming file based datasource.
       case (format: FileFormat, _) =>
@@ -412,13 +421,21 @@ case class DataSource(
           (index, resultDataSchema, resultPartitionSchema)
         }
 
+        val options = if (catalogTable.isDefined &&
+          catalogTable.get.partitionColumnNames.nonEmpty &&
+          catalogTable.get.tracksPartitionsInCatalog) {
+          caseInsensitiveOptions +
+            (DataSourceUtils.PARTITION_OVERWRITE_MODE -> PartitionOverwriteMode.DYNAMIC.toString)
+        } else {
+          caseInsensitiveOptions
+        }
         HadoopFsRelation(
           fileCatalog,
           partitionSchema = partitionSchema,
           dataSchema = dataSchema.asNullable,
           bucketSpec = bucketSpec,
           format,
-          caseInsensitiveOptions)(sparkSession)
+          options)(sparkSession)
 
       case _ =>
         throw QueryCompilationErrors.invalidDataSourceError(className)
