@@ -263,5 +263,4 @@ object DefaultColumns {
     }
     insert.copy(query = newQuery)
   }
-
 }
