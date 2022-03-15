@@ -22,13 +22,11 @@ from typing import (
     List,
     Optional,
     Tuple,
-    TypeVar,
     Union,
     TYPE_CHECKING,
 )
 
 from pyspark import keyword_only, since, SparkContext
-from pyspark.ml._typing import P, JM
 from pyspark.ml.linalg import _convert_to_vector, DenseMatrix, DenseVector, Vector
 from pyspark.sql.dataframe import DataFrame
 from pyspark.ml.param.shared import (
@@ -56,6 +54,7 @@ from pyspark.ml.common import inherit_doc
 
 if TYPE_CHECKING:
     from py4j.java_gateway import JavaObject  # type: ignore[import]
+    from pyspark.ml._typing import P, JM
 
 __all__ = [
     "Binarizer",
