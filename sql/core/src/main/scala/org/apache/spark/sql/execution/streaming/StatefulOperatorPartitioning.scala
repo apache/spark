@@ -33,14 +33,14 @@ import org.apache.spark.sql.internal.SQLConf.STATEFUL_OPERATOR_USE_STRICT_DISTRI
  */
 object StatefulOperatorPartitioning {
 
-  def getClusteredDistributionWithBackwardCompatibility(
+  def getCompatibleDistribution(
       expressions: Seq[Expression],
       stateInfo: StatefulOperatorStateInfo,
       conf: SQLConf): Distribution = {
-    getClusteredDistributionWithBackwardCompatibility(expressions, stateInfo.numPartitions, conf)
+    getCompatibleDistribution(expressions, stateInfo.numPartitions, conf)
   }
 
-  def getClusteredDistributionWithBackwardCompatibility(
+  def getCompatibleDistribution(
       expressions: Seq[Expression],
       numPartitions: Int,
       conf: SQLConf): Distribution = {

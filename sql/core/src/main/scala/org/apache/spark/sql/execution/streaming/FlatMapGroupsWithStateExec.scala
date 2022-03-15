@@ -93,9 +93,9 @@ case class FlatMapGroupsWithStateExec(
    * to have the same grouping so that the data are co-lacated on the same task.
    */
   override def requiredChildDistribution: Seq[Distribution] = {
-    StatefulOperatorPartitioning.getClusteredDistributionWithBackwardCompatibility(
+    StatefulOperatorPartitioning.getCompatibleDistribution(
       groupingAttributes, getStateInfo, conf) ::
-    StatefulOperatorPartitioning.getClusteredDistributionWithBackwardCompatibility(
+    StatefulOperatorPartitioning.getCompatibleDistribution(
       initialStateGroupAttrs, getStateInfo, conf) ::
       Nil
   }

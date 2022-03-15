@@ -337,7 +337,7 @@ case class StateStoreRestoreExec(
     if (keyExpressions.isEmpty) {
       AllTuples :: Nil
     } else {
-      StatefulOperatorPartitioning.getClusteredDistributionWithBackwardCompatibility(
+      StatefulOperatorPartitioning.getCompatibleDistribution(
         keyExpressions, getStateInfo, conf) :: Nil
     }
   }
@@ -497,7 +497,7 @@ case class StateStoreSaveExec(
     if (keyExpressions.isEmpty) {
       AllTuples :: Nil
     } else {
-      StatefulOperatorPartitioning.getClusteredDistributionWithBackwardCompatibility(
+      StatefulOperatorPartitioning.getCompatibleDistribution(
         keyExpressions, getStateInfo, conf) :: Nil
     }
   }
@@ -575,7 +575,7 @@ case class SessionWindowStateStoreRestoreExec(
   }
 
   override def requiredChildDistribution: Seq[Distribution] = {
-    StatefulOperatorPartitioning.getClusteredDistributionWithBackwardCompatibility(
+    StatefulOperatorPartitioning.getCompatibleDistribution(
       keyWithoutSessionExpressions, getStateInfo, conf) :: Nil
   }
 
@@ -687,7 +687,7 @@ case class SessionWindowStateStoreSaveExec(
   override def outputPartitioning: Partitioning = child.outputPartitioning
 
   override def requiredChildDistribution: Seq[Distribution] = {
-    StatefulOperatorPartitioning.getClusteredDistributionWithBackwardCompatibility(
+    StatefulOperatorPartitioning.getCompatibleDistribution(
       keyWithoutSessionExpressions, getStateInfo, conf) :: Nil
   }
 
@@ -746,7 +746,7 @@ case class StreamingDeduplicateExec(
 
   /** Distribute by grouping attributes */
   override def requiredChildDistribution: Seq[Distribution] = {
-    StatefulOperatorPartitioning.getClusteredDistributionWithBackwardCompatibility(
+    StatefulOperatorPartitioning.getCompatibleDistribution(
       keyExpressions, getStateInfo, conf) :: Nil
   }
 

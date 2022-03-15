@@ -69,7 +69,7 @@ case class UpdatingSessionsExec(
       if (isStreaming) {
         numShufflePartitions match {
           case Some(parts) =>
-            StatefulOperatorPartitioning.getClusteredDistributionWithBackwardCompatibility(
+            StatefulOperatorPartitioning.getCompatibleDistribution(
               groupingWithoutSessionExpression, parts, conf) :: Nil
 
           case _ =>

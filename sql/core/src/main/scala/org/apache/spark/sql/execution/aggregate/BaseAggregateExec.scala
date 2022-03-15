@@ -99,7 +99,7 @@ trait BaseAggregateExec extends UnaryExecNode with AliasAwareOutputPartitioning 
         if (isStreaming) {
           numShufflePartitions match {
             case Some(parts) =>
-              StatefulOperatorPartitioning.getClusteredDistributionWithBackwardCompatibility(
+              StatefulOperatorPartitioning.getCompatibleDistribution(
                 exprs, parts, conf) :: Nil
 
             case _ =>
