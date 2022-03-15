@@ -55,7 +55,7 @@ from pyspark.pandas.spark.accessors import (
 )
 from pyspark.pandas.strings import StringMethods
 from pyspark.pandas.window import Expanding, ExpandingGroupby, Rolling, RollingGroupby
-from pyspark.util import _attach
+from pyspark.instrumentation_utils import _attach
 
 
 def attach(logger_module: Union[str, ModuleType]) -> None:
