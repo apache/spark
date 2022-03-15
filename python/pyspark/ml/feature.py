@@ -22,8 +22,9 @@ from typing import (
     List,
     Optional,
     Tuple,
+    TypeVar,
     Union,
-    TYPE_CHECKING, TypeVar,
+    TYPE_CHECKING,
 )
 
 from pyspark import keyword_only, since, SparkContext
