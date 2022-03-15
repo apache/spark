@@ -26,7 +26,9 @@ import org.apache.hadoop.fs.{FileAlreadyExistsException, FSDataOutputStream, Pat
 import org.apache.spark.SparkException
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.analysis.DefaultColumns
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType}
+import org.apache.spark.sql.catalyst.expressions.GenericRowWithSchema
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.PartitionOverwriteMode
@@ -843,6 +845,147 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
         sql("INSERT INTO TABLE test_table SELECT 2, null")
       }.getMessage
       assert(msg.contains("Cannot write nullable values to non-null column 's'"))
+    }
+  }
+
+  test("INSERT INTO statements with tables with default columns") {
+    // For each of these cases, the test table 't' has two columns:
+    // (1) name 'i' with boolean type and no default value
+    // (2) name 's' with long integer type and a default value of 42L.
+    //
+    // Positive tests:
+    // The default value parses correctly the the provided and expected types are equal.
+    sql("drop table if exists t")
+    withTable("t") {
+      sql("create table t(i boolean, s bigint default 42L) using parquet")
+      sql("insert into t values(true, 2L)")
+      checkAnswer(sql("select s from t where i = true"), Seq(2L).map(i => Row(i)))
+      sql("insert into t values(false)")
+      checkAnswer(sql("select s from t where i = false"), Seq(42L).map(i => Row(i)))
+    }
+    // The default value parses correctly and the provided value type is different but coercible.
+    withTable("t") {
+      sql("create table t(i boolean, s bigint default 42) using parquet")
+      sql("insert into t values(false)")
+      checkAnswer(sql("select s from t where i = false"), Seq(42L).map(i => Row(i)))
+    }
+    // The default value parses correctly as a constant but non-literal expression.
+    withTable("t") {
+      sql("create table t(i boolean, s bigint default 41 + 1) using parquet")
+      sql("insert into t values(false)")
+      checkAnswer(sql("select s from t where i = false"), Seq(42L).map(i => Row(i)))
+    }
+    // There is an explicit default value provided in the INSERT INTO statement as an inline table.
+    withTable("t") {
+      sql("create table t(i boolean, s bigint default 42) using parquet")
+      sql("insert into t values(false, default)")
+      checkAnswer(sql("select s from t where i = false"), Seq(42L).map(i => Row(i)))
+    }
+    // There is an explicit default value provided in the INSERT INTO statement as a SELECT.
+    withTable("t") {
+      sql("create table t(i boolean, s bigint default 42) using parquet")
+      sql("insert into t select false, default")
+      checkAnswer(sql("select s from t where i = false"), Seq(42L).map(i => Row(i)))
+    }
+    // The explicit default value arrives first before the other value.
+    withTable("t") {
+      sql("create table t(i boolean default false, s bigint) using parquet")
+      sql("insert into t select default, 43")
+      checkAnswer(sql("select s from t where i = false"), Seq(43L).map(i => Row(i)))
+    }
+    // The 'create table' statement provides the default parameter first.
+    withTable("t") {
+      sql("create table t(i boolean default false, s bigint) using parquet")
+      sql("insert into t select default, 43")
+      checkAnswer(sql("select s from t where i = false"), Seq(43L).map(i => Row(i)))
+    }
+    // There are three column types exercising various combinations of implicit and explicit
+    // default column value references in the 'insert into' statements.
+    withTable("t1", "t2") {
+      sql("create table t1(j int, s bigint default 42, x bigint default 43) using parquet")
+      sql("insert into t1 values(1)")
+      sql("insert into t1 values(2, default)")
+      sql("insert into t1 values(3, default, default)")
+      sql("insert into t1 values(4, 44)")
+      sql("insert into t1 values(5, 44, 45)")
+      sql("create table t2(j int, s bigint default 42, x bigint default 43) using parquet")
+      sql("insert into t2 select j from t1 where j = 1")
+      sql("insert into t2 select j, default from t1 where j = 2")
+      sql("insert into t2 select j, default, default from t1 where j = 3")
+      sql("insert into t2 select j, s from t1 where j = 4")
+      sql("insert into t2 select j, s, default from t1 where j = 5")
+      val resultSchema = new StructType()
+        .add("s", LongType, false)
+        .add("x", LongType, false)
+      checkAnswer(sql("select j, s, x from t2 order by j, s, x"),
+        Seq(
+          new GenericRowWithSchema(Array(1, 42L, 43L), resultSchema),
+          new GenericRowWithSchema(Array(2, 42L, 43L), resultSchema),
+          new GenericRowWithSchema(Array(3, 42L, 43L), resultSchema),
+          new GenericRowWithSchema(Array(4, 44L, 43L), resultSchema),
+          new GenericRowWithSchema(Array(5, 44L, 43L), resultSchema)))
+    }
+
+    // Negative tests:
+    // The default value fails to analyze.
+    withTable("t") {
+      assert(intercept[AnalysisException] {
+        sql("create table t(i boolean, s bigint default badvalue) using parquet")
+      }.getMessage.contains(DefaultColumns.analysisPrefix))
+    }
+    // The default value analyzes to a table not in the catalog.
+    withTable("t") {
+      assert(intercept[AnalysisException] {
+        sql("create table t(i boolean, s bigint default (select min(x) from badtable)) " +
+          "using parquet")
+      }.getMessage.contains(DefaultColumns.analysisPrefix))
+    }
+    // The default value parses but refers to a table from the catalog.
+    withTable("t", "other") {
+      sql("create table other(x string) using parquet")
+      assert(intercept[AnalysisException] {
+        sql("create table t(i boolean, s bigint default (select min(x) from other)) using parquet")
+      }.getMessage.contains(DefaultColumns.analysisPrefix))
+    }
+    // The default value has an explicit alias.
+    withTable("t") {
+      assert(intercept[AnalysisException] {
+        sql("create table t(i boolean default (select false as alias), s bigint) using parquet")
+      }.getMessage.contains(DefaultColumns.analysisPrefix))
+    }
+    // Explicit default values may not participate in complex expressions in the VALUES list.
+    withTable("t") {
+      sql("create table t(i boolean, s bigint default 42) using parquet")
+      assert(intercept[AnalysisException] {
+        sql("insert into t values(false, default + 1)")
+      }.getMessage.contains(DefaultColumns.columnDefaultNotFound))
+    }
+    // The explicit default value is provided in the wrong order (first instead of second).
+    withTable("t") {
+      sql("create table t(i boolean, s bigint default 42) using parquet")
+      assert(intercept[AnalysisException] {
+        sql("insert into t select default, 43")
+      }.getMessage.contains(DefaultColumns.columnDefaultNotFound))
+    }
+    // Explicit default values have a reasonable error path if the table is not found.
+    withTable("t") {
+      assert(intercept[AnalysisException] {
+        sql("insert into t values(false, default)")
+      }.getMessage.contains(DefaultColumns.columnDefaultNotFound))
+    }
+    // Explicit default values may not participate in complex expressions in the SELECT query.
+    withTable("t") {
+      sql("create table t(i boolean, s bigint default 42) using parquet")
+      assert(intercept[AnalysisException] {
+        sql("insert into t select false, default + 1")
+      }.getMessage.contains(DefaultColumns.columnDefaultNotFound))
+    }
+    // The default value parses but the type is not coercible.
+    withTable("t") {
+      sql("create table t(i boolean, s bigint default false) using parquet")
+      assert(intercept[AnalysisException] {
+        sql("insert into t values (true)")
+      }.getMessage.contains("provided a value of incompatible type"))
     }
   }
 

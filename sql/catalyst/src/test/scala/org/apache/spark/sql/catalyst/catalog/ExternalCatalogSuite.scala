@@ -1025,16 +1025,27 @@ abstract class CatalogTestUtils {
 
   def newTable(name: String, db: String): CatalogTable = newTable(name, Some(db))
 
-  def newTable(name: String, database: Option[String] = None): CatalogTable = {
+  def newTable(name: String, database: Option[String] = None,
+               defaultColumns: Boolean = false): CatalogTable = {
     CatalogTable(
       identifier = TableIdentifier(name, database),
       tableType = CatalogTableType.EXTERNAL,
       storage = storageFormat.copy(locationUri = Some(Utils.createTempDir().toURI)),
-      schema = new StructType()
-        .add("col1", "int")
-        .add("col2", "string")
-        .add("a", "int")
-        .add("b", "string"),
+      schema = if (defaultColumns) {
+        new StructType()
+          .add("col1", "int")
+          .add("col2", "string")
+          .add("a", IntegerType, nullable = true,
+            new MetadataBuilder().putString("default", "42").build())
+          .add("b", StringType, nullable = false,
+            new MetadataBuilder().putString("default", "\"abc\"").build())
+      } else {
+        new StructType()
+          .add("col1", "int")
+          .add("col2", "string")
+          .add("a", "int")
+          .add("b", "string")
+      },
       provider = Some(defaultProvider),
       partitionColumnNames = Seq("a", "b"),
       bucketSpec = Some(BucketSpec(4, Seq("col1"), Nil)))

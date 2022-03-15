@@ -120,6 +120,30 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
     assert(e.contains(s"`$name` is not a valid name for tables/databases."))
   }
 
+  test("create table with default columns") {
+    withBasicCatalog { catalog =>
+      assert(catalog.externalCatalog.listTables("db1").isEmpty)
+      assert(catalog.externalCatalog.listTables("db2").toSet == Set("tbl1", "tbl2"))
+      catalog.createTable(newTable(
+        "tbl3", Some("db1"), defaultColumns = true), ignoreIfExists = false)
+      catalog.createTable(newTable(
+        "tbl3", Some("db2"), defaultColumns = true), ignoreIfExists = false)
+      assert(catalog.externalCatalog.listTables("db1").toSet == Set("tbl3"))
+      assert(catalog.externalCatalog.listTables("db2").toSet == Set("tbl1", "tbl2", "tbl3"))
+      // Inspect the default column values.
+      val db1tbl3 = catalog.externalCatalog.getTable("db1", "tbl3")
+      val db2tbl3 = catalog.externalCatalog.getTable("db2", "tbl3")
+      assert(db1tbl3.schema.fields(db1tbl3.schema.fields.size - 2)
+        .metadata.getString("default") == "42")
+      assert(db1tbl3.schema.fields.last
+        .metadata.getString("default") == "\"abc\"")
+      assert(db2tbl3.schema.fields(db2tbl3.schema.fields.size - 2)
+        .metadata.getString("default") == "42")
+      assert(db2tbl3.schema.fields.last
+        .metadata.getString("default") == "\"abc\"")
+    }
+  }
+
   test("create databases using invalid names") {
     withEmptyCatalog { catalog =>
       testInvalidName(

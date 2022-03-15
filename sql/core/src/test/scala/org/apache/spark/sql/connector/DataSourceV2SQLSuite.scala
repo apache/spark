@@ -614,15 +614,16 @@ class DataSourceV2SQLSuite
     val table = testCatalog.loadTable(Identifier.of(Array(), "table_name"))
     assert(table.asInstanceOf[InMemoryTable].rows.nonEmpty)
 
-    spark.sql("REPLACE TABLE testcat.table_name (id bigint NOT NULL) USING foo")
+    spark.sql("REPLACE TABLE testcat.table_name (id bigint NOT NULL DEFAULT 42) USING foo")
     val replaced = testCatalog.loadTable(Identifier.of(Array(), "table_name"))
 
     assert(replaced.asInstanceOf[InMemoryTable].rows.isEmpty,
         "Replaced table should have no rows after committing.")
     assert(replaced.schema().fields.length === 1,
         "Replaced table should have new schema.")
-    assert(replaced.schema().fields(0) === StructField("id", LongType, nullable = false),
-      "Replaced table should have new schema.")
+    assert(replaced.schema().fields(0) === StructField("id", LongType, nullable = false,
+      new MetadataBuilder().putString("default", "42").build()),
+      "Replaced table should have new schema with DEFAULT column metadata.")
   }
 
   test("ReplaceTableAsSelect: CREATE OR REPLACE new table has same behavior as CTAS.") {

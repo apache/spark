@@ -20,7 +20,8 @@ package org.apache.spark.sql.catalyst.analysis
 import scala.util.control.NonFatal
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
+import org.apache.spark.sql.catalyst.catalog.SessionCatalog
+import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoStatement, LocalRelation, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.AlwaysProcess
 import org.apache.spark.sql.types.{StructField, StructType}
@@ -28,13 +29,21 @@ import org.apache.spark.sql.types.{StructField, StructType}
 /**
  * An analyzer rule that replaces [[UnresolvedInlineTable]] with [[LocalRelation]].
  */
-object ResolveInlineTables extends Rule[LogicalPlan] with CastSupport {
+case class ResolveInlineTables(catalog: SessionCatalog) extends Rule[LogicalPlan] with CastSupport {
   override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsWithPruning(
     AlwaysProcess.fn, ruleId) {
     case table: UnresolvedInlineTable if table.expressionsResolved =>
       validateInputDimension(table)
       validateInputEvaluable(table)
       convert(table)
+    case i @ InsertIntoStatement(_, _, _, (_: UnresolvedInlineTable | _: Project), _, _) =>
+      // This case matches against an INSERT INTO statement whose right-hand side is either a
+      // VALUES list (comprising an inline table) or else a SELECT query (comprising a projection).
+      // In either case, we expect this input to be unresolved at this point because this
+      // [[ResolveInlineTables]] rule runs top-down. It is necessary to match against the entire
+      // INSERT INTO statement in this way in order to provide enough context to know what values
+      // to replace each explicit provided DEFAULT reference with.
+      DefaultColumns.ReplaceExplicitDefaultColumnValues(i, catalog)
   }
 
   /**
