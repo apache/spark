@@ -192,7 +192,7 @@ case class Sum(
        25
       > SELECT _FUNC_(col) FROM VALUES (NULL), (NULL) AS tab(col);
        NULL
-      > SELECT try_sum(col) FROM VALUES (9223372036854775807L), (1L) AS tab(col);
+      > SELECT _FUNC_(col) FROM VALUES (9223372036854775807L), (1L) AS tab(col);
        NULL
   """,
   since = "3.3.0",
