@@ -328,7 +328,7 @@ object GeneratorNestedColumnAliasing {
     //    lots of expressions that we can push down, including non ExtractValues and GetArrayItem
     //    and GetMapValue. But to be safe, we only handle GetStructField and GetArrayStructFields.
     // 2. For [[ExtractValue]]s on the output of the generator, the situation depends on the type
-    //    of the generator expression.
+    //    of the generator expression. *For now, we only support Explode*.
     //   2.1 Inline
     //       Inline takes an input of ARRAY<STRUCT<field1, field2>>, and returns an output of
     //       STRUCT<field1, field2>, the output field can be directly accessed by name "field1".
@@ -353,8 +353,6 @@ object GeneratorNestedColumnAliasing {
     //       The push down is doable but more complicated in this case as the expression that
     //       operates on the col_i of the output needs to pushed down to every (kn+i)-th input
     //       expression where n is the total number of columns (or struct fields) of the output.
-
-    // To be safe, we only support
     case Project(projectList, g: Generate) if (SQLConf.get.nestedPruningOnExpressions ||
         SQLConf.get.nestedSchemaPruningEnabled) && canPruneGenerator(g.generator) =>
       // On top on `Generate`, a `Project` that might have nested column accessors.
@@ -380,11 +378,6 @@ object GeneratorNestedColumnAliasing {
         case _: MapType => return Some(pushedThrough)
         case ArrayType(_: ArrayType, _) => return Some(pushedThrough)
         case _ =>
-      }
-
-      g.generator match {
-        case _: ExplodeBase =>
-        case _ => return Some(pushedThrough)
       }
 
       // Pruning on `Generator`'s output. We only process single field case.
@@ -485,9 +478,6 @@ object GeneratorNestedColumnAliasing {
    */
   def canPruneGenerator(g: Generator): Boolean = g match {
     case _: Explode => true
-    case _: Stack => true
-    case _: PosExplode => true
-    case _: Inline => true
     case _ => false
   }
 }

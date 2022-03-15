@@ -292,7 +292,7 @@ class NestedColumnAliasingSuite extends SchemaPruningTest {
     comparePlans(optimized, expected)
   }
 
-  test("Nested field pruning for Project and Generate") {
+  test("Nested field pruning for Project and Explode") {
     val query = contact
       .generate(Explode($"friends".getField("first")), outputNames = Seq("explode"))
       .select($"explode", $"friends".getField("middle"))
