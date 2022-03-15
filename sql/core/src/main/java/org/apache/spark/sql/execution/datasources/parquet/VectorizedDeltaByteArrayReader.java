@@ -42,8 +42,9 @@ public class VectorizedDeltaByteArrayReader extends VectorizedReaderBase
   private ByteBuffer previous;
   private int currentRow = 0;
 
-  // temporary variable used by getBinary
+  // temporary variable used by readBinary
   private final WritableColumnVector binaryValVector;
+  // temporary variable used by skipBinary
   private final WritableColumnVector tempBinaryValVector;
 
   VectorizedDeltaByteArrayReader() {
