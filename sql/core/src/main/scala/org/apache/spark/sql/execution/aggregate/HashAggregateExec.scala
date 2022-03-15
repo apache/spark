@@ -53,7 +53,7 @@ case class HashAggregateExec(
     aggregateAttributes: Seq[Attribute],
     initialInputBufferOffset: Int,
     resultExpressions: Seq[NamedExpression],
-    isSupportPartialAgg: Boolean = false,
+    isPartialAgg: Boolean = false,
     child: SparkPlan)
   extends AggregateCodegenSupport {
 
@@ -156,14 +156,16 @@ case class HashAggregateExec(
   // but the vectorized hashmap can still be switched on for testing and benchmarking purposes.
   private var isVectorizedHashMapEnabled: Boolean = false
 
-  private lazy val isAdaptivePartialAggregationEnabled = {
-    isSupportPartialAgg && conf.adaptivePartialAggregationThreshold > 0 &&
+  // VisibleForTesting
+  private[sql] lazy val isAdaptivePartialAggregationEnabled = {
+    isPartialAgg && groupingAttributes.nonEmpty && conf.adaptivePartialAggregationThreshold > 0 &&
       conf.adaptivePartialAggregationThreshold < (1 << conf.fastHashAggregateRowMaxCapacityBit) && {
       child
         .collectUntil(p => p.isInstanceOf[WholeStageCodegenExec] ||
           !p.isInstanceOf[CodegenSupport] ||
           p.isInstanceOf[LeafExecNode]).forall {
         case _: ProjectExec | _: FilterExec | _: ColumnarToRowExec => true
+        case _: SerializeFromObjectExec => true
         case _: InputAdapter => true
         // HashAggregateExec, ExpandExec, SortMergeJoinExec ...
         case _ => false
@@ -923,7 +925,6 @@ case class HashAggregateExec(
          |    $numberOfKeys
          |    if ((double) $numberOfConsumedKeysTerm / (double) $numberOfConsumedTerm > 0.1) {
          |       $skipPartialAggregateTerm = true;
-         |       System.out.println("adaptivePartialAggregation");
          |    }
          |  }
          |  $numberOfConsumedTerm = $numberOfConsumedTerm + 1;

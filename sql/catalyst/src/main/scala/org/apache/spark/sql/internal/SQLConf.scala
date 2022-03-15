@@ -3130,7 +3130,7 @@ object SQLConf {
       .checkValue(threshold => threshold >= 0 && threshold < (1 << 16),
         "The threshold value must be bigger than or equal to 0 and less than " +
           s"1 << ${FAST_HASH_AGGREGATE_MAX_ROWS_CAPACITY_BIT.key}.")
-      .createWithDefault(2)
+      .createWithDefault(10000)
 
   val AVRO_COMPRESSION_CODEC = buildConf("spark.sql.avro.compression.codec")
     .doc("Compression codec used in writing of AVRO files. Supported codecs: " +
