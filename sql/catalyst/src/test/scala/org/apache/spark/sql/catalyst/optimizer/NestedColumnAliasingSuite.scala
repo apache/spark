@@ -292,7 +292,7 @@ class NestedColumnAliasingSuite extends SchemaPruningTest {
     comparePlans(optimized, expected)
   }
 
-  test("Nested field pruning for Project and Explode") {
+  test("Nested field pruning for Project and Generate") {
     val query = contact
       .generate(Explode($"friends".getField("first")), outputNames = Seq("explode"))
       .select($"explode", $"friends".getField("middle"))
@@ -814,7 +814,7 @@ class NestedColumnAliasingSuite extends SchemaPruningTest {
     comparePlans(optimized3, expected3)
   }
 
-  test("GeneratorNestedColumnAliasing does not pushdown for non-Explode") {
+  test("SPARK-38529: GeneratorNestedColumnAliasing does not pushdown for non-Explode") {
     val employer = StructType.fromDDL("id int, company struct<name:string, address:string>")
     val input = LocalRelation(
       'col1.int,
