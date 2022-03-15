@@ -89,11 +89,19 @@ case class ClusteredDistribution(
 
 /**
  * Represents data where tuples have been clustered according to the hash of the given
- * `expressions`. The hash function is defined as `HashPartitioning.partitionIdExpression`, so only
- * [[HashPartitioning]] can satisfy this distribution.
+ * `expressions`. Since this distribution relies on [[HashPartitioning]] on the physical
+ * partitioning, only [[HashPartitioning]] (and HashPartitioning in [[PartitioningCollection]])
+ * can satisfy this distribution. When `requiredNumPartitions` is Some(1), [[SinglePartition]]
+ * is essentially same as [[HashPartitioning]], so it can satisfy this distribution as well.
  *
- * This is a strictly stronger guarantee than [[ClusteredDistribution]]. Given a tuple and the
- * number of partitions, this distribution strictly requires which partition the tuple should be in.
+ * This distribution is used majorly to represent the requirement of distribution on the stateful
+ * operator in Structured Streaming, but this can be used for other cases as well.
+ *
+ * NOTE: Each partition in stateful operator initializes state store(s), which are independent
+ * with state store(s) in other partitions. Since it is not possible to repartition the data in
+ * state store, Spark should make sure the physical partitioning of the stateful operator is
+ * unchanged across Spark versions. Violation of this requirement may bring silent correctness
+ * issue.
  */
 case class HashClusteredDistribution(
     expressions: Seq[Expression],
