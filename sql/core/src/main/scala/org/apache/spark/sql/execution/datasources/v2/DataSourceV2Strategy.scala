@@ -533,7 +533,7 @@ private[sql] object DataSourceV2Strategy {
 
       case Not(child) =>
         translateFilterV2WithMapping(child, translatedFilterToExpr, nestedPredicatePushdownEnabled)
-          .map(v => new V2Not(v))
+          .map(new V2Not(_))
 
       case other =>
         val filter = translateLeafNodeFilterV2(other, nestedPredicatePushdownEnabled)

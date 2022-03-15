@@ -18,6 +18,7 @@
 package org.apache.spark.sql.connector.expressions.filter;
 
 import org.apache.spark.annotation.Evolving;
+import org.apache.spark.sql.connector.expressions.NamedReference;
 
 /**
  * A predicate that evaluates to {@code true} if {@code child} is evaluated to {@code false}.
@@ -32,4 +33,9 @@ public final class Not extends Predicate {
   }
 
   public Predicate child() { return (Predicate) children()[0]; }
+
+  @Override
+  public NamedReference[] references() {
+    return child().references();
+  }
 }

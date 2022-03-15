@@ -19,6 +19,7 @@ package org.apache.spark.sql.connector.expressions.filter;
 
 import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.connector.expressions.Literal;
+import org.apache.spark.sql.connector.expressions.NamedReference;
 import org.apache.spark.sql.types.DataType;
 import org.apache.spark.sql.types.DataTypes;
 
@@ -43,6 +44,9 @@ public final class AlwaysTrue extends Predicate implements Literal<Boolean> {
   public DataType dataType() {
     return dataType;
   }
+
+  @Override
+  public NamedReference[] references() { return EMPTY_REFERENCE; }
 
   public String toString() { return "TRUE"; }
 }

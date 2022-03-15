@@ -70,6 +70,8 @@ sealed abstract class Filter {
 
   /**
    * Converts V1 filter to V2 filter
+   *
+   * @since 3.3.0
    */
   def toV2: Predicate
 }

@@ -17,7 +17,11 @@
 
 package org.apache.spark.sql.connector.expressions.filter;
 
+import java.util.Arrays;
+import java.util.stream.Stream;
+
 import org.apache.spark.annotation.Evolving;
+import org.apache.spark.sql.connector.expressions.NamedReference;
 
 /**
  * A predicate that evaluates to {@code true} if at least one of {@code left} or {@code right}
@@ -34,4 +38,10 @@ public final class Or extends Predicate {
 
   public Predicate left() { return (Predicate) children()[0]; }
   public Predicate right() { return (Predicate) children()[1]; }
+
+  @Override
+  public NamedReference[] references() {
+    return Stream.concat(Arrays.stream(left().references()), Arrays.stream(right().references()))
+      .toArray(NamedReference[]::new);
+  }
 }

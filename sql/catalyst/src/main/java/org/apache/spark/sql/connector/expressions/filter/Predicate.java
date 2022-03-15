@@ -20,6 +20,11 @@ package org.apache.spark.sql.connector.expressions.filter;
 import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.connector.expressions.Expression;
 import org.apache.spark.sql.connector.expressions.GeneralScalarExpression;
+import org.apache.spark.sql.connector.expressions.NamedReference;
+
+import java.util.Arrays;
+import java.util.List;
+import java.util.stream.Collectors;
 
 /**
  * The general representation of predicate expressions, which contains the upper-cased expression
@@ -142,7 +147,18 @@ import org.apache.spark.sql.connector.expressions.GeneralScalarExpression;
  */
 @Evolving
 public class Predicate extends GeneralScalarExpression {
+  protected static final NamedReference[] EMPTY_REFERENCE = new NamedReference[0];
+
   public Predicate(String name, Expression[] children) {
     super(name, children);
+  }
+
+  /**
+   * Returns all field references in the predicate children.
+   */
+  public NamedReference[] references() {
+    return Arrays.stream(children())
+      .filter(p -> p instanceof NamedReference)
+      .toArray(NamedReference[]::new);
   }
 }

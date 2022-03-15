@@ -27,7 +27,7 @@ import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.connector.catalog.{SupportsRead, Table, TableCapability, TableProvider}
 import org.apache.spark.sql.connector.catalog.TableCapability._
-import org.apache.spark.sql.connector.expressions.{FieldReference, Literal, Transform}
+import org.apache.spark.sql.connector.expressions.{Literal, Transform}
 import org.apache.spark.sql.connector.expressions.filter.Predicate
 import org.apache.spark.sql.connector.read._
 import org.apache.spark.sql.connector.read.partitioning.{ClusteredDistribution, Distribution, Partitioning}
@@ -167,13 +167,11 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
         checkAnswer(q2, (4 until 10).map(i => Row(i, -i)))
         if (cls == classOf[AdvancedDataSourceV2WithV2Filter]) {
           val batch = getBatchWithV2Filter(q2)
-          assert(batch.predicates.flatMap(_.children().filter(_.isInstanceOf[FieldReference])
-            .map(_.describe())).toSet == Set("i"))
+          assert(batch.predicates.flatMap(_.references.map(_.describe)).toSet == Set("i"))
           assert(batch.requiredSchema.fieldNames === Seq("i", "j"))
         } else {
           val batch = getJavaBatchWithV2Filter(q2)
-          assert(batch.predicates.flatMap(_.children().filter(_.isInstanceOf[FieldReference])
-            .map(_.describe())).toSet == Set("i"))
+          assert(batch.predicates.flatMap(_.references.map(_.describe)).toSet == Set("i"))
           assert(batch.requiredSchema.fieldNames === Seq("i", "j"))
         }
 
@@ -181,13 +179,11 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
         checkAnswer(q3, (7 until 10).map(i => Row(i)))
         if (cls == classOf[AdvancedDataSourceV2WithV2Filter]) {
           val batch = getBatchWithV2Filter(q3)
-          assert(batch.predicates.flatMap(_.children().filter(_.isInstanceOf[FieldReference])
-            .map(_.describe())).toSet == Set("i"))
+          assert(batch.predicates.flatMap(_.references.map(_.describe)).toSet == Set("i"))
           assert(batch.requiredSchema.fieldNames === Seq("i"))
         } else {
           val batch = getJavaBatchWithV2Filter(q3)
-          assert(batch.predicates.flatMap(_.children().filter(_.isInstanceOf[FieldReference])
-            .map(_.describe())).toSet == Set("i"))
+          assert(batch.predicates.flatMap(_.references.map(_.describe)).toSet == Set("i"))
           assert(batch.requiredSchema.fieldNames === Seq("i"))
         }
 
