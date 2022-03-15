@@ -327,13 +327,15 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product with Tre
     this.collect { case p if p.children.isEmpty => p }
   }
 
+  /**
+   * Returns a Seq containing the result until the condition specified by `f`.
+   * The condition is recursively applied to this node and all of its children.
+   */
   def collectUntil(f: BaseType => Boolean): Seq[BaseType] = {
-    val ret = new collection.mutable.ArrayBuffer[BaseType]()
     if (f(this)) {
-      ret
+      Nil
     } else {
-      ret.+=:(this)
-      ret ++ children.foldLeft(Seq.empty[BaseType]) { (l, r) => l ++ r.collectUntil(f) }
+      Seq(this) ++ children.foldLeft(Seq.empty[BaseType]) { (l, r) => l ++ r.collectUntil(f) }
     }
   }
 
