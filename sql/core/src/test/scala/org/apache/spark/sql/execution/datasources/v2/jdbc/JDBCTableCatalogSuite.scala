@@ -447,7 +447,7 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
       sql(s"insert into h2.test.employee values($id, 'a')")
     }
     val df = sql("select id, name from h2.test.employee")
-    // default partition num is 15
+    // default partition num is 10
     assert(df.rdd.getNumPartitions == 10)
   }
 
@@ -457,7 +457,7 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
       sql(s"insert into h2.test.employee values($id, 'a')")
     }
     val df = sql("select id, name from h2.test.employee where id > 30")
-    // default partition num is 15
+    // default partition num is 10
     assert(df.rdd.getNumPartitions == 1)
   }
 

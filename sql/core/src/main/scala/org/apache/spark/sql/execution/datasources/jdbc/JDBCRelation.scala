@@ -187,11 +187,11 @@ private[sql] object JDBCRelation extends Logging {
    * @return JDBCPartitioningInfo
    */
   def getPartitionBound(
-                         schema: StructType,
-                         resolver: Resolver,
-                         timeZoneId: String,
-                         jdbcOptions: JDBCOptions,
-                         filters: Array[Filter] = Array.empty): JDBCPartitioningInfo = {
+      schema: StructType,
+      resolver: Resolver,
+      timeZoneId: String,
+      jdbcOptions: JDBCOptions,
+      filters: Array[Filter] = Array.empty): JDBCPartitioningInfo = {
     // columns in filters
     val filterColumns = new util.ArrayList[String]()
     filters.map(filter => filter.references.distinct.map(r => filterColumns.add(r)))
