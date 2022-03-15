@@ -50,6 +50,14 @@ trait AliasHelper {
     AttributeMap(exprs.collect { case a: Alias => (a.toAttribute, a) })
   }
 
+  protected def getAttrToAliasMap(aliasMap: AttributeMap[Alias]): AttributeMap[Alias] = {
+    val attrToAliasMap = aliasMap.values.toSeq.collect {
+      case alias @ Alias(originAttr: Attribute, _) =>
+        (originAttr, alias)
+    }
+    AttributeMap(attrToAliasMap)
+  }
+
   /**
    * Replace all attributes, that reference an alias, with the aliased expression
    */
@@ -75,6 +83,17 @@ trait AliasHelper {
     trimNonTopLevelAliases(expr.transformUp {
       case a: Attribute => aliasMap.get(a).map(_.withName(a.name)).getOrElse(a)
     }).asInstanceOf[NamedExpression]
+  }
+
+  /**
+   * Replace all alias, with the aliased attribute.
+   */
+  protected def replaceAliasWithAttr(
+      expr: NamedExpression,
+      aliasMap: AttributeMap[Alias]): NamedExpression = {
+    replaceAliasButKeepName(expr, aliasMap).transform {
+      case Alias(attr: Attribute, _) => attr
+    }.asInstanceOf[NamedExpression]
   }
 
   protected def trimAliases(e: Expression): Expression = {

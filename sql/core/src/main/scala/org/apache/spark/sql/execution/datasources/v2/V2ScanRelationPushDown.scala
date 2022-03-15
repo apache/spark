@@ -19,8 +19,7 @@ package org.apache.spark.sql.execution.datasources.v2
 
 import scala.collection.mutable
 
-import org.apache.spark.sql.catalyst.expressions.{Alias, And, Attribute, AttributeReference, Cast, Divide, DivideDTInterval, DivideYMInterval, EqualTo, Expression, If, IntegerLiteral, Literal, NamedExpression, PredicateHelper, ProjectionOverSchema, SubqueryExpression}
-import org.apache.spark.sql.catalyst.expressions.aggregate
+import org.apache.spark.sql.catalyst.expressions.{aggregate, Alias, AliasHelper, And, Attribute, AttributeReference, Cast, Divide, DivideDTInterval, DivideYMInterval, EqualTo, Expression, If, IntegerLiteral, Literal, NamedExpression, PredicateHelper, ProjectionOverSchema, SubqueryExpression}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.planning.ScanOperation
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, LeafNode, Limit, LocalLimit, LogicalPlan, Project, Sample, Sort}
@@ -33,7 +32,7 @@ import org.apache.spark.sql.sources
 import org.apache.spark.sql.types.{DataType, DayTimeIntervalType, LongType, StructType, YearMonthIntervalType}
 import org.apache.spark.sql.util.SchemaUtils._
 
-object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
+object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper with AliasHelper {
   import DataSourceV2Implicits._
 
   def apply(plan: LogicalPlan): LogicalPlan = {
@@ -96,20 +95,11 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
           project.forall(p => p.isInstanceOf[AttributeReference] || p.isInstanceOf[Alias]) =>
           sHolder.builder match {
             case r: SupportsPushDownAggregates =>
-              val aliasAttrToOriginAttr = mutable.HashMap.empty[Expression, AttributeReference]
-              val originAttrToAliasAttr = mutable.HashMap.empty[Expression, Attribute]
-              collectAliases(project, aliasAttrToOriginAttr, originAttrToAliasAttr)
-              def replaceAliasWithAttr(expressions: Seq[Expression]): Seq[NamedExpression] = {
-                expressions.map { expr =>
-                  expr.transform {
-                    case r: AttributeReference if aliasAttrToOriginAttr.contains(r.canonicalized) =>
-                      aliasAttrToOriginAttr(r.canonicalized)
-                  }
-                }.asInstanceOf[Seq[NamedExpression]]
-              }
-
-              val newResultExpressions = replaceAliasWithAttr(resultExpressions)
-              val newGroupingExpressions = replaceAliasWithAttr(groupingExpressions)
+              val aliasMap = getAliasMap(project)
+              val newResultExpressions =
+                resultExpressions.map(replaceAliasWithAttr(_, aliasMap))
+              val newGroupingExpressions = groupingExpressions.asInstanceOf[Seq[NamedExpression]]
+                .map(replaceAliasWithAttr(_, aliasMap))
               val aggExprToOutputOrdinal = mutable.HashMap.empty[Expression, Int]
               val aggregates = collectAggregates(newResultExpressions, aggExprToOutputOrdinal)
               val normalizedAggregates = DataSourceStrategy.normalizeExprs(
@@ -217,11 +207,10 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
                   val wrappedScan = getWrappedScan(scan, sHolder, pushedAggregates)
                   val scanRelation =
                     DataSourceV2ScanRelation(sHolder.relation, wrappedScan, output)
+                  val aliasAttrMap = getAttrToAliasMap(aliasMap)
                   val finalResultExpressions = selectedResultExpressions.map {
-                    case attr: AttributeReference
-                      if originAttrToAliasAttr.contains(attr.canonicalized) =>
-                      val alias = originAttrToAliasAttr(attr.canonicalized)
-                      Alias(attr, alias.name)(alias.exprId)
+                    case attr: AttributeReference =>
+                      aliasAttrMap.getOrElse(attr, attr)
                     case other => other
                   }
                   if (r.supportCompletePushDown(pushedAggregates.get)) {
@@ -300,18 +289,6 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
           ordinal += 1
           agg
       }
-    }
-  }
-
-  private def collectAliases(project: Seq[NamedExpression],
-      aliasAttrToOriginAttr: mutable.HashMap[Expression, AttributeReference],
-      originAttrToAliasAttr: mutable.HashMap[Expression, Attribute]) = {
-    project.collect {
-      case alias @ Alias(attr: AttributeReference, _) =>
-        val output = alias.toAttribute
-        aliasAttrToOriginAttr(output.canonicalized) = attr
-        originAttrToAliasAttr(attr.canonicalized) = output
-      case other => other
     }
   }
 
