@@ -32,7 +32,9 @@ _local = threading.local()
 
 
 class _WrappedAbstractContextManager(AbstractContextManager):
-    def __init__(self, gcm, class_name, function_name, logger):
+    def __init__(
+        self, gcm: AbstractContextManager, class_name: str, function_name: str, logger: Any
+    ):
         self._enter_func = _wrap_function(
             class_name, "{}.__enter__".format(function_name), gcm.__enter__, logger
         )
@@ -40,10 +42,10 @@ class _WrappedAbstractContextManager(AbstractContextManager):
             class_name, "{}.__exit__".format(function_name), gcm.__exit__, logger
         )
 
-    def __enter__(self):
+    def __enter__(self):  # type: ignore[no-untyped-def]
         return self._enter_func()
 
-    def __exit__(self, exc_type, exc_val, exc_tb):
+    def __exit__(self, exc_type, exc_val, exc_tb):  # type: ignore[no-untyped-def]
         return self._exit_func(exc_type, exc_val, exc_tb)
 
 
