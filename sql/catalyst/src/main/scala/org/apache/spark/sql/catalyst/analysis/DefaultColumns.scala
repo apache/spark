@@ -137,12 +137,14 @@ object DefaultColumns {
    * using the DEFAULT keyword as needed.
    *
    * Example:
-   * CREATE TABLE T(a INT, b INT NOT NULL DEFAULT 5);
-   * INSERT INTO T VALUES (1, 2, DEFAULT);
+   * CREATE TABLE T(a INT DEFAULT 4, b INT NOT NULL DEFAULT 5);
+   * INSERT INTO T VALUES (1, 2);
+   * INSERT INTO T VALUES (1, DEFAULT);
+   * INSERT INTO T VALUES (DEFAULT, 6);
    * SELECT * FROM T;
-   * (NULL, 0, 5)
-   * (NULL, 1, 5)
-   * (1, 2, 5)
+   * (1, 2)
+   * (1, 5)
+   * (4, 6)
    *
    * @param insert the INSERT INTO statement to replace explicit DEFAULT column references within.
    * @param catalog session catalog for use when looking up table names for the statement.
