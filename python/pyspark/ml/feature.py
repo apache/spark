@@ -23,7 +23,7 @@ from typing import (
     Optional,
     Tuple,
     Union,
-    TYPE_CHECKING,
+    TYPE_CHECKING, TypeVar,
 )
 
 from pyspark import keyword_only, since, SparkContext
@@ -54,7 +54,9 @@ from pyspark.ml.common import inherit_doc
 
 if TYPE_CHECKING:
     from py4j.java_gateway import JavaObject  # type: ignore[import]
-    from pyspark.ml._typing import P, JM
+    from pyspark.ml._typing import P
+
+JM = TypeVar("JM", bound=JavaTransformer)
 
 __all__ = [
     "Binarizer",
