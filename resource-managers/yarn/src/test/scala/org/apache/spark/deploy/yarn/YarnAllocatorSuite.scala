@@ -723,11 +723,11 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
 
     val argumentCaptor = ArgumentCaptor.forClass(classOf[CoarseGrainedClusterMessage])
 
-    Mockito.doReturn(allocateResponse).when(rmClientSpy).allocate(
+    Mockito.doReturn(allocateResponse, Nil: _*).when(rmClientSpy).allocate(
       org.mockito.ArgumentMatchers.anyFloat())
-    Mockito.doReturn(mockResource).when(allocateResponse).getAvailableResources
-    Mockito.doReturn(1000L).when(mockResource).getMemorySize
-    Mockito.doReturn(4).when(mockResource).getVirtualCores
+    Mockito.doReturn(mockResource, Nil: _*).when(allocateResponse).getAvailableResources
+    Mockito.doReturn(1000L, Nil: _*).when(mockResource).getMemorySize
+    Mockito.doReturn(4, Nil: _*).when(mockResource).getVirtualCores
 
     handler._1.allocateResources()
 
