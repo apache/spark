@@ -667,7 +667,8 @@ object ScalaReflection extends ScalaReflection {
    * `ClassSymbol.selfType` can throw an exception in case of cyclic annotation reference
    * in Java classes. A retry of this operation will succeed as the class which defines the
    * cycle is now resolved. It can however expose further recursive annotation references, so
-   * we keep retrying until we exhaust our retry threshold.
+   * we keep retrying until we exhaust our retry threshold. Default threshold is set to 5
+   * to allow for a few level of cyclic references.
    */
   @tailrec
   private def selfType(clsSymbol: ClassSymbol, tries: Int = 5): Type = {
