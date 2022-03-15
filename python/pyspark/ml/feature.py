@@ -55,9 +55,9 @@ from pyspark.ml.common import inherit_doc
 
 if TYPE_CHECKING:
     from py4j.java_gateway import JavaObject  # type: ignore[import]
-    from pyspark.ml._typing import P
 
 JM = TypeVar("JM", bound=JavaTransformer)
+P = TypeVar("P", bound=Params)
 
 __all__ = [
     "Binarizer",
