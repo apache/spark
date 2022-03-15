@@ -110,9 +110,10 @@ case class BloomFilterAggregate(
 
   override def third: Expression = numBitsExpression
 
-  override protected def withNewChildrenInternal(newChild: Expression,
-      newEstimatedNumItemsExpression: Expression, newNumBitsExpression: Expression)
-  : BloomFilterAggregate = {
+  override protected def withNewChildrenInternal(
+      newChild: Expression,
+      newEstimatedNumItemsExpression: Expression,
+      newNumBitsExpression: Expression): BloomFilterAggregate = {
     copy(child = newChild, estimatedNumItemsExpression = newEstimatedNumItemsExpression,
       numBitsExpression = newNumBitsExpression)
   }
@@ -176,7 +177,7 @@ object BloomFilterAggregate {
   class BloomFilterSerDe {
 
     final def serialize(obj: BloomFilter): Array[Byte] = {
-      val size = obj.bitSize()/8
+      val size = obj.bitSize() / 8
       require(size <= Integer.MAX_VALUE, s"actual number of bits is too large $size")
       val out = new ByteArrayOutputStream(size.intValue())
       obj.writeTo(out)

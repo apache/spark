@@ -344,7 +344,7 @@ object SQLConf {
   val RUNTIME_FILTER_SEMI_JOIN_REDUCTION_ENABLED =
     buildConf("spark.sql.optimizer.runtimeFilter.semiJoinReduction.enabled")
       .doc("When true and if one side of a shuffle join has a selective predicate, we attempt " +
-        "to insert a semi join in the other side to reduce the amount of shuffle data")
+        "to insert a semi join in the other side to reduce the amount of shuffle data.")
       .version("3.3.0")
       .booleanConf
       .createWithDefault(false)
@@ -352,7 +352,7 @@ object SQLConf {
   val RUNTIME_FILTER_NUMBER_THRESHOLD =
     buildConf("spark.sql.optimizer.runtimeFilter.number.threshold")
       .doc("The total number of injected runtime filters (non-DPP) for a single " +
-        "query. This is to prevent driver OOMs with too many Bloom filters")
+        "query. This is to prevent driver OOMs with too many Bloom filters.")
       .version("3.3.0")
       .intConf
       .checkValue(threshold => threshold >= 0, "The threshold should be >= 0")
@@ -361,7 +361,7 @@ object SQLConf {
   lazy val RUNTIME_BLOOM_FILTER_ENABLED =
     buildConf("spark.sql.optimizer.runtime.bloomFilter.enabled")
       .doc("When true and if one side of a shuffle join has a selective predicate, we attempt " +
-        "to insert a bloom filter in the other side to reduce the amount of shuffle data")
+        "to insert a bloom filter in the other side to reduce the amount of shuffle data.")
       .version("3.3.0")
       .booleanConf
       .createWithDefault(false)
@@ -369,7 +369,7 @@ object SQLConf {
   val RUNTIME_BLOOM_FILTER_THRESHOLD =
     buildConf("spark.sql.optimizer.runtime.bloomFilter.threshold")
       .doc("Size threshold of the bloom filter creation side plan. Estimated size needs to be " +
-        "under this value to try to inject bloom filter")
+        "under this value to try to inject bloom filter.")
       .version("3.3.0")
       .bytesConf(ByteUnit.BYTE)
       .createWithDefaultString("10MB")
@@ -378,7 +378,7 @@ object SQLConf {
     buildConf("spark.sql.optimizer.runtime.bloomFilter.applicationSideScanSizethreshold")
       .doc("Byte size threshold of the Bloom filter application side plan's aggregated scan " +
         "size. Aggregated scan byte size of the Bloom filter application side needs to be over " +
-        "this value to inject a bloom filter")
+        "this value to inject a bloom filter.")
       .version("3.3.0")
       .bytesConf(ByteUnit.BYTE)
       .createWithDefaultString("10GB")

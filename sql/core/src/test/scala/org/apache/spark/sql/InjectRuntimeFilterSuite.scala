@@ -208,6 +208,7 @@ class InjectRuntimeFilterSuite extends QueryTest with SQLTestUtils with SharedSp
     sql("DROP TABLE IF EXISTS bf3")
     sql("DROP TABLE IF EXISTS bf4")
     sql("DROP TABLE IF EXISTS bf5part")
+    sql("DROP TABLE IF EXISTS bf5filtered")
   } finally {
     super.afterAll()
   }
@@ -292,64 +293,64 @@ class InjectRuntimeFilterSuite extends QueryTest with SQLTestUtils with SharedSp
     checkWithAndWithoutFeatureEnabled(query, testSemiJoin = false, shouldReplace = false)
   }
 
-  test(s"Runtime semi join reduction: simple") {
+  test("Runtime semi join reduction: simple") {
     // Filter creation side is 3409 bytes
     // Filter application side scan is 3362 bytes
     withSQLConf(SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "3000",
       SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "2000") {
-      assertRewroteSemiJoin(s"select * from bf1 join bf2 on bf1.c1 = bf2.c2 where bf2.a2 = 62")
-      assertDidNotRewriteSemiJoin(s"select * from bf1 join bf2 on bf1.c1 = bf2.c2")
+      assertRewroteSemiJoin("select * from bf1 join bf2 on bf1.c1 = bf2.c2 where bf2.a2 = 62")
+      assertDidNotRewriteSemiJoin("select * from bf1 join bf2 on bf1.c1 = bf2.c2")
     }
   }
 
-  test(s"Runtime semi join reduction: two joins") {
+  test("Runtime semi join reduction: two joins") {
     withSQLConf(SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "3000",
       SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "2000") {
-      assertRewroteSemiJoin(s"select * from bf1 join bf2 join bf3 on bf1.c1 = bf2.c2 " +
-        s"and bf3.c3 = bf2.c2 where bf2.a2 = 5")
+      assertRewroteSemiJoin("select * from bf1 join bf2 join bf3 on bf1.c1 = bf2.c2 " +
+        "and bf3.c3 = bf2.c2 where bf2.a2 = 5")
     }
   }
 
-  test(s"Runtime semi join reduction: three joins") {
+  test("Runtime semi join reduction: three joins") {
     withSQLConf(SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "3000",
       SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "2000") {
-      assertRewroteSemiJoin(s"select * from bf1 join bf2 join bf3 join bf4 on " +
-        s"bf1.c1 = bf2.c2 and bf2.c2 = bf3.c3 and bf3.c3 = bf4.c4 where bf1.a1 = 5")
+      assertRewroteSemiJoin("select * from bf1 join bf2 join bf3 join bf4 on " +
+        "bf1.c1 = bf2.c2 and bf2.c2 = bf3.c3 and bf3.c3 = bf4.c4 where bf1.a1 = 5")
     }
   }
 
-  test(s"Runtime semi join reduction: simple expressions only") {
+  test("Runtime semi join reduction: simple expressions only") {
     withSQLConf(SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "3000",
       SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "2000") {
       val squared = (s: Long) => {
         s * s
       }
       spark.udf.register("square", squared)
-      assertDidNotRewriteSemiJoin(s"select * from bf1 join bf2 on " +
-        s"bf1.c1 = bf2.c2 where square(bf2.a2) = 62")
-      assertDidNotRewriteSemiJoin(s"select * from bf1 join bf2 on " +
-        s"bf1.c1 = square(bf2.c2) where bf2.a2= 62")
+      assertDidNotRewriteSemiJoin("select * from bf1 join bf2 on " +
+        "bf1.c1 = bf2.c2 where square(bf2.a2) = 62")
+      assertDidNotRewriteSemiJoin("select * from bf1 join bf2 on " +
+        "bf1.c1 = square(bf2.c2) where bf2.a2= 62")
     }
   }
 
-  test(s"Runtime bloom filter join: simple") {
+  test("Runtime bloom filter join: simple") {
     withSQLConf(SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "3000",
       SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "2000") {
-      assertRewroteWithBloomFilter(s"select * from bf1 join bf2 on bf1.c1 = bf2.c2 " +
-        s"where bf2.a2 = 62")
-      assertDidNotRewriteWithBloomFilter(s"select * from bf1 join bf2 on bf1.c1 = bf2.c2")
+      assertRewroteWithBloomFilter("select * from bf1 join bf2 on bf1.c1 = bf2.c2 " +
+        "where bf2.a2 = 62")
+      assertDidNotRewriteWithBloomFilter("select * from bf1 join bf2 on bf1.c1 = bf2.c2")
     }
   }
 
-  test(s"Runtime bloom filter join: two filters single join") {
+  test("Runtime bloom filter join: two filters single join") {
     withSQLConf(SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "3000",
       SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "2000") {
       var planDisabled: LogicalPlan = null
       var planEnabled: LogicalPlan = null
       var expectedAnswer: Array[Row] = null
 
-      val query = s"select * from bf1 join bf2 on bf1.c1 = bf2.c2 and " +
-        s"bf1.b1 = bf2.b2 where bf2.a2 = 62"
+      val query = "select * from bf1 join bf2 on bf1.c1 = bf2.c2 and " +
+        "bf1.b1 = bf2.b2 where bf2.a2 = 62"
 
       withSQLConf(SQLConf.RUNTIME_FILTER_SEMI_JOIN_REDUCTION_ENABLED.key -> "false",
         SQLConf.RUNTIME_BLOOM_FILTER_ENABLED.key -> "false") {
@@ -366,15 +367,15 @@ class InjectRuntimeFilterSuite extends QueryTest with SQLTestUtils with SharedSp
     }
   }
 
-  test(s"Runtime bloom filter join: test the number of filter threshold") {
+  test("Runtime bloom filter join: test the number of filter threshold") {
     withSQLConf(SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "3000",
       SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "2000") {
       var planDisabled: LogicalPlan = null
       var planEnabled: LogicalPlan = null
       var expectedAnswer: Array[Row] = null
 
-      val query = s"select * from bf1 join bf2 on bf1.c1 = bf2.c2 and " +
-        s"bf1.b1 = bf2.b2 where bf2.a2 = 62"
+      val query = "select * from bf1 join bf2 on bf1.c1 = bf2.c2 and " +
+        "bf1.b1 = bf2.b2 where bf2.a2 = 62"
 
       withSQLConf(SQLConf.RUNTIME_FILTER_SEMI_JOIN_REDUCTION_ENABLED.key -> "false",
         SQLConf.RUNTIME_BLOOM_FILTER_ENABLED.key -> "false") {
@@ -399,15 +400,15 @@ class InjectRuntimeFilterSuite extends QueryTest with SQLTestUtils with SharedSp
     }
   }
 
-  test(s"Runtime bloom filter join: insert one bloom filter per column") {
+  test("Runtime bloom filter join: insert one bloom filter per column") {
     withSQLConf(SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "3000",
       SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "2000") {
       var planDisabled: LogicalPlan = null
       var planEnabled: LogicalPlan = null
       var expectedAnswer: Array[Row] = null
 
-      val query = s"select * from bf1 join bf2 on bf1.c1 = bf2.c2 and " +
-        s"bf1.c1 = bf2.b2 where bf2.a2 = 62"
+      val query = "select * from bf1 join bf2 on bf1.c1 = bf2.c2 and " +
+        "bf1.c1 = bf2.b2 where bf2.a2 = 62"
 
       withSQLConf(SQLConf.RUNTIME_FILTER_SEMI_JOIN_REDUCTION_ENABLED.key -> "false",
         SQLConf.RUNTIME_BLOOM_FILTER_ENABLED.key -> "false") {
@@ -424,48 +425,48 @@ class InjectRuntimeFilterSuite extends QueryTest with SQLTestUtils with SharedSp
     }
   }
 
-  test(s"Runtime bloom filter join: do not add bloom filter if dpp filter exists " +
-    s"on the same column") {
+  test("Runtime bloom filter join: do not add bloom filter if dpp filter exists " +
+    "on the same column") {
     withSQLConf(SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "3000",
       SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "2000") {
-      assertDidNotRewriteWithBloomFilter(s"select * from bf5part join bf2 on " +
-        s"bf5part.f5 = bf2.c2 where bf2.a2 = 62")
+      assertDidNotRewriteWithBloomFilter("select * from bf5part join bf2 on " +
+        "bf5part.f5 = bf2.c2 where bf2.a2 = 62")
     }
   }
 
-  test(s"Runtime bloom filter join: add bloom filter if dpp filter exists on " +
-    s"a different column") {
+  test("Runtime bloom filter join: add bloom filter if dpp filter exists on " +
+    "a different column") {
     withSQLConf(SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "3000",
       SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "2000") {
-      assertRewroteWithBloomFilter(s"select * from bf5part join bf2 on " +
-        s"bf5part.c5 = bf2.c2 and bf5part.f5 = bf2.f2 where bf2.a2 = 62")
+      assertRewroteWithBloomFilter("select * from bf5part join bf2 on " +
+        "bf5part.c5 = bf2.c2 and bf5part.f5 = bf2.f2 where bf2.a2 = 62")
     }
   }
 
-  test(s"Runtime bloom filter join: BF rewrite triggering threshold test") {
+  test("Runtime bloom filter join: BF rewrite triggering threshold test") {
     // Filter creation side data size is 3409 bytes. On the filter application side, an individual
     // scan's byte size is 3362.
     withSQLConf(SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "3000",
       SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "3000",
       SQLConf.RUNTIME_BLOOM_FILTER_THRESHOLD.key -> "4000"
     ) {
-      assertRewroteWithBloomFilter(s"select * from bf1 join bf2 on bf1.c1 = bf2.c2 " +
-        s"where bf2.a2 = 62")
+      assertRewroteWithBloomFilter("select * from bf1 join bf2 on bf1.c1 = bf2.c2 " +
+        "where bf2.a2 = 62")
     }
     withSQLConf(SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "3000",
       SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "50",
       SQLConf.RUNTIME_BLOOM_FILTER_THRESHOLD.key -> "50"
     ) {
-      assertDidNotRewriteWithBloomFilter(s"select * from bf1 join bf2 on bf1.c1 = bf2.c2 " +
-        s"where bf2.a2 = 62")
+      assertDidNotRewriteWithBloomFilter("select * from bf1 join bf2 on bf1.c1 = bf2.c2 " +
+        "where bf2.a2 = 62")
     }
     withSQLConf(SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "5000",
       SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "3000",
       SQLConf.RUNTIME_BLOOM_FILTER_THRESHOLD.key -> "4000"
     ) {
       // Rewrite should not be triggered as the Bloom filter application side scan size is small.
-      assertDidNotRewriteWithBloomFilter(s"select * from bf1 join bf2 on bf1.c1 = bf2.c2 "
-        + s"where bf2.a2 = 62")
+      assertDidNotRewriteWithBloomFilter("select * from bf1 join bf2 on bf1.c1 = bf2.c2 "
+        + "where bf2.a2 = 62")
     }
     withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "32",
       SQLConf.RUNTIME_BLOOM_FILTER_THRESHOLD.key -> "4000") {
@@ -473,30 +474,30 @@ class InjectRuntimeFilterSuite extends QueryTest with SQLTestUtils with SharedSp
       // application side matters. `bf5filtered` has 14168 bytes and `bf2` has 3409 bytes.
       withSQLConf(
         SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "5000") {
-        assertRewroteWithBloomFilter(s"select * from " +
-          s"(select * from bf5filtered union all select * from bf2) t " +
-          s"join bf3 on t.c5 = bf3.c3 where bf3.a3 = 5")
+        assertRewroteWithBloomFilter("select * from " +
+          "(select * from bf5filtered union all select * from bf2) t " +
+          "join bf3 on t.c5 = bf3.c3 where bf3.a3 = 5")
       }
       withSQLConf(
         SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "15000") {
-        assertDidNotRewriteWithBloomFilter(s"select * from " +
-          s"(select * from bf5filtered union all select * from bf2) t " +
-          s"join bf3 on t.c5 = bf3.c3 where bf3.a3 = 5")
+        assertDidNotRewriteWithBloomFilter("select * from " +
+          "(select * from bf5filtered union all select * from bf2) t " +
+          "join bf3 on t.c5 = bf3.c3 where bf3.a3 = 5")
       }
     }
   }
 
-  test(s"Runtime bloom filter join: simple expressions only") {
+  test("Runtime bloom filter join: simple expressions only") {
     withSQLConf(SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "3000",
       SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "2000") {
       val squared = (s: Long) => {
         s * s
       }
       spark.udf.register("square", squared)
-      assertDidNotRewriteWithBloomFilter(s"select * from bf1 join bf2 on " +
-        s"bf1.c1 = bf2.c2 where square(bf2.a2) = 62" )
-      assertDidNotRewriteWithBloomFilter(s"select * from bf1 join bf2 on " +
-        s"bf1.c1 = square(bf2.c2) where bf2.a2 = 62" )
+      assertDidNotRewriteWithBloomFilter("select * from bf1 join bf2 on " +
+        "bf1.c1 = bf2.c2 where square(bf2.a2) = 62" )
+      assertDidNotRewriteWithBloomFilter("select * from bf1 join bf2 on " +
+        "bf1.c1 = square(bf2.c2) where bf2.a2 = 62" )
     }
   }
 }

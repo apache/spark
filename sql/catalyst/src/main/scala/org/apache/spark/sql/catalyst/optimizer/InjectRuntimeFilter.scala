@@ -36,7 +36,7 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
 
   // Wraps `expr` with a hash function if its byte size is larger than an integer.
   private def mayWrapWithHash(expr: Expression): Expression = {
-    if (expr.dataType.defaultSize >  IntegerType.defaultSize) {
+    if (expr.dataType.defaultSize > IntegerType.defaultSize) {
       new Murmur3Hash(Seq(expr))
     } else {
       expr
@@ -47,8 +47,7 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
       filterApplicationSideExp: Expression,
       filterApplicationSidePlan: LogicalPlan,
       filterCreationSideExp: Expression,
-      filterCreationSidePlan: LogicalPlan
-  ): LogicalPlan = {
+      filterCreationSidePlan: LogicalPlan): LogicalPlan = {
     require(conf.runtimeFilterBloomFilterEnabled || conf.runtimeFilterSemiJoinReductionEnabled)
     if (conf.runtimeFilterBloomFilterEnabled) {
       injectBloomFilter(
@@ -98,8 +97,7 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
       filterApplicationSideExp: Expression,
       filterApplicationSidePlan: LogicalPlan,
       filterCreationSideExp: Expression,
-      filterCreationSidePlan: LogicalPlan
-  ): LogicalPlan = {
+      filterCreationSidePlan: LogicalPlan): LogicalPlan = {
     require(filterApplicationSideExp.dataType == filterCreationSideExp.dataType)
     val actualFilterKeyExpr = mayWrapWithHash(filterCreationSideExp)
     val alias = Alias(actualFilterKeyExpr, actualFilterKeyExpr.toString)()
