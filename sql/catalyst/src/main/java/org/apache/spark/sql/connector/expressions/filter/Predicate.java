@@ -17,14 +17,12 @@
 
 package org.apache.spark.sql.connector.expressions.filter;
 
+import java.util.Arrays;
+
 import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.connector.expressions.Expression;
 import org.apache.spark.sql.connector.expressions.GeneralScalarExpression;
 import org.apache.spark.sql.connector.expressions.NamedReference;
-
-import java.util.Arrays;
-import java.util.List;
-import java.util.stream.Collectors;
 
 /**
  * The general representation of predicate expressions, which contains the upper-cased expression
