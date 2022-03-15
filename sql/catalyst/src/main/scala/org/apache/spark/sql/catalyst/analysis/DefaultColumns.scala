@@ -214,7 +214,7 @@ object DefaultColumns {
   }
 
   /**
-   * Adds a projection over the plan in 'insert.query' generating missing default column values.
+   * Adds a projection over the plan in `insert.query` generating missing default column values.
    *
    * @param insert the INSERT INTO statement to add missing DEFAULT column references to.
    * @return the updated statement with missing DEFAULT column values appended to the list.
@@ -251,7 +251,7 @@ object DefaultColumns {
             s"provided a value of incompatible type ${expr.dataType}")
       case (expr, _, _) => expr
     }
-    // Finally, return a projection of the original 'insert.query' output attributes plus new
+    // Finally, return a projection of the original `insert.query` output attributes plus new
     // aliases over the DEFAULT column values.
     // If the insertQuery is an existing Project, flatten them together.
     val newAliases: Seq[NamedExpression] = {
