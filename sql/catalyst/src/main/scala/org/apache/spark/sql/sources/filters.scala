@@ -88,8 +88,11 @@ sealed abstract class Filter {
 @Stable
 case class EqualTo(attribute: String, value: Any) extends Filter {
   override def references: Array[String] = Array(attribute) ++ findReferences(value)
-  override def toV2: Predicate = new Predicate("=",
-    Array(FieldReference(attribute), LiteralValue(value, Literal(value).dataType)))
+  override def toV2: Predicate = {
+    val literal = Literal(value)
+    new Predicate("=",
+      Array(FieldReference(attribute), LiteralValue(literal.value, literal.dataType)))
+  }
 }
 
 /**
@@ -105,8 +108,11 @@ case class EqualTo(attribute: String, value: Any) extends Filter {
 @Stable
 case class EqualNullSafe(attribute: String, value: Any) extends Filter {
   override def references: Array[String] = Array(attribute) ++ findReferences(value)
-  override def toV2: Predicate = new Predicate("<=>",
-    Array(FieldReference(attribute), LiteralValue(value, Literal(value).dataType)))
+  override def toV2: Predicate = {
+    val literal = Literal(value)
+    new Predicate("<=>",
+      Array(FieldReference(attribute), LiteralValue(literal.value, literal.dataType)))
+  }
 }
 
 /**
@@ -121,8 +127,11 @@ case class EqualNullSafe(attribute: String, value: Any) extends Filter {
 @Stable
 case class GreaterThan(attribute: String, value: Any) extends Filter {
   override def references: Array[String] = Array(attribute) ++ findReferences(value)
-  override def toV2: Predicate = new Predicate(">",
-    Array(FieldReference(attribute), LiteralValue(value, Literal(value).dataType)))
+  override def toV2: Predicate = {
+    val literal = Literal(value)
+    new Predicate(">",
+      Array(FieldReference(attribute), LiteralValue(literal.value, literal.dataType)))
+  }
 }
 
 /**
@@ -137,8 +146,11 @@ case class GreaterThan(attribute: String, value: Any) extends Filter {
 @Stable
 case class GreaterThanOrEqual(attribute: String, value: Any) extends Filter {
   override def references: Array[String] = Array(attribute) ++ findReferences(value)
-  override def toV2: Predicate = new Predicate(">=",
-    Array(FieldReference(attribute), LiteralValue(value, Literal(value).dataType)))
+  override def toV2: Predicate = {
+    val literal = Literal(value)
+    new Predicate(">=",
+      Array(FieldReference(attribute), LiteralValue(literal.value, literal.dataType)))
+  }
 }
 
 /**
@@ -153,8 +165,11 @@ case class GreaterThanOrEqual(attribute: String, value: Any) extends Filter {
 @Stable
 case class LessThan(attribute: String, value: Any) extends Filter {
   override def references: Array[String] = Array(attribute) ++ findReferences(value)
-  override def toV2: Predicate = new Predicate("<",
-    Array(FieldReference(attribute), LiteralValue(value, Literal(value).dataType)))
+  override def toV2: Predicate = {
+    val literal = Literal(value)
+    new Predicate("<",
+      Array(FieldReference(attribute), LiteralValue(literal.value, literal.dataType)))
+  }
 }
 
 /**
@@ -169,8 +184,11 @@ case class LessThan(attribute: String, value: Any) extends Filter {
 @Stable
 case class LessThanOrEqual(attribute: String, value: Any) extends Filter {
   override def references: Array[String] = Array(attribute) ++ findReferences(value)
-  override def toV2: Predicate = new Predicate("<=",
-    Array(FieldReference(attribute), LiteralValue(value, Literal(value).dataType)))
+  override def toV2: Predicate = {
+    val literal = Literal(value)
+    new Predicate("<=",
+      Array(FieldReference(attribute), LiteralValue(literal.value, literal.dataType)))
+  }
 }
 
 /**
@@ -208,7 +226,10 @@ case class In(attribute: String, values: Array[Any]) extends Filter {
 
   override def references: Array[String] = Array(attribute) ++ values.flatMap(findReferences)
   override def toV2: Predicate = {
-    val literals = values.map(v => LiteralValue(v, Literal(v).dataType))
+    val literals = values.map { value =>
+      val literal = Literal(value)
+      LiteralValue(literal.value, literal.dataType)
+    }
     new Predicate("IN", FieldReference(attribute) +: literals)
   }
 }

@@ -41,7 +41,6 @@ import org.apache.spark.sql.execution.datasources.jdbc.connection.ConnectionProv
 import org.apache.spark.sql.execution.datasources.v2.TableSampleInfo
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.UTF8String
 
 /**
  * :: DeveloperApi ::
@@ -221,9 +220,13 @@ abstract class JdbcDialect extends Serializable with Logging{
   }
 
   class JDBCSQLBuilder extends V2ExpressionSQLBuilder {
-    override def visitLiteral(literal: Literal[_]): String = literal.value() match {
-      case str: UTF8String => s"${compileValue(str.toString)}"
-      case other => s"${compileValue(other)}"
+    override def visitLiteral(literal: Literal[_]): String = literal.dataType() match {
+      case StringType => s"${compileValue(literal.value().toString)}"
+      case TimestampType =>
+        s"${compileValue(DateTimeUtils.toJavaTimestamp(literal.value().asInstanceOf[Long]))}"
+      case DateType =>
+        s"${compileValue(DateTimeUtils.toJavaDate(literal.value().asInstanceOf[Int]))}"
+      case other => s"${compileValue(literal.value())}"
     }
 
     override def visitNamedReference(namedRef: NamedReference): String = {
