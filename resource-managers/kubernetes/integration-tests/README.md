@@ -340,7 +340,7 @@ You can also specify `volcano` tag to only run Volcano test:
         'kubernetes-integration-tests/test'
 
 ## Cleanup Volcano
-```
+
     # x86_64
     kubectl delete -f https://raw.githubusercontent.com/volcano-sh/volcano/v1.5.1/installer/volcano-development.yaml
 
@@ -348,6 +348,6 @@ You can also specify `volcano` tag to only run Volcano test:
     kubectl delete -f https://raw.githubusercontent.com/volcano-sh/volcano/v1.5.1/installer/volcano-development-arm64.yaml
     
     # Cleanup Volcano webhook 
-    k delete validatingwebhookconfigurations volcano-admission-service-jobs-validate volcano-admission-service-pods-validate volcano-admission-service-queues-validate
-    k delete mutatingwebhookconfigurations volcano-admission-service-jobs-mutate volcano-admission-service-podgroups-mutate volcano-admission-service-pods-mutate volcano-admission-service-queues-mutate
-```
+    kubectl delete validatingwebhookconfigurations volcano-admission-service-jobs-validate volcano-admission-service-pods-validate volcano-admission-service-queues-validate
+    kubectl delete mutatingwebhookconfigurations volcano-admission-service-jobs-mutate volcano-admission-service-podgroups-mutate volcano-admission-service-pods-mutate volcano-admission-service-queues-mutate
+
