@@ -1529,7 +1529,8 @@ abstract class DynamicPartitionPruningSuiteBase
     }
   }
 
-  test("SPARK-37995: Fix DPP does not compile nested subquery in AQE") {
+  test("SPARK-37995: PlanAdaptiveDynamicPruningFilters should use prepareExecutedPlan " +
+    "rather than createSparkPlan to re-plan subquery") {
     withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true",
       SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "false",
       SQLConf.EXCHANGE_REUSE_ENABLED.key -> "false") {
