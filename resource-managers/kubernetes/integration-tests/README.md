@@ -317,10 +317,10 @@ Volcano integration is experimental in Aapche Spark 3.3.0 and the test coverage 
 ## Installation
 
     # x86_64
-    kubectl apply -f https://raw.githubusercontent.com/volcano-sh/volcano/release-1.5/installer/volcano-development.yaml
+    kubectl apply -f https://raw.githubusercontent.com/volcano-sh/volcano/v1.5.0/installer/volcano-development.yaml
 
     # arm64:
-    kubectl apply -f https://raw.githubusercontent.com/volcano-sh/volcano/release-1.5/installer/volcano-development-arm64.yaml
+    kubectl apply -f https://raw.githubusercontent.com/volcano-sh/volcano/v1.5.0/installer/volcano-development-arm64.yaml
 
 ## Run tests
 
