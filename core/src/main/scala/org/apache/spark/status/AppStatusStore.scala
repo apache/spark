@@ -17,12 +17,17 @@
 
 package org.apache.spark.status
 
+import java.io.File
+import java.nio.file.Files
 import java.util.{List => JList}
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.HashMap
+import scala.util.control.NonFatal
 
 import org.apache.spark.{JobExecutionStatus, SparkConf, SparkContext}
+import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config.Status.DISK_STORE_DIR_FOR_STATUS
 import org.apache.spark.status.api.v1
 import org.apache.spark.storage.FallbackStorage.FALLBACK_BLOCK_MANAGER_ID
 import org.apache.spark.ui.scope._
@@ -34,6 +39,7 @@ import org.apache.spark.util.kvstore.{InMemoryStore, KVStore}
  */
 private[spark] class AppStatusStore(
     val store: KVStore,
+    val diskStore: Option[KVStore] = None,
     val listener: Option[AppStatusListener] = None) {
 
   def applicationInfo(): v1.ApplicationInfo = {
@@ -755,18 +761,33 @@ private[spark] class AppStatusStore(
   }
 }
 
-private[spark] object AppStatusStore {
+private[spark] object AppStatusStore extends Logging {
 
   val CURRENT_VERSION = 2L
 
   /**
-   * Create an in-memory store for a live application.
+   * Create an in-memory store for a live application. also create a disk store if
+   * the `spark.appStatusStore.diskStore.dir` is set
    */
   def createLiveStore(
       conf: SparkConf,
       appStatusSource: Option[AppStatusSource] = None): AppStatusStore = {
     val store = new ElementTrackingStore(new InMemoryStore(), conf)
     val listener = new AppStatusListener(store, conf, true, appStatusSource)
-    new AppStatusStore(store, listener = Some(listener))
+    // create a disk-based kv store if the directory is set
+    val diskStore = conf.get(DISK_STORE_DIR_FOR_STATUS).flatMap { storeDir =>
+      val storePath = Files.createDirectories(
+        new File(storeDir, System.currentTimeMillis().toString).toPath
+      ).toFile
+       try {
+        Some(KVUtils.open(storePath, AppStatusStoreMetadata(CURRENT_VERSION), conf))
+          .map(new ElementTrackingStore(_, conf))
+      } catch {
+        case NonFatal(e) =>
+          logWarning("Failed to create disk-based app status store: ", e)
+          None
+      }
+    }
+    new AppStatusStore(store, diskStore = diskStore, listener = Some(listener))
   }
 }
