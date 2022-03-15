@@ -96,8 +96,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper wit
           sHolder.builder match {
             case r: SupportsPushDownAggregates =>
               val aliasMap = getAliasMap(project)
-              val newResultExpressions =
-                resultExpressions.map(replaceAliasWithAttr(_, aliasMap))
+              val newResultExpressions = resultExpressions.map(replaceAliasWithAttr(_, aliasMap))
               val newGroupingExpressions = groupingExpressions.asInstanceOf[Seq[NamedExpression]]
                 .map(replaceAliasWithAttr(_, aliasMap))
               val aggExprToOutputOrdinal = mutable.HashMap.empty[Expression, Int]
