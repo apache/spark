@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.{Ascending, Attribute, Expression, SortOrder, UnsafeRow}
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.plans.physical.{ClusteredDistribution, Distribution}
+import org.apache.spark.sql.catalyst.plans.physical.Distribution
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.streaming.StreamingSymmetricHashJoinHelper._
 import org.apache.spark.sql.execution.streaming.state._
@@ -93,13 +93,10 @@ case class FlatMapGroupsWithStateExec(
    * to have the same grouping so that the data are co-lacated on the same task.
    */
   override def requiredChildDistribution: Seq[Distribution] = {
-    // NOTE: Please read through the NOTE on the classdoc of StatefulOpClusteredDistribution
-    // before making any changes.
-    // TODO(SPARK-38204)
-    ClusteredDistribution(
-        groupingAttributes, requiredNumPartitions = stateInfo.map(_.numPartitions)) ::
-      ClusteredDistribution(
-        initialStateGroupAttrs, requiredNumPartitions = stateInfo.map(_.numPartitions)) ::
+    StatefulOperatorPartitioning.getCompatibleDistribution(
+      groupingAttributes, getStateInfo, conf) ::
+    StatefulOperatorPartitioning.getCompatibleDistribution(
+      initialStateGroupAttrs, getStateInfo, conf) ::
       Nil
   }
 
