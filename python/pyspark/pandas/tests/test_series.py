@@ -1744,6 +1744,10 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
         self.assert_eq(
             psser.replace(regex=r"^.oo$", value="new"), pser.replace(regex=r"^.oo$", value="new")
         )
+        self.assert_eq(
+            (psser + "o").replace(regex=r"^.ooo$", value="new"),
+            (pser + "o").replace(regex=r"^.ooo$", value="new"),
+        )
 
         msg = "'to_replace' should be one of str, list, tuple, dict, int, float"
         with self.assertRaisesRegex(TypeError, msg):

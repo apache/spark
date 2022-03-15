@@ -4319,7 +4319,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         Values of the Series are replaced with other values dynamically.
 
         .. note:: For partial pattern matching, the replacement is against the whole string,
-            which is different from pandas'.
+            which is different from pandas'. That's by the nature of underlying Spark API.
 
         Parameters
         ----------
