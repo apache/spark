@@ -236,7 +236,8 @@ object DefaultColumns {
    * @return Result of the analysis and constant-folding operation.
    */
   private def Analyze(colExpr: Expression, colText: String, colName: String,
-                      statementType: String): Expression = {
+      statementType: String):
+  Expression = {
     try {
       // Invoke the analyzer over the 'colExpr'.
       val plan = analyzer.execute(Project(Seq(Alias(colExpr, colName)()), OneRowRelation()))

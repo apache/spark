@@ -904,6 +904,13 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
       sql("insert into t values(false, default)")
       checkAnswer(sql("select s from t where i = false"), Seq(42L).map(i => Row(i)))
     }
+    // Explicit defaults may appear in different positions within the inline table provided as input
+    // to an INSERT INTO statement as an inline table.
+    withTable("t") {
+      sql("create table t(i boolean default false, s bigint default 42) using parquet")
+      sql("insert into t values(false, default), (default, 42)")
+      checkAnswer(sql("select s from t where i = false"), Seq(42L, 42L).map(i => Row(i)))
+    }
     // There is an explicit default value provided in the INSERT INTO statement as a SELECT.
     withTable("t") {
       sql("create table t(i boolean, s bigint default 42) using parquet")
