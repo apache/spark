@@ -130,6 +130,9 @@ case class AQEShuffleReadExec private(
   def hasSkewedPartition: Boolean =
     partitionSpecs.exists(_.isInstanceOf[PartialReducerPartitionSpec])
 
+  def hasEmptyPartition: Boolean =
+    emptyPartitionsSize.nonEmpty && emptyPartitionsSize.get.nonEmpty
+
   def isLocalRead: Boolean =
     partitionSpecs.exists(_.isInstanceOf[PartialMapperPartitionSpec]) ||
       partitionSpecs.exists(_.isInstanceOf[CoalescedMapperPartitionSpec])
@@ -163,6 +166,10 @@ case class AQEShuffleReadExec private(
     }
   }
 
+  lazy val emptyPartitionsSize: Option[Seq[Long]] = partitionDataSizes.map(
+    dataSizes => dataSizes.filter(_ <= 0)
+  )
+
   private def sendDriverMetrics(): Unit = {
     val executionId = sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)
     val driverAccumUpdates = ArrayBuffer.empty[(Long, Long)]
@@ -194,6 +201,14 @@ case class AQEShuffleReadExec private(
       val x = partitionSpecs.count(isCoalescedSpec)
       numCoalescedPartitionsMetric.set(x)
       driverAccumUpdates += numCoalescedPartitionsMetric.id -> x
+    }
+
+    if (hasEmptyPartition) {
+      val numEmptyPartitionsMetrics = metrics("numEmptyPartitions")
+      emptyPartitionsSize.foreach { size =>
+        numEmptyPartitionsMetrics.set(size.length.toLong)
+        driverAccumUpdates += (numEmptyPartitionsMetrics.id -> size.length.toLong)
+      }
     }
 
     partitionDataSizes.foreach { dataSizes =>
@@ -230,6 +245,13 @@ case class AQEShuffleReadExec private(
         if (hasCoalescedPartition) {
           Map("numCoalescedPartitions" ->
             SQLMetrics.createMetric(sparkContext, "number of coalesced partitions"))
+        } else {
+          Map.empty
+        }
+      } ++ {
+        if (hasEmptyPartition) {
+          Map("numEmptyPartitions" ->
+            SQLMetrics.createMetric(sparkContext, "number of empty partitions"))
         } else {
           Map.empty
         }
