@@ -23,20 +23,6 @@ on:
   push:
     branches:
     - '**'
-    - '!branch-*.*'
-  schedule:
-    # master, Hadoop 2
-    - cron: '0 1 * * *'
-    # master
-    - cron: '0 4 * * *'
-    # branch-3.2
-    - cron: '0 7 * * *'
-    # PySpark coverage for master branch
-    - cron: '0 10 * * *'
-    # Java 11
-    - cron: '0 13 * * *'
-    # Java 17
-    - cron: '0 16 * * *'
   workflow_call:
     inputs:
       ansi_enabled:
@@ -96,7 +82,7 @@ jobs:
           echo '::set-output name=hadoop::hadoop3'
         else
           echo '::set-output name=java::8'
-          echo '::set-output name=branch::master' # Default branch to run on. CHANGE here when a branch is cut out.
+          echo '::set-output name=branch::branch-3.3' # Default branch to run on. CHANGE here when a branch is cut out.
           echo '::set-output name=type::regular'
           echo '::set-output name=envs::{"SPARK_ANSI_SQL_MODE": "${{ inputs.ansi_enabled }}"}'
           echo '::set-output name=hadoop::hadoop3'
@@ -115,7 +101,7 @@ jobs:
       with:
         fetch-depth: 0
         repository: apache/spark
-        ref: master
+        ref: branch-3.3
     - name: Sync the current branch with the latest in Apache Spark
       if: github.repository != 'apache/spark'
       run: |
@@ -325,7 +311,7 @@ jobs:
       with:
         fetch-depth: 0
         repository: apache/spark
-        ref: master
+        ref: branch-3.3
     - name: Sync the current branch with the latest in Apache Spark
       if: github.repository != 'apache/spark'
       run: |
@@ -413,7 +399,7 @@ jobs:
       with:
         fetch-depth: 0
         repository: apache/spark
-        ref: master
+        ref: branch-3.3
     - name: Sync the current branch with the latest in Apache Spark
       if: github.repository != 'apache/spark'
       run: |
@@ -477,7 +463,7 @@ jobs:
       with:
         fetch-depth: 0
         repository: apache/spark
-        ref: master
+        ref: branch-3.3
     - name: Sync the current branch with the latest in Apache Spark
       if: github.repository != 'apache/spark'
       run: |
@@ -590,7 +576,7 @@ jobs:
       with:
         fetch-depth: 0
         repository: apache/spark
-        ref: master
+        ref: branch-3.3
     - name: Sync the current branch with the latest in Apache Spark
       if: github.repository != 'apache/spark'
       run: |
@@ -639,7 +625,7 @@ jobs:
       with:
         fetch-depth: 0
         repository: apache/spark
-        ref: master
+        ref: branch-3.3
     - name: Sync the current branch with the latest in Apache Spark
       if: github.repository != 'apache/spark'
       run: |
@@ -687,7 +673,7 @@ jobs:
       with:
         fetch-depth: 0
         repository: apache/spark
-        ref: master
+        ref: branch-3.3
     - name: Sync the current branch with the latest in Apache Spark
       if: github.repository != 'apache/spark'
       run: |
@@ -786,7 +772,7 @@ jobs:
       with:
         fetch-depth: 0
         repository: apache/spark
-        ref: master
+        ref: branch-3.3
     - name: Sync the current branch with the latest in Apache Spark
       if: github.repository != 'apache/spark'
       run: |
