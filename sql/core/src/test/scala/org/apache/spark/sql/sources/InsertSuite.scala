@@ -1036,7 +1036,8 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
         sql("insert into t values (true)")
       }.getMessage.contains("provided a value of incompatible type"))
     }
-    // The number of columns in the INSERT INTO statement does not match the table.
+    // The number of columns in the INSERT INTO statement is greater than the number of columns in
+    // the table.
     withTable("t") {
       sql("create table num_data(id int, val decimal(38,10)) using parquet")
       sql("create table t(id1 int, int2 int, result decimal(38,10)) using parquet")
