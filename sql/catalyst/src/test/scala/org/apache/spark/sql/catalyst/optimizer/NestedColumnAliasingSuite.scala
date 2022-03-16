@@ -815,27 +815,34 @@ class NestedColumnAliasingSuite extends SchemaPruningTest {
   }
 
   test("SPARK-38530: Do not push down nested ExtractValues with other expressions") {
-    val nestedStruct = StructType.fromDDL(
-      "a int, b struct<c: struct<d: int, e: int>, c2: int>")
+    val inputType = StructType.fromDDL(
+      "a int, b struct<c: array<int>, c2: int>")
+    val simpleStruct = StructType.fromDDL(
+      "b struct<c: struct<d: int, e: int>, c2 int>"
+    )
     val input = LocalRelation(
       'id.int,
-      'col1.array(ArrayType(nestedStruct)))
+      'col1.array(ArrayType(inputType)))
 
     val query = input
       .generate(Explode('col1))
-      .select(UnresolvedExtractValue(UnresolvedExtractValue(
-        CaseWhen(Seq(('col.getField("a").===(1),
-          'col.getField("b")))), Literal("c")), Literal("d")))
+      .select(
+        UnresolvedExtractValue(
+          UnresolvedExtractValue(
+            CaseWhen(Seq(('col.getField("a").===(1),
+              Literal.default(simpleStruct)))),
+            Literal("b")),
+          Literal("c")).as("result"))
       .analyze
     val optimized = Optimize.execute(query)
 
-    // The query should not be optimized.
+    // Only the inner-most col.a should be pushed down.
     val expected = input
       .select('col1)
-      .generate(Explode('col1), unrequiredChildIndex = Seq(0))
+      .generate(Explode('col1.getField("a")), unrequiredChildIndex = Seq(0))
       .select(UnresolvedExtractValue(UnresolvedExtractValue(
-        CaseWhen(Seq(('col.getField("a").===(1),
-          'col.getField("b")))), Literal("c")), Literal("d")))
+        CaseWhen(Seq(('col.===(1),
+          Literal.default(simpleStruct)))), Literal("b")), Literal("c")).as("result"))
       .analyze
 
     comparePlans(optimized, expected)
