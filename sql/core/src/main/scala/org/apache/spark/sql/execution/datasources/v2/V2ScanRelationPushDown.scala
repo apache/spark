@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.planning.ScanOperation
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, LeafNode, Limit, LocalLimit, LogicalPlan, Project, Sample, Sort}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.connector.expressions.SortOrder
-import org.apache.spark.sql.connector.expressions.aggregate.{Aggregation, Avg, GeneralAggregateFunc}
+import org.apache.spark.sql.connector.expressions.aggregate.{Aggregation, Avg, Count, GeneralAggregateFunc, Sum}
 import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownAggregates, SupportsPushDownFilters, V1Scan}
 import org.apache.spark.sql.execution.datasources.DataSourceStrategy
 import org.apache.spark.sql.sources
@@ -278,8 +278,15 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
   }
 
   private def supportPartialAggPushDown(agg: Aggregation): Boolean = {
-    // We don't know the agg buffer of `GeneralAggregateFunc`, so can't do partial agg push down.
-    agg.aggregateExpressions().forall(!_.isInstanceOf[GeneralAggregateFunc])
+    agg.aggregateExpressions().forall {
+      // We don't know the agg buffer of `GeneralAggregateFunc`, so can't do partial agg push down.
+      case _: GeneralAggregateFunc => false
+      // If `Sum`, `Count`, `Avg` with distinct, can't do partial agg push down.
+      case sum: Sum => !sum.isDistinct
+      case count: Count => !count.isDistinct
+      case avg: Avg => !avg.isDistinct
+      case _ => true
+    }
   }
 
   private def addCastIfNeeded(expression: Expression, expectedDataType: DataType) =
