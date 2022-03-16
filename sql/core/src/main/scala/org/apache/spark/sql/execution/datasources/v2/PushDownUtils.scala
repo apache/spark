@@ -131,10 +131,11 @@ object PushDownUtils extends PredicateHelper {
    */
   def pushTopN(
       scanBuilder: ScanBuilder,
-      order: Array[SortOrder], limit: Int): Tuple2[Boolean, Boolean] = {
+      order: Array[SortOrder], limit: Int): (Boolean, Boolean) = {
     scanBuilder match {
       case s: SupportsPushDownTopN =>
-        Tuple2(s.pushTopN(order, limit), s.isPartiallyPushed)
+        val isPushed = s.pushTopN(order, limit)
+        (isPushed, s.isPartiallyPushed)
       case _ => Tuple2(false, false)
     }
   }
