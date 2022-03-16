@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.datasources.parquet;
 
 import java.nio.ByteBuffer;
+
 import org.apache.spark.sql.execution.vectorized.WritableColumnVector;
 
 import org.apache.parquet.io.api.Binary;
@@ -100,7 +101,5 @@ public interface VectorizedValuesReader {
     }
 
     static void skipWrite(WritableColumnVector c, int rowId, ByteBuffer val, int length) { }
-
   }
-
 }

@@ -160,7 +160,7 @@ class ParquetEncodingSuite extends ParquetCompatibilityTest with SharedSparkSess
           // reads at least twice from the reader). This will catch any issues with state
           // maintained by the reader(s)
           // Add at least one string with a null
-          val data = (1 to 81971).map { i =>
+          val data = (1 to 8193).map { i =>
             (i,
               i.toLong, i.toShort, Array[Byte](i.toByte),
               if (i % 2 == 1) s"test_$i" else null,

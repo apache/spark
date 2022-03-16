@@ -140,5 +140,4 @@ class ParquetDeltaByteArrayEncodingSuite extends ParquetCompatibilityTest with S
       i += skipCount + 1
     }
   }
-
 }

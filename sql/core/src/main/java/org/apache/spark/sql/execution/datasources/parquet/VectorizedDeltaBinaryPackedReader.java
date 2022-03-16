@@ -98,6 +98,7 @@ public class VectorizedDeltaBinaryPackedReader extends VectorizedReaderBase {
     firstValue = BytesUtils.readZigZagVarLong(in);
   }
 
+  // True value count. May be less than valueCount because of nulls
   int getTotalValueCount() {
     return totalValueCount;
   }

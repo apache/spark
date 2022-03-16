@@ -290,9 +290,10 @@ public class VectorizedColumnReader {
     } catch (IOException e) {
       throw new IOException("could not read page in col " + descriptor, e);
     }
+    // for PARQUET-246 (See VectorizedDeltaByteArrayReader.setPreviousValues)
     if (CorruptDeltaByteArrays.requiresSequentialReads(writerVersion, dataEncoding) &&
         previousReader instanceof RequiresPreviousReader) {
-      // previous reader can only be set if reading sequentially
+      // previousReader can only be set if reading sequentially
       ((RequiresPreviousReader) dataColumn).setPreviousReader(previousReader);
     }
   }

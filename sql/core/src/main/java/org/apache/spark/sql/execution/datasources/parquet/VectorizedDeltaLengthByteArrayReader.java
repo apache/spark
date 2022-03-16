@@ -86,5 +86,4 @@ public class VectorizedDeltaLengthByteArrayReader extends VectorizedReaderBase i
     }
     currentRow += total;
   }
-
 }

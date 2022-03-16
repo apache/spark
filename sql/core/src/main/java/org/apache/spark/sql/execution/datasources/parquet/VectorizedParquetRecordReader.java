@@ -368,8 +368,7 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
         datetimeRebaseTz,
         int96RebaseMode,
         int96RebaseTz,
-        writerVersion
-        );
+        writerVersion);
     }
     totalCountLoadedSoFar += pages.getRowCount();
   }
