@@ -954,6 +954,14 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
       sql("insert into t select default, 43")
       checkAnswer(sql("select s from t where i is null"), Seq(43L).map(i => Row(i)))
     }
+    // The default value has an explicit alias. It evaluates successfully when inlined into the
+    // SELECT query at the INSERT INTO time.
+    withTable("t") {
+      sql("create table t(i boolean default (select false as alias), s bigint default 42) " +
+        " using parquet")
+      sql("insert into t select default, default")
+      checkAnswer(sql("select s from t"), Seq(42).map(i => Row(i)))
+    }
     // There are three column types exercising various combinations of implicit and explicit
     // default column value references in the 'insert into' statements.
     withTable("t1", "t2") {
@@ -988,29 +996,34 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
       val COLUMN_DEFAULT_NOT_FOUND = "Column 'default' does not exist"
     }
     withTable("t") {
+      sql("create table t(i boolean, s bigint default badvalue) using parquet")
       assert(intercept[AnalysisException] {
-        sql("create table t(i boolean, s bigint default badvalue) using parquet")
+        sql("insert into t values (default, default)")
       }.getMessage.contains(Errors.COMMON_SUBSTRING))
     }
     // The default value analyzes to a table not in the catalog.
     withTable("t") {
+      sql("create table t(i boolean, s bigint default (select min(x) from badtable)) using parquet")
       assert(intercept[AnalysisException] {
-        sql("create table t(i boolean, s bigint default (select min(x) from badtable)) " +
-          "using parquet")
+        sql("insert into t values (default, default)")
       }.getMessage.contains(Errors.COMMON_SUBSTRING))
     }
     // The default value parses but refers to a table from the catalog.
     withTable("t", "other") {
       sql("create table other(x string) using parquet")
+      sql("create table t(i boolean, s bigint default (select min(x) from other)) using parquet")
       assert(intercept[AnalysisException] {
-        sql("create table t(i boolean, s bigint default (select min(x) from other)) using parquet")
+        sql("insert into t values (default, default)")
       }.getMessage.contains(Errors.COMMON_SUBSTRING))
     }
-    // The default value has an explicit alias.
+    // The default value has an explicit alias. It fails to evaluate when inlined into the VALUES
+    // list at the INSERT INTO time.
     withTable("t") {
+      sql("create table t(i boolean default (select false as alias), s bigint) using parquet")
       assert(intercept[AnalysisException] {
-        sql("create table t(i boolean default (select false as alias), s bigint) using parquet")
-      }.getMessage.contains(Errors.COMMON_SUBSTRING))
+        sql("insert into t values (default, default)")
+      }.getMessage.contains(
+        "cannot evaluate expression scalarsubquery() in inline table definition"))
     }
     // Explicit default values may not participate in complex expressions in the VALUES list.
     withTable("t") {
@@ -1034,8 +1047,9 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
     }
     // The default value parses but the type is not coercible.
     withTable("t") {
+      sql("create table t(i boolean, s bigint default false) using parquet")
       assert(intercept[AnalysisException] {
-        sql("create table t(i boolean, s bigint default false) using parquet")
+        sql("insert into t values (default, default)")
       }.getMessage.contains("provided a value of incompatible type"))
     }
     // The number of columns in the INSERT INTO statement is greater than the number of columns in

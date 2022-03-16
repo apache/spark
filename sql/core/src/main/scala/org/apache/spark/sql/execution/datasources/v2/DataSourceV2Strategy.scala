@@ -21,7 +21,7 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable
 
 import org.apache.spark.sql.{SparkSession, Strategy}
-import org.apache.spark.sql.catalyst.analysis.{ResolvedDBObjectName, ResolvedNamespace, ResolvedPartitionSpec, ResolvedTable}
+import org.apache.spark.sql.catalyst.analysis.{DefaultColumns, ResolvedDBObjectName, ResolvedNamespace, ResolvedPartitionSpec, ResolvedTable}
 import org.apache.spark.sql.catalyst.catalog.CatalogUtils
 import org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.expressions.{And, Attribute, DynamicPruning, EmptyRow, Expression, Literal, NamedExpression, PredicateHelper, SubqueryExpression}
@@ -41,7 +41,7 @@ import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, PushableC
 import org.apache.spark.sql.execution.streaming.continuous.{WriteToContinuousDataSource, WriteToContinuousDataSourceExec}
 import org.apache.spark.sql.internal.StaticSQLConf.WAREHOUSE_PATH
 import org.apache.spark.sql.sources.{BaseRelation, TableScan}
-import org.apache.spark.sql.types.{BooleanType, StringType}
+import org.apache.spark.sql.types.{BooleanType, StringType, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.unsafe.types.UTF8String
@@ -170,7 +170,9 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
 
     case CreateTable(ResolvedDBObjectName(catalog, ident), schema, partitioning,
         tableSpec, ifNotExists) =>
-      CreateTableExec(catalog.asTableCatalog, ident.asIdentifier, schema,
+      val newSchema: StructType =
+        DefaultColumns.constantFoldExistsDefaultExpressions(schema, "CREATE TABLE")
+      CreateTableExec(catalog.asTableCatalog, ident.asIdentifier, newSchema,
         partitioning, qualifyLocInTableSpec(tableSpec), ifNotExists) :: Nil
 
     case CreateTableAsSelect(ResolvedDBObjectName(catalog, ident), parts, query, tableSpec,
@@ -189,12 +191,14 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       RefreshTableExec(r.catalog, r.identifier, recacheTable(r)) :: Nil
 
     case ReplaceTable(ResolvedDBObjectName(catalog, ident), schema, parts, tableSpec, orCreate) =>
+      val newSchema: StructType =
+        DefaultColumns.constantFoldExistsDefaultExpressions(schema, "CREATE TABLE")
       catalog match {
         case staging: StagingTableCatalog =>
-          AtomicReplaceTableExec(staging, ident.asIdentifier, schema, parts,
+          AtomicReplaceTableExec(staging, ident.asIdentifier, newSchema, parts,
             qualifyLocInTableSpec(tableSpec), orCreate = orCreate, invalidateCache) :: Nil
         case _ =>
-          ReplaceTableExec(catalog.asTableCatalog, ident.asIdentifier, schema, parts,
+          ReplaceTableExec(catalog.asTableCatalog, ident.asIdentifier, newSchema, parts,
             qualifyLocInTableSpec(tableSpec), orCreate = orCreate, invalidateCache) :: Nil
       }
 
