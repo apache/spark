@@ -844,6 +844,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
         if (h._1 > c) {
           // Prepend updated first req to times, constant time op
           ((h._1 - c, h._2)) +=: times
+          c = 0
         } else {
           c = c - h._1
         }
