@@ -210,7 +210,7 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession {
       errorClass = "INVALID_SQL_SYNTAX",
       sqlState = "42000",
       message =
-        s"""
+        """
           |Invalid SQL syntax: Too many arguments for transform years(line 1, pos 44)
           |
           |== SQL ==
