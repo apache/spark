@@ -1722,6 +1722,25 @@ spec:
     image: will-be-overwritten
 ```
 
+#### Customized Kubernetes Schedulers for Spark on Kubernetes
+
+Spark allows users to specify a customized scheduler as Spark on Kubernetes scheduler.
+
+1. Specify scheduler name.
+
+   Users can specify customized scheduler using <code>spark.kubernetes.scheduler.name</code> or
+   <code>spark.kubernetes.{driver/executor}.scheduler.name</code> configuration.
+
+2. Specify scheduler related configurations.
+
+   Users can use [Pod template](#pod-template), existing configurations to specify label (<code>spark.kubernetes.{driver,executor}.label.*</code>), annotations style (<code>spark.kubernetes.{driver/executor}.annotation.*</code>) scheduler hints.
+
+3. Specify scheduler feature step.
+
+   Users may also consider to use <code>spark.kubernetes.{driver/executor}.pod.featureSteps</code> to support more complex requirements and more centralized scheduler hints configure, included but not limited to:
+  - Creating a scheduler needed additional Kubernetes custom resource for driver/executor scheduling.
+  - Setting scheduler hints according to configuration or existing Pod info dynamically.
+
 ### Stage Level Scheduling Overview
 
 Stage level scheduling is supported on Kubernetes when dynamic allocation is enabled. This also requires <code>spark.dynamicAllocation.shuffleTracking.enabled</code> to be enabled since Kubernetes doesn't support an external shuffle service at this time. The order in which containers for different profiles is requested from Kubernetes is not guaranteed. Note that since dynamic allocation on Kubernetes requires the shuffle tracking feature, this means that executors from previous stages that used a different ResourceProfile may not idle timeout due to having shuffle data on them. This could result in using more cluster resources and in the worst case if there are no remaining resources on the Kubernetes cluster then Spark could potentially hang. You may consider looking at config <code>spark.dynamicAllocation.shuffleTracking.timeout</code> to set a timeout, but that could result in data having to be recomputed if the shuffle data is really needed.
