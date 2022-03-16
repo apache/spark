@@ -43,8 +43,11 @@ case class ResolveInlineTables(catalog: SessionCatalog) extends Rule[LogicalPlan
       // [[ResolveInlineTables]] rule runs top-down. It is necessary to match against the entire
       // INSERT INTO statement in this way in order to provide enough context to know what values
       // to replace each explicit provided DEFAULT reference with.
-      DefaultColumns.ReplaceExplicitDefaultColumnValues(
-        DefaultColumns.AddProjectionForMissingDefaultColumnValues(i, catalog), catalog)
+      // NOTE: It is necessary to run this when the inline table is unresolved since at this point,
+      // any "default" tokens comprise UnresolvedAttributes which are necessary to replace before we
+      // check analysis.
+      DefaultColumns.replaceExplicitDefaultColumnValues(
+        DefaultColumns.addProjectionForMissingDefaultColumnValues(i, catalog), catalog)
   }
 
   /**

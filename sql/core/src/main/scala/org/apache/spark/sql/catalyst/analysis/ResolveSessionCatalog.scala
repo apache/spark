@@ -153,7 +153,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
         ctas = false)
       val folded =
         c.copy(tableSchema =
-          DefaultColumns.ConstantFoldDefaultExpressions(c.tableSchema, "CREATE TABLE"))
+          DefaultColumns.constantFoldDefaultExpressions(c.tableSchema, "CREATE TABLE"))
       if (!isV2Provider(provider)) {
         constructV1TableCmd(None, folded.tableSpec, name, folded.tableSchema, folded.partitioning,
           folded.ignoreIfExists, storageFormat, provider)
@@ -186,7 +186,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
       val provider = c.tableSpec.provider.getOrElse(conf.defaultDataSourceName)
       val folded =
         c.copy(tableSchema =
-          DefaultColumns.ConstantFoldDefaultExpressions(c.tableSchema, "REPLACE TABLE"))
+          DefaultColumns.constantFoldDefaultExpressions(c.tableSchema, "REPLACE TABLE"))
       if (!isV2Provider(provider)) {
         throw QueryCompilationErrors.operationOnlySupportedWithV2TableError("REPLACE TABLE")
       } else {

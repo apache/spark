@@ -26,7 +26,6 @@ import org.apache.hadoop.fs.{FileAlreadyExistsException, FSDataOutputStream, Pat
 import org.apache.spark.SparkException
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.analysis.DefaultColumns
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType}
 import org.apache.spark.sql.catalyst.expressions.GenericRowWithSchema
 import org.apache.spark.sql.catalyst.parser.ParseException
@@ -984,56 +983,59 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
 
     // Negative tests:
     // The default value fails to analyze.
+    object Errors {
+      val COMMON_SUBSTRING = " has a DEFAULT value"
+      val COLUMN_DEFAULT_NOT_FOUND = "Column 'default' does not exist"
+    }
     withTable("t") {
       assert(intercept[AnalysisException] {
         sql("create table t(i boolean, s bigint default badvalue) using parquet")
-      }.getMessage.contains(DefaultColumns.analysisPrefix))
+      }.getMessage.contains(Errors.COMMON_SUBSTRING))
     }
     // The default value analyzes to a table not in the catalog.
     withTable("t") {
       assert(intercept[AnalysisException] {
         sql("create table t(i boolean, s bigint default (select min(x) from badtable)) " +
           "using parquet")
-      }.getMessage.contains(DefaultColumns.analysisPrefix))
+      }.getMessage.contains(Errors.COMMON_SUBSTRING))
     }
     // The default value parses but refers to a table from the catalog.
     withTable("t", "other") {
       sql("create table other(x string) using parquet")
       assert(intercept[AnalysisException] {
         sql("create table t(i boolean, s bigint default (select min(x) from other)) using parquet")
-      }.getMessage.contains(DefaultColumns.analysisPrefix))
+      }.getMessage.contains(Errors.COMMON_SUBSTRING))
     }
     // The default value has an explicit alias.
     withTable("t") {
       assert(intercept[AnalysisException] {
         sql("create table t(i boolean default (select false as alias), s bigint) using parquet")
-      }.getMessage.contains(DefaultColumns.analysisPrefix))
+      }.getMessage.contains(Errors.COMMON_SUBSTRING))
     }
     // Explicit default values may not participate in complex expressions in the VALUES list.
     withTable("t") {
       sql("create table t(i boolean, s bigint default 42) using parquet")
       assert(intercept[AnalysisException] {
         sql("insert into t values(false, default + 1)")
-      }.getMessage.contains(DefaultColumns.columnDefaultNotFound))
+      }.getMessage.contains(Errors.COLUMN_DEFAULT_NOT_FOUND))
     }
     // Explicit default values have a reasonable error path if the table is not found.
     withTable("t") {
       assert(intercept[AnalysisException] {
         sql("insert into t values(false, default)")
-      }.getMessage.contains(DefaultColumns.columnDefaultNotFound))
+      }.getMessage.contains(Errors.COLUMN_DEFAULT_NOT_FOUND))
     }
     // Explicit default values may not participate in complex expressions in the SELECT query.
     withTable("t") {
       sql("create table t(i boolean, s bigint default 42) using parquet")
       assert(intercept[AnalysisException] {
         sql("insert into t select false, default + 1")
-      }.getMessage.contains(DefaultColumns.columnDefaultNotFound))
+      }.getMessage.contains(Errors.COLUMN_DEFAULT_NOT_FOUND))
     }
     // The default value parses but the type is not coercible.
     withTable("t") {
-      sql("create table t(i boolean, s bigint default false) using parquet")
       assert(intercept[AnalysisException] {
-        sql("insert into t values (true)")
+        sql("create table t(i boolean, s bigint default false) using parquet")
       }.getMessage.contains("provided a value of incompatible type"))
     }
     // The number of columns in the INSERT INTO statement is greater than the number of columns in
