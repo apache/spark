@@ -21,6 +21,7 @@ import org.apache.spark.sql.catalyst.analysis.AnalysisTest
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions.Literal
+import org.apache.spark.sql.catalyst.expressions.Literal.{FalseLiteral, TrueLiteral}
 import org.apache.spark.sql.catalyst.plans.{LeftOuter, RightOuter}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Distinct, LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
@@ -122,8 +123,7 @@ class AggregateOptimizeSuite extends AnalysisTest {
       Optimize.execute(
         x.join(y, LeftOuter, Some("x.a".attr === "y.a".attr))
           .groupBy("x.a".attr)("x.a".attr, Literal(1)).analyze),
-      x.join(y, LeftOuter, Some("x.a".attr === "y.a".attr))
-        .groupBy("x.a".attr)("x.a".attr, Literal(1)).analyze)
+      x.groupBy("x.a".attr)("x.a".attr, Literal(1)).analyze)
   }
 
   test("SPARK-37292: Removes outer join if it only has DISTINCT on streamed side with alias") {
@@ -147,5 +147,18 @@ class AggregateOptimizeSuite extends AnalysisTest {
           .select("x.b".attr.as("newAlias1"), "x.b".attr.as("newAlias2"))).analyze),
       x.select("x.b".attr.as("newAlias1"), "x.b".attr.as("newAlias2"))
         .groupBy("newAlias1".attr, "newAlias2".attr)("newAlias1".attr, "newAlias2".attr).analyze)
+  }
+
+  test("SPARK-38489: Aggregate.groupOnly support foldable expressions") {
+    val x = testRelation.subquery('x)
+    val y = testRelation.subquery('y)
+    comparePlans(
+      Optimize.execute(
+        Distinct(x.join(y, LeftOuter, Some("x.a".attr === "y.a".attr))
+          .select("x.b".attr, TrueLiteral, FalseLiteral.as("newAlias")))
+          .analyze),
+      x.select("x.b".attr, TrueLiteral, FalseLiteral.as("newAlias"))
+        .groupBy("x.b".attr)("x.b".attr, TrueLiteral, FalseLiteral.as("newAlias"))
+        .analyze)
   }
 }

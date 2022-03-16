@@ -205,6 +205,8 @@ object OrcUtils extends Logging {
       orcCatalystSchema.fields.map(_.dataType).zip(dataSchema.fields.map(_.dataType)).foreach {
         case (TimestampType, TimestampNTZType) =>
           throw QueryExecutionErrors.cannotConvertOrcTimestampToTimestampNTZError()
+        case (TimestampNTZType, TimestampType) =>
+          throw QueryExecutionErrors.cannotConvertOrcTimestampNTZToTimestampLTZError()
         case (t1: StructType, t2: StructType) => checkTimestampCompatibility(t1, t2)
         case _ =>
       }

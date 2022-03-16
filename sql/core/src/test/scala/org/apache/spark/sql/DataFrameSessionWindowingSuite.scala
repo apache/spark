@@ -382,6 +382,34 @@ class DataFrameSessionWindowingSuite extends QueryTest with SharedSparkSession
     }
   }
 
+  test("SPARK-36465: filter out events with invalid gap duration.") {
+    val df = Seq(
+      ("2016-03-27 19:39:30", 1, "a")).toDF("time", "value", "id")
+
+    checkAnswer(
+      df.groupBy(session_window($"time", "x sec"))
+        .agg(count("*").as("counts"))
+        .orderBy($"session_window.start".asc)
+        .select($"session_window.start".cast("string"), $"session_window.end".cast("string"),
+          $"counts"),
+      Seq()
+    )
+
+    withTempTable { table =>
+      checkAnswer(
+        spark.sql("select session_window(time, " +
+          """case when value = 1 then "2 seconds" when value = 2 then "invalid gap duration" """ +
+          s"""else "20 seconds" end), value from $table""")
+          .select($"session_window.start".cast(StringType), $"session_window.end".cast(StringType),
+            $"value"),
+        Seq(
+          Row("2016-03-27 19:39:27", "2016-03-27 19:39:47", 4),
+          Row("2016-03-27 19:39:34", "2016-03-27 19:39:36", 1)
+        )
+      )
+    }
+  }
+
   test("SPARK-36724: Support timestamp_ntz as a type of time column for SessionWindow") {
     val df = Seq((LocalDateTime.parse("2016-03-27T19:39:30"), 1, "a"),
       (LocalDateTime.parse("2016-03-27T19:39:25"), 2, "a")).toDF("time", "value", "id")
