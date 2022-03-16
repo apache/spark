@@ -1724,22 +1724,22 @@ spec:
 
 #### Customized Kubernetes Schedulers for Spark on Kubernetes
 
-Spark allows users to specify a customized scheduler as Spark on Kubernetes scheduler.
+Spark allows users to specify a custom Kubernetes schedulers.
 
 1. Specify scheduler name.
 
-   Users can specify customized scheduler using <code>spark.kubernetes.scheduler.name</code> or
+   Users can specify a custom scheduler using <code>spark.kubernetes.scheduler.name</code> or
    <code>spark.kubernetes.{driver/executor}.scheduler.name</code> configuration.
 
 2. Specify scheduler related configurations.
 
-   Users can use [Pod template](#pod-template), existing configurations to specify label (<code>spark.kubernetes.{driver,executor}.label.*</code>), annotations style (<code>spark.kubernetes.{driver/executor}.annotation.*</code>) scheduler hints.
+   To configure the custom scheduler the user can use [Pod templates](#pod-template), add labels (<code>spark.kubernetes.{driver,executor}.label.*</code>)  and/or annotations (<code>spark.kubernetes.{driver/executor}.annotation.*</code>).
 
 3. Specify scheduler feature step.
 
-   Users may also consider to use <code>spark.kubernetes.{driver/executor}.pod.featureSteps</code> to support more complex requirements and more centralized scheduler hints configure, included but not limited to:
-  - Creating a scheduler needed additional Kubernetes custom resource for driver/executor scheduling.
-  - Setting scheduler hints according to configuration or existing Pod info dynamically.
+   Users may also consider to use <code>spark.kubernetes.{driver/executor}.pod.featureSteps</code> to support more complex requirements, including but not limited to:
+  - Create additional Kubernetes custom resources for driver/executor scheduling.
+  - Set scheduler hints according to configuration or existing Pod info dynamically.
 
 ### Stage Level Scheduling Overview
 
