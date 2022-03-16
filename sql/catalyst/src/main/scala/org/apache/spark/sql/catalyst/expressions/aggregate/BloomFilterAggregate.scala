@@ -60,32 +60,29 @@ case class BloomFilterAggregate(
   }
 
   override def checkInputDataTypes(): TypeCheckResult = {
-    val typeCheckResult = (first.dataType, second.dataType, third.dataType) match {
+    (first.dataType, second.dataType, third.dataType) match {
       case (_, NullType, _) | (_, _, NullType) =>
         TypeCheckResult.TypeCheckFailure("Null typed values cannot be used as size arguments")
-      case (LongType, LongType, LongType) => TypeCheckResult.TypeCheckSuccess
+      case (LongType, LongType, LongType) =>
+        if (!estimatedNumItemsExpression.foldable) {
+          TypeCheckFailure("The estimated number of items provided must be a constant literal")
+        } else if (estimatedNumItems <= 0L) {
+          TypeCheckFailure("The estimated number of items must be a positive value " +
+            s" (current value = $estimatedNumItems)")
+        } else if (!numBitsExpression.foldable) {
+          TypeCheckFailure("The number of bits provided must be a constant literal")
+        } else if (numBits <= 0L) {
+          TypeCheckFailure("The number of bits must be a positive value " +
+            s" (current value = $numBits)")
+        } else {
+          require(estimatedNumItems <= BloomFilterAggregate.MAX_ALLOWED_NUM_ITEMS)
+          require(numBits <= BloomFilterAggregate.MAX_NUM_BITS)
+          TypeCheckSuccess
+        }
       case _ => TypeCheckResult.TypeCheckFailure(s"Input to function $prettyName should have " +
         s"been a ${LongType.simpleString} value followed with two ${LongType.simpleString} size " +
         s"arguments, but it's [${first.dataType.catalogString}, " +
         s"${second.dataType.catalogString}, ${third.dataType.catalogString}]")
-    }
-    if (typeCheckResult.isFailure) {
-      return typeCheckResult
-    }
-    if (!estimatedNumItemsExpression.foldable) {
-      TypeCheckFailure("The estimated number of items provided must be a constant literal")
-    } else if (estimatedNumItems <= 0L) {
-      TypeCheckFailure("The estimated number of items must be a positive value " +
-        s" (current value = $estimatedNumItems)")
-    } else if (!numBitsExpression.foldable) {
-      TypeCheckFailure("The number of bits provided must be a constant literal")
-    } else if (numBits <= 0L) {
-      TypeCheckFailure("The number of bits must be a positive value " +
-        s" (current value = $numBits)")
-    } else {
-      require(estimatedNumItems <= BloomFilterAggregate.MAX_ALLOWED_NUM_ITEMS)
-      require(numBits <= BloomFilterAggregate.MAX_NUM_BITS)
-      TypeCheckSuccess
     }
   }
   override def nullable: Boolean = true

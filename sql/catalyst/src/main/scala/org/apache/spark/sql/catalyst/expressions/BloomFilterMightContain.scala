@@ -49,23 +49,20 @@ case class BloomFilterMightContain(
   override def dataType: DataType = BooleanType
 
   override def checkInputDataTypes(): TypeCheckResult = {
-    val typeCheckResult = (left.dataType, right.dataType) match {
+    (left.dataType, right.dataType) match {
       case (BinaryType, NullType) | (NullType, LongType) | (NullType, NullType) |
-           (BinaryType, LongType) => TypeCheckResult.TypeCheckSuccess
+           (BinaryType, LongType) =>
+        bloomFilterExpression match {
+          case e : Expression if e.foldable => TypeCheckResult.TypeCheckSuccess
+          case subquery : PlanExpression[_] if !subquery.containsPattern(OUTER_REFERENCE) =>
+            TypeCheckResult.TypeCheckSuccess
+          case _ =>
+            TypeCheckResult.TypeCheckFailure(s"The Bloom filter binary input to $prettyName " +
+              "should be either a constant value or a scalar subquery expression")
+        }
       case _ => TypeCheckResult.TypeCheckFailure(s"Input to function $prettyName should have " +
         s"been ${BinaryType.simpleString} followed by a value with ${LongType.simpleString}, " +
         s"but it's [${left.dataType.catalogString}, ${right.dataType.catalogString}].")
-    }
-    if (typeCheckResult.isFailure) {
-      return typeCheckResult
-    }
-    bloomFilterExpression match {
-      case e : Expression if e.foldable => TypeCheckResult.TypeCheckSuccess
-      case subquery : PlanExpression[_] if !subquery.containsPattern(OUTER_REFERENCE) =>
-        TypeCheckResult.TypeCheckSuccess
-      case _ =>
-        TypeCheckResult.TypeCheckFailure(s"The Bloom filter binary input to $prettyName " +
-          "should be either a constant value or a scalar subquery expression")
     }
   }
 
