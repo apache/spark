@@ -15,6 +15,7 @@
 # limitations under the License.
 #
 from typing import (
+    cast,
     overload,
     Any,
     Dict,
@@ -477,7 +478,7 @@ class _BucketedRandomProjectionLSHParams:
         """
         Gets the value of bucketLength or its default value.
         """
-        return self.getOrDefault(self.bucketLength)  # type: ignore[attr-defined]
+        return (cast(Params, self)).getOrDefault(self.bucketLength)
 
 
 @inherit_doc
