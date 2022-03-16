@@ -90,7 +90,7 @@ public class VectorizedDeltaByteArrayReader extends VectorizedReaderBase
       }
       arrayData.appendBytes(suffixLength, suffixArray, suffix.position());
       c.putArray(rowId + i, offset, length);
-      previous = arrayData.getBytesUnsafe(offset, length);
+      previous = arrayData.getByteBuffer(offset, length);
       currentRow++;
     }
   }
@@ -131,7 +131,7 @@ public class VectorizedDeltaByteArrayReader extends VectorizedReaderBase
         arrayData.appendBytes(prefixLength, previous.array(), previous.position());
       }
       arrayData.appendBytes(suffixLength, suffixArray, suffix.position());
-      previous = arrayData.getBytesUnsafe(0, length);
+      previous = arrayData.getByteBuffer(0, length);
       currentRow++;
 
       WritableColumnVector tmp = c1;

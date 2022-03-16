@@ -220,7 +220,7 @@ public final class OnHeapColumnVector extends WritableColumnVector {
   }
 
   @Override
-  public ByteBuffer getBytesUnsafe(int rowId, int count) {
+  public ByteBuffer getByteBuffer(int rowId, int count) {
     return ByteBuffer.wrap(byteData, rowId, count);
   }
 

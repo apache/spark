@@ -222,10 +222,8 @@ public final class OffHeapColumnVector extends WritableColumnVector {
   }
 
   @Override
-  public ByteBuffer getBytesUnsafe(int rowId, int count) {
-    byte[] array = new byte[count];
-    Platform.copyMemory(null, data + rowId, array, Platform.BYTE_ARRAY_OFFSET, count);
-    return ByteBuffer.wrap(array);
+  public ByteBuffer getByteBuffer(int rowId, int count) {
+    return ByteBuffer.wrap(getBytes(rowId, count));
   }
 
   //
