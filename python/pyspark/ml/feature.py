@@ -55,7 +55,7 @@ from pyspark.ml.wrapper import JavaEstimator, JavaModel, JavaParams, JavaTransfo
 from pyspark.ml.common import inherit_doc
 
 if TYPE_CHECKING:
-    from py4j.java_gateway import JavaObject  # type: ignore[import]
+    from py4j.java_gateway import JavaObject
 
 JM = TypeVar("JM", bound=JavaTransformer)
 P = TypeVar("P", bound=Params)
