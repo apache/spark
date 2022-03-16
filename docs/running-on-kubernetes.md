@@ -1732,6 +1732,83 @@ Spark allows users to specify a custom Kubernetes schedulers.
   - Create additional Kubernetes custom resources for driver/executor scheduling.
   - Set scheduler hints according to configuration or existing Pod info dynamically.
 
+#### Using Volcano as Customized Scheduler for Spark on Kubernetes
+
+##### Prerequisites
+* Volcano supports Spark on Kubernetes since v1.5. Mini version: v1.5.1+. See also [Volcano installation](https://volcano.sh/en/docs/installation).
+
+##### Usage
+Spark on Kubernetes allows using Volcano as a customized scheduler. Users can use Volcano to
+support more advanced resource scheduling: queue scheduling, resource reservation, priority scheduling, for example:
+
+```
+# Specify volcano scheduler
+--conf spark.kubernetes.scheduler.name=volcano
+# Specify driver/executor VolcanoFeatureStep
+--conf spark.kubernetes.driver.pod.featureSteps=org.apache.spark.deploy.k8s.features.VolcanoFeatureStep
+--conf spark.kubernetes.executor.pod.featureSteps=org.apache.spark.deploy.k8s.features.VolcanoFeatureStep
+# Specify PodGroup template
+--conf spark.kubernetes.scheduler.volcano.podGroupTemplateFile=/path/to/podgroup-template.yaml
+```
+
+##### Volcano Feature Step
+Volcano feature steps help users to create Volcano PodGroup and set driver/executor pod annotation to link this PodGroup.
+
+Note that, currently only supported driver/job level PodGroup in Volcano Feature Step, executor separate PodGroup is not supported yet.
+
+##### Volcano PodGroup Template
+Volcano defines PodGroup spec using [CRD yaml](https://volcano.sh/en/docs/podgroup/#example)
+
+Similar to [Pod template](#pod-template), Spark users can similarly use Volcano PodGroup Template to define the PodGroup spec configurations.
+
+To do so, specify the spark properties `spark.kubernetes.scheduler.volcano.podGroupTemplateFile` to point to files accessible to the `spark-submit` process.
+
+Below is an example of PodGroup template, see also [PodGroup Introduction](https://volcano.sh/en/docs/podgroup/#introduction):
+
+```
+apiVersion: scheduling.volcano.sh/v1beta1
+kind: PodGroup
+spec:
+  # Specify minMember to 1 to make driver
+  minMember: 1
+  # Specify minResources to support resource reservation
+  minResources:
+    cpu: "2"
+    memory: "3Gi"
+  # Specify the priority
+  priorityClassName: high-priority
+  queue: default
+```
+
+##### Features
+<table class="table">
+<tr><th>Scheduling</th><th>Description</th><th>Configuration</th></tr>
+<tr>
+  <td>Queue scheduling</td>
+  <td>
+    Queue indicates the resource queue, which adopts FIFO. is also used as the basis for resource division.
+    help users specify which queue the job to submit.
+  </td>
+  <td>`spec.queue` field in PodGroup template</td>
+</tr>
+<tr>
+  <td>Resource reservation</td>
+  <td>
+    Resource reservation, aka `Gang` scheduling (start all or nothing), helps users reserve resources for specific jobs.
+    It's useful for ensuring resource are meet the minimum requirements of spark job and avoiding all drivers stuck
+    due to all executor pending, especially, when cluster resources are very limited.
+  </td>
+  <td>`spec.minResources` field in PodGroup template</td>
+</tr>
+<tr>
+  <td>Priority scheduling</td>
+  <td>
+    It is used to help users to specify job priority in the queue during scheduling.
+  </td>
+  <td>`spec.priorityClassName` field in PodGroup template</td>
+</tr>
+</table>
+
 ### Stage Level Scheduling Overview
 
 Stage level scheduling is supported on Kubernetes when dynamic allocation is enabled. This also requires <code>spark.dynamicAllocation.shuffleTracking.enabled</code> to be enabled since Kubernetes doesn't support an external shuffle service at this time. The order in which containers for different profiles is requested from Kubernetes is not guaranteed. Note that since dynamic allocation on Kubernetes requires the shuffle tracking feature, this means that executors from previous stages that used a different ResourceProfile may not idle timeout due to having shuffle data on them. This could result in using more cluster resources and in the worst case if there are no remaining resources on the Kubernetes cluster then Spark could potentially hang. You may consider looking at config <code>spark.dynamicAllocation.shuffleTracking.timeout</code> to set a timeout, but that could result in data having to be recomputed if the shuffle data is really needed.
