@@ -4061,26 +4061,25 @@ object SessionWindowing extends Rule[LogicalPlan] {
           case s: SessionWindow => sessionAttr
         }
 
-        def getSum(child: Expression) = {
+        def isGapInvalid(child: Expression) : Boolean = {
           val calendarInterval = IntervalUtils
             .safeStringToInterval(UTF8String.fromString(child.toString))
           calendarInterval == null ||
             calendarInterval.months + calendarInterval.days + calendarInterval.microseconds <= 0
         }
 
-        // Judge whether all conditions are greater than 0 from the gapDuration
-        val children = gapDuration.child.children
-        val needFilterTimeSize = if (children.size == 0) {
-          getSum(gapDuration.child)
-        } else {
-          children.filter(_.dataType != BooleanType).exists(e =>
-            // The user define function itself is origin, so there is no upward origin
-            e.origin.line.nonEmpty || getSum(e))
+        val filterTimeSize = gapDuration match {
+          case gapDuration if gapDuration.find(_.isInstanceOf[ScalaUDF]).nonEmpty => true
+          case _ => gapDuration.child.children match {
+            case children if children.size > 0 =>
+              children.filter(_.dataType != BooleanType).exists(isGapInvalid(_))
+            case _ => isGapInvalid(gapDuration.child)
+          }
         }
 
         // As same as tumbling window, we add a filter to filter out nulls.
         // And we also filter out events with negative or zero or invalid gap duration.
-        val filterExpr = if (needFilterTimeSize) {
+        val filterExpr = if (filterTimeSize) {
           IsNotNull(session.timeColumn) &&
             (sessionAttr.getField(SESSION_END) > sessionAttr.getField(SESSION_START))
         } else {
