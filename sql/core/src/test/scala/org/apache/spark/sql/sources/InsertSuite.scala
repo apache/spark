@@ -916,11 +916,24 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
       sql("insert into t select default, 43")
       checkAnswer(sql("select s from t where i = false"), Seq(43L).map(i => Row(i)))
     }
+    // The explicit default reference resolves successfully even in the event of a table subquery.
+    withTable("t") {
+      sql("create table t(i boolean default false, s bigint) using parquet")
+      sql("insert into t select default, x from (select 42 as x)")
+      checkAnswer(sql("select s from t where i = false"), Seq(42L).map(i => Row(i)))
+    }
     // The 'create table' statement provides the default parameter first.
     withTable("t") {
       sql("create table t(i boolean default false, s bigint) using parquet")
       sql("insert into t select default, 43")
       checkAnswer(sql("select s from t where i = false"), Seq(43L).map(i => Row(i)))
+    }
+    // The explicit default value is provided in the wrong order (first instead of second), but
+    // this is OK because the provided default value evaluates to literal NULL.
+    withTable("t") {
+      sql("create table t(i boolean, s bigint default 42) using parquet")
+      sql("insert into t select default, 43")
+      checkAnswer(sql("select s from t where i is null"), Seq(43L).map(i => Row(i)))
     }
     // There are three column types exercising various combinations of implicit and explicit
     // default column value references in the 'insert into' statements.
@@ -981,13 +994,6 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
       sql("create table t(i boolean, s bigint default 42) using parquet")
       assert(intercept[AnalysisException] {
         sql("insert into t values(false, default + 1)")
-      }.getMessage.contains(DefaultColumns.columnDefaultNotFound))
-    }
-    // The explicit default value is provided in the wrong order (first instead of second).
-    withTable("t") {
-      sql("create table t(i boolean, s bigint default 42) using parquet")
-      assert(intercept[AnalysisException] {
-        sql("insert into t select default, 43")
       }.getMessage.contains(DefaultColumns.columnDefaultNotFound))
     }
     // Explicit default values have a reasonable error path if the table is not found.

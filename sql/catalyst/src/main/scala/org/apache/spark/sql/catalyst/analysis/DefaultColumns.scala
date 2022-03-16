@@ -161,8 +161,9 @@ object DefaultColumns {
       insert: InsertIntoStatement, catalog: SessionCatalog): InsertIntoStatement = {
     // Extract the list of DEFAULT column values from the INSERT INTO statement.
     val schema: StructType = getInsertTableSchema(insert, catalog).getOrElse(return insert)
-    val colNames: Seq[String] = schema.fields.map { _.name }
-    val defaultExprs: Seq[Expression] = schema.fields.map {
+    val schemaWithoutPartitionCols = StructType(schema.fields.dropRight(insert.partitionSpec.size))
+    val colNames: Seq[String] = schemaWithoutPartitionCols.fields.map { _.name }
+    val defaultExprs: Seq[Expression] = schemaWithoutPartitionCols.fields.map {
       case f if f.metadata.contains(default) =>
         parser.parseExpression(f.metadata.getString(default))
       case _ => Literal(null)
