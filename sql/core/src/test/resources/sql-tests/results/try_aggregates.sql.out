@@ -75,9 +75,8 @@ struct<try_sum(col):interval second>
 
 
 -- !query
-SELECT try_sum(col) FROM VALUES (interval '106751991 04:00:54.775808' DAY TO SECOND), (interval '1 seconds') AS tab(col)
+SELECT try_sum(col) FROM VALUES (interval '106751991 DAYS'), (interval '1 DAYS') AS tab(col)
 -- !query schema
-struct<>
+struct<try_sum(col):interval day>
 -- !query output
-java.lang.ArithmeticException
-long overflow
+NULL
