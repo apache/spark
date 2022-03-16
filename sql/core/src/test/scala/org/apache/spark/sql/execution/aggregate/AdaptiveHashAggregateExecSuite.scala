@@ -18,7 +18,9 @@
 package org.apache.spark.sql.execution.aggregate
 
 import org.apache.spark.sql.{QueryTest, Row}
+import org.apache.spark.sql.execution.{ProjectExec, RangeExec}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
+import org.apache.spark.sql.execution.joins.BroadcastHashJoinExec
 import org.apache.spark.sql.execution.metric.SQLMetricsTestUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -78,6 +80,38 @@ class AdaptiveHashAggregateExecSuite extends QueryTest
 
       assert(partialHashAggregate.isPartialAgg)
       assert(!partialHashAggregate.isAdaptivePartialAggregationEnabled)
+    }
+  }
+
+  test("Test collectUntil") {
+    withTempView("v1", "v2") {
+      // HashAggregate(keys=[a#2L], functions=[sum(b#15L)], output=[a#2L, sum(b)#19L])
+      // +- HashAggregate(keys=[a#2L], functions=[partial_sum(b#15L)], output=[a#2L, sum#23L])
+      //    +- Project [a#2L, b#15L]
+      //       +- BroadcastHashJoin [a#2L], [a#14L], Inner, BuildLeft, false
+      //          :- HashAggregate(keys=[a#2L], functions=[], output=[a#2L])
+      //          :  +- HashAggregate(keys=[a#2L], functions=[], output=[a#2L])
+      //          :     +- Project [id#0L AS a#2L]
+      //          :        +- Range (0, 2, step=1, splits=2)
+      //          +- Project [id#12L AS a#14L, id#12L AS b#15L]
+      //             +- Range (0, 2, step=1, splits=2)
+      spark.range(2)
+        .selectExpr("id AS a", "id AS b")
+        .groupBy("a").sum("b")
+        .createTempView("v1")
+
+      spark.range(2)
+        .selectExpr("id AS a", "id AS b")
+        .createTempView("v2")
+
+      val df = sql("SELECT v1.a, sum(v2.b) FROM v1 join v2 ON v1.a = v2.a GROUP BY v1.a")
+      val plan = df.queryExecution.sparkPlan
+
+      assert(plan.collectUntil(_.isInstanceOf[HashAggregateExec]).isEmpty)
+      assert(plan.collectUntil(_.isInstanceOf[ProjectExec]).size === 2)
+      assert(plan.collectUntil(_.isInstanceOf[BroadcastHashJoinExec]).size === 3)
+      assert(
+        plan.collectUntil(_.isInstanceOf[RangeExec]).size === plan.collect { case p => p }.size - 2)
     }
   }
 }
