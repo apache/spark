@@ -170,7 +170,7 @@
       See: SPARK-36547, SPARK-38394.
        -->
 
-    <scala-maven-plugin.version>4.4.0</scala-maven-plugin.version>
+    <scala-maven-plugin.version>4.5.6</scala-maven-plugin.version>
     <scalafmt.parameters>--test</scalafmt.parameters>
     <!-- for now, not running scalafmt as part of default verify pipeline -->
     <scalafmt.skip>true</scalafmt.skip>
