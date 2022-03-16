@@ -854,8 +854,19 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
     // (2) name 's' with long integer type and a default value of 42L.
     //
     // Positive tests:
-    // The default value parses correctly the the provided and expected types are equal.
-    sql("drop table if exists t")
+    // When no explicit DEFAULT value is available and the INSERT INTO statement provides fewer
+    // values than expected, NULL values are appended in their place.
+    withTable("t") {
+      sql("create table t(i boolean, s bigint) using parquet")
+      sql("insert into t values(true)")
+      checkAnswer(sql("select s from t where i = true"), Seq(null).map(i => Row(i)))
+    }
+    // The default value for the DEFAULT keyword is the NULL literal.
+    withTable("t") {
+      sql("create table t(i boolean, s bigint) using parquet")
+      sql("insert into t values(true, default)")
+      checkAnswer(sql("select s from t where i = true"), Seq(null).map(i => Row(i)))
+    }
     withTable("t") {
       sql("create table t(i boolean, s bigint default 42L) using parquet")
       sql("insert into t values(true, 2L)")
@@ -868,6 +879,18 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
       sql("create table t(i boolean, s bigint default 42) using parquet")
       sql("insert into t values(false)")
       checkAnswer(sql("select s from t where i = false"), Seq(42L).map(i => Row(i)))
+    }
+    // The table has a partitioning column and a default value is injected.
+    withTable("t") {
+      sql("create table t(i boolean, s bigint, q int default 42 ) using parquet partitioned by (i)")
+      sql("insert into t partition(i='true') values(5)")
+      checkAnswer(sql("select s from t where i = true"), Seq(5).map(i => Row(i)))
+    }
+    // The table has a partitioning column and a default value is added per explicit reference.
+    withTable("t") {
+      sql("create table t(i boolean, s bigint default 42) using parquet partitioned by (i)")
+      sql("insert into t partition(i='true') values(default)")
+      checkAnswer(sql("select s from t where i = true"), Seq(42L).map(i => Row(i)))
     }
     // The default value parses correctly as a constant but non-literal expression.
     withTable("t") {
@@ -986,6 +1009,16 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
       assert(intercept[AnalysisException] {
         sql("insert into t values (true)")
       }.getMessage.contains("provided a value of incompatible type"))
+    }
+    // The number of columns in the INSERT INTO statement does not match the table.
+    withTable("t") {
+      sql("create table num_data(id int, val decimal(38,10)) using parquet")
+      sql("create table t(id1 int, int2 int, result decimal(38,10)) using parquet")
+      assert(intercept[AnalysisException] {
+        sql("insert into t select t1.id, t2.id, t1.val, t2.val, t1.val * t2.val " +
+          "from num_data t1, num_data t2")
+      }.getMessage.contains(
+        "requires that the data to be inserted have the same number of columns as the target"))
     }
   }
 

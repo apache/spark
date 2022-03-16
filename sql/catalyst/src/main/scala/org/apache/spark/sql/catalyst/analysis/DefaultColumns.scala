@@ -78,6 +78,135 @@ object DefaultColumns {
   }
 
   /**
+   * Adds a projection over the plan in `insert.query` generating missing default column values.
+   *
+   * @param insert the INSERT INTO statement to add missing DEFAULT column references to.
+   * @param catalog the catalog to use for looking up the schema of the INSERT INTO table object.
+   * @return the updated statement with missing DEFAULT column values appended to the list.
+   */
+  def AddProjectionForMissingDefaultColumnValues(
+      insert: InsertIntoStatement, catalog: SessionCatalog): InsertIntoStatement = {
+    // Compute the number of attributes returned by the INSERT INTO statement.
+    val numQueryOutputs: Int = insert.query match {
+      case table: UnresolvedInlineTable
+        if table.rows.nonEmpty && table.rows.forall(_.size == table.rows(0).size) =>
+        table.rows(0).size
+      case project: Project => project.projectList.size
+      case _ => return insert
+    }
+    // The table value provides the DEFAULT column values as text; analyze them into expressions.
+    val schema: StructType = getInsertTableSchema(insert, catalog).getOrElse(return insert)
+    val schemaWithoutPartitionCols = StructType(schema.fields.dropRight(insert.partitionSpec.size))
+    val coerced: Seq[Expression] = for {
+      field <- schemaWithoutPartitionCols.fields.drop(numQueryOutputs)
+      name: String = field.name
+      text: String =
+        if (field.metadata.contains(default)) field.metadata.getString(default) else "NULL"
+      // Parse the DEFAULT column expression. If the parsing fails, throw an error to the user.
+      expr: Expression = Parse(name, text, "INSERT")
+      // Analyze and constant-fold each result.
+      analyzed: Expression = Analyze(expr, text, name, "INSERT")
+      // Perform implicit coercion from the provided expression type to the required column type.
+      errorPrefix = "Failed to execute INSERT command because the destination table column "
+      coerced: Expression =
+        if (field.dataType == analyzed.dataType) {
+          analyzed
+        } else if (Cast.canUpCast(analyzed.dataType, field.dataType)) {
+          Cast(analyzed, field.dataType)
+        } else {
+          throw new AnalysisException(errorPrefix +
+            s"$name has a DEFAULT value with type ${field.dataType}, but the " +
+            s"query provided a value of incompatible type ${analyzed.dataType}")
+        }
+    } yield coerced
+    // Finally, return a projection of the original `insert.query` output attributes plus new
+    // aliases over the DEFAULT column values.
+    // If the insertQuery is an existing Project, flatten them together.
+    val newQuery = insert.query match {
+      case Project(projectList, child) =>
+        val newAliases: Seq[NamedExpression] = coerced.zip(schemaWithoutPartitionCols.fields).map {
+          case (expr, field) => Alias(expr, field.name)() }
+        Project(projectList ++ newAliases, child)
+      case table: UnresolvedInlineTable =>
+        val newNames: Seq[String] =
+          schemaWithoutPartitionCols.fields.drop(numQueryOutputs).map { _.name }
+        table.copy(names = table.names ++ newNames, rows = table.rows.map { row => row ++ coerced })
+      case _ => insert.query
+    }
+    insert.copy(query = newQuery)
+  }
+
+  /**
+   * Replaces unresolved "DEFAULT" column references with matching default column values.
+   *
+   * Background: CREATE TABLE and ALTER TABLE invocations support setting column default values for
+   * later operations. Following INSERT, and INSERT MERGE commands may then reference the value
+   * using the DEFAULT keyword as needed.
+   *
+   * Example:
+   * CREATE TABLE T(a INT DEFAULT 4, b INT NOT NULL DEFAULT 5);
+   * INSERT INTO T VALUES (1, 2);
+   * INSERT INTO T VALUES (1, DEFAULT);
+   * INSERT INTO T VALUES (DEFAULT, 6);
+   * SELECT * FROM T;
+   * (1, 2)
+   * (1, 5)
+   * (4, 6)
+   *
+   * @param insert the INSERT INTO statement to replace explicit DEFAULT column references within.
+   * @param catalog the catalog to use for looking up the schema of the INSERT INTO table object.
+   * @return the updated statement with DEFAULT column references replaced with their values.
+   */
+  def ReplaceExplicitDefaultColumnValues(
+      insert: InsertIntoStatement, catalog: SessionCatalog): InsertIntoStatement = {
+    // Extract the list of DEFAULT column values from the INSERT INTO statement.
+    val schema: StructType = getInsertTableSchema(insert, catalog).getOrElse(return insert)
+    val colNames: Seq[String] = schema.fields.map { _.name }
+    val defaultExprs: Seq[Expression] = schema.fields.map {
+      case f if f.metadata.contains(default) =>
+        parser.parseExpression(f.metadata.getString(default))
+      case _ => Literal(null)
+    }
+    // Handle two types of logical query plans in the target of the INSERT INTO statement:
+    // Inline table: VALUES (0, 1, DEFAULT, ...)
+    // Projection: SELECT 0, 1, DEFAULT, ...
+    // Note that the DEFAULT reference may not participate in complex expressions such as
+    // "DEFAULT + 2"; this generally results in a "not found" error later in the analyzer.
+    val newQuery: LogicalPlan = insert.query match {
+      case table: UnresolvedInlineTable
+        if table.rows.nonEmpty && table.rows.forall(_.size == defaultExprs.size) =>
+        val newRows: Seq[Seq[Expression]] =
+          table.rows.map { row: Seq[Expression] =>
+            // Map each row of the VALUES list to its corresponding DEFAULT expression in the
+            // INSERT INTO object table, if the two lists are equal in length.
+            row.zip(defaultExprs).map {
+              case (expr: Expression, defaultExpr: Expression) =>
+                expr match {
+                  case u: UnresolvedAttribute if u.name.equalsIgnoreCase(default) => defaultExpr
+                  case _ => expr
+                }
+            }
+          }
+        table.copy(rows = newRows)
+      case project: Project if project.projectList.size == defaultExprs.size =>
+        val updated: Seq[NamedExpression] =
+          // Map each expression of the project list to its corresponding DEFAULT expression in the
+          // INSERT INTO object table, if the two lists are equal in length.
+          (project.projectList, defaultExprs, colNames).zipped.map {
+            case (expr: Expression, defaultExpr: Expression, colName: String) =>
+              expr match {
+                case u: UnresolvedAttribute if u.name.equalsIgnoreCase(default) =>
+                  Alias(defaultExpr, colName)()
+                case _ => expr
+              }
+          }
+        project.copy(projectList = updated)
+      case _ => insert.query
+    }
+    insert.copy(query = newQuery)
+  }
+
+  /**
    * Parses DEFAULT column text to an expression, returning a reasonable error upon failure.
    *
    * @param colName the name of the DEFAULT column whose text we endeavor to parse.
@@ -130,137 +259,27 @@ object DefaultColumns {
   }
 
   /**
-   * Replaces unresolved "DEFAULT" column references with matching default column values.
+   * Looks up the schema for the table object of an INSERT INTO statement from the catalog.
    *
-   * Background: CREATE TABLE and ALTER TABLE invocations support setting column default values for
-   * later operations. Following INSERT, and INSERT MERGE commands may then reference the value
-   * using the DEFAULT keyword as needed.
-   *
-   * Example:
-   * CREATE TABLE T(a INT DEFAULT 4, b INT NOT NULL DEFAULT 5);
-   * INSERT INTO T VALUES (1, 2);
-   * INSERT INTO T VALUES (1, DEFAULT);
-   * INSERT INTO T VALUES (DEFAULT, 6);
-   * SELECT * FROM T;
-   * (1, 2)
-   * (1, 5)
-   * (4, 6)
-   *
-   * @param insert the INSERT INTO statement to replace explicit DEFAULT column references within.
-   * @param catalog session catalog for use when looking up table names for the statement.
-   * @return the updated statement with DEFAULT column references replaced with their values.
+   * @param insert the INSERT INTO statement to lookup the schema for.
+   * @param catalog the catalog to use for looking up the schema of the INSERT INTO table object.
+   * @return the schema of the indicated table, or None if the lookup found nothing.
    */
-  def ReplaceExplicitDefaultColumnValues(insert: InsertIntoStatement,
-                                         catalog: SessionCatalog): InsertIntoStatement = {
-    // Extract the list of DEFAULT column values from the INSERT INTO statement.
+  private def getInsertTableSchema(
+      insert: InsertIntoStatement, catalog: SessionCatalog): Option[StructType] = {
     val lookup = try {
       val tableName = insert.table match {
         case r: UnresolvedRelation => TableIdentifier(r.name)
         case r: UnresolvedCatalogRelation => r.tableMeta.identifier
-        case _ => return insert
+        case _ => return None
       }
       catalog.lookupRelation(tableName)
     } catch {
-      case _: NoSuchTableException => return insert
+      case _: NoSuchTableException => return None
     }
-    val schema: StructType = lookup match {
-      case SubqueryAlias(_, r: UnresolvedCatalogRelation) => r.tableMeta.schema
-      case _ => return insert
-    }
-    val colNames: Seq[String] = schema.fields.map { _.name }
-    val defaultExprs: Seq[Option[Expression]] = schema.fields.map {
-      case f if f.metadata.contains(default) =>
-        Some(parser.parseExpression(f.metadata.getString(default)))
+    lookup match {
+      case SubqueryAlias(_, r: UnresolvedCatalogRelation) => Some(r.tableMeta.schema)
       case _ => None
     }
-    if (defaultExprs.isEmpty) {
-      // Fast path: if there are no explicit default columns, there is nothing to do.
-      return insert
-    }
-    // Handle two types of logical query plans in the target of the INSERT INTO statement:
-    // Inline table: VALUES (0, 1, DEFAULT, ...)
-    // Projection: SELECT 0, 1, DEFAULT, ...
-    // Note that the DEFAULT reference may not participate in complex expressions such as
-    // "DEFAULT + 2"; this generally results in a "not found" error later in the analyzer.
-    val newQuery: LogicalPlan = insert.query match {
-      case table: UnresolvedInlineTable =>
-        val newRows: Seq[Seq[Expression]] =
-          table.rows.map { row: Seq[Expression] =>
-            row.zip(defaultExprs).map {
-              case (expr: Expression, defaultExpr: Option[Expression]) =>
-                expr match {
-                  case u: UnresolvedAttribute
-                    if u.name.equalsIgnoreCase(default) && defaultExpr.isDefined => defaultExpr.get
-                  case _ => expr
-                }
-            }
-        }
-        table.copy(rows = newRows)
-      case project: Project =>
-        val updated: Seq[NamedExpression] =
-          (project.projectList, defaultExprs, colNames).zipped.map {
-          case (expr: Expression, defaultExpr: Option[Expression], colName: String) =>
-            expr match {
-              case u: UnresolvedAttribute
-                if u.name.equalsIgnoreCase(default) && defaultExpr.isDefined =>
-                Alias(defaultExpr.get, colName)()
-              case _ => expr
-            }
-        }
-        project.copy(projectList = updated)
-      case _ => insert.query
-    }
-    insert.copy(query = newQuery)
-  }
-
-  /**
-   * Adds a projection over the plan in `insert.query` generating missing default column values.
-   *
-   * @param insert the INSERT INTO statement to add missing DEFAULT column references to.
-   * @return the updated statement with missing DEFAULT column values appended to the list.
-   */
-  def AddProjectionForMissingDefaultColumnValues(
-      insert: InsertIntoStatement): InsertIntoStatement = {
-    val colIndexes = insert.query.output.size until insert.table.output.size
-    if (colIndexes.isEmpty) {
-      // Fast path: if there are no missing default columns, there is nothing to do.
-      return insert
-    }
-    val columns = colIndexes.map(insert.table.schema.fields(_))
-    val colNames: Seq[String] = columns.map(_.name)
-    val colTypes: Seq[DataType] = columns.map(_.dataType)
-    val colTexts: Seq[String] = columns.map(_.metadata.getString(default))
-    // Parse the DEFAULT column expression. If the parsing fails, throw an error to the user.
-    val colExprs: Seq[Expression] = colNames.zip(colTexts).map {
-      case (name, text) => Parse(name, text, "INSERT")
-    }
-    // Analyze and constant-fold each result.
-    val analyzed = (colExprs, colTexts, colNames).zipped.map {
-      case (expr, text, name) => Analyze(expr, text, name, "INSERT")
-    }
-    // Perform implicit coercion from the provided expression type to the required column type.
-    val colExprsCoerced: Seq[Expression] = (analyzed, colTypes, colNames).zipped.map {
-      case (expr, datatype, _)
-        if datatype != expr.dataType && Cast.canUpCast(expr.dataType, datatype) =>
-        Cast(expr, datatype)
-      case (expr, dataType, colName)
-        if dataType != expr.dataType =>
-        throw new AnalysisException(
-          s"Failed to execute INSERT command because the destination table column " +
-          s"$colName has a DEFAULT value with type $dataType, but the query " +
-            s"provided a value of incompatible type ${expr.dataType}")
-      case (expr, _, _) => expr
-    }
-    // Finally, return a projection of the original `insert.query` output attributes plus new
-    // aliases over the DEFAULT column values.
-    // If the insertQuery is an existing Project, flatten them together.
-    val newAliases: Seq[NamedExpression] = {
-      colExprsCoerced.zip(colNames).map { case (expr, name) => Alias(expr, name)() }
-    }
-    val newQuery = insert.query match {
-      case Project(projectList, child) => Project(projectList ++ newAliases, child)
-      case _ => Project(insert.query.output ++ newAliases, insert.query)
-    }
-    insert.copy(query = newQuery)
   }
 }
