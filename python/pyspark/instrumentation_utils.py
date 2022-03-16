@@ -33,13 +33,13 @@ _local = threading.local()
 
 class _WrappedAbstractContextManager(AbstractContextManager):
     def __init__(
-        self, gcm: AbstractContextManager, class_name: str, function_name: str, logger: Any
+        self, acm: AbstractContextManager, class_name: str, function_name: str, logger: Any
     ):
         self._enter_func = _wrap_function(
-            class_name, "{}.__enter__".format(function_name), gcm.__enter__, logger
+            class_name, "{}.__enter__".format(function_name), acm.__enter__, logger
         )
         self._exit_func = _wrap_function(
-            class_name, "{}.__exit__".format(function_name), gcm.__exit__, logger
+            class_name, "{}.__exit__".format(function_name), acm.__exit__, logger
         )
 
     def __enter__(self):  # type: ignore[no-untyped-def]
@@ -64,7 +64,7 @@ def _wrap_function(class_name: str, function_name: str, func: Callable, logger: 
             try:
                 res = func(*args, **kwargs)
                 if isinstance(res, AbstractContextManager):
-                    # Wrap AbstractContextManager's subclasses returned by @contexmanager decorator
+                    # Wrap AbstractContextManager's subclasses returned by @contextmanager decorator
                     # function so that wrapped function calls inside __enter__ and __exit__
                     # are not recorded by usage logger.
                     #
