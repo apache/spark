@@ -877,7 +877,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
     }
     // There is a complex expression in the default value.
     withTable("t") {
-      sql("create table t(i boolean, s string default concat('abc', 'def') using parquet")
+      sql("create table t(i boolean, s string default concat('abc', 'def')) using parquet")
       sql("insert into t values(true, default)")
       checkAnswer(sql("select s from t where i = true"), Seq("abcdef").map(i => Row(i)))
     }
