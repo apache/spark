@@ -234,7 +234,9 @@ Data source options of Avro can be set via:
           When reading Avro, this option can be set to an evolved schema, which is compatible but different with
           the actual Avro schema. The deserialization schema will be consistent with the evolved schema.
           For example, if we set an evolved schema containing one additional column with a default value,
-          the reading result in Spark will contain the new column too.
+          the reading result in Spark will contain the new column too. Note that when using this option with 
+          <code>from_avro</code>, you still need to pass the actual schema as a parameter to the function. 
+          Otherwise, the behavior is undefined: it may fail or return arbitrary result.
         </li>
         <li>
           When writing Avro, this option can be set if the expected output Avro schema doesn't match the
