@@ -35,7 +35,7 @@
     spark.createDataFrame(data, schema)
     spark.createDataFrame(data, "name string, age integer")
     spark.createDataFrame([(1, ("foo", "bar"))], ("_1", "_2"))
-    spark.createDataFrame(data, ("name", "age"), samplingRatio=0.1)  # type: ignore
+    spark.createDataFrame(data, ("name", "age"), samplingRatio=0.1)
 
 
 - case: createDataFrameScalarsValid

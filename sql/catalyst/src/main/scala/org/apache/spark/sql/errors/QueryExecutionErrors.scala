@@ -1993,18 +1993,6 @@ object QueryExecutionErrors {
     new SQLFeatureNotSupportedException("Drop namespace restrict is not supported")
   }
 
-  def invalidUnitInTimestampAdd(unit: String): Throwable = {
-    new SparkIllegalArgumentException(
-      errorClass = "INVALID_PARAMETER_VALUE",
-      messageParameters = Array("unit", "timestampadd", unit))
-  }
-
-  def invalidUnitInTimestampDiff(unit: String): Throwable = {
-    new SparkIllegalArgumentException(
-      errorClass = "INVALID_PARAMETER_VALUE",
-      messageParameters = Array("unit", "timestampdiff", unit))
-  }
-
   def timestampAddOverflowError(micros: Long, amount: Int, unit: String): ArithmeticException = {
     new SparkArithmeticException(
       errorClass = "DATETIME_OVERFLOW",

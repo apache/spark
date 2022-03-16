@@ -744,6 +744,15 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
+  val PROPAGATE_DISTINCT_KEYS_ENABLED =
+    buildConf("spark.sql.optimizer.propagateDistinctKeys.enabled")
+      .internal()
+      .doc("When true, the query optimizer will propagate a set of distinct attributes from the " +
+        "current node and use it to optimize query.")
+      .version("3.3.0")
+      .booleanConf
+      .createWithDefault(true)
+
   val ESCAPED_STRING_LITERALS = buildConf("spark.sql.parser.escapedStringLiterals")
     .internal()
     .doc("When true, string literals (including regex patterns) remain escaped in our SQL " +
@@ -1770,6 +1779,23 @@ object SQLConf {
         "When this config is disabled, Spark will just print warning message for users. " +
         "Prior to Spark 3.1.0, the behavior is disabling this config.")
       .version("3.1.0")
+      .booleanConf
+      .createWithDefault(true)
+
+  val STATEFUL_OPERATOR_USE_STRICT_DISTRIBUTION =
+    buildConf("spark.sql.streaming.statefulOperator.useStrictDistribution")
+      .internal()
+      .doc("The purpose of this config is only compatibility; DO NOT MANUALLY CHANGE THIS!!! " +
+        "When true, the stateful operator for streaming query will use " +
+        "StatefulOpClusteredDistribution which guarantees stable state partitioning as long as " +
+        "the operator provides consistent grouping keys across the lifetime of query. " +
+        "When false, the stateful operator for streaming query will use ClusteredDistribution " +
+        "which is not sufficient to guarantee stable state partitioning despite the operator " +
+        "provides consistent grouping keys across the lifetime of query. " +
+        "This config will be set to true for new streaming queries to guarantee stable state " +
+        "partitioning, and set to false for existing streaming queries to not break queries " +
+        "which are restored from existing checkpoints. Please refer SPARK-38204 for details.")
+      .version("3.3.0")
       .booleanConf
       .createWithDefault(true)
 
