@@ -86,7 +86,7 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("SPARK-35789: INVALID_SQL_SYNTAX - LATERAL can only be used with subquery") {
+  test("INVALID_SQL_SYNTAX: LATERAL can only be used with subquery") {
     Seq(
       "SELECT * FROM t1, LATERAL t2" -> 26,
       "SELECT * FROM t1 JOIN LATERAL t2" -> 30,
@@ -122,6 +122,272 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession {
           |== SQL ==
           |SELECT * FROM a NATURAL CROSS JOIN b
           |--------------^^^
+          |""".stripMargin)
+  }
+
+  test("INVALID_SQL_SYNTAX: redefine window") {
+    validateParsingError(
+      sqlText = "SELECT min(a) OVER win FROM t1 WINDOW win AS win, win AS win2",
+      errorClass = "INVALID_SQL_SYNTAX",
+      sqlState = "42000",
+      message =
+        """
+          |Invalid SQL syntax: The definition of window 'win' is repetitive.(line 1, pos 31)
+          |
+          |== SQL ==
+          |SELECT min(a) OVER win FROM t1 WINDOW win AS win, win AS win2
+          |-------------------------------^^^
+          |""".stripMargin)
+  }
+
+  test("INVALID_SQL_SYNTAX: invalid window reference") {
+    validateParsingError(
+      sqlText = "SELECT min(a) OVER win FROM t1 WINDOW win AS win",
+      errorClass = "INVALID_SQL_SYNTAX",
+      sqlState = "42000",
+      message =
+        """
+          |Invalid SQL syntax: Window reference 'win' is not a window specification.(line 1, pos 31)
+          |
+          |== SQL ==
+          |SELECT min(a) OVER win FROM t1 WINDOW win AS win
+          |-------------------------------^^^
+          |""".stripMargin)
+  }
+
+  test("INVALID_SQL_SYNTAX: window reference cannot be resolved") {
+    validateParsingError(
+      sqlText = "SELECT min(a) OVER win FROM t1 WINDOW win AS win2",
+      errorClass = "INVALID_SQL_SYNTAX",
+      sqlState = "42000",
+      message =
+        """
+          |Invalid SQL syntax: Cannot resolve window reference 'win2'.(line 1, pos 31)
+          |
+          |== SQL ==
+          |SELECT min(a) OVER win FROM t1 WINDOW win AS win2
+          |-------------------------------^^^
+          |""".stripMargin)
+  }
+
+  test("UNSUPPORTED_FEATURE: TRANSFORM does not support DISTINCT/ALL") {
+    validateParsingError(
+      sqlText = "SELECT TRANSFORM(DISTINCT a) USING 'a' FROM t",
+      errorClass = "UNSUPPORTED_FEATURE",
+      sqlState = "0A000",
+      message =
+        """
+          |The feature is not supported: """.stripMargin +
+        """TRANSFORM does not support DISTINCT/ALL in inputs(line 1, pos 17)
+          |
+          |== SQL ==
+          |SELECT TRANSFORM(DISTINCT a) USING 'a' FROM t
+          |-----------------^^^
+          |""".stripMargin)
+  }
+
+  test("UNSUPPORTED_FEATURE: In-memory mode does not support TRANSFORM with serde") {
+    validateParsingError(
+      sqlText = "SELECT TRANSFORM(a) ROW FORMAT SERDE " +
+        "'org.apache.hadoop.hive.serde2.OpenCSVSerde' USING 'a' FROM t",
+      errorClass = "UNSUPPORTED_FEATURE",
+      sqlState = "0A000",
+      message =
+        """
+          |The feature is not supported: """.stripMargin +
+        """TRANSFORM with serde is only supported in hive mode(line 1, pos 0)
+          |
+          |== SQL ==
+          |SELECT TRANSFORM(a) ROW FORMAT SERDE """.stripMargin +
+        """'org.apache.hadoop.hive.serde2.OpenCSVSerde' USING 'a' FROM t
+          |^^^
+          |""".stripMargin)
+  }
+
+  test("INVALID_SQL_SYNTAX: Too many arguments for transform") {
+    validateParsingError(
+      sqlText = "CREATE TABLE table(col int) PARTITIONED BY (years(col,col))",
+      errorClass = "INVALID_SQL_SYNTAX",
+      sqlState = "42000",
+      message =
+        """
+          |Invalid SQL syntax: Too many arguments for transform years(line 1, pos 44)
+          |
+          |== SQL ==
+          |CREATE TABLE table(col int) PARTITIONED BY (years(col,col))
+          |--------------------------------------------^^^
+          |""".stripMargin)
+  }
+
+  test("INVALID_SQL_SYNTAX: Invalid table value function name") {
+    validateParsingError(
+      sqlText = "SELECT * FROM ns.db.func()",
+      errorClass = "INVALID_SQL_SYNTAX",
+      sqlState = "42000",
+      message =
+        """
+          |Invalid SQL syntax: Unsupported function name 'ns.db.func'(line 1, pos 14)
+          |
+          |== SQL ==
+          |SELECT * FROM ns.db.func()
+          |--------------^^^
+          |""".stripMargin)
+  }
+
+  test("INVALID_SQL_SYNTAX: Invalid scope in show functions") {
+    validateParsingError(
+      sqlText = "SHOW sys FUNCTIONS",
+      errorClass = "INVALID_SQL_SYNTAX",
+      sqlState = "42000",
+      message =
+        """
+          |Invalid SQL syntax: SHOW sys FUNCTIONS not supported(line 1, pos 5)
+          |
+          |== SQL ==
+          |SHOW sys FUNCTIONS
+          |-----^^^
+          |""".stripMargin)
+  }
+
+  test("INVALID_SQL_SYNTAX: Invalid pattern in show functions") {
+    val errorDesc =
+      "Invalid pattern in SHOW FUNCTIONS: f1. It must be a string literal.(line 1, pos 21)"
+
+    validateParsingError(
+      sqlText = "SHOW FUNCTIONS IN db f1",
+      errorClass = "INVALID_SQL_SYNTAX",
+      sqlState = "42000",
+      message =
+        s"""
+          |Invalid SQL syntax: $errorDesc
+          |
+          |== SQL ==
+          |SHOW FUNCTIONS IN db f1
+          |---------------------^^^
+          |""".stripMargin)
+  }
+
+  test("INVALID_SQL_SYNTAX: Create function with both if not exists and replace") {
+    val sqlText =
+      """
+        |CREATE OR REPLACE FUNCTION IF NOT EXISTS func1 as
+        |'com.matthewrathbone.example.SimpleUDFExample' USING JAR '/path/to/jar1',
+        |JAR '/path/to/jar2'
+        |""".stripMargin
+    val errorDesc =
+      "CREATE FUNCTION with both IF NOT EXISTS and REPLACE is not allowed.(line 2, pos 0)"
+
+    validateParsingError(
+      sqlText = sqlText,
+      errorClass = "INVALID_SQL_SYNTAX",
+      sqlState = "42000",
+      message =
+        s"""
+          |Invalid SQL syntax: $errorDesc
+          |
+          |== SQL ==
+          |
+          |CREATE OR REPLACE FUNCTION IF NOT EXISTS func1 as
+          |^^^
+          |'com.matthewrathbone.example.SimpleUDFExample' USING JAR '/path/to/jar1',
+          |JAR '/path/to/jar2'
+          |""".stripMargin)
+  }
+
+  test("INVALID_SQL_SYNTAX: Create temporary function with if not exists") {
+    val sqlText =
+      """
+        |CREATE TEMPORARY FUNCTION IF NOT EXISTS func1 as
+        |'com.matthewrathbone.example.SimpleUDFExample' USING JAR '/path/to/jar1',
+        |JAR '/path/to/jar2'
+        |""".stripMargin
+    val errorDesc =
+      "It is not allowed to define a TEMPORARY function with IF NOT EXISTS.(line 2, pos 0)"
+
+    validateParsingError(
+      sqlText = sqlText,
+      errorClass = "INVALID_SQL_SYNTAX",
+      sqlState = "42000",
+      message =
+        s"""
+          |Invalid SQL syntax: $errorDesc
+          |
+          |== SQL ==
+          |
+          |CREATE TEMPORARY FUNCTION IF NOT EXISTS func1 as
+          |^^^
+          |'com.matthewrathbone.example.SimpleUDFExample' USING JAR '/path/to/jar1',
+          |JAR '/path/to/jar2'
+          |""".stripMargin)
+  }
+
+  test("INVALID_SQL_SYNTAX: Create temporary function with multi-part name") {
+    val sqlText =
+      """
+        |CREATE TEMPORARY FUNCTION ns.db.func as
+        |'com.matthewrathbone.example.SimpleUDFExample' USING JAR '/path/to/jar1',
+        |JAR '/path/to/jar2'
+        |""".stripMargin
+
+    validateParsingError(
+      sqlText = sqlText,
+      errorClass = "INVALID_SQL_SYNTAX",
+      sqlState = "42000",
+      message =
+        """
+          |Invalid SQL syntax: Unsupported function name 'ns.db.func'(line 2, pos 0)
+          |
+          |== SQL ==
+          |
+          |CREATE TEMPORARY FUNCTION ns.db.func as
+          |^^^
+          |'com.matthewrathbone.example.SimpleUDFExample' USING JAR '/path/to/jar1',
+          |JAR '/path/to/jar2'
+          |""".stripMargin)
+  }
+
+  test("INVALID_SQL_SYNTAX: Specifying database while creating temporary function") {
+    val sqlText =
+      """
+        |CREATE TEMPORARY FUNCTION db.func as
+        |'com.matthewrathbone.example.SimpleUDFExample' USING JAR '/path/to/jar1',
+        |JAR '/path/to/jar2'
+        |""".stripMargin
+    val errorDesc =
+      "Specifying a database in CREATE TEMPORARY FUNCTION is not allowed: 'db'(line 2, pos 0)"
+
+    validateParsingError(
+      sqlText = sqlText,
+      errorClass = "INVALID_SQL_SYNTAX",
+      sqlState = "42000",
+      message =
+        s"""
+          |Invalid SQL syntax: $errorDesc
+          |
+          |== SQL ==
+          |
+          |CREATE TEMPORARY FUNCTION db.func as
+          |^^^
+          |'com.matthewrathbone.example.SimpleUDFExample' USING JAR '/path/to/jar1',
+          |JAR '/path/to/jar2'
+          |""".stripMargin)
+  }
+
+  test("INVALID_SQL_SYNTAX: Drop temporary function requires a single part name") {
+    val errorDesc =
+      "DROP TEMPORARY FUNCTION requires a single part name but got: db.func(line 1, pos 0)"
+
+    validateParsingError(
+      sqlText = "DROP TEMPORARY FUNCTION db.func",
+      errorClass = "INVALID_SQL_SYNTAX",
+      sqlState = "42000",
+      message =
+        s"""
+          |Invalid SQL syntax: $errorDesc
+          |
+          |== SQL ==
+          |DROP TEMPORARY FUNCTION db.func
+          |^^^
           |""".stripMargin)
   }
 }

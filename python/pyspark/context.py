@@ -63,7 +63,7 @@ from pyspark.serializers import (
 )
 from pyspark.storagelevel import StorageLevel
 from pyspark.resource.information import ResourceInformation
-from pyspark.rdd import RDD, _load_from_socket  # type: ignore[attr-defined]
+from pyspark.rdd import RDD, _load_from_socket
 from pyspark.taskcontext import TaskContext
 from pyspark.traceback_utils import CallSite, first_spark_call
 from pyspark.status import StatusTracker
@@ -181,10 +181,7 @@ class SparkContext:
         udf_profiler_cls: Type[UDFBasicProfiler] = UDFBasicProfiler,
     ):
 
-        if (
-            conf is None
-            or cast(str, conf.get("spark.executor.allowSparkContext", "false")).lower() != "true"
-        ):
+        if conf is None or conf.get("spark.executor.allowSparkContext", "false").lower() != "true":
             # In order to prevent SparkContext from being created in executors.
             SparkContext._assert_on_driver()
 
@@ -290,7 +287,7 @@ class SparkContext:
         # they will be passed back to us through a TCP server
         assert self._gateway is not None
         auth_token = self._gateway.gateway_parameters.auth_token
-        start_update_server = accumulators._start_update_server  # type: ignore[attr-defined]
+        start_update_server = accumulators._start_update_server
         self._accumulatorServer = start_update_server(auth_token)
         (host, port) = self._accumulatorServer.server_address
         assert self._jvm is not None
@@ -326,7 +323,7 @@ class SparkContext:
 
         # Deploy code dependencies set by spark-submit; these will already have been added
         # with SparkContext.addFile, so we just need to add them to the PYTHONPATH
-        for path in cast(str, self._conf.get("spark.submit.pyFiles", "")).split(","):
+        for path in self._conf.get("spark.submit.pyFiles", "").split(","):
             if path != "":
                 (dirname, filename) = os.path.split(path)
                 try:
@@ -573,7 +570,7 @@ class SparkContext:
             self._accumulatorServer.shutdown()
             self._accumulatorServer = None  # type: ignore[assignment]
         with SparkContext._lock:
-            SparkContext._active_spark_context = None  # type: ignore[assignment]
+            SparkContext._active_spark_context = None
 
     def emptyRDD(self) -> RDD[Any]:
         """
@@ -1163,12 +1160,9 @@ class SparkContext:
         >>> sorted(sc.union([textFile, parallelized]).collect())
         ['Hello', 'World!']
         """
-        first_jrdd_deserializer = rdds[0]._jrdd_deserializer  # type: ignore[attr-defined]
-        if any(
-            x._jrdd_deserializer != first_jrdd_deserializer  # type: ignore[attr-defined]
-            for x in rdds
-        ):
-            rdds = [x._reserialize() for x in rdds]  # type: ignore[attr-defined]
+        first_jrdd_deserializer = rdds[0]._jrdd_deserializer
+        if any(x._jrdd_deserializer != first_jrdd_deserializer for x in rdds):
+            rdds = [x._reserialize() for x in rdds]
         gw = SparkContext._gateway
         assert gw is not None
         jvm = SparkContext._jvm
@@ -1176,21 +1170,19 @@ class SparkContext:
         jrdd_cls = jvm.org.apache.spark.api.java.JavaRDD
         jpair_rdd_cls = jvm.org.apache.spark.api.java.JavaPairRDD
         jdouble_rdd_cls = jvm.org.apache.spark.api.java.JavaDoubleRDD
-        if is_instance_of(gw, rdds[0]._jrdd, jrdd_cls):  # type: ignore[attr-defined]
+        if is_instance_of(gw, rdds[0]._jrdd, jrdd_cls):
             cls = jrdd_cls
-        elif is_instance_of(gw, rdds[0]._jrdd, jpair_rdd_cls):  # type: ignore[attr-defined]
+        elif is_instance_of(gw, rdds[0]._jrdd, jpair_rdd_cls):
             cls = jpair_rdd_cls
-        elif is_instance_of(gw, rdds[0]._jrdd, jdouble_rdd_cls):  # type: ignore[attr-defined]
+        elif is_instance_of(gw, rdds[0]._jrdd, jdouble_rdd_cls):
             cls = jdouble_rdd_cls
         else:
-            cls_name = rdds[0]._jrdd.getClass().getCanonicalName()  # type: ignore[attr-defined]
+            cls_name = rdds[0]._jrdd.getClass().getCanonicalName()
             raise TypeError("Unsupported Java RDD class %s" % cls_name)
         jrdds = gw.new_array(cls, len(rdds))
         for i in range(0, len(rdds)):
-            jrdds[i] = rdds[i]._jrdd  # type: ignore[attr-defined]
-        return RDD(
-            self._jsc.union(jrdds), self, rdds[0]._jrdd_deserializer  # type: ignore[attr-defined]
-        )
+            jrdds[i] = rdds[i]._jrdd
+        return RDD(self._jsc.union(jrdds), self, rdds[0]._jrdd_deserializer)
 
     def broadcast(self, value: T) -> "Broadcast[T]":
         """
@@ -1373,7 +1365,7 @@ class SparkContext:
         to HDFS-1208, where HDFS may respond to Thread.interrupt() by marking nodes as dead.
 
         If you run jobs in parallel, use :class:`pyspark.InheritableThread` for thread
-        local inheritance, and preventing resource leak.
+        local inheritance.
 
         Examples
         --------
@@ -1413,7 +1405,7 @@ class SparkContext:
         Notes
         -----
         If you run jobs in parallel, use :class:`pyspark.InheritableThread` for thread
-        local inheritance, and preventing resource leak.
+        local inheritance.
         """
         self._jsc.setLocalProperty(key, value)
 
@@ -1431,7 +1423,7 @@ class SparkContext:
         Notes
         -----
         If you run jobs in parallel, use :class:`pyspark.InheritableThread` for thread
-        local inheritance, and preventing resource leak.
+        local inheritance.
         """
         self._jsc.setJobDescription(value)
 
@@ -1484,19 +1476,15 @@ class SparkContext:
         [0, 1, 16, 25]
         """
         if partitions is None:
-            partitions = list(range(rdd._jrdd.partitions().size()))  # type: ignore[attr-defined]
+            partitions = list(range(rdd._jrdd.partitions().size()))
 
         # Implementation note: This is implemented as a mapPartitions followed
         # by runJob() in order to avoid having to pass a Python lambda into
         # SparkContext#runJob.
         mappedRDD = rdd.mapPartitions(partitionFunc)
         assert self._jvm is not None
-        sock_info = self._jvm.PythonRDD.runJob(
-            self._jsc.sc(), mappedRDD._jrdd, partitions  # type: ignore[attr-defined]
-        )
-        return list(
-            _load_from_socket(sock_info, mappedRDD._jrdd_deserializer)  # type: ignore[attr-defined]
-        )
+        sock_info = self._jvm.PythonRDD.runJob(self._jsc.sc(), mappedRDD._jrdd, partitions)
+        return list(_load_from_socket(sock_info, mappedRDD._jrdd_deserializer))
 
     def show_profiles(self) -> None:
         """Print the profile stats to stdout"""

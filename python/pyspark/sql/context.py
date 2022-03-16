@@ -32,9 +32,9 @@ from typing import (
     cast,
 )
 
-from py4j.java_gateway import JavaObject  # type: ignore[import]
+from py4j.java_gateway import JavaObject
 
-from pyspark import since, _NoValue  # type: ignore[attr-defined]
+from pyspark import since, _NoValue
 from pyspark._globals import _NoValueType
 from pyspark.sql.session import _monkey_patch_RDD, SparkSession
 from pyspark.sql.dataframe import DataFrame
@@ -115,8 +115,8 @@ class SQLContext:
             )
 
         self._sc = sparkContext
-        self._jsc = self._sc._jsc  # type: ignore[attr-defined]
-        self._jvm = self._sc._jvm  # type: ignore[attr-defined]
+        self._jsc = self._sc._jsc
+        self._jvm = self._sc._jvm
         if sparkSession is None:
             sparkSession = SparkSession._getActiveSessionOrCreate()
         if jsqlContext is None:
@@ -127,7 +127,7 @@ class SQLContext:
         install_exception_handler()
         if (
             SQLContext._instantiatedContext is None
-            or SQLContext._instantiatedContext._sc._jsc is None  # type: ignore[attr-defined]
+            or SQLContext._instantiatedContext._sc._jsc is None
         ):
             SQLContext._instantiatedContext = self
 

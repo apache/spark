@@ -107,5 +107,5 @@ class CreateNamespaceParserSuite extends AnalysisTest {
   }
 
   private def intercept(sqlCommand: String, messages: String*): Unit =
-    interceptParseException(parsePlan)(sqlCommand, messages: _*)
+    interceptParseException(parsePlan)(sqlCommand, messages: _*)()
 }

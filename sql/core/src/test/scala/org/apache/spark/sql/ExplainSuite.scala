@@ -106,7 +106,7 @@ class ExplainSuite extends ExplainSuiteHelper with DisableAdaptiveExecutionSuite
       keywords = "InMemoryRelation", "StorageLevel(disk, memory, deserialized, 1 replicas)")
   }
 
-  test("optimized plan should show the rewritten aggregate expression") {
+  test("optimized plan should show the rewritten expression") {
     withTempView("test_agg") {
       sql(
         """
@@ -124,6 +124,13 @@ class ExplainSuite extends ExplainSuiteHelper with DisableAdaptiveExecutionSuite
       checkKeywordsExistsInExplain(df,
         "Aggregate [k#x], [k#x, every(v#x) AS every(v)#x, some(v#x) AS some(v)#x, " +
           "any(v#x) AS any(v)#x]")
+    }
+
+    withTable("t") {
+      sql("CREATE TABLE t(col TIMESTAMP) USING parquet")
+      val df = sql("SELECT date_part('month', col) FROM t")
+      checkKeywordsExistsInExplain(df,
+        "Project [month(cast(col#x as date)) AS date_part(month, col)#x]")
     }
   }
 
@@ -593,7 +600,7 @@ class ExplainSuiteAE extends ExplainSuiteHelper with EnableAdaptiveExecutionSuit
   }
 
   test("SPARK-35884: Explain should only display one plan before AQE takes effect") {
-    val df = (0 to 10).toDF("id").where('id > 5)
+    val df = (0 to 10).toDF("id").where(Symbol("id") > 5)
     val modes = Seq(SimpleMode, ExtendedMode, CostMode, FormattedMode)
     modes.foreach { mode =>
       checkKeywordsExistsInExplain(df, mode, "AdaptiveSparkPlan")
@@ -608,7 +615,8 @@ class ExplainSuiteAE extends ExplainSuiteHelper with EnableAdaptiveExecutionSuit
 
   test("SPARK-35884: Explain formatted with subquery") {
     withTempView("t1", "t2") {
-      spark.range(100).select('id % 10 as "key", 'id as "value").createOrReplaceTempView("t1")
+      spark.range(100).select(Symbol("id") % 10 as "key", Symbol("id") as "value")
+        .createOrReplaceTempView("t1")
       spark.range(10).createOrReplaceTempView("t2")
       val query =
         """

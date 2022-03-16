@@ -613,7 +613,7 @@ class PandasOnSparkFrameMethods:
             psdf_or_psser = ps.from_pandas(transformed)
 
             if isinstance(psdf_or_psser, ps.Series):
-                psser = cast(ps.Series, psdf_or_psser)
+                psser = psdf_or_psser
 
                 field = psser._internal.data_fields[0].normalize_spark_type()
 
@@ -892,7 +892,7 @@ class PandasOnSparkSeriesMethods:
                     "Expected the return type of this function to be of type column,"
                     " but found type {}".format(sig_return)
                 )
-            return_type = cast(SeriesType, sig_return)
+            return_type = sig_return
 
         return self._transform_batch(lambda c: func(c, *args, **kwargs), return_type)
 

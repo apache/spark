@@ -43,8 +43,8 @@ from typing import (
     TypeVar,
 )
 
-from py4j.protocol import register_input_converter  # type: ignore[import]
-from py4j.java_gateway import JavaClass, JavaGateway, JavaObject  # type: ignore[import]
+from py4j.protocol import register_input_converter
+from py4j.java_gateway import JavaClass, JavaGateway, JavaObject
 
 from pyspark.serializers import CloudPickleSerializer
 
@@ -1011,7 +1011,7 @@ def _parse_datatype_string(s: str) -> DataType:
     """
     from pyspark import SparkContext
 
-    sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
+    sc = SparkContext._active_spark_context
     assert sc is not None
 
     def from_ddl_schema(type_str: str) -> DataType:
@@ -1593,7 +1593,7 @@ def _make_type_verifier(
 
     def verify_acceptable_types(obj: Any) -> None:
         # subclass of them can not be fromInternal in JVM
-        if type(obj) not in _acceptable_types[_type]:  # type: ignore[operator]
+        if type(obj) not in _acceptable_types[_type]:
             raise TypeError(
                 new_msg("%s can not accept object %r in type %s" % (dataType, obj, type(obj)))
             )
@@ -1684,9 +1684,7 @@ def _make_type_verifier(
     elif isinstance(dataType, StructType):
         verifiers = []
         for f in dataType.fields:
-            verifier = _make_type_verifier(
-                f.dataType, f.nullable, name=new_name(f.name)
-            )  # type: ignore[arg-type]
+            verifier = _make_type_verifier(f.dataType, f.nullable, name=new_name(f.name))
             verifiers.append((f.name, verifier))
 
         def verify_struct(obj: Any) -> None:
