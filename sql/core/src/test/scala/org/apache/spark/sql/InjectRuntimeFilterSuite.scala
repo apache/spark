@@ -448,28 +448,28 @@ class InjectRuntimeFilterSuite extends QueryTest with SQLTestUtils with SharedSp
     // scan's byte size is 3362.
     withSQLConf(SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "3000",
       SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "3000",
-      SQLConf.RUNTIME_BLOOM_FILTER_THRESHOLD.key -> "4000"
+      SQLConf.RUNTIME_BLOOM_FILTER_CREATION_SIDE_THRESHOLD.key -> "4000"
     ) {
       assertRewroteWithBloomFilter("select * from bf1 join bf2 on bf1.c1 = bf2.c2 " +
         "where bf2.a2 = 62")
     }
     withSQLConf(SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "3000",
       SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "50",
-      SQLConf.RUNTIME_BLOOM_FILTER_THRESHOLD.key -> "50"
+      SQLConf.RUNTIME_BLOOM_FILTER_CREATION_SIDE_THRESHOLD.key -> "50"
     ) {
       assertDidNotRewriteWithBloomFilter("select * from bf1 join bf2 on bf1.c1 = bf2.c2 " +
         "where bf2.a2 = 62")
     }
     withSQLConf(SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "5000",
       SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "3000",
-      SQLConf.RUNTIME_BLOOM_FILTER_THRESHOLD.key -> "4000"
+      SQLConf.RUNTIME_BLOOM_FILTER_CREATION_SIDE_THRESHOLD.key -> "4000"
     ) {
       // Rewrite should not be triggered as the Bloom filter application side scan size is small.
       assertDidNotRewriteWithBloomFilter("select * from bf1 join bf2 on bf1.c1 = bf2.c2 "
         + "where bf2.a2 = 62")
     }
     withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "32",
-      SQLConf.RUNTIME_BLOOM_FILTER_THRESHOLD.key -> "4000") {
+      SQLConf.RUNTIME_BLOOM_FILTER_CREATION_SIDE_THRESHOLD.key -> "4000") {
       // Test that the max scan size rather than an individual scan size on the filter
       // application side matters. `bf5filtered` has 14168 bytes and `bf2` has 3409 bytes.
       withSQLConf(

@@ -166,9 +166,7 @@ public abstract class BloomFilter {
   /**
    * @return the number of set bits in this {@link BloomFilter}.
    */
-  public long cardinality() {
-    throw new UnsupportedOperationException("Not implemented");
-  }
+  public abstract long cardinality();
 
   /**
    * Reads in a {@link BloomFilter} from an input stream. It is the caller's responsibility to close

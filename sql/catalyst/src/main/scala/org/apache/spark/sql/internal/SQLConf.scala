@@ -358,7 +358,7 @@ object SQLConf {
       .checkValue(threshold => threshold >= 0, "The threshold should be >= 0")
       .createWithDefault(10)
 
-  lazy val RUNTIME_BLOOM_FILTER_ENABLED =
+  val RUNTIME_BLOOM_FILTER_ENABLED =
     buildConf("spark.sql.optimizer.runtime.bloomFilter.enabled")
       .doc("When true and if one side of a shuffle join has a selective predicate, we attempt " +
         "to insert a bloom filter in the other side to reduce the amount of shuffle data.")
@@ -366,8 +366,8 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
-  val RUNTIME_BLOOM_FILTER_THRESHOLD =
-    buildConf("spark.sql.optimizer.runtime.bloomFilter.threshold")
+  val RUNTIME_BLOOM_FILTER_CREATION_SIDE_THRESHOLD =
+    buildConf("spark.sql.optimizer.runtime.bloomFilter.creationSideThreshold")
       .doc("Size threshold of the bloom filter creation side plan. Estimated size needs to be " +
         "under this value to try to inject bloom filter.")
       .version("3.3.0")
@@ -3760,8 +3760,8 @@ class SQLConf extends Serializable with Logging {
   def runtimeFilterBloomFilterEnabled: Boolean =
     getConf(RUNTIME_BLOOM_FILTER_ENABLED)
 
-  def runtimeFilterBloomFilterThreshold: Long =
-    getConf(RUNTIME_BLOOM_FILTER_THRESHOLD)
+  def runtimeFilterCreationSideThreshold: Long =
+    getConf(RUNTIME_BLOOM_FILTER_CREATION_SIDE_THRESHOLD)
 
   def stateStoreProviderClass: String = getConf(STATE_STORE_PROVIDER_CLASS)
 

@@ -19,8 +19,10 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.io.ByteArrayInputStream
 
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode, JavaCode, TrueLiteral}
+import org.apache.spark.sql.catalyst.expressions.codegen.Block.BlockHelper
 import org.apache.spark.sql.catalyst.trees.TreePattern.OUTER_REFERENCE
 import org.apache.spark.sql.types._
 import org.apache.spark.util.sketch.BloomFilter
@@ -74,20 +76,34 @@ case class BloomFilterMightContain(
       valueExpression = newValueExpression)
 
   // The bloom filter created from `bloomFilterExpression`.
-  @transient private var bloomFilter: BloomFilter = _
+  @transient private lazy val bloomFilter = {
+    val bytes = bloomFilterExpression.eval().asInstanceOf[Array[Byte]]
+    if (bytes == null) null else deserialize(bytes)
+  }
 
-  override def nullSafeEval(bloomFilterBytes: Any, value: Any): Any = {
+  override def eval(input: InternalRow): Any = {
     if (bloomFilter == null) {
-      bloomFilter = deserialize(bloomFilterBytes.asInstanceOf[Array[Byte]])
+      null
+    } else {
+      val value = valueExpression.eval(input)
+      if (value == null) null else bloomFilter.mightContainLong(value.asInstanceOf[Long])
     }
-    bloomFilter.mightContainLong(value.asInstanceOf[Long])
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val thisObj = ctx.addReferenceObj("thisObj", this)
-    nullSafeCodeGen(ctx, ev, (bloomFilterBytes, value) => {
-      s"\n${ev.value} = (Boolean) $thisObj.nullSafeEval($bloomFilterBytes, $value);\n"
-    })
+    if (bloomFilter == null) {
+      ev.copy(isNull = TrueLiteral, value = JavaCode.defaultLiteral(dataType))
+    } else {
+      val bf = ctx.addReferenceObj("bloomFilter", bloomFilter, classOf[BloomFilter].getName)
+      val valueEval = valueExpression.genCode(ctx)
+      ev.copy(code = code"""
+      ${valueEval.code}
+      boolean ${ev.isNull} = ${valueEval.isNull};
+      ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
+      if (!${ev.isNull}) {
+        ${ev.value} = $bf.mightContainLong((Long)${valueEval.value});
+      }""")
+    }
   }
 
   final def deserialize(bytes: Array[Byte]): BloomFilter = {

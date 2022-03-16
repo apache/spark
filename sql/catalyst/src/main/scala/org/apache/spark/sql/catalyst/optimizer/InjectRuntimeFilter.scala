@@ -73,7 +73,7 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
       filterCreationSidePlan: LogicalPlan
   ): LogicalPlan = {
     // Skip if the filter creation side is too big
-    if (filterCreationSidePlan.stats.sizeInBytes > conf.runtimeFilterBloomFilterThreshold) {
+    if (filterCreationSidePlan.stats.sizeInBytes > conf.runtimeFilterCreationSideThreshold) {
       return filterApplicationSidePlan
     }
     val rowCount = filterCreationSidePlan.stats.rowCount
@@ -118,7 +118,6 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
    * do not add a subquery that might have an expensive computation
    */
   private def isSelectiveFilterOverScan(plan: LogicalPlan): Boolean = {
-    plan.expressions
     val ret = plan match {
       case PhysicalOperation(_, filters, child) if child.isInstanceOf[LeafNode] =>
         filters.forall(isSimpleExpression) &&
@@ -183,6 +182,14 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
       conf.getConf(SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD)
   }
 
+  /**
+   * Check that:
+   * - The filterApplicationSideJoinExp can be pushed down through joins and aggregates (ie the
+   * - expression references originate from a single leaf node)
+   * - The filter creation side has a selective predicate
+   * - The current join is a shuffle join or a broadcast join that has a shuffle below it
+   * - The max filterApplicationSide scan size is greater than a configurable threshold
+   */
   private def filteringHasBenefit(
       filterApplicationSide: LogicalPlan,
       filterCreationSide: LogicalPlan,
@@ -194,8 +201,7 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
     // 2. The filter creation side has a selective predicate
     // 3. The current join is a shuffle join or a broadcast join that has a shuffle or aggregate
     //    in the filter application side
-    // 4. The filterApplicationSide is larger than the filterCreationSide by a configurable
-    //    threshold
+    // 4. The max filterApplicationSide scan size is greater than a configurable threshold
     findExpressionAndTrackLineageDown(filterApplicationSideExp,
       filterApplicationSide).isDefined && isSelectiveFilterOverScan(filterCreationSide) &&
       (isProbablyShuffleJoin(filterApplicationSide, filterCreationSide, hint) ||
