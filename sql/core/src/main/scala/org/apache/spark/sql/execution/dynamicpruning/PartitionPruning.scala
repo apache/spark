@@ -65,7 +65,7 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper {
           case fs: HadoopFsRelation =>
             val partitionColumns = AttributeSet(
               l.resolve(fs.partitionSchema, fs.sparkSession.sessionState.analyzer.resolver))
-            if (resExp.references.subsetOf(partitionColumns)) {
+            if (!resExp.references.isEmpty && resExp.references.subsetOf(partitionColumns)) {
               return Some(l)
             } else {
               None

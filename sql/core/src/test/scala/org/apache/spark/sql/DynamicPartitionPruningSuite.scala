@@ -1528,6 +1528,55 @@ abstract class DynamicPartitionPruningSuiteBase
       }
     }
   }
+
+  test("SPARK-38570: Fix incorrect DynamicPartitionPruning caused by Literal") {
+    withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true") {
+      withTable("fact1", "fact2", "dim") {
+        val fact1 = Seq[(Int, String, String)](
+          (1, "a1", "part1"),
+          (3, "a3", "part1"),
+          (5, "a5", "part1")
+        )
+        fact1.toDF("joinCol", "otherCol", "partCol")
+          .write
+          .partitionBy("partCol")
+          .format(tableFormat)
+          .saveAsTable("fact1")
+
+        val fact2 = Seq[(Int, String, String)](
+          (2, "b2", "part1"),
+          (4, "b4", "part1"),
+          (6, "b6", "part1")
+        )
+        fact2.toDF("joinCol", "otherCol", "partCol")
+          .write
+          .partitionBy("partCol")
+          .format(tableFormat)
+          .saveAsTable("fact2")
+
+        val dim = Seq[(String, Int, Int)](
+          ("type1", 1, 100),
+          ("type2", 2, 200)
+        )
+        dim.toDF("type", "joinCol", "score")
+          .write
+          .format(tableFormat)
+          .saveAsTable("dim")
+
+        val df = sql(
+          """
+            |SELECT a.type,a.joinCol,a.otherCol,b.score FROM
+            |(SELECT 'type1' as type,joinCol,otherCol FROM fact1 WHERE partCol='part1'
+            |UNION ALL
+            |SELECT 'type2' as type,joinCol,otherCol FROM fact2 WHERE partCol='part1') a
+            |Join dim b ON a.type=b.type AND a.joinCol=b.joinCol;
+            |""".stripMargin)
+
+        checkPartitionPruningPredicate(df, false, withBroadcast = false)
+        checkAnswer(df, Row("type1", 1, "a1", 100) :: Row("type2", 2, "b2", 200) :: Nil)
+      }
+    }
+  }
 }
 
 abstract class DynamicPartitionPruningDataSourceSuiteBase
