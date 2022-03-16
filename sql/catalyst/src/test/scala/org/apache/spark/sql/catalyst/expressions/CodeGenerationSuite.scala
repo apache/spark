@@ -330,7 +330,9 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
     val inputObject = BoundReference(0, ObjectType(classOf[Row]), nullable = true)
     GenerateUnsafeProjection.generate(
       ValidateExternalType(
-        GetExternalRowField(inputObject, index = 0, fieldName = "\"quote"), IntegerType) :: Nil)
+        GetExternalRowField(inputObject, index = 0, fieldName = "\"quote"),
+        IntegerType,
+        lenient = false) :: Nil)
   }
 
   test("SPARK-17160: field names are properly escaped by AssertTrue") {

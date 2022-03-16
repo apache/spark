@@ -1891,31 +1891,25 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   test("SPARK-38195: add a quantity of interval units to a timestamp") {
     // Check case-insensitivity
     checkEvaluation(
-      TimestampAdd(Literal("Hour"), Literal(1), Literal(LocalDateTime.of(2022, 2, 15, 12, 57, 0))),
+      TimestampAdd("Hour", Literal(1), Literal(LocalDateTime.of(2022, 2, 15, 12, 57, 0))),
       LocalDateTime.of(2022, 2, 15, 13, 57, 0))
     // Check nulls as input values
     checkEvaluation(
       TimestampAdd(
-        Literal.create(null, StringType),
-        Literal(1),
-        Literal(LocalDateTime.of(2022, 2, 15, 12, 57, 0))),
-      null)
-    checkEvaluation(
-      TimestampAdd(
-        Literal("MINUTE"),
+        "MINUTE",
         Literal.create(null, IntegerType),
         Literal(LocalDateTime.of(2022, 2, 15, 12, 57, 0))),
       null)
     checkEvaluation(
       TimestampAdd(
-        Literal("MINUTE"),
+        "MINUTE",
         Literal(1),
         Literal.create(null, TimestampType)),
       null)
     // Check crossing the daylight saving time
     checkEvaluation(
       TimestampAdd(
-        Literal("HOUR"),
+        "HOUR",
         Literal(6),
         Literal(Instant.parse("2022-03-12T23:30:00Z")),
         Some("America/Los_Angeles")),
@@ -1923,7 +1917,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     // Check the leap year
     checkEvaluation(
       TimestampAdd(
-        Literal("DAY"),
+        "DAY",
         Literal(2),
         Literal(LocalDateTime.of(2020, 2, 28, 10, 11, 12)),
         Some("America/Los_Angeles")),
@@ -1940,7 +1934,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
           checkConsistencyBetweenInterpretedAndCodegenAllowingException(
             (quantity: Expression, timestamp: Expression) =>
               TimestampAdd(
-                Literal(unit),
+                unit,
                 quantity,
                 timestamp,
                 Some(tz)),
@@ -1954,33 +1948,27 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     // Check case-insensitivity
     checkEvaluation(
       TimestampDiff(
-        Literal("Hour"),
+        "Hour",
         Literal(Instant.parse("2022-02-15T12:57:00Z")),
         Literal(Instant.parse("2022-02-15T13:57:00Z"))),
       1L)
     // Check nulls as input values
     checkEvaluation(
       TimestampDiff(
-        Literal.create(null, StringType),
-        Literal(Instant.parse("2021-02-15T12:57:00Z")),
-        Literal(Instant.parse("2022-02-15T12:57:00Z"))),
-      null)
-    checkEvaluation(
-      TimestampDiff(
-        Literal("MINUTE"),
+        "MINUTE",
         Literal.create(null, TimestampType),
         Literal(Instant.parse("2022-02-15T12:57:00Z"))),
       null)
     checkEvaluation(
       TimestampDiff(
-        Literal("MINUTE"),
+        "MINUTE",
         Literal(Instant.parse("2021-02-15T12:57:00Z")),
         Literal.create(null, TimestampType)),
       null)
     // Check crossing the daylight saving time
     checkEvaluation(
       TimestampDiff(
-        Literal("HOUR"),
+        "HOUR",
         Literal(Instant.parse("2022-03-12T23:30:00Z")),
         Literal(Instant.parse("2022-03-13T05:30:00Z")),
         Some("America/Los_Angeles")),
@@ -1988,7 +1976,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     // Check the leap year
     checkEvaluation(
       TimestampDiff(
-        Literal("DAY"),
+        "DAY",
         Literal(Instant.parse("2020-02-28T10:11:12Z")),
         Literal(Instant.parse("2020-03-01T10:21:12Z")),
         Some("America/Los_Angeles")),
@@ -2004,7 +1992,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         checkConsistencyBetweenInterpretedAndCodegenAllowingException(
           (startTs: Expression, endTs: Expression) =>
             TimestampDiff(
-              Literal(unit),
+              unit,
               startTs,
               endTs,
               Some(tz)),

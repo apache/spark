@@ -1110,16 +1110,16 @@ class DataFrameWindowFunctionsSuite extends QueryTest
 
       checkAnswer(windowed, Seq(Row("b", 4), Row(null, null), Row(null, null), Row(null, null)))
 
-      val shuffleByRequirement = windowed.queryExecution.executedPlan.find {
+      val shuffleByRequirement = windowed.queryExecution.executedPlan.exists {
         case w: WindowExec =>
-          w.child.find {
+          w.child.exists {
             case s: ShuffleExchangeExec => isShuffleExecByRequirement(s, Seq("key1", "key2"))
             case _ => false
-          }.nonEmpty
+          }
         case _ => false
       }
 
-      assert(shuffleByRequirement.nonEmpty, "Can't find desired shuffle node from the query plan")
+      assert(shuffleByRequirement, "Can't find desired shuffle node from the query plan")
     }
   }
 }
