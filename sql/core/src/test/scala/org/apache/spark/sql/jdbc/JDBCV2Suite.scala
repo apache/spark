@@ -20,7 +20,7 @@ package org.apache.spark.sql.jdbc
 import java.sql.{Connection, DriverManager}
 import java.util.Properties
 
-import org.apache.spark.SparkConf
+import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.sql.{DataFrame, ExplainSuiteHelper, QueryTest, Row}
 import org.apache.spark.sql.catalyst.analysis.CannotReplaceMissingTableException
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, Sort}
@@ -28,6 +28,7 @@ import org.apache.spark.sql.connector.expressions.{FieldReference, NullOrdering,
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2ScanRelation, V1ScanWrapper}
 import org.apache.spark.sql.execution.datasources.v2.jdbc.JDBCTableCatalog
 import org.apache.spark.sql.functions.{avg, count, lit, sum, udf}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.util.Utils
 
@@ -91,6 +92,10 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
       // scalastyle:on
       conn.prepareStatement("INSERT INTO \"test\".\"person\" VALUES (1)").executeUpdate()
       conn.prepareStatement("INSERT INTO \"test\".\"person\" VALUES (2)").executeUpdate()
+      conn.prepareStatement(
+        """CREATE TABLE "test"."view1" ("|col1" INTEGER, "|col2" INTEGER)""").executeUpdate()
+      conn.prepareStatement(
+        """CREATE TABLE "test"."view2" ("|col1" INTEGER, "|col3" INTEGER)""").executeUpdate()
     }
   }
 
@@ -316,7 +321,8 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
   test("show tables") {
     checkAnswer(sql("SHOW TABLES IN h2.test"),
       Seq(Row("test", "people", false), Row("test", "empty_table", false),
-        Row("test", "employee", false), Row("test", "dept", false), Row("test", "person", false)))
+        Row("test", "employee", false), Row("test", "dept", false), Row("test", "person", false),
+        Row("test", "view1", false), Row("test", "view2", false)))
   }
 
   test("SQL API: create table as select") {
@@ -841,6 +847,34 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
       Row(2, 2, 2, 2, 2, 0d, 12000d, 0d, 12000d, 12000d, 0d, 0d, 3, 0d)))
   }
 
+  test("scan with aggregate push-down: aggregate function with binary arithmetic") {
+    Seq(false, true).foreach { ansiMode =>
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> ansiMode.toString) {
+        val df = sql("SELECT SUM(2147483647 + DEPT) FROM h2.test.employee")
+        checkAggregateRemoved(df, ansiMode)
+        val expected_plan_fragment = if (ansiMode) {
+          "PushedAggregates: [SUM((2147483647) + (DEPT))], " +
+            "PushedFilters: [], PushedGroupByColumns: []"
+        } else {
+          "PushedFilters: []"
+        }
+        df.queryExecution.optimizedPlan.collect {
+          case _: DataSourceV2ScanRelation =>
+            checkKeywordsExistsInExplain(df, expected_plan_fragment)
+        }
+        if (ansiMode) {
+          val e = intercept[SparkException] {
+            checkAnswer(df, Seq(Row(-10737418233L)))
+          }
+          assert(e.getMessage.contains(
+            "org.h2.jdbc.JdbcSQLDataException: Numeric value out of range: \"2147483648\""))
+        } else {
+          checkAnswer(df, Seq(Row(-10737418233L)))
+        }
+      }
+    }
+  }
+
   test("scan with aggregate push-down: aggregate function with UDF") {
     val df = spark.table("h2.test.employee")
     val decrease = udf { (x: Double, y: Double) => x - y }
@@ -989,5 +1023,13 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
       Row("cathy", 9000.00, 9000.000000, 1),
       Row("david", 10000.00, 10000.000000, 1),
       Row("jen", 12000.00, 12000.000000, 1)))
+  }
+
+  test("SPARK-37895: JDBC push down with delimited special identifiers") {
+    val df = sql(
+      """SELECT h2.test.view1.`|col1`, h2.test.view1.`|col2`, h2.test.view2.`|col3`
+        |FROM h2.test.view1 LEFT JOIN h2.test.view2
+        |ON h2.test.view1.`|col1` = h2.test.view2.`|col1`""".stripMargin)
+    checkAnswer(df, Seq.empty[Row])
   }
 }

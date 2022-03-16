@@ -329,7 +329,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 
-mismatched input 'BY' expecting {')', ',', '-'}(line 1, pos 33)
+Syntax error at or near 'BY'(line 1, pos 33)
 
 == SQL ==
 SELECT * FROM rank() OVER (ORDER BY random())

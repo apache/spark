@@ -509,7 +509,7 @@ class Analyzer(override val catalogManager: CatalogManager)
     }
 
     private def hasUnresolvedAlias(exprs: Seq[NamedExpression]) =
-      exprs.exists(_.find(_.isInstanceOf[UnresolvedAlias]).isDefined)
+      exprs.exists(_.exists(_.isInstanceOf[UnresolvedAlias]))
 
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUpWithPruning(
       _.containsPattern(UNRESOLVED_ALIAS), ruleId) {
@@ -530,10 +530,7 @@ class Analyzer(override val catalogManager: CatalogManager)
 
   object ResolveGroupingAnalytics extends Rule[LogicalPlan] {
     private[analysis] def hasGroupingFunction(e: Expression): Boolean = {
-      e.collectFirst {
-        case g: Grouping => g
-        case g: GroupingID => g
-      }.isDefined
+      e.exists (g => g.isInstanceOf[Grouping] || g.isInstanceOf[GroupingID])
     }
 
     private def replaceGroupingFunc(
@@ -616,7 +613,7 @@ class Analyzer(override val catalogManager: CatalogManager)
       val aggsBuffer = ArrayBuffer[Expression]()
       // Returns whether the expression belongs to any expressions in `aggsBuffer` or not.
       def isPartOfAggregation(e: Expression): Boolean = {
-        aggsBuffer.exists(a => a.find(_ eq e).isDefined)
+        aggsBuffer.exists(a => a.exists(_ eq e))
       }
       replaceGroupingFunc(agg, groupByExprs, gid).transformDown {
         // AggregateExpression should be computed on the unmodified value of its argument
@@ -966,14 +963,14 @@ class Analyzer(override val catalogManager: CatalogManager)
     }
 
     private def hasMetadataCol(plan: LogicalPlan): Boolean = {
-      plan.expressions.exists(_.find {
+      plan.expressions.exists(_.exists {
         case a: Attribute =>
           // If an attribute is resolved before being labeled as metadata
           // (i.e. from the originating Dataset), we check with expression ID
           a.isMetadataCol ||
             plan.children.exists(c => c.metadataOutput.exists(_.exprId == a.exprId))
         case _ => false
-      }.isDefined)
+      })
     }
 
     private def addMetadataCol(plan: LogicalPlan): LogicalPlan = plan match {
@@ -1380,6 +1377,31 @@ class Analyzer(override val catalogManager: CatalogManager)
         throw QueryCompilationErrors.invalidStarUsageError("explode/json_tuple/UDTF",
           extractStar(g.generator.children))
 
+      case u @ Union(children, _, _)
+        // if there are duplicate output columns, give them unique expr ids
+          if children.exists(c => c.output.map(_.exprId).distinct.length < c.output.length) =>
+        val newChildren = children.map { c =>
+          if (c.output.map(_.exprId).distinct.length < c.output.length) {
+            val existingExprIds = mutable.HashSet[ExprId]()
+            val projectList = c.output.map { attr =>
+              if (existingExprIds.contains(attr.exprId)) {
+                // replace non-first duplicates with aliases and tag them
+                val newMetadata = new MetadataBuilder().withMetadata(attr.metadata)
+                  .putNull("__is_duplicate").build()
+                Alias(attr, attr.name)(explicitMetadata = Some(newMetadata))
+              } else {
+                // leave first duplicate alone
+                existingExprIds.add(attr.exprId)
+                attr
+              }
+            }
+            Project(projectList, c)
+          } else {
+            c
+          }
+        }
+        u.withNewChildren(newChildren)
+
       // When resolve `SortOrder`s in Sort based on child, don't report errors as
       // we still have chance to resolve it based on its descendants
       case s @ Sort(ordering, global, child) if child.resolved && !s.resolved =>
@@ -1649,7 +1671,7 @@ class Analyzer(override val catalogManager: CatalogManager)
   }
 
   private def containsDeserializer(exprs: Seq[Expression]): Boolean = {
-    exprs.exists(_.find(_.isInstanceOf[UnresolvedDeserializer]).isDefined)
+    exprs.exists(_.exists(_.isInstanceOf[UnresolvedDeserializer]))
   }
 
   // support CURRENT_DATE, CURRENT_TIMESTAMP, and grouping__id
@@ -1844,7 +1866,7 @@ class Analyzer(override val catalogManager: CatalogManager)
         withPosition(ordinal) {
           if (index > 0 && index <= aggs.size) {
             val ordinalExpr = aggs(index - 1)
-            if (ordinalExpr.find(_.isInstanceOf[AggregateExpression]).nonEmpty) {
+            if (ordinalExpr.exists(_.isInstanceOf[AggregateExpression])) {
               throw QueryCompilationErrors.groupByPositionRefersToAggregateFunctionError(
                 index, ordinalExpr)
             } else {
@@ -2498,11 +2520,11 @@ class Analyzer(override val catalogManager: CatalogManager)
       }.toSet
 
       // Find the first Aggregate Expression that is not Windowed.
-      exprs.exists(_.collectFirst {
-        case ae: AggregateExpression if !windowedAggExprs.contains(ae) => ae
-        case e: PythonUDF if PythonUDF.isGroupedAggPandasUDF(e) &&
-          !windowedAggExprs.contains(e) => e
-      }.isDefined)
+      exprs.exists(_.exists {
+        case ae: AggregateExpression => !windowedAggExprs.contains(ae)
+        case e: PythonUDF => PythonUDF.isGroupedAggPandasUDF(e) && !windowedAggExprs.contains(e)
+        case _ => false
+      })
     }
   }
 
@@ -2662,7 +2684,7 @@ class Analyzer(override val catalogManager: CatalogManager)
    */
   object ExtractGenerator extends Rule[LogicalPlan] {
     private def hasGenerator(expr: Expression): Boolean = {
-      expr.find(_.isInstanceOf[Generator]).isDefined
+      expr.exists(_.isInstanceOf[Generator])
     }
 
     private def hasNestedGenerator(expr: NamedExpression): Boolean = {
@@ -2672,10 +2694,10 @@ class Analyzer(override val catalogManager: CatalogManager)
         case go: GeneratorOuter =>
           hasInnerGenerator(go.child)
         case _ =>
-          g.children.exists { _.find {
+          g.children.exists { _.exists {
             case _: Generator => true
             case _ => false
-          }.isDefined }
+          } }
       }
       trimNonTopLevelAliases(expr) match {
         case UnresolvedAlias(g: Generator, _) => hasInnerGenerator(g)
@@ -2686,12 +2708,12 @@ class Analyzer(override val catalogManager: CatalogManager)
     }
 
     private def hasAggFunctionInGenerator(ne: Seq[NamedExpression]): Boolean = {
-      ne.exists(_.find {
+      ne.exists(_.exists {
         case g: Generator =>
-          g.children.exists(_.find(_.isInstanceOf[AggregateFunction]).isDefined)
+          g.children.exists(_.exists(_.isInstanceOf[AggregateFunction]))
         case _ =>
           false
-      }.nonEmpty)
+      })
     }
 
     private def trimAlias(expr: NamedExpression): Expression = expr match {
@@ -2744,6 +2766,7 @@ class Analyzer(override val catalogManager: CatalogManager)
 
         val projectExprs = Array.ofDim[NamedExpression](aggList.length)
         val newAggList = aggList
+          .toIndexedSeq
           .map(trimNonTopLevelAliases)
           .zipWithIndex
           .flatMap {
@@ -2811,6 +2834,9 @@ class Analyzer(override val catalogManager: CatalogManager)
         } else {
           p
         }
+
+      case g @ Generate(GeneratorOuter(generator), _, _, _, _, _) =>
+        g.copy(generator = generator, outer = true)
 
       case g: Generate => g
 
@@ -2889,10 +2915,10 @@ class Analyzer(override val catalogManager: CatalogManager)
       exprs.exists(hasWindowFunction)
 
     private def hasWindowFunction(expr: Expression): Boolean = {
-      expr.find {
+      expr.exists {
         case window: WindowExpression => true
         case _ => false
-      }.isDefined
+      }
     }
 
     /**
@@ -3728,7 +3754,7 @@ class Analyzer(override val catalogManager: CatalogManager)
     }
 
     private def hasUnresolvedFieldName(a: AlterTableCommand): Boolean = {
-      a.expressions.exists(_.find(_.isInstanceOf[UnresolvedFieldName]).isDefined)
+      a.expressions.exists(_.exists(_.isInstanceOf[UnresolvedFieldName]))
     }
   }
 
@@ -4033,7 +4059,7 @@ object SessionWindowing extends Rule[LogicalPlan] {
         }
 
         // As same as tumbling window, we add a filter to filter out nulls.
-        // And we also filter out events with negative or zero gap duration.
+        // And we also filter out events with negative or zero or invalid gap duration.
         val filterExpr = IsNotNull(session.timeColumn) &&
           (sessionAttr.getField(SESSION_END) > sessionAttr.getField(SESSION_START))
 

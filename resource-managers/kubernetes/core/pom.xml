@@ -44,6 +44,11 @@
           <artifactId>volcano-model-v1beta1</artifactId>
           <version>${kubernetes-client.version}</version>
         </dependency>
+        <dependency>
+          <groupId>io.fabric8</groupId>
+          <artifactId>volcano-client</artifactId>
+          <version>${kubernetes-client.version}</version>
+        </dependency>
       </dependencies>
     </profile>
   </profiles>

@@ -16,11 +16,12 @@
  */
 package org.apache.spark.deploy.k8s.features
 
+import java.io.File
+
 import io.fabric8.volcano.scheduling.v1beta1.PodGroup
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.k8s._
-import org.apache.spark.deploy.k8s.Config._
 
 class VolcanoFeatureStepSuite extends SparkFunSuite {
 
@@ -38,16 +39,6 @@ class VolcanoFeatureStepSuite extends SparkFunSuite {
     assert(podGroup.getMetadata.getName === s"${kubernetesConf.appId}-podgroup")
   }
 
-  test("SPARK-38818: Support `spark.kubernetes.job.queue`") {
-    val sparkConf = new SparkConf()
-      .set(KUBERNETES_JOB_QUEUE.key, "queue1")
-    val kubernetesConf = KubernetesTestConf.createDriverConf(sparkConf)
-    val step = new VolcanoFeatureStep()
-    step.init(kubernetesConf)
-    val podGroup = step.getAdditionalPreKubernetesResources().head.asInstanceOf[PodGroup]
-    assert(podGroup.getSpec.getQueue === "queue1")
-  }
-
   test("SPARK-36061: Executor Pod with Volcano PodGroup") {
     val sparkConf = new SparkConf()
     val kubernetesConf = KubernetesTestConf.createExecutorConf(sparkConf)
@@ -56,5 +47,23 @@ class VolcanoFeatureStepSuite extends SparkFunSuite {
     val configuredPod = step.configurePod(SparkPod.initialPod())
     val annotations = configuredPod.pod.getMetadata.getAnnotations
     assert(annotations.get("scheduling.k8s.io/group-name") === s"${kubernetesConf.appId}-podgroup")
+  }
+
+  test("SPARK-38455: Support driver podgroup template") {
+    val templatePath = new File(
+      getClass.getResource("/driver-podgroup-template.yml").getFile).getAbsolutePath
+    val sparkConf = new SparkConf()
+      .set(VolcanoFeatureStep.POD_GROUP_TEMPLATE_FILE_KEY, templatePath)
+    val kubernetesConf = KubernetesTestConf.createDriverConf(sparkConf)
+    val step = new VolcanoFeatureStep()
+    step.init(kubernetesConf)
+    step.configurePod(SparkPod.initialPod())
+    val podGroup = step.getAdditionalPreKubernetesResources().head.asInstanceOf[PodGroup]
+    assert(podGroup.getSpec.getMinMember == 1)
+    assert(podGroup.getSpec.getMinResources.get("cpu").getAmount == "2")
+    assert(podGroup.getSpec.getMinResources.get("memory").getAmount == "2048")
+    assert(podGroup.getSpec.getMinResources.get("memory").getFormat == "Mi")
+    assert(podGroup.getSpec.getPriorityClassName == "driver-priority")
+    assert(podGroup.getSpec.getQueue == "driver-queue")
   }
 }

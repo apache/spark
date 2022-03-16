@@ -19,7 +19,7 @@ import sys
 
 from typing import Callable, List, Optional, TYPE_CHECKING, overload, Dict, Union, cast, Tuple
 
-from py4j.java_gateway import JavaObject  # type: ignore[import]
+from py4j.java_gateway import JavaObject
 
 from pyspark.sql.column import Column, _to_seq
 from pyspark.sql.session import SparkSession

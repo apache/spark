@@ -21,12 +21,15 @@ import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference,
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, Final, PartialMerge}
 import org.apache.spark.sql.catalyst.plans.physical.{AllTuples, ClusteredDistribution, Distribution, UnspecifiedDistribution}
 import org.apache.spark.sql.execution.{AliasAwareOutputPartitioning, ExplainUtils, UnaryExecNode}
+import org.apache.spark.sql.execution.streaming.StatefulOperatorPartitioning
 
 /**
  * Holds common logic for aggregate operators
  */
 trait BaseAggregateExec extends UnaryExecNode with AliasAwareOutputPartitioning {
   def requiredChildDistributionExpressions: Option[Seq[Expression]]
+  def isStreaming: Boolean
+  def numShufflePartitions: Option[Int]
   def groupingExpressions: Seq[NamedExpression]
   def aggregateExpressions: Seq[AggregateExpression]
   def aggregateAttributes: Seq[Attribute]
@@ -92,7 +95,20 @@ trait BaseAggregateExec extends UnaryExecNode with AliasAwareOutputPartitioning 
   override def requiredChildDistribution: List[Distribution] = {
     requiredChildDistributionExpressions match {
       case Some(exprs) if exprs.isEmpty => AllTuples :: Nil
-      case Some(exprs) => ClusteredDistribution(exprs) :: Nil
+      case Some(exprs) =>
+        if (isStreaming) {
+          numShufflePartitions match {
+            case Some(parts) =>
+              StatefulOperatorPartitioning.getCompatibleDistribution(
+                exprs, parts, conf) :: Nil
+
+            case _ =>
+              throw new IllegalStateException("Expected to set the number of partitions before " +
+                "constructing required child distribution!")
+          }
+        } else {
+          ClusteredDistribution(exprs) :: Nil
+        }
       case None => UnspecifiedDistribution :: Nil
     }
   }
@@ -102,7 +118,8 @@ trait BaseAggregateExec extends UnaryExecNode with AliasAwareOutputPartitioning 
    */
   def toSortAggregate: SortAggregateExec = {
     SortAggregateExec(
-      requiredChildDistributionExpressions, groupingExpressions, aggregateExpressions,
-      aggregateAttributes, initialInputBufferOffset, resultExpressions, child)
+      requiredChildDistributionExpressions, isStreaming, numShufflePartitions, groupingExpressions,
+      aggregateExpressions, aggregateAttributes, initialInputBufferOffset, resultExpressions,
+      child)
   }
 }

@@ -68,9 +68,9 @@ struct<convert_timezone(Europe/Moscow, America/Los_Angeles, TIMESTAMP_NTZ '2022-
 
 
 -- !query
-select timestampdiff('QUARTER', timestamp_ntz'2022-01-01 01:02:03', timestamp_ntz'2022-05-02 05:06:07')
+select timestampdiff(QUARTER, timestamp_ntz'2022-01-01 01:02:03', timestamp_ntz'2022-05-02 05:06:07')
 -- !query schema
-struct<timestampdiff(QUARTER, TIMESTAMP_NTZ '2022-01-01 01:02:03', TIMESTAMP_NTZ '2022-05-02 05:06:07'):bigint>
+struct<timestampdiff(TIMESTAMP_NTZ '2022-01-01 01:02:03', TIMESTAMP_NTZ '2022-05-02 05:06:07'):bigint>
 -- !query output
 1
 
@@ -78,7 +78,7 @@ struct<timestampdiff(QUARTER, TIMESTAMP_NTZ '2022-01-01 01:02:03', TIMESTAMP_NTZ
 -- !query
 select timestampdiff(HOUR, timestamp_ntz'2022-02-14 01:02:03', timestamp_ltz'2022-02-14 02:03:04')
 -- !query schema
-struct<timestampdiff(HOUR, TIMESTAMP_NTZ '2022-02-14 01:02:03', TIMESTAMP '2022-02-14 02:03:04'):bigint>
+struct<timestampdiff(TIMESTAMP_NTZ '2022-02-14 01:02:03', TIMESTAMP '2022-02-14 02:03:04'):bigint>
 -- !query output
 1
 
@@ -86,14 +86,14 @@ struct<timestampdiff(HOUR, TIMESTAMP_NTZ '2022-02-14 01:02:03', TIMESTAMP '2022-
 -- !query
 select timestampdiff(YEAR, date'2022-02-15', timestamp_ntz'2023-02-15 10:11:12')
 -- !query schema
-struct<timestampdiff(YEAR, DATE '2022-02-15', TIMESTAMP_NTZ '2023-02-15 10:11:12'):bigint>
+struct<timestampdiff(DATE '2022-02-15', TIMESTAMP_NTZ '2023-02-15 10:11:12'):bigint>
 -- !query output
 1
 
 
 -- !query
-select timestampdiff('MILLISECOND', timestamp_ntz'2022-02-14 23:59:59.123', date'2022-02-15')
+select timestampdiff(MILLISECOND, timestamp_ntz'2022-02-14 23:59:59.123', date'2022-02-15')
 -- !query schema
-struct<timestampdiff(MILLISECOND, TIMESTAMP_NTZ '2022-02-14 23:59:59.123', DATE '2022-02-15'):bigint>
+struct<timestampdiff(TIMESTAMP_NTZ '2022-02-14 23:59:59.123', DATE '2022-02-15'):bigint>
 -- !query output
 877

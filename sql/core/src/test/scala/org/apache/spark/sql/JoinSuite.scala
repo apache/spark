@@ -183,7 +183,7 @@ class JoinSuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlan
   test("inner join where, one match per row") {
     withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
       checkAnswer(
-        upperCaseData.join(lowerCaseData).where('n === 'N),
+        upperCaseData.join(lowerCaseData).where(Symbol("n") === 'N),
         Seq(
           Row(1, "A", 1, "a"),
           Row(2, "B", 2, "b"),
@@ -404,8 +404,8 @@ class JoinSuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlan
 
   test("full outer join") {
     withTempView("`left`", "`right`") {
-      upperCaseData.where('N <= 4).createOrReplaceTempView("`left`")
-      upperCaseData.where('N >= 3).createOrReplaceTempView("`right`")
+      upperCaseData.where(Symbol("N") <= 4).createOrReplaceTempView("`left`")
+      upperCaseData.where(Symbol("N") >= 3).createOrReplaceTempView("`right`")
 
       val left = UnresolvedRelation(TableIdentifier("left"))
       val right = UnresolvedRelation(TableIdentifier("right"))
@@ -623,7 +623,7 @@ class JoinSuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlan
       testData.createOrReplaceTempView("B")
       testData2.createOrReplaceTempView("C")
       testData3.createOrReplaceTempView("D")
-      upperCaseData.where('N >= 3).createOrReplaceTempView("`right`")
+      upperCaseData.where(Symbol("N") >= 3).createOrReplaceTempView("`right`")
       val cartesianQueries = Seq(
         /** The following should error out since there is no explicit cross join */
         "SELECT * FROM testData inner join testData2",
@@ -1074,8 +1074,8 @@ class JoinSuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlan
     val df = left.crossJoin(right).where(pythonTestUDF(left("a")) === right.col("c"))
 
     // Before optimization, there is a logical Filter operator.
-    val filterInAnalysis = df.queryExecution.analyzed.find(_.isInstanceOf[Filter])
-    assert(filterInAnalysis.isDefined)
+    val filterInAnalysis = df.queryExecution.analyzed.exists(_.isInstanceOf[Filter])
+    assert(filterInAnalysis)
 
     // Filter predicate was pushdown as join condition. So there is no Filter exec operator.
     val filterExec = find(df.queryExecution.executedPlan)(_.isInstanceOf[FilterExec])

@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.datasources.orc
 import java.io.File
 import java.nio.charset.StandardCharsets
 import java.sql.Timestamp
-import java.time.{LocalDateTime, ZoneOffset}
+import java.time.LocalDateTime
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
@@ -371,7 +371,7 @@ abstract class OrcQueryTest extends OrcTest {
     withTempPath { dir =>
       val path = dir.getCanonicalPath
 
-      spark.range(0, 10).select('id as "Acol").write.orc(path)
+      spark.range(0, 10).select(Symbol("id") as "Acol").write.orc(path)
       spark.read.orc(path).schema("Acol")
       intercept[IllegalArgumentException] {
         spark.read.orc(path).schema("acol")
@@ -416,19 +416,19 @@ abstract class OrcQueryTest extends OrcTest {
             s"No data was filtered for predicate: $pred")
         }
 
-        checkPredicate('a === 5, List(5).map(Row(_, null)))
-        checkPredicate('a <=> 5, List(5).map(Row(_, null)))
-        checkPredicate('a < 5, List(1, 3).map(Row(_, null)))
-        checkPredicate('a <= 5, List(1, 3, 5).map(Row(_, null)))
-        checkPredicate('a > 5, List(7, 9).map(Row(_, null)))
-        checkPredicate('a >= 5, List(5, 7, 9).map(Row(_, null)))
-        checkPredicate('a.isNull, List(null).map(Row(_, null)))
-        checkPredicate('b.isNotNull, List())
-        checkPredicate('a.isin(3, 5, 7), List(3, 5, 7).map(Row(_, null)))
-        checkPredicate('a > 0 && 'a < 3, List(1).map(Row(_, null)))
-        checkPredicate('a < 1 || 'a > 8, List(9).map(Row(_, null)))
-        checkPredicate(!('a > 3), List(1, 3).map(Row(_, null)))
-        checkPredicate(!('a > 0 && 'a < 3), List(3, 5, 7, 9).map(Row(_, null)))
+        checkPredicate(Symbol("a") === 5, List(5).map(Row(_, null)))
+        checkPredicate(Symbol("a") <=> 5, List(5).map(Row(_, null)))
+        checkPredicate(Symbol("a") < 5, List(1, 3).map(Row(_, null)))
+        checkPredicate(Symbol("a") <= 5, List(1, 3, 5).map(Row(_, null)))
+        checkPredicate(Symbol("a") > 5, List(7, 9).map(Row(_, null)))
+        checkPredicate(Symbol("a") >= 5, List(5, 7, 9).map(Row(_, null)))
+        checkPredicate(Symbol("a").isNull, List(null).map(Row(_, null)))
+        checkPredicate(Symbol("b").isNotNull, List())
+        checkPredicate(Symbol("a").isin(3, 5, 7), List(3, 5, 7).map(Row(_, null)))
+        checkPredicate(Symbol("a") > 0 && Symbol("a") < 3, List(1).map(Row(_, null)))
+        checkPredicate(Symbol("a") < 1 || Symbol("a") > 8, List(9).map(Row(_, null)))
+        checkPredicate(!(Symbol("a") > 3), List(1, 3).map(Row(_, null)))
+        checkPredicate(!(Symbol("a") > 0 && Symbol("a") < 3), List(3, 5, 7, 9).map(Row(_, null)))
       }
     }
   }
@@ -734,10 +734,10 @@ abstract class OrcQuerySuite extends OrcQueryTest with SharedSparkSession {
 
       withSQLConf(SQLConf.ORC_VECTORIZED_READER_NESTED_COLUMN_ENABLED.key -> "true") {
         val readDf = spark.read.orc(path)
-        val vectorizationEnabled = readDf.queryExecution.executedPlan.find {
+        val vectorizationEnabled = readDf.queryExecution.executedPlan.exists {
           case scan @ (_: FileSourceScanExec | _: BatchScanExec) => scan.supportsColumnar
           case _ => false
-        }.isDefined
+        }
         assert(vectorizationEnabled)
         checkAnswer(readDf, df)
       }
@@ -756,10 +756,10 @@ abstract class OrcQuerySuite extends OrcQueryTest with SharedSparkSession {
 
       withSQLConf(SQLConf.ORC_VECTORIZED_READER_NESTED_COLUMN_ENABLED.key -> "true") {
         val readDf = spark.read.orc(path)
-        val vectorizationEnabled = readDf.queryExecution.executedPlan.find {
+        val vectorizationEnabled = readDf.queryExecution.executedPlan.exists {
           case scan @ (_: FileSourceScanExec | _: BatchScanExec) => scan.supportsColumnar
           case _ => false
-        }.isDefined
+        }
         assert(vectorizationEnabled)
         checkAnswer(readDf, df)
       }
@@ -783,10 +783,10 @@ abstract class OrcQuerySuite extends OrcQueryTest with SharedSparkSession {
           withSQLConf(SQLConf.ORC_VECTORIZED_READER_NESTED_COLUMN_ENABLED.key -> "true",
             SQLConf.WHOLESTAGE_MAX_NUM_FIELDS.key -> maxNumFields) {
             val scanPlan = spark.read.orc(path).queryExecution.executedPlan
-            assert(scanPlan.find {
+            assert(scanPlan.exists {
               case scan @ (_: FileSourceScanExec | _: BatchScanExec) => scan.supportsColumnar
               case _ => false
-            }.isDefined == vectorizedEnabled)
+            } == vectorizedEnabled)
           }
       }
     }
@@ -800,55 +800,6 @@ abstract class OrcQuerySuite extends OrcQueryTest with SharedSparkSession {
     withOrcFile(data) { file =>
       withAllNativeOrcReaders {
         checkAnswer(spark.read.orc(file), data.toDF().collect())
-      }
-    }
-  }
-
-  test("SPARK-36346: can't read TimestampLTZ as TimestampNTZ") {
-    val data = (1 to 10).map { i =>
-      val ts = new Timestamp(i)
-      Row(ts)
-    }
-    val answer = (1 to 10).map { i =>
-      // The second parameter is `nanoOfSecond`, while java.sql.Timestamp accepts milliseconds
-      // as input. So here we multiple the `nanoOfSecond` by NANOS_PER_MILLIS
-      val ts = LocalDateTime.ofEpochSecond(0, i * 1000000, ZoneOffset.UTC)
-      Row(ts)
-    }
-    val actualSchema = StructType(Seq(StructField("time", TimestampType, false)))
-    val providedSchema = StructType(Seq(StructField("time", TimestampNTZType, false)))
-
-    withTempPath { file =>
-      val df = spark.createDataFrame(sparkContext.parallelize(data), actualSchema)
-      df.write.orc(file.getCanonicalPath)
-      withAllNativeOrcReaders {
-        val msg = intercept[SparkException] {
-          spark.read.schema(providedSchema).orc(file.getCanonicalPath).collect()
-        }.getMessage
-        assert(msg.contains("Unable to convert timestamp of Orc to data type 'timestamp_ntz'"))
-      }
-    }
-  }
-
-  test("SPARK-36346: read TimestampNTZ as TimestampLTZ") {
-    val data = (1 to 10).map { i =>
-      // The second parameter is `nanoOfSecond`, while java.sql.Timestamp accepts milliseconds
-      // as input. So here we multiple the `nanoOfSecond` by NANOS_PER_MILLIS
-      val ts = LocalDateTime.ofEpochSecond(0, i * 1000000, ZoneOffset.UTC)
-      Row(ts)
-    }
-    val answer = (1 to 10).map { i =>
-      val ts = new java.sql.Timestamp(i)
-      Row(ts)
-    }
-    val actualSchema = StructType(Seq(StructField("time", TimestampNTZType, false)))
-    val providedSchema = StructType(Seq(StructField("time", TimestampType, false)))
-
-    withTempPath { file =>
-      val df = spark.createDataFrame(sparkContext.parallelize(data), actualSchema)
-      df.write.orc(file.getCanonicalPath)
-      withAllNativeOrcReaders {
-        checkAnswer(spark.read.schema(providedSchema).orc(file.getCanonicalPath), answer)
       }
     }
   }

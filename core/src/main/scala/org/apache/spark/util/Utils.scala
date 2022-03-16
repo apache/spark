@@ -3224,11 +3224,12 @@ private[spark] object Utils extends Logging {
    * Return the median number of a long array
    *
    * @param sizes
+   * @param alreadySorted
    * @return
    */
-  def median(sizes: Array[Long]): Long = {
+  def median(sizes: Array[Long], alreadySorted: Boolean): Long = {
     val len = sizes.length
-    val sortedSize = sizes.sorted
+    val sortedSize = if (alreadySorted) sizes else sizes.sorted
     len match {
       case _ if (len % 2 == 0) =>
         math.max((sortedSize(len / 2) + sortedSize(len / 2 - 1)) / 2, 1)
