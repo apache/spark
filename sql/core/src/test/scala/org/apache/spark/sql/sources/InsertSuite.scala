@@ -867,12 +867,19 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
       sql("insert into t values(true, default)")
       checkAnswer(sql("select s from t where i = true"), Seq(null).map(i => Row(i)))
     }
+    // The default value may be ommitted in the insert statement.
     withTable("t") {
       sql("create table t(i boolean, s bigint default 42L) using parquet")
       sql("insert into t values(true, 2L)")
       checkAnswer(sql("select s from t where i = true"), Seq(2L).map(i => Row(i)))
       sql("insert into t values(false)")
       checkAnswer(sql("select s from t where i = false"), Seq(42L).map(i => Row(i)))
+    }
+    // There is a complex expression in the default value.
+    withTable("t") {
+      sql("create table t(i boolean, s string default concat('abc', 'def') using parquet")
+      sql("insert into t values(true, default)")
+      checkAnswer(sql("select s from t where i = true"), Seq("abcdef").map(i => Row(i)))
     }
     // The default value parses correctly and the provided value type is different but coercible.
     withTable("t") {
@@ -915,6 +922,12 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
     withTable("t") {
       sql("create table t(i boolean, s bigint default 42) using parquet")
       sql("insert into t select false, default")
+      checkAnswer(sql("select s from t where i = false"), Seq(42L).map(i => Row(i)))
+    }
+    // There is an explicit default value provided in the INSERT INTO statement as a SELECT.
+    withTable("t") {
+      sql("create table t(i boolean, s bigint default 42) using parquet")
+      sql("insert into t select col, default from values (false) as tab(col)")
       checkAnswer(sql("select s from t where i = false"), Seq(42L).map(i => Row(i)))
     }
     // The explicit default value arrives first before the other value.
