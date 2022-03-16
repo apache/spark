@@ -22,7 +22,7 @@ import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Ascending, DataSourceBucketTransformExpression, DataSourceTransformExpression, SortOrder => V1SortOrder}
 import org.apache.spark.sql.catalyst.plans.{physical => v1}
-import org.apache.spark.sql.catalyst.plans.physical.{ClusteredDistribution, DataSourceHashPartitioning}
+import org.apache.spark.sql.catalyst.plans.physical.{ClusteredDistribution, KeyGroupedPartitioning}
 import org.apache.spark.sql.connector.catalog.Identifier
 import org.apache.spark.sql.connector.catalog.InMemoryTableCatalog
 import org.apache.spark.sql.connector.catalog.functions._
@@ -39,7 +39,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf._
 import org.apache.spark.sql.types._
 
-class DataSourceHashPartitioningSuite extends DistributionAndOrderingSuiteBase {
+class DataSourcePartitioningSuite extends DistributionAndOrderingSuiteBase {
   private var originalV2BucketingEnabled: Boolean = false
   private var originalAutoBroadcastJoinThreshold: Long = -1
 
@@ -80,7 +80,7 @@ class DataSourceHashPartitioningSuite extends DistributionAndOrderingSuiteBase {
       .add("data", StringType)
       .add("ts", TimestampType)
 
-  test("clustered distribution: output partitioning should be DataSourcePartitioning") {
+  test("clustered distribution: output partitioning should be KeyGroupedPartitioning") {
     val partitions: Array[Transform] = Array(Expressions.years("ts"))
 
     // create a table with 3 partitions, partitioned by `years` transform
@@ -97,12 +97,12 @@ class DataSourceHashPartitioningSuite extends DistributionAndOrderingSuiteBase {
     val partitionValues = Seq(50, 51, 52).map(v => InternalRow.fromSeq(Seq(v)))
 
     checkQueryPlan(df, v1Distribution,
-      DataSourceHashPartitioning(v1Distribution.clustering, partitionValues))
+      KeyGroupedPartitioning(v1Distribution.clustering, partitionValues))
 
     // multiple group keys should work too as long as partition keys are subset of them
     df = sql(s"SELECT count(*) FROM testcat.ns.$table GROUP BY id, ts")
     checkQueryPlan(df, v1Distribution,
-      DataSourceHashPartitioning(v1Distribution.clustering, partitionValues))
+      KeyGroupedPartitioning(v1Distribution.clustering, partitionValues))
   }
 
   test("non-clustered distribution: fallback to super.partitioning") {

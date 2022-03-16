@@ -71,7 +71,7 @@ object UnboundBucketFunction extends UnboundFunction {
 }
 
 object BucketFunction extends BoundFunction {
-  override def inputTypes(): Array[DataType] = Array(IntegerType)
+  override def inputTypes(): Array[DataType] = Array(IntegerType, IntegerType)
   override def resultType(): DataType = IntegerType
   override def name(): String = "bucket"
   override def canonicalName(): String = name()

@@ -20,22 +20,24 @@ package org.apache.spark.sql.execution.datasources.v2
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.expressions.V2ExpressionUtils._
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, RepartitionByExpression, Sort}
-import org.apache.spark.sql.catalyst.plans.physical._
+import org.apache.spark.sql.connector.distributions._
 import org.apache.spark.sql.connector.write.{RequiresDistributionAndOrdering, Write}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.util.collection.Utils.sequenceToOption
 
 object DistributionAndOrderingUtils {
 
   def prepareQuery(write: Write, query: LogicalPlan, conf: SQLConf): LogicalPlan = write match {
     case write: RequiresDistributionAndOrdering =>
       val numPartitions = write.requiredNumPartitions()
-      val distribution = toCatalystDistribution(write.requiredDistribution(), query) match {
-        case OrderedDistribution(ordering) => ordering
-        case ClusteredDistribution(clustering, _, _) => clustering
-        case UnspecifiedDistribution => Seq.empty[Expression]
-        case d => throw new IllegalArgumentException("Unexpected distribution type " +
-            s"${d.getClass.getName}")
+
+      val distribution = write.requiredDistribution match {
+        case d: OrderedDistribution => toCatalystOrdering(d.ordering(), query)
+        case d: ClusteredDistribution =>
+          sequenceToOption(d.clustering.map(e => toCatalyst(e, query)))
+              .getOrElse(Seq.empty[Expression])
+        case _: UnspecifiedDistribution => Seq.empty[Expression]
       }
 
       val queryWithDistribution = if (distribution.nonEmpty) {

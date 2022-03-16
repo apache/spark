@@ -35,7 +35,7 @@ abstract class TransformExpression extends Expression with Unevaluable {
    * @param other the transform expression to compare to
    * @return true if this and `other` has the same semantics w.r.t to transform, false otherwise.
    */
-  def equalsTo(other: TransformExpression): Boolean
+  def isCompatibleWith(other: TransformExpression): Boolean
 }
 
 /**
@@ -45,7 +45,7 @@ case class DataSourceTransformExpression(
     function: BoundFunction,
     children: Seq[Expression]) extends TransformExpression {
 
-  override def equalsTo(other: TransformExpression): Boolean = other match {
+  override def isCompatibleWith(other: TransformExpression): Boolean = other match {
     case DataSourceTransformExpression(otherFunction, _) =>
       function.canonicalName() == otherFunction.canonicalName()
     case _ =>
@@ -63,7 +63,7 @@ case class DataSourceBucketTransformExpression(
     function: BoundFunction,
     children: Seq[Expression]) extends TransformExpression {
 
-  override def equalsTo(other: TransformExpression): Boolean = other match {
+  override def isCompatibleWith(other: TransformExpression): Boolean = other match {
     case DataSourceBucketTransformExpression(otherNumBuckets, otherFunction, _) =>
       numBuckets == otherNumBuckets && function.canonicalName() == otherFunction.canonicalName()
     case _ =>

@@ -138,11 +138,11 @@ case class EnsureRequirements(
         Some(finalCandidateSpecs.values.maxBy(_.numPartitions))
       }
 
-      // Check if 1) all children are of `DataSourcePartitioning` and 2) they are all compatible
+      // Check if 1) all children are of `KeyGroupedPartitioning` and 2) they are all compatible
       // with each other. If both are true, skip shuffle.
       val allCompatible = childrenIndexes.sliding(2).map {
             case Seq(a, b) =>
-              checkDataSourceSpec(specs(a)) && checkDataSourceSpec(specs(b)) &&
+              checkKeyGroupedSpec(specs(a)) && checkKeyGroupedSpec(specs(b)) &&
                   specs(a).isCompatibleWith(specs(b))
           }.forall(_ == true)
 
@@ -186,8 +186,8 @@ case class EnsureRequirements(
     children
   }
 
-  private def checkDataSourceSpec(shuffleSpec: ShuffleSpec): Boolean = {
-    def check(spec: DataSourceShuffleSpec): Boolean = {
+  private def checkKeyGroupedSpec(shuffleSpec: ShuffleSpec): Boolean = {
+    def check(spec: KeyGroupedShuffleSpec): Boolean = {
       val attributes = spec.partitioning.expressions.flatMap(_.collectLeaves())
       val clustering = spec.distribution.clustering
 
@@ -196,12 +196,12 @@ case class EnsureRequirements(
           case (l, r) => l.semanticEquals(r)
         }
       } else {
-        true // already validated in `DataSourcePartitioning.satisfies`
+        true // already validated in `KeyGroupedPartitioning.satisfies`
       }
     }
     shuffleSpec match {
-      case spec: DataSourceShuffleSpec => check(spec)
-      case ShuffleSpecCollection(specs) => specs.exists(checkDataSourceSpec)
+      case spec: KeyGroupedShuffleSpec => check(spec)
+      case ShuffleSpecCollection(specs) => specs.exists(checkKeyGroupedSpec)
       case _ => false
     }
   }
@@ -285,12 +285,12 @@ case class EnsureRequirements(
         reorder(leftKeys.toIndexedSeq, rightKeys.toIndexedSeq, rightExpressions, rightKeys)
           .orElse(reorderJoinKeysRecursively(
             leftKeys, rightKeys, leftPartitioning, None))
-      case (Some(DataSourceHashPartitioning(clustering, _, _)), _) =>
+      case (Some(KeyGroupedPartitioning(clustering, _, _)), _) =>
         val leafExprs = clustering.flatMap(_.collectLeaves())
         reorder(leftKeys.toIndexedSeq, rightKeys.toIndexedSeq, leafExprs, leftKeys)
             .orElse(reorderJoinKeysRecursively(
               leftKeys, rightKeys, None, rightPartitioning))
-      case (_, Some(DataSourceHashPartitioning(clustering, _, _))) =>
+      case (_, Some(KeyGroupedPartitioning(clustering, _, _))) =>
         val leafExprs = clustering.flatMap(_.collectLeaves())
         reorder(leftKeys.toIndexedSeq, rightKeys.toIndexedSeq, leafExprs, rightKeys)
             .orElse(reorderJoinKeysRecursively(

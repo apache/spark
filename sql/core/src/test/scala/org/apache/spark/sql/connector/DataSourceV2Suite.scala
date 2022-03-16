@@ -32,7 +32,7 @@ import org.apache.spark.sql.connector.expressions.filter.Predicate
 import org.apache.spark.sql.connector.distributions.Distributions
 import org.apache.spark.sql.connector.expressions.{FieldReference, Literal, SortOrder, Transform}
 import org.apache.spark.sql.connector.read._
-import org.apache.spark.sql.connector.read.partitioning.{HashPartitioning, Partitioning}
+import org.apache.spark.sql.connector.read.partitioning.{DataSourcePartitioning, Partitioning}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, DataSourceV2Relation, DataSourceV2ScanRelation}
 import org.apache.spark.sql.execution.exchange.{Exchange, ShuffleExchangeExec}
@@ -902,7 +902,7 @@ class PartitionAwareDataSource extends TestingV2Source {
     }
 
     override def outputPartitioning(): Partitioning =
-      new HashPartitioning(Array(FieldReference("i")), 2)
+      new DataSourcePartitioning(Array(FieldReference("i")), 2)
   }
 
   override def getTable(options: CaseInsensitiveStringMap): Table = new SimpleBatchTable {

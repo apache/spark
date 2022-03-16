@@ -22,10 +22,8 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.analysis.NoSuchFunctionException
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.connector.catalog.{FunctionCatalog, Identifier}
 import org.apache.spark.sql.connector.catalog.functions._
-import org.apache.spark.sql.connector.distributions.{ClusteredDistribution => V2ClusteredDistribution, Distribution => V2Distribution, OrderedDistribution => V2OrderedDistribution, UnspecifiedDistribution => V2UnspecifiedDistribution}
 import org.apache.spark.sql.connector.expressions.{BucketTransform, Expression => V2Expression, FieldReference, IdentityTransform, NamedReference, NamedTransform, NullOrdering => V2NullOrdering, SortDirection => V2SortDirection, SortOrder => V2SortOrder, SortValue, Transform}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types._
@@ -60,33 +58,6 @@ object V2ExpressionUtils extends SQLConfHelper with Logging {
         .getOrElse(Seq.empty)
   }
 
-  /**
-   * Converts the V2 [[V2Distribution]] into its counterpart in catalyst [[Distribution]].
-   *
-   * If `funCatalogOpt` is set, it will be used to lookup any V2 function referenced
-   * by the input distribution. For instance, a bucket transform in the distribution requires a
-   * corresponding function to exist in the catalog, in order for Spark to leverage bucket join
-   * for the V2 data sources.
-   *
-   * This returns [[UnspecifiedDistribution]] if any non-identity transform is used in the
-   * distribution, AND the `funCatalogOpt` is not set OR the corresponding function is not
-   * defined in the catalog.
-   */
-  def toCatalystDistribution(
-      distribution: V2Distribution,
-      query: LogicalPlan,
-      funCatalogOpt: Option[FunctionCatalog] = None): Distribution = distribution match {
-    case d: V2OrderedDistribution =>
-      val resolvedOrdering = toCatalystOrdering(d.ordering(), query)
-      OrderedDistribution(resolvedOrdering)
-    case d: V2ClusteredDistribution =>
-      sequenceToOption(d.clustering.map(toCatalyst(_, query, funCatalogOpt)))
-          .map(ClusteredDistribution(_))
-          .getOrElse(UnspecifiedDistribution)
-    case _: V2UnspecifiedDistribution =>
-      UnspecifiedDistribution
-  }
-
   def toCatalyst(
       expr: V2Expression,
       query: LogicalPlan,
@@ -113,8 +84,11 @@ object V2ExpressionUtils extends SQLConfHelper with Logging {
       Some(resolveRef[NamedExpression](ref, query))
     case BucketTransform(numBuckets, refs, sorted) if sorted.isEmpty && refs.length == 1 =>
       val resolvedRefs = refs.map(r => resolveRef[NamedExpression](r, query))
+      // Create a dummy reference for `numBuckets` here and use that, together with `refs`, to
+      // look up the V2 function.
+      val numBucketsRef = AttributeReference("numBuckets", IntegerType, nullable = false)()
       funCatalogOpt.flatMap { catalog =>
-        loadV2Function(catalog, "bucket", resolvedRefs).map { bound =>
+        loadV2Function(catalog, "bucket", Seq(numBucketsRef) ++ resolvedRefs).map { bound =>
           DataSourceBucketTransformExpression(numBuckets, bound, resolvedRefs)
         }
       }

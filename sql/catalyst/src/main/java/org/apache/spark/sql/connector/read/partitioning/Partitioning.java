@@ -25,12 +25,11 @@ import org.apache.spark.sql.connector.read.SupportsReportPartitioning;
  * {@link SupportsReportPartitioning#outputPartitioning()}.
  * <p>
  * Note: implementors <b>should NOT</b> directly implement this interface. Instead, they should
- * implement one of the following subclasses:
+ * use one of the following subclasses:
  * <ul>
- * <li>{@link HashPartitioning}</li>
+ * <li>{@link DataSourcePartitioning}</li>
  * <li>{@link UnknownPartitioning}</li>
  * </ul>
- *
  *
  * @since 3.0.0
  */

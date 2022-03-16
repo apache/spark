@@ -51,8 +51,8 @@ class DistributionAndOrderingSuiteBase
       plan: QueryPlan[T]): Partitioning = partitioning match {
     case HashPartitioning(exprs, numPartitions) =>
       HashPartitioning(exprs.map(resolveAttrs(_, plan)), numPartitions)
-    case DataSourceHashPartitioning(clustering, numPartitions, partitionValues) =>
-      DataSourceHashPartitioning(clustering.map(resolveAttrs(_, plan)), numPartitions,
+    case KeyGroupedPartitioning(clustering, numPartitions, partitionValues) =>
+      KeyGroupedPartitioning(clustering.map(resolveAttrs(_, plan)), numPartitions,
         partitionValues)
     case PartitioningCollection(partitionings) =>
       PartitioningCollection(partitionings.map(resolvePartitioning(_, plan)))

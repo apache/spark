@@ -22,20 +22,20 @@ import org.apache.spark.sql.connector.expressions.Expression;
 
 /**
  * Represents a partitioning where rows are split across partitions based on the expressions
- * returned by {@link HashPartitioning#clustering}.
+ * returned by {@link DataSourcePartitioning#clustering}.
  * <p>
- * Data source implementations should make sure
- * that all rows where {@link HashPartitioning#clustering} evaluate to the same value should be
- * in the same partition.
+ * Data source implementations should make sure that all rows where
+ * {@link DataSourcePartitioning#clustering} evaluate to the same value should be in the same
+ * partition.
  *
  * @since 3.3.0
  */
 @Evolving
-public class HashPartitioning implements Partitioning {
+public class DataSourcePartitioning implements Partitioning {
   private final Expression[] clustering;
   private final int numPartitions;
 
-  public HashPartitioning(Expression[] clustering, int numPartitions) {
+  public DataSourcePartitioning(Expression[] clustering, int numPartitions) {
     this.clustering = clustering;
     this.numPartitions = numPartitions;
   }

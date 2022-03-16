@@ -21,7 +21,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Expression, RowOrdering}
 import org.apache.spark.sql.catalyst.plans.physical
-import org.apache.spark.sql.catalyst.plans.physical.{DataSourceHashPartitioning, SinglePartition}
+import org.apache.spark.sql.catalyst.plans.physical.{KeyGroupedPartitioning, SinglePartition}
 import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.connector.read.{HasPartitionKey, InputPartition, PartitionReaderFactory, Scan}
 import org.apache.spark.sql.execution.{ExplainUtils, LeafExecNode}
@@ -88,7 +88,7 @@ trait DataSourceV2ScanExecBase extends LeafExecNode {
   override def outputPartitioning: physical.Partitioning = {
     if (partitions.length == 1) SinglePartition
     else groupedPartitions.map { partitionValues =>
-      DataSourceHashPartitioning(clustering.get,
+      KeyGroupedPartitioning(clustering.get,
         partitionValues.size, Some(partitionValues.map(_._1)))
     }.getOrElse(super.outputPartitioning)
   }
@@ -100,7 +100,7 @@ trait DataSourceV2ScanExecBase extends LeafExecNode {
    * Group partition values for all the input partitions. This returns `Some` iff:
    *   - [[SQLConf.V2_BUCKETING_ENABLED]] is turned on
    *   - all input partitions implement [[HasPartitionKey]]
-   *   - `distribution` is a [[ClusteredDistribution]]
+   *   - `clustering` is set
    *
    * The result, if defined, is a list of tuples where the first element is a partition value,
    * and the second element is a list of input partitions that share the same partition value.
@@ -118,8 +118,7 @@ trait DataSourceV2ScanExecBase extends LeafExecNode {
       }.map(p => (p.asInstanceOf[HasPartitionKey].partitionKey(), p))
 
       if (results.length != inputPartitions.length || inputPartitions.isEmpty) {
-        // Not all of the `InputPartitions` implements `HasPartitionKey`, therefore skip
-        // creating DataSourcePartitioning
+        // Not all of the `InputPartitions` implements `HasPartitionKey`, therefore skip here.
         None
       } else {
         val partKeyType = expressions.map(_.dataType)

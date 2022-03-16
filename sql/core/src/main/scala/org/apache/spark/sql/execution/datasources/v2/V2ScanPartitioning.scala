@@ -22,7 +22,7 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.connector.catalog.FunctionCatalog
 import org.apache.spark.sql.connector.read.SupportsReportPartitioning
-import org.apache.spark.sql.connector.read.partitioning.{HashPartitioning, UnknownPartitioning}
+import org.apache.spark.sql.connector.read.partitioning.{DataSourcePartitioning, UnknownPartitioning}
 import org.apache.spark.util.collection.Utils.sequenceToOption
 
 /**
@@ -38,7 +38,7 @@ object V2ScanPartitioning extends Rule[LogicalPlan] with SQLConfHelper {
       }
 
       val catalystClustering = scan.outputPartitioning() match {
-        case hp: HashPartitioning => sequenceToOption(hp.clustering().map(
+        case hp: DataSourcePartitioning => sequenceToOption(hp.clustering().map(
           V2ExpressionUtils.toCatalyst(_, relation, funCatalogOpt)))
         case _: UnknownPartitioning => None
         case p => throw new IllegalArgumentException("Unsupported data source V2 partitioning " +

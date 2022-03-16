@@ -43,13 +43,6 @@ private[spark] object Utils {
    *
    * Otherwise, returns `None`.
    */
-  def sequenceToOption[T](input: Seq[Option[T]]): Option[Seq[T]] = {
-    input.foldLeft(Option(Seq.empty[T])) {
-      (result, opt) =>
-        for {
-          seq <- result
-          v <- opt
-        } yield seq :+ v
-    }
-  }
+  def sequenceToOption[T](input: Seq[Option[T]]): Option[Seq[T]] =
+    if (input.forall(_.isDefined)) Some(input.flatten) else None
 }
