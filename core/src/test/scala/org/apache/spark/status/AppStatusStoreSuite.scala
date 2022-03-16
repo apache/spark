@@ -17,6 +17,8 @@
 
 package org.apache.spark.status
 
+import scala.util.Random
+
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.internal.config.History.{HYBRID_STORE_DISK_BACKEND, HybridStoreDiskBackend}
@@ -137,13 +139,52 @@ class AppStatusStoreSuite extends SparkFunSuite {
        * Task summary will consider (1, 3, 5) only
        */
       val summary = appStore.taskSummary(stageId, attemptId, uiQuantiles).get
+      val successfulTasks = Array(getTaskMetrics(1), getTaskMetrics(3), getTaskMetrics(5))
 
-      val values = Array(1.0, 3.0, 5.0)
+      def assertQuantiles(metricGetter: TaskMetrics => Double,
+        actualQuantiles: Seq[Double]): Unit = {
+        val values = successfulTasks.map(metricGetter)
+        val expectedQuantiles = new Distribution(values, 0, values.length)
+          .getQuantiles(uiQuantiles.sorted)
 
-      val dist = new Distribution(values, 0, values.length).getQuantiles(uiQuantiles.sorted)
-      dist.zip(summary.executorRunTime).foreach { case (expected, actual) =>
-        assert(expected === actual)
+        assert(actualQuantiles === expectedQuantiles)
       }
+
+      assertQuantiles(_.executorDeserializeTime, summary.executorDeserializeTime)
+      assertQuantiles(_.executorDeserializeCpuTime, summary.executorDeserializeCpuTime)
+      assertQuantiles(_.executorRunTime, summary.executorRunTime)
+      assertQuantiles(_.executorRunTime, summary.executorRunTime)
+      assertQuantiles(_.executorCpuTime, summary.executorCpuTime)
+      assertQuantiles(_.resultSize, summary.resultSize)
+      assertQuantiles(_.jvmGCTime, summary.jvmGcTime)
+      assertQuantiles(_.resultSerializationTime, summary.resultSerializationTime)
+      assertQuantiles(_.memoryBytesSpilled, summary.memoryBytesSpilled)
+      assertQuantiles(_.diskBytesSpilled, summary.diskBytesSpilled)
+      assertQuantiles(_.peakExecutionMemory, summary.peakExecutionMemory)
+      assertQuantiles(_.inputMetrics.bytesRead, summary.inputMetrics.bytesRead)
+      assertQuantiles(_.inputMetrics.recordsRead, summary.inputMetrics.recordsRead)
+      assertQuantiles(_.outputMetrics.bytesWritten, summary.outputMetrics.bytesWritten)
+      assertQuantiles(_.outputMetrics.recordsWritten, summary.outputMetrics.recordsWritten)
+      assertQuantiles(_.shuffleReadMetrics.remoteBlocksFetched,
+        summary.shuffleReadMetrics.remoteBlocksFetched)
+      assertQuantiles(_.shuffleReadMetrics.localBlocksFetched,
+        summary.shuffleReadMetrics.localBlocksFetched)
+      assertQuantiles(_.shuffleReadMetrics.fetchWaitTime, summary.shuffleReadMetrics.fetchWaitTime)
+      assertQuantiles(_.shuffleReadMetrics.remoteBytesRead,
+        summary.shuffleReadMetrics.remoteBytesRead)
+      assertQuantiles(_.shuffleReadMetrics.remoteBytesReadToDisk,
+        summary.shuffleReadMetrics.remoteBytesReadToDisk)
+      assertQuantiles(
+        t => t.shuffleReadMetrics.localBytesRead + t.shuffleReadMetrics.remoteBytesRead,
+        summary.shuffleReadMetrics.readBytes)
+      assertQuantiles(
+        t => t.shuffleReadMetrics.localBlocksFetched + t.shuffleReadMetrics.remoteBlocksFetched,
+        summary.shuffleReadMetrics.totalBlocksFetched)
+      assertQuantiles(_.shuffleWriteMetrics.bytesWritten, summary.shuffleWriteMetrics.writeBytes)
+      assertQuantiles(_.shuffleWriteMetrics.writeTime, summary.shuffleWriteMetrics.writeTime)
+      assertQuantiles(_.shuffleWriteMetrics.recordsWritten,
+        summary.shuffleWriteMetrics.writeRecords)
+
       appStore.close()
     }
   }
@@ -227,32 +268,41 @@ class AppStatusStoreSuite extends SparkFunSuite {
     liveTask.write(store.asInstanceOf[ElementTrackingStore], 1L)
   }
 
-  private def getTaskMetrics(i: Int): TaskMetrics = {
+  /**
+   * Creates fake task metrics
+   * @param seed The random seed. The output will be reproducible for a given seed.
+   * @return The test metrics object with fake data
+   */
+  private def getTaskMetrics(seed: Int): TaskMetrics = {
+    val random = new Random(seed)
+    val randomMax = 1000
+    def nextInt(): Int = random.nextInt(randomMax)
+
     val taskMetrics = new TaskMetrics()
-    taskMetrics.setExecutorDeserializeTime(i)
-    taskMetrics.setExecutorDeserializeCpuTime(i)
-    taskMetrics.setExecutorRunTime(i)
-    taskMetrics.setExecutorCpuTime(i)
-    taskMetrics.setResultSize(i)
-    taskMetrics.setJvmGCTime(i)
-    taskMetrics.setResultSerializationTime(i)
-    taskMetrics.incMemoryBytesSpilled(i)
-    taskMetrics.incDiskBytesSpilled(i)
-    taskMetrics.incPeakExecutionMemory(i)
-    taskMetrics.inputMetrics.incBytesRead(i)
-    taskMetrics.inputMetrics.incRecordsRead(i)
-    taskMetrics.outputMetrics.setBytesWritten(i)
-    taskMetrics.outputMetrics.setRecordsWritten(i)
-    taskMetrics.shuffleReadMetrics.incRemoteBlocksFetched(i)
-    taskMetrics.shuffleReadMetrics.incLocalBlocksFetched(i)
-    taskMetrics.shuffleReadMetrics.incFetchWaitTime(i)
-    taskMetrics.shuffleReadMetrics.incRemoteBytesRead(i)
-    taskMetrics.shuffleReadMetrics.incRemoteBytesReadToDisk(i)
-    taskMetrics.shuffleReadMetrics.incLocalBytesRead(i)
-    taskMetrics.shuffleReadMetrics.incRecordsRead(i)
-    taskMetrics.shuffleWriteMetrics.incBytesWritten(i)
-    taskMetrics.shuffleWriteMetrics.incWriteTime(i)
-    taskMetrics.shuffleWriteMetrics.incRecordsWritten(i)
+    taskMetrics.setExecutorDeserializeTime(nextInt())
+    taskMetrics.setExecutorDeserializeCpuTime(nextInt())
+    taskMetrics.setExecutorRunTime(nextInt())
+    taskMetrics.setExecutorCpuTime(nextInt())
+    taskMetrics.setResultSize(nextInt())
+    taskMetrics.setJvmGCTime(nextInt())
+    taskMetrics.setResultSerializationTime(nextInt())
+    taskMetrics.incMemoryBytesSpilled(nextInt())
+    taskMetrics.incDiskBytesSpilled(nextInt())
+    taskMetrics.incPeakExecutionMemory(nextInt())
+    taskMetrics.inputMetrics.incBytesRead(nextInt())
+    taskMetrics.inputMetrics.incRecordsRead(nextInt())
+    taskMetrics.outputMetrics.setBytesWritten(nextInt())
+    taskMetrics.outputMetrics.setRecordsWritten(nextInt())
+    taskMetrics.shuffleReadMetrics.incRemoteBlocksFetched(nextInt())
+    taskMetrics.shuffleReadMetrics.incLocalBlocksFetched(nextInt())
+    taskMetrics.shuffleReadMetrics.incFetchWaitTime(nextInt())
+    taskMetrics.shuffleReadMetrics.incRemoteBytesRead(nextInt())
+    taskMetrics.shuffleReadMetrics.incRemoteBytesReadToDisk(nextInt())
+    taskMetrics.shuffleReadMetrics.incLocalBytesRead(nextInt())
+    taskMetrics.shuffleReadMetrics.incRecordsRead(nextInt())
+    taskMetrics.shuffleWriteMetrics.incBytesWritten(nextInt())
+    taskMetrics.shuffleWriteMetrics.incWriteTime(nextInt())
+    taskMetrics.shuffleWriteMetrics.incRecordsWritten(nextInt())
     taskMetrics
   }
 

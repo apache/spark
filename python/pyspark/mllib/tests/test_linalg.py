@@ -22,7 +22,7 @@ from numpy import array, array_equal, zeros, arange, tile, ones, inf
 
 import pyspark.ml.linalg as newlinalg
 from pyspark.serializers import CPickleSerializer
-from pyspark.mllib.linalg import (  # type: ignore[attr-defined]
+from pyspark.mllib.linalg import (
     Vector,
     SparseVector,
     DenseVector,

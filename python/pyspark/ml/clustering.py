@@ -53,7 +53,7 @@ from pyspark.ml.linalg import Vector, Matrix
 
 if TYPE_CHECKING:
     from pyspark.ml._typing import M
-    from py4j.java_gateway import JavaObject  # type: ignore[import]
+    from py4j.java_gateway import JavaObject
 
 
 __all__ = [

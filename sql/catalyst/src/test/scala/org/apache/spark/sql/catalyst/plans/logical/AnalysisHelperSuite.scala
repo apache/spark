@@ -41,7 +41,7 @@ class AnalysisHelperSuite extends SparkFunSuite {
   test("setAnalyze is recursive") {
     val plan = Project(Nil, LocalRelation())
     plan.setAnalyzed()
-    assert(plan.find(!_.analyzed).isEmpty)
+    assert(!plan.exists(!_.analyzed))
   }
 
   test("resolveOperator runs on operators recursively") {

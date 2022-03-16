@@ -40,9 +40,14 @@ import org.apache.spark.util.Utils
  *   we use this to replace Every and Any with Min and Max respectively.
  */
 object ReplaceExpressions extends Rule[LogicalPlan] {
-  def apply(plan: LogicalPlan): LogicalPlan = plan.transformAllExpressionsWithPruning(
+  def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
     _.containsAnyPattern(RUNTIME_REPLACEABLE)) {
-    case e: RuntimeReplaceable => e.replacement
+    case p => p.mapExpressions(replace)
+  }
+
+  private def replace(e: Expression): Expression = e match {
+    case r: RuntimeReplaceable => replace(r.replacement)
+    case _ => e.mapChildren(replace)
   }
 }
 

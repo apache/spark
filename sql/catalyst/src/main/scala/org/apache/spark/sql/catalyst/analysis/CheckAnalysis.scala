@@ -334,7 +334,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
             }
 
             def checkValidGroupingExprs(expr: Expression): Unit = {
-              if (expr.find(_.isInstanceOf[AggregateExpression]).isDefined) {
+              if (expr.exists(_.isInstanceOf[AggregateExpression])) {
                 failAnalysis(
                   "aggregate functions are not allowed in GROUP BY, but found " + expr.sql)
               }
@@ -435,7 +435,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
               // Check if the data types match.
               dataTypes(child).zip(ref).zipWithIndex.foreach { case ((dt1, dt2), ci) =>
                 // SPARK-18058: we shall not care about the nullability of columns
-                if (dataTypesAreCompatibleFn(dt1, dt2)) {
+                if (!dataTypesAreCompatibleFn(dt1, dt2)) {
                   val errorMessage =
                     s"""
                        |${operator.nodeName} can only be performed on tables with the compatible
@@ -607,11 +607,11 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
     val isUnion = plan.isInstanceOf[Union]
     if (isUnion) {
       (dt1: DataType, dt2: DataType) =>
-        !DataType.equalsStructurally(dt1, dt2, true)
+        DataType.equalsStructurally(dt1, dt2, true)
     } else {
       // SPARK-18058: we shall not care about the nullability of columns
       (dt1: DataType, dt2: DataType) =>
-        TypeCoercion.findWiderTypeForTwo(dt1.asNullable, dt2.asNullable).isEmpty
+        TypeCoercion.findWiderTypeForTwo(dt1.asNullable, dt2.asNullable).nonEmpty
     }
   }
 
@@ -662,7 +662,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
           nonAnsiPlan.children.tail.zipWithIndex.foreach { case (child, ti) =>
             // Check if the data types match.
             dataTypes(child).zip(ref).zipWithIndex.foreach { case ((dt1, dt2), ci) =>
-              if (dataTypesAreCompatibleFn(dt1, dt2)) {
+              if (!dataTypesAreCompatibleFn(dt1, dt2)) {
                 issueFixedIfAnsiOff = false
               }
             }
@@ -718,7 +718,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
 
     // Check whether the given expressions contains the subquery expression.
     def containsExpr(expressions: Seq[Expression]): Boolean = {
-      expressions.exists(_.find(_.semanticEquals(expr)).isDefined)
+      expressions.exists(_.exists(_.semanticEquals(expr)))
     }
 
     // Validate the subquery plan.

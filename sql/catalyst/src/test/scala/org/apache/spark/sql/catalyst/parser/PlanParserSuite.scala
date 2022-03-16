@@ -41,7 +41,10 @@ class PlanParserSuite extends AnalysisTest {
   }
 
   private def intercept(sqlCommand: String, messages: String*): Unit =
-    interceptParseException(parsePlan)(sqlCommand, messages: _*)
+    interceptParseException(parsePlan)(sqlCommand, messages: _*)()
+
+  private def intercept(sqlCommand: String, errorClass: Option[String], messages: String*): Unit =
+    interceptParseException(parsePlan)(sqlCommand, messages: _*)(errorClass)
 
   private def cte(
       plan: LogicalPlan,
@@ -289,11 +292,11 @@ class PlanParserSuite extends AnalysisTest {
       "from a select * select * where s < 10",
       table("a").select(star()).union(table("a").where('s < 10).select(star())))
     intercept(
-      "from a select * select * from x where a.s < 10",
-      "mismatched input 'from' expecting")
+      "from a select * select * from x where a.s < 10", Some("PARSE_INPUT_MISMATCHED"),
+      "Syntax error at or near 'from'")
     intercept(
-      "from a select * from b",
-      "mismatched input 'from' expecting")
+      "from a select * from b", Some("PARSE_INPUT_MISMATCHED"),
+      "Syntax error at or near 'from'")
     assertEqual(
       "from a insert into tbl1 select * insert into tbl2 select * where s < 10",
       table("a").select(star()).insertInto("tbl1").union(
@@ -775,16 +778,12 @@ class PlanParserSuite extends AnalysisTest {
 
   test("select hint syntax") {
     // Hive compatibility: Missing parameter raises ParseException.
-    val m = intercept[ParseException] {
-      parsePlan("SELECT /*+ HINT() */ * FROM t")
-    }.getMessage
-    assert(m.contains("mismatched input"))
+    intercept("SELECT /*+ HINT() */ * FROM t", Some("PARSE_INPUT_MISMATCHED"),
+      "Syntax error at or near")
 
     // Disallow space as the delimiter.
-    val m3 = intercept[ParseException] {
-      parsePlan("SELECT /*+ INDEX(a b c) */ * from default.t")
-    }.getMessage
-    assert(m3.contains("mismatched input 'b' expecting"))
+    intercept("SELECT /*+ INDEX(a b c) */ * from default.t", Some("PARSE_INPUT_MISMATCHED"),
+      "Syntax error at or near 'b'")
 
     comparePlans(
       parsePlan("SELECT /*+ HINT */ * FROM t"),
@@ -841,7 +840,8 @@ class PlanParserSuite extends AnalysisTest {
         UnresolvedHint("REPARTITION", Seq(Literal(100)),
           table("t").select(star()))))
 
-    intercept("SELECT /*+ COALESCE(30 + 50) */ * FROM t", "mismatched input")
+    intercept("SELECT /*+ COALESCE(30 + 50) */ * FROM t", Some("PARSE_INPUT_MISMATCHED"),
+      "Syntax error at or near")
 
     comparePlans(
       parsePlan("SELECT /*+ REPARTITION(c) */ * FROM t"),
@@ -965,8 +965,10 @@ class PlanParserSuite extends AnalysisTest {
       )
     }
 
-    intercept("select ltrim(both 'S' from 'SS abc S'", "mismatched input 'from' expecting {')'")
-    intercept("select rtrim(trailing 'S' from 'SS abc S'", "mismatched input 'from' expecting {')'")
+    intercept("select ltrim(both 'S' from 'SS abc S'", Some("PARSE_INPUT_MISMATCHED"),
+      "Syntax error at or near 'from'") // expecting {')'
+    intercept("select rtrim(trailing 'S' from 'SS abc S'", Some("PARSE_INPUT_MISMATCHED"),
+      "Syntax error at or near 'from'") //  expecting {')'
 
     assertTrimPlans(
       "SELECT TRIM(BOTH '@$%&( )abc' FROM '@ $ % & ()abc ' )",
@@ -1079,7 +1081,7 @@ class PlanParserSuite extends AnalysisTest {
     val m1 = intercept[ParseException] {
       parsePlan("CREATE VIEW testView AS INSERT INTO jt VALUES(1, 1)")
     }.getMessage
-    assert(m1.contains("mismatched input 'INSERT' expecting"))
+    assert(m1.contains("Syntax error at or near 'INSERT'"))
     // Multi insert query
     val m2 = intercept[ParseException] {
       parsePlan(
@@ -1089,11 +1091,11 @@ class PlanParserSuite extends AnalysisTest {
           |INSERT INTO tbl2 SELECT * WHERE jt.id > 4
         """.stripMargin)
     }.getMessage
-    assert(m2.contains("mismatched input 'INSERT' expecting"))
+    assert(m2.contains("Syntax error at or near 'INSERT'"))
     val m3 = intercept[ParseException] {
       parsePlan("ALTER VIEW testView AS INSERT INTO jt VALUES(1, 1)")
     }.getMessage
-    assert(m3.contains("mismatched input 'INSERT' expecting"))
+    assert(m3.contains("Syntax error at or near 'INSERT'"))
     // Multi insert query
     val m4 = intercept[ParseException] {
       parsePlan(
@@ -1104,7 +1106,7 @@ class PlanParserSuite extends AnalysisTest {
         """.stripMargin
       )
     }.getMessage
-    assert(m4.contains("mismatched input 'INSERT' expecting"))
+    assert(m4.contains("Syntax error at or near 'INSERT'"))
   }
 
   test("Invalid insert constructs in the query") {
@@ -1115,7 +1117,7 @@ class PlanParserSuite extends AnalysisTest {
     val m2 = intercept[ParseException] {
       parsePlan("SELECT * FROM S WHERE C1 IN (INSERT INTO T VALUES (2))")
     }.getMessage
-    assert(m2.contains("mismatched input 'IN' expecting"))
+    assert(m2.contains("Syntax error at or near 'IN'"))
   }
 
   test("relation in v2 catalog") {
