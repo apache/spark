@@ -313,7 +313,7 @@ class NestedColumnAliasingSuite extends SchemaPruningTest {
     comparePlans(optimized, expected)
   }
 
-  test("Nested field pruning for Project and PosExplode") {
+  test("SPARK-38531: Nested field pruning for Project and PosExplode") {
     val query = contact
       .generate(PosExplode('friends))
       .select('col.getField("middle"))
