@@ -20,14 +20,14 @@ package org.apache.spark.sql.catalyst.optimizer
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.sql.catalyst.SchemaPruningTest
-import org.apache.spark.sql.catalyst.analysis.SimpleAnalyzer
+import org.apache.spark.sql.catalyst.analysis.{SimpleAnalyzer, UnresolvedExtractValue}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.Cross
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
-import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
+import org.apache.spark.sql.types.{ArrayType, IntegerType, StringType, StructField, StructType}
 
 class NestedColumnAliasingSuite extends SchemaPruningTest {
 
@@ -812,6 +812,33 @@ class NestedColumnAliasingSuite extends SchemaPruningTest {
     val optimized3 = Optimize.execute(plan3)
     val expected3 = contact.select($"name").rebalance($"name").select($"name.first").analyze
     comparePlans(optimized3, expected3)
+  }
+
+  test("SPARK-38530: Do not push down nested ExtractValues with other expressions") {
+    val nestedStruct = StructType.fromDDL(
+      "a int, b struct<c: struct<d: int, e: int>, c2: int>")
+    val input = LocalRelation(
+      'id.int,
+      'col1.array(ArrayType(nestedStruct)))
+
+    val query = input
+      .generate(Explode('col1))
+      .select(UnresolvedExtractValue(UnresolvedExtractValue(
+        CaseWhen(Seq(('col.getField("a").===(1),
+          'col.getField("b")))), Literal("c")), Literal("d")))
+      .analyze
+    val optimized = Optimize.execute(query)
+
+    // The query should not be optimized.
+    val expected = input
+      .select('col1)
+      .generate(Explode('col1), unrequiredChildIndex = Seq(0))
+      .select(UnresolvedExtractValue(UnresolvedExtractValue(
+        CaseWhen(Seq(('col.getField("a").===(1),
+          'col.getField("b")))), Literal("c")), Literal("d")))
+      .analyze
+
+    comparePlans(optimized, expected)
   }
 }
 
