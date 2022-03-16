@@ -193,13 +193,25 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
         with self.assertRaisesRegex(TypeError, expected_error_message):
             psser.rename(["0", "1"])
 
+        # Function index
+        self.assert_eq(psser.rename(lambda x: x ** 2), pser.rename(lambda x: x ** 2))
+        self.assert_eq((psser + 1).rename(lambda x: x ** 2), (pser + 1).rename(lambda x: x ** 2))
+
+        expected_error_message = "inplace True is not supported yet for a function 'index'"
+        with self.assertRaisesRegex(ValueError, expected_error_message):
+            psser.rename(lambda x: x ** 2, inplace=True)
+
+        unsupported_index_inputs = (pd.Series([2, 3, 4, 5, 6, 7, 8]), {0: "zero", 1: "one"})
+        for index in unsupported_index_inputs:
+            expected_error_message = (
+                "'index' of %s type is not supported yet" % type(index).__name__
+            )
+            with self.assertRaisesRegex(ValueError, expected_error_message):
+                psser.rename(index)
+
         # Series index
         # pser = pd.Series(['a', 'b', 'c', 'd', 'e', 'f', 'g'], name='x')
         # psser = ps.from_pandas(s)
-
-        # TODO: index
-        # res = psser.rename(lambda x: x ** 2)
-        # self.assert_eq(res, pser.rename(lambda x: x ** 2))
 
         # res = psser.rename(pser)
         # self.assert_eq(res, pser.rename(pser))
@@ -838,13 +850,20 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
             pd.Series([True, False], name="x"),
             pd.Series([0, 1], name="x"),
             pd.Series([1, 2, 3], name="x"),
+            pd.Series([np.nan, 0, 1], name="x"),
+            pd.Series([np.nan, 1, 2, 3], name="x"),
             pd.Series([True, True, None], name="x"),
             pd.Series([True, False, None], name="x"),
             pd.Series([], name="x"),
             pd.Series([np.nan], name="x"),
+            pd.Series([np.nan, np.nan], name="x"),
+            pd.Series([None], name="x"),
+            pd.Series([None, None], name="x"),
         ]:
             psser = ps.from_pandas(pser)
             self.assert_eq(psser.all(), pser.all())
+            self.assert_eq(psser.all(skipna=False), pser.all(skipna=False))
+            self.assert_eq(psser.all(skipna=True), pser.all(skipna=True))
 
         pser = pd.Series([1, 2, 3, 4], name="x")
         psser = ps.from_pandas(pser)
@@ -1161,12 +1180,33 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
     def test_map(self):
         pser = pd.Series(["cat", "dog", None, "rabbit"])
         psser = ps.from_pandas(pser)
-        # Currently Koalas doesn't return NaN as pandas does.
-        self.assert_eq(psser.map({}), pser.map({}).replace({pd.np.nan: None}))
+
+        # dict correspondence
+        # Currently pandas API on Spark doesn't return NaN as pandas does.
+        self.assert_eq(psser.map({}), pser.map({}).replace({np.nan: None}))
 
         d = defaultdict(lambda: "abc")
         self.assertTrue("abc" in repr(psser.map(d)))
         self.assert_eq(psser.map(d), pser.map(d))
+
+        # series correspondence
+        pser_to_apply = pd.Series(["one", "two", "four"], index=["cat", "dog", "rabbit"])
+        self.assert_eq(psser.map(pser_to_apply), pser.map(pser_to_apply))
+        self.assert_eq(
+            psser.map(pser_to_apply, na_action="ignore"),
+            pser.map(pser_to_apply, na_action="ignore"),
+        )
+
+        # function correspondence
+        self.assert_eq(
+            psser.map(lambda x: x.upper(), na_action="ignore"),
+            pser.map(lambda x: x.upper(), na_action="ignore"),
+        )
+
+        def to_upper(string) -> str:
+            return string.upper() if string else ""
+
+        self.assert_eq(psser.map(to_upper), pser.map(to_upper))
 
         def tomorrow(date) -> datetime:
             return date + timedelta(days=1)
@@ -2070,6 +2110,48 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
 
         with ps.option_context("compute.eager_check", False):
             self.assert_eq(psser.asof(20), 4.0)
+
+        pser = pd.Series([2, 1, np.nan, 4], index=[10, 20, 30, 40], name="Koalas")
+        psser = ps.from_pandas(pser)
+        self.assert_eq(psser.asof([5, 20]), pser.asof([5, 20]))
+
+        pser = pd.Series([4, np.nan, np.nan, 2], index=[10, 20, 30, 40], name="Koalas")
+        psser = ps.from_pandas(pser)
+        self.assert_eq(psser.asof([5, 100]), pser.asof([5, 100]))
+
+        pser = pd.Series([np.nan, 4, 1, 2], index=[10, 20, 30, 40], name="Koalas")
+        psser = ps.from_pandas(pser)
+        self.assert_eq(psser.asof([5, 35]), pser.asof([5, 35]))
+
+        pser = pd.Series([2, 1, np.nan, 4], index=[10, 20, 30, 40], name="Koalas")
+        psser = ps.from_pandas(pser)
+        self.assert_eq(psser.asof([25, 25]), pser.asof([25, 25]))
+
+        pser = pd.Series([2, 1, np.nan, 4], index=["a", "b", "c", "d"], name="Koalas")
+        psser = ps.from_pandas(pser)
+        self.assert_eq(psser.asof(["a", "d"]), pser.asof(["a", "d"]))
+
+        pser = pd.Series(
+            [2, 1, np.nan, 4],
+            index=[
+                pd.Timestamp(2020, 1, 1),
+                pd.Timestamp(2020, 2, 2),
+                pd.Timestamp(2020, 3, 3),
+                pd.Timestamp(2020, 4, 4),
+            ],
+            name="Koalas",
+        )
+        psser = ps.from_pandas(pser)
+        self.assert_eq(
+            psser.asof([pd.Timestamp(2020, 1, 1)]),
+            pser.asof([pd.Timestamp(2020, 1, 1)]),
+        )
+
+        pser = pd.Series([2, np.nan, 1, 4], index=[10, 20, 30, 40], name="Koalas")
+        psser = ps.from_pandas(pser)
+        self.assert_eq(psser.asof(np.nan), pser.asof(np.nan))
+        self.assert_eq(psser.asof([np.nan, np.nan]), pser.asof([np.nan, np.nan]))
+        self.assert_eq(psser.asof([10, np.nan]), pser.asof([10, np.nan]))
 
     def test_squeeze(self):
         # Single value

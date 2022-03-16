@@ -118,6 +118,28 @@ class PruneFileSourcePartitionsSuite extends PrunePartitionSuiteBase with Shared
     }
   }
 
+  test("SPARK-38357: data + partition filters with OR") {
+    // Force datasource v2 for parquet
+    withSQLConf((SQLConf.USE_V1_SOURCE_LIST.key, "")) {
+      withTempPath { dir =>
+        spark.range(10).coalesce(1).selectExpr("id", "id % 3 as p")
+          .write.partitionBy("p").parquet(dir.getCanonicalPath)
+        withTempView("tmp") {
+          spark.read.parquet(dir.getCanonicalPath).createOrReplaceTempView("tmp");
+          assertPrunedPartitions("SELECT * FROM tmp WHERE (p = 0 AND id > 0) OR (p = 1 AND id = 2)",
+            2,
+            "((tmp.p = 0) || (tmp.p = 1))")
+          assertPrunedPartitions("SELECT * FROM tmp WHERE p = 0 AND id > 0",
+            1,
+            "(tmp.p = 0)")
+          assertPrunedPartitions("SELECT * FROM tmp WHERE p = 0",
+            1,
+            "(tmp.p = 0)")
+        }
+      }
+    }
+  }
+
   protected def collectPartitionFiltersFn(): PartialFunction[SparkPlan, Seq[Expression]] = {
     case scan: FileSourceScanExec => scan.partitionFilters
   }

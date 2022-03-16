@@ -593,6 +593,9 @@ private[spark] object Utils extends Logging {
    * basically copied from `org.apache.hadoop.yarn.util.FSDownload.unpack`.
    */
   def unpack(source: File, dest: File): Unit = {
+    if (!source.exists()) {
+      throw new FileNotFoundException(source.getAbsolutePath)
+    }
     val lowerSrc = StringUtils.toLowerCase(source.getName)
     if (lowerSrc.endsWith(".jar")) {
       RunJar.unJar(source, dest, RunJar.MATCH_ANY)
@@ -3221,11 +3224,12 @@ private[spark] object Utils extends Logging {
    * Return the median number of a long array
    *
    * @param sizes
+   * @param alreadySorted
    * @return
    */
-  def median(sizes: Array[Long]): Long = {
+  def median(sizes: Array[Long], alreadySorted: Boolean): Long = {
     val len = sizes.length
-    val sortedSize = sizes.sorted
+    val sortedSize = if (alreadySorted) sizes else sizes.sorted
     len match {
       case _ if (len % 2 == 0) =>
         math.max((sortedSize(len / 2) + sortedSize(len / 2 - 1)) / 2, 1)

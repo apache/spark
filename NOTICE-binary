@@ -917,6 +917,9 @@ This product includes code (JaspellTernarySearchTrie) from Java Spelling Checkin
 g Package (jaspell): http://jaspell.sourceforge.net/
 License: The BSD License (http://www.opensource.org/licenses/bsd-license.php)
 
+This product includes software developed by the JDOM Project (http://www.jdom.org/)
+License: https://raw.githubusercontent.com/hunterhacker/jdom/master/LICENSE.txt
+
 The snowball stemmers in
   analysis/common/src/java/net/sf/snowball
 were developed by Martin Porter and Richard Boulton.

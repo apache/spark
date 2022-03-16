@@ -365,10 +365,12 @@ class SessionCatalog(
       if (!ignoreIfExists) {
         throw new TableAlreadyExistsException(db = db, table = table)
       }
-    } else if (validateLocation) {
-      validateTableLocation(newTableDefinition)
+    } else {
+      if (validateLocation) {
+        validateTableLocation(newTableDefinition)
+      }
+      externalCatalog.createTable(newTableDefinition, ignoreIfExists)
     }
-    externalCatalog.createTable(newTableDefinition, ignoreIfExists)
   }
 
   def validateTableLocation(table: CatalogTable): Unit = {
@@ -388,6 +390,8 @@ class SessionCatalog(
   private def makeQualifiedTablePath(locationUri: URI, database: String): URI = {
     if (locationUri.isAbsolute) {
       locationUri
+    } else if (new Path(locationUri).isAbsolute) {
+      makeQualifiedPath(locationUri)
     } else {
       val dbName = formatDatabaseName(database)
       val dbLocation = makeQualifiedDBPath(getDatabaseMetadata(dbName).locationUri)

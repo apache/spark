@@ -68,6 +68,8 @@ abstract class AvroSuite
 
   override protected def beforeAll(): Unit = {
     super.beforeAll()
+    // initialize SessionCatalog here so it has a clean hadoopConf
+    spark.sessionState.catalog
     spark.conf.set(SQLConf.FILES_MAX_PARTITION_BYTES.key, 1024)
   }
 
@@ -1359,6 +1361,32 @@ abstract class AvroSuite
     }
   }
 
+  test("SPARK-34378: support writing user provided avro schema with missing optional fields") {
+    withTempDir { tempDir =>
+      val avroSchema = SchemaBuilder.builder().record("test").fields()
+        .requiredString("f1").optionalString("f2").endRecord().toString()
+
+      val data = Seq("foo", "bar")
+
+      // Fail if required field f1 is missing
+      val e = intercept[SparkException] {
+        data.toDF("f2").write.option("avroSchema", avroSchema).format("avro").save(s"$tempDir/fail")
+      }
+      assertExceptionMsg[IncompatibleSchemaException](e,
+        "Found field 'f1' in Avro schema but there is no match in the SQL schema")
+
+      val tempSaveDir = s"$tempDir/save/"
+      // Succeed if optional field f2 is missing
+      data.toDF("f1").write.option("avroSchema", avroSchema).format("avro").save(tempSaveDir)
+
+      val newDf = spark.read.format("avro").load(tempSaveDir)
+      assert(newDf.schema === new StructType().add("f1", StringType).add("f2", StringType))
+      val rows = newDf.collect()
+      assert(rows.map(_.getAs[String]("f1")).sorted === data.sorted)
+      rows.foreach(row => assert(row.isNullAt(1)))
+    }
+  }
+
   test("SPARK-34133: Reading user provided schema respects case sensitivity for field matching") {
     val wrongCaseSchema = new StructType()
         .add("STRING", StringType, nullable = false)
@@ -2301,9 +2329,10 @@ class AvroV2Suite extends AvroSuite with ExplainSuiteHelper {
        }
       assert(filterCondition.isDefined)
       // The partitions filters should be pushed down and no need to be reevaluated.
-      assert(filterCondition.get.collectFirst {
-        case a: AttributeReference if a.name == "p1" || a.name == "p2" => a
-      }.isEmpty)
+      assert(!filterCondition.get.exists {
+        case a: AttributeReference => a.name == "p1" || a.name == "p2"
+        case _ => false
+      })
 
       val fileScan = df.queryExecution.executedPlan collectFirst {
         case BatchScanExec(_, f: AvroScan, _) => f

@@ -825,7 +825,7 @@ case class NTile(buckets: Expression) extends RowNumberLike with SizeBasedWindow
     zero,
     zero,
     zero,
-    (n.cast(DecimalType.IntDecimal) / buckets.cast(DecimalType.IntDecimal)).cast(IntegerType),
+    (n div buckets).cast(IntegerType),
     (n % buckets).cast(IntegerType)
   )
 

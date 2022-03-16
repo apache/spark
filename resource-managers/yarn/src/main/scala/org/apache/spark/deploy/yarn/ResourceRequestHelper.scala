@@ -51,14 +51,14 @@ private object ResourceRequestHelper extends Logging {
       if (splitIndex == -1) {
         val errorMessage = s"Missing suffix for ${componentName}${key}, you must specify" +
           s" a suffix - $AMOUNT is currently the only supported suffix."
-        throw new IllegalArgumentException(errorMessage.toString())
+        throw new IllegalArgumentException(errorMessage)
       }
       val resourceName = key.substring(0, splitIndex)
       val resourceSuffix = key.substring(splitIndex + 1)
       if (!AMOUNT.equals(resourceSuffix)) {
         val errorMessage = s"Unsupported suffix: $resourceSuffix in: ${componentName}${key}, " +
           s"only .$AMOUNT is supported."
-        throw new IllegalArgumentException(errorMessage.toString())
+        throw new IllegalArgumentException(errorMessage)
       }
       (resourceName, value)
     }.toMap

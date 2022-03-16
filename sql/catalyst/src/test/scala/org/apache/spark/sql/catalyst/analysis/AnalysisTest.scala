@@ -200,11 +200,15 @@ trait AnalysisTest extends PlanTest {
     }
   }
 
-  protected def interceptParseException(
-      parser: String => Any)(sqlCommand: String, messages: String*): Unit = {
+  protected def interceptParseException(parser: String => Any)(
+    sqlCommand: String, messages: String*)(
+    errorClass: Option[String] = None): Unit = {
     val e = intercept[ParseException](parser(sqlCommand))
     messages.foreach { message =>
       assert(e.message.contains(message))
+    }
+    if (errorClass.isDefined) {
+      assert(e.getErrorClass == errorClass.get)
     }
   }
 }

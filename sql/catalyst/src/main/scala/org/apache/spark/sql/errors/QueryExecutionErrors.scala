@@ -42,13 +42,13 @@ import org.apache.spark.sql.catalyst.ScalaReflection.Schema
 import org.apache.spark.sql.catalyst.WalkedTypePath
 import org.apache.spark.sql.catalyst.analysis.UnresolvedGenerator
 import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, CatalogTable}
-import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Expression, UnevaluableAggregate}
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Expression}
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.JoinType
 import org.apache.spark.sql.catalyst.plans.logical.{DomainJoin, LogicalPlan}
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.ValueInterval
 import org.apache.spark.sql.catalyst.trees.TreeNode
-import org.apache.spark.sql.catalyst.util.{sideBySide, BadRecordException, FailFastMode}
+import org.apache.spark.sql.catalyst.util.{sideBySide, BadRecordException, DateTimeUtils, FailFastMode}
 import org.apache.spark.sql.connector.catalog.{CatalogNotFoundException, Identifier, Table, TableProvider}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.connector.expressions.Transform
@@ -89,9 +89,9 @@ object QueryExecutionErrors {
       messageParameters = Array(s"Cannot terminate expression: $generator"))
   }
 
-  def castingCauseOverflowError(t: Any, targetType: String): ArithmeticException = {
+  def castingCauseOverflowError(t: Any, dataType: DataType): ArithmeticException = {
     new SparkArithmeticException(errorClass = "CAST_CAUSES_OVERFLOW",
-      messageParameters = Array(t.toString, targetType, SQLConf.ANSI_ENABLED.key))
+      messageParameters = Array(t.toString, dataType.catalogString, SQLConf.ANSI_ENABLED.key))
   }
 
   def cannotChangeDecimalPrecisionError(
@@ -124,12 +124,6 @@ object QueryExecutionErrors {
   def cannotParseDecimalError(): Throwable = {
     new SparkIllegalStateException(errorClass = "CANNOT_PARSE_DECIMAL",
       messageParameters = Array.empty)
-  }
-
-  def evaluateUnevaluableAggregateUnsupportedError(
-      methodName: String, unEvaluable: UnevaluableAggregate): Throwable = {
-    new SparkUnsupportedOperationException(errorClass = "INTERNAL_ERROR",
-      messageParameters = Array(s"Cannot evaluate expression: $methodName: $unEvaluable"))
   }
 
   def dataTypeUnsupportedError(dataType: String, failure: String): Throwable = {
@@ -179,11 +173,6 @@ object QueryExecutionErrors {
       new SparkNoSuchElementException(errorClass = "MAP_KEY_DOES_NOT_EXIST",
         messageParameters = Array(key.toString, SQLConf.ANSI_STRICT_INDEX_OPERATOR.key))
     }
-  }
-
-  def rowFromCSVParserNotExpectedError(): Throwable = {
-    new SparkIllegalArgumentException(errorClass = "ROW_FROM_CSV_PARSER_NOT_EXPECTED",
-      messageParameters = Array.empty)
   }
 
   def inputTypeUnsupportedError(dataType: DataType): Throwable = {
@@ -245,6 +234,14 @@ object QueryExecutionErrors {
     new SparkRuntimeException(
       errorClass = "UNSUPPORTED_FEATURE",
       messageParameters = Array(s"literal for '${v.toString}' of ${v.getClass.toString}."))
+  }
+
+  def pivotColumnUnsupportedError(v: Any, dataType: DataType): RuntimeException = {
+    new SparkRuntimeException(
+      errorClass = "UNSUPPORTED_FEATURE",
+      messageParameters = Array(
+        s"pivoting by the value '${v.toString}' of the column data type" +
+        s" '${dataType.catalogString}'."))
   }
 
   def noDefaultForDataTypeError(dataType: DataType): RuntimeException = {
@@ -536,30 +533,43 @@ object QueryExecutionErrors {
 
   def sparkUpgradeInReadingDatesError(
       format: String, config: String, option: String): SparkUpgradeException = {
-    new SparkUpgradeException("3.0",
-      s"""
-         |reading dates before 1582-10-15 or timestamps before 1900-01-01T00:00:00Z from $format
-         |files can be ambiguous, as the files may be written by Spark 2.x or legacy versions of
-         |Hive, which uses a legacy hybrid calendar that is different from Spark 3.0+'s Proleptic
-         |Gregorian calendar. See more details in SPARK-31404. You can set the SQL config
-         |'$config' or the datasource option '$option' to 'LEGACY' to rebase the datetime values
-         |w.r.t. the calendar difference during reading. To read the datetime values as it is,
-         |set the SQL config '$config' or the datasource option '$option' to 'CORRECTED'.
-       """.stripMargin, null)
+    new SparkUpgradeException(
+      errorClass = "INCONSISTENT_BEHAVIOR_CROSS_VERSION",
+      messageParameters = Array(
+        "3.0",
+        s"""
+           |reading dates before 1582-10-15 or timestamps before 1900-01-01T00:00:00Z
+           |from $format files can be ambiguous, as the files may be written by
+           |Spark 2.x or legacy versions of Hive, which uses a legacy hybrid calendar
+           |that is different from Spark 3.0+'s Proleptic Gregorian calendar.
+           |See more details in SPARK-31404. You can set the SQL config '$config' or
+           |the datasource option '$option' to 'LEGACY' to rebase the datetime values
+           |w.r.t. the calendar difference during reading. To read the datetime values
+           |as it is, set the SQL config '$config' or the datasource option '$option'
+           |to 'CORRECTED'.
+           |""".stripMargin),
+      cause = null
+    )
   }
 
   def sparkUpgradeInWritingDatesError(format: String, config: String): SparkUpgradeException = {
-    new SparkUpgradeException("3.0",
-      s"""
-         |writing dates before 1582-10-15 or timestamps before 1900-01-01T00:00:00Z into $format
-         |files can be dangerous, as the files may be read by Spark 2.x or legacy versions of Hive
-         |later, which uses a legacy hybrid calendar that is different from Spark 3.0+'s Proleptic
-         |Gregorian calendar. See more details in SPARK-31404. You can set $config to 'LEGACY' to
-         |rebase the datetime values w.r.t. the calendar difference during writing, to get maximum
-         |interoperability. Or set $config to 'CORRECTED' to write the datetime values as it is,
-         |if you are 100% sure that the written files will only be read by Spark 3.0+ or other
-         |systems that use Proleptic Gregorian calendar.
-       """.stripMargin, null)
+    new SparkUpgradeException(
+      errorClass = "INCONSISTENT_BEHAVIOR_CROSS_VERSION",
+      messageParameters = Array(
+        "3.0",
+        s"""
+           |writing dates before 1582-10-15 or timestamps before 1900-01-01T00:00:00Z
+           |into $format files can be dangerous, as the files may be read by Spark 2.x
+           |or legacy versions of Hive later, which uses a legacy hybrid calendar that
+           |is different from Spark 3.0+'s Proleptic Gregorian calendar. See more
+           |details in SPARK-31404. You can set $config to 'LEGACY' to rebase the
+           |datetime values w.r.t. the calendar difference during writing, to get maximum
+           |interoperability. Or set $config to 'CORRECTED' to write the datetime values
+           |as it is, if you are 100% sure that the written files will only be read by
+           |Spark 3.0+ or other systems that use Proleptic Gregorian calendar.
+           |""".stripMargin),
+      cause = null
+    )
   }
 
   def buildReaderUnsupportedForFileFormatError(format: String): Throwable = {
@@ -802,6 +812,15 @@ object QueryExecutionErrors {
       s"""
          |Found duplicate field(s) "$requiredFieldName": $matchedOrcFields
          |in case-insensitive mode
+       """.stripMargin.replaceAll("\n", " "))
+  }
+
+  def foundDuplicateFieldInFieldIdLookupModeError(
+      requiredId: Int, matchedFields: String): Throwable = {
+    new RuntimeException(
+      s"""
+         |Found duplicate field(s) "$requiredId": $matchedFields
+         |in id mapping mode
        """.stripMargin.replaceAll("\n", " "))
   }
 
@@ -1611,8 +1630,12 @@ object QueryExecutionErrors {
   }
 
   def timeZoneIdNotSpecifiedForTimestampTypeError(): Throwable = {
-    new UnsupportedOperationException(
-      s"${TimestampType.catalogString} must supply timeZoneId parameter")
+    new SparkUnsupportedOperationException(
+      errorClass = "UNSUPPORTED_OPERATION",
+      messageParameters = Array(
+        s"${TimestampType.catalogString} must supply timeZoneId parameter " +
+          s"while converting to ArrowType")
+    )
   }
 
   def notPublicClassError(name: String): Throwable = {
@@ -1885,11 +1908,15 @@ object QueryExecutionErrors {
   }
 
   def repeatedPivotsUnsupportedError(): Throwable = {
-    new UnsupportedOperationException("repeated pivots are not supported")
+    new SparkUnsupportedOperationException(
+      errorClass = "UNSUPPORTED_FEATURE",
+      messageParameters = Array("Repeated pivots."))
   }
 
   def pivotNotAfterGroupByUnsupportedError(): Throwable = {
-    new UnsupportedOperationException("pivot is only supported after a groupBy")
+    new SparkUnsupportedOperationException(
+      errorClass = "UNSUPPORTED_FEATURE",
+      messageParameters = Array("Pivot not after a groupBy."))
   }
 
   def invalidAesKeyLengthError(actualLength: Int): RuntimeException = {
@@ -1922,7 +1949,16 @@ object QueryExecutionErrors {
   }
 
   def cannotConvertOrcTimestampToTimestampNTZError(): Throwable = {
-    new RuntimeException("Unable to convert timestamp of Orc to data type 'timestamp_ntz'")
+    new SparkUnsupportedOperationException(
+      errorClass = "UNSUPPORTED_OPERATION",
+      messageParameters = Array("Unable to convert timestamp of Orc to data type 'timestamp_ntz'"))
+  }
+
+  def cannotConvertOrcTimestampNTZToTimestampLTZError(): Throwable = {
+    new SparkUnsupportedOperationException(
+      errorClass = "UNSUPPORTED_OPERATION",
+      messageParameters =
+        Array("Unable to convert timestamp ntz of Orc to data type 'timestamp_ltz'"))
   }
 
   def writePartitionExceedConfigSizeWhenDynamicPartitionError(
@@ -1941,7 +1977,25 @@ object QueryExecutionErrors {
       s"The input string '$input' does not match the given number format: '$format'")
   }
 
-  def MultipleBucketTransformsError(): Throwable = {
+  def multipleBucketTransformsError(): Throwable = {
     new UnsupportedOperationException("Multiple bucket transforms are not supported.")
+  }
+
+  def unsupportedCreateNamespaceCommentError(): Throwable = {
+    new SQLFeatureNotSupportedException("Create namespace comment is not supported")
+  }
+
+  def unsupportedRemoveNamespaceCommentError(): Throwable = {
+    new SQLFeatureNotSupportedException("Remove namespace comment is not supported")
+  }
+
+  def unsupportedDropNamespaceRestrictError(): Throwable = {
+    new SQLFeatureNotSupportedException("Drop namespace restrict is not supported")
+  }
+
+  def timestampAddOverflowError(micros: Long, amount: Int, unit: String): ArithmeticException = {
+    new SparkArithmeticException(
+      errorClass = "DATETIME_OVERFLOW",
+      messageParameters = Array(s"add $amount $unit to '${DateTimeUtils.microsToInstant(micros)}'"))
   }
 }

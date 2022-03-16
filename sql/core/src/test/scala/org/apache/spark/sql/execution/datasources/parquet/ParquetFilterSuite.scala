@@ -1426,39 +1426,39 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
   test("filter pushdown - StringStartsWith") {
     withParquetDataFrame((1 to 4).map(i => Tuple1(i + "str" + i))) { implicit df =>
       checkFilterPredicate(
-        '_1.startsWith("").asInstanceOf[Predicate],
+        Symbol("_1").startsWith("").asInstanceOf[Predicate],
         classOf[UserDefinedByInstance[_, _]],
         Seq("1str1", "2str2", "3str3", "4str4").map(Row(_)))
 
       Seq("2", "2s", "2st", "2str", "2str2").foreach { prefix =>
         checkFilterPredicate(
-          '_1.startsWith(prefix).asInstanceOf[Predicate],
+          Symbol("_1").startsWith(prefix).asInstanceOf[Predicate],
           classOf[UserDefinedByInstance[_, _]],
           "2str2")
       }
 
       Seq("2S", "null", "2str22").foreach { prefix =>
         checkFilterPredicate(
-          '_1.startsWith(prefix).asInstanceOf[Predicate],
+          Symbol("_1").startsWith(prefix).asInstanceOf[Predicate],
           classOf[UserDefinedByInstance[_, _]],
           Seq.empty[Row])
       }
 
       checkFilterPredicate(
-        !'_1.startsWith("").asInstanceOf[Predicate],
+        !Symbol("_1").startsWith("").asInstanceOf[Predicate],
         classOf[Operators.Not],
         Seq().map(Row(_)))
 
       Seq("2", "2s", "2st", "2str", "2str2").foreach { prefix =>
         checkFilterPredicate(
-          !'_1.startsWith(prefix).asInstanceOf[Predicate],
+          !Symbol("_1").startsWith(prefix).asInstanceOf[Predicate],
           classOf[Operators.Not],
           Seq("1str1", "3str3", "4str4").map(Row(_)))
       }
 
       Seq("2S", "null", "2str22").foreach { prefix =>
         checkFilterPredicate(
-          !'_1.startsWith(prefix).asInstanceOf[Predicate],
+          !Symbol("_1").startsWith(prefix).asInstanceOf[Predicate],
           classOf[Operators.Not],
           Seq("1str1", "2str2", "3str3", "4str4").map(Row(_)))
       }
@@ -1472,7 +1472,7 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
     // SPARK-28371: make sure filter is null-safe.
     withParquetDataFrame(Seq(Tuple1[String](null))) { implicit df =>
       checkFilterPredicate(
-        '_1.startsWith("blah").asInstanceOf[Predicate],
+        Symbol("_1").startsWith("blah").asInstanceOf[Predicate],
         classOf[UserDefinedByInstance[_, _]],
         Seq.empty[Row])
     }

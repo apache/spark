@@ -1251,9 +1251,9 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
                 )
 
             if isinstance(return_type, DataFrameType):
-                data_fields = cast(DataFrameType, return_type).data_fields
-                return_schema = cast(DataFrameType, return_type).spark_type
-                index_fields = cast(DataFrameType, return_type).index_fields
+                data_fields = return_type.data_fields
+                return_schema = return_type.spark_type
+                index_fields = return_type.index_fields
                 should_retain_index = len(index_fields) > 0
                 psdf_from_pandas = None
             else:
@@ -2287,8 +2287,8 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
                     "but found type {}".format(return_type)
                 )
 
-            dtype = cast(SeriesType, return_type).dtype
-            spark_type = cast(SeriesType, return_type).spark_type
+            dtype = return_type.dtype
+            spark_type = return_type.spark_type
 
             data_fields = [
                 InternalField(dtype=dtype, struct_field=StructField(name=c, dataType=spark_type))
@@ -2838,7 +2838,7 @@ class DataFrameGroupBy(GroupBy[DataFrame]):
     ) -> DataFrame:
         applied = []
         for column in self._agg_columns:
-            applied.append(op(cast(SeriesGroupBy, column.groupby(self._groupkeys))))
+            applied.append(op(column.groupby(self._groupkeys)))
         if numeric_only:
             applied = [col for col in applied if isinstance(col.spark.data_type, NumericType)]
             if not applied:

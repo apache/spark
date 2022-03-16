@@ -898,7 +898,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 
-The definition of window 'w' is repetitive(line 8, pos 0)
+Invalid SQL syntax: The definition of window 'w' is repetitive.(line 8, pos 0)
 
 == SQL ==
 SELECT

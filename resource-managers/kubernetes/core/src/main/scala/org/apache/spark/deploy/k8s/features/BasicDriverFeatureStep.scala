@@ -142,7 +142,8 @@ private[spark] class BasicDriverFeatureStep(conf: KubernetesDriverConf)
       .editOrNewMetadata()
         .withName(driverPodName)
         .addToLabels(conf.labels.asJava)
-        .addToAnnotations(conf.annotations.asJava)
+        .addToAnnotations(conf.annotations.map { case (k, v) =>
+          (k, Utils.substituteAppNExecIds(v, conf.appId, "")) }.asJava)
         .endMetadata()
       .editOrNewSpec()
         .withRestartPolicy("Never")
@@ -152,7 +153,7 @@ private[spark] class BasicDriverFeatureStep(conf: KubernetesDriverConf)
         .endSpec()
       .build()
 
-    conf.get(KUBERNETES_DRIVER_SCHEDULER_NAME)
+    conf.schedulerName
       .foreach(driverPod.getSpec.setSchedulerName)
 
     SparkPod(driverPod, driverContainer)

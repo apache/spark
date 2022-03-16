@@ -200,7 +200,7 @@ case class FileSourceScanExec(
   extends DataSourceScanExec {
 
   lazy val metadataColumns: Seq[AttributeReference] =
-    output.collect { case MetadataAttribute(attr) => attr }
+    output.collect { case FileSourceMetadataAttribute(attr) => attr }
 
   // Note that some vals referring the file-based relation are lazy intentionally
   // so that this plan can be canonicalized on executor side too. See SPARK-23731.
@@ -239,7 +239,7 @@ case class FileSourceScanExec(
   }
 
   private def isDynamicPruningFilter(e: Expression): Boolean =
-    e.find(_.isInstanceOf[PlanExpression[_]]).isDefined
+    e.exists(_.isInstanceOf[PlanExpression[_]])
 
   @transient lazy val selectedPartitions: Array[PartitionDirectory] = {
     val optimizerMetadataTimeNs = relation.location.metadataOpsTimeNs.getOrElse(0L)
@@ -366,9 +366,11 @@ case class FileSourceScanExec(
   @transient
   private lazy val pushedDownFilters = {
     val supportNestedPredicatePushdown = DataSourceUtils.supportNestedPredicatePushdown(relation)
-    // TODO: should be able to push filters containing metadata columns down to skip files
+    // `dataFilters` should not include any metadata col filters
+    // because the metadata struct has been flatted in FileSourceStrategy
+    // and thus metadata col filters are invalid to be pushed down
     dataFilters.filterNot(_.references.exists {
-      case MetadataAttribute(_) => true
+      case FileSourceMetadataAttribute(_) => true
       case _ => false
     }).flatMap(DataSourceStrategy.translateFilter(_, supportNestedPredicatePushdown))
   }

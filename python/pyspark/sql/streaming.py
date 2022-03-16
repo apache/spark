@@ -20,7 +20,7 @@ import json
 from collections.abc import Iterator
 from typing import cast, overload, Any, Callable, Dict, List, Optional, TYPE_CHECKING, Union
 
-from py4j.java_gateway import java_import, JavaObject  # type: ignore[import]
+from py4j.java_gateway import java_import, JavaObject
 
 from pyspark import since
 from pyspark.sql.column import _to_seq
@@ -29,7 +29,7 @@ from pyspark.sql.types import Row, StructType, StructField, StringType
 from pyspark.sql.utils import ForeachBatchFunction, StreamingQueryException
 
 if TYPE_CHECKING:
-    from pyspark.sql import SQLContext
+    from pyspark.sql.session import SparkSession
     from pyspark.sql._typing import SupportsProcess, OptionalPrimitiveType
     from pyspark.sql.dataframe import DataFrame
 
@@ -316,8 +316,8 @@ class DataStreamReader(OptionUtils):
     This API is evolving.
     """
 
-    def __init__(self, spark: "SQLContext") -> None:
-        self._jreader = spark._ssql_ctx.readStream()
+    def __init__(self, spark: "SparkSession") -> None:
+        self._jreader = spark._jsparkSession.readStream()
         self._spark = spark
 
     def _df(self, jdf: JavaObject) -> "DataFrame":
@@ -856,7 +856,7 @@ class DataStreamWriter:
 
     def __init__(self, df: "DataFrame") -> None:
         self._df = df
-        self._spark = df.sql_ctx
+        self._spark = df.sparkSession
         self._jwrite = df._jdf.writeStream()
 
     def _sq(self, jsq: JavaObject) -> StreamingQuery:
@@ -1196,7 +1196,7 @@ class DataStreamWriter:
         >>> writer = sdf.writeStream.foreach(RowPrinter())
         """
 
-        from pyspark.rdd import _wrap_function  # type: ignore[attr-defined]
+        from pyspark.rdd import _wrap_function
         from pyspark.serializers import CPickleSerializer, AutoBatchedSerializer
         from pyspark.taskcontext import TaskContext
 
@@ -1474,7 +1474,7 @@ def _test() -> None:
     import tempfile
     from pyspark.sql import SparkSession, SQLContext
     import pyspark.sql.streaming
-    from py4j.protocol import Py4JError  # type: ignore[import]
+    from py4j.protocol import Py4JError
 
     os.chdir(os.environ["SPARK_HOME"])
 
