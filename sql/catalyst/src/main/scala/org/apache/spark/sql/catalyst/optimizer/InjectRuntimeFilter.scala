@@ -277,11 +277,17 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
             !hasDynamicPruningSubquery(left, right, l, r) &&
             !hasRuntimeFilter(newLeft, newRight, l, r) &&
             isSimpleExpression(l) && isSimpleExpression(r)) {
+            val oldLeft = newLeft
+            val oldRight = newRight
             if (canFilterLeft(joinType) && filteringHasBenefit(left, right, l, hint)) {
               newLeft = injectFilter(l, newLeft, r, right)
-              filterCounter = filterCounter + 1
-            } else if (canFilterRight(joinType) && filteringHasBenefit(right, left, r, hint)) {
+            }
+            // Did we actually inject on the left? If not, try on the right
+            if (newLeft.fastEquals(oldLeft) && canFilterRight(joinType) &&
+              filteringHasBenefit(right, left, r, hint)) {
               newRight = injectFilter(r, newRight, l, left)
+            }
+            if (!newLeft.fastEquals(oldLeft) || !newRight.fastEquals(oldRight)) {
               filterCounter = filterCounter + 1
             }
           }
