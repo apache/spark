@@ -3266,7 +3266,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
                     "Expected the return type of this function to be of scalar type, "
                     "but found type {}".format(sig_return)
                 )
-            return_type = cast(ScalarType, sig_return)
+            return_type = sig_return
             return self.pandas_on_spark._transform_batch(apply_each, return_type)
 
     # TODO: not all arguments are implemented comparing to pandas' for now.
@@ -3542,7 +3542,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
                 raise TypeError(
                     "q must be a float or an array of floats; however, [%s] found." % type(q)
                 )
-            q_float = cast(float, q)
+            q_float = q
             if q_float < 0.0 or q_float > 1.0:
                 raise ValueError("percentiles should all be in the interval [0, 1].")
 
@@ -3707,10 +3707,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         if axis == 1:
             raise ValueError("Series does not support columns axis.")
         return first_series(
-            cast(
-                "ps.DataFrame",
-                self.to_frame().filter(items=items, like=like, regex=regex, axis=axis),
-            )
+            self.to_frame().filter(items=items, like=like, regex=regex, axis=axis),
         ).rename(self.name)
 
     filter.__doc__ = DataFrame.filter.__doc__
@@ -4791,7 +4788,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
         >>> reset_option("compute.ops_on_diff_frames")
         """
-        return self.where(cast(Series, ~cond), other)
+        return self.where(~cond, other)
 
     def xs(self, key: Name, level: Optional[int] = None) -> "Series":
         """
@@ -5301,7 +5298,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         if not should_return_series:
             with sql_conf({SPARK_CONF_ARROW_ENABLED: False}):
                 # Disable Arrow to keep row ordering.
-                result = cast(pd.DataFrame, sdf.limit(1).toPandas()).iloc[0, 0]
+                result = sdf.limit(1).toPandas().iloc[0, 0]
             return result if result is not None else np.nan
 
         # The data is expected to be small so it's fine to transpose/use default index.
@@ -6349,7 +6346,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         if isinstance(psser_or_scol, Series):
             psser = psser_or_scol
         else:
-            psser = self._with_new_scol(cast(Column, psser_or_scol))
+            psser = self._with_new_scol(psser_or_scol)
         if should_resolve:
             internal = psser._internal.resolved_copy
             return first_series(DataFrame(internal))
@@ -6501,7 +6498,7 @@ def unpack_scalar(sdf: SparkDataFrame) -> Any:
     Takes a dataframe that is supposed to contain a single row with a single scalar value,
     and returns this value.
     """
-    lst = cast(pd.DataFrame, sdf.limit(2).toPandas())
+    lst = sdf.limit(2).toPandas()
     assert len(lst) == 1, (sdf, lst)
     row = lst.iloc[0]
     lst2 = list(row)

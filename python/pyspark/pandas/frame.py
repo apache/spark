@@ -5606,7 +5606,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         if isinstance(to_replace, dict) and (
             value is not None or all(isinstance(i, dict) for i in to_replace.values())
         ):
-            to_replace_dict = cast(dict, to_replace)
+            to_replace_dict = to_replace
 
             def op(psser: ps.Series) -> ps.Series:
                 if psser.name in to_replace_dict:
@@ -10583,7 +10583,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             mapper: Union[Dict, Callable[[Any], Any]]
         ) -> Tuple[Callable[[Any], Any], Dtype, DataType]:
             if isinstance(mapper, dict):
-                mapper_dict = cast(dict, mapper)
+                mapper_dict = mapper
 
                 type_set = set(map(lambda x: type(x), mapper_dict.values()))
                 if len(type_set) > 1:
@@ -12500,7 +12500,7 @@ def _reduce_spark_multi(sdf: SparkDataFrame, aggs: List[Column]) -> Any:
     """
     assert isinstance(sdf, SparkDataFrame)
     sdf0 = sdf.agg(*aggs)
-    lst = cast(pd.DataFrame, sdf0.limit(2).toPandas())
+    lst = sdf0.limit(2).toPandas()
     assert len(lst) == 1, (sdf, lst)
     row = lst.iloc[0]
     lst2 = list(row)
