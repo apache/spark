@@ -196,7 +196,7 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
       filterApplicationSideExp: Expression,
       hint: JoinHint): Boolean = {
     // Check that:
-    // 1. The filterApplicationSideJoinExp can be pushed down through joins and aggregates (ie the
+    // 1. The filterApplicationSideJoinExp can be pushed down through joins and aggregates (i.e the
     //    expression references originate from a single leaf node)
     // 2. The filter creation side has a selective predicate
     // 3. The current join is a shuffle join or a broadcast join that has a shuffle or aggregate
