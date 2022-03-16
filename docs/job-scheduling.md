@@ -304,5 +304,5 @@ via `sc.setJobGroup` in a separate PVM thread, which also disallows to cancel th
 later.
 
 `pyspark.InheritableThread` is recommended to use together for a PVM thread to inherit the inheritable attributes
- such as local properties in a JVM thread, and to avoid resource leak.
+ such as local properties in a JVM thread.
 
