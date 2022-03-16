@@ -136,7 +136,7 @@ object PushDownUtils extends PredicateHelper {
       case s: SupportsPushDownTopN =>
         val isPushed = s.pushTopN(order, limit)
         (isPushed, s.isPartiallyPushed)
-      case _ => Tuple2(false, false)
+      case _ => (false, false)
     }
   }
 
