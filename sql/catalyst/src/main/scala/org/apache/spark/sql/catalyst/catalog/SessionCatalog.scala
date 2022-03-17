@@ -1859,8 +1859,9 @@ class SessionCatalog(
     requireTableNotExists(newName)
     val oldTable = getTableMetadata(oldName)
     if (oldTable.tableType == CatalogTableType.MANAGED) {
+      assert(oldName.database.nonEmpty)
       val databaseLocation =
-        externalCatalog.getDatabase(oldName.database.getOrElse(currentDb)).locationUri
+        externalCatalog.getDatabase(oldName.database.get).locationUri
       val newTableLocation = new Path(new Path(databaseLocation), formatTableName(newName.table))
       val fs = newTableLocation.getFileSystem(hadoopConf)
       if (fs.exists(newTableLocation)) {
