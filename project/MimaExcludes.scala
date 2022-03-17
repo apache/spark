@@ -34,6 +34,10 @@ import com.typesafe.tools.mima.core.ProblemFilters._
  */
 object MimaExcludes {
 
+  // Exclude rules for 3.4.x
+  lazy val v34excludes = v33excludes ++ Seq(
+  )
+
   // Exclude rules for 3.3.x from 3.2.0
   lazy val v33excludes = v32excludes ++ Seq(
     // [SPARK-35672][CORE][YARN] Pass user classpath entries to executors using config instead of command line
@@ -134,6 +138,7 @@ object MimaExcludes {
   )
 
   def excludes(version: String) = version match {
+    case v if v.startsWith("3.4") => v34excludes
     case v if v.startsWith("3.3") => v33excludes
     case v if v.startsWith("3.2") => v32excludes
     case _ => Seq()
