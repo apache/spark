@@ -1799,7 +1799,7 @@ case class ParseUrl(children: Seq[Expression], failOnError: Boolean = SQLConf.ge
   usage = "_FUNC_(strfmt, obj, ...) - Returns a formatted string from printf-style format strings.",
   examples = """
     Examples:
-      > SELECT _FUNC_("Hello World %d %s", 100, "days");
+      > SELECT _FUNC_('Hello World %d %s', 100, 'days');
        Hello World 100 days
   """,
   since = "1.5.0",

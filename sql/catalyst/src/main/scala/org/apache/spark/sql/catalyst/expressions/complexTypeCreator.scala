@@ -410,7 +410,7 @@ object CreateStruct {
   usage = "_FUNC_(name1, val1, name2, val2, ...) - Creates a struct with the given field names and values.",
   examples = """
     Examples:
-      > SELECT _FUNC_("a", 1, "b", 2, "c", 3);
+      > SELECT _FUNC_('a', 1, 'b', 2, 'c', 3);
        {"a":1,"b":2,"c":3}
   """,
   since = "1.5.0",

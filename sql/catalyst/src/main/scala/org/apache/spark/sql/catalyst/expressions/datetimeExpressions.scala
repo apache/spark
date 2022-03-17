@@ -512,7 +512,7 @@ case class DateFromUnixDate(child: Expression) extends UnaryExpression
   usage = "_FUNC_(date) - Returns the number of days since 1970-01-01.",
   examples = """
     Examples:
-      > SELECT _FUNC_(DATE("1970-01-02"));
+      > SELECT _FUNC_(DATE('1970-01-02'));
        1
   """,
   group = "datetime_funcs",
