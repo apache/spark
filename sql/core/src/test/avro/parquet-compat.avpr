@@ -26,6 +26,10 @@
       "type" : "string"
     } ]
   }, {
+    "type" : "fixed",
+    "name" : "FixedType",
+    "size" : 8
+  }, {
     "type" : "record",
     "name" : "AvroPrimitives",
     "fields" : [ {
@@ -49,6 +53,9 @@
     }, {
       "name" : "string_column",
       "type" : "string"
+    }, {
+      "name" : "fixed_column",
+      "type" : "FixedType"
     } ]
   }, {
     "type" : "record",
@@ -74,6 +81,9 @@
     }, {
       "name" : "maybe_string_column",
       "type" : [ "null", "string" ]
+    }, {
+      "name" : "maybe_fixed_column",
+      "type" : [ "null", "FixedType" ]
     } ]
   }, {
     "type" : "record",

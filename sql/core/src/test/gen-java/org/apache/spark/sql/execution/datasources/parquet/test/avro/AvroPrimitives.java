@@ -7,7 +7,7 @@ package org.apache.spark.sql.execution.datasources.parquet.test.avro;
 @SuppressWarnings("all")
 @org.apache.avro.specific.AvroGenerated
 public class AvroPrimitives extends org.apache.avro.specific.SpecificRecordBase implements org.apache.avro.specific.SpecificRecord {
-  public static final org.apache.avro.Schema SCHEMA$ = new org.apache.avro.Schema.Parser().parse("{\"type\":\"record\",\"name\":\"AvroPrimitives\",\"namespace\":\"org.apache.spark.sql.execution.datasources.parquet.test.avro\",\"fields\":[{\"name\":\"bool_column\",\"type\":\"boolean\"},{\"name\":\"int_column\",\"type\":\"int\"},{\"name\":\"long_column\",\"type\":\"long\"},{\"name\":\"float_column\",\"type\":\"float\"},{\"name\":\"double_column\",\"type\":\"double\"},{\"name\":\"binary_column\",\"type\":\"bytes\"},{\"name\":\"string_column\",\"type\":{\"type\":\"string\",\"avro.java.string\":\"String\"}}]}");
+  public static final org.apache.avro.Schema SCHEMA$ = new org.apache.avro.Schema.Parser().parse("{\"type\":\"record\",\"name\":\"AvroPrimitives\",\"namespace\":\"org.apache.spark.sql.execution.datasources.parquet.test.avro\",\"fields\":[{\"name\":\"bool_column\",\"type\":\"boolean\"},{\"name\":\"int_column\",\"type\":\"int\"},{\"name\":\"long_column\",\"type\":\"long\"},{\"name\":\"float_column\",\"type\":\"float\"},{\"name\":\"double_column\",\"type\":\"double\"},{\"name\":\"binary_column\",\"type\":\"bytes\"},{\"name\":\"string_column\",\"type\":{\"type\":\"string\",\"avro.java.string\":\"String\"}},{\"name\":\"fixed_column\",\"type\":{\"type\":\"fixed\",\"name\":\"FixedType\",\"size\":8}}]}");
   public static org.apache.avro.Schema getClassSchema() { return SCHEMA$; }
   @Deprecated public boolean bool_column;
   @Deprecated public int int_column;
@@ -16,6 +16,8 @@ public class AvroPrimitives extends org.apache.avro.specific.SpecificRecordBase 
   @Deprecated public double double_column;
   @Deprecated public java.nio.ByteBuffer binary_column;
   @Deprecated public java.lang.String string_column;
+
+  private org.apache.spark.sql.execution.datasources.parquet.test.avro.FixedType fixed_column;
 
   /**
    * Default constructor.  Note that this does not initialize fields
@@ -27,7 +29,7 @@ public class AvroPrimitives extends org.apache.avro.specific.SpecificRecordBase 
   /**
    * All-args constructor.
    */
-  public AvroPrimitives(java.lang.Boolean bool_column, java.lang.Integer int_column, java.lang.Long long_column, java.lang.Float float_column, java.lang.Double double_column, java.nio.ByteBuffer binary_column, java.lang.String string_column) {
+  public AvroPrimitives(java.lang.Boolean bool_column, java.lang.Integer int_column, java.lang.Long long_column, java.lang.Float float_column, java.lang.Double double_column, java.nio.ByteBuffer binary_column, java.lang.String string_column, org.apache.spark.sql.execution.datasources.parquet.test.avro.FixedType fixed_column) {
     this.bool_column = bool_column;
     this.int_column = int_column;
     this.long_column = long_column;
@@ -35,6 +37,7 @@ public class AvroPrimitives extends org.apache.avro.specific.SpecificRecordBase 
     this.double_column = double_column;
     this.binary_column = binary_column;
     this.string_column = string_column;
+    this.fixed_column = fixed_column;
   }
 
   public org.apache.avro.Schema getSchema() { return SCHEMA$; }
@@ -48,6 +51,7 @@ public class AvroPrimitives extends org.apache.avro.specific.SpecificRecordBase 
     case 4: return double_column;
     case 5: return binary_column;
     case 6: return string_column;
+    case 7: return fixed_column;
     default: throw new org.apache.avro.AvroRuntimeException("Bad index");
     }
   }
@@ -62,6 +66,7 @@ public class AvroPrimitives extends org.apache.avro.specific.SpecificRecordBase 
     case 4: double_column = (java.lang.Double)value$; break;
     case 5: binary_column = (java.nio.ByteBuffer)value$; break;
     case 6: string_column = (java.lang.String)value$; break;
+    case 7: fixed_column = (org.apache.spark.sql.execution.datasources.parquet.test.avro.FixedType)value$; break;
     default: throw new org.apache.avro.AvroRuntimeException("Bad index");
     }
   }
@@ -171,6 +176,21 @@ public class AvroPrimitives extends org.apache.avro.specific.SpecificRecordBase 
     this.string_column = value;
   }
 
+  /**
+   * Gets the value of the 'fixed_column' field.
+   */
+  public org.apache.spark.sql.execution.datasources.parquet.test.avro.FixedType getFixedColumn() {
+    return fixed_column;
+  }
+
+  /**
+   * Sets the value of the 'fixed_column' field.
+   * @param value the value to set.
+   */
+  public void setFixedColumn(org.apache.spark.sql.execution.datasources.parquet.test.avro.FixedType value) {
+    this.fixed_column = value;
+  }
+
   /** Creates a new AvroPrimitives RecordBuilder */
   public static org.apache.spark.sql.execution.datasources.parquet.test.avro.AvroPrimitives.Builder newBuilder() {
     return new org.apache.spark.sql.execution.datasources.parquet.test.avro.AvroPrimitives.Builder();
@@ -199,6 +219,7 @@ public class AvroPrimitives extends org.apache.avro.specific.SpecificRecordBase 
     private double double_column;
     private java.nio.ByteBuffer binary_column;
     private java.lang.String string_column;
+    private org.apache.spark.sql.execution.datasources.parquet.test.avro.FixedType fixed_column;
 
     /** Creates a new Builder */
     private Builder() {
@@ -236,6 +257,10 @@ public class AvroPrimitives extends org.apache.avro.specific.SpecificRecordBase 
         this.string_column = data().deepCopy(fields()[6].schema(), other.string_column);
         fieldSetFlags()[6] = true;
       }
+      if (isValidValue(fields()[7], other.fixed_column)) {
+        this.fixed_column = data().deepCopy(fields()[7].schema(), other.fixed_column);
+        fieldSetFlags()[7] = true;
+      }
     }
     
     /** Creates a Builder by copying an existing AvroPrimitives instance */
@@ -268,6 +293,10 @@ public class AvroPrimitives extends org.apache.avro.specific.SpecificRecordBase 
       if (isValidValue(fields()[6], other.string_column)) {
         this.string_column = data().deepCopy(fields()[6].schema(), other.string_column);
         fieldSetFlags()[6] = true;
+      }
+      if (isValidValue(fields()[7], other.fixed_column)) {
+        this.fixed_column = data().deepCopy(fields()[7].schema(), other.fixed_column);
+        fieldSetFlags()[7] = true;
       }
     }
 
@@ -441,6 +470,44 @@ public class AvroPrimitives extends org.apache.avro.specific.SpecificRecordBase 
       return this;
     }
 
+    /**
+      * Gets the value of the 'fixed_column' field.
+      * @return The value.
+      */
+    public org.apache.spark.sql.execution.datasources.parquet.test.avro.FixedType getFixedColumn() {
+      return fixed_column;
+    }
+
+    /**
+      * Sets the value of the 'fixed_column' field.
+      * @param value The value of 'fixed_column'.
+      * @return This builder.
+      */
+    public org.apache.spark.sql.execution.datasources.parquet.test.avro.AvroPrimitives.Builder setFixedColumn(org.apache.spark.sql.execution.datasources.parquet.test.avro.FixedType value) {
+      validate(fields()[7], value);
+      this.fixed_column = value;
+      fieldSetFlags()[7] = true;
+      return this;
+    }
+
+    /**
+      * Checks whether the 'fixed_column' field has been set.
+      * @return True if the 'fixed_column' field has been set, false otherwise.
+      */
+    public boolean hasFixedColumn() {
+      return fieldSetFlags()[7];
+    }
+
+    /**
+      * Clears the value of the 'fixed_column' field.
+      * @return This builder.
+      */
+    public org.apache.spark.sql.execution.datasources.parquet.test.avro.AvroPrimitives.Builder clearFixedColumn() {
+      fixed_column = null;
+      fieldSetFlags()[7] = false;
+      return this;
+    }
+
     @Override
     public AvroPrimitives build() {
       try {
@@ -452,6 +519,7 @@ public class AvroPrimitives extends org.apache.avro.specific.SpecificRecordBase 
         record.double_column = fieldSetFlags()[4] ? this.double_column : (java.lang.Double) defaultValue(fields()[4]);
         record.binary_column = fieldSetFlags()[5] ? this.binary_column : (java.nio.ByteBuffer) defaultValue(fields()[5]);
         record.string_column = fieldSetFlags()[6] ? this.string_column : (java.lang.String) defaultValue(fields()[6]);
+        record.fixed_column = fieldSetFlags()[7] ? this.fixed_column : (org.apache.spark.sql.execution.datasources.parquet.test.avro.FixedType) defaultValue(fields()[7]);
         return record;
       } catch (Exception e) {
         throw new org.apache.avro.AvroRuntimeException(e);

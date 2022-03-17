@@ -7,7 +7,7 @@ package org.apache.spark.sql.execution.datasources.parquet.test.avro;
 @SuppressWarnings("all")
 @org.apache.avro.specific.AvroGenerated
 public class AvroOptionalPrimitives extends org.apache.avro.specific.SpecificRecordBase implements org.apache.avro.specific.SpecificRecord {
-  public static final org.apache.avro.Schema SCHEMA$ = new org.apache.avro.Schema.Parser().parse("{\"type\":\"record\",\"name\":\"AvroOptionalPrimitives\",\"namespace\":\"org.apache.spark.sql.execution.datasources.parquet.test.avro\",\"fields\":[{\"name\":\"maybe_bool_column\",\"type\":[\"null\",\"boolean\"]},{\"name\":\"maybe_int_column\",\"type\":[\"null\",\"int\"]},{\"name\":\"maybe_long_column\",\"type\":[\"null\",\"long\"]},{\"name\":\"maybe_float_column\",\"type\":[\"null\",\"float\"]},{\"name\":\"maybe_double_column\",\"type\":[\"null\",\"double\"]},{\"name\":\"maybe_binary_column\",\"type\":[\"null\",\"bytes\"]},{\"name\":\"maybe_string_column\",\"type\":[\"null\",{\"type\":\"string\",\"avro.java.string\":\"String\"}]}]}");
+  public static final org.apache.avro.Schema SCHEMA$ = new org.apache.avro.Schema.Parser().parse("{\"type\":\"record\",\"name\":\"AvroOptionalPrimitives\",\"namespace\":\"org.apache.spark.sql.execution.datasources.parquet.test.avro\",\"fields\":[{\"name\":\"maybe_bool_column\",\"type\":[\"null\",\"boolean\"]},{\"name\":\"maybe_int_column\",\"type\":[\"null\",\"int\"]},{\"name\":\"maybe_long_column\",\"type\":[\"null\",\"long\"]},{\"name\":\"maybe_float_column\",\"type\":[\"null\",\"float\"]},{\"name\":\"maybe_double_column\",\"type\":[\"null\",\"double\"]},{\"name\":\"maybe_binary_column\",\"type\":[\"null\",\"bytes\"]},{\"name\":\"maybe_string_column\",\"type\":[\"null\",{\"type\":\"string\",\"avro.java.string\":\"String\"}]},{\"name\":\"maybe_fixed_column\",\"type\":[\"null\",{\"type\":\"fixed\",\"name\":\"FixedType\",\"size\":8}]}]}");
   public static org.apache.avro.Schema getClassSchema() { return SCHEMA$; }
   @Deprecated public java.lang.Boolean maybe_bool_column;
   @Deprecated public java.lang.Integer maybe_int_column;
@@ -16,6 +16,8 @@ public class AvroOptionalPrimitives extends org.apache.avro.specific.SpecificRec
   @Deprecated public java.lang.Double maybe_double_column;
   @Deprecated public java.nio.ByteBuffer maybe_binary_column;
   @Deprecated public java.lang.String maybe_string_column;
+
+  private org.apache.spark.sql.execution.datasources.parquet.test.avro.FixedType maybe_fixed_column;
 
   /**
    * Default constructor.  Note that this does not initialize fields
@@ -27,7 +29,7 @@ public class AvroOptionalPrimitives extends org.apache.avro.specific.SpecificRec
   /**
    * All-args constructor.
    */
-  public AvroOptionalPrimitives(java.lang.Boolean maybe_bool_column, java.lang.Integer maybe_int_column, java.lang.Long maybe_long_column, java.lang.Float maybe_float_column, java.lang.Double maybe_double_column, java.nio.ByteBuffer maybe_binary_column, java.lang.String maybe_string_column) {
+  public AvroOptionalPrimitives(java.lang.Boolean maybe_bool_column, java.lang.Integer maybe_int_column, java.lang.Long maybe_long_column, java.lang.Float maybe_float_column, java.lang.Double maybe_double_column, java.nio.ByteBuffer maybe_binary_column, java.lang.String maybe_string_column, org.apache.spark.sql.execution.datasources.parquet.test.avro.FixedType maybe_fixed_column) {
     this.maybe_bool_column = maybe_bool_column;
     this.maybe_int_column = maybe_int_column;
     this.maybe_long_column = maybe_long_column;
@@ -35,6 +37,7 @@ public class AvroOptionalPrimitives extends org.apache.avro.specific.SpecificRec
     this.maybe_double_column = maybe_double_column;
     this.maybe_binary_column = maybe_binary_column;
     this.maybe_string_column = maybe_string_column;
+    this.maybe_fixed_column = maybe_fixed_column;
   }
 
   public org.apache.avro.Schema getSchema() { return SCHEMA$; }
@@ -48,6 +51,7 @@ public class AvroOptionalPrimitives extends org.apache.avro.specific.SpecificRec
     case 4: return maybe_double_column;
     case 5: return maybe_binary_column;
     case 6: return maybe_string_column;
+    case 7: return maybe_fixed_column;
     default: throw new org.apache.avro.AvroRuntimeException("Bad index");
     }
   }
@@ -62,6 +66,7 @@ public class AvroOptionalPrimitives extends org.apache.avro.specific.SpecificRec
     case 4: maybe_double_column = (java.lang.Double)value$; break;
     case 5: maybe_binary_column = (java.nio.ByteBuffer)value$; break;
     case 6: maybe_string_column = (java.lang.String)value$; break;
+    case 7: maybe_fixed_column = (org.apache.spark.sql.execution.datasources.parquet.test.avro.FixedType)value$; break;
     default: throw new org.apache.avro.AvroRuntimeException("Bad index");
     }
   }
@@ -171,6 +176,22 @@ public class AvroOptionalPrimitives extends org.apache.avro.specific.SpecificRec
     this.maybe_string_column = value;
   }
 
+  /**
+   * Gets the value of the 'maybe_fixed_column' field.
+   * @return The value of the 'maybe_fixed_column' field.
+   */
+  public org.apache.spark.sql.execution.datasources.parquet.test.avro.FixedType getMaybeFixedColumn() {
+    return maybe_fixed_column;
+  }
+
+  /**
+   * Sets the value of the 'maybe_fixed_column' field.
+   * @param value the value to set.
+   */
+  public void setMaybeFixedColumn(org.apache.spark.sql.execution.datasources.parquet.test.avro.FixedType value) {
+    this.maybe_fixed_column = value;
+  }
+
   /** Creates a new AvroOptionalPrimitives RecordBuilder */
   public static org.apache.spark.sql.execution.datasources.parquet.test.avro.AvroOptionalPrimitives.Builder newBuilder() {
     return new org.apache.spark.sql.execution.datasources.parquet.test.avro.AvroOptionalPrimitives.Builder();
@@ -199,6 +220,7 @@ public class AvroOptionalPrimitives extends org.apache.avro.specific.SpecificRec
     private java.lang.Double maybe_double_column;
     private java.nio.ByteBuffer maybe_binary_column;
     private java.lang.String maybe_string_column;
+    private org.apache.spark.sql.execution.datasources.parquet.test.avro.FixedType maybe_fixed_column;
 
     /** Creates a new Builder */
     private Builder() {
@@ -236,6 +258,10 @@ public class AvroOptionalPrimitives extends org.apache.avro.specific.SpecificRec
         this.maybe_string_column = data().deepCopy(fields()[6].schema(), other.maybe_string_column);
         fieldSetFlags()[6] = true;
       }
+      if (isValidValue(fields()[7], other.maybe_fixed_column)) {
+        this.maybe_fixed_column = data().deepCopy(fields()[7].schema(), other.maybe_fixed_column);
+        fieldSetFlags()[7] = true;
+      }
     }
     
     /** Creates a Builder by copying an existing AvroOptionalPrimitives instance */
@@ -268,6 +294,10 @@ public class AvroOptionalPrimitives extends org.apache.avro.specific.SpecificRec
       if (isValidValue(fields()[6], other.maybe_string_column)) {
         this.maybe_string_column = data().deepCopy(fields()[6].schema(), other.maybe_string_column);
         fieldSetFlags()[6] = true;
+      }
+      if (isValidValue(fields()[7], other.maybe_fixed_column)) {
+        this.maybe_fixed_column = data().deepCopy(fields()[7].schema(), other.maybe_fixed_column);
+        fieldSetFlags()[7] = true;
       }
     }
 
@@ -446,6 +476,45 @@ public class AvroOptionalPrimitives extends org.apache.avro.specific.SpecificRec
       return this;
     }
 
+    /**
+      * Gets the value of the 'maybe_fixed_column' field.
+      * @return The value.
+      */
+    public org.apache.spark.sql.execution.datasources.parquet.test.avro.FixedType getMaybeFixedColumn() {
+      return maybe_fixed_column;
+    }
+
+    /**
+      * Sets the value of the 'maybe_fixed_column' field.
+      * @param value The value of 'maybe_fixed_column'.
+      * @return This builder.
+      */
+    public org.apache.spark.sql.execution.datasources.parquet.test.avro.AvroOptionalPrimitives.Builder setMaybeFixedColumn(org.apache.spark.sql.execution.datasources.parquet.test.avro.FixedType value) {
+      validate(fields()[7], value);
+      this.maybe_fixed_column = value;
+      fieldSetFlags()[7] = true;
+      return this;
+    }
+
+    /**
+      * Checks whether the 'maybe_fixed_column' field has been set.
+      * @return True if the 'maybe_fixed_column' field has been set, false otherwise.
+      */
+    public boolean hasMaybeFixedColumn() {
+      return fieldSetFlags()[7];
+    }
+
+
+    /**
+      * Clears the value of the 'maybe_fixed_column' field.
+      * @return This builder.
+      */
+    public org.apache.spark.sql.execution.datasources.parquet.test.avro.AvroOptionalPrimitives.Builder clearMaybeFixedColumn() {
+      maybe_fixed_column = null;
+      fieldSetFlags()[7] = false;
+      return this;
+    }
+
     @Override
     public AvroOptionalPrimitives build() {
       try {
@@ -457,6 +526,7 @@ public class AvroOptionalPrimitives extends org.apache.avro.specific.SpecificRec
         record.maybe_double_column = fieldSetFlags()[4] ? this.maybe_double_column : (java.lang.Double) defaultValue(fields()[4]);
         record.maybe_binary_column = fieldSetFlags()[5] ? this.maybe_binary_column : (java.nio.ByteBuffer) defaultValue(fields()[5]);
         record.maybe_string_column = fieldSetFlags()[6] ? this.maybe_string_column : (java.lang.String) defaultValue(fields()[6]);
+        record.maybe_fixed_column = fieldSetFlags()[7] ? this.maybe_fixed_column : (org.apache.spark.sql.execution.datasources.parquet.test.avro.FixedType) defaultValue(fields()[7]);
         return record;
       } catch (Exception e) {
         throw new org.apache.avro.AvroRuntimeException(e);
