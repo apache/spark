@@ -54,6 +54,10 @@ private[spark] class BasicDriverFeatureStep(conf: KubernetesDriverConf)
   // Memory settings
   private val driverMemoryMiB = conf.get(DRIVER_MEMORY)
 
+  // The default memory overhead factor to use, derived from the deprecated
+  // `spark.kubernetes.memoryOverheadFactor` config or the default overhead values.
+  // If the user has not set it, then use a different default for non-JVM apps. This value is
+  // propagated to executors and used if the executor overhead factor is not set explicitly.
   private val defaultOverheadFactor =
     if (conf.mainAppResource.isInstanceOf[NonJVMResource]) {
       if (conf.contains(MEMORY_OVERHEAD_FACTOR)) {
@@ -65,6 +69,7 @@ private[spark] class BasicDriverFeatureStep(conf: KubernetesDriverConf)
       conf.get(MEMORY_OVERHEAD_FACTOR)
     }
 
+  // Prefer the driver memory overhead factor if set explicitly
   private val memoryOverheadFactor = if (conf.contains(DRIVER_MEMORY_OVERHEAD_FACTOR)) {
     conf.get(DRIVER_MEMORY_OVERHEAD_FACTOR)
   } else {
