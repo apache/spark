@@ -28,9 +28,14 @@ import org.apache.spark.unsafe.types.UTF8String
 
 abstract class NumberFormatterBase
   extends BinaryExpression with ImplicitCastInputTypes with NullIntolerant {
+  
+  protected final val PARSE_METHOD = "parse"
+  protected final val FORMAT_METHOD = "format"
   private lazy val numberFormat = right.eval().toString.toUpperCase(Locale.ROOT)
-  protected lazy val numberFormatter = new NumberFormatter(numberFormat, isParse)
-  def isParse: Boolean
+  protected lazy val numberFormatter =
+    new NumberFormatter(numberFormat, methodName == PARSE_METHOD)
+
+  def methodName: String
 
   override def checkInputDataTypes(): TypeCheckResult = {
     val inputTypeCheck = super.checkInputDataTypes()
@@ -48,7 +53,6 @@ abstract class NumberFormatterBase
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val builder =
       ctx.addReferenceObj("numberFormatter", numberFormatter, classOf[NumberFormatter].getName)
-    val methodName = if (isParse) "parse" else "format"
     val eval = left.genCode(ctx)
     ev.copy(code =
       code"""
@@ -91,7 +95,8 @@ abstract class NumberFormatterBase
   since = "3.3.0",
   group = "string_funcs")
 case class ToNumber(left: Expression, right: Expression) extends NumberFormatterBase {
-  val isParse: Boolean = true
+
+  val methodName = PARSE_METHOD
 
   override def dataType: DataType = numberFormatter.parsedDecimalType
 
@@ -142,7 +147,8 @@ case class ToNumber(left: Expression, right: Expression) extends NumberFormatter
   since = "3.3.0",
   group = "string_funcs")
 case class ToCharacter(left: Expression, right: Expression) extends NumberFormatterBase {
-  val isParse: Boolean = false
+
+  val methodName = FORMAT_METHOD
 
   override def dataType: DataType = StringType
 

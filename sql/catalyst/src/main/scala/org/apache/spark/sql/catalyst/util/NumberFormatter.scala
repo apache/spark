@@ -120,7 +120,7 @@ class NumberFormatter(originNumberFormat: String, isParse: Boolean = true) exten
     }
   }
 
-  private def isDigitPosition(c: Char): Boolean = c == ZERO_DIGIT || c == POUND_SIGN
+  private def isDigitPosition(c: Char): Boolean = (c == ZERO_DIGIT || c == POUND_SIGN)
 
   def check(): TypeCheckResult = {
     def invalidSignPosition(c: Char): Boolean = {
