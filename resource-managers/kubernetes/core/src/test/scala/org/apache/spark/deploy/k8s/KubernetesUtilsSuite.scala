@@ -22,7 +22,7 @@ import java.nio.charset.StandardCharsets
 
 import scala.collection.JavaConverters._
 
-import io.fabric8.kubernetes.api.model.{ContainerBuilder, PodBuilder}
+import io.fabric8.kubernetes.api.model.{ContainerBuilder, EnvVarBuilder, EnvVarSourceBuilder, PodBuilder}
 import org.apache.commons.io.FileUtils
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
@@ -126,5 +126,35 @@ class KubernetesUtilsSuite extends SparkFunSuite with PrivateMethodTester {
         assert(fs.exists(src))
       }
     }
+  }
+
+  test("SPARK-38582: verify that envVars built with kv env as expected") {
+    val input = for (i <- 9 to 1 by -1) yield s"testEnvKey.$i" -> "testEnvValue123456"
+    val expectedEnvVars = input.map { case(k, v) =>
+      new EnvVarBuilder()
+        .withName(k)
+        .withValue(v).build()
+    }
+    val outputEnvVars = KubernetesUtils.buildEnvVarsWithKV(input ++ Seq(("testKeyForNull", null)))
+    assert(outputEnvVars == expectedEnvVars)
+  }
+
+  test("SPARK-38582: verify that envVars built with field ref env as expected") {
+    val input = for (i <- 9 to 1 by -1) yield (s"testEnvKey.$i", s"v$i", "testEnvValue123456")
+    val expectedEnvVars = input.map { env =>
+      new EnvVarBuilder()
+        .withName(env._1)
+        .withValueFrom(new EnvVarSourceBuilder()
+          .withNewFieldRef(env._2, env._3)
+          .build())
+        .build()
+    }
+    val outputEnvVars =
+      KubernetesUtils.buildEnvVarsWithFieldRef(
+        input ++ Seq(
+          ("testKey1", null, "testValue1"),
+          ("testKey2", "v1", null),
+          ("testKey3", null, null)))
+    assert(outputEnvVars == expectedEnvVars)
   }
 }

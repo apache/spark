@@ -23,7 +23,7 @@ import java.util.{Collections, UUID}
 
 import scala.collection.JavaConverters._
 
-import io.fabric8.kubernetes.api.model.{Container, ContainerBuilder, ContainerStateRunning, ContainerStateTerminated, ContainerStateWaiting, ContainerStatus, HasMetadata, OwnerReferenceBuilder, Pod, PodBuilder, Quantity}
+import io.fabric8.kubernetes.api.model.{Container, ContainerBuilder, ContainerStateRunning, ContainerStateTerminated, ContainerStateWaiting, ContainerStatus, EnvVar, EnvVarBuilder, EnvVarSourceBuilder, HasMetadata, OwnerReferenceBuilder, Pod, PodBuilder, Quantity}
 import io.fabric8.kubernetes.client.KubernetesClient
 import org.apache.commons.codec.binary.Hex
 import org.apache.hadoop.fs.{FileSystem, Path}
@@ -378,6 +378,44 @@ object KubernetesUtils extends Logging {
       resources.foreach { resource =>
         val originalMetadata = resource.getMetadata
         originalMetadata.setOwnerReferences(Collections.singletonList(reference))
+      }
+    }
+  }
+
+  /**
+   * This function builds the EnvVar objects for each key-value env.
+   */
+  @Since("3.3.1")
+  def buildEnvVarsWithKV(env: Seq[(String, String)]): Seq[EnvVar] = {
+    if (env.isEmpty) {
+      Seq.empty
+    } else {
+      env.filter( env => env._2 != null)
+         .map { env =>
+           new EnvVarBuilder()
+             .withName(env._1)
+             .withValue(env._2)
+             .build()
+      }
+    }
+  }
+
+  /**
+   * This function builds he EnvVar objects for each field ref env.
+   */
+  @Since("3.3.1")
+  def buildEnvVarsWithFieldRef(env: Seq[(String, String, String)]): Seq[EnvVar] = {
+    if (env.isEmpty) {
+      Seq.empty
+    } else {
+      env.filter( env => env._2 != null && env._3 != null)
+         .map { env =>
+           new EnvVarBuilder()
+             .withName(env._1)
+             .withValueFrom(new EnvVarSourceBuilder()
+               .withNewFieldRef(env._2, env._3)
+               .build())
+             .build()
       }
     }
   }
