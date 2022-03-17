@@ -19,8 +19,9 @@ package org.apache.spark.sql.execution.datasources.v2
 
 import scala.collection.mutable
 
-import org.apache.spark.sql.catalyst.expressions.{aggregate, Alias, AliasHelper, And, Attribute, AttributeReference, Cast, Divide, DivideDTInterval, DivideYMInterval, EqualTo, Expression, If, IntegerLiteral, Literal, NamedExpression, PredicateHelper, ProjectionOverSchema, SubqueryExpression}
+import org.apache.spark.sql.catalyst.expressions.{aggregate, Alias, AliasHelper, And, Attribute, AttributeMap, AttributeReference, Cast, Divide, DivideDTInterval, DivideYMInterval, EqualTo, Expression, If, IntegerLiteral, Literal, NamedExpression, PredicateHelper, ProjectionOverSchema, SubqueryExpression}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
+import org.apache.spark.sql.catalyst.optimizer.CollapseProject.{buildCleanedProjectList, canCollapseExpressions}
 import org.apache.spark.sql.catalyst.planning.ScanOperation
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, LeafNode, Limit, LocalLimit, LogicalPlan, Project, Sample, Sort}
 import org.apache.spark.sql.catalyst.rules.Rule
@@ -28,6 +29,7 @@ import org.apache.spark.sql.connector.expressions.SortOrder
 import org.apache.spark.sql.connector.expressions.aggregate.{Aggregation, Avg, Count, GeneralAggregateFunc, Sum}
 import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownAggregates, SupportsPushDownFilters, V1Scan}
 import org.apache.spark.sql.execution.datasources.DataSourceStrategy
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources
 import org.apache.spark.sql.types.{DataType, DayTimeIntervalType, LongType, StructType, YearMonthIntervalType}
 import org.apache.spark.sql.util.SchemaUtils._
@@ -40,6 +42,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper wit
       createScanBuilder,
       pushDownSample,
       pushDownFilters,
+      collapseProject,
       pushDownAggregates,
       pushDownLimits,
       pruneColumns)
@@ -85,6 +88,16 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper wit
 
       val filterCondition = postScanFilters.reduceLeftOption(And)
       filterCondition.map(Filter(_, sHolder)).getOrElse(sHolder)
+  }
+
+  private def collapseProject(plan: LogicalPlan): LogicalPlan = {
+    val alwaysInline = conf.getConf(SQLConf.COLLAPSE_PROJECT_ALWAYS_INLINE)
+    plan transformUp {
+      case agg @ Aggregate(_, aggregateExpressions, p: Project)
+        if canCollapseExpressions(aggregateExpressions, p.projectList, alwaysInline) =>
+        agg.copy(aggregateExpressions = buildCleanedProjectList(
+          aggregateExpressions, p.projectList))
+    }
   }
 
   def pushDownAggregates(plan: LogicalPlan): LogicalPlan = plan.transform {
@@ -274,6 +287,25 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper wit
           }
         case _ => aggNode
       }
+  }
+
+  /**
+   * Replace all alias, with the aliased attribute.
+   */
+  private def replaceAliasWithAttr(
+      expr: NamedExpression,
+      aliasMap: AttributeMap[Alias]): NamedExpression = {
+    replaceAliasButKeepName(expr, aliasMap).transform {
+      case Alias(attr: Attribute, _) => attr
+    }.asInstanceOf[NamedExpression]
+  }
+
+  protected def getAttrToAliasMap(aliasMap: AttributeMap[Alias]): AttributeMap[Alias] = {
+    val attrToAliasMap = aliasMap.values.toSeq.collect {
+      case alias @ Alias(originAttr: Attribute, _) =>
+        (originAttr, alias)
+    }
+    AttributeMap(attrToAliasMap)
   }
 
   private def collectAggregates(resultExpressions: Seq[NamedExpression],
