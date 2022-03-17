@@ -631,7 +631,7 @@ class DataSourceV2SQLSuite
       "Replaced table should have new schema with DEFAULT column metadata.")
   }
 
-  test("ReplaceTableAsSelect: CREATE OR REPLACE new table has same behavinor as CTAS.") {
+  test("ReplaceTableAsSelect: CREATE OR REPLACE new table has same behavior as CTAS.") {
     Seq("testcat", "testcat_atomic").foreach { catalogName =>
       spark.sql(
         s"""
