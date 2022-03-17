@@ -34,10 +34,11 @@ import org.apache.spark.util.Utils
 
 object YarnSparkHadoopUtil {
 
-  // Additional memory overhead for application masters in client mode.
+  // Additional memory overhead
   // 10% was arrived at experimentally. In the interest of minimizing memory waste while covering
   // the common cases. Memory overhead tends to grow with container size.
-  val AM_MEMORY_OVERHEAD_FACTOR = 0.10
+
+  val MEMORY_OVERHEAD_FACTOR = 0.10
 
   val ANY_HOST = "*"
 
