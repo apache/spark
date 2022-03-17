@@ -315,11 +315,11 @@ struct<unix_micros(TIMESTAMP '2020-12-01 06:30:08'):bigint,unix_micros(TIMESTAMP
 
 
 -- !query
-select to_timestamp(null), to_timestamp('2016-12-31 00:12:00'), to_timestamp('2016-12-31', 'yyyy-MM-dd')
+select to_timestamp(1), to_timestamp(null), to_timestamp('2016-12-31 00:12:00'), to_timestamp('2016-12-31', 'yyyy-MM-dd')
 -- !query schema
-struct<to_timestamp(NULL):timestamp,to_timestamp(2016-12-31 00:12:00):timestamp,to_timestamp(2016-12-31, yyyy-MM-dd):timestamp>
+struct<to_timestamp(1):timestamp,to_timestamp(NULL):timestamp,to_timestamp(2016-12-31 00:12:00):timestamp,to_timestamp(2016-12-31, yyyy-MM-dd):timestamp>
 -- !query output
-NULL	2016-12-31 00:12:00	2016-12-31 00:00:00
+1969-12-31 16:00:01	NULL	2016-12-31 00:12:00	2016-12-31 00:00:00
 
 
 -- !query
