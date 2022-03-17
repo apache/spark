@@ -75,42 +75,42 @@ The count of pattern letters determines the format.
 - Month: It follows the rule of Number/Text. The text form is depend on letters - 'M' denotes the 'standard' form, and 'L' is for 'stand-alone' form. These two forms are different only in some certain languages. For example, in Russian, 'Июль' is the stand-alone form of July, and 'Июля' is the standard form. Here are examples for all supported pattern letters:
   - `'M'` or `'L'`: Month number in a year starting from 1. There is no difference between 'M' and 'L'. Month from 1 to 9 are printed without padding.
     ```sql
-    spark-sql> select date_format(date '1970-01-01', "M");
+    spark-sql> select date_format(date '1970-01-01', 'M');
     1
-    spark-sql> select date_format(date '1970-12-01', "L");
+    spark-sql> select date_format(date '1970-12-01', 'L');
     12
     ```
   - `'MM'` or `'LL'`: Month number in a year starting from 1. Zero padding is added for month 1-9.
       ```sql
-      spark-sql> select date_format(date '1970-1-01', "LL");
+      spark-sql> select date_format(date '1970-1-01', 'LL');
       01
-      spark-sql> select date_format(date '1970-09-01', "MM");
+      spark-sql> select date_format(date '1970-09-01', 'MM');
       09
       ```
   - `'MMM'`: Short textual representation in the standard form. The month pattern should be a part of a date pattern not just a stand-alone month except locales where there is no difference between stand and stand-alone forms like in English.
     ```sql
-    spark-sql> select date_format(date '1970-01-01', "d MMM");
+    spark-sql> select date_format(date '1970-01-01', 'd MMM');
     1 Jan
     spark-sql> select to_csv(named_struct('date', date '1970-01-01'), map('dateFormat', 'dd MMM', 'locale', 'RU'));
     01 янв.
     ```
   - `'LLL'`: Short textual representation in the stand-alone form. It should be used to format/parse only months without any other date fields.
     ```sql
-    spark-sql> select date_format(date '1970-01-01', "LLL");
+    spark-sql> select date_format(date '1970-01-01', 'LLL');
     Jan
     spark-sql> select to_csv(named_struct('date', date '1970-01-01'), map('dateFormat', 'LLL', 'locale', 'RU'));
     янв.
     ```
   - `'MMMM'`: full textual month representation in the standard form. It is used for parsing/formatting months as a part of dates/timestamps.
     ```sql
-    spark-sql> select date_format(date '1970-01-01', "d MMMM");
+    spark-sql> select date_format(date '1970-01-01', 'd MMMM');
     1 January
     spark-sql> select to_csv(named_struct('date', date '1970-01-01'), map('dateFormat', 'd MMMM', 'locale', 'RU'));
     1 января
     ```
   - `'LLLL'`: full textual month representation in the stand-alone form. The pattern can be used to format/parse only months.
     ```sql
-    spark-sql> select date_format(date '1970-01-01', "LLLL");
+    spark-sql> select date_format(date '1970-01-01', 'LLLL');
     January
     spark-sql> select to_csv(named_struct('date', date '1970-01-01'), map('dateFormat', 'LLLL', 'locale', 'RU'));
     январь

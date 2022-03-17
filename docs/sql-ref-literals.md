@@ -61,14 +61,7 @@ SELECT 'Hello, World!' AS col;
 |Hello, World!|
 +-------------+
 
-SELECT "SPARK SQL" AS col;
-+---------+
-|      col|
-+---------+
-|Spark SQL|
-+---------+
-
-SELECT 'it\'s $10.' AS col;
+SELECT `'it\'s $10.'` AS col;
 +---------+
 |      col|
 +---------+

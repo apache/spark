@@ -119,7 +119,7 @@ SELECT * FROM persons;
 +-------------+--------------------------+---------+
 
 INSERT INTO students PARTITION (student_id = 444444)
-    SELECT name, address FROM persons WHERE name = "Dora Williams";
+    SELECT name, address FROM persons WHERE name = 'Dora Williams';
 
 SELECT * FROM students;
 +-------------+--------------------------+----------+
@@ -298,7 +298,7 @@ SELECT * FROM persons;
 +-------------+--------------------------+---------+
 
 INSERT OVERWRITE students PARTITION (student_id = 222222)
-    SELECT name, address FROM persons WHERE name = "Dora Williams";
+    SELECT name, address FROM persons WHERE name = 'Dora Williams';
 
 SELECT * FROM students;
 +-------------+--------------------------+----------+
