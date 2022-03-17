@@ -41,6 +41,7 @@ private[spark] trait SparkConfPropagateSuite { k8sSuite: KubernetesSuite =>
       sparkAppConf.set("spark.executor.extraJavaOptions", "-Dlog4j2.debug")
       sparkAppConf.set("spark.kubernetes.executor.deleteOnTermination", "false")
 
+      // since 2.7.2, log4j2 loads the original log4j2.properties file instead of the soft link file.
       val log4jExpectedLog =
         Seq("Reconfiguration complete for context", "at URI /opt/spark/conf", "/log4j2.properties")
 
