@@ -17,15 +17,56 @@
 
 package org.apache.spark.ml.util
 
-import org.apache.spark.ml.linalg.{Vector, Vectors, VectorUDT}
+import org.apache.spark.ml.linalg._
 import org.apache.spark.mllib.linalg.{Vector => OldVector, Vectors => OldVectors}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{Column, Dataset, Row}
-import org.apache.spark.sql.functions.{col, udf}
+import org.apache.spark.sql.functions.{col, lit, udf}
 import org.apache.spark.sql.types.{ArrayType, DoubleType, FloatType}
 
 
 private[spark] object DatasetUtils {
+
+  private[ml] def getBinaryLabelCol(labelCol: String) = {
+    checkBinaryLabel(col(labelCol).cast(DoubleType))
+  }
+
+  private[ml] def getNonNegativeWeightCol(weightCol: Option[String]) = weightCol match {
+    case Some(w) if w.nonEmpty => checkNonNegativeWeight(col(w).cast(DoubleType))
+    case _ => lit(1.0)
+  }
+
+  private[ml] def getNonNanVectorCol(featuresCol: String) = {
+    checkNonNanVector(col(featuresCol))
+  }
+
+  private def checkBinaryLabel = udf {
+    label: Double =>
+      require(label == 0 || label == 1,
+        s"Labels MUST be in {0, 1}, but got $label")
+      label
+  }
+
+  private def checkNonNegativeWeight = udf {
+    weight: Double =>
+      require(weight >= 0 && !weight.isInfinity,
+        s"Weights MUST be non-Negative and finite, but got $weight")
+      weight
+  }
+
+  private def checkNonNanVector = udf {
+    vector: Vector =>
+      require(vector != null, s"Vector MUST NOT be NULL")
+      vector match {
+        case dv: DenseVector =>
+          require(dv.values.forall(v => !v.isNaN && !v.isInfinity),
+            s"Vector values MUST be non-NaN and finite, but got $dv")
+        case sv: SparseVector =>
+          require(sv.values.forall(v => !v.isNaN && !v.isInfinity),
+            s"Vector values MUST be non-NaN and finite, but got $sv")
+      }
+      vector
+  }
 
   /**
    * Cast a column in a Dataset to Vector type.

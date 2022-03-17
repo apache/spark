@@ -23,7 +23,7 @@ import breeze.linalg.{DenseVector => BDV}
 import org.scalatest.Assertions._
 
 import org.apache.spark.ml.classification.LinearSVCSuite._
-import org.apache.spark.ml.feature.LabeledPoint
+import org.apache.spark.ml.feature.{Instance, LabeledPoint}
 import org.apache.spark.ml.linalg.{DenseVector, SparseVector, Vector, Vectors}
 import org.apache.spark.ml.param.ParamsSuite
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTest, MLTestingUtils}
@@ -71,6 +71,35 @@ class LinearSVCSuite extends MLTest with DefaultReadWriteTest {
     binaryDataset.rdd.map { case Row(label: Double, features: Vector) =>
       label + "," + features.toArray.mkString(",")
     }.repartition(1).saveAsTextFile("target/tmp/LinearSVC/binaryDataset")
+  }
+
+  test("linearSVC validate input dataset") {
+    val df1 = sc.parallelize(Seq(
+      LabeledPoint(2.0, Vectors.dense(1.0, 2.0)),
+      LabeledPoint(0.0, Vectors.dense(3.0, 2.0))
+    )).toDF()
+    val e1 = intercept[Exception] {
+      new LinearSVC().fit(df1)
+    }
+    assert(e1.getMessage.contains("Labels MUST be in {0, 1}"))
+
+    val df2 = sc.parallelize(Seq(
+      Instance(1.0, 0.0, Vectors.dense(1.0, 2.0)),
+      Instance(0.0, -1.0, Vectors.dense(3.0, 2.0))
+    )).toDF()
+    val e2 = intercept[Exception] {
+      new LinearSVC().setWeightCol("weight").fit(df2)
+    }
+    assert(e2.getMessage.contains("Weights MUST be non-Negative and finite"))
+
+    val df3 = sc.parallelize(Seq(
+      LabeledPoint(1.0, Vectors.dense(1.0, Double.NaN)),
+      LabeledPoint(0.0, Vectors.dense(Double.PositiveInfinity, 2.0))
+    )).toDF()
+    val e3 = intercept[Exception] {
+      new LinearSVC().fit(df3)
+    }
+    assert(e3.getMessage.contains("Vector values MUST be non-NaN and finite"))
   }
 
   test("Linear SVC binary classification") {
