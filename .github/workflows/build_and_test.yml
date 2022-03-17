@@ -96,7 +96,7 @@ jobs:
           echo '::set-output name=hadoop::hadoop3'
         else
           echo '::set-output name=java::8'
-          echo "::set-output name=branch::`git branch --show-current`"
+          echo "::set-output name=branch::${GITHUB_REF#refs/heads/}"
           echo '::set-output name=type::regular'
           echo '::set-output name=envs::{"SPARK_ANSI_SQL_MODE": "${{ inputs.ansi_enabled }}"}'
           echo '::set-output name=hadoop::hadoop3'
