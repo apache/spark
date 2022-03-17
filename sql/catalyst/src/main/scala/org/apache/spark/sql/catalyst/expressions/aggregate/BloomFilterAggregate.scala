@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.trees.TernaryLike
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.util.sketch.BloomFilter
 
@@ -55,8 +56,8 @@ case class BloomFilterAggregate(
   }
 
   def this(child: Expression) = {
-    this(child, Literal(BloomFilterAggregate.DEFAULT_EXPECTED_NUM_ITEMS),
-      Literal(BloomFilterAggregate.DEFAULT_NUM_BITS))
+    this(child, Literal(SQLConf.get.getConf(SQLConf.RUNTIME_BLOOM_FILTER_EXPECTED_NUM_ITEMS)),
+      Literal(SQLConf.get.getConf(SQLConf.RUNTIME_BLOOM_FILTER_NUM_BITS)))
   }
 
   override def checkInputDataTypes(): TypeCheckResult = {
@@ -75,8 +76,9 @@ case class BloomFilterAggregate(
           TypeCheckFailure("The number of bits must be a positive value " +
             s" (current value = $numBits)")
         } else {
-          require(estimatedNumItems <= BloomFilterAggregate.MAX_ALLOWED_NUM_ITEMS)
-          require(numBits <= BloomFilterAggregate.MAX_NUM_BITS)
+          require(estimatedNumItems <=
+            SQLConf.get.getConf(SQLConf.RUNTIME_BLOOM_FILTER_MAX_NUM_ITEMS))
+          require(numBits <= SQLConf.get.getConf(SQLConf.RUNTIME_BLOOM_FILTER_MAX_NUM_BITS))
           TypeCheckSuccess
         }
       case _ => TypeCheckResult.TypeCheckFailure(s"Input to function $prettyName should have " +
@@ -94,12 +96,12 @@ case class BloomFilterAggregate(
   // Mark as lazy so that `estimatedNumItems` is not evaluated during tree transformation.
   private lazy val estimatedNumItems: Long =
     Math.min(estimatedNumItemsExpression.eval().asInstanceOf[Number].longValue,
-      BloomFilterAggregate.MAX_ALLOWED_NUM_ITEMS)
+      SQLConf.get.getConf(SQLConf.RUNTIME_BLOOM_FILTER_MAX_NUM_ITEMS))
 
   // Mark as lazy so that `numBits` is not evaluated during tree transformation.
   private lazy val numBits: Long =
     Math.min(numBitsExpression.eval().asInstanceOf[Number].longValue,
-      BloomFilterAggregate.MAX_NUM_BITS)
+      SQLConf.get.getConf(SQLConf.RUNTIME_BLOOM_FILTER_MAX_NUM_BITS))
 
   override def first: Expression = child
 
@@ -148,47 +150,28 @@ case class BloomFilterAggregate(
     copy(inputAggBufferOffset = newOffset)
 
   override def serialize(obj: BloomFilter): Array[Byte] = {
-    BloomFilterAggregate.serde.serialize(obj)
+    BloomFilterAggregate.serialize(obj)
   }
 
   override def deserialize(bytes: Array[Byte]): BloomFilter = {
-    BloomFilterAggregate.serde.deserialize(bytes)
+    BloomFilterAggregate.deserialize(bytes)
   }
 }
 
 object BloomFilterAggregate {
-
-  val DEFAULT_EXPECTED_NUM_ITEMS: Long = 1000000L // Default 1M distinct items
-
-  val MAX_ALLOWED_NUM_ITEMS: Long = 4000000L // At most 4M distinct items
-
-  val DEFAULT_NUM_BITS: Long = 8388608 // Default 1MB
-
-  val MAX_NUM_BITS: Long = 67108864 // At most 8MB
-
-  /**
-   * Serializer/Deserializer for class [[BloomFilter]]
-   *
-   * This class is thread safe.
-   */
-  class BloomFilterSerDe {
-
-    final def serialize(obj: BloomFilter): Array[Byte] = {
-      val size = obj.bitSize() / 8
-      require(size <= Integer.MAX_VALUE, s"actual number of bits is too large $size")
-      val out = new ByteArrayOutputStream(size.intValue())
-      obj.writeTo(out)
-      out.close()
-      out.toByteArray
-    }
-
-    final def deserialize(bytes: Array[Byte]): BloomFilter = {
-      val in = new ByteArrayInputStream(bytes)
-      val bloomFilter = BloomFilter.readFrom(in)
-      in.close()
-      bloomFilter
-    }
+  final def serialize(obj: BloomFilter): Array[Byte] = {
+    val size = obj.bitSize() / 8
+    require(size <= Integer.MAX_VALUE, s"actual number of bits is too large $size")
+    val out = new ByteArrayOutputStream(size.intValue())
+    obj.writeTo(out)
+    out.close()
+    out.toByteArray
   }
 
-  val serde: BloomFilterSerDe = new BloomFilterSerDe
+  final def deserialize(bytes: Array[Byte]): BloomFilter = {
+    val in = new ByteArrayInputStream(bytes)
+    val bloomFilter = BloomFilter.readFrom(in)
+    in.close()
+    bloomFilter
+  }
 }

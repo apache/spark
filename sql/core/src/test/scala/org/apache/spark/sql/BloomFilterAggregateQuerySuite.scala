@@ -23,6 +23,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.BloomFilterAggregate
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanExec
 import org.apache.spark.sql.execution.aggregate.BaseAggregateExec
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
 /**
@@ -46,11 +47,12 @@ class BloomFilterAggregateQuerySuite extends QueryTest with SharedSparkSession {
     (children: Seq[Expression]) => BloomFilterMightContain(children.head, children(1)))
 
   test("Test bloom_filter_agg and might_contain") {
+    val conf = SQLConf.get
     val table = "bloom_filter_test"
     for (numEstimatedItems <- Seq(Long.MinValue, -10L, 0L, 4096L, 4194304L, Long.MaxValue,
-      BloomFilterAggregate.MAX_ALLOWED_NUM_ITEMS)) {
+      conf.getConf(SQLConf.RUNTIME_BLOOM_FILTER_MAX_NUM_ITEMS))) {
       for (numBits <- Seq(Long.MinValue, -10L, 0L, 4096L, 4194304L, Long.MaxValue,
-        BloomFilterAggregate.MAX_NUM_BITS)) {
+        conf.getConf(SQLConf.RUNTIME_BLOOM_FILTER_MAX_NUM_BITS))) {
         val sqlString = s"""
                            |SELECT every(might_contain(
                            |            (SELECT bloom_filter_agg(col,

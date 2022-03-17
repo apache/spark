@@ -383,6 +383,35 @@ object SQLConf {
       .bytesConf(ByteUnit.BYTE)
       .createWithDefaultString("10GB")
 
+  val RUNTIME_BLOOM_FILTER_EXPECTED_NUM_ITEMS =
+    buildConf("spark.sql.optimizer.runtime.bloomFilter.expectedNumItems")
+      .doc("The default number of expected items for the runtime bloomfilter")
+      .version("3.3.0")
+      .longConf
+      .createWithDefault(1000000L)
+
+  val RUNTIME_BLOOM_FILTER_MAX_NUM_ITEMS =
+    buildConf("spark.sql.optimizer.runtime.bloomFilter.maxNumItems")
+      .doc("The max allowed number of expected items for the runtime bloom filter")
+      .version("3.3.0")
+      .longConf
+      .createWithDefault(4000000L)
+
+
+  val RUNTIME_BLOOM_FILTER_NUM_BITS =
+    buildConf("spark.sql.optimizer.runtime.bloomFilter.numBits")
+      .doc("The default number of bits to use for the runtime bloom filter")
+      .version("3.3.0")
+      .longConf
+      .createWithDefault(8388608L)
+
+  val RUNTIME_BLOOM_FILTER_MAX_NUM_BITS =
+    buildConf("spark.sql.optimizer.runtime.bloomFilter.maxNumBits")
+      .doc("The max number of bits to use for the runtime bloom filter")
+      .version("3.3.0")
+      .longConf
+      .createWithDefault(67108864L)
+
   val COMPRESS_CACHED = buildConf("spark.sql.inMemoryColumnarStorage.compressed")
     .doc("When set to true Spark SQL will automatically select a compression codec for each " +
       "column based on statistics of the data.")
