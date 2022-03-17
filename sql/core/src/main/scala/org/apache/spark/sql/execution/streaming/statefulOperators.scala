@@ -78,7 +78,7 @@ trait StreamingOperator { self: SparkPlan =>
    */
   def getProgress(): StreamingOperatorProgress = {
     val metrics = self.metrics.map { case (key, metric) =>
-      (key -> metric.value)
+      (key -> long2Long(metric.value))
     }.asJava
 
     new StreamingOperatorProgress(operatorName, metrics)

@@ -17,8 +17,8 @@
 
 package org.apache.spark.sql.execution.streaming
 
-import java.text.SimpleDateFormat
 import java.{util => ju}
+import java.text.SimpleDateFormat
 import java.util.{Date, Optional, UUID}
 
 import scala.collection.JavaConverters._
@@ -49,7 +49,8 @@ trait ProgressReporter extends Logging {
   case class ExecutionStats(
     inputRows: Map[SparkDataStream, Long],
     stateOperators: Seq[StateOperatorProgress],
-    eventTimeStats: Map[String, String])
+    eventTimeStats: Map[String, String],
+    generalOperators: Seq[StreamingOperatorProgress])
 
   // Internal state of the stream, required for computing metrics.
   protected def id: UUID
@@ -217,7 +218,8 @@ trait ProgressReporter extends Logging {
       stateOperators = executionStats.stateOperators.toArray,
       sources = sourceProgress.toArray,
       sink = sinkProgress,
-      observedMetrics = new java.util.HashMap(observedMetrics.asJava))
+      observedMetrics = new java.util.HashMap(observedMetrics.asJava),
+      operatorProgress = executionStats.generalOperators.toArray)
 
     if (hasExecuted) {
       // Reset noDataEventTimestamp if we processed any data
@@ -247,6 +249,14 @@ trait ProgressReporter extends Logging {
         } else {
           progress.copy(newNumRowsUpdated = 0, newNumRowsDroppedByWatermark = 0)
         }
+    }
+  }
+
+  private def extractOperatorMetrics(hasExecuted: Boolean): Seq[StreamingOperatorProgress] = {
+    if (lastExecution == null) return Nil
+    // lastExecution could belong to one of the previous triggers if `!hasExecuted`.
+    // Walking the plan again should be inexpensive.
+    lastExecution.executedPlan.collect {
       case p if p.isInstanceOf[StreamingOperator] =>
         val progress = p.asInstanceOf[StreamingOperator].getProgress()
         if (hasExecuted) {
@@ -266,9 +276,10 @@ trait ProgressReporter extends Logging {
 
     // SPARK-19378: Still report metrics even though no data was processed while reporting progress.
     val stateOperators = extractStateOperatorMetrics(hasExecuted)
+    val generalOperators = extractOperatorMetrics(hasExecuted)
 
     if (!hasNewData) {
-      return ExecutionStats(Map.empty, stateOperators, watermarkTimestamp)
+      return ExecutionStats(Map.empty, stateOperators, watermarkTimestamp, generalOperators)
     }
 
     val numInputRows = extractSourceToNumInputRows()
@@ -282,7 +293,7 @@ trait ProgressReporter extends Logging {
           "avg" -> stats.avg.toLong).mapValues(formatTimestamp)
     }.headOption.getOrElse(Map.empty) ++ watermarkTimestamp
 
-    ExecutionStats(numInputRows, stateOperators, eventTimeStats.toMap)
+    ExecutionStats(numInputRows, stateOperators, eventTimeStats.toMap, generalOperators)
   }
 
   /** Extract number of input sources for each streaming source in plan */

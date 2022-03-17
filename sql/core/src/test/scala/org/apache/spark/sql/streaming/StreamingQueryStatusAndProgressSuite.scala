@@ -359,7 +359,8 @@ object StreamingQueryStatusAndProgressSuite {
     sink = SinkProgress("sink", None),
     observedMetrics = new java.util.HashMap(Map(
       "event1" -> row(schema1, 1L, 3.0d),
-      "event2" -> row(schema2, 1L, "hello", "world")).asJava)
+      "event2" -> row(schema2, 1L, "hello", "world")).asJava),
+    operatorProgress = Array.empty[StreamingOperatorProgress]
   )
 
   val testProgress2 = new StreamingQueryProgress(
@@ -391,7 +392,8 @@ object StreamingQueryStatusAndProgressSuite {
     observedMetrics = new java.util.HashMap(Map(
       "event_a" -> row(schema1, null, -20.7d),
       "event_b1" -> row(schema2, 33L, "foo", "bar"),
-      "event_b2" -> row(schema2, 200L, "fzo", "baz")).asJava)
+      "event_b2" -> row(schema2, 200L, "fzo", "baz")).asJava),
+    operatorProgress = Array.empty[StreamingOperatorProgress]
   )
 
   val testStatus = new StreamingQueryStatus("active", true, false)

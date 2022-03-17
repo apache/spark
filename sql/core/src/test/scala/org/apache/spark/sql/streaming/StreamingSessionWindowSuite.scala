@@ -39,6 +39,22 @@ class StreamingSessionWindowSuite extends StreamTest
     sqlContext.streams.active.foreach(_.stop())
   }
 
+  private def assertNumRowsDroppedByWatermark(
+      numRowsDroppedByWatermark: Long): AssertOnQuery = AssertOnQuery { q =>
+    q.processAllAvailable()
+    val progressWithData = q.recentProgress.filterNot { p =>
+      // filter out batches which are falling into one of types:
+      // 1) doesn't execute the batch run
+      // 2) empty input batch
+      p.inputRowsPerSecond == 0
+    }.lastOption.get
+    val progress = progressWithData.operatorProgress(0)
+    assert(progress.operatorName == "SessionWindowStateStoreRestore")
+    assert(progress.metrics.containsKey("numRowsDroppedByWatermark"))
+    assert(progress.metrics.get("numRowsDroppedByWatermark") == numRowsDroppedByWatermark)
+    true
+  }
+
   def testWithAllOptions(name: String, confPairs: (String, String)*)
     (func: => Any): Unit = {
     val mergingSessionOptions = Seq(true, false).map { value =>
@@ -205,6 +221,7 @@ class StreamingSessionWindowSuite extends StreamTest
 
       // late event which session's end 10 would be later than watermark 11: should be dropped
       AddData(inputData, ("spark streaming", 0L)),
+      assertNumRowsDroppedByWatermark(2),
       // watermark: 11
       // current sessions
       // ("spark", 25, 35, 10, 1),
@@ -310,6 +327,7 @@ class StreamingSessionWindowSuite extends StreamTest
 
       // late event which session's end 10 would be later than watermark 11: should be dropped
       AddData(inputData, ("spark streaming", 0L)),
+      assertNumRowsDroppedByWatermark(2),
       // watermark: 11
       // current sessions
       // ("spark", 25, 35, 10, 1),
