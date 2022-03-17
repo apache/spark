@@ -311,7 +311,8 @@ class Analyzer(override val catalogManager: CatalogManager)
       ResolveAggregateFunctions ::
       TimeWindowing ::
       SessionWindowing ::
-      ResolveInlineTables(v1SessionCatalog) ::
+      ResolveDefaultColumns(v1SessionCatalog) ::
+      ResolveInlineTables ::
       ResolveLambdaVariables ::
       ResolveTimeZone ::
       ResolveRandomSeed ::

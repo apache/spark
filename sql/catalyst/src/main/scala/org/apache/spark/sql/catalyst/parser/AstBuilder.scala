@@ -2786,8 +2786,8 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
     Option(ctx.defaultExpression()).map(visitDefaultExpression).foreach { field =>
       if (conf.getConf(SQLConf.ENABLE_DEFAULT_COLUMNS)) {
         // Add default to metadata
-        builder.putString(DefaultColumns.CURRENT_DEFAULT_COLUMN_METADATA_KEY, field)
-        builder.putString(DefaultColumns.EXISTS_DEFAULT_COLUMN_METADATA_KEY, field)
+        builder.putString(ResolveDefaultColumns.CURRENT_DEFAULT_COLUMN_METADATA_KEY, field)
+        builder.putString(ResolveDefaultColumns.EXISTS_DEFAULT_COLUMN_METADATA_KEY, field)
       } else {
         throw QueryParsingErrors.defaultColumnNotEnabledError(ctx)
       }

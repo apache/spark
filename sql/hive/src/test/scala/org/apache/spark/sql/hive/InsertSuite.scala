@@ -398,8 +398,12 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
         }
 
         // The data is missing a column.
-        intercept[AnalysisException] {
-          sql(s"INSERT INTO TABLE $tableName PARTITION (c=15, b=16) SELECT 13")
+        // This is not allowed when the ENABLE_DEFAULT_COLUMNS configuration is disabled.
+        // When it is enabled, a NULL value is injected in ths missing column's place, instead.
+        withSQLConf(SQLConf.ENABLE_DEFAULT_COLUMNS.key -> "false") {
+          intercept[AnalysisException] {
+            sql(s"INSERT INTO TABLE $tableName PARTITION (c=15, b=16) SELECT 13")
+          }
         }
 
         // d is not a partitioning column.

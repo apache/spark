@@ -2237,20 +2237,26 @@ class DDLParserSuite extends AnalysisTest {
   }
 
   test("SPARK-38335: Implement parser support for DEFAULT values for columns in tables") {
-    // The following commands will support DEFAULT columns, but this has not been implemented yet.
-    for (sql <- Seq(
-      "ALTER TABLE t1 ADD COLUMN x int NOT NULL DEFAULT 42",
-      "ALTER TABLE t1 ALTER COLUMN a.b.c SET DEFAULT 42",
-      "ALTER TABLE t1 ALTER COLUMN a.b.c DROP DEFAULT",
-      "ALTER TABLE t1 REPLACE COLUMNS (x STRING DEFAULT 42)",
-      "CREATE TABLE my_tab(a INT COMMENT 'test', b STRING NOT NULL DEFAULT \"abc\") USING parquet",
-      "REPLACE TABLE my_tab(a INT COMMENT 'test', b STRING NOT NULL DEFAULT \"xyz\") USING parquet"
-    )) {
-      val exc = intercept[ParseException] {
-        parsePlan(sql);
-      }
-      assert(exc.getMessage.contains("Support for DEFAULT column values is not implemented yet"));
-    }
+    // The following ALTER TABLE commands will support DEFAULT columns, but this has not been
+    // implemented yet.
+    val unsupportedError = "Support for DEFAULT column values is not implemented yet"
+    assert(intercept[ParseException] {
+      parsePlan("ALTER TABLE t1 ADD COLUMN x int NOT NULL DEFAULT 42")
+    }.getMessage.contains(unsupportedError))
+    assert(intercept[ParseException] {
+      parsePlan("ALTER TABLE t1 ALTER COLUMN a.b.c SET DEFAULT 42")
+    }.getMessage.contains(unsupportedError))
+    assert(intercept[ParseException] {
+      parsePlan("ALTER TABLE t1 ALTER COLUMN a.b.c DROP DEFAULT")
+    }.getMessage.contains(unsupportedError))
+    assert(intercept[ParseException] {
+      parsePlan("ALTER TABLE t1 REPLACE COLUMNS (x STRING DEFAULT 42)")
+    }.getMessage.contains(unsupportedError))
+    // These CREATE/REPLACE TABLE statements should parse successfully.
+    parsePlan(
+      "CREATE TABLE my_tab(a INT COMMENT 'test', b STRING NOT NULL DEFAULT \"abc\") USING parquet")
+    parsePlan(
+      "REPLACE TABLE my_tab(a INT COMMENT 'test', b STRING NOT NULL DEFAULT \"xyz\") USING parquet")
     // In each of the following cases, the DEFAULT reference parses as an unresolved attribute
     // reference. We can handle these cases after the parsing stage, at later phases of analysis.
     comparePlans(parsePlan("VALUES (1, 2, DEFAULT) AS val"),

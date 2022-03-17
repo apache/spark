@@ -374,7 +374,6 @@ object PreprocessTableInsertion extends Rule[LogicalPlan] {
       tblName: String,
       partColNames: StructType,
       catalogTable: Option[CatalogTable]): InsertIntoStatement = {
-
     val normalizedPartSpec = normalizePartitionSpec(
       insert.partitionSpec, partColNames, tblName, conf.resolver)
 

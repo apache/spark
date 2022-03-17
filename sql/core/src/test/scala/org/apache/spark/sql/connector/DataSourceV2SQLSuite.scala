@@ -24,7 +24,7 @@ import scala.collection.JavaConverters._
 
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, DefaultColumns, NoSuchDatabaseException, NoSuchNamespaceException, TableAlreadyExistsException}
+import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, NoSuchDatabaseException, NoSuchNamespaceException, ResolveDefaultColumns, TableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.connector.catalog._
@@ -623,8 +623,10 @@ class DataSourceV2SQLSuite
         "Replaced table should have new schema.")
     val actual = replaced.schema().fields(0)
     val expected = StructField("id", LongType, nullable = false,
-      new MetadataBuilder().putString(DefaultColumns.CURRENT_DEFAULT_COLUMN_METADATA_KEY, "41 + 1")
-        .putString(DefaultColumns.EXISTS_DEFAULT_COLUMN_METADATA_KEY, "CAST(42 AS BIGINT)").build())
+      new MetadataBuilder().putString(
+        ResolveDefaultColumns.CURRENT_DEFAULT_COLUMN_METADATA_KEY, "41 + 1")
+        .putString(ResolveDefaultColumns.EXISTS_DEFAULT_COLUMN_METADATA_KEY, "CAST(42 AS BIGINT)")
+        .build())
     assert(actual === expected,
       "Replaced table should have new schema with DEFAULT column metadata.")
   }

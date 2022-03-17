@@ -21,7 +21,7 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable
 
 import org.apache.spark.sql.{SparkSession, Strategy}
-import org.apache.spark.sql.catalyst.analysis.{DefaultColumns, ResolvedDBObjectName, ResolvedNamespace, ResolvedPartitionSpec, ResolvedTable}
+import org.apache.spark.sql.catalyst.analysis.{ResolvedDBObjectName, ResolveDefaultColumns, ResolvedNamespace, ResolvedPartitionSpec, ResolvedTable}
 import org.apache.spark.sql.catalyst.catalog.CatalogUtils
 import org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.expressions.{And, Attribute, DynamicPruning, EmptyRow, Expression, Literal, NamedExpression, PredicateHelper, SubqueryExpression}
@@ -171,7 +171,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
     case CreateTable(ResolvedDBObjectName(catalog, ident), schema, partitioning,
         tableSpec, ifNotExists) =>
       val newSchema: StructType =
-        DefaultColumns.constantFoldExistsDefaultExpressions(schema, "CREATE TABLE")
+        ResolveDefaultColumns.constantFoldCurrentDefaultsToExistDefaults(schema, "CREATE TABLE")
       CreateTableExec(catalog.asTableCatalog, ident.asIdentifier, newSchema,
         partitioning, qualifyLocInTableSpec(tableSpec), ifNotExists) :: Nil
 
@@ -192,7 +192,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
 
     case ReplaceTable(ResolvedDBObjectName(catalog, ident), schema, parts, tableSpec, orCreate) =>
       val newSchema: StructType =
-        DefaultColumns.constantFoldExistsDefaultExpressions(schema, "CREATE TABLE")
+        ResolveDefaultColumns.constantFoldCurrentDefaultsToExistDefaults(schema, "CREATE TABLE")
       catalog match {
         case staging: StagingTableCatalog =>
           AtomicReplaceTableExec(staging, ident.asIdentifier, newSchema, parts,

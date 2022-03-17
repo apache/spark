@@ -27,7 +27,7 @@ import org.scalatest.BeforeAndAfterEach
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.{DefaultColumns, FunctionAlreadyExistsException, NoSuchDatabaseException, NoSuchFunctionException, TableAlreadyExistsException}
+import org.apache.spark.sql.catalyst.analysis.{FunctionAlreadyExistsException, NoSuchDatabaseException, NoSuchFunctionException, ResolveDefaultColumns, TableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.connector.catalog.SupportsNamespaces.PROP_OWNER
@@ -1036,10 +1036,10 @@ abstract class CatalogTestUtils {
           .add("col2", "string")
           .add("a", IntegerType, nullable = true,
             new MetadataBuilder().putString(
-              DefaultColumns.CURRENT_DEFAULT_COLUMN_METADATA_KEY, "42").build())
+              ResolveDefaultColumns.CURRENT_DEFAULT_COLUMN_METADATA_KEY, "42").build())
           .add("b", StringType, nullable = false,
             new MetadataBuilder().putString(
-              DefaultColumns.CURRENT_DEFAULT_COLUMN_METADATA_KEY, "\"abc\"").build())
+              ResolveDefaultColumns.CURRENT_DEFAULT_COLUMN_METADATA_KEY, "\"abc\"").build())
       } else {
         new StructType()
           .add("col1", "int")

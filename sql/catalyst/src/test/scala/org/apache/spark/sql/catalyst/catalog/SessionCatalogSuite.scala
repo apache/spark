@@ -134,13 +134,13 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
       val db1tbl3 = catalog.externalCatalog.getTable("db1", "tbl3")
       val db2tbl3 = catalog.externalCatalog.getTable("db2", "tbl3")
       assert(db1tbl3.schema.fields(db1tbl3.schema.fields.size - 2)
-        .metadata.getString(DefaultColumns.CURRENT_DEFAULT_COLUMN_METADATA_KEY) == "42")
+        .metadata.getString(ResolveDefaultColumns.CURRENT_DEFAULT_COLUMN_METADATA_KEY) == "42")
       assert(db1tbl3.schema.fields.last
-        .metadata.getString(DefaultColumns.CURRENT_DEFAULT_COLUMN_METADATA_KEY) == "\"abc\"")
+        .metadata.getString(ResolveDefaultColumns.CURRENT_DEFAULT_COLUMN_METADATA_KEY) == "\"abc\"")
       assert(db2tbl3.schema.fields(db2tbl3.schema.fields.size - 2)
-        .metadata.getString(DefaultColumns.CURRENT_DEFAULT_COLUMN_METADATA_KEY) == "42")
+        .metadata.getString(ResolveDefaultColumns.CURRENT_DEFAULT_COLUMN_METADATA_KEY) == "42")
       assert(db2tbl3.schema.fields.last
-        .metadata.getString(DefaultColumns.CURRENT_DEFAULT_COLUMN_METADATA_KEY) == "\"abc\"")
+        .metadata.getString(ResolveDefaultColumns.CURRENT_DEFAULT_COLUMN_METADATA_KEY) == "\"abc\"")
     }
   }
 
