@@ -42,7 +42,6 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper wit
       createScanBuilder,
       pushDownSample,
       pushDownFilters,
-      collapseProject,
       pushDownAggregates,
       pushDownLimits,
       pruneColumns)
@@ -100,7 +99,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper wit
     }
   }
 
-  def pushDownAggregates(plan: LogicalPlan): LogicalPlan = plan.transform {
+  def pushDownAggregates(plan: LogicalPlan): LogicalPlan = collapseProject(plan).transform {
     // update the scan builder with agg pushdown and return a new plan with agg pushed
     case aggNode @ Aggregate(groupingExpressions, resultExpressions, child) =>
       child match {
@@ -175,14 +174,14 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper wit
               }
 
               if (selectedTranslatedAggregates.isEmpty) {
-                aggNode // return original plan node
+                return plan // return original plan node
               } else if (!r.supportCompletePushDown(selectedTranslatedAggregates.get) &&
                 !supportPartialAggPushDown(selectedTranslatedAggregates.get)) {
-                aggNode // return original plan node
+                return plan // return original plan node
               } else {
                 val pushedAggregates = selectedTranslatedAggregates.filter(r.pushAggregation)
                 if (pushedAggregates.isEmpty) {
-                  aggNode // return original plan node
+                  return plan // return original plan node
                 } else {
                   // No need to do column pruning because only the aggregate columns are used as
                   // DataSourceV2ScanRelation output columns. All the other columns are not
@@ -283,9 +282,9 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper wit
                   }
                 }
               }
-            case _ => aggNode
+            case _ => return plan
           }
-        case _ => aggNode
+        case _ => return plan
       }
   }
 
