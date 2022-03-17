@@ -13,7 +13,7 @@ SELECT a + b, b, SUM(a - b) FROM testData GROUP BY a + b, b WITH ROLLUP;
 SELECT a, b, SUM(b) FROM testData GROUP BY a, b WITH ROLLUP;
 
 CREATE OR REPLACE TEMPORARY VIEW courseSales AS SELECT * FROM VALUES
-("dotNET", 2012, 10000), ("Java", 2012, 20000), ("dotNET", 2012, 5000), ("dotNET", 2013, 48000), ("Java", 2013, 30000)
+('dotNET', 2012, 10000), ('Java', 2012, 20000), ('dotNET', 2012, 5000), ('dotNET', 2013, 48000), ('Java', 2013, 30000)
 AS courseSales(course, year, earnings);
 
 -- ROLLUP

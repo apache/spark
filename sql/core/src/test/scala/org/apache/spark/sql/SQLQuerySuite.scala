@@ -604,7 +604,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
 
   test("date row") {
     checkAnswer(sql(
-      """select cast("2015-01-28" as date) from testData limit 1"""),
+      """select cast('2015-01-28' as date) from testData limit 1"""),
       Row(Date.valueOf("2015-01-28"))
     )
   }
@@ -4249,8 +4249,6 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
   test("SPARK-36371: Support raw string literal") {
     checkAnswer(sql("""SELECT r'a\tb\nc'"""), Row("""a\tb\nc"""))
     checkAnswer(sql("""SELECT R'a\tb\nc'"""), Row("""a\tb\nc"""))
-    checkAnswer(sql("""SELECT r"a\tb\nc""""), Row("""a\tb\nc"""))
-    checkAnswer(sql("""SELECT R"a\tb\nc""""), Row("""a\tb\nc"""))
     checkAnswer(sql("""SELECT from_json(r'{"a": "\\"}', 'a string')"""), Row(Row("\\")))
     checkAnswer(sql("""SELECT from_json(R'{"a": "\\"}', 'a string')"""), Row(Row("\\")))
   }

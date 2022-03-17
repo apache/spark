@@ -1555,7 +1555,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
           s"""
              |CREATE TABLE t(a string, b int)
              |USING parquet
-             |OPTIONS(path "${dir.toURI}")
+             |OPTIONS(path '${dir.toURI}')
            """.stripMargin)
         val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
         assert(table.location == makeQualifiedPath(dir.getAbsolutePath))
@@ -1596,7 +1596,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
              |CREATE TABLE t(a int, b int, c int, d int)
              |USING parquet
              |PARTITIONED BY(a, b)
-             |LOCATION "${dir.toURI}"
+             |LOCATION '${dir.toURI}'
            """.stripMargin)
         val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
         assert(table.location == makeQualifiedPath(dir.getAbsolutePath))
@@ -1622,7 +1622,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
           s"""
              |CREATE TABLE t(a string, b int)
              |USING parquet
-             |OPTIONS(path "${dir.toURI}")
+             |OPTIONS(path '${dir.toURI}')
            """.stripMargin)
         val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
 
@@ -1650,7 +1650,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
           s"""
              |CREATE TABLE t(a int, b int, c int, d int)
              |USING parquet
-             |LOCATION "${dir.toURI}"
+             |LOCATION '${dir.toURI}'
              |PARTITIONED BY(a, b)
            """.stripMargin)
         spark.sql("INSERT INTO TABLE t PARTITION(a=1, b=2) SELECT 3, 4")

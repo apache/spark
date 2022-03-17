@@ -1,10 +1,10 @@
 -- This test file was converted from having.sql.
 
 create temporary view hav as select * from values
-  ("one", 1),
-  ("two", 2),
-  ("three", 3),
-  ("one", 5)
+  ('one', 1),
+  ('two', 2),
+  ('three', 3),
+  ('one', 5)
   as hav(k, v);
 
 -- having clause

@@ -3,7 +3,7 @@ set hive.stats.autogather=true;
 create table tab_decimal(a decimal(10,3));
 
 -- insert some data
-LOAD DATA LOCAL INPATH "../../data/files/decimal.txt" INTO TABLE tab_decimal;
+LOAD DATA LOCAL INPATH '../../data/files/decimal.txt' INTO TABLE tab_decimal;
 
 select count(*) from tab_decimal;
 

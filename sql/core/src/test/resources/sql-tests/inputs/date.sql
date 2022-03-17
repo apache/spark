@@ -27,9 +27,9 @@ select UNIX_DATE(DATE('1970-01-01')), UNIX_DATE(DATE('2020-12-04')), UNIX_DATE(n
 select to_date(null), to_date('2016-12-31'), to_date('2016-12-31', 'yyyy-MM-dd');
 
 -- missing fields in `to_date`
-select to_date("16", "dd");
+select to_date('16', 'dd');
 -- invalid: there is no 29 in February, 1970
-select to_date("02-29", "MM-dd");
+select to_date('02-29', 'MM-dd');
 
 -- `dayofweek` accepts both date and timestamp ltz/ntz inputs.
 select dayofweek('2007-02-03'), dayofweek('2009-07-30'), dayofweek('2017-05-27'), dayofweek(null),
@@ -49,15 +49,15 @@ select month('1500-01-01'), month('1582-10-15 13:10:15'), month(timestamp_ltz'15
 select dayOfYear('1500-01-01'), dayOfYear('1582-10-15 13:10:15'), dayOfYear(timestamp_ltz'1582-10-15 13:10:15'), dayOfYear(timestamp_ntz'1582-10-15 13:10:15');
 
 -- next_day
-select next_day("2015-07-23", "Mon");
-select next_day("2015-07-23", "xx");
-select next_day("2015-07-23 12:12:12", "Mon");
+select next_day('2015-07-23', 'Mon');
+select next_day('2015-07-23', 'xx');
+select next_day('2015-07-23 12:12:12', 'Mon');
 -- next_date does not accept timestamp lzt/ntz input
-select next_day(timestamp_ltz"2015-07-23 12:12:12", "Mon");
-select next_day(timestamp_ntz"2015-07-23 12:12:12", "Mon");
-select next_day("xx", "Mon");
-select next_day(null, "Mon");
-select next_day(null, "xx");
+select next_day(timestamp_ltz'2015-07-23 12:12:12', 'Mon');
+select next_day(timestamp_ntz'2015-07-23 12:12:12', 'Mon');
+select next_day('xx', 'Mon');
+select next_day(null, 'Mon');
+select next_day(null, 'xx');
 
 -- date add
 select date_add(date'2011-11-11', 1);

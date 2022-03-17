@@ -571,7 +571,7 @@ abstract class AvroSuite
       s"""
          |CREATE TEMPORARY VIEW avroTable
          |USING avro
-         |OPTIONS (path "${episodesAvro}")
+         |OPTIONS (path '${episodesAvro}')
       """.stripMargin.replaceAll("\n", " "))
 
     assert(spark.sql("SELECT * FROM avroTable").collect().length === 8)
@@ -1307,14 +1307,14 @@ abstract class AvroSuite
         s"""
            |CREATE TEMPORARY VIEW episodes
            |USING avro
-           |OPTIONS (path "${episodesAvro}")
+           |OPTIONS (path '${episodesAvro}')
          """.stripMargin.replaceAll("\n", " "))
       spark.sql(
         s"""
            |CREATE TEMPORARY VIEW episodesEmpty
            |(name string, air_date string, doctor int)
            |USING avro
-           |OPTIONS (path "$tempEmptyDir")
+           |OPTIONS (path '$tempEmptyDir')
          """.stripMargin.replaceAll("\n", " "))
 
       assert(spark.sql("SELECT * FROM episodes").collect().length === 8)
@@ -2322,7 +2322,7 @@ class AvroV2Suite extends AvroSuite with ExplainSuiteHelper {
         .read
         .format("avro")
         .load(dir.getCanonicalPath)
-        .where("p1 = 1 and p2 = 2 and value != \"a\"")
+        .where("p1 = 1 and p2 = 2 and value != 'a'")
 
        val filterCondition = df.queryExecution.optimizedPlan.collectFirst {
          case f: Filter => f.condition

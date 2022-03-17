@@ -63,6 +63,6 @@ select col, date_format(col, 'x xx xxx xxxx xxxx xxxxx') from v;
 select col, date_format(col, '[yyyy-MM-dd HH:mm:ss]') from v;
 
 -- literals
-select col, date_format(col, "姚123'GyYqQMLwWuEFDdhHmsSaVzZxXOV'") from v;
-select col, date_format(col, "''") from v;
+select col, date_format(col, '姚123\'GyYqQMLwWuEFDdhHmsSaVzZxXOV\'') from v;
+select col, date_format(col, '\'\'') from v;
 select col, date_format(col, '') from v;

@@ -492,7 +492,7 @@ cannot resolve 'any(1L)' due to data type mismatch: argument 1 requires boolean 
 
 
 -- !query
-SELECT every("true")
+SELECT every('true')
 -- !query schema
 struct<>
 -- !query output

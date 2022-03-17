@@ -402,7 +402,7 @@ cannot resolve 'any(CAST(udf(cast(1 as string)) AS BIGINT))' due to data type mi
 
 
 -- !query
-SELECT udf(every("true"))
+SELECT udf(every('true'))
 -- !query schema
 struct<>
 -- !query output

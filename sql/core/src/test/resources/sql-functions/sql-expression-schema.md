@@ -85,7 +85,7 @@
 | org.apache.spark.sql.catalyst.expressions.Crc32 | crc32 | SELECT crc32('Spark') | struct<crc32(Spark):bigint> |
 | org.apache.spark.sql.catalyst.expressions.CreateArray | array | SELECT array(1, 2, 3) | struct<array(1, 2, 3):array<int>> |
 | org.apache.spark.sql.catalyst.expressions.CreateMap | map | SELECT map(1.0, '2', 3.0, '4') | struct<map(1.0, 2, 3.0, 4):map<decimal(2,1),string>> |
-| org.apache.spark.sql.catalyst.expressions.CreateNamedStruct | named_struct | SELECT named_struct("a", 1, "b", 2, "c", 3) | struct<named_struct(a, 1, b, 2, c, 3):struct<a:int,b:int,c:int>> |
+| org.apache.spark.sql.catalyst.expressions.CreateNamedStruct | named_struct | SELECT named_struct('a', 1, 'b', 2, 'c', 3) | struct<named_struct(a, 1, b, 2, c, 3):struct<a:int,b:int,c:int>> |
 | org.apache.spark.sql.catalyst.expressions.CreateNamedStruct | struct | SELECT struct(1, 2, 3) | struct<struct(1, 2, 3):struct<col1:int,col2:int,col3:int>> |
 | org.apache.spark.sql.catalyst.expressions.Csc | csc | SELECT csc(1) | struct<CSC(1):double> |
 | org.apache.spark.sql.catalyst.expressions.CsvToStructs | from_csv | SELECT from_csv('1, 0.8', 'a INT, b DOUBLE') | struct<from_csv(1, 0.8):struct<a:int,b:double>> |
@@ -127,8 +127,8 @@
 | org.apache.spark.sql.catalyst.expressions.Flatten | flatten | SELECT flatten(array(array(1, 2), array(3, 4))) | struct<flatten(array(array(1, 2), array(3, 4))):array<int>> |
 | org.apache.spark.sql.catalyst.expressions.FloorExpressionBuilder$ | floor | SELECT floor(-0.1) | struct<FLOOR(-0.1):decimal(1,0)> |
 | org.apache.spark.sql.catalyst.expressions.FormatNumber | format_number | SELECT format_number(12332.123456, 4) | struct<format_number(12332.123456, 4):string> |
-| org.apache.spark.sql.catalyst.expressions.FormatString | format_string | SELECT format_string("Hello World %d %s", 100, "days") | struct<format_string(Hello World %d %s, 100, days):string> |
-| org.apache.spark.sql.catalyst.expressions.FormatString | printf | SELECT printf("Hello World %d %s", 100, "days") | struct<printf(Hello World %d %s, 100, days):string> |
+| org.apache.spark.sql.catalyst.expressions.FormatString | format_string | SELECT format_string('Hello World %d %s', 100, 'days') | struct<format_string(Hello World %d %s, 100, days):string> |
+| org.apache.spark.sql.catalyst.expressions.FormatString | printf | SELECT printf('Hello World %d %s', 100, 'days') | struct<printf(Hello World %d %s, 100, days):string> |
 | org.apache.spark.sql.catalyst.expressions.FromUTCTimestamp | from_utc_timestamp | SELECT from_utc_timestamp('2016-08-31', 'Asia/Seoul') | struct<from_utc_timestamp(2016-08-31, Asia/Seoul):timestamp> |
 | org.apache.spark.sql.catalyst.expressions.FromUnixTime | from_unixtime | SELECT from_unixtime(0, 'yyyy-MM-dd HH:mm:ss') | struct<from_unixtime(0, yyyy-MM-dd HH:mm:ss):string> |
 | org.apache.spark.sql.catalyst.expressions.GetJsonObject | get_json_object | SELECT get_json_object('{"a":"b"}', '$.a') | struct<get_json_object({"a":"b"}, $.a):string> |
@@ -320,7 +320,7 @@
 | org.apache.spark.sql.catalyst.expressions.UnaryMinus | negative | SELECT negative(1) | struct<negative(1):int> |
 | org.apache.spark.sql.catalyst.expressions.UnaryPositive | positive | SELECT positive(1) | struct<(+ 1):int> |
 | org.apache.spark.sql.catalyst.expressions.Unhex | unhex | SELECT decode(unhex('537061726B2053514C'), 'UTF-8') | struct<decode(unhex(537061726B2053514C), UTF-8):string> |
-| org.apache.spark.sql.catalyst.expressions.UnixDate | unix_date | SELECT unix_date(DATE("1970-01-02")) | struct<unix_date(1970-01-02):int> |
+| org.apache.spark.sql.catalyst.expressions.UnixDate | unix_date | SELECT unix_date(DATE('1970-01-02')) | struct<unix_date(1970-01-02):int> |
 | org.apache.spark.sql.catalyst.expressions.UnixMicros | unix_micros | SELECT unix_micros(TIMESTAMP('1970-01-01 00:00:01Z')) | struct<unix_micros(1970-01-01 00:00:01Z):bigint> |
 | org.apache.spark.sql.catalyst.expressions.UnixMillis | unix_millis | SELECT unix_millis(TIMESTAMP('1970-01-01 00:00:01Z')) | struct<unix_millis(1970-01-01 00:00:01Z):bigint> |
 | org.apache.spark.sql.catalyst.expressions.UnixSeconds | unix_seconds | SELECT unix_seconds(TIMESTAMP('1970-01-01 00:00:01Z')) | struct<unix_seconds(1970-01-01 00:00:01Z):bigint> |

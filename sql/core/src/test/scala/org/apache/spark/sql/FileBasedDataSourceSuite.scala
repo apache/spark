@@ -829,7 +829,7 @@ class FileBasedDataSourceSuite extends QueryTest
             .format(format)
             .option("header", true)
             .load(dir.getCanonicalPath)
-            .where("p1 = 1 and p2 = 2 and value != \"a\"")
+            .where("p1 = 1 and p2 = 2 and value != 'a'")
 
           val filterCondition = df.queryExecution.optimizedPlan.collectFirst {
             case f: Filter => f.condition

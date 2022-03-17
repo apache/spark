@@ -183,7 +183,7 @@ class SparkSqlParserSuite extends AnalysisTest {
     assertEqual("REFRESH pat1h/112/_1a/a-1", RefreshResource("pat1h/112/_1a/a-1"))
     assertEqual("REFRESH path-with-dash", RefreshResource("path-with-dash"))
     assertEqual("REFRESH \'path with space\'", RefreshResource("path with space"))
-    assertEqual("REFRESH \"path with space 2\"", RefreshResource("path with space 2"))
+    assertEqual("REFRESH \'path with space 2\'", RefreshResource("path with space 2"))
     intercept("REFRESH a b", "REFRESH statements cannot contain")
     intercept("REFRESH a\tb", "REFRESH statements cannot contain")
     intercept("REFRESH a\nb", "REFRESH statements cannot contain")

@@ -199,7 +199,7 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
       val dataFilePath =
         Thread.currentThread().getContextClassLoader.getResource("data/files/employee.dat")
       val e2 = intercept[AnalysisException] {
-        sql(s"""LOAD DATA LOCAL INPATH "$dataFilePath" INTO TABLE $viewName""")
+        sql(s"""LOAD DATA LOCAL INPATH '$dataFilePath' INTO TABLE $viewName""")
       }.getMessage
       assert(e2.contains(s"$viewName is a temp view. 'LOAD DATA' expects a table"))
       val e3 = intercept[AnalysisException] {
@@ -243,7 +243,7 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
       val dataFilePath =
         Thread.currentThread().getContextClassLoader.getResource("data/files/employee.dat")
       e = intercept[AnalysisException] {
-        sql(s"""LOAD DATA LOCAL INPATH "$dataFilePath" INTO TABLE $viewName""")
+        sql(s"""LOAD DATA LOCAL INPATH '$dataFilePath' INTO TABLE $viewName""")
       }.getMessage
       assert(e.contains("default.testView is a view. 'LOAD DATA' expects a table"))
     }

@@ -45,7 +45,7 @@ class ShowCreateTableSuite extends command.ShowCreateTableSuiteBase with Command
            |PARTITIONED BY (a)
            |COMMENT 'This is a comment'
            |TBLPROPERTIES ('a' = '1')
-           |AS SELECT 1 AS a, "foo" AS b
+           |AS SELECT 1 AS a, 'foo' AS b
          """.stripMargin
       )
       val showDDL = getShowCreateDDL(t, false)

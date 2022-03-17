@@ -1980,8 +1980,8 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
     )
 
     checkAnswer(
-      df.selectExpr("array_remove(a, 2)", "array_remove(b, \"a\")",
-        "array_remove(c, \"\")"),
+      df.selectExpr("array_remove(a, 2)", "array_remove(b, 'a')",
+        "array_remove(c, '')"),
       Seq(
         Row(Seq(1, 3), Seq("b", "c"), Seq.empty[String]),
         Row(Seq.empty[Int], Seq.empty[String], Seq.empty[String]),

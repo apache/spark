@@ -4,8 +4,8 @@
 
 -- !query
 create temporary view data as select * from values
-  ("one", array(11, 12, 13), array(array(111, 112, 113), array(121, 122, 123))),
-  ("two", array(21, 22, 23), array(array(211, 212, 213), array(221, 222, 223)))
+  ('one', array(11, 12, 13), array(array(111, 112, 113), array(121, 122, 123))),
+  ('two', array(21, 22, 23), array(array(211, 212, 213), array(221, 222, 223)))
   as data(a, b, c)
 -- !query schema
 struct<>

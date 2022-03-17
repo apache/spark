@@ -3,7 +3,7 @@
 
 
 -- !query
-select udf(col1), udf(col2) from values ("one", 1)
+select udf(col1), udf(col2) from values ('one', 1)
 -- !query schema
 struct<udf(col1):string,udf(col2):int>
 -- !query output
@@ -11,7 +11,7 @@ one	1
 
 
 -- !query
-select udf(col1), udf(udf(col2)) from values ("one", 1) as data
+select udf(col1), udf(udf(col2)) from values ('one', 1) as data
 -- !query schema
 struct<udf(col1):string,udf(udf(col2)):int>
 -- !query output
@@ -19,7 +19,7 @@ one	1
 
 
 -- !query
-select udf(a), b from values ("one", 1) as data(a, b)
+select udf(a), b from values ('one', 1) as data(a, b)
 -- !query schema
 struct<udf(a):string,b:int>
 -- !query output
@@ -37,7 +37,7 @@ struct<udf(a):int>
 
 
 -- !query
-select udf(a), b from values ("one", 1), ("two", 2), ("three", null) as data(a, b)
+select udf(a), b from values ('one', 1), ('two', 2), ('three', null) as data(a, b)
 -- !query schema
 struct<udf(a):string,b:int>
 -- !query output
@@ -47,7 +47,7 @@ two	2
 
 
 -- !query
-select udf(a), b from values ("one", null), ("two", null) as data(a, b)
+select udf(a), b from values ('one', null), ('two', null) as data(a, b)
 -- !query schema
 struct<udf(a):string,b:void>
 -- !query output
@@ -56,7 +56,7 @@ two	NULL
 
 
 -- !query
-select udf(a), b from values ("one", 1), ("two", 2L) as data(a, b)
+select udf(a), b from values ('one', 1), ('two', 2L) as data(a, b)
 -- !query schema
 struct<udf(a):string,b:bigint>
 -- !query output
@@ -65,7 +65,7 @@ two	2
 
 
 -- !query
-select udf(udf(a)), udf(b) from values ("one", 1 + 0), ("two", 1 + 3L) as data(a, b)
+select udf(udf(a)), udf(b) from values ('one', 1 + 0), ('two', 1 + 3L) as data(a, b)
 -- !query schema
 struct<udf(udf(a)):string,udf(b):bigint>
 -- !query output
@@ -74,7 +74,7 @@ two	4
 
 
 -- !query
-select udf(a), b from values ("one", array(0, 1)), ("two", array(2, 3)) as data(a, b)
+select udf(a), b from values ('one', array(0, 1)), ('two', array(2, 3)) as data(a, b)
 -- !query schema
 struct<udf(a):string,b:array<int>>
 -- !query output
@@ -83,7 +83,7 @@ two	[2,3]
 
 
 -- !query
-select udf(a), b from values ("one", 2.0), ("two", 3.0D) as data(a, b)
+select udf(a), b from values ('one', 2.0), ('two', 3.0D) as data(a, b)
 -- !query schema
 struct<udf(a):string,b:double>
 -- !query output
@@ -92,7 +92,7 @@ two	3.0
 
 
 -- !query
-select udf(a), b from values ("one", rand(5)), ("two", 3.0D) as data(a, b)
+select udf(a), b from values ('one', rand(5)), ('two', 3.0D) as data(a, b)
 -- !query schema
 struct<>
 -- !query output
@@ -101,7 +101,7 @@ cannot evaluate expression rand(5) in inline table definition; line 1 pos 37
 
 
 -- !query
-select udf(a), udf(b) from values ("one", 2.0), ("two") as data(a, b)
+select udf(a), udf(b) from values ('one', 2.0), ('two') as data(a, b)
 -- !query schema
 struct<>
 -- !query output
@@ -110,7 +110,7 @@ expected 2 columns but found 1 columns in row 1; line 1 pos 27
 
 
 -- !query
-select udf(a), udf(b) from values ("one", array(0, 1)), ("two", struct(1, 2)) as data(a, b)
+select udf(a), udf(b) from values ('one', array(0, 1)), ('two', struct(1, 2)) as data(a, b)
 -- !query schema
 struct<>
 -- !query output
@@ -119,7 +119,7 @@ incompatible types found in column b for inline table; line 1 pos 27
 
 
 -- !query
-select udf(a), udf(b) from values ("one"), ("two") as data(a, b)
+select udf(a), udf(b) from values ('one'), ('two') as data(a, b)
 -- !query schema
 struct<>
 -- !query output
@@ -128,7 +128,7 @@ expected 2 columns but found 1 columns in row 0; line 1 pos 27
 
 
 -- !query
-select udf(a), udf(b) from values ("one", random_not_exist_func(1)), ("two", 2) as data(a, b)
+select udf(a), udf(b) from values ('one', random_not_exist_func(1)), ('two', 2) as data(a, b)
 -- !query schema
 struct<>
 -- !query output
@@ -137,7 +137,7 @@ Undefined function: random_not_exist_func. This function is neither a built-in/t
 
 
 -- !query
-select udf(a), udf(b) from values ("one", count(1)), ("two", 2) as data(a, b)
+select udf(a), udf(b) from values ('one', count(1)), ('two', 2) as data(a, b)
 -- !query schema
 struct<>
 -- !query output

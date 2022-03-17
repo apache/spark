@@ -3,11 +3,11 @@
 -- Note some test cases have been commented as the current integrated UDFs cannot handle complex types
 
 create temporary view courseSales as select * from values
-  ("dotNET", 2012, 10000),
-  ("Java", 2012, 20000),
-  ("dotNET", 2012, 5000),
-  ("dotNET", 2013, 48000),
-  ("Java", 2013, 30000)
+  ('dotNET', 2012, 10000),
+  ('Java', 2012, 20000),
+  ('dotNET', 2012, 5000),
+  ('dotNET', 2013, 48000),
+  ('Java', 2013, 30000)
   as courseSales(course, year, earnings);
 
 create temporary view years as select * from values
@@ -297,8 +297,8 @@ PIVOT (
 -- grouping columns output in the same order as input
 -- correctly handle pivot columns with different cases
 SELECT * FROM (
-  SELECT course, earnings, udf("a") as a, udf("z") as z, udf("b") as b, udf("y") as y,
-  udf("c") as c, udf("x") as x, udf("d") as d, udf("w") as w
+  SELECT course, earnings, udf('a') as a, udf('z') as z, udf('b') as b, udf('y') as y,
+  udf('c') as c, udf('x') as x, udf('d') as d, udf('w') as w
   FROM courseSales
 )
 PIVOT (

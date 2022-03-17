@@ -623,12 +623,11 @@ class ExpressionParserSuite extends AnalysisTest {
 
         // tests that have same result whatever the conf is
         // Single Strings.
-        assertEqual("\"hello\"", "hello", parser)
         assertEqual("'hello'", "hello", parser)
 
         // Multi-Strings.
-        assertEqual("\"hello\" 'world'", "helloworld", parser)
-        assertEqual("'hello' \" \" 'world'", "hello world", parser)
+        assertEqual("'hello' 'world'", "helloworld", parser)
+        assertEqual("'hello' ' ' 'world'", "hello world", parser)
 
         // 'LIKE' string literals. Notice that an escaped '%' is the same as an escaped '\' and a
         // regular '%'; to get the correct result you need to add another escaped '\'.
@@ -861,6 +860,10 @@ class ExpressionParserSuite extends AnalysisTest {
         }
       }
     }
+  }
+
+  test("double-quoted identifier as alias") {
+    assertEqual("1 + r.r As \"q\"", (Literal(1) + UnresolvedAttribute("r.r")).as("q"))
   }
 
   test("composed expressions") {

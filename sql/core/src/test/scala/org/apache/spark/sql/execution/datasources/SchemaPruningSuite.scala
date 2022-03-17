@@ -168,7 +168,7 @@ abstract class SchemaPruningSuite
 
   testSchemaPruning("select a single complex field from a map entry and its parent map entry") {
     val query =
-      sql("select relatives[\"brother\"].middle, relatives[\"brother\"] from contacts where p=1")
+      sql("select relatives['brother'].middle, relatives['brother'] from contacts where p=1")
     checkScan(query,
       "struct<relatives:map<string,struct<first:string,middle:string,last:string>>>")
     checkAnswer(query.orderBy("id"),
@@ -263,8 +263,8 @@ abstract class SchemaPruningSuite
 
   testSchemaPruning("select a single complex field from a map entry and in clause") {
     val query =
-      sql("select relatives[\"brother\"].middle from contacts " +
-        "where relatives[\"brother\"].first = 'John'")
+      sql("select relatives['brother'].middle from contacts " +
+        "where relatives['brother'].first = 'John'")
     checkScan(query,
       "struct<relatives:map<string,struct<first:string,middle:string>>>")
     checkAnswer(query.orderBy("id"),

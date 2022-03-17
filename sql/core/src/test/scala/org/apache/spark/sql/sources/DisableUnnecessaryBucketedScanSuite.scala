@@ -271,11 +271,11 @@ abstract class DisableUnnecessaryBucketedScanSuite
             |""".stripMargin)
         sql(
           """
-            |INSERT INTO TABLE t1 VALUES(1.23, cast("2021-07-07" as date))
+            |INSERT INTO TABLE t1 VALUES(1.23, cast('2021-07-07' as date))
             |""".stripMargin)
         sql(
           """
-            |INSERT INTO TABLE t1 VALUES(2.28, cast("2021-08-08" as date))
+            |INSERT INTO TABLE t1 VALUES(2.28, cast('2021-08-08' as date))
             |""".stripMargin)
         val df = spark.sql("select sum(id) from t1 where id is not null")
         assert(df.count == 1)

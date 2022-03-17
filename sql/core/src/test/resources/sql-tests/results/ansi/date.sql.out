@@ -127,7 +127,7 @@ NULL	2016-12-31	2016-12-31
 
 
 -- !query
-select to_date("16", "dd")
+select to_date('16', 'dd')
 -- !query schema
 struct<to_date(16, dd):date>
 -- !query output
@@ -135,7 +135,7 @@ struct<to_date(16, dd):date>
 
 
 -- !query
-select to_date("02-29", "MM-dd")
+select to_date('02-29', 'MM-dd')
 -- !query schema
 struct<>
 -- !query output
@@ -186,7 +186,7 @@ struct<dayofyear(1500-01-01):int,dayofyear(1582-10-15 13:10:15):int,dayofyear(TI
 
 
 -- !query
-select next_day("2015-07-23", "Mon")
+select next_day('2015-07-23', 'Mon')
 -- !query schema
 struct<next_day(2015-07-23, Mon):date>
 -- !query output
@@ -194,7 +194,7 @@ struct<next_day(2015-07-23, Mon):date>
 
 
 -- !query
-select next_day("2015-07-23", "xx")
+select next_day('2015-07-23', 'xx')
 -- !query schema
 struct<>
 -- !query output
@@ -203,7 +203,7 @@ Illegal input for day of week: xx. If necessary set spark.sql.ansi.enabled to fa
 
 
 -- !query
-select next_day("2015-07-23 12:12:12", "Mon")
+select next_day('2015-07-23 12:12:12', 'Mon')
 -- !query schema
 struct<next_day(2015-07-23 12:12:12, Mon):date>
 -- !query output
@@ -211,7 +211,7 @@ struct<next_day(2015-07-23 12:12:12, Mon):date>
 
 
 -- !query
-select next_day(timestamp_ltz"2015-07-23 12:12:12", "Mon")
+select next_day(timestamp_ltz'2015-07-23 12:12:12', 'Mon')
 -- !query schema
 struct<next_day(TIMESTAMP '2015-07-23 12:12:12', Mon):date>
 -- !query output
@@ -219,7 +219,7 @@ struct<next_day(TIMESTAMP '2015-07-23 12:12:12', Mon):date>
 
 
 -- !query
-select next_day(timestamp_ntz"2015-07-23 12:12:12", "Mon")
+select next_day(timestamp_ntz'2015-07-23 12:12:12', 'Mon')
 -- !query schema
 struct<next_day(TIMESTAMP_NTZ '2015-07-23 12:12:12', Mon):date>
 -- !query output
@@ -227,7 +227,7 @@ struct<next_day(TIMESTAMP_NTZ '2015-07-23 12:12:12', Mon):date>
 
 
 -- !query
-select next_day("xx", "Mon")
+select next_day('xx', 'Mon')
 -- !query schema
 struct<>
 -- !query output
@@ -236,7 +236,7 @@ Cannot cast xx to DateType. To return NULL instead, use 'try_cast'. If necessary
 
 
 -- !query
-select next_day(null, "Mon")
+select next_day(null, 'Mon')
 -- !query schema
 struct<next_day(NULL, Mon):date>
 -- !query output
@@ -244,7 +244,7 @@ NULL
 
 
 -- !query
-select next_day(null, "xx")
+select next_day(null, 'xx')
 -- !query schema
 struct<next_day(NULL, xx):date>
 -- !query output

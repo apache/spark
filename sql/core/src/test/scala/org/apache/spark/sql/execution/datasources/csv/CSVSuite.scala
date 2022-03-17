@@ -270,8 +270,8 @@ abstract class CSVSuite
       spark.sql(
         s"""
           |CREATE TEMPORARY VIEW carsTable USING csv
-          |OPTIONS (path "${testFile(carsFile8859)}", header "true",
-          |charset "iso-8859-1", delimiter "þ")
+          |OPTIONS (path '${testFile(carsFile8859)}', header 'true',
+          |charset 'iso-8859-1', delimiter 'þ')
          """.stripMargin.replaceAll("\n", " "))
       // scalastyle:on
       verifyCars(spark.table("carsTable"), withHeader = true)
@@ -308,7 +308,7 @@ abstract class CSVSuite
       spark.sql(
         s"""
           |CREATE TEMPORARY VIEW carsTable USING csv
-          |OPTIONS (path "${testFile(carsTsvFile)}", header "true", delimiter "\t")
+          |OPTIONS (path '${testFile(carsTsvFile)}', header 'true', delimiter '\t')
          """.stripMargin.replaceAll("\n", " "))
 
       verifyCars(spark.table("carsTable"), numFields = 6, withHeader = true, checkHeader = false)
@@ -323,7 +323,7 @@ abstract class CSVSuite
           |(yearMade double, makeName string, modelName string, priceTag decimal,
           | comments string, grp string)
           |USING csv
-          |OPTIONS (path "${testFile(carsTsvFile)}", header "true", delimiter "\t")
+          |OPTIONS (path '${testFile(carsTsvFile)}', header 'true', delimiter '\t')
          """.stripMargin.replaceAll("\n", " "))
 
       assert(
@@ -410,7 +410,7 @@ abstract class CSVSuite
           |CREATE TEMPORARY VIEW carsTable
           |(yearMade double, makeName string, modelName string, comments string, grp string)
           |USING csv
-          |OPTIONS (path "${testFile(emptyFile)}", header "false")
+          |OPTIONS (path '${testFile(emptyFile)}', header 'false')
          """.stripMargin.replaceAll("\n", " "))
 
       assert(spark.sql("SELECT count(*) FROM carsTable").collect().head(0) === 0)
@@ -424,7 +424,7 @@ abstract class CSVSuite
           |CREATE TEMPORARY VIEW carsTable
           |(yearMade double, makeName string, modelName string, comments string, blank string)
           |USING csv
-          |OPTIONS (path "${testFile(carsFile)}", header "true")
+          |OPTIONS (path '${testFile(carsFile)}', header 'true')
          """.stripMargin.replaceAll("\n", " "))
 
       val cars = spark.table("carsTable")

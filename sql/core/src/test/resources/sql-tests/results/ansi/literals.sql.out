@@ -263,7 +263,7 @@ struct<1.2345678901234568E48:double,1.2345678901234568E48:double>
 
 
 -- !query
-select "Hello Peter!", 'hello lee!'
+select 'Hello Peter!', 'hello lee!'
 -- !query schema
 struct<Hello Peter!:string,hello lee!:string>
 -- !query output
@@ -271,7 +271,7 @@ Hello Peter!	hello lee!
 
 
 -- !query
-select 'hello' 'world', 'hello' " " 'lee'
+select 'hello' 'world', 'hello' ' ' 'lee'
 -- !query schema
 struct<helloworld:string,hello lee:string>
 -- !query output
@@ -279,7 +279,7 @@ helloworld	hello lee
 
 
 -- !query
-select "hello 'peter'"
+select 'hello \'peter\''
 -- !query schema
 struct<hello 'peter':string>
 -- !query output
@@ -298,10 +298,12 @@ pattern%	no-pattern\%	pattern\%	pattern\\%
 select '\'', '"', '\n', '\r', '\t', 'Z'
 -- !query schema
 struct<':string,":string,
-:string,:string,	:string,Z:string>
+:string,
+:string,	:string,Z:string>
 -- !query output
-'	"	
-				Z
+'	"
+	
+			Z
 
 
 -- !query

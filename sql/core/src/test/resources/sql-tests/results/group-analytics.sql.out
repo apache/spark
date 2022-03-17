@@ -88,7 +88,7 @@ NULL	NULL	9
 
 -- !query
 CREATE OR REPLACE TEMPORARY VIEW courseSales AS SELECT * FROM VALUES
-("dotNET", 2012, 10000), ("Java", 2012, 20000), ("dotNET", 2012, 5000), ("dotNET", 2013, 48000), ("Java", 2013, 30000)
+('dotNET', 2012, 10000), ('Java', 2012, 20000), ('dotNET', 2012, 5000), ('dotNET', 2013, 48000), ('Java', 2013, 30000)
 AS courseSales(course, year, earnings)
 -- !query schema
 struct<>

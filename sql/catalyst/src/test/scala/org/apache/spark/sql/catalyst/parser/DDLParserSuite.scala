@@ -127,7 +127,7 @@ class DDLParserSuite extends AnalysisTest {
         |    months(ts),
         |    days(ts),
         |    hours(ts),
-        |    foo(a, "bar", 34))
+        |    foo(a, 'bar', 34))
       """.stripMargin
 
     val replaceSql =
@@ -140,7 +140,7 @@ class DDLParserSuite extends AnalysisTest {
         |    months(ts),
         |    days(ts),
         |    hours(ts),
-        |    foo(a, "bar", 34))
+        |    foo(a, 'bar', 34))
       """.stripMargin
     val expectedTableSpec = TableSpec(
       Seq("my_tab"),

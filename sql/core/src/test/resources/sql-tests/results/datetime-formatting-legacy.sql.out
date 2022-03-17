@@ -360,7 +360,7 @@ struct<col:timestamp,date_format(col, [yyyy-MM-dd HH:mm:ss]):string>
 
 
 -- !query
-select col, date_format(col, "姚123'GyYqQMLwWuEFDdhHmsSaVzZxXOV'") from v
+select col, date_format(col, '姚123\'GyYqQMLwWuEFDdhHmsSaVzZxXOV\'') from v
 -- !query schema
 struct<col:timestamp,date_format(col, 姚123'GyYqQMLwWuEFDdhHmsSaVzZxXOV'):string>
 -- !query output
@@ -374,7 +374,7 @@ struct<col:timestamp,date_format(col, 姚123'GyYqQMLwWuEFDdhHmsSaVzZxXOV'):strin
 
 
 -- !query
-select col, date_format(col, "''") from v
+select col, date_format(col, '\'\'') from v
 -- !query schema
 struct<col:timestamp,date_format(col, ''):string>
 -- !query output

@@ -14,7 +14,7 @@ ROW FORMAT DELIMITED
 FIELDS TERMINATED BY '\t'
 COLLECTION ITEMS TERMINATED BY ',';
 
-load data local inpath "../../data/files/array_table.txt" overwrite into table array_table;
+load data local inpath '../../data/files/array_table.txt' overwrite into table array_table;
 
 insert overwrite local directory '../../data/files/local_array_table_1'
 select * from array_table;
@@ -44,7 +44,7 @@ COLLECTION ITEMS TERMINATED BY ','
 MAP KEYS TERMINATED BY ':'
 STORED AS TEXTFILE;
 
-load data local inpath "../../data/files/map_table.txt" overwrite into table map_table;
+load data local inpath '../../data/files/map_table.txt' overwrite into table map_table;
 
 insert overwrite local directory '../../data/files/local_map_table_1'
 select * from map_table;

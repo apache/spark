@@ -4,42 +4,42 @@
 --CONFIG_DIM1 spark.sql.optimizeNullAwareAntiJoin=false
 
 CREATE TEMPORARY VIEW EMP AS SELECT * FROM VALUES
-  (100, "emp 1", 10),
-  (200, "emp 2", NULL),
-  (300, "emp 3", 20),
-  (400, "emp 4", 30),
-  (500, "emp 5", NULL),
-  (600, "emp 6", 100),
-  (800, "emp 8", 70)
+  (100, 'emp 1', 10),
+  (200, 'emp 2', NULL),
+  (300, 'emp 3', 20),
+  (400, 'emp 4', 30),
+  (500, 'emp 5', NULL),
+  (600, 'emp 6', 100),
+  (800, 'emp 8', 70)
 AS EMP(id, emp_name, dept_id);
 
 CREATE TEMPORARY VIEW DEPT AS SELECT * FROM VALUES
-  (10, "dept 1", "CA"),
-  (20, "dept 2", "NY"),
-  (30, "dept 3", "TX"),
-  (40, "dept 4 - unassigned", "OR"),
-  (50, "dept 5 - unassigned", "NJ"),
-  (70, "dept 7", "FL")
+  (10, 'dept 1', 'CA'),
+  (20, 'dept 2', 'NY'),
+  (30, 'dept 3', 'TX'),
+  (40, 'dept 4 - unassigned', 'OR'),
+  (50, 'dept 5 - unassigned', 'NJ'),
+  (70, 'dept 7', 'FL')
 AS DEPT(dept_id, dept_name, state);
 
 CREATE TEMPORARY VIEW BONUS AS SELECT * FROM VALUES
-  ("emp 1", 10.00D),
-  ("emp 1", 20.00D),
-  ("emp 2", 300.00D),
-  ("emp 2", 100.00D),
-  ("emp 3", 300.00D),
-  ("emp 4", 100.00D),
-  ("emp 5", 1000.00D),
-  ("emp 6 - no dept", 500.00D)
+  ('emp 1', 10.00D),
+  ('emp 1', 20.00D),
+  ('emp 2', 300.00D),
+  ('emp 2', 100.00D),
+  ('emp 3', 300.00D),
+  ('emp 4', 100.00D),
+  ('emp 5', 1000.00D),
+  ('emp 6 - no dept', 500.00D)
 AS BONUS(emp_name, bonus_amt);
 
 CREATE TEMPORARY VIEW ADDRESS AS SELECT * FROM VALUES
-  (100, "emp 1", "addr1"),
-  (200, null, "addr2"),
-  (null, "emp 3", "addr3"),
-  (null, null, "addr4"),
-  (600, "emp 6", "addr6"),
-  (800, "emp 8", "addr8")
+  (100, 'emp 1', 'addr1'),
+  (200, null, 'addr2'),
+  (null, 'emp 3', 'addr3'),
+  (null, null, 'addr4'),
+  (600, 'emp 6', 'addr6'),
+  (800, 'emp 8', 'addr8')
 AS ADDRESS(id, emp_name, address);
 
 CREATE TEMPORARY VIEW S1 AS SELECT * FROM VALUES

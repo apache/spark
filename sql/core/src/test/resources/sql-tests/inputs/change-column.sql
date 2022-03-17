@@ -39,9 +39,9 @@ ALTER TABLE test_change CHANGE A COMMENT 'case insensitivity';
 DESC test_change;
 
 -- Change column can't apply to a temporary/global_temporary view
-CREATE TEMPORARY VIEW temp_view(a, b) AS SELECT 1, "one";
+CREATE TEMPORARY VIEW temp_view(a, b) AS SELECT 1, 'one';
 ALTER TABLE temp_view CHANGE a TYPE INT;
-CREATE GLOBAL TEMPORARY VIEW global_temp_view(a, b) AS SELECT 1, "one";
+CREATE GLOBAL TEMPORARY VIEW global_temp_view(a, b) AS SELECT 1, 'one';
 ALTER TABLE global_temp.global_temp_view CHANGE a TYPE INT;
 
 -- DROP TEST TABLE

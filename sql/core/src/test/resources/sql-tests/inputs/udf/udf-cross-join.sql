@@ -3,22 +3,22 @@
 -- This test file was converted from cross-join.sql.
 
 create temporary view nt1 as select * from values
-  ("one", 1),
-  ("two", 2),
-  ("three", 3)
+  ('one', 1),
+  ('two', 2),
+  ('three', 3)
   as nt1(k, v1);
 
 create temporary view nt2 as select * from values
-  ("one", 1),
-  ("two", 22),
-  ("one", 5)
+  ('one', 1),
+  ('two', 22),
+  ('one', 5)
   as nt2(k, v2);
 
 -- Cross joins with and without predicates
 SELECT * FROM nt1 cross join nt2;
 SELECT * FROM nt1 cross join nt2 where udf(nt1.k) = udf(nt2.k);
 SELECT * FROM nt1 cross join nt2 on (udf(nt1.k) = udf(nt2.k));
-SELECT * FROM nt1 cross join nt2 where udf(nt1.v1) = "1" and udf(nt2.v2) = "22";
+SELECT * FROM nt1 cross join nt2 where udf(nt1.v1) = '1' and udf(nt2.v2) = '22';
 
 SELECT udf(a.key), udf(b.key) FROM
 (SELECT udf(k) key FROM nt1 WHERE v1 < 2) a

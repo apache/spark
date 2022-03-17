@@ -826,7 +826,7 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
     sql(
       """CREATE TABLE t1(a string, b string)
       |ROW FORMAT SERDE 'org.apache.hive.hcatalog.data.JsonSerDe'""".stripMargin)
-    sql(s"""LOAD DATA LOCAL INPATH "$testData" INTO TABLE t1""")
+    sql(s"""LOAD DATA LOCAL INPATH '$testData' INTO TABLE t1""")
     sql("select * from src join t1 on src.key = t1.a")
     sql("DROP TABLE t1")
     assert(sql("list jars").
@@ -1518,7 +1518,7 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
       sql(
         """CREATE TABLE t(a string, b string)
           |ROW FORMAT SERDE 'org.apache.hive.hcatalog.data.JsonSerDe'""".stripMargin)
-      sql(s"""LOAD DATA LOCAL INPATH "$testData" INTO TABLE t""")
+      sql(s"""LOAD DATA LOCAL INPATH '$testData' INTO TABLE t""")
       sql("SELECT * FROM src JOIN t on src.key = t.a")
       assert(sql("LIST JARS").filter(_.getString(0).contains(
         s"org.apache.hive.hcatalog_hive-hcatalog-core-$hiveVersion.jar")).count() > 0)

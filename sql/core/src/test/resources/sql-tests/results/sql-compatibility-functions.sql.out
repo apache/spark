@@ -83,7 +83,7 @@ struct<1:float,1:double,1:decimal(10,0)>
 
 
 -- !query
-SELECT date("2014-04-04"), timestamp(date("2014-04-04"))
+SELECT date('2014-04-04'), timestamp(date('2014-04-04'))
 -- !query schema
 struct<2014-04-04:date,2014-04-04:timestamp>
 -- !query output
@@ -108,7 +108,7 @@ struct<>
 
 
 -- !query
-SELECT nvl(st.col1, "value"), count(*) FROM from tempView1 GROUP BY nvl(st.col1, "value")
+SELECT nvl(st.col1, 'value'), count(*) FROM from tempView1 GROUP BY nvl(st.col1, 'value')
 -- !query schema
 struct<nvl(st.col1, value):string,FROM:bigint>
 -- !query output

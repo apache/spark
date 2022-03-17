@@ -1,9 +1,9 @@
 create temporary view courseSales as select * from values
-  ("dotNET", 2012, 10000),
-  ("Java", 2012, 20000),
-  ("dotNET", 2012, 5000),
-  ("dotNET", 2013, 48000),
-  ("Java", 2013, 30000)
+  ('dotNET', 2012, 10000),
+  ('Java', 2012, 20000),
+  ('dotNET', 2012, 5000),
+  ('dotNET', 2013, 48000),
+  ('Java', 2013, 30000)
   as courseSales(course, year, earnings);
 
 create temporary view years as select * from values
@@ -291,7 +291,7 @@ PIVOT (
 -- grouping columns output in the same order as input
 -- correctly handle pivot columns with different cases
 SELECT * FROM (
-  SELECT course, earnings, "a" as a, "z" as z, "b" as b, "y" as y, "c" as c, "x" as x, "d" as d, "w" as w
+  SELECT course, earnings, 'a' as a, 'z' as z, 'b' as b, 'y' as y, 'c' as c, 'x' as x, 'd' as d, 'w' as w
   FROM courseSales
 )
 PIVOT (

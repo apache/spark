@@ -66,11 +66,11 @@ select 0.3 F, 0.4 D, 0.5 BD;
 select 123456789012345678901234567890123456789e10d, 123456789012345678901234567890123456789.1e10d;
 
 -- string
-select "Hello Peter!", 'hello lee!';
+select 'Hello Peter!', 'hello lee!';
 -- multi string
-select 'hello' 'world', 'hello' " " 'lee';
+select 'hello' 'world', 'hello' ' ' 'lee';
 -- single quote within double quotes
-select "hello 'peter'";
+select 'hello \'peter\'';
 select 'pattern%', 'no-pattern\%', 'pattern\\%', 'pattern\\\%';
 select '\'', '"', '\n', '\r', '\t', 'Z';
 -- "Hello!" in octals

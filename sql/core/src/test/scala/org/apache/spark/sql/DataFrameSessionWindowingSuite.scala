@@ -281,7 +281,7 @@ class DataFrameSessionWindowingSuite extends QueryTest with SharedSparkSession
   test("time window in SQL with single string expression") {
     withTempTable { table =>
       checkAnswer(
-        spark.sql(s"""select session_window(time, "10 seconds"), value from $table""")
+        spark.sql(s"""select session_window(time, '10 seconds'), value from $table""")
           .select($"session_window.start".cast(StringType), $"session_window.end".cast(StringType),
             $"value"),
         Seq(
@@ -344,8 +344,8 @@ class DataFrameSessionWindowingSuite extends QueryTest with SharedSparkSession
 
       checkAnswer(
         spark.sql("select session_window(time, " +
-          """case when value = 1 then "2 seconds" when value = 2 then "10 seconds" """ +
-          s"""else "20 seconds" end), value from $table""")
+          "case when value = 1 then '2 seconds' when value = 2 then '10 seconds' " +
+          s"else '20 seconds' end), value from $table")
           .select($"session_window.start".cast(StringType), $"session_window.end".cast(StringType),
             $"value"),
         Seq(
@@ -398,8 +398,8 @@ class DataFrameSessionWindowingSuite extends QueryTest with SharedSparkSession
     withTempTable { table =>
       checkAnswer(
         spark.sql("select session_window(time, " +
-          """case when value = 1 then "2 seconds" when value = 2 then "invalid gap duration" """ +
-          s"""else "20 seconds" end), value from $table""")
+          "case when value = 1 then '2 seconds' when value = 2 then 'invalid gap duration' " +
+          s"else '20 seconds' end), value from $table")
           .select($"session_window.start".cast(StringType), $"session_window.end".cast(StringType),
             $"value"),
         Seq(

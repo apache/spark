@@ -741,10 +741,10 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
       s"""
          |SELECT
          | to_json(
-         |   named_struct('time', timestamp'$s'), map('timestampFormat', "$p")
+         |   named_struct('time', timestamp'$s'), map('timestampFormat', '$p')
          | )
          | """.stripMargin)
-    checkAnswer(toDF("yyyy-MM-dd'T'HH:mm:ss.SSSXXX"), toDF("yyyy-MM-dd'T'HH:mm:ss[.SSS][XXX]"))
+    checkAnswer(toDF("yyyy-MM-dd\'T\'HH:mm:ss.SSSXXX"), toDF("yyyy-MM-dd\'T\'HH:mm:ss[.SSS][XXX]"))
   }
 
   test("SPARK-33134: return partial results only for root JSON objects") {

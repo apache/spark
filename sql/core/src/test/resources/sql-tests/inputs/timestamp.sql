@@ -81,25 +81,25 @@ select to_timestamp('2019-10-06 10:11:12.123', 'yyyy-MM-dd HH:mm:ss[.SSSSSS]');
 select to_timestamp('2019-10-06 10:11:12', 'yyyy-MM-dd HH:mm:ss[.SSSSSS]');
 select to_timestamp('2019-10-06 10:11:12.12', 'yyyy-MM-dd HH:mm[:ss.SSSSSS]');
 select to_timestamp('2019-10-06 10:11', 'yyyy-MM-dd HH:mm[:ss.SSSSSS]');
-select to_timestamp("2019-10-06S10:11:12.12345", "yyyy-MM-dd'S'HH:mm:ss.SSSSSS");
-select to_timestamp("12.12342019-10-06S10:11", "ss.SSSSyyyy-MM-dd'S'HH:mm");
-select to_timestamp("12.1232019-10-06S10:11", "ss.SSSSyyyy-MM-dd'S'HH:mm");
-select to_timestamp("12.1232019-10-06S10:11", "ss.SSSSyy-MM-dd'S'HH:mm");
-select to_timestamp("12.1234019-10-06S10:11", "ss.SSSSy-MM-dd'S'HH:mm");
+select to_timestamp('2019-10-06S10:11:12.12345', 'yyyy-MM-dd\'S\'HH:mm:ss.SSSSSS');
+select to_timestamp('12.12342019-10-06S10:11', 'ss.SSSSyyyy-MM-dd\'S\'HH:mm');
+select to_timestamp('12.1232019-10-06S10:11', 'ss.SSSSyyyy-MM-dd\'S\'HH:mm');
+select to_timestamp('12.1232019-10-06S10:11', 'ss.SSSSyy-MM-dd\'S\'HH:mm');
+select to_timestamp('12.1234019-10-06S10:11', 'ss.SSSSy-MM-dd\'S\'HH:mm');
 
-select to_timestamp("2019-10-06S", "yyyy-MM-dd'S'");
-select to_timestamp("S2019-10-06", "'S'yyyy-MM-dd");
+select to_timestamp('2019-10-06S', 'yyyy-MM-dd\'S\'');
+select to_timestamp('S2019-10-06', '\'S\'yyyy-MM-dd');
 
-select to_timestamp("2019-10-06T10:11:12'12", "yyyy-MM-dd'T'HH:mm:ss''SSSS"); -- middle
-select to_timestamp("2019-10-06T10:11:12'", "yyyy-MM-dd'T'HH:mm:ss''"); -- tail
-select to_timestamp("'2019-10-06T10:11:12", "''yyyy-MM-dd'T'HH:mm:ss"); -- head
-select to_timestamp("P2019-10-06T10:11:12", "'P'yyyy-MM-dd'T'HH:mm:ss"); -- head but as single quote
+select to_timestamp('2019-10-06T10:11:12\'12', 'yyyy-MM-dd\'T\'HH:mm:ss\'\'SSSS'); -- middle
+select to_timestamp('2019-10-06T10:11:12\'', 'yyyy-MM-dd\'T\'HH:mm:ss\'\''); -- tail
+select to_timestamp('\'2019-10-06T10:11:12', '\'\'yyyy-MM-dd\'T\'HH:mm:ss'); -- head
+select to_timestamp('P2019-10-06T10:11:12', '\'P\'yyyy-MM-dd\'T\'HH:mm:ss'); -- head but as single quote
 
 -- missing fields
-select to_timestamp("16", "dd");
-select to_timestamp("02-29", "MM-dd");
-select to_timestamp("2019 40", "yyyy mm");
-select to_timestamp("2019 10:10:10", "yyyy hh:mm:ss");
+select to_timestamp('16', 'dd');
+select to_timestamp('02-29', 'MM-dd');
+select to_timestamp('2019 40', 'yyyy mm');
+select to_timestamp('2019 10:10:10', 'yyyy hh:mm:ss');
 
 -- timestamp - timestamp
 select timestamp'2011-11-11 11:11:11' - timestamp'2011-11-11 11:11:10';

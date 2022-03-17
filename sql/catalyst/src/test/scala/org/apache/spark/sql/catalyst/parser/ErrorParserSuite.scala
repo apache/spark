@@ -182,7 +182,7 @@ class ErrorParserSuite extends AnalysisTest {
     intercept("SHOW COLUMNS IN t FROM test-db", 1, 27, 28, msg + " test-db")
     intercept("DESC SCHEMA EXTENDED test-db", 1, 25, 26, msg + " test-db")
     intercept("ANALYZE TABLE test-table PARTITION (part1)", 1, 18, 19, msg + " test-table")
-    intercept("LOAD DATA INPATH \"path\" INTO TABLE my-tab", 1, 37, 38, msg + " my-tab")
+    intercept("LOAD DATA INPATH 'path' INTO TABLE my-tab", 1, 37, 38, msg + " my-tab")
   }
 
   test("hyphen in identifier - DML tests") {

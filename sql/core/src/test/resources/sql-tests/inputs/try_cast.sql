@@ -46,9 +46,9 @@ select TRY_CAST('false' as boolean);
 select TRY_CAST('abc' as boolean);
 
 -- TRY_CAST string to date
-SELECT TRY_CAST("2021-01-01" AS date);
-SELECT TRY_CAST("2021-101-01" AS date);
+SELECT TRY_CAST('2021-01-01' AS date);
+SELECT TRY_CAST('2021-101-01' AS date);
 
 -- TRY_CAST string to timestamp
-SELECT TRY_CAST("2021-01-01 00:00:00" AS timestamp);
-SELECT TRY_CAST("2021-101-01 00:00:00" AS timestamp);
+SELECT TRY_CAST('2021-01-01 00:00:00' AS timestamp);
+SELECT TRY_CAST('2021-101-01 00:00:00' AS timestamp);

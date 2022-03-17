@@ -131,7 +131,7 @@ trait ShowCreateTableSuiteBase extends QueryTest with DDLCommandTestUtils {
       sql(
         s"""CREATE TABLE $t
            |USING json
-           |AS SELECT 1 AS a, "foo" AS b
+           |AS SELECT 1 AS a, 'foo' AS b
          """.stripMargin
       )
       val expected = s"CREATE TABLE $fullName ( a INT, b STRING) USING json"
@@ -145,7 +145,7 @@ trait ShowCreateTableSuiteBase extends QueryTest with DDLCommandTestUtils {
         s"""CREATE TABLE $t
            |USING json
            |PARTITIONED BY (b)
-           |AS SELECT 1 AS a, "foo" AS b
+           |AS SELECT 1 AS a, 'foo' AS b
          """.stripMargin
       )
       val expected = s"CREATE TABLE $fullName ( a INT, b STRING) USING json PARTITIONED BY (b)"
@@ -159,7 +159,7 @@ trait ShowCreateTableSuiteBase extends QueryTest with DDLCommandTestUtils {
         s"""CREATE TABLE $t
            |USING json
            |COMMENT 'This is a comment'
-           |AS SELECT 1 AS a, "foo" AS b, 2.5 AS c
+           |AS SELECT 1 AS a, 'foo' AS b, 2.5 AS c
          """.stripMargin
       )
       val expected = s"CREATE TABLE $fullName ( a INT, b STRING, c DECIMAL(2,1)) USING json" +
@@ -174,7 +174,7 @@ trait ShowCreateTableSuiteBase extends QueryTest with DDLCommandTestUtils {
         s"""CREATE TABLE $t
            |USING json
            |TBLPROPERTIES ('a' = '1')
-           |AS SELECT 1 AS a, "foo" AS b, 2.5 AS c
+           |AS SELECT 1 AS a, 'foo' AS b, 2.5 AS c
          """.stripMargin
       )
       val expected = s"CREATE TABLE $fullName ( a INT, b STRING, c DECIMAL(2,1)) USING json" +

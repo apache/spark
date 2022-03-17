@@ -203,7 +203,7 @@ NULL
 
 
 -- !query
-SELECT TRY_CAST("2021-01-01" AS date)
+SELECT TRY_CAST('2021-01-01' AS date)
 -- !query schema
 struct<TRY_CAST(2021-01-01 AS DATE):date>
 -- !query output
@@ -211,7 +211,7 @@ struct<TRY_CAST(2021-01-01 AS DATE):date>
 
 
 -- !query
-SELECT TRY_CAST("2021-101-01" AS date)
+SELECT TRY_CAST('2021-101-01' AS date)
 -- !query schema
 struct<TRY_CAST(2021-101-01 AS DATE):date>
 -- !query output
@@ -219,7 +219,7 @@ NULL
 
 
 -- !query
-SELECT TRY_CAST("2021-01-01 00:00:00" AS timestamp)
+SELECT TRY_CAST('2021-01-01 00:00:00' AS timestamp)
 -- !query schema
 struct<TRY_CAST(2021-01-01 00:00:00 AS TIMESTAMP):timestamp>
 -- !query output
@@ -227,7 +227,7 @@ struct<TRY_CAST(2021-01-01 00:00:00 AS TIMESTAMP):timestamp>
 
 
 -- !query
-SELECT TRY_CAST("2021-101-01 00:00:00" AS timestamp)
+SELECT TRY_CAST('2021-101-01 00:00:00' AS timestamp)
 -- !query schema
 struct<TRY_CAST(2021-101-01 00:00:00 AS TIMESTAMP):timestamp>
 -- !query output

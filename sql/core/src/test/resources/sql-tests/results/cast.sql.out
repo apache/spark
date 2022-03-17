@@ -284,7 +284,7 @@ struct<CAST(interval 3 month 1 hour AS INTERVAL):interval>
 
 
 -- !query
-SELECT CAST("interval '3-1' year to month" AS interval year to month)
+SELECT CAST('interval \'3-1\' year to month' AS interval year to month)
 -- !query schema
 struct<CAST(interval '3-1' year to month AS INTERVAL YEAR TO MONTH):interval year to month>
 -- !query output
@@ -292,7 +292,7 @@ struct<CAST(interval '3-1' year to month AS INTERVAL YEAR TO MONTH):interval yea
 
 
 -- !query
-SELECT CAST("interval '3 00:00:01' day to second" AS interval day to second)
+SELECT CAST('interval \'3 00:00:01\' day to second' AS interval day to second)
 -- !query schema
 struct<CAST(interval '3 00:00:01' day to second AS INTERVAL DAY TO SECOND):interval day to second>
 -- !query output
@@ -437,7 +437,8 @@ NULL
 select cast('\t\t true \n\r ' as boolean)
 -- !query schema
 struct<CAST(		 true 
-  AS BOOLEAN):boolean>
+
+  AS BOOLEAN):boolean>
 -- !query output
 true
 
@@ -446,7 +447,8 @@ true
 select cast('\t\n false \t\r' as boolean)
 -- !query schema
 struct<CAST(	
- false 	 AS BOOLEAN):boolean>
+ false 	
+ AS BOOLEAN):boolean>
 -- !query output
 false
 
@@ -455,6 +457,7 @@ false
 select cast('\t\n xyz \t\r' as boolean)
 -- !query schema
 struct<CAST(	
- xyz 	 AS BOOLEAN):boolean>
+ xyz 	
+ AS BOOLEAN):boolean>
 -- !query output
 NULL

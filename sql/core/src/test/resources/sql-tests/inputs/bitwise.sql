@@ -35,7 +35,7 @@ select bit_count(9223372036854775807L);
 select bit_count(-9223372036854775808L);
 
 -- other illegal arguments
-select bit_count("bit count");
+select bit_count('bit count');
 select bit_count('a');
 
 -- test for bit_xor

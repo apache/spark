@@ -4,11 +4,11 @@
 
 -- !query
 create temporary view courseSales as select * from values
-  ("dotNET", 2012, 10000),
-  ("Java", 2012, 20000),
-  ("dotNET", 2012, 5000),
-  ("dotNET", 2013, 48000),
-  ("Java", 2013, 30000)
+  ('dotNET', 2012, 10000),
+  ('Java', 2012, 20000),
+  ('dotNET', 2012, 5000),
+  ('dotNET', 2013, 48000),
+  ('Java', 2013, 30000)
   as courseSales(course, year, earnings)
 -- !query schema
 struct<>
@@ -446,8 +446,8 @@ Invalid pivot column 'named_struct(course, course#x, m, m#x)'. Pivot columns mus
 
 -- !query
 SELECT * FROM (
-  SELECT course, earnings, udf("a") as a, udf("z") as z, udf("b") as b, udf("y") as y,
-  udf("c") as c, udf("x") as x, udf("d") as d, udf("w") as w
+  SELECT course, earnings, udf('a') as a, udf('z') as z, udf('b') as b, udf('y') as y,
+  udf('c') as c, udf('x') as x, udf('d') as d, udf('w') as w
   FROM courseSales
 )
 PIVOT (

@@ -159,7 +159,7 @@ SELECT some(1S);
 SELECT any(1L);
 
 -- input type checking String
-SELECT every("true");
+SELECT every('true');
 
 -- input type checking Decimal
 SELECT bool_and(1.0);

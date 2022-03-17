@@ -26,7 +26,7 @@ SELECT col1, col2 FROM (SELECT 1 AS a, 1 AS b) t(col1, col2);
 SELECT t.col1, t.col2 FROM (SELECT 1 AS a, 1 AS b) t(col1, col2);
 
 -- Aliases for join relations in FROM clause
-CREATE OR REPLACE TEMPORARY VIEW src1 AS SELECT * FROM VALUES (1, "a"), (2, "b"), (3, "c") AS src1(id, v1);
+CREATE OR REPLACE TEMPORARY VIEW src1 AS SELECT * FROM VALUES (1, 'a'), (2, 'b'), (3, 'c') AS src1(id, v1);
 
 CREATE OR REPLACE TEMPORARY VIEW src2 AS SELECT * FROM VALUES (2, 1.0), (3, 3.2), (1, 8.5) AS src2(id, v2);
 

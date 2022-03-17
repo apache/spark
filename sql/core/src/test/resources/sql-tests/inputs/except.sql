@@ -1,16 +1,16 @@
 -- Tests different scenarios of except operation
 create temporary view t1 as select * from values
-  ("one", 1),
-  ("two", 2),
-  ("three", 3),
-  ("one", NULL)
+  ('one', 1),
+  ('two', 2),
+  ('three', 3),
+  ('one', NULL)
   as t1(k, v);
 
 create temporary view t2 as select * from values
-  ("one", 1),
-  ("two", 22),
-  ("one", 5),
-  ("one", NULL),
+  ('one', 1),
+  ('two', 22),
+  ('one', 5),
+  ('one', NULL),
   (NULL, 5)
   as t2(k, v);
 

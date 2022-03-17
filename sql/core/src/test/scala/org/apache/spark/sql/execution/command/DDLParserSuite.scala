@@ -363,7 +363,7 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
       """
         |CREATE OR REPLACE VIEW view1
         |(col1, col3 COMMENT 'hello')
-        |TBLPROPERTIES('prop1Key'="prop1Val")
+        |TBLPROPERTIES('prop1Key'='prop1Val')
         |COMMENT 'BLABLA'
         |AS SELECT * FROM tab1
       """.stripMargin
@@ -418,7 +418,7 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
       """.stripMargin
     }
     val sql1 = createViewStatement("COMMENT 'BLABLA'")
-    val sql2 = createViewStatement("TBLPROPERTIES('prop1Key'=\"prop1Val\")")
+    val sql2 = createViewStatement("TBLPROPERTIES('prop1Key'='prop1Val')")
     intercept(sql1, "Found duplicate clauses: COMMENT")
     intercept(sql2, "Found duplicate clauses: TBLPROPERTIES")
   }
@@ -494,7 +494,7 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
       sql = """
               |CREATE OR REPLACE TEMPORARY VIEW a.b.c
               |(col1, col3 COMMENT 'hello')
-              |TBLPROPERTIES('prop1Key'="prop1Val")
+              |TBLPROPERTIES('prop1Key'='prop1Val')
               |AS SELECT * FROM tab1
       """.stripMargin,
       containsThesePhrases = Seq("TBLPROPERTIES can't coexist with CREATE TEMPORARY VIEW"))

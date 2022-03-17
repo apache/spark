@@ -147,7 +147,7 @@ struct<bit_count(-9223372036854775808):int>
 
 
 -- !query
-select bit_count("bit count")
+select bit_count('bit count')
 -- !query schema
 struct<>
 -- !query output

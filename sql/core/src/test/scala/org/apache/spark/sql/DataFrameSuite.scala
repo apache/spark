@@ -864,7 +864,7 @@ class DataFrameSuite extends QueryTest
     val df = spark.sparkContext
       .parallelize(Seq(StringWrapper("a"), StringWrapper("b"), StringWrapper("c")))
       .toDF()
-    val filtered = df.where("s = \"a\"")
+    val filtered = df.where("s = 'a'")
     checkAnswer(filtered, spark.sparkContext.parallelize(Seq(StringWrapper("a"))).toDF)
   }
 
@@ -874,7 +874,7 @@ class DataFrameSuite extends QueryTest
         (StringWrapper("a1"), StringWrapper("a2")),
         (StringWrapper("b1"), StringWrapper("b2"))))
       .toDF()
-    val filtered = df.where("_2.s = \"a2\"")
+    val filtered = df.where("_2.s = 'a2'")
     checkAnswer(filtered,
       spark.sparkContext.parallelize(Seq((StringWrapper("a1"), StringWrapper("a2")))).toDF)
   }
@@ -885,7 +885,7 @@ class DataFrameSuite extends QueryTest
         (StringWrapper("a1"), StringWrapper("a2"), StringWrapper("a3")),
         (StringWrapper("b1"), StringWrapper("b2"), StringWrapper("b3"))))
       .toDF()
-    val filtered = df.where("_3.s = \"a3\"")
+    val filtered = df.where("_3.s = 'a3'")
     checkAnswer(filtered,
       spark.sparkContext.parallelize(
         Seq((StringWrapper("a1"), StringWrapper("a2"), StringWrapper("a3")))).toDF)
@@ -906,7 +906,7 @@ class DataFrameSuite extends QueryTest
 
     val df = spark.sparkContext.parallelize(Seq(a, b)).toDF
     // flat value class, `s` field is not in schema
-    val filtered = df.where("wrapper = \"a\"")
+    val filtered = df.where("wrapper = 'a'")
     checkAnswer(filtered, spark.sparkContext.parallelize(Seq(a)).toDF)
   }
 

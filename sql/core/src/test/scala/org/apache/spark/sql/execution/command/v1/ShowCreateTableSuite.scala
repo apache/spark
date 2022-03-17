@@ -86,7 +86,7 @@ trait ShowCreateTableSuiteBase extends command.ShowCreateTableSuiteBase
         s"""CREATE TABLE $t
            |USING json
            |CLUSTERED BY (a) INTO 2 BUCKETS
-           |AS SELECT 1 AS a, "foo" AS b
+           |AS SELECT 1 AS a, 'foo' AS b
          """.stripMargin
       )
       val expected = s"CREATE TABLE $fullName ( a INT, b STRING) USING json" +
@@ -101,7 +101,7 @@ trait ShowCreateTableSuiteBase extends command.ShowCreateTableSuiteBase
         s"""CREATE TABLE $t
            |USING json
            |CLUSTERED BY (a) SORTED BY (b) INTO 2 BUCKETS
-           |AS SELECT 1 AS a, "foo" AS b
+           |AS SELECT 1 AS a, 'foo' AS b
          """.stripMargin
       )
       val expected = s"CREATE TABLE $fullName ( a INT, b STRING) USING json" +
@@ -117,7 +117,7 @@ trait ShowCreateTableSuiteBase extends command.ShowCreateTableSuiteBase
            |USING json
            |PARTITIONED BY (c)
            |CLUSTERED BY (a) INTO 2 BUCKETS
-           |AS SELECT 1 AS a, "foo" AS b, 2.5 AS c
+           |AS SELECT 1 AS a, 'foo' AS b, 2.5 AS c
          """.stripMargin
       )
       val expected = s"CREATE TABLE $fullName ( a INT, b STRING, c DECIMAL(2,1)) USING json" +
@@ -133,7 +133,7 @@ trait ShowCreateTableSuiteBase extends command.ShowCreateTableSuiteBase
            |USING json
            |PARTITIONED BY (c)
            |CLUSTERED BY (a) SORTED BY (b) INTO 2 BUCKETS
-           |AS SELECT 1 AS a, "foo" AS b, 2.5 AS c
+           |AS SELECT 1 AS a, 'foo' AS b, 2.5 AS c
          """.stripMargin
       )
       val expected = s"CREATE TABLE $fullName ( a INT, b STRING, c DECIMAL(2,1)) USING json" +

@@ -5,7 +5,7 @@ set hive.test.mode.nosamplelist=exim_department,exim_employee;
 create table exim_department ( dep_id int comment "department id") 	
 	stored as textfile	
 	tblproperties("creator"="krishna");
-load data local inpath "../../data/files/test.dat" into table exim_department;		
+load data local inpath '../../data/files/test.dat' into table exim_department;
 dfs ${system:test.dfs.mkdir} ${system:test.tmp.dir}/ql/test/data/exports/exim_department/temp;
 dfs -rmr ${system:test.tmp.dir}/ql/test/data/exports/exim_department;
 export table exim_department to 'ql/test/data/exports/exim_department';

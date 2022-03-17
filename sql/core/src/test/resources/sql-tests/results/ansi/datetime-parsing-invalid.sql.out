@@ -165,7 +165,7 @@ You may get a different result due to the upgrading to Spark >= 3.0: Fail to par
 
 
 -- !query
-select to_date("2020-01-27T20:06:11.847", "yyyy-MM-dd HH:mm:ss.SSS")
+select to_date('2020-01-27T20:06:11.847', 'yyyy-MM-dd HH:mm:ss.SSS')
 -- !query schema
 struct<>
 -- !query output
@@ -174,7 +174,7 @@ Text '2020-01-27T20:06:11.847' could not be parsed at index 10. If necessary set
 
 
 -- !query
-select to_date("Unparseable", "yyyy-MM-dd HH:mm:ss.SSS")
+select to_date('Unparseable', 'yyyy-MM-dd HH:mm:ss.SSS')
 -- !query schema
 struct<>
 -- !query output
@@ -183,7 +183,7 @@ Text 'Unparseable' could not be parsed at index 0. If necessary set spark.sql.an
 
 
 -- !query
-select to_timestamp("2020-01-27T20:06:11.847", "yyyy-MM-dd HH:mm:ss.SSS")
+select to_timestamp('2020-01-27T20:06:11.847', 'yyyy-MM-dd HH:mm:ss.SSS')
 -- !query schema
 struct<>
 -- !query output
@@ -192,7 +192,7 @@ Text '2020-01-27T20:06:11.847' could not be parsed at index 10. If necessary set
 
 
 -- !query
-select to_timestamp("Unparseable", "yyyy-MM-dd HH:mm:ss.SSS")
+select to_timestamp('Unparseable', 'yyyy-MM-dd HH:mm:ss.SSS')
 -- !query schema
 struct<>
 -- !query output
@@ -201,7 +201,7 @@ Text 'Unparseable' could not be parsed at index 0. If necessary set spark.sql.an
 
 
 -- !query
-select unix_timestamp("2020-01-27T20:06:11.847", "yyyy-MM-dd HH:mm:ss.SSS")
+select unix_timestamp('2020-01-27T20:06:11.847', 'yyyy-MM-dd HH:mm:ss.SSS')
 -- !query schema
 struct<>
 -- !query output
@@ -210,7 +210,7 @@ Text '2020-01-27T20:06:11.847' could not be parsed at index 10. If necessary set
 
 
 -- !query
-select unix_timestamp("Unparseable", "yyyy-MM-dd HH:mm:ss.SSS")
+select unix_timestamp('Unparseable', 'yyyy-MM-dd HH:mm:ss.SSS')
 -- !query schema
 struct<>
 -- !query output
@@ -219,7 +219,7 @@ Text 'Unparseable' could not be parsed at index 0. If necessary set spark.sql.an
 
 
 -- !query
-select to_unix_timestamp("2020-01-27T20:06:11.847", "yyyy-MM-dd HH:mm:ss.SSS")
+select to_unix_timestamp('2020-01-27T20:06:11.847', 'yyyy-MM-dd HH:mm:ss.SSS')
 -- !query schema
 struct<>
 -- !query output
@@ -228,7 +228,7 @@ Text '2020-01-27T20:06:11.847' could not be parsed at index 10. If necessary set
 
 
 -- !query
-select to_unix_timestamp("Unparseable", "yyyy-MM-dd HH:mm:ss.SSS")
+select to_unix_timestamp('Unparseable', 'yyyy-MM-dd HH:mm:ss.SSS')
 -- !query schema
 struct<>
 -- !query output
@@ -237,7 +237,7 @@ Text 'Unparseable' could not be parsed at index 0. If necessary set spark.sql.an
 
 
 -- !query
-select cast("Unparseable" as timestamp)
+select cast('Unparseable' as timestamp)
 -- !query schema
 struct<>
 -- !query output
@@ -246,7 +246,7 @@ Cannot cast Unparseable to TimestampType. To return NULL instead, use 'try_cast'
 
 
 -- !query
-select cast("Unparseable" as date)
+select cast('Unparseable' as date)
 -- !query schema
 struct<>
 -- !query output

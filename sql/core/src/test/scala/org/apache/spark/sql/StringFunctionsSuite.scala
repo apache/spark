@@ -251,7 +251,7 @@ class StringFunctionsSuite extends QueryTest with SharedSparkSession {
   test("string translate") {
     val df = Seq(("translate", "")).toDF("a", "b")
     checkAnswer(df.select(translate($"a", "rnlt", "123")), Row("1a2s3ae"))
-    checkAnswer(df.selectExpr("""translate(a, "rnlt", "")"""), Row("asae"))
+    checkAnswer(df.selectExpr("translate(a, 'rnlt', '')"), Row("asae"))
   }
 
   test("string trim functions") {

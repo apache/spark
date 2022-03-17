@@ -96,7 +96,7 @@ struct<col1:int,col2:int>
 
 
 -- !query
-CREATE OR REPLACE TEMPORARY VIEW src1 AS SELECT * FROM VALUES (1, "a"), (2, "b"), (3, "c") AS src1(id, v1)
+CREATE OR REPLACE TEMPORARY VIEW src1 AS SELECT * FROM VALUES (1, 'a'), (2, 'b'), (3, 'c') AS src1(id, v1)
 -- !query schema
 struct<>
 -- !query output

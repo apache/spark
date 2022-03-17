@@ -61,7 +61,7 @@ struct<locate(bar, foobarbar, 1):int,position(NULL, foobarbar, 1):int,position(a
 
 
 -- !query
-select left("abcd", 2), left("abcd", 5), left("abcd", '2'), left("abcd", null)
+select left('abcd', 2), left('abcd', 5), left('abcd', '2'), left('abcd', null)
 -- !query schema
 struct<left(abcd, 2):string,left(abcd, 5):string,left(abcd, 2):string,left(abcd, NULL):string>
 -- !query output
@@ -77,7 +77,7 @@ NULL
 
 
 -- !query
-select left("abcd", -2), left("abcd", 0), left("abcd", 'a')
+select left('abcd', -2), left('abcd', 0), left('abcd', 'a')
 -- !query schema
 struct<left(abcd, -2):string,left(abcd, 0):string,left(abcd, a):string>
 -- !query output
@@ -85,7 +85,7 @@ struct<left(abcd, -2):string,left(abcd, 0):string,left(abcd, a):string>
 
 
 -- !query
-select right("abcd", 2), right("abcd", 5), right("abcd", '2'), right("abcd", null)
+select right('abcd', 2), right('abcd', 5), right('abcd', '2'), right('abcd', null)
 -- !query schema
 struct<right(abcd, 2):string,right(abcd, 5):string,right(abcd, 2):string,right(abcd, NULL):string>
 -- !query output
@@ -101,7 +101,7 @@ NULL
 
 
 -- !query
-select right("abcd", -2), right("abcd", 0), right("abcd", 'a')
+select right('abcd', -2), right('abcd', 0), right('abcd', 'a')
 -- !query schema
 struct<right(abcd, -2):string,right(abcd, 0):string,right(abcd, a):string>
 -- !query output
@@ -221,7 +221,7 @@ k
 
 
 -- !query
-SELECT trim(" xyz "), ltrim(" xyz "), rtrim(" xyz ")
+SELECT trim(' xyz '), ltrim(' xyz '), rtrim(' xyz ')
 -- !query schema
 struct<trim( xyz ):string,ltrim( xyz ):string,rtrim( xyz ):string>
 -- !query output
@@ -301,7 +301,7 @@ trim
 
 
 -- !query
-SELECT btrim(encode(" xyz ", 'utf-8'))
+SELECT btrim(encode(' xyz ', 'utf-8'))
 -- !query schema
 struct<btrim(encode( xyz , utf-8)):string>
 -- !query output

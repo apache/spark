@@ -136,7 +136,7 @@ SELECT some(udf(1S));
 SELECT any(udf(1L));
 
 -- input type checking String
-SELECT udf(every("true"));
+SELECT udf(every('true'));
 
 -- every/some/any aggregates are supported as windows expression.
 SELECT k, v, every(v) OVER (PARTITION BY k ORDER BY v) FROM test_agg;

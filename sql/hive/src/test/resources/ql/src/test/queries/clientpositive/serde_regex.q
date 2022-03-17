@@ -31,8 +31,8 @@ WITH SERDEPROPERTIES (
 )
 STORED AS TEXTFILE;
 
-LOAD DATA LOCAL INPATH "../../data/files/apache.access.log" INTO TABLE serde_regex;
-LOAD DATA LOCAL INPATH "../../data/files/apache.access.2.log" INTO TABLE serde_regex;
+LOAD DATA LOCAL INPATH '../../data/files/apache.access.log' INTO TABLE serde_regex;
+LOAD DATA LOCAL INPATH '../../data/files/apache.access.2.log' INTO TABLE serde_regex;
 
 SELECT * FROM serde_regex ORDER BY time;
 
@@ -59,7 +59,7 @@ WITH SERDEPROPERTIES (
 )
 STORED AS TEXTFILE;
 
-LOAD DATA LOCAL INPATH "../../data/files/kv7.txt" INTO TABLE serde_regex1;
+LOAD DATA LOCAL INPATH '../../data/files/kv7.txt' INTO TABLE serde_regex1;
 
 SELECT key, value FROM serde_regex1 ORDER BY key, value;
 

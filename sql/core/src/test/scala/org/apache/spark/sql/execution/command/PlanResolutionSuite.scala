@@ -2037,10 +2037,10 @@ class PlanResolutionSuite extends AnalysisTest {
 
   test("Test CTAS #5") {
     val s5 = """CREATE TABLE ctas2
-               | ROW FORMAT SERDE "org.apache.hadoop.hive.serde2.columnar.ColumnarSerDe"
-               | WITH SERDEPROPERTIES("serde_p1"="p1","serde_p2"="p2")
+               | ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.columnar.ColumnarSerDe'
+               | WITH SERDEPROPERTIES('serde_p1'='p1','serde_p2'='p2')
                | STORED AS RCFile
-               | TBLPROPERTIES("tbl_p1"="p11", "tbl_p2"="p22")
+               | TBLPROPERTIES('tbl_p1'='p11', 'tbl_p2'='p22')
                | AS
                |   SELECT key, value
                |   FROM src

@@ -1243,15 +1243,15 @@ class PlanParserSuite extends AnalysisTest {
         |SELECT TRANSFORM(a, b, c)
         |  ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.OpenCSVSerde'
         |  WITH SERDEPROPERTIES(
-        |    "separatorChar" = "\t",
-        |    "quoteChar" = "'",
-        |    "escapeChar" = "\\")
+        |    'separatorChar' = '\t',
+        |    'quoteChar' = '\'',
+        |    'escapeChar' = '\\')
         |  USING 'cat' AS (a, b, c)
         |  ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.OpenCSVSerde'
         |  WITH SERDEPROPERTIES(
-        |    "separatorChar" = "\t",
-        |    "quoteChar" = "'",
-        |    "escapeChar" = "\\")
+        |    'separatorChar' = '\t',
+        |    'quoteChar' = '\'',
+        |    'escapeChar' = '\\')
         |FROM testData
       """.stripMargin,
       "TRANSFORM with serde is only supported in hive mode")
