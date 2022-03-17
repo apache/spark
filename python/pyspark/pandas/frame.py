@@ -51,7 +51,7 @@ import datetime
 
 import numpy as np
 import pandas as pd
-from pandas.api.types import is_list_like, is_dict_like, is_scalar  # type: ignore[attr-defined]
+from pandas.api.types import is_bool_dtype, is_list_like, is_dict_like, is_scalar  # type: ignore[attr-defined]
 from pandas.tseries.frequencies import DateOffset, to_offset
 
 if TYPE_CHECKING:
@@ -10066,7 +10066,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         )
 
     # TODO: axis, skipna, and many arguments should be implemented.
-    def all(self, axis: Axis = 0) -> "Series":
+    def all(self, axis: Axis = 0, bool_only: Optional[bool] = None) -> "Series":
         """
         Return whether all elements are True.
 
@@ -10080,6 +10080,10 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
             * 0 / 'index' : reduce the index, return a Series whose index is the
               original column labels.
+
+        bool_only : bool, default None
+            Include only boolean columns. If None, will attempt to use everything,
+            then use only boolean data. Not implemented for Series.
 
         Returns
         -------
@@ -10117,6 +10121,21 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         applied = []
         column_labels = self._internal.column_labels
+
+        if bool_only:
+            bool_column_labels = []
+            for label in column_labels:
+                psser = self._psser_for(label)
+                if is_bool_dtype(psser):
+                    # Rely on dtype rather than spark type because
+                    # columns that consist of bools and Nones should be excluded
+                    # if bool_only is True
+                    bool_column_labels.append(label)
+            column_labels = bool_column_labels
+
+        if len(column_labels) == 0:
+            return ps.Series([], dtype=bool)
+
         for label in column_labels:
             scol = self._internal.spark_column_for(label)
             all_col = F.min(F.coalesce(scol.cast("boolean"), SF.lit(True)))
