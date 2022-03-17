@@ -188,7 +188,7 @@ class KeyValueGroupedDataset[K, V] private[sql](
    * (for example, by calling `toList`) unless they are sure that this is possible given the memory
    * constraints of their cluster.
    *
-   * @since 3.3.0
+   * @since 3.4.0
    */
   def flatMapSortedGroups[S: Encoder, U : Encoder]
       (s: V => S)(f: (K, Iterator[V]) => TraversableOnce[U]): Dataset[U] = {
@@ -225,7 +225,7 @@ class KeyValueGroupedDataset[K, V] private[sql](
    * (for example, by calling `toList`) unless they are sure that this is possible given the memory
    * constraints of their cluster.
    *
-   * @since 3.3.0
+   * @since 3.4.0
    */
   def flatMapSortedGroups[U : Encoder]
       (sortExpr: Column, sortExprs: Column*)
