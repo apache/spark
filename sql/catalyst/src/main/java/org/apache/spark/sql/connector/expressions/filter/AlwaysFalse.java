@@ -45,8 +45,5 @@ public final class AlwaysFalse extends Predicate implements Literal<Boolean> {
     return dataType;
   }
 
-  @Override
-  public NamedReference[] references() { return EMPTY_REFERENCE; }
-
   public String toString() { return "FALSE"; }
 }

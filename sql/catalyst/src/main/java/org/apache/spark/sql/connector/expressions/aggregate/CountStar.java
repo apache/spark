@@ -32,8 +32,5 @@ public final class CountStar implements AggregateFunc {
   }
 
   @Override
-  public NamedReference[] references() { return EMPTY_REFERENCE; }
-
-  @Override
   public String toString() { return "COUNT(*)"; }
 }

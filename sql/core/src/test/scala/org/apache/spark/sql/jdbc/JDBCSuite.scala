@@ -777,20 +777,20 @@ class JDBCSuite extends QueryTest
       JdbcDialects.get("jdbc:").compileExpression(f.toV2).getOrElse("")
 
     Seq(("col0", "col1"), ("`col0`", "`col1`")).foreach { case(col0, col1) =>
-      assert(doCompileFilter(EqualTo(col0, 3)) === """("col0") = (3)""")
-      assert(doCompileFilter(Not(EqualTo(col1, "abc"))) === """NOT (("col1") = ('abc'))""")
+      assert(doCompileFilter(EqualTo(col0, 3)) === """"col0" = 3""")
+      assert(doCompileFilter(Not(EqualTo(col1, "abc"))) === """NOT ("col1" = 'abc')""")
       assert(doCompileFilter(And(EqualTo(col0, 0), EqualTo(col1, "def")))
-        === """(("col0") = (0)) AND (("col1") = ('def'))""")
+        === """("col0" = 0) AND ("col1" = 'def')""")
       assert(doCompileFilter(Or(EqualTo(col0, 2), EqualTo(col1, "ghi")))
-        === """(("col0") = (2)) OR (("col1") = ('ghi'))""")
-      assert(doCompileFilter(LessThan(col0, 5)) === """("col0") < (5)""")
+        === """("col0" = 2) OR ("col1" = 'ghi')""")
+      assert(doCompileFilter(LessThan(col0, 5)) === """"col0" < 5""")
       assert(doCompileFilter(LessThan(col0,
-        Timestamp.valueOf("1995-11-21 00:00:00.0"))) === """("col0") < ('1995-11-21 00:00:00.0')""")
+        Timestamp.valueOf("1995-11-21 00:00:00.0"))) === """"col0" < '1995-11-21 00:00:00.0'""")
       assert(doCompileFilter(LessThan(col0, Date.valueOf("1983-08-04")))
-        === """("col0") < ('1983-08-04')""")
-      assert(doCompileFilter(LessThanOrEqual(col0, 5)) === """("col0") <= (5)""")
-      assert(doCompileFilter(GreaterThan(col0, 3)) === """("col0") > (3)""")
-      assert(doCompileFilter(GreaterThanOrEqual(col0, 3)) === """("col0") >= (3)""")
+        === """"col0" < '1983-08-04'""")
+      assert(doCompileFilter(LessThanOrEqual(col0, 5)) === """"col0" <= 5""")
+      assert(doCompileFilter(GreaterThan(col0, 3)) === """"col0" > 3""")
+      assert(doCompileFilter(GreaterThanOrEqual(col0, 3)) === """"col0" >= 3""")
       assert(doCompileFilter(In(col1, Array("jkl"))) === """"col1" IN ('jkl')""")
       assert(doCompileFilter(In(col1, Array.empty)) ===
         """CASE WHEN "col1" IS NULL THEN NULL ELSE FALSE END""")
@@ -800,7 +800,7 @@ class JDBCSuite extends QueryTest
       assert(doCompileFilter(IsNotNull(col1)) === """"col1" IS NOT NULL""")
       assert(doCompileFilter(And(EqualNullSafe(col0, "abc"), EqualTo(col1, "def")))
         === """(("col0" = 'abc') OR ("col0" IS NULL AND 'abc' IS NULL))"""
-        + """ AND (("col1") = ('def'))""")
+        + """ AND ("col1" = 'def')""")
     }
     val e = intercept[IllegalArgumentException] {
       doCompileFilter(EqualTo("col0.nested", 3))

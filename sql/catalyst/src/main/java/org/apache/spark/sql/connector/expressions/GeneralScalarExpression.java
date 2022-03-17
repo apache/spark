@@ -113,6 +113,7 @@ public class GeneralScalarExpression implements Expression, Serializable {
   public String name() { return name; }
   public Expression[] children() { return children; }
 
+  @Override
   public NamedReference[] references() {
     return Arrays.stream(children()).map(e -> {
       if (e instanceof NamedReference) {

@@ -35,11 +35,6 @@ public interface Transform extends Expression {
   String name();
 
   /**
-   * Returns all field references in the transform arguments.
-   */
-  NamedReference[] references();
-
-  /**
    * Returns the arguments passed to the transform function.
    */
   Expression[] arguments();

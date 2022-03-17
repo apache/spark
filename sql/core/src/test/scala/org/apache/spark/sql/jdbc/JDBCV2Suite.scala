@@ -264,7 +264,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
     df.queryExecution.optimizedPlan.collect {
       case _: DataSourceV2ScanRelation =>
         val expected_plan_fragment =
-          "PushedFilters: [ID IS NOT NULL, (ID) > (1)]"
+          "PushedFilters: [ID IS NOT NULL, ID > 1]"
         checkKeywordsExistsInExplain(df, expected_plan_fragment)
     }
 
@@ -307,7 +307,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
         df.queryExecution.optimizedPlan.collect {
           case _: DataSourceV2ScanRelation =>
             val expected_plan_fragment = if (ansiMode) {
-              "PushedFilters: [ID IS NOT NULL, ((ID) + (1)) > (1)]"
+              "PushedFilters: [ID IS NOT NULL, (ID + 1) > 1]"
             } else {
               "PushedFilters: [ID IS NOT NULL]"
             }
@@ -317,17 +317,17 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
         checkAnswer(df, Seq(Row("fred", 1), Row("mary", 2)))
 
         val df2 = sql("""
-                       |SELECT * FROM h2.test.employee
-                       |WHERE (CASE WHEN SALARY > 10000 THEN BONUS ELSE BONUS + 200 END) > 1200
-                       |""".stripMargin)
+                        |SELECT * FROM h2.test.employee
+                        |WHERE (CASE WHEN SALARY > 10000 THEN BONUS ELSE BONUS + 200 END) > 1200
+                        |""".stripMargin)
 
         checkFiltersRemoved(df2, ansiMode)
 
         df2.queryExecution.optimizedPlan.collect {
           case _: DataSourceV2ScanRelation =>
             val expected_plan_fragment = if (ansiMode) {
-              "PushedFilters: [(CASE WHEN (SALARY) > (10000.00) THEN BONUS" +
-                " ELSE (BONUS) + (200.0) END) > (1200.0)]"
+              "PushedFilters: [(CASE WHEN SALARY > 10000.00 THEN BONUS" +
+                " ELSE BONUS + 200.0 END) > 1200.0]"
             } else {
               "PushedFilters: []"
             }
@@ -480,7 +480,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
       case _: DataSourceV2ScanRelation =>
         val expected_plan_fragment =
           "PushedAggregates: [MAX(SALARY), AVG(BONUS)], " +
-            "PushedFilters: [DEPT IS NOT NULL, (DEPT) > (0)], " +
+            "PushedFilters: [DEPT IS NOT NULL, DEPT > 0], " +
             "PushedGroupByColumns: [DEPT], "
         checkKeywordsExistsInExplain(df, expected_plan_fragment)
     }
@@ -506,7 +506,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
       case _: DataSourceV2ScanRelation =>
         val expected_plan_fragment =
           "PushedAggregates: [MAX(ID), AVG(ID)], " +
-            "PushedFilters: [ID IS NOT NULL, (ID) > (0)], " +
+            "PushedFilters: [ID IS NOT NULL, ID > 0], " +
             "PushedGroupByColumns: [], "
         checkKeywordsExistsInExplain(df, expected_plan_fragment)
     }
@@ -651,7 +651,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
       case _: DataSourceV2ScanRelation =>
         val expected_plan_fragment =
           "PushedAggregates: [MAX(SALARY), MIN(BONUS)], " +
-            "PushedFilters: [DEPT IS NOT NULL, (DEPT) > (0)], " +
+            "PushedFilters: [DEPT IS NOT NULL, DEPT > 0], " +
             "PushedGroupByColumns: [DEPT, NAME], "
         checkKeywordsExistsInExplain(df, expected_plan_fragment)
     }
@@ -671,7 +671,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
       case _: DataSourceV2ScanRelation =>
         val expected_plan_fragment =
           "PushedAggregates: [MAX(SALARY)], " +
-            "PushedFilters: [DEPT IS NOT NULL, (DEPT) > (0)], " +
+            "PushedFilters: [DEPT IS NOT NULL, DEPT > 0], " +
             "PushedGroupByColumns: [DEPT, NAME], "
         checkKeywordsExistsInExplain(df1, expected_plan_fragment)
     }
@@ -689,7 +689,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
       case _: DataSourceV2ScanRelation =>
         val expected_plan_fragment =
           "PushedAggregates: [MAX(SALARY), MIN(BONUS)], " +
-            "PushedFilters: [DEPT IS NOT NULL, (DEPT) > (0)], " +
+            "PushedFilters: [DEPT IS NOT NULL, DEPT > 0], " +
             "PushedGroupByColumns: [DEPT, NAME], "
         checkKeywordsExistsInExplain(df2, expected_plan_fragment)
     }
@@ -706,7 +706,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
     df3.queryExecution.optimizedPlan.collect {
       case _: DataSourceV2ScanRelation =>
         val expected_plan_fragment =
-          "PushedFilters: [DEPT IS NOT NULL, (DEPT) > (0)], "
+          "PushedFilters: [DEPT IS NOT NULL, DEPT > 0], "
         checkKeywordsExistsInExplain(df3, expected_plan_fragment)
     }
     checkAnswer(df3, Seq(Row("1#amy", 11000), Row("1#cathy", 10200), Row("2#alex", 13200),
@@ -725,7 +725,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
       case _: DataSourceV2ScanRelation =>
         val expected_plan_fragment =
           "PushedAggregates: [MAX(SALARY), MIN(BONUS)], " +
-            "PushedFilters: [DEPT IS NOT NULL, (DEPT) > (0)], " +
+            "PushedFilters: [DEPT IS NOT NULL, DEPT > 0], " +
             "PushedGroupByColumns: [DEPT], "
         checkKeywordsExistsInExplain(df, expected_plan_fragment)
     }
@@ -765,7 +765,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
       case _: DataSourceV2ScanRelation =>
         val expected_plan_fragment =
           "PushedAggregates: [SUM(SALARY)], " +
-            "PushedFilters: [DEPT IS NOT NULL, (DEPT) > (0)], " +
+            "PushedFilters: [DEPT IS NOT NULL, DEPT > 0], " +
             "PushedGroupByColumns: [DEPT], "
         checkKeywordsExistsInExplain(query, expected_plan_fragment)
     }
@@ -808,7 +808,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
       case _: DataSourceV2ScanRelation =>
         val expected_plan_fragment =
           "PushedAggregates: [VAR_POP(BONUS), VAR_SAMP(BONUS)], " +
-            "PushedFilters: [DEPT IS NOT NULL, (DEPT) > (0)], " +
+            "PushedFilters: [DEPT IS NOT NULL, DEPT > 0], " +
             "PushedGroupByColumns: [DEPT], "
         checkKeywordsExistsInExplain(df, expected_plan_fragment)
     }
@@ -824,7 +824,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
       case _: DataSourceV2ScanRelation =>
         val expected_plan_fragment =
           "PushedAggregates: [STDDEV_POP(BONUS), STDDEV_SAMP(BONUS)], " +
-            "PushedFilters: [DEPT IS NOT NULL, (DEPT) > (0)], " +
+            "PushedFilters: [DEPT IS NOT NULL, DEPT > 0], " +
             "PushedGroupByColumns: [DEPT], "
         checkKeywordsExistsInExplain(df, expected_plan_fragment)
     }
@@ -840,7 +840,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
       case _: DataSourceV2ScanRelation =>
         val expected_plan_fragment =
           "PushedAggregates: [COVAR_POP(BONUS, BONUS), COVAR_SAMP(BONUS, BONUS)], " +
-            "PushedFilters: [DEPT IS NOT NULL, (DEPT) > (0)], " +
+            "PushedFilters: [DEPT IS NOT NULL, DEPT > 0], " +
             "PushedGroupByColumns: [DEPT], "
         checkKeywordsExistsInExplain(df, expected_plan_fragment)
     }
@@ -856,7 +856,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
       case _: DataSourceV2ScanRelation =>
         val expected_plan_fragment =
           "PushedAggregates: [CORR(BONUS, BONUS)], " +
-            "PushedFilters: [DEPT IS NOT NULL, (DEPT) > (0)], " +
+            "PushedFilters: [DEPT IS NOT NULL, DEPT > 0], " +
             "PushedGroupByColumns: [DEPT], "
         checkKeywordsExistsInExplain(df, expected_plan_fragment)
     }
@@ -920,8 +920,8 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
     df.queryExecution.optimizedPlan.collect {
       case _: DataSourceV2ScanRelation =>
         val expected_plan_fragment =
-          "PushedAggregates: [COUNT(CASE WHEN ((SALARY) > (8000.00)) AND ((SALARY) < (10000.00))" +
-            " THEN SALARY ELSE 0.00 END), C..., " +
+          "PushedAggregates: [COUNT(CASE WHEN (SALARY > 8000.00) AND (SALARY < 10000.00)" +
+            " THEN SALARY ELSE 0.00 END), COUNT(CAS..., " +
             "PushedFilters: [], " +
             "PushedGroupByColumns: [DEPT], "
         checkKeywordsExistsInExplain(df, expected_plan_fragment)
@@ -937,7 +937,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
         val df = sql("SELECT SUM(2147483647 + DEPT) FROM h2.test.employee")
         checkAggregateRemoved(df, ansiMode)
         val expected_plan_fragment = if (ansiMode) {
-          "PushedAggregates: [SUM((2147483647) + (DEPT))], " +
+          "PushedAggregates: [SUM(2147483647 + DEPT)], " +
             "PushedFilters: [], " +
             "PushedGroupByColumns: []"
         } else {

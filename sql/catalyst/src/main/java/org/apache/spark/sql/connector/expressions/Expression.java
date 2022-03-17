@@ -36,5 +36,5 @@ public interface Expression {
   /**
    * List of fields or columns that are referenced by this expression.
    */
-  NamedReference[] references();
+  default NamedReference[] references() { return EMPTY_REFERENCE; }
 }

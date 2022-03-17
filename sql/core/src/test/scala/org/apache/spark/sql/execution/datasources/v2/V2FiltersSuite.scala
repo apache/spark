@@ -30,17 +30,17 @@ class FiltersV2Suite extends SparkFunSuite {
     val predicate1 =
       new Predicate("=", Array[Expression](ref("a", "B"), LiteralValue(1, IntegerType)))
     assert(predicate1.references.map(_.describe()).toSeq == Seq("a.B"))
-    assert(predicate1.describe.equals("(a.B) = (1)"))
+    assert(predicate1.describe.equals("a.B = 1"))
 
     val predicate2 =
       new Predicate("=", Array[Expression](ref("a", "b.c"), LiteralValue(1, IntegerType)))
     assert(predicate2.references.map(_.describe()).toSeq == Seq("a.`b.c`"))
-    assert(predicate2.describe.equals("(a.`b.c`) = (1)"))
+    assert(predicate2.describe.equals("a.`b.c` = 1"))
 
     val predicate3 =
       new Predicate("=", Array[Expression](ref("`a`.b", "c"), LiteralValue(1, IntegerType)))
     assert(predicate3.references.map(_.describe()).toSeq == Seq("```a``.b`.c"))
-    assert(predicate3.describe.equals("(```a``.b`.c) = (1)"))
+    assert(predicate3.describe.equals("```a``.b`.c = 1"))
   }
 
   test("AlwaysTrue") {
@@ -64,7 +64,7 @@ class FiltersV2Suite extends SparkFunSuite {
     val predicate2 = new Predicate("=", Array[Expression](ref("a"), LiteralValue(1, IntegerType)))
     assert(predicate1.equals(predicate2))
     assert(predicate1.references.map(_.describe()).toSeq == Seq("a"))
-    assert(predicate1.describe.equals("(a) = (1)"))
+    assert(predicate1.describe.equals("a = 1"))
   }
 
   test("EqualNullSafe") {
@@ -120,7 +120,7 @@ class FiltersV2Suite extends SparkFunSuite {
       new Predicate("<", Array[Expression](ref("a"), LiteralValue(1, IntegerType))))
     assert(predicate1.equals(predicate2))
     assert(predicate1.references.map(_.describe()).toSeq == Seq("a"))
-    assert(predicate1.describe.equals("NOT ((a) < (1))"))
+    assert(predicate1.describe.equals("NOT (a < 1)"))
   }
 
   test("And") {
@@ -132,7 +132,7 @@ class FiltersV2Suite extends SparkFunSuite {
       new Predicate("=", Array[Expression](ref("b"), LiteralValue(1, IntegerType))))
     assert(predicate1.equals(predicate2))
     assert(predicate1.references.map(_.describe()).toSeq == Seq("a", "b"))
-    assert(predicate1.describe.equals("((a) = (1)) AND ((b) = (1))"))
+    assert(predicate1.describe.equals("(a = 1) AND (b = 1)"))
   }
 
   test("Or") {
@@ -144,7 +144,7 @@ class FiltersV2Suite extends SparkFunSuite {
       new Predicate("=", Array[Expression](ref("b"), LiteralValue(1, IntegerType))))
     assert(predicate1.equals(predicate2))
     assert(predicate1.references.map(_.describe()).toSeq == Seq("a", "b"))
-    assert(predicate1.describe.equals("((a) = (1)) OR ((b) = (1))"))
+    assert(predicate1.describe.equals("(a = 1) OR (b = 1)"))
   }
 
   test("StringStartsWith") {

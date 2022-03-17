@@ -59,7 +59,8 @@ public class V2ExpressionSQLBuilder {
         case "<=":
         case ">":
         case ">=":
-          return visitBinaryComparison(name, build(e.children()[0]), build(e.children()[1]));
+          return visitBinaryComparison(name, build(e.children()[0]), childNum(e.children()[0]),
+            build(e.children()[1]), childNum(e.children()[1]));
         case "+":
         case "*":
         case "/":
@@ -67,12 +68,14 @@ public class V2ExpressionSQLBuilder {
         case "&":
         case "|":
         case "^":
-          return visitBinaryArithmetic(name, build(e.children()[0]), build(e.children()[1]));
+          return visitBinaryArithmetic(name, build(e.children()[0]), childNum(e.children()[0]),
+            build(e.children()[1]), childNum(e.children()[1]));
         case "-":
           if (e.children().length == 1) {
             return visitUnaryArithmetic(name, build(e.children()[0]));
           } else {
-            return visitBinaryArithmetic(name, build(e.children()[0]), build(e.children()[1]));
+            return visitBinaryArithmetic(name, build(e.children()[0]), childNum(e.children()[0]),
+              build(e.children()[1]), childNum(e.children()[1]));
           }
         case "AND":
           return visitAnd(name, build(e.children()[0]), build(e.children()[1]));
@@ -135,17 +138,40 @@ public class V2ExpressionSQLBuilder {
     }
   }
 
-  protected String visitBinaryComparison(String name, String l, String r) {
+  protected String visitBinaryComparison(
+    String name, String l, int lChildNum, String r, int rChildNum) {
     switch (name) {
       case "<=>":
         return "(" + l + " = " + r + ") OR (" + l + " IS NULL AND " + r + " IS NULL)";
       default:
-        return "(" + l + ") " + name + " (" + r + ")";
+        String left = l, right = r;
+        if (lChildNum > 1) {
+          left = "(" + l + ")";
+        }
+        if (rChildNum > 1) {
+          right = "(" + r + ")";
+        }
+        return left + " " + name + " " + right;
     }
   }
 
-  protected String visitBinaryArithmetic(String name, String l, String r) {
-    return "(" + l + ") " + name + " (" + r + ")";
+  private int childNum(Expression expr) {
+    if (expr instanceof GeneralScalarExpression) {
+      return ((GeneralScalarExpression) expr).children().length;
+    } else {
+      return 0;
+    }
+  }
+
+  protected String visitBinaryArithmetic(String name, String l, int lChildNum, String r, int rChildNum) {
+    String left = l, right = r;
+    if (lChildNum > 1) {
+      left = "(" + l + ")";
+    }
+    if (rChildNum > 1) {
+      right = "(" + r + ")";
+    }
+    return left + " " + name + " " + right;
   }
 
   protected String visitAnd(String name, String l, String r) {
