@@ -1736,7 +1736,7 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
 
     def test_replace(self):
         pser = pd.Series([10, 20, 15, 30, np.nan], name="x")
-        psser = ps.Series(pser)
+        psser = ps.from_pandas(pser)
 
         self.assert_eq(psser.replace(), pser.replace())
         self.assert_eq(psser.replace({}), pser.replace({}))
@@ -1747,15 +1747,36 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
         self.assert_eq(psser.replace([10, 15], [45, 50]), pser.replace([10, 15], [45, 50]))
         self.assert_eq(psser.replace((10, 15), (45, 50)), pser.replace((10, 15), (45, 50)))
 
+        pser = pd.Series(["bat", "foo", "bait", "abc", "bar", "zoo"])
+        psser = ps.from_pandas(pser)
+        self.assert_eq(
+            psser.replace(to_replace=r"^ba.$", value="new", regex=True),
+            pser.replace(to_replace=r"^ba.$", value="new", regex=True),
+        )
+        self.assert_eq(
+            psser.replace(regex=r"^.oo$", value="new"), pser.replace(regex=r"^.oo$", value="new")
+        )
+        self.assert_eq(
+            (psser + "o").replace(regex=r"^.ooo$", value="new"),
+            (pser + "o").replace(regex=r"^.ooo$", value="new"),
+        )
+
         msg = "'to_replace' should be one of str, list, tuple, dict, int, float"
         with self.assertRaisesRegex(TypeError, msg):
             psser.replace(ps.range(5))
         msg = "Replacement lists must match in length. Expecting 3 got 2"
         with self.assertRaisesRegex(ValueError, msg):
-            psser.replace([10, 20, 30], [1, 2])
-        msg = "replace currently not support for regex"
+            psser.replace(["bat", "foo", "bait"], ["a", "b"])
+        msg = "'to_replace' must be 'None' if 'regex' is not a bool"
+        with self.assertRaisesRegex(ValueError, msg):
+            psser.replace(to_replace="foo", regex=r"^.oo$")
+        msg = "If 'regex' is True then 'to_replace' must be a string"
+        with self.assertRaisesRegex(AssertionError, msg):
+            psser.replace(["bat", "foo", "bait"], regex=True)
+        unsupported_regex = [r"^.oo$", r"^ba.$"]
+        msg = "'regex' of %s type is not supported" % type(unsupported_regex).__name__
         with self.assertRaisesRegex(NotImplementedError, msg):
-            psser.replace(r"^1.$", regex=True)
+            psser.replace(regex=unsupported_regex, value="new")
 
     def test_xs(self):
         midx = pd.MultiIndex(
