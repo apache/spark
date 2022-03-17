@@ -22,7 +22,7 @@ name: ANSI SQL mode test
 on:
   push:
     branches:
-      - master
+      - '**'
 
 jobs:
   ansi_sql_test:

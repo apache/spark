@@ -26,7 +26,7 @@ from pyspark.sql import Row
 # $example off:schema_merging$
 
 
-def generic_file_source_options_example(spark):
+def generic_file_source_options_example(spark: SparkSession) -> None:
     # $example on:ignore_corrupt_files$
     # enable ignore corrupt files
     spark.sql("set spark.sql.files.ignoreCorruptFiles=true")
@@ -88,7 +88,7 @@ def generic_file_source_options_example(spark):
     # $example off:load_with_modified_time_filter$
 
 
-def basic_datasource_example(spark):
+def basic_datasource_example(spark: SparkSession) -> None:
     # $example on:generic_load_save_functions$
     df = spark.read.load("examples/src/main/resources/users.parquet")
     df.select("name", "favorite_color").write.save("namesAndFavColors.parquet")
@@ -148,7 +148,7 @@ def basic_datasource_example(spark):
     spark.sql("DROP TABLE IF EXISTS users_partitioned_bucketed")
 
 
-def parquet_example(spark):
+def parquet_example(spark: SparkSession) -> None:
     # $example on:basic_parquet_example$
     peopleDF = spark.read.json("examples/src/main/resources/people.json")
 
@@ -172,7 +172,7 @@ def parquet_example(spark):
     # $example off:basic_parquet_example$
 
 
-def parquet_schema_merging_example(spark):
+def parquet_schema_merging_example(spark: SparkSession) -> None:
     # $example on:schema_merging$
     # spark is from the previous example.
     # Create a simple DataFrame, stored into a partition directory
@@ -202,7 +202,7 @@ def parquet_schema_merging_example(spark):
     # $example off:schema_merging$
 
 
-def json_dataset_example(spark):
+def json_dataset_example(spark: SparkSession) -> None:
     # $example on:json_dataset$
     # spark is from the previous example.
     sc = spark.sparkContext
@@ -244,7 +244,7 @@ def json_dataset_example(spark):
     # $example off:json_dataset$
 
 
-def csv_dataset_example(spark):
+def csv_dataset_example(spark: SparkSession) -> None:
     # $example on:csv_dataset$
     # spark is from the previous example
     sc = spark.sparkContext
@@ -264,7 +264,7 @@ def csv_dataset_example(spark):
     # +------------------+
 
     # Read a csv with delimiter, the default delimiter is ","
-    df2 = spark.read.option(delimiter=';').csv(path)
+    df2 = spark.read.option("delimiter", ";").csv(path)
     df2.show()
     # +-----+---+---------+
     # |  _c0|_c1|      _c2|
@@ -308,7 +308,7 @@ def csv_dataset_example(spark):
     # $example off:csv_dataset$
 
 
-def text_dataset_example(spark):
+def text_dataset_example(spark: SparkSession) -> None:
     # $example on:text_dataset$
     # spark is from the previous example
     sc = spark.sparkContext
@@ -358,7 +358,7 @@ def text_dataset_example(spark):
     # $example off:text_dataset$
 
 
-def jdbc_dataset_example(spark):
+def jdbc_dataset_example(spark: SparkSession) -> None:
     # $example on:jdbc_dataset$
     # Note: JDBC loading and saving can be achieved via either the load/save or jdbc methods
     # Loading data from a JDBC source
