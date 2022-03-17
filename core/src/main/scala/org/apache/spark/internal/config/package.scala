@@ -105,6 +105,22 @@ package object config {
     .bytesConf(ByteUnit.MiB)
     .createOptional
 
+  private[spark] val DRIVER_MEMORY_OVERHEAD_FACTOR =
+    ConfigBuilder("spark.driver.memoryOverheadFactor")
+      .doc("Fraction of driver memory to be allocated as additional non-heap memory per driver " +
+        "process in cluster mode. This is memory that accounts for things like VM overheads, " +
+        "interned strings, other native overheads, etc. This tends to grow with the container " +
+        "size. This value defaults to 0.10 except for Kubernetes non-JVM jobs, which defaults to " +
+        "0.40. This is done as non-JVM tasks need more non-JVM heap space and such tasks " +
+        "commonly fail with \"Memory Overhead Exceeded\" errors. This preempts this error " +
+        "with a higher default. This value is ignored if spark.driver.memoryOverhead is set " +
+        "directly.")
+      .version("3.3.0")
+      .doubleConf
+      .checkValue(factor => factor > 0,
+        "Ensure that memory overhead is a double greater than 0")
+      .createWithDefault(0.1)
+
   private[spark] val DRIVER_LOG_DFS_DIR =
     ConfigBuilder("spark.driver.log.dfsDir").version("3.0.0").stringConf.createOptional
 
@@ -314,6 +330,18 @@ package object config {
     .version("2.3.0")
     .bytesConf(ByteUnit.MiB)
     .createOptional
+
+  private[spark] val EXECUTOR_MEMORY_OVERHEAD_FACTOR =
+    ConfigBuilder("spark.executor.memoryOverheadFactor")
+      .doc("Fraction of executor memory to be allocated as additional non-heap memory per " +
+        "executor process. This is memory that accounts for things like VM overheads, " +
+        "interned strings, other native overheads, etc. This tends to grow with the container " +
+        "size. This value is ignored if spark.executor.memoryOverhead is set directly.")
+      .version("3.3.0")
+      .doubleConf
+      .checkValue(factor => factor > 0,
+        "Ensure that memory overhead is a double greater than 0")
+      .createWithDefault(0.1)
 
   private[spark] val CORES_MAX = ConfigBuilder("spark.cores.max")
     .doc("When running on a standalone deploy cluster or a Mesos cluster in coarse-grained " +
