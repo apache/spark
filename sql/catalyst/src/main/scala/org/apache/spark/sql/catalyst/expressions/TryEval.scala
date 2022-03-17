@@ -181,3 +181,36 @@ case class TryMultiply(left: Expression, right: Expression, replacement: Express
   override protected def withNewChildInternal(newChild: Expression): Expression =
     this.copy(replacement = newChild)
 }
+
+/**
+ * Converts the input expression to a binary value based on the supplied format.
+ * The result is NULL on encoding error.
+ */
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = """
+    _FUNC_(str[, fmt]) - Converts the input `str` to a binary value based on the supplied `fmt`.
+      `fmt` can be a case-insensitive string literal of "hex", "utf-8", or "base64".
+      By default, the binary format for conversion is "hex" if `fmt` is omitted.
+      The function returns NULL if at least one of the input parameters is NULL.
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_('abc', 'utf-8');
+       abc
+  """,
+  since = "3.3.0",
+  group = "string_funcs")
+case class TryToBinary(
+    expr: Expression,
+    format: Option[Expression],
+    replacement: Expression) extends RuntimeReplaceable
+  with InheritAnalysisRules {
+  def this(expr: Expression, format: Option[Expression]) =
+    this(expr, format, TryEval(ToBinary(expr, format)))
+
+  override def parameters: Seq[Expression] = expr +: format.toSeq
+
+  override protected def withNewChildInternal(newChild: Expression): Expression =
+    this.copy(replacement = newChild)
+}
