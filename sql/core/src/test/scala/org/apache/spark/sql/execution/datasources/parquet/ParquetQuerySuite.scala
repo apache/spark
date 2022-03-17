@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.datasources.parquet
 
 import java.io.File
 import java.math.BigDecimal
-import java.time.{Duration, Period}
+import java.time.{Duration, LocalDateTime, Period, ZoneOffset}
 import java.util.concurrent.TimeUnit
 
 import org.apache.hadoop.fs.{FileSystem, Path}
@@ -153,8 +153,83 @@ abstract class ParquetQuerySuite extends QueryTest with ParquetTest with SharedS
         (1, "2016-01-01 10:11:12.123456"),
         (2, null),
         (3, "1965-01-01 10:11:12.123456"))
-        .toDS().select('_1, $"_2".cast("timestamp"))
+        .toDS().select(Symbol("_1"), $"_2".cast("timestamp"))
       checkAnswer(sql("select * from ts"), expected)
+    }
+  }
+
+  test("SPARK-36182: writing and reading TimestampNTZType column") {
+    withTable("ts") {
+      sql("create table ts (c1 timestamp_ntz) using parquet")
+      sql("insert into ts values (timestamp_ntz'2016-01-01 10:11:12.123456')")
+      sql("insert into ts values (null)")
+      sql("insert into ts values (timestamp_ntz'1965-01-01 10:11:12.123456')")
+      val expectedSchema = new StructType().add(StructField("c1", TimestampNTZType))
+      assert(spark.table("ts").schema == expectedSchema)
+      val expected = Seq(
+        ("2016-01-01 10:11:12.123456"),
+        (null),
+        ("1965-01-01 10:11:12.123456"))
+        .toDS().select($"value".cast("timestamp_ntz"))
+      withAllParquetReaders {
+        checkAnswer(sql("select * from ts"), expected)
+      }
+    }
+  }
+
+  test("SPARK-36182: can't read TimestampLTZ as TimestampNTZ") {
+    val data = (1 to 1000).map { i =>
+      val ts = new java.sql.Timestamp(i)
+      Row(ts)
+    }
+    val actualSchema = StructType(Seq(StructField("time", TimestampType, false)))
+    val providedSchema = StructType(Seq(StructField("time", TimestampNTZType, false)))
+
+    Seq("INT96", "TIMESTAMP_MICROS", "TIMESTAMP_MILLIS").foreach { tsType =>
+      Seq(true, false).foreach { dictionaryEnabled =>
+        withSQLConf(
+            SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE.key -> tsType,
+            ParquetOutputFormat.ENABLE_DICTIONARY -> dictionaryEnabled.toString) {
+          withTempPath { file =>
+            val df = spark.createDataFrame(sparkContext.parallelize(data), actualSchema)
+            df.write.parquet(file.getCanonicalPath)
+            withAllParquetReaders {
+              val msg = intercept[SparkException] {
+                spark.read.schema(providedSchema).parquet(file.getCanonicalPath).collect()
+              }.getMessage
+              assert(msg.contains(
+                "Unable to create Parquet converter for data type \"timestamp_ntz\""))
+            }
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-36182: read TimestampNTZ as TimestampLTZ") {
+    val data = (1 to 1000).map { i =>
+      // The second parameter is `nanoOfSecond`, while java.sql.Timestamp accepts milliseconds
+      // as input. So here we multiple the `nanoOfSecond` by NANOS_PER_MILLIS
+      val ts = LocalDateTime.ofEpochSecond(i / 1000, (i % 1000) * 1000000, ZoneOffset.UTC)
+      Row(ts)
+    }
+    val answer = (1 to 1000).map { i =>
+      val ts = new java.sql.Timestamp(i)
+      Row(ts)
+    }
+    val actualSchema = StructType(Seq(StructField("time", TimestampNTZType, false)))
+    val providedSchema = StructType(Seq(StructField("time", TimestampType, false)))
+
+    withTempPath { file =>
+      val df = spark.createDataFrame(sparkContext.parallelize(data), actualSchema)
+      df.write.parquet(file.getCanonicalPath)
+      withAllParquetReaders {
+        Seq(true, false).foreach { dictionaryEnabled =>
+          withSQLConf(ParquetOutputFormat.ENABLE_DICTIONARY -> dictionaryEnabled.toString) {
+            checkAnswer(spark.read.schema(providedSchema).parquet(file.getCanonicalPath), answer)
+          }
+        }
+      }
     }
   }
 
@@ -730,7 +805,7 @@ abstract class ParquetQuerySuite extends QueryTest with ParquetTest with SharedS
   test("SPARK-15804: write out the metadata to parquet file") {
     val df = Seq((1, "abc"), (2, "hello")).toDF("a", "b")
     val md = new MetadataBuilder().putString("key", "value").build()
-    val dfWithmeta = df.select('a, 'b.as("b", md))
+    val dfWithmeta = df.select(Symbol("a"), Symbol("b").as("b", md))
 
     withTempPath { dir =>
       val path = dir.getCanonicalPath
@@ -952,7 +1027,7 @@ class ParquetV1QuerySuite extends ParquetQuerySuite {
     withSQLConf(SQLConf.WHOLESTAGE_MAX_NUM_FIELDS.key -> "10") {
       withTempPath { dir =>
         val path = dir.getCanonicalPath
-        val df = spark.range(10).select(Seq.tabulate(11) {i => ('id + i).as(s"c$i")} : _*)
+        val df = spark.range(10).select(Seq.tabulate(11) {i => (Symbol("id") + i).as(s"c$i")} : _*)
         df.write.mode(SaveMode.Overwrite).parquet(path)
 
         // do not return batch - whole stage codegen is disabled for wide table (>200 columns)
@@ -985,7 +1060,7 @@ class ParquetV2QuerySuite extends ParquetQuerySuite {
     withSQLConf(SQLConf.WHOLESTAGE_MAX_NUM_FIELDS.key -> "10") {
       withTempPath { dir =>
         val path = dir.getCanonicalPath
-        val df = spark.range(10).select(Seq.tabulate(11) {i => ('id + i).as(s"c$i")} : _*)
+        val df = spark.range(10).select(Seq.tabulate(11) {i => (Symbol("id") + i).as(s"c$i")} : _*)
         df.write.mode(SaveMode.Overwrite).parquet(path)
 
         // do not return batch - whole stage codegen is disabled for wide table (>200 columns)

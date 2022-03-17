@@ -17,7 +17,6 @@
 
 from distutils.version import LooseVersion
 
-import numpy as np
 import pandas as pd
 
 from pyspark import pandas as ps
@@ -74,43 +73,7 @@ class OpsOnDiffFramesGroupByExpandingTest(PandasOnSparkTestCase, TestUtils):
         )
 
     def test_groupby_expanding_count(self):
-        # The behaviour of ExpandingGroupby.count are different between pandas>=1.0.0 and lower,
-        # and we're following the behaviour of latest version of pandas.
-        if LooseVersion(pd.__version__) >= LooseVersion("1.0.0"):
-            self._test_groupby_expanding_func("count")
-        else:
-            # Series
-            psser = ps.Series([1, 2, 3])
-            kkey = ps.Series([1, 2, 3], name="a")
-            midx = pd.MultiIndex.from_tuples(
-                list(zip(kkey.to_pandas().values, psser.index.to_pandas().values)),
-                names=["a", None],
-            )
-            expected_result = pd.Series([np.nan, np.nan, np.nan], index=midx)
-            self.assert_eq(
-                psser.groupby(kkey).expanding(2).count().sort_index(), expected_result.sort_index()
-            )
-
-            # DataFrame
-            psdf = ps.DataFrame({"a": [1, 2, 3, 2], "b": [4.0, 2.0, 3.0, 1.0]})
-            kkey = ps.Series([1, 2, 3, 2], name="a")
-            midx = pd.MultiIndex.from_tuples([(1, 0), (2, 1), (2, 3), (3, 2)], names=["a", None])
-            expected_result = pd.DataFrame(
-                {"a": [None, None, 2.0, None], "b": [None, None, 2.0, None]}, index=midx
-            )
-            self.assert_eq(
-                psdf.groupby(kkey).expanding(2).count().sort_index(), expected_result.sort_index()
-            )
-            expected_result = pd.Series([None, None, 2.0, None], index=midx, name="b")
-            self.assert_eq(
-                psdf.groupby(kkey)["b"].expanding(2).count().sort_index(),
-                expected_result.sort_index(),
-            )
-            expected_result = pd.DataFrame({"b": [None, None, 2.0, None]}, index=midx)
-            self.assert_eq(
-                psdf.groupby(kkey)[["b"]].expanding(2).count().sort_index(),
-                expected_result.sort_index(),
-            )
+        self._test_groupby_expanding_func("count")
 
     def test_groupby_expanding_min(self):
         self._test_groupby_expanding_func("min")

@@ -43,7 +43,9 @@ import org.apache.spark.util.{Clock, SystemClock, Utils}
  * @since 2.0.0
  */
 @Evolving
-class StreamingQueryManager private[sql] (sparkSession: SparkSession) extends Logging {
+class StreamingQueryManager private[sql] (
+    sparkSession: SparkSession,
+    sqlConf: SQLConf) extends Logging {
 
   private[sql] val stateStoreCoordinator =
     StateStoreCoordinatorRef.forDriver(sparkSession.sparkContext.env)
@@ -70,11 +72,13 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) extends Lo
 
   try {
     sparkSession.sparkContext.conf.get(STREAMING_QUERY_LISTENERS).foreach { classNames =>
-      Utils.loadExtensions(classOf[StreamingQueryListener], classNames,
-        sparkSession.sparkContext.conf).foreach(listener => {
-        addListener(listener)
-        logInfo(s"Registered listener ${listener.getClass.getName}")
-      })
+      SQLConf.withExistingConf(sqlConf) {
+        Utils.loadExtensions(classOf[StreamingQueryListener], classNames,
+          sparkSession.sparkContext.conf).foreach { listener =>
+          addListener(listener)
+          logInfo(s"Registered listener ${listener.getClass.getName}")
+        }
+      }
     }
     sparkSession.sharedState.streamingQueryStatusListener.foreach { listener =>
       addListener(listener)

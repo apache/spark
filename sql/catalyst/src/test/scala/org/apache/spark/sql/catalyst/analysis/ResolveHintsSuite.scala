@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import org.apache.log4j.Level
+import org.apache.logging.log4j.Level
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.dsl.expressions._
@@ -236,7 +236,7 @@ class ResolveHintsSuite extends AnalysisTest {
     }
     assert(logAppender.loggingEvents.exists(
       e => e.getLevel == Level.WARN &&
-        e.getRenderedMessage.contains("Unrecognized hint: unknown_hint")))
+        e.getMessage.getFormattedMessage.contains("Unrecognized hint: unknown_hint")))
   }
 
   test("SPARK-30003: Do not throw stack overflow exception in non-root unknown hint resolution") {

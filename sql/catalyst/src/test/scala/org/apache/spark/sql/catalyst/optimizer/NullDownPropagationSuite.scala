@@ -36,7 +36,6 @@ class NullDownPropagationSuite extends PlanTest with ExpressionEvalHelper {
         ConstantFolding,
         SimplifyConditionals,
         BooleanSimplification,
-        NotPropagation,
         PruneFilters) :: Nil
   }
 

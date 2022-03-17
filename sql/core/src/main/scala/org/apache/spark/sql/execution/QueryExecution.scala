@@ -304,8 +304,6 @@ class QueryExecution(
   }
 
   private def stringWithStats(maxFields: Int, append: String => Unit): Unit = {
-    val maxFields = SQLConf.get.maxToStringFields
-
     // trigger to compute stats for logical plans
     try {
       // This will trigger to compute stats for all the nodes in the plan, including subqueries,
@@ -423,6 +421,9 @@ object QueryExecution {
       PlanSubqueries(sparkSession),
       RemoveRedundantProjects,
       EnsureRequirements(),
+      // `ReplaceHashWithSortAgg` needs to be added after `EnsureRequirements` to guarantee the
+      // sort order of each node is checked to be valid.
+      ReplaceHashWithSortAgg,
       // `RemoveRedundantSorts` needs to be added after `EnsureRequirements` to guarantee the same
       // number of partitions when instantiating PartitioningCollection.
       RemoveRedundantSorts,

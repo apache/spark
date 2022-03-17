@@ -35,6 +35,7 @@ import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.datasources.parquet.{ParquetFileFormat => ParquetSource}
 import org.apache.spark.sql.execution.datasources.v2.PushedDownOperators
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
+import org.apache.spark.sql.execution.vectorized.ConstantColumnVector
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.{BaseRelation, Filter}
 import org.apache.spark.sql.types.StructType
@@ -134,13 +135,6 @@ case class RowDataSourceScanExec(
 
     def seqToString(seq: Seq[Any]): String = seq.mkString("[", ", ", "]")
 
-    val (aggString, groupByString) = if (pushedDownOperators.aggregation.nonEmpty) {
-      (seqToString(pushedDownOperators.aggregation.get.aggregateExpressions),
-        seqToString(pushedDownOperators.aggregation.get.groupByColumns))
-    } else {
-      ("[]", "[]")
-    }
-
     val markedFilters = if (filters.nonEmpty) {
       for (filter <- filters) yield {
         if (handledFilters.contains(filter)) s"*$filter" else s"$filter"
@@ -149,12 +143,23 @@ case class RowDataSourceScanExec(
       handledFilters
     }
 
+    val topNOrLimitInfo =
+      if (pushedDownOperators.limit.isDefined && pushedDownOperators.sortValues.nonEmpty) {
+        val pushedTopN =
+          s"ORDER BY ${seqToString(pushedDownOperators.sortValues.map(_.describe()))}" +
+          s" LIMIT ${pushedDownOperators.limit.get}"
+        Some("pushedTopN" -> pushedTopN)
+    } else {
+      pushedDownOperators.limit.map(value => "PushedLimit" -> s"LIMIT $value")
+    }
+
     Map(
       "ReadSchema" -> requiredSchema.catalogString,
-      "PushedFilters" -> seqToString(markedFilters.toSeq),
-      "PushedAggregates" -> aggString,
-      "PushedGroupby" -> groupByString) ++
-      pushedDownOperators.limit.map(value => "PushedLimit" -> s"LIMIT $value") ++
+      "PushedFilters" -> seqToString(markedFilters.toSeq)) ++
+      pushedDownOperators.aggregation.fold(Map[String, String]()) { v =>
+        Map("PushedAggregates" -> seqToString(v.aggregateExpressions.map(_.describe())),
+          "PushedGroupByColumns" -> seqToString(v.groupByColumns.map(_.describe())))} ++
+      topNOrLimitInfo ++
       pushedDownOperators.sample.map(v => "PushedSample" ->
         s"SAMPLE (${(v.upperBound - v.lowerBound) * 100}) ${v.withReplacement} SEED(${v.seed})"
       )
@@ -194,6 +199,9 @@ case class FileSourceScanExec(
     disableBucketedScan: Boolean = false)
   extends DataSourceScanExec {
 
+  lazy val metadataColumns: Seq[AttributeReference] =
+    output.collect { case FileSourceMetadataAttribute(attr) => attr }
+
   // Note that some vals referring the file-based relation are lazy intentionally
   // so that this plan can be canonicalized on executor side too. See SPARK-23731.
   override lazy val supportsColumnar: Boolean = {
@@ -212,7 +220,10 @@ case class FileSourceScanExec(
     relation.fileFormat.vectorTypes(
       requiredSchema = requiredSchema,
       partitionSchema = relation.partitionSchema,
-      relation.sparkSession.sessionState.conf)
+      relation.sparkSession.sessionState.conf).map { vectorTypes =>
+        // for column-based file format, append metadata column's vector type classes if any
+        vectorTypes ++ Seq.fill(metadataColumns.size)(classOf[ConstantColumnVector].getName)
+      }
 
   private lazy val driverMetrics: HashMap[String, Long] = HashMap.empty
 
@@ -355,7 +366,13 @@ case class FileSourceScanExec(
   @transient
   private lazy val pushedDownFilters = {
     val supportNestedPredicatePushdown = DataSourceUtils.supportNestedPredicatePushdown(relation)
-    dataFilters.flatMap(DataSourceStrategy.translateFilter(_, supportNestedPredicatePushdown))
+    // `dataFilters` should not include any metadata col filters
+    // because the metadata struct has been flatted in FileSourceStrategy
+    // and thus metadata col filters are invalid to be pushed down
+    dataFilters.filterNot(_.references.exists {
+      case FileSourceMetadataAttribute(_) => true
+      case _ => false
+    }).flatMap(DataSourceStrategy.translateFilter(_, supportNestedPredicatePushdown))
   }
 
   override lazy val metadata: Map[String, String] = {
@@ -469,7 +486,7 @@ case class FileSourceScanExec(
       driverMetrics("staticFilesNum") = filesNum
       driverMetrics("staticFilesSize") = filesSize
     }
-    if (relation.partitionSchemaOption.isDefined) {
+    if (relation.partitionSchema.nonEmpty) {
       driverMetrics("numPartitions") = partitions.length
     }
   }
@@ -488,7 +505,7 @@ case class FileSourceScanExec(
       None
     }
   } ++ {
-    if (relation.partitionSchemaOption.isDefined) {
+    if (relation.partitionSchema.nonEmpty) {
       Map(
         "numPartitions" -> SQLMetrics.createMetric(sparkContext, "number of partitions read"),
         "pruningTime" ->
@@ -597,7 +614,8 @@ case class FileSourceScanExec(
       }
     }
 
-    new FileScanRDD(fsRelation.sparkSession, readFile, filePartitions)
+    new FileScanRDD(fsRelation.sparkSession, readFile, filePartitions,
+      requiredSchema, metadataColumns)
   }
 
   /**
@@ -653,7 +671,8 @@ case class FileSourceScanExec(
     val partitions =
       FilePartition.getFilePartitions(relation.sparkSession, splitFiles, maxSplitBytes)
 
-    new FileScanRDD(fsRelation.sparkSession, readFile, partitions)
+    new FileScanRDD(fsRelation.sparkSession, readFile, partitions,
+      requiredSchema, metadataColumns)
   }
 
   // Filters unused DynamicPruningExpression expressions - one which has been replaced

@@ -979,7 +979,8 @@ abstract class ParquetPartitionDiscoverySuite
     withTempPath { dir =>
       withSQLConf(SQLConf.PARALLEL_PARTITION_DISCOVERY_THRESHOLD.key -> "1") {
         val path = dir.getCanonicalPath
-        val df = spark.range(5).select('id as 'a, 'id as 'b, 'id as 'c).coalesce(1)
+        val df = spark.range(5).select(Symbol("id") as Symbol("a"), Symbol("id") as Symbol("b"),
+          Symbol("id") as Symbol("c")).coalesce(1)
         df.write.partitionBy("b", "c").parquet(path)
         checkAnswer(spark.read.parquet(path), df)
       }
@@ -1065,14 +1066,15 @@ abstract class ParquetPartitionDiscoverySuite
     }
   }
 
-  test("SPARK-23436: invalid Dates should be inferred as String in partition inference") {
+  test(
+    "SPARK-23436, SPARK-36861: invalid Dates should be inferred as String in partition inference") {
     withTempPath { path =>
-      val data = Seq(("1", "2018-41", "2018-01-01-04", "test"))
-        .toDF("id", "date_month", "date_hour", "data")
+      val data = Seq(("1", "2018-41", "2018-01-01-04", "2021-01-01T00", "test"))
+        .toDF("id", "date_month", "date_hour", "date_t_hour", "data")
 
-      data.write.partitionBy("date_month", "date_hour").parquet(path.getAbsolutePath)
+      data.write.partitionBy("date_month", "date_hour", "date_t_hour").parquet(path.getAbsolutePath)
       val input = spark.read.parquet(path.getAbsolutePath).select("id",
-        "date_month", "date_hour", "data")
+        "date_month", "date_hour", "date_t_hour", "data")
 
       assert(input.schema.sameType(input.schema))
       checkAnswer(input, data)

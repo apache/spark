@@ -30,6 +30,7 @@ import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{TypeCheckFailure, TypeCheckSuccess}
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
+import org.apache.spark.sql.catalyst.trees.BinaryLike
 import org.apache.spark.sql.catalyst.trees.TreePattern.{LIKE_FAMLIY, TreePattern}
 import org.apache.spark.sql.catalyst.util.{GenericArrayData, StringUtils}
 import org.apache.spark.sql.errors.QueryExecutionErrors
@@ -240,18 +241,20 @@ case class Like(left: Expression, right: Expression, escapeChar: Char)
 case class ILike(
     left: Expression,
     right: Expression,
-    escapeChar: Char,
-    child: Expression) extends RuntimeReplaceable {
-  def this(left: Expression, right: Expression, escapeChar: Char) =
-    this(left, right, escapeChar, Like(Lower(left), Lower(right), escapeChar))
+    escapeChar: Char) extends RuntimeReplaceable
+  with ImplicitCastInputTypes with BinaryLike[Expression] {
+
+  override lazy val replacement: Expression = Like(Lower(left), Lower(right), escapeChar)
+
   def this(left: Expression, right: Expression) =
     this(left, right, '\\')
 
-  override def exprsReplaced: Seq[Expression] = Seq(left, right)
-  override def flatArguments: Iterator[Any] = Iterator(left, right, escapeChar)
+  override def inputTypes: Seq[AbstractDataType] = Seq(StringType, StringType)
 
-  override protected def withNewChildInternal(newChild: Expression): ILike =
-    copy(child = newChild)
+  override protected def withNewChildrenInternal(
+      newLeft: Expression, newRight: Expression): Expression = {
+    copy(left = newLeft, right = newRight)
+  }
 }
 
 sealed abstract class MultiLikeBase
@@ -529,7 +532,7 @@ case class RLike(left: Expression, right: Expression) extends StringRegexExpress
 case class StringSplit(str: Expression, regex: Expression, limit: Expression)
   extends TernaryExpression with ImplicitCastInputTypes with NullIntolerant {
 
-  override def dataType: DataType = ArrayType(StringType)
+  override def dataType: DataType = ArrayType(StringType, containsNull = false)
   override def inputTypes: Seq[DataType] = Seq(StringType, StringType, IntegerType)
   override def first: Expression = str
   override def second: Expression = regex

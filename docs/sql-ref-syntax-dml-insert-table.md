@@ -389,7 +389,7 @@ SELECT * FROM students;
 +-----------+-------------------------+-----------+
 ```
 
-#### Insert with a column list
+##### Insert with a column list
 
 ```sql
 INSERT OVERWRITE students (address, name, student_id) VALUES

@@ -19,6 +19,7 @@ package org.apache.spark.sql.sources
 
 import java.io.{File, IOException}
 import java.sql.Date
+import java.time.{Duration, Period}
 
 import org.apache.hadoop.fs.{FileAlreadyExistsException, FSDataOutputStream, Path, RawLocalFileSystem}
 
@@ -1061,6 +1062,39 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
       sql("CREATE TABLE t(i int, part1 int, part2 int) using parquet")
       sql("INSERT INTO t WITH v1(c1) as (values (1)) select 1, 2, 3 from v1")
       checkAnswer(spark.table("t"), Row(1, 2, 3))
+    }
+  }
+
+  test("SPARK-37294: insert ANSI intervals into a table partitioned by the interval columns") {
+    val tbl = "interval_table"
+    Seq(PartitionOverwriteMode.DYNAMIC, PartitionOverwriteMode.STATIC).foreach { mode =>
+      withSQLConf(SQLConf.PARTITION_OVERWRITE_MODE.key -> mode.toString) {
+        withTable(tbl) {
+          sql(
+            s"""
+              |CREATE TABLE $tbl (i INT, part1 INTERVAL YEAR, part2 INTERVAL DAY) USING PARQUET
+              |PARTITIONED BY (part1, part2)
+              """.stripMargin)
+
+          sql(
+            s"""ALTER TABLE $tbl ADD PARTITION (
+               |part1 = INTERVAL '2' YEAR,
+               |part2 = INTERVAL '3' DAY)""".stripMargin)
+          sql(s"INSERT OVERWRITE TABLE $tbl SELECT 1, INTERVAL '2' YEAR, INTERVAL '3' DAY")
+          sql(s"INSERT INTO TABLE $tbl SELECT 4, INTERVAL '5' YEAR, INTERVAL '6' DAY")
+          sql(
+            s"""
+               |INSERT INTO $tbl
+               | PARTITION (part1 = INTERVAL '8' YEAR, part2 = INTERVAL '9' DAY)
+               |SELECT 7""".stripMargin)
+
+          checkAnswer(
+            spark.table(tbl),
+            Seq(Row(1, Period.ofYears(2), Duration.ofDays(3)),
+              Row(4, Period.ofYears(5), Duration.ofDays(6)),
+              Row(7, Period.ofYears(8), Duration.ofDays(9))))
+        }
+      }
     }
   }
 }

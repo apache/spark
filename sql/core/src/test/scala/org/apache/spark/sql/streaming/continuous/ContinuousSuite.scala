@@ -257,7 +257,7 @@ class ContinuousSuite extends ContinuousSuiteBase {
       .option("numPartitions", "2")
       .option("rowsPerSecond", "2")
       .load()
-      .select('value)
+      .select(Symbol("value"))
 
     val query = df.writeStream
       .format("memory")
@@ -306,7 +306,7 @@ class ContinuousStressSuite extends ContinuousSuiteBase {
       .option("numPartitions", "5")
       .option("rowsPerSecond", "500")
       .load()
-      .select('value)
+      .select(Symbol("value"))
 
     testStream(df)(
       StartStream(longContinuousTrigger),
@@ -326,7 +326,7 @@ class ContinuousStressSuite extends ContinuousSuiteBase {
       .option("numPartitions", "5")
       .option("rowsPerSecond", "500")
       .load()
-      .select('value)
+      .select(Symbol("value"))
 
     testStream(df)(
       StartStream(Trigger.Continuous(2012)),
@@ -345,7 +345,7 @@ class ContinuousStressSuite extends ContinuousSuiteBase {
       .option("numPartitions", "5")
       .option("rowsPerSecond", "500")
       .load()
-      .select('value)
+      .select(Symbol("value"))
 
     testStream(df)(
       StartStream(Trigger.Continuous(1012)),
@@ -436,7 +436,7 @@ class ContinuousEpochBacklogSuite extends ContinuousSuiteBase {
         .option("numPartitions", "2")
         .option("rowsPerSecond", "500")
         .load()
-        .select('value)
+        .select(Symbol("value"))
 
       testStream(df)(
         StartStream(Trigger.Continuous(1)),

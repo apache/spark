@@ -22,7 +22,7 @@ import java.util.concurrent.ConcurrentHashMap
 
 import scala.collection.JavaConverters._
 
-import org.apache.spark.sql.catalyst.analysis.{NamespaceAlreadyExistsException, NoSuchNamespaceException, NoSuchTableException, TableAlreadyExistsException}
+import org.apache.spark.sql.catalyst.analysis.{NamespaceAlreadyExistsException, NonEmptyNamespaceException, NoSuchNamespaceException, NoSuchTableException, TableAlreadyExistsException}
 import org.apache.spark.sql.connector.distributions.{Distribution, Distributions}
 import org.apache.spark.sql.connector.expressions.{SortOrder, Transform}
 import org.apache.spark.sql.types.StructType
@@ -53,6 +53,26 @@ class BasicInMemoryTableCatalog extends TableCatalog {
 
   override def loadTable(ident: Identifier): Table = {
     Option(tables.get(ident)) match {
+      case Some(table) =>
+        table
+      case _ =>
+        throw new NoSuchTableException(ident)
+    }
+  }
+
+  override def loadTable(ident: Identifier, version: String): Table = {
+    val versionIdent = Identifier.of(ident.namespace, ident.name + version)
+    Option(tables.get(versionIdent)) match {
+      case Some(table) =>
+        table
+      case _ =>
+        throw new NoSuchTableException(ident)
+    }
+  }
+
+  override def loadTable(ident: Identifier, timestamp: Long): Table = {
+    val timestampIdent = Identifier.of(ident.namespace, ident.name + timestamp)
+    Option(tables.get(timestampIdent)) match {
       case Some(table) =>
         table
       case _ =>
@@ -193,10 +213,16 @@ class InMemoryTableCatalog extends BasicInMemoryTableCatalog with SupportsNamesp
     namespaces.put(namespace.toList, CatalogV2Util.applyNamespaceChanges(metadata, changes))
   }
 
-  override def dropNamespace(namespace: Array[String]): Boolean = {
-    listNamespaces(namespace).foreach(dropNamespace)
+  override def dropNamespace(namespace: Array[String], cascade: Boolean): Boolean = {
     try {
-      listTables(namespace).foreach(dropTable)
+      if (!cascade) {
+        if (listTables(namespace).nonEmpty || listNamespaces(namespace).nonEmpty) {
+          throw new NonEmptyNamespaceException(namespace)
+        }
+      } else {
+        listNamespaces(namespace).foreach(namespace => dropNamespace(namespace, cascade))
+        listTables(namespace).foreach(dropTable)
+      }
     } catch {
       case _: NoSuchNamespaceException =>
     }

@@ -22,6 +22,7 @@ import org.apache.spark.sql.connector.expressions.Transform;
 import org.apache.spark.sql.catalyst.analysis.NoSuchNamespaceException;
 import org.apache.spark.sql.catalyst.analysis.NoSuchTableException;
 import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException;
+import org.apache.spark.sql.errors.QueryCompilationErrors;
 import org.apache.spark.sql.types.StructType;
 
 import java.util.Map;
@@ -93,6 +94,36 @@ public interface TableCatalog extends CatalogPlugin {
    * @throws NoSuchTableException If the table doesn't exist or is a view
    */
   Table loadTable(Identifier ident) throws NoSuchTableException;
+
+  /**
+   * Load table metadata of a specific version by {@link Identifier identifier} from the catalog.
+   * <p>
+   * If the catalog supports views and contains a view for the identifier and not a table, this
+   * must throw {@link NoSuchTableException}.
+   *
+   * @param ident a table identifier
+   * @param version version of the table
+   * @return the table's metadata
+   * @throws NoSuchTableException If the table doesn't exist or is a view
+   */
+  default Table loadTable(Identifier ident, String version) throws NoSuchTableException {
+    throw QueryCompilationErrors.tableNotSupportTimeTravelError(ident);
+  }
+
+  /**
+   * Load table metadata at a specific time by {@link Identifier identifier} from the catalog.
+   * <p>
+   * If the catalog supports views and contains a view for the identifier and not a table, this
+   * must throw {@link NoSuchTableException}.
+   *
+   * @param ident a table identifier
+   * @param timestamp timestamp of the table, which is microseconds since 1970-01-01 00:00:00 UTC
+   * @return the table's metadata
+   * @throws NoSuchTableException If the table doesn't exist or is a view
+   */
+  default Table loadTable(Identifier ident, long timestamp) throws NoSuchTableException {
+    throw QueryCompilationErrors.tableNotSupportTimeTravelError(ident);
+  }
 
   /**
    * Invalidate cached table metadata for an {@link Identifier identifier}.

@@ -21,7 +21,7 @@ import java.util.{Locale, UUID}
 import io.fabric8.kubernetes.api.model.{LocalObjectReference, LocalObjectReferenceBuilder, Pod}
 import org.apache.commons.lang3.StringUtils
 
-import org.apache.spark.SparkConf
+import org.apache.spark.{SPARK_VERSION, SparkConf}
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.submit._
@@ -42,7 +42,8 @@ private[spark] abstract class KubernetesConf(val sparkConf: SparkConf) {
   def secretEnvNamesToKeyRefs: Map[String, String]
   def secretNamesToMountPaths: Map[String, String]
   def volumes: Seq[KubernetesVolumeSpec]
-  def schedulerName: String
+  def schedulerName: Option[String]
+  def appId: String
 
   def appName: String = get("spark.app.name", "spark")
 
@@ -94,6 +95,7 @@ private[spark] class KubernetesDriverConf(
 
   override def labels: Map[String, String] = {
     val presetLabels = Map(
+      SPARK_VERSION_LABEL -> SPARK_VERSION,
       SPARK_APP_ID_LABEL -> appId,
       SPARK_APP_NAME_LABEL -> KubernetesConf.getAppNameLabel(appName),
       SPARK_ROLE_LABEL -> SPARK_POD_DRIVER_ROLE)
@@ -134,7 +136,9 @@ private[spark] class KubernetesDriverConf(
     KubernetesVolumeUtils.parseVolumesWithPrefix(sparkConf, KUBERNETES_DRIVER_VOLUMES_PREFIX)
   }
 
-  override def schedulerName: String = get(KUBERNETES_DRIVER_SCHEDULER_NAME).getOrElse("")
+  override def schedulerName: Option[String] = {
+    Option(get(KUBERNETES_DRIVER_SCHEDULER_NAME).getOrElse(get(KUBERNETES_SCHEDULER_NAME).orNull))
+  }
 }
 
 private[spark] class KubernetesExecutorConf(
@@ -155,6 +159,7 @@ private[spark] class KubernetesExecutorConf(
 
   override def labels: Map[String, String] = {
     val presetLabels = Map(
+      SPARK_VERSION_LABEL -> SPARK_VERSION,
       SPARK_EXECUTOR_ID_LABEL -> executorId,
       SPARK_APP_ID_LABEL -> appId,
       SPARK_APP_NAME_LABEL -> KubernetesConf.getAppNameLabel(appName),
@@ -192,7 +197,9 @@ private[spark] class KubernetesExecutorConf(
     KubernetesVolumeUtils.parseVolumesWithPrefix(sparkConf, KUBERNETES_EXECUTOR_VOLUMES_PREFIX)
   }
 
-  override def schedulerName: String = get(KUBERNETES_EXECUTOR_SCHEDULER_NAME).getOrElse("")
+  override def schedulerName: Option[String] = {
+    Option(get(KUBERNETES_EXECUTOR_SCHEDULER_NAME).getOrElse(get(KUBERNETES_SCHEDULER_NAME).orNull))
+  }
 
   private def checkExecutorEnvKey(key: String): Boolean = {
     // Pattern for matching an executorEnv key, which meets certain naming rules.

@@ -18,7 +18,6 @@
 package org.apache.spark.sql.execution.datasources.orc
 
 import org.apache.hadoop.io._
-import org.apache.orc.TypeDescription
 import org.apache.orc.mapred.{OrcList, OrcMap, OrcStruct, OrcTimestamp}
 
 import org.apache.spark.sql.catalyst.InternalRow
@@ -148,12 +147,14 @@ class OrcSerializer(dataSchema: StructType) {
       result.setNanos(ts.getNanos)
       result
 
+    case TimestampNTZType => (getter, ordinal) => OrcUtils.toOrcNTZ(getter.getLong(ordinal))
+
     case DecimalType.Fixed(precision, scale) =>
       OrcShimUtils.getHiveDecimalWritable(precision, scale)
 
     case st: StructType => (getter, ordinal) =>
       val result = createOrcValue(st).asInstanceOf[OrcStruct]
-      val fieldConverters = st.map(_.dataType).map(newConverter(_))
+      val fieldConverters = st.map(_.dataType).map(newConverter(_)).toArray
       val numFields = st.length
       val struct = getter.getStruct(ordinal, numFields)
       var i = 0
@@ -214,6 +215,6 @@ class OrcSerializer(dataSchema: StructType) {
    * Return a Orc value object for the given Spark schema.
    */
   private def createOrcValue(dataType: DataType) = {
-    OrcStruct.createValue(TypeDescription.fromString(OrcFileFormat.getQuotedSchemaString(dataType)))
+    OrcStruct.createValue(OrcUtils.orcTypeDescription(dataType))
   }
 }

@@ -21,18 +21,25 @@ import java.io.File
 
 import org.mockito.AdditionalAnswers
 import org.mockito.ArgumentMatchers.{anyBoolean, anyLong, eq => meq}
-import org.mockito.Mockito.{doAnswer, spy, when}
-import org.scalatest.{BeforeAndAfter, PrivateMethodTester}
-import org.scalatestplus.mockito.MockitoSugar.mock
+import org.mockito.Mockito.{doAnswer, spy}
+import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.internal.config.History._
+import org.apache.spark.internal.config.History.HybridStoreDiskBackend
 import org.apache.spark.status.KVUtils
+import org.apache.spark.tags.{ExtendedLevelDBTest, ExtendedRocksDBTest}
 import org.apache.spark.util.{ManualClock, Utils}
 import org.apache.spark.util.kvstore.KVStore
 
-class HistoryServerDiskManagerSuite extends SparkFunSuite
-  with PrivateMethodTester with BeforeAndAfter {
+abstract class HistoryServerDiskManagerSuite extends SparkFunSuite with BeforeAndAfter {
+
+  protected def backend: HybridStoreDiskBackend.Value
+
+  protected def extension: String
+
+  protected def conf: SparkConf = new SparkConf()
+    .set(HYBRID_STORE_DISK_BACKEND, backend.toString)
 
   private def doReturn(value: Any) = org.mockito.Mockito.doReturn(value, Seq.empty: _*)
 
@@ -43,7 +50,7 @@ class HistoryServerDiskManagerSuite extends SparkFunSuite
 
   before {
     testDir = Utils.createTempDir()
-    store = KVUtils.open(new File(testDir, "listing"), "test")
+    store = KVUtils.open(new File(testDir, "listing"), "test", conf)
   }
 
   after {
@@ -160,28 +167,6 @@ class HistoryServerDiskManagerSuite extends SparkFunSuite
     assert(manager.approximateSize(50L, true) > 50L)
   }
 
-  test("SPARK-36998: Should be able to delete a store") {
-    val manager = mockManager()
-    val tempDir = Utils.createTempDir()
-    tempDir.delete()
-    Seq(true, false).foreach { exists =>
-      val file = mock[File]
-      when(file.exists()).thenReturn(true).thenReturn(true).thenReturn(exists)
-      when(file.isDirectory).thenReturn(true)
-      when(file.toPath).thenReturn(tempDir.toPath)
-      when(file.getAbsolutePath).thenReturn(tempDir.getAbsolutePath)
-      val deleteStore = PrivateMethod[Unit]('deleteStore)
-      if (exists) {
-        val m = intercept[Exception] {
-          manager invokePrivate deleteStore(file)
-        }.getMessage
-        assert(m.contains("Unknown I/O error"))
-      } else {
-        manager invokePrivate deleteStore(file)
-      }
-    }
-  }
-
   test("SPARK-32024: update ApplicationStoreInfo.size during initializing") {
     val manager = mockManager()
     val leaseA = manager.lease(2)
@@ -234,4 +219,21 @@ class HistoryServerDiskManagerSuite extends SparkFunSuite
     assert(store.read(classOf[ApplicationStoreInfo], dstC.getAbsolutePath).size === 2)
   }
 
+  test("SPARK-38095: appStorePath should use backend extensions") {
+    val conf = new SparkConf().set(HYBRID_STORE_DISK_BACKEND, backend.toString)
+    val manager = new HistoryServerDiskManager(conf, testDir, store, new ManualClock())
+    assert(manager.appStorePath("appId", None).getName.endsWith(extension))
+  }
+}
+
+@ExtendedLevelDBTest
+class HistoryServerDiskManagerUseLevelDBSuite extends HistoryServerDiskManagerSuite {
+  override protected def backend: HybridStoreDiskBackend.Value = HybridStoreDiskBackend.LEVELDB
+  override protected def extension: String = ".ldb"
+}
+
+@ExtendedRocksDBTest
+class HistoryServerDiskManagerUseRocksDBSuite extends HistoryServerDiskManagerSuite {
+  override protected def backend: HybridStoreDiskBackend.Value = HybridStoreDiskBackend.ROCKSDB
+  override protected def extension: String = ".rdb"
 }

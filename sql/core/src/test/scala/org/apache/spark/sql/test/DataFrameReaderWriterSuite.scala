@@ -32,7 +32,7 @@ import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName
 import org.apache.parquet.schema.Type.Repetition
 import org.scalatest.BeforeAndAfter
 
-import org.apache.spark.SparkContext
+import org.apache.spark.{SparkContext, TestUtils}
 import org.apache.spark.internal.io.FileCommitProtocol.TaskCommitMessage
 import org.apache.spark.internal.io.HadoopMapReduceCommitProtocol
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
@@ -42,7 +42,6 @@ import org.apache.spark.sql.catalyst.plans.logical.{AppendData, LogicalPlan, Ove
 import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.execution.datasources.{DataSourceUtils, HadoopFsRelation, LogicalRelation}
 import org.apache.spark.sql.execution.datasources.noop.NoopDataSource
-import org.apache.spark.sql.execution.datasources.parquet.SpecificParquetRecordReaderBase
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
@@ -536,12 +535,31 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSparkSession with 
       .option("TO", "10")
       .format("org.apache.spark.sql.sources.SimpleScanSource")
 
+    val answerDf = spark.range(1, 11).toDF()
+
     // when users do not specify the schema
-    checkAnswer(dfReader.load(), spark.range(1, 11).toDF())
+    checkAnswer(dfReader.load(), answerDf)
+
+    // same base schema, differing metadata and nullability
+    val fooBarMetadata = new MetadataBuilder().putString("foo", "bar").build()
+    val nullableAndMetadataCases = Seq(
+      (false, fooBarMetadata),
+      (false, Metadata.empty),
+      (true, fooBarMetadata),
+      (true, Metadata.empty))
+    nullableAndMetadataCases.foreach { case (nullable, metadata) =>
+      val inputSchema = new StructType()
+        .add("i", IntegerType, nullable = nullable, metadata = metadata)
+      checkAnswer(dfReader.schema(inputSchema).load(), answerDf)
+    }
 
     // when users specify a wrong schema
-    val inputSchema = new StructType().add("s", IntegerType, nullable = false)
-    val e = intercept[AnalysisException] { dfReader.schema(inputSchema).load() }
+    var inputSchema = new StructType().add("s", IntegerType, nullable = false)
+    var e = intercept[AnalysisException] { dfReader.schema(inputSchema).load() }
+    assert(e.getMessage.contains("The user-specified schema doesn't match the actual schema"))
+
+    inputSchema = new StructType().add("i", StringType, nullable = true)
+    e = intercept[AnalysisException] { dfReader.schema(inputSchema).load() }
     assert(e.getMessage.contains("The user-specified schema doesn't match the actual schema"))
   }
 
@@ -745,7 +763,7 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSparkSession with 
     withTempPath { dir =>
       val path = dir.getAbsolutePath
       df.write.mode("overwrite").parquet(path)
-      val file = SpecificParquetRecordReaderBase.listDirectory(dir).get(0)
+      val file = TestUtils.listDirectory(dir).head
 
       val hadoopInputFile = HadoopInputFile.fromPath(new Path(file), new Configuration())
       val f = ParquetFileReader.open(hadoopInputFile)
@@ -862,7 +880,8 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSparkSession with 
       val createArray = udf { (length: Long) =>
         for (i <- 1 to length.toInt) yield i.toString
       }
-      spark.range(4).select(createArray('id + 1) as 'ex, 'id, 'id % 4 as 'part).coalesce(1).write
+      spark.range(4).select(createArray(Symbol("id") + 1) as Symbol("ex"),
+        Symbol("id"), Symbol("id") % 4 as Symbol("part")).coalesce(1).write
         .partitionBy("part", "id")
         .mode("overwrite")
         .parquet(src.toString)

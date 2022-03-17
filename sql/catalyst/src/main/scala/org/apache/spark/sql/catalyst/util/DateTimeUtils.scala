@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.util
 
 import java.sql.{Date, Timestamp}
 import java.time._
-import java.time.temporal.{ChronoField, ChronoUnit, IsoFields}
+import java.time.temporal.{ChronoField, ChronoUnit, IsoFields, Temporal}
 import java.util.{Locale, TimeZone}
 import java.util.concurrent.TimeUnit._
 
@@ -108,6 +108,17 @@ object DateTimeUtils {
   }
 
   /**
+   * Converts an Java object to days.
+   *
+   * @param obj Either an object of `java.sql.Date` or `java.time.LocalDate`.
+   * @return The number of days since 1970-01-01.
+   */
+  def anyToDays(obj: Any): Int = obj match {
+    case d: Date => fromJavaDate(d)
+    case ld: LocalDate => localDateToDays(ld)
+  }
+
+  /**
    * Converts days since the epoch 1970-01-01 in Proleptic Gregorian calendar to a local date
    * at the default JVM time zone in the hybrid calendar (Julian + Gregorian). It rebases the given
    * days from Proleptic Gregorian to the hybrid calendar at UTC time zone for simplicity because
@@ -178,6 +189,17 @@ object DateTimeUtils {
   def fromJavaTimestamp(t: Timestamp): Long = {
     val micros = millisToMicros(t.getTime) + (t.getNanos / NANOS_PER_MICROS) % MICROS_PER_MILLIS
     rebaseJulianToGregorianMicros(micros)
+  }
+
+  /**
+   * Converts an Java object to microseconds.
+   *
+   * @param obj Either an object of `java.sql.Timestamp` or `java.time.Instant`.
+   * @return The number of micros since the epoch.
+   */
+  def anyToMicros(obj: Any): Long = obj match {
+    case t: Timestamp => fromJavaTimestamp(t)
+    case i: Instant => instantToMicros(i)
   }
 
   /**
@@ -442,17 +464,22 @@ object DateTimeUtils {
 
   /**
    * Trims and parses a given UTF8 string to a corresponding [[Long]] value which representing the
-   * number of microseconds since the epoch. The result is independent of time zones,
-   * which means that zone ID in the input string will be ignored.
+   * number of microseconds since the epoch. The result will be independent of time zones.
+   *
+   * If the input string contains a component associated with time zone, the method will return
+   * `None` if `allowTimeZone` is set to `false`. If `allowTimeZone` is set to `true`, the method
+   * will simply discard the time zone component. Enable the check to detect situations like parsing
+   * a timestamp with time zone as TimestampNTZType.
+   *
    * The return type is [[Option]] in order to distinguish between 0L and null. Please
    * refer to `parseTimestampString` for the allowed formats.
    */
-  def stringToTimestampWithoutTimeZone(s: UTF8String): Option[Long] = {
+  def stringToTimestampWithoutTimeZone(s: UTF8String, allowTimeZone: Boolean): Option[Long] = {
     try {
-      val (segments, _, justTime) = parseTimestampString(s)
-      // If the input string can't be parsed as a timestamp, or it contains only the time part of a
-      // timestamp and we can't determine its date, return None.
-      if (segments.isEmpty || justTime) {
+      val (segments, zoneIdOpt, justTime) = parseTimestampString(s)
+      // If the input string can't be parsed as a timestamp without time zone, or it contains only
+      // the time part of a timestamp and we can't determine its date, return None.
+      if (segments.isEmpty || justTime || !allowTimeZone && zoneIdOpt.isDefined) {
         return None
       }
       val nanoseconds = MICROSECONDS.toNanos(segments(6))
@@ -465,8 +492,19 @@ object DateTimeUtils {
     }
   }
 
+  /**
+   * Trims and parses a given UTF8 string to a corresponding [[Long]] value which representing the
+   * number of microseconds since the epoch. The result is independent of time zones. Zone id
+   * component will be ignored.
+   * The return type is [[Option]] in order to distinguish between 0L and null. Please
+   * refer to `parseTimestampString` for the allowed formats.
+   */
+  def stringToTimestampWithoutTimeZone(s: UTF8String): Option[Long] = {
+    stringToTimestampWithoutTimeZone(s, true)
+  }
+
   def stringToTimestampWithoutTimeZoneAnsi(s: UTF8String): Long = {
-    stringToTimestampWithoutTimeZone(s).getOrElse {
+    stringToTimestampWithoutTimeZone(s, true).getOrElse {
       throw QueryExecutionErrors.cannotCastToDateTimeError(s, TimestampNTZType)
     }
   }
@@ -528,7 +566,7 @@ object DateTimeUtils {
   def stringToDate(s: UTF8String): Option[Int] = {
     def isValidDigits(segment: Int, digits: Int): Boolean = {
       // An integer is able to represent a date within [+-]5 million years.
-      var maxDigitsYear = 7
+      val maxDigitsYear = 7
       (segment == 0 && digits >= 4 && digits <= maxDigitsYear) ||
         (segment != 0 && digits > 0 && digits <= 2)
     }
@@ -981,6 +1019,23 @@ object DateTimeUtils {
   }
 
   /**
+   * Converts a timestamp without time zone from a source to target time zone.
+   *
+   * @param sourceTz The time zone for the input timestamp without time zone.
+   * @param targetTz The time zone to which the input timestamp should be converted.
+   * @param micros The offset in microseconds represents a local timestamp.
+   * @return The timestamp without time zone represents the same moment (physical time) as
+   *         the input timestamp in the input time zone, but in the destination time zone.
+   */
+  def convertTimestampNtzToAnotherTz(sourceTz: String, targetTz: String, micros: Long): Long = {
+    val ldt = microsToLocalDateTime(micros)
+      .atZone(getZoneId(sourceTz))
+      .withZoneSameInstant(getZoneId(targetTz))
+      .toLocalDateTime
+    localDateTimeToMicros(ldt)
+  }
+
+  /**
    * Returns a timestamp of given timezone from UTC timestamp, with the same string
    * representation in their timezone.
    */
@@ -1129,5 +1184,75 @@ object DateTimeUtils {
     val localEndTs = getLocalDateTime(endMicros, zoneId)
     val localStartTs = getLocalDateTime(startMicros, zoneId)
     ChronoUnit.MICROS.between(localStartTs, localEndTs)
+  }
+
+  /**
+   * Adds the specified number of units to a timestamp.
+   *
+   * @param unit A keyword that specifies the interval units to add to the input timestamp.
+   * @param quantity The amount of `unit`s to add. It can be positive or negative.
+   * @param micros The input timestamp value, expressed in microseconds since 1970-01-01 00:00:00Z.
+   * @param zoneId The time zone ID at which the operation is performed.
+   * @return A timestamp value, expressed in microseconds since 1970-01-01 00:00:00Z.
+   */
+  def timestampAdd(unit: String, quantity: Int, micros: Long, zoneId: ZoneId): Long = {
+    unit.toUpperCase(Locale.ROOT) match {
+      case "MICROSECOND" =>
+        timestampAddDayTime(micros, quantity, zoneId)
+      case "MILLISECOND" =>
+        timestampAddDayTime(micros, quantity * MICROS_PER_MILLIS, zoneId)
+      case "SECOND" =>
+        timestampAddDayTime(micros, quantity * MICROS_PER_SECOND, zoneId)
+      case "MINUTE" =>
+        timestampAddDayTime(micros, quantity * MICROS_PER_MINUTE, zoneId)
+      case "HOUR" =>
+        timestampAddDayTime(micros, quantity * MICROS_PER_HOUR, zoneId)
+      case "DAY" | "DAYOFYEAR" =>
+        timestampAddDayTime(micros, quantity * MICROS_PER_DAY, zoneId)
+      case "WEEK" =>
+        timestampAddDayTime(micros, quantity * MICROS_PER_DAY * DAYS_PER_WEEK, zoneId)
+      case "MONTH" =>
+        timestampAddMonths(micros, quantity, zoneId)
+      case "QUARTER" =>
+        timestampAddMonths(micros, quantity * 3, zoneId)
+      case "YEAR" =>
+        timestampAddMonths(micros, quantity * MONTHS_PER_YEAR, zoneId)
+      case _ =>
+        throw QueryExecutionErrors.invalidUnitInTimestampAdd(unit)
+    }
+  }
+
+  private val timestampDiffMap = Map[String, (Temporal, Temporal) => Long](
+    "MICROSECOND" -> ChronoUnit.MICROS.between,
+    "MILLISECOND" -> ChronoUnit.MILLIS.between,
+    "SECOND" -> ChronoUnit.SECONDS.between,
+    "MINUTE" -> ChronoUnit.MINUTES.between,
+    "HOUR" -> ChronoUnit.HOURS.between,
+    "DAY" -> ChronoUnit.DAYS.between,
+    "WEEK" -> ChronoUnit.WEEKS.between,
+    "MONTH" -> ChronoUnit.MONTHS.between,
+    "QUARTER" -> ((startTs: Temporal, endTs: Temporal) =>
+      ChronoUnit.MONTHS.between(startTs, endTs) / 3),
+    "YEAR" -> ChronoUnit.YEARS.between)
+
+  /**
+   * Gets the difference between two timestamps.
+   *
+   * @param unit Specifies the interval units in which to express the difference between
+   *             the two timestamp parameters.
+   * @param startTs A timestamp which the function subtracts from `endTs`.
+   * @param endTs A timestamp from which the function subtracts `startTs`.
+   * @param zoneId The time zone ID at which the operation is performed.
+   * @return The time span between two timestamp values, in the units specified.
+   */
+  def timestampDiff(unit: String, startTs: Long, endTs: Long, zoneId: ZoneId): Long = {
+    val unitInUpperCase = unit.toUpperCase(Locale.ROOT)
+    if (timestampDiffMap.contains(unitInUpperCase)) {
+      val startLocalTs = getLocalDateTime(startTs, zoneId)
+      val endLocalTs = getLocalDateTime(endTs, zoneId)
+      timestampDiffMap(unitInUpperCase)(startLocalTs, endLocalTs)
+    } else {
+      throw QueryExecutionErrors.invalidUnitInTimestampDiff(unit)
+    }
   }
 }

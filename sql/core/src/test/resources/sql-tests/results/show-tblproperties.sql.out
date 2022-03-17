@@ -33,7 +33,7 @@ SHOW TBLPROPERTIES tbl("p3")
 -- !query schema
 struct<key:string,value:string>
 -- !query output
-p3	Table default.tbl does not have property: p3
+p3	Table spark_catalog.default.tbl does not have property: p3
 
 
 -- !query

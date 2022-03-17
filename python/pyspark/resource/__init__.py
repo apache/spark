@@ -19,12 +19,20 @@
 APIs to let users manipulate resource requirements.
 """
 from pyspark.resource.information import ResourceInformation
-from pyspark.resource.requests import TaskResourceRequest, TaskResourceRequests, \
-    ExecutorResourceRequest, ExecutorResourceRequests
+from pyspark.resource.requests import (
+    TaskResourceRequest,
+    TaskResourceRequests,
+    ExecutorResourceRequest,
+    ExecutorResourceRequests,
+)
 from pyspark.resource.profile import ResourceProfile, ResourceProfileBuilder
 
 __all__ = [
-    "TaskResourceRequest", "TaskResourceRequests", "ExecutorResourceRequest",
-    "ExecutorResourceRequests", "ResourceProfile", "ResourceInformation",
+    "TaskResourceRequest",
+    "TaskResourceRequests",
+    "ExecutorResourceRequest",
+    "ExecutorResourceRequests",
+    "ResourceProfile",
+    "ResourceInformation",
     "ResourceProfileBuilder",
 ]

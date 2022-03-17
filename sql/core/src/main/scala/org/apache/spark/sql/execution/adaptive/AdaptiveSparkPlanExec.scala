@@ -116,9 +116,10 @@ case class AdaptiveSparkPlanExec(
     Seq(
       RemoveRedundantProjects,
       ensureRequirements,
+      ReplaceHashWithSortAgg,
       RemoveRedundantSorts,
       DisableUnnecessaryBucketedScan,
-      OptimizeSkewedJoin(ensureRequirements, costEvaluator)
+      OptimizeSkewedJoin(ensureRequirements)
     ) ++ context.session.sessionState.queryStagePrepRules
   }
 
@@ -409,7 +410,6 @@ case class AdaptiveSparkPlanExec(
         if (isFinalPlan) "Final Plan" else "Current Plan",
         currentPhysicalPlan,
         depth,
-        lastChildren,
         append,
         verbose,
         maxFields,
@@ -418,7 +418,6 @@ case class AdaptiveSparkPlanExec(
         "Initial Plan",
         initialPlan,
         depth,
-        lastChildren,
         append,
         verbose,
         maxFields,
@@ -431,7 +430,6 @@ case class AdaptiveSparkPlanExec(
       header: String,
       plan: SparkPlan,
       depth: Int,
-      lastChildren: Seq[Boolean],
       append: String => Unit,
       verbose: Boolean,
       maxFields: Int,
@@ -701,7 +699,7 @@ case class AdaptiveSparkPlanExec(
         p.flatMap(_.metrics.values.map(m => SQLPlanMetric(m.name.get, m.id, m.metricType)))
       }
       context.session.sparkContext.listenerBus.post(SparkListenerSQLAdaptiveSQLMetricUpdates(
-        executionId.toLong, newMetrics))
+        executionId, newMetrics))
     } else {
       val planDescriptionMode = ExplainMode.fromString(conf.uiExplainMode)
       context.session.sparkContext.listenerBus.post(SparkListenerSQLAdaptiveExecutionUpdate(

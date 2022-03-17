@@ -24,13 +24,14 @@ from pyspark.testing.mlutils import SparkSessionTestCase
 
 
 class ChiSquareTestTests(SparkSessionTestCase):
-
     def test_chisquaretest(self):
-        data = [[0, Vectors.dense([0, 1, 2])],
-                [1, Vectors.dense([1, 1, 1])],
-                [2, Vectors.dense([2, 1, 0])]]
-        df = self.spark.createDataFrame(data, ['label', 'feat'])
-        res = ChiSquareTest.test(df, 'feat', 'label')
+        data = [
+            [0, Vectors.dense([0, 1, 2])],
+            [1, Vectors.dense([1, 1, 1])],
+            [2, Vectors.dense([2, 1, 0])],
+        ]
+        df = self.spark.createDataFrame(data, ["label", "feat"])
+        res = ChiSquareTest.test(df, "feat", "label")
         # This line is hitting the collect bug described in #17218, commented for now.
         # pValues = res.select("degreesOfFreedom").collect())
         self.assertIsInstance(res, DataFrame)
@@ -44,7 +45,8 @@ if __name__ == "__main__":
 
     try:
         import xmlrunner  # type: ignore[import]
-        testRunner = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2)
+
+        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:
         testRunner = None
     unittest.main(testRunner=testRunner, verbosity=2)

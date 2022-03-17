@@ -25,32 +25,30 @@ import scala.io.Source
 private[spark] trait SparkConfPropagateSuite { k8sSuite: KubernetesSuite =>
   import KubernetesSuite.{k8sTestTag, SPARK_PI_MAIN_CLASS}
 
-  test("Verify logging configuration is picked from the provided SPARK_CONF_DIR/log4j.properties",
+  test("Verify logging configuration is picked from the provided SPARK_CONF_DIR/log4j2.properties",
     k8sTestTag) {
     val loggingConfigFileName = "log-config-test-log4j.properties"
     val loggingConfURL: URL = this.getClass.getClassLoader.getResource(loggingConfigFileName)
     assert(loggingConfURL != null, "Logging configuration file not available.")
 
     val content = Source.createBufferedSource(loggingConfURL.openStream()).getLines().mkString("\n")
-    val logConfFilePath = s"${sparkHomeDir.toFile}/conf/log4j.properties"
+    val logConfFilePath = s"${sparkHomeDir.toFile}/conf/log4j2.properties"
 
     try {
       Files.write(new File(logConfFilePath).toPath, content.getBytes)
 
-      sparkAppConf.set("spark.driver.extraJavaOptions", "-Dlog4j.debug")
-      sparkAppConf.set("spark.executor.extraJavaOptions", "-Dlog4j.debug")
+      sparkAppConf.set("spark.driver.extraJavaOptions", "-Dlog4j2.debug")
+      sparkAppConf.set("spark.executor.extraJavaOptions", "-Dlog4j2.debug")
       sparkAppConf.set("spark.kubernetes.executor.deleteOnTermination", "false")
 
       val log4jExpectedLog =
-        s"log4j: Reading configuration from URL file:/opt/spark/conf/log4j.properties"
+        Seq("Reconfiguration complete for context", "at URI /opt/spark/conf/log4j2.properties")
 
       runSparkApplicationAndVerifyCompletion(
         appResource = containerLocalSparkDistroExamplesJar,
         mainClass = SPARK_PI_MAIN_CLASS,
-        expectedDriverLogOnCompletion = (Seq("DEBUG",
-          log4jExpectedLog,
-          "Pi is roughly 3")),
-        expectedExecutorLogOnCompletion = Seq(log4jExpectedLog),
+        expectedDriverLogOnCompletion = Seq("DEBUG", "Pi is roughly 3") ++ log4jExpectedLog,
+        expectedExecutorLogOnCompletion = log4jExpectedLog,
         appArgs = Array.empty[String],
         driverPodChecker = doBasicDriverPodCheck,
         executorPodChecker = doBasicExecutorPodCheck,

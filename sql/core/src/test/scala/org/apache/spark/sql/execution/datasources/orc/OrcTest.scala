@@ -47,7 +47,7 @@ import org.apache.spark.sql.internal.SQLConf.ORC_IMPLEMENTATION
  *       -> HiveOrcPartitionDiscoverySuite
  *   -> OrcFilterSuite
  */
-abstract class OrcTest extends QueryTest with FileBasedDataSourceTest with BeforeAndAfterAll {
+trait OrcTest extends QueryTest with FileBasedDataSourceTest with BeforeAndAfterAll {
 
   val orcImp: String = "native"
 
@@ -141,6 +141,13 @@ abstract class OrcTest extends QueryTest with FileBasedDataSourceTest with Befor
     file.deleteOnExit();
     FileUtils.copyURLToFile(url, file)
     spark.read.orc(file.getAbsolutePath)
+  }
+
+  def withAllNativeOrcReaders(code: => Unit): Unit = {
+    // test the row-based reader
+    withSQLConf(SQLConf.ORC_VECTORIZED_READER_ENABLED.key -> "false")(code)
+    // test the vectorized reader
+    withSQLConf(SQLConf.ORC_VECTORIZED_READER_ENABLED.key -> "true")(code)
   }
 
   /**

@@ -60,10 +60,10 @@ private[sql] class AvroSerializer(
     converter.apply(catalystData)
   }
 
-  private val dateRebaseFunc = DataSourceUtils.creteDateRebaseFuncInWrite(
+  private val dateRebaseFunc = DataSourceUtils.createDateRebaseFuncInWrite(
     datetimeRebaseMode, "Avro")
 
-  private val timestampRebaseFunc = DataSourceUtils.creteTimestampRebaseFuncInWrite(
+  private val timestampRebaseFunc = DataSourceUtils.createTimestampRebaseFuncInWrite(
     datetimeRebaseMode, "Avro")
 
   private val converter: Any => Any = {
@@ -240,6 +240,12 @@ private[sql] class AvroSerializer(
           }
           result
 
+      case (_: YearMonthIntervalType, INT) =>
+        (getter, ordinal) => getter.getInt(ordinal)
+
+      case (_: DayTimeIntervalType, LONG) =>
+        (getter, ordinal) => getter.getLong(ordinal)
+
       case _ =>
         throw new IncompatibleSchemaException(errorPrefix +
           s"schema is incompatible (sqlType = ${catalystType.sql}, avroType = $avroType)")
@@ -256,7 +262,7 @@ private[sql] class AvroSerializer(
       avroStruct, catalystStruct, avroPath, catalystPath, positionalFieldMatch)
 
     avroSchemaHelper.validateNoExtraCatalystFields(ignoreNullable = false)
-    avroSchemaHelper.validateNoExtraAvroFields()
+    avroSchemaHelper.validateNoExtraRequiredAvroFields()
 
     val (avroIndices, fieldConverters) = avroSchemaHelper.matchedFields.map {
       case AvroMatchedField(catalystField, _, avroField) =>

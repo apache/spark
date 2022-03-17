@@ -23,6 +23,7 @@ import org.apache.spark.internal.config.ConfigEntry
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, UnresolvedAlias, UnresolvedAttribute, UnresolvedFunction, UnresolvedGenerator, UnresolvedHaving, UnresolvedRelation, UnresolvedStar}
 import org.apache.spark.sql.catalyst.expressions.{Ascending, AttributeReference, Concat, GreaterThan, Literal, NullsFirst, SortOrder, UnresolvedWindowExpression, UnspecifiedFrame, WindowSpecDefinition, WindowSpecReference}
+import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.connector.catalog.TableCatalog
 import org.apache.spark.sql.execution.command._
@@ -46,7 +47,7 @@ class SparkSqlParserSuite extends AnalysisTest {
   }
 
   private def intercept(sqlCommand: String, messages: String*): Unit =
-    interceptParseException(parser.parsePlan)(sqlCommand, messages: _*)
+    interceptParseException(parser.parsePlan)(sqlCommand, messages: _*)()
 
   test("Checks if SET/RESET can parse all the configurations") {
     // Force to build static SQL configurations
@@ -71,6 +72,14 @@ class SparkSqlParserSuite extends AnalysisTest {
       }
       assertEqual(s"RESET ${config.key}", ResetCommand(Some(config.key)))
     }
+  }
+
+  test("SET with comment") {
+    assertEqual(s"SET my_path = /a/b/*", SetCommand(Some("my_path" -> Some("/a/b/*"))))
+    val e1 = intercept[ParseException](parser.parsePlan("SET k=`v` /*"))
+    assert(e1.getMessage.contains(s"Unclosed bracketed comment"))
+    val e2 = intercept[ParseException](parser.parsePlan("SET `k`=`v` /*"))
+    assert(e2.getMessage.contains(s"Unclosed bracketed comment"))
   }
 
   test("Report Error for invalid usage of SET command") {
@@ -303,7 +312,7 @@ class SparkSqlParserSuite extends AnalysisTest {
         Seq(AttributeReference("a", StringType)(),
           AttributeReference("b", StringType)(),
           AttributeReference("c", StringType)()),
-        Project(Seq('a, 'b, 'c),
+        Project(Seq(Symbol("a"), Symbol("b"), Symbol("c")),
           UnresolvedRelation(TableIdentifier("testData"))),
         ioSchema))
 
@@ -327,9 +336,9 @@ class SparkSqlParserSuite extends AnalysisTest {
             UnresolvedFunction("sum", Seq(UnresolvedAttribute("b")), isDistinct = false),
             Literal(10)),
           Aggregate(
-            Seq('a),
+            Seq(Symbol("a")),
             Seq(
-              'a,
+              Symbol("a"),
               UnresolvedAlias(
                 UnresolvedFunction("sum", Seq(UnresolvedAttribute("b")), isDistinct = false), None),
               UnresolvedAlias(
@@ -354,12 +363,12 @@ class SparkSqlParserSuite extends AnalysisTest {
           AttributeReference("c", StringType)()),
         WithWindowDefinition(
           Map("w" -> WindowSpecDefinition(
-            Seq('a),
-            Seq(SortOrder('b, Ascending, NullsFirst, Seq.empty)),
+            Seq(Symbol("a")),
+            Seq(SortOrder(Symbol("b"), Ascending, NullsFirst, Seq.empty)),
             UnspecifiedFrame)),
           Project(
             Seq(
-              'a,
+              Symbol("a"),
               UnresolvedAlias(
                 UnresolvedWindowExpression(
                   UnresolvedFunction("sum", Seq(UnresolvedAttribute("b")), isDistinct = false),
@@ -394,9 +403,9 @@ class SparkSqlParserSuite extends AnalysisTest {
             UnresolvedFunction("sum", Seq(UnresolvedAttribute("b")), isDistinct = false),
             Literal(10)),
           Aggregate(
-            Seq('a, 'myCol, 'myCol2),
+            Seq(Symbol("a"), Symbol("myCol"), Symbol("myCol2")),
             Seq(
-              'a,
+              Symbol("a"),
               UnresolvedAlias(
                 UnresolvedFunction("sum", Seq(UnresolvedAttribute("b")), isDistinct = false), None),
               UnresolvedAlias(
@@ -406,7 +415,7 @@ class SparkSqlParserSuite extends AnalysisTest {
               UnresolvedGenerator(
                 FunctionIdentifier("explode"),
                 Seq(UnresolvedAttribute("myTable.myCol"))),
-              Nil, false, Option("mytable2"), Seq('myCol2),
+              Nil, false, Option("mytable2"), Seq(Symbol("myCol2")),
               Generate(
                 UnresolvedGenerator(
                   FunctionIdentifier("explode"),
@@ -414,7 +423,7 @@ class SparkSqlParserSuite extends AnalysisTest {
                     Seq(
                       UnresolvedFunction("array", Seq(Literal(1), Literal(2), Literal(3)), false)),
                     false))),
-                Nil, false, Option("mytable"), Seq('myCol),
+                Nil, false, Option("mytable"), Seq(Symbol("myCol")),
                 UnresolvedRelation(TableIdentifier("testData")))))),
         ioSchema))
   }

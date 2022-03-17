@@ -203,7 +203,7 @@ class BasicWriteJobStatsTracker(
 
   override def processStats(stats: Seq[WriteTaskStats], jobCommitTime: Long): Unit = {
     val sparkContext = SparkContext.getActive.get
-    var partitionsSet: mutable.Set[InternalRow] = mutable.HashSet.empty
+    val partitionsSet: mutable.Set[InternalRow] = mutable.HashSet.empty
     var numFiles: Long = 0L
     var totalNumBytes: Long = 0L
     var totalNumOutput: Long = 0L

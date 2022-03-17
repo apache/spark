@@ -145,7 +145,6 @@ public class JavaRowSuite {
       doubleValue, stringValue, timestampValue, null);
 
     // Complex array
-    @SuppressWarnings("unchecked")
     List<Map<String, Long>> arrayOfMaps = Arrays.asList(simpleMap);
     List<Row> arrayOfRows = Arrays.asList(simpleStruct);
 

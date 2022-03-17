@@ -27,6 +27,7 @@ import org.apache.spark.sql.types.DataType;
 import org.apache.spark.sql.types.DateType;
 import org.apache.spark.sql.types.Decimal;
 import org.apache.spark.sql.types.TimestampType;
+import org.apache.spark.sql.types.TimestampNTZType;
 import org.apache.spark.sql.vectorized.ColumnarArray;
 import org.apache.spark.sql.vectorized.ColumnarMap;
 import org.apache.spark.unsafe.types.UTF8String;
@@ -36,6 +37,7 @@ import org.apache.spark.unsafe.types.UTF8String;
  */
 public class OrcAtomicColumnVector extends OrcColumnVector {
   private final boolean isTimestamp;
+  private final boolean isTimestampNTZ;
   private final boolean isDate;
 
   // Column vector for each type. Only 1 is populated for any type.
@@ -52,6 +54,12 @@ public class OrcAtomicColumnVector extends OrcColumnVector {
       isTimestamp = true;
     } else {
       isTimestamp = false;
+    }
+
+    if (type instanceof TimestampNTZType) {
+      isTimestampNTZ = true;
+    } else {
+      isTimestampNTZ = false;
     }
 
     if (type instanceof DateType) {
@@ -105,6 +113,8 @@ public class OrcAtomicColumnVector extends OrcColumnVector {
     int index = getRowIndex(rowId);
     if (isTimestamp) {
       return DateTimeUtils.fromJavaTimestamp(timestampData.asScratchTimestamp(index));
+    } else if (isTimestampNTZ) {
+      return OrcUtils.fromOrcNTZ(timestampData.asScratchTimestamp(index));
     } else {
       return longData.vector[index];
     }

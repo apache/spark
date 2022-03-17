@@ -14,8 +14,8 @@ TakeOrderedAndProject [item_sk,d_date,web_sales,store_sales,web_cumulative,store
                           WholeStageCodegen (29)
                             Project [item_sk,item_sk,d_date,d_date,cume_sales,cume_sales]
                               Filter [item_sk,item_sk]
-                                InputAdapter
-                                  SortMergeJoin [item_sk,d_date,item_sk,d_date]
+                                SortMergeJoin [item_sk,d_date,item_sk,d_date]
+                                  InputAdapter
                                     WholeStageCodegen (14)
                                       Sort [item_sk,d_date]
                                         InputAdapter
@@ -73,6 +73,7 @@ TakeOrderedAndProject [item_sk,d_date,web_sales,store_sales,web_cumulative,store
                                                                           Sort [ws_item_sk,d_date]
                                                                             InputAdapter
                                                                               ReusedExchange [item_sk,d_date,sumws,ws_item_sk] #4
+                                  InputAdapter
                                     WholeStageCodegen (28)
                                       Sort [item_sk,d_date]
                                         InputAdapter

@@ -10,6 +10,7 @@ cache
 .generated-mima-member-excludes
 .rat-excludes
 .*md
+.java-version
 derby.log
 licenses/*
 licenses-binary/*

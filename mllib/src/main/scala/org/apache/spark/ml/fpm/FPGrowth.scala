@@ -350,7 +350,7 @@ object FPGrowthModel extends MLReadable[FPGrowthModel] {
       implicit val format = DefaultFormats
       val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
       val (major, minor) = VersionUtils.majorMinorVersion(metadata.sparkVersion)
-      val numTrainingRecords = if (major.toInt < 2 || (major.toInt == 2 && minor.toInt < 4)) {
+      val numTrainingRecords = if (major < 2 || (major == 2 && minor < 4)) {
         // 2.3 and before don't store the count
         0L
       } else {

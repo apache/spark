@@ -54,7 +54,6 @@ case class JDBCTable(ident: Identifier, schema: StructType, jdbcOptions: JDBCOpt
 
   override def createIndex(
       indexName: String,
-      indexType: String,
       columns: Array[NamedReference],
       columnsProperties: util.Map[NamedReference, util.Map[String, String]],
       properties: util.Map[String, String]): Unit = {
@@ -62,7 +61,7 @@ case class JDBCTable(ident: Identifier, schema: StructType, jdbcOptions: JDBCOpt
       JdbcUtils.classifyException(s"Failed to create index $indexName in $name",
         JdbcDialects.get(jdbcOptions.url)) {
         JdbcUtils.createIndex(
-          conn, indexName, indexType, name, columns, columnsProperties, properties, jdbcOptions)
+          conn, indexName, name, columns, columnsProperties, properties, jdbcOptions)
       }
     }
   }

@@ -18,33 +18,25 @@
 package org.apache.spark.sql.jdbc.v2
 
 import java.sql.{Connection, SQLFeatureNotSupportedException}
-import java.util
 
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.analysis.{IndexAlreadyExistsException, NoSuchIndexException}
-import org.apache.spark.sql.connector.catalog.{Catalogs, Identifier, TableCatalog}
-import org.apache.spark.sql.connector.catalog.index.SupportsIndex
-import org.apache.spark.sql.connector.expressions.{FieldReference, NamedReference}
 import org.apache.spark.sql.execution.datasources.v2.jdbc.JDBCTableCatalog
-import org.apache.spark.sql.jdbc.{DatabaseOnDocker, DockerJDBCIntegrationSuite}
+import org.apache.spark.sql.jdbc.DatabaseOnDocker
 import org.apache.spark.sql.types._
 import org.apache.spark.tags.DockerTest
 
 /**
- *
  * To run this test suite for a specific version (e.g., mysql:5.7.36):
  * {{{
  *   ENABLE_DOCKER_INTEGRATION_TESTS=1 MYSQL_DOCKER_IMAGE_NAME=mysql:5.7.36
  *     ./build/sbt -Pdocker-integration-tests "testOnly *v2*MySQLIntegrationSuite"
- *
  * }}}
- *
  */
 @DockerTest
-class MySQLIntegrationSuite extends DockerJDBCIntegrationSuite with V2JDBCTest {
+class MySQLIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTest {
   override val catalogName: String = "mysql"
   override val db = new DatabaseOnDocker {
     override val imageName = sys.env.getOrElse("MYSQL_DOCKER_IMAGE_NAME", "mysql:5.7.36")
@@ -62,13 +54,17 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationSuite with V2JDBCTest {
   override def sparkConf: SparkConf = super.sparkConf
     .set("spark.sql.catalog.mysql", classOf[JDBCTableCatalog].getName)
     .set("spark.sql.catalog.mysql.url", db.getJdbcUrl(dockerIp, externalPort))
+    .set("spark.sql.catalog.mysql.pushDownAggregate", "true")
 
   override val connectionTimeout = timeout(7.minutes)
 
   private var mySQLVersion = -1
 
-  override def dataPreparation(conn: Connection): Unit = {
-    mySQLVersion = conn.getMetaData.getDatabaseMajorVersion
+  override def tablePreparation(connection: Connection): Unit = {
+    mySQLVersion = connection.getMetaData.getDatabaseMajorVersion
+    connection.prepareStatement(
+      "CREATE TABLE employee (dept INT, name VARCHAR(32), salary DECIMAL(20, 2)," +
+        " bonus DOUBLE)").executeUpdate()
   }
 
   override def testUpdateColumnType(tbl: String): Unit = {
@@ -123,65 +119,10 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationSuite with V2JDBCTest {
 
   override def supportsIndex: Boolean = true
 
-  override def testIndexProperties(jdbcTable: SupportsIndex): Unit = {
-    val properties = new util.HashMap[String, String]();
-    properties.put("KEY_BLOCK_SIZE", "10")
-    properties.put("COMMENT", "'this is a comment'")
-    // MySQL doesn't allow property set on individual column, so use empty Array for
-    // column properties
-    jdbcTable.createIndex("i1", "BTREE", Array(FieldReference("col1")),
-      new util.HashMap[NamedReference, util.Map[String, String]](), properties)
+  override def indexOptions: String = "KEY_BLOCK_SIZE=10"
 
-    var index = jdbcTable.listIndexes()
-    // The index property size is actually 1. Even though the index is created
-    // with properties "KEY_BLOCK_SIZE", "10" and "COMMENT", "'this is a comment'", when
-    // retrieving index using `SHOW INDEXES`, MySQL only returns `COMMENT`.
-    assert(index(0).properties.size == 1)
-    assert(index(0).properties.get("COMMENT").equals("this is a comment"))
-  }
-
-  override def testIndexUsingSQL(tbl: String): Unit = {
-    val loaded = Catalogs.load("mysql", conf)
-    val jdbcTable = loaded.asInstanceOf[TableCatalog]
-      .loadTable(Identifier.of(Array.empty[String], "new_table"))
-      .asInstanceOf[SupportsIndex]
-    assert(jdbcTable.indexExists("i1") == false)
-    assert(jdbcTable.indexExists("i2") == false)
-
-    val indexType = "DUMMY"
-    var m = intercept[UnsupportedOperationException] {
-      sql(s"CREATE index i1 ON $catalogName.new_table USING DUMMY (col1)")
-    }.getMessage
-    assert(m.contains(s"Index Type $indexType is not supported." +
-      s" The supported Index Types are: BTREE and HASH"))
-
-    sql(s"CREATE index i1 ON $catalogName.new_table USING BTREE (col1)")
-    sql(s"CREATE index i2 ON $catalogName.new_table (col2, col3, col5)" +
-      s" OPTIONS (KEY_BLOCK_SIZE=10)")
-
-    assert(jdbcTable.indexExists("i1") == true)
-    assert(jdbcTable.indexExists("i2") == true)
-
-    // This should pass without exception
-    sql(s"CREATE index IF NOT EXISTS i1 ON $catalogName.new_table (col1)")
-
-    m = intercept[IndexAlreadyExistsException] {
-      sql(s"CREATE index i1 ON $catalogName.new_table (col1)")
-    }.getMessage
-    assert(m.contains("Failed to create index i1 in new_table"))
-
-    sql(s"DROP index i1 ON $catalogName.new_table")
-    sql(s"DROP index i2 ON $catalogName.new_table")
-
-    assert(jdbcTable.indexExists("i1") == false)
-    assert(jdbcTable.indexExists("i2") == false)
-
-    // This should pass without exception
-    sql(s"DROP index IF EXISTS i1 ON $catalogName.new_table")
-
-    m = intercept[NoSuchIndexException] {
-      sql(s"DROP index i1 ON $catalogName.new_table")
-    }.getMessage
-    assert(m.contains("Failed to drop index i1 in new_table"))
-  }
+  testVarPop()
+  testVarSamp()
+  testStddevPop()
+  testStddevSamp()
 }

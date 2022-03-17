@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.rules.RuleId
 import org.apache.spark.sql.catalyst.rules.UnknownRuleId
 import org.apache.spark.sql.catalyst.trees.{AlwaysProcess, CurrentOrigin, TreeNode, TreeNodeTag}
-import org.apache.spark.sql.catalyst.trees.TreePattern.OUTER_REFERENCE
+import org.apache.spark.sql.catalyst.trees.TreePattern.{OUTER_REFERENCE, PLAN_EXPRESSION}
 import org.apache.spark.sql.catalyst.trees.TreePatternBits
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DataType, StructType}
@@ -354,7 +354,13 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
   private def updateAttr(a: Attribute, attrMap: AttributeMap[Attribute]): Attribute = {
     attrMap.get(a) match {
       case Some(b) =>
-        AttributeReference(a.name, b.dataType, b.nullable, a.metadata)(b.exprId, a.qualifier)
+        // The new Attribute has to
+        // - use a.nullable, because nullability cannot be propagated bottom-up without considering
+        //   enclosed operators, e.g., operators such as Filters and Outer Joins can change
+        //   nullability;
+        // - use b.dataType because transformUpWithNewOutput is used in the Analyzer for resolution,
+        //   e.g., WidenSetOperationTypes uses it to propagate types bottom-up.
+        AttributeReference(a.name, b.dataType, a.nullable, a.metadata)(b.exprId, a.qualifier)
       case None => a
     }
   }
@@ -427,8 +433,8 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
   /**
    * All the top-level subqueries of the current plan node. Nested subqueries are not included.
    */
-  def subqueries: Seq[PlanType] = {
-    expressions.flatMap(_.collect {
+  @transient lazy val subqueries: Seq[PlanType] = {
+    expressions.filter(_.containsPattern(PLAN_EXPRESSION)).flatMap(_.collect {
       case e: PlanExpression[_] => e.plan.asInstanceOf[PlanType]
     })
   }

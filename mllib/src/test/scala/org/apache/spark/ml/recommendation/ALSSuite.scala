@@ -188,7 +188,7 @@ class ALSSuite extends MLTest with DefaultReadWriteTest with Logging {
     assert(compressed.size === 5)
     assert(compressed.srcIds.toSeq === Seq(0, 1, 2, 3))
     assert(compressed.dstPtrs.toSeq === Seq(0, 2, 3, 4, 5))
-    var decompressed = ArrayBuffer.empty[(Int, Int, Int, Float)]
+    val decompressed = ArrayBuffer.empty[(Int, Int, Int, Float)]
     var i = 0
     while (i < compressed.srcIds.length) {
       var j = compressed.dstPtrs(i)

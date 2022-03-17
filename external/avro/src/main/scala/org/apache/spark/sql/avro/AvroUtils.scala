@@ -71,8 +71,6 @@ private[sql] object AvroUtils extends Logging {
   }
 
   def supportsDataType(dataType: DataType): Boolean = dataType match {
-    case _: AnsiIntervalType => false
-
     case _: AtomicType => true
 
     case st: StructType => st.forall { f => supportsDataType(f.dataType) }
@@ -272,10 +270,12 @@ private[sql] object AvroUtils extends Logging {
 
     /**
      * Validate that there are no Avro fields which don't have a matching Catalyst field, throwing
-     * [[IncompatibleSchemaException]] if such extra fields are found.
+     * [[IncompatibleSchemaException]] if such extra fields are found. Only required (non-nullable)
+     * fields are checked; nullable fields are ignored.
      */
-    def validateNoExtraAvroFields(): Unit = {
-      (avroFieldArray.toSet -- matchedFields.map(_.avroField)).foreach { extraField =>
+    def validateNoExtraRequiredAvroFields(): Unit = {
+      val extraFields = avroFieldArray.toSet -- matchedFields.map(_.avroField)
+      extraFields.filterNot(isNullable).foreach { extraField =>
         if (positionalFieldMatch) {
           throw new IncompatibleSchemaException(s"Found field '${extraField.name()}' at position " +
             s"${extraField.pos()} of ${toFieldStr(avroPath)} from Avro schema but there is no " +
@@ -330,4 +330,9 @@ private[sql] object AvroUtils extends Logging {
     case Seq() => "top-level record"
     case n => s"field '${n.mkString(".")}'"
   }
+
+  /** Return true iff `avroField` is nullable, i.e. `UNION` type and has `NULL` as an option. */
+  private[avro] def isNullable(avroField: Schema.Field): Boolean =
+    avroField.schema().getType == Schema.Type.UNION &&
+      avroField.schema().getTypes.asScala.exists(_.getType == Schema.Type.NULL)
 }

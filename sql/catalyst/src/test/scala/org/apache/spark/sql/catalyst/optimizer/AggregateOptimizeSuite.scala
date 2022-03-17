@@ -125,4 +125,27 @@ class AggregateOptimizeSuite extends AnalysisTest {
       x.join(y, LeftOuter, Some("x.a".attr === "y.a".attr))
         .groupBy("x.a".attr)("x.a".attr, Literal(1)).analyze)
   }
+
+  test("SPARK-37292: Removes outer join if it only has DISTINCT on streamed side with alias") {
+    val x = testRelation.subquery('x)
+    val y = testRelation.subquery('y)
+    comparePlans(
+      Optimize.execute(
+        Distinct(x.join(y, LeftOuter, Some("x.a".attr === "y.a".attr))
+          .select("x.b".attr.as("newAlias"))).analyze),
+      x.select("x.b".attr.as("newAlias")).groupBy("newAlias".attr)("newAlias".attr).analyze)
+
+    comparePlans(
+      Optimize.execute(
+        Distinct(x.join(y, RightOuter, Some("x.a".attr === "y.a".attr))
+          .select("y.b".attr.as("newAlias"))).analyze),
+      y.select("y.b".attr.as("newAlias")).groupBy("newAlias".attr)("newAlias".attr).analyze)
+
+    comparePlans(
+      Optimize.execute(
+        Distinct(x.join(y, LeftOuter, Some("x.a".attr === "y.a".attr))
+          .select("x.b".attr.as("newAlias1"), "x.b".attr.as("newAlias2"))).analyze),
+      x.select("x.b".attr.as("newAlias1"), "x.b".attr.as("newAlias2"))
+        .groupBy("newAlias1".attr, "newAlias2".attr)("newAlias1".attr, "newAlias2".attr).analyze)
+  }
 }

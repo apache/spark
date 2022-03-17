@@ -27,6 +27,7 @@ class SparkJobInfo(NamedTuple):
     """
     Exposes information about Spark Jobs.
     """
+
     jobId: int
     stageIds: JavaArray
     status: str
@@ -36,6 +37,7 @@ class SparkStageInfo(NamedTuple):
     """
     Exposes information about Spark Stages.
     """
+
     stageId: int
     currentAttemptId: int
     name: str
@@ -45,7 +47,7 @@ class SparkStageInfo(NamedTuple):
     numFailedTasks: int
 
 
-class StatusTracker(object):
+class StatusTracker:
     """
     Low-level status reporting APIs for monitoring job and stage progress.
 
@@ -59,6 +61,7 @@ class StatusTracker(object):
     jobs / stages.  These APIs will provide information for the last
     `spark.ui.retainedStages` stages and `spark.ui.retainedJobs` jobs.
     """
+
     def __init__(self, jtracker: JavaObject):
         self._jtracker = jtracker
 

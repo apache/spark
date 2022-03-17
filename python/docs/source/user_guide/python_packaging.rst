@@ -249,5 +249,5 @@ For the interactive pyspark shell, the commands are almost the same:
 
 An end-to-end Docker example for deploying a standalone PySpark with ``SparkSession.builder`` and PEX
 can be found `here <https://github.com/criteo/cluster-pack/blob/master/examples/spark-with-S3/README.md>`_
-- it uses cluster-pack, a library on top of PEX that automatizes the the intermediate step of having
+- it uses cluster-pack, a library on top of PEX that automatizes the intermediate step of having
 to create & upload the PEX manually.

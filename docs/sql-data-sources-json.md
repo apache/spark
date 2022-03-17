@@ -9,9 +9,9 @@ license: |
   The ASF licenses this file to You under the Apache License, Version 2.0
   (the "License"); you may not use this file except in compliance with
   the License.  You may obtain a copy of the License at
- 
+
      http://www.apache.org/licenses/LICENSE-2.0
- 
+
   Unless required by applicable law or agreed to in writing, software
   distributed under the License is distributed on an "AS IS" BASIS,
   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -194,6 +194,12 @@ Data source options of JSON can be set via:
     <td><code>timestampFormat</code></td>
     <td><code>yyyy-MM-dd'T'HH:mm:ss[.SSS][XXX]</code></td>
     <td>Sets the string that indicates a timestamp format. Custom date formats follow the formats at <a href="https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html"> datetime pattern</a>. This applies to timestamp type.</td>
+    <td>read/write</td>
+  </tr>
+  <tr>
+    <td><code>timestampNTZFormat</code></td>
+    <td>yyyy-MM-dd'T'HH:mm:ss[.SSS]</td>
+    <td>Sets the string that indicates a timestamp without timezone format. Custom date formats follow the formats at <a href="https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html">Datetime Patterns</a>. This applies to timestamp without timezone type, note that zone-offset and time-zone components are not supported when writing or reading this data type.</td>
     <td>read/write</td>
   </tr>
   <tr>
