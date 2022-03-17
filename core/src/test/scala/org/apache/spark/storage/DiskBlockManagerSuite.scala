@@ -142,6 +142,11 @@ class DiskBlockManagerSuite extends SparkFunSuite with BeforeAndAfterEach with B
   }
 
   test("SPARK-37618: Sub dirs are group writable") {
+    val conf = testConf.clone
+    conf.set("spark.local.dir", rootDirs)
+    conf.set("spark.shuffle.service.enabled", "true")
+    conf.set("spark.shuffle.service.removeShufle", "true")
+    val diskBlockManager = new DiskBlockManager(conf, deleteFilesOnStop = true, isDriver = false)
     val blockId = new TestBlockId("test")
     val newFile = diskBlockManager.getFile(blockId)
     val parentDir = newFile.getParentFile()
