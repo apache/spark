@@ -4061,7 +4061,7 @@ object SessionWindowing extends Rule[LogicalPlan] {
           case s: SessionWindow => sessionAttr
         }
 
-        def isGapInvalid(child: Expression) : Boolean = {
+        def isGapInvalid(child: Expression): Boolean = {
           val calendarInterval = IntervalUtils
             .safeStringToInterval(UTF8String.fromString(child.toString))
           calendarInterval == null ||
