@@ -83,7 +83,7 @@ statement
         (RESTRICT | CASCADE)?                                          #dropNamespace
     | SHOW namespaces ((FROM | IN) multipartIdentifier)?
         (LIKE? pattern=STRING)?                                        #showNamespaces
-    | createTableHeader (LEFT_PAREN createOrReplaceTableColTypeList RIGHT_PAREN)? tableProvider?
+    | createTableHeader (LEFT_PAREN colTypeList RIGHT_PAREN)? tableProvider?
         createTableClauses
         (AS? query)?                                                   #createTable
     | CREATE TABLE (IF NOT EXISTS)? target=tableIdentifier
@@ -93,7 +93,7 @@ statement
         createFileFormat |
         locationSpec |
         (TBLPROPERTIES tableProps=propertyList))*                      #createTableLike
-    | replaceTableHeader (LEFT_PAREN createOrReplaceTableColTypeList RIGHT_PAREN)? tableProvider?
+    | replaceTableHeader (LEFT_PAREN colTypeList RIGHT_PAREN)? tableProvider?
         createTableClauses
         (AS? query)?                                                   #replaceTable
     | ANALYZE TABLE multipartIdentifier partitionSpec? COMPUTE STATISTICS
@@ -917,11 +917,7 @@ qualifiedColTypeWithPositionList
     ;
 
 qualifiedColTypeWithPosition
-    : name=multipartIdentifier dataType (NOT NULL)? defaultExpression? commentSpec? colPosition?
-    ;
-
-defaultExpression
-    : DEFAULT expression
+    : name=multipartIdentifier dataType (NOT NULL)? commentSpec? colPosition?
     ;
 
 colTypeList
@@ -930,14 +926,6 @@ colTypeList
 
 colType
     : colName=errorCapturingIdentifier dataType (NOT NULL)? commentSpec?
-    ;
-
-createOrReplaceTableColTypeList
-    : createOrReplaceTableColType (COMMA createOrReplaceTableColType)*
-    ;
-
-createOrReplaceTableColType
-    : colName=errorCapturingIdentifier dataType (NOT NULL)? defaultExpression? commentSpec?
     ;
 
 complexColTypeList
@@ -1046,8 +1034,6 @@ alterColumnAction
     | commentSpec
     | colPosition
     | setOrDrop=(SET | DROP) NOT NULL
-    | SET defaultExpression
-    | dropDefault=DROP DEFAULT
     ;
 
 
@@ -1105,7 +1091,6 @@ ansiNonReserved
     | DAY
     | DAYOFYEAR
     | DBPROPERTIES
-    | DEFAULT
     | DEFINED
     | DELETE
     | DELIMITED
@@ -1361,7 +1346,6 @@ nonReserved
     | DAY
     | DAYOFYEAR
     | DBPROPERTIES
-    | DEFAULT
     | DEFINED
     | DELETE
     | DELIMITED
