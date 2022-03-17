@@ -33,9 +33,4 @@ public final class Not extends Predicate {
   }
 
   public Predicate child() { return (Predicate) children()[0]; }
-
-  @Override
-  public NamedReference[] references() {
-    return child().references();
-  }
 }

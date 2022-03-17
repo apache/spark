@@ -274,7 +274,8 @@ private[sql] case class JDBCRelation(
   // Check if JdbcDialect can compile input filters
   override def unhandledFilters(filters: Array[Filter]): Array[Filter] = {
     if (jdbcOptions.pushDownPredicate) {
-      filters.filter(f => JdbcDialects.get(jdbcOptions.url).compileExpression(f.toV2).isEmpty)
+      val dialect = JdbcDialects.get(jdbcOptions.url)
+      filters.filter(f => dialect.compileExpression(f.toV2).isEmpty)
     } else {
       filters
     }

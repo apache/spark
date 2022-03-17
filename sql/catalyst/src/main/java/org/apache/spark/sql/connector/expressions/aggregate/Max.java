@@ -19,6 +19,7 @@ package org.apache.spark.sql.connector.expressions.aggregate;
 
 import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.connector.expressions.Expression;
+import org.apache.spark.sql.connector.expressions.NamedReference;
 
 /**
  * An aggregate function that returns the maximum value in a group.
@@ -32,6 +33,9 @@ public final class Max implements AggregateFunc {
   public Max(Expression column) { this.input = column; }
 
   public Expression column() { return input; }
+
+  @Override
+  public NamedReference[] references() { return input.references(); }
 
   @Override
   public String toString() { return "MAX(" + input.describe() + ")"; }

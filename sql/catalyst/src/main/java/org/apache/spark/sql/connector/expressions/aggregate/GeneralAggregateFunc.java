@@ -59,6 +59,9 @@ public final class GeneralAggregateFunc implements AggregateFunc {
   }
 
   @Override
+  public NamedReference[] references() { return inputs; }
+
+  @Override
   public String toString() {
     String inputsString = Arrays.stream(inputs)
       .map(Expression::describe)

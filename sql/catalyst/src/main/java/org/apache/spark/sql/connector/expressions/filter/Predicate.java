@@ -45,19 +45,19 @@ import org.apache.spark.sql.connector.expressions.NamedReference;
  *  </li>
  *  <li>Name: <code>STARTS_WITH</code>
  *   <ul>
- *    <li>SQL semantic: <code>StartsWith(expr1, expr2)</code></li>
+ *    <li>SQL semantic: <code>expr1 LIKE 'expr2%'</code></li>
  *    <li>Since version: 3.3.0</li>
  *   </ul>
  *  </li>
  *  <li>Name: <code>ENDS_WITH</code>
  *   <ul>
- *    <li>SQL semantic: <code>EndsWith(expr1, expr2)</code></li>
+ *    <li>SQL semantic: <code>expr1 LIKE '%expr2'</code></li>
  *    <li>Since version: 3.3.0</li>
  *   </ul>
  *  </li>
  *  <li>Name: <code>CONTAINS</code>
  *   <ul>
- *    <li>SQL semantic: <code>Contains(expr1, expr2)</code></li>
+ *    <li>SQL semantic: <code>expr1 LIKE '%expr2%'</code></li>
  *    <li>Since version: 3.3.0</li>
  *   </ul>
  *  </li>
@@ -127,13 +127,13 @@ import org.apache.spark.sql.connector.expressions.NamedReference;
  *    <li>Since version: 3.3.0</li>
  *   </ul>
  *  </li>
- *  <li>Name: <code>TRUE</code>
+ *  <li>Name: <code>ALWAYS_TRUE</code>
  *   <ul>
  *    <li>SQL semantic: <code>TRUE</code></li>
  *    <li>Since version: 3.3.0</li>
  *   </ul>
  *  </li>
- *  <li>Name: <code>FALSE</code>
+ *  <li>Name: <code>ALWAYS_FALSE</code>
  *   <ul>
  *    <li>SQL semantic: <code>FALSE</code></li>
  *    <li>Since version: 3.3.0</li>
@@ -145,18 +145,8 @@ import org.apache.spark.sql.connector.expressions.NamedReference;
  */
 @Evolving
 public class Predicate extends GeneralScalarExpression {
-  protected static final NamedReference[] EMPTY_REFERENCE = new NamedReference[0];
 
   public Predicate(String name, Expression[] children) {
     super(name, children);
-  }
-
-  /**
-   * Returns all field references in the predicate children.
-   */
-  public NamedReference[] references() {
-    return Arrays.stream(children())
-      .filter(p -> p instanceof NamedReference)
-      .toArray(NamedReference[]::new);
   }
 }

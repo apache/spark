@@ -29,6 +29,7 @@ class TransformExtractorSuite extends SparkFunSuite {
   private def lit[T](literal: T): Literal[T] = new Literal[T] {
     override def value: T = literal
     override def dataType: DataType = catalyst.expressions.Literal(literal).dataType
+    override def references: Array[NamedReference] = Expression.EMPTY_REFERENCE
     override def toString: String = literal.toString
   }
 
@@ -37,6 +38,7 @@ class TransformExtractorSuite extends SparkFunSuite {
    */
   private def ref(names: String*): NamedReference = new NamedReference {
     override def fieldNames: Array[String] = names.toArray
+    override def references: Array[NamedReference] = Expression.EMPTY_REFERENCE
     override def toString: String = names.mkString(".")
   }
 

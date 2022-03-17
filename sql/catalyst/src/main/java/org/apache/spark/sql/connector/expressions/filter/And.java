@@ -38,10 +38,4 @@ public final class And extends Predicate {
 
   public Predicate left() { return (Predicate) children()[0]; }
   public Predicate right() { return (Predicate) children()[1]; }
-
-  @Override
-  public NamedReference[] references() {
-    return Stream.concat(Arrays.stream(left().references()), Arrays.stream(right().references()))
-      .toArray(NamedReference[]::new);
-  }
 }

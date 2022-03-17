@@ -26,8 +26,15 @@ import org.apache.spark.annotation.Evolving;
  */
 @Evolving
 public interface Expression {
+  NamedReference[] EMPTY_REFERENCE = new NamedReference[0];
+
   /**
    * Format the expression as a human readable SQL-like string.
    */
   default String describe() { return this.toString(); }
+
+  /**
+   * List of fields or columns that are referenced by this expression.
+   */
+  NamedReference[] references();
 }

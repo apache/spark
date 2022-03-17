@@ -69,7 +69,7 @@ public class JavaAdvancedDataSourceV2WithV2Filter implements TestingV2Source {
           assert(f.children()[0] instanceof FieldReference);
           FieldReference column = (FieldReference) f.children()[0];
           assert(f.children()[1] instanceof LiteralValue);
-          Literal value = (LiteralValue) f.children()[1];
+          Literal value = (Literal) f.children()[1];
           return column.describe().equals("i") && value.value() instanceof Integer;
         } else {
           return false;
@@ -128,7 +128,7 @@ public class JavaAdvancedDataSourceV2WithV2Filter implements TestingV2Source {
           assert(predicate.children()[0] instanceof FieldReference);
           FieldReference column = (FieldReference) predicate.children()[0];
           assert(predicate.children()[1] instanceof LiteralValue);
-          Literal value = (LiteralValue) predicate.children()[1];
+          Literal value = (Literal) predicate.children()[1];
           if ("i".equals(column.describe()) && value.value() instanceof Integer) {
             lowerBound = (Integer) value.value();
             break;
