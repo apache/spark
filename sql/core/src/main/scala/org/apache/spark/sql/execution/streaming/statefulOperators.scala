@@ -73,7 +73,7 @@ trait StreamingOperator { self: SparkPlan =>
   val operatorName = self.nodeName
 
   /**
-   * Get the progress made by this stateful operator after execution. This should be called in
+   * Get the progress made by this streaming operator after execution. This should be called in
    * the driver after this SparkPlan has been executed and metrics have been updated.
    */
   def getProgress(): StreamingOperatorProgress = {
