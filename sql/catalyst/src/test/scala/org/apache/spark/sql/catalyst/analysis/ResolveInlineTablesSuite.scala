@@ -20,7 +20,6 @@ package org.apache.spark.sql.catalyst.analysis
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.catalog.{InMemoryCatalog, SessionCatalog}
 import org.apache.spark.sql.catalyst.expressions.{Cast, Literal, Rand}
 import org.apache.spark.sql.catalyst.expressions.aggregate.Count
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
@@ -35,10 +34,7 @@ class ResolveInlineTablesSuite extends AnalysisTest with BeforeAndAfter {
 
   private def lit(v: Any): Literal = Literal(v)
 
-  private val catalog = new SessionCatalog(
-    new InMemoryCatalog, EmptyFunctionRegistry, EmptyTableFunctionRegistry)
-
-    test("validate inputs are foldable") {
+  test("validate inputs are foldable") {
     ResolveInlineTables.validateInputEvaluable(
       UnresolvedInlineTable(Seq("c1", "c2"), Seq(Seq(lit(1)))))
 
