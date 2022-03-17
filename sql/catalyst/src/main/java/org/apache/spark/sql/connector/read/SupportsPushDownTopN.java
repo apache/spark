@@ -37,8 +37,8 @@ public interface SupportsPushDownTopN extends ScanBuilder {
     boolean pushTopN(SortOrder[] orders, int limit);
 
     /**
-     * Whether the top N is partially pushed or not. If it returns true, then Spark will do top N again.
-     * This method will only be called when `pushTopN` returns true.
+     * Whether the top N is partially pushed or not. If it returns true, then Spark will do top N
+     * again. This method will only be called when `pushTopN` returns true.
      */
     default boolean isPartiallyPushed() { return true; }
 }
