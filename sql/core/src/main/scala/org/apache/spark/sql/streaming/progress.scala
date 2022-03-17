@@ -37,6 +37,39 @@ import org.apache.spark.sql.streaming.SafeJsonSerializer.{safeDoubleToJValue, sa
 import org.apache.spark.sql.streaming.SinkProgress.DEFAULT_NUM_OUTPUT_ROWS
 
 /**
+ * General progress information for streaming operator that are not stateful writer operator. For
+ * the progress information about stateful writer operator, please see [[StateOperatorProgress]].
+ */
+@Evolving
+class StreamingOperatorProgress(
+    val operatorName: String,
+    val metrics: ju.Map[String, JLong]) extends Serializable {
+
+  /** The compact JSON representation of this progress. */
+  def json: String = compact(render(jsonValue))
+
+  /** The pretty (i.e. indented) JSON representation of this progress. */
+  def prettyJson: String = pretty(render(jsonValue))
+
+  private[sql] def jsonValue: JValue = {
+    ("operatorName" -> JString(operatorName)) ~
+      ("metrics" -> {
+        if (!metrics.isEmpty) {
+          val keys = metrics.keySet.asScala.toSeq.sorted
+          keys.map { k => k -> JInt(metrics.get(k).toLong) : JObject }.reduce(_ ~ _)
+        } else {
+          JNothing
+        }
+      })
+  }
+
+  override def toString: String = prettyJson
+
+  private[sql] def copy(newMetrics: ju.Map[String, JLong]): StreamingOperatorProgress =
+    new StreamingOperatorProgress(operatorName = operatorName, metrics = newMetrics)
+}
+
+/**
  * Information about updates made to stateful operators in a [[StreamingQuery]] during a trigger.
  */
 @Evolving
@@ -138,7 +171,8 @@ class StreamingQueryProgress private[sql](
   val sources: Array[SourceProgress],
   val sink: SinkProgress,
   @JsonDeserialize(contentAs = classOf[GenericRowWithSchema])
-  val observedMetrics: ju.Map[String, Row]) extends Serializable {
+  val observedMetrics: ju.Map[String, Row],
+  val operatorProgress: Array[StreamingOperatorProgress]) extends Serializable {
 
   /** The aggregate (across all sources) number of records processed in a trigger. */
   def numInputRows: Long = sources.map(_.numInputRows).sum

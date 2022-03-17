@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.streaming
 
 import java.text.SimpleDateFormat
+import java.{util => ju}
 import java.util.{Date, Optional, UUID}
 
 import scala.collection.JavaConverters._
@@ -245,6 +246,13 @@ trait ProgressReporter extends Logging {
           progress
         } else {
           progress.copy(newNumRowsUpdated = 0, newNumRowsDroppedByWatermark = 0)
+        }
+      case p if p.isInstanceOf[StreamingOperator] =>
+        val progress = p.asInstanceOf[StreamingOperator].getProgress()
+        if (hasExecuted) {
+          progress
+        } else {
+          progress.copy(newMetrics = new ju.HashMap())
         }
     }
   }

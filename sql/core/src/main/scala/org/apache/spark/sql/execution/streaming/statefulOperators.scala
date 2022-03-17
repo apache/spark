@@ -35,7 +35,7 @@ import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.sql.execution.streaming.state._
-import org.apache.spark.sql.streaming.{OutputMode, StateOperatorProgress}
+import org.apache.spark.sql.streaming.{OutputMode, StateOperatorProgress, StreamingOperatorProgress}
 import org.apache.spark.sql.types._
 import org.apache.spark.util.{CompletionIterator, NextIterator, Utils}
 
@@ -65,6 +65,23 @@ trait StatefulOperator extends SparkPlan {
     stateInfo.getOrElse {
       throw new IllegalStateException("State location not present for execution")
     }
+  }
+}
+
+
+trait StreamingOperator { self: SparkPlan =>
+  val operatorName = self.nodeName
+
+  /**
+   * Get the progress made by this stateful operator after execution. This should be called in
+   * the driver after this SparkPlan has been executed and metrics have been updated.
+   */
+  def getProgress(): StreamingOperatorProgress = {
+    val metrics = self.metrics.map { case (key, metric) =>
+      (key -> metric.value)
+    }.asJava
+
+    new StreamingOperatorProgress(operatorName, metrics)
   }
 }
 
@@ -527,7 +544,7 @@ case class SessionWindowStateStoreRestoreExec(
     eventTimeWatermark: Option[Long],
     stateFormatVersion: Int,
     child: SparkPlan)
-  extends UnaryExecNode with StateStoreReader with WatermarkSupport {
+  extends UnaryExecNode with StateStoreReader with WatermarkSupport with StreamingOperator {
 
   override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"),
