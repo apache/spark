@@ -181,7 +181,7 @@ BASE_PROFILES="-Pmesos -Pyarn -Pkubernetes"
 
 PUBLISH_SCALA_2_13=1
 SCALA_2_13_PROFILES="-Pscala-2.13"
-if [ "$(echo $SPARK_VERSION | awk -F "." '{if ($1 <= 3 && $2 < 2) print $1}')" ]; then
+if [[ $SPARK_VERSION < "3.2" ]]; then
   PUBLISH_SCALA_2_13=0
 fi
 
@@ -342,7 +342,7 @@ if [[ "$1" == "package" ]]; then
 
   if [[ $PUBLISH_SCALA_2_12 = 1 ]]; then
     echo "Packages to build: ${!BINARY_PKGS_ARGS[*]}"
-    for key in "${!BINARY_PKGS_ARGS[@]}"; do
+    for key in ${!BINARY_PKGS_ARGS[@]}; do
       args=${BINARY_PKGS_ARGS[$key]}
       extra=${BINARY_PKGS_EXTRA[$key]}
       if ! make_binary_release "$key" "$SCALA_2_12_PROFILES $args" "$extra" "2.12"; then
