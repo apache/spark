@@ -610,24 +610,15 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product with Tre
 
   /**
    * Returns a copy of this node where `f` has been applied to all the nodes in `children`.
+   * This method force making a copy of the nodes even if no child has been changed.
    * @param f The transform function to be applied on applicable `TreeNode` elements.
-   * @param forceCopy Whether to force making a copy of the nodes even if no child has been changed.
    */
-  private def mapChildren(
-      f: BaseType => BaseType,
-      forceCopy: Boolean): BaseType = {
-    var changed = false
+  private def mapChildrenWithForceCopy(f: BaseType => BaseType): BaseType = {
 
     def mapChild(child: Any): Any = child match {
       case arg: TreeNode[_] if containsChild(arg) =>
-        val newChild = f(arg.asInstanceOf[BaseType])
-        if (forceCopy || !(newChild fastEquals arg)) {
-          changed = true
-          newChild
-        } else {
-          arg
-        }
-      case tuple @ (arg1: TreeNode[_], arg2: TreeNode[_]) =>
+        f(arg.asInstanceOf[BaseType])
+      case (arg1: TreeNode[_], arg2: TreeNode[_]) =>
         val newChild1 = if (containsChild(arg1)) {
           f(arg1.asInstanceOf[BaseType])
         } else {
@@ -639,44 +630,20 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product with Tre
         } else {
           arg2.asInstanceOf[BaseType]
         }
-
-        if (forceCopy || !(newChild1 fastEquals arg1) || !(newChild2 fastEquals arg2)) {
-          changed = true
-          (newChild1, newChild2)
-        } else {
-          tuple
-        }
+        (newChild1, newChild2)
       case other => other
     }
 
     val newArgs = mapProductIterator {
       case arg: TreeNode[_] if containsChild(arg) =>
-        val newChild = f(arg.asInstanceOf[BaseType])
-        if (forceCopy || !(newChild fastEquals arg)) {
-          changed = true
-          newChild
-        } else {
-          arg
-        }
+        f(arg.asInstanceOf[BaseType])
       case Some(arg: TreeNode[_]) if containsChild(arg) =>
-        val newChild = f(arg.asInstanceOf[BaseType])
-        if (forceCopy || !(newChild fastEquals arg)) {
-          changed = true
-          Some(newChild)
-        } else {
-          Some(arg)
-        }
+        Some(f(arg.asInstanceOf[BaseType]))
       // `map.mapValues().view.force` return `Map` in Scala 2.12 but return `IndexedSeq` in Scala
       // 2.13, call `toMap` method manually to compatible with Scala 2.12 and Scala 2.13
       case m: Map[_, _] => m.mapValues {
         case arg: TreeNode[_] if containsChild(arg) =>
-          val newChild = f(arg.asInstanceOf[BaseType])
-          if (forceCopy || !(newChild fastEquals arg)) {
-            changed = true
-            newChild
-          } else {
-            arg
-          }
+          f(arg.asInstanceOf[BaseType])
         case other => other
       }.view.force.toMap // `mapValues` is lazy and we need to force it to materialize
       case d: DataType => d // Avoid unpacking Structs
@@ -685,7 +652,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product with Tre
       case nonChild: AnyRef => nonChild
       case null => null
     }
-    if (forceCopy || changed) makeCopy(newArgs, forceCopy) else this
+    makeCopy(newArgs, allowEmptyArgs = true)
   }
 
   /**
@@ -764,7 +731,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product with Tre
   }
 
   override def clone(): BaseType = {
-    mapChildren(_.clone(), forceCopy = true)
+    mapChildrenWithForceCopy(_.clone())
   }
 
   private def simpleClassName: String = Utils.getSimpleName(this.getClass)
