@@ -217,7 +217,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 
-no viable alternative at input 'select .'(line 1, pos 7)
+Syntax error at or near '.'(line 1, pos 7)
 
 == SQL ==
 select .e3
@@ -298,10 +298,12 @@ pattern%	no-pattern\%	pattern\%	pattern\\%
 select '\'', '"', '\n', '\r', '\t', 'Z'
 -- !query schema
 struct<':string,":string,
-:string,:string,	:string,Z:string>
+:string,
+:string,	:string,Z:string>
 -- !query output
 '	"	
-				Z
+	
+			Z
 
 
 -- !query
