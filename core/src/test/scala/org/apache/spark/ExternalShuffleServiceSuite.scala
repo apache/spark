@@ -172,13 +172,14 @@ class ExternalShuffleServiceSuite extends ShuffleSuite with BeforeAndAfterAll wi
               val files = blocks.flatMap { case (blockId, _, _) =>
                 val shuffleBlockId = blockId.asInstanceOf[ShuffleBlockId]
                 Seq(
-                  ExecutorDiskUtils.getFile(dirs, sc.env.blockManager.subDirsPerLocalDir,
-                    ShuffleDataBlockId(shuffleBlockId.shuffleId, shuffleBlockId.mapId,
-                      shuffleBlockId.reduceId).name),
-                  ExecutorDiskUtils.getFile(dirs, sc.env.blockManager.subDirsPerLocalDir,
-                    ShuffleIndexBlockId(shuffleBlockId.shuffleId, shuffleBlockId.mapId,
-                      shuffleBlockId.reduceId).name)
-                )
+                  ShuffleDataBlockId(shuffleBlockId.shuffleId, shuffleBlockId.mapId,
+                    shuffleBlockId.reduceId).name,
+                  ShuffleIndexBlockId(shuffleBlockId.shuffleId, shuffleBlockId.mapId,
+                    shuffleBlockId.reduceId).name
+                ).map { blockId =>
+                  new File(ExecutorDiskUtils.getFilePath(dirs,
+                    sc.env.blockManager.subDirsPerLocalDir, blockId))
+                }
               }
               promise.success(files)
             }

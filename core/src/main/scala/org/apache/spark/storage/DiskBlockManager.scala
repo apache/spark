@@ -78,6 +78,9 @@ private[spark] class DiskBlockManager(
 
   private val shutdownHook = addShutdownHook()
 
+  private val shuffleServiceRemoveShuffleEnabled = conf.get(config.SHUFFLE_SERVICE_ENABLED) &&
+    conf.get(config.SHUFFLE_SERVICE_REMOVE_SHUFFLE_ENABLED)
+
   /** Looks up a file by hashing it into one of our local subdirectories. */
   // This method should be kept in sync with
   // org.apache.spark.network.shuffle.ExecutorDiskUtils#getFilePath().
@@ -95,13 +98,16 @@ private[spark] class DiskBlockManager(
       } else {
         val newDir = new File(localDirs(dirId), "%02x".format(subDirId))
         if (!newDir.exists()) {
-          // SPARK-37618: Create dir as group writable so files within can be deleted by the
-          // shuffle service
           val path = newDir.toPath
           Files.createDirectory(path)
-          val currentPerms = Files.getPosixFilePermissions(path)
-          currentPerms.add(PosixFilePermission.GROUP_WRITE)
-          Files.setPosixFilePermissions(path, currentPerms)
+          if (shuffleServiceRemoveShuffleEnabled) {
+            // SPARK-37618: Create dir as group writable so files within can be deleted by the
+            // shuffle service in a secure setup. This will remove the setgid bit so files created
+            // within won't be created with the parent folder group.
+            val currentPerms = Files.getPosixFilePermissions(path)
+            currentPerms.add(PosixFilePermission.GROUP_WRITE)
+            Files.setPosixFilePermissions(path, currentPerms)
+          }
         }
         subDirs(dirId)(subDirId) = newDir
         newDir
@@ -177,7 +183,7 @@ private[spark] class DiskBlockManager(
    * SPARK-37618: Makes sure that the file is created as world readable. This is to get
    * around the fact that making the block manager sub dirs group writable removes
    * the setgid bit in secure Yarn environments, which prevents the shuffle service
-   * from being able ot read shuffle files. The outer directories will still not be
+   * from being able to read shuffle files. The outer directories will still not be
    * world executable, so this doesn't allow access to these files except for the
    * running user and shuffle service.
    */
@@ -195,7 +201,12 @@ private[spark] class DiskBlockManager(
    */
   def createTempFileWith(file: File): File = {
     val tmpFile = Utils.tempFileWith(file)
-    createWorldReadableFile(tmpFile)
+    if (shuffleServiceRemoveShuffleEnabled) {
+      // SPARK-37618: we need to make the file world readable because the parent will
+      // lose the setgid bit when making it group writable. Without this the shuffle
+      // service can't read the shuffle files in a secure setup.
+      createWorldReadableFile(tmpFile)
+    }
     tmpFile
   }
 
@@ -205,9 +216,7 @@ private[spark] class DiskBlockManager(
     while (getFile(blockId).exists()) {
       blockId = new TempLocalBlockId(UUID.randomUUID())
     }
-    val file = getFile(blockId)
-    createWorldReadableFile(file)
-    (blockId, file)
+    (blockId, getFile(blockId))
   }
 
   /** Produces a unique block id and File suitable for storing shuffled intermediate results. */
@@ -216,9 +225,7 @@ private[spark] class DiskBlockManager(
     while (getFile(blockId).exists()) {
       blockId = new TempShuffleBlockId(UUID.randomUUID())
     }
-    val file = getFile(blockId)
-    createWorldReadableFile(file)
-    (blockId, file)
+    (blockId, getFile(blockId))
   }
 
   /**
