@@ -887,7 +887,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
       sql("insert into t partition(i='true') values(5, default)")
       checkAnswer(sql("select s from t where i = true"), Seq(5).map(i => Row(i)))
     }
-    // The table has a partitioning column and a default value is added per explicit reference.
+    // The table has a partitioning column and a default value is added per an explicit reference.
     withTable("t") {
       sql("create table t(i boolean, s bigint default 42) using parquet partitioned by (i)")
       sql("insert into t partition(i='true') values(default)")
