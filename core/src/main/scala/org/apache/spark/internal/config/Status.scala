@@ -73,7 +73,8 @@ private[spark] object Status {
 
   val DISK_STORE_DIR_FOR_STATUS =
     ConfigBuilder("spark.appStatusStore.diskStore.dir")
-      .doc("Local directory where to store app status that couldn't fit in memory")
+      .doc("Local directory where to store app status. " +
+           "It's an alternative to the in-memory kv store")
       .version("3.3.0")
       .stringConf
       .createOptional
