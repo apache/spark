@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.expressions.{Expression, _}
 import org.apache.spark.sql.catalyst.optimizer.ConstantFolding
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException}
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 /**
@@ -62,6 +63,9 @@ object DefaultColumns {
    */
   def constantFoldExistsDefaultExpressions(
       tableSchema: StructType, statementType: String): StructType = {
+    if (!SQLConf.get.enableDefaultColumns) {
+      return tableSchema
+    }
     val newFields: Seq[StructField] = tableSchema.fields.map { field =>
       if (field.metadata.contains(EXISTS_DEFAULT_COLUMN_METADATA_KEY)) {
         val analyzed: Expression = analyze(field, statementType, foldConstants = true)
@@ -84,6 +88,9 @@ object DefaultColumns {
    */
   def addProjectionForMissingDefaultColumnValues(
       insert: InsertIntoStatement, catalog: SessionCatalog): InsertIntoStatement = {
+    if (!SQLConf.get.enableDefaultColumns) {
+      return insert
+    }
     // Compute the number of attributes returned by the INSERT INTO statement.
     val numQueryOutputs: Int = insert.query match {
       case table: UnresolvedInlineTable
@@ -141,6 +148,9 @@ object DefaultColumns {
    */
   def replaceExplicitDefaultColumnValues(
       insert: InsertIntoStatement, catalog: SessionCatalog): InsertIntoStatement = {
+    if (!SQLConf.get.enableDefaultColumns) {
+      return insert
+    }
     // Extract the list of DEFAULT column values from the INSERT INTO statement.
     val schema: StructType = getInsertTableSchema(insert, catalog).getOrElse(return insert)
     val schemaWithoutPartitionCols = StructType(schema.fields.dropRight(insert.partitionSpec.size))

@@ -3562,6 +3562,17 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val ENABLE_DEFAULT_COLUMNS =
+    buildConf("spark.sql.parser.enableDefaultColumns")
+      .internal()
+      .doc("When true, allow CREATE TABLE, REPLACE TABLE, and ALTER COLUMN statements to set or " +
+        "update default values for specific columns. Following INSERT, MERGE, and UPDATE " +
+        "statements may then omit these values and their values will be injected automatically " +
+        "instead.")
+      .version("3.3.0")
+      .booleanConf
+      .createWithDefault(true)
+
   /**
    * Holds information about keys that have been deprecated.
    *
@@ -4299,6 +4310,8 @@ class SQLConf extends Serializable with Logging {
   def ignoreMissingParquetFieldId: Boolean = getConf(SQLConf.IGNORE_MISSING_PARQUET_FIELD_ID)
 
   def useV1Command: Boolean = getConf(SQLConf.LEGACY_USE_V1_COMMAND)
+
+  def enableDefaultColumns: Boolean = getConf(SQLConf.ENABLE_DEFAULT_COLUMNS)
 
   /** ********************** SQLConf functionality methods ************ */
 

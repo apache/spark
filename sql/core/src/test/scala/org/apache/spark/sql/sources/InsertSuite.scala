@@ -1063,6 +1063,14 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
       }.getMessage.contains(
         "requires that the data to be inserted have the same number of columns as the target"))
     }
+    // The default value is disabled per configuration.
+    withTable("t") {
+      withSQLConf(SQLConf.ENABLE_DEFAULT_COLUMNS.key -> "false") {
+        assert(intercept[AnalysisException] {
+          sql("create table t(i boolean, s bigint default 42L) using parquet")
+        }.getMessage.contains("Support for DEFAULT column values is not allowed"))
+      }
+    }
   }
 
   test("Stop task set if FileAlreadyExistsException was thrown") {
