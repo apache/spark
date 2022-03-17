@@ -26,25 +26,12 @@ import org.apache.spark.sql.catalyst.util.TypeUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
-@ExpressionDescription(
-  usage = "_FUNC_(expr) - Returns the mean calculated from values of a group.",
-  examples = """
-    Examples:
-      > SELECT _FUNC_(col) FROM VALUES (1), (2), (3) AS tab(col);
-       2.0
-      > SELECT _FUNC_(col) FROM VALUES (1), (2), (NULL) AS tab(col);
-       1.5
-  """,
-  group = "agg_funcs",
-  since = "1.0.0")
-case class Average(
-    child: Expression,
-    failOnError: Boolean = SQLConf.get.ansiEnabled)
+abstract class AverageBase
   extends DeclarativeAggregate
   with ImplicitCastInputTypes
   with UnaryLike[Expression] {
 
-  def this(child: Expression) = this(child, failOnError = SQLConf.get.ansiEnabled)
+  def failOnError: Boolean
 
   override def prettyName: String = getTagValue(FunctionRegistry.FUNC_ALIAS).getOrElse("avg")
 
@@ -86,14 +73,14 @@ case class Average(
     /* count = */ Literal(0L)
   )
 
-  override lazy val mergeExpressions = Seq(
+  protected def getMergeExpressions = Seq(
     /* sum = */ sum.left + sum.right,
     /* count = */ count.left + count.right
   )
 
   // If all input are nulls, count will be 0 and we will get null after the division.
   // We can't directly use `/` as it throws an exception under ansi mode.
-  override lazy val evaluateExpression = child.dataType match {
+  protected def getEvaluateExpression = child.dataType match {
     case _: DecimalType =>
       DecimalPrecision.decimalAndDecimal()(
         Divide(
@@ -109,7 +96,7 @@ case class Average(
       Divide(sum.cast(resultType), count.cast(resultType), failOnError = false)
   }
 
-  override lazy val updateExpressions: Seq[Expression] = Seq(
+  protected def getUpdateExpressions: Seq[Expression] = Seq(
     /* sum = */
     Add(
       sum,
@@ -117,9 +104,71 @@ case class Average(
     /* count = */ If(child.isNull, count, count + 1L)
   )
 
+  // The flag `failOnError` won't be shown in the `toString` or `toAggString` methods
+  override def flatArguments: Iterator[Any] = Iterator(child)
+}
+
+@ExpressionDescription(
+  usage = "_FUNC_(expr) - Returns the mean calculated from values of a group.",
+  examples = """
+    Examples:
+      > SELECT _FUNC_(col) FROM VALUES (1), (2), (3) AS tab(col);
+       2.0
+      > SELECT _FUNC_(col) FROM VALUES (1), (2), (NULL) AS tab(col);
+       1.5
+  """,
+  group = "agg_funcs",
+  since = "1.0.0")
+case class Average(
+    child: Expression,
+    failOnError: Boolean = SQLConf.get.ansiEnabled) extends AverageBase {
+  def this(child: Expression) = this(child, failOnError = SQLConf.get.ansiEnabled)
+
   override protected def withNewChildInternal(newChild: Expression): Average =
     copy(child = newChild)
 
-  // The flag `failOnError` won't be shown in the `toString` or `toAggString` methods
-  override def flatArguments: Iterator[Any] = Iterator(child)
+  override lazy val updateExpressions: Seq[Expression] = getUpdateExpressions
+
+  override lazy val mergeExpressions: Seq[Expression] = getMergeExpressions
+
+  override lazy val evaluateExpression: Expression = getEvaluateExpression
+}
+
+case class TryAverage(child: Expression) extends AverageBase {
+  override def failOnError: Boolean = dataType match {
+    // Double type won't fail, thus the failOnError is always false
+    // For decimal type, it returns NULL on overflow. It behaves the same as TrySum when
+    // `failOnError` is false.
+    case _: DoubleType | _: DecimalType => false
+    case _ => true
+  }
+
+  override lazy val updateExpressions: Seq[Expression] =
+    if (failOnError) {
+      val expressions = getUpdateExpressions
+      // If the length of updateExpressions is larger than 1, the tail expressions are for
+      // tracking whether the input is empty, which doesn't need `TryEval` execution.
+      Seq(TryEval(expressions.head)) ++ expressions.tail
+    } else {
+      getUpdateExpressions
+    }
+
+  override lazy val mergeExpressions: Seq[Expression] =
+    if (failOnError) {
+      getMergeExpressions.map(TryEval)
+    } else {
+      getMergeExpressions
+    }
+
+  override lazy val evaluateExpression: Expression =
+    if (failOnError) {
+      TryEval(getEvaluateExpression)
+    } else {
+      getEvaluateExpression
+    }
+
+  override protected def withNewChildInternal(newChild: Expression): Expression =
+    copy(child = newChild)
+
+  override def prettyName: String = "try_avg"
 }
