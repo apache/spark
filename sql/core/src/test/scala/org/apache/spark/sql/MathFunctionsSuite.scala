@@ -213,10 +213,10 @@ class MathFunctionsSuite extends QueryTest with SharedSparkSession {
     checkAnswer(df.select(conv(lit(100), 2, 16)), Row("4"))
     checkAnswer(df.select(conv(lit(3122234455L), 10, 16)), Row("BA198457"))
     checkAnswer(df.selectExpr("conv(num, fromBase, toBase)"), Row("101001101"))
-    checkAnswer(df.selectExpr("""conv("100", 2, 10)"""), Row("4"))
-    checkAnswer(df.selectExpr("""conv("-10", 16, -10)"""), Row("-16"))
+    checkAnswer(df.selectExpr("""conv('100', 2, 10)"""), Row("4"))
+    checkAnswer(df.selectExpr("""conv('-10', 16, -10)"""), Row("-16"))
     checkAnswer(
-      df.selectExpr("""conv("9223372036854775807", 36, -16)"""), Row("-1")) // for overflow
+      df.selectExpr("""conv('9223372036854775807', 36, -16)"""), Row("-1")) // for overflow
   }
 
   test("SPARK-33428 conv function should trim input string") {
@@ -440,8 +440,8 @@ class MathFunctionsSuite extends QueryTest with SharedSparkSession {
     checkAnswer(data.select(unhex(Symbol("b"))), Row("string".getBytes(StandardCharsets.UTF_8)))
     checkAnswer(data.selectExpr("unhex(a)"), Row(Array[Byte](28.toByte)))
     checkAnswer(data.selectExpr("unhex(b)"), Row("string".getBytes(StandardCharsets.UTF_8)))
-    checkAnswer(data.selectExpr("""unhex("##")"""), Row(null))
-    checkAnswer(data.selectExpr("""unhex("G123")"""), Row(null))
+    checkAnswer(data.selectExpr("""unhex('##')"""), Row(null))
+    checkAnswer(data.selectExpr("""unhex('G123')"""), Row(null))
   }
 
   test("hypot") {

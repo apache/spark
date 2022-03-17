@@ -419,7 +419,7 @@ class TableScanSuite extends DataSourceTest with SharedSparkSession {
   test("SPARK-5196 schema field with comment") {
     sql(
       """
-       |CREATE TEMPORARY VIEW student(name string comment "SN", age int comment "SA", grade int)
+       |CREATE TEMPORARY VIEW student(name string comment 'SN', age int comment 'SA', grade int)
        |USING org.apache.spark.sql.sources.AllDataTypesScanSource
        |OPTIONS (
        |  from '1',

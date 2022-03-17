@@ -229,10 +229,11 @@ class CsvFunctionsSuite extends QueryTest with SharedSparkSession {
       s"""
          |SELECT
          | to_csv(
-         |   named_struct('time', timestamp'$s'), map('timestampFormat', "$p")
+         |   named_struct('time', timestamp'$s'), map('timestampFormat', '$p')
          | )
          | """.stripMargin)
-    checkAnswer(toDF("yyyy-MM-dd'T'HH:mm:ss.SSSXXX"), toDF("yyyy-MM-dd'T'HH:mm:ss[.SSS][XXX]"))
+    checkAnswer(toDF("yyyy-MM-dd\\'T\\'HH:mm:ss.SSSXXX"),
+      toDF("yyyy-MM-dd\\'T\\'HH:mm:ss[.SSS][XXX]"))
   }
 
   test("SPARK-32968: Pruning csv field should not change result") {
