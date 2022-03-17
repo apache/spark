@@ -17,11 +17,7 @@
 
 package org.apache.spark.sql.connector.expressions.filter;
 
-import java.util.Arrays;
-import java.util.stream.Stream;
-
 import org.apache.spark.annotation.Evolving;
-import org.apache.spark.sql.connector.expressions.NamedReference;
 
 /**
  * A predicate that evaluates to {@code true} if at least one of {@code left} or {@code right}
