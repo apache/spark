@@ -405,7 +405,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
   }
 
   test("SPARK-15824 - Execute an INSERT wrapped in a WITH statement immediately") {
-    withTable("target", "target2") {
+    def test: Unit = withTable("target", "target2") {
       sql(s"CREATE TABLE target(a INT, b STRING) USING JSON")
       sql("WITH tbl AS (SELECT * FROM jt) INSERT OVERWRITE TABLE target SELECT a, b FROM tbl")
       checkAnswer(
@@ -425,6 +425,12 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
         sql("SELECT a, b FROM target2"),
         sql("SELECT a, b FROM jt")
       )
+    }
+    withSQLConf(SQLConf.ENABLE_DEFAULT_COLUMNS.key -> "false") {
+      test
+    }
+    withSQLConf(SQLConf.ENABLE_DEFAULT_COLUMNS.key -> "true") {
+      test
     }
   }
 
