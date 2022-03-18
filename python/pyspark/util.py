@@ -320,12 +320,9 @@ def inheritable_thread_target(f):
 
         @functools.wraps(f)
         def wrapped(*args, **kwargs):
-            try:
-                # Set local properties in child thread.
-                SparkContext._active_spark_context._jsc.sc().setLocalProperties(properties)
-                return f(*args, **kwargs)
-            finally:
-                InheritableThread._clean_py4j_conn_for_current_thread()
+            # Set local properties in child thread.
+            SparkContext._active_spark_context._jsc.sc().setLocalProperties(properties)
+            return f(*args, **kwargs)
         return wrapped
     else:
         return f
@@ -360,10 +357,7 @@ class InheritableThread(threading.Thread):
                 # self._props is set before starting the thread to match the behavior with JVM.
                 assert hasattr(self, "_props")
                 SparkContext._active_spark_context._jsc.sc().setLocalProperties(self._props)
-                try:
-                    return target(*a, **k)
-                finally:
-                    InheritableThread._clean_py4j_conn_for_current_thread()
+                return target(*a, **k)
 
             super(InheritableThread, self).__init__(
                 target=copy_local_properties, *args, **kwargs)
@@ -379,24 +373,6 @@ class InheritableThread(threading.Thread):
             # Local property copy should happen in Thread.start to mimic JVM's behavior.
             self._props = SparkContext._active_spark_context._jsc.sc().getLocalProperties().clone()
         return super(InheritableThread, self).start(*args, **kwargs)
-
-    @staticmethod
-    def _clean_py4j_conn_for_current_thread():
-        from pyspark import SparkContext
-
-        jvm = SparkContext._jvm
-        thread_connection = jvm._gateway_client.get_thread_connection()
-        if thread_connection is not None:
-            try:
-                # Dequeue is shared across other threads but it's thread-safe.
-                # If this function has to be invoked one more time in the same thead
-                # Py4J will create a new connection automatically.
-                jvm._gateway_client.deque.remove(thread_connection)
-            except ValueError:
-                # Should never reach this point
-                return
-            finally:
-                thread_connection.close()
 
 
 if __name__ == "__main__":
