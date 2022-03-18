@@ -508,9 +508,9 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
 
   test("SPARK-26321 Should not split semicolon within quoted string literals") {
     runCliWithin(3.minute)(
-      """select 'Test1', "^;^";""" -> "Test1\t^;^",
-      """select 'Test2', "\";";""" -> "Test2\t\";",
-      """select 'Test3', "\';";""" -> "Test3\t';",
+      """select 'Test1', '^;^';""" -> "Test1\t^;^",
+      """select 'Test2', '\";';""" -> "Test2\t\";",
+      """select 'Test3', '\';';""" -> "Test3\t';",
       "select concat('Test4', ';');" -> "Test4;"
     )
   }
@@ -551,7 +551,7 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
       "SELECT '\"legal string a';select 1 + 234;".stripMargin -> "235"
     )
     runCliWithin(1.minute)(
-      "SELECT \"legal 'string b\";select 22222 + 1;".stripMargin -> "22223"
+      "SELECT '\"legal 'string b\"';select 22222 + 1;".stripMargin -> "22223"
     )
   }
 

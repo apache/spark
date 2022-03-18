@@ -756,7 +756,7 @@ You may get a different result due to the upgrading to Spark >= 3.0: Fail to rec
 
 
 -- !query
-select from_json('{"T":'26/October/2015'}', 't Timestamp', map('timestampFormat', 'dd/MMMMM/yyyy'))
+select from_json('{"t":"26/October/2015"}', 't Timestamp', map('timestampFormat', 'dd/MMMMM/yyyy'))
 -- !query schema
 struct<>
 -- !query output
