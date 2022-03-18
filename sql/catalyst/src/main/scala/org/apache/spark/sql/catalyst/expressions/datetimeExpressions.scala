@@ -3121,6 +3121,11 @@ case class TimestampAdd(
 
   override def prettyName: String = "timestampadd"
 
+  override def sql: String = {
+    val childrenSQL = (unit +: children.map(_.sql)).mkString(", ")
+    s"$prettyName($childrenSQL)"
+  }
+
   override protected def withNewChildrenInternal(
       newLeft: Expression,
       newRight: Expression): TimestampAdd = {
@@ -3202,6 +3207,11 @@ case class TimestampDiff(
   }
 
   override def prettyName: String = "timestampdiff"
+
+  override def sql: String = {
+    val childrenSQL = (unit +: children.map(_.sql)).mkString(", ")
+    s"$prettyName($childrenSQL)"
+  }
 
   override protected def withNewChildrenInternal(
       newLeft: Expression,
