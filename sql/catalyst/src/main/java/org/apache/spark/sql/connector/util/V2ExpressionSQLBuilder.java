@@ -30,6 +30,7 @@ import org.apache.spark.sql.connector.expressions.Literal;
  * The builder to generate SQL from V2 expressions.
  */
 public class V2ExpressionSQLBuilder {
+
   public String build(Expression expr) {
     if (expr instanceof Literal) {
       return visitLiteral((Literal) expr);

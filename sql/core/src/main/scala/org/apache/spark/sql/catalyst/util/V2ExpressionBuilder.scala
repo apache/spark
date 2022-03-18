@@ -26,7 +26,8 @@ import org.apache.spark.sql.types.BooleanType
 /**
  * The builder to generate V2 expressions from catalyst expressions.
  */
-class V2ExpressionBuilder(e: Expression, nestedPredicatePushdownEnabled: Boolean = false) {
+class V2ExpressionBuilder(
+    e: Expression, nestedPredicatePushdownEnabled: Boolean = false, isPredicate: Boolean = false) {
 
   val pushableColumn = PushableColumn(nestedPredicatePushdownEnabled)
 
@@ -48,8 +49,12 @@ class V2ExpressionBuilder(e: Expression, nestedPredicatePushdownEnabled: Boolean
     case Literal(true, BooleanType) => Some(new AlwaysTrue())
     case Literal(false, BooleanType) => Some(new AlwaysFalse())
     case Literal(value, dataType) => Some(LiteralValue(value, dataType))
-    case pushableColumn(name) if nestedPredicatePushdownEnabled =>
-      Some(FieldReference(name))
+    case col @ pushableColumn(name) if nestedPredicatePushdownEnabled =>
+      if (isPredicate && col.dataType.isInstanceOf[BooleanType]) {
+        Some(new V2Predicate("=", Array(FieldReference(name), LiteralValue(true, BooleanType))))
+      } else {
+        Some(FieldReference(name))
+      }
     case pushableColumn(name) if !nestedPredicatePushdownEnabled =>
       Some(FieldReference.column(name))
     case in @ InSet(child, hset) =>
