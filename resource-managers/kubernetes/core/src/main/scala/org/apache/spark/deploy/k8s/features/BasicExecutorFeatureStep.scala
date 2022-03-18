@@ -131,7 +131,7 @@ private[spark] class BasicExecutorFeatureStep(
       val allOpts = (userOpts ++ sparkOpts).zipWithIndex.map { case (opt, index) =>
         (s"$ENV_JAVA_OPT_PREFIX$index", opt)
       }.toMap
-      KubernetesUtils.buildEnvVarsWithKV(
+      KubernetesUtils.buildEnvVars(
         Map(
           ENV_DRIVER_URL -> driverUrl,
           ENV_EXECUTOR_CORES -> execResources.cores.toString,

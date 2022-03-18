@@ -85,7 +85,7 @@ private[spark] class DriverCommandFeatureStep(conf: KubernetesDriverConf)
     }
 
     val pythonEnvs = {
-      KubernetesUtils.buildEnvVarsWithKV(
+      KubernetesUtils.buildEnvVars(
         Map(
           ENV_PYSPARK_PYTHON -> conf.get(PYSPARK_PYTHON)
             .orElse(environmentVariables.get(ENV_PYSPARK_PYTHON))

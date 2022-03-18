@@ -386,7 +386,7 @@ object KubernetesUtils extends Logging {
    * This function builds the EnvVar objects for each key-value env.
    */
   @Since("3.4.0")
-  def buildEnvVarsWithKV(env: Map[String, String]): Seq[EnvVar] = {
+  def buildEnvVars(env: Map[String, String]): Seq[EnvVar] = {
     if (env.isEmpty) {
       Seq.empty
     } else {
