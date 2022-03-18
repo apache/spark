@@ -743,6 +743,29 @@ case class SessionWindowStateStoreSaveExec(
 
   override protected def withNewChildInternal(newChild: SparkPlan): SparkPlan =
     copy(child = newChild)
+
+  /**
+   * The class overrides this method since dropping late events are happening in the upstream node
+   * [[SessionWindowStateStoreRestoreExec]], and this class has responsibility to report the number
+   * of dropped late events as a part of StateOperatorProgress.
+   *
+   * This method should be called in the driver after this SparkPlan has been executed and metrics
+   * have been updated.
+   */
+  override def getProgress(): StateOperatorProgress = {
+    val stateOpProgress = super.getProgress()
+
+    // This should be safe, since the method is called in the driver after the plan has been
+    // executed and metrics have been updated.
+    val numRowsDroppedByWatermark = child.collectFirst {
+      case s: SessionWindowStateStoreRestoreExec =>
+        s.longMetric("numRowsDroppedByWatermark").value
+    }.getOrElse(0L)
+
+    stateOpProgress.copy(
+      newNumRowsUpdated = stateOpProgress.numRowsUpdated,
+      newNumRowsDroppedByWatermark = numRowsDroppedByWatermark)
+  }
 }
 
 
