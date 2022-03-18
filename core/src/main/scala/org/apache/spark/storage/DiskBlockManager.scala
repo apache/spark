@@ -196,7 +196,7 @@ private[spark] class DiskBlockManager(
   }
 
   /**
-   * Creates a temporary version of the given file with world readable permissions.
+   * Creates a temporary version of the given file with world readable permissions (if required).
    * Used to create block files that will be renamed to the final version of the file.
    */
   def createTempFileWith(file: File): File = {
@@ -225,7 +225,14 @@ private[spark] class DiskBlockManager(
     while (getFile(blockId).exists()) {
       blockId = new TempShuffleBlockId(UUID.randomUUID())
     }
-    (blockId, getFile(blockId))
+    val tmpFile = getFile(blockId)
+    if (shuffleServiceRemoveShuffleEnabled) {
+      // SPARK-37618: we need to make the file world readable because the parent will
+      // lose the setgid bit when making it group writable. Without this the shuffle
+      // service can't read the shuffle files in a secure setup.
+      createWorldReadableFile(tmpFile)
+    }
+    (blockId, tmpFile)
   }
 
   /**
