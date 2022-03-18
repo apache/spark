@@ -196,7 +196,7 @@ private[spark] class DiskBlockManager(
   }
 
   /**
-   * Creates a temporary version of the given file with world readable permissions.
+   * Creates a temporary version of the given file with world readable permissions (if required).
    * Used to create block files that will be renamed to the final version of the file.
    */
   def createTempFileWith(file: File): File = {
