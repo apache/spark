@@ -156,14 +156,11 @@ public class V2ExpressionSQLBuilder {
   }
 
   private int childNum(Expression expr) {
-    if (expr instanceof GeneralScalarExpression) {
-      return ((GeneralScalarExpression) expr).children().length;
-    } else {
-      return 0;
-    }
+    return expr.children().length;
   }
 
-  protected String visitBinaryArithmetic(String name, String l, int lChildNum, String r, int rChildNum) {
+  protected String visitBinaryArithmetic(
+    String name, String l, int lChildNum, String r, int rChildNum) {
     String left = l, right = r;
     if (lChildNum > 1) {
       left = "(" + l + ")";

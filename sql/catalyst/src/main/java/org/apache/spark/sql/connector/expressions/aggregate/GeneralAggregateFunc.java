@@ -22,7 +22,6 @@ import java.util.stream.Collectors;
 
 import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.connector.expressions.Expression;
-import org.apache.spark.sql.connector.expressions.NamedReference;
 
 /**
  * The general implementation of {@link AggregateFunc}, which contains the upper-cased function
@@ -46,20 +45,20 @@ import org.apache.spark.sql.connector.expressions.NamedReference;
 public final class GeneralAggregateFunc implements AggregateFunc {
   private final String name;
   private final boolean isDistinct;
-  private final NamedReference[] inputs;
+  private final Expression[] inputs;
 
   public String name() { return name; }
   public boolean isDistinct() { return isDistinct; }
-  public NamedReference[] inputs() { return inputs; }
+  public Expression[] inputs() { return inputs; }
 
-  public GeneralAggregateFunc(String name, boolean isDistinct, NamedReference[] inputs) {
+  public GeneralAggregateFunc(String name, boolean isDistinct, Expression[] inputs) {
     this.name = name;
     this.isDistinct = isDistinct;
     this.inputs = inputs;
   }
 
   @Override
-  public NamedReference[] references() { return inputs; }
+  public Expression[] children() { return inputs; }
 
   @Override
   public String toString() {

@@ -18,6 +18,9 @@
 package org.apache.spark.sql.connector.expressions;
 
 import org.apache.spark.annotation.Evolving;
+import org.apache.spark.sql.connector.trees.TreeNode;
+
+import java.util.Arrays;
 
 /**
  * Base class of the public logical expression API.
@@ -25,7 +28,7 @@ import org.apache.spark.annotation.Evolving;
  * @since 3.0.0
  */
 @Evolving
-public interface Expression {
+public interface Expression extends TreeNode {
   NamedReference[] EMPTY_REFERENCE = new NamedReference[0];
 
   /**
@@ -36,5 +39,8 @@ public interface Expression {
   /**
    * List of fields or columns that are referenced by this expression.
    */
-  default NamedReference[] references() { return EMPTY_REFERENCE; }
+  default NamedReference[] references() {
+    return Arrays.stream(children()).map(e -> e.references())
+      .flatMap(Arrays::stream).distinct().toArray(NamedReference[]::new);
+  }
 }

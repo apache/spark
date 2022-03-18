@@ -114,17 +114,6 @@ public class GeneralScalarExpression implements Expression, Serializable {
   public Expression[] children() { return children; }
 
   @Override
-  public NamedReference[] references() {
-    return Arrays.stream(children()).map(e -> {
-      if (e instanceof NamedReference) {
-        return new NamedReference[] { (NamedReference) e };
-      } else {
-        return e.references();
-      }
-    }).flatMap(Arrays::stream).distinct().toArray(NamedReference[]::new);
-  }
-
-  @Override
   public boolean equals(Object o) {
     if (this == o) return true;
     if (o == null || getClass() != o.getClass()) return false;

@@ -19,7 +19,6 @@ package org.apache.spark.sql.connector.expressions.aggregate;
 
 import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.connector.expressions.Expression;
-import org.apache.spark.sql.connector.expressions.NamedReference;
 
 /**
  * An aggregate function that returns the minimum value in a group.
@@ -35,7 +34,7 @@ public final class Min implements AggregateFunc {
   public Expression column() { return input; }
 
   @Override
-  public NamedReference[] references() { return input.references(); }
+  public Expression[] children() { return new Expression[]{ input }; }
 
   @Override
   public String toString() { return "MIN(" + input.describe() + ")"; }

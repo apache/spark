@@ -19,7 +19,6 @@ package org.apache.spark.sql.connector.expressions.aggregate;
 
 import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.connector.expressions.Expression;
-import org.apache.spark.sql.connector.expressions.NamedReference;
 
 /**
  * An aggregate function that returns the number of the specific row in a group.
@@ -40,7 +39,7 @@ public final class Count implements AggregateFunc {
   public boolean isDistinct() { return isDistinct; }
 
   @Override
-  public NamedReference[] references() { return input.references(); }
+  public Expression[] children() { return new Expression[]{ input }; }
 
   @Override
   public String toString() {

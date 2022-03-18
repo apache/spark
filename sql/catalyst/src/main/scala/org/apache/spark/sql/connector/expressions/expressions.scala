@@ -348,7 +348,6 @@ private[sql] object HoursTransform {
 }
 
 private[sql] final case class LiteralValue[T](value: T, dataType: DataType) extends Literal[T] {
-  override def references: Array[NamedReference] = Expression.EMPTY_REFERENCE
   override def toString: String = {
     if (dataType.isInstanceOf[StringType]) {
       s"'$value'"
@@ -361,7 +360,6 @@ private[sql] final case class LiteralValue[T](value: T, dataType: DataType) exte
 private[sql] final case class FieldReference(parts: Seq[String]) extends NamedReference {
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.MultipartIdentifierHelper
   override def fieldNames: Array[String] = parts.toArray
-  override def references: Array[NamedReference] = Expression.EMPTY_REFERENCE
   override def toString: String = parts.quoted
 }
 

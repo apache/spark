@@ -38,4 +38,7 @@ public interface Transform extends Expression {
    * Returns the arguments passed to the transform function.
    */
   Expression[] arguments();
+
+  @Override
+  default Expression[] children() { return arguments(); }
 }

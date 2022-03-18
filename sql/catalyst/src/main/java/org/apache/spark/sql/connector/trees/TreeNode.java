@@ -15,27 +15,20 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.connector.expressions.aggregate;
+package org.apache.spark.sql.connector.trees;
 
 import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.connector.expressions.Expression;
 
 /**
- * An aggregate function that returns the maximum value in a group.
+ * Base class of the public V2 expression API.
  *
- * @since 3.2.0
+ * @since 3.3.0
  */
 @Evolving
-public final class Max implements AggregateFunc {
-  private final Expression input;
-
-  public Max(Expression column) { this.input = column; }
-
-  public Expression column() { return input; }
-
-  @Override
-  public Expression[] children() { return new Expression[]{ input }; }
-
-  @Override
-  public String toString() { return "MAX(" + input.describe() + ")"; }
+public interface TreeNode {
+  /**
+   * Returns an array of the children of this node. Children should not change.
+   */
+  Expression[] children();
 }
