@@ -28,7 +28,6 @@ import org.apache.spark.unsafe.types.UTF8String
 
 abstract class NumberFormatterBase
   extends BinaryExpression with ImplicitCastInputTypes with NullIntolerant {
-  
   protected final val PARSE_METHOD = "parse"
   protected final val FORMAT_METHOD = "format"
   private lazy val numberFormat = right.eval().toString.toUpperCase(Locale.ROOT)
