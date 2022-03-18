@@ -41,7 +41,7 @@ private[spark] object DatasetUtils {
     when(casted.isNull || casted.isNaN,
       raise_error(lit("Weights MUST NOT be NULL or NaN")))
       .when(casted < 0 || casted === Double.PositiveInfinity,
-        raise_error(concat(lit("Weights MUST be non-Negative and finite, but got "), casted)))
+        raise_error(concat(lit("Weights MUST NOT be Negative or Infinity, but got "), casted)))
       .otherwise(casted)
   }
 
@@ -54,7 +54,7 @@ private[spark] object DatasetUtils {
     val vecCol = col(vectorCol)
     when(vecCol.isNull, raise_error(lit("Vectors MUST NOT be NULL")))
       .when(!validateVector(vecCol),
-        raise_error(concat(lit("Vector values MUST be non-NaN and finite, but got "),
+        raise_error(concat(lit("Vector values MUST NOT be NaN or Infinity, but got "),
           vecCol.cast(StringType))))
       .otherwise(vecCol)
   }

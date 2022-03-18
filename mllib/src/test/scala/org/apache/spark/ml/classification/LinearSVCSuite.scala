@@ -90,7 +90,7 @@ class LinearSVCSuite extends MLTest with DefaultReadWriteTest {
     val e2 = intercept[Exception] {
       new LinearSVC().setWeightCol("weight").fit(df2)
     }
-    assert(e2.getMessage.contains("Weights MUST be non-Negative and finite"))
+    assert(e2.getMessage.contains("Weights MUST NOT be Negative or Infinity"))
 
     val df3 = sc.parallelize(Seq(
       LabeledPoint(1.0, Vectors.dense(1.0, Double.NaN)),
@@ -99,7 +99,7 @@ class LinearSVCSuite extends MLTest with DefaultReadWriteTest {
     val e3 = intercept[Exception] {
       new LinearSVC().fit(df3)
     }
-    assert(e3.getMessage.contains("Vector values MUST be non-NaN and finite"))
+    assert(e3.getMessage.contains("Vector values MUST NOT be NaN or Infinity"))
   }
 
   test("Linear SVC binary classification") {
