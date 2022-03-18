@@ -86,15 +86,15 @@ private[spark] class DriverCommandFeatureStep(conf: KubernetesDriverConf)
 
     val pythonEnvs = {
       KubernetesUtils.buildEnvVarsWithKV(
-        Seq(
-          (ENV_PYSPARK_PYTHON, conf.get(PYSPARK_PYTHON)
+        Map(
+          ENV_PYSPARK_PYTHON -> conf.get(PYSPARK_PYTHON)
             .orElse(environmentVariables.get(ENV_PYSPARK_PYTHON))
-            .orNull),
-          (ENV_PYSPARK_DRIVER_PYTHON, conf.get(PYSPARK_DRIVER_PYTHON)
+            .orNull,
+          ENV_PYSPARK_DRIVER_PYTHON -> conf.get(PYSPARK_DRIVER_PYTHON)
             .orElse(conf.get(PYSPARK_PYTHON))
             .orElse(environmentVariables.get(ENV_PYSPARK_DRIVER_PYTHON))
             .orElse(environmentVariables.get(ENV_PYSPARK_PYTHON))
-            .orNull)))
+            .orNull))
     }
 
     // re-write primary resource to be the remote one and upload the related file

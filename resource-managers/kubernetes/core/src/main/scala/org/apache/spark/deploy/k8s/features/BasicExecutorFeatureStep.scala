@@ -117,7 +117,7 @@ private[spark] class BasicExecutorFeatureStep(
 
     val executorEnv: Seq[EnvVar] = {
       val sparkAuthSecret = if (kubernetesConf.get(AUTH_SECRET_FILE_EXECUTOR).isEmpty) {
-        Seq((SecurityManager.ENV_AUTH_SECRET, secMgr.getSecretKey()))
+        Map(SecurityManager.ENV_AUTH_SECRET -> secMgr.getSecretKey())
       } else {
         Nil
       }
@@ -130,18 +130,18 @@ private[spark] class BasicExecutorFeatureStep(
         SparkConf.isExecutorStartupConf)
       val allOpts = (userOpts ++ sparkOpts).zipWithIndex.map { case (opt, index) =>
         (s"$ENV_JAVA_OPT_PREFIX$index", opt)
-      }
+      }.toMap
       KubernetesUtils.buildEnvVarsWithKV(
-        Seq(
-          (ENV_DRIVER_URL, driverUrl),
-          (ENV_EXECUTOR_CORES, execResources.cores.toString),
-          (ENV_EXECUTOR_MEMORY, executorMemoryString),
-          (ENV_APPLICATION_ID, kubernetesConf.appId),
+        Map(
+          ENV_DRIVER_URL -> driverUrl,
+          ENV_EXECUTOR_CORES -> execResources.cores.toString,
+          ENV_EXECUTOR_MEMORY -> executorMemoryString,
+          ENV_APPLICATION_ID -> kubernetesConf.appId,
           // This is to set the SPARK_CONF_DIR to be /opt/spark/conf
-          (ENV_SPARK_CONF_DIR, SPARK_CONF_DIR_INTERNAL),
-          (ENV_EXECUTOR_ID, kubernetesConf.executorId),
-          (ENV_RESOURCE_PROFILE_ID, resourceProfile.id.toString),
-          (ENV_CLASSPATH, kubernetesConf.get(EXECUTOR_CLASS_PATH).orNull))
+          ENV_SPARK_CONF_DIR -> SPARK_CONF_DIR_INTERNAL,
+          ENV_EXECUTOR_ID -> kubernetesConf.executorId,
+          ENV_RESOURCE_PROFILE_ID -> resourceProfile.id.toString,
+          ENV_CLASSPATH-> kubernetesConf.get(EXECUTOR_CLASS_PATH).orNull)
           ++ kubernetesConf.environment
           ++ sparkAuthSecret
           ++ allOpts) ++

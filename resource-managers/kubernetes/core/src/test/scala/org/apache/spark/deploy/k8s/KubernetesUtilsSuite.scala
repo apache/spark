@@ -135,7 +135,8 @@ class KubernetesUtilsSuite extends SparkFunSuite with PrivateMethodTester {
         .withName(k)
         .withValue(v).build()
     }
-    val outputEnvVars = KubernetesUtils.buildEnvVarsWithKV(input ++ Seq(("testKeyForNull", null)))
+    val outputEnvVars =
+      KubernetesUtils.buildEnvVarsWithKV(input.toMap + ("testKeyForNull" -> null))
     assert(outputEnvVars == expectedEnvVars)
   }
 
