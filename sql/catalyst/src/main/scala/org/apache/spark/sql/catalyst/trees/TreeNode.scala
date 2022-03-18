@@ -609,53 +609,6 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product with Tre
   }
 
   /**
-   * Returns a copy of this node where `f` has been applied to all the nodes in `children`.
-   * This method force making a copy of the nodes even if no child has been changed.
-   * @param f The transform function to be applied on applicable `TreeNode` elements.
-   */
-  private def mapChildrenWithForceCopy(f: BaseType => BaseType): BaseType = {
-
-    def mapChild(child: Any): Any = child match {
-      case arg: TreeNode[_] if containsChild(arg) =>
-        f(arg.asInstanceOf[BaseType])
-      case (arg1: TreeNode[_], arg2: TreeNode[_]) =>
-        val newChild1 = if (containsChild(arg1)) {
-          f(arg1.asInstanceOf[BaseType])
-        } else {
-          arg1.asInstanceOf[BaseType]
-        }
-
-        val newChild2 = if (containsChild(arg2)) {
-          f(arg2.asInstanceOf[BaseType])
-        } else {
-          arg2.asInstanceOf[BaseType]
-        }
-        (newChild1, newChild2)
-      case other => other
-    }
-
-    val newArgs = mapProductIterator {
-      case arg: TreeNode[_] if containsChild(arg) =>
-        f(arg.asInstanceOf[BaseType])
-      case Some(arg: TreeNode[_]) if containsChild(arg) =>
-        Some(f(arg.asInstanceOf[BaseType]))
-      // `map.mapValues().view.force` return `Map` in Scala 2.12 but return `IndexedSeq` in Scala
-      // 2.13, call `toMap` method manually to compatible with Scala 2.12 and Scala 2.13
-      case m: Map[_, _] => m.mapValues {
-        case arg: TreeNode[_] if containsChild(arg) =>
-          f(arg.asInstanceOf[BaseType])
-        case other => other
-      }.view.force.toMap // `mapValues` is lazy and we need to force it to materialize
-      case d: DataType => d // Avoid unpacking Structs
-      case args: Stream[_] => args.map(mapChild).force // Force materialization on stream
-      case args: Iterable[_] => args.map(mapChild)
-      case nonChild: AnyRef => nonChild
-      case null => null
-    }
-    makeCopy(newArgs, allowEmptyArgs = true)
-  }
-
-  /**
    * Args to the constructor that should be copied, but not transformed.
    * These are appended to the transformed args automatically by makeCopy
    * @return
@@ -731,7 +684,44 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product with Tre
   }
 
   override def clone(): BaseType = {
-    mapChildrenWithForceCopy(_.clone())
+    def mapChild(child: Any): Any = child match {
+      case arg: TreeNode[_] if containsChild(arg) =>
+        arg.asInstanceOf[BaseType].clone()
+      case (arg1: TreeNode[_], arg2: TreeNode[_]) =>
+        val newChild1 = if (containsChild(arg1)) {
+          arg1.asInstanceOf[BaseType].clone()
+        } else {
+          arg1.asInstanceOf[BaseType]
+        }
+
+        val newChild2 = if (containsChild(arg2)) {
+          arg2.asInstanceOf[BaseType].clone()
+        } else {
+          arg2.asInstanceOf[BaseType]
+        }
+        (newChild1, newChild2)
+      case other => other
+    }
+
+    val newArgs = mapProductIterator {
+      case arg: TreeNode[_] if containsChild(arg) =>
+        arg.asInstanceOf[BaseType].clone()
+      case Some(arg: TreeNode[_]) if containsChild(arg) =>
+        Some(arg.asInstanceOf[BaseType].clone())
+      // `map.mapValues().view.force` return `Map` in Scala 2.12 but return `IndexedSeq` in Scala
+      // 2.13, call `toMap` method manually to compatible with Scala 2.12 and Scala 2.13
+      case m: Map[_, _] => m.mapValues {
+        case arg: TreeNode[_] if containsChild(arg) =>
+          arg.asInstanceOf[BaseType].clone()
+        case other => other
+      }.view.force.toMap // `mapValues` is lazy and we need to force it to materialize
+      case d: DataType => d // Avoid unpacking Structs
+      case args: Stream[_] => args.map(mapChild).force // Force materialization on stream
+      case args: Iterable[_] => args.map(mapChild)
+      case nonChild: AnyRef => nonChild
+      case null => null
+    }
+    makeCopy(newArgs, allowEmptyArgs = true)
   }
 
   private def simpleClassName: String = Utils.getSimpleName(this.getClass)
