@@ -2080,8 +2080,10 @@ case class ParseToTimestamp(
   override def inputTypes: Seq[AbstractDataType] = {
     // Note: ideally this function should only take string input, but we allow more types here to
     // be backward compatible.
-    TypeCollection(StringType, DateType, TimestampType, TimestampNTZType) +:
-      format.map(_ => StringType).toSeq
+    val types = Seq(StringType, DateType, TimestampType, TimestampNTZType)
+    TypeCollection(
+      (if (dataType.isInstanceOf[TimestampType]) types :+ NumericType else types): _*
+    ) +: format.map(_ => StringType).toSeq
   }
 
   override protected def withNewChildrenInternal(
