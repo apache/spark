@@ -23,7 +23,6 @@ import java.util.concurrent.TimeUnit
 
 import io.netty.bootstrap.ServerBootstrap
 import io.netty.channel.{ChannelFuture, ChannelInitializer, EventLoopGroup}
-import io.netty.channel.nio.NioEventLoopGroup
 import io.netty.channel.socket.SocketChannel
 import io.netty.channel.socket.nio.NioServerSocketChannel
 import io.netty.handler.codec.LengthFieldBasedFrameDecoder
@@ -47,16 +46,18 @@ private[spark] class RBackend {
   private[r] val jvmObjectTracker = new JVMObjectTracker
 
   def init(): (Int, RAuthHelper) = {
+    import org.apache.spark.network.util.{IOMode, NettyUtils}
     val conf = Option(SparkEnv.get).map(_.conf).getOrElse(new SparkConf())
     val backendConnectionTimeout = conf.get(R_BACKEND_CONNECTION_TIMEOUT)
-    bossGroup = new NioEventLoopGroup(conf.get(R_NUM_BACKEND_THREADS))
+    bossGroup = NettyUtils.createEventLoop(IOMode.NIO, conf.get(R_NUM_BACKEND_THREADS), "RBackend")
     val workerGroup = bossGroup
     val handler = new RBackendHandler(this)
     val authHelper = new RAuthHelper(conf)
+    val channelClass = NettyUtils.getServerChannelClass(IOMode.NIO)
 
     bootstrap = new ServerBootstrap()
       .group(bossGroup, workerGroup)
-      .channel(classOf[NioServerSocketChannel])
+      .channel(channelClass)
 
     bootstrap.childHandler(new ChannelInitializer[SocketChannel]() {
       def initChannel(ch: SocketChannel): Unit = {
