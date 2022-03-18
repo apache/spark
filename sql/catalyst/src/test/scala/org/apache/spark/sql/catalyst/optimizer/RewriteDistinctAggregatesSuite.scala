@@ -84,15 +84,11 @@ class RewriteDistinctAggregatesSuite extends PlanTest {
         max('c).as('agg3))
       .analyze
 
-    val expected = testRelation
-      .groupBy('a)(
-        countDistinct('b + 'c).as('agg1),
-        countDistinct('b + 'c).as('agg2),
-        max('c).as('agg3))
-      .analyze
-
     val rewrite = RewriteDistinctAggregates(input)
-    comparePlans(expected, rewrite)
+    rewrite match {
+      case Aggregate(_, _, LocalRelation(_, _, _)) =>
+      case _ => fail(s"Plan is not as expected:\n$rewrite")
+    }
   }
 
   test("reduce multiple distinct groups due to superficial differences") {
