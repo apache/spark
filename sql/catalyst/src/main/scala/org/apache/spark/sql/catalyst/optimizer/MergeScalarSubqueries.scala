@@ -222,11 +222,12 @@ object MergeScalarSubqueries extends Rule[LogicalPlan] with PredicateHelper {
             }
           }
 
-        // Merging general nodes is complicated and this implementation supports only those nodes in
-        // which the order and the number of output attributes are not relevant (see
-        // `supportedMerge()` whitelist).
-        // Also, this implementation supports only those nodes in which children can be merged in
-        // the same order.
+        // Merging general nodes is complicated. This implementation:
+        // - Supports only a whitelist of nodes (see `supportedMerge()`).
+        // - All children need to be direct fields of the tree node case class. Tree nodes where a
+        //   child is wrapped into a `Seq` or `Option` (e.g. `Union`) is not supported.
+        // - Expressions can be wrapped.
+        // - Children are tried to be merged in the same order.
         case (np, cp) if supportedMerge(np) && np.getClass == cp.getClass &&
             np.children.size == cp.children.size &&
             np.expressions.size == cp.expressions.size &&
