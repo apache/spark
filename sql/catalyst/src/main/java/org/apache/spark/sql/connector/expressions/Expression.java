@@ -17,10 +17,9 @@
 
 package org.apache.spark.sql.connector.expressions;
 
-import org.apache.spark.annotation.Evolving;
-import org.apache.spark.sql.connector.trees.TreeNode;
-
 import java.util.Arrays;
+
+import org.apache.spark.annotation.Evolving;
 
 /**
  * Base class of the public logical expression API.
@@ -28,13 +27,18 @@ import java.util.Arrays;
  * @since 3.0.0
  */
 @Evolving
-public interface Expression extends TreeNode {
+public interface Expression {
   NamedReference[] EMPTY_REFERENCE = new NamedReference[0];
 
   /**
    * Format the expression as a human readable SQL-like string.
    */
   default String describe() { return this.toString(); }
+
+  /**
+   * Returns an array of the children of this node. Children should not change.
+   */
+  Expression[] children();
 
   /**
    * List of fields or columns that are referenced by this expression.

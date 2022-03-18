@@ -575,7 +575,7 @@ case class PushablePredicate(nestedPredicatePushdownEnabled: Boolean) {
     case col @ pushableColumn(name) if col.dataType.isInstanceOf[BooleanType] =>
       Some(new Predicate("=", Array(FieldReference(name), LiteralValue(true, BooleanType))))
     case _ =>
-      new V2ExpressionBuilder(e, nestedPredicatePushdownEnabled, true).build().map { v =>
+      new V2ExpressionBuilder(e, nestedPredicatePushdownEnabled).build().map { v =>
         assert(v.isInstanceOf[Predicate])
         v.asInstanceOf[Predicate]
       }
