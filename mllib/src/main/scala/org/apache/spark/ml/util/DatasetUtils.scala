@@ -21,51 +21,51 @@ import org.apache.spark.ml.linalg._
 import org.apache.spark.mllib.linalg.{Vector => OldVector, Vectors => OldVectors}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{Column, Dataset, Row}
-import org.apache.spark.sql.functions.{col, lit, udf}
-import org.apache.spark.sql.types.{ArrayType, DoubleType, FloatType}
+import org.apache.spark.sql.functions._
+import org.apache.spark.sql.types.{ArrayType, DoubleType, FloatType, StringType}
 
 
 private[spark] object DatasetUtils {
 
-  private[ml] def getBinaryLabelCol(labelCol: String) = {
-    checkBinaryLabel(col(labelCol).cast(DoubleType))
+  private[ml] def checkBinaryLabels(labelCol: String): Column = {
+    val casted = col(labelCol).cast(DoubleType)
+    when(casted.isNull, raise_error(lit("Labels MUST NOT be NULL")))
+      .when(casted =!= 0 && casted =!= 1,
+        raise_error(concat(lit("Labels MUST be in {0, 1}, but got "),
+          casted.cast(StringType))))
+      .otherwise(casted)
   }
 
-  private[ml] def getNonNegativeWeightCol(weightCol: Option[String]) = weightCol match {
-    case Some(w) if w.nonEmpty => checkNonNegativeWeight(col(w).cast(DoubleType))
+  private[ml] def checkNonNegativeWeights(weightCol: String): Column = {
+    val casted = col(weightCol).cast(DoubleType)
+    when(casted.isNull, raise_error(lit("Weights MUST NOT be NULL")))
+      .when(casted < 0 || casted === Double.PositiveInfinity,
+        raise_error(concat(lit("Weights MUST be non-Negative and finite, but got "),
+          casted.cast(StringType))))
+      .otherwise(casted)
+  }
+
+  private[ml] def checkNonNegativeWeights(weightCol: Option[String]): Column = weightCol match {
+    case Some(w) if w.nonEmpty => checkNonNegativeWeights(w)
     case _ => lit(1.0)
   }
 
-  private[ml] def getNonNanVectorCol(featuresCol: String) = {
-    checkNonNanVector(col(featuresCol))
+  private[ml] def checkNonNanVectors(vectorCol: String): Column = {
+    val vecCol = col(vectorCol)
+    when(vecCol.isNull, raise_error(lit("Vectors MUST NOT be NULL")))
+      .when(!validateVector(vecCol),
+        raise_error(concat(lit("Vector values MUST be non-NaN and finite, but got "),
+          vecCol.cast(StringType))))
+      .otherwise(vecCol)
   }
 
-  private def checkBinaryLabel = udf {
-    label: Double =>
-      require(label == 0 || label == 1,
-        s"Labels MUST be in {0, 1}, but got $label")
-      label
-  }
-
-  private def checkNonNegativeWeight = udf {
-    weight: Double =>
-      require(weight >= 0 && !weight.isInfinity,
-        s"Weights MUST be non-Negative and finite, but got $weight")
-      weight
-  }
-
-  private def checkNonNanVector = udf {
-    vector: Vector =>
-      require(vector != null, s"Vector MUST NOT be NULL")
-      vector match {
-        case dv: DenseVector =>
-          require(dv.values.forall(v => !v.isNaN && !v.isInfinity),
-            s"Vector values MUST be non-NaN and finite, but got $dv")
-        case sv: SparseVector =>
-          require(sv.values.forall(v => !v.isNaN && !v.isInfinity),
-            s"Vector values MUST be non-NaN and finite, but got $sv")
-      }
-      vector
+  private lazy val validateVector = udf { vector: Vector =>
+    vector match {
+      case dv: DenseVector =>
+        dv.values.forall(v => !v.isNaN && !v.isInfinity)
+      case sv: SparseVector =>
+        sv.values.forall(v => !v.isNaN && !v.isInfinity)
+    }
   }
 
   /**
