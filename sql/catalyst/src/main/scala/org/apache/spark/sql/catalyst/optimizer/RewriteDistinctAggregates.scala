@@ -253,8 +253,42 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
         }
     }
 
+    // get the count of aggregation groups that takes into account
+    // even superficial differences in the function children
+    val distictAggGroupsCount = aggExpressions.filter(_.isDistinct).map { e =>
+      val unfoldableChildren = e.aggregateFunction.children.filter(!_.foldable).toSet
+      if (unfoldableChildren.nonEmpty) {
+        unfoldableChildren
+      } else {
+        e.aggregateFunction.children.take(1).toSet
+      }
+    }.toSet.size
+
+    def patchAggregateFunctionChildren(
+        af: AggregateFunction)(
+        attrs: Expression => Option[Expression]): AggregateFunction = {
+      val newChildren = af.children.map(c => attrs(c).getOrElse(c))
+      af.withNewChildren(newChildren).asInstanceOf[AggregateFunction]
+    }
+
     // Aggregation strategy can handle queries with a single distinct group without filter clause.
-    if (distinctAggGroups.size > 1 || distinctAggs.exists(_.filter.isDefined)) {
+    if (distinctAggGroups.size == 1 && distictAggGroupsCount > 1
+        && !distinctAggs.exists(_.filter.isDefined)) {
+      // we have multiple groups only because of
+      // superficial differences. Make them the same so that SparkStrategies
+      // doesn't complain during sanity check. That is, if we have an aggList of:
+      // [count(distinct b + 1), sum(distinct 1 + b), sum(c)]
+      // Change it to:
+      // [count(distinct b + 1), sum(distinct b + 1), sum(c)]
+      // therefore we have distinct aggregations over only one expression
+      val patchedAggExpressions = a.aggregateExpressions.map { e =>
+        e.transformDown {
+          case e: Expression =>
+            funcChildrenLookup.getOrElse(e, e)
+        }.asInstanceOf[NamedExpression]
+      }
+      a.copy(aggregateExpressions = patchedAggExpressions)
+    } else if (distinctAggGroups.size > 1 || distinctAggs.exists(_.filter.isDefined)) {
       // Create the attributes for the grouping id and the group by clause.
       val gid = AttributeReference("gid", IntegerType, nullable = false)()
       val groupByMap = a.groupingExpressions.collect {
@@ -262,13 +296,6 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
         case e => e -> AttributeReference(e.sql, e.dataType, e.nullable)()
       }
       val groupByAttrs = groupByMap.map(_._2)
-
-      def patchAggregateFunctionChildren(
-          af: AggregateFunction)(
-          attrs: Expression => Option[Expression]): AggregateFunction = {
-        val newChildren = af.children.map(c => attrs(c).getOrElse(c))
-        af.withNewChildren(newChildren).asInstanceOf[AggregateFunction]
-      }
 
       // Setup unique distinct aggregate children.
       val distinctAggChildren = distinctAggGroups.keySet.flatten.toSeq.distinct
