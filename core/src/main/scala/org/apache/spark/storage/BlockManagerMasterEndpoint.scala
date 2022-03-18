@@ -333,10 +333,8 @@ class BlockManagerMasterEndpoint(
     if (externalShuffleServiceRemoveShuffleEnabled) {
       mapOutputTracker.shuffleStatuses.get(shuffleId).foreach { shuffleStatus =>
         shuffleStatus.mapStatuses.foreach { mapStatus =>
-          // Port should always be external shuffle port if external shuffle is enabled so
-          // also check if the executor has been deallocated
-          if (mapStatus.location.port == externalShuffleServicePort &&
-              !blockManagerIdByExecutor.contains(mapStatus.location.executorId)) {
+          // Check if the executor has been deallocated
+          if (!blockManagerIdByExecutor.contains(mapStatus.location.executorId)) {
             val blocksToDel =
               shuffleManager.shuffleBlockResolver.getBlocksForShuffle(shuffleId, mapStatus.mapId)
             if (blocksToDel.nonEmpty) {
