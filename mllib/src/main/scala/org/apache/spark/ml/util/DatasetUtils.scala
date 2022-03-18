@@ -29,19 +29,19 @@ private[spark] object DatasetUtils {
 
   private[ml] def checkBinaryLabels(labelCol: String): Column = {
     val casted = col(labelCol).cast(DoubleType)
-    when(casted.isNull, raise_error(lit("Labels MUST NOT be NULL")))
+    when(casted.isNull || casted.isNaN,
+      raise_error(lit("Labels MUST NOT be NULL or NaN")))
       .when(casted =!= 0 && casted =!= 1,
-        raise_error(concat(lit("Labels MUST be in {0, 1}, but got "),
-          casted.cast(StringType))))
+        raise_error(concat(lit("Labels MUST be in {0, 1}, but got "), casted)))
       .otherwise(casted)
   }
 
   private[ml] def checkNonNegativeWeights(weightCol: String): Column = {
     val casted = col(weightCol).cast(DoubleType)
-    when(casted.isNull, raise_error(lit("Weights MUST NOT be NULL")))
+    when(casted.isNull || casted.isNaN,
+      raise_error(lit("Weights MUST NOT be NULL or NaN")))
       .when(casted < 0 || casted === Double.PositiveInfinity,
-        raise_error(concat(lit("Weights MUST be non-Negative and finite, but got "),
-          casted.cast(StringType))))
+        raise_error(concat(lit("Weights MUST be non-Negative and finite, but got "), casted)))
       .otherwise(casted)
   }
 
