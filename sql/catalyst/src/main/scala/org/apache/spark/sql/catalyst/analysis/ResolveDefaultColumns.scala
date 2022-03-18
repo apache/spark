@@ -169,40 +169,44 @@ case class ResolveDefaultColumns(catalog: SessionCatalog) extends Rule[LogicalPl
   override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsWithPruning(
     AlwaysProcess.fn, ruleId) {
     // INSERT INTO t VALUES (...)
-    case insert@InsertIntoStatement(_, _, _, table: UnresolvedInlineTable, _, _) if valid(table) =>
+    case insert@InsertIntoStatement(_, _, _, table: UnresolvedInlineTable, _, _)
+      if SQLConf.get.enableDefaultColumns && valid(table) =>
       val expanded = addMissingDefaultColumnValues(table, insert)
       val replaced = replaceExplicitDefaultColumnValues(expanded, insert)
       insert.copy(query = replaced)
 
     // INSERT INTO t VALUES (...) AS alias(...)
     case insert@InsertIntoStatement(
-        _, _, _, alias@SubqueryAlias(_, table: UnresolvedInlineTable), _, _) if valid(table) =>
+        _, _, _, alias@SubqueryAlias(_, table: UnresolvedInlineTable), _, _)
+      if SQLConf.get.enableDefaultColumns && valid(table) =>
       val expanded = addMissingDefaultColumnValues(table, insert)
       val replaced = replaceExplicitDefaultColumnValues(expanded, insert)
       insert.copy(query = alias.copy(child = replaced))
 
     // INSERT INTO t SELECT * FROM VALUES (...)
     case insert@InsertIntoStatement(_, _, _, project@Project(_, table: UnresolvedInlineTable), _, _)
-      if selectStar(project) && valid(table) =>
+      if SQLConf.get.enableDefaultColumns && selectStar(project) && valid(table) =>
       val expanded = addMissingDefaultColumnValues(table, insert)
       val replaced = replaceExplicitDefaultColumnValues(expanded, insert)
-      insert.copy(project.copy(child = replaced))
+      insert.copy(query = project.copy(child = replaced))
 
     // INSERT INTO t SELECT * FROM VALUES (...) AS alias(...)
     case insert@InsertIntoStatement(
         _, _, _, project@Project(_, alias@SubqueryAlias(_, table: UnresolvedInlineTable)), _, _)
-      if selectStar(project) && valid(table) =>
+      if SQLConf.get.enableDefaultColumns && selectStar(project) && valid(table) =>
       val expanded = addMissingDefaultColumnValues(table, insert)
       val replaced = replaceExplicitDefaultColumnValues(expanded, insert)
       insert.copy(query = project.copy(child = alias.copy(child = replaced)))
 
     // INSERT INTO t SELECT ... FROM ... (unresolved)
-    case insert@InsertIntoStatement(_, _, _, project: Project, _, _) if !project.resolved =>
+    case insert@InsertIntoStatement(_, _, _, project: Project, _, _)
+      if SQLConf.get.enableDefaultColumns && !project.resolved =>
       val replaced = replaceExplicitDefaultColumnValues(project, insert)
       insert.copy(query = replaced)
 
     // INSERT INTO t SELECT ... FROM ... (resolved)
-    case insert@InsertIntoStatement(_, _, _, project: Project, _, _) if project.resolved =>
+    case insert@InsertIntoStatement(_, _, _, project: Project, _, _)
+      if SQLConf.get.enableDefaultColumns && project.resolved =>
       val expanded = addMissingDefaultColumnValues(project, insert)
       val replaced = replaceExplicitDefaultColumnValues(expanded, insert)
       insert.copy(query = replaced)
@@ -224,12 +228,12 @@ case class ResolveDefaultColumns(catalog: SessionCatalog) extends Rule[LogicalPl
     val schema: StructType = getInsertTableSchema(insert).getOrElse(return table)
     val schemaWithoutPartitionCols = StructType(schema.fields.dropRight(insert.partitionSpec.size))
     val numNonPartitionCols: Int = schemaWithoutPartitionCols.fields.drop(numQueryOutputs).size
-    val numColsWithExplicitDefaults: Int =
-      schema.fields.reverse.dropWhile(!_.metadata.contains(CURRENT_DEFAULT_COLUMN_NAME)).length
     val numDefaultExprsToAdd: Int = {
       if (SQLConf.get.useNullsForMissingDefaultColumnValues) {
         numNonPartitionCols
       } else {
+        val numColsWithExplicitDefaults: Int =
+          schema.fields.reverse.dropWhile(!_.metadata.contains(CURRENT_DEFAULT_COLUMN_NAME)).length
         numNonPartitionCols.min(numColsWithExplicitDefaults)
       }
     }
@@ -247,12 +251,12 @@ case class ResolveDefaultColumns(catalog: SessionCatalog) extends Rule[LogicalPl
     val schema: StructType = getInsertTableSchema(insert).getOrElse(return project)
     val schemaWithoutPartitionCols = StructType(schema.fields.dropRight(insert.partitionSpec.size))
     val numNonPartitionCols: Int = schemaWithoutPartitionCols.fields.drop(numQueryOutputs).size
-    val numColsWithExplicitDefaults: Int =
-      schema.fields.reverse.dropWhile(!_.metadata.contains(CURRENT_DEFAULT_COLUMN_NAME)).length
     val numDefaultExprsToAdd: Int = {
       if (SQLConf.get.useNullsForMissingDefaultColumnValues) {
         numNonPartitionCols
       } else {
+        val numColsWithExplicitDefaults: Int =
+          schema.fields.reverse.dropWhile(!_.metadata.contains(CURRENT_DEFAULT_COLUMN_NAME)).length
         numNonPartitionCols.min(numColsWithExplicitDefaults)
       }
     }
