@@ -784,7 +784,7 @@ You may get a different result due to the upgrading to Spark >= 3.0: Fail to rec
 -- !query
 select timestampadd(MONTH, -1, timestamp'2022-02-14 01:02:03')
 -- !query schema
-struct<timestampadd(-1, TIMESTAMP '2022-02-14 01:02:03'):timestamp>
+struct<timestampadd(MONTH, -1, TIMESTAMP '2022-02-14 01:02:03'):timestamp>
 -- !query output
 2022-01-14 01:02:03
 
@@ -792,7 +792,7 @@ struct<timestampadd(-1, TIMESTAMP '2022-02-14 01:02:03'):timestamp>
 -- !query
 select timestampadd(MINUTE, 58, timestamp'2022-02-14 01:02:03')
 -- !query schema
-struct<timestampadd(58, TIMESTAMP '2022-02-14 01:02:03'):timestamp>
+struct<timestampadd(MINUTE, 58, TIMESTAMP '2022-02-14 01:02:03'):timestamp>
 -- !query output
 2022-02-14 02:00:03
 
@@ -800,7 +800,7 @@ struct<timestampadd(58, TIMESTAMP '2022-02-14 01:02:03'):timestamp>
 -- !query
 select timestampadd(YEAR, 1, date'2022-02-15')
 -- !query schema
-struct<timestampadd(1, DATE '2022-02-15'):timestamp>
+struct<timestampadd(YEAR, 1, DATE '2022-02-15'):timestamp>
 -- !query output
 2023-02-15 00:00:00
 
@@ -808,7 +808,7 @@ struct<timestampadd(1, DATE '2022-02-15'):timestamp>
 -- !query
 select timestampadd(SECOND, -1, date'2022-02-15')
 -- !query schema
-struct<timestampadd(-1, DATE '2022-02-15'):timestamp>
+struct<timestampadd(SECOND, -1, DATE '2022-02-15'):timestamp>
 -- !query output
 2022-02-14 23:59:59
 
@@ -816,7 +816,7 @@ struct<timestampadd(-1, DATE '2022-02-15'):timestamp>
 -- !query
 select timestampdiff(MONTH, timestamp'2022-02-14 01:02:03', timestamp'2022-01-14 01:02:03')
 -- !query schema
-struct<timestampdiff(TIMESTAMP '2022-02-14 01:02:03', TIMESTAMP '2022-01-14 01:02:03'):bigint>
+struct<timestampdiff(MONTH, TIMESTAMP '2022-02-14 01:02:03', TIMESTAMP '2022-01-14 01:02:03'):bigint>
 -- !query output
 -1
 
@@ -824,7 +824,7 @@ struct<timestampdiff(TIMESTAMP '2022-02-14 01:02:03', TIMESTAMP '2022-01-14 01:0
 -- !query
 select timestampdiff(MINUTE, timestamp'2022-02-14 01:02:03', timestamp'2022-02-14 02:00:03')
 -- !query schema
-struct<timestampdiff(TIMESTAMP '2022-02-14 01:02:03', TIMESTAMP '2022-02-14 02:00:03'):bigint>
+struct<timestampdiff(MINUTE, TIMESTAMP '2022-02-14 01:02:03', TIMESTAMP '2022-02-14 02:00:03'):bigint>
 -- !query output
 58
 
@@ -832,7 +832,7 @@ struct<timestampdiff(TIMESTAMP '2022-02-14 01:02:03', TIMESTAMP '2022-02-14 02:0
 -- !query
 select timestampdiff(YEAR, date'2022-02-15', date'2023-02-15')
 -- !query schema
-struct<timestampdiff(DATE '2022-02-15', DATE '2023-02-15'):bigint>
+struct<timestampdiff(YEAR, DATE '2022-02-15', DATE '2023-02-15'):bigint>
 -- !query output
 1
 
@@ -840,6 +840,6 @@ struct<timestampdiff(DATE '2022-02-15', DATE '2023-02-15'):bigint>
 -- !query
 select timestampdiff(SECOND, date'2022-02-15', timestamp'2022-02-14 23:59:59')
 -- !query schema
-struct<timestampdiff(DATE '2022-02-15', TIMESTAMP '2022-02-14 23:59:59'):bigint>
+struct<timestampdiff(SECOND, DATE '2022-02-15', TIMESTAMP '2022-02-14 23:59:59'):bigint>
 -- !query output
 -1
