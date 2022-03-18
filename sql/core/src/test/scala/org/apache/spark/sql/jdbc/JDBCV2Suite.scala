@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, Sort}
 import org.apache.spark.sql.connector.expressions.{FieldReference, NullOrdering, SortDirection, SortValue}
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2ScanRelation, V1ScanWrapper}
 import org.apache.spark.sql.execution.datasources.v2.jdbc.JDBCTableCatalog
-import org.apache.spark.sql.functions.{avg, count, count_distinct, lit, sum, udf}
+import org.apache.spark.sql.functions.{avg, count, count_distinct, lit, not, sum, udf, when}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.util.Utils
@@ -324,6 +324,63 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
     }
 
     checkAnswer(df5, Seq(Row(6, "jen", 12000, 1200, true)))
+
+    val df6 = spark.table("h2.test.employee").filter($"is_manager".or($"salary" > 10000))
+
+    checkFiltersRemoved(df6)
+
+    df6.queryExecution.optimizedPlan.collect {
+      case _: DataSourceV2ScanRelation =>
+        val expected_plan_fragment =
+          "PushedFilters: [(IS_MANAGER = true) OR (SALARY > 10000.00)], "
+        checkKeywordsExistsInExplain(df6, expected_plan_fragment)
+    }
+
+    checkAnswer(df6, Seq(Row(1, "amy", 10000, 1000, true), Row(2, "alex", 12000, 1200, false),
+      Row(2, "david", 10000, 1300, true), Row(6, "jen", 12000, 1200, true)))
+
+    val df7 = spark.table("h2.test.employee").filter(not($"is_manager") === true)
+
+    checkFiltersRemoved(df7)
+
+    df7.queryExecution.optimizedPlan.collect {
+      case _: DataSourceV2ScanRelation =>
+        val expected_plan_fragment =
+          "PushedFilters: [IS_MANAGER IS NOT NULL, NOT (IS_MANAGER = true)], "
+        checkKeywordsExistsInExplain(df7, expected_plan_fragment)
+    }
+
+    checkAnswer(df7, Seq(Row(1, "cathy", 9000, 1200, false), Row(2, "alex", 12000, 1200, false)))
+
+    val df8 = spark.table("h2.test.employee").filter($"is_manager" === true)
+
+    checkFiltersRemoved(df8)
+
+    df8.queryExecution.optimizedPlan.collect {
+      case _: DataSourceV2ScanRelation =>
+        val expected_plan_fragment =
+          "PushedFilters: [IS_MANAGER IS NOT NULL, IS_MANAGER = true], "
+        checkKeywordsExistsInExplain(df8, expected_plan_fragment)
+    }
+
+    checkAnswer(df8, Seq(Row(1, "amy", 10000, 1000, true),
+      Row(2, "david", 10000, 1300, true), Row(6, "jen", 12000, 1200, true)))
+
+    val df9 = spark.table("h2.test.employee")
+      .filter(when($"dept" > 1, true).when($"is_manager", false).otherwise($"dept" > 3))
+
+    checkFiltersRemoved(df9)
+
+    df9.queryExecution.optimizedPlan.collect {
+      case _: DataSourceV2ScanRelation =>
+        val expected_plan_fragment =
+          "PushedFilters: [CASE WHEN DEPT > 1 THEN TRUE WHEN IS_MANAGER = true THEN FALSE" +
+            " ELSE DEPT > 3 END], "
+        checkKeywordsExistsInExplain(df9, expected_plan_fragment)
+    }
+
+    checkAnswer(df9, Seq(Row(2, "alex", 12000, 1200, false),
+      Row(2, "david", 10000, 1300, true), Row(6, "jen", 12000, 1200, true)))
   }
 
   test("scan with complex filter push-down") {
