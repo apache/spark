@@ -255,7 +255,7 @@ object MergeScalarSubqueries extends Rule[LogicalPlan] with PredicateHelper {
           }
 
         // As a follow-up, it would be possible to merge `CommonScalarSubqueries` nodes, which would
-        // allow merging subqueries with mergee subqueries.
+        // allow merging different set of merged subqueries.
         // E.g. this query:
         //
         // SELECT
@@ -342,7 +342,8 @@ object MergeScalarSubqueries extends Rule[LogicalPlan] with PredicateHelper {
     (mergedExpressions.toSeq, newOutputMap)
   }
 
-  // Merging different aggregate implementations could cause performance regression
+  // Only allow aggregates of the same implementation because merging different implementations
+  // could cause performance regression
   private def supportedAggregateMerge(newPlan: Aggregate, cachedPlan: Aggregate) = {
     val newPlanAggregateExpressions = newPlan.aggregateExpressions.flatMap(_.collect {
       case a: AggregateExpression => a
