@@ -112,9 +112,32 @@ GROUP BY EXISTS (SELECT 1
                  FROM   dept
                  WHERE  emp.dept_id = dept.dept_id);
 
+-- uncorrelated exist in aggregate function
+-- TC.01.09
+SELECT
+    count(CASE WHEN EXISTS (SELECT 1
+                            FROM   dept
+                            WHERE  dept.dept_id > 10
+                              AND dept.dept_id < 30) THEN 1 END),
+    sum(CASE WHEN EXISTS (SELECT 1
+                          FROM   dept
+                          WHERE  dept.dept_id > 10
+                            AND dept.dept_id < 30) THEN salary END)
+FROM   emp;
+
+-- correlated exist in aggregate function
+-- TC.01.10
+SELECT
+    count(CASE WHEN EXISTS (SELECT 1
+                            FROM   dept
+                            WHERE  emp.dept_id = dept.dept_id) THEN 1 END),
+    sum(CASE WHEN EXISTS (SELECT 1
+                          FROM   dept
+                          WHERE  emp.dept_id = dept.dept_id) THEN salary END)
+FROM   emp;
 
 -- uncorrelated exist in window
--- TC.01.09
+-- TC.01.11
 SELECT
     emp_name,
     sum(salary) OVER (PARTITION BY EXISTS (SELECT 1
@@ -124,7 +147,7 @@ SELECT
 FROM   emp;
 
 -- correlated exist in window
--- TC.01.10
+-- TC.01.12
 SELECT
     emp_name,
     sum(salary) OVER (PARTITION BY EXISTS (SELECT 1
