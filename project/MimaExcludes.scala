@@ -57,7 +57,10 @@ object MimaExcludes {
     // [SPARK-37600][BUILD] Upgrade to Hadoop 3.3.2
     ProblemFilters.exclude[MissingClassProblem]("org.apache.hadoop.shaded.net.jpountz.lz4.LZ4Compressor"),
     ProblemFilters.exclude[MissingClassProblem]("org.apache.hadoop.shaded.net.jpountz.lz4.LZ4Factory"),
-    ProblemFilters.exclude[MissingClassProblem]("org.apache.hadoop.shaded.net.jpountz.lz4.LZ4SafeDecompressor")
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.hadoop.shaded.net.jpountz.lz4.LZ4SafeDecompressor"),
+
+    // [SPARK-38593][SS] Incorporate numRowsDroppedByWatermark metric from SessionWindowStateStoreRestoreExec into StateOperatorProgress
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.streaming.StreamingQueryProgress.this")
   )
 
   // Exclude rules for 3.2.x from 3.1.1
