@@ -171,7 +171,7 @@ trait SQLInsertTestSuite extends QueryTest with SQLTestUtils {
   }
 
   test("insert with column list - mismatched column list size") {
-    val msg = "Cannot write to table due to mismatched user specified column size"
+    val msg = "expected 3 columns but found"
     def test: Unit = {
       withTable("t1") {
         val cols = Seq("c1", "c2", "c3")
@@ -196,7 +196,7 @@ trait SQLInsertTestSuite extends QueryTest with SQLTestUtils {
   }
 
   test("insert with column list - mismatched target table out size after rewritten query") {
-    val v2Msg = "Cannot write to 'testcat.t1', not enough data columns:"
+    val v2Msg = "expected 2 columns but found"
     val cols = Seq("c1", "c2", "c3", "c4")
 
     withTable("t1") {
