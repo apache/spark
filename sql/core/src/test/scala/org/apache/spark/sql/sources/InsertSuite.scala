@@ -884,8 +884,14 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
     // The default value parses correctly and the provided value type is different but coercible.
     withTable("t") {
       sql("create table t(i boolean, s bigint default 42) using parquet")
-      sql("insert into t values(false, default)")
+      sql("insert into t values(false)")
       checkAnswer(sql("select s from t where i = false"), Seq(42L).map(i => Row(i)))
+    }
+    // There are two trailing default values referenced implicitly by the INSERT INTO statement.
+    withTable("t") {
+      sql("create table t(i int, s bigint default 42, x bigint default 43) using parquet")
+      sql("insert into t values(1)")
+      checkAnswer(sql("select s + x from t where i = 1"), Seq(85L).map(i => Row(i)))
     }
     // The table has a partitioning column and a default value is injected.
     withTable("t") {
@@ -1072,14 +1078,12 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
         }.getMessage.contains("Support for DEFAULT column values is not allowed"))
       }
     }
-    // Injecting NULLs in the absence of explicit DEFAULT values is disabled per configuration.
-    withSQLConf(SQLConf.USE_NULLS_FOR_MISSING_DEFAULT_COLUMN_VALUES.key -> "false") {
-      withTable("t1") {
-        sql("create table t1(j int, s bigint default 42, x bigint default 43) using parquet")
-        assert(intercept[AnalysisException] {
-          sql("insert into t1 values(1)")
-        }.getMessage.contains("expected 3 columns but found"))
-      }
+    // There is one trailing default value referenced implicitly by the INSERT INTO statement.
+    withTable("t") {
+      sql("create table t(i int, s bigint default 42, x bigint) using parquet")
+      assert(intercept[AnalysisException] {
+        sql("insert into t values(1)")
+      }.getMessage.contains("expected 3 columns but found"))
     }
   }
 

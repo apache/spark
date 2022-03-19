@@ -146,17 +146,12 @@ case class ResolveDefaultColumns(catalog: SessionCatalog) extends Rule[LogicalPl
   // This is a helper for the addMissingDefaultColumnValues methods above.
   private def getDefaultExprs(numQueryOutputs: Int, schema: StructType,
       schemaWithoutPartitionCols: StructType): Seq[Expression] = {
-    val numNonPartitionColsMissingProvidedValues: Int =
-      schemaWithoutPartitionCols.fields.drop(numQueryOutputs).size
+    val remainingFields: Seq[StructField] = schemaWithoutPartitionCols.fields.drop(numQueryOutputs)
     val numDefaultExprsToAdd: Int = {
       if (SQLConf.get.useNullsForMissingDefaultColumnValues) {
-        numNonPartitionColsMissingProvidedValues
+        remainingFields.size
       } else {
-        val numColsWithExplicitDefaults: Int = {
-          schema.fields.length -
-          schema.fields.dropWhile(_.metadata.contains(CURRENT_DEFAULT_COLUMN_NAME)).length
-        }
-        numNonPartitionColsMissingProvidedValues.min(numColsWithExplicitDefaults)
+        remainingFields.takeWhile(_.metadata.contains(CURRENT_DEFAULT_COLUMN_METADATA_KEY)).size
       }
     }
     Seq.fill(numDefaultExprsToAdd)(UnresolvedAttribute(CURRENT_DEFAULT_COLUMN_NAME))
