@@ -32,7 +32,7 @@ public final class CountStar implements AggregateFunc {
   }
 
   @Override
-  public Expression[] children() { return EMPTY_REFERENCE; }
+  public Expression[] children() { return EMPTY_EXPRESSION; }
 
   @Override
   public String toString() { return "COUNT(*)"; }

@@ -34,7 +34,7 @@ public interface NamedReference extends Expression {
   String[] fieldNames();
 
   @Override
-  default Expression[] children() { return EMPTY_REFERENCE; }
+  default Expression[] children() { return EMPTY_EXPRESSION; }
 
   @Override
   default NamedReference[] references() { return new NamedReference[]{ this }; }

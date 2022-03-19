@@ -42,5 +42,5 @@ public interface Literal<T> extends Expression {
   DataType dataType();
 
   @Override
-  default Expression[] children() { return EMPTY_REFERENCE; }
+  default Expression[] children() { return EMPTY_EXPRESSION; }
 }

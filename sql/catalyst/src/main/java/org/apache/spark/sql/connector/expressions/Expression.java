@@ -28,7 +28,7 @@ import org.apache.spark.annotation.Evolving;
  */
 @Evolving
 public interface Expression {
-  NamedReference[] EMPTY_REFERENCE = new NamedReference[0];
+  Expression[] EMPTY_EXPRESSION = new Expression[0];
 
   /**
    * Format the expression as a human readable SQL-like string.
