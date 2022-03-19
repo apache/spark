@@ -300,6 +300,10 @@
       <artifactId>netty-all</artifactId>
     </dependency>
     <dependency>
+      <groupId>io.netty</groupId>
+      <artifactId>netty-tcnative-classes</artifactId>
+    </dependency>
+    <dependency>
       <groupId>com.clearspring.analytics</groupId>
       <artifactId>stream</artifactId>
     </dependency>
