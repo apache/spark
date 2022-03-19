@@ -45,24 +45,23 @@ import org.apache.spark.sql.connector.expressions.Expression;
 public final class GeneralAggregateFunc implements AggregateFunc {
   private final String name;
   private final boolean isDistinct;
-  private final Expression[] inputs;
+  private final Expression[] children;
 
   public String name() { return name; }
   public boolean isDistinct() { return isDistinct; }
-  public Expression[] inputs() { return inputs; }
 
-  public GeneralAggregateFunc(String name, boolean isDistinct, Expression[] inputs) {
+  public GeneralAggregateFunc(String name, boolean isDistinct, Expression[] children) {
     this.name = name;
     this.isDistinct = isDistinct;
-    this.inputs = inputs;
+    this.children = children;
   }
 
   @Override
-  public Expression[] children() { return inputs; }
+  public Expression[] children() { return children; }
 
   @Override
   public String toString() {
-    String inputsString = Arrays.stream(inputs)
+    String inputsString = Arrays.stream(children)
       .map(Expression::describe)
       .collect(Collectors.joining(", "));
     if (isDistinct) {

@@ -377,7 +377,6 @@ private[sql] final case class SortValue(
     expression: Expression,
     direction: SortDirection,
     nullOrdering: NullOrdering) extends SortOrder {
-  override def references: Array[NamedReference] = Expression.EMPTY_REFERENCE
   override def toString(): String = s"$expression $direction $nullOrdering"
 }
 

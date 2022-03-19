@@ -26,11 +26,12 @@ import org.apache.spark.sql.types.BooleanType
 /**
  * The builder to generate V2 expressions from catalyst expressions.
  */
-class V2ExpressionBuilder(e: Expression, nestedPredicatePushdownEnabled: Boolean = false) {
+class V2ExpressionBuilder(
+  e: Expression, nestedPredicatePushdownEnabled: Boolean = false, isPredicate: Boolean = false) {
 
   val pushableColumn = PushableColumn(nestedPredicatePushdownEnabled)
 
-  def build(isPredicate: Boolean = false): Option[V2Expression] =
+  def build(): Option[V2Expression] =
     generateExpression(e, isPredicate)
 
   private def canTranslate(b: BinaryOperator) = b match {
@@ -96,13 +97,16 @@ class V2ExpressionBuilder(e: Expression, nestedPredicatePushdownEnabled: Boolean
       }
     case b: BinaryOperator if canTranslate(b) =>
       // AND/OR expect predicate
-      val left = generateExpression(b.left, b.isInstanceOf[And] || b.isInstanceOf[Or])
-      val right = generateExpression(b.right, b.isInstanceOf[And] || b.isInstanceOf[Or])
-      if (left.isDefined && right.isDefined) {
+      val (l, r) = b match {
+        case _: And | _: Or =>
+          (generateExpression(b.left, true), generateExpression(b.right, true))
+        case _ => (generateExpression(b.left), generateExpression(b.right))
+      }
+      if (l.isDefined && r.isDefined) {
         if (b.isInstanceOf[Predicate]) {
-          Some(new V2Predicate(b.sqlOperator, Array[V2Expression](left.get, right.get)))
+          Some(new V2Predicate(b.sqlOperator, Array[V2Expression](l.get, r.get)))
         } else {
-          Some(new GeneralScalarExpression(b.sqlOperator, Array[V2Expression](left.get, right.get)))
+          Some(new GeneralScalarExpression(b.sqlOperator, Array[V2Expression](l.get, r.get)))
         }
       } else {
         None
@@ -132,18 +136,11 @@ class V2ExpressionBuilder(e: Expression, nestedPredicatePushdownEnabled: Boolean
           elseValue.flatMap(generateExpression(_)).map { v =>
             val children = (branchExpressions :+ v).toArray[V2Expression]
             // The children looks like [condition1, value1, ..., conditionN, valueN, elseValue]
-            if (isPredicate) {
-              new V2Predicate("CASE_WHEN", children)
-            } else {
-              new GeneralScalarExpression("CASE_WHEN", children)
-            }
+            new V2Predicate("CASE_WHEN", children)
           }
-        } else if (isPredicate) {
-          // The children looks like [condition1, value1, ..., conditionN, valueN]
-          Some(new V2Predicate("CASE_WHEN", branchExpressions.toArray[V2Expression]))
         } else {
           // The children looks like [condition1, value1, ..., conditionN, valueN]
-          Some(new GeneralScalarExpression("CASE_WHEN", branchExpressions.toArray[V2Expression]))
+          Some(new V2Predicate("CASE_WHEN", branchExpressions.toArray[V2Expression]))
         }
       } else {
         None
