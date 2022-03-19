@@ -171,26 +171,22 @@ trait SQLInsertTestSuite extends QueryTest with SQLTestUtils {
   }
 
   test("insert with column list - mismatched column list size") {
-    val msg = "expected 3 columns but found"
+    val msgs = Seq("Cannot write to table due to mismatched user specified column size",
+      "expected 3 columns but found")
     def test: Unit = {
       withTable("t1") {
         val cols = Seq("c1", "c2", "c3")
         createTable("t1", cols, Seq("int", "long", "string"))
         val e1 = intercept[AnalysisException](sql(s"INSERT INTO t1 (c1, c2) values(1, 2, 3)"))
-        assert(e1.getMessage.contains(msg))
+        assert(e1.getMessage.contains(msgs(0)) || e1.getMessage.contains(msgs(1)))
         val e2 = intercept[AnalysisException](sql(s"INSERT INTO t1 (c1, c2, c3) values(1, 2)"))
-        assert(e2.getMessage.contains(msg))
+        assert(e2.getMessage.contains(msgs(0)) || e2.getMessage.contains(msgs(1)))
       }
     }
     withSQLConf(SQLConf.ENABLE_DEFAULT_COLUMNS.key -> "false") {
       test
     }
-    withSQLConf(SQLConf.ENABLE_DEFAULT_COLUMNS.key -> "true",
-      SQLConf.USE_NULLS_FOR_MISSING_DEFAULT_COLUMN_VALUES.key -> "false") {
-      test
-    }
-    withSQLConf(SQLConf.ENABLE_DEFAULT_COLUMNS.key -> "true",
-      SQLConf.USE_NULLS_FOR_MISSING_DEFAULT_COLUMN_VALUES.key -> "true") {
+    withSQLConf(SQLConf.ENABLE_DEFAULT_COLUMNS.key -> "true") {
       test
     }
   }
