@@ -31,122 +31,6 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 /**
- * This object contains fields to help process DEFAULT columns with the below rule of the same name.
- */
-object ResolveDefaultColumns {
-  // This column metadata indicates the default value associated with a particular table column that
-  // is in effect at any given time. Its value begins at the time of the initial CREATE/REPLACE
-  // TABLE statement with DEFAULT column definition(s), if any. It then changes whenever an ALTER
-  // TABLE statement SETs the DEFAULT. The intent is for this "current default" to be used by
-  // UPDATE, INSERT and MERGE, which evaluate each default expression for each row.
-  val CURRENT_DEFAULT_COLUMN_METADATA_KEY = "CURRENT_DEFAULT"
-  // This column metadata represents the default value for all existing rows in a table after a
-  // column has been added. This value is determined at time of CREATE TABLE, REPLACE TABLE, or
-  // ALTER TABLE ADD COLUMN, and never changes thereafter. The intent is for this "exist default"
-  // to be used by any scan when the columns in the source row are incomplete.
-  val EXISTS_DEFAULT_COLUMN_METADATA_KEY = "EXISTS_DEFAULT"
-  // Name of attributes representing explicit references to the value stored in the above
-  // CURRENT_DEFAULT_COLUMN_METADATA.
-  val CURRENT_DEFAULT_COLUMN_NAME = "DEFAULT"
-
-  /**
-   * Finds "current default" expressions in CREATE/REPLACE TABLE columns and constant-folds them.
-   *
-   * The results are stored in the "exists default" metadata of the same columns. For example, in
-   * the event of this statement:
-   *
-   * CREATE TABLE T(a INT, b INT DEFAULT 5 + 5)
-   *
-   * This method constant-folds the "current default" value, stored in the CURRENT_DEFAULT metadata
-   * of the "b" column, to "10", storing the result in the "exists default" value within the
-   * EXISTS_DEFAULT metadata of that same column. Meanwhile the "current default" metadata of this
-   * "b" column retains its original value of "5 + 5".
-   *
-   * @param tableSchema represents the names and types of the columns of the statement to process.
-   * @param statementType name of the statement being processed, such as INSERT; useful for errors.
-   * @return a copy of `tableSchema` with field metadata updated with the constant-folded values.
-   */
-  def constantFoldCurrentDefaultsToExistDefaults(
-      tableSchema: StructType, statementType: String): StructType = {
-    if (!SQLConf.get.enableDefaultColumns) {
-      return tableSchema
-    }
-    val newFields: Seq[StructField] = tableSchema.fields.map { field =>
-      if (field.metadata.contains(EXISTS_DEFAULT_COLUMN_METADATA_KEY)) {
-        val analyzed: Expression = analyze(field, statementType, foldConstants = true)
-        val newMetadata: Metadata = new MetadataBuilder().withMetadata(field.metadata)
-          .putString(EXISTS_DEFAULT_COLUMN_METADATA_KEY, analyzed.sql).build()
-        field.copy(metadata = newMetadata)
-      } else {
-        field
-      }
-    }
-    StructType(newFields)
-  }
-
-  /**
-   * Parses and analyzes the DEFAULT column text in `field`, returning an error upon failure.
-   *
-   * @param field represents the DEFAULT column value whose "default" metadata to parse and analyze.
-   * @param statementType which type of statement we are running, such as INSERT; useful for errors.
-   * @param foldConstants if true, perform constant-folding on the analyzed value before returning.
-   * @return Result of the analysis and constant-folding operation.
-   */
-  private def analyze(
-      field: StructField, statementType: String, foldConstants: Boolean = false): Expression = {
-    // Parse the expression.
-    val colText: String = if (field.metadata.contains(CURRENT_DEFAULT_COLUMN_METADATA_KEY)) {
-      field.metadata.getString(CURRENT_DEFAULT_COLUMN_METADATA_KEY)
-    } else {
-      "NULL"
-    }
-    val parsed: Expression = try {
-      lazy val parser = new CatalystSqlParser()
-      parser.parseExpression(colText)
-    } catch {
-      case ex: ParseException =>
-        throw new AnalysisException(
-          s"Failed to execute $statementType command because the destination table column " +
-            s"${field.name} has a DEFAULT value of $colText which fails to parse as a valid " +
-            s"expression: ${ex.getMessage}")
-    }
-    // Analyze the parse result.
-    val plan = try {
-      lazy val analyzer =
-        new Analyzer(new SessionCatalog(new InMemoryCatalog, FunctionRegistry.builtin))
-      val analyzed = analyzer.execute(Project(Seq(Alias(parsed, field.name)()), OneRowRelation()))
-      analyzer.checkAnalysis(analyzed)
-      if (foldConstants) ConstantFolding(analyzed) else analyzed
-    } catch {
-      case ex @ (_: ParseException | _: AnalysisException) =>
-        val colText: String = if (field.metadata.contains(CURRENT_DEFAULT_COLUMN_METADATA_KEY)) {
-          field.metadata.getString(CURRENT_DEFAULT_COLUMN_METADATA_KEY)
-        } else {
-          "NULL"
-        }
-        throw new AnalysisException(
-          s"Failed to execute $statementType command because the destination table column " +
-            s"${field.name} has a DEFAULT value of $colText which fails to resolve as a valid " +
-            s"expression: ${ex.getMessage}")
-    }
-    val analyzed = plan match {
-      case Project(Seq(a: Alias), OneRowRelation()) => a.child
-    }
-    // Perform implicit coercion from the provided expression type to the required column type.
-    if (field.dataType == analyzed.dataType) {
-      analyzed
-    } else if (Cast.canUpCast(analyzed.dataType, field.dataType)) {
-      Cast(analyzed, field.dataType)
-    } else {
-      throw new AnalysisException(
-        s"Failed to execute $statementType command because the destination table column " +
-          s"${field.name} has a DEFAULT value with type ${field.dataType}, but the " +
-          s"statement provided a value of incompatible type ${analyzed.dataType}")
-    }
-  }
-}
-
-/**
  * This is a rule to process DEFAULT columns in statements such as CREATE/REPLACE TABLE.
  *
  * Background: CREATE TABLE and ALTER TABLE invocations support setting column default values for
@@ -358,6 +242,122 @@ case class ResolveDefaultColumns(catalog: SessionCatalog) extends Rule[LogicalPl
     lookup match {
       case SubqueryAlias(_, r: UnresolvedCatalogRelation) => Some(r.tableMeta.schema)
       case _ => None
+    }
+  }
+}
+
+/**
+ * This object contains fields to help process DEFAULT columns with the below rule of the same name.
+ */
+object ResolveDefaultColumns {
+  // This column metadata indicates the default value associated with a particular table column that
+  // is in effect at any given time. Its value begins at the time of the initial CREATE/REPLACE
+  // TABLE statement with DEFAULT column definition(s), if any. It then changes whenever an ALTER
+  // TABLE statement SETs the DEFAULT. The intent is for this "current default" to be used by
+  // UPDATE, INSERT and MERGE, which evaluate each default expression for each row.
+  val CURRENT_DEFAULT_COLUMN_METADATA_KEY = "CURRENT_DEFAULT"
+  // This column metadata represents the default value for all existing rows in a table after a
+  // column has been added. This value is determined at time of CREATE TABLE, REPLACE TABLE, or
+  // ALTER TABLE ADD COLUMN, and never changes thereafter. The intent is for this "exist default"
+  // to be used by any scan when the columns in the source row are incomplete.
+  val EXISTS_DEFAULT_COLUMN_METADATA_KEY = "EXISTS_DEFAULT"
+  // Name of attributes representing explicit references to the value stored in the above
+  // CURRENT_DEFAULT_COLUMN_METADATA.
+  val CURRENT_DEFAULT_COLUMN_NAME = "DEFAULT"
+
+  /**
+   * Finds "current default" expressions in CREATE/REPLACE TABLE columns and constant-folds them.
+   *
+   * The results are stored in the "exists default" metadata of the same columns. For example, in
+   * the event of this statement:
+   *
+   * CREATE TABLE T(a INT, b INT DEFAULT 5 + 5)
+   *
+   * This method constant-folds the "current default" value, stored in the CURRENT_DEFAULT metadata
+   * of the "b" column, to "10", storing the result in the "exists default" value within the
+   * EXISTS_DEFAULT metadata of that same column. Meanwhile the "current default" metadata of this
+   * "b" column retains its original value of "5 + 5".
+   *
+   * @param tableSchema represents the names and types of the columns of the statement to process.
+   * @param statementType name of the statement being processed, such as INSERT; useful for errors.
+   * @return a copy of `tableSchema` with field metadata updated with the constant-folded values.
+   */
+  def constantFoldCurrentDefaultsToExistDefaults(
+      tableSchema: StructType, statementType: String): StructType = {
+    if (!SQLConf.get.enableDefaultColumns) {
+      return tableSchema
+    }
+    val newFields: Seq[StructField] = tableSchema.fields.map { field =>
+      if (field.metadata.contains(EXISTS_DEFAULT_COLUMN_METADATA_KEY)) {
+        val analyzed: Expression = analyze(field, statementType, foldConstants = true)
+        val newMetadata: Metadata = new MetadataBuilder().withMetadata(field.metadata)
+          .putString(EXISTS_DEFAULT_COLUMN_METADATA_KEY, analyzed.sql).build()
+        field.copy(metadata = newMetadata)
+      } else {
+        field
+      }
+    }
+    StructType(newFields)
+  }
+
+  /**
+   * Parses and analyzes the DEFAULT column text in `field`, returning an error upon failure.
+   *
+   * @param field represents the DEFAULT column value whose "default" metadata to parse and analyze.
+   * @param statementType which type of statement we are running, such as INSERT; useful for errors.
+   * @param foldConstants if true, perform constant-folding on the analyzed value before returning.
+   * @return Result of the analysis and constant-folding operation.
+   */
+  private def analyze(
+      field: StructField, statementType: String, foldConstants: Boolean = false): Expression = {
+    // Parse the expression.
+    val colText: String = if (field.metadata.contains(CURRENT_DEFAULT_COLUMN_METADATA_KEY)) {
+      field.metadata.getString(CURRENT_DEFAULT_COLUMN_METADATA_KEY)
+    } else {
+      "NULL"
+    }
+    val parsed: Expression = try {
+      lazy val parser = new CatalystSqlParser()
+      parser.parseExpression(colText)
+    } catch {
+      case ex: ParseException =>
+        throw new AnalysisException(
+          s"Failed to execute $statementType command because the destination table column " +
+            s"${field.name} has a DEFAULT value of $colText which fails to parse as a valid " +
+            s"expression: ${ex.getMessage}")
+    }
+    // Analyze the parse result.
+    val plan = try {
+      lazy val analyzer =
+        new Analyzer(new SessionCatalog(new InMemoryCatalog, FunctionRegistry.builtin))
+      val analyzed = analyzer.execute(Project(Seq(Alias(parsed, field.name)()), OneRowRelation()))
+      analyzer.checkAnalysis(analyzed)
+      if (foldConstants) ConstantFolding(analyzed) else analyzed
+    } catch {
+      case ex @ (_: ParseException | _: AnalysisException) =>
+        val colText: String = if (field.metadata.contains(CURRENT_DEFAULT_COLUMN_METADATA_KEY)) {
+          field.metadata.getString(CURRENT_DEFAULT_COLUMN_METADATA_KEY)
+        } else {
+          "NULL"
+        }
+        throw new AnalysisException(
+          s"Failed to execute $statementType command because the destination table column " +
+            s"${field.name} has a DEFAULT value of $colText which fails to resolve as a valid " +
+            s"expression: ${ex.getMessage}")
+    }
+    val analyzed = plan match {
+      case Project(Seq(a: Alias), OneRowRelation()) => a.child
+    }
+    // Perform implicit coercion from the provided expression type to the required column type.
+    if (field.dataType == analyzed.dataType) {
+      analyzed
+    } else if (Cast.canUpCast(analyzed.dataType, field.dataType)) {
+      Cast(analyzed, field.dataType)
+    } else {
+      throw new AnalysisException(
+        s"Failed to execute $statementType command because the destination table column " +
+          s"${field.name} has a DEFAULT value with type ${field.dataType}, but the " +
+          s"statement provided a value of incompatible type ${analyzed.dataType}")
     }
   }
 }
