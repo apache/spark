@@ -152,8 +152,10 @@ case class ResolveDefaultColumns(catalog: SessionCatalog) extends Rule[LogicalPl
       if (SQLConf.get.useNullsForMissingDefaultColumnValues) {
         numNonPartitionColsMissingProvidedValues
       } else {
-        val numColsWithExplicitDefaults: Int =
-          schema.fields.reverse.dropWhile(!_.metadata.contains(CURRENT_DEFAULT_COLUMN_NAME)).length
+        val numColsWithExplicitDefaults: Int = {
+          schema.fields.length -
+          schema.fields.dropWhile(_.metadata.contains(CURRENT_DEFAULT_COLUMN_NAME)).length
+        }
         numNonPartitionColsMissingProvidedValues.min(numColsWithExplicitDefaults)
       }
     }

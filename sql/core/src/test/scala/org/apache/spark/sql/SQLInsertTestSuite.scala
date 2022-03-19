@@ -200,6 +200,7 @@ trait SQLInsertTestSuite extends QueryTest with SQLTestUtils {
       val e1 = intercept[AnalysisException](sql(s"INSERT INTO t1 (c1) values(1)"))
       assert(e1.getMessage.contains("target table has 4 column(s) but the inserted data has 1") ||
         e1.getMessage.contains("expected 4 columns but found 1") ||
+        e1.getMessage.contains("not enough data columns") ||
         e1.getMessage.contains(v2Msg))
     }
 
@@ -209,6 +210,7 @@ trait SQLInsertTestSuite extends QueryTest with SQLTestUtils {
         sql(s"INSERT INTO t1 partition(c3=3, c4=4) (c1) values(1)")
       }
       assert(e1.getMessage.contains("target table has 4 column(s) but the inserted data has 3") ||
+        e1.getMessage.contains("not enough data columns") ||
         e1.getMessage.contains(v2Msg))
     }
   }
