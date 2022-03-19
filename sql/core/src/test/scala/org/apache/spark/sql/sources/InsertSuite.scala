@@ -426,10 +426,10 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
         sql("SELECT a, b FROM jt")
       )
     }
-    withSQLConf(SQLConf.ENABLE_DEFAULT_COLUMNS.key -> "false") {
+    withSQLConf(SQLConf.ENABLE_DEFAULT_COLUMNS.key -> "true") {
       test
     }
-    withSQLConf(SQLConf.ENABLE_DEFAULT_COLUMNS.key -> "true") {
+    withSQLConf(SQLConf.ENABLE_DEFAULT_COLUMNS.key -> "false") {
       test
     }
   }

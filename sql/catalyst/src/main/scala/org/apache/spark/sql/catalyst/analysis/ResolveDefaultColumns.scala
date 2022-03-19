@@ -171,45 +171,55 @@ case class ResolveDefaultColumns(catalog: SessionCatalog) extends Rule[LogicalPl
     // INSERT INTO t VALUES (...)
     case insert@InsertIntoStatement(_, _, _, table: UnresolvedInlineTable, _, _)
       if SQLConf.get.enableDefaultColumns && valid(table) =>
-      val expanded = addMissingDefaultColumnValues(table, insert).getOrElse(table)
-      val replaced = replaceExplicitDefaultColumnValues(expanded, insert).getOrElse(return insert)
-      insert.copy(query = replaced)
+      val expanded: UnresolvedInlineTable =
+        addMissingDefaultColumnValues(table, insert).getOrElse(table)
+      val replaced: Option[UnresolvedInlineTable] =
+        replaceExplicitDefaultColumnValues(expanded, insert)
+      if (replaced.isDefined) insert.copy(query = replaced.get) else insert
 
     // INSERT INTO t VALUES (...) AS alias(...)
     case insert@InsertIntoStatement(
         _, _, _, alias@SubqueryAlias(_, table: UnresolvedInlineTable), _, _)
       if SQLConf.get.enableDefaultColumns && valid(table) =>
-      val expanded = addMissingDefaultColumnValues(table, insert).getOrElse(table)
-      val replaced = replaceExplicitDefaultColumnValues(expanded, insert).getOrElse(return insert)
-      insert.copy(query = alias.copy(child = replaced))
+      val expanded: UnresolvedInlineTable =
+        addMissingDefaultColumnValues(table, insert).getOrElse(table)
+      val replaced: Option[UnresolvedInlineTable] =
+        replaceExplicitDefaultColumnValues(expanded, insert)
+      if (replaced.isDefined) insert.copy(query = alias.copy(child = replaced.get)) else insert
 
     // INSERT INTO t SELECT * FROM VALUES (...)
     case insert@InsertIntoStatement(_, _, _, project@Project(_, table: UnresolvedInlineTable), _, _)
       if SQLConf.get.enableDefaultColumns && selectStar(project) && valid(table) =>
-      val expanded = addMissingDefaultColumnValues(table, insert).getOrElse(table)
-      val replaced = replaceExplicitDefaultColumnValues(expanded, insert).getOrElse(return insert)
-      insert.copy(query = project.copy(child = replaced))
+      val expanded: UnresolvedInlineTable =
+        addMissingDefaultColumnValues(table, insert).getOrElse(table)
+      val replaced: Option[UnresolvedInlineTable] =
+        replaceExplicitDefaultColumnValues(expanded, insert)
+      if (replaced.isDefined) insert.copy(query = project.copy(child = replaced.get)) else insert
 
     // INSERT INTO t SELECT * FROM VALUES (...) AS alias(...)
     case insert@InsertIntoStatement(
         _, _, _, project@Project(_, alias@SubqueryAlias(_, table: UnresolvedInlineTable)), _, _)
       if SQLConf.get.enableDefaultColumns && selectStar(project) && valid(table) =>
-      val expanded = addMissingDefaultColumnValues(table, insert).getOrElse(table)
-      val replaced = replaceExplicitDefaultColumnValues(expanded, insert).getOrElse(return insert)
-      insert.copy(query = project.copy(child = alias.copy(child = replaced)))
+      val expanded: UnresolvedInlineTable =
+        addMissingDefaultColumnValues(table, insert).getOrElse(table)
+      val replaced: Option[UnresolvedInlineTable] =
+        replaceExplicitDefaultColumnValues(expanded, insert)
+      if (replaced.isDefined) {
+        insert.copy(query = project.copy(child = alias.copy(child = replaced.get)))
+      } else insert
 
     // INSERT INTO t SELECT ... FROM ... (unresolved)
     case insert@InsertIntoStatement(_, _, _, project: Project, _, _)
       if SQLConf.get.enableDefaultColumns && !project.resolved =>
-      val replaced = replaceExplicitDefaultColumnValues(project, insert).getOrElse(return insert)
-      insert.copy(query = replaced)
+      val replaced: Option[Project] = replaceExplicitDefaultColumnValues(project, insert)
+      if (replaced.isDefined) insert.copy(query = replaced.get) else insert
 
     // INSERT INTO t SELECT ... FROM ... (resolved)
     case insert@InsertIntoStatement(_, _, _, project: Project, _, _)
       if SQLConf.get.enableDefaultColumns && project.resolved =>
-      val expanded = addMissingDefaultColumnValues(project, insert).getOrElse(project)
-      val replaced = replaceExplicitDefaultColumnValues(expanded, insert).getOrElse(return insert)
-      insert.copy(query = replaced)
+      val expanded: Project = addMissingDefaultColumnValues(project, insert).getOrElse(project)
+      val replaced: Option[Project] = replaceExplicitDefaultColumnValues(expanded, insert)
+      if (replaced.isDefined) insert.copy(query = replaced.get) else insert
   }
 
   // Helper method to check that an inline table has an equal number of values in each row.
