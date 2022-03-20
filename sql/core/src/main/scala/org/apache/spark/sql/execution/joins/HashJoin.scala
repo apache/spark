@@ -166,7 +166,8 @@ trait HashJoin extends JoinCodegenSupport {
 
     if (hashedRelation == EmptyHashedRelation) {
       Iterator.empty
-    } else if (hashedRelation.keyIsUnique) {// md: 这个优化很关键，对于hash join场景
+    } else if (hashedRelation.keyIsUnique) {
+      // md: 这个优化很关键，对于hash join场景
       streamIter.flatMap { srow =>
         joinRow.withLeft(srow)
         val matched = hashedRelation.getValue(joinKeys(srow))

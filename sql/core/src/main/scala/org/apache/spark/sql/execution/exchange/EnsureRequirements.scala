@@ -161,9 +161,9 @@ case class EnsureRequirements(
       }
 
       children = children.zip(requiredChildDistributions).zipWithIndex.map {
-        case ((child, _), idx) if !childrenIndexes.contains(idx) =>
+        case ((child, _), idx) if allCompatible || !childrenIndexes.contains(idx) =>
           // md: 无需协分布的
-        child
+          child
         case ((child, dist), idx) =>
           if (bestSpecOpt.isDefined && bestSpecOpt.get.isCompatibleWith(specs(idx))) {
             child

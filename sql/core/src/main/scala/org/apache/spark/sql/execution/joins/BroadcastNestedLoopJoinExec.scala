@@ -289,7 +289,9 @@ case class BroadcastNestedLoopJoinExec(
           if (condition.isDefined) {
             // md: 构建一个单值的数组
             val resultRow = new GenericInternalRow(Array[Any](null))
-            // md: 这里稍微不一样的是，不管exist成功与否，stream表的结果都会输出；why？？？
+            // md: 这里稍微不一样的是，不管exist成功与否，stream表的结果都会输出；
+            //  why？因为一般的ExistenceJoin，都是由(not) in-subquery转化而来，而同时会增加一个Filter，只要判断join之后的结果集中
+            //  新增的'exists'的列值是否为true（not-in时判读为false）即可
             streamedIter.map { row =>
               val result = buildRows.exists(r => boundCondition(joinedRow(row, r)))
               resultRow.setBoolean(0, result)

@@ -62,6 +62,7 @@ class UnsafeCartesianRDD(
   }
 }
 
+
 // md: cartesianJoin会有shuffle吗？难道是在同一个进程来运行的吗？
 case class CartesianProductExec(
     left: SparkPlan,
