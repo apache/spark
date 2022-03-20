@@ -56,7 +56,6 @@ public class ParquetVectorUpdaterFactory {
       String datetimeRebaseTz,
       String int96RebaseMode,
       String int96RebaseTz) {
-
     this.logicalTypeAnnotation = logicalTypeAnnotation;
     this.convertTz = convertTz;
     this.datetimeRebaseMode = datetimeRebaseMode;
@@ -175,7 +174,8 @@ public class ParquetVectorUpdaterFactory {
           return new FixedLenByteArrayAsIntUpdater(arrayLen);
         } else if (canReadAsLongDecimal(descriptor, sparkType)) {
           return new FixedLenByteArrayAsLongUpdater(arrayLen);
-        } else if (canReadAsBinaryDecimal(descriptor, sparkType) || sparkType == DataTypes.BinaryType) {
+        } else if (canReadAsBinaryDecimal(descriptor, sparkType) ||
+          sparkType == DataTypes.BinaryType) {
           return new FixedLenByteArrayUpdater(arrayLen);
         }
         break;
