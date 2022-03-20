@@ -184,14 +184,11 @@ echo "Build flags: $*" >> "$DISTDIR/RELEASE"
 cp "$SPARK_HOME"/assembly/target/scala*/jars/* "$DISTDIR/jars/"
 
 # Only create the yarn directory if the yarn artifacts were built.
-for file in "$SPARK_HOME"/common/network-yarn/target/scala*/spark-*-yarn-shuffle.jar
-do
-  if [ -f "$file" ]; then
-    mkdir "$DISTDIR/yarn"
-    cp "$SPARK_HOME"/common/network-yarn/target/scala*/spark-*-yarn-shuffle.jar "$DISTDIR/yarn"
-    break
-  fi
-done
+file_cnt=$(find ./common/network-yarn/target/scala*/ -type f -name "spark-*-yarn-shuffle.jar" | wc -l)
+if [ $file_cnt -eq 1 ]; then
+  mkdir "$DISTDIR/yarn"
+  cp "$SPARK_HOME"/common/network-yarn/target/scala*/spark-*-yarn-shuffle.jar "$DISTDIR/yarn"
+fi
 
 # Only create and copy the dockerfiles directory if the kubernetes artifacts were built.
 if [ -d "$SPARK_HOME"/resource-managers/kubernetes/core/target/ ]; then
