@@ -55,7 +55,7 @@ class ParquetAvroCompatibilitySuite extends ParquetCompatibilityTest with Shared
     fixedLengthByteArray
   }
 
-  private def testRequiredPrimitives(enableVectorizedReader: String) {
+  private def testRequiredPrimitives(enableVectorizedReader: String): Unit = {
     withTempPath { dir =>
       val path = dir.getCanonicalPath
 
@@ -100,7 +100,7 @@ class ParquetAvroCompatibilitySuite extends ParquetCompatibilityTest with Shared
     testRequiredPrimitives("false")
   }
 
-  private def testOptionalPrimitives(enableVectorizedReader: String) {
+  private def testOptionalPrimitives(enableVectorizedReader: String): Unit = {
    withTempPath { dir =>
       val path = dir.getCanonicalPath
 
