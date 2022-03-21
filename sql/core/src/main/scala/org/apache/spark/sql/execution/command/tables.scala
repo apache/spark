@@ -290,7 +290,7 @@ case class AlterTableAddColumnsCommand(
 
 /**
  * A command that loads data into a Hive table.
- 
+ *
  * The syntax of this command is:
  * {{{
  *  LOAD DATA [LOCAL] INPATH 'filepath' [OVERWRITE] INTO TABLE tablename

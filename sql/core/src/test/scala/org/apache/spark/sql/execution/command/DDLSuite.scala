@@ -2019,15 +2019,6 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     }
   }
 
-  protected def testAddDefaultColumn(provider: String): Unit = {
-    withTable("t1") {
-      sql(s"CREATE TABLE t1 (c1 int) USING $provider")
-      assert(intercept[AnalysisException] {
-        sql("ALTER TABLE t1 ADD COLUMNS (c2 INT DEFAULT 42)")
-      }.getMessage.contains("ALTER ADD COLUMNS does not support assigning DEFAULT column values"))
-    }
-  }
-
   protected def testAddColumnPartitioned(provider: String): Unit = {
     withTable("t1") {
       sql(s"CREATE TABLE t1 (c1 int, c2 int) USING $provider PARTITIONED BY (c2)")
@@ -2061,7 +2052,6 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
   supportedNativeFileFormatsForAlterTableAddColumns.foreach { provider =>
     test(s"alter datasource table add columns - $provider") {
       testAddColumn(provider)
-      testAddDefaultColumn(provider)
     }
   }
 
