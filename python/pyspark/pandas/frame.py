@@ -10107,7 +10107,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         ...    'col6': [True, False, None]},
         ...    columns=['col1', 'col2', 'col3', 'col4', 'col5', 'col6'])
 
-        Default behaviour checks if column-wise values all return a boolean.
+        Default behaviour checks if column-wise values all return True.
 
         >>> df.all()
         col1     True
@@ -10117,6 +10117,8 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         col5     True
         col6    False
         dtype: bool
+
+        Include only boolean columns when set `bool_only=True`.
 
         >>> df.all(bool_only=True)
         col1     True
