@@ -184,7 +184,7 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
   /**
    * Check that:
    * - The filterApplicationSideJoinExp can be pushed down through joins and aggregates (ie the
-   * - expression references originate from a single leaf node)
+   *   expression references originate from a single leaf node)
    * - The filter creation side has a selective predicate
    * - The current join is a shuffle join or a broadcast join that has a shuffle below it
    * - The max filterApplicationSide scan size is greater than a configurable threshold
@@ -194,13 +194,6 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
       filterCreationSide: LogicalPlan,
       filterApplicationSideExp: Expression,
       hint: JoinHint): Boolean = {
-    // Check that:
-    // 1. The filterApplicationSideJoinExp can be pushed down through joins and aggregates (i.e the
-    //    expression references originate from a single leaf node)
-    // 2. The filter creation side has a selective predicate
-    // 3. The current join is a shuffle join or a broadcast join that has a shuffle or aggregate
-    //    in the filter application side
-    // 4. The max filterApplicationSide scan size is greater than a configurable threshold
     findExpressionAndTrackLineageDown(filterApplicationSideExp,
       filterApplicationSide).isDefined && isSelectiveFilterOverScan(filterCreationSide) &&
       (isProbablyShuffleJoin(filterApplicationSide, filterCreationSide, hint) ||
@@ -297,7 +290,7 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
             }
           }
         })
-        Join(newLeft, newRight, joinType, join.condition, hint)
+        join.withNewChildren(Seq(newLeft, newRight))
     }
   }
 

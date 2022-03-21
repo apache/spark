@@ -160,7 +160,9 @@ case class BloomFilterAggregate(
 
 object BloomFilterAggregate {
   final def serialize(obj: BloomFilter): Array[Byte] = {
-    val size = obj.bitSize() / 8
+    // BloomFilterImpl.writeTo() writes 2 integers (version number and num hash functions), hence
+    // the +8
+    val size = (obj.bitSize() / 8) + 8
     require(size <= Integer.MAX_VALUE, s"actual number of bits is too large $size")
     val out = new ByteArrayOutputStream(size.intValue())
     obj.writeTo(out)

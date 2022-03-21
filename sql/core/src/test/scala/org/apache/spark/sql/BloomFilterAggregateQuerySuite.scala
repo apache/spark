@@ -32,8 +32,11 @@ import org.apache.spark.sql.test.SharedSparkSession
 class BloomFilterAggregateQuerySuite extends QueryTest with SharedSparkSession {
   import testImplicits._
 
+  val funcId_bloom_filter_agg = new FunctionIdentifier("bloom_filter_agg")
+  val funcId_might_contain = new FunctionIdentifier("might_contain")
+
   // Register 'bloom_filter_agg' to builtin.
-  FunctionRegistry.builtin.registerFunction(new FunctionIdentifier("bloom_filter_agg"),
+  FunctionRegistry.builtin.registerFunction(funcId_bloom_filter_agg,
     new ExpressionInfo(classOf[BloomFilterAggregate].getName, "bloom_filter_agg"),
     (children: Seq[Expression]) => children.size match {
       case 1 => new BloomFilterAggregate(children.head)
@@ -42,9 +45,15 @@ class BloomFilterAggregateQuerySuite extends QueryTest with SharedSparkSession {
     })
 
   // Register 'might_contain' to builtin.
-  FunctionRegistry.builtin.registerFunction(new FunctionIdentifier("might_contain"),
+  FunctionRegistry.builtin.registerFunction(funcId_might_contain,
     new ExpressionInfo(classOf[BloomFilterMightContain].getName, "might_contain"),
     (children: Seq[Expression]) => BloomFilterMightContain(children.head, children(1)))
+
+  override def afterAll(): Unit = {
+    FunctionRegistry.builtin.dropFunction(funcId_bloom_filter_agg)
+    FunctionRegistry.builtin.dropFunction(funcId_might_contain)
+    super.afterAll()
+  }
 
   test("Test bloom_filter_agg and might_contain") {
     val conf = SQLConf.get
