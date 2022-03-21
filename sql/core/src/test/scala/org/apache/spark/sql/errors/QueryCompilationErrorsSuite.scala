@@ -169,7 +169,8 @@ class QueryCompilationErrorsSuite extends QueryTest with SharedSparkSession {
       "Pandas UDF aggregate expressions don't support pivot.")
   }
 
-  test("INVALID_PARAMETER_VALUE: Invalid value for duration/time inputs to time/session window") {
+  test("WINDOW_PARAMETER_TYPE_ERROR: " +
+    "Invalid value for duration/time inputs to time/session window") {
     val df = Seq(
       (1, "2020-10-10 01:00:00", "2010-09-09 03:00:00"),
       (2, "2019-08-08 07:30:20", "2022-01-01 01:00:20"),
