@@ -179,6 +179,8 @@ fi
 # different versions of Scala are supported.
 BASE_PROFILES="-Pmesos -Pyarn -Pkubernetes"
 
+VOLCANO_PROFLIE="-Pvolcano"
+
 PUBLISH_SCALA_2_13=1
 SCALA_2_13_PROFILES="-Pscala-2.13"
 if [[ $SPARK_VERSION < "3.2" ]]; then
@@ -192,9 +194,9 @@ SCALA_2_12_PROFILES="-Pscala-2.12"
 HIVE_PROFILES="-Phive -Phive-thriftserver"
 # Profiles for publishing snapshots and release to Maven Central
 # We use Apache Hive 2.3 for publishing
-PUBLISH_PROFILES="$BASE_PROFILES $HIVE_PROFILES -Pspark-ganglia-lgpl -Pkinesis-asl -Phadoop-cloud"
+PUBLISH_PROFILES="$BASE_PROFILES $VOLCANO_PROFLIE $HIVE_PROFILES -Pspark-ganglia-lgpl -Pkinesis-asl -Phadoop-cloud"
 # Profiles for building binary releases
-BASE_RELEASE_PROFILES="$BASE_PROFILES -Psparkr"
+BASE_RELEASE_PROFILES="$BASE_PROFILES $VOLCANO_PROFLIE -Psparkr"
 
 if [[ $JAVA_VERSION < "1.8." ]]; then
   echo "Java version $JAVA_VERSION is less than required 1.8 for 2.2+"
