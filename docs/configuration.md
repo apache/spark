@@ -309,6 +309,10 @@ of the most common options to set are:
     Fraction of executor memory to be allocated as additional non-heap memory per executor process.
     This is memory that accounts for things like VM overheads, interned strings,
     other native overheads, etc. This tends to grow with the container size.
+    This value defaults to 0.10 except for Kubernetes non-JVM jobs, which defaults to
+    0.40. This is done as non-JVM tasks need more non-JVM heap space and such tasks
+    commonly fail with "Memory Overhead Exceeded" errors. This preempts this error
+    with a higher default.
     This value is ignored if <code>spark.executor.memoryOverhead</code> is set directly.
   </td>
   <td>3.3.0</td>
