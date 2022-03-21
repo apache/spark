@@ -260,20 +260,28 @@ case class AlterTableAddColumnsCommand(
       throw QueryCompilationErrors.alterAddColNotSupportViewError(table)
     }
 
-    if (DDLUtils.isDatasourceTable(catalogTable)) {
-      DataSource.lookupDataSource(catalogTable.provider.get, conf).
-        getConstructor().newInstance() match {
+    val tableType = if (DDLUtils.isDatasourceTable(catalogTable)) {
+      val newInstance =
+        DataSource.lookupDataSource(catalogTable.provider.get, conf).getConstructor().newInstance()
+      newInstance match {
         // For datasource table, this command can only support the following File format.
         // TextFileFormat only default to one column "value"
         // Hive type is already considered as hive serde table, so the logic will not
         // come in here.
-        case _: CSVFileFormat | _: JsonFileFormat | _: ParquetFileFormat =>
-        case _: JsonDataSourceV2 | _: CSVDataSourceV2 |
-             _: OrcDataSourceV2 | _: ParquetDataSourceV2 =>
-        case s if s.getClass.getCanonicalName.endsWith("OrcFileFormat") =>
+        case _: CSVFileFormat | _: JsonFileFormat | _: ParquetFileFormat |
+             _: JsonDataSourceV2 | _: CSVDataSourceV2 |
+             _: OrcDataSourceV2 | _: ParquetDataSourceV2 => newInstance
+        case s if s.getClass.getCanonicalName.endsWith("OrcFileFormat") => newInstance
         case s =>
           throw QueryCompilationErrors.alterAddColNotSupportDatasourceTableError(s, table)
       }
+    } else ""
+
+    // Check if the ALTER TABLE ADD COLUMNS command contains a DEFAULT value
+    // for the new column.
+    if (catalogTable.schema.fields.exists(_.metadata.contains("EXISTS_DEFAULT"))) {
+      throw QueryCompilationErrors.alterAddColDefaultNotSupportDatasourceTableError(
+          tableType, table)
     }
     catalogTable
   }
@@ -282,7 +290,7 @@ case class AlterTableAddColumnsCommand(
 
 /**
  * A command that loads data into a Hive table.
- *
+ 
  * The syntax of this command is:
  * {{{
  *  LOAD DATA [LOCAL] INPATH 'filepath' [OVERWRITE] INTO TABLE tablename
