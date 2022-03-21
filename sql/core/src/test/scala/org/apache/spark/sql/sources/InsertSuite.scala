@@ -26,6 +26,7 @@ import org.apache.hadoop.fs.{FileAlreadyExistsException, FSDataOutputStream, Pat
 import org.apache.spark.SparkException
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.analysis.ResolveDefaultColumns
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType}
 import org.apache.spark.sql.catalyst.expressions.GenericRowWithSchema
 import org.apache.spark.sql.catalyst.parser.ParseException
@@ -951,6 +952,19 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
       sql("insert into t select false, default")
       checkAnswer(sql("select s from t where i = false"), Seq(42L).map(i => Row(i)))
     }
+    // There is a complex query plan in the SELECT query in the INSERT INTO statement.
+    withTable("t") {
+      sql("create table t(i boolean default false, s bigint default 42) using parquet")
+      sql("insert into t select col, count(*) from values (default, default) " +
+        "as tab(col, other) group by 1")
+      checkAnswer(sql("select s from t where i = false"), Seq(1).map(i => Row(i)))
+    }
+    // The explicit default reference resolves successfully with nested table subqueries.
+    withTable("t") {
+      sql("create table t(i boolean default false, s bigint) using parquet")
+      sql("insert into t select * from (select * from values(default, 42))")
+      checkAnswer(sql("select s from t where i = false"), Seq(42L).map(i => Row(i)))
+    }
     // There are three column types exercising various combinations of implicit and explicit
     // default column value references in the 'insert into' statements. Note these tests depend on
     // enabling the configuration to use NULLs for missing DEFAULT column values.
@@ -1022,19 +1036,19 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
       sql("create table t(i boolean, s bigint default 42) using parquet")
       assert(intercept[AnalysisException] {
         sql("insert into t values(false, default + 1)")
-      }.getMessage.contains(Errors.COLUMN_DEFAULT_NOT_FOUND))
-    }
-    // Explicit default values have a reasonable error path if the table is not found.
-    withTable("t") {
-      assert(intercept[AnalysisException] {
-        sql("insert into t values(false, default)")
-      }.getMessage.contains(Errors.COLUMN_DEFAULT_NOT_FOUND))
+      }.getMessage.contains(ResolveDefaultColumns.DEFAULTS_IN_EXPRESSIONS_ERROR))
     }
     // Explicit default values may not participate in complex expressions in the SELECT query.
     withTable("t") {
       sql("create table t(i boolean, s bigint default 42) using parquet")
       assert(intercept[AnalysisException] {
         sql("insert into t select false, default + 1")
+      }.getMessage.contains(ResolveDefaultColumns.DEFAULTS_IN_EXPRESSIONS_ERROR))
+    }
+    // Explicit default values have a reasonable error path if the table is not found.
+    withTable("t") {
+      assert(intercept[AnalysisException] {
+        sql("insert into t values(false, default)")
       }.getMessage.contains(Errors.COLUMN_DEFAULT_NOT_FOUND))
     }
     // The default value parses but the type is not coercible.
@@ -1043,21 +1057,6 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
       assert(intercept[AnalysisException] {
         sql("insert into t values (default, default)")
       }.getMessage.contains("provided a value of incompatible type"))
-    }
-    // There is a complex query plan in the SELECT query in the INSERT INTO statement.
-    withTable("t") {
-      sql("create table t(i boolean default false, s bigint default 42) using parquet")
-      assert(intercept[AnalysisException] {
-        sql("insert into t select col, count(*) from values (default, default) " +
-          "as tab(col, other) group by tab")
-      }.getMessage.contains(Errors.COLUMN_DEFAULT_NOT_FOUND))
-    }
-    // The explicit default reference does not resolve successfully with nested table subqueries.
-    withTable("t") {
-      sql("create table t(i boolean default false, s bigint) using parquet")
-      assert(intercept[AnalysisException] {
-        sql("insert into t select * from (select * from values(default, 42 as x))")
-      }.getMessage.contains(Errors.COLUMN_DEFAULT_NOT_FOUND))
     }
     // The number of columns in the INSERT INTO statement is greater than the number of columns in
     // the table.
