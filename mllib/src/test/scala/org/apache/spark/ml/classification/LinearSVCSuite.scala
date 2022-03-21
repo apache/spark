@@ -73,90 +73,6 @@ class LinearSVCSuite extends MLTest with DefaultReadWriteTest {
     }.repartition(1).saveAsTextFile("target/tmp/LinearSVC/binaryDataset")
   }
 
-  test("LinearSVC validate input dataset") {
-    // labels contains NULL
-    val df1 = sc.parallelize(Seq(
-      (null, 1.0, Vectors.dense(1.0, 2.0)),
-      ("1.0", 1.0, Vectors.dense(1.0, 2.0))
-    )).toDF("str_label", "weight", "features")
-      .select(col("str_label").cast("double").as("label"), col("weight"), col("features"))
-    val e1 = intercept[Exception] { new LinearSVC().fit(df1) }
-    assert(e1.getMessage.contains("Labels MUST NOT be NULL or NaN"))
-
-    // labels contains NaN
-    val df2 = sc.parallelize(Seq(
-      (Double.NaN, 1.0, Vectors.dense(1.0, 2.0)),
-      (1.0, 1.0, Vectors.dense(1.0, 2.0))
-    )).toDF("label", "weight", "features")
-    val e2 = intercept[Exception] { new LinearSVC().fit(df2) }
-    assert(e2.getMessage.contains("Labels MUST NOT be NULL or NaN"))
-
-    // labels contains invalid value: 3
-    val df3 = sc.parallelize(Seq(
-      (3.0, 1.0, Vectors.dense(1.0, 2.0)),
-      (1.0, 1.0, Vectors.dense(1.0, 2.0))
-    )).toDF("label", "weight", "features")
-    val e3 = intercept[Exception] { new LinearSVC().fit(df3) }
-    assert(e3.getMessage.contains("Labels MUST be in {0, 1}"))
-
-    // weights contains NULL
-    val df4 = sc.parallelize(Seq(
-      (1.0, "1.0", Vectors.dense(1.0, 2.0)),
-      (0.0, null, Vectors.dense(1.0, 2.0))
-    )).toDF("label", "str_weight", "features")
-      .select(col("label"), col("str_weight").cast("double").as("weight"), col("features"))
-    val e4 = intercept[Exception] { new LinearSVC().setWeightCol("weight").fit(df4) }
-    assert(e4.getMessage.contains("Weights MUST NOT be NULL or NaN"))
-
-    // weights contains NaN
-    val df5 = sc.parallelize(Seq(
-      (1.0, 1.0, Vectors.dense(1.0, 2.0)),
-      (0.0, Double.NaN, Vectors.dense(1.0, 2.0))
-    )).toDF("label", "weight", "features")
-    val e5 = intercept[Exception] { new LinearSVC().setWeightCol("weight").fit(df5) }
-    assert(e5.getMessage.contains("Weights MUST NOT be NULL or NaN"))
-
-    // weights contains invalid value: -3
-    val df6 = sc.parallelize(Seq(
-      (1.0, 1.0, Vectors.dense(1.0, 2.0)),
-      (0.0, -3.0, Vectors.dense(1.0, 2.0))
-    )).toDF("label", "weight", "features")
-    val e6 = intercept[Exception] { new LinearSVC().setWeightCol("weight").fit(df6) }
-    assert(e6.getMessage.contains("Weights MUST NOT be Negative or Infinity"))
-
-    // weights contains invalid value: Infinity
-    val df7 = sc.parallelize(Seq(
-      (1.0, 1.0, Vectors.dense(1.0, 2.0)),
-      (0.0, Double.PositiveInfinity, Vectors.dense(1.0, 2.0))
-    )).toDF("label", "weight", "features")
-    val e7 = intercept[Exception] { new LinearSVC().setWeightCol("weight").fit(df7) }
-    assert(e7.getMessage.contains("Weights MUST NOT be Negative or Infinity"))
-
-    // vectors contains NULL
-    val df8 = sc.parallelize(Seq(
-      (1.0, 1.0, Vectors.dense(1.0, 2.0)),
-      (0.0, 1.0, null)
-    )).toDF("label", "weight", "features")
-    val e8 = intercept[Exception] { new LinearSVC().fit(df8) }
-    assert(e8.getMessage.contains("Vectors MUST NOT be NULL"))
-
-    // vectors contains NaN
-    val df9 = sc.parallelize(Seq(
-      (1.0, 1.0, Vectors.dense(1.0, 2.0)),
-      (0.0, 1.0, Vectors.dense(Double.NaN, 2.0))
-    )).toDF("label", "weight", "features")
-    val e9 = intercept[Exception] { new LinearSVC().fit(df9) }
-    assert(e9.getMessage.contains("Vector values MUST NOT be NaN or Infinity"))
-
-    // vectors contains Infinity
-    val df10 = sc.parallelize(Seq(
-      (1.0, 1.0, Vectors.dense(1.0, 2.0)),
-      (0.0, 1.0, Vectors.dense(1.0, Double.NegativeInfinity))
-    )).toDF("label", "weight", "features")
-    val e10 = intercept[Exception] { new LinearSVC().fit(df10) }
-    assert(e10.getMessage.contains("Vector values MUST NOT be NaN or Infinity"))
-  }
-
   test("Linear SVC binary classification") {
     val svm = new LinearSVC()
     val model = svm.fit(smallBinaryDataset)
@@ -213,6 +129,12 @@ class LinearSVCSuite extends MLTest with DefaultReadWriteTest {
     assert(model.numFeatures === 2)
 
     MLTestingUtils.checkCopyAndUids(lsvc, model)
+  }
+
+  test("LinearSVC validate input dataset") {
+    testInvalidClassificationLabels(new LinearSVC().fit(_), Some(2))
+    testInvalidWeights(new LinearSVC().setWeightCol("weight").fit(_))
+    testInvalidVectors(new LinearSVC().fit(_))
   }
 
   test("LinearSVC threshold acts on rawPrediction") {

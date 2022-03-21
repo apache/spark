@@ -182,7 +182,7 @@ class LinearSVC @Since("2.2.0") (
     }
 
     val instances = dataset.select(
-      checkBinaryLabels($(labelCol)),
+      checkClassificationLabels($(labelCol), Some(2)),
       checkNonNegativeWeights(get(weightCol)),
       checkNonNanVectors($(featuresCol))
     ).rdd.map { case Row(l: Double, w: Double, v: Vector) => Instance(l, w, v)

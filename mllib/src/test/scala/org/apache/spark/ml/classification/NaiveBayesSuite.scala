@@ -22,7 +22,6 @@ import scala.util.Random
 import breeze.linalg.{DenseVector => BDV, Vector => BV}
 import breeze.stats.distributions.{Multinomial => BrzMultinomial, RandBasis => BrzRandBasis}
 
-import org.apache.spark.SparkException
 import org.apache.spark.ml.classification.NaiveBayes._
 import org.apache.spark.ml.classification.NaiveBayesSuite._
 import org.apache.spark.ml.feature.LabeledPoint
@@ -303,31 +302,35 @@ class NaiveBayesSuite extends MLTest with DefaultReadWriteTest {
       Vector, NaiveBayesModel](this, model, testDataset)
   }
 
+  test("NaiveBayes validate input dataset") {
+    testInvalidClassificationLabels(new NaiveBayes().fit(_), None)
+    testInvalidWeights(new NaiveBayes().setWeightCol("weight").fit(_))
+  }
+
   test("detect negative values") {
     val dense = spark.createDataFrame(Seq(
       LabeledPoint(1.0, Vectors.dense(1.0)),
       LabeledPoint(0.0, Vectors.dense(-1.0)),
       LabeledPoint(1.0, Vectors.dense(1.0)),
       LabeledPoint(1.0, Vectors.dense(0.0))))
-    intercept[SparkException] {
-      new NaiveBayes().fit(dense)
-    }
+    val e1 = intercept[Exception] { new NaiveBayes().fit(dense) }
+    assert(e1.getMessage.contains("Vector values MUST NOT be Negative or Infinity"))
+
     val sparse = spark.createDataFrame(Seq(
       LabeledPoint(1.0, Vectors.sparse(1, Array(0), Array(1.0))),
       LabeledPoint(0.0, Vectors.sparse(1, Array(0), Array(-1.0))),
       LabeledPoint(1.0, Vectors.sparse(1, Array(0), Array(1.0))),
       LabeledPoint(1.0, Vectors.sparse(1, Array.empty, Array.empty))))
-    intercept[SparkException] {
-      new NaiveBayes().fit(sparse)
-    }
+    val e2 = intercept[Exception] { new NaiveBayes().fit(sparse) }
+    assert(e2.getMessage.contains("Vector values MUST NOT be Negative or Infinity"))
+
     val nan = spark.createDataFrame(Seq(
       LabeledPoint(1.0, Vectors.sparse(1, Array(0), Array(1.0))),
       LabeledPoint(0.0, Vectors.sparse(1, Array(0), Array(Double.NaN))),
       LabeledPoint(1.0, Vectors.sparse(1, Array(0), Array(1.0))),
       LabeledPoint(1.0, Vectors.sparse(1, Array.empty, Array.empty))))
-    intercept[SparkException] {
-      new NaiveBayes().fit(nan)
-    }
+    val e3 = intercept[Exception] { new NaiveBayes().fit(nan) }
+    assert(e3.getMessage.contains("Vector values MUST NOT be Negative or Infinity"))
   }
 
   test("detect non zero or one values in Bernoulli") {
@@ -337,9 +340,10 @@ class NaiveBayesSuite extends MLTest with DefaultReadWriteTest {
       LabeledPoint(1.0, Vectors.dense(1.0)),
       LabeledPoint(1.0, Vectors.dense(0.0))))
 
-    intercept[SparkException] {
+    val e1 = intercept[Exception] {
       new NaiveBayes().setModelType(Bernoulli).setSmoothing(1.0).fit(badTrain)
     }
+    assert(e1.getMessage.contains("Vector values MUST be in {0, 1}"))
 
     val okTrain = spark.createDataFrame(Seq(
       LabeledPoint(1.0, Vectors.dense(1.0)),
@@ -358,7 +362,7 @@ class NaiveBayesSuite extends MLTest with DefaultReadWriteTest {
       LabeledPoint(1.0, Vectors.dense(1.0)),
       LabeledPoint(1.0, Vectors.dense(0.0))))
 
-    intercept[SparkException] {
+    intercept[Exception] {
       model.transform(badPredict).collect()
     }
   }
