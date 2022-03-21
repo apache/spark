@@ -793,7 +793,7 @@ public class RemoteBlockPushResolverSuite {
     }
   }
 
-  @Test(expected = RuntimeException.class)
+  @Test
   public void testWritingPendingBufsIsAbortedImmediatelyDuringComplete() throws IOException {
     useTestFiles(true, false);
     RemoteBlockPushResolver.PushBlockStreamCallback callback =
@@ -817,7 +817,7 @@ public class RemoteBlockPushResolverSuite {
     assertEquals(4, partitionInfo.getNumIOExceptions());
     RemoteBlockPushResolver.PushBlockStreamCallback callback2 =
       (RemoteBlockPushResolver.PushBlockStreamCallback) pushResolver.receiveBlockDataAsStream(
-        new PushBlockStream(TEST_APP, 1, 0, 0, 5, 0, 0));
+        new PushBlockStream(TEST_APP, NO_ATTEMPT_ID, 0, 0, 5, 0, 0));
     callback2.onData(callback2.getID(), ByteBuffer.wrap(new byte[5]));
     // This is deferred
     callback.onData(callback.getID(), ByteBuffer.wrap(new byte[4]));
@@ -831,13 +831,10 @@ public class RemoteBlockPushResolverSuite {
     // Restore index file so that any further writes to it are successful and any exceptions are
     // due to IOExceptions exceeding threshold.
     testIndexFile.restore();
-    try {
-      callback.onComplete(callback.getID());
-    } catch (Throwable t) {
-      assertEquals("IOExceptions exceeded the threshold when merging shufflePush_0_0_0",
-        t.getMessage());
-      throw t;
-    }
+    RuntimeException re =
+      assertThrows(RuntimeException.class, () -> callback.onComplete(callback.getID()));
+    assertEquals("IOExceptions exceeded the threshold when merging shufflePush_0_0_0_0",
+      re.getMessage());
   }
 
   @Test
