@@ -10117,6 +10117,11 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         col5     True
         col6    False
         dtype: bool
+
+        >>> df.all(bool_only=True)
+        col1     True
+        col2    False
+        dtype: bool
         """
         from pyspark.pandas.series import first_series
 
