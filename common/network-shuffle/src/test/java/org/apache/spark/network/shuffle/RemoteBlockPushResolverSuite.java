@@ -1167,9 +1167,9 @@ public class RemoteBlockPushResolverSuite {
       pushResolver.validateAndGetAppShuffleInfo(testApp);
     closed.acquire();
     assertFalse("Data files on the disk should be cleaned up",
-      appShuffleInfo.getMergedShuffleDataFile(0, 1, 0).exists());
+      appShuffleInfo.getMergedShuffleDataFilePath(0, 1, 0).exists());
     assertFalse("Meta files on the disk should be cleaned up",
-      appShuffleInfo.getMergedShuffleMetaFile(0, 1, 0).exists());
+      appShuffleInfo.getMergedShuffleMetaFilePath(0, 1, 0).exists());
     assertFalse("Index files on the disk should be cleaned up",
       new File(appShuffleInfo.getMergedShuffleIndexFilePath(0, 1, 0)).exists());
     stream2.onData(stream2.getID(), ByteBuffer.wrap(new byte[2]));
@@ -1204,11 +1204,11 @@ public class RemoteBlockPushResolverSuite {
     pushResolver.finalizeShuffleMerge(new FinalizeShuffleMerge(testApp, NO_ATTEMPT_ID, 0, 5));
     closed.acquire();
     assertFalse("MergedBlock meta file for shuffle 0 and shuffleMergeId 4 should be cleaned"
-      + " up", appShuffleInfo.getMergedShuffleMetaFile(0, 4, 0).exists());
+      + " up", appShuffleInfo.getMergedShuffleMetaFilePath(0, 4, 0).exists());
     assertFalse("MergedBlock index file for shuffle 0 and shuffleMergeId 4 should be cleaned"
       + " up", new File(appShuffleInfo.getMergedShuffleIndexFilePath(0, 4, 0)).exists());
     assertFalse("MergedBlock data file for shuffle 0 and shuffleMergeId 4 should be cleaned"
-      + " up", appShuffleInfo.getMergedShuffleDataFile(0, 4, 0).exists());
+      + " up", appShuffleInfo.getMergedShuffleDataFilePath(0, 4, 0).exists());
   }
 
   @Test
