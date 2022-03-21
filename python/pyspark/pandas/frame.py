@@ -10232,8 +10232,8 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
     def _result_aggregated(self, column_labels: List[Label], scols: List[Column]) -> ps.Series:
         """
-        Given aggregated Spark columns and respective column labels from the original pandas-on-Spark DataFrame,
-        construct the result Series.
+        Given aggregated Spark columns and respective column labels from the original
+        pandas-on-Spark DataFrame, construct the result Series.
         """
         from pyspark.pandas.series import first_series
 
