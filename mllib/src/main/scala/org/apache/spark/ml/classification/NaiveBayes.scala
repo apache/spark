@@ -167,7 +167,8 @@ class NaiveBayes @Since("1.5.0") (
         val vecCol = col($(featuresCol))
         when(vecCol.isNull, raise_error(lit("Vectors MUST NOT be Null")))
           .when(!checkNonNegativeVector(vecCol),
-            raise_error(concat(lit("Vector values MUST NOT be Negative or Infinity, but got "),
+            raise_error(concat(
+              lit("Vector values MUST NOT be Negative, NaN or Infinity, but got "),
               vecCol.cast(StringType))))
           .otherwise(vecCol)
 
@@ -181,7 +182,8 @@ class NaiveBayes @Since("1.5.0") (
         val vecCol = col($(featuresCol))
         when(vecCol.isNull, raise_error(lit("Vectors MUST NOT be Null")))
           .when(!checkBinaryVector(vecCol),
-            raise_error(concat(lit("Vector values MUST be in {0, 1}, but got "),
+            raise_error(concat(
+              lit("Vector values MUST be in {0, 1}, but got "),
               vecCol.cast(StringType))))
           .otherwise(vecCol)
 

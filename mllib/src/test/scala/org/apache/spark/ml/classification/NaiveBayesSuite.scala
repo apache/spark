@@ -305,45 +305,64 @@ class NaiveBayesSuite extends MLTest with DefaultReadWriteTest {
   test("NaiveBayes validate input dataset") {
     testInvalidClassificationLabels(new NaiveBayes().fit(_), None)
     testInvalidWeights(new NaiveBayes().setWeightCol("weight").fit(_))
+    testInvalidVectors(new NaiveBayes().setModelType(Gaussian).fit(_))
   }
 
-  test("detect negative values") {
-    val dense = spark.createDataFrame(Seq(
-      LabeledPoint(1.0, Vectors.dense(1.0)),
-      LabeledPoint(0.0, Vectors.dense(-1.0)),
-      LabeledPoint(1.0, Vectors.dense(1.0)),
-      LabeledPoint(1.0, Vectors.dense(0.0))))
-    val e1 = intercept[Exception] { new NaiveBayes().fit(dense) }
-    assert(e1.getMessage.contains("Vector values MUST NOT be Negative or Infinity"))
+  test("Multinomial and Complement: check vectors") {
+    Seq(Multinomial, Complement).foreach { mode =>
+      val df1 = sc.parallelize(Seq(
+        (1.0, 1.0, Vectors.dense(1.0, 2.0)),
+        (0.0, 1.0, null)
+      )).toDF("label", "weight", "features")
+      val e1 = intercept[Exception] { new NaiveBayes().setModelType(mode).fit(df1) }
+      assert(e1.getMessage.contains("Vectors MUST NOT be Null"))
 
-    val sparse = spark.createDataFrame(Seq(
-      LabeledPoint(1.0, Vectors.sparse(1, Array(0), Array(1.0))),
-      LabeledPoint(0.0, Vectors.sparse(1, Array(0), Array(-1.0))),
-      LabeledPoint(1.0, Vectors.sparse(1, Array(0), Array(1.0))),
-      LabeledPoint(1.0, Vectors.sparse(1, Array.empty, Array.empty))))
-    val e2 = intercept[Exception] { new NaiveBayes().fit(sparse) }
-    assert(e2.getMessage.contains("Vector values MUST NOT be Negative or Infinity"))
+      val df2 = spark.createDataFrame(Seq(
+        LabeledPoint(1.0, Vectors.dense(1.0)),
+        LabeledPoint(0.0, Vectors.dense(-1.0)),
+        LabeledPoint(1.0, Vectors.dense(1.0)),
+        LabeledPoint(1.0, Vectors.dense(0.0))))
+      val e2 = intercept[Exception] { new NaiveBayes().setModelType(mode).fit(df2) }
+      assert(e2.getMessage.contains("Vector values MUST NOT be Negative, NaN or Infinity"))
 
-    val nan = spark.createDataFrame(Seq(
-      LabeledPoint(1.0, Vectors.sparse(1, Array(0), Array(1.0))),
-      LabeledPoint(0.0, Vectors.sparse(1, Array(0), Array(Double.NaN))),
-      LabeledPoint(1.0, Vectors.sparse(1, Array(0), Array(1.0))),
-      LabeledPoint(1.0, Vectors.sparse(1, Array.empty, Array.empty))))
-    val e3 = intercept[Exception] { new NaiveBayes().fit(nan) }
-    assert(e3.getMessage.contains("Vector values MUST NOT be Negative or Infinity"))
+      val df3 = spark.createDataFrame(Seq(
+        LabeledPoint(1.0, Vectors.sparse(1, Array(0), Array(1.0))),
+        LabeledPoint(0.0, Vectors.sparse(1, Array(0), Array(-1.0))),
+        LabeledPoint(1.0, Vectors.sparse(1, Array(0), Array(1.0))),
+        LabeledPoint(1.0, Vectors.sparse(1, Array.empty, Array.empty))))
+      val e3 = intercept[Exception] { new NaiveBayes().setModelType(mode).fit(df3) }
+      assert(e3.getMessage.contains("Vector values MUST NOT be Negative, NaN or Infinity"))
+
+      val df4 = spark.createDataFrame(Seq(
+        LabeledPoint(1.0, Vectors.sparse(1, Array(0), Array(1.0))),
+        LabeledPoint(0.0, Vectors.sparse(1, Array(0), Array(Double.NaN))),
+        LabeledPoint(1.0, Vectors.sparse(1, Array(0), Array(1.0))),
+        LabeledPoint(1.0, Vectors.sparse(1, Array.empty, Array.empty))))
+      val e4 = intercept[Exception] { new NaiveBayes().setModelType(mode).fit(df4) }
+      assert(e4.getMessage.contains("Vector values MUST NOT be Negative, NaN or Infinity"))
+    }
   }
 
-  test("detect non zero or one values in Bernoulli") {
-    val badTrain = spark.createDataFrame(Seq(
+  test("Bernoulli: check vectors") {
+    val df1 = sc.parallelize(Seq(
+      (1.0, 1.0, Vectors.dense(1.0, 2.0)),
+      (0.0, 1.0, null)
+    )).toDF("label", "weight", "features")
+    val e1 = intercept[Exception] {
+      new NaiveBayes().setModelType(Bernoulli).setSmoothing(1.0).fit(df1)
+    }
+    assert(e1.getMessage.contains("Vectors MUST NOT be Null"))
+
+    val df2 = spark.createDataFrame(Seq(
       LabeledPoint(1.0, Vectors.dense(1.0)),
       LabeledPoint(0.0, Vectors.dense(2.0)),
       LabeledPoint(1.0, Vectors.dense(1.0)),
       LabeledPoint(1.0, Vectors.dense(0.0))))
 
-    val e1 = intercept[Exception] {
-      new NaiveBayes().setModelType(Bernoulli).setSmoothing(1.0).fit(badTrain)
+    val e2 = intercept[Exception] {
+      new NaiveBayes().setModelType(Bernoulli).setSmoothing(1.0).fit(df2)
     }
-    assert(e1.getMessage.contains("Vector values MUST be in {0, 1}"))
+    assert(e2.getMessage.contains("Vector values MUST be in {0, 1}"))
 
     val okTrain = spark.createDataFrame(Seq(
       LabeledPoint(1.0, Vectors.dense(1.0)),
