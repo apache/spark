@@ -21,7 +21,6 @@ import java.util.Date
 import javax.ws.rs._
 import javax.ws.rs.core.MediaType
 
-import scala.collection.immutable.HashMap
 import scala.util.{Failure, Success, Try}
 
 import org.apache.spark.JobExecutionStatus
@@ -95,15 +94,8 @@ private[v1] class SqlResource extends BaseAppResource {
 
     val duration = exec.completionTime.getOrElse(new Date()).getTime - exec.submissionTime
     val planDetails = if (planDescription) exec.physicalPlanDescription else ""
-    val nodes = if (details) {
-      if (exec.metricValues != null) {
-        printableMetrics(graph.allNodes, exec.metricValues)
-      } else {
-        printableMetrics(graph.allNodes, new HashMap[Long, String])
-      }
-    } else {
-      Seq.empty
-    }
+    val nodes = if (details) printableMetrics(graph.allNodes,
+      Option(exec.metricValues).getOrElse(Map())) else Seq.empty
     val edges = if (details) graph.edges else Seq.empty
 
     new ExecutionData(
