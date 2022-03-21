@@ -233,7 +233,10 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
     }
   }
 
-  def hasBloomFilter(left: LogicalPlan, right: LogicalPlan, leftKey: Expression,
+  def hasBloomFilter(
+      left: LogicalPlan,
+      right: LogicalPlan,
+      leftKey: Expression,
       rightKey: Expression): Boolean = {
     findBloomFilterWithExp(left, leftKey) || findBloomFilterWithExp(right, rightKey)
   }
