@@ -163,7 +163,9 @@ private[spark] class TaskDataWrapper(
     @KVIndexParam(value = TaskIndexNames.ATTEMPT, parent = TaskIndexNames.STAGE)
     val attempt: Int,
     @KVIndexParam(value = TaskIndexNames.TASK_PARTITION_ID, parent = TaskIndexNames.STAGE)
-    val partitionId: Int,
+    // Different kvstores have different default values (eg 0 or -1),
+    // thus we use the default value here for backwards compatibility.
+    val partitionId: Int = -1,
     @KVIndexParam(value = TaskIndexNames.LAUNCH_TIME, parent = TaskIndexNames.STAGE)
     val launchTime: Long,
     val resultFetchStart: Long,
