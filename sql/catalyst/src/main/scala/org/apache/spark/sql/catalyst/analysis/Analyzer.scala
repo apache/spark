@@ -1734,14 +1734,7 @@ class Analyzer(override val catalogManager: CatalogManager)
 
         case u @ UnresolvedAttribute(nameParts) =>
           val result = withPosition(u) {
-            resolveColumnByName(nameParts).orElse(resolveLiteralFunction(nameParts)).map {
-              // We trim unnecessary alias here. Note that, we cannot trim the alias at top-level,
-              // as we should resolve `UnresolvedAttribute` to a named expression. The caller side
-              // can trim the top-level alias if it's safe to do so. Since we will call
-              // CleanupAliases later in Analyzer, trim non top-level unnecessary alias is safe.
-              case Alias(child, _) if !isTopLevel => child
-              case other => other
-            }.getOrElse(u)
+            resolveColumnByName(nameParts).orElse(resolveLiteralFunction(nameParts)).getOrElse(u)
           }
           logDebug(s"Resolving $u to $result")
           result

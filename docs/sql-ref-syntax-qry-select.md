@@ -73,7 +73,12 @@ SELECT [ hints , ... ] [ ALL | DISTINCT ] { [ [ named_expression | regex_column_
 
 * **named_expression**
 
-    An expression with an assigned name. In general, it denotes a column expression.
+    An expression with an assigned name. In general, it denotes a column expression. When the alias name is not
+    specified, Spark will generate one automatically. The generated alias name is subject to change across
+    Spark versions, with one exception that the generated name can be deterministic: if the expression is a
+    column/field identifier, such as "a.b.c", or a CAST of it, the generated name will be the last name part,
+    which is "c" for "a.b.c". It's recommended to specify the alias name explicitly instead of relying on the
+    auto-generated one.
 
     **Syntax:** `expression [AS] [alias]`
 
