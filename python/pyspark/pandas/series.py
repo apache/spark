@@ -1647,7 +1647,9 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
     tolist = to_list
 
-    def drop_duplicates(self, keep: str = "first", inplace: bool = False) -> Optional["Series"]:
+    def drop_duplicates(
+        self, keep: Union[bool, str] = "first", inplace: bool = False
+    ) -> Optional["Series"]:
         """
         Return Series with duplicate values removed.
 
