@@ -322,7 +322,8 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
     int size = (int) indexFile.length();
     // First entry is the zero offset
     int numChunks = (size / Long.BYTES) - 1;
-    File metaFile = appShuffleInfo.getMergedShuffleMetaFilePath(shuffleId, shuffleMergeId, reduceId);
+    File metaFile =
+      appShuffleInfo.getMergedShuffleMetaFilePath(shuffleId, shuffleMergeId, reduceId);
     if (!metaFile.exists()) {
       throw new RuntimeException(String.format("Merged shuffle meta file %s not found",
         metaFile.getPath()));
@@ -347,7 +348,8 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
         shuffleId, shuffleMergeId, reduceId,
         ErrorHandler.BlockFetchErrorHandler.STALE_SHUFFLE_BLOCK_FETCH));
     }
-    File dataFile = appShuffleInfo.getMergedShuffleDataFilePath(shuffleId, shuffleMergeId, reduceId);
+    File dataFile =
+      appShuffleInfo.getMergedShuffleDataFilePath(shuffleId, shuffleMergeId, reduceId);
     if (!dataFile.exists()) {
       throw new RuntimeException(String.format("Merged shuffle data file %s not found",
         dataFile.getPath()));
@@ -410,20 +412,21 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
     if (db != null) {
       try {
         db.delete(dbAppAttemptPathsKey(appShuffleInfo.appId, appShuffleInfo.attemptId));
-        appShuffleInfo.shuffles.
-            forEach((shuffleId, shuffleInfo) -> shuffleInfo.shuffleMergePartitions
-              .forEach((shuffleMergeId, partitionInfo) -> {
-                synchronized (partitionInfo) {
-                  if (shuffleInfo.isFinalized()) {
-                    cleanUpAppShufflePartitionInfoInDB(new AppShufflePartitionId(
-                      appShuffleInfo.appId, appShuffleInfo.attemptId, shuffleId, shuffleMergeId, -1));
-                  }
-                  cleanUpAppShufflePartitionInfoInDB(partitionInfo.appShufflePartitionId);
+        appShuffleInfo.shuffles
+          .forEach((shuffleId, shuffleInfo) -> shuffleInfo.shuffleMergePartitions
+            .forEach((shuffleMergeId, partitionInfo) -> {
+              synchronized (partitionInfo) {
+                if (shuffleInfo.isFinalized()) {
+                  cleanUpAppShufflePartitionInfoInDB(new AppShufflePartitionId(
+                    appShuffleInfo.appId, appShuffleInfo.attemptId, shuffleId,
+                      shuffleMergeId, -1));
                 }
-              }));
+                cleanUpAppShufflePartitionInfoInDB(partitionInfo.appShufflePartitionId);
+              }
+            }));
       } catch (Exception e) {
         logger.error("Error deleting {}_{} from application paths info db",
-            appShuffleInfo.appId, appShuffleInfo.attemptId, e);
+          appShuffleInfo.appId, appShuffleInfo.attemptId, e);
       }
     }
   }
@@ -1632,10 +1635,11 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
       // Get rid of any partial block data at the end of the file. This could either
       // be due to failure, or a request still being processed when the shuffle
       // merge gets finalized, or any exceptions while updating index/meta files.
-      logger.trace("{}_{} shuffleId {} shuffleMergeId {} reduceId {} truncating files data {} index {} meta {}",
-        appShufflePartitionId.appId, appShufflePartitionId.attemptId,
-        appShufflePartitionId.shuffleId, appShufflePartitionId.shuffleMergeId,
-        appShufflePartitionId.reduceId, lastChunkOffset, indexFile.getPos(), metaFile.getPos());
+      logger.trace("{}_{} shuffleId {} shuffleMergeId {} reduceId {} "
+         + "truncating files data {} index {} meta {}", appShufflePartitionId.appId,
+          appShufflePartitionId.attemptId, appShufflePartitionId.shuffleId,
+          appShufflePartitionId.shuffleMergeId, appShufflePartitionId.reduceId,
+          lastChunkOffset, indexFile.getPos(), metaFile.getPos());
       dataFile.getChannel().truncate(lastChunkOffset);
       indexFile.getChannel().truncate(indexFile.getPos());
       metaFile.getChannel().truncate(metaFile.getPos());
