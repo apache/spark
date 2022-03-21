@@ -99,10 +99,11 @@ class ReportSinkMetricsSuite extends StreamTest {
       TestSinkTable
     }
 
-    def createRelation(sqlContext: SQLContext,
-                       mode: SaveMode,
-                       parameters: Map[String, String],
-                       data: DataFrame): BaseRelation = {
+    def createRelation(
+        sqlContext: SQLContext,
+        mode: SaveMode,
+        parameters: Map[String, String],
+        data: DataFrame): BaseRelation = {
 
       TestSinkRelation(sqlContext, data)
     }
