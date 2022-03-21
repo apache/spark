@@ -33,10 +33,10 @@ from pyspark.sql.context import SQLContext
 if os.environ.get("SPARK_EXECUTOR_URI"):
     SparkContext.setSystemProperty("spark.executor.uri", os.environ["SPARK_EXECUTOR_URI"])
 
-SparkContext._ensure_initialized()  # type: ignore
+SparkContext._ensure_initialized()
 
 try:
-    spark = SparkSession._create_shell_session()  # type: ignore
+    spark = SparkSession._create_shell_session()
 except Exception:
     import sys
     import traceback

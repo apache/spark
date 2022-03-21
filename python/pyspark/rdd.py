@@ -110,8 +110,8 @@ if TYPE_CHECKING:
     from pyspark.sql.types import AtomicType, StructType
     from pyspark.sql._typing import AtomicValue, RowLike, SQLBatchedUDFType
 
-    from py4j.java_gateway import JavaObject  # type: ignore[import]
-    from py4j.java_collections import JavaArray  # type: ignore[import]
+    from py4j.java_gateway import JavaObject
+    from py4j.java_collections import JavaArray
 
 T = TypeVar("T")
 T_co = TypeVar("T_co", covariant=True)
@@ -1292,7 +1292,7 @@ class RDD(Generic[T_co]):
             elif y[1]:
                 return x
             else:
-                return f(x[0], y[0]), False  # type: ignore[arg-type]
+                return f(x[0], y[0]), False
 
         reduced = self.map(lambda x: (x, False)).treeAggregate(zeroValue, op, op, depth)
         if reduced[1]:
@@ -1654,12 +1654,7 @@ class RDD(Generic[T_co]):
         def histogram(iterator: Iterable["S"]) -> Iterable[List[int]]:
             counters = [0] * len(buckets)  # type: ignore[arg-type]
             for i in iterator:
-                if (
-                    i is None
-                    or (isinstance(i, float) and isnan(i))  # type: ignore[arg-type]
-                    or i > maxv
-                    or i < minv
-                ):
+                if i is None or (isinstance(i, float) and isnan(i)) or i > maxv or i < minv:
                     continue
                 t = (
                     int((i - minv) / inc)  # type: ignore[operator]

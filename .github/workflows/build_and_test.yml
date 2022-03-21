@@ -23,8 +23,8 @@ on:
   push:
     branches:
     - '**'
-    - '!branch-*.*'
   schedule:
+    # Note that the scheduled jobs are only for master branch.
     # master, Hadoop 2
     - cron: '0 1 * * *'
     # master
@@ -96,7 +96,7 @@ jobs:
           echo '::set-output name=hadoop::hadoop3'
         else
           echo '::set-output name=java::8'
-          echo '::set-output name=branch::master' # Default branch to run on. CHANGE here when a branch is cut out.
+          echo '::set-output name=branch::master'  # NOTE: UPDATE THIS WHEN CUTTING BRANCH
           echo '::set-output name=type::regular'
           echo '::set-output name=envs::{"SPARK_ANSI_SQL_MODE": "${{ inputs.ansi_enabled }}"}'
           echo '::set-output name=hadoop::hadoop3'
@@ -105,6 +105,7 @@ jobs:
   precondition:
     name: Check changes
     runs-on: ubuntu-20.04
+    needs: configure-jobs
     env:
       GITHUB_PREV_SHA: ${{ github.event.before }}
     outputs:
@@ -115,7 +116,7 @@ jobs:
       with:
         fetch-depth: 0
         repository: apache/spark
-        ref: master
+        ref: ${{ needs.configure-jobs.outputs.branch }}
     - name: Sync the current branch with the latest in Apache Spark
       if: github.repository != 'apache/spark'
       run: |
@@ -325,7 +326,7 @@ jobs:
       with:
         fetch-depth: 0
         repository: apache/spark
-        ref: master
+        ref: ${{ needs.configure-jobs.outputs.branch }}
     - name: Sync the current branch with the latest in Apache Spark
       if: github.repository != 'apache/spark'
       run: |
@@ -413,7 +414,7 @@ jobs:
       with:
         fetch-depth: 0
         repository: apache/spark
-        ref: master
+        ref: ${{ needs.configure-jobs.outputs.branch }}
     - name: Sync the current branch with the latest in Apache Spark
       if: github.repository != 'apache/spark'
       run: |
@@ -477,7 +478,7 @@ jobs:
       with:
         fetch-depth: 0
         repository: apache/spark
-        ref: master
+        ref: ${{ needs.configure-jobs.outputs.branch }}
     - name: Sync the current branch with the latest in Apache Spark
       if: github.repository != 'apache/spark'
       run: |
@@ -590,7 +591,7 @@ jobs:
       with:
         fetch-depth: 0
         repository: apache/spark
-        ref: master
+        ref: ${{ needs.configure-jobs.outputs.branch }}
     - name: Sync the current branch with the latest in Apache Spark
       if: github.repository != 'apache/spark'
       run: |
@@ -639,7 +640,7 @@ jobs:
       with:
         fetch-depth: 0
         repository: apache/spark
-        ref: master
+        ref: ${{ needs.configure-jobs.outputs.branch }}
     - name: Sync the current branch with the latest in Apache Spark
       if: github.repository != 'apache/spark'
       run: |
@@ -687,7 +688,7 @@ jobs:
       with:
         fetch-depth: 0
         repository: apache/spark
-        ref: master
+        ref: ${{ needs.configure-jobs.outputs.branch }}
     - name: Sync the current branch with the latest in Apache Spark
       if: github.repository != 'apache/spark'
       run: |
@@ -786,7 +787,7 @@ jobs:
       with:
         fetch-depth: 0
         repository: apache/spark
-        ref: master
+        ref: ${{ needs.configure-jobs.outputs.branch }}
     - name: Sync the current branch with the latest in Apache Spark
       if: github.repository != 'apache/spark'
       run: |

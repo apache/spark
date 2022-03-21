@@ -1736,7 +1736,7 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
 
     def test_replace(self):
         pser = pd.Series([10, 20, 15, 30, np.nan], name="x")
-        psser = ps.Series(pser)
+        psser = ps.from_pandas(pser)
 
         self.assert_eq(psser.replace(), pser.replace())
         self.assert_eq(psser.replace({}), pser.replace({}))
@@ -1747,15 +1747,36 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
         self.assert_eq(psser.replace([10, 15], [45, 50]), pser.replace([10, 15], [45, 50]))
         self.assert_eq(psser.replace((10, 15), (45, 50)), pser.replace((10, 15), (45, 50)))
 
+        pser = pd.Series(["bat", "foo", "bait", "abc", "bar", "zoo"])
+        psser = ps.from_pandas(pser)
+        self.assert_eq(
+            psser.replace(to_replace=r"^ba.$", value="new", regex=True),
+            pser.replace(to_replace=r"^ba.$", value="new", regex=True),
+        )
+        self.assert_eq(
+            psser.replace(regex=r"^.oo$", value="new"), pser.replace(regex=r"^.oo$", value="new")
+        )
+        self.assert_eq(
+            (psser + "o").replace(regex=r"^.ooo$", value="new"),
+            (pser + "o").replace(regex=r"^.ooo$", value="new"),
+        )
+
         msg = "'to_replace' should be one of str, list, tuple, dict, int, float"
         with self.assertRaisesRegex(TypeError, msg):
             psser.replace(ps.range(5))
         msg = "Replacement lists must match in length. Expecting 3 got 2"
         with self.assertRaisesRegex(ValueError, msg):
-            psser.replace([10, 20, 30], [1, 2])
-        msg = "replace currently not support for regex"
+            psser.replace(["bat", "foo", "bait"], ["a", "b"])
+        msg = "'to_replace' must be 'None' if 'regex' is not a bool"
+        with self.assertRaisesRegex(ValueError, msg):
+            psser.replace(to_replace="foo", regex=r"^.oo$")
+        msg = "If 'regex' is True then 'to_replace' must be a string"
+        with self.assertRaisesRegex(AssertionError, msg):
+            psser.replace(["bat", "foo", "bait"], regex=True)
+        unsupported_regex = [r"^.oo$", r"^ba.$"]
+        msg = "'regex' of %s type is not supported" % type(unsupported_regex).__name__
         with self.assertRaisesRegex(NotImplementedError, msg):
-            psser.replace(r"^1.$", regex=True)
+            psser.replace(regex=unsupported_regex, value="new")
 
     def test_xs(self):
         midx = pd.MultiIndex(
@@ -2110,6 +2131,48 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
 
         with ps.option_context("compute.eager_check", False):
             self.assert_eq(psser.asof(20), 4.0)
+
+        pser = pd.Series([2, 1, np.nan, 4], index=[10, 20, 30, 40], name="Koalas")
+        psser = ps.from_pandas(pser)
+        self.assert_eq(psser.asof([5, 20]), pser.asof([5, 20]))
+
+        pser = pd.Series([4, np.nan, np.nan, 2], index=[10, 20, 30, 40], name="Koalas")
+        psser = ps.from_pandas(pser)
+        self.assert_eq(psser.asof([5, 100]), pser.asof([5, 100]))
+
+        pser = pd.Series([np.nan, 4, 1, 2], index=[10, 20, 30, 40], name="Koalas")
+        psser = ps.from_pandas(pser)
+        self.assert_eq(psser.asof([5, 35]), pser.asof([5, 35]))
+
+        pser = pd.Series([2, 1, np.nan, 4], index=[10, 20, 30, 40], name="Koalas")
+        psser = ps.from_pandas(pser)
+        self.assert_eq(psser.asof([25, 25]), pser.asof([25, 25]))
+
+        pser = pd.Series([2, 1, np.nan, 4], index=["a", "b", "c", "d"], name="Koalas")
+        psser = ps.from_pandas(pser)
+        self.assert_eq(psser.asof(["a", "d"]), pser.asof(["a", "d"]))
+
+        pser = pd.Series(
+            [2, 1, np.nan, 4],
+            index=[
+                pd.Timestamp(2020, 1, 1),
+                pd.Timestamp(2020, 2, 2),
+                pd.Timestamp(2020, 3, 3),
+                pd.Timestamp(2020, 4, 4),
+            ],
+            name="Koalas",
+        )
+        psser = ps.from_pandas(pser)
+        self.assert_eq(
+            psser.asof([pd.Timestamp(2020, 1, 1)]),
+            pser.asof([pd.Timestamp(2020, 1, 1)]),
+        )
+
+        pser = pd.Series([2, np.nan, 1, 4], index=[10, 20, 30, 40], name="Koalas")
+        psser = ps.from_pandas(pser)
+        self.assert_eq(psser.asof(np.nan), pser.asof(np.nan))
+        self.assert_eq(psser.asof([np.nan, np.nan]), pser.asof([np.nan, np.nan]))
+        self.assert_eq(psser.asof([10, np.nan]), pser.asof([10, np.nan]))
 
     def test_squeeze(self):
         # Single value

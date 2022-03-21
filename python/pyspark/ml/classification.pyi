@@ -69,7 +69,7 @@ from pyspark.ml.param import Param
 from pyspark.ml.regression import DecisionTreeRegressionModel
 from pyspark.sql.dataframe import DataFrame
 
-from py4j.java_gateway import JavaObject  # type: ignore[import]
+from py4j.java_gateway import JavaObject
 
 class _ClassifierParams(HasRawPredictionCol, _PredictorParams): ...
 

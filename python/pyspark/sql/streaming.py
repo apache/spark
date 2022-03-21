@@ -20,7 +20,7 @@ import json
 from collections.abc import Iterator
 from typing import cast, overload, Any, Callable, Dict, List, Optional, TYPE_CHECKING, Union
 
-from py4j.java_gateway import java_import, JavaObject  # type: ignore[import]
+from py4j.java_gateway import java_import, JavaObject
 
 from pyspark import since
 from pyspark.sql.column import _to_seq
@@ -1196,7 +1196,7 @@ class DataStreamWriter:
         >>> writer = sdf.writeStream.foreach(RowPrinter())
         """
 
-        from pyspark.rdd import _wrap_function  # type: ignore[attr-defined]
+        from pyspark.rdd import _wrap_function
         from pyspark.serializers import CPickleSerializer, AutoBatchedSerializer
         from pyspark.taskcontext import TaskContext
 
@@ -1474,7 +1474,7 @@ def _test() -> None:
     import tempfile
     from pyspark.sql import SparkSession, SQLContext
     import pyspark.sql.streaming
-    from py4j.protocol import Py4JError  # type: ignore[import]
+    from py4j.protocol import Py4JError
 
     os.chdir(os.environ["SPARK_HOME"])
 

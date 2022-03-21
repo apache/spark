@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, Sort}
 import org.apache.spark.sql.connector.expressions.{FieldReference, NullOrdering, SortDirection, SortValue}
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2ScanRelation, V1ScanWrapper}
 import org.apache.spark.sql.execution.datasources.v2.jdbc.JDBCTableCatalog
-import org.apache.spark.sql.functions.{avg, count, lit, sum, udf}
+import org.apache.spark.sql.functions.{avg, count, count_distinct, lit, sum, udf}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.util.Utils
@@ -503,6 +503,18 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
           "PushedAggregates: [COUNT(DISTINCT DEPT)]"
         checkKeywordsExistsInExplain(df, expected_plan_fragment)
     }
+    checkAnswer(df, Seq(Row(3)))
+  }
+
+  test("scan with aggregate push-down: cannot partial push down COUNT(DISTINCT col)") {
+    val df = spark.read
+      .option("partitionColumn", "dept")
+      .option("lowerBound", "0")
+      .option("upperBound", "2")
+      .option("numPartitions", "2")
+      .table("h2.test.employee")
+      .agg(count_distinct($"DEPT"))
+    checkAggregateRemoved(df, false)
     checkAnswer(df, Seq(Row(3)))
   }
 

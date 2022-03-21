@@ -658,14 +658,14 @@ class AnalysisErrorSuite extends AnalysisTest {
     assertAnalysisError(plan2, "EqualTo does not support ordering on type map" :: Nil)
   }
 
-  test("PredicateSubQuery is used outside of a filter") {
+  test("PredicateSubQuery is used outside of a allowed nodes") {
     val a = AttributeReference("a", IntegerType)()
     val b = AttributeReference("b", IntegerType)()
-    val plan = Project(
-      Seq(a, Alias(InSubquery(Seq(a), ListQuery(LocalRelation(b))), "c")()),
+    val plan = Sort(
+      Seq(SortOrder(InSubquery(Seq(a), ListQuery(LocalRelation(b))), Ascending)),
+      global = true,
       LocalRelation(a))
-    assertAnalysisError(plan, "Predicate sub-queries can only be used" +
-        " in Filter" :: Nil)
+    assertAnalysisError(plan, "Predicate sub-queries can only be used in " :: Nil)
   }
 
   test("PredicateSubQuery correlated predicate is nested in an illegal plan") {
