@@ -1734,12 +1734,17 @@ Spark allows users to specify a custom Kubernetes schedulers.
 
 #### Using Volcano as Customized Scheduler for Spark on Kubernetes
 
+**This feature is currently experimental. In future versions, there may be behavioral changes around configuration, feature step improvement.**
+
 ##### Prerequisites
-* Volcano supports Spark on Kubernetes since v1.5. Mini version: v1.5.1+. See also [Volcano installation](https://volcano.sh/en/docs/installation).
+* Spark on Kubernetes with Volcano as a custom scheduler is supported since Spark v3.3.0 and Volcano v1.5.1.
+* See also [Volcano installation](https://volcano.sh/en/docs/installation).
 
 ##### Usage
-Spark on Kubernetes allows using Volcano as a customized scheduler. Users can use Volcano to
-support more advanced resource scheduling: queue scheduling, resource reservation, priority scheduling, for example:
+Spark on Kubernetes allows using Volcano as a custom scheduler. Users can use Volcano to
+support more advanced resource scheduling: queue scheduling, resource reservation, priority scheduling, and more.
+
+To use Volcano as a custom scheduler the user needs to specify the following configuration options:
 
 ```
 # Specify volcano scheduler
@@ -1752,16 +1757,16 @@ support more advanced resource scheduling: queue scheduling, resource reservatio
 ```
 
 ##### Volcano Feature Step
-Volcano feature steps help users to create Volcano PodGroup and set driver/executor pod annotation to link this PodGroup.
+Volcano feature steps help users to create a Volcano PodGroup and set driver/executor pod annotation to link with this PodGroup.
 
-Note that, currently only supported driver/job level PodGroup in Volcano Feature Step, executor separate PodGroup is not supported yet.
+Note that currently only driver/job level PodGroup is supported in Volcano Feature Step. Executor PodGroup is not supported yet.
 
 ##### Volcano PodGroup Template
 Volcano defines PodGroup spec using [CRD yaml](https://volcano.sh/en/docs/podgroup/#example)
 
 Similar to [Pod template](#pod-template), Spark users can similarly use Volcano PodGroup Template to define the PodGroup spec configurations.
 
-To do so, specify the spark properties `spark.kubernetes.scheduler.volcano.podGroupTemplateFile` to point to files accessible to the `spark-submit` process.
+To do so, specify the Spark properties `spark.kubernetes.scheduler.volcano.podGroupTemplateFile` to point to files accessible to the `spark-submit` process.
 
 Below is an example of PodGroup template, see also [PodGroup Introduction](https://volcano.sh/en/docs/podgroup/#introduction):
 
@@ -1786,8 +1791,8 @@ spec:
 <tr>
   <td>Queue scheduling</td>
   <td>
-    Queue indicates the resource queue, which adopts FIFO. is also used as the basis for resource division.
-    help users specify which queue the job to submit.
+    <a href="https://volcano.sh/en/docs/queue">Queue</a> indicates the resource queue, which adopts FIFO. It is also used as the basis for resource division.
+    Helps the user to specify to which queue the job should be submitted to.
   </td>
   <td>`spec.queue` field in PodGroup template</td>
 </tr>
@@ -1795,15 +1800,15 @@ spec:
   <td>Resource reservation</td>
   <td>
     Resource reservation, aka `Gang` scheduling (start all or nothing), helps users reserve resources for specific jobs.
-    It's useful for ensuring resource are meet the minimum requirements of spark job and avoiding all drivers stuck
-    due to all executor pending, especially, when cluster resources are very limited.
+    It is useful for ensource the available resources meet the minimum requirements of the Spark job and avoiding the
+    situation where drivers are scheduled, and then they are unable to schedule sufficient executors to progress.
   </td>
   <td>`spec.minResources` field in PodGroup template</td>
 </tr>
 <tr>
   <td>Priority scheduling</td>
   <td>
-    It is used to help users to specify job priority in the queue during scheduling.
+    It is used to help users to specify job <a href="https://volcano.sh/en/docs/podgroup/#priorityclassname">priority</a> in the queue during scheduling.
   </td>
   <td>`spec.priorityClassName` field in PodGroup template</td>
 </tr>
