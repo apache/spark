@@ -51,7 +51,12 @@ import datetime
 
 import numpy as np
 import pandas as pd
-from pandas.api.types import is_bool_dtype, is_list_like, is_dict_like, is_scalar  # type: ignore[attr-defined]
+from pandas.api.types import (
+    is_bool_dtype,
+    is_list_like,
+    is_dict_like,
+    is_scalar,
+)  # type: ignore[attr-defined]
 from pandas.tseries.frequencies import DateOffset, to_offset
 
 if TYPE_CHECKING:
