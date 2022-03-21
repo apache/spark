@@ -1537,12 +1537,10 @@ object QueryCompilationErrors {
 
   def invalidLiteralForWindowDurationError(): Throwable = {
     new AnalysisException(
-      errorClass = "INVALID_PARAMETER_VALUE",
+      errorClass = "WINDOW_PARAMETER_TYPE_ERROR",
       messageParameters = Array(
         "Duration/Time",
-        "window function",
-        "The duration and time " +
-          "inputs to window must be an integer, long or string literal."))
+        "Integer, Long, String"))
   }
 
   def noSuchStructFieldInGivenFieldsError(

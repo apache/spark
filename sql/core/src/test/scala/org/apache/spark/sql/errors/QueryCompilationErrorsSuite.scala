@@ -183,10 +183,10 @@ class QueryCompilationErrorsSuite extends QueryTest with SharedSparkSession {
     val e = intercept[AnalysisException] {
       sql("SELECT * FROM df GROUP BY id, WINDOW(time1, NULL, '5 minutes') ORDER BY id")
     }
-    assert(e.errorClass === Some("INVALID_PARAMETER_VALUE"))
+    assert(e.errorClass === Some("WINDOW_PARAMETER_TYPE_ERROR"))
     assert(
       e.message ===
-        "The value of parameter(s) 'Duration/Time' in window function is invalid: " +
-          "The duration and time inputs to window must be an integer, long or string literal.")
+        "Invalid Window Parameter: The parameter(s) " +
+          "Duration/Time must be of type Integer, Long, String")
   }
 }

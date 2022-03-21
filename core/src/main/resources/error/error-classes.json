@@ -179,6 +179,9 @@
   "UNSUPPORTED_OPERATION" : {
     "message" : [ "The operation is not supported: %s" ]
   },
+  "WINDOW_PARAMETER_TYPE_ERROR" : {
+    "message" : [ "Invalid Window Parameter: The parameter(s) %s must be of type %s" ]
+  },
   "WRITING_JOB_ABORTED" : {
     "message" : [ "Writing job aborted" ],
     "sqlState" : "40000"
