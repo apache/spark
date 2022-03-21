@@ -25,7 +25,7 @@ import java.util.Map;
  * A mix-in interface for streaming sinks to signal that they can report
  * metrics.
  *
- * @since 3.3.0
+ * @since 3.4.0
  */
 @Evolving
 public interface ReportsSinkMetrics {

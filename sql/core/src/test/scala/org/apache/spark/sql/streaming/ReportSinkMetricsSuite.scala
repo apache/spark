@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.streaming
 
-import java.nio.file.Files
-
 import scala.collection.JavaConverters._
 
 import org.apache.spark.internal.Logging
@@ -43,39 +41,46 @@ class ReportSinkMetricsSuite extends StreamTest {
     val df = inputData.toDF()
     var query: StreamingQuery = null
 
-    try {
-      query =
-        df.writeStream
-          .outputMode("append")
-          .format("org.apache.spark.sql.streaming.TestSinkProvider")
-          .option("checkPointLocation", Files.createTempDirectory("some-prefix").toFile.getName)
-          .start()
+    var metricsMap: java.util.Map[String, String] = null
 
-      inputData.addData(1, 2, 3)
+    val listener = new StreamingQueryListener {
 
-      var metricsMap: java.util.Map[String, String] = null
-      spark.streams.addListener(new StreamingQueryListener {
+      override def onQueryStarted(event: StreamingQueryListener.QueryStartedEvent): Unit = {}
 
-        override def onQueryStarted(event: StreamingQueryListener.QueryStartedEvent): Unit = {}
+      override def onQueryProgress(event: StreamingQueryListener.QueryProgressEvent): Unit = {
+        metricsMap = event.progress.sink.metrics
+      }
 
-        override def onQueryProgress(event: StreamingQueryListener.QueryProgressEvent): Unit = {
-          metricsMap = event.progress.sink.metrics
+      override def onQueryTerminated(
+        event: StreamingQueryListener.QueryTerminatedEvent): Unit = {}
+    }
+
+    spark.streams.addListener(listener)
+
+    withTempDir { dir =>
+      try {
+        query =
+          df.writeStream
+            .outputMode("append")
+            .format("org.apache.spark.sql.streaming.TestSinkProvider")
+            .option("checkPointLocation", dir.toString)
+            .start()
+
+        inputData.addData(1, 2, 3)
+
+        failAfter(streamingTimeout) {
+          query.processAllAvailable()
         }
 
-        override def onQueryTerminated(
-          event: StreamingQueryListener.QueryTerminatedEvent): Unit = {}
-      })
+        assertResult(metricsMap) {
+          Map("metrics-1" -> "value-1", "metrics-2" -> "value-2").asJava
+        }
+      } finally {
+        if (query != null) {
+          query.stop()
+        }
 
-      failAfter(streamingTimeout) {
-        query.processAllAvailable()
-      }
-
-      assertResult(metricsMap) {
-        Map("metrics-1" -> "value-1", "metrics-2" -> "value-2").asJava
-      }
-    } finally {
-      if (query != null) {
-        query.stop()
+        spark.streams.removeListener(listener)
       }
     }
   }
@@ -94,11 +99,10 @@ class ReportSinkMetricsSuite extends StreamTest {
       TestSinkTable
     }
 
-    def createRelation(
-                        sqlContext: SQLContext,
-                        mode: SaveMode,
-                        parameters: Map[String, String],
-                        data: DataFrame): BaseRelation = {
+    def createRelation(sqlContext: SQLContext,
+                       mode: SaveMode,
+                       parameters: Map[String, String],
+                       data: DataFrame): BaseRelation = {
 
       TestSinkRelation(sqlContext, data)
     }
