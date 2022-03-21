@@ -53,6 +53,24 @@ class ParserUtilsSuite extends SparkFunSuite {
     parser.statement().asInstanceOf[CreateNamespaceContext]
   }
 
+  val castClause =
+    """
+      |CAST(1 /* Convert
+      |   INT
+      |   AS
+      |   String */ as STRING)""".stripMargin.trim
+
+  val castQuery =
+    s"""
+       |SELECT
+       |$castClause /* SHOULD NOT INCLUDE THIS */
+       | AS s
+       |""".stripMargin
+
+  val castQueryContext = buildContext(castQuery) { parser =>
+    parser.statement().asInstanceOf[StatementDefaultContext]
+  }
+
   val emptyContext = buildContext("") { parser =>
     parser.statement
   }
@@ -196,7 +214,38 @@ class ParserUtilsSuite extends SparkFunSuite {
       (string(ctx.STRING), CurrentOrigin.get)
     }
     assert(location == "/home/user/db")
-    assert(origin == Origin(Some(3), Some(27)))
+    assert(origin == Origin(Some(3), Some(27), Some("LOCATION '/home/user/db'")))
     assert(CurrentOrigin.get == current)
+  }
+
+  private def findCastContext(ctx: ParserRuleContext): Option[CastContext] = {
+    ctx match {
+      case context: CastContext =>
+        Some(context)
+      case _ =>
+        val it = ctx.children.iterator()
+        while(it.hasNext) {
+          it.next() match {
+            case p: ParserRuleContext =>
+              val childResult = findCastContext(p)
+              if (childResult.isDefined) {
+                return childResult
+              }
+            case _ =>
+          }
+        }
+        None
+    }
+  }
+
+  test("text") {
+    withOrigin(castQueryContext) {
+      assert(CurrentOrigin.get.text.contains(castQuery.trim))
+    }
+    val castContext = findCastContext(castQueryContext)
+    assert(castContext.isDefined)
+    withOrigin(castContext.get) {
+      assert(CurrentOrigin.get.text.contains(castClause))
+    }
   }
 }

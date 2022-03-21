@@ -109,9 +109,9 @@ object ParserUtils {
   }
 
   /** Get the origin (line and position) of the token. */
-  def position(token: Token): Origin = {
+  def position(token: Token, text: Option[String] = None): Origin = {
     val opt = Option(token)
-    Origin(opt.map(_.getLine), opt.map(_.getCharPositionInLine))
+    Origin(opt.map(_.getLine), opt.map(_.getCharPositionInLine), text)
   }
 
   /** Validate the condition. If it doesn't throw a parse exception. */
@@ -128,7 +128,15 @@ object ParserUtils {
    */
   def withOrigin[T](ctx: ParserRuleContext)(f: => T): T = {
     val current = CurrentOrigin.get
-    CurrentOrigin.set(position(ctx.getStart))
+    val interval = Interval.of(ctx.getStart.getStartIndex, ctx.getStop.getStopIndex)
+    val inputSteam = ctx.getStart.getInputStream
+    // Only set the SQL text when the interval is valid
+    val text = if (interval.length() > 0 && interval.b < inputSteam.size()) {
+      Some(inputSteam.getText(interval))
+    } else {
+      None
+    }
+    CurrentOrigin.set(position(ctx.getStart, text))
     try {
       f
     } finally {
