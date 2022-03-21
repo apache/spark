@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.util
 
 import org.apache.spark.sql.catalyst.expressions.{Add, And, BinaryComparison, BinaryOperator, BitwiseAnd, BitwiseNot, BitwiseOr, BitwiseXor, CaseWhen, Contains, Divide, EndsWith, EqualTo, Expression, In, InSet, IsNotNull, IsNull, Literal, Multiply, Not, Or, Predicate, Remainder, StartsWith, StringPredicate, Subtract, UnaryMinus}
 import org.apache.spark.sql.connector.expressions.{Expression => V2Expression, FieldReference, GeneralScalarExpression, LiteralValue}
-import org.apache.spark.sql.connector.expressions.filter.{AlwaysFalse, AlwaysTrue, Predicate => V2Predicate}
+import org.apache.spark.sql.connector.expressions.filter.{AlwaysFalse, AlwaysTrue, And => V2And, Not => V2Not, Or => V2Or, Predicate => V2Predicate}
 import org.apache.spark.sql.execution.datasources.PushableColumn
 import org.apache.spark.sql.types.BooleanType
 
@@ -103,10 +103,19 @@ class V2ExpressionBuilder(
         case _ => (generateExpression(b.left), generateExpression(b.right))
       }
       if (l.isDefined && r.isDefined) {
-        if (b.isInstanceOf[Predicate]) {
-          Some(new V2Predicate(b.sqlOperator, Array[V2Expression](l.get, r.get)))
-        } else {
-          Some(new GeneralScalarExpression(b.sqlOperator, Array[V2Expression](l.get, r.get)))
+        b match {
+          case _: And =>
+            assert(l.get.isInstanceOf[V2Predicate])
+            assert(r.get.isInstanceOf[V2Predicate])
+            Some(new V2And(l.get.asInstanceOf[V2Predicate], r.get.asInstanceOf[V2Predicate]))
+          case _: Or =>
+            assert(l.get.isInstanceOf[V2Predicate])
+            assert(r.get.isInstanceOf[V2Predicate])
+            Some(new V2Or(l.get.asInstanceOf[V2Predicate], r.get.asInstanceOf[V2Predicate]))
+          case _: Predicate =>
+            Some(new V2Predicate(b.sqlOperator, Array[V2Expression](l.get, r.get)))
+          case _ =>
+            Some(new GeneralScalarExpression(b.sqlOperator, Array[V2Expression](l.get, r.get)))
         }
       } else {
         None
@@ -120,7 +129,10 @@ class V2ExpressionBuilder(
         None
       }
     case Not(child) => generateExpression(child, true) // NOT expects predicate
-      .map(v => new V2Predicate("NOT", Array[V2Expression](v)))
+      .map { v =>
+        assert(v.isInstanceOf[V2Predicate])
+        new V2Not(v.asInstanceOf[V2Predicate])
+      }
     case UnaryMinus(child, true) => generateExpression(child)
       .map(v => new GeneralScalarExpression("-", Array[V2Expression](v)))
     case BitwiseNot(child) => generateExpression(child)

@@ -50,9 +50,11 @@ public class V2ExpressionSQLBuilder {
         case "IS_NOT_NULL":
           return visitIsNotNull(build(e.children()[0]));
         case "STARTS_WITH":
+          return visitStartsWith(build(e.children()[0]), build(e.children()[1]));
         case "ENDS_WITH":
+          return visitEndsWith(build(e.children()[0]), build(e.children()[1]));
         case "CONTAINS":
-          return visitStringPredicate(name, e);
+          return visitContains(build(e.children()[0]), build(e.children()[1]));
         case "=":
         case "<>":
         case "<=>":
@@ -123,20 +125,19 @@ public class V2ExpressionSQLBuilder {
     return v + " IS NOT NULL";
   }
 
-  protected String visitStringPredicate(String name, GeneralScalarExpression strPredicate) {
-    String l = build(strPredicate.children()[0]);
-    String r = build(strPredicate.children()[1]);
+  protected String visitStartsWith(String l, String r) {
     String value = r.replaceAll("'", "");
-    switch (name) {
-      case "STARTS_WITH":
-        return l + " LIKE '" + value + "%'";
-      case "ENDS_WITH":
-        return l + " LIKE '%" + value + "'";
-      case "CONTAINS":
-        return l + " LIKE '%" + value + "%'";
-      default:
-        return visitUnexpectedExpr(strPredicate);
-    }
+    return l + " LIKE '" + value + "%'";
+  }
+
+  protected String visitEndsWith(String l, String r) {
+    String value = r.replaceAll("'", "");
+    return l + " LIKE '%" + value + "'";
+  }
+
+  protected String visitContains(String l, String r) {
+    String value = r.replaceAll("'", "");
+    return l + " LIKE '%" + value + "%'";
   }
 
   private String inputToSQL(Expression input) {
@@ -154,10 +155,6 @@ public class V2ExpressionSQLBuilder {
       default:
         return l + " " + name + " " + r;
     }
-  }
-
-  private int childNum(Expression expr) {
-    return expr.children().length;
   }
 
   protected String visitBinaryArithmetic(String name, String l, String r) {

@@ -20,7 +20,7 @@ package org.apache.spark.sql.connector.expressions.filter;
 import org.apache.spark.annotation.Evolving;
 
 /**
- * A predicate that evaluates to {@code true} if at least one of {@code left} or {@code right}
+ * A predicate that evaluates to {@code true} iff at least one of {@code left} or {@code right}
  * evaluates to {@code true}.
  *
  * @since 3.3.0
