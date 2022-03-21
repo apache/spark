@@ -4307,7 +4307,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
     def _mark_duplicates(
         self,
         subset: Optional[Union[Name, List[Name]]] = None,
-        keep: str = "first",
+        keep: Union[bool, str] = "first",
     ) -> Tuple[SparkDataFrame, str]:
         if subset is None:
             subset_list = self._internal.column_labels
@@ -4350,7 +4350,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
     def duplicated(
         self,
         subset: Optional[Union[Name, List[Name]]] = None,
-        keep: str = "first",
+        keep: Union[bool, str] = "first",
     ) -> "Series":
         """
         Return boolean Series denoting duplicate rows, optionally only considering certain columns.
@@ -9037,7 +9037,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
     def drop_duplicates(
         self,
         subset: Optional[Union[Name, List[Name]]] = None,
-        keep: str = "first",
+        keep: Union[bool, str] = "first",
         inplace: bool = False,
     ) -> Optional["DataFrame"]:
         """
