@@ -84,8 +84,10 @@ class ExecutionPage(parent: SQLTab) extends WebUIPage("execution") with Logging 
 
       val metrics = sqlStore.executionMetrics(executionId)
       val graph = sqlStore.planGraph(executionId)
+      val compileStatsStr = sqlStore.getCompilerStats(executionId).compileStatsString()
 
       summary ++
+        compileStatsDescription(compileStatsStr) ++
         planVisualization(request, metrics, graph) ++
         physicalPlanDescription(executionUIData.physicalPlanDescription) ++
         modifiedConfigs(
@@ -219,6 +221,25 @@ class ExecutionPage(parent: SQLTab) extends WebUIPage("execution") with Logging 
     <br/>
   }
 
+  private def compileStatsDescription(compileStatsStr: String): Seq[Node] = {
+    <div>
+      <span style="cursor: pointer;" onclick="clickCompileStatsDetails();">
+        <span id="compile-stats-details-arrow" class="arrow-closed"></span>
+        <a>Compilation Stats</a>
+      </span>
+    </div>
+      <div id="compile-stats-details" style="display: none;">
+        <pre>{compileStatsStr}</pre>
+      </div>
+      <script>
+        function clickCompileStatsDetails() {{
+        $('#compile-stats-details').toggle();
+        $('#compile-stats-details-arrow').toggleClass('arrow-open').toggleClass('arrow-closed');
+        }}
+      </script>
+        <br/>
+  }
+  
   private def propertyHeader = Seq("Name", "Value")
   private def propertyRow(kv: (String, String)) = <tr><td>{kv._1}</td><td>{kv._2}</td></tr>
 }

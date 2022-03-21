@@ -42,4 +42,14 @@ private[v1] class ApiSqlRootResource extends ApiRequestContext {
       @PathParam("appId") appId: String,
       @PathParam("attemptId") attemptId: String): Class[SQLDiagnosticResource] =
     classOf[SQLDiagnosticResource]
+
+  @Path("applications/{appId}/compiler")
+  def compilerStat(@PathParam("appId") appId: String): Class[SqlCompilerResource] =
+    classOf[SqlCompilerResource]
+
+  @Path("applications/{appId}/{attemptId}/compiler")
+  def compilerStat(
+                    @PathParam("appId") appId: String,
+                    @PathParam("attemptId") attemptId: String): Class[SqlCompilerResource] =
+    classOf[SqlCompilerResource]
 }

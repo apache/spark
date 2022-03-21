@@ -33,6 +33,18 @@ class ExecutionData private[spark] (
     val nodes: Seq[Node],
     val edges: Seq[SparkPlanGraphEdge])
 
+class CompileData private[spark] (
+   val id: Long,
+   val appID: String,
+   val phaseInfo: Seq[Metric], // Time spent per Spark phase
+   val ruleInfo: Seq[Rule])
+
+case class Rule private[spark](
+    ruleName: String,
+    value: String, // duration in ms
+    numInvocations: Long,
+    numEffectiveInvocations: Long)
+
 case class Node private[spark](
     nodeId: Long,
     nodeName: String,

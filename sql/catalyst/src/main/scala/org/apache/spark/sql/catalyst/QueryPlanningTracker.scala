@@ -18,7 +18,9 @@
 package org.apache.spark.sql.catalyst
 
 import scala.collection.JavaConverters._
+import scala.collection.immutable.ListMap
 
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.BoundedPriorityQueue
 
 
@@ -160,4 +162,23 @@ class QueryPlanningTracker {
     }
   }
 
+  def compileStatsString(): String = {
+    val phaseStr = ListMap(phases.toSeq.sortBy(_._1): _*).view map {
+      case (phase, summary) => "Spark Phase: " + phase + "\nTime(ms): " + summary.durationMs
+    } mkString ("", "\n", "\n")
+
+    val ruleStr = topRulesByTime(SQLConf.get.uiRulesShow).view map {
+      case (rule, summary) => "Spark rule: " + rule + "\nTime(ms): " +
+        summary.totalTimeNs/1000000.0 + "\nNumber of Invocations: " + summary.numInvocations +
+        "\nNumber of Effective Invocations: " + summary.numEffectiveInvocations
+    } mkString ("", "\n", "")
+
+    val compileStatStr = s"""
+                            |=== Spark Phase Timing Statistics ===
+                            |$phaseStr
+                            |=== Spark Rule Timing Statistics ===
+                            |$ruleStr
+     """.stripMargin
+    compileStatStr
+  }
 }

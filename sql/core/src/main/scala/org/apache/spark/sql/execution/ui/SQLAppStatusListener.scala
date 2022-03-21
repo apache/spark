@@ -394,6 +394,10 @@ class SQLAppStatusListener(
 
   private def onExecutionEnd(event: SparkListenerSQLExecutionEnd): Unit = {
     val SparkListenerSQLExecutionEnd(executionId, time) = event
+    if (event.qe != null) {
+      val compileStats = CompilerStats(executionId, event.qe.tracker)
+      kvstore.write(compileStats)
+    }
     Option(liveExecutions.get(executionId)).foreach { exec =>
       exec.completionTime = Some(new Date(time))
       update(exec)
@@ -474,6 +478,7 @@ class SQLAppStatusListener(
     toDelete.foreach { e =>
       kvstore.delete(e.getClass(), e.executionId)
       kvstore.delete(classOf[SparkPlanGraphWrapper], e.executionId)
+      kvstore.delete(classOf[CompilerStats], e.executionId)
     }
   }
 
