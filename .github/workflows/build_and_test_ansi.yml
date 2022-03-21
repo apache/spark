@@ -17,7 +17,7 @@
 # under the License.
 #
 
-name: ANSI SQL mode test
+name: "Build and test (ANSI)"
 
 on:
   push:
@@ -25,10 +25,10 @@ on:
       - '**'
 
 jobs:
-  ansi_sql_test:
+  call-build-and-test:
+    name: Call main build
     uses: ./.github/workflows/build_and_test.yml
     if: github.repository == 'apache/spark'
     with:
       ansi_enabled: true
-
 
