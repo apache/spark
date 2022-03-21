@@ -218,7 +218,10 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
   }
 
   // This checks if there is already a DPP filter, as this rule is called just after DPP.
-  def hasDynamicPruningSubquery(left: LogicalPlan, right: LogicalPlan, leftKey: Expression,
+  def hasDynamicPruningSubquery(
+      left: LogicalPlan,
+      right: LogicalPlan,
+      leftKey: Expression,
       rightKey: Expression): Boolean = {
     (left, right) match {
       case (Filter(DynamicPruningSubquery(pruningKey, _, _, _, _, _), plan), _) =>
