@@ -30,7 +30,7 @@ import org.apache.spark.broadcast
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.catalyst.expressions.{Attribute, SortOrder}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, ReturnAnswer}
 import org.apache.spark.sql.catalyst.plans.physical.{Distribution, UnspecifiedDistribution}
 import org.apache.spark.sql.catalyst.rules.{PlanChangeLogger, Rule}
@@ -97,6 +97,13 @@ case class AdaptiveSparkPlanExec(
     AQEUtils.getRequiredDistribution(inputPlan)
   }
 
+  // Make sure AQE does not change the user-specified output ordering
+  @transient private val requiredOrdering: Seq[SortOrder] = if (isSubquery) {
+    Nil
+  } else {
+    AQEUtils.getRequiredOrdering(inputPlan)
+  }
+
   @transient private val costEvaluator =
     conf.getConf(SQLConf.ADAPTIVE_CUSTOM_COST_EVALUATOR_CLASS) match {
       case Some(className) => CostEvaluator.instantiate(className, session.sparkContext.getConf)
@@ -112,7 +119,7 @@ case class AdaptiveSparkPlanExec(
     // `EnsureRequirements` to not optimize out the user-specified repartition-by-col to work
     // around this case.
     val ensureRequirements =
-      EnsureRequirements(requiredDistribution.isDefined, requiredDistribution)
+      EnsureRequirements(requiredDistribution.isDefined, requiredDistribution, requiredOrdering)
     Seq(
       RemoveRedundantProjects,
       ensureRequirements,
@@ -163,7 +170,7 @@ case class AdaptiveSparkPlanExec(
           } else {
             UnspecifiedDistribution
           }
-          if (ValidateRequirements.validate(applied, distribution)) {
+          if (ValidateRequirements.validate(applied, distribution, requiredOrdering)) {
             applied
           } else {
             logDebug(s"Rule ${rule.ruleName} is not applied as it breaks the " +
@@ -206,6 +213,8 @@ case class AdaptiveSparkPlanExec(
   override def conf: SQLConf = context.session.sessionState.conf
 
   override def output: Seq[Attribute] = inputPlan.output
+
+  override def outputOrdering: Seq[SortOrder] = requiredOrdering
 
   override def doCanonicalize(): SparkPlan = inputPlan.canonicalized
 

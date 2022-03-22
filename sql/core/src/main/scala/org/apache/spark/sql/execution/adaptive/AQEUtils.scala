@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.adaptive
 
+import org.apache.spark.sql.catalyst.expressions.SortOrder
 import org.apache.spark.sql.catalyst.plans.physical.{ClusteredDistribution, Distribution, HashPartitioning, UnspecifiedDistribution}
 import org.apache.spark.sql.execution.{CollectMetricsExec, FilterExec, ProjectExec, SortExec, SparkPlan}
 import org.apache.spark.sql.execution.exchange.{REPARTITION_BY_COL, REPARTITION_BY_NUM, ShuffleExchangeExec}
@@ -56,5 +57,25 @@ object AQEUtils {
         case other => Some(other)
       }
     case _ => Some(UnspecifiedDistribution)
+  }
+
+  // Analyze the given plan and calculate the required ordering of this plan w.r.t. the
+  // user-specified sort.
+  def getRequiredOrdering(p: SparkPlan): Seq[SortOrder] = p match {
+    case f: FilterExec => getRequiredOrdering(f.child)
+    case c: CollectMetricsExec => getRequiredOrdering(c.child)
+    // We do not need to care whether the sort is global or not, since the output partitioning
+    // is ensured by requiredDistribution.
+    case s: SortExec => s.outputOrdering
+    case p: ProjectExec =>
+      val requiredOrdering = getRequiredOrdering(p.child)
+      // avoid case `df.sort(a, b).select(c)`
+      if (requiredOrdering.map(_.child).forall(e => p.projectList.exists(_.semanticEquals(e)))) {
+        requiredOrdering
+      } else {
+        Nil
+      }
+
+    case _ => Nil
   }
 }

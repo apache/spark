@@ -40,10 +40,13 @@ import org.apache.spark.sql.execution.joins.{ShuffledHashJoinExec, SortMergeJoin
  *                               repartition shuffles in the plan.
  * @param requiredDistribution The root required distribution we should ensure. This value is used
  *                             in AQE in case we change final stage output partitioning.
+ * @param requiredOrdering The root required ordering we should ensure. This value is used
+ *                             in AQE in case we change final stage output ordering.
  */
 case class EnsureRequirements(
     optimizeOutRepartition: Boolean = true,
-    requiredDistribution: Option[Distribution] = None)
+    requiredDistribution: Option[Distribution] = None,
+    requiredOrdering: Seq[SortOrder] = Nil)
   extends Rule[SparkPlan] {
 
   private def ensureDistributionAndOrdering(
@@ -333,8 +336,16 @@ case class EnsureRequirements(
       val finalPlan = ensureDistributionAndOrdering(
         newPlan :: Nil,
         requiredDistribution.get :: Nil,
-        Seq(Nil),
+        Seq(requiredOrdering),
         shuffleOrigin)
+      assert(finalPlan.size == 1)
+      finalPlan.head
+    } else if (requiredOrdering.nonEmpty) {
+      val finalPlan = ensureDistributionAndOrdering(
+        newPlan :: Nil,
+        Nil,
+        Seq(requiredOrdering),
+        ENSURE_REQUIREMENTS)
       assert(finalPlan.size == 1)
       finalPlan.head
     } else {

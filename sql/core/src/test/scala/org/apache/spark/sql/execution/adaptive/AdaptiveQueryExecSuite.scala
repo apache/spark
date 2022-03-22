@@ -1468,8 +1468,8 @@ class AdaptiveQueryExecSuite
       val (plan2, adaptivePlan2) = runAdaptiveAndVerifyResult(
        "SELECT key FROM (SELECT * FROM testData WHERE value = 'no_match' ORDER BY key)" +
          " WHERE key > rand()")
-      assert(findTopLevelSort(plan2).size == 1)
-      assert(stripAQEPlan(adaptivePlan2).isInstanceOf[LocalTableScanExec])
+      assert(findTopLevelSort(plan2).head.global)
+      assert(!findTopLevelSort(adaptivePlan2).head.global)
     }
   }
 
@@ -2535,13 +2535,13 @@ class AdaptiveQueryExecSuite
         (1 to 4).map(i => TestData(i, i.toString)), 2)
         .toDF("c1", "c2").createOrReplaceTempView("v")
 
-      // remove sort
+      // remove global sort
       val (origin1, adaptive1) = runAdaptiveAndVerifyResult(
         """
           |SELECT * FROM v where c1 = 1 order by c1, c2
           |""".stripMargin)
-      assert(findTopLevelSort(origin1).size == 1)
-      assert(findTopLevelSort(adaptive1).isEmpty)
+      assert(findTopLevelSort(origin1).head.global)
+      assert(!findTopLevelSort(adaptive1).head.global)
 
       // convert group only aggregate to project
       val (origin2, adaptive2) = runAdaptiveAndVerifyResult(
@@ -2573,6 +2573,22 @@ class AdaptiveQueryExecSuite
           |""".stripMargin)
       assert(findTopLevelAggregate(origin5).size == 4)
       assert(findTopLevelAggregate(adaptive5).size == 4)
+    }
+  }
+
+  test("SPARK-38578: Avoid unnecessary sort in FileFormatWriter if user has specified sort") {
+    Seq(
+      ("key", "key, value", false),
+      ("key as x", "key, value", false),
+      ("key", "key", true),
+      ("key, value", "key", true)
+    ).foreach { case (project, sort, required) =>
+      val (origin, adaptive) = runAdaptiveAndVerifyResult(
+        s"""
+           |SELECT $project FROM testdata where key < 0 ORDER BY $sort
+           |""".stripMargin)
+      assert(findTopLevelSort(origin).size == 1)
+      assert(findTopLevelSort(adaptive).nonEmpty == required)
     }
   }
 }

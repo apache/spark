@@ -30,6 +30,14 @@ import org.apache.spark.sql.execution._
  */
 object ValidateRequirements extends Logging {
 
+  def validate(
+      plan: SparkPlan,
+      requiredDistribution: Distribution,
+      requiredOrdering: Seq[SortOrder]): Boolean = {
+    validate(plan, requiredDistribution) &&
+      SortOrder.orderingSatisfies(plan.outputOrdering, requiredOrdering)
+  }
+
   def validate(plan: SparkPlan, requiredDistribution: Distribution): Boolean = {
     validate(plan) && plan.outputPartitioning.satisfies(requiredDistribution)
   }
