@@ -802,10 +802,7 @@ class JDBCSuite extends QueryTest
         === """(("col0" = 'abc') OR ("col0" IS NULL AND 'abc' IS NULL))"""
         + """ AND ("col1" = 'def')""")
     }
-    val e = intercept[IllegalArgumentException] {
-      doCompileFilter(EqualTo("col0.nested", 3))
-    }.getMessage
-    assert(e.contains("Filter push down does not support nested column: col0.nested"))
+    assert(doCompileFilter(EqualTo("col0.nested", 3)).isEmpty)
   }
 
   test("Dialect unregister") {

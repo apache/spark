@@ -22,6 +22,7 @@ import java.time.{Instant, LocalDate}
 import java.util
 
 import scala.collection.mutable.ArrayBuilder
+import scala.util.control.NonFatal
 
 import org.apache.commons.lang3.StringUtils
 
@@ -244,7 +245,13 @@ abstract class JdbcDialect extends Serializable with Logging{
   @Since("3.3.0")
   def compileExpression(expr: Expression): Option[String] = {
     val jdbcSQLBuilder = new JDBCSQLBuilder()
-    Some(jdbcSQLBuilder.build(expr))
+    try {
+      Some(jdbcSQLBuilder.build(expr))
+    } catch {
+      case NonFatal(e) =>
+        logWarning("Error occurs while compiling V2 expression", e)
+        None
+    }
   }
 
   /**
