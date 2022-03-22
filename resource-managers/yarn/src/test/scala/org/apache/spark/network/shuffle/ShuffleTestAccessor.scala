@@ -16,8 +16,7 @@
  */
 package org.apache.spark.network.shuffle
 
-import java.io.{File, RandomAccessFile}
-import java.nio.channels.FileChannel
+import java.io.File
 import java.util.concurrent.ConcurrentMap
 
 import org.apache.hadoop.yarn.api.records.ApplicationId
