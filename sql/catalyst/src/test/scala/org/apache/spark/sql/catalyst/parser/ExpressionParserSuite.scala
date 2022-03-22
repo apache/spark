@@ -284,7 +284,7 @@ class ExpressionParserSuite extends AnalysisTest {
     assertEqual("foo(distinct a, b)", 'foo.distinctFunction('a, 'b))
     assertEqual("grouping(distinct a, b)", 'grouping.distinctFunction('a, 'b))
     assertEqual("`select`(all a, b)", 'select.function('a, 'b))
-    intercept("foo(a x)", "extraneous input 'x'")
+    intercept("foo(a x)", "Syntax error at or near 'x': extra input 'x'")
   }
 
   private def lv(s: Symbol) = UnresolvedNamedLambdaVariable(Seq(s.name))
@@ -654,7 +654,7 @@ class ExpressionParserSuite extends AnalysisTest {
           // Note: Single quote follows 1.6 parsing behavior
           // when ESCAPED_STRING_LITERALS is enabled.
           val e = intercept[ParseException](parser.parseExpression("'\''"))
-          assert(e.message.contains("extraneous input '''"))
+          assert(e.message.contains("Syntax error at or near ''': extra input '''"))
 
           // The unescape special characters (e.g., "\\t") for 2.0+ don't work
           // when ESCAPED_STRING_LITERALS is enabled. They are parsed literally.
@@ -866,7 +866,7 @@ class ExpressionParserSuite extends AnalysisTest {
   test("composed expressions") {
     assertEqual("1 + r.r As q", (Literal(1) + UnresolvedAttribute("r.r")).as("q"))
     assertEqual("1 - f('o', o(bar))", Literal(1) - 'f.function("o", 'o.function('bar)))
-    intercept("1 - f('o', o(bar)) hello * world", Some("PARSE_INPUT_MISMATCHED"),
+    intercept("1 - f('o', o(bar)) hello * world", Some("PARSE_SYNTAX_ERROR"),
       "Syntax error at or near '*'")
   }
 
@@ -886,7 +886,7 @@ class ExpressionParserSuite extends AnalysisTest {
   test("SPARK-17832 function identifier contains backtick") {
     val complexName = FunctionIdentifier("`ba`r", Some("`fo`o"))
     assertEqual(complexName.quotedString, UnresolvedAttribute(Seq("`fo`o", "`ba`r")))
-    intercept(complexName.unquotedString, Some("PARSE_INPUT_MISMATCHED"),
+    intercept(complexName.unquotedString, Some("PARSE_SYNTAX_ERROR"),
       "Syntax error at or near")
     // Function identifier contains continuous backticks should be treated correctly.
     val complexName2 = FunctionIdentifier("ba``r", Some("fo``o"))
