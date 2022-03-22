@@ -62,6 +62,8 @@ object AQEUtils {
   // Analyze the given plan and calculate the required ordering of this plan w.r.t. the
   // user-specified sort.
   def getRequiredOrdering(p: SparkPlan): Seq[SortOrder] = p match {
+    // User-specified repartition is only effective when it's the root node, or under
+    // Project/Filter/CollectMetrics.
     case f: FilterExec => getRequiredOrdering(f.child)
     case c: CollectMetricsExec => getRequiredOrdering(c.child)
     // We do not need to care whether the sort is global or not, since the output partitioning
