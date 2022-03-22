@@ -856,7 +856,7 @@ object SQLConf {
         "and prune partition filters before pushing to parquet at runtime. " +
         s"This configuration only has an effect when '${PARQUET_FILTER_PUSHDOWN_ENABLED.key}' " +
         "is enabled.")
-      .version("3.3.0")
+      .version("3.4.0")
       .booleanConf
       .createWithDefault(false)
 
