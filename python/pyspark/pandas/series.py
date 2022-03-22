@@ -1647,7 +1647,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
     tolist = to_list
 
-    def duplicated(self, keep: str = "first") -> "Series":
+    def duplicated(self, keep: Union[bool, str] = "first") -> "Series":
         """
         Indicate duplicate Series values.
 
