@@ -24,7 +24,6 @@ import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.sql.{DataFrame, ExplainSuiteHelper, QueryTest, Row}
 import org.apache.spark.sql.catalyst.analysis.CannotReplaceMissingTableException
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, Sort}
-import org.apache.spark.sql.connector.expressions.{FieldReference, NullOrdering, SortDirection, SortValue}
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2ScanRelation, V1ScanWrapper}
 import org.apache.spark.sql.execution.datasources.v2.jdbc.JDBCTableCatalog
 import org.apache.spark.sql.functions.{avg, count, count_distinct, lit, not, sum, udf, when}
@@ -116,7 +115,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
   test("TABLESAMPLE (integer_expression ROWS) is the same as LIMIT") {
     val df = sql("SELECT NAME FROM h2.test.employee TABLESAMPLE (3 ROWS)")
     checkSchemaNames(df, Seq("NAME"))
-    checkPushedLimit(df, Some(3))
+    checkPushedInfo(df, "PushedFilters: [], PushedLimit: LIMIT 3, ")
     checkAnswer(df, Seq(Row("amy"), Row("alex"), Row("cathy")))
   }
 
@@ -130,7 +129,8 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
   test("simple scan with LIMIT") {
     val df1 = spark.read.table("h2.test.employee")
       .where($"dept" === 1).limit(1)
-    checkPushedLimit(df1, Some(1))
+    checkPushedInfo(df1,
+      "PushedFilters: [IsNotNull(DEPT), EqualTo(DEPT,1)], PushedLimit: LIMIT 1, ")
     checkAnswer(df1, Seq(Row(1, "amy", 10000.00, 1000.0, true)))
 
     val df2 = spark.read
@@ -142,18 +142,22 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
       .filter($"dept" > 1)
       .limit(1)
     checkPushedLimit(df2, Some(1))
+    checkPushedInfo(df2,
+      "PushedFilters: [IsNotNull(DEPT), GreaterThan(DEPT,1)], PushedLimit: LIMIT 1, ")
     checkAnswer(df2, Seq(Row(2, "alex", 12000.00, 1200.0, false)))
 
     val df3 = sql("SELECT name FROM h2.test.employee WHERE dept > 1 LIMIT 1")
     checkSchemaNames(df3, Seq("NAME"))
-    checkPushedLimit(df3, Some(1))
+    checkPushedInfo(df3,
+      "PushedFilters: [IsNotNull(DEPT), GreaterThan(DEPT,1)], PushedLimit: LIMIT 1, ")
     checkAnswer(df3, Seq(Row("alex")))
 
     val df4 = spark.read
       .table("h2.test.employee")
       .groupBy("DEPT").sum("SALARY")
       .limit(1)
-    checkPushedLimit(df4, None)
+    checkPushedInfo(df4,
+      "PushedAggregates: [SUM(SALARY)], PushedFilters: [], PushedGroupByColumns: [DEPT], ")
     checkAnswer(df4, Seq(Row(1, 19000.00)))
 
     val name = udf { (x: String) => x.matches("cat|dav|amy") }
@@ -164,24 +168,18 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
       .filter(name($"shortName"))
       .limit(1)
     // LIMIT is pushed down only if all the filters are pushed down
-    checkPushedLimit(df5, None)
+    checkPushedInfo(df5, "PushedFilters: [], ")
     checkAnswer(df5, Seq(Row(10000.00, 1000.0, "amy")))
   }
 
-  private def checkPushedLimit(df: DataFrame, limit: Option[Int] = None,
-      sortValues: Seq[SortValue] = Nil): Unit = {
-    df.queryExecution.optimizedPlan.collect {
-      case relation: DataSourceV2ScanRelation => relation.scan match {
-        case v1: V1ScanWrapper =>
-          assert(v1.pushedDownOperators.limit === limit)
-          assert(v1.pushedDownOperators.sortValues === sortValues)
-      }
+  private def checkSortRemoved(df: DataFrame, removed: Boolean = true): Unit = {
+    val sorts = df.queryExecution.optimizedPlan.collect {
+      case s: Sort => s
     }
-    if (sortValues.nonEmpty) {
-      val sorts = df.queryExecution.optimizedPlan.collect {
-        case s: Sort => s
-      }
+    if (removed) {
       assert(sorts.isEmpty)
+    } else {
+      assert(sorts.nonEmpty)
     }
   }
 
@@ -197,14 +195,14 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
       .table("h2.test.employee")
       .sort("salary")
       .limit(1)
-    checkPushedLimit(df1, Some(1), createSortValues())
+    checkSortRemoved(df1)
     checkPushedInfo(df1,
       "PushedFilters: [], PushedTopN: ORDER BY [salary ASC NULLS FIRST] LIMIT 1, ")
     checkAnswer(df1, Seq(Row(1, "cathy", 9000.00, 1200.0, false)))
 
     val df2 = spark.read.table("h2.test.employee")
       .where($"dept" === 1).orderBy($"salary").limit(1)
-    checkPushedLimit(df2, Some(1), createSortValues())
+    checkSortRemoved(df2)
     checkPushedInfo(df2, "PushedFilters: [IsNotNull(DEPT), EqualTo(DEPT,1)], " +
       "PushedTopN: ORDER BY [salary ASC NULLS FIRST] LIMIT 1, ")
     checkAnswer(df2, Seq(Row(1, "cathy", 9000.00, 1200.0, false)))
@@ -218,8 +216,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
       .filter($"dept" > 1)
       .orderBy($"salary".desc)
       .limit(1)
-    checkPushedLimit(
-      df3, Some(1), createSortValues(SortDirection.DESCENDING, NullOrdering.NULLS_LAST))
+    checkSortRemoved(df3)
     checkPushedInfo(df3, "PushedFilters: [IsNotNull(DEPT), GreaterThan(DEPT,1)], " +
       "PushedTopN: ORDER BY [salary DESC NULLS LAST] LIMIT 1, ")
     checkAnswer(df3, Seq(Row(2, "alex", 12000.00, 1200.0, false)))
@@ -227,14 +224,14 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
     val df4 =
       sql("SELECT name FROM h2.test.employee WHERE dept > 1 ORDER BY salary NULLS LAST LIMIT 1")
     checkSchemaNames(df4, Seq("NAME"))
-    checkPushedLimit(df4, Some(1), createSortValues(nullOrdering = NullOrdering.NULLS_LAST))
+    checkSortRemoved(df4)
     checkPushedInfo(df4, "PushedFilters: [IsNotNull(DEPT), GreaterThan(DEPT,1)], " +
       "PushedTopN: ORDER BY [salary ASC NULLS LAST] LIMIT 1, ")
     checkAnswer(df4, Seq(Row("david")))
 
     val df5 = spark.read.table("h2.test.employee")
       .where($"dept" === 1).orderBy($"salary")
-    checkPushedLimit(df5, None)
+    checkSortRemoved(df5, false)
     checkPushedInfo(df5, "PushedFilters: [IsNotNull(DEPT), EqualTo(DEPT,1)], ")
     checkAnswer(df5,
       Seq(Row(1, "cathy", 9000.00, 1200.0, false), Row(1, "amy", 10000.00, 1000.0, true)))
@@ -244,7 +241,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
       .groupBy("DEPT").sum("SALARY")
       .orderBy("DEPT")
       .limit(1)
-    checkPushedLimit(df6)
+    checkSortRemoved(df6, false)
     checkPushedInfo(df6, "PushedAggregates: [SUM(SALARY)]," +
       " PushedFilters: [], PushedGroupByColumns: [DEPT], ")
     checkAnswer(df6, Seq(Row(1, 19000.00)))
@@ -258,7 +255,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
       .sort($"SALARY".desc)
       .limit(1)
     // LIMIT is pushed down only if all the filters are pushed down
-    checkPushedLimit(df7)
+    checkSortRemoved(df7, false)
     checkPushedInfo(df7, "PushedFilters: [], ")
     checkAnswer(df7, Seq(Row(10000.00, 1000.0, "amy")))
 
@@ -266,15 +263,9 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
       .table("h2.test.employee")
       .sort(sub($"NAME"))
       .limit(1)
-    checkPushedLimit(df8)
+    checkSortRemoved(df8, false)
     checkPushedInfo(df8, "PushedFilters: [], ")
     checkAnswer(df8, Seq(Row(2, "alex", 12000.00, 1200.0, false)))
-  }
-
-  private def createSortValues(
-      sortDirection: SortDirection = SortDirection.ASCENDING,
-      nullOrdering: NullOrdering = NullOrdering.NULLS_FIRST): Seq[SortValue] = {
-    Seq(SortValue(FieldReference("salary"), sortDirection, nullOrdering))
   }
 
   test("scan with filter push-down") {
