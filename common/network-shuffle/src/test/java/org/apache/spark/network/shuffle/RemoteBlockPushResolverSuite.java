@@ -673,7 +673,7 @@ public class RemoteBlockPushResolverSuite {
     validateChunks(TEST_APP, 0, 0, 0, blockMeta, new int[] {4, 5}, new int[][] {{0}, {1}});
   }
 
-  @Test(expected = RuntimeException.class)
+  @Test(expected = IllegalStateException.class)
   public void testIOExceptionsExceededThreshold() throws IOException {
     RemoteBlockPushResolver.PushBlockStreamCallback callback =
       (RemoteBlockPushResolver.PushBlockStreamCallback) pushResolver.receiveBlockDataAsStream(
@@ -708,7 +708,7 @@ public class RemoteBlockPushResolverSuite {
     }
   }
 
-  @Test(expected = RuntimeException.class)
+  @Test(expected = IllegalStateException.class)
   public void testIOExceptionsDuringMetaUpdateIncreasesExceptionCount() throws IOException {
     useTestFiles(true, false);
     RemoteBlockPushResolver.PushBlockStreamCallback callback =
@@ -743,7 +743,7 @@ public class RemoteBlockPushResolverSuite {
     }
   }
 
-  @Test(expected = RuntimeException.class)
+  @Test(expected = IllegalStateException.class)
   public void testRequestForAbortedShufflePartitionThrowsException() {
     try {
       testIOExceptionsDuringMetaUpdateIncreasesExceptionCount();
@@ -760,7 +760,7 @@ public class RemoteBlockPushResolverSuite {
     }
   }
 
-  @Test(expected = RuntimeException.class)
+  @Test(expected = IllegalStateException.class)
   public void testPendingBlockIsAbortedImmediately() throws IOException {
     useTestFiles(true, false);
     RemoteBlockPushResolver.PushBlockStreamCallback callback =
@@ -793,7 +793,7 @@ public class RemoteBlockPushResolverSuite {
     }
   }
 
-  @Test
+  @Test(expected = IllegalStateException.class)
   public void testWritingPendingBufsIsAbortedImmediatelyDuringComplete() throws IOException {
     useTestFiles(true, false);
     RemoteBlockPushResolver.PushBlockStreamCallback callback =
@@ -831,10 +831,13 @@ public class RemoteBlockPushResolverSuite {
     // Restore index file so that any further writes to it are successful and any exceptions are
     // due to IOExceptions exceeding threshold.
     testIndexFile.restore();
-    RuntimeException re =
-      assertThrows(RuntimeException.class, () -> callback.onComplete(callback.getID()));
-    assertEquals("IOExceptions exceeded the threshold when merging shufflePush_0_0_0_0",
-      re.getMessage());
+    try {
+      callback.onComplete(callback.getID());
+    } catch (Throwable t) {
+      assertEquals("IOExceptions exceeded the threshold when merging shufflePush_0_0_0_0",
+        t.getMessage());
+      throw t;
+    }
   }
 
   @Test
