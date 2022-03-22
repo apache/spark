@@ -1369,14 +1369,14 @@ class DDLParserSuite extends AnalysisTest {
     parseCompare("DELETE FROM testcat.ns1.ns2.tbl",
       DeleteFromTable(
         UnresolvedRelation(Seq("testcat", "ns1", "ns2", "tbl")),
-        None))
+        Literal.TrueLiteral))
   }
 
   test("delete from table: with alias and where clause") {
     parseCompare("DELETE FROM testcat.ns1.ns2.tbl AS t WHERE t.a = 2",
       DeleteFromTable(
         SubqueryAlias("t", UnresolvedRelation(Seq("testcat", "ns1", "ns2", "tbl"))),
-        Some(EqualTo(UnresolvedAttribute("t.a"), Literal(2)))))
+        EqualTo(UnresolvedAttribute("t.a"), Literal(2))))
   }
 
   test("delete from table: columns aliases is not allowed") {
