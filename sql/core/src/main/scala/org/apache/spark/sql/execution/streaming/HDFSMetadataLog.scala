@@ -51,6 +51,10 @@ class HDFSMetadataLog[T <: AnyRef : ClassTag](sparkSession: SparkSession, path: 
   /** Needed to serialize type T into JSON when using Jackson */
   private implicit val manifest = Manifest.classType[T](implicitly[ClassTag[T]].runtimeClass)
 
+  private val hdfsMetadataLogFsRetries = sparkSession.sessionState.conf.hdfsMetadataLogFsRetries
+  private val hdfsMetadataLogFsRetrtWaittime =
+    sparkSession.sessionState.conf.hdfsMetadataLogFsRetryWaittime
+
   // Avoid serializing generic sequences, see SPARK-17372
   require(implicitly[ClassTag[T]].runtimeClass != classOf[Seq[_]],
     "Should not create a log with type Seq, use Arrays instead - see SPARK-17372")
@@ -138,7 +142,9 @@ class HDFSMetadataLog[T <: AnyRef : ClassTag](sparkSession: SparkSession, path: 
   def applyFnToBatchByStream[RET](batchId: Long)(fn: InputStream => RET): RET = {
     val batchMetadataFile = batchIdToPath(batchId)
     if (fileManager.exists(batchMetadataFile)) {
-      val input = fileManager.open(batchMetadataFile)
+      val input = CheckpointFileManager.open(fileManager, batchMetadataFile,
+        hdfsMetadataLogFsRetrtWaittime,
+        hdfsMetadataLogFsRetries)
       try {
         fn(input)
       } catch {

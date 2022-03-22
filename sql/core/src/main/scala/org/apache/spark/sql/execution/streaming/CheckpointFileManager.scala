@@ -95,6 +95,39 @@ trait CheckpointFileManager {
 object CheckpointFileManager extends Logging {
 
   /**
+   * Open a file for reading, or throw exception if it does not exist. Allowing specified
+   * retries if there is an exception.
+   *
+   * @param path Path to open
+   * @param retryWaitTimeMs The interval between consequent retries.
+   * @param maxRetries The maximum number of attempts to be made.
+   */
+  def open(
+      fileManager: CheckpointFileManager,
+      path: Path,
+      retryWaitTimeMs: Long,
+      maxRetries: Int): FSDataInputStream = {
+    var retryCount = 1
+    var waitTimeInterval = retryWaitTimeMs
+    var stream: FSDataInputStream = null
+    while (stream == null && retryCount <= maxRetries) {
+      try {
+        stream = fileManager.open(path)
+      } catch {
+        case NonFatal(e) if retryCount < maxRetries =>
+          logWarning(s"Exception happened during opening file ${path.toString}: ${e.getMessage}\n" +
+            s"attempt: $retryCount, max retries: $maxRetries, waiting $waitTimeInterval ms..")
+          Thread.sleep(waitTimeInterval)
+          waitTimeInterval *= 2  // if you have waited, then double wait time for next round
+          retryCount += 1
+        case e: Throwable =>
+          throw e
+      }
+    }
+    stream
+  }
+
+  /**
    * Additional methods in CheckpointFileManager implementations that allows
    * [[RenameBasedFSDataOutputStream]] get atomicity by write-to-temp-file-and-rename
    */

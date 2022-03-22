@@ -1658,6 +1658,22 @@ object SQLConf {
     .intConf
     .createWithDefault(2)
 
+  val STREAMING_HDFS_METADATALOG_FS_NUM_RETRIES =
+    buildConf("spark.sql.streaming.hdfsMetadataLog.fsNumRetries")
+      .internal()
+      .doc("")
+      .version("3.4.0")
+      .intConf
+      .createWithDefault(3)
+
+  val STREAMING_HDFS_METADATALOG_FS_RETRY_WAITTIME =
+    buildConf("spark.sql.streaming.hdfsMetadataLog.fsRetryWaitTime")
+      .internal()
+      .doc("")
+      .version("3.4.0")
+      .timeConf(TimeUnit.MILLISECONDS)
+      .createWithDefault(100)
+
   val STREAMING_MAINTENANCE_INTERVAL =
     buildConf("spark.sql.streaming.stateStore.maintenanceInterval")
       .internal()
@@ -3854,6 +3870,10 @@ class SQLConf extends Serializable with Logging {
   def minBatchesToRetain: Int = getConf(MIN_BATCHES_TO_RETAIN)
 
   def maxBatchesToRetainInMemory: Int = getConf(MAX_BATCHES_TO_RETAIN_IN_MEMORY)
+
+  def hdfsMetadataLogFsRetries: Int = getConf(STREAMING_HDFS_METADATALOG_FS_NUM_RETRIES)
+
+  def hdfsMetadataLogFsRetryWaittime: Long = getConf(STREAMING_HDFS_METADATALOG_FS_RETRY_WAITTIME)
 
   def streamingMaintenanceInterval: Long = getConf(STREAMING_MAINTENANCE_INTERVAL)
 
