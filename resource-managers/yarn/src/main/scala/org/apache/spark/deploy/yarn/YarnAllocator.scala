@@ -399,7 +399,9 @@ private[yarn] class YarnAllocator(
     val allocatedContainers = allocateResponse.getAllocatedContainers()
     allocatorNodeHealthTracker.setNumClusterNodes(allocateResponse.getNumClusterNodes)
 
-    decommissionNodes(allocateResponse)
+    if (sparkConf.get(YARN_EXECUTOR_DECOMMISSION_ENABLED)) {
+      handleNodesInDecommissioningState(allocateResponse)
+    }
 
     if (allocatedContainers.size > 0) {
       logDebug(("Allocated containers: %d. Current executor count: %d. " +
@@ -422,29 +424,16 @@ private[yarn] class YarnAllocator(
     }
   }
 
-  private def decommissionNodes(allocateResponse: AllocateResponse): Unit = {
-    if (sparkConf.get(YARN_EXECUTOR_DECOMMISSION_ENABLED)) {
-      try {
-        allocateResponse.getUpdatedNodes.asScala.filter(shouldDecommissionNode).
-          foreach(node => driverRef.send(DecommissionExecutorsOnHost(getHostAddress(node))))
-      } catch {
-        case e: Exception => logError("Node decommissioning failed", e)
-      }
+  private def handleNodesInDecommissioningState(allocateResponse: AllocateResponse): Unit = {
+    try {
+      allocateResponse.getUpdatedNodes.asScala.filter(_.getNodeState == NodeState.DECOMMISSIONING).
+        foreach(node => driverRef.send(DecommissionExecutorsOnHost(getHostAddress(node))))
+    } catch {
+      case e: Exception => logError("Node decommissioning failed", e)
     }
   }
 
-  private def shouldDecommissionNode(nodeReport: NodeReport): Boolean = {
-    nodeReport.getNodeState match {
-      case NodeState.DECOMMISSIONING =>
-        true
-      case _ =>
-        false
-    }
-  }
-
-  private def getHostAddress(nodeReport: NodeReport): String = {
-    new URI(s"http://${nodeReport.getHttpAddress}").getHost
-  }
+  private def getHostAddress(nodeReport: NodeReport): String = nodeReport.getNodeId.getHost
 
   /**
    * Update the set of container requests that we will sync with the RM based on the number of

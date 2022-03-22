@@ -68,6 +68,7 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
   sparkConf.set(DRIVER_PORT, 4040)
   sparkConf.set(SPARK_JARS, Seq("notarealjar.jar"))
   sparkConf.set("spark.yarn.launchContainers", "false")
+  sparkConf.set(YARN_EXECUTOR_DECOMMISSION_ENABLED.key, "true")
 
   val appAttemptId = ApplicationAttemptId.newInstance(ApplicationId.newInstance(0, 0), 0)
 
@@ -716,7 +717,6 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
   }
 
   test("Test YARN container decommissioning") {
-    sparkConf.set(YARN_EXECUTOR_DECOMMISSION_ENABLED.key, "true")
 
     val rmClient: AMRMClient[ContainerRequest] = AMRMClient.createAMRMClient()
     val rmClientSpy = spy(rmClient)
