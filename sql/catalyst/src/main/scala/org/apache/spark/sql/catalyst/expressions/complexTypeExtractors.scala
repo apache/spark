@@ -146,6 +146,8 @@ case class GetStructField(child: Expression, ordinal: Int, name: Option[String] 
 
   override protected def withNewChildInternal(newChild: Expression): GetStructField =
     copy(child = newChild)
+
+  def metadata: Metadata = childSchema(ordinal).metadata
 }
 
 /**

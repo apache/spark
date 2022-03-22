@@ -119,7 +119,7 @@
     <exec-maven-plugin.version>1.6.0</exec-maven-plugin.version>
     <sbt.project.name>spark</sbt.project.name>
     <slf4j.version>1.7.32</slf4j.version>
-    <log4j.version>2.17.1</log4j.version>
+    <log4j.version>2.17.2</log4j.version>
     <!-- make sure to update IsolatedClientLoader whenever this version is changed -->
     <hadoop.version>3.3.2</hadoop.version>
     <protobuf.version>2.5.0</protobuf.version>
@@ -779,7 +779,7 @@
       <dependency>
         <groupId>com.github.luben</groupId>
         <artifactId>zstd-jni</artifactId>
-        <version>1.5.2-1</version>
+        <version>1.5.2-2</version>
       </dependency>
       <dependency>
         <groupId>com.clearspring.analytics</groupId>
@@ -812,7 +812,7 @@
       <dependency>
         <groupId>io.netty</groupId>
         <artifactId>netty-all</artifactId>
-        <version>4.1.74.Final</version>
+        <version>4.1.75.Final</version>
         <exclusions>
           <exclusion>
             <groupId>io.netty</groupId>
@@ -887,6 +887,16 @@
             <artifactId>netty-transport-udt</artifactId>
           </exclusion>
         </exclusions>
+      </dependency>
+      <!-- SPARK-38541: Add the explicit dependency on `netty-tcnative-classes` because the dependency on
+           `netty-tcnative-classes` is changed to `Optional` in [netty](https://github.com/netty/netty/pull/12146).
+           `netty-tcnative-classes` module is mainly used by SSL package in `netty-handler`.
+           We need to ensure that `netty-tcnative-classes` uses the corresponding version when Netty upgrade.
+      -->
+      <dependency>
+        <groupId>io.netty</groupId>
+        <artifactId>netty-tcnative-classes</artifactId>
+        <version>2.0.50.Final</version>
       </dependency>
       <dependency>
         <groupId>org.apache.derby</groupId>

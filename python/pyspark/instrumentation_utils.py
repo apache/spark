@@ -21,7 +21,6 @@ import inspect
 import threading
 import importlib
 import time
-from contextlib import AbstractContextManager
 from types import ModuleType
 from typing import Tuple, Union, List, Callable, Any, Type
 
@@ -29,24 +28,6 @@ from typing import Tuple, Union, List, Callable, Any, Type
 __all__: List[str] = []
 
 _local = threading.local()
-
-
-class _WrappedAbstractContextManager(AbstractContextManager):
-    def __init__(
-        self, acm: AbstractContextManager, class_name: str, function_name: str, logger: Any
-    ):
-        self._enter_func = _wrap_function(
-            class_name, "{}.__enter__".format(function_name), acm.__enter__, logger
-        )
-        self._exit_func = _wrap_function(
-            class_name, "{}.__exit__".format(function_name), acm.__exit__, logger
-        )
-
-    def __enter__(self):  # type: ignore[no-untyped-def]
-        return self._enter_func()
-
-    def __exit__(self, exc_type, exc_val, exc_tb):  # type: ignore[no-untyped-def]
-        return self._exit_func(exc_type, exc_val, exc_tb)
 
 
 def _wrap_function(class_name: str, function_name: str, func: Callable, logger: Any) -> Callable:
@@ -63,17 +44,6 @@ def _wrap_function(class_name: str, function_name: str, func: Callable, logger: 
             start = time.perf_counter()
             try:
                 res = func(*args, **kwargs)
-                if isinstance(res, AbstractContextManager):
-                    # Wrap AbstractContextManager's subclasses returned by @contextmanager decorator
-                    # function so that wrapped function calls inside __enter__ and __exit__
-                    # are not recorded by usage logger.
-                    #
-                    # The reason to add a wrapped class after function calls instead of
-                    # wrapping __enter__ and __exit__ methods of _GeneratorContextManager class is
-                    # because usage logging should be disabled for functions with @contextmanager
-                    # decorator in PySpark only.
-                    res = _WrappedAbstractContextManager(res, class_name, function_name, logger)
-
                 logger.log_success(
                     class_name, function_name, time.perf_counter() - start, signature
                 )
