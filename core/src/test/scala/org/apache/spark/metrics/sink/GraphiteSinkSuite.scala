@@ -23,7 +23,7 @@ import scala.collection.JavaConverters._
 
 import com.codahale.metrics._
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkException, SparkFunSuite}
 
 class GraphiteSinkSuite extends SparkFunSuite {
 
@@ -78,5 +78,43 @@ class GraphiteSinkSuite extends SparkFunSuite {
 
     assert(metricKeys.equals(filteredMetricKeys),
       "Should contain only metrics matches regex filter")
+  }
+
+  test("GraphiteSink without host") {
+    val props = new Properties
+    props.put("port", "54321")
+    val registry = new MetricRegistry
+
+    val e = intercept[SparkException] {
+      new GraphiteSink(props, registry)
+    }
+    assert(e.getErrorClass === "GRAPHITE_SINK_PROPERTY_MISSING")
+    assert(e.getMessage === "Graphite sink requires 'host' property.")
+  }
+
+  test("GraphiteSink without port") {
+    val props = new Properties
+    props.put("host", "127.0.0.1")
+    val registry = new MetricRegistry
+
+    val e = intercept[SparkException] {
+      new GraphiteSink(props, registry)
+    }
+    assert(e.getErrorClass === "GRAPHITE_SINK_PROPERTY_MISSING")
+    assert(e.getMessage === "Graphite sink requires 'port' property.")
+  }
+
+  test("GraphiteSink with invalid protocol") {
+    val props = new Properties
+    props.put("host", "127.0.0.1")
+    props.put("port", "54321")
+    props.put("protocol", "http")
+    val registry = new MetricRegistry
+
+    val e = intercept[SparkException] {
+      new GraphiteSink(props, registry)
+    }
+    assert(e.getErrorClass === "GRAPHITE_SINK_INVALID_PROTOCOL")
+    assert(e.getMessage === "Invalid Graphite protocol: http")
   }
 }

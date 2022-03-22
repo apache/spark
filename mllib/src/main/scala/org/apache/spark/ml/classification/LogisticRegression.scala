@@ -1334,7 +1334,7 @@ object LogisticRegressionModel extends MLReadable[LogisticRegressionModel] {
       val dataPath = new Path(path, "data").toString
       val data = sparkSession.read.format("parquet").load(dataPath)
 
-      val model = if (major.toInt < 2 || (major.toInt == 2 && minor.toInt == 0)) {
+      val model = if (major < 2 || (major == 2 && minor == 0)) {
         // 2.0 and before
         val Row(numClasses: Int, numFeatures: Int, intercept: Double, coefficients: Vector) =
           MLUtils.convertVectorColumnsToML(data, "coefficients")

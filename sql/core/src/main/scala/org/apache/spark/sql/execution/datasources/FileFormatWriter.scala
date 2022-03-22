@@ -328,7 +328,6 @@ object FileFormatWriter extends Logging {
     try {
       Utils.tryWithSafeFinallyAndFailureCallbacks(block = {
         // Execute the task to write rows out and commit the task.
-        val taskAttemptID = taskAttemptContext.getTaskAttemptID
         dataWriter.writeWithIterator(iterator)
         dataWriter.commit()
       })(catchBlock = {

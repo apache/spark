@@ -247,6 +247,16 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product with Tre
   }
 
   /**
+   * Test whether there is [[TreeNode]] satisfies the conditions specified in `f`.
+   * The condition is recursively applied to this node and all of its children (pre-order).
+   */
+  def exists(f: BaseType => Boolean): Boolean = if (f(this)) {
+    true
+  } else {
+    children.exists(_.exists(f))
+  }
+
+  /**
    * Runs the given function on this node and then recursively on [[children]].
    * @param f the function to be applied to each node in the tree.
    */

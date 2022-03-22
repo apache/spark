@@ -83,7 +83,7 @@ class DataFrameSessionWindowingSuite extends QueryTest with SharedSparkSession
     // key "b" => (19:39:27 ~ 19:39:37)
 
     checkAnswer(
-      df.groupBy(session_window($"time", "10 seconds"), 'id)
+      df.groupBy(session_window($"time", "10 seconds"), Symbol("id"))
         .agg(count("*").as("counts"), sum("value").as("sum"))
         .orderBy($"session_window.start".asc)
         .selectExpr("CAST(session_window.start AS STRING)", "CAST(session_window.end AS STRING)",
@@ -113,7 +113,7 @@ class DataFrameSessionWindowingSuite extends QueryTest with SharedSparkSession
     // key "b" => (19:39:27 ~ 19:39:37)
 
     checkAnswer(
-      df.groupBy(session_window($"time", "10 seconds"), 'id)
+      df.groupBy(session_window($"time", "10 seconds"), Symbol("id"))
         .agg(count("*").as("counts"), sum_distinct(col("value")).as("sum"))
         .orderBy($"session_window.start".asc)
         .selectExpr("CAST(session_window.start AS STRING)", "CAST(session_window.end AS STRING)",
@@ -142,7 +142,7 @@ class DataFrameSessionWindowingSuite extends QueryTest with SharedSparkSession
     // key "b" => (19:39:27 ~ 19:39:37)
 
     checkAnswer(
-      df.groupBy(session_window($"time", "10 seconds"), 'id)
+      df.groupBy(session_window($"time", "10 seconds"), Symbol("id"))
         .agg(sum_distinct(col("value")).as("sum"), sum_distinct(col("value2")).as("sum2"))
         .orderBy($"session_window.start".asc)
         .selectExpr("CAST(session_window.start AS STRING)", "CAST(session_window.end AS STRING)",
@@ -171,7 +171,7 @@ class DataFrameSessionWindowingSuite extends QueryTest with SharedSparkSession
     // b => (19:39:27 ~ 19:39:37), (19:39:39 ~ 19:39:55)
 
     checkAnswer(
-      df.groupBy(session_window($"time", "10 seconds"), 'id)
+      df.groupBy(session_window($"time", "10 seconds"), Symbol("id"))
         .agg(count("*").as("counts"), sum("value").as("sum"))
         .orderBy($"session_window.start".asc)
         .selectExpr("CAST(session_window.start AS STRING)", "CAST(session_window.end AS STRING)",
@@ -378,6 +378,34 @@ class DataFrameSessionWindowingSuite extends QueryTest with SharedSparkSession
           .select($"session_window.start".cast("string"), $"session_window.end".cast("string"),
             $"counts"),
         Seq(Row("2016-03-27 19:39:27", "2016-03-27 19:39:32", 1))
+      )
+    }
+  }
+
+  test("SPARK-36465: filter out events with invalid gap duration.") {
+    val df = Seq(
+      ("2016-03-27 19:39:30", 1, "a")).toDF("time", "value", "id")
+
+    checkAnswer(
+      df.groupBy(session_window($"time", "x sec"))
+        .agg(count("*").as("counts"))
+        .orderBy($"session_window.start".asc)
+        .select($"session_window.start".cast("string"), $"session_window.end".cast("string"),
+          $"counts"),
+      Seq()
+    )
+
+    withTempTable { table =>
+      checkAnswer(
+        spark.sql("select session_window(time, " +
+          """case when value = 1 then "2 seconds" when value = 2 then "invalid gap duration" """ +
+          s"""else "20 seconds" end), value from $table""")
+          .select($"session_window.start".cast(StringType), $"session_window.end".cast(StringType),
+            $"value"),
+        Seq(
+          Row("2016-03-27 19:39:27", "2016-03-27 19:39:47", 4),
+          Row("2016-03-27 19:39:34", "2016-03-27 19:39:36", 1)
+        )
       )
     }
   }

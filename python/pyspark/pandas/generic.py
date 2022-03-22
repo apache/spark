@@ -2441,12 +2441,11 @@ class Frame(object, metaclass=ABCMeta):
 
         with sql_conf({SPARK_CONF_ARROW_ENABLED: False}):
             # Disable Arrow to keep row ordering.
-            first_valid_row = cast(
-                pd.DataFrame,
+            first_valid_row = (
                 self._internal.spark_frame.filter(cond)
                 .select(self._internal.index_spark_columns)
                 .limit(1)
-                .toPandas(),
+                .toPandas()
             )
 
         # For Empty Series or DataFrame, returns None.
