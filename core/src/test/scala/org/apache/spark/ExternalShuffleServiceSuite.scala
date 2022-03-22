@@ -18,6 +18,8 @@
 package org.apache.spark
 
 import java.io.File
+import java.nio.file.Files
+import java.nio.file.attribute.PosixFilePermission
 
 import scala.concurrent.Promise
 import scala.concurrent.duration.Duration
@@ -106,7 +108,9 @@ class ExternalShuffleServiceSuite extends ShuffleSuite with BeforeAndAfterAll wi
   }
 
   test("SPARK-25888: using external shuffle service fetching disk persisted blocks") {
-    val confWithRddFetchEnabled = conf.clone.set(config.SHUFFLE_SERVICE_FETCH_RDD_ENABLED, true)
+    val confWithRddFetchEnabled = conf.clone
+      .set(config.SHUFFLE_HOST_LOCAL_DISK_READING_ENABLED, true)
+      .set(config.SHUFFLE_SERVICE_FETCH_RDD_ENABLED, true)
     sc = new SparkContext("local-cluster[1,1,1024]", "test", confWithRddFetchEnabled)
     sc.env.blockManager.externalShuffleServiceEnabled should equal(true)
     sc.env.blockManager.blockStoreClient.getClass should equal(classOf[ExternalBlockStoreClient])
@@ -118,12 +122,41 @@ class ExternalShuffleServiceSuite extends ShuffleSuite with BeforeAndAfterAll wi
       rdd.count()
 
       val blockId = RDDBlockId(rdd.id, 0)
-      eventually(timeout(2.seconds), interval(100.milliseconds)) {
+      val bms = eventually(timeout(2.seconds), interval(100.milliseconds)) {
         val locations = sc.env.blockManager.master.getLocations(blockId)
         assert(locations.size === 2)
         assert(locations.map(_.port).contains(server.getPort),
           "external shuffle service port should be contained")
+        locations
       }
+
+      val dirManager = sc.env.blockManager.hostLocalDirManager
+          .getOrElse(fail("No host local dir manager"))
+
+      val promises = bms.map { case bmid =>
+          val promise = Promise[File]()
+          dirManager.getHostLocalDirs(bmid.host, bmid.port, Seq(bmid.executorId).toArray) {
+            case scala.util.Success(res) => res.foreach { case (eid, dirs) =>
+              val file = new File(ExecutorDiskUtils.getFilePath(dirs,
+                sc.env.blockManager.subDirsPerLocalDir, blockId.name))
+              promise.success(file)
+            }
+            case scala.util.Failure(error) => promise.failure(error)
+          }
+          promise.future
+        }
+      val filesToCheck = promises.map(p => ThreadUtils.awaitResult(p, Duration(2, "sec")))
+
+      filesToCheck.foreach(f => {
+        val parentPerms = Files.getPosixFilePermissions(f.getParentFile.toPath)
+        assert(parentPerms.contains(PosixFilePermission.GROUP_WRITE))
+
+        // On most operating systems the default umask will make this test pass
+        // even if the permission isn't changed. To properly test this, run the
+        // test with a umask of 0027
+        val perms = Files.getPosixFilePermissions(f.toPath)
+        assert(perms.contains(PosixFilePermission.OTHERS_READ))
+      })
 
       sc.killExecutors(sc.getExecutorIds())
 
@@ -190,6 +223,19 @@ class ExternalShuffleServiceSuite extends ShuffleSuite with BeforeAndAfterAll wi
         val filesToCheck = promises.flatMap(p => ThreadUtils.awaitResult(p, Duration(2, "sec")))
         assert(filesToCheck.length == 4)
         assert(filesToCheck.forall(_.exists()))
+
+        if (enabled) {
+          filesToCheck.foreach(f => {
+            val parentPerms = Files.getPosixFilePermissions(f.getParentFile.toPath)
+            assert(parentPerms.contains(PosixFilePermission.GROUP_WRITE))
+
+            // On most operating systems the default umask will make this test pass
+            // even if the permission isn't changed. To properly test this, run the
+            // test with a umask of 0027
+            val perms = Files.getPosixFilePermissions(f.toPath)
+            assert(perms.contains(PosixFilePermission.OTHERS_READ))
+          })
+        }
 
         sc.killExecutors(sc.getExecutorIds())
         eventually(timeout(2.seconds), interval(100.milliseconds)) {
