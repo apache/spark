@@ -51,30 +51,36 @@ import org.apache.spark.sql.types._
  * @param insert the enclosing INSERT statement for which this rule is processing the query, if any.
  */
 case class ResolveDefaultColumns(
-    catalog: SessionCatalog, insert: Option[InsertIntoStatement] = None) extends Rule[LogicalPlan] {
+    catalog: SessionCatalog,
+    insert: Option[InsertIntoStatement] = None) extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsWithPruning(
     AlwaysProcess.fn, ruleId) {
+    case _ if !SQLConf.get.enableDefaultColumns => plan
 
     case i@InsertIntoStatement(_, _, _, _, _, _)
-      if SQLConf.get.enableDefaultColumns &&
-        i.query.collectFirst { case u: UnresolvedInlineTable => u }.isDefined =>
-      val newQuery = ResolveDefaultColumns(catalog, Some(i)).apply(i.query)
+      if i.query.collectFirst { case u: UnresolvedInlineTable => u }.isDefined =>
+      // Create a helper instance of this same rule with the `insert` argument populated as `i`.
+      // Then recursively apply it on the `query` of `i` to transform the result. This recursive
+      // application lets the below case matching against `UnresolvedInlineTable` to trigger
+      // anywhere that operator may appear in the descendants of `i.query`.
+      val helper = ResolveDefaultColumns(catalog, Some(i))
+      val newQuery = helper.apply(i.query)
       i.copy(query = newQuery)
 
     case table: UnresolvedInlineTable
-      if SQLConf.get.enableDefaultColumns && insert.isDefined &&
+      if insert.isDefined &&
         table.rows.nonEmpty && table.rows.forall(_.size == table.rows(0).size) =>
       val expanded: UnresolvedInlineTable = addMissingDefaultColumnValues(table).getOrElse(table)
       replaceExplicitDefaultColumnValues(expanded).getOrElse(table)
 
     case i@InsertIntoStatement(_, _, _, project: Project, _, _)
-      if SQLConf.get.enableDefaultColumns && !project.resolved =>
+      if !project.resolved =>
       val helper = ResolveDefaultColumns(catalog, Some(i))
       val replaced: Option[Project] = helper.replaceExplicitDefaultColumnValues(project)
       if (replaced.isDefined) i.copy(query = replaced.get) else i
 
     case i@InsertIntoStatement(_, _, _, project: Project, _, _)
-      if SQLConf.get.enableDefaultColumns && project.resolved =>
+      if project.resolved =>
       val helper = ResolveDefaultColumns(catalog, Some(i))
       val expanded: Project = helper.addMissingDefaultColumnValues(project).getOrElse(project)
       val replaced: Option[Project] = helper.replaceExplicitDefaultColumnValues(expanded)
@@ -246,7 +252,18 @@ object ResolveDefaultColumns {
   // This column metadata represents the default value for all existing rows in a table after a
   // column has been added. This value is determined at time of CREATE TABLE, REPLACE TABLE, or
   // ALTER TABLE ADD COLUMN, and never changes thereafter. The intent is for this "exist default"
-  // to be used by any scan when the columns in the source row are incomplete.
+  // to be used by any scan when the columns in the source row are missing data. For example,
+  // consider the following sequence:
+  // CREATE TABLE t (c1 INT)
+  // INSERT INTO t VALUES (42)
+  // ALTER TABLE t ADD COLUMNS (c2 INT DEFAULT 43)
+  // SELECT c1, c2 FROM t
+  // In this case, the final query is expected to return 42, 43. The ALTER TABLE ADD COLUMNS command
+  // executed after there was already data in the table, so in order to enforce this invariant,
+  // we need either (1) an expensive backfill of value 43 at column c2 into all previous rows, or
+  // (2) indicate to each data source that selected columns missing data are to generate the
+  // corresponding DEFAULT value instead. We choose option (2) for efficiency, and represent this
+  // value as the text representation of a folded constant in the "EXISTS_DEFAULT" column metadata.
   val EXISTS_DEFAULT_COLUMN_METADATA_KEY = "EXISTS_DEFAULT"
   // Name of attributes representing explicit references to the value stored in the above
   // CURRENT_DEFAULT_COLUMN_METADATA.

@@ -1024,7 +1024,8 @@ abstract class CatalogTestUtils {
 
   def newTable(name: String, db: String): CatalogTable = newTable(name, Some(db))
 
-  def newTable(name: String, database: Option[String] = None,
+  def newTable(name: String,
+               database: Option[String] = None,
                defaultColumns: Boolean = false): CatalogTable = {
     CatalogTable(
       identifier = TableIdentifier(name, database),

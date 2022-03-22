@@ -2710,24 +2710,24 @@ object SQLConf {
     .createWithDefault(false)
 
   val ENABLE_DEFAULT_COLUMNS =
-    buildConf("spark.sql.parser.enableDefaultColumns")
+    buildConf("spark.sql.defaultColumn.enabled")
       .internal()
       .doc("When true, allow CREATE TABLE, REPLACE TABLE, and ALTER COLUMN statements to set or " +
         "update default values for specific columns. Following INSERT, MERGE, and UPDATE " +
         "statements may then omit these values and their values will be injected automatically " +
         "instead.")
-      .version("3.3.0")
+      .version("3.4.0")
       .booleanConf
       .createWithDefault(true)
 
   val USE_NULLS_FOR_MISSING_DEFAULT_COLUMN_VALUES =
-    buildConf("spark.sql.parser.useNullsForMissingDefaultColumnValues")
+    buildConf("spark.sql.defaultColumn.useNullsForMissingDefautValues")
       .internal()
       .doc("When true, and DEFAULT columns are enabled, allow column definitions lacking " +
         "explicit default values to behave as if they had specified DEFAULT NULL instead. " +
         "For example, this allows most INSERT INTO statements to specify only a prefix of the " +
         "columns in the target table, and the remaining columns will receive NULL values.")
-      .version("3.3.0")
+      .version("3.4.0")
       .booleanConf
       .createWithDefault(false)
 
