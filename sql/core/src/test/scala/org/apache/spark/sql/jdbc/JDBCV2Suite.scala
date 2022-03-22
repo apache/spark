@@ -795,11 +795,8 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
       .agg(sum($"SALARY").as("total"))
       .filter($"total" > 1000)
       .orderBy($"total")
-    val filters = query.queryExecution.optimizedPlan.collect {
-      case f: Filter => f
-    }
-    assert(filters.nonEmpty) // filter over aggregate not pushed down
-    checkAggregateRemoved(df)
+    checkFiltersRemoved(query, false)// filter over aggregate not pushed down
+    checkAggregateRemoved(query)
     checkPushedInfo(query, "PushedAggregates: [SUM(SALARY)], " +
       "PushedFilters: [DEPT IS NOT NULL, DEPT > 0], PushedGroupByColumns: [DEPT]")
     checkAnswer(query, Seq(Row(6, 12000), Row(1, 19000), Row(2, 22000)))
