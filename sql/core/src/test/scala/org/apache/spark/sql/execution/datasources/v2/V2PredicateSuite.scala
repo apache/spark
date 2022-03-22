@@ -20,11 +20,11 @@ package org.apache.spark.sql.execution.datasources.v2
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.connector.expressions.{Expression, FieldReference, Literal, LiteralValue}
 import org.apache.spark.sql.connector.expressions.filter._
-import org.apache.spark.sql.execution.datasources.v2.FiltersV2Suite.ref
-import org.apache.spark.sql.types.{BooleanType, IntegerType}
+import org.apache.spark.sql.execution.datasources.v2.V2PredicateSuite.ref
+import org.apache.spark.sql.types.{IntegerType, StringType}
 import org.apache.spark.unsafe.types.UTF8String
 
-class FiltersV2Suite extends SparkFunSuite {
+class V2PredicateSuite extends SparkFunSuite {
 
   test("nested columns") {
     val predicate1 =
@@ -148,7 +148,7 @@ class FiltersV2Suite extends SparkFunSuite {
   }
 
   test("StringStartsWith") {
-    val literal = LiteralValue(UTF8String.fromString("str"), BooleanType)
+    val literal = LiteralValue(UTF8String.fromString("str"), StringType)
     val predicate1 = new Predicate("STARTS_WITH",
       Array[Expression](ref("a"), literal))
     val predicate2 = new Predicate("STARTS_WITH",
@@ -159,7 +159,7 @@ class FiltersV2Suite extends SparkFunSuite {
   }
 
   test("StringEndsWith") {
-    val literal = LiteralValue(UTF8String.fromString("str"), BooleanType)
+    val literal = LiteralValue(UTF8String.fromString("str"), StringType)
     val predicate1 = new Predicate("ENDS_WITH",
       Array[Expression](ref("a"), literal))
     val predicate2 = new Predicate("ENDS_WITH",
@@ -170,7 +170,7 @@ class FiltersV2Suite extends SparkFunSuite {
   }
 
   test("StringContains") {
-    val literal = LiteralValue(UTF8String.fromString("str"), BooleanType)
+    val literal = LiteralValue(UTF8String.fromString("str"), StringType)
     val predicate1 = new Predicate("CONTAINS",
       Array[Expression](ref("a"), literal))
     val predicate2 = new Predicate("CONTAINS",
@@ -181,7 +181,7 @@ class FiltersV2Suite extends SparkFunSuite {
   }
 }
 
-object FiltersV2Suite {
+object V2PredicateSuite {
   private[sql] def ref(parts: String*): FieldReference = {
     new FieldReference(parts)
   }

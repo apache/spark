@@ -126,17 +126,23 @@ public class V2ExpressionSQLBuilder {
   }
 
   protected String visitStartsWith(String l, String r) {
-    String value = r.replaceAll("'", "");
+    // Remove quotes at the beginning and end.
+    // e.g. converts "'str'" to "str".
+    String value = r.substring(1, r.length() - 1);
     return l + " LIKE '" + value + "%'";
   }
 
   protected String visitEndsWith(String l, String r) {
-    String value = r.replaceAll("'", "");
+    // Remove quotes at the beginning and end.
+    // e.g. converts "'str'" to "str".
+    String value = r.substring(1, r.length() - 1);
     return l + " LIKE '%" + value + "'";
   }
 
   protected String visitContains(String l, String r) {
-    String value = r.replaceAll("'", "");
+    // Remove quotes at the beginning and end.
+    // e.g. converts "'str'" to "str".
+    String value = r.substring(1, r.length() - 1);
     return l + " LIKE '%" + value + "%'";
   }
 

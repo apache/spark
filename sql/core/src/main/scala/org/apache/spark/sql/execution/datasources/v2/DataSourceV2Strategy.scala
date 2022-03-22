@@ -30,18 +30,17 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util.{toPrettySQL, V2ExpressionBuilder}
 import org.apache.spark.sql.connector.catalog.{Identifier, StagingTableCatalog, SupportsNamespaces, SupportsPartitionManagement, SupportsWrite, Table, TableCapability, TableCatalog}
 import org.apache.spark.sql.connector.catalog.index.SupportsIndex
-import org.apache.spark.sql.connector.expressions.{FieldReference, LiteralValue}
+import org.apache.spark.sql.connector.expressions.{FieldReference}
 import org.apache.spark.sql.connector.expressions.filter.{And => V2And, Not => V2Not, Or => V2Or, Predicate}
 import org.apache.spark.sql.connector.read.LocalScan
 import org.apache.spark.sql.connector.read.streaming.{ContinuousStream, MicroBatchStream}
 import org.apache.spark.sql.connector.write.V1Write
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.{FilterExec, LeafExecNode, LocalTableScanExec, ProjectExec, RowDataSourceScanExec, SparkPlan}
-import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, PushableColumn, PushableColumnBase}
+import org.apache.spark.sql.execution.datasources.DataSourceStrategy
 import org.apache.spark.sql.execution.streaming.continuous.{WriteToContinuousDataSource, WriteToContinuousDataSourceExec}
 import org.apache.spark.sql.internal.StaticSQLConf.WAREHOUSE_PATH
 import org.apache.spark.sql.sources.{BaseRelation, TableScan}
-import org.apache.spark.sql.types.BooleanType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.storage.StorageLevel
 
@@ -569,15 +568,10 @@ private[sql] object DataSourceV2Strategy {
  * Get the expression of DS V2 to represent catalyst predicate that can be pushed down.
  */
 case class PushablePredicate(nestedPredicatePushdownEnabled: Boolean) {
-  private val pushableColumn: PushableColumnBase = PushableColumn(nestedPredicatePushdownEnabled)
 
-  def unapply(e: Expression): Option[Predicate] = e match {
-    case col @ pushableColumn(name) if col.dataType.isInstanceOf[BooleanType] =>
-      Some(new Predicate("=", Array(FieldReference(name), LiteralValue(true, BooleanType))))
-    case _ =>
-      new V2ExpressionBuilder(e, nestedPredicatePushdownEnabled, true).build().map { v =>
-        assert(v.isInstanceOf[Predicate])
-        v.asInstanceOf[Predicate]
-      }
-  }
+  def unapply(e: Expression): Option[Predicate] =
+    new V2ExpressionBuilder(e, nestedPredicatePushdownEnabled, true).build().map { v =>
+      assert(v.isInstanceOf[Predicate])
+      v.asInstanceOf[Predicate]
+    }
 }

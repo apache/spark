@@ -22,7 +22,7 @@ import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.parseColumnPath
 import org.apache.spark.sql.connector.expressions.{FieldReference, LiteralValue}
 import org.apache.spark.sql.connector.expressions.filter.{AlwaysFalse => V2AlwaysFalse, AlwaysTrue => V2AlwaysTrue, Predicate}
-import org.apache.spark.sql.types.BooleanType
+import org.apache.spark.sql.types.StringType
 import org.apache.spark.unsafe.types.UTF8String
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -72,8 +72,6 @@ sealed abstract class Filter {
 
   /**
    * Converts V1 filter to V2 filter
-   *
-   * @since 3.3.0
    */
   private[sql] def toV2: Predicate
 }
@@ -310,7 +308,7 @@ case class Not(child: Filter) extends Filter {
 case class StringStartsWith(attribute: String, value: String) extends Filter {
   override def references: Array[String] = Array(attribute)
   override def toV2: Predicate = new Predicate("STARTS_WITH",
-    Array(FieldReference(attribute), LiteralValue(UTF8String.fromString(value), BooleanType)))
+    Array(FieldReference(attribute), LiteralValue(UTF8String.fromString(value), StringType)))
 }
 
 /**
@@ -326,7 +324,7 @@ case class StringStartsWith(attribute: String, value: String) extends Filter {
 case class StringEndsWith(attribute: String, value: String) extends Filter {
   override def references: Array[String] = Array(attribute)
   override def toV2: Predicate = new Predicate("ENDS_WITH",
-    Array(FieldReference(attribute), LiteralValue(UTF8String.fromString(value), BooleanType)))
+    Array(FieldReference(attribute), LiteralValue(UTF8String.fromString(value), StringType)))
 }
 
 /**
@@ -342,7 +340,7 @@ case class StringEndsWith(attribute: String, value: String) extends Filter {
 case class StringContains(attribute: String, value: String) extends Filter {
   override def references: Array[String] = Array(attribute)
   override def toV2: Predicate = new Predicate("CONTAINS",
-    Array(FieldReference(attribute), LiteralValue(UTF8String.fromString(value), BooleanType)))
+    Array(FieldReference(attribute), LiteralValue(UTF8String.fromString(value), StringType)))
 }
 
 /**

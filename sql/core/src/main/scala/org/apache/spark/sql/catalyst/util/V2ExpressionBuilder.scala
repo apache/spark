@@ -31,11 +31,9 @@ class V2ExpressionBuilder(
 
   val pushableColumn = PushableColumn(nestedPredicatePushdownEnabled)
 
-  def build(): Option[V2Expression] =
-    generateExpression(e, isPredicate)
+  def build(): Option[V2Expression] = generateExpression(e, isPredicate)
 
   private def canTranslate(b: BinaryOperator) = b match {
-    case _: And | _: Or => true
     case _: BinaryComparison => true
     case _: BitwiseAnd | _: BitwiseOr | _: BitwiseXor => true
     case add: Add => add.failOnError
@@ -95,23 +93,29 @@ class V2ExpressionBuilder(
       } else {
         None
       }
-    case b: BinaryOperator if canTranslate(b) =>
-      // AND/OR expect predicate
-      val (l, r) = b match {
-        case _: And | _: Or =>
-          (generateExpression(b.left, true), generateExpression(b.right, true))
-        case _ => (generateExpression(b.left), generateExpression(b.right))
+    case and: And =>
+      val l = generateExpression(and.left, true)
+      val r = generateExpression(and.right, true)
+      if (l.isDefined && r.isDefined) {
+        assert(l.get.isInstanceOf[V2Predicate] && r.get.isInstanceOf[V2Predicate])
+        Some(new V2And(l.get.asInstanceOf[V2Predicate], r.get.asInstanceOf[V2Predicate]))
+      } else {
+        None
       }
+    case or: Or =>
+      val l = generateExpression(or.left, true)
+      val r = generateExpression(or.right, true)
+      if (l.isDefined && r.isDefined) {
+        assert(l.get.isInstanceOf[V2Predicate] && r.get.isInstanceOf[V2Predicate])
+        Some(new V2Or(l.get.asInstanceOf[V2Predicate], r.get.asInstanceOf[V2Predicate]))
+      } else {
+        None
+      }
+    case b: BinaryOperator if canTranslate(b) =>
+      val l = generateExpression(b.left)
+      val r = generateExpression(b.right)
       if (l.isDefined && r.isDefined) {
         b match {
-          case _: And =>
-            assert(l.get.isInstanceOf[V2Predicate])
-            assert(r.get.isInstanceOf[V2Predicate])
-            Some(new V2And(l.get.asInstanceOf[V2Predicate], r.get.asInstanceOf[V2Predicate]))
-          case _: Or =>
-            assert(l.get.isInstanceOf[V2Predicate])
-            assert(r.get.isInstanceOf[V2Predicate])
-            Some(new V2Or(l.get.asInstanceOf[V2Predicate], r.get.asInstanceOf[V2Predicate]))
           case _: Predicate =>
             Some(new V2Predicate(b.sqlOperator, Array[V2Expression](l.get, r.get)))
           case _ =>
