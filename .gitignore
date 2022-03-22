@@ -117,3 +117,8 @@ spark-warehouse/
 
 # For Node.js
 node_modules
+
+# For Antlr
+sql/catalyst/gen/
+sql/catalyst/src/main/antlr4/org/apache/spark/sql/catalyst/parser/SqlBaseLexer.tokens
+sql/catalyst/src/main/antlr4/org/apache/spark/sql/catalyst/parser/gen/

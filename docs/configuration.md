@@ -183,7 +183,7 @@ of the most common options to set are:
 </tr>
 <tr>
   <td><code>spark.driver.memoryOverhead</code></td>
-  <td>driverMemory * 0.10, with minimum of 384 </td>
+  <td>driverMemory * <code>spark.driver.memoryOverheadFactor</code>, with minimum of 384 </td>
   <td>
     Amount of non-heap memory to be allocated per driver process in cluster mode, in MiB unless
     otherwise specified. This is memory that accounts for things like VM overheads, interned strings,
@@ -197,6 +197,21 @@ of the most common options to set are:
     and <code>spark.driver.memory</code>.
   </td>
   <td>2.3.0</td>
+</tr>
+<tr>
+  <td><code>spark.driver.memoryOverheadFactor</code></td>
+  <td>0.10</td>
+  <td>
+    Fraction of driver memory to be allocated as additional non-heap memory per driver process in cluster mode.
+    This is memory that accounts for things like VM overheads, interned strings,
+    other native overheads, etc. This tends to grow with the container size.
+    This value defaults to 0.10 except for Kubernetes non-JVM jobs, which defaults to
+    0.40. This is done as non-JVM tasks need more non-JVM heap space and such tasks
+    commonly fail with "Memory Overhead Exceeded" errors. This preempts this error
+    with a higher default.
+    This value is ignored if <code>spark.driver.memoryOverhead</code> is set directly.
+  </td>
+  <td>3.3.0</td>
 </tr>
 <tr>
  <td><code>spark.driver.resource.{resourceName}.amount</code></td>
@@ -272,7 +287,7 @@ of the most common options to set are:
 </tr>
 <tr>
  <td><code>spark.executor.memoryOverhead</code></td>
-  <td>executorMemory * 0.10, with minimum of 384 </td>
+  <td>executorMemory * <code>spark.executor.memoryOverheadFactor</code>, with minimum of 384 </td>
   <td>
     Amount of additional memory to be allocated per executor process, in MiB unless otherwise specified.
     This is memory that accounts for things like VM overheads, interned strings, other native overheads, etc.
@@ -286,6 +301,17 @@ of the most common options to set are:
     <code>spark.executor.pyspark.memory</code>.
   </td>
   <td>2.3.0</td>
+</tr>
+<tr>
+  <td><code>spark.executor.memoryOverheadFactor</code></td>
+  <td>0.10</td>
+  <td>
+    Fraction of executor memory to be allocated as additional non-heap memory per executor process.
+    This is memory that accounts for things like VM overheads, interned strings,
+    other native overheads, etc. This tends to grow with the container size.
+    This value is ignored if <code>spark.executor.memoryOverhead</code> is set directly.
+  </td>
+  <td>3.3.0</td>
 </tr>
 <tr>
  <td><code>spark.executor.resource.{resourceName}.amount</code></td>
