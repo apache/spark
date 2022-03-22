@@ -30,6 +30,7 @@ private object DB2Dialect extends JdbcDialect {
   override def canHandle(url: String): Boolean =
     url.toLowerCase(Locale.ROOT).startsWith("jdbc:db2")
 
+  // See https://www.ibm.com/docs/en/db2/11.5?topic=functions-aggregate
   override def compileAggregate(aggFunction: AggregateFunc): Option[String] = {
     super.compileAggregate(aggFunction).orElse(
       aggFunction match {
@@ -37,6 +38,24 @@ private object DB2Dialect extends JdbcDialect {
           assert(f.inputs().length == 1)
           val distinct = if (f.isDistinct) "DISTINCT " else ""
           Some(s"VARIANCE($distinct${f.inputs().head})")
+        case f: GeneralAggregateFunc if f.name() == "VAR_SAMP" =>
+          assert(f.inputs().length == 1)
+          val distinct = if (f.isDistinct) "DISTINCT " else ""
+          Some(s"VARIANCE_SAMP($distinct${f.inputs().head})")
+        case f: GeneralAggregateFunc if f.name() == "STDDEV_POP" =>
+          assert(f.inputs().length == 1)
+          val distinct = if (f.isDistinct) "DISTINCT " else ""
+          Some(s"STDDEV($distinct${f.inputs().head})")
+        case f: GeneralAggregateFunc if f.name() == "STDDEV_SAMP" =>
+          assert(f.inputs().length == 1)
+          val distinct = if (f.isDistinct) "DISTINCT " else ""
+          Some(s"STDDEV_SAMP($distinct${f.inputs().head})")
+        case f: GeneralAggregateFunc if f.name() == "COVAR_POP" && f.isDistinct == false =>
+          assert(f.inputs().length == 2)
+          Some(s"COVARIANCE(${f.inputs().head}, ${f.inputs().last})")
+        case f: GeneralAggregateFunc if f.name() == "COVAR_SAMP" && f.isDistinct == false =>
+          assert(f.inputs().length == 2)
+          Some(s"COVARIANCE_SAMP(${f.inputs().head}, ${f.inputs().last})")
         case _ => None
       }
     )

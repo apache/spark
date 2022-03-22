@@ -48,7 +48,7 @@ from pyspark.sql.types import (
     BooleanType,
     NullType,
 )
-from pyspark.sql.types import (  # type: ignore
+from pyspark.sql.types import (
     _array_signed_int_typecode_ctype_mappings,
     _array_type_mappings,
     _array_unsigned_int_typecode_ctype_mappings,

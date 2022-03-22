@@ -68,6 +68,8 @@ abstract class AvroSuite
 
   override protected def beforeAll(): Unit = {
     super.beforeAll()
+    // initialize SessionCatalog here so it has a clean hadoopConf
+    spark.sessionState.catalog
     spark.conf.set(SQLConf.FILES_MAX_PARTITION_BYTES.key, 1024)
   }
 
@@ -2327,9 +2329,10 @@ class AvroV2Suite extends AvroSuite with ExplainSuiteHelper {
        }
       assert(filterCondition.isDefined)
       // The partitions filters should be pushed down and no need to be reevaluated.
-      assert(filterCondition.get.collectFirst {
-        case a: AttributeReference if a.name == "p1" || a.name == "p2" => a
-      }.isEmpty)
+      assert(!filterCondition.get.exists {
+        case a: AttributeReference => a.name == "p1" || a.name == "p2"
+        case _ => false
+      })
 
       val fileScan = df.queryExecution.executedPlan collectFirst {
         case BatchScanExec(_, f: AvroScan, _) => f

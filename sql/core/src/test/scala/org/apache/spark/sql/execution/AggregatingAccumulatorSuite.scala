@@ -35,9 +35,9 @@ class AggregatingAccumulatorSuite
   extends SparkFunSuite
   with SharedSparkSession
   with ExpressionEvalHelper {
-  private val a = 'a.long
-  private val b = 'b.string
-  private val c = 'c.double
+  private val a = Symbol("a").long
+  private val b = Symbol("b").string
+  private val c = Symbol("c").double
   private val inputAttributes = Seq(a, b, c)
   private def str(s: String): UTF8String = UTF8String.fromString(s)
 

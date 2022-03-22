@@ -344,7 +344,7 @@ private[spark] class TaskDataWrapper(
   @JsonIgnore @KVIndex(value = TaskIndexNames.SHUFFLE_TOTAL_READS, parent = TaskIndexNames.STAGE)
   private def shuffleTotalReads: Long = {
     if (hasMetrics) {
-      getMetricValue(shuffleLocalBytesRead) + getMetricValue(shuffleRemoteBytesRead)
+      shuffleLocalBytesRead + shuffleRemoteBytesRead
     } else {
       -1L
     }
@@ -353,7 +353,7 @@ private[spark] class TaskDataWrapper(
   @JsonIgnore @KVIndex(value = TaskIndexNames.SHUFFLE_TOTAL_BLOCKS, parent = TaskIndexNames.STAGE)
   private def shuffleTotalBlocks: Long = {
     if (hasMetrics) {
-      getMetricValue(shuffleLocalBlocksFetched) + getMetricValue(shuffleRemoteBlocksFetched)
+      shuffleLocalBlocksFetched + shuffleRemoteBlocksFetched
     } else {
       -1L
     }

@@ -147,7 +147,7 @@ object OrcUtils extends Logging {
       : Option[StructType] = {
     val ignoreCorruptFiles = sparkSession.sessionState.conf.ignoreCorruptFiles
     val conf = sparkSession.sessionState.newHadoopConfWithOptions(options)
-    files.toIterator.map(file => readSchema(file.getPath, conf, ignoreCorruptFiles)).collectFirst {
+    files.iterator.map(file => readSchema(file.getPath, conf, ignoreCorruptFiles)).collectFirst {
       case Some(schema) =>
         logDebug(s"Reading schema from file $files, got Hive schema string: $schema")
         toCatalystSchema(schema)
@@ -205,6 +205,8 @@ object OrcUtils extends Logging {
       orcCatalystSchema.fields.map(_.dataType).zip(dataSchema.fields.map(_.dataType)).foreach {
         case (TimestampType, TimestampNTZType) =>
           throw QueryExecutionErrors.cannotConvertOrcTimestampToTimestampNTZError()
+        case (TimestampNTZType, TimestampType) =>
+          throw QueryExecutionErrors.cannotConvertOrcTimestampNTZToTimestampLTZError()
         case (t1: StructType, t2: StructType) => checkTimestampCompatibility(t1, t2)
         case _ =>
       }

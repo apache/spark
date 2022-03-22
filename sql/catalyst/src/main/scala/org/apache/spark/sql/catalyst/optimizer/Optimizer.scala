@@ -52,7 +52,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
       previousPlan: LogicalPlan,
       currentPlan: LogicalPlan): Boolean = {
     !Utils.isTesting || (currentPlan.resolved &&
-      currentPlan.find(PlanHelper.specialExpressionsInUnsupportedOperator(_).nonEmpty).isEmpty &&
+      !currentPlan.exists(PlanHelper.specialExpressionsInUnsupportedOperator(_).nonEmpty) &&
       LogicalPlanIntegrity.checkIfExprIdsAreGloballyUnique(currentPlan) &&
       DataType.equalsIgnoreNullability(previousPlan.schema, currentPlan.schema))
   }
@@ -238,6 +238,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
       // PropagateEmptyRelation can change the nullability of an attribute from nullable to
       // non-nullable when an empty relation child of a Union is removed
       UpdateAttributeNullability) :+
+    Batch("Optimize One Row Plan", fixedPoint, OptimizeOneRowPlan) :+
     // The following batch should be executed after batch "Join Reorder" and "LocalRelation".
     Batch("Check Cartesian Products", Once,
       CheckCartesianProducts) :+
@@ -1071,11 +1072,11 @@ object CollapseRepartition extends Rule[LogicalPlan] {
       r.withNewChildren(child.children)
     // Case 3: When a RebalancePartitions has a child of local or global Sort, Repartition or
     // RepartitionByExpression we can remove the child.
-    case r @ RebalancePartitions(_, child @ (_: Sort | _: RepartitionOperation)) =>
+    case r @ RebalancePartitions(_, child @ (_: Sort | _: RepartitionOperation), _) =>
       r.withNewChildren(child.children)
     // Case 4: When a RebalancePartitions has a child of RebalancePartitions we can remove the
     // child.
-    case r @ RebalancePartitions(_, child: RebalancePartitions) =>
+    case r @ RebalancePartitions(_, child: RebalancePartitions, _) =>
       r.withNewChildren(child.children)
   }
 }
@@ -1390,15 +1391,14 @@ object CombineFilters extends Rule[LogicalPlan] with PredicateHelper {
  * Removes Sort operations if they don't affect the final output ordering.
  * Note that changes in the final output ordering may affect the file size (SPARK-32318).
  * This rule handles the following cases:
- * 1) if the child maximum number of rows less than or equal to 1
- * 2) if the sort order is empty or the sort order does not have any reference
- * 3) if the Sort operator is a local sort and the child is already sorted
- * 4) if there is another Sort operator separated by 0...n Project, Filter, Repartition or
+ * 1) if the sort order is empty or the sort order does not have any reference
+ * 2) if the Sort operator is a local sort and the child is already sorted
+ * 3) if there is another Sort operator separated by 0...n Project, Filter, Repartition or
  *    RepartitionByExpression, RebalancePartitions (with deterministic expressions) operators
- * 5) if the Sort operator is within Join separated by 0...n Project, Filter, Repartition or
+ * 4) if the Sort operator is within Join separated by 0...n Project, Filter, Repartition or
  *    RepartitionByExpression, RebalancePartitions (with deterministic expressions) operators only
  *    and the Join condition is deterministic
- * 6) if the Sort operator is within GroupBy separated by 0...n Project, Filter, Repartition or
+ * 5) if the Sort operator is within GroupBy separated by 0...n Project, Filter, Repartition or
  *    RepartitionByExpression, RebalancePartitions (with deterministic expressions) operators only
  *    and the aggregate function is order irrelevant
  */
@@ -1407,7 +1407,6 @@ object EliminateSorts extends Rule[LogicalPlan] {
     _.containsPattern(SORT))(applyLocally)
 
   private val applyLocally: PartialFunction[LogicalPlan, LogicalPlan] = {
-    case Sort(_, _, child) if child.maxRows.exists(_ <= 1L) => recursiveRemoveSort(child)
     case s @ Sort(orders, _, child) if orders.isEmpty || orders.exists(_.child.foldable) =>
       val newOrders = orders.filterNot(_.child.foldable)
       if (newOrders.isEmpty) {
@@ -1691,11 +1690,10 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
    */
   private def canPushThroughCondition(plan: LogicalPlan, condition: Expression): Boolean = {
     val attributes = plan.outputSet
-    val matched = condition.find {
+    !condition.exists {
       case s: SubqueryExpression => s.plan.outputSet.intersect(attributes).nonEmpty
       case _ => false
     }
-    matched.isEmpty
   }
 }
 
@@ -1957,7 +1955,7 @@ object ConvertToLocalRelation extends Rule[LogicalPlan] {
   }
 
   private def hasUnevaluableExpr(expr: Expression): Boolean = {
-    expr.find(e => e.isInstanceOf[Unevaluable] && !e.isInstanceOf[AttributeReference]).isDefined
+    expr.exists(e => e.isInstanceOf[Unevaluable] && !e.isInstanceOf[AttributeReference])
   }
 }
 

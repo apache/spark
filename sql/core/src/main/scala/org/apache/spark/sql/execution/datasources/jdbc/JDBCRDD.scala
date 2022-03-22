@@ -24,8 +24,10 @@ import scala.util.control.NonFatal
 import org.apache.spark.{InterruptibleIterator, Partition, SparkContext, TaskContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.connector.expressions.SortOrder
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.v2.TableSampleInfo
 import org.apache.spark.sql.jdbc.{JdbcDialect, JdbcDialects}
 import org.apache.spark.sql.sources._
@@ -60,7 +62,7 @@ object JDBCRDD extends Logging {
 
   def getQueryOutputSchema(
       query: String, options: JDBCOptions, dialect: JdbcDialect): StructType = {
-    val conn: Connection = JdbcUtils.createConnectionFactory(options)()
+    val conn: Connection = dialect.createConnectionFactory(options)(-1)
     try {
       val statement = conn.prepareStatement(query)
       try {
@@ -97,7 +99,14 @@ object JDBCRDD extends Logging {
    * Returns None for an unhandled filter.
    */
   def compileFilter(f: Filter, dialect: JdbcDialect): Option[String] = {
-    def quote(colName: String): String = dialect.quoteIdentifier(colName)
+
+    def quote(colName: String): String = {
+      val nameParts = SparkSession.active.sessionState.sqlParser.parseMultipartIdentifier(colName)
+      if(nameParts.length > 1) {
+        throw QueryCompilationErrors.commandNotSupportNestedColumnError("Filter push down", colName)
+      }
+      dialect.quoteIdentifier(nameParts.head)
+    }
 
     Option(f match {
       case EqualTo(attr, value) => s"${quote(attr)} = ${dialect.compileValue(value)}"
@@ -182,7 +191,7 @@ object JDBCRDD extends Logging {
     }
     new JDBCRDD(
       sc,
-      JdbcUtils.createConnectionFactory(options),
+      dialect.createConnectionFactory(options),
       outputSchema.getOrElse(pruneSchema(schema, requiredColumns)),
       quotedColumns,
       filters,
@@ -204,7 +213,7 @@ object JDBCRDD extends Logging {
  */
 private[jdbc] class JDBCRDD(
     sc: SparkContext,
-    getConnection: () => Connection,
+    getConnection: Int => Connection,
     schema: StructType,
     columns: Array[String],
     filters: Array[Filter],
@@ -318,7 +327,7 @@ private[jdbc] class JDBCRDD(
 
     val inputMetrics = context.taskMetrics().inputMetrics
     val part = thePart.asInstanceOf[JDBCPartition]
-    conn = getConnection()
+    conn = getConnection(part.idx)
     val dialect = JdbcDialects.get(url)
     import scala.collection.JavaConverters._
     dialect.beforeFetch(conn, options.asProperties.asScala.toMap)

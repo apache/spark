@@ -22,7 +22,7 @@ from typing import List, NamedTuple, Optional, Tuple, TypeVar
 import array
 
 from numpy import float64, int64, ndarray
-from py4j.java_gateway import JavaObject  # type: ignore[import]
+from py4j.java_gateway import JavaObject
 
 from pyspark.mllib._typing import VectorLike
 from pyspark.context import SparkContext

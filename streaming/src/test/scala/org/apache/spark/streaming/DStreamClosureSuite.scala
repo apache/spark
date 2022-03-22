@@ -90,7 +90,7 @@ class DStreamClosureSuite extends SparkFunSuite with LocalStreamingContext with 
     ds.filter { _ => return; true }
   }
   private def testMapPartitions(ds: DStream[Int]): Unit = expectCorrectException {
-    ds.mapPartitions { _ => return; Seq.empty.toIterator }
+    ds.mapPartitions { _ => return; Seq.empty.iterator }
   }
   private def testReduce(ds: DStream[Int]): Unit = expectCorrectException {
     ds.reduce { case (_, _) => return; 1 }
@@ -153,7 +153,7 @@ class DStreamClosureSuite extends SparkFunSuite with LocalStreamingContext with 
   }
   private def testUpdateStateByKey(ds: DStream[(Int, Int)]): Unit = {
     val updateF1 = (_: Seq[Int], _: Option[Int]) => { return; Some(1) }
-    val updateF2 = (_: Iterator[(Int, Seq[Int], Option[Int])]) => { return; Seq((1, 1)).toIterator }
+    val updateF2 = (_: Iterator[(Int, Seq[Int], Option[Int])]) => { return; Seq((1, 1)).iterator }
     val updateF3 = (_: Time, _: Int, _: Seq[Int], _: Option[Int]) => {
       return
       Option(1)

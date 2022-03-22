@@ -20,7 +20,7 @@ from itertools import chain
 import re
 import math
 
-from py4j.protocol import Py4JJavaError  # type: ignore[import]
+from py4j.protocol import Py4JJavaError
 from pyspark.sql import Row, Window, types
 from pyspark.sql.functions import (
     udf,

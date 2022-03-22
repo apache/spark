@@ -435,4 +435,27 @@ class RowEncoderSuite extends CodegenInterpretedPlanTest {
       }
     }
   }
+
+  test("SPARK-38437: encoding TimestampType/DateType from any supported datetime Java types") {
+    Seq(true, false).foreach { java8Api =>
+      withSQLConf(SQLConf.DATETIME_JAVA8API_ENABLED.key -> java8Api.toString) {
+        val schema = new StructType()
+          .add("t0", TimestampType)
+          .add("t1", TimestampType)
+          .add("d0", DateType)
+          .add("d1", DateType)
+        val encoder = RowEncoder(schema, lenient = true).resolveAndBind()
+        val instant = java.time.Instant.parse("2019-02-26T16:56:00Z")
+        val ld = java.time.LocalDate.parse("2022-03-08")
+        val row = encoder.createSerializer().apply(
+          Row(instant, java.sql.Timestamp.from(instant), ld, java.sql.Date.valueOf(ld)))
+        val expectedMicros = DateTimeUtils.instantToMicros(instant)
+        assert(row.getLong(0) === expectedMicros)
+        assert(row.getLong(1) === expectedMicros)
+        val expectedDays = DateTimeUtils.localDateToDays(ld)
+        assert(row.getInt(2) === expectedDays)
+        assert(row.getInt(3) === expectedDays)
+      }
+    }
+  }
 }

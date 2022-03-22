@@ -97,4 +97,13 @@ class DB2IntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTest {
   override def caseConvert(tableName: String): String = tableName.toUpperCase(Locale.ROOT)
 
   testVarPop()
+  testVarPop(true)
+  testVarSamp()
+  testVarSamp(true)
+  testStddevPop()
+  testStddevPop(true)
+  testStddevSamp()
+  testStddevSamp(true)
+  testCovarPop()
+  testCovarSamp()
 }

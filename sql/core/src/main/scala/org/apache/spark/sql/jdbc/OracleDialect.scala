@@ -34,37 +34,33 @@ private case object OracleDialect extends JdbcDialect {
   override def canHandle(url: String): Boolean =
     url.toLowerCase(Locale.ROOT).startsWith("jdbc:oracle")
 
+  // scalastyle:off line.size.limit
+  // https://docs.oracle.com/en/database/oracle/oracle-database/19/sqlrf/Aggregate-Functions.html#GUID-62BE676B-AF18-4E63-BD14-25206FEA0848
+  // scalastyle:on line.size.limit
   override def compileAggregate(aggFunction: AggregateFunc): Option[String] = {
     super.compileAggregate(aggFunction).orElse(
       aggFunction match {
-        case f: GeneralAggregateFunc if f.name() == "VAR_POP" =>
+        case f: GeneralAggregateFunc if f.name() == "VAR_POP" && f.isDistinct == false =>
           assert(f.inputs().length == 1)
-          val distinct = if (f.isDistinct) "DISTINCT " else ""
-          Some(s"VAR_POP($distinct${f.inputs().head})")
-        case f: GeneralAggregateFunc if f.name() == "VAR_SAMP" =>
+          Some(s"VAR_POP(${f.inputs().head})")
+        case f: GeneralAggregateFunc if f.name() == "VAR_SAMP" && f.isDistinct == false =>
           assert(f.inputs().length == 1)
-          val distinct = if (f.isDistinct) "DISTINCT " else ""
-          Some(s"VAR_SAMP($distinct${f.inputs().head})")
-        case f: GeneralAggregateFunc if f.name() == "STDDEV_POP" =>
+          Some(s"VAR_SAMP(${f.inputs().head})")
+        case f: GeneralAggregateFunc if f.name() == "STDDEV_POP" && f.isDistinct == false =>
           assert(f.inputs().length == 1)
-          val distinct = if (f.isDistinct) "DISTINCT " else ""
-          Some(s"STDDEV_POP($distinct${f.inputs().head})")
-        case f: GeneralAggregateFunc if f.name() == "STDDEV_SAMP" =>
+          Some(s"STDDEV_POP(${f.inputs().head})")
+        case f: GeneralAggregateFunc if f.name() == "STDDEV_SAMP" && f.isDistinct == false =>
           assert(f.inputs().length == 1)
-          val distinct = if (f.isDistinct) "DISTINCT " else ""
-          Some(s"STDDEV_SAMP($distinct${f.inputs().head})")
-        case f: GeneralAggregateFunc if f.name() == "COVAR_POP" =>
+          Some(s"STDDEV_SAMP(${f.inputs().head})")
+        case f: GeneralAggregateFunc if f.name() == "COVAR_POP" && f.isDistinct == false =>
           assert(f.inputs().length == 2)
-          val distinct = if (f.isDistinct) "DISTINCT " else ""
-          Some(s"COVAR_POP($distinct${f.inputs().head}, ${f.inputs().last})")
-        case f: GeneralAggregateFunc if f.name() == "COVAR_SAMP" =>
+          Some(s"COVAR_POP(${f.inputs().head}, ${f.inputs().last})")
+        case f: GeneralAggregateFunc if f.name() == "COVAR_SAMP" && f.isDistinct == false =>
           assert(f.inputs().length == 2)
-          val distinct = if (f.isDistinct) "DISTINCT " else ""
-          Some(s"COVAR_SAMP($distinct${f.inputs().head}, ${f.inputs().last})")
-        case f: GeneralAggregateFunc if f.name() == "CORR" =>
+          Some(s"COVAR_SAMP(${f.inputs().head}, ${f.inputs().last})")
+        case f: GeneralAggregateFunc if f.name() == "CORR" && f.isDistinct == false =>
           assert(f.inputs().length == 2)
-          val distinct = if (f.isDistinct) "DISTINCT " else ""
-          Some(s"CORR($distinct${f.inputs().head}, ${f.inputs().last})")
+          Some(s"CORR(${f.inputs().head}, ${f.inputs().last})")
         case _ => None
       }
     )

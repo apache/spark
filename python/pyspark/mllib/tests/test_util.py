@@ -19,7 +19,7 @@ import os
 import tempfile
 import unittest
 
-from pyspark.mllib.common import _to_java_object_rdd  # type: ignore[attr-defined]
+from pyspark.mllib.common import _to_java_object_rdd
 from pyspark.mllib.util import LinearDataGenerator
 from pyspark.mllib.util import MLUtils
 from pyspark.mllib.linalg import SparseVector, DenseVector, Vectors

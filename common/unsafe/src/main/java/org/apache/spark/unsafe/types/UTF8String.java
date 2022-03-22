@@ -369,7 +369,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
         // fallback
         return toUpperCaseSlow();
       }
-      int upper = Character.toUpperCase((int) b);
+      int upper = Character.toUpperCase(b);
       if (upper > 127) {
         // fallback
         return toUpperCaseSlow();
@@ -399,7 +399,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
         // fallback
         return toLowerCaseSlow();
       }
-      int lower = Character.toLowerCase((int) b);
+      int lower = Character.toLowerCase(b);
       if (lower > 127) {
         // fallback
         return toLowerCaseSlow();
