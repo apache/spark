@@ -74,7 +74,7 @@ class DDLParserSuite extends AnalysisTest {
     }
 
     intercept("CREATE TABLE my_tab(a: INT COMMENT 'test', b: STRING) USING parquet",
-      "extraneous input ':'")
+      "Syntax error at or near ':': extra input ':'")
   }
 
   test("create/replace table - with IF NOT EXISTS") {
@@ -1777,9 +1777,9 @@ class DDLParserSuite extends AnalysisTest {
         allColumns = true))
 
     intercept("ANALYZE TABLE a.b.c COMPUTE STATISTICS FOR ALL COLUMNS key, value",
-      Some("PARSE_INPUT_MISMATCHED"), "Syntax error at or near 'key'") // expecting {<EOF>, ';'}
+      Some("PARSE_SYNTAX_ERROR"), "Syntax error at or near 'key'") // expecting {<EOF>, ';'}
     intercept("ANALYZE TABLE a.b.c COMPUTE STATISTICS FOR ALL",
-      "missing 'COLUMNS' at '<EOF>'")
+      "Syntax error at or near end of input: missing 'COLUMNS'")
   }
 
   test("LOAD DATA INTO table") {

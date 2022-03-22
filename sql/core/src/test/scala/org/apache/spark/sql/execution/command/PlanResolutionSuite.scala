@@ -1750,7 +1750,7 @@ class PlanResolutionSuite extends AnalysisTest {
 
     interceptParseException(parsePlan)(
       "CREATE TABLE my_tab(a: INT COMMENT 'test', b: STRING)",
-      "extraneous input ':'")()
+      "Syntax error at or near ':': extra input ':'")()
   }
 
   test("create hive table - table file format") {
