@@ -10230,7 +10230,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                 bool_column_labels.append(label)
         return bool_column_labels
 
-    def _result_aggregated(self, column_labels: List[Label], scols: List[Column]) -> ps.Series:
+    def _result_aggregated(self, column_labels: List[Label], scols: List[Column]) -> "Series":
         """
         Given aggregated Spark columns and respective column labels from the original
         pandas-on-Spark DataFrame, construct the result Series.
