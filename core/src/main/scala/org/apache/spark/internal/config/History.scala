@@ -17,6 +17,7 @@
 
 package org.apache.spark.internal.config
 
+import java.util.Locale
 import java.util.concurrent.TimeUnit
 
 import org.apache.spark.network.util.ByteUnit
@@ -212,10 +213,15 @@ private[spark] object History {
     .bytesConf(ByteUnit.BYTE)
     .createWithDefaultString("2g")
 
+  object HybridStoreDiskBackend extends Enumeration {
+    val LEVELDB, ROCKSDB = Value
+  }
+
   val HYBRID_STORE_DISK_BACKEND = ConfigBuilder("spark.history.store.hybridStore.diskBackend")
-    .doc("Specifies a disk-based store used in hybrid store; 'leveldb' or 'rocksdb'.")
+    .doc("Specifies a disk-based store used in hybrid store; LEVELDB or ROCKSDB.")
     .version("3.3.0")
     .stringConf
-    .checkValues(Set("leveldb", "rocksdb"))
-    .createWithDefault("leveldb")
+    .transform(_.toUpperCase(Locale.ROOT))
+    .checkValues(HybridStoreDiskBackend.values.map(_.toString))
+    .createWithDefault(HybridStoreDiskBackend.LEVELDB.toString)
 }

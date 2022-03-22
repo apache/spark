@@ -2244,6 +2244,81 @@ class TaskSetManagerSuite
     // After 3s have elapsed now the task is marked as speculative task
     assert(sched.speculativeTasks.size == 1)
   }
+
+  test("SPARK-37580: Reset numFailures when one of task attempts succeeds") {
+    sc = new SparkContext("local", "test")
+    // Set the speculation multiplier to be 0 so speculative tasks are launched immediately
+    sc.conf.set(config.SPECULATION_MULTIPLIER, 0.0)
+    sc.conf.set(config.SPECULATION_QUANTILE, 0.6)
+    sc.conf.set(config.SPECULATION_ENABLED, true)
+
+    sched = new FakeTaskScheduler(sc, ("exec1", "host1"), ("exec2", "host2"), ("exec3", "host3"))
+    sched.backend = mock(classOf[SchedulerBackend])
+    val taskSet = FakeTask.createTaskSet(3)
+    val clock = new ManualClock()
+    val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES, clock = clock)
+
+    // Offer resources for 3 task to start
+    val tasks = new ArrayBuffer[TaskDescription]()
+    for ((k, v) <- List("exec1" -> "host1", "exec2" -> "host2", "exec3" -> "host3")) {
+      val taskOption = manager.resourceOffer(k, v, NO_PREF)._1
+      assert(taskOption.isDefined)
+      val task = taskOption.get
+      assert(task.executorId === k)
+      tasks += task
+    }
+    assert(sched.startedTasks.toSet === (0 until 3).toSet)
+
+    def runningTaskForIndex(index: Int): TaskDescription = {
+      tasks.find { task =>
+        task.index == index && !sched.endedTasks.contains(task.taskId)
+      }.getOrElse {
+        throw new RuntimeException(s"couldn't find index $index in " +
+          s"tasks: ${tasks.map { t => t.index -> t.taskId }} with endedTasks:" +
+          s" ${sched.endedTasks.keys}")
+      }
+    }
+    clock.advance(1)
+
+    // running task with index 1 fail 3 times (not enough to abort the stage)
+    (0 until 3).foreach { attempt =>
+      val task = runningTaskForIndex(1)
+      val endReason = ExceptionFailure("a", "b", Array(), "c", None)
+      manager.handleFailedTask(task.taskId, TaskState.FAILED, endReason)
+      sched.endedTasks(task.taskId) = endReason
+      assert(!manager.isZombie)
+      val nextTask = manager.resourceOffer(s"exec2", s"host2", NO_PREF)._1
+      assert(nextTask.isDefined, s"no offer for attempt $attempt of 1")
+      tasks += nextTask.get
+    }
+
+    val numFailuresField = classOf[TaskSetManager].getDeclaredField("numFailures")
+    numFailuresField.setAccessible(true)
+    val numFailures = numFailuresField.get(manager).asInstanceOf[Array[Int]]
+    // numFailures(1) should be 3
+    assert(numFailures(1) == 3)
+
+    // make task(TID 2) success to speculative other tasks
+    manager.handleSuccessfulTask(2, createTaskResult(2))
+
+    val originalTask = runningTaskForIndex(1)
+    clock.advance(1)
+    assert(manager.checkSpeculatableTasks(0))
+    assert(sched.speculativeTasks.toSet === Set(0, 1))
+
+    // make the speculative task(index 1) success
+    val speculativeTask = manager.resourceOffer("exec1", "host1", NO_PREF)._1
+    assert(speculativeTask.isDefined)
+    manager.handleSuccessfulTask(speculativeTask.get.taskId, createTaskResult(1))
+    // if task success, numFailures will be reset to 0
+    assert(numFailures(1) == 0)
+
+    // failed the originalTask(index 1) and check if the task manager is zombie
+    val failedReason = ExceptionFailure("a", "b", Array(), "c", None)
+    manager.handleFailedTask(originalTask.taskId, TaskState.FAILED, failedReason)
+    assert(!manager.isZombie)
+  }
+
 }
 
 class FakeLongTasks(stageId: Int, partitionId: Int) extends FakeTask(stageId, partitionId) {

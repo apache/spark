@@ -33,7 +33,7 @@ import org.apache.spark.sql.connector.read.streaming.{Offset => _, _}
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.kafka010.KafkaSourceProvider._
 import org.apache.spark.sql.types._
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{Clock, SystemClock, Utils}
 
 /**
  * A [[Source]] that reads data from Kafka using the following design.
@@ -77,7 +77,7 @@ private[kafka010] class KafkaSource(
     metadataPath: String,
     startingOffsets: KafkaOffsetRangeLimit,
     failOnDataLoss: Boolean)
-  extends SupportsAdmissionControl with Source with Logging {
+  extends SupportsTriggerAvailableNow with Source with Logging {
 
   private val sc = sqlContext.sparkContext
 
@@ -94,10 +94,19 @@ private[kafka010] class KafkaSource(
   private[kafka010] val maxTriggerDelayMs =
     Utils.timeStringAsMs(sourceOptions.get(MAX_TRIGGER_DELAY).getOrElse(DEFAULT_MAX_TRIGGER_DELAY))
 
+  // this allows us to mock system clock for testing purposes
+  private[kafka010] val clock: Clock = if (sourceOptions.contains(MOCK_SYSTEM_TIME)) {
+    new MockedSystemClock
+  } else {
+    new SystemClock
+  }
+
   private val includeHeaders =
     sourceOptions.getOrElse(INCLUDE_HEADERS, "false").toBoolean
 
   private var lastTriggerMillis = 0L
+
+  private var allDataForTriggerAvailableNow: PartitionOffsetMap = _
 
   /**
    * Lazily initialize `initialPartitionOffsets` to make sure that `KafkaConsumer.poll` is only
@@ -130,7 +139,8 @@ private[kafka010] class KafkaSource(
     } else if (minOffsetPerTrigger.isDefined) {
       ReadLimit.minRows(minOffsetPerTrigger.get, maxTriggerDelayMs)
     } else {
-      maxOffsetsPerTrigger.map(ReadLimit.maxRows).getOrElse(super.getDefaultReadLimit)
+      // TODO (SPARK-37973) Directly call super.getDefaultReadLimit when scala issue 12523 is fixed
+      maxOffsetsPerTrigger.map(ReadLimit.maxRows).getOrElse(ReadLimit.allAvailable())
     }
   }
 
@@ -159,7 +169,14 @@ private[kafka010] class KafkaSource(
     // Make sure initialPartitionOffsets is initialized
     initialPartitionOffsets
     val currentOffsets = currentPartitionOffsets.orElse(Some(initialPartitionOffsets))
-    val latest = kafkaReader.fetchLatestOffsets(currentOffsets)
+
+    // Use the pre-fetched list of partition offsets when Trigger.AvailableNow is enabled.
+    val latest = if (allDataForTriggerAvailableNow != null) {
+      allDataForTriggerAvailableNow
+    } else {
+      kafkaReader.fetchLatestOffsets(currentOffsets)
+    }
+
     latestPartitionOffsets = Some(latest)
 
     val limits: Seq[ReadLimit] = limit match {
@@ -206,9 +223,9 @@ private[kafka010] class KafkaSource(
       currentOffsets: Map[TopicPartition, Long],
       maxTriggerDelayMs: Long): Boolean = {
     // Checking first if the maxbatchDelay time has passed
-    if ((System.currentTimeMillis() - lastTriggerMillis) >= maxTriggerDelayMs) {
+    if ((clock.getTimeMillis() - lastTriggerMillis) >= maxTriggerDelayMs) {
       logDebug("Maximum wait time is passed, triggering batch")
-      lastTriggerMillis = System.currentTimeMillis()
+      lastTriggerMillis = clock.getTimeMillis()
       false
     } else {
       val newRecords = latestOffsets.flatMap {
@@ -216,7 +233,7 @@ private[kafka010] class KafkaSource(
           Some(topic -> (offset - currentOffsets.getOrElse(topic, 0L)))
       }.values.sum.toDouble
       if (newRecords < minLimit) true else {
-        lastTriggerMillis = System.currentTimeMillis()
+        lastTriggerMillis = clock.getTimeMillis()
         false
       }
     }
@@ -330,6 +347,10 @@ private[kafka010] class KafkaSource(
     } else {
       logWarning(message + s". $INSTRUCTION_FOR_FAIL_ON_DATA_LOSS_FALSE")
     }
+  }
+
+  override def prepareForTriggerAvailableNow(): Unit = {
+    allDataForTriggerAvailableNow = kafkaReader.fetchLatestOffsets(Some(initialPartitionOffsets))
   }
 }
 

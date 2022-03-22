@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources.jdbc
 
-import java.sql.{Connection, Driver, JDBCType, PreparedStatement, ResultSet, ResultSetMetaData, SQLException}
+import java.sql.{Connection, JDBCType, PreparedStatement, ResultSet, ResultSetMetaData, SQLException}
 import java.time.{Instant, LocalDate}
 import java.util
 import java.util.Locale
@@ -43,7 +43,6 @@ import org.apache.spark.sql.connector.catalog.TableChange
 import org.apache.spark.sql.connector.catalog.index.{SupportsIndex, TableIndex}
 import org.apache.spark.sql.connector.expressions.NamedReference
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
-import org.apache.spark.sql.execution.datasources.jdbc.connection.ConnectionProvider
 import org.apache.spark.sql.jdbc.{JdbcDialect, JdbcDialects, JdbcType}
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.SchemaUtils
@@ -54,24 +53,6 @@ import org.apache.spark.util.NextIterator
  * Util functions for JDBC tables.
  */
 object JdbcUtils extends Logging with SQLConfHelper {
-  /**
-   * Returns a factory for creating connections to the given JDBC URL.
-   *
-   * @param options - JDBC options that contains url, table and other information.
-   * @throws IllegalArgumentException if the driver could not open a JDBC connection.
-   */
-  def createConnectionFactory(options: JDBCOptions): () => Connection = {
-    val driverClass: String = options.driverClass
-    () => {
-      DriverRegistry.register(driverClass)
-      val driver: Driver = DriverRegistry.get(driverClass)
-      val connection =
-        ConnectionProvider.create(driver, options.parameters, options.connectionProviderName)
-      require(connection != null,
-        s"The driver could not open a JDBC connection. Check the URL: ${options.url}")
-      connection
-    }
-  }
 
   /**
    * Returns true if the table already exists in the JDBC database.
@@ -651,7 +632,6 @@ object JdbcUtils extends Logging with SQLConfHelper {
    * updated even with error if it doesn't support transaction, as there're dirty outputs.
    */
   def savePartition(
-      getConnection: () => Connection,
       table: String,
       iterator: Iterator[Row],
       rddSchema: StructType,
@@ -667,7 +647,7 @@ object JdbcUtils extends Logging with SQLConfHelper {
 
     val outMetrics = TaskContext.get().taskMetrics().outputMetrics
 
-    val conn = getConnection()
+    val conn = dialect.createConnectionFactory(options)(-1)
     var committed = false
 
     var finalIsolationLevel = Connection.TRANSACTION_NONE
@@ -874,7 +854,6 @@ object JdbcUtils extends Logging with SQLConfHelper {
     val table = options.table
     val dialect = JdbcDialects.get(url)
     val rddSchema = df.schema
-    val getConnection: () => Connection = createConnectionFactory(options)
     val batchSize = options.batchSize
     val isolationLevel = options.isolationLevel
 
@@ -886,8 +865,7 @@ object JdbcUtils extends Logging with SQLConfHelper {
       case _ => df
     }
     repartitionedDF.rdd.foreachPartition { iterator => savePartition(
-      getConnection, table, iterator, rddSchema, insertStmt, batchSize, dialect, isolationLevel,
-      options)
+      table, iterator, rddSchema, insertStmt, batchSize, dialect, isolationLevel, options)
     }
   }
 
@@ -971,52 +949,57 @@ object JdbcUtils extends Logging with SQLConfHelper {
   }
 
   /**
-   * Creates a namespace.
+   * Creates a schema.
    */
-  def createNamespace(
+  def createSchema(
       conn: Connection,
       options: JDBCOptions,
-      namespace: String,
+      schema: String,
       comment: String): Unit = {
-    val dialect = JdbcDialects.get(options.url)
-    executeStatement(conn, options, s"CREATE SCHEMA ${dialect.quoteIdentifier(namespace)}")
-    if (!comment.isEmpty) createNamespaceComment(conn, options, namespace, comment)
-  }
-
-  def createNamespaceComment(
-      conn: Connection,
-      options: JDBCOptions,
-      namespace: String,
-      comment: String): Unit = {
-    val dialect = JdbcDialects.get(options.url)
+    val statement = conn.createStatement
     try {
-      executeStatement(
-        conn, options, dialect.getSchemaCommentQuery(namespace, comment))
-    } catch {
-      case e: Exception =>
-        logWarning("Cannot create JDBC catalog comment. The catalog comment will be ignored.")
+      statement.setQueryTimeout(options.queryTimeout)
+      val dialect = JdbcDialects.get(options.url)
+      dialect.createSchema(statement, schema, comment)
+    } finally {
+      statement.close()
     }
   }
 
-  def removeNamespaceComment(
+  def schemaExists(conn: Connection, options: JDBCOptions, schema: String): Boolean = {
+    val dialect = JdbcDialects.get(options.url)
+    dialect.schemasExists(conn, options, schema)
+  }
+
+  def listSchemas(conn: Connection, options: JDBCOptions): Array[Array[String]] = {
+    val dialect = JdbcDialects.get(options.url)
+    dialect.listSchemas(conn, options)
+  }
+
+  def alterSchemaComment(
       conn: Connection,
       options: JDBCOptions,
-      namespace: String): Unit = {
+      schema: String,
+      comment: String): Unit = {
     val dialect = JdbcDialects.get(options.url)
-    try {
-      executeStatement(conn, options, dialect.removeSchemaCommentQuery(namespace))
-    } catch {
-      case e: Exception =>
-        logWarning("Cannot drop JDBC catalog comment.")
-    }
+    executeStatement(conn, options, dialect.getSchemaCommentQuery(schema, comment))
+  }
+
+  def removeSchemaComment(
+      conn: Connection,
+      options: JDBCOptions,
+      schema: String): Unit = {
+    val dialect = JdbcDialects.get(options.url)
+    executeStatement(conn, options, dialect.removeSchemaCommentQuery(schema))
   }
 
   /**
-   * Drops a namespace from the JDBC database.
+   * Drops a schema from the JDBC database.
    */
-  def dropNamespace(conn: Connection, options: JDBCOptions, namespace: String): Unit = {
+  def dropSchema(
+      conn: Connection, options: JDBCOptions, schema: String, cascade: Boolean): Unit = {
     val dialect = JdbcDialects.get(options.url)
-    executeStatement(conn, options, s"DROP SCHEMA ${dialect.quoteIdentifier(namespace)}")
+    executeStatement(conn, options, dialect.dropSchema(schema, cascade))
   }
 
   /**
@@ -1147,11 +1130,17 @@ object JdbcUtils extends Logging with SQLConfHelper {
     }
   }
 
-  def executeQuery(conn: Connection, options: JDBCOptions, sql: String): ResultSet = {
+  def executeQuery(conn: Connection, options: JDBCOptions, sql: String)(
+    f: ResultSet => Unit): Unit = {
     val statement = conn.createStatement
     try {
       statement.setQueryTimeout(options.queryTimeout)
-      statement.executeQuery(sql)
+      val rs = statement.executeQuery(sql)
+      try {
+        f(rs)
+      } finally {
+        rs.close()
+      }
     } finally {
       statement.close()
     }
@@ -1166,7 +1155,8 @@ object JdbcUtils extends Logging with SQLConfHelper {
   }
 
   def withConnection[T](options: JDBCOptions)(f: Connection => T): T = {
-    val conn = createConnectionFactory(options)()
+    val dialect = JdbcDialects.get(options.url)
+    val conn = dialect.createConnectionFactory(options)(-1)
     try {
       f(conn)
     } finally {

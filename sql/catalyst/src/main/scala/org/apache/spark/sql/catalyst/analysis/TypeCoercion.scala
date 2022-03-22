@@ -1045,6 +1045,7 @@ object TypeCoercion extends TypeCoercionBase {
   /**
    * Whether the data type contains StringType.
    */
+  @tailrec
   def hasStringType(dt: DataType): Boolean = dt match {
     case StringType => true
     case ArrayType(et, _) => hasStringType(et)

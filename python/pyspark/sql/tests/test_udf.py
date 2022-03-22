@@ -22,7 +22,7 @@ import tempfile
 import unittest
 import datetime
 
-from pyspark import SparkContext
+from pyspark import SparkContext, SQLContext
 from pyspark.sql import SparkSession, Column, Row
 from pyspark.sql.functions import udf, assert_true, lit
 from pyspark.sql.udf import UserDefinedFunction
@@ -79,7 +79,7 @@ class UDFTests(ReusedSQLTestCase):
         self.assertEqual(row[0], 5)
 
         # This is to check if a deprecated 'SQLContext.registerFunction' can call its alias.
-        sqlContext = self.spark._wrapped
+        sqlContext = SQLContext.getOrCreate(self.spark.sparkContext)
         sqlContext.registerFunction("oneArg", lambda x: len(x), IntegerType())
         [row] = sqlContext.sql("SELECT oneArg('test')").collect()
         self.assertEqual(row[0], 4)
@@ -257,7 +257,8 @@ class UDFTests(ReusedSQLTestCase):
 
         def runWithJoinType(join_type, type_string):
             with self.assertRaisesRegex(
-                AnalysisException, "Using PythonUDF.*%s is not supported." % type_string
+                AnalysisException,
+                "Using PythonUDF in join condition of join type %s is not supported" % type_string,
             ):
                 left.join(right, [f("a", "b"), left.a1 == right.b1], join_type).collect()
 
@@ -372,7 +373,7 @@ class UDFTests(ReusedSQLTestCase):
         )
 
         # This is to check if a 'SQLContext.udf' can call its alias.
-        sqlContext = self.spark._wrapped
+        sqlContext = SQLContext.getOrCreate(self.spark.sparkContext)
         add_four = sqlContext.udf.register("add_four", lambda x: x + 4, IntegerType())
 
         self.assertListEqual(
@@ -419,7 +420,7 @@ class UDFTests(ReusedSQLTestCase):
         )
 
         # This is to check if a deprecated 'SQLContext.registerJavaFunction' can call its alias.
-        sqlContext = spark._wrapped
+        sqlContext = SQLContext.getOrCreate(self.spark.sparkContext)
         self.assertRaisesRegex(
             AnalysisException,
             "Can not load class non_existed_udf",
@@ -747,7 +748,8 @@ class UDFTests(ReusedSQLTestCase):
         self.assertEqual(r.first()[0], "success")
 
     def test_udf_cache(self):
-        func = lambda x: x
+        def func(x):
+            return x
 
         df = self.spark.range(1)
         df.select(udf(func)("id")).cache()

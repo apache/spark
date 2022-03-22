@@ -28,6 +28,7 @@ import scala.util.{Failure, Random, Success, Try}
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst._
+import org.apache.spark.sql.catalyst.analysis.SimpleAnalyzer.{extraHintForAnsiTypeCoercionExpression, DATA_TYPE_MISMATCH_ERROR}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.encoders.OuterScopes
 import org.apache.spark.sql.catalyst.expressions.{Expression, FrameLessOffsetWindowFunction, _}
@@ -45,13 +46,14 @@ import org.apache.spark.sql.catalyst.util.{toPrettySQL, CharVarcharUtils}
 import org.apache.spark.sql.connector.catalog._
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.connector.catalog.TableChange.{After, ColumnPosition}
-import org.apache.spark.sql.connector.catalog.functions.{AggregateFunction => V2AggregateFunction, BoundFunction, ScalarFunction}
+import org.apache.spark.sql.connector.catalog.functions.{AggregateFunction => V2AggregateFunction, BoundFunction, ScalarFunction, UnboundFunction}
 import org.apache.spark.sql.connector.catalog.functions.ScalarFunction.MAGIC_METHOD_NAME
 import org.apache.spark.sql.connector.expressions.{FieldReference, IdentityTransform, Transform}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.{PartitionOverwriteMode, StoreAssignmentPolicy}
+import org.apache.spark.sql.internal.connector.V1Function
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.types.DayTimeIntervalType.DAY
 import org.apache.spark.sql.util.{CaseInsensitiveStringMap, SchemaUtils}
@@ -75,7 +77,7 @@ object SimpleAnalyzer extends Analyzer(
   override def resolver: Resolver = caseSensitiveResolution
 }
 
-object FakeV2SessionCatalog extends TableCatalog {
+object FakeV2SessionCatalog extends TableCatalog with FunctionCatalog {
   private def fail() = throw new UnsupportedOperationException
   override def listTables(namespace: Array[String]): Array[Identifier] = fail()
   override def loadTable(ident: Identifier): Table = {
@@ -91,6 +93,8 @@ object FakeV2SessionCatalog extends TableCatalog {
   override def renameTable(oldIdent: Identifier, newIdent: Identifier): Unit = fail()
   override def initialize(name: String, options: CaseInsensitiveStringMap): Unit = fail()
   override def name(): String = CatalogManager.SESSION_CATALOG_NAME
+  override def listFunctions(namespace: Array[String]): Array[Identifier] = fail()
+  override def loadFunction(ident: Identifier): UnboundFunction = fail()
 }
 
 /**
@@ -308,7 +312,6 @@ class Analyzer(override val catalogManager: CatalogManager)
       TimeWindowing ::
       SessionWindowing ::
       ResolveInlineTables ::
-      ResolveHigherOrderFunctions(catalogManager) ::
       ResolveLambdaVariables ::
       ResolveTimeZone ::
       ResolveRandomSeed ::
@@ -506,7 +509,7 @@ class Analyzer(override val catalogManager: CatalogManager)
     }
 
     private def hasUnresolvedAlias(exprs: Seq[NamedExpression]) =
-      exprs.exists(_.find(_.isInstanceOf[UnresolvedAlias]).isDefined)
+      exprs.exists(_.exists(_.isInstanceOf[UnresolvedAlias]))
 
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUpWithPruning(
       _.containsPattern(UNRESOLVED_ALIAS), ruleId) {
@@ -527,10 +530,7 @@ class Analyzer(override val catalogManager: CatalogManager)
 
   object ResolveGroupingAnalytics extends Rule[LogicalPlan] {
     private[analysis] def hasGroupingFunction(e: Expression): Boolean = {
-      e.collectFirst {
-        case g: Grouping => g
-        case g: GroupingID => g
-      }.isDefined
+      e.exists (g => g.isInstanceOf[Grouping] || g.isInstanceOf[GroupingID])
     }
 
     private def replaceGroupingFunc(
@@ -613,7 +613,7 @@ class Analyzer(override val catalogManager: CatalogManager)
       val aggsBuffer = ArrayBuffer[Expression]()
       // Returns whether the expression belongs to any expressions in `aggsBuffer` or not.
       def isPartOfAggregation(e: Expression): Boolean = {
-        aggsBuffer.exists(a => a.find(_ eq e).isDefined)
+        aggsBuffer.exists(a => a.exists(_ eq e))
       }
       replaceGroupingFunc(agg, groupByExprs, gid).transformDown {
         // AggregateExpression should be computed on the unmodified value of its argument
@@ -877,6 +877,8 @@ class Analyzer(override val catalogManager: CatalogManager)
         s.copy(namespace = ResolvedNamespace(currentCatalog, catalogManager.currentNamespace))
       case s @ ShowViews(UnresolvedNamespace(Seq()), _, _) =>
         s.copy(namespace = ResolvedNamespace(currentCatalog, catalogManager.currentNamespace))
+      case s @ ShowFunctions(UnresolvedNamespace(Seq()), _, _, _, _) =>
+        s.copy(namespace = ResolvedNamespace(currentCatalog, catalogManager.currentNamespace))
       case a @ AnalyzeTables(UnresolvedNamespace(Seq()), _) =>
         a.copy(namespace = ResolvedNamespace(currentCatalog, catalogManager.currentNamespace))
       case UnresolvedNamespace(Seq()) =>
@@ -961,14 +963,14 @@ class Analyzer(override val catalogManager: CatalogManager)
     }
 
     private def hasMetadataCol(plan: LogicalPlan): Boolean = {
-      plan.expressions.exists(_.find {
+      plan.expressions.exists(_.exists {
         case a: Attribute =>
           // If an attribute is resolved before being labeled as metadata
           // (i.e. from the originating Dataset), we check with expression ID
           a.isMetadataCol ||
             plan.children.exists(c => c.metadataOutput.exists(_.exprId == a.exprId))
         case _ => false
-      }.isDefined)
+      })
     }
 
     private def addMetadataCol(plan: LogicalPlan): LogicalPlan = plan match {
@@ -1375,6 +1377,31 @@ class Analyzer(override val catalogManager: CatalogManager)
         throw QueryCompilationErrors.invalidStarUsageError("explode/json_tuple/UDTF",
           extractStar(g.generator.children))
 
+      case u @ Union(children, _, _)
+        // if there are duplicate output columns, give them unique expr ids
+          if children.exists(c => c.output.map(_.exprId).distinct.length < c.output.length) =>
+        val newChildren = children.map { c =>
+          if (c.output.map(_.exprId).distinct.length < c.output.length) {
+            val existingExprIds = mutable.HashSet[ExprId]()
+            val projectList = c.output.map { attr =>
+              if (existingExprIds.contains(attr.exprId)) {
+                // replace non-first duplicates with aliases and tag them
+                val newMetadata = new MetadataBuilder().withMetadata(attr.metadata)
+                  .putNull("__is_duplicate").build()
+                Alias(attr, attr.name)(explicitMetadata = Some(newMetadata))
+              } else {
+                // leave first duplicate alone
+                existingExprIds.add(attr.exprId)
+                attr
+              }
+            }
+            Project(projectList, c)
+          } else {
+            c
+          }
+        }
+        u.withNewChildren(newChildren)
+
       // When resolve `SortOrder`s in Sort based on child, don't report errors as
       // we still have chance to resolve it based on its descendants
       case s @ Sort(ordering, global, child) if child.resolved && !s.resolved =>
@@ -1588,7 +1615,7 @@ class Analyzer(override val catalogManager: CatalogManager)
       exprs.exists(_.collect { case _: Star => true }.nonEmpty)
 
     private def extractStar(exprs: Seq[Expression]): Seq[Star] =
-      exprs.map(_.collect { case s: Star => s }).flatten
+      exprs.flatMap(_.collect { case s: Star => s })
 
     /**
      * Expands the matching attribute.*'s in `child`'s output.
@@ -1644,7 +1671,7 @@ class Analyzer(override val catalogManager: CatalogManager)
   }
 
   private def containsDeserializer(exprs: Seq[Expression]): Boolean = {
-    exprs.exists(_.find(_.isInstanceOf[UnresolvedDeserializer]).isDefined)
+    exprs.exists(_.exists(_.isInstanceOf[UnresolvedDeserializer]))
   }
 
   // support CURRENT_DATE, CURRENT_TIMESTAMP, and grouping__id
@@ -1839,7 +1866,7 @@ class Analyzer(override val catalogManager: CatalogManager)
         withPosition(ordinal) {
           if (index > 0 && index <= aggs.size) {
             val ordinalExpr = aggs(index - 1)
-            if (ordinalExpr.find(_.isInstanceOf[AggregateExpression]).nonEmpty) {
+            if (ordinalExpr.exists(_.isInstanceOf[AggregateExpression])) {
               throw QueryCompilationErrors.groupByPositionRefersToAggregateFunctionError(
                 index, ordinalExpr)
             } else {
@@ -1874,9 +1901,6 @@ class Analyzer(override val catalogManager: CatalogManager)
           aggs.find(ne => resolver(ne.name, u.name)).getOrElse(u)
       }}
     }
-
-    // Group by alias is not allowed in ANSI mode.
-    private def allowGroupByAlias: Boolean = conf.groupByAliases && !conf.ansiEnabled
 
     override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUpWithPruning(
       // mayResolveAttrByAggregateExprs requires the TreePattern UNRESOLVED_ATTRIBUTE.
@@ -2003,42 +2027,33 @@ class Analyzer(override val catalogManager: CatalogManager)
    */
   object LookupFunctions extends Rule[LogicalPlan] {
     override def apply(plan: LogicalPlan): LogicalPlan = {
-      val externalFunctionNameSet = new mutable.HashSet[FunctionIdentifier]()
+      val externalFunctionNameSet = new mutable.HashSet[Seq[String]]()
+
       plan.resolveExpressionsWithPruning(_.containsAnyPattern(UNRESOLVED_FUNCTION)) {
-        case f @ UnresolvedFunction(AsFunctionIdentifier(ident), _, _, _, _) =>
-          if (externalFunctionNameSet.contains(normalizeFuncName(ident)) ||
-            v1SessionCatalog.isRegisteredFunction(ident)) {
-            f
-          } else if (v1SessionCatalog.isPersistentFunction(ident)) {
-            externalFunctionNameSet.add(normalizeFuncName(ident))
+        case f @ UnresolvedFunction(nameParts, _, _, _, _) =>
+          if (ResolveFunctions.lookupBuiltinOrTempFunction(nameParts).isDefined) {
             f
           } else {
-            withPosition(f) {
-              throw new NoSuchFunctionException(
-                ident.database.getOrElse(v1SessionCatalog.getCurrentDatabase),
-                ident.funcName)
+            val CatalogAndIdentifier(catalog, ident) = expandIdentifier(nameParts)
+            val fullName = normalizeFuncName(catalog.name +: ident.namespace :+ ident.name)
+            if (externalFunctionNameSet.contains(fullName)) {
+              f
+            } else if (catalog.asFunctionCatalog.functionExists(ident)) {
+              externalFunctionNameSet.add(fullName)
+              f
+            } else {
+              throw QueryCompilationErrors.noSuchFunctionError(nameParts, f, Some(fullName))
             }
           }
       }
     }
 
-    def normalizeFuncName(name: FunctionIdentifier): FunctionIdentifier = {
-      val funcName = if (conf.caseSensitiveAnalysis) {
-        name.funcName
+    def normalizeFuncName(name: Seq[String]): Seq[String] = {
+      if (conf.caseSensitiveAnalysis) {
+        name
       } else {
-        name.funcName.toLowerCase(Locale.ROOT)
+        name.map(_.toLowerCase(Locale.ROOT))
       }
-
-      val databaseName = name.database match {
-        case Some(a) => formatDatabaseName(a)
-        case None => v1SessionCatalog.getCurrentDatabase
-      }
-
-      FunctionIdentifier(funcName, Some(databaseName))
-    }
-
-    protected def formatDatabaseName(name: String): String = {
-      if (conf.caseSensitiveAnalysis) name else name.toLowerCase(Locale.ROOT)
     }
   }
 
@@ -2048,164 +2063,239 @@ class Analyzer(override val catalogManager: CatalogManager)
    */
   object ResolveFunctions extends Rule[LogicalPlan] {
     val trimWarningEnabled = new AtomicBoolean(true)
+
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUpWithPruning(
       _.containsAnyPattern(UNRESOLVED_FUNC, UNRESOLVED_FUNCTION, GENERATOR), ruleId) {
       // Resolve functions with concrete relations from v2 catalog.
-      case UnresolvedFunc(multipartIdent) =>
-        val funcIdent = parseSessionCatalogFunctionIdentifier(multipartIdent)
-        ResolvedFunc(Identifier.of(funcIdent.database.toArray, funcIdent.funcName))
+      case u @ UnresolvedFunc(nameParts, cmd, requirePersistentFunc, mismatchHint, _) =>
+        lookupBuiltinOrTempFunction(nameParts)
+          .orElse(lookupBuiltinOrTempTableFunction(nameParts)).map { info =>
+          if (requirePersistentFunc) {
+            throw QueryCompilationErrors.expectPersistentFuncError(
+              nameParts.head, cmd, mismatchHint, u)
+          } else {
+            ResolvedNonPersistentFunc(nameParts.head, V1Function(info))
+          }
+        }.getOrElse {
+          val CatalogAndIdentifier(catalog, ident) = expandIdentifier(nameParts)
+          val fullName = catalog.name +: ident.namespace :+ ident.name
+          CatalogV2Util.loadFunction(catalog, ident).map { func =>
+            ResolvedPersistentFunc(catalog.asFunctionCatalog, ident, func)
+          }.getOrElse(u.copy(possibleQualifiedName = Some(fullName)))
+        }
 
       case q: LogicalPlan =>
         q.transformExpressionsWithPruning(
           _.containsAnyPattern(UNRESOLVED_FUNCTION, GENERATOR), ruleId) {
-          case u if !u.childrenResolved => u // Skip until children are resolved.
-          case u @ UnresolvedGenerator(name, children) =>
-            withPosition(u) {
-              v1SessionCatalog.lookupFunction(name, children) match {
-                case generator: Generator => generator
-                case other => throw QueryCompilationErrors.generatorNotExpectedError(
-                  name, other.getClass.getCanonicalName)
-              }
-            }
-
-          case u @ UnresolvedFunction(AsFunctionIdentifier(ident), arguments, isDistinct, filter,
-            ignoreNulls) => withPosition(u) {
-              v1SessionCatalog.lookupFunction(ident, arguments) match {
-                // AggregateWindowFunctions are AggregateFunctions that can only be evaluated within
-                // the context of a Window clause. They do not need to be wrapped in an
-                // AggregateExpression.
-                case wf: AggregateWindowFunction =>
-                  if (isDistinct) {
-                    throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(
-                      wf.prettyName, "DISTINCT")
-                  } else if (filter.isDefined) {
-                    throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(
-                      wf.prettyName, "FILTER clause")
-                  } else if (ignoreNulls) {
-                    wf match {
-                      case nthValue: NthValue =>
-                        nthValue.copy(ignoreNulls = ignoreNulls)
-                      case _ =>
-                        throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(
-                          wf.prettyName, "IGNORE NULLS")
-                    }
-                  } else {
-                    wf
-                  }
-                case owf: FrameLessOffsetWindowFunction =>
-                  if (isDistinct) {
-                    throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(
-                      owf.prettyName, "DISTINCT")
-                  } else if (filter.isDefined) {
-                    throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(
-                      owf.prettyName, "FILTER clause")
-                  } else if (ignoreNulls) {
-                    owf match {
-                      case lead: Lead =>
-                        lead.copy(ignoreNulls = ignoreNulls)
-                      case lag: Lag =>
-                        lag.copy(ignoreNulls = ignoreNulls)
-                    }
-                  } else {
-                    owf
-                  }
-                // We get an aggregate function, we need to wrap it in an AggregateExpression.
-                case agg: AggregateFunction =>
-                  if (filter.isDefined && !filter.get.deterministic) {
-                    throw QueryCompilationErrors.nonDeterministicFilterInAggregateError
-                  }
-                  if (ignoreNulls) {
-                    val aggFunc = agg match {
-                      case first: First => first.copy(ignoreNulls = ignoreNulls)
-                      case last: Last => last.copy(ignoreNulls = ignoreNulls)
-                      case _ =>
-                        throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(
-                          agg.prettyName, "IGNORE NULLS")
-                    }
-                    AggregateExpression(aggFunc, Complete, isDistinct, filter)
-                  } else {
-                    AggregateExpression(agg, Complete, isDistinct, filter)
-                  }
-                // This function is not an aggregate function, just return the resolved one.
-                case other if isDistinct =>
-                  throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(
-                    other.prettyName, "DISTINCT")
-                case other if filter.isDefined =>
-                  throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(
-                    other.prettyName, "FILTER clause")
-                case other if ignoreNulls =>
-                  throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(
-                    other.prettyName, "IGNORE NULLS")
-                case e: String2TrimExpression if arguments.size == 2 =>
-                  if (trimWarningEnabled.get) {
-                    log.warn("Two-parameter TRIM/LTRIM/RTRIM function signatures are deprecated." +
-                      " Use SQL syntax `TRIM((BOTH | LEADING | TRAILING)? trimStr FROM str)`" +
-                      " instead.")
-                    trimWarningEnabled.set(false)
-                  }
-                  e
-                case other =>
-                  other
-              }
+          case u @ UnresolvedFunction(nameParts, arguments, _, _, _)
+              if hasLambdaAndResolvedArguments(arguments) => withPosition(u) {
+            resolveBuiltinOrTempFunction(nameParts, arguments, Some(u)).map {
+              case func: HigherOrderFunction => func
+              case other => other.failAnalysis(
+                "A lambda function should only be used in a higher order function. However, " +
+                  s"its class is ${other.getClass.getCanonicalName}, which is not a " +
+                  s"higher order function.")
+              // We don't support persistent high-order functions yet.
+            }.getOrElse(throw QueryCompilationErrors.noSuchFunctionError(nameParts, u))
           }
 
-          case u @ UnresolvedFunction(nameParts, arguments, isDistinct, filter, ignoreNulls) =>
-            withPosition(u) {
-              expandIdentifier(nameParts) match {
-                case NonSessionCatalogAndIdentifier(catalog, ident) =>
-                  if (!catalog.isFunctionCatalog) {
-                    throw QueryCompilationErrors.lookupFunctionInNonFunctionCatalogError(
-                      ident, catalog)
-                  }
+          case u if !u.childrenResolved => u // Skip until children are resolved.
 
-                  val unbound = catalog.asFunctionCatalog.loadFunction(ident)
-                  val inputType = StructType(arguments.zipWithIndex.map {
-                    case (exp, pos) => StructField(s"_$pos", exp.dataType, exp.nullable)
-                  })
-                  val bound = try {
-                    unbound.bind(inputType)
-                  } catch {
-                    case unsupported: UnsupportedOperationException =>
-                      throw QueryCompilationErrors.functionCannotProcessInputError(
-                        unbound, arguments, unsupported)
-                  }
+          case u @ UnresolvedGenerator(name, arguments) => withPosition(u) {
+            // For generator function, the parser only accepts v1 function name and creates
+            // `FunctionIdentifier`.
+            v1SessionCatalog.lookupFunction(name, arguments) match {
+              case generator: Generator => generator
+              case other => throw QueryCompilationErrors.generatorNotExpectedError(
+                name, other.getClass.getCanonicalName)
+            }
+          }
 
-                  if (bound.inputTypes().length != arguments.length) {
-                    throw QueryCompilationErrors.v2FunctionInvalidInputTypeLengthError(
-                      bound, arguments)
-                  }
-
-                  bound match {
-                    case scalarFunc: ScalarFunction[_] =>
-                      processV2ScalarFunction(scalarFunc, arguments, isDistinct,
-                        filter, ignoreNulls)
-                    case aggFunc: V2AggregateFunction[_, _] =>
-                      processV2AggregateFunction(aggFunc, arguments, isDistinct, filter,
-                        ignoreNulls)
-                    case _ =>
-                      failAnalysis(s"Function '${bound.name()}' does not implement ScalarFunction" +
-                        s" or AggregateFunction")
-                  }
-
-                case _ => u
+          case u @ UnresolvedFunction(nameParts, arguments, _, _, _) => withPosition(u) {
+            resolveBuiltinOrTempFunction(nameParts, arguments, Some(u)).getOrElse {
+              val CatalogAndIdentifier(catalog, ident) = expandIdentifier(nameParts)
+              if (CatalogV2Util.isSessionCatalog(catalog)) {
+                resolveV1Function(ident.asFunctionIdentifier, arguments, u)
+              } else {
+                resolveV2Function(catalog.asFunctionCatalog, ident, arguments, u)
               }
             }
+          }
         }
+    }
+
+    /**
+     * Check if the arguments of a function are either resolved or a lambda function.
+     */
+    private def hasLambdaAndResolvedArguments(expressions: Seq[Expression]): Boolean = {
+      val (lambdas, others) = expressions.partition(_.isInstanceOf[LambdaFunction])
+      lambdas.nonEmpty && others.forall(_.resolved)
+    }
+
+    def lookupBuiltinOrTempFunction(name: Seq[String]): Option[ExpressionInfo] = {
+      if (name.length == 1) {
+        v1SessionCatalog.lookupBuiltinOrTempFunction(name.head)
+      } else {
+        None
+      }
+    }
+
+    def lookupBuiltinOrTempTableFunction(name: Seq[String]): Option[ExpressionInfo] = {
+      if (name.length == 1) {
+        v1SessionCatalog.lookupBuiltinOrTempTableFunction(name.head)
+      } else {
+        None
+      }
+    }
+
+    private def resolveBuiltinOrTempFunction(
+        name: Seq[String],
+        arguments: Seq[Expression],
+        u: Option[UnresolvedFunction]): Option[Expression] = {
+      if (name.length == 1) {
+        v1SessionCatalog.resolveBuiltinOrTempFunction(name.head, arguments).map { func =>
+          if (u.isDefined) validateFunction(func, arguments.length, u.get) else func
+        }
+      } else {
+        None
+      }
+    }
+
+    private def resolveV1Function(
+        ident: FunctionIdentifier,
+        arguments: Seq[Expression],
+        u: UnresolvedFunction): Expression = {
+      val func = v1SessionCatalog.resolvePersistentFunction(ident, arguments)
+      validateFunction(func, arguments.length, u)
+    }
+
+    private def validateFunction(
+        func: Expression,
+        numArgs: Int,
+        u: UnresolvedFunction): Expression = {
+      func match {
+        // AggregateWindowFunctions are AggregateFunctions that can only be evaluated within
+        // the context of a Window clause. They do not need to be wrapped in an
+        // AggregateExpression.
+        case wf: AggregateWindowFunction =>
+          if (u.isDistinct) {
+            throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(
+              wf.prettyName, "DISTINCT")
+          } else if (u.filter.isDefined) {
+            throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(
+              wf.prettyName, "FILTER clause")
+          } else if (u.ignoreNulls) {
+            wf match {
+              case nthValue: NthValue =>
+                nthValue.copy(ignoreNulls = u.ignoreNulls)
+              case _ =>
+                throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(
+                  wf.prettyName, "IGNORE NULLS")
+            }
+          } else {
+            wf
+          }
+        case owf: FrameLessOffsetWindowFunction =>
+          if (u.isDistinct) {
+            throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(
+              owf.prettyName, "DISTINCT")
+          } else if (u.filter.isDefined) {
+            throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(
+              owf.prettyName, "FILTER clause")
+          } else if (u.ignoreNulls) {
+            owf match {
+              case lead: Lead =>
+                lead.copy(ignoreNulls = u.ignoreNulls)
+              case lag: Lag =>
+                lag.copy(ignoreNulls = u.ignoreNulls)
+            }
+          } else {
+            owf
+          }
+        // We get an aggregate function, we need to wrap it in an AggregateExpression.
+        case agg: AggregateFunction =>
+          if (u.filter.isDefined && !u.filter.get.deterministic) {
+            throw QueryCompilationErrors.nonDeterministicFilterInAggregateError
+          }
+          if (u.ignoreNulls) {
+            val aggFunc = agg match {
+              case first: First => first.copy(ignoreNulls = u.ignoreNulls)
+              case last: Last => last.copy(ignoreNulls = u.ignoreNulls)
+              case _ =>
+                throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(
+                  agg.prettyName, "IGNORE NULLS")
+            }
+            AggregateExpression(aggFunc, Complete, u.isDistinct, u.filter)
+          } else {
+            AggregateExpression(agg, Complete, u.isDistinct, u.filter)
+          }
+        // This function is not an aggregate function, just return the resolved one.
+        case other if u.isDistinct =>
+          throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(
+            other.prettyName, "DISTINCT")
+        case other if u.filter.isDefined =>
+          throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(
+            other.prettyName, "FILTER clause")
+        case other if u.ignoreNulls =>
+          throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(
+            other.prettyName, "IGNORE NULLS")
+        case e: String2TrimExpression if numArgs == 2 =>
+          if (trimWarningEnabled.get) {
+            log.warn("Two-parameter TRIM/LTRIM/RTRIM function signatures are deprecated." +
+              " Use SQL syntax `TRIM((BOTH | LEADING | TRAILING)? trimStr FROM str)`" +
+              " instead.")
+            trimWarningEnabled.set(false)
+          }
+          e
+        case other =>
+          other
+      }
+    }
+
+    private def resolveV2Function(
+        catalog: FunctionCatalog,
+        ident: Identifier,
+        arguments: Seq[Expression],
+        u: UnresolvedFunction): Expression = {
+      val unbound = catalog.loadFunction(ident)
+      val inputType = StructType(arguments.zipWithIndex.map {
+        case (exp, pos) => StructField(s"_$pos", exp.dataType, exp.nullable)
+      })
+      val bound = try {
+        unbound.bind(inputType)
+      } catch {
+        case unsupported: UnsupportedOperationException =>
+          throw QueryCompilationErrors.functionCannotProcessInputError(
+            unbound, arguments, unsupported)
+      }
+
+      if (bound.inputTypes().length != arguments.length) {
+        throw QueryCompilationErrors.v2FunctionInvalidInputTypeLengthError(
+          bound, arguments)
+      }
+
+      bound match {
+        case scalarFunc: ScalarFunction[_] =>
+          processV2ScalarFunction(scalarFunc, arguments, u)
+        case aggFunc: V2AggregateFunction[_, _] =>
+          processV2AggregateFunction(aggFunc, arguments, u)
+        case _ =>
+          failAnalysis(s"Function '${bound.name()}' does not implement ScalarFunction" +
+            s" or AggregateFunction")
+      }
     }
 
     private def processV2ScalarFunction(
         scalarFunc: ScalarFunction[_],
         arguments: Seq[Expression],
-        isDistinct: Boolean,
-        filter: Option[Expression],
-        ignoreNulls: Boolean): Expression = {
-      if (isDistinct) {
+        u: UnresolvedFunction): Expression = {
+      if (u.isDistinct) {
         throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(
           scalarFunc.name(), "DISTINCT")
-      } else if (filter.isDefined) {
+      } else if (u.filter.isDefined) {
         throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(
           scalarFunc.name(), "FILTER clause")
-      } else if (ignoreNulls) {
+      } else if (u.ignoreNulls) {
         throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(
           scalarFunc.name(), "IGNORE NULLS")
       } else {
@@ -2215,12 +2305,14 @@ class Analyzer(override val catalogManager: CatalogManager)
           case Some(m) if Modifier.isStatic(m.getModifiers) =>
             StaticInvoke(scalarFunc.getClass, scalarFunc.resultType(),
               MAGIC_METHOD_NAME, arguments, inputTypes = declaredInputTypes,
-                propagateNull = false, returnNullable = scalarFunc.isResultNullable)
+                propagateNull = false, returnNullable = scalarFunc.isResultNullable,
+                isDeterministic = scalarFunc.isDeterministic)
           case Some(_) =>
             val caller = Literal.create(scalarFunc, ObjectType(scalarFunc.getClass))
             Invoke(caller, MAGIC_METHOD_NAME, scalarFunc.resultType(),
               arguments, methodInputTypes = declaredInputTypes, propagateNull = false,
-              returnNullable = scalarFunc.isResultNullable)
+              returnNullable = scalarFunc.isResultNullable,
+              isDeterministic = scalarFunc.isDeterministic)
           case _ =>
             // TODO: handle functions defined in Scala too - in Scala, even if a
             //  subclass do not override the default method in parent interface
@@ -2240,15 +2332,13 @@ class Analyzer(override val catalogManager: CatalogManager)
     private def processV2AggregateFunction(
         aggFunc: V2AggregateFunction[_, _],
         arguments: Seq[Expression],
-        isDistinct: Boolean,
-        filter: Option[Expression],
-        ignoreNulls: Boolean): Expression = {
-      if (ignoreNulls) {
+        u: UnresolvedFunction): Expression = {
+      if (u.ignoreNulls) {
         throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(
           aggFunc.name(), "IGNORE NULLS")
       }
       val aggregator = V2Aggregator(aggFunc, arguments)
-      AggregateExpression(aggregator, Complete, isDistinct, filter)
+      AggregateExpression(aggregator, Complete, u.isDistinct, u.filter)
     }
 
     /**
@@ -2430,11 +2520,11 @@ class Analyzer(override val catalogManager: CatalogManager)
       }.toSet
 
       // Find the first Aggregate Expression that is not Windowed.
-      exprs.exists(_.collectFirst {
-        case ae: AggregateExpression if !windowedAggExprs.contains(ae) => ae
-        case e: PythonUDF if PythonUDF.isGroupedAggPandasUDF(e) &&
-          !windowedAggExprs.contains(e) => e
-      }.isDefined)
+      exprs.exists(_.exists {
+        case ae: AggregateExpression => !windowedAggExprs.contains(ae)
+        case e: PythonUDF => PythonUDF.isGroupedAggPandasUDF(e) && !windowedAggExprs.contains(e)
+        case _ => false
+      })
     }
   }
 
@@ -2594,19 +2684,20 @@ class Analyzer(override val catalogManager: CatalogManager)
    */
   object ExtractGenerator extends Rule[LogicalPlan] {
     private def hasGenerator(expr: Expression): Boolean = {
-      expr.find(_.isInstanceOf[Generator]).isDefined
+      expr.exists(_.isInstanceOf[Generator])
     }
 
     private def hasNestedGenerator(expr: NamedExpression): Boolean = {
+      @scala.annotation.tailrec
       def hasInnerGenerator(g: Generator): Boolean = g match {
         // Since `GeneratorOuter` is just a wrapper of generators, we skip it here
         case go: GeneratorOuter =>
           hasInnerGenerator(go.child)
         case _ =>
-          g.children.exists { _.find {
+          g.children.exists { _.exists {
             case _: Generator => true
             case _ => false
-          }.isDefined }
+          } }
       }
       trimNonTopLevelAliases(expr) match {
         case UnresolvedAlias(g: Generator, _) => hasInnerGenerator(g)
@@ -2617,12 +2708,12 @@ class Analyzer(override val catalogManager: CatalogManager)
     }
 
     private def hasAggFunctionInGenerator(ne: Seq[NamedExpression]): Boolean = {
-      ne.exists(_.find {
+      ne.exists(_.exists {
         case g: Generator =>
-          g.children.exists(_.find(_.isInstanceOf[AggregateFunction]).isDefined)
+          g.children.exists(_.exists(_.isInstanceOf[AggregateFunction]))
         case _ =>
           false
-      }.nonEmpty)
+      })
     }
 
     private def trimAlias(expr: NamedExpression): Expression = expr match {
@@ -2675,6 +2766,7 @@ class Analyzer(override val catalogManager: CatalogManager)
 
         val projectExprs = Array.ofDim[NamedExpression](aggList.length)
         val newAggList = aggList
+          .toIndexedSeq
           .map(trimNonTopLevelAliases)
           .zipWithIndex
           .flatMap {
@@ -2742,6 +2834,9 @@ class Analyzer(override val catalogManager: CatalogManager)
         } else {
           p
         }
+
+      case g @ Generate(GeneratorOuter(generator), _, _, _, _, _) =>
+        g.copy(generator = generator, outer = true)
 
       case g: Generate => g
 
@@ -2820,10 +2915,10 @@ class Analyzer(override val catalogManager: CatalogManager)
       exprs.exists(hasWindowFunction)
 
     private def hasWindowFunction(expr: Expression): Boolean = {
-      expr.find {
+      expr.exists {
         case window: WindowExpression => true
         case _ => false
-      }.isDefined
+      }
     }
 
     /**
@@ -3523,7 +3618,8 @@ class Analyzer(override val catalogManager: CatalogManager)
         case u @ UpCast(child, _, _) if !child.resolved => u
 
         case UpCast(_, target, _) if target != DecimalType && !target.isInstanceOf[DataType] =>
-          throw QueryCompilationErrors.unsupportedAbstractDataTypeForUpCastError(target)
+          throw new IllegalStateException(
+            s"UpCast only supports DecimalType as AbstractDataType yet, but got: $target")
 
         case UpCast(child, target, walkedTypePath) if target == DecimalType
           && child.dataType.isInstanceOf[DecimalType] =>
@@ -3658,7 +3754,7 @@ class Analyzer(override val catalogManager: CatalogManager)
     }
 
     private def hasUnresolvedFieldName(a: AlterTableCommand): Boolean = {
-      a.expressions.exists(_.find(_.isInstanceOf[UnresolvedFieldName]).isDefined)
+      a.expressions.exists(_.exists(_.isInstanceOf[UnresolvedFieldName]))
     }
   }
 
@@ -3775,8 +3871,8 @@ object TimeWindowing extends Rule[LogicalPlan] {
    * The windows are calculated as below:
    * maxNumOverlapping <- ceil(windowDuration / slideDuration)
    * for (i <- 0 until maxNumOverlapping)
-   *   windowId <- ceil((timestamp - startTime) / slideDuration)
-   *   windowStart <- windowId * slideDuration + (i - maxNumOverlapping) * slideDuration + startTime
+   *   lastStart <- timestamp - (timestamp - startTime + slideDuration) % slideDuration
+   *   windowStart <- lastStart - i * slideDuration
    *   windowEnd <- windowStart + windowDuration
    *   return windowStart, windowEnd
    *
@@ -3816,21 +3912,20 @@ object TimeWindowing extends Rule[LogicalPlan] {
           case _ => Metadata.empty
         }
 
-        def getWindow(i: Int, overlappingWindows: Int, dataType: DataType): Expression = {
-          val division = (PreciseTimestampConversion(
-            window.timeColumn, dataType, LongType) - window.startTime) / window.slideDuration
-          val ceil = Ceil(division)
-          // if the division is equal to the ceiling, our record is the start of a window
-          val windowId = CaseWhen(Seq((ceil === division, ceil + 1)), Some(ceil))
-          val windowStart = (windowId + i - overlappingWindows) *
-            window.slideDuration + window.startTime
+        def getWindow(i: Int, dataType: DataType): Expression = {
+          val timestamp = PreciseTimestampConversion(window.timeColumn, dataType, LongType)
+          val lastStart = timestamp - (timestamp - window.startTime
+            + window.slideDuration) % window.slideDuration
+          val windowStart = lastStart - i * window.slideDuration
           val windowEnd = windowStart + window.windowDuration
 
+          // We make sure value fields are nullable since the dataType of TimeWindow defines them
+          // as nullable.
           CreateNamedStruct(
             Literal(WINDOW_START) ::
-              PreciseTimestampConversion(windowStart, LongType, dataType) ::
+              PreciseTimestampConversion(windowStart, LongType, dataType).castNullable() ::
               Literal(WINDOW_END) ::
-              PreciseTimestampConversion(windowEnd, LongType, dataType) ::
+              PreciseTimestampConversion(windowEnd, LongType, dataType).castNullable() ::
               Nil)
         }
 
@@ -3838,7 +3933,7 @@ object TimeWindowing extends Rule[LogicalPlan] {
           WINDOW_COL_NAME, window.dataType, metadata = metadata)()
 
         if (window.windowDuration == window.slideDuration) {
-          val windowStruct = Alias(getWindow(0, 1, window.timeColumn.dataType), WINDOW_COL_NAME)(
+          val windowStruct = Alias(getWindow(0, window.timeColumn.dataType), WINDOW_COL_NAME)(
             exprId = windowAttr.exprId, explicitMetadata = Some(metadata))
 
           val replacedPlan = p transformExpressions {
@@ -3856,13 +3951,20 @@ object TimeWindowing extends Rule[LogicalPlan] {
             math.ceil(window.windowDuration * 1.0 / window.slideDuration).toInt
           val windows =
             Seq.tabulate(overlappingWindows)(i =>
-              getWindow(i, overlappingWindows, window.timeColumn.dataType))
+              getWindow(i, window.timeColumn.dataType))
 
           val projections = windows.map(_ +: child.output)
 
+          // When the condition windowDuration % slideDuration = 0 is fulfilled,
+          // the estimation of the number of windows becomes exact one,
+          // which means all produced windows are valid.
           val filterExpr =
-            window.timeColumn >= windowAttr.getField(WINDOW_START) &&
-              window.timeColumn < windowAttr.getField(WINDOW_END)
+            if (window.windowDuration % window.slideDuration == 0) {
+              IsNotNull(window.timeColumn)
+            } else {
+              window.timeColumn >= windowAttr.getField(WINDOW_START) &&
+                window.timeColumn < windowAttr.getField(WINDOW_END)
+            }
 
           val substitutedPlan = Filter(filterExpr,
             Expand(projections, windowAttr +: child.output, child))
@@ -3938,11 +4040,15 @@ object SessionWindowing extends Rule[LogicalPlan] {
         val sessionEnd = PreciseTimestampConversion(session.timeColumn + gapDuration,
           session.timeColumn.dataType, LongType)
 
+        // We make sure value fields are nullable since the dataType of SessionWindow defines them
+        // as nullable.
         val literalSessionStruct = CreateNamedStruct(
           Literal(SESSION_START) ::
-            PreciseTimestampConversion(sessionStart, LongType, session.timeColumn.dataType) ::
+            PreciseTimestampConversion(sessionStart, LongType, session.timeColumn.dataType)
+              .castNullable() ::
             Literal(SESSION_END) ::
-            PreciseTimestampConversion(sessionEnd, LongType, session.timeColumn.dataType) ::
+            PreciseTimestampConversion(sessionEnd, LongType, session.timeColumn.dataType)
+              .castNullable() ::
             Nil)
 
         val sessionStruct = Alias(literalSessionStruct, SESSION_COL_NAME)(
@@ -3953,7 +4059,7 @@ object SessionWindowing extends Rule[LogicalPlan] {
         }
 
         // As same as tumbling window, we add a filter to filter out nulls.
-        // And we also filter out events with negative or zero gap duration.
+        // And we also filter out events with negative or zero or invalid gap duration.
         val filterExpr = IsNotNull(session.timeColumn) &&
           (sessionAttr.getField(SESSION_END) > sessionAttr.getField(SESSION_START))
 
@@ -4181,7 +4287,30 @@ object ApplyCharTypePadding extends Rule[LogicalPlan] {
  * rule right after the main resolution batch.
  */
 object RemoveTempResolvedColumn extends Rule[LogicalPlan] {
-  override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveExpressions {
-    case t: TempResolvedColumn => UnresolvedAttribute(t.nameParts)
+  override def apply(plan: LogicalPlan): LogicalPlan = {
+    plan.foreachUp {
+      // HAVING clause will be resolved as a Filter. When having func(column with wrong data type),
+      // the column could be wrapped by a TempResolvedColumn, e.g. mean(tempresolvedcolumn(t.c)).
+      // Because TempResolvedColumn can still preserve column data type, here is a chance to check
+      // if the data type matches with the required data type of the function. We can throw an error
+      // when data types mismatches.
+      case operator: Filter =>
+        operator.expressions.foreach(_.foreachUp {
+          case e: Expression if e.childrenResolved && e.checkInputDataTypes().isFailure =>
+            e.checkInputDataTypes() match {
+              case TypeCheckResult.TypeCheckFailure(message) =>
+                e.setTagValue(DATA_TYPE_MISMATCH_ERROR, true)
+                e.failAnalysis(
+                  s"cannot resolve '${e.sql}' due to data type mismatch: $message" +
+                    extraHintForAnsiTypeCoercionExpression(plan))
+            }
+          case _ =>
+        })
+      case _ =>
+    }
+
+    plan.resolveExpressions {
+      case t: TempResolvedColumn => UnresolvedAttribute(t.nameParts)
+    }
   }
 }

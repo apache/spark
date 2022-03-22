@@ -65,7 +65,7 @@ public class RegisterExecutor extends BlockTransferMessage {
 
   @Override
   public boolean equals(Object other) {
-    if (other != null && other instanceof RegisterExecutor) {
+    if (other instanceof RegisterExecutor) {
       RegisterExecutor o = (RegisterExecutor) other;
       return Objects.equals(appId, o.appId)
         && Objects.equals(execId, o.execId)

@@ -908,8 +908,8 @@ class InternalFrame:
         """
         if len(sdf.columns) > 0:
             return SparkDataFrame(
-                sdf._jdf.toDF().withSequenceColumn(column_name),  # type: ignore[operator]
-                sdf.sql_ctx,
+                sdf._jdf.toDF().withSequenceColumn(column_name),
+                sdf.sparkSession,
             )
         else:
             cnt = sdf.count()
@@ -1570,7 +1570,7 @@ class InternalFrame:
             InternalField(
                 dtype=dtype,
                 struct_field=StructField(
-                    name=name,
+                    name=str(name),
                     dataType=infer_pd_series_spark_type(col, dtype, prefer_timestamp_ntz),
                     nullable=bool(col.isnull().any()),
                 ),

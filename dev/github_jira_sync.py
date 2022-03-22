@@ -55,7 +55,7 @@ MAX_FILE = ".github-jira-max"
 def get_url(url):
     try:
         request = Request(url)
-        request.add_header('Authorization', 'token %s' % GITHUB_OAUTH_KEY)
+        request.add_header("Authorization", "token %s" % GITHUB_OAUTH_KEY)
         return urlopen(request)
     except HTTPError:
         print("Unable to fetch URL, exiting: %s" % url)
@@ -77,7 +77,7 @@ def get_jira_prs():
         page_json = get_json(page)
 
         for pull in page_json:
-            jira_issues = re.findall(JIRA_PROJECT_NAME + "-[0-9]{4,5}", pull['title'])
+            jira_issues = re.findall(JIRA_PROJECT_NAME + "-[0-9]{4,5}", pull["title"])
             for jira_issue in jira_issues:
                 result = result + [(jira_issue, pull)]
 
@@ -91,7 +91,7 @@ def get_jira_prs():
 
 
 def set_max_pr(max_val):
-    f = open(MAX_FILE, 'w')
+    f = open(MAX_FILE, "w")
     f.write("%s" % max_val)
     f.close()
     print("Writing largest PR number seen: %s" % max_val)
@@ -99,7 +99,7 @@ def set_max_pr(max_val):
 
 def get_max_pr():
     if os.path.exists(MAX_FILE):
-        result = int(open(MAX_FILE, 'r').read())
+        result = int(open(MAX_FILE, "r").read())
         print("Read largest PR number previously seen: %s" % result)
         return result
     else:
@@ -112,23 +112,23 @@ def build_pr_component_dic(jira_prs):
     for issue, pr in jira_prs:
         print(issue)
         page = get_json(get_url(JIRA_API_BASE + "/rest/api/2/issue/" + issue))
-        jira_components = [c['name'].upper() for c in page['fields']['components']]
-        if pr['number'] in dic:
-            dic[pr['number']][1].update(jira_components)
+        jira_components = [c["name"].upper() for c in page["fields"]["components"]]
+        if pr["number"] in dic:
+            dic[pr["number"]][1].update(jira_components)
         else:
-            pr_components = set(label['name'].upper() for label in pr['labels'])
-            dic[pr['number']] = (pr_components, set(jira_components))
+            pr_components = set(label["name"].upper() for label in pr["labels"])
+            dic[pr["number"]] = (pr_components, set(jira_components))
     return dic
 
 
 def reset_pr_labels(pr_num, jira_components):
-    url = '%s/issues/%s/labels' % (GITHUB_API_BASE, pr_num)
-    labels = ', '.join(('"%s"' % c) for c in jira_components)
+    url = "%s/issues/%s/labels" % (GITHUB_API_BASE, pr_num)
+    labels = ", ".join(('"%s"' % c) for c in jira_components)
     try:
-        request = Request(url, data=('{"labels":[%s]}' % labels).encode('utf-8'))
-        request.add_header('Content-Type', 'application/json')
-        request.add_header('Authorization', 'token %s' % GITHUB_OAUTH_KEY)
-        request.get_method = lambda: 'PUT'
+        request = Request(url, data=('{"labels":[%s]}' % labels).encode("utf-8"))
+        request.add_header("Content-Type", "application/json")
+        request.add_header("Authorization", "token %s" % GITHUB_OAUTH_KEY)
+        request.get_method = lambda: "PUT"
         urlopen(request)
         print("Set %s with labels %s" % (pr_num, labels))
     except HTTPError:
@@ -136,32 +136,31 @@ def reset_pr_labels(pr_num, jira_components):
         sys.exit(-1)
 
 
-jira_client = jira.client.JIRA({'server': JIRA_API_BASE},
-                               basic_auth=(JIRA_USERNAME, JIRA_PASSWORD))
+jira_client = jira.client.JIRA({"server": JIRA_API_BASE}, basic_auth=(JIRA_USERNAME, JIRA_PASSWORD))
 
 jira_prs = get_jira_prs()
 
 previous_max = get_max_pr()
 print("Retrieved %s JIRA PR's from GitHub" % len(jira_prs))
-jira_prs = [(k, v) for k, v in jira_prs if int(v['number']) > previous_max]
+jira_prs = [(k, v) for k, v in jira_prs if int(v["number"]) > previous_max]
 print("%s PR's remain after excluding visited ones" % len(jira_prs))
 
 num_updates = 0
 considered = []
-for issue, pr in sorted(jira_prs, key=lambda kv: int(kv[1]['number'])):
+for issue, pr in sorted(jira_prs, key=lambda kv: int(kv[1]["number"])):
     if num_updates >= MAX_UPDATES:
         break
-    pr_num = int(pr['number'])
+    pr_num = int(pr["number"])
 
     print("Checking issue %s" % issue)
     considered = considered + [pr_num]
 
-    url = pr['html_url']
-    title = "[GitHub] Pull Request #%s (%s)" % (pr['number'], pr['user']['login'])
+    url = pr["html_url"]
+    title = "[GitHub] Pull Request #%s (%s)" % (pr["number"], pr["user"]["login"])
     try:
         page = get_json(get_url(JIRA_API_BASE + "/rest/api/2/issue/" + issue + "/remotelink"))
-        existing_links = map(lambda l: l['object']['url'], page)
-    except:
+        existing_links = map(lambda l: l["object"]["url"], page)
+    except BaseException:
         print("Failure reading JIRA %s (does it exist?)" % issue)
         print(sys.exc_info()[0])
         continue
@@ -169,20 +168,22 @@ for issue, pr in sorted(jira_prs, key=lambda kv: int(kv[1]['number'])):
     if url in existing_links:
         continue
 
-    icon = {"title": "Pull request #%s" % pr['number'],
-            "url16x16": "https://assets-cdn.github.com/favicon.ico"}
+    icon = {
+        "title": "Pull request #%s" % pr["number"],
+        "url16x16": "https://assets-cdn.github.com/favicon.ico",
+    }
     destination = {"title": title, "url": url, "icon": icon}
     # For all possible fields see:
     # https://developer.atlassian.com/display/JIRADEV/Fields+in+Remote+Issue+Links
     # application = {"name": "GitHub pull requests", "type": "org.apache.spark.jira.github"}
     jira_client.add_remote_link(issue, destination)
 
-    comment = "User '%s' has created a pull request for this issue:" % pr['user']['login']
-    comment += "\n%s" % pr['html_url']
+    comment = "User '%s' has created a pull request for this issue:" % pr["user"]["login"]
+    comment += "\n%s" % pr["html_url"]
     if pr_num >= MIN_COMMENT_PR:
         jira_client.add_comment(issue, comment)
 
-    print("Added link %s <-> PR #%s" % (issue, pr['number']))
+    print("Added link %s <-> PR #%s" % (issue, pr["number"]))
     num_updates += 1
 
 if len(considered) > 0:

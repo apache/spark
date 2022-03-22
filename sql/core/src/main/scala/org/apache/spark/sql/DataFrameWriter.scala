@@ -327,7 +327,6 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
                 supportsExtract, catalogManager, dsOptions)
 
               val tableSpec = TableSpec(
-                bucketSpec = None,
                 properties = Map.empty,
                 provider = Some(source),
                 options = Map.empty,
@@ -596,7 +595,6 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
 
       case (SaveMode.Overwrite, _) =>
         val tableSpec = TableSpec(
-          bucketSpec = None,
           properties = Map.empty,
           provider = Some(source),
           options = Map.empty,
@@ -609,7 +607,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
           partitioningAsV2,
           df.queryExecution.analyzed,
           tableSpec,
-          writeOptions = Map.empty,
+          writeOptions = extraOptions.toMap,
           orCreate = true) // Create the table if it doesn't exist
 
       case (other, _) =>
@@ -617,7 +615,6 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
         // created between our existence check and physical execution, but this can't be helped
         // in any case.
         val tableSpec = TableSpec(
-          bucketSpec = None,
           properties = Map.empty,
           provider = Some(source),
           options = Map.empty,
@@ -631,7 +628,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
           partitioningAsV2,
           df.queryExecution.analyzed,
           tableSpec,
-          Map.empty,
+          writeOptions = extraOptions.toMap,
           other == SaveMode.Ignore)
     }
 

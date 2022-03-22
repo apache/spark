@@ -22,22 +22,14 @@ import datetime
 import decimal
 import sys
 import typing
-from collections import Iterable
+from collections.abc import Iterable
 from distutils.version import LooseVersion
-from inspect import getfullargspec, isclass
-from typing import (
-    Any,
-    Callable,
-    Generic,
-    List,
-    Tuple,
-    Union,
-    Type,
-)
+from inspect import isclass
+from typing import Any, Callable, Generic, List, Tuple, Union, Type, get_type_hints
 
 import numpy as np
 import pandas as pd
-from pandas.api.types import CategoricalDtype, pandas_dtype
+from pandas.api.types import CategoricalDtype, pandas_dtype  # type: ignore[attr-defined]
 from pandas.api.extensions import ExtensionDtype
 
 extension_dtypes: Tuple[type, ...]
@@ -76,7 +68,6 @@ from pyspark.sql.pandas.types import to_arrow_type, from_arrow_type
 # For running doctests and reference resolution in PyCharm.
 from pyspark import pandas as ps  # noqa: F401
 from pyspark.pandas._typing import Dtype, T
-from pyspark.pandas.typedef.string_typehints import resolve_string_type_hint
 
 if typing.TYPE_CHECKING:
     from pyspark.pandas.internal import InternalField
@@ -566,11 +557,10 @@ def infer_return_type(f: Callable) -> Union[SeriesType, DataFrameType, ScalarTyp
     from pyspark.pandas.typedef import SeriesType, NameTypeHolder, IndexNameTypeHolder
     from pyspark.pandas.utils import name_like_string
 
-    spec = getfullargspec(f)
-    tpe = spec.annotations.get("return", None)
-    if isinstance(tpe, str):
-        # This type hint can happen when given hints are string to avoid forward reference.
-        tpe = resolve_string_type_hint(tpe)
+    tpe = get_type_hints(f).get("return", None)
+
+    if tpe is None:
+        raise ValueError("A return value is required for the input function")
 
     if hasattr(tpe, "__origin__") and issubclass(tpe.__origin__, SeriesType):
         tpe = tpe.__args__[0]
@@ -664,7 +654,7 @@ def create_type_for_series_type(param: Any) -> Type[SeriesType]:
     new_class: Type[NameTypeHolder]
     if isinstance(param, ExtensionDtype):
         new_class = type(NameTypeHolder.short_name, (NameTypeHolder,), {})
-        new_class.tpe = param
+        new_class.tpe = param  # type: ignore[assignment]
     else:
         new_class = param.type if isinstance(param, np.dtype) else param
 
@@ -815,7 +805,7 @@ def _new_type_holders(
             )
             new_param.name = param.start
             if isinstance(param.stop, ExtensionDtype):
-                new_param.tpe = param.stop
+                new_param.tpe = param.stop  # type: ignore[assignment]
             else:
                 # When the given argument is a numpy's dtype instance.
                 new_param.tpe = param.stop.type if isinstance(param.stop, np.dtype) else param.stop
@@ -829,7 +819,7 @@ def _new_type_holders(
                 holder_clazz.short_name, (holder_clazz,), {}
             )
             if isinstance(param, ExtensionDtype):
-                new_type.tpe = param
+                new_type.tpe = param  # type: ignore[assignment]
             else:
                 new_type.tpe = param.type if isinstance(param, np.dtype) else param
             new_types.append(new_type)

@@ -33,11 +33,7 @@ import static java.nio.charset.StandardCharsets.UTF_8;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Throwables;
-import org.rocksdb.BlockBasedTableConfig;
-import org.rocksdb.Options;
-import org.rocksdb.Statistics;
-import org.rocksdb.WriteBatch;
-import org.rocksdb.WriteOptions;
+import org.rocksdb.*;
 
 import org.apache.spark.annotation.Private;
 
@@ -63,15 +59,39 @@ public class RocksDB implements KVStore {
   /** DB key where type aliases are stored. */
   private static final byte[] TYPE_ALIASES_KEY = "__types__".getBytes(UTF_8);
 
+  /**
+   * Use full filter.
+   *
+   * https://github.com/facebook/rocksdb/wiki/RocksDB-Bloom-Filter#full-filters-new-format
+   */
+  private static final BloomFilter fullFilter =
+    new BloomFilter(10.0D /* BloomFilter.DEFAULT_BITS_PER_KEY */, false);
+
+  /** Disable compression in index data. */
   private static final BlockBasedTableConfig tableFormatConfig = new BlockBasedTableConfig()
+    .setFilterPolicy(fullFilter)
+    .setEnableIndexCompression(false)
+    .setIndexBlockRestartInterval(8)
     .setFormatVersion(5);
 
+  /**
+   * - Use ZSTD at the bottom most level to reduce the disk space
+   * - Use LZ4 at the other levels because it's better than Snappy in general.
+   *
+   * https://github.com/facebook/rocksdb/wiki/Compression#configuration
+   */
   private static final Options dbOptions = new Options()
     .setCreateIfMissing(true)
-    .setTableFormatConfig(tableFormatConfig)
-    .setStatistics(new Statistics());
+    .setBottommostCompressionType(CompressionType.ZSTD_COMPRESSION)
+    .setCompressionType(CompressionType.LZ4_COMPRESSION)
+    .setTableFormatConfig(tableFormatConfig);
 
-  private static final WriteOptions writeOptions = new WriteOptions().setSync(true);
+  /**
+   * - Use explicitly 'sync = false' like LevelDB KVStore implementation.
+   *
+   * https://github.com/google/leveldb/blob/1.23/include/leveldb/options.h#L182
+   */
+  private static final WriteOptions writeOptions = new WriteOptions().setSync(false);
 
   private final AtomicReference<org.rocksdb.RocksDB> _db;
 

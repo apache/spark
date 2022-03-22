@@ -261,4 +261,22 @@ class QueryExecutionSuite extends SharedSparkSession {
     val cmdResultExec = projectQe.executedPlan.asInstanceOf[CommandResultExec]
     assert(cmdResultExec.commandPhysicalPlan.isInstanceOf[ShowTablesExec])
   }
+
+  test("SPARK-38198: check specify maxFields when call toFile method") {
+    withTempDir { dir =>
+      val path = dir.getCanonicalPath + "/plans.txt"
+      // Define a dataset with 6 columns
+      val ds = spark.createDataset(Seq((0, 1, 2, 3, 4, 5), (6, 7, 8, 9, 10, 11)))
+      // `CodegenMode` and `FormattedMode` doesn't use the maxFields, so not tested in this case
+      Seq(SimpleMode.name, ExtendedMode.name, CostMode.name).foreach { modeName =>
+        val maxFields = 3
+        ds.queryExecution.debug.toFile(path, explainMode = Some(modeName), maxFields = maxFields)
+        Utils.tryWithResource(Source.fromFile(path)) { source =>
+          val tableScan = source.getLines().filter(_.contains("LocalTableScan"))
+          assert(tableScan.exists(_.contains("more fields")),
+            s"Specify maxFields = $maxFields doesn't take effect when explainMode is $modeName")
+        }
+      }
+    }
+  }
 }

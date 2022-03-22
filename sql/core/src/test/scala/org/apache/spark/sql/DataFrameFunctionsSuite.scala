@@ -251,31 +251,12 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
     val key16 = "abcdefghijklmnop"
     val key24 = "abcdefghijklmnop12345678"
     val key32 = "abcdefghijklmnop12345678ABCDEFGH"
-    val dummyKey16 = "1234567812345678"
-    val dummyKey24 = "123456781234567812345678"
-    val dummyKey32 = "12345678123456781234567812345678"
     val encryptedText16 = "4Hv0UKCx6nfUeAoPZo1z+w=="
     val encryptedText24 = "NeTYNgA+PCQBN50DA//O2w=="
     val encryptedText32 = "9J3iZbIxnmaG+OIA9Amd+A=="
     val encryptedEmptyText16 = "jmTOhz8XTbskI/zYFFgOFQ=="
     val encryptedEmptyText24 = "9RDK70sHNzqAFRcpfGM5gQ=="
     val encryptedEmptyText32 = "j9IDsCvlYXtcVJUf4FAjQQ=="
-
-    def checkInvalidKeyLength(df: => DataFrame): Unit = {
-      val e = intercept[Exception] {
-        df.collect
-      }
-      assert(e.getMessage.contains(
-        "The key length of aes_encrypt/aes_decrypt should be one of 16, 24 or 32 bytes"))
-    }
-
-    def checkUnsupportedMode(df: => DataFrame): Unit = {
-      val e = intercept[SparkException] {
-        df.collect
-      }.getCause
-      assert(e.isInstanceOf[UnsupportedOperationException])
-      assert(e.getMessage.matches("""The AES mode \w+ with the padding \w+ is not supported"""))
-    }
 
     val df1 = Seq("Spark", "").toDF
 
@@ -315,15 +296,6 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       df1.selectExpr("aes_encrypt(value, cast(null as binary))"),
       Seq(Row(null), Row(null)))
 
-    // Encryption failure - invalid key length
-    checkInvalidKeyLength(df1.selectExpr("aes_encrypt(value, '12345678901234567')"))
-    checkInvalidKeyLength(df1.selectExpr("aes_encrypt(value, binary('123456789012345'))"))
-    checkInvalidKeyLength(df1.selectExpr("aes_encrypt(value, binary(''))"))
-
-    // Unsupported AES mode and padding in encrypt
-    checkUnsupportedMode(df1.selectExpr(s"aes_encrypt(value, '$key16', 'CBC')"))
-    checkUnsupportedMode(df1.selectExpr(s"aes_encrypt(value, '$key16', 'ECB', 'NoPadding')"))
-
     val df2 = Seq(
       (encryptedText16, encryptedText24, encryptedText32),
       (encryptedEmptyText16, encryptedEmptyText24, encryptedEmptyText32)
@@ -360,35 +332,6 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
         df2.selectExpr(s"aes_decrypt($colName, cast(null as binary))"),
         Seq(Row(null), Row(null)))
     }
-
-    // Decryption failure - invalid key length
-    Seq("value16", "value24", "value32").foreach { colName =>
-      checkInvalidKeyLength(df2.selectExpr(
-        s"aes_decrypt(unbase64($colName), '12345678901234567')"))
-      checkInvalidKeyLength(df2.selectExpr(
-        s"aes_decrypt(unbase64($colName), binary('123456789012345'))"))
-      checkInvalidKeyLength(df2.selectExpr(
-        s"aes_decrypt(unbase64($colName), '')"))
-      checkInvalidKeyLength(df2.selectExpr(
-        s"aes_decrypt(unbase64($colName), binary(''))"))
-    }
-
-    // Decryption failure - key mismatch
-    Seq(
-      ("value16", dummyKey16),
-      ("value24", dummyKey24),
-      ("value32", dummyKey32)).foreach {
-      case (colName, key) =>
-        val e = intercept[Exception] {
-          df2.selectExpr(s"aes_decrypt(unbase64($colName), binary('$key'), 'ECB')").collect
-        }
-        assert(e.getMessage.contains("BadPaddingException"))
-    }
-
-    // Unsupported AES mode and padding in decrypt
-    checkUnsupportedMode(df2.selectExpr(s"aes_decrypt(value16, '$key16', 'GSM')"))
-    checkUnsupportedMode(df2.selectExpr(s"aes_decrypt(value16, '$key16', 'GCM', 'PKCS')"))
-    checkUnsupportedMode(df2.selectExpr(s"aes_decrypt(value32, '$key32', 'ECB', 'None')"))
   }
 
   test("string function find_in_set") {
@@ -538,6 +481,16 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
     spark.sql("drop temporary function fStringLength")
   }
 
+  test("SPARK-38130: array_sort with lambda of non-orderable items") {
+    val df6 = Seq((Array[Map[String, Int]](Map("a" -> 1), Map("b" -> 2, "c" -> 3),
+      Map()), "x")).toDF("a", "b")
+    checkAnswer(
+      df6.selectExpr("array_sort(a, (x, y) -> cardinality(x) - cardinality(y))"),
+      Seq(
+        Row(Seq[Map[String, Int]](Map(), Map("a" -> 1), Map("b" -> 2, "c" -> 3))))
+    )
+  }
+
   test("sort_array/array_sort functions") {
     val df = Seq(
       (Array[Int](2, 1, 3), Array("b", "c", "a")),
@@ -626,8 +579,10 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
   }
 
   test("array size function - legacy") {
-    withSQLConf(SQLConf.LEGACY_SIZE_OF_NULL.key -> "true") {
-      testSizeOfArray(sizeOfNull = -1)
+    if (!conf.ansiEnabled) {
+      withSQLConf(SQLConf.LEGACY_SIZE_OF_NULL.key -> "true") {
+        testSizeOfArray(sizeOfNull = -1)
+      }
     }
   }
 
@@ -779,8 +734,10 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
   }
 
   test("map size function - legacy") {
-    withSQLConf(SQLConf.LEGACY_SIZE_OF_NULL.key -> "true") {
-      testSizeOfMap(sizeOfNull = -1: Int)
+    if (!conf.ansiEnabled) {
+      withSQLConf(SQLConf.LEGACY_SIZE_OF_NULL.key -> "true") {
+        testSizeOfMap(sizeOfNull = -1: Int)
+      }
     }
   }
 
@@ -1074,15 +1031,17 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       Seq(Row(false))
     )
 
-    val e1 = intercept[AnalysisException] {
-      OneRowRelation().selectExpr("array_contains(array(1), .01234567890123456790123456780)")
-    }
-    val errorMsg1 =
-      s"""
-         |Input to function array_contains should have been array followed by a
-         |value with same element type, but it's [array<int>, decimal(38,29)].
+    if (!conf.ansiEnabled) {
+      val e1 = intercept[AnalysisException] {
+        OneRowRelation().selectExpr("array_contains(array(1), .01234567890123456790123456780)")
+      }
+      val errorMsg1 =
+        s"""
+           |Input to function array_contains should have been array followed by a
+           |value with same element type, but it's [array<int>, decimal(38,29)].
        """.stripMargin.replace("\n", " ").trim()
-    assert(e1.message.contains(errorMsg1))
+      assert(e1.message.contains(errorMsg1))
+    }
 
     val e2 = intercept[AnalysisException] {
       OneRowRelation().selectExpr("array_contains(array(1), 'foo')")
@@ -1511,41 +1470,43 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
         Seq(Row(null), Row(null), Row(null))
       )
     }
-    checkAnswer(
-      df.select(element_at(df("a"), 4)),
-      Seq(Row(null), Row(null), Row(null))
-    )
-    checkAnswer(
-      df.select(element_at(df("a"), df("b"))),
-      Seq(Row("1"), Row(""), Row(null))
-    )
-    checkAnswer(
-      df.selectExpr("element_at(a, b)"),
-      Seq(Row("1"), Row(""), Row(null))
-    )
+    if (!conf.ansiEnabled) {
+      checkAnswer(
+        df.select(element_at(df("a"), 4)),
+        Seq(Row(null), Row(null), Row(null))
+      )
+      checkAnswer(
+        df.select(element_at(df("a"), df("b"))),
+        Seq(Row("1"), Row(""), Row(null))
+      )
+      checkAnswer(
+        df.selectExpr("element_at(a, b)"),
+        Seq(Row("1"), Row(""), Row(null))
+      )
 
-    checkAnswer(
-      df.select(element_at(df("a"), 1)),
-      Seq(Row("1"), Row(null), Row(null))
-    )
-    checkAnswer(
-      df.select(element_at(df("a"), -1)),
-      Seq(Row("3"), Row(""), Row(null))
-    )
+      checkAnswer(
+        df.select(element_at(df("a"), 1)),
+        Seq(Row("1"), Row(null), Row(null))
+      )
+      checkAnswer(
+        df.select(element_at(df("a"), -1)),
+        Seq(Row("3"), Row(""), Row(null))
+      )
 
-    checkAnswer(
-      df.selectExpr("element_at(a, 4)"),
-      Seq(Row(null), Row(null), Row(null))
-    )
+      checkAnswer(
+        df.selectExpr("element_at(a, 4)"),
+        Seq(Row(null), Row(null), Row(null))
+      )
 
-    checkAnswer(
-      df.selectExpr("element_at(a, 1)"),
-      Seq(Row("1"), Row(null), Row(null))
-    )
-    checkAnswer(
-      df.selectExpr("element_at(a, -1)"),
-      Seq(Row("3"), Row(""), Row(null))
-    )
+      checkAnswer(
+        df.selectExpr("element_at(a, 1)"),
+        Seq(Row("1"), Row(null), Row(null))
+      )
+      checkAnswer(
+        df.selectExpr("element_at(a, -1)"),
+        Seq(Row("3"), Row(""), Row(null))
+      )
+    }
 
     val e1 = intercept[AnalysisException] {
       Seq(("a string element", 1)).toDF().selectExpr("element_at(_1, _2)")
@@ -1607,10 +1568,12 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       Seq(Row("a"))
     )
 
-    checkAnswer(
-      OneRowRelation().selectExpr("element_at(map(1, 'a', 2, 'b'), 1.23D)"),
-      Seq(Row(null))
-    )
+    if (!conf.ansiEnabled) {
+      checkAnswer(
+        OneRowRelation().selectExpr("element_at(map(1, 'a', 2, 'b'), 1.23D)"),
+        Seq(Row(null))
+      )
+    }
 
     val e3 = intercept[AnalysisException] {
       OneRowRelation().selectExpr("element_at(map(1, 'a', 2, 'b'), '1')")
@@ -1685,10 +1648,12 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
 
     // Simple test cases
     def simpleTest(): Unit = {
-      checkAnswer (
-        df.select(concat($"i1", $"s1")),
-        Seq(Row(Seq("1", "a", "b", "c")), Row(Seq("1", "0", "a")))
-      )
+      if (!conf.ansiEnabled) {
+        checkAnswer(
+          df.select(concat($"i1", $"s1")),
+          Seq(Row(Seq("1", "a", "b", "c")), Row(Seq("1", "0", "a")))
+        )
+      }
       checkAnswer(
         df.select(concat($"i1", $"i2", $"i3")),
         Seq(Row(Seq(1, 2, 3, 5, 6)), Row(Seq(1, 0, 2)))

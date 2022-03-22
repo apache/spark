@@ -236,7 +236,7 @@ select schema_of_json('{"c1":0, "c2":[1]}')
 -- !query schema
 struct<schema_of_json({"c1":0, "c2":[1]}):string>
 -- !query output
-STRUCT<`c1`: BIGINT, `c2`: ARRAY<BIGINT>>
+STRUCT<c1: BIGINT, c2: ARRAY<BIGINT>>
 
 
 -- !query
@@ -339,7 +339,7 @@ select from_json(
 struct<>
 -- !query output
 org.apache.spark.SparkUpgradeException
-You may get a different result due to the upgrading of Spark 3.0: Fail to parse '02-29' in the new parser. You can set spark.sql.legacy.timeParserPolicy to LEGACY to restore the behavior before Spark 3.0, or set to CORRECTED and treat it as an invalid datetime string.
+You may get a different result due to the upgrading to Spark >= 3.0: Fail to parse '02-29' in the new parser. You can set spark.sql.legacy.timeParserPolicy to LEGACY to restore the behavior before Spark 3.0, or set to CORRECTED and treat it as an invalid datetime string.
 
 
 -- !query
@@ -351,7 +351,7 @@ select from_json(
 struct<>
 -- !query output
 org.apache.spark.SparkUpgradeException
-You may get a different result due to the upgrading of Spark 3.0: Fail to parse '02-29' in the new parser. You can set spark.sql.legacy.timeParserPolicy to LEGACY to restore the behavior before Spark 3.0, or set to CORRECTED and treat it as an invalid datetime string.
+You may get a different result due to the upgrading to Spark >= 3.0: Fail to parse '02-29' in the new parser. You can set spark.sql.legacy.timeParserPolicy to LEGACY to restore the behavior before Spark 3.0, or set to CORRECTED and treat it as an invalid datetime string.
 
 
 -- !query
@@ -375,7 +375,7 @@ select schema_of_json('{"c1":1}', map('primitivesAsString', 'true'))
 -- !query schema
 struct<schema_of_json({"c1":1}):string>
 -- !query output
-STRUCT<`c1`: STRING>
+STRUCT<c1: STRING>
 
 
 -- !query
@@ -383,7 +383,7 @@ select schema_of_json('{"c1":01, "c2":0.1}', map('allowNumericLeadingZeros', 'tr
 -- !query schema
 struct<schema_of_json({"c1":01, "c2":0.1}):string>
 -- !query output
-STRUCT<`c1`: BIGINT, `c2`: DECIMAL(1,1)>
+STRUCT<c1: BIGINT, c2: DECIMAL(1,1)>
 
 
 -- !query

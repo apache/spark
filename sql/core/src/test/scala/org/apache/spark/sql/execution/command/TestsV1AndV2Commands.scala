@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.command
 import org.scalactic.source.Position
 import org.scalatest.Tag
 
+import org.apache.spark.sql.execution.command.DDLCommandTestUtils.{V1_COMMAND_VERSION, V2_COMMAND_VERSION}
 import org.apache.spark.sql.internal.SQLConf
 
 /**
@@ -34,8 +35,14 @@ trait TestsV1AndV2Commands extends DDLCommandTestUtils {
   override def test(testName: String, testTags: Tag*)(testFun: => Any)
     (implicit pos: Position): Unit = {
     Seq(true, false).foreach { useV1Command =>
-      _version = if (useV1Command) "V1" else "V2"
+      def setCommandVersion(): Unit = {
+        _version = if (useV1Command) V1_COMMAND_VERSION else V2_COMMAND_VERSION
+      }
+      setCommandVersion()
       super.test(testName, testTags: _*) {
+        // Need to set command version inside this test function so that
+        // the correct command version is available in each test.
+        setCommandVersion()
         withSQLConf(SQLConf.LEGACY_USE_V1_COMMAND.key -> useV1Command.toString) {
           testFun
         }

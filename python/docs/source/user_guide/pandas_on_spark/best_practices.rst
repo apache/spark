@@ -23,7 +23,7 @@ Best Practices
 Leverage PySpark APIs
 ---------------------
 
-Pandas API on Spark uses Spark under the hood; therefore, many features and performance optimization are available
+Pandas API on Spark uses Spark under the hood; therefore, many features and performance optimizations are available
 in pandas API on Spark as well. Leverage and combine those cutting-edge features with pandas API on Spark.
 
 Existing Spark context and Spark sessions are used out of the box in pandas API on Spark. If you already have your own
@@ -31,7 +31,7 @@ configured Spark context or sessions running, pandas API on Spark uses them.
 
 If there is no Spark context or session running in your environment (e.g., ordinary Python interpreter),
 such configurations can be set to ``SparkContext`` and/or ``SparkSession``.
-Once Spark context and/or session is created, pandas API on Spark can use this context and/or session automatically.
+Once a Spark context and/or session is created, pandas API on Spark can use this context and/or session automatically.
 For example, if you want to configure the executor memory in Spark, you can do as below:
 
 .. code-block:: python
@@ -149,9 +149,9 @@ Avoid computation on single partition
 
 Another common case is the computation on a single partition. Currently, some APIs such as
 `DataFrame.rank <https://spark.apache.org/docs/latest/api/python/reference/api/pyspark.pandas.DataFrame.rank.html>`_
-uses PySpark’s Window without specifying partition specification. This leads to move all data into a single
+use PySpark’s Window without specifying partition specification. This moves all data into a single
 partition in single machine and could cause serious performance degradation.
-Such APIs should be avoided very large dataset.
+Such APIs should be avoided for very large datasets.
 
 .. code-block:: python
 
@@ -176,7 +176,7 @@ Avoid reserved column names
 ---------------------------
 
 Columns with leading ``__`` and trailing ``__`` are reserved in pandas API on Spark. To handle internal behaviors for, such as, index,
-pandas API on Spark uses some internal columns. Therefore, it is discouraged to use such column names and not guaranteed to work.
+pandas API on Spark uses some internal columns. Therefore, it is discouraged to use such column names and they are not guaranteed to work.
 
 
 Do not use duplicated column names
@@ -202,7 +202,7 @@ Additionally, it is strongly discouraged to use case sensitive column names. Pan
    ...
    Reference 'a' is ambiguous, could be: a, a.;
 
-However, you can turn on ``spark.sql.caseSensitive`` in Spark configuration to enable it if you use on your own risk.
+However, you can turn on ``spark.sql.caseSensitive`` in Spark configuration to enable it for use at your own risk.
 
 .. code-block:: python
 
@@ -232,7 +232,7 @@ See  `working with PySpark <pandas_pyspark.rst#pyspark>`_
 Use ``distributed`` or ``distributed-sequence`` default index
 -------------------------------------------------------------
 
-One common issue when pandas-on-Spark users face is the slow performance by default index. Pandas API on Spark attaches
+One common issue that pandas-on-Spark users face is the slow performance due to the default index. Pandas API on Spark attaches
 a default index when the index is unknown, for example, Spark DataFrame is directly converted to pandas-on-Spark DataFrame.
 
 Note that ``sequence`` requires the computation on single partition which is discouraged. If you plan

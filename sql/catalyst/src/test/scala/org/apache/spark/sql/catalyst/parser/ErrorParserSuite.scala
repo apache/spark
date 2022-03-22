@@ -16,6 +16,7 @@
  */
 package org.apache.spark.sql.catalyst.parser
 
+import org.apache.spark.SparkThrowableHelper
 import org.apache.spark.sql.catalyst.analysis.AnalysisTest
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 
@@ -31,26 +32,49 @@ class ErrorParserSuite extends AnalysisTest {
     assert(parsePlan(sqlCommand) == plan)
   }
 
-  def intercept(sqlCommand: String, messages: String*): Unit =
-    interceptParseException(CatalystSqlParser.parsePlan)(sqlCommand, messages: _*)
-
-  def intercept(sql: String, line: Int, startPosition: Int, stopPosition: Int,
-                messages: String*): Unit = {
+  private def interceptImpl(sql: String, messages: String*)(
+      line: Option[Int] = None,
+      startPosition: Option[Int] = None,
+      stopPosition: Option[Int] = None,
+      errorClass: Option[String] = None): Unit = {
     val e = intercept[ParseException](CatalystSqlParser.parsePlan(sql))
-
-    // Check position.
-    assert(e.line.isDefined)
-    assert(e.line.get === line)
-    assert(e.startPosition.isDefined)
-    assert(e.startPosition.get === startPosition)
-    assert(e.stop.startPosition.isDefined)
-    assert(e.stop.startPosition.get === stopPosition)
 
     // Check messages.
     val error = e.getMessage
     messages.foreach { message =>
       assert(error.contains(message))
     }
+
+    // Check position.
+    if (line.isDefined) {
+      assert(line.isDefined && startPosition.isDefined && stopPosition.isDefined)
+      assert(e.line.isDefined)
+      assert(e.line.get === line.get)
+      assert(e.startPosition.isDefined)
+      assert(e.startPosition.get === startPosition.get)
+      assert(e.stop.startPosition.isDefined)
+      assert(e.stop.startPosition.get === stopPosition.get)
+    }
+
+    // Check error class.
+    if (errorClass.isDefined) {
+      assert(e.getErrorClass == errorClass.get)
+    }
+  }
+
+  def intercept(sqlCommand: String, errorClass: Option[String], messages: String*): Unit = {
+    interceptImpl(sqlCommand, messages: _*)(errorClass = errorClass)
+  }
+
+  def intercept(
+      sql: String, line: Int, startPosition: Int, stopPosition: Int, messages: String*): Unit = {
+    interceptImpl(sql, messages: _*)(Some(line), Some(startPosition), Some(stopPosition))
+  }
+
+  def intercept(sql: String, errorClass: String, line: Int, startPosition: Int, stopPosition: Int,
+      messages: String*): Unit = {
+    interceptImpl(sql, messages: _*)(
+      Some(line), Some(startPosition), Some(stopPosition), Some(errorClass))
   }
 
   test("no viable input") {
@@ -64,10 +88,29 @@ class ErrorParserSuite extends AnalysisTest {
   }
 
   test("mismatched input") {
-    intercept("select * from r order by q from t", 1, 27, 31,
-      "mismatched input",
-      "---------------------------^^^")
-    intercept("select *\nfrom r\norder by q\nfrom t", 4, 0, 4, "mismatched input", "^^^")
+    intercept("select * from r order by q from t", "PARSE_INPUT_MISMATCHED",
+      1, 27, 31,
+      "Syntax error at or near",
+      "---------------------------^^^"
+    )
+    intercept("select *\nfrom r\norder by q\nfrom t", "PARSE_INPUT_MISMATCHED",
+      4, 0, 4,
+      "Syntax error at or near", "^^^")
+  }
+
+  test("empty input") {
+    val expectedErrMsg = SparkThrowableHelper.getMessage("PARSE_EMPTY_STATEMENT", Array[String]())
+    intercept("", Some("PARSE_EMPTY_STATEMENT"), expectedErrMsg)
+    intercept("   ", Some("PARSE_EMPTY_STATEMENT"), expectedErrMsg)
+    intercept(" \n", Some("PARSE_EMPTY_STATEMENT"), expectedErrMsg)
+  }
+
+  test("jargon token substitute to user-facing language") {
+    // '<EOF>' -> end of input
+    intercept("select count(*", "PARSE_INPUT_MISMATCHED",
+      1, 14, 14, "Syntax error at or near end of input")
+    intercept("select 1 as a from", "PARSE_INPUT_MISMATCHED",
+      1, 18, 18, "Syntax error at or near end of input")
   }
 
   test("semantic errors") {
@@ -77,9 +120,11 @@ class ErrorParserSuite extends AnalysisTest {
   }
 
   test("SPARK-21136: misleading error message due to problematic antlr grammar") {
-    intercept("select * from a left join_ b on a.id = b.id", "missing 'JOIN' at 'join_'")
-    intercept("select * from test where test.t is like 'test'", "mismatched input 'is' expecting")
-    intercept("SELECT * FROM test WHERE x NOT NULL", "mismatched input 'NOT' expecting")
+    intercept("select * from a left join_ b on a.id = b.id", None, "missing 'JOIN' at 'join_'")
+    intercept("select * from test where test.t is like 'test'", Some("PARSE_INPUT_MISMATCHED"),
+      SparkThrowableHelper.getMessage("PARSE_INPUT_MISMATCHED", Array("'is'")))
+    intercept("SELECT * FROM test WHERE x NOT NULL", Some("PARSE_INPUT_MISMATCHED"),
+      SparkThrowableHelper.getMessage("PARSE_INPUT_MISMATCHED", Array("'NOT'")))
   }
 
   test("hyphen in identifier - DDL tests") {
@@ -207,15 +252,5 @@ class ErrorParserSuite extends AnalysisTest {
         |SELECT a
         |SELECT b
       """.stripMargin, 2, 9, 10, msg + " test-table")
-  }
-
-  test("SPARK-35789: lateral join with non-subquery relations") {
-    val msg = "LATERAL can only be used with subquery"
-    intercept("SELECT * FROM t1, LATERAL t2", msg)
-    intercept("SELECT * FROM t1 JOIN LATERAL t2", msg)
-    intercept("SELECT * FROM t1, LATERAL (t2 JOIN t3)", msg)
-    intercept("SELECT * FROM t1, LATERAL (LATERAL t2)", msg)
-    intercept("SELECT * FROM t1, LATERAL VALUES (0, 1)", msg)
-    intercept("SELECT * FROM t1, LATERAL RANGE(0, 1)", msg)
   }
 }

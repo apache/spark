@@ -34,10 +34,12 @@ import org.apache.spark.sql.catalyst.{InternalRow, NoopFilters, StructFilters}
 import org.apache.spark.sql.catalyst.expressions.{SpecificInternalRow, UnsafeArrayData}
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, DateTimeUtils, GenericArrayData}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants.MILLIS_PER_DAY
+import org.apache.spark.sql.catalyst.util.RebaseDateTime.RebaseSpec
 import org.apache.spark.sql.execution.datasources.DataSourceUtils
 import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
+
 /**
  * A deserializer to deserialize data in avro format to data in catalyst format.
  */
@@ -45,7 +47,7 @@ private[sql] class AvroDeserializer(
     rootAvroType: Schema,
     rootCatalystType: DataType,
     positionalFieldMatch: Boolean,
-    datetimeRebaseMode: LegacyBehaviorPolicy.Value,
+    datetimeRebaseSpec: RebaseSpec,
     filters: StructFilters) {
 
   def this(
@@ -56,17 +58,17 @@ private[sql] class AvroDeserializer(
       rootAvroType,
       rootCatalystType,
       positionalFieldMatch = false,
-      LegacyBehaviorPolicy.withName(datetimeRebaseMode),
+      RebaseSpec(LegacyBehaviorPolicy.withName(datetimeRebaseMode)),
       new NoopFilters)
   }
 
   private lazy val decimalConversions = new DecimalConversion()
 
   private val dateRebaseFunc = DataSourceUtils.createDateRebaseFuncInRead(
-    datetimeRebaseMode, "Avro")
+    datetimeRebaseSpec.mode, "Avro")
 
   private val timestampRebaseFunc = DataSourceUtils.createTimestampRebaseFuncInRead(
-    datetimeRebaseMode, "Avro")
+    datetimeRebaseSpec, "Avro")
 
   private val converter: Any => Option[Any] = try {
     rootCatalystType match {

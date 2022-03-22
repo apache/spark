@@ -48,9 +48,9 @@ private[spark] object Minikube extends Logging {
 
     versionArrayOpt match {
       case Some(Array(x, y, z)) =>
-        if (Ordering.Tuple3[Int, Int, Int].lt((x, y, z), (1, 7, 3))) {
+        if (Ordering.Tuple3[Int, Int, Int].lt((x, y, z), (1, 18, 0))) {
           assert(false, s"Unsupported Minikube version is detected: $minikubeVersionString." +
-            "For integration testing Minikube version 1.7.3 or greater is expected.")
+            "For integration testing Minikube version 1.18.0 or greater is expected.")
         }
       case _ =>
         assert(false, s"Unexpected version format detected in `$minikubeVersionString`." +
@@ -111,10 +111,6 @@ private[spark] object Minikube extends Logging {
   def minikubeServiceAction(args: String*): String = {
     executeMinikube(true, "service", args: _*).head
   }
-
-  def describePods(labels: String): Seq[String] =
-    Minikube.executeMinikube(false, "kubectl", "--", "describe", "pods", "--all-namespaces",
-      "-l", labels)
 }
 
 private[spark] object MinikubeStatus extends Enumeration {

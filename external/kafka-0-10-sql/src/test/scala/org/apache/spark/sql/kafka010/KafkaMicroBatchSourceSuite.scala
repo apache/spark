@@ -44,7 +44,7 @@ import org.apache.spark.sql.execution.streaming.continuous.ContinuousExecution
 import org.apache.spark.sql.functions.{count, window}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.kafka010.KafkaSourceProvider._
-import org.apache.spark.sql.streaming.{StreamTest, Trigger}
+import org.apache.spark.sql.streaming.{StreamingQuery, StreamTest, Trigger}
 import org.apache.spark.sql.streaming.util.StreamManualClock
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -193,6 +193,45 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase {
       throw q.exception.get
     }
     true
+  }
+
+  test("Trigger.AvailableNow") {
+    val topic = newTopic()
+    testUtils.createTopic(topic, partitions = 5)
+
+    testUtils.sendMessages(topic, (0 until 15).map { case x =>
+      s"foo-$x"
+    }.toArray, Some(0))
+
+    val reader = spark
+      .readStream
+      .format("kafka")
+      .option("kafka.bootstrap.servers", testUtils.brokerAddress)
+      .option("kafka.metadata.max.age.ms", "1")
+      .option("maxOffsetsPerTrigger", 5)
+      .option("subscribe", topic)
+      .option("startingOffsets", "earliest")
+      .load()
+
+    var index: Int = 0
+    def startTriggerAvailableNowQuery(): StreamingQuery = {
+      reader.writeStream
+        .foreachBatch((_: Dataset[Row], _: Long) => {
+          index += 1
+        })
+        .trigger(Trigger.AvailableNow)
+        .start()
+    }
+
+    val query = startTriggerAvailableNowQuery()
+    try {
+      assert(query.awaitTermination(streamingTimeout.toMillis))
+    } finally {
+      query.stop()
+    }
+
+    // should have 3 batches now i.e. 15 / 5 = 3
+    assert(index == 3)
   }
 
   test("(de)serialization of initial offsets") {
@@ -419,6 +458,8 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase {
   }
 
   test("compositeReadLimit") {
+    MockedSystemClock.reset()
+
     val topic = newTopic()
     testUtils.createTopic(topic, partitions = 3)
     testUtils.sendMessages(topic, (100 to 120).map(_.toString).toArray, Some(0))
@@ -435,12 +476,19 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase {
       .option("maxOffsetsPerTrigger", 20)
       .option("subscribe", topic)
       .option("startingOffsets", "earliest")
+      // mock system time to ensure deterministic behavior
+      // in determining if maxOffsetsPerTrigger is satisfied
+      .option("_mockSystemTime", "")
     val kafka = reader.load()
       .selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
       .as[(String, String)]
     val mapped: org.apache.spark.sql.Dataset[_] = kafka.map(kv => kv._2.toInt)
 
     val clock = new StreamManualClock
+
+    def advanceSystemClock(mills: Long): ExternalAction = () => {
+      MockedSystemClock.advanceCurrentSystemTime(mills)
+    }
 
     testStream(mapped)(
       StartStream(Trigger.ProcessingTime(100), clock),
@@ -453,6 +501,7 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase {
       // No data is processed for next batch as data is less than minOffsetsPerTrigger
       // and maxTriggerDelay is not expired
       AdvanceManualClock(100),
+      advanceSystemClock(100),
       waitUntilBatchProcessed(clock),
       CheckNewAnswer(),
       Assert {
@@ -462,6 +511,7 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase {
         true
       },
       AdvanceManualClock(100),
+      advanceSystemClock(100),
       waitUntilBatchProcessed(clock),
       // Running batch now as number of new records is greater than minOffsetsPerTrigger
       // but reading limited data as per maxOffsetsPerTrigger
@@ -473,14 +523,11 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase {
       // Testing maxTriggerDelay
       // No data is processed for next batch till maxTriggerDelay is expired
       AdvanceManualClock(100),
+      advanceSystemClock(100),
       waitUntilBatchProcessed(clock),
       CheckNewAnswer(),
-      // Sleeping for 5s to let maxTriggerDelay expire
-      Assert {
-        Thread.sleep(5 * 1000)
-        true
-      },
       AdvanceManualClock(100),
+      advanceSystemClock(5000),
       // Running batch as maxTriggerDelay is expired
       waitUntilBatchProcessed(clock),
       CheckAnswer(1, 10, 100, 101, 102, 103, 104, 105, 106, 107,
@@ -1369,10 +1416,10 @@ class KafkaMicroBatchV2SourceSuite extends KafkaMicroBatchSourceSuiteBase {
     testStream(kafka)(
       makeSureGetOffsetCalled,
       AssertOnQuery { query =>
-        query.logicalPlan.find {
+        query.logicalPlan.exists {
           case r: StreamingDataSourceV2Relation => r.stream.isInstanceOf[KafkaMicroBatchStream]
           case _ => false
-        }.isDefined
+        }
       }
     )
   }

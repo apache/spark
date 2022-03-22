@@ -29,6 +29,8 @@ import com.fasterxml.jackson.module.scala.DefaultScalaModule
 import org.apache.spark.SparkConf
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.History.HYBRID_STORE_DISK_BACKEND
+import org.apache.spark.internal.config.History.HybridStoreDiskBackend
+import org.apache.spark.internal.config.History.HybridStoreDiskBackend._
 import org.apache.spark.util.kvstore._
 
 private[spark] object KVUtils extends Logging {
@@ -36,7 +38,8 @@ private[spark] object KVUtils extends Logging {
   /** Use this to annotate constructor params to be used as KVStore indices. */
   type KVIndexParam = KVIndex @getter
 
-  private lazy val backend = new SparkConf().get(HYBRID_STORE_DISK_BACKEND)
+  private def backend(conf: SparkConf) =
+    HybridStoreDiskBackend.withName(conf.get(HYBRID_STORE_DISK_BACKEND))
 
   /**
    * A KVStoreSerializer that provides Scala types serialization too, and uses the same options as
@@ -56,14 +59,14 @@ private[spark] object KVUtils extends Logging {
    * @param metadata Metadata value to compare to the data in the store. If the store does not
    *                 contain any metadata (e.g. it's a new store), this value is written as
    *                 the store's metadata.
+   * @param conf SparkConf use to get `HYBRID_STORE_DISK_BACKEND`
    */
-  def open[M: ClassTag](path: File, metadata: M): KVStore = {
+  def open[M: ClassTag](path: File, metadata: M, conf: SparkConf): KVStore = {
     require(metadata != null, "Metadata is required.")
 
-    val db = backend match {
-      case "leveldb" => new LevelDB(path, new KVStoreScalaSerializer())
-      case "rocksdb" => new RocksDB(path, new KVStoreScalaSerializer())
-      case _ => throw new IllegalArgumentException(s"$backend is not supported.")
+    val db = backend(conf) match {
+      case LEVELDB => new LevelDB(path, new KVStoreScalaSerializer())
+      case ROCKSDB => new RocksDB(path, new KVStoreScalaSerializer())
     }
     val dbMeta = db.getMetadata(classTag[M].runtimeClass)
     if (dbMeta == null) {
