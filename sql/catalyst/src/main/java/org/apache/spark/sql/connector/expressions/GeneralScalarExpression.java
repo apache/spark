@@ -19,77 +19,19 @@ package org.apache.spark.sql.connector.expressions;
 
 import java.io.Serializable;
 import java.util.Arrays;
+import java.util.Objects;
 
 import org.apache.spark.annotation.Evolving;
+import org.apache.spark.sql.connector.expressions.filter.Predicate;
 import org.apache.spark.sql.connector.util.V2ExpressionSQLBuilder;
 
-// scalastyle:off line.size.limit
 /**
  * The general representation of SQL scalar expressions, which contains the upper-cased
- * expression name and all the children expressions.
+ * expression name and all the children expressions. Please also see {@link Predicate}
+ * for the supported predicate expressions.
  * <p>
  * The currently supported SQL scalar expressions:
  * <ol>
- *  <li>Name: <code>IS_NULL</code>
- *   <ul>
- *    <li>SQL semantic: <code>expr IS NULL</code></li>
- *    <li>Since version: 3.3.0</li>
- *   </ul>
- *  </li>
- *  <li>Name: <code>IS_NOT_NULL</code>
- *   <ul>
- *    <li>SQL semantic: <code>expr IS NOT NULL</code></li>
- *    <li>Since version: 3.3.0</li>
- *   </ul>
- *  </li>
- *  <li>Name: <code>=</code>
- *   <ul>
- *    <li>SQL semantic: <code>expr1 = expr2</code></li>
- *    <li>Since version: 3.3.0</li>
- *   </ul>
- *  </li>
- *  <li>Name: <code>!=</code>
- *   <ul>
- *    <li>SQL semantic: <code>expr1 != expr2</code></li>
- *    <li>Since version: 3.3.0</li>
- *   </ul>
- *  </li>
- *  <li>Name: <code>&lt;&gt;</code>
- *   <ul>
- *    <li>SQL semantic: <code>expr1 &lt;&gt; expr2</code></li>
- *    <li>Since version: 3.3.0</li>
- *   </ul>
- *  </li>
- *  <li>Name: <code>&lt;=&gt;</code>
- *   <ul>
- *    <li>SQL semantic: <code>expr1 &lt;=&gt; expr2</code></li>
- *    <li>Since version: 3.3.0</li>
- *   </ul>
- *  </li>
- *  <li>Name: <code>&lt;</code>
- *   <ul>
- *    <li>SQL semantic: <code>expr1 &lt; expr2</code></li>
- *    <li>Since version: 3.3.0</li>
- *   </ul>
- *  </li>
- *  <li>Name: <code>&lt;=</code>
- *   <ul>
- *    <li>SQL semantic: <code>expr1 &lt;= expr2</code></li>
- *    <li>Since version: 3.3.0</li>
- *   </ul>
- *  </li>
- *  <li>Name: <code>&gt;</code>
- *   <ul>
- *    <li>SQL semantic: <code>expr1 &gt; expr2</code></li>
- *    <li>Since version: 3.3.0</li>
- *   </ul>
- *  </li>
- *  <li>Name: <code>&gt;=</code>
- *   <ul>
- *    <li>SQL semantic: <code>expr1 &gt;= expr2</code></li>
- *    <li>Since version: 3.3.0</li>
- *   </ul>
- *  </li>
  *  <li>Name: <code>+</code>
  *   <ul>
  *    <li>SQL semantic: <code>expr1 + expr2</code></li>
@@ -138,24 +80,6 @@ import org.apache.spark.sql.connector.util.V2ExpressionSQLBuilder;
  *    <li>Since version: 3.3.0</li>
  *   </ul>
  *  </li>
- *  <li>Name: <code>AND</code>
- *   <ul>
- *    <li>SQL semantic: <code>expr1 AND expr2</code></li>
- *    <li>Since version: 3.3.0</li>
- *   </ul>
- *  </li>
- *  <li>Name: <code>OR</code>
- *   <ul>
- *    <li>SQL semantic: <code>expr1 OR expr2</code></li>
- *    <li>Since version: 3.3.0</li>
- *   </ul>
- *  </li>
- *  <li>Name: <code>NOT</code>
- *   <ul>
- *    <li>SQL semantic: <code>NOT expr</code></li>
- *    <li>Since version: 3.3.0</li>
- *   </ul>
- *  </li>
  *  <li>Name: <code>~</code>
  *   <ul>
  *    <li>SQL semantic: <code>~ expr</code></li>
@@ -176,7 +100,6 @@ import org.apache.spark.sql.connector.util.V2ExpressionSQLBuilder;
  *
  * @since 3.3.0
  */
-// scalastyle:on line.size.limit
 @Evolving
 public class GeneralScalarExpression implements Expression, Serializable {
   private String name;
@@ -189,6 +112,19 @@ public class GeneralScalarExpression implements Expression, Serializable {
 
   public String name() { return name; }
   public Expression[] children() { return children; }
+
+  @Override
+  public boolean equals(Object o) {
+    if (this == o) return true;
+    if (o == null || getClass() != o.getClass()) return false;
+    GeneralScalarExpression that = (GeneralScalarExpression) o;
+    return Objects.equals(name, that.name) && Arrays.equals(children, that.children);
+  }
+
+  @Override
+  public int hashCode() {
+    return Objects.hash(name, children);
+  }
 
   @Override
   public String toString() {
