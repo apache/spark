@@ -17,7 +17,6 @@
 
 package org.apache.spark.deploy.yarn
 
-import java.net.URI
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicInteger
 import javax.annotation.concurrent.GuardedBy
