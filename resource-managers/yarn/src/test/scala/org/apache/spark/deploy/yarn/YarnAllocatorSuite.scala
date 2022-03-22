@@ -790,12 +790,14 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
     // No new containers in this heartbeat
     when(allocateResponse.getAllocatedContainers).thenReturn(new util.ArrayList[Container]())
     val nodeReport = mock(classOf[NodeReport])
+    val nodeId = mock(classOf[NodeId])
     val nodeReportList = new util.ArrayList[NodeReport](Seq(nodeReport).asJava)
 
     // host1 is now in DECOMMISSIONING state
     val httpAddress1 = "host1:420"
     when(nodeReport.getNodeState).thenReturn(NodeState.DECOMMISSIONING)
-    when(nodeReport.getHttpAddress).thenReturn(httpAddress1)
+    when(nodeReport.getNodeId).thenReturn(nodeId)
+    when(nodeId.getHost).thenReturn("host1")
     when(allocateResponse.getUpdatedNodes).thenReturn(nodeReportList)
 
     handler.allocateResources()
@@ -807,7 +809,9 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
 
     // host2 is now in DECOMMISSIONING state
     val httpAddress2 = "host2:420"
-    when(nodeReport.getHttpAddress).thenReturn(httpAddress2)
+    when(nodeReport.getNodeId).thenReturn(nodeId)
+    when(nodeId.getHost).thenReturn("host2")
+    when(nodeReport.getNodeId).thenReturn(nodeId)
 
     // No DecommissionExecutor message should be sent when config is set to false
     verify(rpcEndPoint, times(1)).
