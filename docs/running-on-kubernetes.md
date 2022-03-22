@@ -359,7 +359,7 @@ If no volume is set as local storage, Spark uses temporary scratch space to spil
 
 `emptyDir` volumes use the nodes backing storage for ephemeral storage by default, this behaviour may not be appropriate for some compute environments.  For example if you have diskless nodes with remote storage mounted over a network, having lots of executors doing IO to this remote storage may actually degrade performance.
 
-In this case it may be desirable to set `spark.kubernetes.local.dirs.tmpfs=true` in your configuration which will cause the `emptyDir` volumes to be configured as `tmpfs` i.e. RAM backed volumes.  When configured like this Spark's local storage usage will count towards your pods memory usage therefore you may wish to increase your memory requests by increasing the value of `spark.kubernetes.memoryOverheadFactor` as appropriate.
+In this case it may be desirable to set `spark.kubernetes.local.dirs.tmpfs=true` in your configuration which will cause the `emptyDir` volumes to be configured as `tmpfs` i.e. RAM backed volumes.  When configured like this Spark's local storage usage will count towards your pods memory usage therefore you may wish to increase your memory requests by increasing the value of `spark.{driver,executor}.memoryOverheadFactor` as appropriate.
 
 
 ## Introspection and Debugging
