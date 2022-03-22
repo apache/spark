@@ -10088,7 +10088,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         bool_only : bool, default None
             Include only boolean columns. If None, will attempt to use everything,
-            then use only boolean data. Not implemented for Series.
+            then use only boolean data.
 
         Returns
         -------
