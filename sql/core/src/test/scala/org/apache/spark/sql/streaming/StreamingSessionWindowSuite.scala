@@ -216,6 +216,7 @@ class StreamingSessionWindowSuite extends StreamTest
       // ("structured", 41, 51, 10, 1)
       CheckNewAnswer(
       ),
+      assertNumRowsDroppedByWatermark(2),
 
       // concatenating multiple previous sessions into one
       AddData(inputData, ("spark streaming", 30L)),
@@ -319,6 +320,7 @@ class StreamingSessionWindowSuite extends StreamTest
       // ("spark", 40, 50, 10, 1),
       CheckNewAnswer(
       ),
+      assertNumRowsDroppedByWatermark(2),
 
       // concatenating multiple previous sessions into one
       AddData(inputData, ("spark streaming", 30L)),
@@ -405,6 +407,21 @@ class StreamingSessionWindowSuite extends StreamTest
       assert(e.getMessage.toLowerCase(Locale.ROOT).contains(m.toLowerCase(Locale.ROOT)))
     }
   }
+
+  private def assertNumRowsDroppedByWatermark(
+      numRowsDroppedByWatermark: Long): AssertOnQuery = AssertOnQuery { q =>
+    q.processAllAvailable()
+    val progressWithData = q.recentProgress.filterNot { p =>
+      // filter out batches which are falling into one of types:
+      // 1) doesn't execute the batch run
+      // 2) empty input batch
+      p.inputRowsPerSecond == 0
+    }.lastOption.get
+    assert(progressWithData.stateOperators(0).numRowsDroppedByWatermark
+      === numRowsDroppedByWatermark)
+    true
+  }
+
 
   private def sessionWindowQuery(
       input: MemoryStream[(String, Long)],

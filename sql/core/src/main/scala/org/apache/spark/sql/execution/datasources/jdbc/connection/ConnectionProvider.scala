@@ -104,4 +104,4 @@ protected abstract class ConnectionProviderBase extends Logging {
   }
 }
 
-private[jdbc] object ConnectionProvider extends ConnectionProviderBase
+private[sql] object ConnectionProvider extends ConnectionProviderBase

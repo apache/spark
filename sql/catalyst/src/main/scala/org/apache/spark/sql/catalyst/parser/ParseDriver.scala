@@ -289,7 +289,12 @@ class ParseException(
   }
 
   def withCommand(cmd: String): ParseException = {
-    new ParseException(Option(cmd), message, start, stop, errorClass, messageParameters)
+    // PARSE_EMPTY_STATEMENT error class overrides the PARSE_INPUT_MISMATCHED when cmd is empty
+    if (cmd.trim().isEmpty && errorClass.isDefined && errorClass.get == "PARSE_INPUT_MISMATCHED") {
+      new ParseException(Option(cmd), start, stop, "PARSE_EMPTY_STATEMENT", Array[String]())
+    } else {
+      new ParseException(Option(cmd), message, start, stop, errorClass, messageParameters)
+    }
   }
 }
 

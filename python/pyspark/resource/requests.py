@@ -18,7 +18,7 @@ from typing import overload, Optional, Dict
 
 from py4j.java_gateway import JavaObject, JVMView
 
-from pyspark.util import _parse_memory  # type: ignore[attr-defined]
+from pyspark.util import _parse_memory
 
 
 class ExecutorResourceRequest:
@@ -133,7 +133,7 @@ class ExecutorResourceRequests:
     ):
         from pyspark import SparkContext
 
-        _jvm = _jvm or SparkContext._jvm  # type: ignore[attr-defined]
+        _jvm = _jvm or SparkContext._jvm
         if _jvm is not None:
             self._java_executor_resource_requests = (
                 _jvm.org.apache.spark.resource.ExecutorResourceRequests()
@@ -302,7 +302,7 @@ class TaskResourceRequests:
     ):
         from pyspark import SparkContext
 
-        _jvm = _jvm or SparkContext._jvm  # type: ignore[attr-defined]
+        _jvm = _jvm or SparkContext._jvm
         if _jvm is not None:
             self._java_task_resource_requests: Optional[
                 JavaObject

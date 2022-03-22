@@ -71,7 +71,7 @@ class AQEOptimizer(conf: SQLConf) extends RuleExecutor[LogicalPlan] {
       previousPlan: LogicalPlan,
       currentPlan: LogicalPlan): Boolean = {
     !Utils.isTesting || (currentPlan.resolved &&
-      currentPlan.find(PlanHelper.specialExpressionsInUnsupportedOperator(_).nonEmpty).isEmpty &&
+      !currentPlan.exists(PlanHelper.specialExpressionsInUnsupportedOperator(_).nonEmpty) &&
       LogicalPlanIntegrity.checkIfExprIdsAreGloballyUnique(currentPlan) &&
       DataType.equalsIgnoreNullability(previousPlan.schema, currentPlan.schema))
   }

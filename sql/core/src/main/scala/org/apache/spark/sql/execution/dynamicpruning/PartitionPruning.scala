@@ -214,10 +214,10 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper {
    * Search a filtering predicate in a given logical plan
    */
   private def hasSelectivePredicate(plan: LogicalPlan): Boolean = {
-    plan.find {
+    plan.exists {
       case f: Filter => isLikelySelective(f.condition)
       case _ => false
-    }.isDefined
+    }
   }
 
   /**

@@ -17,8 +17,8 @@
 
 package org.apache.spark.sql.errors
 
-import org.apache.spark.sql.{AnalysisException, QueryTest}
-import org.apache.spark.sql.functions.{grouping, grouping_id}
+import org.apache.spark.sql.{AnalysisException, IntegratedUDFTestUtils, QueryTest}
+import org.apache.spark.sql.functions.{grouping, grouping_id, sum}
 import org.apache.spark.sql.test.SharedSparkSession
 
 case class StringLongClass(a: String, b: Long)
@@ -100,5 +100,72 @@ class QueryCompilationErrorsSuite extends QueryTest with SharedSparkSession {
     assert(e.errorClass === Some("ILLEGAL_SUBSTRING"))
     assert(e.message ===
       "The argument_index of string format cannot contain position 0$.")
+  }
+
+  test("CANNOT_USE_MIXTURE: Using aggregate function with grouped aggregate pandas UDF") {
+    import IntegratedUDFTestUtils._
+
+    val df = Seq(
+      (536361, "85123A", 2, 17850),
+      (536362, "85123B", 4, 17850),
+      (536363, "86123A", 6, 17851)
+    ).toDF("InvoiceNo", "StockCode", "Quantity", "CustomerID")
+    val e = intercept[AnalysisException] {
+      val pandasTestUDF = TestGroupedAggPandasUDF(name = "pandas_udf")
+      df.groupBy("CustomerId")
+        .agg(pandasTestUDF(df("Quantity")), sum(df("Quantity"))).collect()
+    }
+
+    assert(e.errorClass === Some("CANNOT_USE_MIXTURE"))
+    assert(e.message ===
+      "Cannot use a mixture of aggregate function and group aggregate pandas UDF")
+  }
+
+  test("UNSUPPORTED_FEATURE: Using Python UDF with unsupported join condition") {
+    import IntegratedUDFTestUtils._
+
+    val df1 = Seq(
+      (536361, "85123A", 2, 17850),
+      (536362, "85123B", 4, 17850),
+      (536363, "86123A", 6, 17851)
+    ).toDF("InvoiceNo", "StockCode", "Quantity", "CustomerID")
+    val df2 = Seq(
+      ("Bob", 17850),
+      ("Alice", 17850),
+      ("Tom", 17851)
+    ).toDF("CustomerName", "CustomerID")
+
+    val e = intercept[AnalysisException] {
+      val pythonTestUDF = TestPythonUDF(name = "python_udf")
+      df1.join(
+        df2, pythonTestUDF(df1("CustomerID") === df2("CustomerID")), "leftouter").collect()
+    }
+
+    assert(e.errorClass === Some("UNSUPPORTED_FEATURE"))
+    assert(e.getSqlState === "0A000")
+    assert(e.message ===
+      "The feature is not supported: " +
+      "Using PythonUDF in join condition of join type LeftOuter is not supported")
+  }
+
+  test("UNSUPPORTED_FEATURE: Using pandas UDF aggregate expression with pivot") {
+    import IntegratedUDFTestUtils._
+
+    val df = Seq(
+      (536361, "85123A", 2, 17850),
+      (536362, "85123B", 4, 17850),
+      (536363, "86123A", 6, 17851)
+    ).toDF("InvoiceNo", "StockCode", "Quantity", "CustomerID")
+
+    val e = intercept[AnalysisException] {
+      val pandasTestUDF = TestGroupedAggPandasUDF(name = "pandas_udf")
+      df.groupBy(df("CustomerID")).pivot(df("CustomerID")).agg(pandasTestUDF(df("Quantity")))
+    }
+
+    assert(e.errorClass === Some("UNSUPPORTED_FEATURE"))
+    assert(e.getSqlState === "0A000")
+    assert(e.message ===
+      "The feature is not supported: " +
+      "Pandas UDF aggregate expressions don't support pivot.")
   }
 }

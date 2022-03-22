@@ -26,7 +26,7 @@
   </parent>
   <groupId>org.apache.spark</groupId>
   <artifactId>spark-parent_2.12</artifactId>
-  <version>3.3.0-SNAPSHOT</version>
+  <version>3.4.0-SNAPSHOT</version>
   <packaging>pom</packaging>
   <name>Spark Project Parent POM</name>
   <url>http://spark.apache.org/</url>
@@ -119,8 +119,9 @@
     <exec-maven-plugin.version>1.6.0</exec-maven-plugin.version>
     <sbt.project.name>spark</sbt.project.name>
     <slf4j.version>1.7.32</slf4j.version>
-    <log4j.version>2.17.1</log4j.version>
-    <hadoop.version>3.3.1</hadoop.version>
+    <log4j.version>2.17.2</log4j.version>
+    <!-- make sure to update IsolatedClientLoader whenever this version is changed -->
+    <hadoop.version>3.3.2</hadoop.version>
     <protobuf.version>2.5.0</protobuf.version>
     <yarn.version>${hadoop.version}</yarn.version>
     <zookeeper.version>3.6.2</zookeeper.version>
@@ -169,12 +170,12 @@
       See: SPARK-36547, SPARK-38394.
        -->
 
-    <scala-maven-plugin.version>4.4.0</scala-maven-plugin.version>
+    <scala-maven-plugin.version>4.5.6</scala-maven-plugin.version>
     <scalafmt.parameters>--test</scalafmt.parameters>
     <!-- for now, not running scalafmt as part of default verify pipeline -->
     <scalafmt.skip>true</scalafmt.skip>
     <codehaus.jackson.version>1.9.13</codehaus.jackson.version>
-    <fasterxml.jackson.version>2.13.1</fasterxml.jackson.version>
+    <fasterxml.jackson.version>2.13.2</fasterxml.jackson.version>
     <snappy.version>1.1.8.4</snappy.version>
     <netlib.java.version>1.1.2</netlib.java.version>
     <netlib.ludovic.dev.version>2.2.1</netlib.ludovic.dev.version>
@@ -744,13 +745,11 @@
         <groupId>org.apache.logging.log4j</groupId>
         <artifactId>log4j-api</artifactId>
         <version>${log4j.version}</version>
-        <scope>${hadoop.deps.scope}</scope>
       </dependency>
       <dependency>
         <groupId>org.apache.logging.log4j</groupId>
         <artifactId>log4j-core</artifactId>
         <version>${log4j.version}</version>
-        <scope>${hadoop.deps.scope}</scope>
       </dependency>
       <dependency>
         <!-- API bridge between log4j 1 and 2 -->
@@ -765,7 +764,7 @@
       <dependency>
         <groupId>com.ning</groupId>
         <artifactId>compress-lzf</artifactId>
-        <version>1.0.3</version>
+        <version>1.1</version>
       </dependency>
       <dependency>
         <groupId>org.xerial.snappy</groupId>
@@ -780,7 +779,7 @@
       <dependency>
         <groupId>com.github.luben</groupId>
         <artifactId>zstd-jni</artifactId>
-        <version>1.5.2-1</version>
+        <version>1.5.2-2</version>
       </dependency>
       <dependency>
         <groupId>com.clearspring.analytics</groupId>
@@ -813,7 +812,7 @@
       <dependency>
         <groupId>io.netty</groupId>
         <artifactId>netty-all</artifactId>
-        <version>4.1.74.Final</version>
+        <version>4.1.75.Final</version>
         <exclusions>
           <exclusion>
             <groupId>io.netty</groupId>
@@ -888,6 +887,16 @@
             <artifactId>netty-transport-udt</artifactId>
           </exclusion>
         </exclusions>
+      </dependency>
+      <!-- SPARK-38541: Add the explicit dependency on `netty-tcnative-classes` because the dependency on
+           `netty-tcnative-classes` is changed to `Optional` in [netty](https://github.com/netty/netty/pull/12146).
+           `netty-tcnative-classes` module is mainly used by SSL package in `netty-handler`.
+           We need to ensure that `netty-tcnative-classes` uses the corresponding version when Netty upgrade.
+      -->
+      <dependency>
+        <groupId>io.netty</groupId>
+        <artifactId>netty-tcnative-classes</artifactId>
+        <version>2.0.50.Final</version>
       </dependency>
       <dependency>
         <groupId>org.apache.derby</groupId>
@@ -3427,6 +3436,7 @@
     <profile>
       <id>hadoop-2</id>
       <properties>
+        <!-- make sure to update IsolatedClientLoader whenever this version is changed -->
         <hadoop.version>2.7.4</hadoop.version>
         <curator.version>2.7.1</curator.version>
         <commons-io.version>2.4</commons-io.version>

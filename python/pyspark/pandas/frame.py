@@ -4307,7 +4307,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
     def _mark_duplicates(
         self,
         subset: Optional[Union[Name, List[Name]]] = None,
-        keep: str = "first",
+        keep: Union[bool, str] = "first",
     ) -> Tuple[SparkDataFrame, str]:
         if subset is None:
             subset_list = self._internal.column_labels
@@ -4350,7 +4350,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
     def duplicated(
         self,
         subset: Optional[Union[Name, List[Name]]] = None,
-        keep: str = "first",
+        keep: Union[bool, str] = "first",
     ) -> "Series":
         """
         Return boolean Series denoting duplicate rows, optionally only considering certain columns.
@@ -5606,7 +5606,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         if isinstance(to_replace, dict) and (
             value is not None or all(isinstance(i, dict) for i in to_replace.values())
         ):
-            to_replace_dict = cast(dict, to_replace)
+            to_replace_dict = to_replace
 
             def op(psser: ps.Series) -> ps.Series:
                 if psser.name in to_replace_dict:
@@ -6855,6 +6855,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         ascending: Union[bool, List[bool]] = True,
         inplace: bool = False,
         na_position: str = "last",
+        ignore_index: bool = False,
     ) -> Optional["DataFrame"]:
         """
         Sort by the values along either axis.
@@ -6870,6 +6871,8 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
              if True, perform operation in-place
         na_position : {'first', 'last'}, default 'last'
              `first` puts NaNs at the beginning, `last` puts NaNs at the end
+        ignore_index : bool, default False
+            If True, the resulting axis will be labeled 0, 1, …, n - 1.
 
         Returns
         -------
@@ -6882,34 +6885,45 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         ...     'col2': [2, 9, 8, 7, 4],
         ...     'col3': [0, 9, 4, 2, 3],
         ...   },
-        ...   columns=['col1', 'col2', 'col3'])
+        ...   columns=['col1', 'col2', 'col3'],
+        ...   index=['a', 'b', 'c', 'd', 'e'])
         >>> df
            col1  col2  col3
-        0     A     2     0
-        1     B     9     9
-        2  None     8     4
-        3     D     7     2
-        4     C     4     3
+        a     A     2     0
+        b     B     9     9
+        c  None     8     4
+        d     D     7     2
+        e     C     4     3
 
         Sort by col1
 
         >>> df.sort_values(by=['col1'])
            col1  col2  col3
+        a     A     2     0
+        b     B     9     9
+        e     C     4     3
+        d     D     7     2
+        c  None     8     4
+
+        Ignore index for the resulting axis
+
+        >>> df.sort_values(by=['col1'], ignore_index=True)
+           col1  col2  col3
         0     A     2     0
         1     B     9     9
-        4     C     4     3
+        2     C     4     3
         3     D     7     2
-        2  None     8     4
+        4  None     8     4
 
         Sort Descending
 
         >>> df.sort_values(by='col1', ascending=False)
            col1  col2  col3
-        3     D     7     2
-        4     C     4     3
-        1     B     9     9
-        0     A     2     0
-        2  None     8     4
+        d     D     7     2
+        e     C     4     3
+        b     B     9     9
+        a     A     2     0
+        c  None     8     4
 
         Sort by multiple columns
 
@@ -6945,11 +6959,14 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             new_by.append(ser.spark.column)
 
         psdf = self._sort(by=new_by, ascending=ascending, na_position=na_position)
+
         if inplace:
+            if ignore_index:
+                psdf.reset_index(drop=True, inplace=inplace)
             self._update_internal_frame(psdf._internal)
             return None
         else:
-            return psdf
+            return psdf.reset_index(drop=True) if ignore_index else psdf
 
     def sort_index(
         self,
@@ -7283,7 +7300,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         )
         return internal
 
-    # TODO:  add keep = First
+    # TODO: add keep = First
     def nlargest(self, n: int, columns: Union[Name, List[Name]]) -> "DataFrame":
         """
         Return the first `n` rows ordered by `columns` in descending order.
@@ -7340,7 +7357,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         6  NaN  12
 
         In the following example, we will use ``nlargest`` to select the three
-        rows having the largest values in column "population".
+        rows having the largest values in column "X".
 
         >>> df.nlargest(n=3, columns='X')
              X   Y
@@ -7348,12 +7365,14 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         4  6.0  10
         3  5.0   9
 
+        To order by the largest values in column "Y" and then "X", we can
+        specify multiple columns like in the next example.
+
         >>> df.nlargest(n=3, columns=['Y', 'X'])
              X   Y
         6  NaN  12
         5  7.0  11
         4  6.0  10
-
         """
         return self.sort_values(by=columns, ascending=False).head(n=n)
 
@@ -7403,7 +7422,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         6  NaN  12
 
         In the following example, we will use ``nsmallest`` to select the
-        three rows having the smallest values in column "a".
+        three rows having the smallest values in column "X".
 
         >>> df.nsmallest(n=3, columns='X') # doctest: +NORMALIZE_WHITESPACE
              X   Y
@@ -7411,7 +7430,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         1  2.0   7
         2  3.0   8
 
-        To order by the largest values in column "a" and then "c", we can
+        To order by the smallest values in column "Y" and then "X", we can
         specify multiple columns like in the next example.
 
         >>> df.nsmallest(n=3, columns=['Y', 'X']) # doctest: +NORMALIZE_WHITESPACE
@@ -9018,7 +9037,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
     def drop_duplicates(
         self,
         subset: Optional[Union[Name, List[Name]]] = None,
-        keep: str = "first",
+        keep: Union[bool, str] = "first",
         inplace: bool = False,
     ) -> Optional["DataFrame"]:
         """
@@ -10564,7 +10583,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             mapper: Union[Dict, Callable[[Any], Any]]
         ) -> Tuple[Callable[[Any], Any], Dtype, DataType]:
             if isinstance(mapper, dict):
-                mapper_dict = cast(dict, mapper)
+                mapper_dict = mapper
 
                 type_set = set(map(lambda x: type(x), mapper_dict.values()))
                 if len(type_set) > 1:
@@ -12481,7 +12500,7 @@ def _reduce_spark_multi(sdf: SparkDataFrame, aggs: List[Column]) -> Any:
     """
     assert isinstance(sdf, SparkDataFrame)
     sdf0 = sdf.agg(*aggs)
-    lst = cast(pd.DataFrame, sdf0.limit(2).toPandas())
+    lst = sdf0.limit(2).toPandas()
     assert len(lst) == 1, (sdf, lst)
     row = lst.iloc[0]
     lst2 = list(row)

@@ -26,13 +26,13 @@ from pyspark import RDD, SparkContext, since
 from pyspark.streaming.dstream import DStream
 from pyspark.mllib.common import callMLlibFunc, _py2java, _java2py
 from pyspark.mllib.linalg import _convert_to_vector
-from pyspark.mllib.regression import (  # type: ignore[attr-defined]
+from pyspark.mllib.regression import (
     LabeledPoint,
     LinearModel,
     _regression_train_wrapper,
     StreamingLinearAlgorithm,
 )
-from pyspark.mllib.util import Saveable, Loader, inherit_doc  # type: ignore[attr-defined]
+from pyspark.mllib.util import Saveable, Loader, inherit_doc
 from pyspark.mllib.linalg import Vector
 from pyspark.mllib.regression import LabeledPoint
 
@@ -929,9 +929,7 @@ class StreamingLogisticRegressionWithSGD(StreamingLinearAlgorithm):
         self.miniBatchFraction = miniBatchFraction
         self.convergenceTol = convergenceTol
         self._model: Optional[LogisticRegressionModel] = None
-        super(StreamingLogisticRegressionWithSGD, self).__init__(
-            model=self._model  # type: ignore[arg-type]
-        )
+        super(StreamingLogisticRegressionWithSGD, self).__init__(model=self._model)
 
     @since("1.5.0")
     def setInitialWeights(
