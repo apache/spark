@@ -37,7 +37,7 @@ import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeTestUtils
 import org.apache.spark.sql.execution.{DataSourceScanExec, ExtendedMode}
 import org.apache.spark.sql.execution.command.{ExplainCommand, ShowCreateTableCommand}
 import org.apache.spark.sql.execution.datasources.LogicalRelation
-import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JDBCPartition, JDBCRDD, JDBCRelation, JdbcUtils}
+import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JDBCPartition, JDBCRelation, JdbcUtils}
 import org.apache.spark.sql.execution.metric.InputOutputMetricsHelper
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources._
@@ -773,12 +773,12 @@ class JDBCSuite extends QueryTest
   }
 
   test("compile filters") {
-    val compileFilter = PrivateMethod[Option[String]](Symbol("compileFilter"))
     def doCompileFilter(f: Filter): String =
-      JDBCRDD invokePrivate compileFilter(f, JdbcDialects.get("jdbc:")) getOrElse("")
+      JdbcDialects.get("jdbc:").compileExpression(f.toV2).getOrElse("")
+
     Seq(("col0", "col1"), ("`col0`", "`col1`")).foreach { case(col0, col1) =>
       assert(doCompileFilter(EqualTo(col0, 3)) === """"col0" = 3""")
-      assert(doCompileFilter(Not(EqualTo(col1, "abc"))) === """(NOT ("col1" = 'abc'))""")
+      assert(doCompileFilter(Not(EqualTo(col1, "abc"))) === """NOT ("col1" = 'abc')""")
       assert(doCompileFilter(And(EqualTo(col0, 0), EqualTo(col1, "def")))
         === """("col0" = 0) AND ("col1" = 'def')""")
       assert(doCompileFilter(Or(EqualTo(col0, 2), EqualTo(col1, "ghi")))
@@ -795,17 +795,14 @@ class JDBCSuite extends QueryTest
       assert(doCompileFilter(In(col1, Array.empty)) ===
         """CASE WHEN "col1" IS NULL THEN NULL ELSE FALSE END""")
       assert(doCompileFilter(Not(In(col1, Array("mno", "pqr"))))
-        === """(NOT ("col1" IN ('mno', 'pqr')))""")
+        === """NOT ("col1" IN ('mno', 'pqr'))""")
       assert(doCompileFilter(IsNull(col1)) === """"col1" IS NULL""")
       assert(doCompileFilter(IsNotNull(col1)) === """"col1" IS NOT NULL""")
       assert(doCompileFilter(And(EqualNullSafe(col0, "abc"), EqualTo(col1, "def")))
-        === """((NOT ("col0" != 'abc' OR "col0" IS NULL OR 'abc' IS NULL) """
-        + """OR ("col0" IS NULL AND 'abc' IS NULL))) AND ("col1" = 'def')""")
+        === """(("col0" = 'abc') OR ("col0" IS NULL AND 'abc' IS NULL))"""
+        + """ AND ("col1" = 'def')""")
     }
-    val e = intercept[AnalysisException] {
-      doCompileFilter(EqualTo("col0.nested", 3))
-    }.getMessage
-    assert(e.contains("Filter push down does not support nested column: col0.nested"))
+    assert(doCompileFilter(EqualTo("col0.nested", 3)).isEmpty)
   }
 
   test("Dialect unregister") {

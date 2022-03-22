@@ -4687,8 +4687,8 @@ def _create_lambda(f: Callable) -> Callable:
     if not isinstance(result, Column):
         raise ValueError("f should return Column, got {}".format(type(result)))
 
-    jexpr = result._jc.expr()  # type: ignore[operator]
-    jargs = _to_seq(sc, [arg._jc.expr() for arg in args])  # type: ignore[operator]
+    jexpr = result._jc.expr()
+    jargs = _to_seq(sc, [arg._jc.expr() for arg in args])
 
     return expressions.LambdaFunction(jexpr, jargs, False)
 

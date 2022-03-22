@@ -452,6 +452,7 @@ object FunctionRegistry {
     expression[TrySubtract]("try_subtract"),
     expression[TryMultiply]("try_multiply"),
     expression[TryElementAt]("try_element_at"),
+    expression[TrySum]("try_sum"),
 
     // aggregate functions
     expression[HyperLogLogPlusPlus]("approx_count_distinct"),

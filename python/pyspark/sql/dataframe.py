@@ -39,12 +39,12 @@ from typing import (
     TYPE_CHECKING,
 )
 
-from py4j.java_gateway import JavaObject  # type: ignore[import]
+from py4j.java_gateway import JavaObject
 
-from pyspark import copy_func, since, _NoValue  # type: ignore[attr-defined]
+from pyspark import copy_func, since, _NoValue
 from pyspark._globals import _NoValueType
 from pyspark.context import SparkContext
-from pyspark.rdd import (  # type: ignore[attr-defined]
+from pyspark.rdd import (
     RDD,
     _load_from_socket,
     _local_iterator_from_socket,
@@ -614,16 +614,13 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
             print(self._jdf.showString(n, int_truncate, vertical))
 
     def __repr__(self) -> str:
-        if (
-            not self._support_repr_html
-            and self.sparkSession._jconf.isReplEagerEvalEnabled()  # type: ignore[attr-defined]
-        ):
+        if not self._support_repr_html and self.sparkSession._jconf.isReplEagerEvalEnabled():
             vertical = False
             return self._jdf.showString(
-                self.sparkSession._jconf.replEagerEvalMaxNumRows(),  # type: ignore[attr-defined]
-                self.sparkSession._jconf.replEagerEvalTruncate(),  # type: ignore[attr-defined]
+                self.sparkSession._jconf.replEagerEvalMaxNumRows(),
+                self.sparkSession._jconf.replEagerEvalTruncate(),
                 vertical,
-            )  # type: ignore[attr-defined]
+            )
         else:
             return "DataFrame[%s]" % (", ".join("%s: %s" % c for c in self.dtypes))
 
@@ -634,13 +631,11 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         """
         if not self._support_repr_html:
             self._support_repr_html = True
-        if self.sparkSession._jconf.isReplEagerEvalEnabled():  # type: ignore[attr-defined]
-            max_num_rows = max(
-                self.sparkSession._jconf.replEagerEvalMaxNumRows(), 0  # type: ignore[attr-defined]
-            )
+        if self.sparkSession._jconf.isReplEagerEvalEnabled():
+            max_num_rows = max(self.sparkSession._jconf.replEagerEvalMaxNumRows(), 0)
             sock_info = self._jdf.getRowsToPython(
                 max_num_rows,
-                self.sparkSession._jconf.replEagerEvalTruncate(),  # type: ignore[attr-defined]
+                self.sparkSession._jconf.replEagerEvalTruncate(),
             )
             rows = list(_load_from_socket(sock_info, BatchedSerializer(CPickleSerializer())))
             head = rows[0]
@@ -935,9 +930,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
     def persist(
         self,
-        storageLevel: StorageLevel = (
-            StorageLevel.MEMORY_AND_DISK_DESER  # type: ignore[attr-defined]
-        ),
+        storageLevel: StorageLevel = (StorageLevel.MEMORY_AND_DISK_DESER),
     ) -> "DataFrame":
         """Sets the storage level to persist the contents of the :class:`DataFrame` across
         operations after the first time it is computed. This can only be used to assign
@@ -951,7 +944,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         The default storage level has changed to `MEMORY_AND_DISK_DESER` to match Scala in 3.0.
         """
         self.is_cached = True
-        javaStorageLevel = self._sc._getJavaStorageLevel(storageLevel)  # type: ignore[attr-defined]
+        javaStorageLevel = self._sc._getJavaStorageLevel(storageLevel)
         self._jdf.persist(javaStorageLevel)
         return self
 
@@ -1630,10 +1623,10 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         """
         if isinstance(leftAsOfColumn, str):
             leftAsOfColumn = self[leftAsOfColumn]
-        left_as_of_jcol = cast(Column, leftAsOfColumn)._jc
+        left_as_of_jcol = leftAsOfColumn._jc
         if isinstance(rightAsOfColumn, str):
             rightAsOfColumn = other[rightAsOfColumn]
-        right_as_of_jcol = cast(Column, rightAsOfColumn)._jc
+        right_as_of_jcol = rightAsOfColumn._jc
 
         if on is not None and not isinstance(on, list):
             on = [on]  # type: ignore[assignment]
@@ -3498,7 +3491,7 @@ class DataFrameStatFunctions:
     ) -> List[List[float]]:
         ...
 
-    def approxQuantile(  # type: ignore[misc]
+    def approxQuantile(
         self,
         col: Union[str, List[str], Tuple[str]],
         probabilities: Union[List[float], Tuple[float]],

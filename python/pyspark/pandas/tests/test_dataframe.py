@@ -4581,7 +4581,7 @@ class DataFrameTest(ComparisonTestBase, SQLTestUtils):
 
             def identify4(
                 x,
-            ) -> ps.DataFrame[float, [int, ntp.NDArray[int]]]:  # type: ignore[name-defined]
+            ) -> ps.DataFrame[float, [int, ntp.NDArray[int]]]:
                 return x
 
             actual = psdf.pandas_on_spark.apply_batch(identify4)

@@ -19,7 +19,7 @@ import warnings
 from collections import Counter
 from typing import List, Optional, Type, Union, no_type_check, overload, TYPE_CHECKING
 
-from pyspark.rdd import _load_from_socket  # type: ignore[attr-defined]
+from pyspark.rdd import _load_from_socket
 from pyspark.sql.pandas.serializers import ArrowCollectSerializer
 from pyspark.sql.types import (
     IntegralType,
@@ -92,7 +92,7 @@ class PandasConversionMixin:
         jconf = self.sparkSession._jconf
         timezone = jconf.sessionLocalTimeZone()
 
-        if jconf.arrowPySparkEnabled():  # type: ignore[attr-defined]
+        if jconf.arrowPySparkEnabled():
             use_arrow = True
             try:
                 from pyspark.sql.pandas.types import to_arrow_schema
@@ -102,7 +102,7 @@ class PandasConversionMixin:
                 to_arrow_schema(self.schema)
             except Exception as e:
 
-                if jconf.arrowPySparkFallbackEnabled():  # type: ignore[attr-defined]
+                if jconf.arrowPySparkFallbackEnabled():
                     msg = (
                         "toPandas attempted Arrow optimization because "
                         "'spark.sql.execution.arrow.pyspark.enabled' is set to true; however, "
@@ -137,9 +137,7 @@ class PandasConversionMixin:
                     # Rename columns to avoid duplicated column names.
                     tmp_column_names = ["col_{}".format(i) for i in range(len(self.columns))]
                     c = self.sparkSession._jconf
-                    self_destruct = (
-                        c.arrowPySparkSelfDestructEnabled()  # type: ignore[attr-defined]
-                    )
+                    self_destruct = c.arrowPySparkSelfDestructEnabled()
                     batches = self.toDF(*tmp_column_names)._collect_as_arrow(
                         split_batches=self_destruct
                     )
@@ -324,7 +322,7 @@ class PandasConversionMixin:
                 port,
                 auth_secret,
                 jsocket_auth_server,
-            ) = self._jdf.collectAsArrowToPython()  # type: ignore[operator]
+            ) = self._jdf.collectAsArrowToPython()
 
         # Collect list of un-ordered batches where last element is a list of correct order indices
         try:
@@ -402,17 +400,17 @@ class SparkConversionMixin:
 
         require_minimum_pandas_version()
 
-        timezone = self._jconf.sessionLocalTimeZone()  # type: ignore[attr-defined]
+        timezone = self._jconf.sessionLocalTimeZone()
 
         # If no schema supplied by user then get the names of columns only
         if schema is None:
             schema = [str(x) if not isinstance(x, str) else x for x in data.columns]
 
-        if self._jconf.arrowPySparkEnabled() and len(data) > 0:  # type: ignore[attr-defined]
+        if self._jconf.arrowPySparkEnabled() and len(data) > 0:
             try:
                 return self._create_from_pandas_with_arrow(data, schema, timezone)
             except Exception as e:
-                if self._jconf.arrowPySparkFallbackEnabled():  # type: ignore[attr-defined]
+                if self._jconf.arrowPySparkFallbackEnabled():
                     msg = (
                         "createDataFrame attempted Arrow optimization because "
                         "'spark.sql.execution.arrow.pyspark.enabled' is set to true; however, "
@@ -606,7 +604,7 @@ class SparkConversionMixin:
 
         jsparkSession = self._jsparkSession
 
-        safecheck = self._jconf.arrowSafeTypeConversion()  # type: ignore[attr-defined]
+        safecheck = self._jconf.arrowSafeTypeConversion()
         col_by_name = True  # col by name only applies to StructType columns, can't happen here
         ser = ArrowStreamPandasSerializer(timezone, safecheck, col_by_name)
 

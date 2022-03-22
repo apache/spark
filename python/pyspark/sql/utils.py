@@ -17,14 +17,14 @@
 from typing import Any, Callable, Optional, Sequence, TYPE_CHECKING, cast
 
 import py4j
-from py4j.java_collections import JavaArray  # type: ignore[import]
-from py4j.java_gateway import (  # type: ignore[import]
+from py4j.java_collections import JavaArray
+from py4j.java_gateway import (
     JavaClass,
     JavaGateway,
     JavaObject,
     is_instance_of,
 )
-from py4j.protocol import Py4JJavaError  # type: ignore[import]
+from py4j.protocol import Py4JJavaError
 
 from pyspark import SparkContext
 from pyspark.find_spark_home import _find_spark_home
@@ -61,9 +61,9 @@ class CapturedException(Exception):
         self._origin = origin
 
     def __str__(self) -> str:
-        assert SparkContext._jvm is not None  # type: ignore[attr-defined]
+        assert SparkContext._jvm is not None
 
-        jvm = SparkContext._jvm  # type: ignore[attr-defined]
+        jvm = SparkContext._jvm
         sql_conf = jvm.org.apache.spark.sql.internal.SQLConf.get()
         debug_enabled = sql_conf.pysparkJVMStacktraceEnabled()
         desc = self.desc
@@ -72,9 +72,9 @@ class CapturedException(Exception):
         return str(desc)
 
     def getErrorClass(self) -> Optional[str]:
-        assert SparkContext._gateway is not None  # type: ignore[attr-defined]
+        assert SparkContext._gateway is not None
 
-        gw = SparkContext._gateway  # type: ignore[attr-defined]
+        gw = SparkContext._gateway
         if self._origin is not None and is_instance_of(
             gw, self._origin, "org.apache.spark.SparkThrowable"
         ):
@@ -83,9 +83,9 @@ class CapturedException(Exception):
             return None
 
     def getSqlState(self) -> Optional[str]:
-        assert SparkContext._gateway is not None  # type: ignore[attr-defined]
+        assert SparkContext._gateway is not None
 
-        gw = SparkContext._gateway  # type: ignore[attr-defined]
+        gw = SparkContext._gateway
         if self._origin is not None and is_instance_of(
             gw, self._origin, "org.apache.spark.SparkThrowable"
         ):
@@ -144,11 +144,11 @@ class SparkUpgradeException(CapturedException):
 
 def convert_exception(e: Py4JJavaError) -> CapturedException:
     assert e is not None
-    assert SparkContext._jvm is not None  # type: ignore[attr-defined]
-    assert SparkContext._gateway is not None  # type: ignore[attr-defined]
+    assert SparkContext._jvm is not None
+    assert SparkContext._gateway is not None
 
-    jvm = SparkContext._jvm  # type: ignore[attr-defined]
-    gw = SparkContext._gateway  # type: ignore[attr-defined]
+    jvm = SparkContext._jvm
+    gw = SparkContext._gateway
 
     if is_instance_of(gw, e, "org.apache.spark.sql.catalyst.parser.ParseException"):
         return ParseException(origin=e)
@@ -292,7 +292,7 @@ def is_timestamp_ntz_preferred() -> bool:
     """
     Return a bool if TimestampNTZType is preferred according to the SQL configuration set.
     """
-    jvm = SparkContext._jvm  # type: ignore[attr-defined]
+    jvm = SparkContext._jvm
     return (
         jvm is not None
         and getattr(getattr(jvm.org.apache.spark.sql.internal, "SQLConf$"), "MODULE$")

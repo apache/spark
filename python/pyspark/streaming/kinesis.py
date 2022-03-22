@@ -20,7 +20,7 @@ from pyspark.serializers import NoOpSerializer
 from pyspark.storagelevel import StorageLevel
 from pyspark.streaming import DStream
 from pyspark.streaming.context import StreamingContext
-from pyspark.util import _print_missing_jar  # type: ignore[attr-defined]
+from pyspark.util import _print_missing_jar
 
 
 __all__ = ["KinesisUtils", "InitialPositionInStream", "utf8_decoder"]
