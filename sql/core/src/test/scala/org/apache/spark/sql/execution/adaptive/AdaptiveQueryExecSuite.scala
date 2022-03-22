@@ -1021,6 +1021,59 @@ class AdaptiveQueryExecSuite
   }
 
   test("SPARK-36638: General Skew Join: combine splits to handle Combinatorial Explosion") {
+    withSQLConf(
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+      SQLConf.SKEW_JOIN_ENABLED.key -> "true",
+      SQLConf.COALESCE_PARTITIONS_ENABLED.key -> "false",
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+      SQLConf.SHUFFLE_PARTITIONS.key -> "100",
+      SQLConf.SKEW_JOIN_SKEWED_PARTITION_THRESHOLD.key -> "100",
+      SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.key -> "100") {
+      withTempView("skewData1", "skewData2") {
+        spark
+          .range(0, 2000, 1, 9)
+          .select(
+            when('id < 1000, 999)
+              .when('id >= 1500, 2000)
+              .otherwise('id).as("key1"), 'id as "value1")
+          .createOrReplaceTempView("skewData1")
+
+        spark
+          .range(0, 2000, 1, 11)
+          .select(
+            when('id < 1000, 999)
+              .when('id >= 1500, 2000)
+              .otherwise('id).as("key2"), 'id as "value2")
+          .createOrReplaceTempView("skewData2")
+
+        val query = "SELECT * FROM skewData1 JOIN skewData2 ON key1 = key2"
+
+        withSQLConf(SQLConf.SKEW_JOIN_MAX_SPLITS_PER_PARTITION.key -> "1000") {
+          val (_, adaptivePlan) = runAdaptiveAndVerifyResult(query)
+          assert(adaptivePlan.execute().getNumPartitions > 150)
+        }
+
+        withSQLConf(SQLConf.SKEW_JOIN_MAX_SPLITS_PER_PARTITION.key -> "10") {
+          /**
+           * related log:
+           *  Splittable ShuffleQueryStages: [0, 1]
+           *  Splitting ShuffleQueryStage #0: partition 57(6 KB) -> 6 splits
+           *  Splitting ShuffleQueryStage #1: partition 57(6 KB) -> 7 splits
+           *  Re-splitting ShuffleQueryStage #0: partition 57(6 KB) -> 3 splits
+           *  Re-splitting ShuffleQueryStage #1: partition 57(6 KB) -> 3 splits
+           *  Splitting ShuffleQueryStage #0: partition 86(2 KB) -> 4 splits
+           *  Splitting ShuffleQueryStage #1: partition 86(2 KB) -> 4 splits
+           *  Re-splitting ShuffleQueryStage #0: partition 86(2 KB) -> 3 splits
+           *  Re-splitting ShuffleQueryStage #1: partition 86(2 KB) -> 3 splits
+           */
+          val (_, adaptivePlan) = runAdaptiveAndVerifyResult(query)
+          assert(adaptivePlan.execute().getNumPartitions < 120)
+        }
+      }
+    }
+  }
+
+  test("SPARK-36638: General Skew Join: combine splits to handle Combinatorial Explosion II") {
     import OptimizeSkewedJoin.combine
 
     val array0 = Array(511, 622) // 317,842 splits

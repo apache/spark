@@ -353,7 +353,6 @@ case class OptimizeSkewedJoin(ensureRequirements: EnsureRequirements)
     }
   }
 
-  // try to optimize at top join in each stage
   private def optimize(plan: SparkPlan): SparkPlan = {
     plan transformDown {
       case join: ShuffledJoin if !join.isSkewJoin => optimizeShuffledJoin(join)
