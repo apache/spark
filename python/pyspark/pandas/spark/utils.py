@@ -63,14 +63,11 @@ def as_nullable_spark_type(dt: DataType) -> DataType:
     ...             StructField('b', StringType(), True)])),
     ...     StructField("B", FloatType(), False)]))  # doctest: +NORMALIZE_WHITESPACE
     StructType([StructField('A',
-                            StructType([StructField('a',
-                                                    MapType(IntegerType(),
-                                                    ArrayType(IntegerType(),
-                                                    True),
-                                        True),
-                            True),
-                StructField('b', StringType(), True)]), True),
-                StructField('B', FloatType(), True)])
+        StructType([StructField('a',
+            MapType(IntegerType(),
+            ArrayType(IntegerType(), True), True), True),
+        StructField('b', StringType(), True)]), True),
+    StructField('B', FloatType(), True)])
     """
     if isinstance(dt, StructType):
         new_fields = []
@@ -151,14 +148,11 @@ def force_decimal_precision_scale(
     ...     StructField("B", DecimalType(30, 15), False)]),
     ...     precision=30, scale=15)  # doctest: +NORMALIZE_WHITESPACE
     StructType([StructField('A',
-                            StructType([StructField('a',
-                                                    MapType(DecimalType(30,15),
-                                                    ArrayType(DecimalType(30,15),
-                                                    False),
-                                        False),
-                            False),
-                StructField('b', StringType(), True)]), True),
-                StructField('B', DecimalType(30,15), False)])
+        StructType([StructField('a',
+            MapType(DecimalType(30,15),
+            ArrayType(DecimalType(30,15), False), False), False),
+        StructField('b', StringType(), True)]), True),
+    StructField('B', DecimalType(30,15), False)])
     """
     if isinstance(dt, StructType):
         new_fields = []
