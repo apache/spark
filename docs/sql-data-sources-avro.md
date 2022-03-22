@@ -231,7 +231,7 @@ Data source options of Avro can be set via:
     <td>Optional schema provided by a user in JSON format.
       <ul>
         <li>
-          When reading Avro, this option can be set to an evolved schema, which is compatible but different with
+          When reading Avro files or calling function <code>from_avro</code>, this option can be set to an evolved schema, which is compatible but different with
           the actual Avro schema. The deserialization schema will be consistent with the evolved schema.
           For example, if we set an evolved schema containing one additional column with a default value,
           the reading result in Spark will contain the new column too. Note that when using this option with 
