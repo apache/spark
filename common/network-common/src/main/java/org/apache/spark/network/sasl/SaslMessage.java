@@ -21,8 +21,8 @@ import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 
 import org.apache.spark.network.buffer.NettyManagedBuffer;
-import org.apache.spark.network.protocol.Encoders;
 import org.apache.spark.network.protocol.AbstractMessage;
+import org.apache.spark.network.protocol.Encoders;
 import org.apache.spark.network.protocol.Message;
 
 /**

@@ -27,8 +27,6 @@ import io.netty.channel.embedded.EmbeddedChannel;
 import io.netty.handler.codec.MessageToMessageEncoder;
 import org.junit.Test;
 
-import static org.junit.Assert.assertEquals;
-
 import org.apache.spark.network.protocol.ChunkFetchFailure;
 import org.apache.spark.network.protocol.ChunkFetchRequest;
 import org.apache.spark.network.protocol.ChunkFetchSuccess;
@@ -45,6 +43,8 @@ import org.apache.spark.network.protocol.StreamRequest;
 import org.apache.spark.network.protocol.StreamResponse;
 import org.apache.spark.network.util.ByteArrayWritableChannel;
 import org.apache.spark.network.util.NettyUtils;
+
+import static org.junit.Assert.assertEquals;
 
 public class ProtocolSuite {
   private void testServerToClient(Message msg) {

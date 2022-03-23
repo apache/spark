@@ -155,15 +155,12 @@
         -->
         <!-- TODO: 11/09/15 disabled - order is currently wrong in many places -->
         <module name="ImportOrder">
-            <property name="option" value="bottom"/>
             <!-- simple imports -->
             <property name="separated" value="true"/>
             <property name="ordered" value="true"/>
             <property name="groups" value="/^javax?\./,scala,*,org.apache.spark"/>
             <!-- static imports -->
-            <!--
-            <property name="staticGroups" value=""/>
-            -->
+            <property name="option" value="bottom"/>
             <property name="sortStaticImportsAlphabetically" value="true"/>
             <property name="separatedStaticGroups" value="true"/>
         </module>

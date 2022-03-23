@@ -24,16 +24,16 @@ import java.nio.channels.WritableByteChannel;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.CompositeByteBuf;
 import io.netty.buffer.Unpooled;
-import org.apache.spark.network.util.AbstractFileRegion;
 import org.junit.Test;
 import org.mockito.Mockito;
-
-import static org.junit.Assert.*;
 
 import org.apache.spark.network.TestManagedBuffer;
 import org.apache.spark.network.buffer.ManagedBuffer;
 import org.apache.spark.network.buffer.NettyManagedBuffer;
+import org.apache.spark.network.util.AbstractFileRegion;
 import org.apache.spark.network.util.ByteArrayWritableChannel;
+
+import static org.junit.Assert.*;
 
 public class MessageWithHeaderSuite {
 

@@ -26,8 +26,6 @@ import com.google.common.collect.ImmutableMap;
 import io.netty.channel.Channel;
 import org.junit.After;
 import org.junit.Test;
-import static org.junit.Assert.*;
-import static org.mockito.Mockito.*;
 
 import org.apache.spark.network.TestUtils;
 import org.apache.spark.network.TransportContext;
@@ -43,6 +41,9 @@ import org.apache.spark.network.server.TransportServerBootstrap;
 import org.apache.spark.network.util.JavaUtils;
 import org.apache.spark.network.util.MapConfigProvider;
 import org.apache.spark.network.util.TransportConf;
+
+import static org.junit.Assert.*;
+import static org.mockito.Mockito.*;
 
 public class AuthIntegrationSuite {
 

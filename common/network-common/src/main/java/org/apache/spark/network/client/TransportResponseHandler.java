@@ -41,8 +41,9 @@ import org.apache.spark.network.protocol.StreamChunkId;
 import org.apache.spark.network.protocol.StreamFailure;
 import org.apache.spark.network.protocol.StreamResponse;
 import org.apache.spark.network.server.MessageHandler;
-import static org.apache.spark.network.util.NettyUtils.getRemoteAddress;
 import org.apache.spark.network.util.TransportFrameDecoder;
+
+import static org.apache.spark.network.util.NettyUtils.getRemoteAddress;
 
 /**
  * Handler that processes server responses, in response to requests issued from a

@@ -17,11 +17,11 @@
 
 package org.apache.spark.network.crypto;
 
-import javax.crypto.spec.SecretKeySpec;
 import java.io.Closeable;
 import java.security.GeneralSecurityException;
 import java.util.Arrays;
 import java.util.Properties;
+import javax.crypto.spec.SecretKeySpec;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
@@ -32,8 +32,10 @@ import com.google.crypto.tink.subtle.Random;
 import com.google.crypto.tink.subtle.X25519;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
-import static java.nio.charset.StandardCharsets.UTF_8;
+
 import org.apache.spark.network.util.TransportConf;
+
+import static java.nio.charset.StandardCharsets.UTF_8;
 
 /**
  * A helper class for abstracting authentication and key negotiation details.

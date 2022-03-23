@@ -30,8 +30,8 @@ import org.slf4j.LoggerFactory;
 
 import org.apache.spark.network.client.RpcResponseCallback;
 import org.apache.spark.network.client.TransportClient;
-import org.apache.spark.network.sasl.SecretKeyHolder;
 import org.apache.spark.network.sasl.SaslRpcHandler;
+import org.apache.spark.network.sasl.SecretKeyHolder;
 import org.apache.spark.network.server.AbstractAuthRpcHandler;
 import org.apache.spark.network.server.RpcHandler;
 import org.apache.spark.network.util.TransportConf;

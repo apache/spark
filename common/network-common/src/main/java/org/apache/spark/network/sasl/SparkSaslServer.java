@@ -17,6 +17,8 @@
 
 package org.apache.spark.network.sasl;
 
+import java.nio.charset.StandardCharsets;
+import java.util.Map;
 import javax.security.auth.callback.Callback;
 import javax.security.auth.callback.CallbackHandler;
 import javax.security.auth.callback.NameCallback;
@@ -27,8 +29,6 @@ import javax.security.sasl.RealmCallback;
 import javax.security.sasl.Sasl;
 import javax.security.sasl.SaslException;
 import javax.security.sasl.SaslServer;
-import java.nio.charset.StandardCharsets;
-import java.util.Map;
 
 import com.google.common.base.Preconditions;
 import com.google.common.base.Throwables;

@@ -17,18 +17,16 @@
 
 package org.apache.spark.network;
 
-import io.netty.channel.ChannelHandlerContext;
 import java.util.ArrayList;
 import java.util.List;
 
 import io.netty.channel.Channel;
+import io.netty.channel.ChannelHandlerContext;
+import org.apache.commons.lang3.tuple.ImmutablePair;
+import org.apache.commons.lang3.tuple.Pair;
 import org.junit.Assert;
 import org.junit.Test;
 
-import static org.mockito.Mockito.*;
-
-import org.apache.commons.lang3.tuple.ImmutablePair;
-import org.apache.commons.lang3.tuple.Pair;
 import org.apache.spark.network.buffer.ManagedBuffer;
 import org.apache.spark.network.client.TransportClient;
 import org.apache.spark.network.protocol.*;
@@ -36,6 +34,8 @@ import org.apache.spark.network.server.ChunkFetchRequestHandler;
 import org.apache.spark.network.server.NoOpRpcHandler;
 import org.apache.spark.network.server.OneForOneStreamManager;
 import org.apache.spark.network.server.RpcHandler;
+
+import static org.mockito.Mockito.*;
 
 public class ChunkFetchRequestHandlerSuite {
 

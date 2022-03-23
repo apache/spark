@@ -32,11 +32,11 @@ import org.junit.Assert;
 import org.junit.Test;
 import org.roaringbitmap.RoaringBitmap;
 
-import static org.mockito.Mockito.*;
-
 import org.apache.spark.network.buffer.FileSegmentManagedBuffer;
 import org.apache.spark.network.util.ByteArrayWritableChannel;
 import org.apache.spark.network.util.TransportConf;
+
+import static org.mockito.Mockito.*;
 
 /**
  * Test for {@link MergedBlockMetaSuccess}.
