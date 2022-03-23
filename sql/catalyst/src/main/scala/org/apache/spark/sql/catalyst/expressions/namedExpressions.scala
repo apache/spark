@@ -168,11 +168,8 @@ case class Alias(child: Expression, name: String)(
   override def metadata: Metadata = {
     explicitMetadata.getOrElse {
       child match {
-        case named: NamedExpression =>
-          val builder = new MetadataBuilder().withMetadata(named.metadata)
-          nonInheritableMetadataKeys.foreach(builder.remove)
-          builder.build()
-
+        case named: NamedExpression => removeNonInheritableMetadata(named.metadata)
+        case structField: GetStructField => removeNonInheritableMetadata(structField.metadata)
         case _ => Metadata.empty
       }
     }
@@ -205,6 +202,12 @@ case class Alias(child: Expression, name: String)(
     s"-T${metadata.getLong(EventTimeWatermark.delayKey)}ms"
   } else {
     ""
+  }
+
+  private def removeNonInheritableMetadata(metadata: Metadata): Metadata = {
+    val builder = new MetadataBuilder().withMetadata(metadata)
+    nonInheritableMetadataKeys.foreach(builder.remove)
+    builder.build()
   }
 
   override def toString: String = s"$child AS $name#${exprId.id}$typeSuffix$delaySuffix"

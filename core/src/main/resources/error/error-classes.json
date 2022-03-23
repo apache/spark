@@ -142,8 +142,8 @@
     "message" : [ "Syntax error, unexpected empty statement" ],
     "sqlState" : "42000"
   },
-  "PARSE_INPUT_MISMATCHED" : {
-    "message" : [ "Syntax error at or near %s" ],
+  "PARSE_SYNTAX_ERROR" : {
+    "message" : [ "Syntax error at or near %s%s" ],
     "sqlState" : "42000"
   },
   "PIVOT_VALUE_DATA_TYPE_MISMATCH" : {

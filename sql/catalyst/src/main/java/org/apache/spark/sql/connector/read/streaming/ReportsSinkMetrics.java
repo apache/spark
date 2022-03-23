@@ -15,25 +15,22 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.connector.expressions.filter;
+package org.apache.spark.sql.connector.read.streaming;
 
 import org.apache.spark.annotation.Evolving;
-import org.apache.spark.sql.connector.expressions.NamedReference;
-import org.apache.spark.unsafe.types.UTF8String;
+
+import java.util.Map;
 
 /**
- * A filter that evaluates to {@code true} iff the {@code column} evaluates to
- * a string that ends with {@code value}.
+ * A mix-in interface for streaming sinks to signal that they can report
+ * metrics.
  *
- * @since 3.3.0
+ * @since 3.4.0
  */
 @Evolving
-public final class StringEndsWith extends StringPredicate {
-
-  public StringEndsWith(NamedReference column, UTF8String value) {
-    super(column, value);
-  }
-
-  @Override
-  public String toString() { return "STRING_ENDS_WITH(" + column.describe() + ", " + value + ")"; }
+public interface ReportsSinkMetrics {
+  /**
+   * Returns the metrics reported by the sink for this micro-batch
+   */
+  Map<String, String> metrics();
 }
