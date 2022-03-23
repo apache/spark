@@ -34,10 +34,6 @@ import org.junit.Test;
 import org.mockito.ArgumentCaptor;
 import org.roaringbitmap.RoaringBitmap;
 
-import static org.junit.Assert.*;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.*;
-
 import org.apache.spark.network.buffer.ManagedBuffer;
 import org.apache.spark.network.buffer.NioManagedBuffer;
 import org.apache.spark.network.client.MergedBlockMetaResponseCallback;
@@ -52,14 +48,18 @@ import org.apache.spark.network.shuffle.protocol.BlockTransferMessage;
 import org.apache.spark.network.shuffle.protocol.CorruptionCause;
 import org.apache.spark.network.shuffle.protocol.DiagnoseCorruption;
 import org.apache.spark.network.shuffle.protocol.ExecutorShuffleInfo;
-import org.apache.spark.network.shuffle.protocol.FetchShuffleBlocks;
 import org.apache.spark.network.shuffle.protocol.FetchShuffleBlockChunks;
+import org.apache.spark.network.shuffle.protocol.FetchShuffleBlocks;
 import org.apache.spark.network.shuffle.protocol.FinalizeShuffleMerge;
 import org.apache.spark.network.shuffle.protocol.MergeStatuses;
 import org.apache.spark.network.shuffle.protocol.OpenBlocks;
 import org.apache.spark.network.shuffle.protocol.RegisterExecutor;
 import org.apache.spark.network.shuffle.protocol.StreamHandle;
 import org.apache.spark.network.shuffle.protocol.UploadBlock;
+
+import static org.junit.Assert.*;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.*;
 
 public class ExternalBlockHandlerSuite {
   TransportClient client = mock(TransportClient.class);

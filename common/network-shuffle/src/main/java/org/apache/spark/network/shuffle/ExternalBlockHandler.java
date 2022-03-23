@@ -27,13 +27,13 @@ import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
 
+import com.codahale.metrics.Counter;
 import com.codahale.metrics.Gauge;
 import com.codahale.metrics.Meter;
 import com.codahale.metrics.Metric;
 import com.codahale.metrics.MetricSet;
 import com.codahale.metrics.RatioGauge;
 import com.codahale.metrics.Timer;
-import com.codahale.metrics.Counter;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Sets;
@@ -52,8 +52,9 @@ import org.apache.spark.network.server.StreamManager;
 import org.apache.spark.network.shuffle.checksum.Cause;
 import org.apache.spark.network.shuffle.protocol.*;
 import org.apache.spark.network.util.TimerWithCustomTimeUnit;
-import static org.apache.spark.network.util.NettyUtils.getRemoteAddress;
 import org.apache.spark.network.util.TransportConf;
+
+import static org.apache.spark.network.util.NettyUtils.getRemoteAddress;
 
 /**
  * RPC Handler for a server which can serve both RDD blocks and shuffle blocks from outside

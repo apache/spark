@@ -31,14 +31,14 @@ import org.junit.Test;
 import org.mockito.stubbing.Answer;
 import org.mockito.stubbing.Stubber;
 
-import static org.junit.Assert.*;
-import static org.mockito.Mockito.*;
-
 import org.apache.spark.network.buffer.ManagedBuffer;
 import org.apache.spark.network.buffer.NioManagedBuffer;
 import org.apache.spark.network.util.MapConfigProvider;
 import org.apache.spark.network.util.TransportConf;
+
 import static org.apache.spark.network.shuffle.RetryingBlockTransferor.BlockTransferStarter;
+import static org.junit.Assert.*;
+import static org.mockito.Mockito.*;
 
 /**
  * Tests retry logic by throwing IOExceptions and ensuring that subsequent attempts are made to

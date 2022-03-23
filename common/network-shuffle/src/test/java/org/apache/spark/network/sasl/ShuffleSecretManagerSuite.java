@@ -20,6 +20,7 @@ package org.apache.spark.network.sasl;
 import java.nio.ByteBuffer;
 
 import org.junit.Test;
+
 import static org.junit.Assert.*;
 
 public class ShuffleSecretManagerSuite {

@@ -25,12 +25,12 @@ import java.io.OutputStream;
 
 import com.google.common.io.Closeables;
 import com.google.common.io.Files;
-
-import org.apache.spark.network.shuffle.protocol.ExecutorShuffleInfo;
-import org.apache.spark.network.util.JavaUtils;
 import org.junit.Assert;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import org.apache.spark.network.shuffle.protocol.ExecutorShuffleInfo;
+import org.apache.spark.network.util.JavaUtils;
 
 /**
  * Manages some sort-shuffle data, including the creation

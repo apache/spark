@@ -34,7 +34,6 @@ import java.util.concurrent.ThreadLocalRandom;
 
 import com.google.common.base.Throwables;
 import com.google.common.collect.ImmutableMap;
-
 import org.apache.commons.io.FileUtils;
 import org.junit.After;
 import org.junit.Assert;
@@ -43,8 +42,6 @@ import org.junit.Test;
 import org.roaringbitmap.RoaringBitmap;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import static org.junit.Assert.*;
 
 import org.apache.spark.network.buffer.FileSegmentManagedBuffer;
 import org.apache.spark.network.client.StreamCallbackWithID;
@@ -58,6 +55,8 @@ import org.apache.spark.network.shuffle.protocol.MergeStatuses;
 import org.apache.spark.network.shuffle.protocol.PushBlockStream;
 import org.apache.spark.network.util.MapConfigProvider;
 import org.apache.spark.network.util.TransportConf;
+
+import static org.junit.Assert.*;
 
 /**
  * Tests for {@link RemoteBlockPushResolver}.

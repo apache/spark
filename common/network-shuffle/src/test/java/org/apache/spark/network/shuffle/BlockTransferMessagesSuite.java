@@ -17,14 +17,14 @@
 
 package org.apache.spark.network.shuffle;
 
-import org.junit.Test;
-
-import static org.junit.Assert.*;
-
 import java.util.HashMap;
 import java.util.Map;
 
+import org.junit.Test;
+
 import org.apache.spark.network.shuffle.protocol.*;
+
+import static org.junit.Assert.*;
 
 /** Verifies that all BlockTransferMessages can be serialized correctly. */
 public class BlockTransferMessagesSuite {

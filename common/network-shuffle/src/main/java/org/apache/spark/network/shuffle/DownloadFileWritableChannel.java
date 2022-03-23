@@ -17,9 +17,9 @@
 
 package org.apache.spark.network.shuffle;
 
-import org.apache.spark.network.buffer.ManagedBuffer;
-
 import java.nio.channels.WritableByteChannel;
+
+import org.apache.spark.network.buffer.ManagedBuffer;
 
 /**
  * A channel for writing data which is fetched to disk, which allows access to the written data only

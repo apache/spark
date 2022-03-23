@@ -27,10 +27,6 @@ import com.google.common.collect.Maps;
 import io.netty.buffer.Unpooled;
 import org.junit.Test;
 
-import static org.junit.Assert.*;
-import static org.mockito.AdditionalMatchers.*;
-import static org.mockito.Mockito.*;
-
 import org.apache.spark.network.buffer.ManagedBuffer;
 import org.apache.spark.network.buffer.NettyManagedBuffer;
 import org.apache.spark.network.buffer.NioManagedBuffer;
@@ -38,10 +34,13 @@ import org.apache.spark.network.client.RpcResponseCallback;
 import org.apache.spark.network.client.TransportClient;
 import org.apache.spark.network.server.BlockPushNonFatalFailure;
 import org.apache.spark.network.server.BlockPushNonFatalFailure.ReturnCode;
-import org.apache.spark.network.shuffle.protocol.BlockTransferMessage;
 import org.apache.spark.network.shuffle.protocol.BlockPushReturnCode;
+import org.apache.spark.network.shuffle.protocol.BlockTransferMessage;
 import org.apache.spark.network.shuffle.protocol.PushBlockStream;
 
+import static org.junit.Assert.*;
+import static org.mockito.AdditionalMatchers.*;
+import static org.mockito.Mockito.*;
 
 public class OneForOneBlockPusherSuite {
 

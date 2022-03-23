@@ -34,23 +34,23 @@ import java.util.concurrent.TimeUnit;
 
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Sets;
-import org.apache.spark.network.buffer.FileSegmentManagedBuffer;
-import org.apache.spark.network.server.OneForOneStreamManager;
 import org.junit.After;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
-import static org.junit.Assert.*;
-
 import org.apache.spark.network.TestUtils;
 import org.apache.spark.network.TransportContext;
+import org.apache.spark.network.buffer.FileSegmentManagedBuffer;
 import org.apache.spark.network.buffer.ManagedBuffer;
 import org.apache.spark.network.buffer.NioManagedBuffer;
+import org.apache.spark.network.server.OneForOneStreamManager;
 import org.apache.spark.network.server.TransportServer;
 import org.apache.spark.network.shuffle.protocol.ExecutorShuffleInfo;
 import org.apache.spark.network.util.MapConfigProvider;
 import org.apache.spark.network.util.TransportConf;
+
+import static org.junit.Assert.*;
 
 public class ExternalShuffleIntegrationSuite {
 

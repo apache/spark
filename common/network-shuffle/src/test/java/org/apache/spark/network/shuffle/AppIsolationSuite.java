@@ -29,9 +29,6 @@ import java.util.function.Supplier;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
-import static org.junit.Assert.*;
-import static org.mockito.Mockito.*;
-
 import org.apache.spark.network.TestUtils;
 import org.apache.spark.network.TransportContext;
 import org.apache.spark.network.buffer.ManagedBuffer;
@@ -54,6 +51,9 @@ import org.apache.spark.network.shuffle.protocol.RegisterExecutor;
 import org.apache.spark.network.shuffle.protocol.StreamHandle;
 import org.apache.spark.network.util.MapConfigProvider;
 import org.apache.spark.network.util.TransportConf;
+
+import static org.junit.Assert.*;
+import static org.mockito.Mockito.*;
 
 public class AppIsolationSuite {
 

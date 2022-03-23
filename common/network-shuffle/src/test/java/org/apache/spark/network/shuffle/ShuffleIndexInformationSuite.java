@@ -17,13 +17,12 @@
 
 package org.apache.spark.network.shuffle;
 
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.Test;
-
-import java.io.IOException;
-
-import java.nio.charset.StandardCharsets;
 
 import static org.junit.Assert.*;
 
