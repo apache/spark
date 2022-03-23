@@ -334,7 +334,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
             }
 
             def checkValidGroupingExprs(expr: Expression): Unit = {
-              if (expr.find(_.isInstanceOf[AggregateExpression]).isDefined) {
+              if (expr.exists(_.isInstanceOf[AggregateExpression])) {
                 failAnalysis(
                   "aggregate functions are not allowed in GROUP BY, but found " + expr.sql)
               }
@@ -718,7 +718,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
 
     // Check whether the given expressions contains the subquery expression.
     def containsExpr(expressions: Seq[Expression]): Boolean = {
-      expressions.exists(_.find(_.semanticEquals(expr)).isDefined)
+      expressions.exists(_.exists(_.semanticEquals(expr)))
     }
 
     // Validate the subquery plan.
@@ -782,10 +782,11 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
 
       case inSubqueryOrExistsSubquery =>
         plan match {
-          case _: Filter | _: SupportsSubquery | _: Join => // Ok
+          case _: Filter | _: SupportsSubquery | _: Join |
+            _: Project | _: Aggregate | _: Window => // Ok
           case _ =>
             failAnalysis(s"IN/EXISTS predicate sub-queries can only be used in" +
-                s" Filter/Join and a few commands: $plan")
+              s" Filter/Join/Project/Aggregate/Window and a few commands: $plan")
         }
         // Validate to make sure the correlations appearing in the query are valid and
         // allowed by spark.

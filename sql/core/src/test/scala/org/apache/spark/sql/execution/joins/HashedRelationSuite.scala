@@ -93,6 +93,9 @@ class HashedRelationSuite extends SharedSparkSession {
     assert(hashed2.get(toUnsafe(InternalRow(10))) === null)
     assert(hashed2.get(unsafeData(2)).toArray === data2)
 
+    // SPARK-38542: UnsafeHashedRelation should serialize numKeys out
+    assert(hashed2.keys().map(_.copy()).forall(_.numFields == 1))
+
     val os2 = new ByteArrayOutputStream()
     val out2 = new ObjectOutputStream(os2)
     hashed2.writeExternal(out2)

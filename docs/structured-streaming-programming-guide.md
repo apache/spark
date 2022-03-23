@@ -1225,6 +1225,13 @@ Note that there are some restrictions when you use session window in streaming q
 
 For batch query, global window (only having `session_window` in grouping key) is supported.
 
+By default, Spark does not perform partial aggregation for session window aggregation, since it requires additional
+sort in local partitions before grouping. It works better for the case there are only few number of input rows in
+same group key for each local partition, but for the case there are numerous input rows having same group key in
+local partition, doing partial aggregation can still increase the performance significantly despite additional sort.
+
+You can enable `spark.sql.streaming.sessionWindow.merge.sessions.in.local.partition` to indicate Spark to perform partial aggregation.
+
 ##### Conditions for watermarking to clean aggregation state
 {:.no_toc}
 

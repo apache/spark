@@ -456,6 +456,7 @@ net.sf.py4j:py4j
 org.jpmml:pmml-model
 org.jpmml:pmml-schema
 org.threeten:threeten-extra
+org.jdom:jdom2
 
 python/lib/py4j-*-src.zip
 python/pyspark/cloudpickle.py
@@ -504,6 +505,7 @@ Common Development and Distribution License (CDDL) 1.0
 javax.activation:activation  http://www.oracle.com/technetwork/java/javase/tech/index-jsp-138795.html
 javax.xml.stream:stax-api    https://jcp.org/en/jsr/detail?id=173
 javax.transaction:javax.transaction-api
+javax.xml.bind:jaxb-api
 
 
 Common Development and Distribution License (CDDL) 1.1

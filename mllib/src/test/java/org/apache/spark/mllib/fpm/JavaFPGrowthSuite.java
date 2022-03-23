@@ -34,7 +34,6 @@ public class JavaFPGrowthSuite extends SharedSparkSession {
   @Test
   public void runFPGrowth() {
 
-    @SuppressWarnings("unchecked")
     JavaRDD<List<String>> rdd = jsc.parallelize(Arrays.asList(
       Arrays.asList("r z h k p".split(" ")),
       Arrays.asList("z y x w v u t s".split(" ")),
@@ -61,7 +60,6 @@ public class JavaFPGrowthSuite extends SharedSparkSession {
   @Test
   public void runFPGrowthSaveLoad() {
 
-    @SuppressWarnings("unchecked")
     JavaRDD<List<String>> rdd = jsc.parallelize(Arrays.asList(
       Arrays.asList("r z h k p".split(" ")),
       Arrays.asList("z y x w v u t s".split(" ")),

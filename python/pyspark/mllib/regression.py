@@ -381,9 +381,7 @@ class LinearRegressionWithSGD:
                 float(convergenceTol),
             )
 
-        return _regression_train_wrapper(
-            train, LinearRegressionModel, data, initialWeights  # type: ignore[arg-type]
-        )
+        return _regression_train_wrapper(train, LinearRegressionModel, data, initialWeights)
 
 
 @inherit_doc
@@ -561,9 +559,7 @@ class LassoWithSGD:
                 float(convergenceTol),
             )
 
-        return _regression_train_wrapper(
-            train, LassoModel, data, initialWeights  # type: ignore[arg-type]
-        )
+        return _regression_train_wrapper(train, LassoModel, data, initialWeights)
 
 
 @inherit_doc
@@ -745,9 +741,7 @@ class RidgeRegressionWithSGD:
                 float(convergenceTol),
             )
 
-        return _regression_train_wrapper(
-            train, RidgeRegressionModel, data, initialWeights  # type: ignore[arg-type]
-        )
+        return _regression_train_wrapper(train, RidgeRegressionModel, data, initialWeights)
 
 
 class IsotonicRegressionModel(Saveable, Loader["IsotonicRegressionModel"]):

@@ -213,7 +213,7 @@ class PandasGroupedOpsMixin:
         udf = pandas_udf(func, returnType=schema, functionType=PandasUDFType.GROUPED_MAP)
         df = self._df
         udf_column = udf(*[df[col] for col in df.columns])
-        jdf = self._jgd.flatMapGroupsInPandas(udf_column._jc.expr())  # type: ignore[attr-defined]
+        jdf = self._jgd.flatMapGroupsInPandas(udf_column._jc.expr())
         return DataFrame(jdf, self.session)
 
     def cogroup(self, other: "GroupedData") -> "PandasCogroupedOps":
@@ -341,9 +341,7 @@ class PandasCogroupedOps:
 
         all_cols = self._extract_cols(self._gd1) + self._extract_cols(self._gd2)
         udf_column = udf(*all_cols)
-        jdf = self._gd1._jgd.flatMapCoGroupsInPandas(  # type: ignore[attr-defined]
-            self._gd2._jgd, udf_column._jc.expr()  # type: ignore[attr-defined]
-        )
+        jdf = self._gd1._jgd.flatMapCoGroupsInPandas(self._gd2._jgd, udf_column._jc.expr())
         return DataFrame(jdf, self._gd1.session)
 
     @staticmethod

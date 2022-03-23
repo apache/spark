@@ -717,7 +717,7 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
            """.stripMargin)
       }.getMessage
 
-      assert(e.contains("mismatched input 'ROW'"))
+      assert(e.contains("Syntax error at or near 'ROW'"))
     }
   }
 
@@ -739,7 +739,7 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
            """.stripMargin)
       }.getMessage
 
-      assert(e.contains("mismatched input 'ROW'"))
+      assert(e.contains("Syntax error at or near 'ROW'"))
     }
   }
 
