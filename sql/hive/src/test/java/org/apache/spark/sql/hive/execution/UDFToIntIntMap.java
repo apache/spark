@@ -17,10 +17,10 @@
 
 package org.apache.spark.sql.hive.execution;
 
-import org.apache.hadoop.hive.ql.exec.UDF;
-
 import java.util.HashMap;
 import java.util.Map;
+
+import org.apache.hadoop.hive.ql.exec.UDF;
 
 public class UDFToIntIntMap extends UDF {
   public Map<Integer, Integer> evaluate(Object o) {

@@ -17,10 +17,10 @@
 
 package org.apache.spark.sql.hive.execution;
 
-import org.apache.hadoop.hive.ql.exec.UDF;
-
 import java.util.ArrayList;
 import java.util.Arrays;
+
+import org.apache.hadoop.hive.ql.exec.UDF;
 
 public class UDFToListInt extends UDF {
   public ArrayList<Integer> evaluate(Object o) {

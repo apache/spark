@@ -16,9 +16,9 @@
  */
 package org.apache.spark.sql.hive.execution;
 
-import org.apache.hadoop.hive.ql.exec.UDF;
-
 import java.util.*;
+
+import org.apache.hadoop.hive.ql.exec.UDF;
 
 /**
  * UDF that returns a nested list of maps that uses a string as its key and a list of ints as its

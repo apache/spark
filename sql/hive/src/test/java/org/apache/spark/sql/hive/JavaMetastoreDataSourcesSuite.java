@@ -36,9 +36,9 @@ import org.apache.spark.sql.Encoders;
 import org.apache.spark.sql.QueryTest$;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.SQLContext;
-import org.apache.spark.sql.hive.test.TestHive$;
 import org.apache.spark.sql.SaveMode;
 import org.apache.spark.sql.catalyst.TableIdentifier;
+import org.apache.spark.sql.hive.test.TestHive$;
 import org.apache.spark.util.Utils;
 
 public class JavaMetastoreDataSourcesSuite {

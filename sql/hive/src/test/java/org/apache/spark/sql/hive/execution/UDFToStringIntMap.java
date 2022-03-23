@@ -17,9 +17,9 @@
 
 package org.apache.spark.sql.hive.execution;
 
-import org.apache.hadoop.hive.ql.exec.UDF;
-
 import java.util.HashMap;
+
+import org.apache.hadoop.hive.ql.exec.UDF;
 
 public class UDFToStringIntMap extends UDF {
   public HashMap<String, Integer> evaluate(Object o) {

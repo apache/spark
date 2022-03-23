@@ -16,10 +16,10 @@
  */
 package org.apache.spark.sql.hive.execution;
 
-import org.apache.hadoop.hive.ql.exec.UDF;
-
 import java.util.Collections;
 import java.util.List;
+
+import org.apache.hadoop.hive.ql.exec.UDF;
 
 /**
  * UDF that returns a raw (non-parameterized) java List.
