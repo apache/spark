@@ -94,6 +94,7 @@ class V2ExpressionBuilder(
         None
       }
     case and: And =>
+      // AND expects predicate
       val l = generateExpression(and.left, true)
       val r = generateExpression(and.right, true)
       if (l.isDefined && r.isDefined) {
@@ -103,6 +104,7 @@ class V2ExpressionBuilder(
         None
       }
     case or: Or =>
+      // OR expects predicate
       val l = generateExpression(or.left, true)
       val r = generateExpression(or.right, true)
       if (l.isDefined && r.isDefined) {

@@ -402,14 +402,38 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
 
         checkAnswer(df, Seq(Row("fred", 1), Row("mary", 2)))
 
-        val df2 = sql("""
-                        |SELECT * FROM h2.test.employee
-                        |WHERE (CASE WHEN SALARY > 10000 THEN BONUS ELSE BONUS + 200 END) > 1200
-                        |""".stripMargin)
+        val df2 = spark.table("h2.test.people").filter($"id" + Int.MaxValue > 1)
 
         checkFiltersRemoved(df2, ansiMode)
 
         df2.queryExecution.optimizedPlan.collect {
+          case _: DataSourceV2ScanRelation =>
+            val expected_plan_fragment = if (ansiMode) {
+              "PushedFilters: [ID IS NOT NULL, (ID + 2147483647) > 1], "
+            } else {
+              "PushedFilters: [ID IS NOT NULL], "
+            }
+            checkKeywordsExistsInExplain(df2, expected_plan_fragment)
+        }
+
+        if (ansiMode) {
+          val e = intercept[SparkException] {
+            checkAnswer(df2, Seq.empty)
+          }
+          assert(e.getMessage.contains(
+            "org.h2.jdbc.JdbcSQLDataException: Numeric value out of range: \"2147483648\""))
+        } else {
+          checkAnswer(df2, Seq.empty)
+        }
+
+        val df3 = sql("""
+                        |SELECT * FROM h2.test.employee
+                        |WHERE (CASE WHEN SALARY > 10000 THEN BONUS ELSE BONUS + 200 END) > 1200
+                        |""".stripMargin)
+
+        checkFiltersRemoved(df3, ansiMode)
+
+        df3.queryExecution.optimizedPlan.collect {
           case _: DataSourceV2ScanRelation =>
             val expected_plan_fragment = if (ansiMode) {
               "PushedFilters: [(CASE WHEN SALARY > 10000.00 THEN BONUS" +
@@ -417,10 +441,10 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
             } else {
               "PushedFilters: []"
             }
-            checkKeywordsExistsInExplain(df2, expected_plan_fragment)
+            checkKeywordsExistsInExplain(df3, expected_plan_fragment)
         }
 
-        checkAnswer(df2,
+        checkAnswer(df3,
           Seq(Row(1, "cathy", 9000, 1200, false), Row(2, "david", 10000, 1300, true)))
       }
     }
