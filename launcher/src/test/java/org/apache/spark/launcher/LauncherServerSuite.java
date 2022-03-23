@@ -33,9 +33,10 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import org.junit.Test;
-import static org.junit.Assert.*;
 
 import static org.apache.spark.launcher.LauncherProtocol.*;
+import static org.junit.Assert.*;
+
 
 public class LauncherServerSuite extends BaseSuite {
 

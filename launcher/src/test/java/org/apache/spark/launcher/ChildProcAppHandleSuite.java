@@ -26,21 +26,22 @@ import java.util.Arrays;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.stream.Collectors;
-import static java.nio.file.attribute.PosixFilePermission.*;
 
-import org.apache.logging.log4j.core.config.plugins.*;
 import org.apache.logging.log4j.core.Filter;
 import org.apache.logging.log4j.core.Layout;
-import org.apache.logging.log4j.core.appender.AbstractAppender;
 import org.apache.logging.log4j.core.LogEvent;
+import org.apache.logging.log4j.core.appender.AbstractAppender;
+import org.apache.logging.log4j.core.config.plugins.*;
 import org.junit.AfterClass;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
+
+import static java.nio.file.attribute.PosixFilePermission.*;
+import static org.apache.spark.launcher.CommandBuilderUtils.*;
 import static org.junit.Assert.*;
 import static org.junit.Assume.*;
 
-import static org.apache.spark.launcher.CommandBuilderUtils.*;
 
 public class ChildProcAppHandleSuite extends BaseSuite {
 
