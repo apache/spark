@@ -21,11 +21,11 @@ import com.amazonaws.services.kinesis.clientlibrary.lib.worker.InitialPositionIn
 import org.junit.Assert;
 import org.junit.Test;
 
-import org.apache.spark.streaming.kinesis.KinesisInitialPositions.TrimHorizon;
 import org.apache.spark.storage.StorageLevel;
 import org.apache.spark.streaming.Duration;
 import org.apache.spark.streaming.LocalJavaStreamingContext;
 import org.apache.spark.streaming.Seconds;
+import org.apache.spark.streaming.kinesis.KinesisInitialPositions.TrimHorizon;
 
 public class JavaKinesisInputDStreamBuilderSuite extends LocalJavaStreamingContext {
   /**

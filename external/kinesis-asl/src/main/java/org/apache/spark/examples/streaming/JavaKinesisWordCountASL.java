@@ -23,6 +23,12 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.regex.Pattern;
 
+import scala.Tuple2;
+import scala.reflect.ClassTag$;
+
+import com.amazonaws.auth.DefaultAWSCredentialsProviderChain;
+import com.amazonaws.services.kinesis.AmazonKinesisClient;
+
 import org.apache.spark.SparkConf;
 import org.apache.spark.api.java.function.FlatMapFunction;
 import org.apache.spark.api.java.function.Function2;
@@ -32,14 +38,8 @@ import org.apache.spark.streaming.Duration;
 import org.apache.spark.streaming.api.java.JavaDStream;
 import org.apache.spark.streaming.api.java.JavaPairDStream;
 import org.apache.spark.streaming.api.java.JavaStreamingContext;
-
 import org.apache.spark.streaming.kinesis.KinesisInitialPositions;
 import org.apache.spark.streaming.kinesis.KinesisInputDStream;
-import scala.Tuple2;
-import scala.reflect.ClassTag$;
-
-import com.amazonaws.auth.DefaultAWSCredentialsProviderChain;
-import com.amazonaws.services.kinesis.AmazonKinesisClient;
 
 /**
  * Consumes messages from a Amazon Kinesis streams and does wordcount.

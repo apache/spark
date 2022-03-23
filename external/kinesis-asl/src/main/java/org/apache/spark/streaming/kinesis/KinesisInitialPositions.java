@@ -16,10 +16,10 @@
  */
 package org.apache.spark.streaming.kinesis;
 
-import com.amazonaws.services.kinesis.clientlibrary.lib.worker.InitialPositionInStream;
-
 import java.io.Serializable;
 import java.util.Date;
+
+import com.amazonaws.services.kinesis.clientlibrary.lib.worker.InitialPositionInStream;
 
 /**
  * A java wrapper for exposing [[InitialPositionInStream]]

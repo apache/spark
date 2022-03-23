@@ -21,9 +21,8 @@ import java.io.Serializable;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicReference;
 
-import org.apache.kafka.common.serialization.StringDeserializer;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
-
+import org.apache.kafka.common.serialization.StringDeserializer;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
