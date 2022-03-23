@@ -19,19 +19,28 @@ package org.apache.spark.sql.catalyst.optimizer
 
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.{CreateNamedStruct, Literal, ScalarSubquery}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, CreateNamedStruct, GetStructField, Literal, ScalarSubquery}
 import org.apache.spark.sql.catalyst.expressions.aggregate.{CollectList, CollectSet}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
-import org.apache.spark.sql.types.{ArrayType, IntegerType, LongType, StringType}
 
 class MergeScalarSubqueriesSuite extends PlanTest {
+
+  override def beforeEach(): Unit = {
+    CTERelationDef.curId.set(0)
+  }
+
   private object Optimize extends RuleExecutor[LogicalPlan] {
     val batches = Batch("MergeScalarSubqueries", Once, MergeScalarSubqueries) :: Nil
   }
 
   val testRelation = LocalRelation('a.int, 'b.int, 'c.string)
+
+  private def extractorExpression(cteIndex: Int, output: Seq[Attribute], fieldIndex: Int) = {
+    GetStructField(ScalarSubquery(CTERelationRef(cteIndex, true, output)), fieldIndex)
+      .as("scalarsubquery()")
+  }
 
   test("Merging subqueries with projects") {
     val subquery1 = ScalarSubquery(testRelation.select(('a + 1).as("a_plus1")))
@@ -49,7 +58,7 @@ class MergeScalarSubqueriesSuite extends PlanTest {
         subquery5,
         subquery6)
 
-    val mergedSubquery = ScalarSubquery(testRelation
+    val mergedSubquery = testRelation
       .select(
         ('a + 1).as("a_plus1"),
         ('a + 2).as("a_plus2"),
@@ -59,17 +68,18 @@ class MergeScalarSubqueriesSuite extends PlanTest {
           Literal("a_plus1"), 'a_plus1,
           Literal("a_plus2"), 'a_plus2,
           Literal("b"), 'b
-        )).as("mergedValue")))
-    val correctAnswer = CommonScalarSubqueries(
-      Seq(mergedSubquery),
+        )).as("mergedValue"))
+    val analyzedMergedSubquery = mergedSubquery.analyze
+    val correctAnswer = WithCTE(
       testRelation
         .select(
-          ScalarSubqueryReference(0, 0, IntegerType, subquery1.exprId).as("scalarsubquery()"),
-          ScalarSubqueryReference(0, 1, IntegerType, subquery2.exprId).as("scalarsubquery()"),
-          ScalarSubqueryReference(0, 2, IntegerType, subquery3.exprId).as("scalarsubquery()"),
-          ScalarSubqueryReference(0, 0, IntegerType, subquery4.exprId).as("scalarsubquery()"),
-          ScalarSubqueryReference(0, 1, IntegerType, subquery5.exprId).as("scalarsubquery()"),
-          ScalarSubqueryReference(0, 2, IntegerType, subquery6.exprId).as("scalarsubquery()")))
+          extractorExpression(0, analyzedMergedSubquery.output, 0),
+          extractorExpression(0, analyzedMergedSubquery.output, 1),
+          extractorExpression(0, analyzedMergedSubquery.output, 2),
+          extractorExpression(0, analyzedMergedSubquery.output, 0),
+          extractorExpression(0, analyzedMergedSubquery.output, 1),
+          extractorExpression(0, analyzedMergedSubquery.output, 2)),
+      Seq(CTERelationDef(analyzedMergedSubquery, 0)))
 
     comparePlans(Optimize.execute(originalQuery.analyze), correctAnswer.analyze)
   }
@@ -90,7 +100,7 @@ class MergeScalarSubqueriesSuite extends PlanTest {
         subquery5,
         subquery6)
 
-    val mergedSubquery = ScalarSubquery(testRelation
+    val mergedSubquery = testRelation
       .groupBy('b)(
         max('a).as("max_a"),
         sum('a).as("sum_a"),
@@ -99,17 +109,18 @@ class MergeScalarSubqueriesSuite extends PlanTest {
         Literal("max_a"), 'max_a,
         Literal("sum_a"), 'sum_a,
         Literal("b"), 'b
-      )).as("mergedValue")))
-    val correctAnswer = CommonScalarSubqueries(
-      Seq(mergedSubquery),
+      )).as("mergedValue"))
+    val analyzedMergedSubquery = mergedSubquery.analyze
+    val correctAnswer = WithCTE(
       testRelation
         .select(
-          ScalarSubqueryReference(0, 0, IntegerType, subquery1.exprId).as("scalarsubquery()"),
-          ScalarSubqueryReference(0, 1, LongType, subquery2.exprId).as("scalarsubquery()"),
-          ScalarSubqueryReference(0, 2, IntegerType, subquery3.exprId).as("scalarsubquery()"),
-          ScalarSubqueryReference(0, 0, IntegerType, subquery4.exprId).as("scalarsubquery()"),
-          ScalarSubqueryReference(0, 1, LongType, subquery5.exprId).as("scalarsubquery()"),
-          ScalarSubqueryReference(0, 2, IntegerType, subquery6.exprId).as("scalarsubquery()")))
+          extractorExpression(0, analyzedMergedSubquery.output, 0),
+          extractorExpression(0, analyzedMergedSubquery.output, 1),
+          extractorExpression(0, analyzedMergedSubquery.output, 2),
+          extractorExpression(0, analyzedMergedSubquery.output, 0),
+          extractorExpression(0, analyzedMergedSubquery.output, 1),
+          extractorExpression(0, analyzedMergedSubquery.output, 2)),
+      Seq(CTERelationDef(analyzedMergedSubquery, 0)))
 
     comparePlans(Optimize.execute(originalQuery.analyze), correctAnswer.analyze)
   }
@@ -130,7 +141,7 @@ class MergeScalarSubqueriesSuite extends PlanTest {
         subquery3,
         subquery4)
 
-    val mergedSubquery = ScalarSubquery(testRelation
+    val mergedSubquery = testRelation
       .select('a, 'b, 'c)
       .where('a > 1)
       .select('a, 'b, 'c)
@@ -138,15 +149,16 @@ class MergeScalarSubqueriesSuite extends PlanTest {
       .select(CreateNamedStruct(Seq(
         Literal("a"), 'a,
         Literal("b_1"), 'b
-      )).as("mergedValue")))
-    val correctAnswer = CommonScalarSubqueries(
-      Seq(mergedSubquery),
+      )).as("mergedValue"))
+    val analyzedMergedSubquery = mergedSubquery.analyze
+    val correctAnswer = WithCTE(
       testRelation
         .select(
-          ScalarSubqueryReference(0, 0, IntegerType, subquery1.exprId).as("scalarsubquery()"),
-          ScalarSubqueryReference(0, 1, IntegerType, subquery2.exprId).as("scalarsubquery()"),
-          ScalarSubqueryReference(0, 0, IntegerType, subquery3.exprId).as("scalarsubquery()"),
-          ScalarSubqueryReference(0, 1, IntegerType, subquery4.exprId).as("scalarsubquery()")))
+          extractorExpression(0, analyzedMergedSubquery.output, 0),
+          extractorExpression(0, analyzedMergedSubquery.output, 1),
+          extractorExpression(0, analyzedMergedSubquery.output, 0),
+          extractorExpression(0, analyzedMergedSubquery.output, 1)),
+      Seq(CTERelationDef(analyzedMergedSubquery, 0)))
 
     comparePlans(Optimize.execute(originalQuery.analyze), correctAnswer.analyze)
   }
@@ -160,7 +172,7 @@ class MergeScalarSubqueriesSuite extends PlanTest {
       subquery1,
       subquery2)
 
-    val mergedSubquery = ScalarSubquery(testRelation
+    val mergedSubquery = testRelation
       .having('b)(
         max('a).as("max_a"),
         sum('a).as("sum_a"))('max_a > 1)
@@ -170,13 +182,14 @@ class MergeScalarSubqueriesSuite extends PlanTest {
       .select(CreateNamedStruct(Seq(
         Literal("max_a"), 'max_a,
         Literal("sum_a"), 'sum_a
-      )).as("mergedValue")))
-    val correctAnswer = CommonScalarSubqueries(
-      Seq(mergedSubquery),
+      )).as("mergedValue"))
+    val analyzedMergedSubquery = mergedSubquery.analyze
+    val correctAnswer = WithCTE(
       testRelation
         .select(
-          ScalarSubqueryReference(0, 0, IntegerType, subquery1.exprId).as("scalarsubquery()"),
-          ScalarSubqueryReference(0, 1, LongType, subquery2.exprId).as("scalarsubquery()")))
+          extractorExpression(0, analyzedMergedSubquery.output, 0),
+          extractorExpression(0, analyzedMergedSubquery.output, 1)),
+      Seq(CTERelationDef(analyzedMergedSubquery, 0)))
 
     comparePlans(Optimize.execute(originalQuery.analyze), correctAnswer.analyze)
   }
@@ -187,20 +200,19 @@ class MergeScalarSubqueriesSuite extends PlanTest {
         testRelation.as("t2"),
         Inner,
         Some($"t1.b" === $"t2.b"))
-      .select($"t1.a"))
+      .select($"t1.a").analyze)
     val subquery2 = ScalarSubquery(testRelation.as("t1")
       .select('a.as("a_1"), 'b.as("b_1"), 'c.as("c_1"))
       .join(
         testRelation.as("t2").select('a.as("a_2"), 'b.as("b_2"), 'c.as("c_2")),
         Inner,
         Some('b_1 === 'b_2))
-      .select('c_2))
-
+      .select('c_2).analyze)
     val originalQuery = testRelation.select(
       subquery1,
       subquery2)
 
-    val mergedSubquery = ScalarSubquery(testRelation.as("t1")
+    val mergedSubquery = testRelation.as("t1")
       .select('a, 'b, 'c)
       .join(
         testRelation.as("t2").select('a, 'b, 'c),
@@ -210,13 +222,14 @@ class MergeScalarSubqueriesSuite extends PlanTest {
       .select(CreateNamedStruct(Seq(
         Literal("a"), 'a,
         Literal("c_2"), 'c
-      )).as("mergedValue")))
-    val correctAnswer = CommonScalarSubqueries(
-      Seq(mergedSubquery),
+      )).as("mergedValue"))
+    val analyzedMergedSubquery = mergedSubquery.analyze
+    val correctAnswer = WithCTE(
       testRelation
         .select(
-          ScalarSubqueryReference(0, 0, IntegerType, subquery1.exprId).as("scalarsubquery()"),
-          ScalarSubqueryReference(0, 1, StringType, subquery2.exprId).as("scalarsubquery()")))
+          extractorExpression(0, analyzedMergedSubquery.output, 0),
+          extractorExpression(0, analyzedMergedSubquery.output, 1)),
+      Seq(CTERelationDef(analyzedMergedSubquery, 0)))
 
     comparePlans(Optimize.execute(originalQuery.analyze), correctAnswer.analyze)
   }
@@ -235,7 +248,6 @@ class MergeScalarSubqueriesSuite extends PlanTest {
         LeftOuter,
         Some('b_1 === 'b_2))
       .select('c_2))
-
     val originalQuery = testRelation.select(
       subquery1,
       subquery2)
@@ -296,42 +308,46 @@ class MergeScalarSubqueriesSuite extends PlanTest {
         subquery5,
         subquery6)
 
-    val hashAggregates = ScalarSubquery(testRelation
+    val hashAggregates = testRelation
       .groupBy('b)(
         max('a).as("max_a"),
         min('a).as("min_a"))
       .select(CreateNamedStruct(Seq(
         Literal("max_a"), 'max_a,
         Literal("min_a"), 'min_a
-      )).as("mergedValue")))
-    val objectHashAggregates = ScalarSubquery(testRelation
+      )).as("mergedValue"))
+    val analyzedHashAggregates = hashAggregates.analyze
+    val objectHashAggregates = testRelation
       .groupBy('b)(
         CollectList('a).toAggregateExpression(isDistinct = false).as("collectlist_a"),
         CollectSet('a).toAggregateExpression(isDistinct = false).as("collectset_a"))
       .select(CreateNamedStruct(Seq(
         Literal("collectlist_a"), 'collectlist_a,
         Literal("collectset_a"), 'collectset_a
-      )).as("mergedValue")))
-    val sortAggregates = ScalarSubquery(testRelation
+      )).as("mergedValue"))
+    val analyzedObjectHashAggregates = objectHashAggregates.analyze
+    val sortAggregates = testRelation
       .groupBy('b)(
         max('c).as("max_c"),
         min('c).as("min_c"))
       .select(CreateNamedStruct(Seq(
         Literal("max_c"), 'max_c,
         Literal("min_c"), 'min_c
-      )).as("mergedValue")))
-    val correctAnswer = CommonScalarSubqueries(
-      Seq(hashAggregates, objectHashAggregates, sortAggregates),
+      )).as("mergedValue"))
+    val analyzedSortAggregates = sortAggregates.analyze
+    val correctAnswer = WithCTE(
       testRelation
         .select(
-          ScalarSubqueryReference(0, 0, IntegerType, subquery1.exprId).as("scalarsubquery()"),
-          ScalarSubqueryReference(0, 1, IntegerType, subquery2.exprId).as("scalarsubquery()"),
-          ScalarSubqueryReference(1, 0, ArrayType(IntegerType, false), subquery3.exprId)
-            .as("scalarsubquery()"),
-          ScalarSubqueryReference(1, 1, ArrayType(IntegerType, false), subquery4.exprId)
-            .as("scalarsubquery()"),
-          ScalarSubqueryReference(2, 0, StringType, subquery5.exprId).as("scalarsubquery()"),
-          ScalarSubqueryReference(2, 1, StringType, subquery6.exprId).as("scalarsubquery()")))
+          extractorExpression(0, analyzedHashAggregates.output, 0),
+          extractorExpression(0, analyzedHashAggregates.output, 1),
+          extractorExpression(1, analyzedObjectHashAggregates.output, 0),
+          extractorExpression(1, analyzedObjectHashAggregates.output, 1),
+          extractorExpression(2, analyzedSortAggregates.output, 0),
+          extractorExpression(2, analyzedSortAggregates.output, 1)),
+        Seq(
+          CTERelationDef(analyzedSortAggregates, 2),
+          CTERelationDef(analyzedObjectHashAggregates, 1),
+          CTERelationDef(analyzedHashAggregates, 0)))
 
     comparePlans(Optimize.execute(originalQuery.analyze), correctAnswer.analyze)
   }

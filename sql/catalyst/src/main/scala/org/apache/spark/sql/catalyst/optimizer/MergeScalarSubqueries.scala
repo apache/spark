@@ -17,12 +17,13 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
+import scala.collection.mutable
 import scala.collection.mutable.ListBuffer
 
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans.QueryPlan
-import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, CommonScalarSubqueries, Filter, Join, LogicalPlan, Project, Subquery}
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, CTERelationDef, CTERelationRef, Filter, Join, LogicalPlan, Project, Subquery, WithCTE}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.{SCALAR_SUBQUERY, SCALAR_SUBQUERY_REFERENCE, TreePattern}
 import org.apache.spark.sql.types.DataType
@@ -35,63 +36,58 @@ import org.apache.spark.sql.types.DataType
  * - While traversing through the plan each [[ScalarSubquery]] plan is tried to merge into the cache
  *   of already seen subquery plans. If merge is possible then cache is updated with the merged
  *   subquery plan, if not then the new subquery plan is added to the cache.
- *   During this first traversal each [[ScalarSubquery]] expression is replaced to a
- *   [[ScalarSubqueryReference]] pointing to its cached version.
- *   The cache uses a flag to keep track of if a cache entry is a results of merging 2 or more
+ *   During this first traversal each [[ScalarSubquery]] expression is replaced to a temporal
+ *   [[ScalarSubqueryReference]] reference pointing to its cached version.
+ *   The cache uses a flag to keep track of if a cache entry is a result of merging 2 or more
  *   plans, or it is a plan that was seen only once.
- *   Merged plans in the cache get a "header", that is is basically
- *   `CreateNamedStruct(name1, attribute1, name2, attribute2, ...)` expression in new root
- *   [[Project]] node. This expression ensures that the merged plan is a valid scalar subquery that
- *   returns only one value.
- * - A second traversal checks if a [[ScalarSubqueryReference]] is pointing to a merged subquery
- *   plan or not and either keeps the reference or restores the original [[ScalarSubquery]].
- *   If there are [[ScalarSubqueryReference]] nodes remained a [[CommonScalarSubqueries]] root node
- *   is added to the plan with the referenced scalar subqueries.
- * - [[PlanSubqueries]] or [[PlanAdaptiveSubqueries]] rule does the physical planning of scalar
- *   subqueries including the ones under [[CommonScalarSubqueriesExec]] node and replaces
- *   each [[ScalarSubqueryReference]] to their referenced physical plan in
- *   `GetStructField(ScalarSubquery(merged plan with CreateNamedStruct() header))` form.
- *   It is important that references pointing to the same merged subquery are replaced to the same
- *   planned instance to make sure that each merged subquery runs only once (even without a wrapping
- *   [[ReuseSubquery]] node).
- *   Finally, the [[CommonScalarSubqueriesExec]] node is removed from the physical plan.
- * - The [[ReuseExchangeAndSubquery]] rule wraps the second, third, ... instances of the same
- *   subquery into a [[ReuseSubquery]] node, but this just a cosmetic change in the plan.
+ *   Merged plans in the cache get a "Header", that contains the list of attributes form the scalar
+ *   return value of a merged subquery.
+ * - A second traversal checks if there are merged subqueries in the cache and builds a `WithCTE`
+ *   node from these queries. The `CTERelationDef` nodes contain the merged subquery in the
+ *   following form:
+ *   `Project(Seq(CreateNamedStruct(name1, attribute1, ...) AS mergedValue), mergedSubqueryPlan)`
+ *   and the definitions are flagged that they host a subquery, that can return maximum one row.
+ *   During the second traversal [[ScalarSubqueryReference]] expressions that pont to a merged
+ *   subquery is either transformed to a `GetStructField(ScalarSubquery(CTERelationRef(...)))`
+ *   expression or restored to the original [[ScalarSubquery]].
  *
  * Eg. the following query:
  *
  * SELECT
- *   (SELECT avg(a) FROM t GROUP BY b),
- *   (SELECT sum(b) FROM t GROUP BY b)
+ *   (SELECT avg(a) FROM t),
+ *   (SELECT sum(b) FROM t)
  *
  * is optimized from:
  *
- * Project [scalar-subquery#231 [] AS scalarsubquery()#241,
- *          scalar-subquery#232 [] AS scalarsubquery()#242L]
- * :  :- Aggregate [b#234], [avg(a#233) AS avg(a)#236]
- * :  :  +- Relation default.t[a#233,b#234] parquet
- * :  +- Aggregate [b#240], [sum(b#240) AS sum(b)#238L]
- * :     +- Project [b#240]
- * :        +- Relation default.t[a#239,b#240] parquet
+ * == Optimized Logical Plan ==
+ * Project [scalar-subquery#242 [] AS scalarsubquery()#253,
+ *          scalar-subquery#243 [] AS scalarsubquery()#254L]
+ * :  :- Aggregate [avg(a#244) AS avg(a)#247]
+ * :  :  +- Project [a#244]
+ * :  :     +- Relation default.t[a#244,b#245] parquet
+ * :  +- Aggregate [sum(a#251) AS sum(a)#250L]
+ * :     +- Project [a#251]
+ * :        +- Relation default.t[a#251,b#252] parquet
  * +- OneRowRelation
  *
  * to:
  *
- * CommonScalarSubqueries [scalar-subquery#250 []]
- * :  +- Project [named_struct(avg(a), avg(a)#236, sum(b), sum(b)#238L) AS mergedValue#249]
- * :     +- Aggregate [b#234], [avg(a#233) AS avg(a)#236, sum(b#234) AS sum(b)#238L]
- * :        +- Project [a#233, b#234]
- * :           +- Relation default.t[a#233,b#234] parquet
- * +- Project [scalarsubqueryreference(0, 0, DoubleType, 231) AS scalarsubquery()#241,
- *             scalarsubqueryreference(0, 1, LongType, 232) AS scalarsubquery()#242L]
+ * WithCTE
+ * :- CTERelationDef 0
+ * :  +- Project [named_struct(avg(a), avg(a)#247, sum(a), sum(a)#250L) AS mergedValue#260]
+ * :     +- Aggregate [avg(a#244) AS avg(a)#247, sum(a#244) AS sum(a)#250L]
+ * :        +- Project [a#244]
+ * :           +- Relation default.t[a#244,b#245] parquet
+ * +- Project [scalar-subquery#242 [].avg(a) AS scalarsubquery()#253,
+ *             scalar-subquery#243 [].sum(a) AS scalarsubquery()#254L]
+ *    :  :- CTERelationRef 0, true, [mergedValue#260], true
+ *    :  +- CTERelationRef 0, true, [mergedValue#260], true
  *    +- OneRowRelation
  */
 object MergeScalarSubqueries extends Rule[LogicalPlan] with PredicateHelper {
   def apply(plan: LogicalPlan): LogicalPlan = {
     plan match {
-      case Subquery(_: CommonScalarSubqueries, _) => plan
       case s: Subquery => s.copy(child = extractCommonScalarSubqueries(s.child))
-      case _: CommonScalarSubqueries => plan
       case _ => extractCommonScalarSubqueries(plan)
     }
   }
@@ -111,12 +107,9 @@ object MergeScalarSubqueries extends Rule[LogicalPlan] with PredicateHelper {
 
   private def extractCommonScalarSubqueries(plan: LogicalPlan) = {
     val cache = ListBuffer.empty[Header]
-    val newPlan = removeReferences(insertReferences(plan, cache), cache)
-    if (cache.nonEmpty) {
-      val scalarSubqueries = cache.map {
-        case Header(elements, child, _) => ScalarSubquery(createProject(elements, child))
-      }.toSeq
-      CommonScalarSubqueries(scalarSubqueries, newPlan)
+    val (newPlan, subqueryCTEs) = removeReferences(insertReferences(plan, cache), cache)
+    if (subqueryCTEs.nonEmpty) {
+      WithCTE(newPlan, subqueryCTEs)
     } else {
       newPlan
     }
@@ -132,8 +125,7 @@ object MergeScalarSubqueries extends Rule[LogicalPlan] with PredicateHelper {
   }
 
   // Caching returns the index of the subquery in the cache and the index of scalar member in the
-  // "header", that `CreateNamedStruct(name1, attribute1, name2, attribute2, ...)` expression in a
-  // [[Project]] node.
+  // "Header".
   private def cacheSubquery(plan: LogicalPlan, cache: ListBuffer[Header]): (Int, Int) = {
     val output = plan.output.head
     cache.zipWithIndex.collectFirst(Function.unlift { case (header, subqueryIndex) =>
@@ -255,48 +247,6 @@ object MergeScalarSubqueries extends Rule[LogicalPlan] with PredicateHelper {
             None
           }
 
-        // As a follow-up, it would be possible to merge `CommonScalarSubqueries` nodes, which would
-        // allow merging different set of merged subqueries.
-        // E.g. this query:
-        //
-        // SELECT
-        //   (
-        //     SELECT
-        //       (SELECT avg(a) FROM t GROUP BY b) +
-        //       (SELECT sum(b) FROM t GROUP BY b)
-        //   ),
-        //   (
-        //     SELECT
-        //       (SELECT max(a) FROM t GROUP BY b) +
-        //       (SELECT min(b) FROM t GROUP BY b)
-        //   )
-        //
-        // is currently optimized to:
-        //
-        // == Optimized Logical Plan ==
-        // Project [scalar-subquery#233 [] AS scalarsubquery()#255,
-        //          scalar-subquery#236 [] AS scalarsubquery()#256]
-        // :  :- CommonScalarSubqueries [scalar-subquery#264 []]
-        // :  :  :  +- Aggregate [b#238], [named_struct(avg(a), avg(a#237), sum(b), sum(b#238))
-        //                                 AS mergedValue#263]
-        // :  :  :     +- Relation default.t[a#237,b#238] parquet
-        // :  :  +- Project [(scalarsubqueryreference(0, 0, DoubleType, 231) +
-        //                   cast(scalarsubqueryreference(0, 1, LongType, 232) as double))
-        //                   AS (scalarsubquery() + scalarsubquery())#245]
-        // :  :     +- OneRowRelation
-        // :  +- CommonScalarSubqueries [scalar-subquery#269 []]
-        // :     :  +- Aggregate [b#254], [named_struct(min(a), min(a#253), max(b), max(b#254))
-        //                                 AS mergedValue#268]
-        // :     :     +- Relation default.t[a#253,b#254] parquet
-        // :     +- Project [(scalarsubqueryreference(0, 0, IntegerType, 234) +
-        //                   scalarsubqueryreference(0, 1, IntegerType, 235))
-        //                   AS (scalarsubquery() + scalarsubquery())#252]
-        // :        +- OneRowRelation
-        // +- OneRowRelation
-        //
-        // but if we implemented merging `CommonScalarSubqueries` nodes then the plan could be
-        // transformed further and all leaf subqueries could be merged.
-
         // Otherwise merging is not possible.
         case _ => None
       })
@@ -344,7 +294,7 @@ object MergeScalarSubqueries extends Rule[LogicalPlan] with PredicateHelper {
   }
 
   // Only allow aggregates of the same implementation because merging different implementations
-  // could cause performance regression
+  // could cause performance regression.
   private def supportedAggregateMerge(newPlan: Aggregate, cachedPlan: Aggregate) = {
     val newPlanAggregateExpressions = newPlan.aggregateExpressions.flatMap(_.collect {
       case a: AggregateExpression => a
@@ -367,7 +317,7 @@ object MergeScalarSubqueries extends Rule[LogicalPlan] with PredicateHelper {
       }
   }
 
-  // Whitelist of mergeable general nodes
+  // Whitelist of mergeable general nodes.
   private def supportedMerge(plan: LogicalPlan) = {
     plan match {
       case _: Filter => true
@@ -377,38 +327,34 @@ object MergeScalarSubqueries extends Rule[LogicalPlan] with PredicateHelper {
   }
 
   // Second traversal replaces `ScalarSubqueryReference`s to either
-  // `GetStructField(ScalarSubquery(merged plan with CreateNamedStruct() header))` if the plan is
-  // merged from multiple subqueries or `ScalarSubquery(original plan)` if it isn't.
-  private def removeReferences(plan: LogicalPlan, cache: ListBuffer[Header]): LogicalPlan = {
-    val nonMergedSubqueriesBefore = cache.scanLeft(0) {
-      case (nonMergedSubqueriesBefore, header) =>
-        nonMergedSubqueriesBefore + (if (header.merged) 0 else 1)
-    }.toArray
+  // `GetStructField(ScalarSubquery(CTERelationRef to the merged plan)` if the plan is merged from
+  // multiple subqueries or `ScalarSubquery(original plan)` if it isn't.
+  private def removeReferences(
+      plan: LogicalPlan,
+      cache: ListBuffer[Header]): (LogicalPlan, Seq[CTERelationDef]) = {
+    val subqueryCTEs = mutable.Map.empty[Int, CTERelationDef]
     val newPlan =
       plan.transformAllExpressionsWithPruning(_.containsAnyPattern(SCALAR_SUBQUERY_REFERENCE)) {
         case ssr: ScalarSubqueryReference =>
           val header = cache(ssr.subqueryIndex)
           if (header.merged) {
-            if (nonMergedSubqueriesBefore(ssr.subqueryIndex) > 0) {
-              ssr.copy(subqueryIndex =
-                ssr.subqueryIndex - nonMergedSubqueriesBefore(ssr.subqueryIndex))
-            } else {
-              ssr
-            }
+            val subqueryCTE = subqueryCTEs.getOrElseUpdate(ssr.subqueryIndex,
+              CTERelationDef(createProject(header.elements, header.plan)))
+            GetStructField(
+              ScalarSubquery(
+                CTERelationRef(subqueryCTE.id, true, subqueryCTE.output),
+                exprId = ssr.exprId),
+              ssr.headerIndex)
           } else {
             ScalarSubquery(plan = header.plan, exprId = ssr.exprId)
           }
     }
-    // Could use `filterInPlace()` in Scala 2.13
-    cache.zipWithIndex.collect {
-      case (header, i) if !header.merged => i
-    }.reverse.foreach(cache.remove)
-    newPlan
+    (newPlan, subqueryCTEs.values.toSeq)
   }
 }
 
 /**
- * Reference to a subquery in a `CommonScalarSubqueries` or `CommonScalarSubqueriesExec` node.
+ * Temporal reference to a subquery.
  */
 case class ScalarSubqueryReference(
     subqueryIndex: Int,

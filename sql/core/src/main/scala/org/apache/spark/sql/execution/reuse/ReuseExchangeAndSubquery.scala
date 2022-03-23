@@ -19,7 +19,6 @@ package org.apache.spark.sql.execution.reuse
 
 import scala.collection.mutable
 
-import org.apache.spark.sql.catalyst.expressions.ExprId
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.execution.{BaseSubqueryExec, ExecSubqueryExpression, ReusedSubqueryExec, SparkPlan}
@@ -39,12 +38,7 @@ case object ReuseExchangeAndSubquery extends Rule[SparkPlan] {
   def apply(plan: SparkPlan): SparkPlan = {
     if (conf.exchangeReuseEnabled || conf.subqueryReuseEnabled) {
       val exchanges = mutable.Map.empty[SparkPlan, Exchange]
-
-      // [[ExprId]] is required in the cache to correctly identify all subquery reuses as the
-      // [[PlanSubqueries]] rule inserts the same instance of planned physical subqueries from
-      // [[CommonScalarSubqueriesExec]] nodes into the plan multiple times, only the [[ExprId]]s of
-      // the wrapper [[ScalarSubquery]] expressions are different in those cases.
-      val subqueries = mutable.Map.empty[SparkPlan, (BaseSubqueryExec, ExprId)]
+      val subqueries = mutable.Map.empty[SparkPlan, BaseSubqueryExec]
 
       def reuse(plan: SparkPlan): SparkPlan = {
         plan.transformUpWithPruning(_.containsAnyPattern(EXCHANGE, PLAN_EXPRESSION)) {
@@ -61,9 +55,8 @@ case object ReuseExchangeAndSubquery extends Rule[SparkPlan] {
               case sub: ExecSubqueryExpression =>
                 val subquery = reuse(sub.plan).asInstanceOf[BaseSubqueryExec]
                 val newSubquery = if (conf.subqueryReuseEnabled) {
-                  val (cachedSubquery, exprId) =
-                    subqueries.getOrElseUpdate(subquery.canonicalized, (subquery, sub.exprId))
-                  if (cachedSubquery.ne(subquery) || exprId != sub.exprId) {
+                  val cachedSubquery = subqueries.getOrElseUpdate(subquery.canonicalized, subquery)
+                  if (cachedSubquery.ne(subquery)) {
                     ReusedSubqueryExec(cachedSubquery)
                   } else {
                     cachedSubquery

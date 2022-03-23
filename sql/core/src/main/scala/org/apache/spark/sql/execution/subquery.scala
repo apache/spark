@@ -20,9 +20,8 @@ package org.apache.spark.sql.execution
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.{expressions, InternalRow}
-import org.apache.spark.sql.catalyst.expressions.{CreateNamedStruct, Expression, ExprId, GetStructField, InSet, ListQuery, Literal, PlanExpression}
+import org.apache.spark.sql.catalyst.expressions.{CreateNamedStruct, Expression, ExprId, InSet, ListQuery, Literal, PlanExpression}
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
-import org.apache.spark.sql.catalyst.optimizer.ScalarSubqueryReference
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.{LeafLike, UnaryLike}
 import org.apache.spark.sql.catalyst.trees.TreePattern._
@@ -175,27 +174,13 @@ case class InSubqueryExec(
  */
 case class PlanSubqueries(sparkSession: SparkSession) extends Rule[SparkPlan] {
   def apply(plan: SparkPlan): SparkPlan = {
-    val (plannedCommonScalarSubqueries, child) = plan match {
-      case css: CommonScalarSubqueriesExec =>
-        css.scalarSubqueries.map { sub =>
-          val executedPlan = QueryExecution.prepareExecutedPlan(sparkSession, sub.plan)
-          SubqueryExec.createForScalarSubquery(s"scalar-subquery#${sub.exprId.id}", executedPlan)
-        } -> css.child
-      case _ => Seq.empty -> plan
-    }
-
-    child.transformAllExpressionsWithPruning(_.containsAnyPattern(SCALAR_SUBQUERY, IN_SUBQUERY,
-      SCALAR_SUBQUERY_REFERENCE)) {
+    plan.transformAllExpressionsWithPruning(_.containsAnyPattern(SCALAR_SUBQUERY, IN_SUBQUERY)) {
       case subquery: expressions.ScalarSubquery =>
         val executedPlan = QueryExecution.prepareExecutedPlan(sparkSession, subquery.plan)
         ScalarSubquery(
           SubqueryExec.createForScalarSubquery(
             s"scalar-subquery#${subquery.exprId.id}", executedPlan),
           subquery.exprId)
-      case ssr: ScalarSubqueryReference =>
-        GetStructField(
-          ScalarSubquery(plannedCommonScalarSubqueries(ssr.subqueryIndex), ssr.exprId),
-          ssr.headerIndex)
       case expressions.InSubquery(values, ListQuery(query, _, exprId, _, _)) =>
         val expr = if (values.length == 1) {
           values.head
@@ -211,4 +196,3 @@ case class PlanSubqueries(sparkSession: SparkSession) extends Rule[SparkPlan] {
     }
   }
 }
-

@@ -65,19 +65,6 @@ object Subquery {
     Subquery(s.plan, SubqueryExpression.hasCorrelatedSubquery(s))
 }
 
-/**
- * This is a root logical node that contains common scalar subqueries.
- */
-case class CommonScalarSubqueries(scalarSubqueries: Seq[ScalarSubquery], child: LogicalPlan)
-  extends OrderPreservingUnaryNode with PredicateHelper {
-  override def output: Seq[Attribute] = child.output
-
-  override def maxRows: Option[Long] = child.maxRows
-
-  override protected def withNewChildInternal(newChild: LogicalPlan): CommonScalarSubqueries =
-    copy(child = newChild)
-}
-
 case class Project(projectList: Seq[NamedExpression], child: LogicalPlan)
     extends OrderPreservingUnaryNode {
   override def output: Seq[Attribute] = projectList.map(_.toAttribute)
@@ -684,7 +671,7 @@ case class CTERelationDef(child: LogicalPlan, id: Long = CTERelationDef.newId) e
 }
 
 object CTERelationDef {
-  private val curId = new java.util.concurrent.atomic.AtomicLong()
+  private[sql] val curId = new java.util.concurrent.atomic.AtomicLong()
   def newId: Long = curId.getAndIncrement()
 }
 

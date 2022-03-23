@@ -30,7 +30,7 @@ import org.apache.spark.broadcast
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Attribute, ExprId}
+import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, ReturnAnswer}
 import org.apache.spark.sql.catalyst.plans.physical.{Distribution, UnspecifiedDistribution}
 import org.apache.spark.sql.catalyst.rules.{PlanChangeLogger, Rule}
@@ -789,14 +789,9 @@ case class AdaptiveExecutionContext(session: SparkSession, qe: QueryExecution) {
 
   /**
    * The subquery-reuse map shared across the entire query.
-   *
-   * [[ExprId]] is required in the cache to correctly identify all subquery reuses as the
-   * [[PlanAdaptiveSubqueries]] rule inserts the same instance of planned physical subqueries from
-   * [[CommonScalarSubqueriesExec]] nodes into the plan multiple times, only the [[ExprId]]s of the
-   * wrapper [[ScalarSubquery]] expressions are different in those cases.
    */
-  val subqueryCache: TrieMap[SparkPlan, (BaseSubqueryExec, ExprId)] =
-    new TrieMap[SparkPlan, (BaseSubqueryExec, ExprId)]()
+  val subqueryCache: TrieMap[SparkPlan, BaseSubqueryExec] =
+    new TrieMap[SparkPlan, BaseSubqueryExec]()
 
   /**
    * The exchange-reuse map shared across the entire query, including sub-queries.

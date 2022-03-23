@@ -18,32 +18,21 @@
 package org.apache.spark.sql.execution.adaptive
 
 import org.apache.spark.sql.catalyst.expressions
-import org.apache.spark.sql.catalyst.expressions.{CreateNamedStruct, DynamicPruningExpression, GetStructField, ListQuery, Literal}
-import org.apache.spark.sql.catalyst.optimizer.ScalarSubqueryReference
+import org.apache.spark.sql.catalyst.expressions.{CreateNamedStruct, DynamicPruningExpression, ListQuery, Literal}
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.catalyst.trees.TreePattern.{DYNAMIC_PRUNING_SUBQUERY, IN_SUBQUERY, SCALAR_SUBQUERY, SCALAR_SUBQUERY_REFERENCE}
+import org.apache.spark.sql.catalyst.trees.TreePattern.{DYNAMIC_PRUNING_SUBQUERY, IN_SUBQUERY,
+  SCALAR_SUBQUERY}
 import org.apache.spark.sql.execution
-import org.apache.spark.sql.execution.{BaseSubqueryExec, CommonScalarSubqueriesExec, InSubqueryExec, SparkPlan}
+import org.apache.spark.sql.execution.{BaseSubqueryExec, InSubqueryExec, SparkPlan}
 
 case class PlanAdaptiveSubqueries(
     subqueryMap: Map[Long, BaseSubqueryExec]) extends Rule[SparkPlan] {
 
   def apply(plan: SparkPlan): SparkPlan = {
-    val (commonScalarSubqueries, child) = plan match {
-      case css: CommonScalarSubqueriesExec => css.scalarSubqueries -> css.child
-      case _ => Seq.empty -> plan
-    }
-
-    child.transformAllExpressionsWithPruning(
-      _.containsAnyPattern(SCALAR_SUBQUERY, IN_SUBQUERY, DYNAMIC_PRUNING_SUBQUERY,
-        SCALAR_SUBQUERY_REFERENCE)) {
+    plan.transformAllExpressionsWithPruning(
+      _.containsAnyPattern(SCALAR_SUBQUERY, IN_SUBQUERY, DYNAMIC_PRUNING_SUBQUERY)) {
       case expressions.ScalarSubquery(_, _, exprId, _) =>
         execution.ScalarSubquery(subqueryMap(exprId.id), exprId)
-      case ssr: ScalarSubqueryReference =>
-        val subquery = commonScalarSubqueries(ssr.subqueryIndex)
-        GetStructField(
-          execution.ScalarSubquery(subqueryMap(subquery.exprId.id), ssr.exprId),
-          ssr.headerIndex)
       case expressions.InSubquery(values, ListQuery(_, _, exprId, _, _)) =>
         val expr = if (values.length == 1) {
           values.head
