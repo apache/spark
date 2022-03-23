@@ -17,6 +17,8 @@
 
 package org.apache.hive.service.cli.operation;
 
+import java.util.List;
+
 import org.apache.hadoop.hive.metastore.IMetaStoreClient;
 import org.apache.hadoop.hive.metastore.api.ForeignKeysRequest;
 import org.apache.hadoop.hive.metastore.api.SQLForeignKey;
@@ -24,7 +26,6 @@ import org.apache.hadoop.hive.serde2.thrift.Type;
 import org.apache.hive.service.cli.*;
 import org.apache.hive.service.cli.session.HiveSession;
 
-import java.util.List;
 
 /**
  * GetCrossReferenceOperation.

@@ -27,7 +27,6 @@ import java.util.Map;
 import java.util.Random;
 import java.util.Set;
 import java.util.StringTokenizer;
-
 import javax.security.auth.Subject;
 
 import org.apache.commons.codec.binary.Base64;
