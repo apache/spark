@@ -402,14 +402,38 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
 
         checkAnswer(df, Seq(Row("fred", 1), Row("mary", 2)))
 
-        val df2 = sql("""
-                        |SELECT * FROM h2.test.employee
-                        |WHERE (CASE WHEN SALARY > 10000 THEN BONUS ELSE BONUS + 200 END) > 1200
-                        |""".stripMargin)
+        val df2 = spark.table("h2.test.people").filter($"id" + Int.MaxValue > 1)
 
         checkFiltersRemoved(df2, ansiMode)
 
         df2.queryExecution.optimizedPlan.collect {
+          case _: DataSourceV2ScanRelation =>
+            val expected_plan_fragment = if (ansiMode) {
+              "PushedFilters: [ID IS NOT NULL, (ID + 2147483647) > 1], "
+            } else {
+              "PushedFilters: [ID IS NOT NULL], "
+            }
+            checkKeywordsExistsInExplain(df2, expected_plan_fragment)
+        }
+
+        if (ansiMode) {
+          val e = intercept[SparkException] {
+            checkAnswer(df2, Seq.empty)
+          }
+          assert(e.getMessage.contains(
+            "org.h2.jdbc.JdbcSQLDataException: Numeric value out of range: \"2147483648\""))
+        } else {
+          checkAnswer(df2, Seq.empty)
+        }
+
+        val df3 = sql("""
+                        |SELECT * FROM h2.test.employee
+                        |WHERE (CASE WHEN SALARY > 10000 THEN BONUS ELSE BONUS + 200 END) > 1200
+                        |""".stripMargin)
+
+        checkFiltersRemoved(df3, ansiMode)
+
+        df3.queryExecution.optimizedPlan.collect {
           case _: DataSourceV2ScanRelation =>
             val expected_plan_fragment = if (ansiMode) {
               "PushedFilters: [(CASE WHEN SALARY > 10000.00 THEN BONUS" +
@@ -417,10 +441,10 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
             } else {
               "PushedFilters: []"
             }
-            checkKeywordsExistsInExplain(df2, expected_plan_fragment)
+            checkKeywordsExistsInExplain(df3, expected_plan_fragment)
         }
 
-        checkAnswer(df2,
+        checkAnswer(df3,
           Seq(Row(1, "cathy", 9000, 1200, false), Row(2, "david", 10000, 1300, true)))
       }
     }
@@ -950,15 +974,19 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
     checkAnswer(df, Seq(Row(1d), Row(1d), Row(null)))
   }
 
-  test("scan with aggregate push-down: aggregate over alias NOT push down") {
+  test("scan with aggregate push-down: aggregate over alias push down") {
     val cols = Seq("a", "b", "c", "d", "e")
     val df1 = sql("select * from h2.test.employee").toDF(cols: _*)
     val df2 = df1.groupBy().sum("c")
-    checkAggregateRemoved(df2, false)
+    checkAggregateRemoved(df2)
     df2.queryExecution.optimizedPlan.collect {
-      case relation: DataSourceV2ScanRelation => relation.scan match {
-        case v1: V1ScanWrapper =>
-          assert(v1.pushedDownOperators.aggregation.isEmpty)
+      case relation: DataSourceV2ScanRelation =>
+        val expectedPlanFragment =
+          "PushedAggregates: [SUM(SALARY)], PushedFilters: [], PushedGroupByColumns: []"
+        checkKeywordsExistsInExplain(df2, expectedPlanFragment)
+        relation.scan match {
+          case v1: V1ScanWrapper =>
+            assert(v1.pushedDownOperators.aggregation.nonEmpty)
       }
     }
     checkAnswer(df2, Seq(Row(53000.00)))
@@ -1203,5 +1231,77 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
         |FROM h2.test.view1 LEFT JOIN h2.test.view2
         |ON h2.test.view1.`|col1` = h2.test.view2.`|col1`""".stripMargin)
     checkAnswer(df, Seq.empty[Row])
+  }
+
+  test("scan with aggregate push-down: complete push-down aggregate with alias") {
+    val df = spark.table("h2.test.employee")
+      .select($"DEPT", $"SALARY".as("mySalary"))
+      .groupBy($"DEPT")
+      .agg(sum($"mySalary").as("total"))
+      .filter($"total" > 1000)
+    checkAggregateRemoved(df)
+    df.queryExecution.optimizedPlan.collect {
+      case _: DataSourceV2ScanRelation =>
+        val expectedPlanFragment =
+          "PushedAggregates: [SUM(SALARY)], PushedFilters: [], PushedGroupByColumns: [DEPT]"
+        checkKeywordsExistsInExplain(df, expectedPlanFragment)
+    }
+    checkAnswer(df, Seq(Row(1, 19000.00), Row(2, 22000.00), Row(6, 12000.00)))
+
+    val df2 = spark.table("h2.test.employee")
+      .select($"DEPT".as("myDept"), $"SALARY".as("mySalary"))
+      .groupBy($"myDept")
+      .agg(sum($"mySalary").as("total"))
+      .filter($"total" > 1000)
+    checkAggregateRemoved(df2)
+    df2.queryExecution.optimizedPlan.collect {
+      case _: DataSourceV2ScanRelation =>
+        val expectedPlanFragment =
+          "PushedAggregates: [SUM(SALARY)], PushedFilters: [], PushedGroupByColumns: [DEPT]"
+        checkKeywordsExistsInExplain(df2, expectedPlanFragment)
+    }
+    checkAnswer(df2, Seq(Row(1, 19000.00), Row(2, 22000.00), Row(6, 12000.00)))
+  }
+
+  test("scan with aggregate push-down: partial push-down aggregate with alias") {
+    val df = spark.read
+      .option("partitionColumn", "DEPT")
+      .option("lowerBound", "0")
+      .option("upperBound", "2")
+      .option("numPartitions", "2")
+      .table("h2.test.employee")
+      .select($"NAME", $"SALARY".as("mySalary"))
+      .groupBy($"NAME")
+      .agg(sum($"mySalary").as("total"))
+      .filter($"total" > 1000)
+    checkAggregateRemoved(df, false)
+    df.queryExecution.optimizedPlan.collect {
+      case _: DataSourceV2ScanRelation =>
+        val expectedPlanFragment =
+          "PushedAggregates: [SUM(SALARY)], PushedFilters: [], PushedGroupByColumns: [NAME]"
+        checkKeywordsExistsInExplain(df, expectedPlanFragment)
+    }
+    checkAnswer(df, Seq(Row("alex", 12000.00), Row("amy", 10000.00),
+      Row("cathy", 9000.00), Row("david", 10000.00), Row("jen", 12000.00)))
+
+    val df2 = spark.read
+      .option("partitionColumn", "DEPT")
+      .option("lowerBound", "0")
+      .option("upperBound", "2")
+      .option("numPartitions", "2")
+      .table("h2.test.employee")
+      .select($"NAME".as("myName"), $"SALARY".as("mySalary"))
+      .groupBy($"myName")
+      .agg(sum($"mySalary").as("total"))
+      .filter($"total" > 1000)
+    checkAggregateRemoved(df2, false)
+    df2.queryExecution.optimizedPlan.collect {
+      case _: DataSourceV2ScanRelation =>
+        val expectedPlanFragment =
+          "PushedAggregates: [SUM(SALARY)], PushedFilters: [], PushedGroupByColumns: [NAME]"
+        checkKeywordsExistsInExplain(df2, expectedPlanFragment)
+    }
+    checkAnswer(df2, Seq(Row("alex", 12000.00), Row("amy", 10000.00),
+      Row("cathy", 9000.00), Row("david", 10000.00), Row("jen", 12000.00)))
   }
 }

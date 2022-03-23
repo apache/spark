@@ -207,6 +207,11 @@ class BloomFilterImpl extends BloomFilter implements Serializable {
     return this;
   }
 
+  @Override
+  public long cardinality() {
+    return this.bits.cardinality();
+  }
+
   private BloomFilterImpl checkCompatibilityForMerge(BloomFilter other)
           throws IncompatibleMergeException {
     // Duplicates the logic of `isCompatible` here to provide better error message.
