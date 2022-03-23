@@ -2583,6 +2583,8 @@ class AdaptiveQueryExecSuite
       ("key", "key", true),
       ("key, value", "key", true)
     ).foreach { case (project, sort, required) =>
+      // During re-optimize in AQE, the sort will be converted to local relation if it's empty
+      // So this test ensure we will add sort back if it is User-specified
       val (origin, adaptive) = runAdaptiveAndVerifyResult(
         s"""
            |SELECT $project FROM testdata where key < 0 ORDER BY $sort
