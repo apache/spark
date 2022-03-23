@@ -22,13 +22,14 @@ import java.util.Arrays;
 import java.util.Objects;
 
 import org.apache.spark.annotation.Evolving;
+import org.apache.spark.sql.connector.expressions.Cast;
 import org.apache.spark.sql.connector.expressions.filter.Predicate;
 import org.apache.spark.sql.connector.util.V2ExpressionSQLBuilder;
 
 /**
  * The general representation of SQL scalar expressions, which contains the upper-cased
  * expression name and all the children expressions. Please also see {@link Predicate}
- * for the supported predicate expressions.
+ * for the supported predicate expressions and {@link Cast} for the cast expression.
  * <p>
  * The currently supported SQL scalar expressions:
  * <ol>

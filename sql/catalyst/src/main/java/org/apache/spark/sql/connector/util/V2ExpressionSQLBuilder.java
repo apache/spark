@@ -21,10 +21,12 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.stream.Collectors;
 
+import org.apache.spark.sql.connector.expressions.Cast;
 import org.apache.spark.sql.connector.expressions.Expression;
 import org.apache.spark.sql.connector.expressions.NamedReference;
 import org.apache.spark.sql.connector.expressions.GeneralScalarExpression;
 import org.apache.spark.sql.connector.expressions.Literal;
+import org.apache.spark.sql.types.DataType;
 
 /**
  * The builder to generate SQL from V2 expressions.
@@ -80,6 +82,10 @@ public class V2ExpressionSQLBuilder {
             return visitBinaryArithmetic(
               name, inputToSQL(e.children()[0]), inputToSQL(e.children()[1]));
           }
+        case "CAST":
+          assert e instanceof Cast;
+          Cast cast = (Cast) e;
+          return visitCast(name, build(cast.expression()), cast.dataType());
         case "AND":
           return visitAnd(name, build(e.children()[0]), build(e.children()[1]));
         case "OR":
@@ -165,6 +171,10 @@ public class V2ExpressionSQLBuilder {
 
   protected String visitBinaryArithmetic(String name, String l, String r) {
     return l + " " + name + " " + r;
+  }
+
+  protected String visitCast(String name, String l, DataType dataType) {
+    return name + "( " + l + " AS " + dataType.typeName() + " )";
   }
 
   protected String visitAnd(String name, String l, String r) {
