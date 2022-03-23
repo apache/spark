@@ -322,7 +322,6 @@ partitionSpec
 
 partitionVal
     : identifier (EQ constant)?
-    | identifier EQ DEFAULT
     ;
 
 namespace
