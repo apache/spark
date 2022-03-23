@@ -1084,6 +1084,15 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
         sql("insert into t values(1)")
       }.getMessage.contains("expected 3 columns but found"))
     }
+    // The table has a partitioning column with a default value; this is not allowed.
+    withTable("t") {
+      sql("create table t(i boolean default true, s bigint, q int default 42 ) " +
+        "using parquet partitioned by (i)")
+      assert(intercept[ParseException] {
+        sql("insert into t partition(i=default) values(5, default)")
+      }.getMessage.contains(
+        "References to DEFAULT column values are not allowed within the PARTITION clause"))
+    }
   }
 
   test("Stop task set if FileAlreadyExistsException was thrown") {

@@ -103,7 +103,7 @@ case class ResolveDefaultColumns(
     val schemaWithoutPartitionCols =
       StructType(schema.fields.dropRight(insert.get.partitionSpec.size))
     val newDefaultExprs: Seq[Expression] =
-      getDefaultExprs(numQueryOutputs, schema, schemaWithoutPartitionCols)
+      getDefaultExprs(numQueryOutputs, schemaWithoutPartitionCols)
     val newNames: Seq[String] =
       schemaWithoutPartitionCols.fields.drop(numQueryOutputs).map { _.name }
     if (newDefaultExprs.isEmpty) return None
@@ -117,7 +117,7 @@ case class ResolveDefaultColumns(
     val schemaWithoutPartitionCols =
       StructType(schema.fields.dropRight(insert.get.partitionSpec.size))
     val newDefaultExprs: Seq[Expression] =
-      getDefaultExprs(numQueryOutputs, schema, schemaWithoutPartitionCols)
+      getDefaultExprs(numQueryOutputs, schemaWithoutPartitionCols)
     val newAliases: Seq[NamedExpression] =
       newDefaultExprs.zip(schemaWithoutPartitionCols.fields).map {
         case (expr, field) => Alias(expr, field.name)()
@@ -127,8 +127,8 @@ case class ResolveDefaultColumns(
   }
 
   // This is a helper for the addMissingDefaultColumnValues methods above.
-  private def getDefaultExprs(numQueryOutputs: Int, schema: StructType,
-      schemaWithoutPartitionCols: StructType): Seq[Expression] = {
+  private def getDefaultExprs(
+      numQueryOutputs: Int, schemaWithoutPartitionCols: StructType): Seq[Expression] = {
     val remainingFields: Seq[StructField] = schemaWithoutPartitionCols.fields.drop(numQueryOutputs)
     val numDefaultExprsToAdd: Int = {
       if (SQLConf.get.useNullsForMissingDefaultColumnValues) {
