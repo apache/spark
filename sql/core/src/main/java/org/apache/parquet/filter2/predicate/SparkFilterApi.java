@@ -19,13 +19,13 @@
 
 package org.apache.parquet.filter2.predicate;
 
-import org.apache.parquet.hadoop.metadata.ColumnPath;
 import org.apache.parquet.filter2.predicate.Operators.BinaryColumn;
 import org.apache.parquet.filter2.predicate.Operators.BooleanColumn;
 import org.apache.parquet.filter2.predicate.Operators.DoubleColumn;
 import org.apache.parquet.filter2.predicate.Operators.FloatColumn;
 import org.apache.parquet.filter2.predicate.Operators.IntColumn;
 import org.apache.parquet.filter2.predicate.Operators.LongColumn;
+import org.apache.parquet.hadoop.metadata.ColumnPath;
 
 /**
  * TODO (PARQUET-1809): This is a temporary workaround; it is intended to be moved to Parquet.

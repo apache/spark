@@ -17,14 +17,14 @@
 
 package org.apache.spark.sql.execution.datasources.orc;
 
+import java.util.Arrays;
+import java.util.LinkedList;
+import java.util.Queue;
+
 import org.apache.orc.ColumnStatistics;
 import org.apache.orc.Reader;
 import org.apache.orc.TypeDescription;
 import org.apache.spark.sql.types.*;
-
-import java.util.Arrays;
-import java.util.LinkedList;
-import java.util.Queue;
 
 /**
  * {@link OrcFooterReader} is a util class which encapsulates the helper
