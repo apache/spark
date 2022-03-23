@@ -24,14 +24,14 @@ import java.nio.ByteOrder;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
 
-import com.google.common.collect.ImmutableMap;
-import org.apache.spark.unsafe.Platform;
 import org.junit.Test;
 
-import static org.junit.Assert.*;
+import com.google.common.collect.ImmutableMap;
+import org.apache.spark.unsafe.Platform;
 
 import static org.apache.spark.unsafe.Platform.BYTE_ARRAY_OFFSET;
 import static org.apache.spark.unsafe.types.UTF8String.*;
+import static org.junit.Assert.*;
 
 public class UTF8StringSuite {
 

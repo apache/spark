@@ -161,6 +161,7 @@
             <property name="groups" value="/^javax?\./,scala,*,org.apache.spark"/>
             <!-- static imports -->
             <property name="option" value="bottom"/>
+            <property name="staticGroups" value=""/>
             <property name="sortStaticImportsAlphabetically" value="true"/>
             <property name="separatedStaticGroups" value="true"/>
         </module>

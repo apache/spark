@@ -17,14 +17,14 @@
 
 package org.apache.spark.unsafe.types;
 
-import org.apache.spark.annotation.Unstable;
-
 import java.io.Serializable;
 import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.Period;
 import java.time.temporal.ChronoUnit;
 import java.util.Objects;
+
+import org.apache.spark.annotation.Unstable;
 
 import static org.apache.spark.sql.catalyst.util.DateTimeConstants.*;
 

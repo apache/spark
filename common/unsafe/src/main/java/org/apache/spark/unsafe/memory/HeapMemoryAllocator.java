@@ -17,11 +17,11 @@
 
 package org.apache.spark.unsafe.memory;
 
-import javax.annotation.concurrent.GuardedBy;
 import java.lang.ref.WeakReference;
 import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.Map;
+import javax.annotation.concurrent.GuardedBy;
 
 import org.apache.spark.unsafe.Platform;
 

@@ -17,12 +17,12 @@
 
 package org.apache.spark.unsafe.types;
 
-import javax.annotation.Nonnull;
 import java.io.*;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.Map;
+import javax.annotation.Nonnull;
 
 import com.esotericsoftware.kryo.Kryo;
 import com.esotericsoftware.kryo.KryoSerializable;
