@@ -44,7 +44,10 @@ abstract class AbstractSqlParser extends ParserInterface with SQLConfHelper with
 
   /** Creates Expression for a given SQL string. */
   override def parseExpression(sqlText: String): Expression = parse(sqlText) { parser =>
-    astBuilder.visitSingleExpression(parser.singleExpression())
+    val ctx = parser.singleExpression()
+    withOrigin(ctx, Some(sqlText)) {
+      astBuilder.visitSingleExpression(ctx)
+    }
   }
 
   /** Creates TableIdentifier for a given SQL string. */
@@ -76,7 +79,10 @@ abstract class AbstractSqlParser extends ParserInterface with SQLConfHelper with
 
   /** Creates LogicalPlan for a given SQL string of query. */
   override def parseQuery(sqlText: String): LogicalPlan = parse(sqlText) { parser =>
-    astBuilder.visitQuery(parser.query())
+    val ctx = parser.query()
+    withOrigin(ctx, Some(sqlText)) {
+      astBuilder.visitQuery(ctx)
+    }
   }
 
   /** Creates LogicalPlan for a given SQL string. */
