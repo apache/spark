@@ -24,9 +24,10 @@ import java.util.Set;
 
 import scala.util.hashing.MurmurHash3$;
 
-import org.apache.spark.unsafe.Platform;
 import org.junit.Assert;
 import org.junit.Test;
+
+import org.apache.spark.unsafe.Platform;
 
 /**
  * Test file based on Guava's Murmur3Hash32Test.

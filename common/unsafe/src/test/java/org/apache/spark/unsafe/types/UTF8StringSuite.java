@@ -24,9 +24,9 @@ import java.nio.ByteOrder;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
 
+import com.google.common.collect.ImmutableMap;
 import org.junit.Test;
 
-import com.google.common.collect.ImmutableMap;
 import org.apache.spark.unsafe.Platform;
 
 import static org.apache.spark.unsafe.Platform.BYTE_ARRAY_OFFSET;

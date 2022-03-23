@@ -17,10 +17,11 @@
 
 package org.apache.spark.unsafe.array;
 
-import org.apache.spark.unsafe.Platform;
-import org.apache.spark.unsafe.types.ByteArray;
 import org.junit.Assert;
 import org.junit.Test;
+
+import org.apache.spark.unsafe.Platform;
+import org.apache.spark.unsafe.types.ByteArray;
 
 public class ByteArraySuite {
   private long getPrefixByByte(byte[] bytes) {
