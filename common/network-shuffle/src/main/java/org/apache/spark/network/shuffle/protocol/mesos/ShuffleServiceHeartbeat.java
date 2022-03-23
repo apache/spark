@@ -18,6 +18,7 @@
 package org.apache.spark.network.shuffle.protocol.mesos;
 
 import io.netty.buffer.ByteBuf;
+
 import org.apache.spark.network.protocol.Encoders;
 import org.apache.spark.network.shuffle.protocol.BlockTransferMessage;
 
