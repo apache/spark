@@ -17,6 +17,7 @@
 
 package org.apache.hive.service.cli.operation;
 
+import java.nio.ByteBuffer;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -168,6 +169,23 @@ public class OperationManager extends AbstractService {
      foreignTable);
    addOperation(operation);
    return operation;
+  }
+
+  public Operation newUploadDataOperation(
+      HiveSession parentSession,
+      ByteBuffer values,
+      String tableName,
+      String path) throws HiveSQLException {
+    throw new HiveSQLException("unimplemented exception");
+  }
+
+  public Operation newDownloadDataOperation(
+      HiveSession parentSession,
+      String tableName,
+      String query,
+      String format,
+      Map<String, String> options) throws HiveSQLException {
+    throw new HiveSQLException("unimplemented exception");
   }
 
   public Operation getOperation(OperationHandle operationHandle) throws HiveSQLException {

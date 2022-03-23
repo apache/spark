@@ -688,6 +688,45 @@ public abstract class ThriftCLIService extends AbstractService implements TCLISe
     return resp;
   }
 
+  @Override
+  public TUploadDataResp UploadData(TUploadDataReq req) throws TException {
+    TUploadDataResp resp = new TUploadDataResp();
+    try {
+      SessionHandle sessionHandle = new SessionHandle(req.getSessionHandle());
+      OperationHandle operationHandle = cliService.uploadData(
+          sessionHandle,
+          req.bufferForValues(),
+          req.getTableName(),
+          req.getPath());
+      resp.setOperationHandle(operationHandle.toTOperationHandle());
+      resp.setStatus(OK_STATUS);
+    } catch (Exception e) {
+      LOG.warn("Error UploadData: ", e);
+      resp.setStatus(HiveSQLException.toTStatus(e));
+    }
+    return resp;
+  }
+
+  @Override
+  public TDownloadDataResp DownloadData(TDownloadDataReq req) throws TException {
+    TDownloadDataResp resp = new TDownloadDataResp();
+    try {
+      SessionHandle sessionHandle = new SessionHandle(req.getSessionHandle());
+      OperationHandle operationHandle = cliService.downloadData(
+          sessionHandle,
+          req.getTableName(),
+          req.getQuery(),
+          req.getFormat(),
+          req.getDownloadOptions());
+      resp.setOperationHandle(operationHandle.toTOperationHandle());
+      resp.setStatus(OK_STATUS);
+    } catch (Exception e) {
+      LOG.warn("Error download data: ", e);
+      resp.setStatus(HiveSQLException.toTStatus(e));
+    }
+    return resp;
+  }
+
   protected abstract void initializeServer();
 
   @Override

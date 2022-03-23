@@ -17,6 +17,7 @@
 
 package org.apache.hive.service.cli.thrift;
 
+import java.nio.ByteBuffer;
 import java.util.List;
 import java.util.Map;
 
@@ -486,6 +487,49 @@ public class ThriftCLIServiceClient extends CLIServiceClient {
     } catch (HiveSQLException e) {
       throw e;
     } catch (Exception e) {
+      throw new HiveSQLException(e);
+    }
+  }
+
+  @Override
+  public OperationHandle uploadData(
+      SessionHandle sessionHandle,
+      ByteBuffer values,
+      String tableName,
+      String path) throws HiveSQLException {
+    try {
+      TUploadDataReq req = new TUploadDataReq(sessionHandle.toTSessionHandle(), values);
+      req.setTableName(tableName);
+      req.setPath(path);
+      TUploadDataResp resp = cliService.UploadData(req);
+      checkStatus(resp.getStatus());
+      TProtocolVersion protocol = sessionHandle.getProtocolVersion();
+      return new OperationHandle(resp.getOperationHandle(), protocol);
+    } catch (HiveSQLException e) {
+      throw e;
+    } catch (Exception e) {
+      throw new HiveSQLException(e);
+    }
+  }
+
+  @Override
+  public OperationHandle downloadData(
+      SessionHandle sessionHandle,
+      String tableName,
+      String query,
+      String format,
+      Map<String, String> options) throws HiveSQLException {
+    try {
+      TDownloadDataReq req = new TDownloadDataReq(sessionHandle.toTSessionHandle());
+      req.setTableName(tableName);
+      req.setQuery(query);
+      req.setFormat(format);
+      req.setDownloadOptions(options);
+      TDownloadDataResp resp = cliService.DownloadData(req);
+      checkStatus(resp.getStatus());
+      TProtocolVersion protocol = sessionHandle.getProtocolVersion();
+      return new OperationHandle(resp.getOperationHandle(), protocol);
+    } catch (TException e) {
       throw new HiveSQLException(e);
     }
   }

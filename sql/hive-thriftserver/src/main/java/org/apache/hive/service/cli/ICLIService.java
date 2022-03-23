@@ -16,6 +16,7 @@
  */
 package org.apache.hive.service.cli;
 
+import java.nio.ByteBuffer;
 import java.util.List;
 import java.util.Map;
 
@@ -112,4 +113,17 @@ public interface ICLIService {
   OperationHandle getCrossReference(SessionHandle sessionHandle,
       String primaryCatalog, String primarySchema, String primaryTable,
       String foreignCatalog, String foreignSchema, String foreignTable) throws HiveSQLException;
+
+  OperationHandle uploadData(
+      SessionHandle sessionHandle,
+      ByteBuffer values,
+      String tableName,
+      String path) throws HiveSQLException;
+
+  OperationHandle downloadData(
+      SessionHandle sessionHandle,
+      String tableName,
+      String query,
+      String format,
+      Map<String, String> options) throws HiveSQLException;
 }

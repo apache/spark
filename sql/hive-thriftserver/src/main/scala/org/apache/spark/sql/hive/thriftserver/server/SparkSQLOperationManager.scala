@@ -151,4 +151,22 @@ private[thriftserver] class SparkSQLOperationManager()
     logDebug(s"Created GetTypeInfoOperation with session=$parentSession.")
     operation
   }
+
+  override def newDownloadDataOperation(
+      parentSession: HiveSession,
+      tableName: String,
+      query: String,
+      format: String,
+      options: JMap[String, String]): Operation = parentSession.synchronized {
+    val sqlContext = sessionToContexts.get(parentSession.getSessionHandle)
+    require(sqlContext != null, s"Session handle: ${parentSession.getSessionHandle} has not been" +
+      s" initialized or had already closed.")
+    val conf = sqlContext.sessionState.conf
+    val runInBackground = conf.getConf(HiveUtils.HIVE_THRIFT_SERVER_ASYNC)
+    val operation = new SparkDownloadDataOperation(
+      sqlContext, parentSession, tableName, query, format, options, runInBackground)
+    handleToOperation.put(operation.getHandle, operation)
+    logDebug(s"Created Operation for DownloadDataOperation with session=$parentSession")
+    operation
+  }
 }

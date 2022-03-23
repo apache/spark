@@ -18,6 +18,7 @@
 package org.apache.hive.service.cli;
 
 import java.io.IOException;
+import java.nio.ByteBuffer;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CancellationException;
@@ -426,6 +427,33 @@ public class CLIService extends CompositeService implements ICLIService {
          foreignSchema, foreignTable);
     LOG.debug(sessionHandle + ": getCrossReference()");
     return opHandle;
+  }
+
+  /* (non-Javadoc)
+   * @see org.apache.hive.service.cli.ICLIService#uploadData(org.apache.hive.service.cli.SessionHandle)
+   */
+  @Override
+  public OperationHandle uploadData(
+      SessionHandle sessionHandle,
+      ByteBuffer values,
+      String tableName,
+      String path) throws HiveSQLException {
+    LOG.info(sessionHandle + ": uploadData()");
+    return sessionManager.getSession(sessionHandle).uploadData(values, tableName, path);
+  }
+
+  /* (non-Javadoc)
+   * @see org.apache.hive.service.cli.ICLIService#downloadData(org.apache.hive.service.cli.SessionHandle)
+   */
+  @Override
+  public OperationHandle downloadData(
+      SessionHandle sessionHandle,
+      String tableName,
+      String query,
+      String format,
+      Map<String, String> options) throws HiveSQLException {
+    LOG.info(sessionHandle + ": downloadData()");
+    return sessionManager.getSession(sessionHandle).downloadData(tableName, query, format, options);
   }
 
   /* (non-Javadoc)

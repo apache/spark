@@ -22,6 +22,7 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStreamReader;
+import java.nio.ByteBuffer;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -886,6 +887,51 @@ public class HiveSessionImpl implements HiveSession {
       .newGetCrossReferenceOperation(getSession(), primaryCatalog,
          primarySchema, primaryTable, foreignCatalog,
          foreignSchema, foreignTable);
+    OperationHandle opHandle = operation.getHandle();
+    try {
+      operation.run();
+      opHandleSet.add(opHandle);
+      return opHandle;
+    } catch (HiveSQLException e) {
+      operationManager.closeOperation(opHandle);
+      throw e;
+    } finally {
+      release(true);
+    }
+  }
+
+  @Override
+  public OperationHandle uploadData(
+      ByteBuffer values, String tableName, String path) throws HiveSQLException {
+    acquire(true);
+
+    OperationManager operationManager = getOperationManager();
+    Operation operation = operationManager.newUploadDataOperation(
+        getSession(), values, tableName, path);
+    OperationHandle opHandle = operation.getHandle();
+    try {
+      operation.run();
+      opHandleSet.add(opHandle);
+      return opHandle;
+    } catch (HiveSQLException e) {
+      operationManager.closeOperation(opHandle);
+      throw e;
+    } finally {
+      release(true);
+    }
+  }
+
+  @Override
+  public OperationHandle downloadData(
+      String tableName,
+      String query,
+      String format,
+      Map<String, String> options) throws HiveSQLException {
+    acquire(true);
+
+    OperationManager operationManager = getOperationManager();
+    Operation operation = operationManager.newDownloadDataOperation(
+        getSession(), tableName, query, format, options);
     OperationHandle opHandle = operation.getHandle();
     try {
       operation.run();

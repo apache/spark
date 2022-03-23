@@ -30,9 +30,10 @@ import org.apache.hadoop.util.Shell;
 import org.apache.hive.service.ServiceException;
 import org.apache.hive.service.auth.HiveAuthFactory;
 import org.apache.hive.service.cli.CLIService;
-import org.apache.hive.service.rpc.thrift.TCLIService;
+import org.apache.hive.service.rpc.thrift.*;
 import org.apache.hive.service.rpc.thrift.TCLIService.Iface;
 import org.apache.hive.service.server.ThreadFactoryWithGarbageCleanup;
+import org.apache.thrift.TException;
 import org.apache.thrift.TProcessor;
 import org.apache.thrift.protocol.TBinaryProtocol;
 import org.apache.thrift.protocol.TProtocolFactory;
@@ -209,5 +210,15 @@ public class ThriftHttpCLIService extends ThriftCLIService {
       }
     }
     return httpPath;
+  }
+
+  @Override
+  public TUploadDataResp UploadData(TUploadDataReq req) throws TException {
+    return null;
+  }
+
+  @Override
+  public TDownloadDataResp DownloadData(TDownloadDataReq req) throws TException {
+    return null;
   }
 }
