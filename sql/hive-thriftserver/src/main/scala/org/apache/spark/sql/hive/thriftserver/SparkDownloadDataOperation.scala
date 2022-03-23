@@ -203,7 +203,7 @@ private[hive] class SparkDownloadDataOperation(
         val dataLen = fs.getFileStatus(path).getLen
         // Cast to BigDecimal to avoid overflowing
         val fetchBatchs =
-          BigDecimal(dataLen)./(BigDecimal(fetchSize)).setScale(0, RoundingMode.CEILING).longValue()
+          BigDecimal(dataLen)./(BigDecimal(fetchSize)).setScale(0, RoundingMode.CEILING).longValue
         assert(fetchBatchs < Int.MaxValue, "The fetch batch too large.")
 
         (0 until fetchBatchs.toInt).foreach { i =>
@@ -300,7 +300,7 @@ private[hive] class SparkDownloadDataOperation(
     cleanup(OperationState.CANCELED)
   }
 
-  private def cleanup(state: OperationState) {
+  private def cleanup(state: OperationState): Unit = {
     setState(state)
     if (runInBackground) {
       val backgroundHandle = getBackgroundHandle()
