@@ -360,6 +360,8 @@ case class Invoke(
 
   lazy val argClasses = ScalaReflection.expressionJavaClasses(arguments)
 
+  final override val nodePatterns: Seq[TreePattern] = Seq(INVOKE)
+
   override def nullable: Boolean = targetObject.nullable || needNullCheck || returnNullable
   override def children: Seq[Expression] = targetObject +: arguments
   override lazy val deterministic: Boolean = isDeterministic && arguments.forall(_.deterministic)

@@ -461,7 +461,7 @@ class ReplaceNullWithFalseInPredicateSuite extends PlanTest {
   }
 
   private def testDelete(originalCond: Expression, expectedCond: Expression): Unit = {
-    test((rel, expr) => DeleteFromTable(rel, Some(expr)), originalCond, expectedCond)
+    test((rel, expr) => DeleteFromTable(rel, expr), originalCond, expectedCond)
   }
 
   private def testUpdate(originalCond: Expression, expectedCond: Expression): Unit = {

@@ -33,7 +33,6 @@ import org.apache.hadoop.mapred.TextInputFormat
 import org.apache.hadoop.mapreduce.lib.input.{TextInputFormat => NewTextInputFormat}
 import org.apache.logging.log4j.{Level, LogManager}
 import org.json4s.{DefaultFormats, Extraction}
-import org.junit.Assert.{assertEquals, assertFalse}
 import org.scalatest.concurrent.Eventually
 import org.scalatest.matchers.must.Matchers._
 
@@ -1257,12 +1256,12 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
   test("SPARK-35383: Fill missing S3A magic committer configs if needed") {
     val c1 = new SparkConf().setAppName("s3a-test").setMaster("local")
     sc = new SparkContext(c1)
-    assertFalse(sc.getConf.contains("spark.hadoop.fs.s3a.committer.name"))
+    assert(!sc.getConf.contains("spark.hadoop.fs.s3a.committer.name"))
 
     resetSparkContext()
     val c2 = c1.clone.set("spark.hadoop.fs.s3a.bucket.mybucket.committer.magic.enabled", "false")
     sc = new SparkContext(c2)
-    assertFalse(sc.getConf.contains("spark.hadoop.fs.s3a.committer.name"))
+    assert(!sc.getConf.contains("spark.hadoop.fs.s3a.committer.name"))
 
     resetSparkContext()
     val c3 = c1.clone.set("spark.hadoop.fs.s3a.bucket.mybucket.committer.magic.enabled", "true")
@@ -1277,7 +1276,7 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
       "spark.sql.sources.commitProtocolClass" ->
         "org.apache.spark.internal.io.cloud.PathOutputCommitProtocol"
     ).foreach { case (k, v) =>
-      assertEquals(v, sc.getConf.get(k))
+      assert(v == sc.getConf.get(k))
     }
 
     // Respect a user configuration
@@ -1294,9 +1293,9 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
       "spark.sql.sources.commitProtocolClass" -> null
     ).foreach { case (k, v) =>
       if (v == null) {
-        assertFalse(sc.getConf.contains(k))
+        assert(!sc.getConf.contains(k))
       } else {
-        assertEquals(v, sc.getConf.get(k))
+        assert(v == sc.getConf.get(k))
       }
     }
   }

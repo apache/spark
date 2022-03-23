@@ -760,7 +760,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 
-no viable alternative at input 'SELECT TRANSFORM(b AS'(line 1, pos 19)
+Syntax error at or near 'AS'(line 1, pos 19)
 
 == SQL ==
 SELECT TRANSFORM(b AS b_1, MAX(a), CAST(sum(c) AS STRING))
@@ -782,7 +782,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 
-no viable alternative at input 'SELECT TRANSFORM(b b_1'(line 1, pos 19)
+Syntax error at or near 'b_1'(line 1, pos 19)
 
 == SQL ==
 SELECT TRANSFORM(b b_1, MAX(a), CAST(sum(c) AS STRING))
@@ -804,7 +804,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 
-no viable alternative at input 'SELECT TRANSFORM(b, MAX(a) AS'(line 1, pos 27)
+Syntax error at or near 'AS'(line 1, pos 27)
 
 == SQL ==
 SELECT TRANSFORM(b, MAX(a) AS max_a, CAST(sum(c) AS STRING))
