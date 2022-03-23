@@ -1004,7 +1004,13 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
   }
 
   public UTF8String[] splitSQL(UTF8String delimiter, int limit) {
-    return split(Pattern.quote(delimiter.toString()), limit);
+    // if delimiter is empty string, skip the regex based splitting directly as regex
+    // treats empty string as matching anything, thus use the input directly.
+    if (delimiter.numBytes() == 0) {
+      return new UTF8String[]{this};
+    } else {
+      return split(Pattern.quote(delimiter.toString()), limit);
+    }
   }
 
   private UTF8String[] split(String delimiter, int limit) {

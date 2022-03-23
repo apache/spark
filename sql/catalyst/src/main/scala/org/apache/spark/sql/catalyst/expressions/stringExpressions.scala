@@ -35,7 +35,7 @@ import org.apache.spark.sql.catalyst.trees.TreePattern.{TreePattern, UPPER_OR_LO
 import org.apache.spark.sql.catalyst.util.{ArrayData, GenericArrayData, TypeUtils}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types._
+import org.apache.spark.sql.types.{StringType, _}
 import org.apache.spark.unsafe.UTF8StringBuilder
 import org.apache.spark.unsafe.array.ByteArrayMethods
 import org.apache.spark.unsafe.types.{ByteArray, UTF8String}
@@ -2949,39 +2949,26 @@ case class Sentences(
  */
 case class SplitByDelimiter(
     str: Expression,
-    delimiter: Expression)
-  extends BinaryExpression with NullIntolerant {
+    delimiter: Expression) extends BinaryExpression with NullIntolerant {
   override def dataType: DataType = ArrayType(StringType, containsNull = false)
   override def left: Expression = str
   override def right: Expression = delimiter
 
   override def nullSafeEval(string: Any, delimiter: Any): Any = {
-    val strings = {
-      // if delimiter is empty string, skip the regex based splitting directly as regex
-      // treats empty string as matching anything, thus use the input directly.
-      if (delimiter.asInstanceOf[UTF8String].numBytes() == 0) {
-        Array(string)
-      } else {
-        string.asInstanceOf[UTF8String].splitSQL(
-          delimiter.asInstanceOf[UTF8String], -1)
-      }
-    }
+    val strings = string.asInstanceOf[UTF8String].splitSQL(
+      delimiter.asInstanceOf[UTF8String], -1);
     new GenericArrayData(strings.asInstanceOf[Array[Any]])
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val arrayClass = classOf[GenericArrayData].getName
     nullSafeCodeGen(ctx, ev, (str, delimiter) => {
-      if (delimiter.asInstanceOf[UTF8String].numBytes() == 0) {
-        s"""${ev.value} = Array($str)""".stripMargin
-      } else {
-        // Array in java is covariant, so we don't need to cast UTF8String[] to Object[].
-        s"""${ev.value} = new $arrayClass($str.splitSQL($delimiter,-1));""".stripMargin
-      }
+      // Array in java is covariant, so we don't need to cast UTF8String[] to Object[].
+      s"""${ev.value} = new $arrayClass($str.splitSQL($delimiter,-1));""".stripMargin
     })
   }
 
-  override protected def withNewChildrenInternal(
+  override def withNewChildrenInternal(
     newFirst: Expression, newSecond: Expression): SplitByDelimiter =
     copy(str = newFirst, delimiter = newSecond)
 }
@@ -2997,7 +2984,7 @@ case class SplitByDelimiter(
     """
     _FUNC_(str, delimiter, partNum) - Splits `str` by delimiter and return
       requested part of the split (1-based). If any input is null, returns null.
-      if `partNum` is out of range of split parts, returns null. If `partNum` is 0,
+      if `partNum` is out of range of split parts, returns empty string. If `partNum` is 0,
       throws an error. If `partNum` is negative, the parts are counted backward from the
       end of the string. If the `delimiter` is an empty string, the `str` is not split.
   """,
@@ -3013,14 +3000,12 @@ case class SplitPart (
     str: Expression,
     delimiter: Expression,
     partNum: Expression)
-  extends RuntimeReplaceable {
+  extends RuntimeReplaceable with ImplicitCastInputTypes {
   override lazy val replacement: Expression =
     ElementAt(SplitByDelimiter(str, delimiter), partNum, Some(Literal.create("", StringType)),
-      SQLConf.get.ansiEnabled)
+      false)
   override def nodeName: String = "split_part"
-
-  override def flatArguments: Iterator[Any] = Iterator(str, delimiter, partNum)
-
+  override def inputTypes: Seq[DataType] = Seq(StringType, StringType, IntegerType)
   def children: Seq[Expression] = Seq(str, delimiter, partNum)
   protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): Expression = {
     copy(str = newChildren.apply(0), delimiter = newChildren.apply(1),

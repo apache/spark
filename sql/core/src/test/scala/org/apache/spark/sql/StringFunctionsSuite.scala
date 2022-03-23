@@ -661,22 +661,4 @@ class StringFunctionsSuite extends QueryTest with SharedSparkSession {
     }.getMessage
     assert(m.contains("data type mismatch: argument 1 requires string type"))
   }
-
-  test("SPARK-38063: string split_part function") {
-    checkAnswer(
-      sql("select split_part('11.12.13', '.', 4)"),
-      Row(""))
-
-    checkAnswer(
-      sql("select split_part('11.12.13', '.', 5)"),
-      Row(""))
-
-    checkAnswer(
-      sql("select split_part('11.12.13', '.', -5)"),
-      Row(""))
-
-    checkAnswer(
-      sql(s"select split_part(${null}, '.', 1)"),
-      Row(null))
-  }
 }
