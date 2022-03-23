@@ -16,15 +16,6 @@
  */
 package org.apache.spark.sql.hive.test;
 
-import org.apache.commons.lang.builder.HashCodeBuilder;
-import org.apache.thrift.scheme.IScheme;
-import org.apache.thrift.scheme.SchemeFactory;
-import org.apache.thrift.scheme.StandardScheme;
-
-import org.apache.hadoop.hive.serde2.thrift.test.IntString;
-import org.apache.thrift.scheme.TupleScheme;
-import org.apache.thrift.protocol.TTupleProtocol;
-import org.apache.thrift.EncodingUtils;
 import java.util.List;
 import java.util.ArrayList;
 import java.util.Map;
@@ -33,6 +24,15 @@ import java.util.EnumMap;
 import java.util.EnumSet;
 import java.util.Collections;
 import java.util.BitSet;
+
+import org.apache.commons.lang.builder.HashCodeBuilder;
+import org.apache.hadoop.hive.serde2.thrift.test.IntString;
+import org.apache.thrift.scheme.IScheme;
+import org.apache.thrift.scheme.SchemeFactory;
+import org.apache.thrift.scheme.StandardScheme;
+import org.apache.thrift.scheme.TupleScheme;
+import org.apache.thrift.protocol.TTupleProtocol;
+import org.apache.thrift.EncodingUtils;
 
 /**
  * This is a fork of Hive 0.13's org/apache/hadoop/hive/serde2/thrift/test/Complex.java, which
