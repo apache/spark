@@ -26,8 +26,8 @@ import org.apache.spark.sql.QueryTest$;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.test.TestSparkSession;
 
-import static org.apache.spark.sql.avro.functions.to_avro;
 import static org.apache.spark.sql.avro.functions.from_avro;
+import static org.apache.spark.sql.avro.functions.to_avro;
 
 
 public class JavaAvroFunctionsSuite {
