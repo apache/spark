@@ -19,9 +19,10 @@ package test.org.apache.spark.sql;
 
 import java.util.Arrays;
 
+import scala.Tuple2;
+
 import org.junit.Assert;
 import org.junit.Test;
-import scala.Tuple2;
 
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.KeyValueGroupedDataset;

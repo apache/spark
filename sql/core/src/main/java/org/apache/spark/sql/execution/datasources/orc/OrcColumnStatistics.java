@@ -17,10 +17,10 @@
 
 package org.apache.spark.sql.execution.datasources.orc;
 
-import org.apache.orc.ColumnStatistics;
-
 import java.util.ArrayList;
 import java.util.List;
+
+import org.apache.orc.ColumnStatistics;
 
 /**
  * Columns statistics interface wrapping ORC {@link ColumnStatistics}s.

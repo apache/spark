@@ -17,10 +17,10 @@
 
 package org.apache.spark.sql.execution;
 
+import java.nio.ByteOrder;
+
 import org.apache.spark.unsafe.Platform;
 import org.apache.spark.util.collection.unsafe.sort.RecordComparator;
-
-import java.nio.ByteOrder;
 
 public final class RecordBinaryComparator extends RecordComparator {
 

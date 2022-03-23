@@ -20,9 +20,6 @@ package test.org.apache.spark.sql;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
-import static java.util.stream.Collectors.toList;
-
-import static scala.collection.JavaConverters.mapAsScalaMap;
 
 import org.junit.After;
 import org.junit.Assert;
@@ -32,10 +29,13 @@ import org.junit.Test;
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.RowFactory;
-import static org.apache.spark.sql.functions.*;
 import org.apache.spark.sql.test.TestSparkSession;
 import org.apache.spark.sql.types.*;
+
+import static java.util.stream.Collectors.toList;
+import static org.apache.spark.sql.functions.*;
 import static org.apache.spark.sql.types.DataTypes.*;
+import static scala.collection.JavaConverters.mapAsScalaMap;
 
 public class JavaHigherOrderFunctionsSuite {
     private transient TestSparkSession spark;

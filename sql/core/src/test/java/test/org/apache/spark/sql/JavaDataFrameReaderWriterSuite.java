@@ -20,14 +20,15 @@ package test.org.apache.spark.sql;
 import java.io.File;
 import java.util.HashMap;
 
+import org.junit.After;
+import org.junit.Before;
+import org.junit.Test;
+
 import org.apache.spark.sql.SaveMode;
 import org.apache.spark.sql.SparkSession;
 import org.apache.spark.sql.test.TestSparkSession;
 import org.apache.spark.sql.types.StructType;
 import org.apache.spark.util.Utils;
-import org.junit.After;
-import org.junit.Before;
-import org.junit.Test;
 
 public class JavaDataFrameReaderWriterSuite {
   private SparkSession spark = new TestSparkSession();

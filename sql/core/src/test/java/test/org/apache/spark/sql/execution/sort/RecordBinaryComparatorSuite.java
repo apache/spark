@@ -17,6 +17,13 @@
 
 package test.org.apache.spark.sql.execution.sort;
 
+import java.nio.ByteOrder;
+
+import org.junit.After;
+import org.junit.Assert;
+import org.junit.Before;
+import org.junit.Test;
+
 import org.apache.spark.SparkConf;
 import org.apache.spark.internal.config.package$;
 import org.apache.spark.memory.TaskMemoryManager;
@@ -31,13 +38,6 @@ import org.apache.spark.unsafe.array.LongArray;
 import org.apache.spark.unsafe.memory.MemoryBlock;
 import org.apache.spark.unsafe.types.UTF8String;
 import org.apache.spark.util.collection.unsafe.sort.*;
-
-import org.junit.After;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
-
-import java.nio.ByteOrder;
 
 /**
  * Test the RecordBinaryComparator, which compares two UnsafeRows by their binary form.

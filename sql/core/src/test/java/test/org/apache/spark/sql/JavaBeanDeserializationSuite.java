@@ -33,10 +33,10 @@ import org.apache.spark.sql.catalyst.expressions.GenericRow;
 import org.apache.spark.sql.catalyst.util.DateTimeUtils;
 import org.apache.spark.sql.catalyst.util.TimestampFormatter;
 import org.apache.spark.sql.internal.SQLConf;
+import org.apache.spark.sql.test.TestSparkSession;
 import org.apache.spark.sql.types.DataTypes;
 import org.apache.spark.sql.types.StructType;
 
-import org.apache.spark.sql.test.TestSparkSession;
 
 public class JavaBeanDeserializationSuite implements Serializable {
 

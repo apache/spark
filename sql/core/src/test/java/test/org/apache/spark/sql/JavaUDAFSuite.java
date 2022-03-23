@@ -17,13 +17,13 @@
 
 package test.org.apache.spark.sql;
 
-import org.apache.spark.sql.Row;
-import org.apache.spark.sql.SparkSession;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
+import org.apache.spark.sql.Row;
+import org.apache.spark.sql.SparkSession;
 
 public class JavaUDAFSuite {
 

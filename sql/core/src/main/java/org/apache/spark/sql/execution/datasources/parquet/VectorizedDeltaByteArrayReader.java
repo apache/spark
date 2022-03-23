@@ -16,13 +16,14 @@
  */
 package org.apache.spark.sql.execution.datasources.parquet;
 
+import java.io.IOException;
+import java.nio.ByteBuffer;
+
 import org.apache.parquet.bytes.ByteBufferInputStream;
 import org.apache.parquet.column.values.deltastrings.DeltaByteArrayReader;
 import org.apache.parquet.io.api.Binary;
-import org.apache.spark.sql.execution.vectorized.WritableColumnVector;
 
-import java.io.IOException;
-import java.nio.ByteBuffer;
+import org.apache.spark.sql.execution.vectorized.WritableColumnVector;
 
 /**
  * An implementation of the Parquet DELTA_BYTE_ARRAY decoder that supports the vectorized interface.

@@ -17,9 +17,9 @@
 
 package org.apache.spark.sql.execution.datasources.parquet;
 
-import org.apache.spark.sql.execution.vectorized.Dictionary;
-
 import java.math.BigInteger;
+
+import org.apache.spark.sql.execution.vectorized.Dictionary;
 
 public final class ParquetDictionary implements Dictionary {
   private org.apache.parquet.column.Dictionary dictionary;
