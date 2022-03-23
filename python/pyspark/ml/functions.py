@@ -58,11 +58,11 @@ def vector_to_array(col: Column, dtype: str = "float64") -> Column:
     [Row(vec=[1.0, 2.0, 3.0], oldVec=[10.0, 20.0, 30.0]),
      Row(vec=[2.0, 0.0, 3.0], oldVec=[20.0, 0.0, 30.0])]
     >>> df1.schema.fields
-    [StructField(vec,ArrayType(DoubleType,false),false),
-    StructField(oldVec,ArrayType(DoubleType,false),false)]
+    [StructField('vec', ArrayType(DoubleType(), False), False),
+     StructField('oldVec', ArrayType(DoubleType(), False), False)]
     >>> df2.schema.fields
-    [StructField(vec,ArrayType(FloatType,false),false),
-    StructField(oldVec,ArrayType(FloatType,false),false)]
+    [StructField('vec', ArrayType(FloatType(), False), False),
+     StructField('oldVec', ArrayType(FloatType(), False), False)]
     """
     sc = SparkContext._active_spark_context
     assert sc is not None and sc._jvm is not None
