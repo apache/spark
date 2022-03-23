@@ -30,8 +30,8 @@ import org.apache.spark.ml.feature.LabeledPoint;
 import org.apache.spark.ml.param.ParamMap;
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
-import static org.apache.spark.ml.classification.LogisticRegressionSuite.generateLogisticInputAsList;
 
+import static org.apache.spark.ml.classification.LogisticRegressionSuite.generateLogisticInputAsList;
 
 public class JavaCrossValidatorSuite extends SharedSparkSession {
 

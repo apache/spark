@@ -20,14 +20,14 @@ package org.apache.spark.mllib.clustering;
 import java.util.Arrays;
 import java.util.List;
 
-import static org.junit.Assert.assertEquals;
-
 import org.junit.Test;
 
 import org.apache.spark.SharedSparkSession;
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.mllib.linalg.Vector;
 import org.apache.spark.mllib.linalg.Vectors;
+
+import static org.junit.Assert.assertEquals;
 
 public class JavaKMeansSuite extends SharedSparkSession {
 

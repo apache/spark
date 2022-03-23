@@ -22,7 +22,6 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 
 import com.google.common.io.Files;
-
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -32,7 +31,6 @@ import org.apache.spark.ml.linalg.Vectors;
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
 import org.apache.spark.util.Utils;
-
 
 /**
  * Test LibSVMRelation in Java.

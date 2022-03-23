@@ -21,7 +21,6 @@ import java.util.Arrays;
 import java.util.List;
 
 import org.junit.Test;
-import static org.junit.Assert.assertEquals;
 
 import org.apache.spark.SharedSparkSession;
 import org.apache.spark.ml.linalg.VectorUDT;
@@ -33,6 +32,8 @@ import org.apache.spark.sql.types.DataTypes;
 import org.apache.spark.sql.types.Metadata;
 import org.apache.spark.sql.types.StructField;
 import org.apache.spark.sql.types.StructType;
+
+import static org.junit.Assert.assertEquals;
 
 public class JavaNaiveBayesSuite extends SharedSparkSession {
 

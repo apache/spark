@@ -21,7 +21,6 @@ import java.util.Arrays;
 import java.util.List;
 
 import org.jtransforms.dct.DoubleDCT_1D;
-
 import org.junit.Assert;
 import org.junit.Test;
 

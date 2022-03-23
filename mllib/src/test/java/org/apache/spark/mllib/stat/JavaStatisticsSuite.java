@@ -23,7 +23,6 @@ import java.util.List;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
-import static org.junit.Assert.assertEquals;
 
 import org.apache.spark.SparkConf;
 import org.apache.spark.api.java.JavaDoubleRDD;
@@ -39,7 +38,9 @@ import org.apache.spark.sql.SparkSession;
 import org.apache.spark.streaming.Duration;
 import org.apache.spark.streaming.api.java.JavaDStream;
 import org.apache.spark.streaming.api.java.JavaStreamingContext;
+
 import static org.apache.spark.streaming.JavaTestUtils.*;
+import static org.junit.Assert.assertEquals;
 
 public class JavaStatisticsSuite {
   private transient SparkSession spark;

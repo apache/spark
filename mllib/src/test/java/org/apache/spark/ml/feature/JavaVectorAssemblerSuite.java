@@ -19,8 +19,6 @@ package org.apache.spark.ml.feature;
 
 import java.util.Arrays;
 
-import static org.apache.spark.sql.types.DataTypes.*;
-
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -33,6 +31,8 @@ import org.apache.spark.sql.Row;
 import org.apache.spark.sql.RowFactory;
 import org.apache.spark.sql.types.StructField;
 import org.apache.spark.sql.types.StructType;
+
+import static org.apache.spark.sql.types.DataTypes.*;
 
 public class JavaVectorAssemblerSuite extends SharedSparkSession {
 

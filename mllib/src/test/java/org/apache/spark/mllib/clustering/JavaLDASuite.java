@@ -26,7 +26,6 @@ import scala.Tuple2;
 import scala.Tuple3;
 
 import org.junit.Test;
-import static org.junit.Assert.*;
 
 import org.apache.spark.SharedSparkSession;
 import org.apache.spark.api.java.JavaPairRDD;
@@ -34,6 +33,8 @@ import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.mllib.linalg.Matrix;
 import org.apache.spark.mllib.linalg.Vector;
 import org.apache.spark.mllib.linalg.Vectors;
+
+import static org.junit.Assert.*;
 
 public class JavaLDASuite extends SharedSparkSession {
   @Override

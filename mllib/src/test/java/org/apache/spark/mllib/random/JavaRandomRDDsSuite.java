@@ -27,6 +27,7 @@ import org.apache.spark.SharedSparkSession;
 import org.apache.spark.api.java.JavaDoubleRDD;
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.mllib.linalg.Vector;
+
 import static org.apache.spark.mllib.random.RandomRDDs.*;
 
 public class JavaRandomRDDsSuite extends SharedSparkSession {

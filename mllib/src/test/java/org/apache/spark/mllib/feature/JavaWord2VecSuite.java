@@ -20,10 +20,9 @@ package org.apache.spark.mllib.feature;
 import java.util.Arrays;
 import java.util.List;
 
-import com.google.common.base.Strings;
-
 import scala.Tuple2;
 
+import com.google.common.base.Strings;
 import org.junit.Assert;
 import org.junit.Test;
 

@@ -21,14 +21,15 @@ import java.io.IOException;
 import java.util.List;
 
 import org.junit.Test;
-import static org.junit.Assert.assertEquals;
 
 import org.apache.spark.SharedSparkSession;
 import org.apache.spark.api.java.JavaRDD;
-import static org.apache.spark.ml.classification.LogisticRegressionSuite.generateLogisticInputAsList;
 import org.apache.spark.ml.feature.LabeledPoint;
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
+
+import static org.apache.spark.ml.classification.LogisticRegressionSuite.generateLogisticInputAsList;
+import static org.junit.Assert.assertEquals;
 
 public class JavaLinearRegressionSuite extends SharedSparkSession {
   private transient Dataset<Row> dataset;

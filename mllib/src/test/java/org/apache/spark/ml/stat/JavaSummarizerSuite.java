@@ -22,16 +22,17 @@ import java.util.ArrayList;
 import java.util.List;
 
 import org.junit.Test;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertArrayEquals;
 
 import org.apache.spark.SharedSparkSession;
-import org.apache.spark.sql.Row;
-import org.apache.spark.sql.Dataset;
-import static org.apache.spark.sql.functions.col;
 import org.apache.spark.ml.feature.LabeledPoint;
 import org.apache.spark.ml.linalg.Vector;
 import org.apache.spark.ml.linalg.Vectors;
+import org.apache.spark.sql.Dataset;
+import org.apache.spark.sql.Row;
+
+import static org.apache.spark.sql.functions.col;
+import static org.junit.Assert.assertArrayEquals;
+import static org.junit.Assert.assertEquals;
 
 public class JavaSummarizerSuite extends SharedSparkSession {
 

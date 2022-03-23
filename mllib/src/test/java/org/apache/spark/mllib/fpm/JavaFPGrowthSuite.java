@@ -21,13 +21,13 @@ import java.io.File;
 import java.util.Arrays;
 import java.util.List;
 
-import static org.junit.Assert.assertEquals;
-
 import org.junit.Test;
 
 import org.apache.spark.SharedSparkSession;
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.util.Utils;
+
+import static org.junit.Assert.assertEquals;
 
 public class JavaFPGrowthSuite extends SharedSparkSession {
 

@@ -22,13 +22,13 @@ import java.util.Arrays;
 import java.util.List;
 
 import org.apache.commons.math3.distribution.NormalDistribution;
-import org.apache.spark.sql.Encoders;
 import org.junit.Assert;
 import org.junit.Test;
 
 import org.apache.spark.SharedSparkSession;
 import org.apache.spark.api.java.function.Function;
 import org.apache.spark.sql.Dataset;
+import org.apache.spark.sql.Encoders;
 import org.apache.spark.sql.Row;
 
 
