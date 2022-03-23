@@ -336,7 +336,11 @@ package object config {
       .doc("Fraction of executor memory to be allocated as additional non-heap memory per " +
         "executor process. This is memory that accounts for things like VM overheads, " +
         "interned strings, other native overheads, etc. This tends to grow with the container " +
-        "size. This value is ignored if spark.executor.memoryOverhead is set directly.")
+        "size. This value defaults to 0.10 except for Kubernetes non-JVM jobs, which defaults " +
+        "to 0.40. This is done as non-JVM tasks need more non-JVM heap space and such tasks " +
+        "commonly fail with \"Memory Overhead Exceeded\" errors. This preempts this error " +
+        "with a higher default. This value is ignored if spark.executor.memoryOverhead is set " +
+        "directly.")
       .version("3.3.0")
       .doubleConf
       .checkValue(factor => factor > 0,

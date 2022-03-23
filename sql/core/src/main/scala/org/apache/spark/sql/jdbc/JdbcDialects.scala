@@ -22,17 +22,19 @@ import java.time.{Instant, LocalDate}
 import java.util
 
 import scala.collection.mutable.ArrayBuilder
+import scala.util.control.NonFatal
 
 import org.apache.commons.lang3.StringUtils
 
 import org.apache.spark.annotation.{DeveloperApi, Since}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.CatalystTypeConverters
 import org.apache.spark.sql.catalyst.util.{DateFormatter, DateTimeUtils, TimestampFormatter}
 import org.apache.spark.sql.connector.catalog.TableChange
 import org.apache.spark.sql.connector.catalog.TableChange._
 import org.apache.spark.sql.connector.catalog.index.TableIndex
-import org.apache.spark.sql.connector.expressions.{Expression, FieldReference, NamedReference}
+import org.apache.spark.sql.connector.expressions.{Expression, Literal, NamedReference}
 import org.apache.spark.sql.connector.expressions.aggregate.{AggregateFunc, Avg, Count, CountStar, Max, Min, Sum}
 import org.apache.spark.sql.connector.util.V2ExpressionSQLBuilder
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -220,12 +222,17 @@ abstract class JdbcDialect extends Serializable with Logging{
   }
 
   class JDBCSQLBuilder extends V2ExpressionSQLBuilder {
-    override def visitFieldReference(fieldRef: FieldReference): String = {
-      if (fieldRef.fieldNames().length != 1) {
-        throw new IllegalArgumentException(
-          "FieldReference with field name has multiple or zero parts unsupported: " + fieldRef);
+    override def visitLiteral(literal: Literal[_]): String = {
+      compileValue(
+        CatalystTypeConverters.convertToScala(literal.value(), literal.dataType())).toString
+    }
+
+    override def visitNamedReference(namedRef: NamedReference): String = {
+      if (namedRef.fieldNames().length > 1) {
+        throw QueryCompilationErrors.commandNotSupportNestedColumnError(
+          "Filter push down", namedRef.toString)
       }
-      quoteIdentifier(fieldRef.fieldNames.head)
+      quoteIdentifier(namedRef.fieldNames.head)
     }
   }
 
@@ -240,7 +247,9 @@ abstract class JdbcDialect extends Serializable with Logging{
     try {
       Some(jdbcSQLBuilder.build(expr))
     } catch {
-      case _: IllegalArgumentException => None
+      case NonFatal(e) =>
+        logWarning("Error occurs while compiling V2 expression", e)
+        None
     }
   }
 

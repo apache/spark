@@ -15,26 +15,21 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.connector.expressions.filter;
+package org.apache.spark.sql.hive
 
-import org.apache.spark.annotation.Evolving;
-import org.apache.spark.sql.connector.expressions.Literal;
-import org.apache.spark.sql.connector.expressions.NamedReference;
+import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.catalyst.ScalaReflection
 
 /**
- * Performs equality comparison, similar to {@link EqualTo}. However, this differs from
- * {@link EqualTo} in that it returns {@code true} (rather than NULL) if both inputs are NULL,
- * and {@code false} (rather than NULL) if one of the input is NULL and the other is not NULL.
- *
- * @since 3.3.0
+ * This test suite prefers to have its own JVM as the error for cyclic annotation references may
+ * not be thrown if the annotation class is previously loaded by some other test and so may be
+ * dependent on test execution order
  */
-@Evolving
-public final class EqualNullSafe extends BinaryComparison {
+class HiveScalaReflectionSuite extends SparkFunSuite {
 
-  public EqualNullSafe(NamedReference column, Literal<?> value) {
-    super(column, value);
+  test("SPARK-38510: ScalaReflection.getConstructorParameterNames should work for classes with " +
+    "cyclic annotation references") {
+    assert(Seq("name", "funcWrapper", "children") ===
+      ScalaReflection.getConstructorParameterNames(classOf[HiveGenericUDF]))
   }
-
-  @Override
-  public String toString() { return this.column.describe() + " <=> " + value.describe(); }
 }

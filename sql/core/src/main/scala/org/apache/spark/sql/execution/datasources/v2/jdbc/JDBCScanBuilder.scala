@@ -22,12 +22,12 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.connector.expressions.SortOrder
 import org.apache.spark.sql.connector.expressions.aggregate.Aggregation
-import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownAggregates, SupportsPushDownFilters, SupportsPushDownLimit, SupportsPushDownRequiredColumns, SupportsPushDownTableSample, SupportsPushDownTopN}
+import org.apache.spark.sql.connector.expressions.filter.Predicate
+import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownAggregates, SupportsPushDownLimit, SupportsPushDownRequiredColumns, SupportsPushDownTableSample, SupportsPushDownTopN, SupportsPushDownV2Filters}
 import org.apache.spark.sql.execution.datasources.PartitioningUtils
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JDBCRDD, JDBCRelation}
 import org.apache.spark.sql.execution.datasources.v2.TableSampleInfo
 import org.apache.spark.sql.jdbc.JdbcDialects
-import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.types.StructType
 
 case class JDBCScanBuilder(
@@ -35,7 +35,7 @@ case class JDBCScanBuilder(
     schema: StructType,
     jdbcOptions: JDBCOptions)
   extends ScanBuilder
-    with SupportsPushDownFilters
+    with SupportsPushDownV2Filters
     with SupportsPushDownRequiredColumns
     with SupportsPushDownAggregates
     with SupportsPushDownLimit
@@ -45,7 +45,7 @@ case class JDBCScanBuilder(
 
   private val isCaseSensitive = session.sessionState.conf.caseSensitiveAnalysis
 
-  private var pushedFilter = Array.empty[Filter]
+  private var pushedPredicate = Array.empty[Predicate]
 
   private var finalSchema = schema
 
@@ -55,18 +55,18 @@ case class JDBCScanBuilder(
 
   private var sortOrders: Array[SortOrder] = Array.empty[SortOrder]
 
-  override def pushFilters(filters: Array[Filter]): Array[Filter] = {
+  override def pushPredicates(predicates: Array[Predicate]): Array[Predicate] = {
     if (jdbcOptions.pushDownPredicate) {
       val dialect = JdbcDialects.get(jdbcOptions.url)
-      val (pushed, unSupported) = filters.partition(JDBCRDD.compileFilter(_, dialect).isDefined)
-      this.pushedFilter = pushed
+      val (pushed, unSupported) = predicates.partition(dialect.compileExpression(_).isDefined)
+      this.pushedPredicate = pushed
       unSupported
     } else {
-      filters
+      predicates
     }
   }
 
-  override def pushedFilters(): Array[Filter] = pushedFilter
+  override def pushedPredicates(): Array[Predicate] = pushedPredicate
 
   private var pushedAggregateList: Array[String] = Array()
 
@@ -170,7 +170,7 @@ case class JDBCScanBuilder(
     // "DEPT","NAME",MAX("SALARY"),MIN("BONUS"), instead of getting column names from
     // prunedSchema and quote them (will become "MAX(SALARY)", "MIN(BONUS)" and can't
     // be used in sql string.
-    JDBCScan(JDBCRelation(schema, parts, jdbcOptions)(session), finalSchema, pushedFilter,
+    JDBCScan(JDBCRelation(schema, parts, jdbcOptions)(session), finalSchema, pushedPredicate,
       pushedAggregateList, pushedGroupByCols, tableSample, pushedLimit, sortOrders)
   }
 }
