@@ -3002,7 +3002,9 @@ object SubtractDates {
   usage = "_FUNC_(sourceTz, targetTz, sourceTs) - Converts the timestamp without time zone `sourceTs` from the `sourceTz` time zone to `targetTz`. ",
   arguments = """
     Arguments:
-      * sourceTz - the time zone for the input timestamp
+      * sourceTz - the time zone for the input timestamp.
+                   If it is missed or a foldable null expression, the session time zone is used as
+                   the source time zone.
       * targetTz - the time zone to which the input timestamp should be converted
       * sourceTs - a timestamp without time zone
   """,
@@ -3010,6 +3012,8 @@ object SubtractDates {
     Examples:
       > SELECT _FUNC_('Europe/Amsterdam', 'America/Los_Angeles', timestamp_ntz'2021-12-06 00:00:00');
        2021-12-05 15:00:00
+      > SELECT _FUNC_('Europe/Amsterdam', timestamp_ntz'2021-12-05 15:00:00');
+       2021-12-06 00:00:00
   """,
   group = "datetime_funcs",
   since = "3.3.0")
@@ -3017,8 +3021,17 @@ object SubtractDates {
 case class ConvertTimezone(
     sourceTz: Expression,
     targetTz: Expression,
-    sourceTs: Expression)
-  extends TernaryExpression with ImplicitCastInputTypes with NullIntolerant {
+    sourceTs: Expression,
+    timeZoneId: Option[String] = None)
+  extends TernaryExpression
+  with ImplicitCastInputTypes
+  with NullIntolerant
+  with TimeZoneAwareExpression {
+
+  def this(sourceTz: Expression, targetTz: Expression, sourceTs: Expression) =
+    this(sourceTz, targetTz, sourceTs, None)
+  def this(targetTz: Expression, sourceTs: Expression) =
+    this(Literal(null, StringType), targetTz, sourceTs)
 
   override def first: Expression = sourceTz
   override def second: Expression = targetTz
@@ -3026,6 +3039,11 @@ case class ConvertTimezone(
 
   override def inputTypes: Seq[AbstractDataType] = Seq(StringType, StringType, TimestampNTZType)
   override def dataType: DataType = TimestampNTZType
+
+  override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression = {
+    val srcTz = if (sourceTz.foldable && sourceTz.eval() == null) Literal(timeZoneId) else sourceTz
+    copy(sourceTz = srcTz, timeZoneId = Option(timeZoneId))
+  }
 
   override def nullSafeEval(srcTz: Any, tgtTz: Any, micros: Any): Any = {
     DateTimeUtils.convertTimestampNtzToAnotherTz(
