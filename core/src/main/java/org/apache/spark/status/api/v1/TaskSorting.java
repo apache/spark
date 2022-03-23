@@ -17,12 +17,12 @@
 
 package org.apache.spark.status.api.v1;
 
-import org.apache.spark.util.EnumUtil;
-
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.Locale;
 import java.util.Set;
+
+import org.apache.spark.util.EnumUtil;
 
 public enum TaskSorting {
   ID,

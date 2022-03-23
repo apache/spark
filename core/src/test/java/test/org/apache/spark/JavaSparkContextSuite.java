@@ -26,8 +26,8 @@ import scala.collection.immutable.Map$;
 
 import org.junit.Test;
 
-import org.apache.spark.api.java.*;
 import org.apache.spark.*;
+import org.apache.spark.api.java.*;
 import org.apache.spark.util.Utils;
 
 /**

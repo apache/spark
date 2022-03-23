@@ -13,14 +13,14 @@
  */
 package org.apache.spark.io;
 
-import org.apache.spark.storage.StorageUtils;
-
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.nio.file.StandardOpenOption;
+
+import org.apache.spark.storage.StorageUtils;
 
 /**
  * {@link InputStream} implementation which uses direct buffer

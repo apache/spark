@@ -18,8 +18,8 @@ package org.apache.spark.io;
 
 import org.junit.Before;
 
-import java.io.InputStream;
 import java.io.IOException;
+import java.io.InputStream;
 
 /**
  * Tests functionality of {@link NioBufferedFileInputStream}

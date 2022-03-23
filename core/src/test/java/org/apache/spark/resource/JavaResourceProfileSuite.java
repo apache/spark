@@ -19,8 +19,9 @@ package org.apache.spark.resource;
 
 import java.util.Map;
 
-import static org.junit.Assert.*;
 import org.junit.Test;
+
+import static org.junit.Assert.*;
 
 // Test the ResourceProfile and Request api's from Java
 public class JavaResourceProfileSuite {

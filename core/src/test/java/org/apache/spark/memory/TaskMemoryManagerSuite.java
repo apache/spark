@@ -21,9 +21,9 @@ import org.junit.Assert;
 import org.junit.Test;
 
 import org.apache.spark.SparkConf;
+import org.apache.spark.internal.config.package$;
 import org.apache.spark.unsafe.memory.MemoryAllocator;
 import org.apache.spark.unsafe.memory.MemoryBlock;
-import org.apache.spark.internal.config.package$;
 
 public class TaskMemoryManagerSuite {
 

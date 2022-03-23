@@ -18,22 +18,23 @@
 package org.apache.spark.launcher;
 
 import java.time.Duration;
-import java.util.Arrays;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 
 import org.junit.Test;
-import static org.junit.Assert.*;
-import static org.junit.Assume.*;
-import static org.mockito.Mockito.*;
 
 import org.apache.spark.SparkContext;
 import org.apache.spark.SparkContext$;
 import org.apache.spark.internal.config.package$;
 import org.apache.spark.util.Utils;
+
+import static org.junit.Assert.*;
+import static org.junit.Assume.*;
+import static org.mockito.Mockito.*;
 
 /**
  * These tests require the Spark assembly to be built before they can be run.

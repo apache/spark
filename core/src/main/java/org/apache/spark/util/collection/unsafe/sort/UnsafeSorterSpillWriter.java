@@ -23,15 +23,15 @@ import java.io.IOException;
 import scala.Tuple2;
 
 import org.apache.spark.SparkConf;
-import org.apache.spark.serializer.SerializerManager;
 import org.apache.spark.executor.ShuffleWriteMetrics;
+import org.apache.spark.internal.config.package$;
 import org.apache.spark.serializer.DummySerializerInstance;
+import org.apache.spark.serializer.SerializerManager;
 import org.apache.spark.storage.BlockId;
 import org.apache.spark.storage.BlockManager;
 import org.apache.spark.storage.DiskBlockObjectWriter;
 import org.apache.spark.storage.TempLocalBlockId;
 import org.apache.spark.unsafe.Platform;
-import org.apache.spark.internal.config.package$;
 
 /**
  * Spills a list of sorted records to disk. Spill files have the following format:

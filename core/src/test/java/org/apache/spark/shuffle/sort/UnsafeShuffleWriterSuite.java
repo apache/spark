@@ -22,10 +22,6 @@ import java.nio.ByteBuffer;
 import java.nio.file.Files;
 import java.util.*;
 
-import org.apache.spark.*;
-import org.apache.spark.network.shuffle.checksum.ShuffleChecksumHelper;
-import org.apache.spark.shuffle.ShuffleChecksumTestHelper;
-import org.mockito.stubbing.Answer;
 import scala.*;
 import scala.collection.Iterator;
 
@@ -35,7 +31,9 @@ import org.junit.Before;
 import org.junit.Test;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
+import org.mockito.stubbing.Answer;
 
+import org.apache.spark.*;
 import org.apache.spark.executor.ShuffleWriteMetrics;
 import org.apache.spark.executor.TaskMetrics;
 import org.apache.spark.internal.config.package$;
@@ -45,11 +43,13 @@ import org.apache.spark.io.LZFCompressionCodec;
 import org.apache.spark.io.SnappyCompressionCodec;
 import org.apache.spark.memory.TaskMemoryManager;
 import org.apache.spark.memory.TestMemoryManager;
+import org.apache.spark.network.shuffle.checksum.ShuffleChecksumHelper;
 import org.apache.spark.network.util.LimitedInputStream;
 import org.apache.spark.scheduler.MapStatus;
 import org.apache.spark.security.CryptoStreamUtils;
 import org.apache.spark.serializer.*;
 import org.apache.spark.shuffle.IndexShuffleBlockResolver;
+import org.apache.spark.shuffle.ShuffleChecksumTestHelper;
 import org.apache.spark.shuffle.sort.io.LocalDiskShuffleExecutorComponents;
 import org.apache.spark.storage.*;
 import org.apache.spark.util.Utils;

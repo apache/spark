@@ -20,18 +20,18 @@ package org.apache.spark.util.collection.unsafe.sort;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 
-import org.apache.spark.unsafe.array.LongArray;
 import org.junit.Assert;
 import org.junit.Test;
 
 import org.apache.spark.HashPartitioner;
 import org.apache.spark.SparkConf;
+import org.apache.spark.internal.config.package$;
+import org.apache.spark.memory.TaskMemoryManager;
 import org.apache.spark.memory.TestMemoryConsumer;
 import org.apache.spark.memory.TestMemoryManager;
-import org.apache.spark.memory.TaskMemoryManager;
 import org.apache.spark.unsafe.Platform;
+import org.apache.spark.unsafe.array.LongArray;
 import org.apache.spark.unsafe.memory.MemoryBlock;
-import org.apache.spark.internal.config.package$;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;

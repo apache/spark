@@ -18,8 +18,8 @@
 package org.apache.spark.shuffle.api;
 
 import java.io.IOException;
-import java.util.Optional;
 import java.io.OutputStream;
+import java.util.Optional;
 
 import org.apache.spark.annotation.Private;
 

@@ -19,7 +19,6 @@ package org.apache.spark.util.collection.unsafe.sort;
 
 import java.util.Comparator;
 import java.util.LinkedList;
-
 import javax.annotation.Nullable;
 
 import org.apache.spark.TaskContext;
