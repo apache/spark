@@ -21,12 +21,12 @@ import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.util.zip.GZIPInputStream;
 import java.util.zip.GZIPOutputStream;
-import static java.nio.charset.StandardCharsets.UTF_8;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 import org.apache.spark.annotation.Private;
 
+import static java.nio.charset.StandardCharsets.UTF_8;
 /**
  * Serializer used to translate between app-defined types and the disk-based stores.
  *

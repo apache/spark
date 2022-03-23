@@ -18,6 +18,7 @@
 package org.apache.spark.util.kvstore;
 
 import org.junit.Test;
+
 import static org.junit.Assert.*;
 
 public class ArrayWrappersSuite {

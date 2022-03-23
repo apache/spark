@@ -21,10 +21,11 @@ import java.lang.reflect.Array;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.Map;
-import static java.nio.charset.StandardCharsets.UTF_8;
 
 import com.google.common.base.Preconditions;
 import org.iq80.leveldb.WriteBatch;
+
+import static java.nio.charset.StandardCharsets.UTF_8;
 
 /**
  * Holds metadata about app-specific types stored in LevelDB. Serves as a cache for data collected

@@ -21,6 +21,7 @@ import java.util.NoSuchElementException;
 
 import com.google.common.collect.ImmutableSet;
 import org.junit.Test;
+
 import static org.junit.Assert.*;
 
 public class InMemoryStoreSuite {

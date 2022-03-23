@@ -28,8 +28,6 @@ import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 
-import static java.nio.charset.StandardCharsets.UTF_8;
-
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Throwables;
@@ -37,6 +35,7 @@ import org.rocksdb.*;
 
 import org.apache.spark.annotation.Private;
 
+import static java.nio.charset.StandardCharsets.UTF_8;
 /**
  * Implementation of KVStore that uses RocksDB as the underlying data store.
  */

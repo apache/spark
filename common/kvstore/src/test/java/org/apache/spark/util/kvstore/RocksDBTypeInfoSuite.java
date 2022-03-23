@@ -17,9 +17,9 @@
 
 package org.apache.spark.util.kvstore;
 
-import static java.nio.charset.StandardCharsets.UTF_8;
-
 import org.junit.Test;
+
+import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.junit.Assert.*;
 
 public class RocksDBTypeInfoSuite {

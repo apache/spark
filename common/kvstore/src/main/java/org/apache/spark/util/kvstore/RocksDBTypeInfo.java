@@ -17,14 +17,14 @@
 
 package org.apache.spark.util.kvstore;
 
-import com.google.common.base.Preconditions;
-import org.rocksdb.RocksDBException;
-import org.rocksdb.WriteBatch;
-
 import java.lang.reflect.Array;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.Map;
+
+import com.google.common.base.Preconditions;
+import org.rocksdb.RocksDBException;
+import org.rocksdb.WriteBatch;
 
 import static java.nio.charset.StandardCharsets.UTF_8;
 
