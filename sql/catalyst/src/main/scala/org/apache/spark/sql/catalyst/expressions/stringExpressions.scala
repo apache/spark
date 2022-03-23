@@ -2945,9 +2945,10 @@ case class Sentences(
 }
 
 /**
- * Splits a given string by a specified delimiter.
+ * Splits a given string by a specified delimiter and return splits into a
+ * GenericArrayData.
  */
-case class SplitByDelimiter(
+case class StringSplitSQL(
     str: Expression,
     delimiter: Expression) extends BinaryExpression with NullIntolerant {
   override def dataType: DataType = ArrayType(StringType, containsNull = false)
@@ -2969,7 +2970,7 @@ case class SplitByDelimiter(
   }
 
   override def withNewChildrenInternal(
-    newFirst: Expression, newSecond: Expression): SplitByDelimiter =
+    newFirst: Expression, newSecond: Expression): StringSplitSQL =
     copy(str = newFirst, delimiter = newSecond)
 }
 
@@ -3002,7 +3003,7 @@ case class SplitPart (
     partNum: Expression)
   extends RuntimeReplaceable with ImplicitCastInputTypes {
   override lazy val replacement: Expression =
-    ElementAt(SplitByDelimiter(str, delimiter), partNum, Some(Literal.create("", StringType)),
+    ElementAt(StringSplitSQL(str, delimiter), partNum, Some(Literal.create("", StringType)),
       false)
   override def nodeName: String = "split_part"
   override def inputTypes: Seq[DataType] = Seq(StringType, StringType, IntegerType)
