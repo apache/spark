@@ -22,25 +22,16 @@ import java.nio.charset.StandardCharsets;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-import org.apache.spark.streaming.Duration;
-import org.apache.spark.streaming.JavaCheckpointTestUtils;
-import org.apache.spark.streaming.JavaTestUtils;
-import org.apache.spark.streaming.LocalJavaStreamingContext;
-import org.apache.spark.streaming.Seconds;
-import org.apache.spark.streaming.StreamingContextState;
-import org.apache.spark.streaming.StreamingContextSuite;
 import scala.Tuple2;
 
+import com.google.common.collect.Sets;
+import com.google.common.io.Files;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.io.LongWritable;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.mapreduce.lib.input.TextInputFormat;
-
 import org.junit.Assert;
 import org.junit.Test;
-
-import com.google.common.io.Files;
-import com.google.common.collect.Sets;
 
 import org.apache.spark.HashPartitioner;
 import org.apache.spark.SparkConf;
@@ -50,6 +41,13 @@ import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.api.java.Optional;
 import org.apache.spark.api.java.function.*;
 import org.apache.spark.storage.StorageLevel;
+import org.apache.spark.streaming.Duration;
+import org.apache.spark.streaming.JavaCheckpointTestUtils;
+import org.apache.spark.streaming.JavaTestUtils;
+import org.apache.spark.streaming.LocalJavaStreamingContext;
+import org.apache.spark.streaming.Seconds;
+import org.apache.spark.streaming.StreamingContextState;
+import org.apache.spark.streaming.StreamingContextSuite;
 import org.apache.spark.streaming.api.java.*;
 import org.apache.spark.util.LongAccumulator;
 import org.apache.spark.util.Utils;

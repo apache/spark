@@ -16,10 +16,10 @@
  */
 package org.apache.spark.io;
 
-import org.junit.Before;
-
 import java.io.IOException;
 import java.io.InputStream;
+
+import org.junit.Before;
 
 /**
  * Tests functionality of {@link NioBufferedFileInputStream}
