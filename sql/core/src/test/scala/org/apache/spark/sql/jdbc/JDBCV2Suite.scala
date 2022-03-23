@@ -109,6 +109,13 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
     checkAnswer(sql("SELECT name, id FROM h2.test.people"), Seq(Row("fred", 1), Row("mary", 2)))
   }
 
+  private def checkPushedInfo(df: DataFrame, expectedPlanFragment: String): Unit = {
+    df.queryExecution.optimizedPlan.collect {
+      case _: DataSourceV2ScanRelation =>
+        checkKeywordsExistsInExplain(df, expectedPlanFragment)
+    }
+  }
+
   // TABLESAMPLE ({integer_expression | decimal_expression} PERCENT) and
   // TABLESAMPLE (BUCKET integer_expression OUT OF integer_expression)
   // are tested in JDBC dialect tests because TABLESAMPLE is not supported by all the DBMS
@@ -179,13 +186,6 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
       assert(sorts.isEmpty)
     } else {
       assert(sorts.nonEmpty)
-    }
-  }
-
-  private def checkPushedInfo(df: DataFrame, expectedPlanFragment: String): Unit = {
-    df.queryExecution.optimizedPlan.collect {
-      case _: DataSourceV2ScanRelation =>
-        checkKeywordsExistsInExplain(df, expectedPlanFragment)
     }
   }
 
@@ -1001,12 +1001,8 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
       .agg(sum($"mySalary").as("total"))
       .filter($"total" > 1000)
     checkAggregateRemoved(df)
-    df.queryExecution.optimizedPlan.collect {
-      case _: DataSourceV2ScanRelation =>
-        val expectedPlanFragment =
-          "PushedAggregates: [SUM(SALARY)], PushedFilters: [], PushedGroupByColumns: [DEPT]"
-        checkKeywordsExistsInExplain(df, expectedPlanFragment)
-    }
+    checkPushedInfo(df,
+      "PushedAggregates: [SUM(SALARY)], PushedFilters: [], PushedGroupByColumns: [DEPT]")
     checkAnswer(df, Seq(Row(1, 19000.00), Row(2, 22000.00), Row(6, 12000.00)))
 
     val df2 = spark.table("h2.test.employee")
@@ -1015,12 +1011,8 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
       .agg(sum($"mySalary").as("total"))
       .filter($"total" > 1000)
     checkAggregateRemoved(df2)
-    df2.queryExecution.optimizedPlan.collect {
-      case _: DataSourceV2ScanRelation =>
-        val expectedPlanFragment =
-          "PushedAggregates: [SUM(SALARY)], PushedFilters: [], PushedGroupByColumns: [DEPT]"
-        checkKeywordsExistsInExplain(df2, expectedPlanFragment)
-    }
+    checkPushedInfo(df2,
+      "PushedAggregates: [SUM(SALARY)], PushedFilters: [], PushedGroupByColumns: [DEPT]")
     checkAnswer(df2, Seq(Row(1, 19000.00), Row(2, 22000.00), Row(6, 12000.00)))
   }
 
@@ -1036,12 +1028,8 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
       .agg(sum($"mySalary").as("total"))
       .filter($"total" > 1000)
     checkAggregateRemoved(df, false)
-    df.queryExecution.optimizedPlan.collect {
-      case _: DataSourceV2ScanRelation =>
-        val expectedPlanFragment =
-          "PushedAggregates: [SUM(SALARY)], PushedFilters: [], PushedGroupByColumns: [NAME]"
-        checkKeywordsExistsInExplain(df, expectedPlanFragment)
-    }
+    checkPushedInfo(df,
+      "PushedAggregates: [SUM(SALARY)], PushedFilters: [], PushedGroupByColumns: [NAME]")
     checkAnswer(df, Seq(Row("alex", 12000.00), Row("amy", 10000.00),
       Row("cathy", 9000.00), Row("david", 10000.00), Row("jen", 12000.00)))
 
@@ -1056,12 +1044,8 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
       .agg(sum($"mySalary").as("total"))
       .filter($"total" > 1000)
     checkAggregateRemoved(df2, false)
-    df2.queryExecution.optimizedPlan.collect {
-      case _: DataSourceV2ScanRelation =>
-        val expectedPlanFragment =
-          "PushedAggregates: [SUM(SALARY)], PushedFilters: [], PushedGroupByColumns: [NAME]"
-        checkKeywordsExistsInExplain(df2, expectedPlanFragment)
-    }
+    checkPushedInfo(df2,
+      "PushedAggregates: [SUM(SALARY)], PushedFilters: [], PushedGroupByColumns: [NAME]")
     checkAnswer(df2, Seq(Row("alex", 12000.00), Row("amy", 10000.00),
       Row("cathy", 9000.00), Row("david", 10000.00), Row("jen", 12000.00)))
   }
