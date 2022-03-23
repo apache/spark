@@ -2576,7 +2576,7 @@ class AdaptiveQueryExecSuite
     }
   }
 
-  test("SPARK-38578: Avoid unnecessary sort in FileFormatWriter if user has specified sort") {
+  test("SPARK-38578: AdaptiveSparkPlanExec should ensure user-specified ordering") {
     Seq(
       ("key", "key, value", false),
       ("key as x", "key, value", false),
