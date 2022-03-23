@@ -93,11 +93,6 @@ case class ResolveDefaultColumns(
     case _ => false
   }
 
-  // Helper method to check that an inline table has any explicit DEFAULT column references.
-  private def hasExplicitDefaultReferences(table: UnresolvedInlineTable): Boolean =
-    table.rows.nonEmpty && table.rows.forall(_.size == table.rows(0).size) &&
-    table.rows.exists{_.exists{isExplicitDefaultColumn(_)}}
-
   // Each of the following methods adds a projection over the input plan to generate missing default
   // column values.
   private def addMissingDefaultColumnValues(
