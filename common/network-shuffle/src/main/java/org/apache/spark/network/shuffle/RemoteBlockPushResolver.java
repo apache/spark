@@ -756,7 +756,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
     }
 
     /**
-     * This throws IllegalStateException if the number of IOExceptions have exceeded threshold.
+     * @throws IllegalStateException if the number of IOExceptions have exceeded threshold.
      */
     private void abortIfNecessary() {
       if (partitionInfo.shouldAbort(mergeManager.ioExceptionsThresholdDuringMerge)) {
