@@ -546,8 +546,9 @@ private[hive] object HadoopTableReader extends HiveInspectors with Logging {
             throw ex
           }
       }
-      while (notSkip && i < length) {
-        try {
+
+      try {
+        while (notSkip && i < length) {
           val fieldValue = soi.getStructFieldData(raw, fieldRefs(i))
           if (fieldValue == null) {
             mutableRow.setNullAt(fieldOrdinals(i))
@@ -555,11 +556,15 @@ private[hive] object HadoopTableReader extends HiveInspectors with Logging {
             unwrappers(i)(fieldValue, mutableRow, fieldOrdinals(i))
           }
           i += 1
-        } catch {
-          case ex: Throwable =>
-            logError(s"Exception thrown in field <${fieldRefs(i).getFieldName}>")
-            throw ex
         }
+      } catch {
+        case ex: Throwable =>
+          logError(s"Exception thrown in field <${fieldRefs(i).getFieldName}>")
+          if (ignoreCorruptRecord) {
+            notSkip = false
+          } else {
+            throw ex
+          }
       }
 
       if (notSkip) {
