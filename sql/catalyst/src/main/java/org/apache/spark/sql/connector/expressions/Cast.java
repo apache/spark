@@ -23,7 +23,7 @@ import org.apache.spark.sql.types.DataType;
 /**
  * Represents a cast expression in the public logical expression API.
  *
- * @since 3.3.0
+ * @since 3.4.0
  */
 @Evolving
 public class Cast extends GeneralScalarExpression {
