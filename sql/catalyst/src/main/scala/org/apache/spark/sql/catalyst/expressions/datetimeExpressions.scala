@@ -3003,8 +3003,7 @@ object SubtractDates {
   arguments = """
     Arguments:
       * sourceTz - the time zone for the input timestamp.
-                   If it is missed or a foldable null expression, the session time zone is used as
-                   the source time zone.
+                   If it is missed, the current session time zone is used as the source time zone.
       * targetTz - the time zone to which the input timestamp should be converted
       * sourceTs - a timestamp without time zone
   """,
@@ -3021,17 +3020,11 @@ object SubtractDates {
 case class ConvertTimezone(
     sourceTz: Expression,
     targetTz: Expression,
-    sourceTs: Expression,
-    timeZoneId: Option[String] = None)
-  extends TernaryExpression
-  with ImplicitCastInputTypes
-  with NullIntolerant
-  with TimeZoneAwareExpression {
+    sourceTs: Expression)
+  extends TernaryExpression with ImplicitCastInputTypes with NullIntolerant {
 
-  def this(sourceTz: Expression, targetTz: Expression, sourceTs: Expression) =
-    this(sourceTz, targetTz, sourceTs, None)
   def this(targetTz: Expression, sourceTs: Expression) =
-    this(Literal(null, StringType), targetTz, sourceTs)
+    this(CurrentTimeZone(), targetTz, sourceTs)
 
   override def first: Expression = sourceTz
   override def second: Expression = targetTz
@@ -3039,11 +3032,6 @@ case class ConvertTimezone(
 
   override def inputTypes: Seq[AbstractDataType] = Seq(StringType, StringType, TimestampNTZType)
   override def dataType: DataType = TimestampNTZType
-
-  override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression = {
-    val srcTz = if (sourceTz.foldable && sourceTz.eval() == null) Literal(timeZoneId) else sourceTz
-    copy(sourceTz = srcTz, timeZoneId = Option(timeZoneId))
-  }
 
   override def nullSafeEval(srcTz: Any, tgtTz: Any, micros: Any): Any = {
     DateTimeUtils.convertTimestampNtzToAnotherTz(
