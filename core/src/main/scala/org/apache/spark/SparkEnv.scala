@@ -169,7 +169,8 @@ object SparkEnv extends Logging {
       isLocal: Boolean,
       listenerBus: LiveListenerBus,
       numCores: Int,
-      mockOutputCommitCoordinator: Option[OutputCommitCoordinator] = None): SparkEnv = {
+      mockOutputCommitCoordinator: Option[OutputCommitCoordinator] = None,
+      blockManagerOption: Option[BlockManager] = None): SparkEnv = {
     assert(conf.contains(DRIVER_HOST_ADDRESS),
       s"${DRIVER_HOST_ADDRESS.key} is not set on the driver!")
     assert(conf.contains(DRIVER_PORT), s"${DRIVER_PORT.key} is not set on the driver!")
@@ -191,6 +192,7 @@ object SparkEnv extends Logging {
       numCores,
       ioEncryptionKey,
       listenerBus = listenerBus,
+      blockManagerOption = blockManagerOption,
       mockOutputCommitCoordinator = mockOutputCommitCoordinator
     )
   }
@@ -235,6 +237,7 @@ object SparkEnv extends Logging {
   /**
    * Helper method to create a SparkEnv for a driver or an executor.
    */
+  // scalastyle:off argcount
   private def create(
       conf: SparkConf,
       executorId: String,
@@ -245,7 +248,8 @@ object SparkEnv extends Logging {
       numUsableCores: Int,
       ioEncryptionKey: Option[Array[Byte]],
       listenerBus: LiveListenerBus = null,
-      mockOutputCommitCoordinator: Option[OutputCommitCoordinator] = None): SparkEnv = {
+      mockOutputCommitCoordinator: Option[OutputCommitCoordinator] = None,
+      blockManagerOption: Option[BlockManager] = None): SparkEnv = {
 
     val isDriver = executorId == SparkContext.DRIVER_IDENTIFIER
 
@@ -360,7 +364,7 @@ object SparkEnv extends Logging {
         blockManagerPort, numUsableCores, blockManagerMaster.driverEndpoint)
 
     // NB: blockManager is not valid until initialize() is called later.
-    val blockManager = new BlockManager(
+    val blockManager = blockManagerOption.getOrElse(new BlockManager(
       executorId,
       rpcEnv,
       blockManagerMaster,
@@ -371,7 +375,7 @@ object SparkEnv extends Logging {
       shuffleManager,
       blockTransferService,
       securityManager,
-      externalShuffleClient)
+      externalShuffleClient))
 
     val metricsSystem = if (isDriver) {
       // Don't start metrics system right now for Driver.
@@ -421,6 +425,7 @@ object SparkEnv extends Logging {
 
     envInstance
   }
+  // scalastyle:on argcount
 
   /**
    * Return a map representation of jvm information, Spark properties, system properties, and

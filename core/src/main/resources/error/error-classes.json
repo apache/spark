@@ -28,6 +28,9 @@
   "CONCURRENT_QUERY" : {
     "message" : [ "Another instance of this query was just started by a concurrent session." ]
   },
+  "CORRUPTED_REMOTE_BLOCK" : {
+    "message" : [ "Corrupted remote block: '%s'" ]
+  },
   "DATETIME_OVERFLOW" : {
     "message" : [ "Datetime operation overflow: %s." ],
     "sqlState" : "22008"
@@ -49,6 +52,12 @@
   },
   "FAILED_SET_ORIGINAL_PERMISSION_BACK" : {
     "message" : [ "Failed to set original permission %s back to the created path: %s. Exception: %s" ]
+  },
+  "GET_BLOCK_ERROR" : {
+    "message" : [ "Failed to get block: '%s'" ]
+  },
+  "GET_LOCAL_BLOCK_ERROR" : {
+    "message" : [ "Failed to get local block: '%s'" ]
   },
   "GRAPHITE_SINK_INVALID_PROTOCOL" : {
     "message" : [ "Invalid Graphite protocol: %s" ]
@@ -157,6 +166,9 @@
   "SECOND_FUNCTION_ARGUMENT_NOT_INTEGER" : {
     "message" : [ "The second argument of '%s' function needs to be an integer." ],
     "sqlState" : "22023"
+  },
+  "STORE_BLOCK_ERROR" : {
+    "message" : [ "Failed to store block: %s" ]
   },
   "UNABLE_TO_ACQUIRE_MEMORY" : {
     "message" : [ "Unable to acquire %s bytes of memory, got %s" ]

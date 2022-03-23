@@ -325,4 +325,24 @@ object SparkCoreErrors {
     new SparkException(errorClass = "GRAPHITE_SINK_PROPERTY_MISSING",
       messageParameters = Array(missingProperty), cause = null)
   }
+
+  def storeBlockError(blockId: BlockId, cause: Throwable = null): Throwable = {
+    new SparkException(errorClass = "STORE_BLOCK_ERROR",
+      messageParameters = Array(blockId.toString), cause = cause)
+  }
+
+  def getBlockError(blockId: BlockId): Throwable = {
+    new SparkException(errorClass = "GET_BLOCK_ERROR",
+      messageParameters = Array(blockId.toString), cause = null)
+  }
+
+  def getLocalBlockError(blockId: BlockId): Throwable = {
+    new SparkException(errorClass = "GET_LOCAL_BLOCK_ERROR",
+      messageParameters = Array(blockId.toString), cause = null)
+  }
+
+  def corruptedRemoteBlockError(blockId: BlockId): Throwable = {
+    new SparkException(errorClass = "CORRUPTED_REMOTE_BLOCK",
+      messageParameters = Array(blockId.toString), cause = null)
+  }
 }

@@ -17,10 +17,13 @@
 
 package org.apache.spark.broadcast
 
+import java.nio.ByteBuffer
 import java.util.Locale
 
 import scala.util.Random
 
+import org.mockito.ArgumentMatchers._
+import org.mockito.Mockito._
 import org.scalatest.Assertions
 
 import org.apache.spark._
@@ -28,6 +31,7 @@ import org.apache.spark.internal.config
 import org.apache.spark.internal.config.SERIALIZER
 import org.apache.spark.io.SnappyCompressionCodec
 import org.apache.spark.rdd.RDD
+import org.apache.spark.scheduler.LiveListenerBus
 import org.apache.spark.security.EncryptionFunSuite
 import org.apache.spark.serializer.JavaSerializer
 import org.apache.spark.storage._
@@ -302,6 +306,76 @@ class BroadcastSuite extends SparkFunSuite with LocalSparkContext with Encryptio
     } else {
       val results = sc.parallelize(1 to partitions, partitions).map(x => (x, broadcast.value.sum))
       assert(results.collect().toSet === (1 to partitions).map(x => (x, list.sum)).toSet)
+    }
+  }
+
+  test("Error in BlockManager.putSingle") {
+    val mockBlockManager = mock(classOf[BlockManager])
+    when(mockBlockManager.putSingle(any, any, any, any)(any)).thenReturn(false)
+    sc = sparkContextWithBlockManager(mockBlockManager)
+    val thrown = intercept[SparkException] { sc.broadcast(Array(1)) }
+    assert(thrown.getErrorClass == "STORE_BLOCK_ERROR")
+    assert(thrown.getMessage.startsWith("Failed to store block: "))
+  }
+
+  test("Error in BlockManager.putBytes") {
+    val mockBlockManager = mock(classOf[BlockManager])
+    when(mockBlockManager.putBytes(any, any, any, any)(any)).thenReturn(false)
+    sc = sparkContextWithBlockManager(mockBlockManager)
+    val thrown = intercept[SparkException] { sc.broadcast(Array(1)) }
+    assert(thrown.getErrorClass == "STORE_BLOCK_ERROR")
+    assert(thrown.getMessage.startsWith("Failed to store block: "))
+  }
+
+  test("Error when getting local blocks") {
+    val mockBlockManager = mock(classOf[BlockManager])
+    when(mockBlockManager.putSingle(any, any, any, any)(any)).thenReturn(true)
+    when(mockBlockManager.putBytes(any, any, any, any)(any)).thenReturn(true)
+    val mockBlockResult = mock(classOf[BlockResult])
+    when(mockBlockResult.data).thenReturn(Iterator.empty)
+    when(mockBlockManager.getLocalValues(any[BlockId])).thenReturn(Some(mockBlockResult))
+    sc = sparkContextWithBlockManager(mockBlockManager)
+    val thrown = intercept[SparkException] { sc.broadcast(Array(1)).value }
+    assert(thrown.getErrorClass == "GET_LOCAL_BLOCK_ERROR")
+    assert(thrown.getMessage.startsWith("Failed to get local block: "))
+  }
+
+  test("Error when getting remote blocks") {
+    val mockBlockManager = mock(classOf[BlockManager])
+    when(mockBlockManager.putSingle(any, any, any, any)(any)).thenReturn(true)
+    when(mockBlockManager.putBytes(any, any, any, any)(any)).thenReturn(true)
+    when(mockBlockManager.getLocalValues(any[BlockId])).thenReturn(None)
+    when(mockBlockManager.getLocalBytes(any[BlockId])).thenReturn(None)
+    when(mockBlockManager.getRemoteBytes(any[BlockId])).thenReturn(None)
+    sc = sparkContextWithBlockManager(mockBlockManager)
+    val thrown = intercept[SparkException] { sc.broadcast(Array(1)).value }
+    assert(thrown.getErrorClass == "GET_BLOCK_ERROR")
+    assert(thrown.getMessage.startsWith("Failed to get block: "))
+  }
+
+  test("Corrupted remote blocks") {
+    val mockBlockManager = mock(classOf[BlockManager])
+    when(mockBlockManager.putSingle(any, any, any, any)(any)).thenReturn(true)
+    when(mockBlockManager.putBytes(any, any, any, any)(any)).thenReturn(true)
+    when(mockBlockManager.getLocalValues(any[BlockId])).thenReturn(None)
+    when(mockBlockManager.getLocalBytes(any[BlockId])).thenReturn(None)
+    when(mockBlockManager.getRemoteBytes(any[BlockId])).thenReturn(
+      Some(new ChunkedByteBuffer(Array(ByteBuffer.allocate(0)))))
+    sc = sparkContextWithBlockManager(mockBlockManager)
+    val thrown = intercept[SparkException] { sc.broadcast(Array(1)).value }
+    assert(thrown.getErrorClass == "CORRUPTED_REMOTE_BLOCK")
+    assert(thrown.getMessage.startsWith("Corrupted remote block: "))
+  }
+
+  private def sparkContextWithBlockManager(blockManager: BlockManager): SparkContext = {
+    new SparkContext(new SparkConf().setAppName("test").setMaster("local")) {
+      override private[spark] def createSparkEnv(
+                                                  conf: SparkConf,
+                                                  isLocal: Boolean,
+                                                  listenerBus: LiveListenerBus) = {
+        SparkEnv.createDriverEnv(conf, isLocal, listenerBus,
+          SparkContext.numDriverCores(master), blockManagerOption = Some(blockManager))
+      }
     }
   }
 }
