@@ -23,7 +23,7 @@ from py4j.java_gateway import JavaObject
 
 from pyspark.rdd import RDD
 from pyspark.mllib.common import callMLlibFunc, JavaModelWrapper
-from pyspark.mllib.linalg import Matrix, Vector, _convert_to_vector  # type: ignore[attr-defined]
+from pyspark.mllib.linalg import Matrix, Vector, _convert_to_vector
 from pyspark.mllib.regression import LabeledPoint
 from pyspark.mllib.stat.test import ChiSqTestResult, KolmogorovSmirnovTestResult
 
@@ -306,7 +306,7 @@ class Statistics:
         if isinstance(observed, Matrix):
             jmodel = callMLlibFunc("chiSqTest", observed)
         else:
-            if expected and len(expected) != len(observed):  # type: ignore[arg-type]
+            if expected and len(expected) != len(observed):
                 raise ValueError("`expected` should have same length with `observed`")
             jmodel = callMLlibFunc("chiSqTest", _convert_to_vector(observed), expected)
         return ChiSqTestResult(jmodel)
