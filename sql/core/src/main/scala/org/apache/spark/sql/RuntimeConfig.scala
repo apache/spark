@@ -65,7 +65,7 @@ class RuntimeConfig private[sql](sqlConf: SQLConf = new SQLConf) {
    *
    * @since 3.4.0
    */
-  def set[T](entry: ConfigEntry[T], value: T): Unit = {
+  protected[sql] def set[T](entry: ConfigEntry[T], value: T): Unit = {
     requireNonStaticConf(entry.key)
     sqlConf.setConf(entry, value)
   }
