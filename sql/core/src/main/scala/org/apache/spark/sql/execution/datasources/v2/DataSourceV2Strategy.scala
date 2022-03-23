@@ -257,12 +257,12 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       relation match {
         case DataSourceV2ScanRelation(r, _, output) =>
           val table = r.table
-          if (condition.exists(SubqueryExpression.hasSubquery)) {
+          if (SubqueryExpression.hasSubquery(condition)) {
             throw QueryCompilationErrors.unsupportedDeleteByConditionWithSubqueryError(condition)
           }
           // fail if any filter cannot be converted.
           // correctness depends on removing all matching data.
-          val filters = DataSourceStrategy.normalizeExprs(condition.toSeq, output)
+          val filters = DataSourceStrategy.normalizeExprs(Seq(condition), output)
               .flatMap(splitConjunctivePredicates(_).map {
                 f => DataSourceStrategy.translateFilter(f, true).getOrElse(
                   throw QueryCompilationErrors.cannotTranslateExpressionToSourceFilterError(f))
