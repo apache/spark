@@ -17,15 +17,15 @@
 
 package org.apache.spark.sql.catalyst.expressions;
 
-import org.apache.spark.sql.errors.QueryExecutionErrors;
-import org.apache.spark.unsafe.types.UTF8String;
-
-import javax.crypto.Cipher;
-import javax.crypto.spec.GCMParameterSpec;
-import javax.crypto.spec.SecretKeySpec;
 import java.nio.ByteBuffer;
 import java.security.GeneralSecurityException;
 import java.security.SecureRandom;
+import javax.crypto.Cipher;
+import javax.crypto.spec.GCMParameterSpec;
+import javax.crypto.spec.SecretKeySpec;
+
+import org.apache.spark.sql.errors.QueryExecutionErrors;
+import org.apache.spark.unsafe.types.UTF8String;
 
 /**
  * An utility class for constructing expressions.

@@ -17,21 +17,22 @@
 
 package org.apache.spark.sql.catalyst.expressions;
 
+import java.util.Random;
+
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
 import org.apache.spark.SparkConf;
+import org.apache.spark.internal.config.package$;
 import org.apache.spark.memory.TaskMemoryManager;
 import org.apache.spark.memory.TestMemoryManager;
-import org.apache.spark.sql.types.StructType;
-import org.apache.spark.sql.types.DataTypes;
 import org.apache.spark.sql.catalyst.expressions.codegen.UnsafeRowWriter;
+import org.apache.spark.sql.types.DataTypes;
+import org.apache.spark.sql.types.StructType;
 import org.apache.spark.unsafe.types.UTF8String;
-import org.apache.spark.internal.config.package$;
 
-import java.util.Random;
 
 public class RowBasedKeyValueBatchSuite {
 

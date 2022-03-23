@@ -19,7 +19,6 @@ package org.apache.spark.sql.catalyst.expressions.xml;
 
 import java.io.IOException;
 import java.io.Reader;
-
 import javax.xml.namespace.QName;
 import javax.xml.parsers.DocumentBuilder;
 import javax.xml.parsers.DocumentBuilderFactory;

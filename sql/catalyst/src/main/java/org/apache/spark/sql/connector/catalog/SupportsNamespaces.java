@@ -17,12 +17,12 @@
 
 package org.apache.spark.sql.connector.catalog;
 
+import java.util.Map;
+
 import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.catalyst.analysis.NamespaceAlreadyExistsException;
 import org.apache.spark.sql.catalyst.analysis.NoSuchNamespaceException;
 import org.apache.spark.sql.catalyst.analysis.NonEmptyNamespaceException;
-
-import java.util.Map;
 
 /**
  * Catalog methods for working with namespaces.

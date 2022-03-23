@@ -17,9 +17,9 @@
 
 package org.apache.spark.sql.connector.read.streaming;
 
-import org.apache.spark.annotation.Evolving;
-
 import java.util.Arrays;
+
+import org.apache.spark.annotation.Evolving;
 
 /**
  /**

@@ -17,9 +17,9 @@
 
 package org.apache.spark.sql.connector.read.streaming;
 
-import org.apache.spark.annotation.Evolving;
-
 import java.util.Objects;
+
+import org.apache.spark.annotation.Evolving;
 
 /**
  * Represents a {@link ReadLimit} where the {@link MicroBatchStream} should scan approximately

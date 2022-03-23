@@ -17,11 +17,11 @@
 
 package org.apache.spark.sql.catalyst.expressions;
 
-import com.google.common.annotations.VisibleForTesting;
-
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.Set;
+
+import com.google.common.annotations.VisibleForTesting;
 
 /**
  * Expression information, will be used to describe a expression.

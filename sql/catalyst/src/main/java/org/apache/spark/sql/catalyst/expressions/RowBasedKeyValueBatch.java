@@ -19,15 +19,14 @@ package org.apache.spark.sql.catalyst.expressions;
 import java.io.Closeable;
 import java.io.IOException;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import org.apache.spark.memory.MemoryConsumer;
 import org.apache.spark.memory.SparkOutOfMemoryError;
 import org.apache.spark.memory.TaskMemoryManager;
 import org.apache.spark.sql.types.*;
 import org.apache.spark.unsafe.memory.MemoryBlock;
-
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 
 /**
  * RowBasedKeyValueBatch stores key value pairs in contiguous memory region.

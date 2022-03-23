@@ -17,9 +17,9 @@
 
 package org.apache.spark.sql.connector.catalog.functions;
 
-import org.apache.spark.annotation.Evolving;
-
 import java.io.Serializable;
+
+import org.apache.spark.annotation.Evolving;
 
 /**
  * Base class for user-defined functions.

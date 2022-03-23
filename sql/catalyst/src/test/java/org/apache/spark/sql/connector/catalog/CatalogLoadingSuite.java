@@ -17,13 +17,14 @@
 
 package org.apache.spark.sql.connector.catalog;
 
-import org.apache.spark.SparkException;
-import org.apache.spark.sql.internal.SQLConf;
-import org.apache.spark.sql.util.CaseInsensitiveStringMap;
+import java.util.concurrent.Callable;
+
 import org.junit.Assert;
 import org.junit.Test;
 
-import java.util.concurrent.Callable;
+import org.apache.spark.SparkException;
+import org.apache.spark.sql.internal.SQLConf;
+import org.apache.spark.sql.util.CaseInsensitiveStringMap;
 
 public class CatalogLoadingSuite {
   @Test

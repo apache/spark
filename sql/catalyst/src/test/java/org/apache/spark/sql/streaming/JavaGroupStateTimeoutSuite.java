@@ -17,10 +17,11 @@
 
 package org.apache.spark.sql.streaming;
 
+import org.junit.Test;
+
 import org.apache.spark.sql.catalyst.plans.logical.EventTimeTimeout$;
 import org.apache.spark.sql.catalyst.plans.logical.NoTimeout$;
 import org.apache.spark.sql.catalyst.plans.logical.ProcessingTimeTimeout$;
-import org.junit.Test;
 
 public class JavaGroupStateTimeoutSuite {
 

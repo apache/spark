@@ -17,10 +17,10 @@
 
 package org.apache.spark.sql.catalyst.expressions;
 
-import org.apache.spark.annotation.DeveloperApi;
-
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
+
+import org.apache.spark.annotation.DeveloperApi;
 
 /**
  * ::DeveloperApi::

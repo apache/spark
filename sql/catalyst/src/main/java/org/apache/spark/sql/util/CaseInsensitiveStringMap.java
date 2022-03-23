@@ -17,10 +17,6 @@
 
 package org.apache.spark.sql.util;
 
-import org.apache.spark.annotation.Experimental;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
@@ -28,6 +24,11 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import org.apache.spark.annotation.Experimental;
 
 /**
  * Case-insensitive map of string keys to string values.

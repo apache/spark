@@ -19,9 +19,9 @@ package org.apache.spark.sql.connector.expressions;
 
 import java.util.Arrays;
 
-import org.apache.spark.annotation.Evolving;
 import scala.collection.JavaConverters;
 
+import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.types.DataType;
 
 /**

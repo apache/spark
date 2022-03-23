@@ -17,10 +17,10 @@
 
 package org.apache.spark.sql.connector.metric;
 
-import org.apache.spark.annotation.Evolving;
-
-import java.util.Arrays;
 import java.text.DecimalFormat;
+import java.util.Arrays;
+
+import org.apache.spark.annotation.Evolving;
 
 /**
  * Built-in `CustomMetric` that computes average of metric values. Note that please extend this

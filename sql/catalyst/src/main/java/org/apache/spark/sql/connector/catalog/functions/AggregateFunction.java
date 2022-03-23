@@ -17,11 +17,11 @@
 
 package org.apache.spark.sql.connector.catalog.functions;
 
+import java.io.Serializable;
+
 import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.types.DataType;
-
-import java.io.Serializable;
 
 /**
  * Interface for a function that produces a result value by aggregating over multiple input rows.

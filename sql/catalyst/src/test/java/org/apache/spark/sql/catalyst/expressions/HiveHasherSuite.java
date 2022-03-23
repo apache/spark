@@ -17,15 +17,16 @@
 
 package org.apache.spark.sql.catalyst.expressions;
 
-import org.apache.spark.unsafe.Platform;
-import org.apache.spark.unsafe.types.UTF8String;
-import org.junit.Assert;
-import org.junit.Test;
-
 import java.nio.charset.StandardCharsets;
 import java.util.HashSet;
 import java.util.Random;
 import java.util.Set;
+
+import org.junit.Assert;
+import org.junit.Test;
+
+import org.apache.spark.unsafe.Platform;
+import org.apache.spark.unsafe.types.UTF8String;
 
 public class HiveHasherSuite {
 

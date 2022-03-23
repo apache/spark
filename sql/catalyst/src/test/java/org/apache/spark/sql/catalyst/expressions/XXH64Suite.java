@@ -22,9 +22,10 @@ import java.util.HashSet;
 import java.util.Random;
 import java.util.Set;
 
-import org.apache.spark.unsafe.Platform;
 import org.junit.Assert;
 import org.junit.Test;
+
+import org.apache.spark.unsafe.Platform;
 
 /**
  * Test the XXH64 function.

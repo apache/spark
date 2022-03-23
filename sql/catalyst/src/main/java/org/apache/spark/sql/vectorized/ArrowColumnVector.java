@@ -22,8 +22,8 @@ import org.apache.arrow.vector.complex.*;
 import org.apache.arrow.vector.holders.NullableVarCharHolder;
 
 import org.apache.spark.annotation.DeveloperApi;
-import org.apache.spark.sql.util.ArrowUtils;
 import org.apache.spark.sql.types.*;
+import org.apache.spark.sql.util.ArrowUtils;
 import org.apache.spark.unsafe.types.UTF8String;
 
 /**
