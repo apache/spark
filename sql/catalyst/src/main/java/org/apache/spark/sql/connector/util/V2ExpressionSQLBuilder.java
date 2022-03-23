@@ -22,9 +22,9 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 import org.apache.spark.sql.connector.expressions.Expression;
-import org.apache.spark.sql.connector.expressions.NamedReference;
 import org.apache.spark.sql.connector.expressions.GeneralScalarExpression;
 import org.apache.spark.sql.connector.expressions.Literal;
+import org.apache.spark.sql.connector.expressions.NamedReference;
 
 /**
  * The builder to generate SQL from V2 expressions.

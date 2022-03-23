@@ -17,9 +17,9 @@
 
 package org.apache.spark.sql.connector.read.streaming;
 
-import org.apache.spark.annotation.Evolving;
-
 import java.util.Map;
+
+import org.apache.spark.annotation.Evolving;
 
 /**
  * A mix-in interface for streaming sinks to signal that they can report
