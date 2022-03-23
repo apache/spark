@@ -24,7 +24,6 @@ import java.util.regex.Pattern;
 import scala.collection.JavaConverters;
 
 import org.apache.kafka.common.TopicPartition;
-
 import org.junit.Assert;
 import org.junit.Test;
 
