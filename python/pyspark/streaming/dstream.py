@@ -286,7 +286,7 @@ class DStream(Generic[T_co]):
         def flat_map_fn(kv: Any) -> Any:
             return ((kv[0], x) for x in f(kv[1]))
 
-        return self.flatMap(flat_map_fn, preservesPartitioning=True)  # type: ignore[arg-type]
+        return self.flatMap(flat_map_fn, preservesPartitioning=True)
 
     def glom(self) -> "DStream[List[T_co]]":
         """
@@ -458,7 +458,7 @@ class DStream(Generic[T_co]):
             self._sc,
             func,
             self._jrdd_deserializer,
-            other._jrdd_deserializer,  # type: ignore[attr-defined]
+            other._jrdd_deserializer,
         )
         dstream = self._sc._jvm.PythonTransformed2DStream(
             self._jdstream.dstream(), other._jdstream.dstream(), jfunc  # type: ignore[attr-defined]
@@ -865,17 +865,17 @@ class DStream(Generic[T_co]):
             self._sc,
             reduceFunc,
             self._sc.serializer,
-            self._jrdd_deserializer,  # type: ignore[attr-defined]
+            self._jrdd_deserializer,
         )
         if initialRDD:
-            initialRDD = initialRDD._reserialize(  # type: ignore[attr-defined]
+            initialRDD = initialRDD._reserialize(
                 self._jrdd_deserializer
             )
             assert initialRDD is not None
             dstream = self._sc._jvm.PythonStateDStream(
                 self._jdstream.dstream(),
                 jreduceFunc,
-                initialRDD._jrdd,  # type: ignore[attr-defined]
+                initialRDD._jrdd,
             )
         else:
             dstream = self._sc._jvm.PythonStateDStream(self._jdstream.dstream(), jreduceFunc)
