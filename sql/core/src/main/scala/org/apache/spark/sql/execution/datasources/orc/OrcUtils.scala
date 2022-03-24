@@ -278,7 +278,7 @@ object OrcUtils extends Logging {
   }
 
   /**
-   * Given two `StructType` object, this methods converts it to corresponding string representation
+   * Given a `StructType` object, this methods converts it to corresponding string representation
    * in ORC.
    */
   def getOrcSchemaString(dt: DataType): String = dt match {
