@@ -36,12 +36,12 @@ class ExecutionData private[spark] (
 class CompileData private[spark] (
    val id: Long,
    val appID: String,
-   val phaseInfo: Seq[Metric], // Time spent per Spark phase
+   val phaseTime: Seq[PhaseTime],
    val ruleInfo: Seq[Rule])
 
 case class Rule private[spark](
     ruleName: String,
-    value: String, // duration in ms
+    timeMs: Long,
     numInvocations: Long,
     numEffectiveInvocations: Long)
 
@@ -62,3 +62,5 @@ class SQLDiagnosticData private[spark] (
     val planChanges: Seq[AdaptivePlanChange])
 
 case class AdaptivePlanChange(updateTime: Date, physicalPlan: String)
+
+case class PhaseTime private[spark] (phase: String, timeMs: Long)

@@ -85,8 +85,8 @@ class SqlCompileResourceSuite
       s"Expected execution ID is valid, found ${compileStats.id}")
     assert(compileStats.ruleInfo.length == 50,
       s"Expected number of Spark rules is 50, found ${compileStats.ruleInfo.length}")
-    assert(compileStats.phaseInfo.length == 3,
-      s"Expected number of phase info is: 3 found ${compileStats.phaseInfo.length}")
+    assert(compileStats.phaseTime.length == 3,
+      s"Expected number of phase info is: 3 found ${compileStats.phaseTime.length}")
   }
 
   private def verifyAndGetCompileStatRestResult(url: URL): String = {

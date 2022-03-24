@@ -65,11 +65,11 @@ private[v1] class SqlCompilerResource extends BaseAppResource with Logging {
                                   compileStats: QueryPlanningTracker,
                                   appId: String): CompileData = {
 
-    val phases = compileStats.phases.map{ case (phaseStr, phaseSummary) => Metric(phaseStr,
-      Option(phaseSummary.durationMs.toString).getOrElse(""))}
+    val phases = compileStats.phases.map{ case (phaseStr, phaseSummary) => PhaseTime(phaseStr,
+      phaseSummary.durationMs)}
 
     val rules = compileStats.topRulesByTime(SQLConf.get.uiRulesShow).map{
-      case (strName, summary) => Rule(strName, (summary.totalTimeNs/1000000.0).toString,
+      case (strName, summary) => Rule(strName, (summary.totalTimeNs/1000000.0).toLong,
         summary.numInvocations, summary.numEffectiveInvocations)
     }
 
