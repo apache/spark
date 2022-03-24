@@ -171,7 +171,6 @@
        -->
 
     <scala-maven-plugin.version>4.5.6</scala-maven-plugin.version>
-    <scalafmt.parameters>--test</scalafmt.parameters>
     <!-- for now, not running scalafmt as part of default verify pipeline -->
     <scalafmt.skip>true</scalafmt.skip>
     <codehaus.jackson.version>1.9.13</codehaus.jackson.version>
@@ -3350,8 +3349,7 @@
         <artifactId>mvn-scalafmt_${scala.binary.version}</artifactId>
         <version>1.0.4</version>
         <configuration>
-          <parameters>${scalafmt.parameters}</parameters> <!-- (Optional) Additional command line arguments -->
-          <skip>${scalafmt.skip}</skip> <!-- (Optional) skip formatting -->
+          <validateOnly>${scalafmt.skip}</validateOnly> <!-- (Optional) skip formatting -->
           <skipSources>${scalafmt.skip}</skipSources>
           <skipTestSources>${scalafmt.skip}</skipTestSources>
           <configLocation>dev/.scalafmt.conf</configLocation> <!-- (Optional) config location -->
