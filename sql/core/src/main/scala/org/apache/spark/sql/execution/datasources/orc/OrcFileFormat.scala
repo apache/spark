@@ -160,9 +160,8 @@ class OrcFileFormat
         }
 
         val (requestedColIds, canPruneCols) = resultedColPruneInfo.get
-        val orcCatalystSchema = OrcUtils.toCatalystSchema(orcSchema)
         val resultSchemaString = OrcUtils.orcResultSchemaString(canPruneCols,
-          dataSchema, resultSchema, orcCatalystSchema, partitionSchema, conf)
+          dataSchema, resultSchema, partitionSchema, conf)
         assert(requestedColIds.length == requiredSchema.length,
           "[BUG] requested column IDs do not match required schema")
         val taskConf = new Configuration(conf)

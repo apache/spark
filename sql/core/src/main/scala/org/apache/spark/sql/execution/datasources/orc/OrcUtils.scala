@@ -279,40 +279,20 @@ object OrcUtils extends Logging {
 
   /**
    * Given two `StructType` object, this methods converts it to corresponding string representation
-   * in ORC. The second `StructType` used to change the `TimestampNTZType` as LongType in result
-   * schema string when reading `TimestampNTZ` as `TimestampLTZ`.
+   * in ORC.
    */
-  def getOrcSchemaString(
-      dt: DataType, orcDtOpt: Option[DataType] = None): String = (dt, orcDtOpt) match {
-    case (s1: StructType, Some(s2: StructType)) =>
-      val orcDataTypeMap = s2.groupBy(_.name)
-      val fieldTypes = s1.fields.map { f =>
-        if (orcDataTypeMap.contains(f.name)) {
-          val orcFields = orcDataTypeMap(f.name)
-          s"${quoteIdentifier(f.name)}:" +
-            s"${getOrcSchemaString(f.dataType, Some(orcFields(0).dataType))}"
-        } else {
-          s"${quoteIdentifier(f.name)}:${getOrcSchemaString(f.dataType)}"
-        }
-      }
-      s"struct<${fieldTypes.mkString(",")}>"
-    case (s: StructType, None) =>
+  def getOrcSchemaString(dt: DataType): String = dt match {
+    case s: StructType =>
       val fieldTypes = s.fields.map { f =>
         s"${quoteIdentifier(f.name)}:${getOrcSchemaString(f.dataType)}"
       }
       s"struct<${fieldTypes.mkString(",")}>"
-    case (a1: ArrayType, Some(a2: ArrayType)) =>
-      s"array<${getOrcSchemaString(a1.elementType, Some(a2.elementType))}>"
-    case (a: ArrayType, None) =>
+    case a: ArrayType =>
       s"array<${getOrcSchemaString(a.elementType)}>"
-    case (m1: MapType, Some(m2: MapType)) =>
-      s"map<${getOrcSchemaString(m1.keyType, Some(m2.keyType))}," +
-        s"${getOrcSchemaString(m1.valueType, Some(m2.valueType))}>"
-    case (m: MapType, None) =>
+    case m: MapType =>
       s"map<${getOrcSchemaString(m.keyType)},${getOrcSchemaString(m.valueType)}>"
-    case (_: DayTimeIntervalType | _: TimestampNTZType, _) => LongType.catalogString
-    case (_: YearMonthIntervalType, _) => IntegerType.catalogString
-    case (TimestampType, Some(TimestampNTZType)) => LongType.catalogString
+    case _: DayTimeIntervalType | _: TimestampNTZType => LongType.catalogString
+    case _: YearMonthIntervalType => IntegerType.catalogString
     case _ => dt.catalogString
   }
 
@@ -388,14 +368,12 @@ object OrcUtils extends Logging {
       canPruneCols: Boolean,
       dataSchema: StructType,
       resultSchema: StructType,
-      orcCatalystSchema: StructType,
       partitionSchema: StructType,
       conf: Configuration): String = {
     val resultSchemaString = if (canPruneCols) {
-      OrcUtils.getOrcSchemaString(resultSchema, Some(orcCatalystSchema))
+      OrcUtils.getOrcSchemaString(resultSchema)
     } else {
-      OrcUtils.getOrcSchemaString(
-        StructType(dataSchema.fields ++ partitionSchema.fields), Some(orcCatalystSchema))
+      OrcUtils.getOrcSchemaString(StructType(dataSchema.fields ++ partitionSchema.fields))
     }
     OrcConf.MAPRED_INPUT_SCHEMA.setString(conf, resultSchemaString)
     resultSchemaString
