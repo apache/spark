@@ -2224,6 +2224,10 @@ class Analyzer(override val catalogManager: CatalogManager)
           if (u.filter.isDefined && !u.filter.get.deterministic) {
             throw QueryCompilationErrors.nonDeterministicFilterInAggregateError
           }
+          if (u.filter.isDefined &&
+            u.filter.get.children.exists(_.isInstanceOf[AggregateExpression])) {
+            throw QueryCompilationErrors.aggregateInAggregateFilterError
+          }
           if (u.ignoreNulls) {
             val aggFunc = agg match {
               case first: First => first.copy(ignoreNulls = u.ignoreNulls)
