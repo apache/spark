@@ -253,20 +253,14 @@ class InjectRuntimeFilterSuite extends QueryTest with SQLTestUtils with SharedSp
   }
 
   def getNumBloomFilters(plan: LogicalPlan): Integer = {
-    val numBloomFilterAggs = plan.collect {
-      case Filter(condition, _) => condition.collect {
-        case subquery: org.apache.spark.sql.catalyst.expressions.ScalarSubquery
-        => subquery.plan.collect {
-          case Aggregate(_, aggregateExpressions, _) =>
-            aggregateExpressions.map {
-              case Alias(AggregateExpression(bfAgg : BloomFilterAggregate, _, _, _, _),
-              _) =>
-                assert(bfAgg.estimatedNumItemsExpression.isInstanceOf[Literal])
-                assert(bfAgg.numBitsExpression.isInstanceOf[Literal])
-                1
-            }.sum
+    val numBloomFilterAggs = plan.collectWithSubqueries {
+      case Aggregate(_, aggregateExpressions, _) =>
+        aggregateExpressions.map {
+          case Alias(AggregateExpression(bfAgg: BloomFilterAggregate, _, _, _, _), _) =>
+            assert(bfAgg.estimatedNumItemsExpression.isInstanceOf[Literal])
+            assert(bfAgg.numBitsExpression.isInstanceOf[Literal])
+            1
         }.sum
-      }.sum
     }.sum
     val numMightContains = plan.collect {
       case Filter(condition, _) => condition.collect {
