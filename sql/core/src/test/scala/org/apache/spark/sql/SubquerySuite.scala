@@ -2042,9 +2042,6 @@ class SubquerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
         assert(subqueryIds.size == 1, "Missing or unexpected SubqueryExec in the plan")
         assert(reusedSubqueryIds.size == 2,
           "Missing or unexpected reused ReusedSubqueryExec in the plan")
-
-        // But, even if subquery reuse is not enabled, all subqueries should be the same instance
-        assert((subqueryIds ++ reusedSubqueryIds).toSet.size == 1, "Subqueries are not merged")
       }
     }
   }
