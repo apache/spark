@@ -47,6 +47,7 @@ import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 class AnalysisSuite extends AnalysisTest with Matchers {
+
   import org.apache.spark.sql.catalyst.analysis.TestRelations._
 
   test("fail for unresolved plan") {
@@ -73,8 +74,8 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     val plan = (1 to 120)
       .map(_ => testRelation)
       .fold[LogicalPlan](testRelation) { (a, b) =>
-        a.select(UnresolvedStar(None)).select($"a").union(b.select(UnresolvedStar(None)))
-      }
+      a.select(UnresolvedStar(None)).select($"a").union(b.select(UnresolvedStar(None)))
+    }
 
     assertAnalysisSuccess(plan)
   }
@@ -277,6 +278,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     val prevPlan = getAnalyzer.execute(plan)
     plan = prevPlan.select(CreateArray(Seq(
       CreateStruct(Seq(att1, (att1 + 1).as("a_plus_1"))).as("col1"),
+
       /** alias should be eliminated by [[CleanupAliases]] */
       "col".attr.as("col2")
     )).as("arr"))
@@ -287,7 +289,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
         CreateNamedStruct(Seq(
           Literal(att1.name), att1,
           Literal("a_plus_1"), (att1 + 1))),
-          Symbol("col").struct(prevPlan.output(0).dataType.asInstanceOf[StructType]).notNull
+        Symbol("col").struct(prevPlan.output(0).dataType.asInstanceOf[StructType]).notNull
       )).as("arr")
     )
 
@@ -332,7 +334,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
   }
 
   test("SPARK-11725: correctly handle null inputs for ScalaUDF") {
-    def resolvedEncoder[T : TypeTag](): ExpressionEncoder[T] = {
+    def resolvedEncoder[T: TypeTag](): ExpressionEncoder[T] = {
       ExpressionEncoder[T]().resolveAndBind()
     }
 
@@ -448,8 +450,8 @@ class AnalysisSuite extends AnalysisTest with Matchers {
   }
 
   private def assertExpressionType(
-      expression: Expression,
-      expectedDataType: DataType): Unit = {
+    expression: Expression,
+    expectedDataType: DataType): Unit = {
     val afterAnalyze =
       Project(Seq(Alias(expression, "a")()), OneRowRelation()).analyze.expressions.head
     if (!afterAnalyze.dataType.equals(expectedDataType)) {
@@ -513,6 +515,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
       SubqueryAlias("t", UnresolvedTableValuedFunction("range", args.map(Literal(_)), outputNames))
         .select(star())
     }
+
     assertAnalysisSuccess(rangeWithAliases(3 :: Nil, "a" :: Nil))
     assertAnalysisSuccess(rangeWithAliases(1 :: 4 :: Nil, "b" :: Nil))
     assertAnalysisSuccess(rangeWithAliases(2 :: 6 :: 2 :: Nil, "c" :: Nil))
@@ -529,6 +532,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
         SubqueryAlias("t", UnresolvedRelation(TableIdentifier("TaBlE3")))
       ).select(star())
     }
+
     assertAnalysisSuccess(tableColumnsWithAliases("col1" :: "col2" :: "col3" :: "col4" :: Nil))
     assertAnalysisError(
       tableColumnsWithAliases("col1" :: Nil),
@@ -549,6 +553,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
           UnresolvedRelation(TableIdentifier("TaBlE3")))
       ).select(star())
     }
+
     assertAnalysisSuccess(tableColumnsWithAliases("col1" :: "col2" :: "col3" :: "col4" :: Nil))
     assertAnalysisError(
       tableColumnsWithAliases("col1" :: Nil),
@@ -571,6 +576,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
           src1.join(src2, Inner, Option(Symbol("s1.id") === Symbol("s2.id"))))
       ).select(star())
     }
+
     assertAnalysisSuccess(joinRelationWithAliases("col1" :: "col2" :: "col3" :: "col4" :: Nil))
     assertAnalysisError(
       joinRelationWithAliases("col1" :: Nil),
@@ -583,8 +589,9 @@ class AnalysisSuite extends AnalysisTest with Matchers {
   }
 
   test("SPARK-22614 RepartitionByExpression partitioning") {
-    def checkPartitioning[T <: Partitioning: ClassTag](
-        numPartitions: Int, exprs: Expression*): Unit = {
+    def checkPartitioning[T <: Partitioning : ClassTag](
+        numPartitions: Int,
+        exprs: Expression*): Unit = {
       val partitioning = RepartitionByExpression(exprs, testRelation2, numPartitions).partitioning
       val clazz = implicitly[ClassTag[T]].runtimeClass
       assert(clazz.isInstance(partitioning))
@@ -760,7 +767,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     // Distinct aggregate
     checkAnalysisError(
       Sum(a).toAggregateExpression(isDistinct = true).as("sum") :: Nil,
-    "distinct aggregates are not allowed in observed metrics, but found")
+      "distinct aggregates are not allowed in observed metrics, but found")
 
     // Nested aggregate
     checkAnalysisError(
@@ -785,12 +792,12 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     // Same result - duplicate names are allowed
     assertAnalysisSuccess(Union(
       CollectMetrics("evt1", count :: Nil, testRelation) ::
-      CollectMetrics("evt1", count :: Nil, testRelation) :: Nil))
+        CollectMetrics("evt1", count :: Nil, testRelation) :: Nil))
 
     // Same children, structurally different metrics - fail
     assertAnalysisError(Union(
       CollectMetrics("evt1", count :: Nil, testRelation) ::
-      CollectMetrics("evt1", sum :: Nil, testRelation) :: Nil),
+        CollectMetrics("evt1", sum :: Nil, testRelation) :: Nil),
       "Multiple definitions of observed metrics" :: "evt1" :: Nil)
 
     // Different children, same metrics - fail
@@ -798,7 +805,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     val tblB = LocalRelation(b)
     assertAnalysisError(Union(
       CollectMetrics("evt1", count :: Nil, testRelation) ::
-      CollectMetrics("evt1", count :: Nil, tblB) :: Nil),
+        CollectMetrics("evt1", count :: Nil, tblB) :: Nil),
       "Multiple definitions of observed metrics" :: "evt1" :: Nil)
 
     // Subquery different tree - fail
@@ -843,6 +850,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
   test("SPARK-30886 Deprecate two-parameter TRIM/LTRIM/RTRIM") {
     Seq("trim", "ltrim", "rtrim").foreach { f =>
       val logAppender = new LogAppender("deprecated two-parameter TRIM/LTRIM/RTRIM functions")
+
       def check(count: Int): Unit = {
         val message = "Two-parameter TRIM/LTRIM/RTRIM function signatures are deprecated."
         assert(logAppender.loggingEvents.size == count)
@@ -859,7 +867,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
           UnresolvedFunction(f, $"a" :: Nil, isDistinct = false))
         testAnalyzer1.execute(plan1)
         // One-parameter is not deprecated.
-        assert(logAppender.loggingEvents.isEmpty)
+        check(0)
 
         val plan2 = testRelation2.select(
           UnresolvedFunction(f, $"a" :: $"b" :: Nil, isDistinct = false))
@@ -892,7 +900,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
   }
 
   test("SPARK-32131: Fix wrong column index when we have more than two columns" +
-    " during union and set operations" ) {
+    " during union and set operations") {
     val firstTable = LocalRelation(
       AttributeReference("a", StringType)(),
       AttributeReference("b", DoubleType)(),
@@ -1011,7 +1019,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
         } catch {
           case ex: AnalysisException
             if ex.getMessage.contains(SQLConf.ANALYZER_MAX_ITERATIONS.key) =>
-              fail("analyzer.execute should not reach max iterations.")
+            fail("analyzer.execute should not reach max iterations.")
         }
       }
 

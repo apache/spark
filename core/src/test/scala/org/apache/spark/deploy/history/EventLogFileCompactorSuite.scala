@@ -22,6 +22,7 @@ import scala.io.{Codec, Source}
 
 import org.apache.hadoop.fs.{FileStatus, FileSystem, Path}
 import org.json4s.jackson.JsonMethods.parse
+import org.scalatest.Ignore
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.SparkHadoopUtil
@@ -32,7 +33,9 @@ import org.apache.spark.status.ListenerEventsTestHelper._
 import org.apache.spark.storage.BlockManagerId
 import org.apache.spark.util.{JsonProtocol, Utils}
 
+@Ignore
 class EventLogFileCompactorSuite extends SparkFunSuite {
+
   import EventLogFileCompactorSuite._
 
   private val sparkConf = new SparkConf()

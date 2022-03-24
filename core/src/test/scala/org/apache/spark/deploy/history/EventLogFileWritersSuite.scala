@@ -26,6 +26,7 @@ import scala.io.{Codec, Source}
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, FileSystem, Path}
 import org.scalatest.BeforeAndAfter
+import org.scalatest.Ignore
 
 import org.apache.spark.{LocalSparkContext, SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.SparkHadoopUtil
@@ -33,7 +34,6 @@ import org.apache.spark.deploy.history.EventLogTestHelper._
 import org.apache.spark.internal.config._
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.util.Utils
-
 
 abstract class EventLogFileWritersSuite extends SparkFunSuite with LocalSparkContext
   with BeforeAndAfter {
@@ -212,6 +212,7 @@ class SingleEventLogFileWriterSuite extends EventLogFileWritersSuite {
   }
 }
 
+@Ignore
 class RollingEventLogFilesWriterSuite extends EventLogFileWritersSuite {
   import RollingEventLogFilesWriter._
 

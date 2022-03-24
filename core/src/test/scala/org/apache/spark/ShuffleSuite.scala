@@ -481,6 +481,7 @@ abstract class ShuffleSuite extends SparkFunSuite with Matchers with LocalRootDi
       rdd.count()
     }
     assert(e.getMessage.contains("corrupted due to DISK_ISSUE"))
+    sc.stop()
   }
 }
 

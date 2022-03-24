@@ -119,5 +119,5 @@ Results [4]: [d_year#2, i_brand_id#9 AS brand_id#17, i_brand#10 AS brand#18, Mak
 
 (21) TakeOrderedAndProject
 Input [4]: [d_year#2, brand_id#17, brand#18, sum_agg#19]
-Arguments: 100, [d_year#2 ASC NULLS FIRST, sum_agg#19 DESC NULLS LAST, brand_id#17 ASC NULLS FIRST], [d_year#2, brand_id#17, brand#18, sum_agg#19]
+Arguments: 100, 0, [d_year#2 ASC NULLS FIRST, sum_agg#19 DESC NULLS LAST, brand_id#17 ASC NULLS FIRST], [d_year#2, brand_id#17, brand#18, sum_agg#19]
 
