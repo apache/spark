@@ -24,7 +24,8 @@ import org.apache.spark.sql.connector.expressions.SortOrder;
  * A mix in interface for {@link Scan}. Data sources can implement this interface to
  * report ordering to Spark.
  * <p>
- * Spark uses ordering information to exploit existing order to avoid sorting required by subsequent operations.
+ * Spark uses ordering information to exploit existing order to avoid sorting required by
+ * subsequent operations.
  *
  * @since 3.4.0
  */
