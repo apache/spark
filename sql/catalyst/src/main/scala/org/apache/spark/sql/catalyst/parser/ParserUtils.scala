@@ -114,7 +114,12 @@ object ParserUtils {
     Origin(opt.map(_.getLine), opt.map(_.getCharPositionInLine))
   }
 
-  def positionAndText(startToken: Token, stopToken: Token, sqlText: String): Origin = {
+  def positionAndText(
+      startToken: Token,
+      stopToken: Token,
+      sqlText: String,
+      objectType: Option[String],
+      objectName: Option[String]): Origin = {
     val startOpt = Option(startToken)
     val stopOpt = Option(stopToken)
     Origin(
@@ -122,7 +127,9 @@ object ParserUtils {
       startPosition = startOpt.map(_.getCharPositionInLine),
       startIndex = startOpt.map(_.getStartIndex),
       stopIndex = stopOpt.map(_.getStopIndex),
-      sqlText = Some(sqlText))
+      sqlText = Some(sqlText),
+      objectType = objectType,
+      objectName = objectName)
   }
 
   /** Validate the condition. If it doesn't throw a parse exception. */
@@ -143,7 +150,8 @@ object ParserUtils {
     if (text.isEmpty) {
       CurrentOrigin.set(position(ctx.getStart))
     } else {
-      CurrentOrigin.set(positionAndText(ctx.getStart, ctx.getStop, text.get))
+      CurrentOrigin.set(positionAndText(ctx.getStart, ctx.getStop, text.get,
+        current.objectType, current.objectName))
     }
     try {
       f

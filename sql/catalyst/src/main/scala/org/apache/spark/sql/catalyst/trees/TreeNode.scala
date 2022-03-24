@@ -57,7 +57,9 @@ case class Origin(
   startPosition: Option[Int] = None,
   startIndex: Option[Int] = None,
   stopIndex: Option[Int] = None,
-  sqlText: Option[String] = None)
+  sqlText: Option[String] = None,
+  objectType: Option[String] = None,
+  objectName: Option[String] = None)
 
 /**
  * Provides a location for TreeNodes to ask about the context of their origin.  For example, which
