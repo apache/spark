@@ -341,6 +341,77 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val RUNTIME_FILTER_SEMI_JOIN_REDUCTION_ENABLED =
+    buildConf("spark.sql.optimizer.runtimeFilter.semiJoinReduction.enabled")
+      .doc("When true and if one side of a shuffle join has a selective predicate, we attempt " +
+        "to insert a semi join in the other side to reduce the amount of shuffle data.")
+      .version("3.3.0")
+      .booleanConf
+      .createWithDefault(false)
+
+  val RUNTIME_FILTER_NUMBER_THRESHOLD =
+    buildConf("spark.sql.optimizer.runtimeFilter.number.threshold")
+      .doc("The total number of injected runtime filters (non-DPP) for a single " +
+        "query. This is to prevent driver OOMs with too many Bloom filters.")
+      .version("3.3.0")
+      .intConf
+      .checkValue(threshold => threshold >= 0, "The threshold should be >= 0")
+      .createWithDefault(10)
+
+  val RUNTIME_BLOOM_FILTER_ENABLED =
+    buildConf("spark.sql.optimizer.runtime.bloomFilter.enabled")
+      .doc("When true and if one side of a shuffle join has a selective predicate, we attempt " +
+        "to insert a bloom filter in the other side to reduce the amount of shuffle data.")
+      .version("3.3.0")
+      .booleanConf
+      .createWithDefault(false)
+
+  val RUNTIME_BLOOM_FILTER_CREATION_SIDE_THRESHOLD =
+    buildConf("spark.sql.optimizer.runtime.bloomFilter.creationSideThreshold")
+      .doc("Size threshold of the bloom filter creation side plan. Estimated size needs to be " +
+        "under this value to try to inject bloom filter.")
+      .version("3.3.0")
+      .bytesConf(ByteUnit.BYTE)
+      .createWithDefaultString("10MB")
+
+  val RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD =
+    buildConf("spark.sql.optimizer.runtime.bloomFilter.applicationSideScanSizethreshold")
+      .doc("Byte size threshold of the Bloom filter application side plan's aggregated scan " +
+        "size. Aggregated scan byte size of the Bloom filter application side needs to be over " +
+        "this value to inject a bloom filter.")
+      .version("3.3.0")
+      .bytesConf(ByteUnit.BYTE)
+      .createWithDefaultString("10GB")
+
+  val RUNTIME_BLOOM_FILTER_EXPECTED_NUM_ITEMS =
+    buildConf("spark.sql.optimizer.runtime.bloomFilter.expectedNumItems")
+      .doc("The default number of expected items for the runtime bloomfilter")
+      .version("3.3.0")
+      .longConf
+      .createWithDefault(1000000L)
+
+  val RUNTIME_BLOOM_FILTER_MAX_NUM_ITEMS =
+    buildConf("spark.sql.optimizer.runtime.bloomFilter.maxNumItems")
+      .doc("The max allowed number of expected items for the runtime bloom filter")
+      .version("3.3.0")
+      .longConf
+      .createWithDefault(4000000L)
+
+
+  val RUNTIME_BLOOM_FILTER_NUM_BITS =
+    buildConf("spark.sql.optimizer.runtime.bloomFilter.numBits")
+      .doc("The default number of bits to use for the runtime bloom filter")
+      .version("3.3.0")
+      .longConf
+      .createWithDefault(8388608L)
+
+  val RUNTIME_BLOOM_FILTER_MAX_NUM_BITS =
+    buildConf("spark.sql.optimizer.runtime.bloomFilter.maxNumBits")
+      .doc("The max number of bits to use for the runtime bloom filter")
+      .version("3.3.0")
+      .longConf
+      .createWithDefault(67108864L)
+
   val COMPRESS_CACHED = buildConf("spark.sql.inMemoryColumnarStorage.compressed")
     .doc("When set to true Spark SQL will automatically select a compression codec for each " +
       "column based on statistics of the data.")
@@ -3749,6 +3820,15 @@ class SQLConf extends Serializable with Logging {
 
   def dynamicPartitionPruningReuseBroadcastOnly: Boolean =
     getConf(DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY)
+
+  def runtimeFilterSemiJoinReductionEnabled: Boolean =
+    getConf(RUNTIME_FILTER_SEMI_JOIN_REDUCTION_ENABLED)
+
+  def runtimeFilterBloomFilterEnabled: Boolean =
+    getConf(RUNTIME_BLOOM_FILTER_ENABLED)
+
+  def runtimeFilterCreationSideThreshold: Long =
+    getConf(RUNTIME_BLOOM_FILTER_CREATION_SIDE_THRESHOLD)
 
   def stateStoreProviderClass: String = getConf(STATE_STORE_PROVIDER_CLASS)
 

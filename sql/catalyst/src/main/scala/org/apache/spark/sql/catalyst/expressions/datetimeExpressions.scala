@@ -2080,8 +2080,10 @@ case class ParseToTimestamp(
   override def inputTypes: Seq[AbstractDataType] = {
     // Note: ideally this function should only take string input, but we allow more types here to
     // be backward compatible.
-    TypeCollection(StringType, DateType, TimestampType, TimestampNTZType) +:
-      format.map(_ => StringType).toSeq
+    val types = Seq(StringType, DateType, TimestampType, TimestampNTZType)
+    TypeCollection(
+      (if (dataType.isInstanceOf[TimestampType]) types :+ NumericType else types): _*
+    ) +: format.map(_ => StringType).toSeq
   }
 
   override protected def withNewChildrenInternal(
@@ -3119,6 +3121,11 @@ case class TimestampAdd(
 
   override def prettyName: String = "timestampadd"
 
+  override def sql: String = {
+    val childrenSQL = (unit +: children.map(_.sql)).mkString(", ")
+    s"$prettyName($childrenSQL)"
+  }
+
   override protected def withNewChildrenInternal(
       newLeft: Expression,
       newRight: Expression): TimestampAdd = {
@@ -3200,6 +3207,11 @@ case class TimestampDiff(
   }
 
   override def prettyName: String = "timestampdiff"
+
+  override def sql: String = {
+    val childrenSQL = (unit +: children.map(_.sql)).mkString(", ")
+    s"$prettyName($childrenSQL)"
+  }
 
   override protected def withNewChildrenInternal(
       newLeft: Expression,

@@ -161,7 +161,8 @@ object QueryParsingErrors {
   }
 
   def functionNameUnsupportedError(functionName: String, ctx: ParserRuleContext): Throwable = {
-    new ParseException(s"Unsupported function name '$functionName'", ctx)
+    new ParseException("INVALID_SQL_SYNTAX",
+      Array(s"Unsupported function name '$functionName'"), ctx)
   }
 
   def cannotParseValueTypeError(
@@ -293,12 +294,13 @@ object QueryParsingErrors {
   }
 
   def showFunctionsUnsupportedError(identifier: String, ctx: IdentifierContext): Throwable = {
-    new ParseException(s"SHOW $identifier FUNCTIONS not supported", ctx)
+    new ParseException("INVALID_SQL_SYNTAX",
+      Array(s"SHOW $identifier FUNCTIONS not supported"), ctx)
   }
 
   def showFunctionsInvalidPatternError(pattern: String, ctx: ParserRuleContext): Throwable = {
-    new ParseException(s"Invalid pattern in SHOW FUNCTIONS: $pattern. It must be " +
-      "a string literal.", ctx)
+    new ParseException("INVALID_SQL_SYNTAX",
+      Array(s"Invalid pattern in SHOW FUNCTIONS: $pattern. It must be a string literal."), ctx)
   }
 
   def duplicateCteDefinitionNamesError(duplicateNames: String, ctx: CtesContext): Throwable = {
@@ -403,22 +405,27 @@ object QueryParsingErrors {
   }
 
   def createFuncWithBothIfNotExistsAndReplaceError(ctx: CreateFunctionContext): Throwable = {
-    new ParseException("CREATE FUNCTION with both IF NOT EXISTS and REPLACE is not allowed.", ctx)
+    new ParseException("INVALID_SQL_SYNTAX",
+      Array("CREATE FUNCTION with both IF NOT EXISTS and REPLACE is not allowed."), ctx)
   }
 
   def defineTempFuncWithIfNotExistsError(ctx: CreateFunctionContext): Throwable = {
-    new ParseException("It is not allowed to define a TEMPORARY function with IF NOT EXISTS.", ctx)
+    new ParseException("INVALID_SQL_SYNTAX",
+      Array("It is not allowed to define a TEMPORARY function with IF NOT EXISTS."), ctx)
   }
 
   def unsupportedFunctionNameError(quoted: String, ctx: CreateFunctionContext): Throwable = {
-    new ParseException(s"Unsupported function name '$quoted'", ctx)
+    new ParseException("INVALID_SQL_SYNTAX",
+      Array(s"Unsupported function name '$quoted'"), ctx)
   }
 
   def specifyingDBInCreateTempFuncError(
       databaseName: String,
       ctx: CreateFunctionContext): Throwable = {
     new ParseException(
-      s"Specifying a database in CREATE TEMPORARY FUNCTION is not allowed: '$databaseName'", ctx)
+      "INVALID_SQL_SYNTAX",
+      Array(s"Specifying a database in CREATE TEMPORARY FUNCTION is not allowed: '$databaseName'"),
+      ctx)
   }
 
   def unclosedBracketedCommentError(command: String, position: Origin): Throwable = {
@@ -430,8 +437,8 @@ object QueryParsingErrors {
   }
 
   def invalidNameForDropTempFunc(name: Seq[String], ctx: ParserRuleContext): Throwable = {
-    new ParseException(
-      s"DROP TEMPORARY FUNCTION requires a single part name but got: ${name.quoted}", ctx)
+    new ParseException("INVALID_SQL_SYNTAX",
+      Array(s"DROP TEMPORARY FUNCTION requires a single part name but got: ${name.quoted}"), ctx)
   }
 
   def defaultColumnNotImplementedYetError(ctx: ParserRuleContext): Throwable = {

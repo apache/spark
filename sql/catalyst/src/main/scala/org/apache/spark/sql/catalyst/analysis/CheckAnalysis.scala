@@ -782,10 +782,11 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
 
       case inSubqueryOrExistsSubquery =>
         plan match {
-          case _: Filter | _: SupportsSubquery | _: Join => // Ok
+          case _: Filter | _: SupportsSubquery | _: Join |
+            _: Project | _: Aggregate | _: Window => // Ok
           case _ =>
             failAnalysis(s"IN/EXISTS predicate sub-queries can only be used in" +
-                s" Filter/Join and a few commands: $plan")
+              s" Filter/Join/Project/Aggregate/Window and a few commands: $plan")
         }
         // Validate to make sure the correlations appearing in the query are valid and
         // allowed by spark.

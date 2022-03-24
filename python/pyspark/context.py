@@ -1365,7 +1365,7 @@ class SparkContext:
         to HDFS-1208, where HDFS may respond to Thread.interrupt() by marking nodes as dead.
 
         If you run jobs in parallel, use :class:`pyspark.InheritableThread` for thread
-        local inheritance, and preventing resource leak.
+        local inheritance.
 
         Examples
         --------
@@ -1405,7 +1405,7 @@ class SparkContext:
         Notes
         -----
         If you run jobs in parallel, use :class:`pyspark.InheritableThread` for thread
-        local inheritance, and preventing resource leak.
+        local inheritance.
         """
         self._jsc.setLocalProperty(key, value)
 
@@ -1423,7 +1423,7 @@ class SparkContext:
         Notes
         -----
         If you run jobs in parallel, use :class:`pyspark.InheritableThread` for thread
-        local inheritance, and preventing resource leak.
+        local inheritance.
         """
         self._jsc.setJobDescription(value)
 

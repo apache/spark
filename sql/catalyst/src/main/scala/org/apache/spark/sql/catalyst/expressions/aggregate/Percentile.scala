@@ -268,12 +268,13 @@ case class Percentile(
     }
   }
 
+  private lazy val projection = UnsafeProjection.create(Array[DataType](child.dataType, LongType))
+
   override def serialize(obj: OpenHashMap[AnyRef, Long]): Array[Byte] = {
     val buffer = new Array[Byte](4 << 10)  // 4K
     val bos = new ByteArrayOutputStream()
     val out = new DataOutputStream(bos)
     try {
-      val projection = UnsafeProjection.create(Array[DataType](child.dataType, LongType))
       // Write pairs in counts map to byte buffer.
       obj.foreach { case (key, count) =>
         val row = InternalRow.apply(key, count)

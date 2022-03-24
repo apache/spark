@@ -365,9 +365,9 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
     val tableAlias = getTableAliasWithoutColumnAlias(ctx.tableAlias(), "DELETE")
     val aliasedTable = tableAlias.map(SubqueryAlias(_, table)).getOrElse(table)
     val predicate = if (ctx.whereClause() != null) {
-      Some(expression(ctx.whereClause().booleanExpression()))
+      expression(ctx.whereClause().booleanExpression())
     } else {
-      None
+      Literal.TrueLiteral
     }
     DeleteFromTable(aliasedTable, predicate)
   }
