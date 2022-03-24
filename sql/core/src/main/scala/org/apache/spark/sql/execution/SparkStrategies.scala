@@ -692,15 +692,18 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         val projectList = r.output.zip(ctePlan.output).map { case (tgtAttr, srcAttr) =>
           Alias(srcAttr, tgtAttr.name)(exprId = tgtAttr.exprId)
         }
-        val newPlan = Project(projectList, ctePlan)
-        // Plan CTE ref as a repartition shuffle so that all refs of the same CTE def will share
-        // an Exchange reuse at runtime.
-        // TODO create a new identity partitioning instead of using RoundRobinPartitioning.
-        exchange.ShuffleExchangeExec(
-          RoundRobinPartitioning(conf.numShufflePartitions),
-          planLater(newPlan),
-          REPARTITION_BY_COL) :: Nil
-
+        val newPlan = planLater(Project(projectList, ctePlan))
+        (if (r.subquery) {
+          newPlan
+        } else {
+          // Plan CTE ref as a repartition shuffle so that all refs of the same CTE def will share
+          // an Exchange reuse at runtime.
+          // TODO create a new identity partitioning instead of using RoundRobinPartitioning.
+          exchange.ShuffleExchangeExec(
+            RoundRobinPartitioning(conf.numShufflePartitions),
+            newPlan,
+            REPARTITION_BY_COL)
+        }) :: Nil
       case _ => Nil
     }
   }

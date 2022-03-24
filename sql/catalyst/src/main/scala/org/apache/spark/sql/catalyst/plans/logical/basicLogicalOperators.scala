@@ -687,7 +687,8 @@ case class CTERelationRef(
     cteId: Long,
     _resolved: Boolean,
     override val output: Seq[Attribute],
-    statsOpt: Option[Statistics] = None) extends LeafNode with MultiInstanceRelation {
+    statsOpt: Option[Statistics] = None,
+    subquery: Boolean = false) extends LeafNode with MultiInstanceRelation {
 
   final override val nodePatterns: Seq[TreePattern] = Seq(CTE)
 

@@ -38,8 +38,9 @@ class MergeScalarSubqueriesSuite extends PlanTest {
   val testRelation = LocalRelation('a.int, 'b.int, 'c.string)
 
   private def extractorExpression(cteIndex: Int, output: Seq[Attribute], fieldIndex: Int) = {
-    GetStructField(ScalarSubquery(CTERelationRef(cteIndex, true, output)), fieldIndex)
-      .as("scalarsubquery()")
+    GetStructField(
+      ScalarSubquery(CTERelationRef(cteIndex, _resolved = true, output, subquery = true)),
+      fieldIndex).as("scalarsubquery()")
   }
 
   test("Merging subqueries with projects") {
