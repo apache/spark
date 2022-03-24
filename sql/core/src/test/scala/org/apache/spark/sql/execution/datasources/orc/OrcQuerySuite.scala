@@ -21,7 +21,6 @@ import java.io.File
 import java.nio.charset.StandardCharsets
 import java.sql.Timestamp
 import java.time.LocalDateTime
-import java.util.TimeZone
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
@@ -36,6 +35,7 @@ import org.apache.orc.mapreduce.OrcInputFormat
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.util.DateTimeTestUtils
 import org.apache.spark.sql.execution.FileSourceScanExec
 import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation, RecordReaderIterator}
 import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
@@ -806,10 +806,7 @@ abstract class OrcQuerySuite extends OrcQueryTest with SharedSparkSession {
   }
 
   test("SPARK-37463: read/write Timestamp ntz to Orc with different time zone") {
-    val localTimeZone = TimeZone.getDefault
-    try {
-      TimeZone.setDefault(TimeZone.getTimeZone("America/Los_Angeles"))
-
+    DateTimeTestUtils.withDefaultTimeZone(DateTimeTestUtils.LA) {
       val sqlText = """
                       |select
                       | timestamp_ntz '2021-06-01 00:00:00' ts_ntz1,
@@ -823,14 +820,13 @@ abstract class OrcQuerySuite extends OrcQueryTest with SharedSparkSession {
 
       val query = "select * from `orc`.`ts_ntz_orc`"
 
-      Seq("America/Los_Angeles", "UTC", "Europe/Amsterdam").foreach { tz =>
-        TimeZone.setDefault(TimeZone.getTimeZone(tz))
-        withAllNativeOrcReaders {
-          checkAnswer(sql(query), df)
+      DateTimeTestUtils.outstandingZoneIds.foreach { zoneId =>
+        DateTimeTestUtils.withDefaultTimeZone(zoneId) {
+          withAllNativeOrcReaders {
+            checkAnswer(sql(query), df)
+          }
         }
       }
-    } finally {
-      TimeZone.setDefault(localTimeZone)
     }
   }
 }

@@ -96,8 +96,7 @@ case class OrcPartitionReaderFactory(
       new EmptyPartitionReader[InternalRow]
     } else {
       val (requestedColIds, canPruneCols) = resultedColPruneInfo.get
-      OrcUtils.orcResultSchemaString(canPruneCols,
-        dataSchema, resultSchema, partitionSchema, conf)
+      OrcUtils.orcResultSchemaString(canPruneCols, dataSchema, resultSchema, partitionSchema, conf)
       assert(requestedColIds.length == readDataSchema.length,
         "[BUG] requested column IDs do not match required schema")
 
