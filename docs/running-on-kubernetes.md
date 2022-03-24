@@ -1717,9 +1717,9 @@ spec:
 
 Spark allows users to specify a custom Kubernetes schedulers.
 
-1. Specify scheduler name.
+1. Specify a scheduler name.
 
-   Users can specify a custom scheduler using <code>spark.kubernetes.scheduler.name</code> or
+   Users can specify custom scheduler using <code>spark.kubernetes.scheduler.name</code> or
    <code>spark.kubernetes.{driver/executor}.scheduler.name</code> configuration.
 
 2. Specify scheduler related configurations.
