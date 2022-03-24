@@ -19,14 +19,14 @@ package org.apache.spark.sql.connector.expressions
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Literal => ExprLiteral}
+import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, Literal => ExprLiteral}
 import org.apache.spark.sql.catalyst.parser.{ParseException, ParserInterface}
-import org.apache.spark.sql.types.{StructField, StructType}
+import org.apache.spark.sql.types.StructType
 
 /**
- * This is a wrapper over iterators of data rows returned by Spark data sources. Its job is to
- * assign DEFAULT column values to the right places when this metadata is present in the schema and
- * the corresponding values are not present in the underlying data source.
+ * This represents a wrapper over iterators of data rows returned by Spark data sources. Its job is
+ * to assign DEFAULT column values to the right places when this metadata is present in the schema
+ * and the corresponding values are not present in the underlying data source.
  *
  * Background: CREATE TABLE, REPLACE TABLE, or ALTER TABLE ADD COLUMN commands may assign DEFAULT
  * values for columns of interest. The intent is for this "existence default" value to be used by
@@ -46,63 +46,107 @@ import org.apache.spark.sql.types.{StructField, StructType}
  * assign this default value for any rows of `c2` where the underlying data source is missing data.
  * Otherwise, in the absence of an explicit DEFAULT value, the data source returns NULL instead.
  *
- * @param dataIterator the primary iterator yielding rows of data from the original data source.
- * @param existenceIterator a secondary iterator whose rows map 1:1 with the [[dataIterator]].
- *                          Each row returned by this iterator should have a number of boolean
- *                          columns equal to the number of columns in the [[dataIterator]] with
- *                          corresponding explicit DEFAULT values, matching from left-to-right.
- *                          For example, if the [[dataIterator]] returns three columns (A, B, C)
- *                          with explicit default values for A and C, this iterator should return
- *                          two boolean columns mapping to A and C, respectively.
+ * @param rowIterator the primary iterator yielding rows of data from the original data source.
  * @param dataSchema the schema containing column metadata for the data source being scanned.
  * @param parser a parser suitable for parsing literal values from their string representation in
- *               the column metadata in [[dataSchema]].
+ *               the column metadata in [[schema]].
  * @param dataSourceType a string representing the type of data source we are currently scanning,
  *                       useful for error messages.
  */
-case class AssignDefaultValuesIterator(
-    dataIterator: Iterator[InternalRow],
-    existenceIterator: Iterator[InternalRow],
-    dataSchema: StructType,
+abstract class AssignDefaultValuesIterator(
+    rowIterator: Iterator[InternalRow],
+    schema: StructType,
     parser: ParserInterface,
     dataSourceType: String) extends Iterator[InternalRow] {
   // If the wrapped iterators each have another row, so does this one; all three map 1:1:1.
-  override def hasNext: Boolean = dataIterator.hasNext
-
-  // Gets the next row from the wrapped iterators and then substitutes in relevant values.
-  override def next: InternalRow = {
-    val dataRow: InternalRow = dataIterator.next
-    val existenceRow: InternalRow = existenceIterator.next
-    val numDefaultValues = defaultValues.size
-    for (i <- 0 until numDefaultValues) {
-      val ColumnIndexAndValue(index, value) = defaultValues(i)
-      val exists: Boolean = existenceRow.getBoolean(i)
-      if (!exists) {
-        dataRow.update(index, value)
-      }
-    }
-    dataRow
-  }
+  override def hasNext: Boolean = rowIterator.hasNext
 
   // Parses each DEFAULT value out of the column metadata provided to this class into a literal
   // value.
-  case class ColumnIndexAndValue(index: Int, value: Any) {}
-  lazy val defaultValues: Seq[ColumnIndexAndValue] = {
-    val EXISTS_DEFAULT = "EXISTS_DEFAULT"
-    for {
-      index <- 0 until dataSchema.fields.size
-      field: StructField = dataSchema.fields(index)
-      if field.metadata.contains(EXISTS_DEFAULT)
-      colText = field.metadata.getString(EXISTS_DEFAULT)
-    } yield try {
-      val expression = parser.parseExpression(colText)
-      expression match { case ExprLiteral(value, _) => ColumnIndexAndValue(index, value) }
-    } catch {
-      case _: ParseException | _: MatchError =>
-        throw new AnalysisException(
-          s"Failed to query $dataSourceType because the destination table column " +
-            s"${field.name} has a DEFAULT value of $colText which fails to parse as a valid " +
-            "literal value")
+  val EXISTS_DEFAULT = "EXISTS_DEFAULT"
+  lazy val defaultValues: Array[Any] = {
+    schema.fields.map { field =>
+      if (field.metadata.contains(EXISTS_DEFAULT)) {
+        val colText = field.metadata.getString(EXISTS_DEFAULT)
+        try {
+          val expression = parser.parseExpression(colText)
+          expression match {
+            case ExprLiteral(value, _) => value
+          }
+        } catch {
+          case _: ParseException | _: MatchError =>
+            throw new AnalysisException(
+              s"Failed to query $dataSourceType because the destination table column " +
+                s"${field.name} has a DEFAULT value of $colText which fails to parse as a valid " +
+                "literal value")
+        }
+      } else {
+        null
+      }
     }
+  }
+}
+
+/**
+ * This iterator interprets each NULL value in each data row as representing a missing value from
+ * the original input data source. This is useful for data sources that only return NULL values in
+ * these cases, such as CSV file scans.
+ */
+case class NullsAsDefaultsIterator(
+    rowIterator: Iterator[InternalRow],
+    schema: StructType,
+    parser: ParserInterface,
+    dataSourceType: String)
+  extends AssignDefaultValuesIterator(rowIterator, schema, parser, dataSourceType) {
+  override def next: InternalRow = {
+    val row: InternalRow = rowIterator.next
+    for (i <- 0 until row.numFields) {
+      if (row.isNullAt(i)) row.update(i, defaultValues(i))
+    }
+    row
+  }
+}
+
+/**
+ * This iterator supports assigning DEFAULT values for data sources supporting explicit NULL values.
+ * For a schema of N columns where a subset D have DEFAULT values, it interprets the final D columns
+ * as indicating the presence or absence of its corresponding DEFAULT value. These final D columns
+ * should have boolean type and map 1:1 with the subset of columns of the provided dataSchema
+ * having DEFAULT values, in the order they appear in the schema. For example, with a dataSchema
+ * of (a INT DEFAULT 42, b STRING), the dataRow iterator should yield three columns of integer,
+ * string, and boolean type, respectively, where the final column represents the existence of 'a'.
+ */
+case class SeparateBooleanExistenceColumnsIterator(
+    rowIterator: Iterator[InternalRow],
+    schema: StructType,
+    parser: ParserInterface,
+    dataSourceType: String)
+  extends AssignDefaultValuesIterator(rowIterator, schema, parser, dataSourceType) {
+  override def next: InternalRow = {
+    val input: InternalRow = rowIterator.next
+    val result = new GenericInternalRow(input.numFields - dataColumnsToExistenceColumns.size)
+    for (i <- 0 until input.numFields) {
+      val lookup: Option[Int] = dataColumnsToExistenceColumns.get(i)
+      if (lookup.isDefined) {
+        val exists = input.getBoolean(lookup.get)
+        if (exists) {
+          result.update(i, input.get(i, schema.fields(i).dataType))
+        } else {
+          result.update(i, defaultValues(i))
+        }
+      }
+    }
+    result
+  }
+
+  // Maps each original column index to its corresponding boolean existence column.
+  lazy val dataColumnsToExistenceColumns: Map[Int, Int] = {
+    val fieldsAndColumnIndexes = schema.fields.zipWithIndex
+    val numColumns = schema.fields.size
+    fieldsAndColumnIndexes.filter {
+      case (field, _) => field.metadata.contains(EXISTS_DEFAULT)
+    }.zipWithIndex.map {
+      case ((_, columnIndex), defaultIndex) => columnIndex -> (numColumns + defaultIndex)
+    }.toMap
   }
 }
