@@ -1475,7 +1475,7 @@ object SQLConf {
   val WHOLESTAGE_CODEGEN_CLEAN_SOURCE_ENABLED = buildConf("spark.sql.codegen.cleanedSourcePrint")
       .internal()
       .doc("When true, and `spark.sql.codegen.wholeStage` is true, the whole stage will be " +
-          "compiled into single java method that will be printed in log")
+          "compiled into single java method that will be printed")
       .version("3.2.0")
       .booleanConf
       .createWithDefault(false)
