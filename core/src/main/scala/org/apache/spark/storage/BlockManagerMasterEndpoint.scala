@@ -332,15 +332,17 @@ class BlockManagerMasterEndpoint(
       new mutable.HashMap[BlockManagerId, mutable.HashSet[BlockId]]
     if (externalShuffleServiceRemoveShuffleEnabled) {
       mapOutputTracker.shuffleStatuses.get(shuffleId).foreach { shuffleStatus =>
-        shuffleStatus.mapStatuses.foreach { mapStatus =>
-          // Check if the executor has been deallocated
-          if (!blockManagerIdByExecutor.contains(mapStatus.location.executorId)) {
-            val blocksToDel =
-              shuffleManager.shuffleBlockResolver.getBlocksForShuffle(shuffleId, mapStatus.mapId)
-            if (blocksToDel.nonEmpty) {
-              val blocks = blocksToDeleteByShuffleService.getOrElseUpdate(mapStatus.location,
-                new mutable.HashSet[BlockId])
-              blocks ++= blocksToDel
+        shuffleStatus.withMapStatuses { mapStatuses =>
+          mapStatuses.foreach { mapStatus =>
+            // Check if the executor has been deallocated
+            if (!blockManagerIdByExecutor.contains(mapStatus.location.executorId)) {
+              val blocksToDel =
+                shuffleManager.shuffleBlockResolver.getBlocksForShuffle(shuffleId, mapStatus.mapId)
+              if (blocksToDel.nonEmpty) {
+                val blocks = blocksToDeleteByShuffleService.getOrElseUpdate(mapStatus.location,
+                  new mutable.HashSet[BlockId])
+                blocks ++= blocksToDel
+              }
             }
           }
         }

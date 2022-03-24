@@ -75,9 +75,9 @@ private[spark] class DiskStore(
     val startTimeNs = System.nanoTime()
     val file = diskManager.getFile(blockId)
 
-    // SPARK-37618: If fetching cached RDDs from the shuffle service is enabled, we must
-    // make the file world readable, as it will not be owned by the gropu running the shuffle
-    // service in a secure environment
+    // SPARK-37618: If fetching cached RDDs from the shuffle service is enabled, we must make
+    // the file world readable, as it will not be owned by the group running the shuffle service
+    // in a secure environment. This is due to changing directory permissions to allow deletion,
     if (shuffleServiceFetchRddEnabled) {
       diskManager.createWorldReadableFile(file)
     }
