@@ -174,15 +174,6 @@ case class OrcPartitionReaderFactory(
     OrcFile.createReader(filePath, readerOptions)
   }
 
-  private def getResultedColPruneInfoAndOrcSchema(
-      filePath: Path, conf: Configuration): (Option[(Array[Int], Boolean)], TypeDescription) = {
-    Utils.tryWithResource(createORCReader(filePath, conf)) { reader =>
-      val orcSchema = reader.getSchema
-      (OrcUtils.requestedColumnIds(
-        isCaseSensitive, dataSchema, readDataSchema, orcSchema, conf), orcSchema)
-    }
-  }
-
   /**
    * Build reader with aggregate push down.
    */
