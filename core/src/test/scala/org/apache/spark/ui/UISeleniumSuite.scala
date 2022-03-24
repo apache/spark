@@ -298,7 +298,8 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers with B
     }
   }
 
-  ignore("jobs page should not display job group name unless some job was submitted in a job group") {
+  test("jobs page should not display job group name " +
+    "unless some job was submitted in a job group") {
     withSpark(newSparkContext()) { sc =>
       // If no job has been run in a job group, then "(Job Group)" should not appear in the header
       sc.parallelize(Seq(1, 2, 3)).count()
@@ -331,7 +332,7 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers with B
     }
   }
 
-  test("job progress bars should handle stage / task failures") {
+  ignore("job progress bars should handle stage / task failures") {
     withSpark(newSparkContext()) { sc =>
       val data = sc.parallelize(Seq(1, 2, 3), 1).map(identity).groupBy(identity)
       val shuffleHandle =

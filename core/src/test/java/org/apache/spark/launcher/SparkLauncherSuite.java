@@ -252,7 +252,7 @@ public class SparkLauncherSuite extends BaseSuite {
       waitForSparkContextShutdown();
     }
   }
-
+  
   @Test
   public void testSparkLauncherGetError() throws Exception {
     SparkAppHandle handle = null;

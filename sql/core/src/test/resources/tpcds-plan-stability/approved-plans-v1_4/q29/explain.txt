@@ -222,7 +222,7 @@ Results [7]: [i_item_id#29, i_item_desc#30, s_store_id#25, s_store_name#26, sum(
 
 (40) TakeOrderedAndProject
 Input [7]: [i_item_id#29, i_item_desc#30, s_store_id#25, s_store_name#26, store_sales_quantity#42, store_returns_quantity#43, catalog_sales_quantity#44]
-Arguments: 100, [i_item_id#29 ASC NULLS FIRST, i_item_desc#30 ASC NULLS FIRST, s_store_id#25 ASC NULLS FIRST, s_store_name#26 ASC NULLS FIRST], [i_item_id#29, i_item_desc#30, s_store_id#25, s_store_name#26, store_sales_quantity#42, store_returns_quantity#43, catalog_sales_quantity#44]
+Arguments: 100, 0, [i_item_id#29 ASC NULLS FIRST, i_item_desc#30 ASC NULLS FIRST, s_store_id#25 ASC NULLS FIRST, s_store_name#26 ASC NULLS FIRST], [i_item_id#29, i_item_desc#30, s_store_id#25, s_store_name#26, store_sales_quantity#42, store_returns_quantity#43, catalog_sales_quantity#44]
 
 ===== Subqueries =====
 

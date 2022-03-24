@@ -149,7 +149,7 @@ Input [9]: [i_category#15, i_class#14, i_brand#13, s_store_name#9, s_company_nam
 
 (27) TakeOrderedAndProject
 Input [8]: [i_category#15, i_class#14, i_brand#13, s_store_name#9, s_company_name#10, d_moy#7, sum_sales#21, avg_monthly_sales#24]
-Arguments: 100, [CheckOverflow((promote_precision(cast(sum_sales#21 as decimal(22,6))) - promote_precision(cast(avg_monthly_sales#24 as decimal(22,6)))), DecimalType(22,6), true) ASC NULLS FIRST, s_store_name#9 ASC NULLS FIRST], [i_category#15, i_class#14, i_brand#13, s_store_name#9, s_company_name#10, d_moy#7, sum_sales#21, avg_monthly_sales#24]
+Arguments: 100, 0, [CheckOverflow((promote_precision(cast(sum_sales#21 as decimal(22,6))) - promote_precision(cast(avg_monthly_sales#24 as decimal(22,6)))), DecimalType(22,6), true) ASC NULLS FIRST, s_store_name#9 ASC NULLS FIRST], [i_category#15, i_class#14, i_brand#13, s_store_name#9, s_company_name#10, d_moy#7, sum_sales#21, avg_monthly_sales#24]
 
 ===== Subqueries =====
 

@@ -164,7 +164,7 @@ Condition : (rk#38 <= 100)
 
 (30) TakeOrderedAndProject
 Input [10]: [i_category#21, i_class#22, i_brand#23, i_product_name#24, d_year#25, d_qoy#26, d_moy#27, s_store_id#28, sumsales#36, rk#38]
-Arguments: 100, [i_category#21 ASC NULLS FIRST, i_class#22 ASC NULLS FIRST, i_brand#23 ASC NULLS FIRST, i_product_name#24 ASC NULLS FIRST, d_year#25 ASC NULLS FIRST, d_qoy#26 ASC NULLS FIRST, d_moy#27 ASC NULLS FIRST, s_store_id#28 ASC NULLS FIRST, sumsales#36 ASC NULLS FIRST, rk#38 ASC NULLS FIRST], [i_category#21, i_class#22, i_brand#23, i_product_name#24, d_year#25, d_qoy#26, d_moy#27, s_store_id#28, sumsales#36, rk#38]
+Arguments: 100, 0, [i_category#21 ASC NULLS FIRST, i_class#22 ASC NULLS FIRST, i_brand#23 ASC NULLS FIRST, i_product_name#24 ASC NULLS FIRST, d_year#25 ASC NULLS FIRST, d_qoy#26 ASC NULLS FIRST, d_moy#27 ASC NULLS FIRST, s_store_id#28 ASC NULLS FIRST, sumsales#36 ASC NULLS FIRST, rk#38 ASC NULLS FIRST], [i_category#21, i_class#22, i_brand#23, i_product_name#24, d_year#25, d_qoy#26, d_moy#27, s_store_id#28, sumsales#36, rk#38]
 
 ===== Subqueries =====
 

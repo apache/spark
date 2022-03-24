@@ -134,7 +134,7 @@ Condition : ((isnotnull(inv_before#22) AND isnotnull(inv_after#23)) AND (((inv_b
 
 (24) TakeOrderedAndProject
 Input [4]: [w_warehouse_name#7, i_item_id#10, inv_before#22, inv_after#23]
-Arguments: 100, [w_warehouse_name#7 ASC NULLS FIRST, i_item_id#10 ASC NULLS FIRST], [w_warehouse_name#7, i_item_id#10, inv_before#22, inv_after#23]
+Arguments: 100, 0, [w_warehouse_name#7 ASC NULLS FIRST, i_item_id#10 ASC NULLS FIRST], [w_warehouse_name#7, i_item_id#10, inv_before#22, inv_after#23]
 
 ===== Subqueries =====
 

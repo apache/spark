@@ -222,7 +222,7 @@ Results [15]: [i_item_id#27, i_item_desc#28, s_state#24, count(ss_quantity#5)#67
 
 (40) TakeOrderedAndProject
 Input [15]: [i_item_id#27, i_item_desc#28, s_state#24, store_sales_quantitycount#76, store_sales_quantityave#77, store_sales_quantitystdev#78, store_sales_quantitycov#79, as_store_returns_quantitycount#80, as_store_returns_quantityave#81, as_store_returns_quantitystdev#82, store_returns_quantitycov#83, catalog_sales_quantitycount#84, catalog_sales_quantityave#85, catalog_sales_quantitystdev#86, catalog_sales_quantitycov#87]
-Arguments: 100, [i_item_id#27 ASC NULLS FIRST, i_item_desc#28 ASC NULLS FIRST, s_state#24 ASC NULLS FIRST], [i_item_id#27, i_item_desc#28, s_state#24, store_sales_quantitycount#76, store_sales_quantityave#77, store_sales_quantitystdev#78, store_sales_quantitycov#79, as_store_returns_quantitycount#80, as_store_returns_quantityave#81, as_store_returns_quantitystdev#82, store_returns_quantitycov#83, catalog_sales_quantitycount#84, catalog_sales_quantityave#85, catalog_sales_quantitystdev#86, catalog_sales_quantitycov#87]
+Arguments: 100, 0, [i_item_id#27 ASC NULLS FIRST, i_item_desc#28 ASC NULLS FIRST, s_state#24 ASC NULLS FIRST], [i_item_id#27, i_item_desc#28, s_state#24, store_sales_quantitycount#76, store_sales_quantityave#77, store_sales_quantitystdev#78, store_sales_quantitycov#79, as_store_returns_quantitycount#80, as_store_returns_quantityave#81, as_store_returns_quantitystdev#82, store_returns_quantitycov#83, catalog_sales_quantitycount#84, catalog_sales_quantityave#85, catalog_sales_quantitystdev#86, catalog_sales_quantitycov#87]
 
 ===== Subqueries =====
 

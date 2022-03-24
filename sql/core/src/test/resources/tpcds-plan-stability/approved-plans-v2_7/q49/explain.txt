@@ -424,7 +424,7 @@ Results [5]: [channel#38, item#32, return_ratio#33, return_rank#36, currency_ran
 
 (77) TakeOrderedAndProject
 Input [5]: [channel#38, item#32, return_ratio#33, return_rank#36, currency_rank#37]
-Arguments: 100, [channel#38 ASC NULLS FIRST, return_rank#36 ASC NULLS FIRST, currency_rank#37 ASC NULLS FIRST, item#32 ASC NULLS FIRST], [channel#38, item#32, return_ratio#33, return_rank#36, currency_rank#37]
+Arguments: 100, 0, [channel#38 ASC NULLS FIRST, return_rank#36 ASC NULLS FIRST, currency_rank#37 ASC NULLS FIRST, item#32 ASC NULLS FIRST], [channel#38, item#32, return_ratio#33, return_rank#36, currency_rank#37]
 
 ===== Subqueries =====
 

@@ -251,7 +251,7 @@ Condition : (cnt#33 >= 10)
 
 (45) TakeOrderedAndProject
 Input [3]: [state#32, cnt#33, ca_state#22]
-Arguments: 100, [cnt#33 ASC NULLS FIRST, ca_state#22 ASC NULLS FIRST], [state#32, cnt#33]
+Arguments: 100, 0, [cnt#33 ASC NULLS FIRST, ca_state#22 ASC NULLS FIRST], [state#32, cnt#33]
 
 ===== Subqueries =====
 

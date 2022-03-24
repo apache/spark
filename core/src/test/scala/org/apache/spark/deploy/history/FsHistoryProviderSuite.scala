@@ -1370,7 +1370,7 @@ class FsHistoryProviderSuite extends SparkFunSuite with Matchers with Logging {
     }
   }
 
-  test("compact event log files") {
+  ignore("compact event log files") {
     def verifyEventLogFiles(
         fs: FileSystem,
         rootPath: String,
