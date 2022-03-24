@@ -73,7 +73,7 @@ private[spark] class PythonRDD(
  * A wrapper for a Python function, contains all necessary context to run the function in Python
  * runner.
  */
-trait PythonFunction {
+private[spark] trait PythonFunction {
   def command: Seq[Byte]
   def envVars: JMap[String, String]
   def pythonIncludes: JList[String]
