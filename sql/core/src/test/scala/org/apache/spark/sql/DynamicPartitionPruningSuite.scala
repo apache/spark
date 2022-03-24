@@ -1552,7 +1552,7 @@ abstract class DynamicPartitionPruningSuiteBase
           |WHERE s.country = 'US'
           |""".stripMargin)
 
-      checkPartitionPruningPredicate(df, false, withBroadcast = false)
+      checkPartitionPruningPredicate(df, withSubquery = false, withBroadcast = false)
       checkAnswer(df, Row(4, 1300, "California") :: Row(5, 1000, "Texas") :: Nil)
     }
   }
