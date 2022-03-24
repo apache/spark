@@ -15,27 +15,21 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.connector.expressions.filter;
+package org.apache.spark.sql.hive
 
-import org.apache.spark.annotation.Evolving;
-import org.apache.spark.sql.connector.expressions.NamedReference;
-import org.apache.spark.unsafe.types.UTF8String;
+import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.catalyst.ScalaReflection
 
 /**
- * A filter that evaluates to {@code true} iff the {@code column} evaluates to
- * a string that starts with {@code value}.
- *
- * @since 3.3.0
+ * This test suite prefers to have its own JVM as the error for cyclic annotation references may
+ * not be thrown if the annotation class is previously loaded by some other test and so may be
+ * dependent on test execution order
  */
-@Evolving
-public final class StringStartsWith extends StringPredicate {
+class HiveScalaReflectionSuite extends SparkFunSuite {
 
-  public StringStartsWith(NamedReference column, UTF8String value) {
-    super(column, value);
-  }
-
-  @Override
-  public String toString() {
-    return "STRING_STARTS_WITH(" + column.describe() + ", " + value + ")";
+  test("SPARK-38510: ScalaReflection.getConstructorParameterNames should work for classes with " +
+    "cyclic annotation references") {
+    assert(Seq("name", "funcWrapper", "children") ===
+      ScalaReflection.getConstructorParameterNames(classOf[HiveGenericUDF]))
   }
 }

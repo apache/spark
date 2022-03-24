@@ -15,26 +15,20 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.connector.expressions.filter;
+package org.apache.spark.sql.connector.write;
 
-import org.apache.spark.annotation.Evolving;
-import org.apache.spark.sql.connector.expressions.Literal;
-import org.apache.spark.sql.connector.expressions.NamedReference;
+import org.apache.spark.annotation.Experimental;
 
 /**
- * Performs equality comparison, similar to {@link EqualTo}. However, this differs from
- * {@link EqualTo} in that it returns {@code true} (rather than NULL) if both inputs are NULL,
- * and {@code false} (rather than NULL) if one of the input is NULL and the other is not NULL.
+ * An interface for building a {@link RowLevelOperation}.
  *
  * @since 3.3.0
  */
-@Evolving
-public final class EqualNullSafe extends BinaryComparison {
-
-  public EqualNullSafe(NamedReference column, Literal<?> value) {
-    super(column, value);
-  }
-
-  @Override
-  public String toString() { return this.column.describe() + " <=> " + value.describe(); }
+@Experimental
+public interface RowLevelOperationBuilder {
+  /**
+   * Returns a {@link RowLevelOperation} that controls how Spark rewrites data
+   * for DELETE, UPDATE, MERGE commands.
+   */
+  RowLevelOperation build();
 }

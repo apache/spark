@@ -202,6 +202,13 @@ class MathFunctionsSuite extends QueryTest with SharedSparkSession {
 
   test("ceil and ceiling") {
     testOneToOneMathFunction(ceil, (d: Double) => math.ceil(d).toLong)
+    // testOneToOneMathFunction does not validate the resulting data type
+    assert(
+      spark.range(1).select(ceil(col("id")).alias("a")).schema ==
+          types.StructType(Seq(types.StructField("a", types.LongType))))
+    assert(
+      spark.range(1).select(ceil(col("id"), lit(0)).alias("a")).schema ==
+          types.StructType(Seq(types.StructField("a", types.DecimalType(20, 0)))))
     checkAnswer(
       sql("SELECT ceiling(0), ceiling(1), ceiling(1.5)"),
       Row(0L, 1L, 2L))
@@ -250,6 +257,13 @@ class MathFunctionsSuite extends QueryTest with SharedSparkSession {
 
   test("floor") {
     testOneToOneMathFunction(floor, (d: Double) => math.floor(d).toLong)
+    // testOneToOneMathFunction does not validate the resulting data type
+    assert(
+      spark.range(1).select(floor(col("id")).alias("a")).schema ==
+          types.StructType(Seq(types.StructField("a", types.LongType))))
+    assert(
+      spark.range(1).select(floor(col("id"), lit(0)).alias("a")).schema ==
+          types.StructType(Seq(types.StructField("a", types.DecimalType(20, 0)))))
   }
 
   test("factorial") {

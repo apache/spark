@@ -485,6 +485,19 @@ object QueryExecution {
     prepareExecutedPlan(spark, sparkPlan)
   }
 
+  /**
+   * Prepare the [[SparkPlan]] for execution using exists adaptive execution context.
+   * This method is only called by [[PlanAdaptiveDynamicPruningFilters]].
+   */
+  def prepareExecutedPlan(
+      session: SparkSession,
+      plan: LogicalPlan,
+      context: AdaptiveExecutionContext): SparkPlan = {
+    val sparkPlan = createSparkPlan(session, session.sessionState.planner, plan.clone())
+    val preparationRules = preparations(session, Option(InsertAdaptiveSparkPlan(context)), true)
+    prepareForExecution(preparationRules, sparkPlan.clone())
+  }
+
   private val currentCteMap = new ThreadLocal[mutable.HashMap[Long, CTERelationDef]]()
 
   def cteMap: mutable.HashMap[Long, CTERelationDef] = currentCteMap.get()

@@ -24,13 +24,11 @@ import scala.util.control.NonFatal
 import org.apache.spark.{InterruptibleIterator, Partition, SparkContext, TaskContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.connector.expressions.SortOrder
-import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.connector.expressions.filter.Predicate
 import org.apache.spark.sql.execution.datasources.v2.TableSampleInfo
 import org.apache.spark.sql.jdbc.{JdbcDialect, JdbcDialects}
-import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
 import org.apache.spark.util.CompletionIterator
 
@@ -95,67 +93,12 @@ object JDBCRDD extends Logging {
   }
 
   /**
-   * Turns a single Filter into a String representing a SQL expression.
-   * Returns None for an unhandled filter.
-   */
-  def compileFilter(f: Filter, dialect: JdbcDialect): Option[String] = {
-
-    def quote(colName: String): String = {
-      val nameParts = SparkSession.active.sessionState.sqlParser.parseMultipartIdentifier(colName)
-      if(nameParts.length > 1) {
-        throw QueryCompilationErrors.commandNotSupportNestedColumnError("Filter push down", colName)
-      }
-      dialect.quoteIdentifier(nameParts.head)
-    }
-
-    Option(f match {
-      case EqualTo(attr, value) => s"${quote(attr)} = ${dialect.compileValue(value)}"
-      case EqualNullSafe(attr, value) =>
-        val col = quote(attr)
-        s"(NOT ($col != ${dialect.compileValue(value)} OR $col IS NULL OR " +
-          s"${dialect.compileValue(value)} IS NULL) OR " +
-          s"($col IS NULL AND ${dialect.compileValue(value)} IS NULL))"
-      case LessThan(attr, value) => s"${quote(attr)} < ${dialect.compileValue(value)}"
-      case GreaterThan(attr, value) => s"${quote(attr)} > ${dialect.compileValue(value)}"
-      case LessThanOrEqual(attr, value) => s"${quote(attr)} <= ${dialect.compileValue(value)}"
-      case GreaterThanOrEqual(attr, value) => s"${quote(attr)} >= ${dialect.compileValue(value)}"
-      case IsNull(attr) => s"${quote(attr)} IS NULL"
-      case IsNotNull(attr) => s"${quote(attr)} IS NOT NULL"
-      case StringStartsWith(attr, value) => s"${quote(attr)} LIKE '${value}%'"
-      case StringEndsWith(attr, value) => s"${quote(attr)} LIKE '%${value}'"
-      case StringContains(attr, value) => s"${quote(attr)} LIKE '%${value}%'"
-      case In(attr, value) if value.isEmpty =>
-        s"CASE WHEN ${quote(attr)} IS NULL THEN NULL ELSE FALSE END"
-      case In(attr, value) => s"${quote(attr)} IN (${dialect.compileValue(value)})"
-      case Not(f) => compileFilter(f, dialect).map(p => s"(NOT ($p))").getOrElse(null)
-      case Or(f1, f2) =>
-        // We can't compile Or filter unless both sub-filters are compiled successfully.
-        // It applies too for the following And filter.
-        // If we can make sure compileFilter supports all filters, we can remove this check.
-        val or = Seq(f1, f2).flatMap(compileFilter(_, dialect))
-        if (or.size == 2) {
-          or.map(p => s"($p)").mkString(" OR ")
-        } else {
-          null
-        }
-      case And(f1, f2) =>
-        val and = Seq(f1, f2).flatMap(compileFilter(_, dialect))
-        if (and.size == 2) {
-          and.map(p => s"($p)").mkString(" AND ")
-        } else {
-          null
-        }
-      case _ => null
-    })
-  }
-
-  /**
    * Build and return JDBCRDD from the given information.
    *
    * @param sc - Your SparkContext.
    * @param schema - The Catalyst schema of the underlying database table.
    * @param requiredColumns - The names of the columns or aggregate columns to SELECT.
-   * @param filters - The filters to include in all WHERE clauses.
+   * @param predicates - The predicates to include in all WHERE clauses.
    * @param parts - An array of JDBCPartitions specifying partition ids and
    *    per-partition WHERE clauses.
    * @param options - JDBC options that contains url, table and other information.
@@ -164,7 +107,7 @@ object JDBCRDD extends Logging {
    * @param sample - The pushed down tableSample.
    * @param limit - The pushed down limit. If the value is 0, it means no limit or limit
    *                is not pushed down.
-   * @param sortValues - The sort values cooperates with limit to realize top N.
+   * @param sortOrders - The sort orders cooperates with limit to realize top N.
    *
    * @return An RDD representing "SELECT requiredColumns FROM fqTable".
    */
@@ -173,7 +116,7 @@ object JDBCRDD extends Logging {
       sc: SparkContext,
       schema: StructType,
       requiredColumns: Array[String],
-      filters: Array[Filter],
+      predicates: Array[Predicate],
       parts: Array[Partition],
       options: JDBCOptions,
       outputSchema: Option[StructType] = None,
@@ -194,7 +137,7 @@ object JDBCRDD extends Logging {
       dialect.createConnectionFactory(options),
       outputSchema.getOrElse(pruneSchema(schema, requiredColumns)),
       quotedColumns,
-      filters,
+      predicates,
       parts,
       url,
       options,
@@ -216,7 +159,7 @@ private[jdbc] class JDBCRDD(
     getConnection: Int => Connection,
     schema: StructType,
     columns: Array[String],
-    filters: Array[Filter],
+    predicates: Array[Predicate],
     partitions: Array[Partition],
     url: String,
     options: JDBCOptions,
@@ -239,10 +182,10 @@ private[jdbc] class JDBCRDD(
   /**
    * `filters`, but as a WHERE clause suitable for injection into a SQL query.
    */
-  private val filterWhereClause: String =
-    filters
-      .flatMap(JDBCRDD.compileFilter(_, JdbcDialects.get(url)))
-      .map(p => s"($p)").mkString(" AND ")
+  private val filterWhereClause: String = {
+    val dialect = JdbcDialects.get(url)
+    predicates.flatMap(dialect.compileExpression(_)).map(p => s"($p)").mkString(" AND ")
+  }
 
   /**
    * A WHERE clause representing both `filters`, if any, and the current partition.

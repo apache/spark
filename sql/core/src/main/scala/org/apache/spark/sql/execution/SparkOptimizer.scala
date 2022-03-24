@@ -43,6 +43,8 @@ class SparkOptimizer(
     Batch("Optimize Metadata Only Query", Once, OptimizeMetadataOnlyQuery(catalog)) :+
     Batch("PartitionPruning", Once,
       PartitionPruning) :+
+    Batch("InjectRuntimeFilter", FixedPoint(1),
+      InjectRuntimeFilter) :+
     Batch("MergeScalarSubqueries", Once,
       MergeScalarSubqueries) :+
     Batch("Pushdown Filters from PartitionPruning", fixedPoint,
