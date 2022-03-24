@@ -1614,6 +1614,12 @@ object SQLConf {
     .longConf
     .createWithDefault(0)
 
+  val IGNORE_CORRUPT_RECORD = buildConf("spark.sql.hive.ignoreCorruptRecord")
+      .doc("Whether to ignore corrupt record. If true, the Spark jobs will continue to run when " +
+          "encountering corrupted record and the contents that have been read will be returned.")
+      .booleanConf
+      .createWithDefault(false)
+
   val EXCHANGE_REUSE_ENABLED = buildConf("spark.sql.exchange.reuse")
     .internal()
     .doc("When true, the planner will try to find out duplicated exchanges and re-use them.")
@@ -3888,6 +3894,8 @@ class SQLConf extends Serializable with Logging {
   def ignoreMissingFiles: Boolean = getConf(IGNORE_MISSING_FILES)
 
   def maxRecordsPerFile: Long = getConf(MAX_RECORDS_PER_FILE)
+
+  def ignoreCorruptRecord: Boolean = getConf(IGNORE_CORRUPT_RECORD)
 
   def useCompression: Boolean = getConf(COMPRESS_CACHED)
 
