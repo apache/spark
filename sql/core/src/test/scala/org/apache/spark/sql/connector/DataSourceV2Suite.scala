@@ -26,7 +26,7 @@ import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.connector.catalog.{SupportsRead, Table, TableCapability, TableProvider}
 import org.apache.spark.sql.connector.catalog.TableCapability._
-import org.apache.spark.sql.connector.expressions.{FieldReference, Literal, Transform}
+import org.apache.spark.sql.connector.expressions.{Expression, FieldReference, Literal, NamedReference, NullOrdering, SortDirection, SortOrder, Transform}
 import org.apache.spark.sql.connector.expressions.filter.Predicate
 import org.apache.spark.sql.connector.read._
 import org.apache.spark.sql.connector.read.partitioning.{KeyGroupedPartitioning, Partitioning}
@@ -251,30 +251,72 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
           val df = spark.read.format(cls.getName).load()
           checkAnswer(df, Seq(Row(1, 4), Row(1, 4), Row(3, 6), Row(2, 6), Row(4, 2), Row(4, 2)))
 
-          val groupByColA = df.groupBy($"i").agg(sum($"j"))
-          checkAnswer(groupByColA, Seq(Row(1, 8), Row(2, 6), Row(3, 6), Row(4, 4)))
-          assert(collectFirst(groupByColA.queryExecution.executedPlan) {
+          val groupByColI = df.groupBy($"i").agg(sum($"j"))
+          checkAnswer(groupByColI, Seq(Row(1, 8), Row(2, 6), Row(3, 6), Row(4, 4)))
+          assert(collectFirst(groupByColI.queryExecution.executedPlan) {
             case e: ShuffleExchangeExec => e
           }.isEmpty)
 
-          val groupByColAB = df.groupBy($"i", $"j").agg(count("*"))
-          checkAnswer(groupByColAB, Seq(Row(1, 4, 2), Row(2, 6, 1), Row(3, 6, 1), Row(4, 2, 2)))
-          assert(collectFirst(groupByColAB.queryExecution.executedPlan) {
+          val groupByColIJ = df.groupBy($"i", $"j").agg(count("*"))
+          checkAnswer(groupByColIJ, Seq(Row(1, 4, 2), Row(2, 6, 1), Row(3, 6, 1), Row(4, 2, 2)))
+          assert(collectFirst(groupByColIJ.queryExecution.executedPlan) {
             case e: ShuffleExchangeExec => e
           }.isEmpty)
 
-          val groupByColB = df.groupBy($"j").agg(sum($"i"))
-          checkAnswer(groupByColB, Seq(Row(2, 8), Row(4, 2), Row(6, 5)))
-          assert(collectFirst(groupByColB.queryExecution.executedPlan) {
+          val groupByColJ = df.groupBy($"j").agg(sum($"i"))
+          checkAnswer(groupByColJ, Seq(Row(2, 8), Row(4, 2), Row(6, 5)))
+          assert(collectFirst(groupByColJ.queryExecution.executedPlan) {
             case e: ShuffleExchangeExec => e
           }.isDefined)
 
-          val groupByAPlusB = df.groupBy($"i" + $"j").agg(count("*"))
-          checkAnswer(groupByAPlusB, Seq(Row(5, 2), Row(6, 2), Row(8, 1), Row(9, 1)))
-          assert(collectFirst(groupByAPlusB.queryExecution.executedPlan) {
+          val groupByIPlusJ = df.groupBy($"i" + $"j").agg(count("*"))
+          checkAnswer(groupByIPlusJ, Seq(Row(5, 2), Row(6, 2), Row(8, 1), Row(9, 1)))
+          assert(collectFirst(groupByIPlusJ.queryExecution.executedPlan) {
             case e: ShuffleExchangeExec => e
           }.isDefined)
         }
+      }
+    }
+  }
+
+  test("ordering and partitioning reporting") {
+    import org.apache.spark.sql.execution.SortExec
+    import org.apache.spark.sql.expressions.Window
+    Seq(
+      classOf[OrderAndPartitionAwareDataSource],
+//      classOf[JavaOrderAndPartitionAwareDataSource]
+    ).foreach { cls =>
+      withClue(cls.getName) {
+        val df = spark.read.format(cls.getName).load()
+        checkAnswer(df, Seq(Row(1, 4), Row(1, 5), Row(2, 6), Row(3, 6), Row(4, 1), Row(4, 2)))
+
+        val windowPartByColIOrderByColJ = df.withColumn("no",
+          row_number() over Window.partitionBy(Symbol("i")).orderBy(Symbol("j"))
+        )
+        checkAnswer(
+          windowPartByColIOrderByColJ,
+          Seq(Row(1, 4, 1), Row(1, 5, 2), Row(2, 6, 1), Row(3, 6, 1), Row(4, 1, 1), Row(4, 2, 2))
+        )
+        assert(collectFirst(windowPartByColIOrderByColJ.queryExecution.executedPlan) {
+          case e: ShuffleExchangeExec => e
+        }.isEmpty)
+        assert(collectFirst(windowPartByColIOrderByColJ.queryExecution.executedPlan) {
+          case e: SortExec => e
+        }.isEmpty)
+
+        val windowPartByColJOrderByColI = df.withColumn("no",
+          row_number() over Window.partitionBy(Symbol("j")).orderBy(Symbol("i"))
+        )
+        checkAnswer(
+          windowPartByColJOrderByColI,
+          Seq(Row(1, 4, 1), Row(1, 5, 1), Row(2, 6, 1), Row(3, 6, 2), Row(4, 1, 1), Row(4, 2, 1))
+        )
+        assert(collectFirst(windowPartByColJOrderByColI.queryExecution.executedPlan) {
+          case e: ShuffleExchangeExec => e
+        }.isDefined)
+        assert(collectFirst(windowPartByColJOrderByColI.queryExecution.executedPlan) {
+          case e: SortExec => e
+        }.isDefined)
       }
     }
   }
@@ -862,10 +904,10 @@ object ColumnarReaderFactory extends PartitionReaderFactory {
 class PartitionAwareDataSource extends TestingV2Source {
 
   class MyScanBuilder extends SimpleScanBuilder
-    with SupportsReportPartitioning{
+    with SupportsReportPartitioning {
 
     override def planInputPartitions(): Array[InputPartition] = {
-      // Note that we don't have same value of column `a` across partitions.
+      // Note that we don't have same value of column `i` across partitions.
       Array(
         SpecificInputPartition(Array(1, 1, 3), Array(4, 4, 6)),
         SpecificInputPartition(Array(2, 4, 4), Array(6, 2, 2)))
@@ -883,6 +925,53 @@ class PartitionAwareDataSource extends TestingV2Source {
     override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
       new MyScanBuilder()
     }
+  }
+}
+
+class OrderAndPartitionAwareDataSource extends PartitionAwareDataSource {
+
+  class MyScanBuilder extends super.MyScanBuilder
+    with SupportsReportOrdering {
+
+    override def planInputPartitions(): Array[InputPartition] = {
+      // Note that column `i` is ordered across partitions, while `j` is ordered per `i`.
+      // Note that we don't have same value of column `i` across partitions.
+      Array(
+        SpecificInputPartition(Array(1, 1, 2), Array(4, 5, 6)),
+        SpecificInputPartition(Array(3, 4, 4), Array(6, 1, 2)))
+    }
+
+    override def createReaderFactory(): PartitionReaderFactory = {
+      SpecificReaderFactory
+    }
+
+    override def outputOrdering(): Array[SortOrder] = Seq(
+      new MySortOrder("i"), new MySortOrder("j")
+    ).toArray
+  }
+
+  override def getTable(options: CaseInsensitiveStringMap): Table = new SimpleBatchTable {
+    override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
+      new MyScanBuilder()
+    }
+  }
+
+  class MySortOrder(columnName: String) extends SortOrder {
+    override def expression(): Expression = new MyIdentityTransform(
+      new MyNamedReference(columnName)
+    )
+    override def direction(): SortDirection = SortDirection.ASCENDING
+    override def nullOrdering(): NullOrdering = NullOrdering.NULLS_FIRST
+  }
+
+  class MyNamedReference(parts: String*) extends NamedReference {
+    override def fieldNames(): Array[String] = parts.toArray
+  }
+
+  class MyIdentityTransform(namedReference: NamedReference) extends Transform {
+    override def name(): String = "identity"
+    override def references(): Array[NamedReference] = Array.empty
+    override def arguments(): Array[Expression] = Seq(namedReference).toArray
   }
 }
 
