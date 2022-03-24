@@ -131,7 +131,8 @@ object PushDownUtils extends PredicateHelper {
    */
   def pushTopN(
       scanBuilder: ScanBuilder,
-      order: Array[SortOrder], limit: Int): (Boolean, Boolean) = {
+      order: Array[SortOrder],
+      limit: Int): (Boolean, Boolean) = {
     scanBuilder match {
       case s: SupportsPushDownTopN =>
         val isPushed = s.pushTopN(order, limit)
