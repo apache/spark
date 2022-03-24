@@ -1759,7 +1759,7 @@ To use Volcano as a custom scheduler the user needs to specify the following con
 ##### Volcano Feature Step
 Volcano feature steps help users to create a Volcano PodGroup and set driver/executor pod annotation to link with this PodGroup.
 
-Note that currently only driver/job level PodGroup is supported in Volcano Feature Step. Executor PodGroup is not supported yet.
+Note that currently only driver/job level PodGroup is supported in Volcano Feature Step.
 
 ##### Volcano PodGroup Template
 Volcano defines PodGroup spec using [CRD yaml](https://volcano.sh/en/docs/podgroup/#example)
