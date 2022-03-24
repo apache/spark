@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.plans.logical.{LeafCommand, LogicalPlan, Project, Range, SubqueryAlias, View}
+import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.connector.catalog.SupportsNamespaces.PROP_OWNER
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
@@ -132,15 +133,42 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
       assert(catalog.externalCatalog.listTables("db2").toSet == Set("tbl1", "tbl2", "tbl3"))
       // Inspect the default column values.
       val db1tbl3 = catalog.externalCatalog.getTable("db1", "tbl3")
-      val db2tbl3 = catalog.externalCatalog.getTable("db2", "tbl3")
-      assert(db1tbl3.schema.fields(db1tbl3.schema.fields.size - 2)
-        .metadata.getString(ResolveDefaultColumns.CURRENT_DEFAULT_COLUMN_METADATA_KEY) == "42")
-      assert(db1tbl3.schema.fields.last
-        .metadata.getString(ResolveDefaultColumns.CURRENT_DEFAULT_COLUMN_METADATA_KEY) == "\"abc\"")
-      assert(db2tbl3.schema.fields(db2tbl3.schema.fields.size - 2)
-        .metadata.getString(ResolveDefaultColumns.CURRENT_DEFAULT_COLUMN_METADATA_KEY) == "42")
-      assert(db2tbl3.schema.fields.last
-        .metadata.getString(ResolveDefaultColumns.CURRENT_DEFAULT_COLUMN_METADATA_KEY) == "\"abc\"")
+      val currentDefault = ResolveDefaultColumns.CURRENT_DEFAULT_COLUMN_METADATA_KEY
+
+      def findField(name: String, schema: StructType): StructField =
+        schema.fields.filter(_.name == name).head
+      val columnA: StructField = findField("a", db1tbl3.schema)
+      val columnB: StructField = findField("b", db1tbl3.schema)
+      val columnC: StructField = findField("c", db1tbl3.schema)
+      val columnD: StructField = findField("d", db1tbl3.schema)
+      val columnE: StructField = findField("e", db1tbl3.schema)
+
+      val defaultValueColumnA: String = columnA.metadata.getString(currentDefault)
+      val defaultValueColumnB: String = columnB.metadata.getString(currentDefault)
+      val defaultValueColumnC: String = columnC.metadata.getString(currentDefault)
+      val defaultValueColumnD: String = columnD.metadata.getString(currentDefault)
+      val defaultValueColumnE: String = columnE.metadata.getString(currentDefault)
+
+      assert(defaultValueColumnA == "42")
+      assert(defaultValueColumnB == "\"abc\"")
+      assert(defaultValueColumnC == "_@#$%")
+      assert(defaultValueColumnD == "(select min(x) from badtable)")
+      assert(defaultValueColumnE == "42")
+
+      // Analyze the default column values.
+      val analyzer = new Analyzer(new SessionCatalog(new InMemoryCatalog, FunctionRegistry.builtin))
+      val statementType = "CREATE TABLE"
+      assert(ResolveDefaultColumns.analyze(analyzer, columnA, statementType).sql == "42")
+      assert(ResolveDefaultColumns.analyze(analyzer, columnB, statementType).sql == "'abc'")
+      assert(intercept[AnalysisException] {
+        ResolveDefaultColumns.analyze(analyzer, columnC, statementType)
+      }.getMessage.contains("fails to parse as a valid expression"))
+      assert(intercept[AnalysisException] {
+        ResolveDefaultColumns.analyze(analyzer, columnD, statementType)
+      }.getMessage.contains("fails to resolve as a valid expression"))
+      assert(intercept[AnalysisException] {
+        ResolveDefaultColumns.analyze(analyzer, columnE, statementType)
+      }.getMessage.contains("statement provided a value of incompatible type"))
     }
   }
 

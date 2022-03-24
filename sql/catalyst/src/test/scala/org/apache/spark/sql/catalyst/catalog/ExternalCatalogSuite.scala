@@ -27,9 +27,10 @@ import org.scalatest.BeforeAndAfterEach
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.{FunctionAlreadyExistsException, NoSuchDatabaseException, NoSuchFunctionException, ResolveDefaultColumns, TableAlreadyExistsException}
+import org.apache.spark.sql.catalyst.analysis.{FunctionAlreadyExistsException, NoSuchDatabaseException, NoSuchFunctionException, TableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns
 import org.apache.spark.sql.connector.catalog.SupportsNamespaces.PROP_OWNER
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
@@ -1024,9 +1025,10 @@ abstract class CatalogTestUtils {
 
   def newTable(name: String, db: String): CatalogTable = newTable(name, Some(db))
 
-  def newTable(name: String,
-               database: Option[String] = None,
-               defaultColumns: Boolean = false): CatalogTable = {
+  def newTable(
+      name: String,
+      database: Option[String] = None,
+      defaultColumns: Boolean = false): CatalogTable = {
     CatalogTable(
       identifier = TableIdentifier(name, database),
       tableType = CatalogTableType.EXTERNAL,
@@ -1041,6 +1043,19 @@ abstract class CatalogTestUtils {
           .add("b", StringType, nullable = false,
             new MetadataBuilder().putString(
               ResolveDefaultColumns.CURRENT_DEFAULT_COLUMN_METADATA_KEY, "\"abc\"").build())
+          // The default value fails to parse.
+          .add("c", LongType, nullable = false,
+            new MetadataBuilder().putString(
+              ResolveDefaultColumns.CURRENT_DEFAULT_COLUMN_METADATA_KEY, "_@#$%").build())
+          // The default value fails to resolve.
+          .add("d", LongType, nullable = false,
+            new MetadataBuilder().putString(
+              ResolveDefaultColumns.CURRENT_DEFAULT_COLUMN_METADATA_KEY,
+              "(select min(x) from badtable)").build())
+          // The default value fails to coerce to the required type.
+          .add("e", BooleanType, nullable = false,
+            new MetadataBuilder().putString(
+              ResolveDefaultColumns.CURRENT_DEFAULT_COLUMN_METADATA_KEY, "42").build())
       } else {
         new StructType()
           .add("col1", "int")

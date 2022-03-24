@@ -15,10 +15,10 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.catalyst.analysis
+package org.apache.spark.sql.catalyst.util
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.catalog._
+import org.apache.spark.sql.catalyst.analysis.Analyzer
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.optimizer.ConstantFolding
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException}
@@ -52,9 +52,6 @@ object ResolveDefaultColumns {
   // corresponding DEFAULT value instead. We choose option (2) for efficiency, and represent this
   // value as the text representation of a folded constant in the "EXISTS_DEFAULT" column metadata.
   val EXISTS_DEFAULT_COLUMN_METADATA_KEY = "EXISTS_DEFAULT"
-  // Name of attributes representing explicit references to the value stored in the above
-  // CURRENT_DEFAULT_COLUMN_METADATA.
-  val CURRENT_DEFAULT_COLUMN_NAME = "DEFAULT"
 
   /**
    * Finds "current default" expressions in CREATE/REPLACE TABLE columns and constant-folds them.
@@ -74,13 +71,15 @@ object ResolveDefaultColumns {
    * @return a copy of `tableSchema` with field metadata updated with the constant-folded values.
    */
   def constantFoldCurrentDefaultsToExistDefaults(
-      tableSchema: StructType, statementType: String): StructType = {
+      analyzer: Analyzer,
+      tableSchema: StructType,
+      statementType: String): StructType = {
     if (!SQLConf.get.enableDefaultColumns) {
       return tableSchema
     }
     val newFields: Seq[StructField] = tableSchema.fields.map { field =>
-      if (field.metadata.contains(EXISTS_DEFAULT_COLUMN_METADATA_KEY)) {
-        val analyzed: Expression = analyze(field, statementType, foldConstants = true)
+      if (field.metadata.contains(CURRENT_DEFAULT_COLUMN_METADATA_KEY)) {
+        val analyzed: Expression = analyze(analyzer, field, statementType)
         val newMetadata: Metadata = new MetadataBuilder().withMetadata(field.metadata)
           .putString(EXISTS_DEFAULT_COLUMN_METADATA_KEY, analyzed.sql).build()
         field.copy(metadata = newMetadata)
@@ -96,17 +95,14 @@ object ResolveDefaultColumns {
    *
    * @param field represents the DEFAULT column value whose "default" metadata to parse and analyze.
    * @param statementType which type of statement we are running, such as INSERT; useful for errors.
-   * @param foldConstants if true, perform constant-folding on the analyzed value before returning.
    * @return Result of the analysis and constant-folding operation.
    */
-  private def analyze(
-      field: StructField, statementType: String, foldConstants: Boolean = false): Expression = {
+  def analyze(
+      analyzer: Analyzer,
+      field: StructField,
+      statementType: String): Expression = {
     // Parse the expression.
-    val colText: String = if (field.metadata.contains(CURRENT_DEFAULT_COLUMN_METADATA_KEY)) {
-      field.metadata.getString(CURRENT_DEFAULT_COLUMN_METADATA_KEY)
-    } else {
-      "NULL"
-    }
+    val colText: String = field.metadata.getString(CURRENT_DEFAULT_COLUMN_METADATA_KEY)
     val parsed: Expression = try {
       lazy val parser = new CatalystSqlParser()
       parser.parseExpression(colText)
@@ -119,26 +115,19 @@ object ResolveDefaultColumns {
     }
     // Analyze the parse result.
     val plan = try {
-      lazy val analyzer =
-        new Analyzer(new SessionCatalog(new InMemoryCatalog, FunctionRegistry.builtin))
       val analyzed = analyzer.execute(Project(Seq(Alias(parsed, field.name)()), OneRowRelation()))
       analyzer.checkAnalysis(analyzed)
-      if (foldConstants) ConstantFolding(analyzed) else analyzed
+      ConstantFolding(analyzed)
     } catch {
-      case ex @ (_: ParseException | _: AnalysisException) =>
-        val colText: String = if (field.metadata.contains(CURRENT_DEFAULT_COLUMN_METADATA_KEY)) {
-          field.metadata.getString(CURRENT_DEFAULT_COLUMN_METADATA_KEY)
-        } else {
-          "NULL"
-        }
+      case ex: AnalysisException =>
         throw new AnalysisException(
           s"Failed to execute $statementType command because the destination table column " +
             s"${field.name} has a DEFAULT value of $colText which fails to resolve as a valid " +
             s"expression: ${ex.getMessage}")
     }
-    val analyzed = plan match {
+    val analyzed: Expression = plan.collectFirst {
       case Project(Seq(a: Alias), OneRowRelation()) => a.child
-    }
+    }.get
     // Perform implicit coercion from the provided expression type to the required column type.
     if (field.dataType == analyzed.dataType) {
       analyzed
