@@ -2946,7 +2946,10 @@ case class Sentences(
 
 /**
  * Splits a given string by a specified delimiter and return splits into a
- * GenericArrayData.
+ * GenericArrayData. This expression is different from `split` function as
+ * `split` takes regex expression as the pattern to split strings while this
+ * expression take delimiter (a string without carrying special meaning on its
+ * characters, thus is not treated as regex) to split strings.
  */
 case class StringSplitSQL(
     str: Expression,
@@ -2965,12 +2968,12 @@ case class StringSplitSQL(
     val arrayClass = classOf[GenericArrayData].getName
     nullSafeCodeGen(ctx, ev, (str, delimiter) => {
       // Array in java is covariant, so we don't need to cast UTF8String[] to Object[].
-      s"""${ev.value} = new $arrayClass($str.splitSQL($delimiter,-1));""".stripMargin
+      s"${ev.value} = new $arrayClass($str.splitSQL($delimiter,-1));"
     })
   }
 
   override def withNewChildrenInternal(
-    newFirst: Expression, newSecond: Expression): StringSplitSQL =
+      newFirst: Expression, newSecond: Expression): StringSplitSQL =
     copy(str = newFirst, delimiter = newSecond)
 }
 

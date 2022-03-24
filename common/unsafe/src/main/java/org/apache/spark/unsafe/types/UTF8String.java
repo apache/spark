@@ -1009,6 +1009,10 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     if (delimiter.numBytes() == 0) {
       return new UTF8String[]{this};
     } else {
+      // we do not treat delimiter as a regex but consider the whole string of delimiter
+      // as the separator to split string. Java String's split, however, only accept
+      // regex as the pattern to split, thus we can quote the delimiter to escape special
+      // characters in the string.
       return split(Pattern.quote(delimiter.toString()), limit);
     }
   }
