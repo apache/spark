@@ -709,7 +709,12 @@ case class WholeStageCodegenExec(child: SparkPlan)(val codegenStageId: Int)
     val duration = System.nanoTime() - startTime
     WholeStageCodegenExec.increaseCodeGenTime(duration)
 
-    logDebug(s"\n${CodeFormatter.format(cleanedSource)}")
+    val formatCleanCode = CodeFormatter.format(cleanedSource)
+    if (conf.wholeStageCleanCodePrintEnabled) {
+      logInfo(s"\n$formatCleanCode")
+    } else {
+      logDebug(s"\n$formatCleanCode")
+    }
     (ctx, cleanedSource)
   }
 
