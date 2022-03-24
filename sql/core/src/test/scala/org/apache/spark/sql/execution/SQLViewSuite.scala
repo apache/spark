@@ -918,7 +918,12 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
       Seq("", "temp")
       withView("v") {
         val viewText = "SELECT a + b c FROM t"
-        sql(s"CREATE VIEW v AS $viewText")
+        sql(
+          s"""
+            |CREATE VIEW v AS
+            |-- the body of the view
+            |$viewText
+            |""".stripMargin)
         val plan = sql("select c / 2.0D d from v").logicalPlan
         val add = plan.collectFirst {
           case Project(Seq(Alias(a: Add, _)), _) =>
