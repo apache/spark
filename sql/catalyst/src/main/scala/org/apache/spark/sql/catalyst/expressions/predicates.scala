@@ -287,6 +287,22 @@ trait PredicateHelper extends AliasHelper with Logging {
       }
     }
   }
+
+  /**
+   * Returns whether an expression is likely to be selective
+   */
+  def isLikelySelective(e: Expression): Boolean = e match {
+    case Not(expr) => isLikelySelective(expr)
+    case And(l, r) => isLikelySelective(l) || isLikelySelective(r)
+    case Or(l, r) => isLikelySelective(l) && isLikelySelective(r)
+    case _: StringRegexExpression => true
+    case _: BinaryComparison => true
+    case _: In | _: InSet => true
+    case _: StringPredicate => true
+    case BinaryPredicate(_) => true
+    case _: MultiLikeBase => true
+    case _ => false
+  }
 }
 
 @ExpressionDescription(
@@ -1134,7 +1150,7 @@ case class LessThanOrEqual(left: Expression, right: Expression)
     Examples:
       > SELECT 2 _FUNC_ 1;
        true
-      > SELECT 2 _FUNC_ '1.1';
+      > SELECT 2 _FUNC_ 1.1;
        true
       > SELECT to_date('2009-07-30 04:17:52') _FUNC_ to_date('2009-07-30 04:17:52');
        false

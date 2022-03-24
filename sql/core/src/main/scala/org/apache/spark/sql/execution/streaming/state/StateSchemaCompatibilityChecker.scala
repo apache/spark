@@ -72,7 +72,7 @@ class StateSchemaCompatibilityChecker(
   }
 
   private def schemasCompatible(storedSchema: StructType, schema: StructType): Boolean =
-    DataType.equalsIgnoreNameAndCompatibleNullability(storedSchema, schema)
+    DataType.equalsIgnoreNameAndCompatibleNullability(schema, storedSchema)
 
   // Visible for testing
   private[sql] def readSchemaFile(): (StructType, StructType) = {

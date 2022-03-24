@@ -38,10 +38,10 @@ import org.apache.spark.sql.catalyst.planning.ScanOperation
 import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoDir, InsertIntoStatement, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
-import org.apache.spark.sql.catalyst.util.ExpressionSQLBuilder
+import org.apache.spark.sql.catalyst.util.V2ExpressionBuilder
 import org.apache.spark.sql.connector.catalog.SupportsRead
 import org.apache.spark.sql.connector.catalog.TableCapability._
-import org.apache.spark.sql.connector.expressions.{Expression => ExpressionV2, FieldReference, GeneralSQLExpression, NullOrdering, SortDirection, SortOrder => SortOrderV2, SortValue}
+import org.apache.spark.sql.connector.expressions.{Expression => V2Expression, FieldReference, NullOrdering, SortDirection, SortOrder => V2SortOrder, SortValue}
 import org.apache.spark.sql.connector.expressions.aggregate.{AggregateFunc, Aggregation, Avg, Count, CountStar, GeneralAggregateFunc, Max, Min, Sum}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.{InSubqueryExec, RowDataSourceScanExec, SparkPlan}
@@ -340,7 +340,7 @@ object DataSourceStrategy
         l.output.toStructType,
         Set.empty,
         Set.empty,
-        PushedDownOperators(None, None, None, Seq.empty),
+        PushedDownOperators(None, None, None, Seq.empty, Seq.empty),
         toCatalystRDD(l, baseRelation.buildScan()),
         baseRelation,
         None) :: Nil
@@ -414,7 +414,7 @@ object DataSourceStrategy
         requestedColumns.toStructType,
         pushedFilters.toSet,
         handledFilters,
-        PushedDownOperators(None, None, None, Seq.empty),
+        PushedDownOperators(None, None, None, Seq.empty, Seq.empty),
         scanBuilder(requestedColumns, candidatePredicates, pushedFilters),
         relation.relation,
         relation.catalogTable.map(_.identifier))
@@ -437,7 +437,7 @@ object DataSourceStrategy
         requestedColumns.toStructType,
         pushedFilters.toSet,
         handledFilters,
-        PushedDownOperators(None, None, None, Seq.empty),
+        PushedDownOperators(None, None, None, Seq.empty, Seq.empty),
         scanBuilder(requestedColumns, candidatePredicates, pushedFilters),
         relation.relation,
         relation.catalogTable.map(_.identifier))
@@ -776,8 +776,8 @@ object DataSourceStrategy
     Some(new Aggregation(translatedAggregates.toArray, translatedGroupBys.toArray))
   }
 
-  protected[sql] def translateSortOrders(sortOrders: Seq[SortOrder]): Seq[SortOrderV2] = {
-    def translateOortOrder(sortOrder: SortOrder): Option[SortOrderV2] = sortOrder match {
+  protected[sql] def translateSortOrders(sortOrders: Seq[SortOrder]): Seq[V2SortOrder] = {
+    def translateOortOrder(sortOrder: SortOrder): Option[V2SortOrder] = sortOrder match {
       case SortOrder(PushableColumnWithoutNestedColumn(name), directionV1, nullOrderingV1, _) =>
         val directionV2 = directionV1 match {
           case Ascending => SortDirection.ASCENDING
@@ -802,7 +802,7 @@ object DataSourceStrategy
       output: Seq[Attribute],
       rdd: RDD[Row]): RDD[InternalRow] = {
     if (relation.needConversion) {
-      val toRow = RowEncoder(StructType.fromAttributes(output)).createSerializer()
+      val toRow = RowEncoder(StructType.fromAttributes(output), lenient = true).createSerializer()
       rdd.mapPartitions { iterator =>
         iterator.map(toRow)
       }
@@ -864,8 +864,5 @@ object PushableColumnWithoutNestedColumn extends PushableColumnBase {
  * Get the expression of DS V2 to represent catalyst expression that can be pushed down.
  */
 object PushableExpression {
-  def unapply(e: Expression): Option[ExpressionV2] = e match {
-    case PushableColumnWithoutNestedColumn(name) => Some(FieldReference.column(name))
-    case _ => new ExpressionSQLBuilder(e).build().map(new GeneralSQLExpression(_))
-  }
+  def unapply(e: Expression): Option[V2Expression] = new V2ExpressionBuilder(e).build()
 }

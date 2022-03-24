@@ -115,7 +115,7 @@ class InMemoryCatalogedDDLSuite extends DDLSuite with SharedSparkSession {
       }.getMessage
       assert(e.contains("Hive support is required to CREATE Hive TABLE (AS SELECT)"))
 
-      spark.range(1).select('id as 'a, 'id as 'b).write.saveAsTable("t1")
+      spark.range(1).select('id as Symbol("a"), 'id as Symbol("b")).write.saveAsTable("t1")
       e = intercept[AnalysisException] {
         sql("CREATE TABLE t STORED AS parquet SELECT a, b from t1")
       }.getMessage
@@ -1374,7 +1374,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
       sql("CREATE TABLE t USING parquet SELECT 1 as a, 1 as b")
       checkAnswer(spark.table("t"), Row(1, 1) :: Nil)
 
-      spark.range(1).select('id as 'a, 'id as 'b).write.saveAsTable("t1")
+      spark.range(1).select('id as Symbol("a"), 'id as Symbol("b")).write.saveAsTable("t1")
       sql("CREATE TABLE t2 USING parquet SELECT a, b from t1")
       checkAnswer(spark.table("t2"), spark.table("t1"))
     }
@@ -2100,57 +2100,6 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
         sql("ALTER TABLE t1 ADD COLUMNS (c1 string)")
       }.getMessage
       assert(e.contains("Found duplicate column(s)"))
-    }
-  }
-
-  test("create temporary function with if not exists") {
-    withUserDefinedFunction("func1" -> true) {
-      val sql1 =
-        """
-          |CREATE TEMPORARY FUNCTION IF NOT EXISTS func1 as
-          |'com.matthewrathbone.example.SimpleUDFExample' USING JAR '/path/to/jar1',
-          |JAR '/path/to/jar2'
-        """.stripMargin
-      val e = intercept[AnalysisException] {
-        sql(sql1)
-      }.getMessage
-      assert(e.contains("It is not allowed to define a TEMPORARY function with IF NOT EXISTS"))
-    }
-  }
-
-  test("create function with both if not exists and replace") {
-    withUserDefinedFunction("func1" -> false) {
-      val sql1 =
-        """
-          |CREATE OR REPLACE FUNCTION IF NOT EXISTS func1 as
-          |'com.matthewrathbone.example.SimpleUDFExample' USING JAR '/path/to/jar1',
-          |JAR '/path/to/jar2'
-        """.stripMargin
-      val e = intercept[AnalysisException] {
-        sql(sql1)
-      }.getMessage
-      assert(e.contains("CREATE FUNCTION with both IF NOT EXISTS and REPLACE is not allowed"))
-    }
-  }
-
-  test("create temporary function by specifying a database") {
-    val dbName = "mydb"
-    withDatabase(dbName) {
-      sql(s"CREATE DATABASE $dbName")
-      sql(s"USE $dbName")
-      withUserDefinedFunction("func1" -> true) {
-        val sql1 =
-          s"""
-             |CREATE TEMPORARY FUNCTION $dbName.func1 as
-             |'com.matthewrathbone.example.SimpleUDFExample' USING JAR '/path/to/jar1',
-             |JAR '/path/to/jar2'
-            """.stripMargin
-        val e = intercept[AnalysisException] {
-          sql(sql1)
-        }.getMessage
-        assert(e.contains(s"Specifying a database in CREATE TEMPORARY FUNCTION " +
-          s"is not allowed: '$dbName'"))
-      }
     }
   }
 

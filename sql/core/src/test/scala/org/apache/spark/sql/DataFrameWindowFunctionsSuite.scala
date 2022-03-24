@@ -20,9 +20,12 @@ package org.apache.spark.sql
 import org.scalatest.matchers.must.Matchers.the
 
 import org.apache.spark.TestUtils.{assertNotSpilled, assertSpilled}
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Expression}
 import org.apache.spark.sql.catalyst.optimizer.TransposeWindow
+import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
-import org.apache.spark.sql.execution.exchange.Exchange
+import org.apache.spark.sql.execution.exchange.{ENSURE_REQUIREMENTS, Exchange, ShuffleExchangeExec}
+import org.apache.spark.sql.execution.window.WindowExec
 import org.apache.spark.sql.expressions.{Aggregator, MutableAggregationBuffer, UserDefinedAggregateFunction, Window}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
@@ -94,7 +97,8 @@ class DataFrameWindowFunctionsSuite extends QueryTest
   }
 
   test("corr, covar_pop, stddev_pop functions in specific window") {
-    withSQLConf(SQLConf.LEGACY_STATISTICAL_AGGREGATE.key -> "true") {
+    withSQLConf(SQLConf.LEGACY_STATISTICAL_AGGREGATE.key -> "true",
+      SQLConf.ANSI_ENABLED.key -> "false") {
       val df = Seq(
         ("a", "p1", 10.0, 20.0),
         ("b", "p1", 20.0, 10.0),
@@ -147,7 +151,8 @@ class DataFrameWindowFunctionsSuite extends QueryTest
   test("SPARK-13860: " +
     "corr, covar_pop, stddev_pop functions in specific window " +
     "LEGACY_STATISTICAL_AGGREGATE off") {
-    withSQLConf(SQLConf.LEGACY_STATISTICAL_AGGREGATE.key -> "false") {
+    withSQLConf(SQLConf.LEGACY_STATISTICAL_AGGREGATE.key -> "false",
+      SQLConf.ANSI_ENABLED.key -> "false") {
       val df = Seq(
         ("a", "p1", 10.0, 20.0),
         ("b", "p1", 20.0, 10.0),
@@ -404,22 +409,24 @@ class DataFrameWindowFunctionsSuite extends QueryTest
   }
 
   test("numerical aggregate functions on string column") {
-    val df = Seq((1, "a", "b")).toDF("key", "value1", "value2")
-    checkAnswer(
-      df.select($"key",
-        var_pop("value1").over(),
-        variance("value1").over(),
-        stddev_pop("value1").over(),
-        stddev("value1").over(),
-        sum("value1").over(),
-        mean("value1").over(),
-        avg("value1").over(),
-        corr("value1", "value2").over(),
-        covar_pop("value1", "value2").over(),
-        covar_samp("value1", "value2").over(),
-        skewness("value1").over(),
-        kurtosis("value1").over()),
-      Seq(Row(1, null, null, null, null, null, null, null, null, null, null, null, null)))
+    if (!conf.ansiEnabled) {
+      val df = Seq((1, "a", "b")).toDF("key", "value1", "value2")
+      checkAnswer(
+        df.select($"key",
+          var_pop("value1").over(),
+          variance("value1").over(),
+          stddev_pop("value1").over(),
+          stddev("value1").over(),
+          sum("value1").over(),
+          mean("value1").over(),
+          avg("value1").over(),
+          corr("value1", "value2").over(),
+          covar_pop("value1", "value2").over(),
+          covar_samp("value1", "value2").over(),
+          skewness("value1").over(),
+          kurtosis("value1").over()),
+        Seq(Row(1, null, null, null, null, null, null, null, null, null, null, null, null)))
+    }
   }
 
   test("statistical functions") {
@@ -1070,5 +1077,49 @@ class DataFrameWindowFunctionsSuite extends QueryTest
         Row("a", 0, "x", null),
         Row("a", 1, "x", "x"),
         Row("b", 0, null, null)))
+  }
+
+  test("SPARK-38237: require all cluster keys for child required distribution for window query") {
+    def partitionExpressionsColumns(expressions: Seq[Expression]): Seq[String] = {
+      expressions.flatMap {
+        case ref: AttributeReference => Some(ref.name)
+      }
+    }
+
+    def isShuffleExecByRequirement(
+        plan: ShuffleExchangeExec,
+        desiredClusterColumns: Seq[String]): Boolean = plan match {
+      case ShuffleExchangeExec(op: HashPartitioning, _, ENSURE_REQUIREMENTS) =>
+        partitionExpressionsColumns(op.expressions) === desiredClusterColumns
+      case _ => false
+    }
+
+    val df = Seq(("a", 1, 1), ("a", 2, 2), ("b", 1, 3), ("b", 1, 4)).toDF("key1", "key2", "value")
+    val windowSpec = Window.partitionBy("key1", "key2").orderBy("value")
+
+    withSQLConf(
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
+      SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_DISTRIBUTION.key -> "true") {
+
+      val windowed = df
+        // repartition by subset of window partitionBy keys which satisfies ClusteredDistribution
+        .repartition($"key1")
+        .select(
+          lead($"key1", 1).over(windowSpec),
+          lead($"value", 1).over(windowSpec))
+
+      checkAnswer(windowed, Seq(Row("b", 4), Row(null, null), Row(null, null), Row(null, null)))
+
+      val shuffleByRequirement = windowed.queryExecution.executedPlan.exists {
+        case w: WindowExec =>
+          w.child.exists {
+            case s: ShuffleExchangeExec => isShuffleExecByRequirement(s, Seq("key1", "key2"))
+            case _ => false
+          }
+        case _ => false
+      }
+
+      assert(shuffleByRequirement, "Can't find desired shuffle node from the query plan")
+    }
   }
 }

@@ -183,7 +183,7 @@ class BarrierTaskContext(TaskContext):
         """
         if not isinstance(cls._taskContext, BarrierTaskContext):
             cls._taskContext = object.__new__(cls)
-        return cast(BarrierTaskContext, cls._taskContext)
+        return cls._taskContext
 
     @classmethod
     def get(cls: Type["BarrierTaskContext"]) -> "BarrierTaskContext":

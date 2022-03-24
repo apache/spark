@@ -627,7 +627,7 @@ class DataFrameTests(ReusedSQLTestCase):
         # field types mismatch will cause exception at runtime.
         self.assertRaisesRegex(
             Exception,
-            "FloatType can not accept",
+            "FloatType\\(\\) can not accept",
             lambda: rdd.toDF("key: float, value: string").collect(),
         )
 

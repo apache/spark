@@ -658,14 +658,14 @@ class AnalysisErrorSuite extends AnalysisTest {
     assertAnalysisError(plan2, "EqualTo does not support ordering on type map" :: Nil)
   }
 
-  test("PredicateSubQuery is used outside of a filter") {
+  test("PredicateSubQuery is used outside of a allowed nodes") {
     val a = AttributeReference("a", IntegerType)()
     val b = AttributeReference("b", IntegerType)()
-    val plan = Project(
-      Seq(a, Alias(InSubquery(Seq(a), ListQuery(LocalRelation(b))), "c")()),
+    val plan = Sort(
+      Seq(SortOrder(InSubquery(Seq(a), ListQuery(LocalRelation(b))), Ascending)),
+      global = true,
       LocalRelation(a))
-    assertAnalysisError(plan, "Predicate sub-queries can only be used" +
-        " in Filter" :: Nil)
+    assertAnalysisError(plan, "Predicate sub-queries can only be used in " :: Nil)
   }
 
   test("PredicateSubQuery correlated predicate is nested in an illegal plan") {
@@ -793,7 +793,8 @@ class AnalysisErrorSuite extends AnalysisTest {
     val a = AttributeReference("a", IntegerType)()
     val b = AttributeReference("b", IntegerType)()
     val c = AttributeReference("c", IntegerType)()
-    val t1 = LocalRelation(a, b)
+    val d = AttributeReference("d", DoubleType)()
+    val t1 = LocalRelation(a, b, d)
     val t2 = LocalRelation(c)
     val conditions = Seq(
       (abs($"a") === $"c", "abs(a) = outer(c)"),
@@ -801,7 +802,7 @@ class AnalysisErrorSuite extends AnalysisTest {
       ($"a" + 1 === $"c", "(a + 1) = outer(c)"),
       ($"a" + $"b" === $"c", "(a + b) = outer(c)"),
       ($"a" + $"c" === $"b", "(a + outer(c)) = b"),
-      (And($"a" === $"c", Cast($"a", IntegerType) === $"c"), "CAST(a AS INT) = outer(c)"))
+      (And($"a" === $"c", Cast($"d", IntegerType) === $"c"), "CAST(d AS INT) = outer(c)"))
     conditions.foreach { case (cond, msg) =>
       val plan = Project(
         ScalarSubquery(

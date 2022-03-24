@@ -23,8 +23,8 @@ on:
   push:
     branches:
     - '**'
-    - '!branch-*.*'
   schedule:
+    # Note that the scheduled jobs are only for master branch.
     # master, Hadoop 2
     - cron: '0 1 * * *'
     # master
@@ -37,6 +37,12 @@ on:
     - cron: '0 13 * * *'
     # Java 17
     - cron: '0 16 * * *'
+  workflow_call:
+    inputs:
+      ansi_enabled:
+        required: false
+        type: boolean
+        default: false
 
 jobs:
   configure-jobs:
@@ -90,15 +96,16 @@ jobs:
           echo '::set-output name=hadoop::hadoop3'
         else
           echo '::set-output name=java::8'
-          echo '::set-output name=branch::master' # Default branch to run on. CHANGE here when a branch is cut out.
+          echo '::set-output name=branch::master'  # NOTE: UPDATE THIS WHEN CUTTING BRANCH
           echo '::set-output name=type::regular'
-          echo '::set-output name=envs::{}'
+          echo '::set-output name=envs::{"SPARK_ANSI_SQL_MODE": "${{ inputs.ansi_enabled }}"}'
           echo '::set-output name=hadoop::hadoop3'
         fi
 
   precondition:
     name: Check changes
     runs-on: ubuntu-20.04
+    needs: configure-jobs
     env:
       GITHUB_PREV_SHA: ${{ github.event.before }}
     outputs:
@@ -109,7 +116,7 @@ jobs:
       with:
         fetch-depth: 0
         repository: apache/spark
-        ref: master
+        ref: ${{ needs.configure-jobs.outputs.branch }}
     - name: Sync the current branch with the latest in Apache Spark
       if: github.repository != 'apache/spark'
       run: |
@@ -311,6 +318,7 @@ jobs:
       SKIP_UNIDOC: true
       SKIP_MIMA: true
       METASPACE_SIZE: 1g
+      SPARK_ANSI_SQL_MODE: ${{ inputs.ansi_enabled }}
     steps:
     - name: Checkout Spark repository
       uses: actions/checkout@v2
@@ -318,7 +326,7 @@ jobs:
       with:
         fetch-depth: 0
         repository: apache/spark
-        ref: master
+        ref: ${{ needs.configure-jobs.outputs.branch }}
     - name: Sync the current branch with the latest in Apache Spark
       if: github.repository != 'apache/spark'
       run: |
@@ -398,6 +406,7 @@ jobs:
       GITHUB_PREV_SHA: ${{ github.event.before }}
       SPARK_LOCAL_IP: localhost
       SKIP_MIMA: true
+      SPARK_ANSI_SQL_MODE: ${{ inputs.ansi_enabled }}
     steps:
     - name: Checkout Spark repository
       uses: actions/checkout@v2
@@ -405,7 +414,7 @@ jobs:
       with:
         fetch-depth: 0
         repository: apache/spark
-        ref: master
+        ref: ${{ needs.configure-jobs.outputs.branch }}
     - name: Sync the current branch with the latest in Apache Spark
       if: github.repository != 'apache/spark'
       run: |
@@ -469,7 +478,7 @@ jobs:
       with:
         fetch-depth: 0
         repository: apache/spark
-        ref: master
+        ref: ${{ needs.configure-jobs.outputs.branch }}
     - name: Sync the current branch with the latest in Apache Spark
       if: github.repository != 'apache/spark'
       run: |
@@ -532,6 +541,7 @@ jobs:
         # Pin the MarkupSafe to 2.0.1 to resolve the CI error.
         #   See also https://issues.apache.org/jira/browse/SPARK-38279.
         python3.9 -m pip install 'sphinx<3.1.0' mkdocs pydata_sphinx_theme ipython nbsphinx numpydoc 'jinja2<3.0.0' 'markupsafe==2.0.1'
+        python3.9 -m pip install ipython_genutils # See SPARK-38517
         python3.9 -m pip install sphinx_plotly_directive 'numpy>=1.20.0' pyarrow pandas 'plotly>=4.8' 
         apt-get update -y
         apt-get install -y ruby ruby-dev
@@ -581,7 +591,7 @@ jobs:
       with:
         fetch-depth: 0
         repository: apache/spark
-        ref: master
+        ref: ${{ needs.configure-jobs.outputs.branch }}
     - name: Sync the current branch with the latest in Apache Spark
       if: github.repository != 'apache/spark'
       run: |
@@ -630,7 +640,7 @@ jobs:
       with:
         fetch-depth: 0
         repository: apache/spark
-        ref: master
+        ref: ${{ needs.configure-jobs.outputs.branch }}
     - name: Sync the current branch with the latest in Apache Spark
       if: github.repository != 'apache/spark'
       run: |
@@ -671,13 +681,14 @@ jobs:
     runs-on: ubuntu-20.04
     env:
       SPARK_LOCAL_IP: localhost
+      SPARK_ANSI_SQL_MODE: ${{ inputs.ansi_enabled }}
     steps:
     - name: Checkout Spark repository
       uses: actions/checkout@v2
       with:
         fetch-depth: 0
         repository: apache/spark
-        ref: master
+        ref: ${{ needs.configure-jobs.outputs.branch }}
     - name: Sync the current branch with the latest in Apache Spark
       if: github.repository != 'apache/spark'
       run: |
@@ -776,7 +787,7 @@ jobs:
       with:
         fetch-depth: 0
         repository: apache/spark
-        ref: master
+        ref: ${{ needs.configure-jobs.outputs.branch }}
     - name: Sync the current branch with the latest in Apache Spark
       if: github.repository != 'apache/spark'
       run: |

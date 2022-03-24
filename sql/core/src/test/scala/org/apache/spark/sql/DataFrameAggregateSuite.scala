@@ -1025,11 +1025,15 @@ class DataFrameAggregateSuite extends QueryTest
         sql("SELECT x FROM tempView GROUP BY x HAVING COUNT_IF(NULL) > 0"),
         Nil)
 
-      val error = intercept[AnalysisException] {
-        sql("SELECT COUNT_IF(x) FROM tempView")
+      // When ANSI mode is on, it will implicit cast the string as boolean and throw a runtime
+      // error. Here we simply test with ANSI mode off.
+      if (!conf.ansiEnabled) {
+        val error = intercept[AnalysisException] {
+          sql("SELECT COUNT_IF(x) FROM tempView")
+        }
+        assert(error.message.contains("cannot resolve 'count_if(tempview.x)' due to data type " +
+          "mismatch: argument 1 requires boolean type, however, 'tempview.x' is of string type"))
       }
-      assert(error.message.contains("cannot resolve 'count_if(tempview.x)' due to data type " +
-        "mismatch: argument 1 requires boolean type, however, 'tempview.x' is of string type"))
     }
   }
 
@@ -1136,9 +1140,11 @@ class DataFrameAggregateSuite extends QueryTest
     val mapDF = Seq(Tuple1(Map("a" -> "a"))).toDF("col")
     checkAnswer(mapDF.groupBy(struct($"col.a")).count().select("count"), Row(1))
 
-    val nonStringMapDF = Seq(Tuple1(Map(1 -> 1))).toDF("col")
-    // Spark implicit casts string literal "a" to int to match the key type.
-    checkAnswer(nonStringMapDF.groupBy(struct($"col.a")).count().select("count"), Row(1))
+    if (!conf.ansiEnabled) {
+      val nonStringMapDF = Seq(Tuple1(Map(1 -> 1))).toDF("col")
+      // Spark implicit casts string literal "a" to int to match the key type.
+      checkAnswer(nonStringMapDF.groupBy(struct($"col.a")).count().select("count"), Row(1))
+    }
 
     val arrayDF = Seq(Tuple1(Seq(1))).toDF("col")
     val e = intercept[AnalysisException](arrayDF.groupBy(struct($"col.a")).count())

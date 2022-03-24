@@ -555,22 +555,22 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
     )
   }
 
-  test("AnalysisException with root cause will be printStacktrace") {
+  test("SparkException with root cause will be printStacktrace") {
     // If it is not in silent mode, will print the stacktrace
     runCliWithin(
       1.minute,
       extraArgs = Seq("--hiveconf", "hive.session.silent=false",
-        "-e", "select date_sub(date'2011-11-11', '1.2');"),
-      errorResponses = Seq("NumberFormatException"))(
-      ("", "Error in query: The second argument of 'date_sub' function needs to be an integer."),
-      ("", "NumberFormatException: invalid input syntax for type numeric: 1.2"))
+        "-e", "select from_json('a', 'a INT', map('mode', 'FAILFAST'));"),
+      errorResponses = Seq("JsonParseException"))(
+      ("", "SparkException: Malformed records are detected in record parsing"),
+      ("", "JsonParseException: Unrecognized token 'a'"))
     // If it is in silent mode, will print the error message only
     runCliWithin(
       1.minute,
       extraArgs = Seq("--conf", "spark.hive.session.silent=true",
-        "-e", "select date_sub(date'2011-11-11', '1.2');"),
-      errorResponses = Seq("AnalysisException"))(
-      ("", "Error in query: The second argument of 'date_sub' function needs to be an integer."))
+        "-e", "select from_json('a', 'a INT', map('mode', 'FAILFAST'));"),
+      errorResponses = Seq("SparkException"))(
+      ("", "SparkException: Malformed records are detected in record parsing"))
   }
 
   test("SPARK-30808: use Java 8 time API in Thrift SQL CLI by default") {
@@ -630,7 +630,7 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
   test("SPARK-37555: spark-sql should pass last unclosed comment to backend") {
     runCliWithin(2.minute)(
       // Only unclosed comment.
-      "/* SELECT /*+ HINT() 4; */;".stripMargin -> "mismatched input ';'",
+      "/* SELECT /*+ HINT() 4; */;".stripMargin -> "Syntax error at or near ';'",
       // Unclosed nested bracketed comment.
       "/* SELECT /*+ HINT() 4; */ SELECT 1;".stripMargin -> "1",
       // Unclosed comment with query.
@@ -642,7 +642,7 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
 
   test("SPARK-37694: delete [jar|file|archive] shall use spark sql processor") {
     runCliWithin(2.minute, errorResponses = Seq("ParseException"))(
-      "delete jar dummy.jar;" -> "missing 'FROM' at 'jar'(line 1, pos 7)")
+      "delete jar dummy.jar;" -> "Syntax error at or near 'jar': missing 'FROM'(line 1, pos 7)")
   }
 
   test("SPARK-37906: Spark SQL CLI should not pass final comment") {

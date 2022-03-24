@@ -673,7 +673,7 @@ public class RemoteBlockPushResolverSuite {
     validateChunks(TEST_APP, 0, 0, 0, blockMeta, new int[] {4, 5}, new int[][] {{0}, {1}});
   }
 
-  @Test(expected = RuntimeException.class)
+  @Test(expected = IllegalStateException.class)
   public void testIOExceptionsExceededThreshold() throws IOException {
     RemoteBlockPushResolver.PushBlockStreamCallback callback =
       (RemoteBlockPushResolver.PushBlockStreamCallback) pushResolver.receiveBlockDataAsStream(
@@ -708,7 +708,7 @@ public class RemoteBlockPushResolverSuite {
     }
   }
 
-  @Test(expected = RuntimeException.class)
+  @Test(expected = IllegalStateException.class)
   public void testIOExceptionsDuringMetaUpdateIncreasesExceptionCount() throws IOException {
     useTestFiles(true, false);
     RemoteBlockPushResolver.PushBlockStreamCallback callback =
@@ -743,7 +743,7 @@ public class RemoteBlockPushResolverSuite {
     }
   }
 
-  @Test(expected = RuntimeException.class)
+  @Test(expected = IllegalStateException.class)
   public void testRequestForAbortedShufflePartitionThrowsException() {
     try {
       testIOExceptionsDuringMetaUpdateIncreasesExceptionCount();
@@ -760,7 +760,7 @@ public class RemoteBlockPushResolverSuite {
     }
   }
 
-  @Test(expected = RuntimeException.class)
+  @Test(expected = IllegalStateException.class)
   public void testPendingBlockIsAbortedImmediately() throws IOException {
     useTestFiles(true, false);
     RemoteBlockPushResolver.PushBlockStreamCallback callback =
@@ -793,7 +793,7 @@ public class RemoteBlockPushResolverSuite {
     }
   }
 
-  @Test(expected = RuntimeException.class)
+  @Test(expected = IllegalStateException.class)
   public void testWritingPendingBufsIsAbortedImmediatelyDuringComplete() throws IOException {
     useTestFiles(true, false);
     RemoteBlockPushResolver.PushBlockStreamCallback callback =
@@ -817,7 +817,7 @@ public class RemoteBlockPushResolverSuite {
     assertEquals(4, partitionInfo.getNumIOExceptions());
     RemoteBlockPushResolver.PushBlockStreamCallback callback2 =
       (RemoteBlockPushResolver.PushBlockStreamCallback) pushResolver.receiveBlockDataAsStream(
-        new PushBlockStream(TEST_APP, 1, 0, 0, 5, 0, 0));
+        new PushBlockStream(TEST_APP, NO_ATTEMPT_ID, 0, 0, 5, 0, 0));
     callback2.onData(callback2.getID(), ByteBuffer.wrap(new byte[5]));
     // This is deferred
     callback.onData(callback.getID(), ByteBuffer.wrap(new byte[4]));
@@ -834,7 +834,7 @@ public class RemoteBlockPushResolverSuite {
     try {
       callback.onComplete(callback.getID());
     } catch (Throwable t) {
-      assertEquals("IOExceptions exceeded the threshold when merging shufflePush_0_0_0",
+      assertEquals("IOExceptions exceeded the threshold when merging shufflePush_0_0_0_0",
         t.getMessage());
       throw t;
     }
@@ -1247,7 +1247,7 @@ public class RemoteBlockPushResolverSuite {
     assertFalse("Meta files on the disk should be cleaned up",
       appShuffleInfo.getMergedShuffleMetaFile(0, 1, 0).exists());
     assertFalse("Index files on the disk should be cleaned up",
-      appShuffleInfo.getMergedShuffleIndexFile(0, 1, 0).exists());
+      new File(appShuffleInfo.getMergedShuffleIndexFilePath(0, 1, 0)).exists());
     stream2.onData(stream2.getID(), ByteBuffer.wrap(new byte[2]));
     stream2.onData(stream2.getID(), ByteBuffer.wrap(new byte[2]));
     // stream 2 now completes
@@ -1282,7 +1282,7 @@ public class RemoteBlockPushResolverSuite {
     assertFalse("MergedBlock meta file for shuffle 0 and shuffleMergeId 4 should be cleaned"
       + " up", appShuffleInfo.getMergedShuffleMetaFile(0, 4, 0).exists());
     assertFalse("MergedBlock index file for shuffle 0 and shuffleMergeId 4 should be cleaned"
-      + " up", appShuffleInfo.getMergedShuffleIndexFile(0, 4, 0).exists());
+      + " up", new File(appShuffleInfo.getMergedShuffleIndexFilePath(0, 4, 0)).exists());
     assertFalse("MergedBlock data file for shuffle 0 and shuffleMergeId 4 should be cleaned"
       + " up", appShuffleInfo.getMergedShuffleDataFile(0, 4, 0).exists());
   }

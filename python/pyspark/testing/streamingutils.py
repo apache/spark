@@ -40,7 +40,7 @@ else:
         "spark-streaming-kinesis-asl-assembly_",
     )
     if kinesis_asl_assembly_jar is None:
-        kinesis_requirement_message = (  # type: ignore
+        kinesis_requirement_message = (
             "Skipping all Kinesis Python tests as the optional Kinesis project was "
             "not compiled into a JAR. To run these tests, "
             "you need to build Spark with 'build/sbt -Pkinesis-asl assembly/package "

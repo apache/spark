@@ -354,7 +354,13 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
   private def updateAttr(a: Attribute, attrMap: AttributeMap[Attribute]): Attribute = {
     attrMap.get(a) match {
       case Some(b) =>
-        AttributeReference(a.name, b.dataType, b.nullable, a.metadata)(b.exprId, a.qualifier)
+        // The new Attribute has to
+        // - use a.nullable, because nullability cannot be propagated bottom-up without considering
+        //   enclosed operators, e.g., operators such as Filters and Outer Joins can change
+        //   nullability;
+        // - use b.dataType because transformUpWithNewOutput is used in the Analyzer for resolution,
+        //   e.g., WidenSetOperationTypes uses it to propagate types bottom-up.
+        AttributeReference(a.name, b.dataType, a.nullable, a.metadata)(b.exprId, a.qualifier)
       case None => a
     }
   }
