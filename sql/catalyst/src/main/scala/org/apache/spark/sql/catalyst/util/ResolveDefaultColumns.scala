@@ -103,8 +103,8 @@ object ResolveDefaultColumns {
       statementType: String): Expression = {
     // Parse the expression.
     val colText: String = field.metadata.getString(CURRENT_DEFAULT_COLUMN_METADATA_KEY)
+    lazy val parser = new CatalystSqlParser()
     val parsed: Expression = try {
-      lazy val parser = new CatalystSqlParser()
       parser.parseExpression(colText)
     } catch {
       case ex: ParseException =>
