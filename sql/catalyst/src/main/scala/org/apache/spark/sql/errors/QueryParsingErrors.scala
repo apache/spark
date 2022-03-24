@@ -221,6 +221,11 @@ object QueryParsingErrors {
     new ParseException(s"DataType $dataType is not supported.", ctx)
   }
 
+  def charTypeMissingLengthError(dataType: String, ctx: PrimitiveDataTypeContext): Throwable = {
+    new ParseException(s"DataType $dataType requires a length parameter, for example " +
+      s"$dataType(10). Please specify the length.", ctx)
+  }
+
   def partitionTransformNotExpectedError(
       name: String, describe: String, ctx: ApplyTransformContext): Throwable = {
     new ParseException(s"Expected a column reference for transform $name: $describe", ctx)
