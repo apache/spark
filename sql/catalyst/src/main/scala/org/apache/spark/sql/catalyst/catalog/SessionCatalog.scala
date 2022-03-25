@@ -875,11 +875,6 @@ class SessionCatalog(
     }
     val viewConfigs = metadata.viewSQLConfigs
     val origin = Origin(
-      line = Some(0),
-      startPosition = Some(0),
-      startIndex = Some(0),
-      stopIndex = Some(viewText.length - 1),
-      sqlText = Some(viewText),
       objectType = Some("VIEW"),
       objectName = Some(metadata.qualifiedName)
     )

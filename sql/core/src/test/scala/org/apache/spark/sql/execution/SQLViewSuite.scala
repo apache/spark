@@ -915,44 +915,51 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
   test("CurrentOrigin is correctly set in and out of the View") {
     withTable("t") {
       Seq((1, 1), (2, 2)).toDF("a", "b").write.format("parquet").saveAsTable("t")
-      Seq("", "temp")
-      withView("v") {
-        val viewText = "SELECT a + b c FROM t"
-        sql(
-          s"""
-            |CREATE VIEW v AS
-            |-- the body of the view
-            |$viewText
-            |""".stripMargin)
-        val plan = sql("select c / 2.0D d from v").logicalPlan
-        val add = plan.collectFirst {
-          case Project(Seq(Alias(a: Add, _)), _) => a
-        }
-        assert(add.isDefined)
-        val expectedAddOrigin = Origin(
-          line = Some(1),
-          startPosition = Some(7),
-          startIndex = Some(7),
-          stopIndex = Some(11),
-          sqlText = Some("SELECT a + b c FROM t"),
-          objectType = Some("VIEW"),
-          objectName = Some("default.v")
-        )
-        assert(add.get.origin == expectedAddOrigin)
+      Seq("VIEW", "TEMPORARY VIEW").foreach { viewType =>
+        val viewId = "v"
+        withView(viewId) {
+          val viewText = "SELECT a + b c FROM t"
+          sql(
+            s"""
+              |CREATE $viewType $viewId AS
+              |-- the body of the view
+              |$viewText
+              |""".stripMargin)
+          val plan = sql("select c / 2.0D d from v").logicalPlan
+          val add = plan.collectFirst {
+            case Project(Seq(Alias(a: Add, _)), _) => a
+          }
+          assert(add.isDefined)
+          val qualifiedName = if (viewType == "VIEW") {
+            s"default.$viewId"
+          } else {
+            viewId
+          }
+          val expectedAddOrigin = Origin(
+            line = Some(1),
+            startPosition = Some(7),
+            startIndex = Some(7),
+            stopIndex = Some(11),
+            sqlText = Some("SELECT a + b c FROM t"),
+            objectType = Some("VIEW"),
+            objectName = Some(qualifiedName)
+          )
+          assert(add.get.origin == expectedAddOrigin)
 
-        val divide = plan.collectFirst {
-          case Project(Seq(Alias(d: Divide, _)), _) => d
+          val divide = plan.collectFirst {
+            case Project(Seq(Alias(d: Divide, _)), _) => d
+          }
+          assert(divide.isDefined)
+          val expectedDivideOrigin = Origin(
+            line = Some(1),
+            startPosition = Some(7),
+            startIndex = Some(7),
+            stopIndex = Some(14),
+            sqlText = Some("select c / 2.0D d from v"),
+            objectType = None,
+            objectName = None)
+          assert(divide.get.origin == expectedDivideOrigin)
         }
-        assert(divide.isDefined)
-        val expectedDivideOrigin = Origin(
-          line = Some(1),
-          startPosition = Some(7),
-          startIndex = Some(7),
-          stopIndex = Some(14),
-          sqlText = Some("select c / 2.0D d from v"),
-          objectType = None,
-          objectName = None)
-        assert(divide.get.origin == expectedDivideOrigin)
       }
     }
   }
