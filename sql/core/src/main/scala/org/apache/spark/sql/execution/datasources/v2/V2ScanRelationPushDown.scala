@@ -375,7 +375,8 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper wit
       }
       operation
     case s @ Sort(order, _, operation @ ScanOperation(project, filter, sHolder: ScanBuilderHolder))
-        if filter.isEmpty =>
+        if filter.isEmpty && CollapseProject.canCollapseExpressions(
+          order, project, alwaysInline = true) =>
       val aliasMap = getAliasMap(project)
       val newOrder = order.map(replaceAlias(_, aliasMap)).asInstanceOf[Seq[SortOrder]]
       val orders = DataSourceStrategy.translateSortOrders(newOrder)

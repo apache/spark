@@ -277,6 +277,18 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
     checkPushedInfo(df1,
       "PushedFilters: [], PushedTopN: ORDER BY [SALARY ASC NULLS FIRST] LIMIT 1, ")
     checkAnswer(df1, Seq(Row("cathy", 9000.00)))
+
+    val df2 = spark.read
+      .table("h2.test.employee")
+      .select($"DEPT", $"NAME", $"SALARY".as("mySalary"))
+      .filter($"DEPT" > 1)
+      .sort("mySalary")
+      .limit(1)
+    checkSortRemoved(df2)
+    checkPushedInfo(df2,
+      "PushedFilters: [DEPT IS NOT NULL, DEPT > 1], " +
+        "PushedTopN: ORDER BY [SALARY ASC NULLS FIRST] LIMIT 1, ")
+    checkAnswer(df2, Seq(Row(2, "david", 10000.00)))
   }
 
   test("scan with filter push-down") {
