@@ -66,6 +66,16 @@ object ResolveDefaultColumns {
    * EXISTS_DEFAULT metadata of that same column. Meanwhile the "current default" metadata of this
    * "b" column retains its original value of "5 + 5".
    *
+   * The reason for constant-folding the EXISTS_DEFAULT is to make the end-user visible behavior the
+   * same, after executing an ALTER TABLE ADD COLUMNS command with DEFAULT value, as if the system
+   * had performed an exhaustive backfill of the provided value to all previously existing rows in
+   * the table instead. We choose to avoid doing such a backfill because it would be a
+   * time-consuming and costly operation. Instead, we elect to store the EXISTS_DEFAULT in the
+   * column metadata for future reference when querying data out of the data source. In turn, each
+   * data source then takes responsibility to provide the constant-folded value in the
+   * EXISTS_DEFAULT metadata for such columns where the value is not present in storage.
+   *
+   * @param analyzer used for analyzing the result of parsing the column expression stored as text.
    * @param tableSchema represents the names and types of the columns of the statement to process.
    * @param statementType name of the statement being processed, such as INSERT; useful for errors.
    * @return a copy of `tableSchema` with field metadata updated with the constant-folded values.
