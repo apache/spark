@@ -66,7 +66,7 @@ private[ui] class AllExecutionsPage(parent: SQLTab) extends WebUIPage("") with L
                 'aggregated-runningExecutions')">
             <h4>
               <span class="collapse-table-arrow arrow-open"></span>
-              <a>Running Queries ({running.size})</a>
+              <a>Running Executions ({running.size})</a>
             </h4>
           </span> ++
             <div class="aggregated-runningExecutions collapsible-table">
@@ -84,7 +84,7 @@ private[ui] class AllExecutionsPage(parent: SQLTab) extends WebUIPage("") with L
                 'aggregated-completedExecutions')">
             <h4>
               <span class="collapse-table-arrow arrow-open"></span>
-              <a>Completed Queries ({completed.size})</a>
+              <a>Completed Executions ({completed.size})</a>
             </h4>
           </span> ++
             <div class="aggregated-completedExecutions collapsible-table">
@@ -102,7 +102,7 @@ private[ui] class AllExecutionsPage(parent: SQLTab) extends WebUIPage("") with L
                 'aggregated-failedExecutions')">
             <h4>
               <span class="collapse-table-arrow arrow-open"></span>
-              <a>Failed Queries ({failed.size})</a>
+              <a>Failed Executions ({failed.size})</a>
             </h4>
           </span> ++
             <div class="aggregated-failedExecutions collapsible-table">
@@ -123,7 +123,7 @@ private[ui] class AllExecutionsPage(parent: SQLTab) extends WebUIPage("") with L
           {
             if (running.nonEmpty) {
               <li>
-                <a href="#running"><strong>Running Queries:</strong></a>
+                <a href="#running"><strong>Running Executions:</strong></a>
                 {running.size}
               </li>
             }
@@ -131,7 +131,7 @@ private[ui] class AllExecutionsPage(parent: SQLTab) extends WebUIPage("") with L
           {
             if (completed.nonEmpty) {
               <li>
-                <a href="#completed"><strong>Completed Queries:</strong></a>
+                <a href="#completed"><strong>Completed Executions:</strong></a>
                 {completed.size}
               </li>
             }
@@ -139,7 +139,7 @@ private[ui] class AllExecutionsPage(parent: SQLTab) extends WebUIPage("") with L
           {
             if (failed.nonEmpty) {
               <li>
-                <a href="#failed"><strong>Failed Queries:</strong></a>
+                <a href="#failed"><strong>Failed Executions:</strong></a>
                 {failed.size}
               </li>
             }
@@ -147,7 +147,7 @@ private[ui] class AllExecutionsPage(parent: SQLTab) extends WebUIPage("") with L
         </ul>
       </div>
 
-    UIUtils.headerSparkPage(request, "SQL", summary ++ content, parent)
+    UIUtils.headerSparkPage(request, "SQL & DataFrame", summary ++ content, parent)
   }
 
   private def executionsTable(

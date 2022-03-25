@@ -84,11 +84,11 @@ class ExecutionPage(parent: SQLTab) extends WebUIPage("execution") with Logging 
         physicalPlanDescription(executionUIData.physicalPlanDescription) ++
         modifiedConfigs(executionUIData.modifiedConfigs)
     }.getOrElse {
-      <div>No information to display for query {executionId}</div>
+      <div>No information to display for execution {executionId}</div>
     }
 
     UIUtils.headerSparkPage(
-      request, s"Details for Query $executionId", content, parent)
+      request, s"Details for Execution $executionId", content, parent)
   }
 
 
@@ -159,7 +159,7 @@ class ExecutionPage(parent: SQLTab) extends WebUIPage("execution") with Logging 
       <span class="collapse-sql-properties collapse-table"
             onClick="collapseTable('collapse-sql-properties', 'sql-properties')">
         <span class="collapse-table-arrow arrow-closed"></span>
-        <a>SQL Properties</a>
+        <a>SQL &amp; DataFrame: Properties</a>
       </span>
       <div class="sql-properties collapsible-table collapsed">
         {configs}
