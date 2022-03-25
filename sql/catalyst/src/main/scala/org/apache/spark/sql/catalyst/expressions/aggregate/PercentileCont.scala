@@ -22,7 +22,7 @@ import org.apache.spark.sql.catalyst.trees.BinaryLike
 import org.apache.spark.sql.types.AbstractDataType
 
 /**
- * Returns a percentile value based on a continuous distribution of
+ * Return a percentile value based on a continuous distribution of
  * numeric or ansi interval column at the given percentage (specified in ORDER BY clause).
  * The value of percentage must be between 0.0 and 1.0.
  */
