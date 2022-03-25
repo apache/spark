@@ -157,9 +157,6 @@ abstract class OffsetWindowFunctionFrameBase(
 
   /** find the offset row whose input is not null */
   protected def findNextRowWithNonNullInput(): Unit = {
-    // In order to ensure the behavior find the offset row whose input is not null,
-    // offset < = input.length must be guaranteed.
-    assert(offset <= input.length)
     while (skippedNonNullCount < offset && inputIndex < input.length) {
       val r = WindowFunctionFrame.getNextOrNull(inputIterator)
       if (!nullCheck(r)) {
@@ -167,6 +164,11 @@ abstract class OffsetWindowFunctionFrameBase(
         skippedNonNullCount += 1
       }
       inputIndex += 1
+    }
+    if (skippedNonNullCount < offset && inputIndex == input.length) {
+      // The size of not null input less than offset, cannot find the offset row whose input
+      // is not null. Therefore, reset `nextSelectedRow` with empty row.
+      nextSelectedRow = EmptyRow
     }
   }
 
