@@ -2280,7 +2280,7 @@ class DDLParserSuite extends AnalysisTest {
         "Support for DEFAULT column values is not allowed")
     }
 
-  // In each of the following cases, the DEFAULT reference parses as an unresolved attribute
+    // In each of the following cases, the DEFAULT reference parses as an unresolved attribute
     // reference. We can handle these cases after the parsing stage, at later phases of analysis.
     comparePlans(parsePlan("VALUES (1, 2, DEFAULT) AS val"),
       SubqueryAlias("val",
