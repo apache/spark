@@ -122,7 +122,7 @@ case class RegrAvgY(
 
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(y, x) - Returns the number of non-null number pairs in a group, where `y` is the dependent variable and `x` is the independent variable.",
+  usage = "_FUNC_(y, x) - Returns the coefficient of determination for non-null pairs in a group, where `y` is the dependent variable and `x` is the independent variable.",
   examples = """
     Examples:
       > SELECT _FUNC_(y, x) FROM VALUES (1, 2), (2, 2), (2, 3), (2, 4) AS tab(y, x);
