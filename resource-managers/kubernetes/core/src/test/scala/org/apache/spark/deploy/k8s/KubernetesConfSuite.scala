@@ -244,4 +244,10 @@ class KubernetesConfSuite extends SparkFunSuite {
     assert(KubernetesConf.getAppNameLabel("a" * 64) === "a" * 63)
     assert(KubernetesConf.getAppNameLabel("a" * 253) === "a" * 63)
   }
+
+  test("SPARK-38630: K8s label value should start and end with alphanumeric") {
+    assert(KubernetesConf.getAppNameLabel("-hello-") === "hello")
+    assert(KubernetesConf.getAppNameLabel("a" * 62 + "-aaa") === "a" * 62)
+    assert(KubernetesConf.getAppNameLabel("-" + "a" * 63) === "a" * 62)
+  }
 }

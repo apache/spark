@@ -53,28 +53,32 @@ private[spark] class BasicDriverFeatureStep(conf: KubernetesDriverConf)
 
   // Memory settings
   private val driverMemoryMiB = conf.get(DRIVER_MEMORY)
-  private val memoryOverheadFactor = if (conf.contains(DRIVER_MEMORY_OVERHEAD_FACTOR)) {
-    conf.get(DRIVER_MEMORY_OVERHEAD_FACTOR)
-  } else {
-    conf.get(MEMORY_OVERHEAD_FACTOR)
-  }
 
-  // The memory overhead factor to use. If the user has not set it, then use a different
-  // value for non-JVM apps. This value is propagated to executors.
-  private val overheadFactor =
+  // The default memory overhead factor to use, derived from the deprecated
+  // `spark.kubernetes.memoryOverheadFactor` config or the default overhead values.
+  // If the user has not set it, then use a different default for non-JVM apps. This value is
+  // propagated to executors and used if the executor overhead factor is not set explicitly.
+  private val defaultOverheadFactor =
     if (conf.mainAppResource.isInstanceOf[NonJVMResource]) {
-      if (conf.contains(MEMORY_OVERHEAD_FACTOR) || conf.contains(DRIVER_MEMORY_OVERHEAD_FACTOR)) {
-        memoryOverheadFactor
+      if (conf.contains(MEMORY_OVERHEAD_FACTOR)) {
+        conf.get(MEMORY_OVERHEAD_FACTOR)
       } else {
         NON_JVM_MEMORY_OVERHEAD_FACTOR
       }
     } else {
-      memoryOverheadFactor
+      conf.get(MEMORY_OVERHEAD_FACTOR)
     }
+
+  // Prefer the driver memory overhead factor if set explicitly
+  private val memoryOverheadFactor = if (conf.contains(DRIVER_MEMORY_OVERHEAD_FACTOR)) {
+    conf.get(DRIVER_MEMORY_OVERHEAD_FACTOR)
+  } else {
+    defaultOverheadFactor
+  }
 
   private val memoryOverheadMiB = conf
     .get(DRIVER_MEMORY_OVERHEAD)
-    .getOrElse(math.max((overheadFactor * driverMemoryMiB).toInt,
+    .getOrElse(math.max((memoryOverheadFactor * driverMemoryMiB).toInt,
       ResourceProfile.MEMORY_OVERHEAD_MIN_MIB))
   private val driverMemoryWithOverheadMiB = driverMemoryMiB + memoryOverheadMiB
 
@@ -169,7 +173,7 @@ private[spark] class BasicDriverFeatureStep(conf: KubernetesDriverConf)
       KUBERNETES_DRIVER_POD_NAME.key -> driverPodName,
       "spark.app.id" -> conf.appId,
       KUBERNETES_DRIVER_SUBMIT_CHECK.key -> "true",
-      DRIVER_MEMORY_OVERHEAD_FACTOR.key -> overheadFactor.toString)
+      MEMORY_OVERHEAD_FACTOR.key -> defaultOverheadFactor.toString)
     // try upload local, resolvable files to a hadoop compatible file system
     Seq(JARS, FILES, ARCHIVES, SUBMIT_PYTHON_FILES).foreach { key =>
       val uris = conf.get(key).filter(uri => KubernetesUtils.isLocalAndResolvable(uri))

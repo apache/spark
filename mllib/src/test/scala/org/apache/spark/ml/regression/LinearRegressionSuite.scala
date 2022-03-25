@@ -188,6 +188,12 @@ class LinearRegressionSuite extends MLTest with DefaultReadWriteTest with PMMLRe
     assert(model.numFeatures === numFeatures)
   }
 
+  test("LinearRegression validate input dataset") {
+    testInvalidRegressionLabels(new LinearRegression().fit(_))
+    testInvalidWeights(new LinearRegression().setWeightCol("weight").fit(_))
+    testInvalidVectors(new LinearRegression().fit(_))
+  }
+
   test("linear regression: can transform data with LinearRegressionModel") {
     withClue("training related params like loss are only validated during fitting phase") {
       val original = new LinearRegression().fit(datasetWithDenseFeature)

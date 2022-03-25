@@ -17,39 +17,53 @@
 
 package org.apache.spark.sql.connector.util;
 
-import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
+import java.util.stream.Collectors;
 
 import org.apache.spark.sql.connector.expressions.Expression;
-import org.apache.spark.sql.connector.expressions.FieldReference;
+import org.apache.spark.sql.connector.expressions.NamedReference;
 import org.apache.spark.sql.connector.expressions.GeneralScalarExpression;
-import org.apache.spark.sql.connector.expressions.LiteralValue;
+import org.apache.spark.sql.connector.expressions.Literal;
 
 /**
  * The builder to generate SQL from V2 expressions.
  */
 public class V2ExpressionSQLBuilder {
+
   public String build(Expression expr) {
-    if (expr instanceof LiteralValue) {
-      return visitLiteral((LiteralValue) expr);
-    } else if (expr instanceof FieldReference) {
-      return visitFieldReference((FieldReference) expr);
+    if (expr instanceof Literal) {
+      return visitLiteral((Literal) expr);
+    } else if (expr instanceof NamedReference) {
+      return visitNamedReference((NamedReference) expr);
     } else if (expr instanceof GeneralScalarExpression) {
       GeneralScalarExpression e = (GeneralScalarExpression) expr;
       String name = e.name();
       switch (name) {
+        case "IN": {
+          List<String> children =
+            Arrays.stream(e.children()).map(c -> build(c)).collect(Collectors.toList());
+          return visitIn(children.get(0), children.subList(1, children.size()));
+        }
         case "IS_NULL":
           return visitIsNull(build(e.children()[0]));
         case "IS_NOT_NULL":
           return visitIsNotNull(build(e.children()[0]));
+        case "STARTS_WITH":
+          return visitStartsWith(build(e.children()[0]), build(e.children()[1]));
+        case "ENDS_WITH":
+          return visitEndsWith(build(e.children()[0]), build(e.children()[1]));
+        case "CONTAINS":
+          return visitContains(build(e.children()[0]), build(e.children()[1]));
         case "=":
-        case "!=":
+        case "<>":
         case "<=>":
         case "<":
         case "<=":
         case ">":
         case ">=":
-          return visitBinaryComparison(name, build(e.children()[0]), build(e.children()[1]));
+          return visitBinaryComparison(
+            name, inputToSQL(e.children()[0]), inputToSQL(e.children()[1]));
         case "+":
         case "*":
         case "/":
@@ -57,12 +71,14 @@ public class V2ExpressionSQLBuilder {
         case "&":
         case "|":
         case "^":
-          return visitBinaryArithmetic(name, build(e.children()[0]), build(e.children()[1]));
+          return visitBinaryArithmetic(
+            name, inputToSQL(e.children()[0]), inputToSQL(e.children()[1]));
         case "-":
           if (e.children().length == 1) {
-            return visitUnaryArithmetic(name, build(e.children()[0]));
+            return visitUnaryArithmetic(name, inputToSQL(e.children()[0]));
           } else {
-            return visitBinaryArithmetic(name, build(e.children()[0]), build(e.children()[1]));
+            return visitBinaryArithmetic(
+              name, inputToSQL(e.children()[0]), inputToSQL(e.children()[1]));
           }
         case "AND":
           return visitAnd(name, build(e.children()[0]), build(e.children()[1]));
@@ -71,13 +87,12 @@ public class V2ExpressionSQLBuilder {
         case "NOT":
           return visitNot(build(e.children()[0]));
         case "~":
-          return visitUnaryArithmetic(name, build(e.children()[0]));
-        case "CASE_WHEN":
-          List<String> children = new ArrayList<>();
-          for (Expression child : e.children()) {
-            children.add(build(child));
-          }
+          return visitUnaryArithmetic(name, inputToSQL(e.children()[0]));
+        case "CASE_WHEN": {
+          List<String> children =
+            Arrays.stream(e.children()).map(c -> build(c)).collect(Collectors.toList());
           return visitCaseWhen(children.toArray(new String[e.children().length]));
+        }
         // TODO supports other expressions
         default:
           return visitUnexpectedExpr(expr);
@@ -87,12 +102,19 @@ public class V2ExpressionSQLBuilder {
     }
   }
 
-  protected String visitLiteral(LiteralValue literalValue) {
-    return literalValue.toString();
+  protected String visitLiteral(Literal literal) {
+    return literal.toString();
   }
 
-  protected String visitFieldReference(FieldReference fieldRef) {
-    return fieldRef.toString();
+  protected String visitNamedReference(NamedReference namedRef) {
+    return namedRef.toString();
+  }
+
+  protected String visitIn(String v, List<String> list) {
+    if (list.isEmpty()) {
+      return "CASE WHEN " + v + " IS NULL THEN NULL ELSE FALSE END";
+    }
+    return v + " IN (" + list.stream().collect(Collectors.joining(", ")) + ")";
   }
 
   protected String visitIsNull(String v) {
@@ -103,12 +125,46 @@ public class V2ExpressionSQLBuilder {
     return v + " IS NOT NULL";
   }
 
+  protected String visitStartsWith(String l, String r) {
+    // Remove quotes at the beginning and end.
+    // e.g. converts "'str'" to "str".
+    String value = r.substring(1, r.length() - 1);
+    return l + " LIKE '" + value + "%'";
+  }
+
+  protected String visitEndsWith(String l, String r) {
+    // Remove quotes at the beginning and end.
+    // e.g. converts "'str'" to "str".
+    String value = r.substring(1, r.length() - 1);
+    return l + " LIKE '%" + value + "'";
+  }
+
+  protected String visitContains(String l, String r) {
+    // Remove quotes at the beginning and end.
+    // e.g. converts "'str'" to "str".
+    String value = r.substring(1, r.length() - 1);
+    return l + " LIKE '%" + value + "%'";
+  }
+
+  private String inputToSQL(Expression input) {
+    if (input.children().length > 1) {
+      return "(" + build(input) + ")";
+    } else {
+      return build(input);
+    }
+  }
+
   protected String visitBinaryComparison(String name, String l, String r) {
-    return "(" + l + ") " + name + " (" + r + ")";
+    switch (name) {
+      case "<=>":
+        return "(" + l + " = " + r + ") OR (" + l + " IS NULL AND " + r + " IS NULL)";
+      default:
+        return l + " " + name + " " + r;
+    }
   }
 
   protected String visitBinaryArithmetic(String name, String l, String r) {
-    return "(" + l + ") " + name + " (" + r + ")";
+    return l + " " + name + " " + r;
   }
 
   protected String visitAnd(String name, String l, String r) {
@@ -123,7 +179,7 @@ public class V2ExpressionSQLBuilder {
     return "NOT (" + v + ")";
   }
 
-  protected String visitUnaryArithmetic(String name, String v) { return name +" (" + v + ")"; }
+  protected String visitUnaryArithmetic(String name, String v) { return name + v; }
 
   protected String visitCaseWhen(String[] children) {
     StringBuilder sb = new StringBuilder("CASE");

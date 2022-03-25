@@ -35,6 +35,7 @@ import org.apache.orc.mapreduce.OrcInputFormat
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.util.DateTimeTestUtils
 import org.apache.spark.sql.execution.FileSourceScanExec
 import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation, RecordReaderIterator}
 import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
@@ -800,6 +801,31 @@ abstract class OrcQuerySuite extends OrcQueryTest with SharedSparkSession {
     withOrcFile(data) { file =>
       withAllNativeOrcReaders {
         checkAnswer(spark.read.orc(file), data.toDF().collect())
+      }
+    }
+  }
+
+  test("SPARK-37463: read/write Timestamp ntz to Orc with different time zone") {
+    DateTimeTestUtils.withDefaultTimeZone(DateTimeTestUtils.LA) {
+      val sqlText = """
+                      |select
+                      | timestamp_ntz '2021-06-01 00:00:00' ts_ntz1,
+                      | timestamp_ntz '1883-11-16 00:00:00.0' as ts_ntz2,
+                      | timestamp_ntz '2021-03-14 02:15:00.0' as ts_ntz3
+                      |""".stripMargin
+
+      val df = sql(sqlText)
+
+      df.write.mode("overwrite").orc("ts_ntz_orc")
+
+      val query = "select * from `orc`.`ts_ntz_orc`"
+
+      DateTimeTestUtils.outstandingZoneIds.foreach { zoneId =>
+        DateTimeTestUtils.withDefaultTimeZone(zoneId) {
+          withAllNativeOrcReaders {
+            checkAnswer(sql(query), df)
+          }
+        }
       }
     }
   }
