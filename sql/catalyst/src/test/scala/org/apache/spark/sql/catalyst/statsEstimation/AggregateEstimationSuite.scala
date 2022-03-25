@@ -65,6 +65,7 @@ class AggregateEstimationSuite extends StatsEstimationTestBase with PlanTest {
     val testAgg = Aggregate(
       groupingExpressions = attributes,
       aggregateExpressions = Seq(Alias(nameToAttr("key12"), "abc")()),
+      false,
       child)
 
     val expectedColStats = Seq("abc" -> nameToColInfo("key12")._2)
@@ -148,13 +149,13 @@ class AggregateEstimationSuite extends StatsEstimationTestBase with PlanTest {
 
     withSQLConf(SQLConf.CBO_ENABLED.key -> "false") {
       val noGroupAgg = Aggregate(groupingExpressions = Nil,
-        aggregateExpressions = Seq(Alias(Count(Literal(1)), "cnt")()), child)
+        aggregateExpressions = Seq(Alias(Count(Literal(1)), "cnt")()), false, child)
       assert(noGroupAgg.stats ==
         // overhead + count result size
         Statistics(sizeInBytes = 8 + 8, rowCount = Some(1)))
 
       val hasGroupAgg = Aggregate(groupingExpressions = attributes,
-        aggregateExpressions = attributes :+ Alias(Count(Literal(1)), "cnt")(), child)
+        aggregateExpressions = attributes :+ Alias(Count(Literal(1)), "cnt")(), false, child)
       assert(hasGroupAgg.stats ==
         // From UnaryNode.computeStats, childSize * outputRowSize / childRowSize
         Statistics(sizeInBytes = 48 * (8 + 4 + 8) / (8 + 4)))
@@ -171,6 +172,7 @@ class AggregateEstimationSuite extends StatsEstimationTestBase with PlanTest {
     val testAgg = Aggregate(
       groupingExpressions = attributes,
       aggregateExpressions = attributes :+ Alias(Count(Literal(1)), "cnt")(),
+      isPartialOnly = false,
       child = StatsTestPlan(
         outputList = tableColumns.map(nameToAttr),
         rowCount = tableRowCount,

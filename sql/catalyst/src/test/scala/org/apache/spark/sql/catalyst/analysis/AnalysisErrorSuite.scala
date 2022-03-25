@@ -556,6 +556,7 @@ class AnalysisErrorSuite extends AnalysisTest {
     val plan = Aggregate(
       Nil,
       aliases,
+      false,
       LocalRelation(otherA))
 
     assert(plan.resolved)
@@ -585,6 +586,7 @@ class AnalysisErrorSuite extends AnalysisTest {
         Aggregate(
           AttributeReference("a", dataType)(exprId = ExprId(2)) :: Nil,
           Alias(sum(AttributeReference("b", IntegerType)(exprId = ExprId(1))), "c")() :: Nil,
+          false,
           LocalRelation(
             AttributeReference("a", dataType)(exprId = ExprId(2)),
             AttributeReference("b", IntegerType)(exprId = ExprId(1))))
@@ -630,6 +632,7 @@ class AnalysisErrorSuite extends AnalysisTest {
       Aggregate(
         AttributeReference("a", IntegerType)(exprId = ExprId(2)) :: Nil,
         Alias(sum(sum(AttributeReference("b", IntegerType)(exprId = ExprId(1)))), "c")() :: Nil,
+        false,
         LocalRelation(
           AttributeReference("a", IntegerType)(exprId = ExprId(2)),
           AttributeReference("b", IntegerType)(exprId = ExprId(1))))
@@ -757,11 +760,11 @@ class AnalysisErrorSuite extends AnalysisTest {
     val t = LocalRelation(c1, c2)
     val plan = Aggregate(
       ScalarSubquery(
-        Aggregate(Nil, sum($"c2").as("sum") :: Nil,
+        Aggregate(Nil, sum($"c2").as("sum") :: Nil, false,
           Filter($"t1.c1" === $"t2.c1",
             t.as("t2")))
       ) :: Nil,
-      sum($"c2").as("sum") :: Nil, t.as("t1"))
+      sum($"c2").as("sum") :: Nil, false, t.as("t1"))
     assertAnalysisError(plan, "Correlated scalar subqueries in the group by clause must also be " +
       "in the aggregate expressions" :: Nil)
   }
@@ -773,10 +776,10 @@ class AnalysisErrorSuite extends AnalysisTest {
     val plan = Aggregate(
       $"c1" :: Nil,
       ScalarSubquery(
-        Aggregate(Nil, sum($"c2").as("sum") :: Nil,
+        Aggregate(Nil, sum($"c2").as("sum") :: Nil, false,
           Filter($"t1.c1" === $"t2.c1",
             t.as("t2")))
-      ).as("sub") :: Nil, t.as("t1"))
+      ).as("sub") :: Nil, false, t.as("t1"))
     assertAnalysisError(plan, "Correlated scalar subquery 'scalarsubquery(t1.c1)' is " +
       "neither present in the group by, nor in an aggregate function. Add it to group by " +
       "using ordinal position or wrap it in first() (or first_value) if you don't care " +
@@ -806,7 +809,7 @@ class AnalysisErrorSuite extends AnalysisTest {
     conditions.foreach { case (cond, msg) =>
       val plan = Project(
         ScalarSubquery(
-          Aggregate(Nil, count(Literal(1)).as("cnt") :: Nil,
+          Aggregate(Nil, count(Literal(1)).as("cnt") :: Nil, false,
             Filter(cond, t1))
         ).as("sub") :: Nil,
         t2)

@@ -91,39 +91,39 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
 
   assertSupportedInStreamingPlan(
     "aggregate - multiple batch aggregations",
-    Aggregate(Nil, aggExprs("c"), Aggregate(Nil, aggExprs("d"), batchRelation)),
+    Aggregate(Nil, aggExprs("c"), false, Aggregate(Nil, aggExprs("d"), false, batchRelation)),
     Append)
 
   assertSupportedInStreamingPlan(
     "aggregate - multiple aggregations but only one streaming aggregation",
-    Aggregate(Nil, aggExprs("c"), batchRelation).join(
-      Aggregate(Nil, aggExprs("d"), streamRelation), joinType = Inner),
+    Aggregate(Nil, aggExprs("c"), false, batchRelation).join(
+      Aggregate(Nil, aggExprs("d"), false, streamRelation), joinType = Inner),
     Update)
 
   assertNotSupportedInStreamingPlan(
     "aggregate - multiple streaming aggregations",
-    Aggregate(Nil, aggExprs("c"), Aggregate(Nil, aggExprs("d"), streamRelation)),
+    Aggregate(Nil, aggExprs("c"), false, Aggregate(Nil, aggExprs("d"), false, streamRelation)),
     outputMode = Update,
     expectedMsgs = Seq("multiple streaming aggregations"))
 
   assertSupportedInStreamingPlan(
     "aggregate - streaming aggregations in update mode",
-    Aggregate(Nil, aggExprs("d"), streamRelation),
+    Aggregate(Nil, aggExprs("d"), false, streamRelation),
     outputMode = Update)
 
   assertSupportedInStreamingPlan(
     "aggregate - streaming aggregations in complete mode",
-    Aggregate(Nil, aggExprs("d"), streamRelation),
+    Aggregate(Nil, aggExprs("d"), false, streamRelation),
     outputMode = Complete)
 
   assertSupportedInStreamingPlan(
     "aggregate - streaming aggregations with watermark in append mode",
-    Aggregate(Seq(attributeWithWatermark), aggExprs("d"), streamRelation),
+    Aggregate(Seq(attributeWithWatermark), aggExprs("d"), false, streamRelation),
     outputMode = Append)
 
   assertNotSupportedInStreamingPlan(
     "aggregate - streaming aggregations without watermark in append mode",
-    Aggregate(Nil, aggExprs("d"), streamRelation),
+    Aggregate(Nil, aggExprs("d"), false, streamRelation),
     outputMode = Append,
     expectedMsgs = Seq("streaming aggregations", "without watermark"))
 
@@ -131,12 +131,12 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
   val distinctAggExprs = Seq(Count("*").toAggregateExpression(isDistinct = true).as("c"))
   assertSupportedInStreamingPlan(
     "distinct aggregate - aggregate on batch relation",
-    Aggregate(Nil, distinctAggExprs, batchRelation),
+    Aggregate(Nil, distinctAggExprs, false, batchRelation),
     outputMode = Append)
 
   assertNotSupportedInStreamingPlan(
     "distinct aggregate - aggregate on streaming relation",
-    Aggregate(Nil, distinctAggExprs, streamRelation),
+    Aggregate(Nil, distinctAggExprs, false, streamRelation),
     outputMode = Complete,
     expectedMsgs = Seq("distinct aggregation"))
 
@@ -194,7 +194,7 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
         s"with aggregation in $outputMode mode",
       TestFlatMapGroupsWithState(
         null, att, att, Seq(att), Seq(att), att, null, Update, isMapGroupsWithState = false, null,
-        Aggregate(Seq(attributeWithWatermark), aggExprs("c"), streamRelation)),
+        Aggregate(Seq(attributeWithWatermark), aggExprs("c"), false, streamRelation)),
       outputMode = outputMode,
       expectedMsgs = Seq("flatMapGroupsWithState in update mode", "with aggregation"))
   }
@@ -226,6 +226,7 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
       Aggregate(
         Seq(attributeWithWatermark),
         aggExprs("c"),
+        false,
         TestFlatMapGroupsWithState(
           null, att, att, Seq(att), Seq(att), att, null, Append, isMapGroupsWithState = false, null,
           streamRelation)),
@@ -239,7 +240,7 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
         s"on streaming relation after aggregation in $outputMode mode",
       TestFlatMapGroupsWithState(null, att, att, Seq(att), Seq(att), att, null, Append,
         isMapGroupsWithState = false, null,
-        Aggregate(Seq(attributeWithWatermark), aggExprs("c"), streamRelation)),
+        Aggregate(Seq(attributeWithWatermark), aggExprs("c"), false, streamRelation)),
       outputMode = outputMode,
       expectedMsgs = Seq("flatMapGroupsWithState", "after aggregation"))
   }
@@ -321,7 +322,7 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
         s"with aggregation in $outputMode mode",
       TestFlatMapGroupsWithState(null, att, att, Seq(att), Seq(att), att, null, Update,
         isMapGroupsWithState = true, null,
-        Aggregate(Seq(attributeWithWatermark), aggExprs("c"), streamRelation)),
+        Aggregate(Seq(attributeWithWatermark), aggExprs("c"), false, streamRelation)),
       outputMode = outputMode,
       expectedMsgs = Seq("mapGroupsWithState", "with aggregation"))
   }
@@ -373,12 +374,13 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
     Aggregate(
       Seq(attributeWithWatermark),
       aggExprs("c"),
+      false,
       Deduplicate(Seq(att), streamRelation)),
     outputMode = Append)
 
   assertNotSupportedInStreamingPlan(
     "Deduplicate - Deduplicate on streaming relation after aggregation",
-    Deduplicate(Seq(att), Aggregate(Nil, aggExprs("c"), streamRelation)),
+    Deduplicate(Seq(att), Aggregate(Nil, aggExprs("c"), false, streamRelation)),
     outputMode = Complete,
     expectedMsgs = Seq("dropDuplicates"))
 
@@ -450,7 +452,7 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
     // Complete mode not allowed
     assertNotSupportedInStreamingPlan(
       s"$joinType join with stream-stream relations and complete mode",
-      Aggregate(Nil, aggExprs("d"), streamRelation.join(streamRelation, joinType = joinType,
+      Aggregate(Nil, aggExprs("d"), false, streamRelation.join(streamRelation, joinType = joinType,
         condition = Some(attribute === attribute))),
       OutputMode.Complete(),
       Seq("is not supported in Complete output mode"))

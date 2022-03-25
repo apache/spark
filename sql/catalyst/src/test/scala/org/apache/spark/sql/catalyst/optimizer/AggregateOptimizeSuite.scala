@@ -102,7 +102,7 @@ class AggregateOptimizeSuite extends AnalysisTest {
     val y = testRelation.subquery(Symbol("y"))
     val query = Distinct(x.join(y, RightOuter, Some("x.a".attr === "y.a".attr))
       .select("x.b".attr, "y.c".attr))
-    val correctAnswer = Aggregate(query.child.output, query.child.output, query.child)
+    val correctAnswer = Aggregate(query.child.output, query.child.output, false, query.child)
 
     comparePlans(Optimize.execute(query.analyze), correctAnswer.analyze)
   }

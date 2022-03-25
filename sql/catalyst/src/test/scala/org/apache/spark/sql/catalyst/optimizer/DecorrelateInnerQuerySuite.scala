@@ -115,11 +115,11 @@ class DecorrelateInnerQuerySuite extends PlanTest {
     val outerPlan = testRelation2
     val minB = Alias(min(b), "min_b")()
     val innerPlan =
-      Aggregate(Nil, Seq(minB),
+      Aggregate(Nil, Seq(minB), false,
         Filter(And(OuterReference(x) === a, b === 3),
           testRelation))
     val correctAnswer =
-      Aggregate(Seq(a), Seq(minB, a),
+      Aggregate(Seq(a), Seq(minB, a), false,
         Filter(b === 3,
           testRelation))
     check(innerPlan, outerPlan, correctAnswer, Seq(x === a))
@@ -129,11 +129,11 @@ class DecorrelateInnerQuerySuite extends PlanTest {
     val outerPlan = testRelation2
     val minB = Alias(min(b), "min_b")()
     val innerPlan =
-      Aggregate(Nil, Seq(minB),
+      Aggregate(Nil, Seq(minB), false,
         Filter(OuterReference(x) === OuterReference(y) + a,
           testRelation))
     val correctAnswer =
-      Aggregate(Seq(x, y), Seq(minB, x, y),
+      Aggregate(Seq(x, y), Seq(minB, x, y), false,
         Filter(x === y + a,
           DomainJoin(Seq(x, y), testRelation)))
     check(innerPlan, outerPlan, correctAnswer, Seq(x <=> x, y <=> y))
@@ -143,11 +143,11 @@ class DecorrelateInnerQuerySuite extends PlanTest {
     val outerPlan = testRelation2
     val minB = Alias(min(b), "min_b")()
     val innerPlan =
-      Aggregate(Nil, Seq(minB),
+      Aggregate(Nil, Seq(minB), false,
         Filter(OuterReference(x) === OuterReference(y),
           testRelation))
     val correctAnswer =
-      Aggregate(Nil, Seq(minB),
+      Aggregate(Nil, Seq(minB), false,
         testRelation)
     check(innerPlan, outerPlan, correctAnswer, Seq(x === y))
   }
@@ -156,11 +156,11 @@ class DecorrelateInnerQuerySuite extends PlanTest {
     val outerPlan = testRelation2
     val minB = Alias(min(b), "min_b")()
     val innerPlan =
-      Aggregate(Nil, Seq(minB),
+      Aggregate(Nil, Seq(minB), false,
         Filter(OuterReference(x) > a,
           testRelation))
     val correctAnswer =
-      Aggregate(Seq(x), Seq(minB, x),
+      Aggregate(Seq(x), Seq(minB, x), false,
         Filter(x > a,
           DomainJoin(Seq(x), testRelation)))
     check(innerPlan, outerPlan, correctAnswer, Seq(x <=> x))
@@ -263,7 +263,7 @@ class DecorrelateInnerQuerySuite extends PlanTest {
     val outerPlan = testRelation2
     val innerPlan =
       Aggregate(
-        Seq($"x1"), Seq(min($"y1").as("min_y1")),
+        Seq($"x1"), Seq(min($"y1").as("min_y1")), false,
         Project(
           Seq(a, OuterReference(x).as("x1"), OuterReference(y).as("y1")),
           Filter(
@@ -274,7 +274,7 @@ class DecorrelateInnerQuerySuite extends PlanTest {
       ).analyze
     val correctAnswer =
       Aggregate(
-        Seq($"x1", y, a), Seq(min($"y1").as("min_y1"), y, a),
+        Seq($"x1", y, a), Seq(min($"y1").as("min_y1"), y, a), false,
         Project(
           Seq(a, a.as("x1"), y.as("y1"), y),
           DomainJoin(Seq(y), testRelation)

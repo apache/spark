@@ -35,7 +35,7 @@ class OptimizerStructuralIntegrityCheckerSuite extends PlanTest {
       case Project(projectList, child) =>
         val newAttr = UnresolvedAttribute("unresolvedAttr")
         Project(projectList ++ Seq(newAttr), child)
-      case agg @ Aggregate(Nil, aggregateExpressions, child) =>
+      case agg @ Aggregate(Nil, aggregateExpressions, _, child) =>
         // Project cannot host AggregateExpression
         Project(aggregateExpressions, child)
     }
@@ -62,7 +62,7 @@ class OptimizerStructuralIntegrityCheckerSuite extends PlanTest {
 
   test("check for invalid plan after execution of rule - special expression in wrong operator") {
     val analyzed =
-      Aggregate(Nil, Seq[NamedExpression](max($"id") as Symbol("m")),
+      Aggregate(Nil, Seq[NamedExpression](max($"id") as Symbol("m")), false,
         LocalRelation($"id".long)).analyze
     assert(analyzed.resolved)
 
@@ -80,7 +80,7 @@ class OptimizerStructuralIntegrityCheckerSuite extends PlanTest {
 
   test("check for invalid plan before execution of any rule") {
     val analyzed =
-      Aggregate(Nil, Seq[NamedExpression](max($"id") as Symbol("m")),
+      Aggregate(Nil, Seq[NamedExpression](max($"id") as Symbol("m")), false,
         LocalRelation($"id".long)).analyze
     val invalidPlan = OptimizeRuleBreakSI.apply(analyzed)
 

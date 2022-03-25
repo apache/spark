@@ -30,7 +30,7 @@ class RewriteDistinctAggregatesSuite extends PlanTest {
   val testRelation = LocalRelation($"a".string, $"b".string, $"c".string, $"d".string, $"e".int)
 
   private def checkRewrite(rewrite: LogicalPlan): Unit = rewrite match {
-    case Aggregate(_, _, Aggregate(_, _, _: Expand)) =>
+    case Aggregate(_, _, _, Aggregate(_, _, _, _: Expand)) =>
     case _ => fail(s"Plan is not rewritten:\n$rewrite")
   }
 

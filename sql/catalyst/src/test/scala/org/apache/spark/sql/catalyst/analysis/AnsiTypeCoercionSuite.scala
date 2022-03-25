@@ -891,7 +891,8 @@ class AnsiTypeCoercionSuite extends TypeCoercionSuiteBase {
     assert(wp1.isInstanceOf[Project])
     // The attribute `p1.output.head` should be replaced in the root `Project`.
     assert(wp1.expressions.forall(!_.exists(_ == p1.output.head)))
-    val wp2 = widenSetOperationTypes(Aggregate(Nil, sum(p1.output.head).as("v") :: Nil, union))
+    val wp2 = widenSetOperationTypes(
+      Aggregate(Nil, sum(p1.output.head).as("v") :: Nil, false, union))
     assert(wp2.isInstanceOf[Aggregate])
     assert(wp2.missingInput.isEmpty)
   }
