@@ -171,7 +171,6 @@
        -->
 
     <scala-maven-plugin.version>4.5.6</scala-maven-plugin.version>
-    <scalafmt.parameters>--test</scalafmt.parameters>
     <!-- for now, not running scalafmt as part of default verify pipeline -->
     <scalafmt.skip>true</scalafmt.skip>
     <codehaus.jackson.version>1.9.13</codehaus.jackson.version>
@@ -191,7 +190,7 @@
     <datanucleus-core.version>4.1.17</datanucleus-core.version>
     <guava.version>14.0.1</guava.version>
     <janino.version>3.0.16</janino.version>
-    <jersey.version>2.34</jersey.version>
+    <jersey.version>2.35</jersey.version>
     <joda.version>2.10.13</joda.version>
     <jodd.version>3.5.2</jodd.version>
     <jsr305.version>3.0.0</jsr305.version>
@@ -3350,8 +3349,7 @@
         <artifactId>mvn-scalafmt_${scala.binary.version}</artifactId>
         <version>1.0.4</version>
         <configuration>
-          <parameters>${scalafmt.parameters}</parameters> <!-- (Optional) Additional command line arguments -->
-          <skip>${scalafmt.skip}</skip> <!-- (Optional) skip formatting -->
+          <validateOnly>${scalafmt.skip}</validateOnly> <!-- (Optional) skip formatting -->
           <skipSources>${scalafmt.skip}</skipSources>
           <skipTestSources>${scalafmt.skip}</skipTestSources>
           <configLocation>dev/.scalafmt.conf</configLocation> <!-- (Optional) config location -->

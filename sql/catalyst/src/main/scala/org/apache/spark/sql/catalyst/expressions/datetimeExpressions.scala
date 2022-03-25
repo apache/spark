@@ -2999,10 +2999,11 @@ object SubtractDates {
 
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(sourceTz, targetTz, sourceTs) - Converts the timestamp without time zone `sourceTs` from the `sourceTz` time zone to `targetTz`. ",
+  usage = "_FUNC_([sourceTz, ]targetTz, sourceTs) - Converts the timestamp without time zone `sourceTs` from the `sourceTz` time zone to `targetTz`. ",
   arguments = """
     Arguments:
-      * sourceTz - the time zone for the input timestamp
+      * sourceTz - the time zone for the input timestamp.
+                   If it is missed, the current session time zone is used as the source time zone.
       * targetTz - the time zone to which the input timestamp should be converted
       * sourceTs - a timestamp without time zone
   """,
@@ -3010,6 +3011,8 @@ object SubtractDates {
     Examples:
       > SELECT _FUNC_('Europe/Amsterdam', 'America/Los_Angeles', timestamp_ntz'2021-12-06 00:00:00');
        2021-12-05 15:00:00
+      > SELECT _FUNC_('Europe/Amsterdam', timestamp_ntz'2021-12-05 15:00:00');
+       2021-12-06 00:00:00
   """,
   group = "datetime_funcs",
   since = "3.3.0")
@@ -3019,6 +3022,9 @@ case class ConvertTimezone(
     targetTz: Expression,
     sourceTs: Expression)
   extends TernaryExpression with ImplicitCastInputTypes with NullIntolerant {
+
+  def this(targetTz: Expression, sourceTs: Expression) =
+    this(CurrentTimeZone(), targetTz, sourceTs)
 
   override def first: Expression = sourceTz
   override def second: Expression = targetTz

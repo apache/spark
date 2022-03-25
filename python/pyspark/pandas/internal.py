@@ -206,7 +206,7 @@ class InternalField:
         )
 
     def __repr__(self) -> str:
-        return "InternalField(dtype={dtype},struct_field={struct_field})".format(
+        return "InternalField(dtype={dtype}, struct_field={struct_field})".format(
             dtype=self.dtype, struct_field=self.struct_field
         )
 
@@ -293,13 +293,13 @@ class InternalFrame:
     >>> internal.index_names
     [None]
     >>> internal.data_fields    # doctest: +NORMALIZE_WHITESPACE
-    [InternalField(dtype=int64,struct_field=StructField(A,LongType,false)),
-     InternalField(dtype=int64,struct_field=StructField(B,LongType,false)),
-     InternalField(dtype=int64,struct_field=StructField(C,LongType,false)),
-     InternalField(dtype=int64,struct_field=StructField(D,LongType,false)),
-     InternalField(dtype=int64,struct_field=StructField(E,LongType,false))]
+    [InternalField(dtype=int64, struct_field=StructField('A', LongType(), False)),
+     InternalField(dtype=int64, struct_field=StructField('B', LongType(), False)),
+     InternalField(dtype=int64, struct_field=StructField('C', LongType(), False)),
+     InternalField(dtype=int64, struct_field=StructField('D', LongType(), False)),
+     InternalField(dtype=int64, struct_field=StructField('E', LongType(), False))]
     >>> internal.index_fields
-    [InternalField(dtype=int64,struct_field=StructField(__index_level_0__,LongType,false))]
+    [InternalField(dtype=int64, struct_field=StructField('__index_level_0__', LongType(), False))]
     >>> internal.to_internal_spark_frame.show()  # doctest: +NORMALIZE_WHITESPACE
     +-----------------+---+---+---+---+---+
     |__index_level_0__|  A|  B|  C|  D|  E|
@@ -355,13 +355,13 @@ class InternalFrame:
     ['A', 'B', 'C', 'D', 'E']
     >>> internal.index_names
     [('A',)]
-    >>> internal.data_fields
-    [InternalField(dtype=int64,struct_field=StructField(B,LongType,false)),
-     InternalField(dtype=int64,struct_field=StructField(C,LongType,false)),
-     InternalField(dtype=int64,struct_field=StructField(D,LongType,false)),
-     InternalField(dtype=int64,struct_field=StructField(E,LongType,false))]
+    >>> internal.data_fields  # doctest: +NORMALIZE_WHITESPACE
+    [InternalField(dtype=int64, struct_field=StructField('B', LongType(), False)),
+     InternalField(dtype=int64, struct_field=StructField('C', LongType(), False)),
+     InternalField(dtype=int64, struct_field=StructField('D', LongType(), False)),
+     InternalField(dtype=int64, struct_field=StructField('E', LongType(), False))]
     >>> internal.index_fields
-    [InternalField(dtype=int64,struct_field=StructField(A,LongType,false))]
+    [InternalField(dtype=int64, struct_field=StructField('A', LongType(), False))]
     >>> internal.to_internal_spark_frame.show()  # doctest: +NORMALIZE_WHITESPACE
     +---+---+---+---+---+
     |  A|  B|  C|  D|  E|
@@ -419,13 +419,13 @@ class InternalFrame:
     >>> internal.index_names
     [None, ('A',)]
     >>> internal.data_fields  # doctest: +NORMALIZE_WHITESPACE
-    [InternalField(dtype=int64,struct_field=StructField(B,LongType,false)),
-     InternalField(dtype=int64,struct_field=StructField(C,LongType,false)),
-     InternalField(dtype=int64,struct_field=StructField(D,LongType,false)),
-     InternalField(dtype=int64,struct_field=StructField(E,LongType,false))]
+    [InternalField(dtype=int64, struct_field=StructField('B', LongType(), False)),
+     InternalField(dtype=int64, struct_field=StructField('C', LongType(), False)),
+     InternalField(dtype=int64, struct_field=StructField('D', LongType(), False)),
+     InternalField(dtype=int64, struct_field=StructField('E', LongType(), False))]
     >>> internal.index_fields  # doctest: +NORMALIZE_WHITESPACE
-    [InternalField(dtype=int64,struct_field=StructField(__index_level_0__,LongType,false)),
-     InternalField(dtype=int64,struct_field=StructField(A,LongType,false))]
+    [InternalField(dtype=int64, struct_field=StructField('__index_level_0__', LongType(), False)),
+     InternalField(dtype=int64, struct_field=StructField('A', LongType(), False))]
     >>> internal.to_internal_spark_frame.show()  # doctest: +NORMALIZE_WHITESPACE
     +-----------------+---+---+---+---+---+
     |__index_level_0__|  A|  B|  C|  D|  E|
@@ -508,9 +508,9 @@ class InternalFrame:
     >>> internal.index_names
     [('A',)]
     >>> internal.data_fields
-    [InternalField(dtype=int64,struct_field=StructField(B,LongType,false))]
+    [InternalField(dtype=int64, struct_field=StructField('B', LongType(), False))]
     >>> internal.index_fields
-    [InternalField(dtype=int64,struct_field=StructField(A,LongType,false))]
+    [InternalField(dtype=int64, struct_field=StructField('A', LongType(), False))]
     >>> internal.to_internal_spark_frame.show()  # doctest: +NORMALIZE_WHITESPACE
     +---+---+
     |  A|  B|
@@ -596,9 +596,12 @@ class InternalFrame:
         [('row_index_a',), ('row_index_b',), ('a', 'x')]
 
         >>> internal.index_fields  # doctest: +NORMALIZE_WHITESPACE
-        [InternalField(dtype=object,struct_field=StructField(__index_level_0__,StringType,false)),
-         InternalField(dtype=object,struct_field=StructField(__index_level_1__,StringType,false)),
-         InternalField(dtype=int64,struct_field=StructField((a, x),LongType,false))]
+        [InternalField(dtype=object,
+            struct_field=StructField('__index_level_0__', StringType(), False)),
+         InternalField(dtype=object,
+            struct_field=StructField('__index_level_1__', StringType(), False)),
+         InternalField(dtype=int64,
+            struct_field=StructField('(a, x)', LongType(), False))]
 
         >>> internal.column_labels
         [('a', 'y'), ('b', 'z')]
@@ -607,8 +610,8 @@ class InternalFrame:
         [Column<'(a, y)'>, Column<'(b, z)'>]
 
         >>> internal.data_fields  # doctest: +NORMALIZE_WHITESPACE
-        [InternalField(dtype=int64,struct_field=StructField((a, y),LongType,false)),
-         InternalField(dtype=int64,struct_field=StructField((b, z),LongType,false))]
+        [InternalField(dtype=int64, struct_field=StructField('(a, y)', LongType(), False)),
+         InternalField(dtype=int64, struct_field=StructField('(b, z)', LongType(), False))]
 
         >>> internal.column_label_names
         [('column_labels_a',), ('column_labels_b',)]
@@ -1505,13 +1508,14 @@ class InternalFrame:
         2                 30      c       1
         >>> index_columns
         ['__index_level_0__']
-        >>> index_fields
-        [InternalField(dtype=int64,struct_field=StructField(__index_level_0__,LongType,false))]
+        >>> index_fields  # doctest: +NORMALIZE_WHITESPACE
+        [InternalField(dtype=int64, struct_field=StructField('__index_level_0__',
+                                                            LongType(), False))]
         >>> data_columns
         ['(x, a)', '(y, b)']
         >>> data_fields  # doctest: +NORMALIZE_WHITESPACE
-        [InternalField(dtype=object,struct_field=StructField((x, a),StringType,false)),
-         InternalField(dtype=category,struct_field=StructField((y, b),ByteType,false))]
+        [InternalField(dtype=object, struct_field=StructField('(x, a)', StringType(), False)),
+         InternalField(dtype=category, struct_field=StructField('(y, b)', ByteType(), False))]
 
         >>> import datetime
         >>> pdf = pd.DataFrame({
@@ -1521,9 +1525,11 @@ class InternalFrame:
         >>> _, _, _, _, data_fields = (
         ...     InternalFrame.prepare_pandas_frame(pdf, prefer_timestamp_ntz=True)
         ... )
-        >>> data_fields
-        [InternalField(dtype=datetime64[ns],struct_field=StructField(dt,TimestampNTZType,false)),
-         InternalField(dtype=object,struct_field=StructField(dt_obj,TimestampNTZType,false))]
+        >>> data_fields  # doctest: +NORMALIZE_WHITESPACE
+        [InternalField(dtype=datetime64[ns],
+            struct_field=StructField('dt', TimestampNTZType(), False)),
+         InternalField(dtype=object,
+            struct_field=StructField('dt_obj', TimestampNTZType(), False))]
 
         >>> pdf = pd.DataFrame({
         ...     "td": [datetime.timedelta(0)], "td_obj": [datetime.timedelta(0)]
@@ -1533,8 +1539,10 @@ class InternalFrame:
         ...     InternalFrame.prepare_pandas_frame(pdf)
         ... )
         >>> data_fields  # doctest: +NORMALIZE_WHITESPACE
-        [InternalField(dtype=timedelta64[ns],struct_field=StructField(td,DayTimeIntervalType(0,3),false)),
-         InternalField(dtype=object,struct_field=StructField(td_obj,DayTimeIntervalType(0,3),false))]
+        [InternalField(dtype=timedelta64[ns],
+            struct_field=StructField('td', DayTimeIntervalType(0, 3), False)),
+         InternalField(dtype=object,
+            struct_field=StructField('td_obj', DayTimeIntervalType(0, 3), False))]
         """
         pdf = pdf.copy()
 
