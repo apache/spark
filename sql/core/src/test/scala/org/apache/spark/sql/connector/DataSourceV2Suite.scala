@@ -284,7 +284,7 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
     import org.apache.spark.sql.expressions.Window
     Seq(
       classOf[OrderAndPartitionAwareDataSource],
-//      classOf[JavaOrderAndPartitionAwareDataSource]
+      classOf[JavaOrderAndPartitionAwareDataSource]
     ).foreach { cls =>
       withClue(cls.getName) {
         val df = spark.read.format(cls.getName).load()
