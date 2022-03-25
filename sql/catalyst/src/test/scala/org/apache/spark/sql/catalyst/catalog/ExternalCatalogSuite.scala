@@ -1055,7 +1055,7 @@ abstract class CatalogTestUtils {
           // The default value fails to coerce to the required type.
           .add("e", BooleanType, nullable = false,
             new MetadataBuilder().putString(
-              ResolveDefaultColumns.CURRENT_DEFAULT_COLUMN_METADATA_KEY, "42").build())
+              ResolveDefaultColumns.CURRENT_DEFAULT_COLUMN_METADATA_KEY, "41 + 1").build())
       } else {
         new StructType()
           .add("col1", "int")

@@ -153,7 +153,7 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
       assert(defaultValueColumnB == "\"abc\"")
       assert(defaultValueColumnC == "_@#$%")
       assert(defaultValueColumnD == "(select min(x) from badtable)")
-      assert(defaultValueColumnE == "42")
+      assert(defaultValueColumnE == "41 + 1")
 
       // Analyze the default column values.
       val analyzer = new Analyzer(new SessionCatalog(new InMemoryCatalog, FunctionRegistry.builtin))
@@ -169,6 +169,16 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
       assert(intercept[AnalysisException] {
         ResolveDefaultColumns.analyze(analyzer, columnE, statementType)
       }.getMessage.contains("statement provided a value of incompatible type"))
+
+      // Make sure that constant-folding default values does not take place when the feature is
+      // disabled.
+      withSQLConf(SQLConf.ENABLE_DEFAULT_COLUMNS.key -> "false") {
+        val result: StructType = ResolveDefaultColumns.constantFoldCurrentDefaultsToExistDefaults(
+          analyzer, db1tbl3.schema, "CREATE TABLE")
+        val columnEWithFeatureDisabled: StructField = findField("e", result)
+        // No constant-folding has taken place to the EXISTS_DEFAULT metadata.
+        assert(!columnEWithFeatureDisabled.metadata.contains("EXISTS_DEFAULT"))
+      }
     }
   }
 
