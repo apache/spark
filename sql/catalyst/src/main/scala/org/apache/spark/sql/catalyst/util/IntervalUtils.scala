@@ -348,19 +348,24 @@ object IntervalUtils {
           }
         }
       case dayTimeIndividualLiteralRegex(firstSign, secondSign, value, suffix, unit) =>
+        // formats are as following with extra `-` possibly:
+        // interval 'x' day || interval 'xx' hour || interval 'xx' minute || interval 'xx' second
         safeToInterval("day-time") {
           val sign = finalSign(firstSign, secondSign)
           unit.toUpperCase(Locale.ROOT) match {
             case "DAY" if suffix == null && value.length <= 9 && checkTargetType(DT.DAY, DT.DAY) =>
               val days = toLongWithRange(dayStr, value, 0, MAX_DAY)
+              // will not overflow, because of checked the range
               sign * days * MICROS_PER_DAY
             case "HOUR" if suffix == null && value.length <= 10
                 && checkTargetType(DT.HOUR, DT.HOUR) =>
               val hours = toLongWithRange(hourStr, value, 0, MAX_HOUR)
+              // will not overflow, because of checked the range
               sign * hours * MICROS_PER_HOUR
             case "MINUTE" if suffix == null && value.length <= 12
                 && checkTargetType(DT.MINUTE, DT.MINUTE) =>
               val minutes = toLongWithRange(minuteStr, value, 0, MAX_MINUTE)
+              // will not overflow, because of checked the range
               sign * minutes * MICROS_PER_MINUTE
             case "SECOND" if value.length <= 13 && checkTargetType(DT.SECOND, DT.SECOND) =>
               sign match {
@@ -550,7 +555,7 @@ object IntervalUtils {
   }
 
   /**
-   * Parse second_nano string in ss.nnnnnnnnn format to microseconds
+   * Parse second_nano string in `+ss.nnnnnnnnn` or `-ss.nnnnnnnnn` format to microseconds
    */
   private def parseSecondNano(secondNano: String): Long = {
     def parseSeconds(secondsStr: String): Long = {

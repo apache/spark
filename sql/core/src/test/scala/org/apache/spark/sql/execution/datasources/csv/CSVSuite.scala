@@ -2735,29 +2735,6 @@ abstract class CSVSuite
       }
     }
   }
-
-  test("SPARK-38520: Intervals are overflow") {
-    Seq(
-      (DayTimeIntervalType(DayTimeIntervalType.DAY, DayTimeIntervalType.DAY),
-          s"interval '${Long.MaxValue / 24L / 60L / 60L / 1000000L + 1}' day"),
-      (DayTimeIntervalType(DayTimeIntervalType.HOUR, DayTimeIntervalType.HOUR),
-          s"interval '${Long.MaxValue / 60L / 60L / 1000000L + 1}' hour"),
-      (DayTimeIntervalType(DayTimeIntervalType.MINUTE, DayTimeIntervalType.MINUTE),
-          s"interval '${Long.MaxValue / 60L / 1000000L + 1}' minute"),
-      (DayTimeIntervalType(DayTimeIntervalType.SECOND, DayTimeIntervalType.SECOND),
-          s"interval '${Long.MaxValue / 1000000L + 1}' second")
-    ).foreach { case (intervalType, intervalString) =>
-      withTempPath { path =>
-        Seq(intervalString).toDF().repartition(1).write.text(path.getCanonicalPath)
-        val readBack = spark.read.schema(StructType(Array(StructField("_c1", intervalType))))
-          .csv(path.getCanonicalPath)
-        checkAnswer(
-          readBack,
-          // the interval is overflow, should be null
-          Seq(Row(null)))
-      }
-    }
-  }
 }
 
 class CSVv1Suite extends CSVSuite {

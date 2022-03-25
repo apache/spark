@@ -665,4 +665,30 @@ class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
       assert(toYearMonthIntervalString(months, ANSI_STYLE, MONTH, MONTH) === month)
     }
   }
+
+  test("SPARK-38520: Intervals are overflow") {
+    Seq(
+      (DayTimeIntervalType(DayTimeIntervalType.DAY, DayTimeIntervalType.DAY),
+        s"interval '${Long.MaxValue / 24L / 60L / 60L / 1000000L + 1}' day"),
+      (DayTimeIntervalType(DayTimeIntervalType.HOUR, DayTimeIntervalType.HOUR),
+        s"interval '${Long.MaxValue / 60L / 60L / 1000000L + 1}' hour"),
+      (DayTimeIntervalType(DayTimeIntervalType.MINUTE, DayTimeIntervalType.MINUTE),
+        s"interval '${Long.MaxValue / 60L / 1000000L + 1}' minute"),
+      (DayTimeIntervalType(DayTimeIntervalType.SECOND, DayTimeIntervalType.SECOND),
+        s"interval '${Long.MaxValue / 1000000L + 1}' second"),
+      (DayTimeIntervalType(DayTimeIntervalType.SECOND, DayTimeIntervalType.SECOND),
+        s"interval '${Long.MaxValue / 1000000L}.999999999' second"),
+      (DayTimeIntervalType(DayTimeIntervalType.SECOND, DayTimeIntervalType.SECOND),
+        s"interval '${Long.MinValue / 1000000L}.999999999' second")
+    ).foreach { case (intervalType, intervalString) =>
+      try {
+        IntervalUtils.castStringToDTInterval(UTF8String.fromString(intervalString),
+          intervalType.startField, intervalType.endField)
+        fail("should throw an overflow exception")
+      } catch {
+        case _: IllegalArgumentException => // Good overflow is right
+        case _: Throwable => fail("not expected, should overflow")
+      }
+    }
+  }
 }
