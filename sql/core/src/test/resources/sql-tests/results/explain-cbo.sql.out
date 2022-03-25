@@ -56,8 +56,8 @@ struct<plan:string>
 == Optimized Logical Plan ==
 Project [c#x], Statistics(sizeInBytes=1.0 B, rowCount=0)
 +- Filter (isnotnull(d#x) AND (cast(d#x as bigint) > scalar-subquery#x [])), Statistics(sizeInBytes=1.0 B, rowCount=0)
-   :  +- Aggregate [max(csales#xL) AS tpcds_cmax#xL], Statistics(sizeInBytes=16.0 B, rowCount=1)
-   :     +- Aggregate [sum(b#x) AS csales#xL], Statistics(sizeInBytes=16.0 B, rowCount=1)
+   :  +- Aggregate [max(csales#xL) AS tpcds_cmax#xL], false, Statistics(sizeInBytes=16.0 B, rowCount=1)
+   :     +- Aggregate [sum(b#x) AS csales#xL], false, Statistics(sizeInBytes=16.0 B, rowCount=1)
    :        +- Project [b#x], Statistics(sizeInBytes=1.0 B, rowCount=0)
    :           +- Filter (isnotnull(a#x) AND (a#x < 100)), Statistics(sizeInBytes=1.0 B, rowCount=0)
    :              +- Relation default.explain_temp1[a#x,b#x] parquet, Statistics(sizeInBytes=1.0 B, rowCount=0)

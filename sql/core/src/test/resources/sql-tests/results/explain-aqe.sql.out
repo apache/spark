@@ -55,12 +55,12 @@ struct<plan:string>
 
 == Analyzed Logical Plan ==
 sum(DISTINCT val): bigint
-Aggregate [sum(distinct val#x) AS sum(DISTINCT val)#xL]
+Aggregate [sum(distinct val#x) AS sum(DISTINCT val)#xL], false
 +- SubqueryAlias spark_catalog.default.explain_temp1
    +- Relation default.explain_temp1[key#x,val#x] parquet
 
 == Optimized Logical Plan ==
-Aggregate [sum(distinct val#x) AS sum(DISTINCT val)#xL]
+Aggregate [sum(distinct val#x) AS sum(DISTINCT val)#xL], false
 +- Project [val#x]
    +- Relation default.explain_temp1[key#x,val#x] parquet
 
