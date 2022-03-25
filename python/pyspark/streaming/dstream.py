@@ -868,9 +868,7 @@ class DStream(Generic[T_co]):
             self._jrdd_deserializer,
         )
         if initialRDD:
-            initialRDD = initialRDD._reserialize(
-                self._jrdd_deserializer
-            )
+            initialRDD = initialRDD._reserialize(self._jrdd_deserializer)
             assert initialRDD is not None
             dstream = self._sc._jvm.PythonStateDStream(
                 self._jdstream.dstream(),
