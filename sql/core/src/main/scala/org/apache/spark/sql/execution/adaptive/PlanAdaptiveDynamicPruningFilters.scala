@@ -68,7 +68,7 @@ case class PlanAdaptiveDynamicPruningFilters(
         } else {
           // we need to apply an aggregate on the buildPlan in order to be column pruned
           val alias = Alias(buildKeys(index), buildKeys(index).toString)()
-          val aggregate = Aggregate(Seq(alias), Seq(alias), buildPlan)
+          val aggregate = Aggregate(Seq(alias), Seq(alias), false, buildPlan)
 
           val session = adaptivePlan.context.session
           val sparkPlan = QueryExecution.prepareExecutedPlan(

@@ -964,6 +964,7 @@ case class Range(
 case class Aggregate(
     groupingExpressions: Seq[Expression],
     aggregateExpressions: Seq[NamedExpression],
+    isPartialOnly: Boolean,
     child: LogicalPlan)
   extends UnaryNode {
 
@@ -979,7 +980,7 @@ case class Aggregate(
   override def output: Seq[Attribute] = aggregateExpressions.map(_.toAttribute)
   override def metadataOutput: Seq[Attribute] = Nil
   override def maxRows: Option[Long] = {
-    if (groupingExpressions.isEmpty) {
+    if (groupingExpressions.isEmpty && !isPartialOnly) {
       Some(1L)
     } else {
       child.maxRows

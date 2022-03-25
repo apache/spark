@@ -37,7 +37,7 @@ object OptimizeOneRowPlan extends Rule[LogicalPlan] {
     plan.transformUpWithPruning(_.containsAnyPattern(SORT, AGGREGATE), ruleId) {
       case Sort(_, _, child) if child.maxRows.exists(_ <= 1L) => child
       case Sort(_, false, child) if child.maxRowsPerPartition.exists(_ <= 1L) => child
-      case agg @ Aggregate(_, _, child) if agg.groupOnly && child.maxRows.exists(_ <= 1L) =>
+      case agg @ Aggregate(_, _, _, child) if agg.groupOnly && child.maxRows.exists(_ <= 1L) =>
         Project(agg.aggregateExpressions, child)
       case agg: Aggregate if agg.child.maxRows.exists(_ <= 1L) =>
         agg.transformExpressions {

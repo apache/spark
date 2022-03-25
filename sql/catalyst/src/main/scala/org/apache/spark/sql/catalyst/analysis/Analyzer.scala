@@ -516,8 +516,9 @@ class Analyzer(override val catalogManager: CatalogManager)
 
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUpWithPruning(
       _.containsPattern(UNRESOLVED_ALIAS), ruleId) {
-      case Aggregate(groups, aggs, child) if child.resolved && hasUnresolvedAlias(aggs) =>
-        Aggregate(groups, assignAliases(aggs), child)
+      case Aggregate(groups, aggs, isPartialOnly, child)
+          if child.resolved && hasUnresolvedAlias(aggs) =>
+        Aggregate(groups, assignAliases(aggs), isPartialOnly, child)
 
       case Pivot(groupByOpt, pivotColumn, pivotValues, aggregates, child)
         if child.resolved && groupByOpt.isDefined && hasUnresolvedAlias(groupByOpt.get) =>
@@ -644,6 +645,7 @@ class Analyzer(override val catalogManager: CatalogManager)
         selectedGroupByExprs: Seq[Seq[Expression]],
         groupByExprs: Seq[Expression],
         aggregationExprs: Seq[NamedExpression],
+        isPartialOnly: Boolean,
         child: LogicalPlan): LogicalPlan = {
 
       if (groupByExprs.size > GroupingID.dataType.defaultSize * 8) {
@@ -663,7 +665,7 @@ class Analyzer(override val catalogManager: CatalogManager)
       val aggregations = constructAggregateExprs(
         groupByExprs, aggregationExprs, groupByAliases, groupingAttrs, gid)
 
-      Aggregate(groupingAttrs, aggregations, expand)
+      Aggregate(groupingAttrs, aggregations, isPartialOnly, expand)
     }
 
     private def findGroupingExprs(plan: LogicalPlan): Seq[Expression] = {
@@ -685,7 +687,8 @@ class Analyzer(override val catalogManager: CatalogManager)
         h: UnresolvedHaving,
         aggregate: Aggregate,
         selectedGroupByExprs: Seq[Seq[Expression]],
-        groupByExprs: Seq[Expression]): LogicalPlan = {
+        groupByExprs: Seq[Expression],
+        isPartialOnly: Boolean): LogicalPlan = {
       // For CUBE/ROLLUP expressions, to avoid resolving repeatedly, here we delete them from
       // groupingExpressions for condition resolving.
       val aggForResolving = aggregate.copy(groupingExpressions = groupByExprs)
@@ -695,7 +698,7 @@ class Analyzer(override val catalogManager: CatalogManager)
 
       // Push the aggregate expressions into the aggregate (if any).
       val newChild = constructAggregate(selectedGroupByExprs, groupByExprs,
-        aggregate.aggregateExpressions ++ extraAggExprs, aggregate.child)
+        aggregate.aggregateExpressions ++ extraAggExprs, isPartialOnly, aggregate.child)
 
       // Since the output exprId will be changed in the constructed aggregate, here we build an
       // attrMap to resolve the condition again.
@@ -719,16 +722,17 @@ class Analyzer(override val catalogManager: CatalogManager)
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsDownWithPruning(
       _.containsPattern(GROUPING_ANALYTICS), ruleId) {
       case h @ UnresolvedHaving(_, agg @ Aggregate(
-        GroupingAnalytics(selectedGroupByExprs, groupByExprs), aggExprs, _))
+        GroupingAnalytics(selectedGroupByExprs, groupByExprs), aggExprs, isPartialOnly, _))
         if agg.childrenResolved && aggExprs.forall(_.resolved) =>
-        tryResolveHavingCondition(h, agg, selectedGroupByExprs, groupByExprs)
+        tryResolveHavingCondition(h, agg, selectedGroupByExprs, groupByExprs, isPartialOnly)
 
       case a if !a.childrenResolved => a // be sure all of the children are resolved.
 
       // Ensure group by expressions and aggregate expressions have been resolved.
-      case Aggregate(GroupingAnalytics(selectedGroupByExprs, groupByExprs), aggExprs, child)
+      case Aggregate(GroupingAnalytics(selectedGroupByExprs, groupByExprs), aggExprs,
+          isPartialOnly, child)
         if aggExprs.forall(_.resolved) =>
-        constructAggregate(selectedGroupByExprs, groupByExprs, aggExprs, child)
+        constructAggregate(selectedGroupByExprs, groupByExprs, aggExprs, isPartialOnly, child)
 
       // We should make sure all expressions in condition have been resolved.
       case f @ Filter(cond, child) if hasGroupingFunction(cond) && cond.resolved =>
@@ -807,14 +811,15 @@ class Analyzer(override val catalogManager: CatalogManager)
             case _ => Alias(pivotColumn, "__pivot_col")()
           }
           val bigGroup = groupByExprs :+ namedPivotCol
-          val firstAgg = Aggregate(bigGroup, bigGroup ++ namedAggExps, child)
+          val firstAgg = Aggregate(bigGroup, bigGroup ++ namedAggExps, false, child)
           val pivotAggs = namedAggExps.map { a =>
             Alias(PivotFirst(namedPivotCol.toAttribute, a.toAttribute, evalPivotValues)
               .toAggregateExpression()
             , "__pivot_" + a.sql)()
           }
           val groupByExprsAttr = groupByExprs.map(_.toAttribute)
-          val secondAgg = Aggregate(groupByExprsAttr, groupByExprsAttr ++ pivotAggs, firstAgg)
+          val secondAgg =
+            Aggregate(groupByExprsAttr, groupByExprsAttr ++ pivotAggs, false, firstAgg)
           val pivotAggAttribute = pivotAggs.map(_.toAttribute)
           val pivotOutputs = pivotValues.zipWithIndex.flatMap { case (value, i) =>
             aggregates.zip(pivotAggAttribute).map { case (aggregate, pivotAtt) =>
@@ -855,7 +860,7 @@ class Analyzer(override val catalogManager: CatalogManager)
               Alias(filteredAggregate, outputName(value, aggregate))()
             }
           }
-          Aggregate(groupByExprs, groupByExprs ++ pivotAggregates, child)
+          Aggregate(groupByExprs, groupByExprs ++ pivotAggregates, false, child)
         }
     }
 
@@ -1450,7 +1455,7 @@ class Analyzer(override val catalogManager: CatalogManager)
           .map(resolveExpressionByPlanChildren(_, planForResolve))
             .map(_.asInstanceOf[NamedExpression])
 
-        a.copy(resolvedGroupingExprs, resolvedAggExprs, a.child)
+        a.copy(resolvedGroupingExprs, resolvedAggExprs, child = a.child)
 
       case o: OverwriteByExpression if o.table.resolved =>
         // The delete condition of `OverwriteByExpression` will be passed to the table
@@ -1854,10 +1859,10 @@ class Analyzer(override val catalogManager: CatalogManager)
 
       // Replace the index with the corresponding expression in aggregateExpressions. The index is
       // a 1-base position of aggregateExpressions, which is output columns (select expression)
-      case Aggregate(groups, aggs, child) if aggs.forall(_.resolved) &&
+      case Aggregate(groups, aggs, isPartialOnly, child) if aggs.forall(_.resolved) &&
         groups.exists(containUnresolvedOrdinal) =>
         val newGroups = groups.map(resolveGroupByExpressionOrdinal(_, aggs))
-        Aggregate(newGroups, aggs, child)
+        Aggregate(newGroups, aggs, isPartialOnly, child)
     }
 
     private def containUnresolvedOrdinal(e: Expression): Boolean = e match {
@@ -1912,7 +1917,7 @@ class Analyzer(override val catalogManager: CatalogManager)
     override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUpWithPruning(
       // mayResolveAttrByAggregateExprs requires the TreePattern UNRESOLVED_ATTRIBUTE.
       _.containsAllPatterns(AGGREGATE, UNRESOLVED_ATTRIBUTE), ruleId) {
-      case agg @ Aggregate(groups, aggs, child)
+      case agg @ Aggregate(groups, aggs, _, child)
           if conf.groupByAliases && child.resolved && aggs.forall(_.resolved) &&
             groups.exists(!_.resolved) =>
         agg.copy(groupingExpressions = mayResolveAttrByAggregateExprs(groups, aggs, child))
@@ -1989,7 +1994,7 @@ class Analyzer(override val catalogManager: CatalogManager)
             val missingAttrs = (AttributeSet(newExprs) -- p.outputSet).intersect(newChild.outputSet)
             (newExprs, Project(p.projectList ++ missingAttrs, newChild))
 
-          case a @ Aggregate(groupExprs, aggExprs, child) =>
+          case a @ Aggregate(groupExprs, aggExprs, _, child) =>
             val maybeResolvedExprs = exprs.map(resolveExpressionByPlanOutput(_, a))
             val (newExprs, newChild) = resolveExprsAndAddMissingAttrs(maybeResolvedExprs, child)
             val missingAttrs = (AttributeSet(newExprs) -- a.outputSet).intersect(newChild.outputSet)
@@ -2513,7 +2518,7 @@ class Analyzer(override val catalogManager: CatalogManager)
       t => t.containsAnyPattern(AGGREGATE_EXPRESSION, PYTHON_UDF) && t.containsPattern(PROJECT),
       ruleId) {
       case Project(projectList, child) if containsAggregates(projectList) =>
-        Aggregate(Nil, projectList, child)
+        Aggregate(Nil, projectList, false, child)
     }
 
     def containsAggregates(exprs: Seq[Expression]): Boolean = {
@@ -2760,15 +2765,15 @@ class Analyzer(override val catalogManager: CatalogManager)
         val generators = projectList.filter(hasGenerator).map(trimAlias)
         throw QueryCompilationErrors.moreThanOneGeneratorError(generators, "select")
 
-      case Aggregate(_, aggList, _) if aggList.exists(hasNestedGenerator) =>
+      case Aggregate(_, aggList, _, _) if aggList.exists(hasNestedGenerator) =>
         val nestedGenerator = aggList.find(hasNestedGenerator).get
         throw QueryCompilationErrors.nestedGeneratorError(trimAlias(nestedGenerator))
 
-      case Aggregate(_, aggList, _) if aggList.count(hasGenerator) > 1 =>
+      case Aggregate(_, aggList, _, _) if aggList.count(hasGenerator) > 1 =>
         val generators = aggList.filter(hasGenerator).map(trimAlias)
         throw QueryCompilationErrors.moreThanOneGeneratorError(generators, "aggregate")
 
-      case agg @ Aggregate(groupList, aggList, child) if aggList.forall {
+      case agg @ Aggregate(groupList, aggList, isPartialOnly, child) if aggList.forall {
           case AliasedGenerator(_, _, _) => true
           case other => other.resolved
         } && aggList.exists(hasGenerator) =>
@@ -2808,7 +2813,7 @@ class Analyzer(override val catalogManager: CatalogManager)
               other :: Nil
           }
 
-        val newAgg = Aggregate(groupList, newAggList, child)
+        val newAgg = Aggregate(groupList, newAggList, isPartialOnly, child)
         Project(projectExprs.toList, newAgg)
 
       case p @ Project(projectList, _) if hasAggFunctionInGenerator(projectList) =>
@@ -3117,13 +3122,14 @@ class Analyzer(override val catalogManager: CatalogManager)
 
       // Aggregate with Having clause. This rule works with an unresolved Aggregate because
       // a resolved Aggregate will not have Window Functions.
-      case f @ UnresolvedHaving(condition, a @ Aggregate(groupingExprs, aggregateExprs, child))
+      case f @ UnresolvedHaving(condition,
+          a @ Aggregate(groupingExprs, aggregateExprs, isPartialOnly, child))
         if child.resolved &&
           hasWindowFunction(aggregateExprs) &&
           a.expressions.forall(_.resolved) =>
         val (windowExpressions, aggregateExpressions) = extract(aggregateExprs)
         // Create an Aggregate operator to evaluate aggregation functions.
-        val withAggregate = Aggregate(groupingExprs, aggregateExpressions, child)
+        val withAggregate = Aggregate(groupingExprs, aggregateExpressions, isPartialOnly, child)
         // Add a Filter operator for conditions in the Having clause.
         val withFilter = Filter(condition, withAggregate)
         val withWindow = addWindow(windowExpressions, withFilter)
@@ -3135,12 +3141,12 @@ class Analyzer(override val catalogManager: CatalogManager)
       case p: LogicalPlan if !p.childrenResolved => p
 
       // Aggregate without Having clause.
-      case a @ Aggregate(groupingExprs, aggregateExprs, child)
+      case a @ Aggregate(groupingExprs, aggregateExprs, isPartialOnly, child)
         if hasWindowFunction(aggregateExprs) &&
           a.expressions.forall(_.resolved) =>
         val (windowExpressions, aggregateExpressions) = extract(aggregateExprs)
         // Create an Aggregate operator to evaluate aggregation functions.
-        val withAggregate = Aggregate(groupingExprs, aggregateExpressions, child)
+        val withAggregate = Aggregate(groupingExprs, aggregateExpressions, isPartialOnly, child)
         // Add Window operators.
         val withWindow = addWindow(windowExpressions, withAggregate)
 
@@ -3822,9 +3828,9 @@ object CleanupAliases extends Rule[LogicalPlan] with AliasHelper {
       val cleanedProjectList = projectList.map(trimNonTopLevelAliases)
       Project(cleanedProjectList, child)
 
-    case Aggregate(grouping, aggs, child) =>
+    case Aggregate(grouping, aggs, isPartialOnly, child) =>
       val cleanedAggs = aggs.map(trimNonTopLevelAliases)
-      Aggregate(grouping.map(trimAliases), cleanedAggs, child)
+      Aggregate(grouping.map(trimAliases), cleanedAggs, isPartialOnly, child)
 
     case Window(windowExprs, partitionSpec, orderSpec, child) =>
       val cleanedWindowExprs = windowExprs.map(trimNonTopLevelAliases)

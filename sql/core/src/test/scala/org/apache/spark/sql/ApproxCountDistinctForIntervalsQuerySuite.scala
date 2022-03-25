@@ -46,7 +46,7 @@ class ApproxCountDistinctForIntervalsQuerySuite extends QueryTest with SharedSpa
       val aggFunc = ApproxCountDistinctForIntervals(attr, CreateArray(endpoints.map(Literal(_))))
       val aggExpr = aggFunc.toAggregateExpression()
       val namedExpr = Alias(aggExpr, aggExpr.toString)()
-      val ndvsRow = new QueryExecution(spark, Aggregate(Nil, Seq(namedExpr), relation))
+      val ndvsRow = new QueryExecution(spark, Aggregate(Nil, Seq(namedExpr), false, relation))
         .executedPlan.executeTake(1).head
       val ndvArray = ndvsRow.getArray(0).toLongArray()
       assert(endpoints.length == ndvArray.length + 1)
@@ -82,7 +82,8 @@ class ApproxCountDistinctForIntervalsQuerySuite extends QueryTest with SharedSpa
         ApproxCountDistinctForIntervals(dtAttr, CreateArray(endpoints.map(Literal(_))))
       val dtAggExpr = dtAggFunc.toAggregateExpression()
       val dtNamedExpr = Alias(dtAggExpr, dtAggExpr.toString)()
-      val result = Dataset.ofRows(spark, Aggregate(Nil, Seq(ymNamedExpr, dtNamedExpr), relation))
+      val result = Dataset.ofRows(spark,
+        Aggregate(Nil, Seq(ymNamedExpr, dtNamedExpr), false, relation))
       checkAnswer(result, Row(Array(1, 1, 1, 1, 1), Array(1, 1, 1, 1, 1)))
     }
   }

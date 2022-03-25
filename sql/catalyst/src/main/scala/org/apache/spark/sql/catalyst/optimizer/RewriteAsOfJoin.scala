@@ -65,7 +65,7 @@ object RewriteAsOfJoin extends Rule[LogicalPlan] {
       val nearestRight = MinBy(rightStruct, orderExpressionWithOuterReference)
         .toAggregateExpression()
       val aggExpr = Alias(nearestRight, "__nearest_right__")()
-      val aggregate = Aggregate(Seq.empty, Seq(aggExpr), filtered)
+      val aggregate = Aggregate(Seq.empty, Seq(aggExpr), false, filtered)
 
       val projectWithScalarSubquery = Project(
         left.output :+ Alias(ScalarSubquery(aggregate, left.output), "__right__")(),

@@ -268,10 +268,11 @@ object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper
         } else {
           p
         }
-      case a @ Aggregate(grouping, expressions, child) =>
+      case a @ Aggregate(grouping, expressions, isPartialOnly, child) =>
         val referencesToAdd = missingReferences(a)
         if (referencesToAdd.nonEmpty) {
-          Aggregate(grouping ++ referencesToAdd, expressions ++ referencesToAdd, child)
+          Aggregate(
+            grouping ++ referencesToAdd, expressions ++ referencesToAdd, isPartialOnly, child)
         } else {
           a
         }
@@ -664,7 +665,7 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] with AliasHelpe
    * subqueries.
    */
   def apply(plan: LogicalPlan): LogicalPlan = plan transformUpWithNewOutput {
-    case a @ Aggregate(grouping, expressions, child) =>
+    case a @ Aggregate(grouping, expressions, _, child) =>
       val subqueries = ArrayBuffer.empty[ScalarSubquery]
       val rewriteExprs = expressions.map(extractCorrelatedScalarSubqueries(_, subqueries))
       if (subqueries.nonEmpty) {
@@ -676,7 +677,7 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] with AliasHelpe
         }
         val (newChild, subqueryAttrMapping) = constructLeftJoins(child, subqueries)
         val newExprs = updateAttrs(rewriteExprs, subqueryAttrMapping)
-        val newAgg = Aggregate(newGrouping, newExprs, newChild)
+        val newAgg = Aggregate(newGrouping, newExprs, false, newChild)
         val attrMapping = a.output.zip(newAgg.output)
         checkScalarSubqueryInAgg(newAgg)
         newAgg -> attrMapping

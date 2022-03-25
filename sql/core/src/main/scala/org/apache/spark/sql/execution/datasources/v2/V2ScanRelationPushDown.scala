@@ -93,7 +93,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper wit
 
   def pushDownAggregates(plan: LogicalPlan): LogicalPlan = plan.transform {
     // update the scan builder with agg pushdown and return a new plan with agg pushed
-    case aggNode @ Aggregate(groupingExpressions, resultExpressions, child) =>
+    case aggNode @ Aggregate(groupingExpressions, resultExpressions, false, child) =>
       child match {
         case ScanOperation(project, filters, sHolder: ScanBuilderHolder)
           if filters.isEmpty && CollapseProject.canCollapseExpressions(
@@ -219,7 +219,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper wit
                     Project(projectExpressions, scanRelation)
                   } else {
                     val plan = Aggregate(output.take(groupingExpressions.length),
-                      finalResultExpressions, scanRelation)
+                      finalResultExpressions, false, scanRelation)
 
                     // scalastyle:off
                     // Change the optimized logical plan to reflect the pushed down aggregate

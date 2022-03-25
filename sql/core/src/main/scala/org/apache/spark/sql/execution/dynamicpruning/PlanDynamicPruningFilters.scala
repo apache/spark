@@ -82,7 +82,7 @@ case class PlanDynamicPruningFilters(sparkSession: SparkSession)
         } else {
           // we need to apply an aggregate on the buildPlan in order to be column pruned
           val alias = Alias(buildKeys(broadcastKeyIndex), buildKeys(broadcastKeyIndex).toString)()
-          val aggregate = Aggregate(Seq(alias), Seq(alias), buildPlan)
+          val aggregate = Aggregate(Seq(alias), Seq(alias), false, buildPlan)
           DynamicPruningExpression(expressions.InSubquery(
             Seq(value), ListQuery(aggregate, childOutputs = aggregate.output)))
         }

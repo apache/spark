@@ -69,8 +69,13 @@ object DistinctKeyVisitor extends LogicalPlanVisitor[Set[ExpressionSet]] {
   override def default(p: LogicalPlan): Set[ExpressionSet] = Set.empty[ExpressionSet]
 
   override def visitAggregate(p: Aggregate): Set[ExpressionSet] = {
-    val groupingExps = ExpressionSet(p.groupingExpressions) // handle group by a, a
-    projectDistinctKeys(addDistinctKey(p.child.distinctKeys, groupingExps), p.aggregateExpressions)
+    if (p.isPartialOnly) {
+      default(p)
+    } else {
+      val groupingExps = ExpressionSet(p.groupingExpressions) // handle group by a, a
+      projectDistinctKeys(
+        addDistinctKey(p.child.distinctKeys, groupingExps), p.aggregateExpressions)
+    }
   }
 
   override def visitDistinct(p: Distinct): Set[ExpressionSet] = Set(ExpressionSet(p.output))

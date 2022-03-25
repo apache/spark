@@ -263,7 +263,8 @@ object CommandUtils extends Logging {
       columns.map(statExprs(_, conf, attributePercentiles))
 
     val namedExpressions = expressions.map(e => Alias(e, e.toString)())
-    val statsRow = new QueryExecution(sparkSession, Aggregate(Nil, namedExpressions, relation))
+    val statsRow = new QueryExecution(sparkSession,
+      Aggregate(Nil, namedExpressions, false, relation))
       .executedPlan.executeTake(1).head
 
     val rowCount = statsRow.getLong(0)
@@ -300,7 +301,8 @@ object CommandUtils extends Logging {
         Alias(expr, expr.toString)()
       }
 
-      val percentilesRow = new QueryExecution(sparkSession, Aggregate(Nil, namedExprs, relation))
+      val percentilesRow = new QueryExecution(sparkSession,
+        Aggregate(Nil, namedExprs, false, relation))
         .executedPlan.executeTake(1).head
       attrsToGenHistogram.zipWithIndex.foreach { case (attr, i) =>
         val percentiles = percentilesRow.getArray(i)

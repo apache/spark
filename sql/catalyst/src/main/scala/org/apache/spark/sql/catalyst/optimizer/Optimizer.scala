@@ -836,7 +836,7 @@ object ColumnPruning extends Rule[LogicalPlan] {
       d.copy(child = prunedChild(child, d.references))
 
     // Prunes the unused columns from child of Aggregate/Expand/Generate/ScriptTransformation
-    case a @ Aggregate(_, _, child) if !child.outputSet.subsetOf(a.references) =>
+    case a @ Aggregate(_, _, _, child) if !child.outputSet.subsetOf(a.references) =>
       a.copy(child = prunedChild(child, a.references))
     case f @ FlatMapGroupsInPandas(_, _, _, child) if !child.outputSet.subsetOf(f.references) =>
       f.copy(child = prunedChild(child, f.references))
@@ -1431,7 +1431,7 @@ object EliminateSorts extends Rule[LogicalPlan] {
     case s @ Sort(_, _, child) => s.copy(child = recursiveRemoveSort(child))
     case j @ Join(originLeft, originRight, _, cond, _) if cond.forall(_.deterministic) =>
       j.copy(left = recursiveRemoveSort(originLeft), right = recursiveRemoveSort(originRight))
-    case g @ Aggregate(_, aggs, originChild) if isOrderIrrelevantAggs(aggs) =>
+    case g @ Aggregate(_, aggs, _, originChild) if isOrderIrrelevantAggs(aggs) =>
       g.copy(child = recursiveRemoveSort(originChild))
   }
 
@@ -1980,7 +1980,7 @@ object ConvertToLocalRelation extends Rule[LogicalPlan] {
 object ReplaceDistinctWithAggregate extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
     _.containsPattern(DISTINCT_LIKE), ruleId) {
-    case Distinct(child) => Aggregate(child.output, child.output, child)
+    case Distinct(child) => Aggregate(child.output, child.output, false, child)
   }
 }
 
@@ -2004,7 +2004,7 @@ object ReplaceDeduplicateWithAggregate extends Rule[LogicalPlan] {
       // we append a literal when the grouping key list is empty so that the result aggregate
       // operator is properly treated as a grouping aggregation.
       val nonemptyKeys = if (keys.isEmpty) Literal(1) :: Nil else keys
-      val newAgg = Aggregate(nonemptyKeys, aggCols, child)
+      val newAgg = Aggregate(nonemptyKeys, aggCols, false, child)
       val attrMapping = d.output.zip(newAgg.output)
       newAgg -> attrMapping
   }
@@ -2099,7 +2099,7 @@ object RewriteExceptAll extends Rule[LogicalPlan] {
       val aggSumCol =
         Alias(AggregateExpression(Sum(unionPlan.output.head.toAttribute), Complete, false), "sum")()
       val aggOutputColumns = left.output ++ Seq(aggSumCol)
-      val aggregatePlan = Aggregate(left.output, aggOutputColumns, unionPlan)
+      val aggregatePlan = Aggregate(left.output, aggOutputColumns, false, unionPlan)
       val filteredAggPlan = Filter(GreaterThan(aggSumCol.toAttribute, Literal(0L)), aggregatePlan)
       val genRowPlan = Generate(
         ReplicateRows(Seq(aggSumCol.toAttribute) ++ left.output),
@@ -2174,7 +2174,7 @@ object RewriteIntersectAll extends Rule[LogicalPlan] {
       ), "min_count")()
 
       val aggregatePlan = Aggregate(left.output,
-        Seq(vCol1AggrExpr, vCol2AggrExpr) ++ left.output, unionPlan)
+        Seq(vCol1AggrExpr, vCol2AggrExpr) ++ left.output, false, unionPlan)
       val filterPlan = Filter(And(GreaterThanOrEqual(vCol1AggrExpr.toAttribute, Literal(1L)),
         GreaterThanOrEqual(vCol2AggrExpr.toAttribute, Literal(1L))), aggregatePlan)
       val projectMinPlan = Project(left.output ++ Seq(ifExpression), filterPlan)
@@ -2199,7 +2199,7 @@ object RewriteIntersectAll extends Rule[LogicalPlan] {
 object RemoveLiteralFromGroupExpressions extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
     _.containsPattern(AGGREGATE), ruleId) {
-    case a @ Aggregate(grouping, _, _) if grouping.nonEmpty =>
+    case a @ Aggregate(grouping, _, _, _) if grouping.nonEmpty =>
       val newGrouping = grouping.filter(!_.foldable)
       if (newGrouping.nonEmpty) {
         a.copy(groupingExpressions = newGrouping)
@@ -2255,7 +2255,7 @@ object GenerateOptimization extends Rule[LogicalPlan] {
 object RemoveRepetitionFromGroupExpressions extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
     _.containsPattern(AGGREGATE), ruleId) {
-    case a @ Aggregate(grouping, _, _) if grouping.size > 1 =>
+    case a @ Aggregate(grouping, _, _, _) if grouping.size > 1 =>
       val newGrouping = ExpressionSet(grouping).toSeq
       if (newGrouping.size == grouping.size) {
         a

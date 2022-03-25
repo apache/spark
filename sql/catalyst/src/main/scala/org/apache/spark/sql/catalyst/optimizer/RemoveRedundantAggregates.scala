@@ -31,7 +31,8 @@ import org.apache.spark.sql.catalyst.trees.TreePattern.AGGREGATE
 object RemoveRedundantAggregates extends Rule[LogicalPlan] with AliasHelper {
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformUpWithPruning(
     _.containsPattern(AGGREGATE), ruleId) {
-    case upper @ Aggregate(_, _, lower: Aggregate) if isLowerRedundant(upper, lower) =>
+    case upper @ Aggregate(_, _, _, lower: Aggregate)
+        if upper.isPartialOnly == lower.isPartialOnly && isLowerRedundant(upper, lower) =>
       val aliasMap = getAliasMap(lower)
 
       val newAggregate = upper.copy(
@@ -48,7 +49,7 @@ object RemoveRedundantAggregates extends Rule[LogicalPlan] with AliasHelper {
         newAggregate
       }
 
-    case agg @ Aggregate(groupingExps, _, child)
+    case agg @ Aggregate(groupingExps, _, false, child)
         if agg.groupOnly && child.distinctKeys.exists(_.subsetOf(ExpressionSet(groupingExps))) =>
       Project(agg.aggregateExpressions, child)
   }

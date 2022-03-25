@@ -286,7 +286,7 @@ object DecorrelateInnerQuery extends PredicateHelper {
         // Construct a domain with the outer query plan.
         // DomainJoin [a', b']  =>  Aggregate [a, b] [a AS a', b AS b']
         //                          +- Relation [a, b]
-        val domain = Aggregate(groupingExprs, aggregateExprs, outerPlan)
+        val domain = Aggregate(groupingExprs, aggregateExprs, false, outerPlan)
         newChild match {
           // A special optimization for OneRowRelation.
           // TODO: add a more general rule to optimize join with OneRowRelation.
@@ -466,7 +466,7 @@ object DecorrelateInnerQuery extends PredicateHelper {
             val newProject = Project(newProjectList ++ referencesToAdd, newChild)
             (newProject, joinCond, outerReferenceMap)
 
-          case a @ Aggregate(groupingExpressions, aggregateExpressions, child) =>
+          case a @ Aggregate(groupingExpressions, aggregateExpressions, _, child) =>
             val outerReferences = collectOuterReferences(a.expressions)
             val newOuterReferences = parentOuterReferences ++ outerReferences
             val (newChild, joinCond, outerReferenceMap) =

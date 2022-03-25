@@ -442,7 +442,7 @@ package object dsl {
           case ne: NamedExpression => ne
           case e => UnresolvedAlias(e)
         }
-        Aggregate(groupingExprs, aliasedExprs, logicalPlan)
+        Aggregate(groupingExprs, aliasedExprs, false, logicalPlan)
       }
 
       def having(

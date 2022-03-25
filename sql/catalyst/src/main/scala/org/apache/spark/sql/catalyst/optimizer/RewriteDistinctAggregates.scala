@@ -383,6 +383,7 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
       val firstAggregate = Aggregate(
         firstAggregateGroupBy,
         firstAggregateGroupBy ++ maxConds ++ regularAggOperatorMap.map(_._2),
+        false,
         expand)
 
       // Construct the second aggregate
@@ -402,7 +403,7 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
               .getOrElse(transformations.getOrElse(e, e))
         }.asInstanceOf[NamedExpression]
       }
-      Aggregate(groupByAttrs, patchedAggExpressions, firstAggregate)
+      Aggregate(groupByAttrs, patchedAggExpressions, false, firstAggregate)
     } else {
       a
     }

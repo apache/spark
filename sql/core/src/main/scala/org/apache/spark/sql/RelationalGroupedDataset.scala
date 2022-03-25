@@ -67,15 +67,15 @@ class RelationalGroupedDataset protected[sql](
 
     groupType match {
       case RelationalGroupedDataset.GroupByType =>
-        Dataset.ofRows(df.sparkSession, Aggregate(groupingExprs, aliasedAgg, df.logicalPlan))
+        Dataset.ofRows(df.sparkSession, Aggregate(groupingExprs, aliasedAgg, false, df.logicalPlan))
       case RelationalGroupedDataset.RollupType =>
         Dataset.ofRows(
           df.sparkSession, Aggregate(Seq(Rollup(groupingExprs.map(Seq(_)))),
-            aliasedAgg, df.logicalPlan))
+            aliasedAgg, false, df.logicalPlan))
       case RelationalGroupedDataset.CubeType =>
         Dataset.ofRows(
           df.sparkSession, Aggregate(Seq(Cube(groupingExprs.map(Seq(_)))),
-            aliasedAgg, df.logicalPlan))
+            aliasedAgg, false, df.logicalPlan))
       case RelationalGroupedDataset.PivotType(pivotCol, values) =>
         val aliasedGrps = groupingExprs.map(alias)
         Dataset.ofRows(

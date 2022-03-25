@@ -71,7 +71,7 @@ object PullOutGroupingExpressions extends Rule[LogicalPlan] {
           val newAggregateExpressions = a.aggregateExpressions
             .map(replaceComplexGroupingExpressions(_).asInstanceOf[NamedExpression])
           val newChild = Project(a.child.output ++ complexGroupingExpressionMap.values, a.child)
-          Aggregate(newGroupingExpressions, newAggregateExpressions, newChild)
+          Aggregate(newGroupingExpressions, newAggregateExpressions, false, newChild)
         } else {
           a
         }

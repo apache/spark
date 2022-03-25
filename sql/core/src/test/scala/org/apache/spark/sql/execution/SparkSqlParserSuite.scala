@@ -344,6 +344,7 @@ class SparkSqlParserSuite extends AnalysisTest {
               UnresolvedAlias(
                 UnresolvedFunction("max", Seq(UnresolvedAttribute("c")), isDistinct = false), None)
             ),
+            false,
             UnresolvedRelation(TableIdentifier("testData")))),
         ioSchema))
 
@@ -411,6 +412,7 @@ class SparkSqlParserSuite extends AnalysisTest {
               UnresolvedAlias(
                 UnresolvedFunction("max", Seq(UnresolvedAttribute("c")), isDistinct = false), None)
             ),
+            false,
             Generate(
               UnresolvedGenerator(
                 FunctionIdentifier("explode"),

@@ -45,7 +45,7 @@ object BasicStatsPlanVisitor extends LogicalPlanVisitor[Statistics] {
 
   override def visitDistinct(p: Distinct): Statistics = {
     val child = p.child
-    visitAggregate(Aggregate(child.output, child.output, child))
+    visitAggregate(Aggregate(child.output, child.output, false, child))
   }
 
   override def visitExcept(p: Except): Statistics = fallback(p)

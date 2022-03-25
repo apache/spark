@@ -107,7 +107,8 @@ object UnsupportedOperationChecker extends Logging {
         // Since the Distinct node will be replaced to Aggregate in the optimizer rule
         // [[ReplaceDistinctWithAggregate]], here we also need to check all Distinct node by
         // assuming it as Aggregate.
-        case d @ Distinct(c: LogicalPlan) if d.isStreaming => Aggregate(c.output, c.output, c)
+        case d @ Distinct(c: LogicalPlan) if d.isStreaming =>
+          Aggregate(c.output, c.output, false, c)
       }
     }
 
@@ -198,7 +199,7 @@ object UnsupportedOperationChecker extends Logging {
      * data.
      */
     def containsCompleteData(subplan: LogicalPlan): Boolean = {
-      val aggs = subplan.collect { case a@Aggregate(_, _, _) if a.isStreaming => a }
+      val aggs = subplan.collect { case a@Aggregate(_, _, _, _) if a.isStreaming => a }
       // Either the subplan has no streaming source, or it has aggregation with Complete mode
       !subplan.isStreaming || (aggs.nonEmpty && outputMode == InternalOutputModes.Complete)
     }
@@ -218,7 +219,7 @@ object UnsupportedOperationChecker extends Logging {
       // Operations that cannot exists anywhere in a streaming plan
       subPlan match {
 
-        case Aggregate(groupingExpressions, aggregateExpressions, child) =>
+        case Aggregate(groupingExpressions, aggregateExpressions, _, child) =>
           val distinctAggExprs = aggregateExpressions.flatMap { expr =>
             expr.collect { case ae: AggregateExpression if ae.isDistinct => ae }
           }

@@ -282,7 +282,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
               failAnalysis("Input argument tolerance must be non-negative.")
             }
 
-          case a @ Aggregate(groupingExprs, aggregateExprs, child) =>
+          case a @ Aggregate(groupingExprs, aggregateExprs, _, _) =>
             def isAggregateExpression(expr: Expression): Boolean = {
               expr.isInstanceOf[AggregateExpression] || PythonUDF.isGroupedAggPandasUDF(expr)
             }
