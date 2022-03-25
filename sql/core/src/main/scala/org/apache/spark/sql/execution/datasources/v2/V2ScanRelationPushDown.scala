@@ -374,7 +374,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper wit
         sHolder.pushedLimit = Some(limit)
       }
       operation
-    case sort @ Sort(order, _, operation @ ScanOperation(project, filter, sHolder: ScanBuilderHolder))
+    case s @ Sort(order, _, operation @ ScanOperation(project, filter, sHolder: ScanBuilderHolder))
         if filter.isEmpty && CollapseProject.canCollapseExpressions(
           order, project, alwaysInline = true) =>
       val aliasMap = getAliasMap(project)
@@ -387,15 +387,15 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper wit
           sHolder.pushedLimit = Some(limit)
           sHolder.sortOrders = orders
           if (isPartiallyPushed) {
-            sort
+            s
           } else {
             operation
           }
         } else {
-          sort
+          s
         }
       } else {
-        sort
+        s
       }
     case p: Project =>
       val newChild = pushDownLimit(p.child, limit)
