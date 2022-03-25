@@ -926,8 +926,7 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
             |""".stripMargin)
         val plan = sql("select c / 2.0D d from v").logicalPlan
         val add = plan.collectFirst {
-          case Project(Seq(Alias(a: Add, _)), _) =>
-              a
+          case Project(Seq(Alias(a: Add, _)), _) => a
         }
         assert(add.isDefined)
         val expectedAddOrigin = Origin(
@@ -942,8 +941,7 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
         assert(add.get.origin == expectedAddOrigin)
 
         val divide = plan.collectFirst {
-          case Project(Seq(Alias(d: Divide, _)), _) =>
-            d
+          case Project(Seq(Alias(d: Divide, _)), _) => d
         }
         assert(divide.isDefined)
         val expectedDivideOrigin = Origin(
