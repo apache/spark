@@ -2273,8 +2273,14 @@ class DDLParserSuite extends AnalysisTest {
       ReplaceTable(UnresolvedDBObjectName(Seq("my_tab"), false), schemaWithDefaultColumn,
         Seq.empty[Transform], LogicalTableSpec(Map.empty[String, String], Some("parquet"),
           Map.empty[String, String], None, None, None, false), false))
+    // Make sure that the parser returns an exception when the feature is disabled.
+    withSQLConf(SQLConf.ENABLE_DEFAULT_COLUMNS.key -> "false") {
+      intercept(
+        "CREATE TABLE my_tab(a INT, b STRING NOT NULL DEFAULT \"abc\") USING parquet",
+        "Support for DEFAULT column values is not allowed")
+    }
 
-    // In each of the following cases, the DEFAULT reference parses as an unresolved attribute
+  // In each of the following cases, the DEFAULT reference parses as an unresolved attribute
     // reference. We can handle these cases after the parsing stage, at later phases of analysis.
     comparePlans(parsePlan("VALUES (1, 2, DEFAULT) AS val"),
       SubqueryAlias("val",
