@@ -27,7 +27,7 @@ import org.apache.spark.sql.types.{IntegerType, StringType}
 class RewriteDistinctAggregatesSuite extends PlanTest {
   val nullInt = Literal(null, IntegerType)
   val nullString = Literal(null, StringType)
-  val testRelation = LocalRelation('a.string, 'b.string, 'c.string, 'd.string, 'e.int)
+  val testRelation = LocalRelation('a.string, 'b.string, 'c.string, 'd.string, $"e".int)
 
   private def checkRewrite(rewrite: LogicalPlan): Unit = rewrite match {
     case Aggregate(_, _, Aggregate(_, _, _: Expand)) =>

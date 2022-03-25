@@ -27,8 +27,8 @@ import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
  */
 class PullOutNondeterministicSuite extends AnalysisTest {
 
-  private lazy val a = 'a.int
-  private lazy val b = 'b.int
+  private lazy val a = $"a".int
+  private lazy val b = $"b".int
   private lazy val r = LocalRelation(a, b)
   private lazy val rnd = Rand(10).as('_nondeterministic)
   private lazy val rndref = rnd.toAttribute

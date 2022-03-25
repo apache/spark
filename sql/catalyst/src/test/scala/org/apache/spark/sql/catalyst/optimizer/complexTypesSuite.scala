@@ -55,7 +55,7 @@ class ComplexTypesSuite extends PlanTest with ExpressionEvalHelper {
   private val nullableIdAtt = ('nullable_id).long
 
   private val relation = LocalRelation(idAtt, nullableIdAtt)
-  private val testRelation = LocalRelation('a.int, 'b.int, 'c.int, 'd.double, 'e.int)
+  private val testRelation = LocalRelation($"a".int, $"b".int, $"c".int, 'd.double, $"e".int)
 
   private def checkRule(originalQuery: LogicalPlan, correctAnswer: LogicalPlan) = {
     val optimized = Optimizer.execute(originalQuery.analyze)
@@ -452,10 +452,10 @@ class ComplexTypesSuite extends PlanTest with ExpressionEvalHelper {
     checkEvaluation(GetMapValue(mb0, Literal(Array[Byte](3, 4))), null)
   }
 
-  private val structAttr = 'struct1.struct('a.int, 'b.int).withNullability(false)
+  private val structAttr = $"struct1".struct($"a".int, $"b".int).withNullability(false)
   private val testStructRelation = LocalRelation(structAttr)
 
-  private val nullableStructAttr = 'struct1.struct('a.int, 'b.int)
+  private val nullableStructAttr = $"struct1".struct($"a".int, $"b".int)
   private val testNullableStructRelation = LocalRelation(nullableStructAttr)
 
   test("simplify GetStructField on basic UpdateFields") {
@@ -550,7 +550,7 @@ class ComplexTypesSuite extends PlanTest with ExpressionEvalHelper {
   }
 
   test("simplify GetStructField that is extracting a field nested inside a struct") {
-    val struct2 = 'struct2.struct('b.int)
+    val struct2 = $"struct2".struct($"b".int)
     val testStructRelation = LocalRelation(structAttr, struct2)
     val testNullableStructRelation = LocalRelation(nullableStructAttr, struct2)
 
@@ -680,7 +680,7 @@ class ComplexTypesSuite extends PlanTest with ExpressionEvalHelper {
     // using the Column.withField API in a non-performant way
     val structLevel2 = LocalRelation(
       'a1.struct(
-        'a2.struct('a3.int.notNull)).notNull)
+        'a2.struct($"a3".int.notNull)).notNull)
 
     val query = {
       val addB3toA1A2 = UpdateFields('a1, Seq(WithField("a2",
@@ -708,7 +708,7 @@ class ComplexTypesSuite extends PlanTest with ExpressionEvalHelper {
     // using the Column.withField API in a non-performant way
     val structLevel2 = LocalRelation(
       'a1.struct(
-        'a2.struct('a3.int.notNull)))
+        'a2.struct($"a3".int.notNull)))
 
     val query = {
       val addB3toA1A2 = UpdateFields('a1, Seq(WithField("a2",
@@ -743,7 +743,7 @@ class ComplexTypesSuite extends PlanTest with ExpressionEvalHelper {
     // using the Column.dropFields API in a non-performant way
     val structLevel2 = LocalRelation(
       'a1.struct(
-        'a2.struct('a3.int.notNull, 'b3.int.notNull, 'c3.int.notNull).notNull
+        'a2.struct($"a3".int.notNull, $"b3".int.notNull, $"c3".int.notNull).notNull
       ).notNull)
 
     val query = {
@@ -770,7 +770,7 @@ class ComplexTypesSuite extends PlanTest with ExpressionEvalHelper {
     // using the Column.dropFields API in a non-performant way
     val structLevel2 = LocalRelation(
       'a1.struct(
-        'a2.struct('a3.int.notNull, 'b3.int.notNull, 'c3.int.notNull)
+        'a2.struct($"a3".int.notNull, $"b3".int.notNull, $"c3".int.notNull)
       ))
 
     val query = {

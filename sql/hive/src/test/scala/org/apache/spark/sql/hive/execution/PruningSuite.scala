@@ -43,7 +43,7 @@ class PruningSuite extends HiveComparisonTest with BeforeAndAfter {
   // Column pruning tests
 
   createPruningTest("Column pruning - with partitioned table",
-    "SELECT key FROM srcpart WHERE ds = '2008-04-08' LIMIT 3",
+    "SELECT key FROM srcpart WHERE ds = $"2008"-04-08' LIMIT 3",
     Seq("key"),
     Seq("key"),
     Seq(
@@ -107,7 +107,7 @@ class PruningSuite extends HiveComparisonTest with BeforeAndAfter {
     Seq.empty)
 
   createPruningTest("Partition pruning - with filter on string partition key",
-    "SELECT value, hr FROM srcpart1 WHERE ds = '2008-04-08'",
+    "SELECT value, hr FROM srcpart1 WHERE ds = $"2008"-04-08'",
     Seq("value", "hr"),
     Seq("value", "hr"),
     Seq(
@@ -123,14 +123,14 @@ class PruningSuite extends HiveComparisonTest with BeforeAndAfter {
       Seq("2008-04-09", "11")))
 
   createPruningTest("Partition pruning - left only 1 partition",
-    "SELECT value, hr FROM srcpart1 WHERE ds = '2008-04-08' AND hr < 12",
+    "SELECT value, hr FROM srcpart1 WHERE ds = $"2008"-04-08' AND hr < 12",
     Seq("value", "hr"),
     Seq("value", "hr"),
     Seq(
       Seq("2008-04-08", "11")))
 
   createPruningTest("Partition pruning - all partitions pruned",
-    "SELECT value, hr FROM srcpart1 WHERE ds = '2014-01-27' AND hr = 11",
+    "SELECT value, hr FROM srcpart1 WHERE ds = $"2014"-01-27' AND hr = 11",
     Seq("value", "hr"),
     Seq("value", "hr"),
     Seq.empty)
@@ -144,7 +144,7 @@ class PruningSuite extends HiveComparisonTest with BeforeAndAfter {
       Seq("2008-04-09", "11")))
 
   createPruningTest("Partition pruning - with filter containing non-deterministic condition",
-    "SELECT value, hr FROM srcpart1 WHERE ds = '2008-04-08' AND hr < 12 AND rand() < 1",
+    "SELECT value, hr FROM srcpart1 WHERE ds = $"2008"-04-08' AND hr < 12 AND rand() < 1",
     Seq("value", "hr"),
     Seq("value", "hr"),
     Seq(

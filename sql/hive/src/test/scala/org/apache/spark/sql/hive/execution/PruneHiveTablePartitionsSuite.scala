@@ -124,7 +124,7 @@ class PruneHiveTablePartitionsSuite extends PrunePartitionSuiteBase with TestHiv
             avgLen = Some(LongType.defaultSize),
             maxLen = Some(LongType.defaultSize))))
 
-        checkOptimizedPlanStats(sql("SELECT id FROM SPARK_34119 WHERE p = '2'"),
+        checkOptimizedPlanStats(sql("SELECT id FROM SPARK_34119 WHERE p = $"2"'"),
           64L,
           Some(4),
           Seq(ColumnStat(

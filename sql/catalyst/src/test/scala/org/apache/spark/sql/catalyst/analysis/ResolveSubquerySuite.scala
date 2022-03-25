@@ -30,11 +30,11 @@ import org.apache.spark.sql.catalyst.plans.logical._
  */
 class ResolveSubquerySuite extends AnalysisTest {
 
-  val a = 'a.int
-  val b = 'b.int
-  val c = 'c.int
-  val x = 'x.struct(a)
-  val y = 'y.struct(a)
+  val a = $"a".int
+  val b = $"b".int
+  val c = $"c".int
+  val x = $"x".struct(a)
+  val y = $"y".struct(a)
   val t0 = OneRowRelation()
   val t1 = LocalRelation(a, b)
   val t2 = LocalRelation(b, c)
@@ -80,7 +80,7 @@ class ResolveSubquerySuite extends AnalysisTest {
   }
 
   test("lateral join with ambiguous join conditions") {
-    val plan = lateralJoin(t1, t0.select('b), condition = Some('b ===  1))
+    val plan = lateralJoin(t1, t0.select('b), condition = Some($"b" ===  1))
     assertAnalysisError(plan, "Reference 'b' is ambiguous, could be: b, b." :: Nil)
   }
 

@@ -36,8 +36,8 @@ class OuterJoinEliminationSuite extends PlanTest {
         PushPredicateThroughJoin) :: Nil
   }
 
-  val testRelation = LocalRelation('a.int, 'b.int, 'c.int)
-  val testRelation1 = LocalRelation('d.int, 'e.int, 'f.int)
+  val testRelation = LocalRelation($"a".int, $"b".int, $"c".int)
+  val testRelation1 = LocalRelation($"d".int, $"e".int, $"f".int)
 
   test("joins: full outer to inner") {
     val x = testRelation.subquery('x)
@@ -48,8 +48,8 @@ class OuterJoinEliminationSuite extends PlanTest {
         .where("x.b".attr >= 1 && "y.d".attr >= 2)
 
     val optimized = Optimize.execute(originalQuery.analyze)
-    val left = testRelation.where('b >= 1)
-    val right = testRelation1.where('d >= 2)
+    val left = testRelation.where($"b" >= 1)
+    val right = testRelation1.where($"d" >= 2)
     val correctAnswer =
       left.join(right, Inner, Option("a".attr === "d".attr)).analyze
 
@@ -65,7 +65,7 @@ class OuterJoinEliminationSuite extends PlanTest {
 
     val optimized = Optimize.execute(originalQuery.analyze)
     val left = testRelation
-    val right = testRelation1.where('d > 2)
+    val right = testRelation1.where($"d" > 2)
     val correctAnswer =
       left.join(right, RightOuter, Option("a".attr === "d".attr)).analyze
 
@@ -80,7 +80,7 @@ class OuterJoinEliminationSuite extends PlanTest {
       x.join(y, FullOuter, Option("x.a".attr === "y.d".attr)).where("x.a".attr <=> 2)
 
     val optimized = Optimize.execute(originalQuery.analyze)
-    val left = testRelation.where('a <=> 2)
+    val left = testRelation.where($"a" <=> 2)
     val right = testRelation1
     val correctAnswer =
       left.join(right, LeftOuter, Option("a".attr === "d".attr)).analyze
@@ -96,7 +96,7 @@ class OuterJoinEliminationSuite extends PlanTest {
       x.join(y, RightOuter, Option("x.a".attr === "y.d".attr)).where("x.b".attr > 2)
 
     val optimized = Optimize.execute(originalQuery.analyze)
-    val left = testRelation.where('b > 2)
+    val left = testRelation.where($"b" > 2)
     val right = testRelation1
     val correctAnswer =
       left.join(right, Inner, Option("a".attr === "d".attr)).analyze

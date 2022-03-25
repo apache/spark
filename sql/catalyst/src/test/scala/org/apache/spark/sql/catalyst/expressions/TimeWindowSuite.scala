@@ -94,7 +94,7 @@ class TimeWindowSuite extends SparkFunSuite with ExpressionEvalHelper with Priva
     }
   }
 
-  private val parseExpression = PrivateMethod[Long](Symbol("parseExpression"))
+  private val parseExpression = PrivateMethod[Long]($"parseExpression")
 
   test("parse sql expression for duration in microseconds - string") {
     val dur = TimeWindow.invokePrivate(parseExpression(Literal("5 seconds")))

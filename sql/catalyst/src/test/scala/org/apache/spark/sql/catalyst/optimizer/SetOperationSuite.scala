@@ -38,9 +38,9 @@ class SetOperationSuite extends PlanTest {
         PruneFilters) :: Nil
   }
 
-  val testRelation = LocalRelation('a.int, 'b.int, 'c.int)
-  val testRelation2 = LocalRelation('d.int, 'e.int, 'f.int)
-  val testRelation3 = LocalRelation('g.int, 'h.int, 'i.int)
+  val testRelation = LocalRelation($"a".int, $"b".int, $"c".int)
+  val testRelation2 = LocalRelation($"d".int, $"e".int, $"f".int)
+  val testRelation3 = LocalRelation($"g".int, $"h".int, $"i".int)
   val testUnion = Union(testRelation :: testRelation2 :: testRelation3 :: Nil)
 
   test("union: combine unions into one unions") {
@@ -59,12 +59,12 @@ class SetOperationSuite extends PlanTest {
   }
 
   test("union: filter to each side") {
-    val unionQuery = testUnion.where('a === 1)
+    val unionQuery = testUnion.where($"a" === 1)
     val unionOptimized = Optimize.execute(unionQuery.analyze)
     val unionCorrectAnswer =
-      Union(testRelation.where('a === 1) ::
-        testRelation2.where('d === 1) ::
-        testRelation3.where('g === 1) :: Nil).analyze
+      Union(testRelation.where($"a" === 1) ::
+        testRelation2.where($"d" === 1) ::
+        testRelation3.where($"g" === 1) :: Nil).analyze
 
     comparePlans(unionOptimized, unionCorrectAnswer)
   }
@@ -330,11 +330,11 @@ class SetOperationSuite extends PlanTest {
   }
 
   test("SPARK-37915: combine unions if there is a project between them") {
-    val relation1 = LocalRelation('a.decimal(18, 1), 'b.int)
-    val relation2 = LocalRelation('a.decimal(18, 2), 'b.int)
-    val relation3 = LocalRelation('a.decimal(18, 3), 'b.int)
-    val relation4 = LocalRelation('a.decimal(18, 4), 'b.int)
-    val relation5 = LocalRelation('a.decimal(18, 5), 'b.int)
+    val relation1 = LocalRelation('a.decimal(18, 1), $"b".int)
+    val relation2 = LocalRelation('a.decimal(18, 2), $"b".int)
+    val relation3 = LocalRelation('a.decimal(18, 3), $"b".int)
+    val relation4 = LocalRelation('a.decimal(18, 4), $"b".int)
+    val relation5 = LocalRelation('a.decimal(18, 5), $"b".int)
 
     val optimizedRelation1 = relation1.select('a.cast(DecimalType(19, 2)).cast(DecimalType(20, 3))
       .cast(DecimalType(21, 4)).cast(DecimalType(22, 5)).as("a"), 'b)

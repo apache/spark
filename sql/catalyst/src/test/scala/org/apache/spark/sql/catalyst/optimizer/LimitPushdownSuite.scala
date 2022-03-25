@@ -186,12 +186,12 @@ class LimitPushdownSuite extends PlanTest {
 
     // test push down
     val analyzed2 = Limit(1, Union(
-      x.groupBy(Symbol("a"))(count(1)),
-      y.groupBy(Symbol("b"))(count(1)))).analyze
+      x.groupBy($"a")(count(1)),
+      y.groupBy($"b")(count(1)))).analyze
     val optimized2 = Optimize.execute(analyzed2)
     val expected2 = Limit(1, Union(
-      LocalLimit(1, x.groupBy(Symbol("a"))(count(1))),
-      LocalLimit(1, y.groupBy(Symbol("b"))(count(1))))).analyze
+      LocalLimit(1, x.groupBy($"a")(count(1))),
+      LocalLimit(1, y.groupBy($"b")(count(1))))).analyze
     comparePlans(expected2, optimized2)
   }
 

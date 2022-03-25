@@ -42,8 +42,8 @@ class ReplaceNullWithFalseInPredicateSuite extends PlanTest {
   }
 
   private val testRelation =
-    LocalRelation('i.int, 'b.boolean, 'a.array(IntegerType), 'm.map(IntegerType, IntegerType))
-  private val anotherTestRelation = LocalRelation('d.int)
+    LocalRelation($"i".int, $"b".boolean, 'a.array(IntegerType), 'm.map(IntegerType, IntegerType))
+  private val anotherTestRelation = LocalRelation($"d".int)
 
   test("replace null inside filter and join conditions") {
     testFilter(originalCond = Literal(null, BooleanType), expectedCond = FalseLiteral)
@@ -496,7 +496,7 @@ class ReplaceNullWithFalseInPredicateSuite extends PlanTest {
       // Between source and target only one should have i and b as those are used for
       // test expressions and both, source and target, having those columns is ambiguous  .
       // However, the source must have all the columns present in target for star resolution.
-      val source = LocalRelation('i.int, 'b.boolean, 'a.array(IntegerType))
+      val source = LocalRelation($"i".int, $"b".boolean, 'a.array(IntegerType))
       val target = LocalRelation('a.array(IntegerType))
       MergeIntoTable(target, source, mergeCondition = expr, matchedActions, notMatchedActions)
     }

@@ -39,7 +39,7 @@ class AggregateOptimizeSuite extends AnalysisTest {
       ReplaceDistinctWithAggregate) :: Nil
   }
 
-  val testRelation = LocalRelation('a.int, 'b.int, 'c.int)
+  val testRelation = LocalRelation($"a".int, $"b".int, $"c".int)
 
   test("remove literals in grouping expression") {
     val query = testRelation.groupBy('a, Literal("1"), Literal(1) + Literal(2))(sum('b))

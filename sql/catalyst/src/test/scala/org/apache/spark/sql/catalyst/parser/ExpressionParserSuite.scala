@@ -81,11 +81,11 @@ class ExpressionParserSuite extends AnalysisTest {
   // NamedExpression (Alias/Multialias)
   test("named expressions") {
     // No Alias
-    val r0 = 'a
+    val r0 = $"a"
     assertEqual("a", r0)
 
     // Single Alias.
-    val r1 = 'a as "b"
+    val r1 = $"a" as "b"
     assertEqual("a as b", r1)
     assertEqual("a b", r1)
 
@@ -96,7 +96,7 @@ class ExpressionParserSuite extends AnalysisTest {
     // Numeric literals without a space between the literal qualifier and the alias, should not be
     // interpreted as such. An unresolved reference should be returned instead.
     // TODO add the JIRA-ticket number.
-    assertEqual("1SL", Symbol("1SL"))
+    assertEqual("1SL", $"1SL")
 
     // Aliased star is allowed.
     assertEqual("a.* b", UnresolvedStar(Option(Seq("a"))) as 'b)
@@ -138,26 +138,26 @@ class ExpressionParserSuite extends AnalysisTest {
   test("exists expression") {
     assertEqual(
       "exists (select 1 from b where b.x = a.x)",
-      Exists(table("b").where(Symbol("b.x") === Symbol("a.x")).select(1)))
+      Exists(table("b").where($"b.x" === $"a.x").select(1)))
   }
 
   test("comparison expressions") {
-    assertEqual("a = b", 'a === 'b)
-    assertEqual("a == b", 'a === 'b)
-    assertEqual("a <=> b", 'a <=> 'b)
-    assertEqual("a <> b", 'a =!= 'b)
-    assertEqual("a != b", 'a =!= 'b)
+    assertEqual("a = b", $"a" === $"b")
+    assertEqual("a == b", $"a" === $"b")
+    assertEqual("a <=> b", 'a <=> $"b")
+    assertEqual("a <> b", $"a" =!= $"b")
+    assertEqual("a != b", $"a" =!= $"b")
     assertEqual("a < b", 'a < 'b)
-    assertEqual("a <= b", 'a <= 'b)
-    assertEqual("a !> b", 'a <= 'b)
-    assertEqual("a > b", 'a > 'b)
-    assertEqual("a >= b", 'a >= 'b)
-    assertEqual("a !< b", 'a >= 'b)
+    assertEqual("a <= b", 'a <= $"b")
+    assertEqual("a !> b", 'a <= $"b")
+    assertEqual("a > b", $"a" > $"b")
+    assertEqual("a >= b", $"a" >= $"b")
+    assertEqual("a !< b", $"a" >= $"b")
   }
 
   test("between expressions") {
-    assertEqual("a between b and c", 'a >= 'b && 'a <= 'c)
-    assertEqual("a not between b and c", !('a >= 'b && 'a <= 'c))
+    assertEqual("a between b and c", $"a" >= $"b" && 'a <= $"c")
+    assertEqual("a not between b and c", !($"a" >= $"b" && 'a <= $"c"))
   }
 
   test("in expressions") {
@@ -231,13 +231,13 @@ class ExpressionParserSuite extends AnalysisTest {
   test("is null expressions") {
     assertEqual("a is null", 'a.isNull)
     assertEqual("a is not null", 'a.isNotNull)
-    assertEqual("a = b is null", ('a === 'b).isNull)
-    assertEqual("a = b is not null", ('a === 'b).isNotNull)
+    assertEqual("a = b is null", ($"a" === $"b").isNull)
+    assertEqual("a = b is not null", ($"a" === $"b").isNotNull)
   }
 
   test("is distinct expressions") {
-    assertEqual("a is distinct from b", !('a <=> 'b))
-    assertEqual("a is not distinct from b", 'a <=> 'b)
+    assertEqual("a is distinct from b", !('a <=> $"b"))
+    assertEqual("a is not distinct from b", 'a <=> $"b")
   }
 
   test("binary arithmetic expressions") {
@@ -295,7 +295,7 @@ class ExpressionParserSuite extends AnalysisTest {
   }
 
   test("window function expressions") {
-    val func = 'foo.function(star())
+    val func = $"foo".function(star())
     def windowed(
         partitioning: Seq[Expression] = Seq.empty,
         ordering: Seq[SortOrder] = Seq.empty,
@@ -326,7 +326,7 @@ class ExpressionParserSuite extends AnalysisTest {
   }
 
   test("range/rows window function expressions") {
-    val func = 'foo.function(star())
+    val func = $"foo".function(star())
     def windowed(
         partitioning: Seq[Expression] = Seq.empty,
         ordering: Seq[SortOrder] = Seq.empty,
@@ -405,10 +405,10 @@ class ExpressionParserSuite extends AnalysisTest {
   test("scalar sub-query") {
     assertEqual(
       "(select max(val) from tbl) > current",
-      ScalarSubquery(table("tbl").select('max.function('val))) > 'current)
+      ScalarSubquery(table("tbl").select('max.function('val))) > $"current")
     assertEqual(
       "a = (select b from s)",
-      'a === ScalarSubquery(table("s").select('b)))
+      $"a" === ScalarSubquery(table("s").select('b)))
   }
 
   test("case when") {
@@ -419,9 +419,9 @@ class ExpressionParserSuite extends AnalysisTest {
     assertEqual("case 'a'='a' when true then 1 end",
       CaseKeyWhen("a" ===  "a", Seq(true, 1)))
     assertEqual("case when a = 1 then b when a = 2 then c else d end",
-      CaseWhen(Seq(('a === 1, 'b.expr), ('a === 2, 'c.expr)), 'd))
+      CaseWhen(Seq(($"a" === 1, 'b.expr), ($"a" === 2, 'c.expr)), 'd))
     assertEqual("case when (1) + case when a > b then c else d end then f else g end",
-      CaseWhen(Seq((Literal(1) + CaseWhen(Seq(('a > 'b, 'c.expr)), 'd.expr), 'f.expr)), 'g))
+      CaseWhen(Seq((Literal(1) + CaseWhen(Seq(($"a" > $"b", 'c.expr)), 'd.expr), 'f.expr)), 'g))
   }
 
   test("dereference") {
@@ -438,7 +438,7 @@ class ExpressionParserSuite extends AnalysisTest {
     assertEqual("a", 'a)
 
     // Starting with a digit.
-    assertEqual("1a", Symbol("1a"))
+    assertEqual("1a", $"1a")
 
     // Quoted using a keyword.
     assertEqual("`select`", 'select)

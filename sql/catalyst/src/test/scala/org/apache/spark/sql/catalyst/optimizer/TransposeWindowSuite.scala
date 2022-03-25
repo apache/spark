@@ -31,7 +31,7 @@ class TransposeWindowSuite extends PlanTest {
       Batch("FlipWindow", Once, CollapseWindow, TransposeWindow) :: Nil
   }
 
-  val testRelation = LocalRelation('a.string, 'b.string, 'c.int, 'd.string)
+  val testRelation = LocalRelation('a.string, 'b.string, $"c".int, 'd.string)
 
   val a = testRelation.output(0)
   val b = testRelation.output(1)

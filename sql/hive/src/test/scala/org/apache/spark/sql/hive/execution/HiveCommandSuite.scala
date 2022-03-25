@@ -244,7 +244,7 @@ class HiveCommandSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
         sql(s"""$loadQuery INPATH "${f.toURI}" INTO TABLE part_table PARTITION(c="1", d="2")""")
       }
       checkAnswer(
-        sql("SELECT employeeID, employeeName FROM part_table WHERE c = '1' AND d = '2'"),
+        sql("SELECT employeeID, employeeName FROM part_table WHERE c = $"1"' AND d = $"2"'"),
         sql("SELECT * FROM non_part_table").collect())
 
       // Different order of partition columns.
@@ -252,7 +252,7 @@ class HiveCommandSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
         sql(s"""$loadQuery INPATH "${f.toURI}" INTO TABLE part_table PARTITION(d="1", c="2")""")
       }
       checkAnswer(
-        sql("SELECT employeeID, employeeName FROM part_table WHERE c = '2' AND d = '1'"),
+        sql("SELECT employeeID, employeeName FROM part_table WHERE c = $"2"' AND d = $"1"'"),
         sql("SELECT * FROM non_part_table"))
     }
   }

@@ -446,8 +446,8 @@ abstract class V2WriteAnalysisSuiteBase extends AnalysisTest {
   }
 
   test("byName: fail extra data fields in struct") {
-    val table = TestRelation(Seq('a.int, 'b.struct('x.int, 'y.int)))
-    val query = TestRelation(Seq('b.struct('y.int, 'x.int, 'z.int), 'a.int))
+    val table = TestRelation(Seq($"a".int, 'b.struct($"x".int, $"y".int)))
+    val query = TestRelation(Seq('b.struct($"y".int, $"x".int, $"z".int), $"a".int))
 
     val writePlan = byName(table, query)
     assertAnalysisError(writePlan, Seq(
@@ -698,8 +698,8 @@ abstract class V2WriteAnalysisSuiteBase extends AnalysisTest {
   }
 
   test("SPARK-36498: reorder inner fields with byName mode") {
-    val table = TestRelation(Seq('a.int, 'b.struct('x.int, 'y.int)))
-    val query = TestRelation(Seq('b.struct('y.int, 'x.byte), 'a.int))
+    val table = TestRelation(Seq($"a".int, 'b.struct($"x".int, $"y".int)))
+    val query = TestRelation(Seq('b.struct($"y".int, 'x.byte), $"a".int))
 
     val writePlan = byName(table, query).analyze
     assert(writePlan.children.head.schema == table.schema)
@@ -707,11 +707,11 @@ abstract class V2WriteAnalysisSuiteBase extends AnalysisTest {
 
   test("SPARK-36498: reorder inner fields in array of struct with byName mode") {
     val table = TestRelation(Seq(
-      'a.int,
+      $"a".int,
       'arr.array(new StructType().add("x", "int").add("y", "int"))))
     val query = TestRelation(Seq(
       'arr.array(new StructType().add("y", "int").add("x", "byte")),
-      'a.int))
+      $"a".int))
 
     val writePlan = byName(table, query).analyze
     assert(writePlan.children.head.schema == table.schema)
@@ -719,7 +719,7 @@ abstract class V2WriteAnalysisSuiteBase extends AnalysisTest {
 
   test("SPARK-36498: reorder inner fields in map of struct with byName mode") {
     val table = TestRelation(Seq(
-      'a.int,
+      $"a".int,
       'm.map(
         new StructType().add("x", "int").add("y", "int"),
         new StructType().add("x", "int").add("y", "int"))))
@@ -727,7 +727,7 @@ abstract class V2WriteAnalysisSuiteBase extends AnalysisTest {
       'm.map(
         new StructType().add("y", "int").add("x", "byte"),
         new StructType().add("y", "int").add("x", "byte")),
-      'a.int))
+      $"a".int))
 
     val writePlan = byName(table, query).analyze
     assert(writePlan.children.head.schema == table.schema)

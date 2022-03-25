@@ -771,15 +771,15 @@ class HiveDDLSuite
         sql(s"CREATE VIEW $viewName AS SELECT * FROM $tabName")
 
         checkProperties(Map())
-        sql(s"ALTER VIEW $viewName SET TBLPROPERTIES ('p' = 'an')")
+        sql(s"ALTER VIEW $viewName SET TBLPROPERTIES ('p' = $"an"')")
         checkProperties(Map("p" -> "an"))
 
         // no exception or message will be issued if we set it again
-        sql(s"ALTER VIEW $viewName SET TBLPROPERTIES ('p' = 'an')")
+        sql(s"ALTER VIEW $viewName SET TBLPROPERTIES ('p' = $"an"')")
         checkProperties(Map("p" -> "an"))
 
         // the value will be updated if we set the same key to a different value
-        sql(s"ALTER VIEW $viewName SET TBLPROPERTIES ('p' = 'b')")
+        sql(s"ALTER VIEW $viewName SET TBLPROPERTIES ('p' = $"b"')")
         checkProperties(Map("p" -> "b"))
 
         sql(s"ALTER VIEW $viewName UNSET TBLPROPERTIES ('p')")
@@ -838,13 +838,13 @@ class HiveDDLSuite
       assert(
         catalog.getTableMetadata(TableIdentifier(tabName)).tableType == CatalogTableType.MANAGED)
       assertAnalysisError(
-        s"ALTER TABLE $tabName SET TBLPROPERTIES ('EXTERNAL' = 'TRUE')",
+        s"ALTER TABLE $tabName SET TBLPROPERTIES ('EXTERNAL' = $"TRUE"')",
         "Cannot set or change the preserved property key: 'EXTERNAL'")
       // The table type is not changed to external
       assert(
         catalog.getTableMetadata(TableIdentifier(tabName)).tableType == CatalogTableType.MANAGED)
       // The table property is case sensitive. Thus, external is allowed
-      sql(s"ALTER TABLE $tabName SET TBLPROPERTIES ('External' = 'TRUE')")
+      sql(s"ALTER TABLE $tabName SET TBLPROPERTIES ('External' = $"TRUE"')")
       // The table type is not changed to external
       assert(
         catalog.getTableMetadata(TableIdentifier(tabName)).tableType == CatalogTableType.MANAGED)
@@ -870,12 +870,12 @@ class HiveDDLSuite
         assertErrorForAlterTableOnView(s"ALTER TABLE $oldViewName RENAME TO $newViewName")
 
         assertErrorForAlterViewOnTable(
-          s"ALTER VIEW $tabName SET TBLPROPERTIES ('p' = 'an')",
+          s"ALTER VIEW $tabName SET TBLPROPERTIES ('p' = $"an"')",
           tabName,
           "ALTER VIEW ... SET TBLPROPERTIES")
 
         assertErrorForAlterTableOnView(
-          s"ALTER TABLE $oldViewName SET TBLPROPERTIES ('p' = 'an')",
+          s"ALTER TABLE $oldViewName SET TBLPROPERTIES ('p' = $"an"')",
           oldViewName,
           "ALTER TABLE ... SET TBLPROPERTIES")
 
@@ -900,12 +900,12 @@ class HiveDDLSuite
           "ALTER TABLE ... SET [SERDE|SERDEPROPERTIES]")
 
         assertErrorForAlterTableOnView(
-          s"ALTER TABLE $oldViewName SET SERDEPROPERTIES ('x' = 'y')",
+          s"ALTER TABLE $oldViewName SET SERDEPROPERTIES ('x' = $"y"')",
           oldViewName,
           "ALTER TABLE ... SET [SERDE|SERDEPROPERTIES]")
 
         assertErrorForAlterTableOnView(
-          s"ALTER TABLE $oldViewName PARTITION (a=1, b=2) SET SERDEPROPERTIES ('x' = 'y')",
+          s"ALTER TABLE $oldViewName PARTITION (a=1, b=2) SET SERDEPROPERTIES ('x' = $"y"')",
           oldViewName,
           "ALTER TABLE ... SET [SERDE|SERDEPROPERTIES]")
 
@@ -1735,7 +1735,7 @@ class HiveDDLSuite
 
       Seq(DATASOURCE_PREFIX, STATISTICS_PREFIX).foreach { forbiddenPrefix =>
         assertAnalysisError(
-          s"ALTER TABLE tbl SET TBLPROPERTIES ('${forbiddenPrefix}foo' = 'loser')",
+          s"ALTER TABLE tbl SET TBLPROPERTIES ('${forbiddenPrefix}foo' = $"loser"')",
           s"${forbiddenPrefix}foo")
 
         assertAnalysisError(
@@ -2783,7 +2783,7 @@ class HiveDDLSuite
         """
           |CREATE TABLE targetHiveTable LIKE sourceHiveTable USING hive
           |ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'
-          |WITH SERDEPROPERTIES ('test' = 'test')
+          |WITH SERDEPROPERTIES ('test' = $"test"')
         """.stripMargin,
         "Operation not allowed: CREATE TABLE LIKE ... USING ... ROW FORMAT SERDE")
 
@@ -2792,7 +2792,7 @@ class HiveDDLSuite
         """
           |CREATE TABLE targetDsTable LIKE sourceDsTable
           |ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'
-          |WITH SERDEPROPERTIES ('test' = 'test')
+          |WITH SERDEPROPERTIES ('test' = $"test"')
         """.stripMargin,
         "'ROW FORMAT' must be used with 'STORED AS'")
 
@@ -2827,8 +2827,8 @@ class HiveDDLSuite
       sql("CREATE TABLE t1(a STRING, B VARCHAR(10), C CHAR(10)) STORED AS parquet")
       sql("CREATE TABLE t2 USING parquet PARTITIONED BY (b, c) AS SELECT * FROM t1")
       // make sure there is no exception
-      assert(sql("SELECT * FROM t2 WHERE b = 'A'").collect().isEmpty)
-      assert(sql("SELECT * FROM t2 WHERE c = 'A'").collect().isEmpty)
+      assert(sql("SELECT * FROM t2 WHERE b = $"A"'").collect().isEmpty)
+      assert(sql("SELECT * FROM t2 WHERE c = $"A"'").collect().isEmpty)
     }
   }
 
@@ -3042,7 +3042,7 @@ class HiveDDLSuite
       val df = spark.table("v")
       assert(df.schema.names.toSeq == Seq("A", "B"))
 
-      sql("ALTER VIEW v SET TBLPROPERTIES('testkey' = 'testval')")
+      sql("ALTER VIEW v SET TBLPROPERTIES('testkey' = $"testval"')")
       val df1 = spark.table("v")
       assert(df1.schema.names.toSeq == Seq("A", "B"))
     }

@@ -756,7 +756,7 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
       s"""
          |CREATE TABLE $tabName (key STRING, value STRING)
          |STORED AS TEXTFILE
-         |TBLPROPERTIES ('prop1' = 'val1', 'prop2' = 'val2')
+         |TBLPROPERTIES ('prop1' = $"val1"', 'prop2' = $"val2"')
        """.stripMargin)
     sql(s"INSERT INTO TABLE $tabName SELECT * FROM src")
     if (analyzedBySpark) sql(s"ANALYZE TABLE $tabName COMPUTE STATISTICS")
@@ -823,7 +823,7 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
       val catalogTable1 = getCatalogTable(table)
       val hiveSize1 = BigInt(catalogTable1.ignoredProperties(StatsSetupConst.TOTAL_SIZE))
 
-      sql(s"ALTER TABLE $table SET TBLPROPERTIES ('prop1' = 'a')")
+      sql(s"ALTER TABLE $table SET TBLPROPERTIES ('prop1' = $"a"')")
 
       sql(s"INSERT INTO TABLE $table SELECT 'c', 'd'")
       val catalogTable2 = getCatalogTable(table)
@@ -860,7 +860,7 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
 
   test("alter table SET TBLPROPERTIES after analyze table") {
     testAlterTableProperties("set_prop_table",
-      "ALTER TABLE set_prop_table SET TBLPROPERTIES ('foo' = 'a')")
+      "ALTER TABLE set_prop_table SET TBLPROPERTIES ('foo' = $"a"')")
   }
 
   test("alter table UNSET TBLPROPERTIES after analyze table") {

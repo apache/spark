@@ -42,16 +42,16 @@ class BooleanSimplificationSuite extends PlanTest with ExpressionEvalHelper with
         PruneFilters) :: Nil
   }
 
-  val testRelation = LocalRelation('a.int, 'b.int, 'c.int, 'd.string,
-    'e.boolean, 'f.boolean, 'g.boolean, 'h.boolean)
+  val testRelation = LocalRelation($"a".int, $"b".int, $"c".int, 'd.string,
+    $"e".boolean, $"f".boolean, $"g".boolean, $"h".boolean)
 
   val testRelationWithData = LocalRelation.fromExternalRows(
     testRelation.output, Seq(Row(1, 2, 3, "abc"))
   )
 
-  val testNotNullableRelation = LocalRelation('a.int.notNull, 'b.int.notNull, 'c.int.notNull,
-    'd.string.notNull, 'e.boolean.notNull, 'f.boolean.notNull, 'g.boolean.notNull,
-    'h.boolean.notNull)
+  val testNotNullableRelation = LocalRelation($"a".int.notNull, $"b".int.notNull, $"c".int.notNull,
+    'd.string.notNull, $"e".boolean.notNull, $"f".boolean.notNull, $"g".boolean.notNull,
+    $"h".boolean.notNull)
 
   val testNotNullableRelationWithData = LocalRelation.fromExternalRows(
     testNotNullableRelation.output, Seq(Row(1, 2, 3, "abc"))
@@ -96,82 +96,82 @@ class BooleanSimplificationSuite extends PlanTest with ExpressionEvalHelper with
   }
 
   test("(a && b && c && ...) || (a && b && d && ...) || (a && b && e && ...) ...") {
-    checkCondition('b > 3 || 'c > 5, 'b > 3 || 'c > 5)
+    checkCondition($"b" > 3 || $"c" > 5, $"b" > 3 || $"c" > 5)
 
-    checkCondition(('a < 2 && 'a > 3 && 'b > 5) || 'a < 2, 'a < 2)
+    checkCondition(($"a" < 2 && $"a" > 3 && $"b" > 5) || $"a" < 2, $"a" < 2)
 
-    checkCondition('a < 2 || ('a < 2 && 'a > 3 && 'b > 5), 'a < 2)
+    checkCondition($"a" < 2 || ($"a" < 2 && $"a" > 3 && $"b" > 5), $"a" < 2)
 
-    val input = ('a === 'b && 'b > 3 && 'c > 2) ||
-      ('a === 'b && 'c < 1 && 'a === 5) ||
-      ('a === 'b && 'b < 5 && 'a > 1)
+    val input = ($"a" === $"b" && $"b" > 3 && $"c" > 2) ||
+      ($"a" === $"b" && $"c" < 1 && $"a" === 5) ||
+      ($"a" === $"b" && $"b" < 5 && $"a" > 1)
 
-    val expected = 'a === 'b && (
-      ('b > 3 && 'c > 2) || ('c < 1 && 'a === 5) || ('b < 5 && 'a > 1))
+    val expected = $"a" === $"b" && (
+      ($"b" > 3 && $"c" > 2) || ($"c" < 1 && $"a" === 5) || ($"b" < 5 && $"a" > 1))
 
     checkCondition(input, expected)
   }
 
   test("(a || b || c || ...) && (a || b || d || ...) && (a || b || e || ...) ...") {
-    checkCondition('b > 3 && 'c > 5, 'b > 3 && 'c > 5)
+    checkCondition($"b" > 3 && $"c" > 5, $"b" > 3 && $"c" > 5)
 
-    checkCondition(('a < 2 || 'a > 3 || 'b > 5) && 'a < 2, 'a < 2)
+    checkCondition(($"a" < 2 || $"a" > 3 || $"b" > 5) && $"a" < 2, $"a" < 2)
 
-    checkCondition('a < 2 && ('a < 2 || 'a > 3 || 'b > 5), 'a < 2)
+    checkCondition($"a" < 2 && ($"a" < 2 || $"a" > 3 || $"b" > 5), $"a" < 2)
 
-    checkCondition(('a < 2 || 'b > 3) && ('a < 2 || 'c > 5), 'a < 2 || ('b > 3 && 'c > 5))
+    checkCondition(($"a" < 2 || $"b" > 3) && ($"a" < 2 || $"c" > 5), $"a" < 2 || ($"b" > 3 && $"c" > 5))
 
     checkCondition(
-      ('a === 'b || 'b > 3) && ('a === 'b || 'a > 3) && ('a === 'b || 'a < 5),
-      'a === 'b || 'b > 3 && 'a > 3 && 'a < 5)
+      ($"a" === $"b" || $"b" > 3) && ($"a" === $"b" || $"a" > 3) && ($"a" === $"b" || $"a" < 5),
+      $"a" === $"b" || $"b" > 3 && $"a" > 3 && $"a" < 5)
   }
 
   test("SPARK-34222: simplify conjunctive predicates (a && b) && a && (a && c) => a && b && c") {
-    checkCondition(('a > 1 && 'b > 2) && 'a > 1 && ('a > 1 && 'c > 3),
-      'a > 1 && ('b > 2 && 'c > 3))
+    checkCondition(($"a" > 1 && $"b" > 2) && $"a" > 1 && ($"a" > 1 && $"c" > 3),
+      $"a" > 1 && ($"b" > 2 && $"c" > 3))
 
-    checkCondition(('a > 1 && 'b > 2) && ('a > 4 && 'b > 5) && ('a > 1 && 'c > 3),
-      ('a > 1 && 'b > 2) && ('c > 3 && 'a > 4) && 'b > 5)
-
-    checkCondition(
-      'a > 1 && 'b > 3 && ('a > 1 && 'b > 3 && ('a > 1 && 'b > 3 && 'c > 1)),
-      'a > 1 && 'b > 3 && 'c > 1)
+    checkCondition(($"a" > 1 && $"b" > 2) && ($"a" > 4 && $"b" > 5) && ($"a" > 1 && $"c" > 3),
+      ($"a" > 1 && $"b" > 2) && ($"c" > 3 && $"a" > 4) && $"b" > 5)
 
     checkCondition(
-      ('a > 1 || 'b > 3) && (('a > 1 || 'b > 3) && 'd > 0L && (('a > 1 || 'b > 3) && 'c > 1)),
-      ('a > 1 || 'b > 3) && 'd > 0L && 'c > 1)
+      $"a" > 1 && $"b" > 3 && ($"a" > 1 && $"b" > 3 && ($"a" > 1 && $"b" > 3 && $"c" > 1)),
+      $"a" > 1 && $"b" > 3 && $"c" > 1)
 
     checkCondition(
-      'a > 1 && 'b > 2 && 'a > 1 && 'c > 3,
-      'a > 1 && 'b > 2 && 'c > 3)
+      ($"a" > 1 || $"b" > 3) && (($"a" > 1 || $"b" > 3) && $"d" > 0L && (($"a" > 1 || $"b" > 3) && $"c" > 1)),
+      ($"a" > 1 || $"b" > 3) && $"d" > 0L && $"c" > 1)
 
     checkCondition(
-      ('a > 1 && 'b > 3 && 'a > 1) || ('a > 1 && 'b > 3 && 'a > 1 && 'c > 1),
-      'a > 1 && 'b > 3)
+      $"a" > 1 && $"b" > 2 && $"a" > 1 && $"c" > 3,
+      $"a" > 1 && $"b" > 2 && $"c" > 3)
+
+    checkCondition(
+      ($"a" > 1 && $"b" > 3 && $"a" > 1) || ($"a" > 1 && $"b" > 3 && $"a" > 1 && $"c" > 1),
+      $"a" > 1 && $"b" > 3)
   }
 
   test("SPARK-34222: simplify disjunctive predicates (a || b) || a || (a || c) => a || b || c") {
-    checkCondition(('a > 1 || 'b > 2) || 'a > 1 || ('a > 1 || 'c > 3),
-      'a > 1 || 'b > 2 || 'c > 3)
+    checkCondition(($"a" > 1 || $"b" > 2) || $"a" > 1 || ($"a" > 1 || $"c" > 3),
+      $"a" > 1 || $"b" > 2 || $"c" > 3)
 
-    checkCondition(('a > 1 || 'b > 2) || ('a > 4 || 'b > 5) ||('a > 1 || 'c > 3),
-      ('a > 1 || 'b > 2) || ('a > 4 || 'b > 5) || 'c > 3)
-
-    checkCondition(
-      'a > 1 || 'b > 3 || ('a > 1 || 'b > 3 || ('a > 1 || 'b > 3 || 'c > 1)),
-      'a > 1 || 'b > 3 || 'c > 1)
+    checkCondition(($"a" > 1 || $"b" > 2) || ($"a" > 4 || $"b" > 5) ||($"a" > 1 || $"c" > 3),
+      ($"a" > 1 || $"b" > 2) || ($"a" > 4 || $"b" > 5) || $"c" > 3)
 
     checkCondition(
-      ('a > 1 && 'b > 3) || (('a > 1 && 'b > 3) || (('a > 1 && 'b > 3) || 'c > 1)),
-      ('a > 1 && 'b > 3) || 'c > 1)
+      $"a" > 1 || $"b" > 3 || ($"a" > 1 || $"b" > 3 || ($"a" > 1 || $"b" > 3 || $"c" > 1)),
+      $"a" > 1 || $"b" > 3 || $"c" > 1)
 
     checkCondition(
-      'a > 1 || 'b > 2 || 'a > 1 || 'c > 3,
-      'a > 1 || 'b > 2 || 'c > 3)
+      ($"a" > 1 && $"b" > 3) || (($"a" > 1 && $"b" > 3) || (($"a" > 1 && $"b" > 3) || $"c" > 1)),
+      ($"a" > 1 && $"b" > 3) || $"c" > 1)
 
     checkCondition(
-      ('a > 1 || 'b > 3 || 'a > 1) && ('a > 1 || 'b > 3 || 'a > 1 || 'c > 1 ),
-      'a > 1 || 'b > 3)
+      $"a" > 1 || $"b" > 2 || $"a" > 1 || $"c" > 3,
+      $"a" > 1 || $"b" > 2 || $"c" > 3)
+
+    checkCondition(
+      ($"a" > 1 || $"b" > 3 || $"a" > 1) && ($"a" > 1 || $"b" > 3 || $"a" > 1 || $"c" > 1 ),
+      $"a" > 1 || $"b" > 3)
   }
 
   test("e && (!e || f) - not nullable") {
@@ -198,31 +198,31 @@ class BooleanSimplificationSuite extends PlanTest with ExpressionEvalHelper with
   }
 
   test("a < 1 && (!(a < 1) || f) - not nullable") {
-    checkConditionInNotNullableRelation('a < 1 && (!('a < 1) || 'f), ('a < 1) && 'f)
-    checkConditionInNotNullableRelation('a < 1 && ('f || !('a < 1)), ('a < 1) && 'f)
+    checkConditionInNotNullableRelation($"a" < 1 && (!($"a" < 1) || 'f), ($"a" < 1) && 'f)
+    checkConditionInNotNullableRelation($"a" < 1 && ('f || !($"a" < 1)), ($"a" < 1) && 'f)
 
-    checkConditionInNotNullableRelation('a <= 1 && (!('a <= 1) || 'f), ('a <= 1) && 'f)
-    checkConditionInNotNullableRelation('a <= 1 && ('f || !('a <= 1)), ('a <= 1) && 'f)
+    checkConditionInNotNullableRelation($"a" <= 1 && (!($"a" <= 1) || 'f), ($"a" <= 1) && 'f)
+    checkConditionInNotNullableRelation($"a" <= 1 && ('f || !($"a" <= 1)), ($"a" <= 1) && 'f)
 
-    checkConditionInNotNullableRelation('a > 1 && (!('a > 1) || 'f), ('a > 1) && 'f)
-    checkConditionInNotNullableRelation('a > 1 && ('f || !('a > 1)), ('a > 1) && 'f)
+    checkConditionInNotNullableRelation($"a" > 1 && (!($"a" > 1) || 'f), ($"a" > 1) && 'f)
+    checkConditionInNotNullableRelation($"a" > 1 && ('f || !($"a" > 1)), ($"a" > 1) && 'f)
 
-    checkConditionInNotNullableRelation('a >= 1 && (!('a >= 1) || 'f), ('a >= 1) && 'f)
-    checkConditionInNotNullableRelation('a >= 1 && ('f || !('a >= 1)), ('a >= 1) && 'f)
+    checkConditionInNotNullableRelation($"a" >= 1 && (!($"a" >= 1) || 'f), ($"a" >= 1) && 'f)
+    checkConditionInNotNullableRelation($"a" >= 1 && ('f || !($"a" >= 1)), ($"a" >= 1) && 'f)
   }
 
   test("a < 1 && ((a >= 1) || f) - not nullable") {
-    checkConditionInNotNullableRelation('a < 1 && ('a >= 1 || 'f ), ('a < 1) && 'f)
-    checkConditionInNotNullableRelation('a < 1 && ('f || 'a >= 1), ('a < 1) && 'f)
+    checkConditionInNotNullableRelation($"a" < 1 && ($"a" >= 1 || 'f ), ($"a" < 1) && 'f)
+    checkConditionInNotNullableRelation($"a" < 1 && ('f || $"a" >= 1), ($"a" < 1) && 'f)
 
-    checkConditionInNotNullableRelation('a <= 1 && ('a > 1 || 'f ), ('a <= 1) && 'f)
-    checkConditionInNotNullableRelation('a <= 1 && ('f || 'a > 1), ('a <= 1) && 'f)
+    checkConditionInNotNullableRelation($"a" <= 1 && ($"a" > 1 || 'f ), ($"a" <= 1) && 'f)
+    checkConditionInNotNullableRelation($"a" <= 1 && ('f || $"a" > 1), ($"a" <= 1) && 'f)
 
-    checkConditionInNotNullableRelation('a > 1 && (('a <= 1) || 'f), ('a > 1) && 'f)
-    checkConditionInNotNullableRelation('a > 1 && ('f || ('a <= 1)), ('a > 1) && 'f)
+    checkConditionInNotNullableRelation($"a" > 1 && (($"a" <= 1) || 'f), ($"a" > 1) && 'f)
+    checkConditionInNotNullableRelation($"a" > 1 && ('f || ($"a" <= 1)), ($"a" > 1) && 'f)
 
-    checkConditionInNotNullableRelation('a >= 1 && (('a < 1) || 'f), ('a >= 1) && 'f)
-    checkConditionInNotNullableRelation('a >= 1 && ('f || ('a < 1)), ('a >= 1) && 'f)
+    checkConditionInNotNullableRelation($"a" >= 1 && (($"a" < 1) || 'f), ($"a" >= 1) && 'f)
+    checkConditionInNotNullableRelation($"a" >= 1 && ('f || ($"a" < 1)), ($"a" >= 1) && 'f)
   }
 
   test("DeMorgan's law") {
@@ -240,19 +240,19 @@ class BooleanSimplificationSuite extends PlanTest with ExpressionEvalHelper with
 
   test("(a && b) || (a && c) => a && (b || c) when case insensitive") {
     val plan = analyzer.execute(
-      testRelation.where(('a > 2 && 'b > 3) || ('A > 2 && 'b < 5)))
+      testRelation.where(($"a" > 2 && $"b" > 3) || ($"A" > 2 && $"b" < 5)))
     val actual = Optimize.execute(plan)
     val expected = analyzer.execute(
-      testRelation.where('a > 2 && ('b > 3 || 'b < 5)))
+      testRelation.where($"a" > 2 && ($"b" > 3 || $"b" < 5)))
     comparePlans(actual, expected)
   }
 
   test("(a || b) && (a || c) => a || (b && c) when case insensitive") {
     val plan = analyzer.execute(
-      testRelation.where(('a > 2 || 'b > 3) && ('A > 2 || 'b < 5)))
+      testRelation.where(($"a" > 2 || $"b" > 3) && ($"A" > 2 || $"b" < 5)))
     val actual = Optimize.execute(plan)
     val expected = analyzer.execute(
-      testRelation.where('a > 2 || ('b > 3 && 'b < 5)))
+      testRelation.where($"a" > 2 || ($"b" > 3 && $"b" < 5)))
     comparePlans(actual, expected)
   }
 
@@ -297,8 +297,8 @@ class BooleanSimplificationSuite extends PlanTest with ExpressionEvalHelper with
 
   test("filter reduction - positive cases") {
     val fields = Seq(
-      'col1NotNULL.boolean.notNull,
-      'col2NotNULL.boolean.notNull
+      $"col1NotNULL".boolean.notNull,
+      $"col2NotNULL".boolean.notNull
     )
     val Seq(col1NotNULL, col2NotNULL) = fields.zipWithIndex.map { case (f, i) => f.at(i) }
 

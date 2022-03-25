@@ -43,7 +43,7 @@ class NestedColumnAliasingSuite extends SchemaPruningTest {
   private val name = StructType.fromDDL("first string, middle string, last string")
   private val employer = StructType.fromDDL("id int, company struct<name:string, address:string>")
   private val contact = LocalRelation(
-    'id.int,
+    $"id".int,
     'name.struct(name),
     'address.string,
     'friends.array(name),
@@ -205,7 +205,7 @@ class NestedColumnAliasingSuite extends SchemaPruningTest {
   }
 
   test("Some nested column means the whole structure") {
-    val nestedRelation = LocalRelation('a.struct('b.struct('c.int, 'd.int, 'e.int)))
+    val nestedRelation = LocalRelation('a.struct('b.struct($"c".int, $"d".int, $"e".int)))
 
     val query = nestedRelation
       .limit(5)
@@ -218,7 +218,7 @@ class NestedColumnAliasingSuite extends SchemaPruningTest {
   }
 
   test("nested field pruning for getting struct field in array of struct") {
-    val field1 = GetArrayStructFields(child = 'friends,
+    val field1 = GetArrayStructFields(child = $"friends",
       field = StructField("first", StringType),
       ordinal = 0,
       numFields = 3,
@@ -262,15 +262,15 @@ class NestedColumnAliasingSuite extends SchemaPruningTest {
   }
 
   test("SPARK-27633: Do not generate redundant aliases if parent nested field is aliased too") {
-    val nestedRelation = LocalRelation('a.struct('b.struct('c.int,
-      'd.struct('f.int, 'g.int)), 'e.int))
+    val nestedRelation = LocalRelation('a.struct('b.struct($"c".int,
+      'd.struct($"f".int, $"g".int)), $"e".int))
 
     // `a.b`
-    val first = 'a.getField("b")
+    val first = $"a".getField("b")
     // `a.b.c` + 1
-    val second = 'a.getField("b").getField("c") + Literal(1)
+    val second = $"a".getField("b").getField("c") + Literal(1)
     // `a.b.d.f`
-    val last = 'a.getField("b").getField("d").getField("f")
+    val last = $"a".getField("b").getField("d").getField("f")
 
     val query = nestedRelation
       .limit(5)
@@ -333,7 +333,7 @@ class NestedColumnAliasingSuite extends SchemaPruningTest {
 
   test("Nested field pruning for Project and Generate: multiple-field case is not supported") {
     val companies = LocalRelation(
-      'id.int,
+      $"id".int,
       'employers.array(employer))
 
     val query = companies
@@ -416,7 +416,7 @@ class NestedColumnAliasingSuite extends SchemaPruningTest {
 
   test("Nested field pruning through Join") {
     val department = LocalRelation(
-      'depID.int,
+      $"depID".int,
       'personID.string)
 
     val query1 = contact.join(department, condition = Some($"id" === $"depID"))
@@ -561,7 +561,7 @@ class NestedColumnAliasingSuite extends SchemaPruningTest {
     comparePlans(optimized3, expected3)
 
     val department = LocalRelation(
-      'depID.int,
+      $"depID".int,
       'personID.string)
     val query4 = contact.join(department, condition = Some($"id" === $"depID"))
       .where($"name.first" === "a")
@@ -690,7 +690,7 @@ class NestedColumnAliasingSuite extends SchemaPruningTest {
 
   test("SPARK-34638: nested column prune on generator output for one field") {
     val companies = LocalRelation(
-      'id.int,
+      $"id".int,
       'employers.array(employer))
 
     val query = companies

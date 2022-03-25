@@ -35,9 +35,9 @@ class ResolveLambdaVariablesSuite extends PlanTest {
     val batches = Batch("Resolution", FixedPoint(4), ResolveLambdaVariables) :: Nil
   }
 
-  private val key = 'key.int
-  private val values1 = 'values1.array(IntegerType)
-  private val values2 = 'values2.array(ArrayType(ArrayType(IntegerType)))
+  private val key = $"key".int
+  private val values1 = $"values1".array(IntegerType)
+  private val values2 = $"values2".array(ArrayType(ArrayType(IntegerType)))
   private val data = LocalRelation(Seq(key, values1, values2))
   private val lvInt = NamedLambdaVariable("x", IntegerType, nullable = true)
   private val lvHiddenInt = NamedLambdaVariable("col0", IntegerType, nullable = true)

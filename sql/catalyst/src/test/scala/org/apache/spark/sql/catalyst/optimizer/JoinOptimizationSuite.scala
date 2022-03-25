@@ -44,8 +44,8 @@ class JoinOptimizationSuite extends PlanTest {
 
   }
 
-  val testRelation = LocalRelation('a.int, 'b.int, 'c.int)
-  val testRelation1 = LocalRelation('d.int)
+  val testRelation = LocalRelation($"a".int, $"b".int, $"c".int)
+  val testRelation1 = LocalRelation($"d".int)
 
   test("extract filters and joins") {
     val x = testRelation.subquery('x)

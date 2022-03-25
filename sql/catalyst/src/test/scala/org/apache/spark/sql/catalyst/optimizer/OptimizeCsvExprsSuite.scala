@@ -43,7 +43,7 @@ class OptimizeCsvExprsSuite extends PlanTest with ExpressionEvalHelper {
 
   val schema = StructType.fromDDL("a int, b int")
 
-  private val csvAttr = 'csv.string
+  private val csvAttr = $"csv".string
   private val testRelation = LocalRelation(csvAttr)
 
   test("SPARK-32968: prune unnecessary columns from GetStructField + from_csv") {

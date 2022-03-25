@@ -32,7 +32,7 @@ class EliminateDistinctSuite extends PlanTest {
         EliminateDistinct) :: Nil
   }
 
-  val testRelation = LocalRelation('a.int)
+  val testRelation = LocalRelation($"a".int)
 
   Seq(
     Max(_),

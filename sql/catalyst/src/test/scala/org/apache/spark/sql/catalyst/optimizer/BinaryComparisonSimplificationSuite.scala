@@ -47,14 +47,14 @@ class BinaryComparisonSimplificationSuite extends PlanTest with PredicateHelper 
   private def checkCondition(rel: LocalRelation, input: Expression, expected: Expression): Unit =
     comparePlans(Optimize.execute(rel.where(input).analyze), rel.where(expected).analyze)
 
-  val nullableRelation = LocalRelation('a.int.withNullability(true))
-  val nonNullableRelation = LocalRelation('a.int.withNullability(false))
-  val boolRelation = LocalRelation('a.boolean, 'b.boolean)
+  val nullableRelation = LocalRelation($"a".int.withNullability(true))
+  val nonNullableRelation = LocalRelation($"a".int.withNullability(false))
+  val boolRelation = LocalRelation($"a".boolean, $"b".boolean)
 
 
   test("Preserve nullable exprs when constraintPropagation is false") {
     withSQLConf(SQLConf.CONSTRAINT_PROPAGATION_ENABLED.key -> "false") {
-      val a = Symbol("a")
+      val a = $"a"
       for (e <- Seq(a === a, a <= a, a >= a, a < a, a > a)) {
         val plan = nullableRelation.where(e).analyze
         val actual = Optimize.execute(plan)
@@ -73,7 +73,7 @@ class BinaryComparisonSimplificationSuite extends PlanTest with PredicateHelper 
   }
 
   test("Nullable Simplification Primitive: <=>") {
-    val plan = nullableRelation.select('a <=> 'a).analyze
+    val plan = nullableRelation.select($"a" <=> $"a").analyze
     val actual = Optimize.execute(plan)
     val correctAnswer = nullableRelation.select(Alias(TrueLiteral, "(a <=> a)")()).analyze
     comparePlans(actual, correctAnswer)
@@ -81,7 +81,7 @@ class BinaryComparisonSimplificationSuite extends PlanTest with PredicateHelper 
 
   test("Non-Nullable Simplification Primitive") {
     val plan = nonNullableRelation
-      .select('a === 'a, 'a <=> 'a, 'a <= 'a, 'a >= 'a, 'a < 'a, 'a > 'a).analyze
+      .select($"a" === $"a", $"a" <=> $"a", $"a" <= $"a", $"a" >= $"a", $"a" < 'a, $"a" > $"a").analyze
     val actual = Optimize.execute(plan)
     val correctAnswer = nonNullableRelation
       .select(
@@ -133,7 +133,7 @@ class BinaryComparisonSimplificationSuite extends PlanTest with PredicateHelper 
   }
 
   test("Simplify null and nonnull with filter constraints") {
-    val a = Symbol("a")
+    val a = $"a"
     Seq(a === a, a <= a, a >= a, a < a, a > a).foreach { condition =>
       val plan = nonNullableRelation.where(condition).analyze
       val actual = Optimize.execute(plan)
@@ -159,7 +159,7 @@ class BinaryComparisonSimplificationSuite extends PlanTest with PredicateHelper 
 
   test("Simplify nullable without constraints propagation") {
     withSQLConf(SQLConf.CONSTRAINT_PROPAGATION_ENABLED.key -> "false") {
-      val a = Symbol("a")
+      val a = $"a"
       Seq(And(a === a, a.isNotNull),
         And(a <= a, a.isNotNull),
         And(a >= a, a.isNotNull)).foreach { condition =>
@@ -181,10 +181,10 @@ class BinaryComparisonSimplificationSuite extends PlanTest with PredicateHelper 
 
   test("SPARK-36359: Coalesce drop all expressions after the first non nullable expression") {
     val testRelation = LocalRelation(
-      'a.int.withNullability(false),
-      'b.int.withNullability(true),
-      'c.int.withNullability(false),
-      'd.int.withNullability(true))
+      $"a".int.withNullability(false),
+      $"b".int.withNullability(true),
+      $"c".int.withNullability(false),
+      $"d".int.withNullability(true))
 
     comparePlans(
       Optimize.execute(testRelation.select(Coalesce(Seq('a, 'b, 'c, 'd)).as("out")).analyze),

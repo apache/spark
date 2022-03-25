@@ -32,10 +32,10 @@ class EliminateSortsBeforeRepartitionSuite extends PlanTest {
   val analyzer = new Analyzer(catalog)
 
   val testRelation = LocalRelation.fromExternalRows(
-    Seq('a.int, 'b.int, 'c.int),
+    Seq($"a".int, $"b".int, $"c".int),
     Seq(Row(1, 2, 3), Row(4, 5, 6)))
   val anotherTestRelation = LocalRelation.fromExternalRows(
-    Seq('d.int, 'e.int),
+    Seq($"d".int, $"e".int),
     Seq(Row(1, 2), Row(3, 4)))
 
   object Optimize extends RuleExecutor[LogicalPlan] {
@@ -64,8 +64,8 @@ class EliminateSortsBeforeRepartitionSuite extends PlanTest {
   }
 
   test("sortBy with projection and filter") {
-    val plan = testRelation.sortBy('a.asc, 'b.asc).select('a, 'b).where('a === 10)
-    val optimizedPlan = testRelation.select('a, 'b).where('a === 10)
+    val plan = testRelation.sortBy('a.asc, 'b.asc).select('a, 'b).where($"a" === 10)
+    val optimizedPlan = testRelation.select('a, 'b).where($"a" === 10)
     checkRepartitionCases(plan, optimizedPlan)
   }
 
@@ -94,8 +94,8 @@ class EliminateSortsBeforeRepartitionSuite extends PlanTest {
   }
 
   test("orderBy with projection and filter") {
-    val plan = testRelation.orderBy('a.asc, 'b.asc).select('a, 'b).where('a === 10)
-    val optimizedPlan = testRelation.select('a, 'b).where('a === 10)
+    val plan = testRelation.orderBy('a.asc, 'b.asc).select('a, 'b).where($"a" === 10)
+    val optimizedPlan = testRelation.select('a, 'b).where($"a" === 10)
     checkRepartitionCases(plan, optimizedPlan)
   }
 
@@ -124,14 +124,14 @@ class EliminateSortsBeforeRepartitionSuite extends PlanTest {
   }
 
   test("additional filter, distribute and sortBy") {
-    val plan = testRelation.sortBy('a.asc, 'b.asc).distribute('a)(2).where('a === 10)
-    val optimizedPlan = testRelation.distribute('a)(2).where('a === 10)
+    val plan = testRelation.sortBy('a.asc, 'b.asc).distribute('a)(2).where($"a" === 10)
+    val optimizedPlan = testRelation.distribute('a)(2).where($"a" === 10)
     checkRepartitionCases(plan, optimizedPlan)
   }
 
   test("join") {
-    val plan = testRelation.sortBy('a.asc, 'b.asc).distribute('a)(2).where('a === 10)
-    val optimizedPlan = testRelation.distribute('a)(2).where('a === 10)
+    val plan = testRelation.sortBy('a.asc, 'b.asc).distribute('a)(2).where($"a" === 10)
+    val optimizedPlan = testRelation.distribute('a)(2).where($"a" === 10)
     val anotherPlan = anotherTestRelation.select('d)
     val joinPlan = plan.join(anotherPlan)
     val optimizedJoinPlan = optimize(joinPlan)
@@ -140,8 +140,8 @@ class EliminateSortsBeforeRepartitionSuite extends PlanTest {
   }
 
   test("aggregate") {
-    val plan = testRelation.sortBy('a.asc, 'b.asc).distribute('a)(2).where('a === 10)
-    val optimizedPlan = testRelation.distribute('a)(2).where('a === 10)
+    val plan = testRelation.sortBy('a.asc, 'b.asc).distribute('a)(2).where($"a" === 10)
+    val optimizedPlan = testRelation.distribute('a)(2).where($"a" === 10)
     val aggPlan = plan.groupBy('a)(sum('b))
     val optimizedAggPlan = optimize(aggPlan)
     val correctAggPlan = analyze(optimizedPlan.groupBy('a)(sum('b)))

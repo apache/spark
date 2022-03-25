@@ -84,7 +84,7 @@ class QueryPartitionSuite extends QueryTest with SQLTestUtils with TestHiveSingl
       sql("CREATE TABLE table_with_timestamp_partition(value int) USING hive " +
         "PARTITIONED BY (ts TIMESTAMP)")
       sql("INSERT OVERWRITE TABLE table_with_timestamp_partition " +
-        "PARTITION (ts = '2010-01-01 00:00:00.000') VALUES (1)")
+        "PARTITION (ts = $"2010"-01-01 00:00:00.000') VALUES (1)")
 
       // test for Cast expression in TableReader
       checkAnswer(sql("SELECT * FROM table_with_timestamp_partition"),
@@ -92,7 +92,7 @@ class QueryPartitionSuite extends QueryTest with SQLTestUtils with TestHiveSingl
 
       // test for Cast expression in HiveTableScanExec
       checkAnswer(sql("SELECT value FROM table_with_timestamp_partition " +
-        "WHERE ts = '2010-01-01 00:00:00.000'"), Row(1))
+        "WHERE ts = $"2010"-01-01 00:00:00.000'"), Row(1))
     }
   }
 }

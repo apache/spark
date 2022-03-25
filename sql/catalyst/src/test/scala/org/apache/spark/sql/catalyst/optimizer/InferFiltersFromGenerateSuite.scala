@@ -34,7 +34,7 @@ class InferFiltersFromGenerateSuite extends PlanTest {
   val testRelation = LocalRelation('a.array(StructType(Seq(
     StructField("x", IntegerType),
     StructField("y", IntegerType)
-  ))), 'c1.string, 'c2.string, 'c3.int)
+  ))), 'c1.string, 'c2.string, $"c3".int)
 
   Seq(Explode(_), PosExplode(_), Inline(_)).foreach { f =>
     val generator = f('a)

@@ -734,7 +734,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
       // Should not find partition columns as the globs resolve to p2 dirs
       // with files in them
       check(s"$dir/*/*", Result(partitionedTestDF.drop("p1", "p2")))
-      check(s"$dir/p1=*/p2=foo", Result(partitionedTestDF.filter("p2 = 'foo'").drop("p1", "p2")))
+      check(s"$dir/p1=*/p2=foo", Result(partitionedTestDF.filter("p2 = $"foo"'").drop("p1", "p2")))
       check(s"$dir/p1=1/p2=???", Result(partitionedTestDF.filter("p1 = 1").drop("p1", "p2")))
 
       // Should find all data without the partitioning columns as the globs resolve to the files

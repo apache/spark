@@ -30,7 +30,7 @@ class CollapseRepartitionSuite extends PlanTest {
         CollapseRepartition) :: Nil
   }
 
-  val testRelation = LocalRelation('a.int, 'b.int)
+  val testRelation = LocalRelation($"a".int, $"b".int)
 
 
   test("collapse two adjacent coalesces into one") {

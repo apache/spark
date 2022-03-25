@@ -480,7 +480,7 @@ class FilterEstimationSuite extends StatsEstimationTestBase {
       expectedRowCount = 3)
   }
 
-  test("cstring = 'A2'") {
+  test("cstring = $"A2"'") {
     validateEstimatedStats(
       Filter(EqualTo(attrString, Literal("A2")), childStatsTestPlan(Seq(attrString), 10L)),
       Seq(attrString -> ColumnStat(distinctCount = Some(1), min = None, max = None,

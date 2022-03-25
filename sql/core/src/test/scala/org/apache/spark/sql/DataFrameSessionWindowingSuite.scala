@@ -83,7 +83,7 @@ class DataFrameSessionWindowingSuite extends QueryTest with SharedSparkSession
     // key "b" => (19:39:27 ~ 19:39:37)
 
     checkAnswer(
-      df.groupBy(session_window($"time", "10 seconds"), Symbol("id"))
+      df.groupBy(session_window($"time", "10 seconds"), $"id")
         .agg(count("*").as("counts"), sum("value").as("sum"))
         .orderBy($"session_window.start".asc)
         .selectExpr("CAST(session_window.start AS STRING)", "CAST(session_window.end AS STRING)",
@@ -113,7 +113,7 @@ class DataFrameSessionWindowingSuite extends QueryTest with SharedSparkSession
     // key "b" => (19:39:27 ~ 19:39:37)
 
     checkAnswer(
-      df.groupBy(session_window($"time", "10 seconds"), Symbol("id"))
+      df.groupBy(session_window($"time", "10 seconds"), $"id")
         .agg(count("*").as("counts"), sum_distinct(col("value")).as("sum"))
         .orderBy($"session_window.start".asc)
         .selectExpr("CAST(session_window.start AS STRING)", "CAST(session_window.end AS STRING)",
@@ -142,7 +142,7 @@ class DataFrameSessionWindowingSuite extends QueryTest with SharedSparkSession
     // key "b" => (19:39:27 ~ 19:39:37)
 
     checkAnswer(
-      df.groupBy(session_window($"time", "10 seconds"), Symbol("id"))
+      df.groupBy(session_window($"time", "10 seconds"), $"id")
         .agg(sum_distinct(col("value")).as("sum"), sum_distinct(col("value2")).as("sum2"))
         .orderBy($"session_window.start".asc)
         .selectExpr("CAST(session_window.start AS STRING)", "CAST(session_window.end AS STRING)",
@@ -171,7 +171,7 @@ class DataFrameSessionWindowingSuite extends QueryTest with SharedSparkSession
     // b => (19:39:27 ~ 19:39:37), (19:39:39 ~ 19:39:55)
 
     checkAnswer(
-      df.groupBy(session_window($"time", "10 seconds"), Symbol("id"))
+      df.groupBy(session_window($"time", "10 seconds"), $"id")
         .agg(count("*").as("counts"), sum("value").as("sum"))
         .orderBy($"session_window.start".asc)
         .selectExpr("CAST(session_window.start AS STRING)", "CAST(session_window.end AS STRING)",

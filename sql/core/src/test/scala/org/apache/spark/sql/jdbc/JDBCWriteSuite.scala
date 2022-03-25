@@ -428,7 +428,7 @@ class JDBCWriteSuite extends SharedSparkSession with BeforeAndAfter {
       val query =
         """
           |(SELECT column_name, data_type, character_maximum_length
-          | FROM information_schema.columns WHERE table_name = 'DBCOLTYPETEST')
+          | FROM information_schema.columns WHERE table_name = $"DBCOLTYPETEST"')
         """.stripMargin
       val rows = spark.read.jdbc(url1, query, properties).collect()
 

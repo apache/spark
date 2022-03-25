@@ -148,7 +148,7 @@ class CatalystTypeConvertersSuite extends SparkFunSuite with SQLHelper {
   }
 
   test("SPARK-24571: convert Char to String") {
-    val chr: Char = 'X'
+    val chr: Char = $"X"'
     val converter = CatalystTypeConverters.createToCatalystConverter(StringType)
     val expected = UTF8String.fromString("X")
     assert(converter(chr) === expected)

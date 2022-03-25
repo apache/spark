@@ -360,11 +360,11 @@ class PlanParserSuite extends AnalysisTest {
       insert(Map("e" -> Option("1")), overwrite = true, ifPartitionNotExists = true))
     assertEqual(s"insert into s $sql",
       insert(Map.empty))
-    assertEqual(s"insert into table s partition (c = 'd', e = 1) $sql",
+    assertEqual(s"insert into table s partition (c = $"d"', e = 1) $sql",
       insert(Map("c" -> Option("d"), "e" -> Option("1"))))
 
     // Multi insert
-    val plan2 = table("t").where('x > 5).select(star())
+    val plan2 = table("t").where($"x" > 5).select(star())
     assertEqual("from t insert into s select * limit 1 insert into u select * where x > 5",
       plan.limit(1).insertInto("s").union(plan2.insertInto("u")))
   }
@@ -516,7 +516,7 @@ class PlanParserSuite extends AnalysisTest {
     val testConditionalJoin = (sql: String, jt: JoinType) => {
       assertEqual(
         s"select * from t $sql u as uu on a = b",
-        table("t").join(table("u").as("uu"), jt, Option('a === 'b)).select(star()))
+        table("t").join(table("u").as("uu"), jt, Option($"a" === $"b")).select(star()))
     }
     val testNaturalJoin = (sql: String, jt: JoinType) => {
       assertEqual(
@@ -574,8 +574,8 @@ class PlanParserSuite extends AnalysisTest {
       "select * from t1 cross join t2 join t3 on t3.id = t1.id join t4 on t4.id = t1.id",
       table("t1")
         .join(table("t2"), Cross)
-        .join(table("t3"), Inner, Option(Symbol("t3.id") === Symbol("t1.id")))
-        .join(table("t4"), Inner, Option(Symbol("t4.id") === Symbol("t1.id")))
+        .join(table("t3"), Inner, Option($"t3.id" === $"t1.id"))
+        .join(table("t4"), Inner, Option($"t4.id" === $"t1.id"))
         .select(star()))
 
     // Test multiple on clauses.
@@ -586,17 +586,17 @@ class PlanParserSuite extends AnalysisTest {
       "select * from t1 inner join (t2 inner join t3 on col3 = col2) on col3 = col1",
       table("t1")
         .join(table("t2")
-          .join(table("t3"), Inner, Option('col3 === 'col2)), Inner, Option('col3 === 'col1))
+          .join(table("t3"), Inner, Option($"col3" === $"col2")), Inner, Option($"col3" === $"col1"))
         .select(star()))
     assertEqual(
       "select * from t1 inner join (t2 inner join t3) on col3 = col2",
       table("t1")
-        .join(table("t2").join(table("t3"), Inner, None), Inner, Option('col3 === 'col2))
+        .join(table("t2").join(table("t3"), Inner, None), Inner, Option($"col3" === $"col2"))
         .select(star()))
     assertEqual(
       "select * from t1 inner join (t2 inner join t3 on col3 = col2)",
       table("t1")
-        .join(table("t2").join(table("t3"), Inner, Option('col3 === 'col2)), Inner, None)
+        .join(table("t2").join(table("t3"), Inner, Option($"col3" === $"col2")), Inner, None)
         .select(star()))
 
     // Implicit joins.
@@ -604,7 +604,7 @@ class PlanParserSuite extends AnalysisTest {
       "select * from t1, t3 join t2 on t1.col1 = t2.col2",
       table("t1")
         .join(table("t3"))
-        .join(table("t2"), Inner, Option(Symbol("t1.col1") === Symbol("t2.col2")))
+        .join(table("t2"), Inner, Option($"t1.col1" === $"t2.col2"))
         .select(star()))
 
     // Test lateral join with join conditions
@@ -674,11 +674,11 @@ class PlanParserSuite extends AnalysisTest {
       table("t").select(ScalarSubquery(table("s").select('max.function('b))).as("ss")))
     assertEqual(
       "select * from t where a = (select b from s)",
-      table("t").where('a === ScalarSubquery(table("s").select('b))).select(star()))
+      table("t").where($"a" === ScalarSubquery(table("s").select('b))).select(star()))
     assertEqual(
       "select g from t group by g having a > (select b from s)",
       table("t")
-        .having('g)('g)('a > ScalarSubquery(table("s").select('b))))
+        .having('g)('g)($"a" > ScalarSubquery(table("s").select('b))))
   }
 
   test("table reference") {
@@ -739,7 +739,7 @@ class PlanParserSuite extends AnalysisTest {
         "dst",
         UnresolvedSubqueryColumnAliases(
           Seq("a", "b", "c", "d"),
-          src1.join(src2, Inner, Option(Symbol("s1.id") === Symbol("s2.id")))
+          src1.join(src2, Inner, Option($"s1.id" === $"s2.id"))
         )
       ).select(star()))
   }
@@ -770,7 +770,7 @@ class PlanParserSuite extends AnalysisTest {
   test("simple select query with !> and !<") {
     // !< is equivalent to >=
     assertEqual("select a, b from db.c where x !< 1",
-      table("db", "c").where('x >= 1).select('a, 'b))
+      table("db", "c").where($"x" >= 1).select('a, 'b))
     // !> is equivalent to <=
     assertEqual("select a, b from db.c where x !> 1",
       table("db", "c").where('x <= 1).select('a, 'b))

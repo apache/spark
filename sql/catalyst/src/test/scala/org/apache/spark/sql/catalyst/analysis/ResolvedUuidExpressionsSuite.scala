@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
  */
 class ResolvedUuidExpressionsSuite extends AnalysisTest {
 
-  private lazy val a = 'a.int
+  private lazy val a = $"a".int
   private lazy val r = LocalRelation(a)
   private lazy val uuid1 = Uuid().as('_uuid1)
   private lazy val uuid2 = Uuid().as('_uuid2)

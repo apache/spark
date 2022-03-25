@@ -34,7 +34,7 @@ class RemoveRedundantAggregatesSuite extends PlanTest {
       RemoveRedundantAggregates) :: Nil
   }
 
-  private val relation = LocalRelation('a.int, 'b.int)
+  private val relation = LocalRelation($"a".int, $"b".int)
   private val x = relation.subquery('x)
   private val y = relation.subquery('y)
 

@@ -58,10 +58,10 @@ class OptimizeOneRowRelationSubquerySuite extends PlanTest {
   }
 
   val t0 = OneRowRelation()
-  val a = 'a.int
-  val b = 'b.int
+  val a = $"a".int
+  val b = $"b".int
   val t1 = LocalRelation(a, b)
-  val t2 = LocalRelation('c.int, 'd.int)
+  val t2 = LocalRelation($"c".int, $"d".int)
 
   test("Optimize scalar subquery with a single project") {
     // SELECT (SELECT a) FROM t1
@@ -120,7 +120,7 @@ class OptimizeOneRowRelationSubquerySuite extends PlanTest {
 
   test("Batch should be idempotent") {
     // SELECT (SELECT 1 WHERE a = a + 1) FROM t1
-    val inner = t0.select(1).where('a === 'a + 1)
+    val inner = t0.select(1).where($"a" === $"a" + 1)
     val query = t1.select(ScalarSubquery(inner).as("sub"))
     val optimized = Optimize.execute(query.analyze)
     val doubleOptimized = Optimize.execute(optimized)
@@ -129,7 +129,7 @@ class OptimizeOneRowRelationSubquerySuite extends PlanTest {
 
   test("Should not optimize scalar subquery with operators other than project") {
     // SELECT (SELECT a AS a1 WHERE a = 1) FROM t1
-    val inner = t0.where('a === 1).select('a.as("a1"))
+    val inner = t0.where($"a" === 1).select('a.as("a1"))
     val query = t1.select(ScalarSubquery(inner).as("sub"))
     val optimized = Optimize.execute(query.analyze)
     assertHasDomainJoin(optimized)
@@ -146,7 +146,7 @@ class OptimizeOneRowRelationSubquerySuite extends PlanTest {
   test("Should not optimize lateral join with non-empty join conditions") {
     Seq(Inner, LeftOuter).foreach { joinType =>
       // SELECT * FROM t1 JOIN LATERAL (SELECT a AS a1, b AS b1) ON a = b1
-      val query = t1.lateralJoin(t0.select('a.as("a1"), 'b.as("b1")), joinType, Some('a === 'b1))
+      val query = t1.lateralJoin(t0.select('a.as("a1"), 'b.as("b1")), joinType, Some($"a" === $"b1"))
       val optimized = Optimize.execute(query.analyze)
       assertHasDomainJoin(optimized)
     }
@@ -155,7 +155,7 @@ class OptimizeOneRowRelationSubquerySuite extends PlanTest {
   test("Should not optimize subquery with nested subqueries that can't be optimized") {
     // SELECT (SELECT (SELECT a WHERE a = 1) FROM (SELECT a AS a)) FROM t1
     // Filter (a = 1) cannot be optimized.
-    val inner = t0.select('a).where('a === 1)
+    val inner = t0.select('a).where($"a" === 1)
     val subquery = t0.select('a.as("a"))
       .select(ScalarSubquery(inner).as("s")).select('s + 1)
     val query = t1.select(ScalarSubquery(subquery).as("sub"))

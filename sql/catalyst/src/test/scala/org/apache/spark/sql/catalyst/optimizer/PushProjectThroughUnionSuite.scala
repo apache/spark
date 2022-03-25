@@ -33,8 +33,8 @@ class PushProjectThroughUnionSuite extends PlanTest {
 
   test("SPARK-25450 PushProjectThroughUnion rule uses the same exprId for project expressions " +
     "in each Union child, causing mistakes in constant propagation") {
-    val testRelation1 = LocalRelation('a.string, 'b.int, 'c.string)
-    val testRelation2 = LocalRelation('d.string, 'e.int, 'f.string)
+    val testRelation1 = LocalRelation('a.string, $"b".int, 'c.string)
+    val testRelation2 = LocalRelation('d.string, $"e".int, 'f.string)
     val query = testRelation1
       .union(testRelation2.select("bar".as("d"), 'e, 'f))
       .select('a.as("n"))

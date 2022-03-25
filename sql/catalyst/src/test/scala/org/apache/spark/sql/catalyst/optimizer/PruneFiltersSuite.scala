@@ -39,7 +39,7 @@ class PruneFiltersSuite extends PlanTest {
         PushPredicateThroughJoin) :: Nil
   }
 
-  val testRelation = LocalRelation('a.int, 'b.int, 'c.int)
+  val testRelation = LocalRelation($"a".int, $"b".int, $"c".int)
 
   test("Constraints of isNull + LeftOuter") {
     val x = testRelation.subquery('x)
@@ -55,9 +55,9 @@ class PruneFiltersSuite extends PlanTest {
   }
 
   test("Constraints of unionall") {
-    val tr1 = LocalRelation('a.int, 'b.int, 'c.int)
-    val tr2 = LocalRelation('d.int, 'e.int, 'f.int)
-    val tr3 = LocalRelation('g.int, 'h.int, 'i.int)
+    val tr1 = LocalRelation($"a".int, $"b".int, $"c".int)
+    val tr2 = LocalRelation($"d".int, $"e".int, $"f".int)
+    val tr3 = LocalRelation($"g".int, $"h".int, $"i".int)
 
     val query =
       tr1.where('a.attr > 10)
@@ -72,8 +72,8 @@ class PruneFiltersSuite extends PlanTest {
   }
 
   test("Pruning multiple constraints in the same run") {
-    val tr1 = LocalRelation('a.int, 'b.int, 'c.int).subquery('tr1)
-    val tr2 = LocalRelation('a.int, 'd.int, 'e.int).subquery('tr2)
+    val tr1 = LocalRelation($"a".int, $"b".int, $"c".int).subquery('tr1)
+    val tr2 = LocalRelation($"a".int, $"d".int, $"e".int).subquery('tr2)
 
     val query = tr1
       .where("tr1.a".attr > 10 || "tr1.c".attr < 10)
@@ -92,8 +92,8 @@ class PruneFiltersSuite extends PlanTest {
   }
 
   test("Partial pruning") {
-    val tr1 = LocalRelation('a.int, 'b.int, 'c.int).subquery('tr1)
-    val tr2 = LocalRelation('a.int, 'd.int, 'e.int).subquery('tr2)
+    val tr1 = LocalRelation($"a".int, $"b".int, $"c".int).subquery('tr1)
+    val tr2 = LocalRelation($"a".int, $"d".int, $"e".int).subquery('tr2)
 
     // One of the filter condition does not exist in the constraints of its child
     // Thus, the filter is not removed
@@ -136,8 +136,8 @@ class PruneFiltersSuite extends PlanTest {
   }
 
   test("No pruning when constraint propagation is disabled") {
-    val tr1 = LocalRelation('a.int, 'b.int, 'c.int).subquery('tr1)
-    val tr2 = LocalRelation('a.int, 'd.int, 'e.int).subquery('tr2)
+    val tr1 = LocalRelation($"a".int, $"b".int, $"c".int).subquery('tr1)
+    val tr2 = LocalRelation($"a".int, $"d".int, $"e".int).subquery('tr2)
 
     val query = tr1
       .where("tr1.a".attr > 10 || "tr1.c".attr < 10)

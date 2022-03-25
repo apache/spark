@@ -41,7 +41,7 @@ class ConstantFoldingSuite extends PlanTest {
         BooleanSimplification) :: Nil
   }
 
-  val testRelation = LocalRelation('a.int, 'b.int, 'c.int)
+  val testRelation = LocalRelation($"a".int, $"b".int, $"c".int)
 
   test("eliminate subqueries") {
     val originalQuery =
@@ -120,20 +120,20 @@ class ConstantFoldingSuite extends PlanTest {
     val originalQuery =
       testRelation
         .where(
-          (('a > 1 && Literal(1) === Literal(1)) ||
-           ('a < 10 && Literal(1) === Literal(2)) ||
-           (Literal(1) === Literal(1) && 'b > 1) ||
-           (Literal(1) === Literal(2) && 'b < 10)) &&
-           (('a > 1 || Literal(1) === Literal(1)) &&
-            ('a < 10 || Literal(1) === Literal(2)) &&
-            (Literal(1) === Literal(1) || 'b > 1) &&
-            (Literal(1) === Literal(2) || 'b < 10)))
+          (($"a" > 1 && Literal(1) === Literal(1)) ||
+           ($"a" < 10 && Literal(1) === Literal(2)) ||
+           (Literal(1) === Literal(1) && $"b" > 1) ||
+           (Literal(1) === Literal(2) && $"b" < 10)) &&
+           (($"a" > 1 || Literal(1) === Literal(1)) &&
+            ($"a" < 10 || Literal(1) === Literal(2)) &&
+            (Literal(1) === Literal(1) || $"b" > 1) &&
+            (Literal(1) === Literal(2) || $"b" < 10)))
 
     val optimized = Optimize.execute(originalQuery.analyze)
 
     val correctAnswer =
       testRelation
-        .where(('a > 1 || 'b > 1) && ('a < 10 && 'b < 10))
+        .where(($"a" > 1 || $"b" > 1) && ($"a" < 10 && $"b" < 10))
         .analyze
 
     comparePlans(optimized, correctAnswer)

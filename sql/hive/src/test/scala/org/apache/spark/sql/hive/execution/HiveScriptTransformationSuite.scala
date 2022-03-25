@@ -222,13 +222,13 @@ class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with T
              |  ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'
              |  WITH SERDEPROPERTIES (
              |    'field.delim' = '\t',
-             |    'serialization.last.column.takes.rest' = 'true'
+             |    'serialization.last.column.takes.rest' = $"true"'
              |  )
              |  USING 'cat'
              |  ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'
              |  WITH SERDEPROPERTIES (
              |    'field.delim' = '\t',
-             |    'serialization.last.column.takes.rest' = 'true'
+             |    'serialization.last.column.takes.rest' = $"true"'
              |  )
              |FROM v
         """.stripMargin),
@@ -252,13 +252,13 @@ class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with T
              |  ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'
              |  WITH SERDEPROPERTIES (
              |    'field.delim' = '\t',
-             |    'serialization.last.column.takes.rest' = 'false'
+             |    'serialization.last.column.takes.rest' = $"false"'
              |  )
              |  USING 'cat'
              |  ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'
              |  WITH SERDEPROPERTIES (
              |    'field.delim' = '\t',
-             |    'serialization.last.column.takes.rest' = 'false'
+             |    'serialization.last.column.takes.rest' = $"false"'
              |  )
              |FROM v
         """.stripMargin),
@@ -277,13 +277,13 @@ class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with T
              |  ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'
              |  WITH SERDEPROPERTIES (
              |    'field.delim' = '\t',
-             |    'serialization.last.column.takes.rest' = 'true'
+             |    'serialization.last.column.takes.rest' = $"true"'
              |  )
              |  USING 'cat'
              |  ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'
              |  WITH SERDEPROPERTIES (
              |    'field.delim' = '\t',
-             |    'serialization.last.column.takes.rest' = 'true'
+             |    'serialization.last.column.takes.rest' = $"true"'
              |  )
              |FROM v
         """.stripMargin),
@@ -302,13 +302,13 @@ class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with T
              |  ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'
              |  WITH SERDEPROPERTIES (
              |    'field.delim' = '\t',
-             |    'serialization.last.column.takes.rest' = 'true'
+             |    'serialization.last.column.takes.rest' = $"true"'
              |  )
              |  USING 'cat'
              |  ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'
              |  WITH SERDEPROPERTIES (
              |    'field.delim' = '\t',
-             |    'serialization.last.column.takes.rest' = 'true'
+             |    'serialization.last.column.takes.rest' = $"true"'
              |  )
              |FROM v
         """.stripMargin),
@@ -455,7 +455,7 @@ class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with T
         |USING 'cat'
         |  ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'
         |  WITH SERDEPROPERTIES (
-        |   'serialization.last.column.takes.rest' = 'true'
+        |   'serialization.last.column.takes.rest' = $"true"'
         |  )
         |FROM (SELECT 1 AS a, 2 AS b, 3 AS c) t
         |) temp;
@@ -473,7 +473,7 @@ class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with T
         |USING 'cat'
         |  ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'
         |  WITH SERDEPROPERTIES (
-        |   'serialization.last.column.takes.rest' = 'true',
+        |   'serialization.last.column.takes.rest' = $"true"',
         |   'field.delim' = '&'
         |  )
         |FROM (SELECT 1 AS a, 2 AS b, 3 AS c) t
@@ -489,7 +489,7 @@ class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with T
         |USING 'cat'
         |  ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'
         |  WITH SERDEPROPERTIES (
-        |   'serialization.last.column.takes.rest' = 'true',
+        |   'serialization.last.column.takes.rest' = $"true"',
         |   'field.delim' = '&'
         |  )
         |FROM (SELECT 1 AS a, 2 AS b, 3 AS c) t

@@ -33,7 +33,7 @@ class CollapseProjectSuite extends PlanTest {
       Batch("CollapseProject", Once, CollapseProject) :: Nil
   }
 
-  val testRelation = LocalRelation('a.int, 'b.int)
+  val testRelation = LocalRelation($"a".int, $"b".int)
 
   test("collapse two deterministic, independent projects into one") {
     val query = testRelation
@@ -150,7 +150,7 @@ class CollapseProjectSuite extends PlanTest {
   }
 
   test("collapse redundant alias through limit") {
-    val relation = LocalRelation('a.int, 'b.int)
+    val relation = LocalRelation($"a".int, $"b".int)
     val query = relation.select('a as 'b).limit(1).select('b as 'c).analyze
     val optimized = Optimize.execute(query)
     val expected = relation.select('a as 'c).limit(1).analyze
@@ -158,7 +158,7 @@ class CollapseProjectSuite extends PlanTest {
   }
 
   test("collapse redundant alias through local limit") {
-    val relation = LocalRelation('a.int, 'b.int)
+    val relation = LocalRelation($"a".int, $"b".int)
     val query = LocalLimit(1, relation.select('a as 'b)).select('b as 'c).analyze
     val optimized = Optimize.execute(query)
     val expected = LocalLimit(1, relation.select('a as 'c)).analyze
@@ -166,7 +166,7 @@ class CollapseProjectSuite extends PlanTest {
   }
 
   test("collapse redundant alias through repartition") {
-    val relation = LocalRelation('a.int, 'b.int)
+    val relation = LocalRelation($"a".int, $"b".int)
     val query = relation.select('a as 'b).repartition(1).select('b as 'c).analyze
     val optimized = Optimize.execute(query)
     val expected = relation.select('a as 'c).repartition(1).analyze
@@ -174,7 +174,7 @@ class CollapseProjectSuite extends PlanTest {
   }
 
   test("collapse redundant alias through sample") {
-    val relation = LocalRelation('a.int, 'b.int)
+    val relation = LocalRelation($"a".int, $"b".int)
     val query = Sample(0.0, 0.6, false, 11L, relation.select('a as 'b)).select('b as 'c).analyze
     val optimized = Optimize.execute(query)
     val expected = Sample(0.0, 0.6, false, 11L, relation.select('a as 'c)).analyze
@@ -182,7 +182,7 @@ class CollapseProjectSuite extends PlanTest {
   }
 
   test("SPARK-36086: CollapseProject should keep output schema name") {
-    val relation = LocalRelation('a.int, 'b.int)
+    val relation = LocalRelation($"a".int, $"b".int)
     val select = relation.select(('a + 'b).as('c)).analyze
     val query = Project(Seq(select.output.head.withName("C")), select)
     val optimized = Optimize.execute(query)

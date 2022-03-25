@@ -32,7 +32,7 @@ class ReorderAssociativeOperatorSuite extends PlanTest {
         ReorderAssociativeOperator) :: Nil
   }
 
-  val testRelation = LocalRelation('a.int, 'b.int, 'c.int)
+  val testRelation = LocalRelation($"a".int, $"b".int, $"c".int)
 
   test("Reorder associative operators") {
     val originalQuery =

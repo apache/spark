@@ -29,8 +29,8 @@ import org.apache.spark.sql.catalyst.util._
  * Tests for the sameResult function of [[LogicalPlan]].
  */
 class SameResultSuite extends SparkFunSuite {
-  val testRelation = LocalRelation('a.int, 'b.int, 'c.int)
-  val testRelation2 = LocalRelation('a.int, 'b.int, 'c.int)
+  val testRelation = LocalRelation($"a".int, $"b".int, $"c".int)
+  val testRelation2 = LocalRelation($"a".int, $"b".int, $"c".int)
 
   object Optimize extends RuleExecutor[LogicalPlan] {
     val batches = Batch("EliminateResolvedHint", Once, EliminateResolvedHint) :: Nil
@@ -61,7 +61,7 @@ class SameResultSuite extends SparkFunSuite {
   }
 
   test("filters") {
-    assertSameResult(testRelation.where('a === 'b), testRelation2.where('a === 'b))
+    assertSameResult(testRelation.where($"a" === $"b"), testRelation2.where($"a" === $"b"))
   }
 
   test("sorts") {

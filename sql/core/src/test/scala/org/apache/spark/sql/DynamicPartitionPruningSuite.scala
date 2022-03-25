@@ -290,7 +290,7 @@ abstract class DynamicPartitionPruningSuiteBase
       val df = sql(
         """
           |SELECT f.date_id, f.store_id FROM fact_sk f
-          |JOIN dim_store s ON f.store_id = s.store_id AND s.country = 'NL'
+          |JOIN dim_store s ON f.store_id = s.store_id AND s.country = $"NL"'
         """.stripMargin)
 
       checkPartitionPruningPredicate(df, true, false)
@@ -340,7 +340,7 @@ abstract class DynamicPartitionPruningSuiteBase
         s"""
            |SELECT * FROM product p WHERE p.store_id NOT IN
            | (SELECT f.store_id FROM fact_sk f JOIN dim_store d ON f.store_id = d.store_id
-           |    WHERE d.state_province = 'NL'
+           |    WHERE d.state_province = $"NL"'
            | )
        """.stripMargin)
 
@@ -367,7 +367,7 @@ abstract class DynamicPartitionPruningSuiteBase
           """
             |SELECT * FROM fact_sk f
             |LEFT SEMI JOIN dim_store s
-            |ON f.store_id = s.store_id AND s.country = 'NL'
+            |ON f.store_id = s.store_id AND s.country = $"NL"'
           """.stripMargin)
 
         checkPartitionPruningPredicate(df, false, false)
@@ -379,7 +379,7 @@ abstract class DynamicPartitionPruningSuiteBase
           """
             |SELECT * FROM fact_np f
             |JOIN dim_store s
-            |ON f.date_id = s.store_id WHERE s.country = 'NL'
+            |ON f.date_id = s.store_id WHERE s.country = $"NL"'
           """.stripMargin)
 
         checkPartitionPruningPredicate(df, false, false)
@@ -404,7 +404,7 @@ abstract class DynamicPartitionPruningSuiteBase
           """
             |SELECT * FROM fact_sk f
             |LEFT SEMI JOIN dim_store s
-            |ON f.store_id = s.store_id AND s.country = 'NL'
+            |ON f.store_id = s.store_id AND s.country = $"NL"'
           """.stripMargin)
 
         checkPartitionPruningPredicate(df, true, false)
@@ -417,7 +417,7 @@ abstract class DynamicPartitionPruningSuiteBase
           """
             |SELECT * FROM dim_store s
             |LEFT SEMI JOIN fact_sk f
-            |ON f.store_id = s.store_id AND s.country = 'NL'
+            |ON f.store_id = s.store_id AND s.country = $"NL"'
           """.stripMargin)
 
         checkPartitionPruningPredicate(df, true, false)
@@ -441,7 +441,7 @@ abstract class DynamicPartitionPruningSuiteBase
         val df = sql(
           """
             |SELECT * FROM fact_sk f RIGHT OUTER JOIN dim_store s
-            |ON f.store_id = s.store_id WHERE s.country = 'NL'
+            |ON f.store_id = s.store_id WHERE s.country = $"NL"'
           """.stripMargin)
 
         checkPartitionPruningPredicate(df, true, false)
@@ -488,7 +488,7 @@ abstract class DynamicPartitionPruningSuiteBase
             """
               |SELECT f.date_id, f.product_id, f.units_sold, f.store_id
               |FROM fact_aux f JOIN dim_store s
-              |ON f.store_id = s.store_id WHERE s.country = 'US'
+              |ON f.store_id = s.store_id WHERE s.country = $"US"'
             """.stripMargin)
 
           checkPartitionPruningPredicate(df, false, false)
@@ -523,7 +523,7 @@ abstract class DynamicPartitionPruningSuiteBase
               """
                 |SELECT f.date_id, f.product_id, f.units_sold, f.store_id
                 |FROM fact_aux f JOIN cached_dim_store s
-                |ON f.store_id = s.store_id WHERE s.country = 'US'
+                |ON f.store_id = s.store_id WHERE s.country = $"US"'
               """.stripMargin)
 
             checkPartitionPruningPredicate(df, true, false)
@@ -545,7 +545,7 @@ abstract class DynamicPartitionPruningSuiteBase
           """
             |SELECT f.date_id, f.product_id, f.units_sold, f.store_id FROM fact_sk f
             |JOIN dim_store s
-            |ON f.store_id = s.store_id WHERE s.country = 'NL'
+            |ON f.store_id = s.store_id WHERE s.country = $"NL"'
           """.stripMargin)
 
         checkPartitionPruningPredicate(df, true, false)
@@ -573,7 +573,7 @@ abstract class DynamicPartitionPruningSuiteBase
           """
             |SELECT f.date_id, f.product_id, f.units_sold, f.store_id FROM fact_stats f
             |JOIN dim_stats s
-            |ON f.store_id = s.store_id WHERE s.country = 'DE'
+            |ON f.store_id = s.store_id WHERE s.country = $"DE"'
           """.stripMargin)
 
         checkPartitionPruningPredicate(df, true, false)
@@ -600,7 +600,7 @@ abstract class DynamicPartitionPruningSuiteBase
           """
             |SELECT f.date_id, f.product_id, f.units_sold, f.store_id FROM fact_stats f
             |JOIN dim_stats s
-            |ON f.store_id = s.store_id WHERE s.country = 'DE'
+            |ON f.store_id = s.store_id WHERE s.country = $"DE"'
           """.stripMargin)
 
         checkPartitionPruningPredicate(df, true, false)
@@ -620,7 +620,7 @@ abstract class DynamicPartitionPruningSuiteBase
           """
             |SELECT f.date_id, f.product_id, f.units_sold, f.store_id
             |FROM fact_stats f JOIN dim_stats s
-            |ON f.store_id + 1 = s.store_id WHERE s.country = 'DE'
+            |ON f.store_id + 1 = s.store_id WHERE s.country = $"DE"'
           """.stripMargin)
 
         checkPartitionPruningPredicate(df, true, false)
@@ -642,7 +642,7 @@ abstract class DynamicPartitionPruningSuiteBase
           |(SELECT date_id, product_id AS pid, store_id AS sid
           |   FROM fact_stats WHERE RAND() > 0.5) AS f
           |JOIN dim_stats s
-          |ON f.sid = s.store_id WHERE s.country = 'DE'
+          |ON f.sid = s.store_id WHERE s.country = $"DE"'
         """.stripMargin)
 
       checkPartitionPruningPredicate(df, false, false)
@@ -658,7 +658,7 @@ abstract class DynamicPartitionPruningSuiteBase
           |  WHERE RAND() > 0.5) fs
           |  JOIN dim_store ds ON fs.sid_d = ds.store_id) f
           |JOIN dim_stats s
-          |ON f.sid  = s.store_id  WHERE s.country = 'DE'
+          |ON f.sid  = s.store_id  WHERE s.country = $"DE"'
         """.stripMargin)
 
       checkPartitionPruningPredicate(df, false, false)
@@ -673,7 +673,7 @@ abstract class DynamicPartitionPruningSuiteBase
           |SELECT f.date_id, f.pid, f.sid FROM
           |(select date_id, product_id as pid, store_id as sid from fact_stats) as f
           |JOIN dim_stats s
-          |ON f.sid = s.store_id WHERE s.country = 'DE'
+          |ON f.sid = s.store_id WHERE s.country = $"DE"'
         """.stripMargin)
 
       checkPartitionPruningPredicate(df, false, true)
@@ -693,7 +693,7 @@ abstract class DynamicPartitionPruningSuiteBase
           |SELECT f.date_id, f.pid, f.sid FROM
           |(SELECT date_id, product_id AS pid, store_id AS sid FROM fact_stats) AS f
           |JOIN dim_stats s
-          |ON f.sid + 1 = s.store_id + 1 WHERE s.country = 'DE'
+          |ON f.sid + 1 = s.store_id + 1 WHERE s.country = $"DE"'
         """.stripMargin)
 
       checkPartitionPruningPredicate(df, false, true)
@@ -715,7 +715,7 @@ abstract class DynamicPartitionPruningSuiteBase
           |  (select date_id, product_id AS pid_d, store_id AS sid_d FROM fact_stats) fs
           |  JOIN dim_store ds ON fs.sid_d = ds.store_id) f
           |JOIN dim_stats s
-          |ON f.sid  = s.store_id  WHERE s.country = 'DE'
+          |ON f.sid  = s.store_id  WHERE s.country = $"DE"'
         """.stripMargin)
 
       checkPartitionPruningPredicate(df, false, true)
@@ -741,7 +741,7 @@ abstract class DynamicPartitionPruningSuiteBase
           |  JOIN dim_store ds ON fs.sid_dd = ds.store_id
           | ) f
           |JOIN dim_stats s
-          |ON f.sid_d  = s.store_id  WHERE s.country = 'DE'
+          |ON f.sid_d  = s.store_id  WHERE s.country = $"DE"'
         """.stripMargin)
 
       checkPartitionPruningPredicate(df, false, true)
@@ -764,7 +764,7 @@ abstract class DynamicPartitionPruningSuiteBase
         """
           |SELECT f.date_id, f.product_id, f.units_sold, f.store_id FROM fact_stats f
           |JOIN dim_stats s
-          |ON f.store_id = s.store_id WHERE s.country = 'DE'
+          |ON f.store_id = s.store_id WHERE s.country = $"DE"'
         """.stripMargin)
 
       checkPartitionPruningPredicate(df, false, false)
@@ -787,7 +787,7 @@ abstract class DynamicPartitionPruningSuiteBase
         """
           |SELECT f.date_id, f.product_id, f.units_sold, f.store_id FROM fact_stats f
           |JOIN dim_stats s
-          |ON f.store_id = s.store_id WHERE s.country = 'DE'
+          |ON f.store_id = s.store_id WHERE s.country = $"DE"'
         """.stripMargin)
 
       checkPartitionPruningPredicate(df, true, false)
@@ -806,7 +806,7 @@ abstract class DynamicPartitionPruningSuiteBase
         """
           |SELECT f.date_id, f.product_id, f.units_sold, f.store_id FROM fact_stats f
           |JOIN dim_stats s
-          |ON f.store_id = s.store_id WHERE s.country = 'DE'
+          |ON f.store_id = s.store_id WHERE s.country = $"DE"'
         """.stripMargin)
 
       checkPartitionPruningPredicate(df, false, true)
@@ -827,7 +827,7 @@ abstract class DynamicPartitionPruningSuiteBase
         """
           |SELECT f.date_id, f.product_id, f.units_sold, f.store_id FROM fact_stats f
           |JOIN dim_stats s
-          |ON f.store_id = s.store_id WHERE s.country = 'DE'
+          |ON f.store_id = s.store_id WHERE s.country = $"DE"'
         """.stripMargin)
 
       checkPartitionPruningPredicate(df, false, false)
@@ -848,7 +848,7 @@ abstract class DynamicPartitionPruningSuiteBase
         """
           |SELECT f.date_id, f.product_id, f.units_sold, f.store_id FROM fact_stats f
           |JOIN dim_stats s
-          |ON f.store_id = s.store_id WHERE s.country = 'DE'
+          |ON f.store_id = s.store_id WHERE s.country = $"DE"'
         """.stripMargin)
 
       checkPartitionPruningPredicate(df, true, false)
@@ -1144,7 +1144,7 @@ abstract class DynamicPartitionPruningSuiteBase
           |(SELECT date_id, product_id AS pid, store_id AS sid
           |   FROM fact_stats WHERE RAND() > 0.5) AS f
           |JOIN dim_stats s
-          |ON f.sid = s.store_id WHERE s.country = 'DE'
+          |ON f.sid = s.store_id WHERE s.country = $"DE"'
         """.stripMargin)
 
       assert(!checkUnpushedFilters(df))
@@ -1195,9 +1195,9 @@ abstract class DynamicPartitionPruningSuiteBase
           |       SUM(f.units_sold),
           |       (SELECT SUM(f.units_sold)
           |        FROM fact_stats f JOIN dim_stats d ON d.store_id = f.store_id
-          |        WHERE d.country = 'US') AS total_prod
+          |        WHERE d.country = $"US"') AS total_prod
           |FROM fact_stats f JOIN dim_stats d ON d.store_id = f.store_id
-          |WHERE d.country = 'US'
+          |WHERE d.country = $"US"'
           |GROUP BY 1
         """.stripMargin)
       checkAnswer(df, Row(4, 50, 70) :: Row(5, 10, 70) :: Row(6, 10, 70) :: Nil)
@@ -1290,7 +1290,7 @@ abstract class DynamicPartitionPruningSuiteBase
               s"""
                  |SELECT f.date_id, f.product_id, f.units_sold, f.store_id FROM fact_stats f
                  |JOIN dim_stats s
-                 |ON $dataType(f.store_id) = $dataType(s.store_id) WHERE s.country = 'DE'
+                 |ON $dataType(f.store_id) = $dataType(s.store_id) WHERE s.country = $"DE"'
               """.stripMargin)
 
             if (pruning) {
@@ -1320,7 +1320,7 @@ abstract class DynamicPartitionPruningSuiteBase
         """
           |SELECT * FROM fact_sk f
           |JOIN dim_store s
-          |ON f.store_id = s.store_id WHERE s.country = 'XYZ'
+          |ON f.store_id = s.store_id WHERE s.country = $"XYZ"'
         """.stripMargin)
 
       checkPartitionPruningPredicate(df, false, true)
@@ -1464,7 +1464,7 @@ abstract class DynamicPartitionPruningSuiteBase
         |          ROW_NUMBER() OVER (PARTITION BY store_id ORDER BY state_province DESC) AS rn
         |        FROM dim_store) s
         |   ON f.store_id = s.store_id
-        |WHERE s.country = 'DE' AND s.rn = 1
+        |WHERE s.country = $"DE"' AND s.rn = 1
         |""".stripMargin)
 
     checkAnswer(df, Row(3, 2) :: Row(3, 2) :: Row(3, 2) :: Row(3, 2) :: Nil)
@@ -1475,7 +1475,7 @@ abstract class DynamicPartitionPruningSuiteBase
       val df = sql(
         """
           |SELECT date_id, product_id FROM fact_sk f
-          |JOIN (select store_id + 3 as new_store_id from dim_store where country = 'US') s
+          |JOIN (select store_id + 3 as new_store_id from dim_store where country = $"US"') s
           |ON f.store_id = s.new_store_id
         """.stripMargin)
 
@@ -1549,7 +1549,7 @@ abstract class DynamicPartitionPruningSuiteBase
           |      WHERE  date_id <= 1000) f
           |JOIN dim_store s
           |ON f.store_id = s.store_id
-          |WHERE s.country = 'US'
+          |WHERE s.country = $"US"'
           |""".stripMargin)
 
       checkPartitionPruningPredicate(df, withSubquery = false, withBroadcast = false)
@@ -1702,7 +1702,7 @@ class DynamicPartitionPruningV1SuiteAEOn extends DynamicPartitionPruningV1Suite
       val df = sql(
         """
           |SELECT f.date_id, f.store_id FROM fact_sk f
-          |JOIN dim_store s ON f.store_id = s.store_id AND s.country = 'NL'
+          |JOIN dim_store s ON f.store_id = s.store_id AND s.country = $"NL"'
           |WHERE s.state_province != (SELECT max(state_province) FROM dim_stats)
         """.stripMargin)
 

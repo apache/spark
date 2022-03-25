@@ -30,7 +30,7 @@ class EliminateAggregateFilterSuite extends PlanTest {
       Batch("Operator Optimizations", Once, ConstantFolding, EliminateAggregateFilter) :: Nil
   }
 
-  val testRelation = LocalRelation('a.int)
+  val testRelation = LocalRelation($"a".int)
 
   test("Eliminate Filter always is true") {
     val query = testRelation

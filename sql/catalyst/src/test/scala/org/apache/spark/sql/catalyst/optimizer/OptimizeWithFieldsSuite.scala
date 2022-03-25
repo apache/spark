@@ -32,8 +32,8 @@ class OptimizeWithFieldsSuite extends PlanTest {
       OptimizeUpdateFields, SimplifyExtractValueOps) :: Nil
   }
 
-  private val testRelation = LocalRelation('a.struct('a1.int))
-  private val testRelation2 = LocalRelation('a.struct('a1.int).notNull)
+  private val testRelation = LocalRelation('a.struct($"a1".int))
+  private val testRelation2 = LocalRelation('a.struct($"a1".int).notNull)
 
   test("combines two adjacent UpdateFields Expressions") {
     val originalQuery = testRelation

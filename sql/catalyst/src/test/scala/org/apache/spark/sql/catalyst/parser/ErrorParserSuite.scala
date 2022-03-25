@@ -228,7 +228,7 @@ class ErrorParserSuite extends AnalysisTest {
         |ORDER BY c
       """.stripMargin,
       table("t")
-        .where('a - 'b > 10)
+        .where('a - $"b" > 10)
         .groupBy('fake - 'breaker)('a, 'b)
         .orderBy('c.asc))
     intercept(

@@ -61,12 +61,12 @@ class ListTablesSuite extends QueryTest
       case allTables =>
         // We are using default DB.
         checkAnswer(
-          allTables.filter("tableName = 'listtablessuitetable'"),
+          allTables.filter("tableName = $"listtablessuitetable"'"),
           Row("", "listtablessuitetable", true))
         checkAnswer(
-          allTables.filter("tableName = 'hivelisttablessuitetable'"),
+          allTables.filter("tableName = $"hivelisttablessuitetable"'"),
           Row("default", "hivelisttablessuitetable", false))
-        assert(allTables.filter("tableName = 'hiveindblisttablessuitetable'").count() === 0)
+        assert(allTables.filter("tableName = $"hiveindblisttablessuitetable"'").count() === 0)
     }
   }
 
@@ -74,11 +74,11 @@ class ListTablesSuite extends QueryTest
     Seq(tables("listtablessuiteDb"), sql("SHOW TABLes in listTablesSuitedb")).foreach {
       case allTables =>
         checkAnswer(
-          allTables.filter("tableName = 'listtablessuitetable'"),
+          allTables.filter("tableName = $"listtablessuitetable"'"),
           Row("", "listtablessuitetable", true))
-        assert(allTables.filter("tableName = 'hivelisttablessuitetable'").count() === 0)
+        assert(allTables.filter("tableName = $"hivelisttablessuitetable"'").count() === 0)
         checkAnswer(
-          allTables.filter("tableName = 'hiveindblisttablessuitetable'"),
+          allTables.filter("tableName = $"hiveindblisttablessuitetable"'"),
           Row("listtablessuitedb", "hiveindblisttablessuitetable", false))
     }
   }

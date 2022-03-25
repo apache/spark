@@ -115,7 +115,7 @@ class HistogramNumericSuite extends SparkFunSuite with SQLHelper with Logging {
     // These are the types of input relations under test. We exercise the unit test with several
     // input column types to inspect the behavior of query analysis for the aggregate function.
     val relations = Seq(LocalRelation('a.double),
-      LocalRelation('a.int),
+      LocalRelation($"a".int),
       LocalRelation('a.timestamp),
       LocalRelation('a.dayTimeInterval()),
       LocalRelation('a.yearMonthInterval()))

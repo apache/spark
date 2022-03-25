@@ -79,8 +79,8 @@ class DistinctKeyVisitorSuite extends PlanTest {
   }
 
   test("Filter's distinct attributes") {
-    checkDistinctAttributes(Filter('a > 1, t1), Set.empty)
-    checkDistinctAttributes(Filter('a > 1, Distinct(t1)), Set(ExpressionSet(Seq(a, b, c))))
+    checkDistinctAttributes(Filter($"a" > 1, t1), Set.empty)
+    checkDistinctAttributes(Filter($"a" > 1, Distinct(t1)), Set(ExpressionSet(Seq(a, b, c))))
   }
 
   test("Limit's distinct attributes") {
@@ -97,35 +97,35 @@ class DistinctKeyVisitorSuite extends PlanTest {
   test("Join's distinct attributes") {
     Seq(LeftSemi, LeftAnti).foreach { joinType =>
       checkDistinctAttributes(
-        Distinct(t1).join(t2, joinType, Some('a === 'x)), Set(ExpressionSet(Seq(a, b, c))))
+        Distinct(t1).join(t2, joinType, Some($"a" === $"x")), Set(ExpressionSet(Seq(a, b, c))))
     }
 
     checkDistinctAttributes(
-      Distinct(t1).join(Distinct(t2), Inner, Some('a === 'x && 'b === 'y && 'c === 'z)),
+      Distinct(t1).join(Distinct(t2), Inner, Some($"a" === $"x" && $"b" === $"y" && $"c" === $"z")),
       Set(ExpressionSet(Seq(a, b, c)), ExpressionSet(Seq(x, y, z))))
 
     checkDistinctAttributes(
-      Distinct(t1).join(Distinct(t2), LeftOuter, Some('a === 'x && 'b === 'y && 'c === 'z)),
+      Distinct(t1).join(Distinct(t2), LeftOuter, Some($"a" === $"x" && $"b" === $"y" && $"c" === $"z")),
       Set(ExpressionSet(Seq(a, b, c))))
 
     checkDistinctAttributes(
-      Distinct(t1).join(Distinct(t2), RightOuter, Some('a === 'x && 'b === 'y && 'c === 'z)),
+      Distinct(t1).join(Distinct(t2), RightOuter, Some($"a" === $"x" && $"b" === $"y" && $"c" === $"z")),
       Set(ExpressionSet(Seq(x, y, z))))
 
     Seq(Inner, Cross, LeftOuter, RightOuter).foreach { joinType =>
-      checkDistinctAttributes(t1.join(t2, joinType, Some('a === 'x)),
+      checkDistinctAttributes(t1.join(t2, joinType, Some($"a" === $"x")),
         Set.empty)
       checkDistinctAttributes(
-        Distinct(t1).join(Distinct(t2), joinType, Some('a === 'x && 'b === 'y)),
+        Distinct(t1).join(Distinct(t2), joinType, Some($"a" === $"x" && $"b" === $"y")),
         Set.empty)
       checkDistinctAttributes(
         Distinct(t1).join(Distinct(t2), joinType,
-          Some('a === 'x && 'b === 'y && 'c % 5 === 'z % 5)),
+          Some($"a" === $"x" && $"b" === $"y" && 'c % 5 === $"z" % 5)),
         Set.empty)
     }
 
     checkDistinctAttributes(
-      Distinct(t1).join(Distinct(t2), Cross, Some('a === 'x && 'b === 'y && 'c === 'z)),
+      Distinct(t1).join(Distinct(t2), Cross, Some($"a" === $"x" && $"b" === $"y" && $"c" === $"z")),
       Set.empty)
   }
 

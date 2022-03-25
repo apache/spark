@@ -31,7 +31,7 @@ class FoldablePropagationSuite extends PlanTest {
         FoldablePropagation) :: Nil
   }
 
-  val testRelation = LocalRelation('a.int, 'b.int)
+  val testRelation = LocalRelation($"a".int, $"b".int)
 
   test("Propagate from subquery") {
     val query = OneRowRelation()
@@ -62,7 +62,7 @@ class FoldablePropagationSuite extends PlanTest {
   test("Propagate to where clause") {
     val query = testRelation
       .select("str".as('y))
-      .where('y === "str" && "str" === 'y)
+      .where($"y" === "str" && "str" === $"y")
     val optimized = Optimize.execute(query.analyze)
     val correctAnswer = testRelation
       .select("str".as('y))
@@ -99,13 +99,13 @@ class FoldablePropagationSuite extends PlanTest {
   test("Propagate in a complex query") {
     val query = testRelation
       .select('a.as('x), Year(CurrentDate()).as('y), 'b)
-      .where('x > 1 && 'y === 2016 && 'b > 1)
+      .where($"x" > 1 && $"y" === 2016 && $"b" > 1)
       .groupBy('x, 'y, 'b)(sum('x), avg('y).as('AVG), count('b))
       .orderBy('x.asc, 'AVG.asc)
     val optimized = Optimize.execute(query.analyze)
     val correctAnswer = testRelation
       .select('a.as('x), Year(CurrentDate()).as('y), 'b)
-      .where('x > 1 && Year(CurrentDate()).as('y) === 2016 && 'b > 1)
+      .where($"x" > 1 && Year(CurrentDate()).as('y) === 2016 && $"b" > 1)
       .groupBy('x, Year(CurrentDate()).as("y"), 'b)(sum('x), avg(Year(CurrentDate())).as('AVG),
         count('b))
       .orderBy('x.asc, 'AVG.asc).analyze
@@ -163,30 +163,30 @@ class FoldablePropagationSuite extends PlanTest {
   }
 
   test("Propagate above outer join") {
-    val left = LocalRelation('a.int).select('a, Literal(1).as('b))
-    val right = LocalRelation('c.int).select('c, Literal(1).as('d))
+    val left = LocalRelation($"a".int).select('a, Literal(1).as('b))
+    val right = LocalRelation($"c".int).select('c, Literal(1).as('d))
 
     val join = left.join(
       right,
       joinType = LeftOuter,
-      condition = Some('a === 'c && 'b === 'd))
+      condition = Some($"a" === $"c" && $"b" === $"d"))
     val query = join.select(('b + 3).as('res)).analyze
     val optimized = Optimize.execute(query)
 
     val correctAnswer = left.join(
       right,
       joinType = LeftOuter,
-      condition = Some('a === 'c && Literal(1) === Literal(1)))
+      condition = Some($"a" === $"c" && Literal(1) === Literal(1)))
       .select((Literal(1) + 3).as('res)).analyze
     comparePlans(optimized, correctAnswer)
   }
 
   test("SPARK-32635: Replace references with foldables coming only from the node's children") {
-    val leftExpression = 'a.int
+    val leftExpression = $"a".int
     val left = LocalRelation(leftExpression).select('a)
     val rightExpression = Alias(Literal(2), "a")(leftExpression.exprId)
-    val right = LocalRelation('b.int).select('b, rightExpression).select('b)
-    val join = left.join(right, joinType = LeftOuter, condition = Some('b === 'a))
+    val right = LocalRelation($"b".int).select('b, rightExpression).select('b)
+    val join = left.join(right, joinType = LeftOuter, condition = Some($"b" === $"a"))
 
     val query = join.analyze
     val optimized = Optimize.execute(query)

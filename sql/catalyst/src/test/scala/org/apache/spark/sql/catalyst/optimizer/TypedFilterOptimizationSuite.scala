@@ -39,7 +39,7 @@ class TypedFilterOptimizationSuite extends PlanTest {
 
   implicit private def productEncoder[T <: Product : TypeTag] = ExpressionEncoder[T]()
 
-  val testRelation = LocalRelation('_1.int, '_2.int)
+  val testRelation = LocalRelation($"_1".int, $"_2".int)
 
   test("filter after serialize with the same object type") {
     val f = (i: (Int, Int)) => i._1 > 0

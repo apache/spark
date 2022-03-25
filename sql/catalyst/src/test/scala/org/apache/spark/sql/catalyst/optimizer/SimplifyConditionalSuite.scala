@@ -35,7 +35,7 @@ class SimplifyConditionalSuite extends PlanTest with ExpressionEvalHelper with P
       BooleanSimplification, ConstantFolding, SimplifyConditionals) :: Nil
   }
 
-  private val relation = LocalRelation('a.int, 'b.int, 'c.boolean)
+  private val relation = LocalRelation($"a".int, $"b".int, $"c".boolean)
 
   protected def assertEquivalent(e1: Expression, e2: Expression): Unit = {
     val correctAnswer = Project(Alias(e2, "out")() :: Nil, relation).analyze
@@ -203,10 +203,10 @@ class SimplifyConditionalSuite extends PlanTest with ExpressionEvalHelper with P
   test("SPARK-33845: remove unnecessary if when the outputs are boolean type") {
     // verify the boolean equivalence of all transformations involved
     val fields = Seq(
-      'cond.boolean.notNull,
-      'cond_nullable.boolean,
-      'a.boolean,
-      'b.boolean
+      $"cond".boolean.notNull,
+      $"cond_nullable".boolean,
+      $"a".boolean,
+      $"b".boolean
     )
     val Seq(cond, cond_nullable, a, b) = fields.zipWithIndex.map { case (f, i) => f.at(i) }
 
@@ -249,10 +249,10 @@ class SimplifyConditionalSuite extends PlanTest with ExpressionEvalHelper with P
   test("SPARK-33884: simplify CaseWhen clauses with (true and false) and (false and true)") {
     // verify the boolean equivalence of all transformations involved
     val fields = Seq(
-      'cond.boolean.notNull,
-      'cond_nullable.boolean,
-      'a.boolean,
-      'b.boolean
+      $"cond".boolean.notNull,
+      $"cond_nullable".boolean,
+      $"a".boolean,
+      $"b".boolean
     )
     val Seq(cond, cond_nullable, a, b) = fields.zipWithIndex.map { case (f, i) => f.at(i) }
 

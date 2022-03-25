@@ -146,18 +146,18 @@ class EliminateSortsSuite extends AnalysisTest {
 
   test("SPARK-33183: remove top level local sort with filter operators") {
     val orderedPlan = testRelation.select('a, 'b).orderBy('a.asc, 'b.desc)
-    val filteredAndReordered = orderedPlan.where('a > Literal(10)).sortBy('a.asc, 'b.desc)
+    val filteredAndReordered = orderedPlan.where($"a" > Literal(10)).sortBy('a.asc, 'b.desc)
     val optimized = Optimize.execute(filteredAndReordered.analyze)
-    val correctAnswer = orderedPlan.where('a > Literal(10)).analyze
+    val correctAnswer = orderedPlan.where($"a" > Literal(10)).analyze
     comparePlans(optimized, correctAnswer)
   }
 
   test("SPARK-33183: keep top level global sort with filter operators") {
     val projectPlan = testRelation.select('a, 'b)
     val orderedPlan = projectPlan.orderBy('a.asc, 'b.desc)
-    val filteredAndReordered = orderedPlan.where('a > Literal(10)).orderBy('a.asc, 'b.desc)
+    val filteredAndReordered = orderedPlan.where($"a" > Literal(10)).orderBy('a.asc, 'b.desc)
     val optimized = Optimize.execute(filteredAndReordered.analyze)
-    val correctAnswer = projectPlan.where('a > Literal(10)).orderBy('a.asc, 'b.desc).analyze
+    val correctAnswer = projectPlan.where($"a" > Literal(10)).orderBy('a.asc, 'b.desc).analyze
     comparePlans(optimized, correctAnswer)
   }
 
@@ -234,21 +234,21 @@ class EliminateSortsSuite extends AnalysisTest {
     comparePlans(optimizedWithProject, correctAnswerWithProject)
 
     val orderedTwiceWithFilter =
-      testRelation.orderBy('a.asc).where('b > Literal(0)).orderBy('b.desc)
+      testRelation.orderBy('a.asc).where($"b" > Literal(0)).orderBy('b.desc)
     val optimizedWithFilter = Optimize.execute(orderedTwiceWithFilter.analyze)
-    val correctAnswerWithFilter = testRelation.where('b > Literal(0)).orderBy('b.desc).analyze
+    val correctAnswerWithFilter = testRelation.where($"b" > Literal(0)).orderBy('b.desc).analyze
     comparePlans(optimizedWithFilter, correctAnswerWithFilter)
 
     val orderedTwiceWithBoth =
-      testRelation.orderBy('a.asc).select('b).where('b > Literal(0)).orderBy('b.desc)
+      testRelation.orderBy('a.asc).select('b).where($"b" > Literal(0)).orderBy('b.desc)
     val optimizedWithBoth = Optimize.execute(orderedTwiceWithBoth.analyze)
     val correctAnswerWithBoth =
-      testRelation.select('b).where('b > Literal(0)).orderBy('b.desc).analyze
+      testRelation.select('b).where($"b" > Literal(0)).orderBy('b.desc).analyze
     comparePlans(optimizedWithBoth, correctAnswerWithBoth)
 
     val orderedThrice = orderedTwiceWithBoth.select(('b + 1).as('c)).orderBy('c.asc)
     val optimizedThrice = Optimize.execute(orderedThrice.analyze)
-    val correctAnswerThrice = testRelation.select('b).where('b > Literal(0))
+    val correctAnswerThrice = testRelation.select('b).where($"b" > Literal(0))
       .select(('b + 1).as('c)).orderBy('c.asc).analyze
     comparePlans(optimizedThrice, correctAnswerThrice)
   }

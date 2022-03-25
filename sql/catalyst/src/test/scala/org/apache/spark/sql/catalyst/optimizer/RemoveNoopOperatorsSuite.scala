@@ -31,7 +31,7 @@ class RemoveNoopOperatorsSuite extends PlanTest {
         RemoveNoopOperators) :: Nil
   }
 
-  val testRelation = LocalRelation('a.int, 'b.int, 'c.int)
+  val testRelation = LocalRelation($"a".int, $"b".int, $"c".int)
 
   test("Remove all redundant projections in one iteration") {
     val originalQuery = testRelation

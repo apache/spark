@@ -764,7 +764,7 @@ class HiveClientSuite(version: String, allVersions: Seq[String])
       versionSpark.sql(
         """
           |ALTER TABLE tbl PARTITION (ds='2')
-          |SET SERDEPROPERTIES ('newKey' = 'vvv')
+          |SET SERDEPROPERTIES ('newKey' = $"vvv"')
           """.stripMargin)
       val newPartMeta = versionSpark.sessionState.catalog.getPartition(
         TableIdentifier("tbl"), spec = Map("ds" -> "2")).parameters
@@ -870,7 +870,7 @@ class HiveClientSuite(version: String, allVersions: Seq[String])
 
         // Adds generated Avro data as a new partition to the testing table.
         versionSpark.sql(
-          s"ALTER TABLE $tableName ADD PARTITION (ds = 'foo') LOCATION '$path/$tempTableName'")
+          s"ALTER TABLE $tableName ADD PARTITION (ds = $"foo"') LOCATION '$path/$tempTableName'")
 
         // The following query fails before SPARK-13709 is fixed. This is because when reading
         // data from table partitions, Avro deserializer needs the Avro schema, which is defined
@@ -986,7 +986,7 @@ class HiveClientSuite(version: String, allVersions: Seq[String])
         s"""
            |CREATE TABLE $tableName
            |ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.avro.AvroSerDe'
-           |WITH SERDEPROPERTIES ('respectSparkSchema' = 'true')
+           |WITH SERDEPROPERTIES ('respectSparkSchema' = $"true"')
            |STORED AS
            |  INPUTFORMAT 'org.apache.hadoop.hive.ql.io.avro.AvroContainerInputFormat'
            |  OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.avro.AvroContainerOutputFormat'
@@ -1038,7 +1038,7 @@ class HiveClientSuite(version: String, allVersions: Seq[String])
           s"""
              |CREATE EXTERNAL TABLE $srcTableName
              |ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.avro.AvroSerDe'
-             |WITH SERDEPROPERTIES ('respectSparkSchema' = 'true')
+             |WITH SERDEPROPERTIES ('respectSparkSchema' = $"true"')
              |STORED AS
              |  INPUTFORMAT 'org.apache.hadoop.hive.ql.io.avro.AvroContainerInputFormat'
              |  OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.avro.AvroContainerOutputFormat'
@@ -1051,7 +1051,7 @@ class HiveClientSuite(version: String, allVersions: Seq[String])
           s"""
              |CREATE TABLE $destTableName
              |ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.avro.AvroSerDe'
-             |WITH SERDEPROPERTIES ('respectSparkSchema' = 'true')
+             |WITH SERDEPROPERTIES ('respectSparkSchema' = $"true"')
              |STORED AS
              |  INPUTFORMAT 'org.apache.hadoop.hive.ql.io.avro.AvroContainerInputFormat'
              |  OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.avro.AvroContainerOutputFormat'

@@ -73,8 +73,8 @@ class ResolveHintsSuite extends AnalysisTest {
   test("do not traverse past existing broadcast hints") {
     checkAnalysisWithoutViewWrapper(
       UnresolvedHint("MAPJOIN", Seq("table"),
-        ResolvedHint(table("table").where('a > 1), HintInfo(strategy = Some(BROADCAST)))),
-      ResolvedHint(testRelation.where('a > 1), HintInfo(strategy = Some(BROADCAST))).analyze,
+        ResolvedHint(table("table").where($"a" > 1), HintInfo(strategy = Some(BROADCAST)))),
+      ResolvedHint(testRelation.where($"a" > 1), HintInfo(strategy = Some(BROADCAST))).analyze,
       caseSensitive = false)
   }
 
@@ -98,8 +98,8 @@ class ResolveHintsSuite extends AnalysisTest {
 
   test("do not traverse past subquery alias") {
     checkAnalysisWithoutViewWrapper(
-      UnresolvedHint("MAPJOIN", Seq("table"), table("table").where('a > 1).subquery('tableAlias)),
-      testRelation.where('a > 1).analyze,
+      UnresolvedHint("MAPJOIN", Seq("table"), table("table").where($"a" > 1).subquery('tableAlias)),
+      testRelation.where($"a" > 1).analyze,
       caseSensitive = false)
   }
 
@@ -111,7 +111,7 @@ class ResolveHintsSuite extends AnalysisTest {
           |SELECT /*+ BROADCAST(ctetable) */ * FROM ctetable
         """.stripMargin
       ),
-      ResolvedHint(testRelation.where('a > 1).select('a), HintInfo(strategy = Some(BROADCAST)))
+      ResolvedHint(testRelation.where($"a" > 1).select('a), HintInfo(strategy = Some(BROADCAST)))
         .select('a).analyze,
       caseSensitive = false,
       inlineCTE = true)
@@ -125,7 +125,7 @@ class ResolveHintsSuite extends AnalysisTest {
           |SELECT /*+ BROADCAST(table) */ * FROM ctetable
         """.stripMargin
       ),
-      testRelation.where('a > 1).select('a).select('a).analyze,
+      testRelation.where($"a" > 1).select('a).select('a).analyze,
       caseSensitive = false,
       inlineCTE = true)
   }

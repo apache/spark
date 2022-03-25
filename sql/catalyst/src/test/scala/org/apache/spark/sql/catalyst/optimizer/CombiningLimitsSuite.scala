@@ -116,7 +116,7 @@ class CombiningLimitsSuite extends PlanTest {
     comparePlans(optimized2, query2)
 
     // test child max row is none
-    val query3 = testRelation.select(Symbol("a")).limit(1).analyze
+    val query3 = testRelation.select($"a").limit(1).analyze
     val optimized3 = Optimize.execute(query3)
     comparePlans(optimized3, query3)
 

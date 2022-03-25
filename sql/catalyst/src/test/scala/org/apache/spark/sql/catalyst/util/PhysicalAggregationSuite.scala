@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
 
 class PhysicalAggregationSuite extends PlanTest {
-  val testRelation = LocalRelation('a.int, 'b.int)
+  val testRelation = LocalRelation($"a".int, $"b".int)
 
   test("SPARK-35014: a foldable expression should not be replaced by an AttributeReference") {
     val query = testRelation

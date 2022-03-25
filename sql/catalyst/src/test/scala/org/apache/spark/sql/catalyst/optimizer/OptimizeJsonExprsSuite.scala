@@ -44,8 +44,8 @@ class OptimizeJsonExprsSuite extends PlanTest with ExpressionEvalHelper {
 
   val schema = StructType.fromDDL("a int, b int")
 
-  private val structAtt = 'struct.struct(schema).notNull
-  private val jsonAttr = 'json.string
+  private val structAtt = $"struct".struct(schema).notNull
+  private val jsonAttr = $"json".string
 
   private val testRelation = LocalRelation(structAtt)
   private val testRelation2 = LocalRelation(jsonAttr)
@@ -104,7 +104,7 @@ class OptimizeJsonExprsSuite extends PlanTest with ExpressionEvalHelper {
     val nonNullSchema = StructType(
       StructField("a", IntegerType, false) :: StructField("b", IntegerType, false) :: Nil)
 
-    val structAtt = 'struct.struct(nonNullSchema).notNull
+    val structAtt = $"struct".struct(nonNullSchema).notNull
     val testRelationWithNonNullAttr = LocalRelation(structAtt)
 
     val schema = StructType.fromDDL("a int, b int")
@@ -237,7 +237,7 @@ class OptimizeJsonExprsSuite extends PlanTest with ExpressionEvalHelper {
     val nullStruct = namedStruct("a", Literal(null, IntegerType), "b", Literal(null, IntegerType))
 
     val UTC_OPT = Option("UTC")
-    val json: BoundReference = 'json.string.canBeNull.at(0)
+    val json: BoundReference = $"json".string.canBeNull.at(0)
 
     assertEquivalent(
       testRelation2,
