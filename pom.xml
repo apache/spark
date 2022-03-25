@@ -101,11 +101,11 @@
     <module>examples</module>
     <module>repl</module>
     <module>launcher</module>
-    <module>external/kafka-0-10-token-provider</module>
-    <module>external/kafka-0-10</module>
-    <module>external/kafka-0-10-assembly</module>
-    <module>external/kafka-0-10-sql</module>
-    <module>external/avro</module>
+    <module>connector/kafka-0-10-token-provider</module>
+    <module>connector/kafka-0-10</module>
+    <module>connector/kafka-0-10-assembly</module>
+    <module>connector/kafka-0-10-sql</module>
+    <module>connector/avro</module>
     <!-- See additional modules enabled by profiles below -->
   </modules>
 
@@ -3405,7 +3405,7 @@
     <profile>
       <id>spark-ganglia-lgpl</id>
       <modules>
-        <module>external/spark-ganglia-lgpl</module>
+        <module>connector/spark-ganglia-lgpl</module>
       </modules>
     </profile>
 
@@ -3413,15 +3413,15 @@
     <profile>
       <id>kinesis-asl</id>
       <modules>
-        <module>external/kinesis-asl</module>
-        <module>external/kinesis-asl-assembly</module>
+        <module>connector/kinesis-asl</module>
+        <module>connector/kinesis-asl-assembly</module>
       </modules>
     </profile>
 
     <profile>
       <id>docker-integration-tests</id>
       <modules>
-        <module>external/docker-integration-tests</module>
+        <module>connector/docker-integration-tests</module>
       </modules>
     </profile>
 
