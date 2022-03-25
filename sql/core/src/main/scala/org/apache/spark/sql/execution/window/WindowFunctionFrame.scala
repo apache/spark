@@ -362,14 +362,18 @@ class UnboundedPrecedingOffsetWindowFunctionFrame(
   assert(offset > 0)
 
   override def prepare(rows: ExternalAppendOnlyUnsafeRowArray): Unit = {
-    resetStates(rows)
-    if (ignoreNulls) {
-      findNextRowWithNonNullInput()
+    if (offset > rows.length) {
+      fillDefaultValue(EmptyRow)
     } else {
-      // drain the first few rows if offset is larger than one
-      while (inputIndex < offset) {
-        nextSelectedRow = WindowFunctionFrame.getNextOrNull(inputIterator)
-        inputIndex += 1
+      resetStates(rows)
+      if (ignoreNulls) {
+        findNextRowWithNonNullInput()
+      } else {
+        // drain the first few rows if offset is larger than one
+        while (inputIndex < offset) {
+          nextSelectedRow = WindowFunctionFrame.getNextOrNull(inputIterator)
+          inputIndex += 1
+        }
       }
     }
   }
