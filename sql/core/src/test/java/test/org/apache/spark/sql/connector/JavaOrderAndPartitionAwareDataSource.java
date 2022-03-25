@@ -17,23 +17,15 @@
 
 package test.org.apache.spark.sql.connector;
 
-import org.apache.spark.sql.catalyst.InternalRow;
-import org.apache.spark.sql.catalyst.expressions.GenericInternalRow;
-import org.apache.spark.sql.connector.TestingV2Source;
 import org.apache.spark.sql.connector.catalog.Table;
 import org.apache.spark.sql.connector.expressions.*;
 import org.apache.spark.sql.connector.read.*;
-import org.apache.spark.sql.connector.read.partitioning.ClusteredDistribution;
-import org.apache.spark.sql.connector.read.partitioning.Distribution;
-import org.apache.spark.sql.connector.read.partitioning.Partitioning;
 import org.apache.spark.sql.util.CaseInsensitiveStringMap;
-
-import java.io.IOException;
-import java.util.Arrays;
 
 public class JavaOrderAndPartitionAwareDataSource extends JavaPartitionAwareDataSource {
 
-  static class MyScanBuilder extends JavaPartitionAwareDataSource.MyScanBuilder implements SupportsReportOrdering {
+  static class MyScanBuilder extends JavaPartitionAwareDataSource.MyScanBuilder
+          implements SupportsReportOrdering {
 
     @Override
     public InputPartition[] planInputPartitions() {
@@ -69,28 +61,10 @@ public class JavaOrderAndPartitionAwareDataSource extends JavaPartitionAwareData
     };
   }
 
-  static class MyPartitioning implements Partitioning {
-
-    @Override
-    public int numPartitions() {
-      return 2;
-    }
-
-    @Override
-    public boolean satisfy(Distribution distribution) {
-      if (distribution instanceof ClusteredDistribution) {
-        String[] clusteredCols = ((ClusteredDistribution) distribution).clusteredColumns;
-        return Arrays.asList(clusteredCols).contains("i");
-      }
-
-      return false;
-    }
-  }
-
   static class MySortOrder implements SortOrder {
     private final Expression expression;
 
-    public MySortOrder(String columnName) {
+    MySortOrder(String columnName) {
       this.expression = new MyIdentityTransform(new MyNamedReference(columnName));
     }
 
@@ -107,7 +81,7 @@ public class JavaOrderAndPartitionAwareDataSource extends JavaPartitionAwareData
   static class MyNamedReference implements NamedReference {
     private final String[] parts;
 
-    public MyNamedReference(String part) { this.parts = new String[] { part }; }
+    MyNamedReference(String part) { this.parts = new String[] { part }; }
 
     @Override
     public String[] fieldNames() { return this.parts; }
@@ -116,7 +90,7 @@ public class JavaOrderAndPartitionAwareDataSource extends JavaPartitionAwareData
   static class MyIdentityTransform implements Transform {
     private final Expression[] args;
 
-    public MyIdentityTransform(NamedReference namedReference) {
+    MyIdentityTransform(NamedReference namedReference) {
       this.args = new Expression[] { namedReference };
     }
 
