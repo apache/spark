@@ -233,6 +233,35 @@ trait MLTest extends StreamTest with TempDirectory { self: Suite =>
     }
   }
 
+  def testInvalidRegressionLabels(f: DataFrame => Any): Unit = {
+    import testImplicits._
+
+    // labels contains NULL
+    val df1 = sc.parallelize(Seq(
+      (null, 1.0, Vectors.dense(1.0, 2.0)),
+      ("1.0", 1.0, Vectors.dense(1.0, 2.0))
+    )).toDF("str_label", "weight", "features")
+      .select(col("str_label").cast("double").as("label"), col("weight"), col("features"))
+    val e1 = intercept[Exception](f(df1))
+    assert(e1.getMessage.contains("Labels MUST NOT be Null or NaN"))
+
+    // labels contains NaN
+    val df2 = sc.parallelize(Seq(
+      (Double.NaN, 1.0, Vectors.dense(1.0, 2.0)),
+      (1.0, 1.0, Vectors.dense(1.0, 2.0))
+    )).toDF("label", "weight", "features")
+    val e2 = intercept[Exception](f(df2))
+    assert(e2.getMessage.contains("Labels MUST NOT be Null or NaN"))
+
+    // labels contains invalid value: Infinity
+    val df3 = sc.parallelize(Seq(
+      (Double.NegativeInfinity, 1.0, Vectors.dense(1.0, 2.0)),
+      (1.0, 1.0, Vectors.dense(1.0, 2.0))
+    )).toDF("label", "weight", "features")
+    val e3 = intercept[Exception](f(df3))
+    assert(e3.getMessage.contains("Labels MUST NOT be Infinity"))
+  }
+
   def testInvalidClassificationLabels(f: DataFrame => Any, numClasses: Option[Int]): Unit = {
     import testImplicits._
 
