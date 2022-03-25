@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode, FalseLiteral}
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.types.{DataType, LongType}
@@ -85,7 +86,8 @@ case class MonotonicallyIncreasingID() extends LeafExpression with Stateful {
       $countTerm++;""", isNull = FalseLiteral)
   }
 
-  override def prettyName: String = "monotonically_increasing_id"
+  override def prettyName: String = getTagValue(
+    FunctionRegistry.FUNC_ALIAS).getOrElse("monotonically_increasing_id")
 
   override def sql: String = s"$prettyName()"
 
