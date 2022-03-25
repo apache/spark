@@ -17,29 +17,15 @@
 
 package org.apache.spark.sql.catalyst.expressions.aggregate
 
-import org.apache.spark.sql.catalyst.expressions.{Expression, ExpressionDescription, ImplicitCastInputTypes, RuntimeReplaceableAggregate}
+import org.apache.spark.sql.catalyst.expressions.{Expression, ImplicitCastInputTypes, RuntimeReplaceableAggregate}
 import org.apache.spark.sql.catalyst.trees.BinaryLike
 import org.apache.spark.sql.types.AbstractDataType
 
 /**
  * Return a percentile value based on a continuous distribution of
- * the input column (specified in ORDER BY clause).
+ * numeric or ansi interval column at the given percentage (specified in ORDER BY clause).
+ * The value of percentage must be between 0.0 and 1.0.
  */
-@ExpressionDescription(
-  usage = """
-    _FUNC_(col, percentage) - Returns a percentile value based on a continuous distribution of
-     numeric or ansi interval column `col` at the given percentage. The value of percentage must be
-     between 0.0 and 1.0.
-  """,
-  examples = """
-    Examples:
-      > SELECT _FUNC_(col, 0.3) FROM VALUES (0), (10) AS tab(col);
-       3.0
-      > SELECT _FUNC_(col, 0.5) FROM VALUES (INTERVAL '0' MONTH), (INTERVAL '10' MONTH) AS tab(col);
-       5.0
-  """,
-  group = "agg_funcs",
-  since = "3.3.0")
 case class PercentileCont(left: Expression, right: Expression)
   extends AggregateFunction
   with RuntimeReplaceableAggregate
