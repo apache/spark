@@ -33,7 +33,7 @@ from pyspark.sql._typing import LiteralType
 from pandas.core.frame import DataFrame as PandasDataFrame
 from pandas.core.series import Series as PandasSeries
 
-import pyarrow  # type: ignore[import]
+import pyarrow
 
 DataFrameLike = PandasDataFrame
 SeriesLike = PandasSeries

@@ -922,14 +922,14 @@ class PlanResolutionSuite extends AnalysisTest {
       val parsed4 = parseAndResolve(sql4)
 
       parsed1 match {
-        case DeleteFromTable(AsDataSourceV2Relation(_), None) =>
+        case DeleteFromTable(AsDataSourceV2Relation(_), Literal.TrueLiteral) =>
         case _ => fail("Expect DeleteFromTable, but got:\n" + parsed1.treeString)
       }
 
       parsed2 match {
         case DeleteFromTable(
           AsDataSourceV2Relation(_),
-          Some(EqualTo(name: UnresolvedAttribute, StringLiteral("Robert")))) =>
+          EqualTo(name: UnresolvedAttribute, StringLiteral("Robert"))) =>
           assert(name.name == "name")
         case _ => fail("Expect DeleteFromTable, but got:\n" + parsed2.treeString)
       }
@@ -937,7 +937,7 @@ class PlanResolutionSuite extends AnalysisTest {
       parsed3 match {
         case DeleteFromTable(
           SubqueryAlias(AliasIdentifier("t", Seq()), AsDataSourceV2Relation(_)),
-          Some(EqualTo(name: UnresolvedAttribute, StringLiteral("Robert")))) =>
+          EqualTo(name: UnresolvedAttribute, StringLiteral("Robert"))) =>
           assert(name.name == "t.name")
         case _ => fail("Expect DeleteFromTable, but got:\n" + parsed3.treeString)
       }
@@ -945,7 +945,7 @@ class PlanResolutionSuite extends AnalysisTest {
       parsed4 match {
         case DeleteFromTable(
             SubqueryAlias(AliasIdentifier("t", Seq()), AsDataSourceV2Relation(_)),
-            Some(InSubquery(values, query))) =>
+            InSubquery(values, query)) =>
           assert(values.size == 1 && values.head.isInstanceOf[UnresolvedAttribute])
           assert(values.head.asInstanceOf[UnresolvedAttribute].name == "t.name")
           query match {
@@ -1750,7 +1750,7 @@ class PlanResolutionSuite extends AnalysisTest {
 
     interceptParseException(parsePlan)(
       "CREATE TABLE my_tab(a: INT COMMENT 'test', b: STRING)",
-      "extraneous input ':'")()
+      "Syntax error at or near ':': extra input ':'")()
   }
 
   test("create hive table - table file format") {

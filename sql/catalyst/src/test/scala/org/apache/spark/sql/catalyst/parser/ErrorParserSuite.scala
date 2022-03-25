@@ -79,21 +79,22 @@ class ErrorParserSuite extends AnalysisTest {
 
   test("no viable input") {
     intercept("select ((r + 1) ", 1, 16, 16,
-      "no viable alternative at input", "----------------^^^")
+      "Syntax error at or near", "----------------^^^")
   }
 
   test("extraneous input") {
-    intercept("select 1 1", 1, 9, 10, "extraneous input '1' expecting", "---------^^^")
-    intercept("select *\nfrom r as q t", 2, 12, 13, "extraneous input", "------------^^^")
+    intercept("select 1 1", 1, 9, 10,
+      "Syntax error at or near '1': extra input '1'", "---------^^^")
+    intercept("select *\nfrom r as q t", 2, 12, 13, "Syntax error at or near", "------------^^^")
   }
 
   test("mismatched input") {
-    intercept("select * from r order by q from t", "PARSE_INPUT_MISMATCHED",
+    intercept("select * from r order by q from t", "PARSE_SYNTAX_ERROR",
       1, 27, 31,
       "Syntax error at or near",
       "---------------------------^^^"
     )
-    intercept("select *\nfrom r\norder by q\nfrom t", "PARSE_INPUT_MISMATCHED",
+    intercept("select *\nfrom r\norder by q\nfrom t", "PARSE_SYNTAX_ERROR",
       4, 0, 4,
       "Syntax error at or near", "^^^")
   }
@@ -107,9 +108,9 @@ class ErrorParserSuite extends AnalysisTest {
 
   test("jargon token substitute to user-facing language") {
     // '<EOF>' -> end of input
-    intercept("select count(*", "PARSE_INPUT_MISMATCHED",
+    intercept("select count(*", "PARSE_SYNTAX_ERROR",
       1, 14, 14, "Syntax error at or near end of input")
-    intercept("select 1 as a from", "PARSE_INPUT_MISMATCHED",
+    intercept("select 1 as a from", "PARSE_SYNTAX_ERROR",
       1, 18, 18, "Syntax error at or near end of input")
   }
 
@@ -120,11 +121,12 @@ class ErrorParserSuite extends AnalysisTest {
   }
 
   test("SPARK-21136: misleading error message due to problematic antlr grammar") {
-    intercept("select * from a left join_ b on a.id = b.id", None, "missing 'JOIN' at 'join_'")
-    intercept("select * from test where test.t is like 'test'", Some("PARSE_INPUT_MISMATCHED"),
-      SparkThrowableHelper.getMessage("PARSE_INPUT_MISMATCHED", Array("'is'")))
-    intercept("SELECT * FROM test WHERE x NOT NULL", Some("PARSE_INPUT_MISMATCHED"),
-      SparkThrowableHelper.getMessage("PARSE_INPUT_MISMATCHED", Array("'NOT'")))
+    intercept("select * from a left join_ b on a.id = b.id", None,
+      "Syntax error at or near 'join_': missing 'JOIN'")
+    intercept("select * from test where test.t is like 'test'", Some("PARSE_SYNTAX_ERROR"),
+      SparkThrowableHelper.getMessage("PARSE_SYNTAX_ERROR", Array("'is'", "")))
+    intercept("SELECT * FROM test WHERE x NOT NULL", Some("PARSE_SYNTAX_ERROR"),
+      SparkThrowableHelper.getMessage("PARSE_SYNTAX_ERROR", Array("'NOT'", "")))
   }
 
   test("hyphen in identifier - DDL tests") {

@@ -217,7 +217,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 
-no viable alternative at input 'select .'(line 1, pos 7)
+Syntax error at or near '.'(line 1, pos 7)
 
 == SQL ==
 select .e3

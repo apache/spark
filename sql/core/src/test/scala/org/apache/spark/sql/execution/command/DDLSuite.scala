@@ -2103,57 +2103,6 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     }
   }
 
-  test("create temporary function with if not exists") {
-    withUserDefinedFunction("func1" -> true) {
-      val sql1 =
-        """
-          |CREATE TEMPORARY FUNCTION IF NOT EXISTS func1 as
-          |'com.matthewrathbone.example.SimpleUDFExample' USING JAR '/path/to/jar1',
-          |JAR '/path/to/jar2'
-        """.stripMargin
-      val e = intercept[AnalysisException] {
-        sql(sql1)
-      }.getMessage
-      assert(e.contains("It is not allowed to define a TEMPORARY function with IF NOT EXISTS"))
-    }
-  }
-
-  test("create function with both if not exists and replace") {
-    withUserDefinedFunction("func1" -> false) {
-      val sql1 =
-        """
-          |CREATE OR REPLACE FUNCTION IF NOT EXISTS func1 as
-          |'com.matthewrathbone.example.SimpleUDFExample' USING JAR '/path/to/jar1',
-          |JAR '/path/to/jar2'
-        """.stripMargin
-      val e = intercept[AnalysisException] {
-        sql(sql1)
-      }.getMessage
-      assert(e.contains("CREATE FUNCTION with both IF NOT EXISTS and REPLACE is not allowed"))
-    }
-  }
-
-  test("create temporary function by specifying a database") {
-    val dbName = "mydb"
-    withDatabase(dbName) {
-      sql(s"CREATE DATABASE $dbName")
-      sql(s"USE $dbName")
-      withUserDefinedFunction("func1" -> true) {
-        val sql1 =
-          s"""
-             |CREATE TEMPORARY FUNCTION $dbName.func1 as
-             |'com.matthewrathbone.example.SimpleUDFExample' USING JAR '/path/to/jar1',
-             |JAR '/path/to/jar2'
-            """.stripMargin
-        val e = intercept[AnalysisException] {
-          sql(sql1)
-        }.getMessage
-        assert(e.contains(s"Specifying a database in CREATE TEMPORARY FUNCTION " +
-          s"is not allowed: '$dbName'"))
-      }
-    }
-  }
-
   Seq(true, false).foreach { caseSensitive =>
     test(s"alter table add columns with existing column name - caseSensitive $caseSensitive") {
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> s"$caseSensitive") {
