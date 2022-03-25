@@ -62,8 +62,6 @@ class RuntimeConfig private[sql](sqlConf: SQLConf = new SQLConf) {
 
   /**
    * Sets the given Spark runtime configuration property.
-   *
-   * @since 3.4.0
    */
   protected[sql] def set[T](entry: ConfigEntry[T], value: T): Unit = {
     requireNonStaticConf(entry.key)
