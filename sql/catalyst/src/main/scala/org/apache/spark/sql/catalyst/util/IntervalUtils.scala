@@ -354,9 +354,7 @@ object IntervalUtils {
           val sign = finalSign(firstSign, secondSign)
           unit.toUpperCase(Locale.ROOT) match {
             case "DAY" if suffix == null && value.length <= 9 && checkTargetType(DT.DAY, DT.DAY) =>
-              val days = toLongWithRange(dayStr, value, 0, MAX_DAY)
-              // will not overflow, because of checked the range
-              sign * days * MICROS_PER_DAY
+              toDTInterval(value, "0", "0", "0", sign)
             case "HOUR" if suffix == null && value.length <= 10
                 && checkTargetType(DT.HOUR, DT.HOUR) =>
               val hours = toLongWithRange(hourStr, value, 0, MAX_HOUR)
