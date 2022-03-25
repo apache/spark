@@ -155,7 +155,7 @@ class ExecutionPage(parent: SQLTab) extends WebUIPage("execution") with Logging 
   }
 
   private def modifiedConfigs(modifiedConfigs: Map[String, String]): Seq[Node] = {
-    if (modifiedConfigs.isEmpty) return Nil
+    if (Option(modifiedConfigs).exists(_.isEmpty)) return Nil
 
     val configs = UIUtils.listingTable(
       propertyHeader,
@@ -179,7 +179,7 @@ class ExecutionPage(parent: SQLTab) extends WebUIPage("execution") with Logging 
 
   private def modifiedPandasOnSparkConfigs(
       modifiedPandasOnSparkConfigs: Map[String, String]): Seq[Node] = {
-    if (modifiedPandasOnSparkConfigs.isEmpty) return Nil
+    if (Option(modifiedPandasOnSparkConfigs).exists(_.isEmpty)) return Nil
 
     val modifiedOptions = modifiedPandasOnSparkConfigs.toSeq.map { case (k, v) =>
       // Remove prefix.
