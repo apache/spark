@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution
 import java.util.Locale
 
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{execution, Strategy}
+import org.apache.spark.sql.{execution, AnalysisException, Strategy}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.RowEncoder
 import org.apache.spark.sql.catalyst.expressions._
@@ -266,11 +266,15 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
             }
         }
 
-        createBroadcastHashJoin(true)
-          .orElse { if (hintToSortMergeJoin(hint)) createSortMergeJoin() else None }
-          .orElse(createShuffleHashJoin(true))
-          .orElse { if (hintToShuffleReplicateNL(hint)) createCartesianProduct() else None }
-          .getOrElse(createJoinWithoutHint())
+        if (hint.isEmpty) {
+          createJoinWithoutHint()
+        } else {
+          createBroadcastHashJoin(true)
+            .orElse { if (hintToSortMergeJoin(hint)) createSortMergeJoin() else None }
+            .orElse(createShuffleHashJoin(true))
+            .orElse { if (hintToShuffleReplicateNL(hint)) createCartesianProduct() else None }
+            .getOrElse(createJoinWithoutHint())
+        }
 
       case j @ ExtractSingleColumnNullAwareAntiJoin(leftKeys, rightKeys) =>
         Seq(joins.BroadcastHashJoinExec(leftKeys, rightKeys, LeftAnti, BuildRight,
@@ -339,10 +343,13 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
             }
         }
 
-        createBroadcastNLJoin(hintToBroadcastLeft(hint), hintToBroadcastRight(hint))
-          .orElse { if (hintToShuffleReplicateNL(hint)) createCartesianProduct() else None }
-          .getOrElse(createJoinWithoutHint())
-
+        if (hint.isEmpty) {
+          createJoinWithoutHint()
+        } else {
+          createBroadcastNLJoin(hintToBroadcastLeft(hint), hintToBroadcastRight(hint))
+            .orElse { if (hintToShuffleReplicateNL(hint)) createCartesianProduct() else None }
+            .getOrElse(createJoinWithoutHint())
+        }
 
       // --- Cases where this strategy does not apply ---------------------------------------------
       case _ => Nil
@@ -366,7 +373,8 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         namedGroupingExpressions, aggregateExpressions, rewrittenResultExpressions, child) =>
 
         if (aggregateExpressions.exists(PythonUDF.isGroupedAggPandasUDF)) {
-          throw QueryCompilationErrors.groupAggPandasUDFUnsupportedByStreamingAggError()
+          throw new AnalysisException(
+            "Streaming aggregation doesn't support group aggregate pandas UDF")
         }
 
         val sessionWindowOption = namedGroupingExpressions.find { p =>
@@ -433,7 +441,10 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
 
       /** Ensures that this plan does not have a streaming aggregate in it. */
       def hasNoStreamingAgg: Boolean = {
-        plan.collectFirst { case a: Aggregate if a.isStreaming => a }.isEmpty
+        !plan.exists {
+          case a: Aggregate => a.isStreaming
+          case _ => false
+        }
       }
 
       // The following cases of limits on a streaming plan has to be executed with a stateful

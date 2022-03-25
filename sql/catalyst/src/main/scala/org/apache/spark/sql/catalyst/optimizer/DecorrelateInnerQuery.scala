@@ -87,25 +87,35 @@ object DecorrelateInnerQuery extends PredicateHelper {
    * leaf node and will not be found here.
    */
   private def containsAttribute(expression: Expression): Boolean = {
-    expression.find(_.isInstanceOf[Attribute]).isDefined
+    expression.exists(_.isInstanceOf[Attribute])
   }
 
   /**
    * Check if an expression can be pulled up over an [[Aggregate]] without changing the
    * semantics of the plan. The expression must be an equality predicate that guarantees
-   * one-to-one mapping between inner and outer attributes. More specifically, one side
-   * of the predicate must be an attribute and another side of the predicate must not
-   * contain other attributes from the inner query.
+   * one-to-one mapping between inner and outer attributes.
    * For example:
    *   (a = outer(c)) -> true
    *   (a > outer(c)) -> false
    *   (a + b = outer(c)) -> false
    *   (a = outer(c) - b) -> false
    */
-  private def canPullUpOverAgg(expression: Expression): Boolean = expression match {
-    case Equality(_: Attribute, b) => !containsAttribute(b)
-    case Equality(a, _: Attribute) => !containsAttribute(a)
-    case o => !containsAttribute(o)
+  def canPullUpOverAgg(expression: Expression): Boolean = {
+    def isSupported(e: Expression): Boolean = e match {
+      case _: Attribute => true
+      // Allow Cast expressions that guarantee 1:1 mapping.
+      case Cast(a: Attribute, dataType, _, _) => Cast.canUpCast(a.dataType, dataType)
+      case _ => false
+    }
+
+    // Only allow equality condition with one side being an attribute or an expression that
+    // guarantees 1:1 mapping and another side being an expression without attributes from
+    // the inner query.
+    expression match {
+      case Equality(a, b) if isSupported(a) => !containsAttribute(b)
+      case Equality(a, b) if isSupported(b) => !containsAttribute(a)
+      case o => !containsAttribute(o)
+    }
   }
 
   /**
@@ -258,7 +268,7 @@ object DecorrelateInnerQuery extends PredicateHelper {
           // The decorrelation framework adds domain inner joins by traversing down the plan tree
           // recursively until it reaches a node that is not correlated with the outer query.
           // So the child node of a domain inner join shouldn't contain another domain join.
-          assert(child.find(_.isInstanceOf[DomainJoin]).isEmpty,
+          assert(!child.exists(_.isInstanceOf[DomainJoin]),
             s"Child of a domain inner join shouldn't contain another domain join.\n$child")
           child
         case o =>
@@ -598,6 +608,11 @@ object DecorrelateInnerQuery extends PredicateHelper {
             } else {
               (newAggregate, joinCond, outerReferenceMap)
             }
+
+          case d: Distinct =>
+            val (newChild, joinCond, outerReferenceMap) =
+              decorrelate(d.child, parentOuterReferences, aggregated = true)
+            (d.copy(child = newChild), joinCond, outerReferenceMap)
 
           case j @ Join(left, right, joinType, condition, _) =>
             val outerReferences = collectOuterReferences(j.expressions)

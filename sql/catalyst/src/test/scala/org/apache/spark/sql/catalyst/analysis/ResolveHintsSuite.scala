@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import org.apache.log4j.Level
+import org.apache.logging.log4j.Level
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.dsl.expressions._
@@ -236,7 +236,7 @@ class ResolveHintsSuite extends AnalysisTest {
     }
     assert(logAppender.loggingEvents.exists(
       e => e.getLevel == Level.WARN &&
-        e.getRenderedMessage.contains("Unrecognized hint: unknown_hint")))
+        e.getMessage.getFormattedMessage.contains("Unrecognized hint: unknown_hint")))
   }
 
   test("SPARK-30003: Do not throw stack overflow exception in non-root unknown hint resolution") {
@@ -299,10 +299,18 @@ class ResolveHintsSuite extends AnalysisTest {
     }
   }
 
-  test("SPARK-35786: Support optimize repartition by expression in AQE") {
+  test("SPARK-35786: Support optimize rebalance by expression in AQE") {
     checkAnalysisWithoutViewWrapper(
       UnresolvedHint("REBALANCE", Seq(UnresolvedAttribute("a")), table("TaBlE")),
       RebalancePartitions(Seq(AttributeReference("a", IntegerType)()), testRelation))
+
+    checkAnalysisWithoutViewWrapper(
+      UnresolvedHint("REBALANCE", Seq(1, UnresolvedAttribute("a")), table("TaBlE")),
+      RebalancePartitions(Seq(AttributeReference("a", IntegerType)()), testRelation, Some(1)))
+
+    checkAnalysisWithoutViewWrapper(
+      UnresolvedHint("REBALANCE", Seq(Literal(1), UnresolvedAttribute("a")), table("TaBlE")),
+      RebalancePartitions(Seq(AttributeReference("a", IntegerType)()), testRelation, Some(1)))
 
     checkAnalysisWithoutViewWrapper(
       UnresolvedHint("REBALANCE", Seq.empty, table("TaBlE")),
@@ -314,12 +322,41 @@ class ResolveHintsSuite extends AnalysisTest {
         testRelation)
 
       checkAnalysisWithoutViewWrapper(
+        UnresolvedHint("REBALANCE", Seq(1, UnresolvedAttribute("a")), table("TaBlE")),
+        testRelation)
+
+      checkAnalysisWithoutViewWrapper(
+        UnresolvedHint("REBALANCE", Seq(Literal(1), UnresolvedAttribute("a")), table("TaBlE")),
+        testRelation)
+
+      checkAnalysisWithoutViewWrapper(
         UnresolvedHint("REBALANCE", Seq.empty, table("TaBlE")),
+        testRelation)
+
+      checkAnalysisWithoutViewWrapper(
+        UnresolvedHint("REBALANCE", 1 :: Nil, table("TaBlE")),
         testRelation)
     }
 
     assertAnalysisError(
-      UnresolvedHint("REBALANCE", Seq(Literal(1)), table("TaBlE")),
+      UnresolvedHint("REBALANCE", Seq(Literal(1), Literal(1)), table("TaBlE")),
       Seq("Hint parameter should include columns"))
+
+    assertAnalysisError(
+      UnresolvedHint("REBALANCE", Seq(1, Literal(1)), table("TaBlE")),
+      Seq("Hint parameter should include columns"))
+  }
+
+  test("SPARK-38410: Support specify initial partition number for rebalance") {
+    withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "3") {
+      Seq(
+        Nil -> 3,
+        Seq(1) -> 1,
+        Seq(UnresolvedAttribute("a")) -> 3,
+        Seq(1, UnresolvedAttribute("a")) -> 1).foreach { case (param, initialNumPartitions) =>
+        assert(UnresolvedHint("REBALANCE", param, testRelation).analyze
+          .asInstanceOf[RebalancePartitions].partitioning.numPartitions == initialNumPartitions)
+      }
+    }
   }
 }

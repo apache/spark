@@ -247,6 +247,16 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product with Tre
   }
 
   /**
+   * Test whether there is [[TreeNode]] satisfies the conditions specified in `f`.
+   * The condition is recursively applied to this node and all of its children (pre-order).
+   */
+  def exists(f: BaseType => Boolean): Boolean = if (f(this)) {
+    true
+  } else {
+    children.exists(_.exists(f))
+  }
+
+  /**
    * Runs the given function on this node and then recursively on [[children]].
    * @param f the function to be applied to each node in the tree.
    */
@@ -341,10 +351,9 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product with Tre
   // This is a temporary solution, we will change the type of children to IndexedSeq in a
   // followup PR
   private def asIndexedSeq(seq: Seq[BaseType]): IndexedSeq[BaseType] = {
-    if (seq.isInstanceOf[IndexedSeq[BaseType]]) {
-      seq.asInstanceOf[IndexedSeq[BaseType]]
-    } else {
-      seq.toIndexedSeq
+    seq match {
+      case types: IndexedSeq[BaseType] => types
+      case other => other.toIndexedSeq
     }
   }
 
@@ -600,86 +609,6 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product with Tre
   }
 
   /**
-   * Returns a copy of this node where `f` has been applied to all the nodes in `children`.
-   * @param f The transform function to be applied on applicable `TreeNode` elements.
-   * @param forceCopy Whether to force making a copy of the nodes even if no child has been changed.
-   */
-  private def mapChildren(
-      f: BaseType => BaseType,
-      forceCopy: Boolean): BaseType = {
-    var changed = false
-
-    def mapChild(child: Any): Any = child match {
-      case arg: TreeNode[_] if containsChild(arg) =>
-        val newChild = f(arg.asInstanceOf[BaseType])
-        if (forceCopy || !(newChild fastEquals arg)) {
-          changed = true
-          newChild
-        } else {
-          arg
-        }
-      case tuple @ (arg1: TreeNode[_], arg2: TreeNode[_]) =>
-        val newChild1 = if (containsChild(arg1)) {
-          f(arg1.asInstanceOf[BaseType])
-        } else {
-          arg1.asInstanceOf[BaseType]
-        }
-
-        val newChild2 = if (containsChild(arg2)) {
-          f(arg2.asInstanceOf[BaseType])
-        } else {
-          arg2.asInstanceOf[BaseType]
-        }
-
-        if (forceCopy || !(newChild1 fastEquals arg1) || !(newChild2 fastEquals arg2)) {
-          changed = true
-          (newChild1, newChild2)
-        } else {
-          tuple
-        }
-      case other => other
-    }
-
-    val newArgs = mapProductIterator {
-      case arg: TreeNode[_] if containsChild(arg) =>
-        val newChild = f(arg.asInstanceOf[BaseType])
-        if (forceCopy || !(newChild fastEquals arg)) {
-          changed = true
-          newChild
-        } else {
-          arg
-        }
-      case Some(arg: TreeNode[_]) if containsChild(arg) =>
-        val newChild = f(arg.asInstanceOf[BaseType])
-        if (forceCopy || !(newChild fastEquals arg)) {
-          changed = true
-          Some(newChild)
-        } else {
-          Some(arg)
-        }
-      // `map.mapValues().view.force` return `Map` in Scala 2.12 but return `IndexedSeq` in Scala
-      // 2.13, call `toMap` method manually to compatible with Scala 2.12 and Scala 2.13
-      case m: Map[_, _] => m.mapValues {
-        case arg: TreeNode[_] if containsChild(arg) =>
-          val newChild = f(arg.asInstanceOf[BaseType])
-          if (forceCopy || !(newChild fastEquals arg)) {
-            changed = true
-            newChild
-          } else {
-            arg
-          }
-        case other => other
-      }.view.force.toMap // `mapValues` is lazy and we need to force it to materialize
-      case d: DataType => d // Avoid unpacking Structs
-      case args: Stream[_] => args.map(mapChild).force // Force materialization on stream
-      case args: Iterable[_] => args.map(mapChild)
-      case nonChild: AnyRef => nonChild
-      case null => null
-    }
-    if (forceCopy || changed) makeCopy(newArgs, forceCopy) else this
-  }
-
-  /**
    * Args to the constructor that should be copied, but not transformed.
    * These are appended to the transformed args automatically by makeCopy
    * @return
@@ -755,7 +684,44 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product with Tre
   }
 
   override def clone(): BaseType = {
-    mapChildren(_.clone(), forceCopy = true)
+    def mapChild(child: Any): Any = child match {
+      case arg: TreeNode[_] if containsChild(arg) =>
+        arg.asInstanceOf[BaseType].clone()
+      case (arg1: TreeNode[_], arg2: TreeNode[_]) =>
+        val newChild1 = if (containsChild(arg1)) {
+          arg1.asInstanceOf[BaseType].clone()
+        } else {
+          arg1.asInstanceOf[BaseType]
+        }
+
+        val newChild2 = if (containsChild(arg2)) {
+          arg2.asInstanceOf[BaseType].clone()
+        } else {
+          arg2.asInstanceOf[BaseType]
+        }
+        (newChild1, newChild2)
+      case other => other
+    }
+
+    val newArgs = mapProductIterator {
+      case arg: TreeNode[_] if containsChild(arg) =>
+        arg.asInstanceOf[BaseType].clone()
+      case Some(arg: TreeNode[_]) if containsChild(arg) =>
+        Some(arg.asInstanceOf[BaseType].clone())
+      // `map.mapValues().view.force` return `Map` in Scala 2.12 but return `IndexedSeq` in Scala
+      // 2.13, call `toMap` method manually to compatible with Scala 2.12 and Scala 2.13
+      case m: Map[_, _] => m.mapValues {
+        case arg: TreeNode[_] if containsChild(arg) =>
+          arg.asInstanceOf[BaseType].clone()
+        case other => other
+      }.view.force.toMap // `mapValues` is lazy and we need to force it to materialize
+      case d: DataType => d // Avoid unpacking Structs
+      case args: Stream[_] => args.map(mapChild).force // Force materialization on stream
+      case args: Iterable[_] => args.map(mapChild)
+      case nonChild: AnyRef => nonChild
+      case null => null
+    }
+    makeCopy(newArgs, allowEmptyArgs = true)
   }
 
   private def simpleClassName: String = Utils.getSimpleName(this.getClass)
@@ -788,7 +754,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product with Tre
       truncatedString(seq.map(formatArg(_, maxFields)), "[", ", ", "]", maxFields)
     case set: Set[_] =>
       // Sort elements for deterministic behaviours
-      truncatedString(set.toSeq.map(formatArg(_, maxFields).sorted), "{", ", ", "}", maxFields)
+      truncatedString(set.toSeq.map(formatArg(_, maxFields)).sorted, "{", ", ", "}", maxFields)
     case array: Array[_] =>
       truncatedString(array.map(formatArg(_, maxFields)), "[", ", ", "]", maxFields)
     case other =>
@@ -803,15 +769,9 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product with Tre
     case tn: TreeNode[_] => tn.simpleString(maxFields) :: Nil
     case seq: Seq[Any] if seq.toSet.subsetOf(allChildren.asInstanceOf[Set[Any]]) => Nil
     case iter: Iterable[_] if iter.isEmpty => Nil
-    case seq: Seq[_] =>
-      truncatedString(seq.map(formatArg(_, maxFields)), "[", ", ", "]", maxFields) :: Nil
-    case set: Set[_] =>
-      // Sort elements for deterministic behaviours
-      val sortedSeq = set.toSeq.map(formatArg(_, maxFields).sorted)
-      truncatedString(sortedSeq, "{", ", ", "}", maxFields) :: Nil
     case array: Array[_] if array.isEmpty => Nil
-    case array: Array[_] =>
-      truncatedString(array.map(formatArg(_, maxFields)), "[", ", ", "]", maxFields) :: Nil
+    case xs @ (_: Seq[_] | _: Set[_] | _: Array[_]) =>
+      formatArg(xs, maxFields) :: Nil
     case null => Nil
     case None => Nil
     case Some(null) => Nil

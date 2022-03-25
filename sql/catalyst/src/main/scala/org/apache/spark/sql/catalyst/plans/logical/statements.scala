@@ -18,12 +18,10 @@
 package org.apache.spark.sql.catalyst.plans.logical
 
 import org.apache.spark.sql.catalyst.analysis.{FieldName, FieldPosition}
-import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.trees.{LeafLike, UnaryLike}
-import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.types.{DataType, StructType}
+import org.apache.spark.sql.types.DataType
 
 /**
  * A logical plan node that contains exactly what was parsed from SQL.
@@ -122,48 +120,6 @@ object SerdeInfo {
     }
   }
 }
-
-/**
- * A CREATE TABLE AS SELECT command, as parsed from SQL.
- */
-case class CreateTableAsSelectStatement(
-    tableName: Seq[String],
-    asSelect: LogicalPlan,
-    partitioning: Seq[Transform],
-    bucketSpec: Option[BucketSpec],
-    properties: Map[String, String],
-    provider: Option[String],
-    options: Map[String, String],
-    location: Option[String],
-    comment: Option[String],
-    writeOptions: Map[String, String],
-    serde: Option[SerdeInfo],
-    external: Boolean,
-    ifNotExists: Boolean) extends UnaryParsedStatement {
-
-  override def child: LogicalPlan = asSelect
-  override protected def withNewChildInternal(newChild: LogicalPlan): CreateTableAsSelectStatement =
-    copy(asSelect = newChild)
-}
-
-/**
- * A REPLACE TABLE command, as parsed from SQL.
- *
- * If the table exists prior to running this command, executing this statement
- * will replace the table's metadata and clear the underlying rows from the table.
- */
-case class ReplaceTableStatement(
-    tableName: Seq[String],
-    tableSchema: StructType,
-    partitioning: Seq[Transform],
-    bucketSpec: Option[BucketSpec],
-    properties: Map[String, String],
-    provider: Option[String],
-    options: Map[String, String],
-    location: Option[String],
-    comment: Option[String],
-    serde: Option[SerdeInfo],
-    orCreate: Boolean) extends LeafParsedStatement
 
 /**
  * Column data as parsed by ALTER TABLE ... (ADD|REPLACE) COLUMNS.

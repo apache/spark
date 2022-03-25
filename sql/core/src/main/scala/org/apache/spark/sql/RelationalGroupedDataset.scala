@@ -21,6 +21,7 @@ import java.util.Locale
 
 import scala.collection.JavaConverters._
 
+import org.apache.spark.SparkRuntimeException
 import org.apache.spark.annotation.Stable
 import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.broadcast.Broadcast
@@ -452,7 +453,13 @@ class RelationalGroupedDataset protected[sql](
       case RelationalGroupedDataset.GroupByType =>
         val valueExprs = values.map(_ match {
           case c: Column => c.expr
-          case v => Literal.apply(v)
+          case v =>
+            try {
+              Literal.apply(v)
+            } catch {
+              case _: SparkRuntimeException =>
+                throw QueryExecutionErrors.pivotColumnUnsupportedError(v, pivotColumn.expr.dataType)
+            }
         })
         new RelationalGroupedDataset(
           df,

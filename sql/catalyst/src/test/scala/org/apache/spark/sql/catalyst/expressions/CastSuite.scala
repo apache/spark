@@ -27,7 +27,6 @@ import org.apache.spark.sql.catalyst.analysis.TypeCoercionSuite
 import org.apache.spark.sql.catalyst.expressions.aggregate.{CollectList, CollectSet}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
-import org.apache.spark.sql.catalyst.util.DateTimeUtils._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.types.DayTimeIntervalType.{DAY, HOUR, MINUTE, SECOND}
@@ -40,6 +39,15 @@ import org.apache.spark.unsafe.types.UTF8String
  *       in `CastSuiteBase` instead of this file to ensure the test coverage.
  */
 class CastSuite extends CastSuiteBase {
+  override def beforeAll(): Unit = {
+    super.beforeAll()
+    SQLConf.get.setConf(SQLConf.ANSI_ENABLED, false)
+  }
+
+  override def afterAll(): Unit = {
+    super.afterAll()
+    SQLConf.get.unsetConf(SQLConf.ANSI_ENABLED)
+  }
 
   override def cast(v: Any, targetType: DataType, timeZoneId: Option[String] = None): CastBase = {
     v match {
@@ -234,6 +242,11 @@ class CastSuite extends CastSuiteBase {
       assert(ret.resolved)
       checkEvaluation(ret, Seq(null, true, false))
     }
+
+    {
+      val ret = cast(array_notNull, ArrayType(BooleanType, containsNull = false))
+      assert(ret.resolved === false)
+    }
   }
 
   test("cast from map II") {
@@ -254,6 +267,21 @@ class CastSuite extends CastSuiteBase {
       val ret = cast(map_notNull, MapType(StringType, BooleanType, valueContainsNull = true))
       assert(ret.resolved)
       checkEvaluation(ret, Map("a" -> null, "b" -> true, "c" -> false))
+    }
+
+    {
+      val ret = cast(map, MapType(IntegerType, StringType, valueContainsNull = true))
+      assert(ret.resolved === false)
+    }
+
+    {
+      val ret = cast(map_notNull, MapType(StringType, BooleanType, valueContainsNull = false))
+      assert(ret.resolved === false)
+    }
+
+    {
+      val ret = cast(map_notNull, MapType(IntegerType, StringType, valueContainsNull = true))
+      assert(ret.resolved === false)
     }
   }
 
@@ -305,6 +333,41 @@ class CastSuite extends CastSuiteBase {
       assert(ret.resolved)
       checkEvaluation(ret, InternalRow(null, true, false))
     }
+
+    {
+      val ret = cast(struct_notNull, StructType(Seq(
+        StructField("a", BooleanType, nullable = true),
+        StructField("b", BooleanType, nullable = true),
+        StructField("c", BooleanType, nullable = false))))
+      assert(ret.resolved === false)
+    }
+  }
+
+  test("complex casting") {
+    val complex = Literal.create(
+      Row(
+        Seq("123", "true", "f"),
+        Map("a" -> "123", "b" -> "true", "c" -> "f"),
+        Row(0)),
+      StructType(Seq(
+        StructField("a",
+          ArrayType(StringType, containsNull = false), nullable = true),
+        StructField("m",
+          MapType(StringType, StringType, valueContainsNull = false), nullable = true),
+        StructField("s",
+          StructType(Seq(
+            StructField("i", IntegerType, nullable = true)))))))
+
+    val ret = cast(complex, StructType(Seq(
+      StructField("a",
+        ArrayType(IntegerType, containsNull = true), nullable = true),
+      StructField("m",
+        MapType(StringType, BooleanType, valueContainsNull = false), nullable = true),
+      StructField("s",
+        StructType(Seq(
+          StructField("l", LongType, nullable = true)))))))
+
+    assert(ret.resolved === false)
   }
 
   test("SPARK-31227: Non-nullable null type should not coerce to nullable type") {
@@ -455,36 +518,7 @@ class CastSuite extends CastSuiteBase {
       "1970-01-01 00:00:00")
   }
 
-  test("cast from timestamp") {
-    val millis = 15 * 1000 + 3
-    val seconds = millis * 1000 + 3
-    val ts = new Timestamp(millis)
-    val tss = new Timestamp(seconds)
-    checkEvaluation(cast(ts, ShortType), 15.toShort)
-    checkEvaluation(cast(ts, IntegerType), 15)
-    checkEvaluation(cast(ts, LongType), 15.toLong)
-    checkEvaluation(cast(ts, FloatType), 15.003f)
-    checkEvaluation(cast(ts, DoubleType), 15.003)
-
-    checkEvaluation(cast(cast(tss, ShortType), TimestampType),
-      fromJavaTimestamp(ts) * MILLIS_PER_SECOND)
-    checkEvaluation(cast(cast(tss, IntegerType), TimestampType),
-      fromJavaTimestamp(ts) * MILLIS_PER_SECOND)
-    checkEvaluation(cast(cast(tss, LongType), TimestampType),
-      fromJavaTimestamp(ts) * MILLIS_PER_SECOND)
-    checkEvaluation(
-      cast(cast(millis.toFloat / MILLIS_PER_SECOND, TimestampType), FloatType),
-      millis.toFloat / MILLIS_PER_SECOND)
-    checkEvaluation(
-      cast(cast(millis.toDouble / MILLIS_PER_SECOND, TimestampType), DoubleType),
-      millis.toDouble / MILLIS_PER_SECOND)
-    checkEvaluation(
-      cast(cast(Decimal(1), TimestampType), DecimalType.SYSTEM_DEFAULT),
-      Decimal(1))
-
-    // A test for higher precision than millis
-    checkEvaluation(cast(cast(0.000001, TimestampType), DoubleType), 0.000001)
-
+  test("cast from timestamp II") {
     checkEvaluation(cast(Double.NaN, TimestampType), null)
     checkEvaluation(cast(1.0 / 0.0, TimestampType), null)
     checkEvaluation(cast(Float.NaN, TimestampType), null)

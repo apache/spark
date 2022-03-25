@@ -33,3 +33,12 @@ else
 fi
 
 pip install plotly "pyspark[sql,ml,mllib,pandas_on_spark]$SPECIFIER$VERSION"
+
+# Set 'PYARROW_IGNORE_TIMEZONE' to surpress warnings from PyArrow.
+echo "export PYARROW_IGNORE_TIMEZONE=1" >> ~/.profile
+
+# Surpress warnings from Spark jobs, and UI progress bar.
+mkdir -p ~/.ipython/profile_default/startup
+echo """from pyspark.sql import SparkSession
+SparkSession.builder.config('spark.ui.showConsoleProgress', 'false').getOrCreate().sparkContext.setLogLevel('FATAL')
+""" > ~/.ipython/profile_default/startup/00-init.py

@@ -17,7 +17,7 @@
 import sys
 from typing import cast, overload, Dict, Iterable, List, Optional, Tuple, TYPE_CHECKING, Union
 
-from py4j.java_gateway import JavaClass, JavaObject  # type: ignore[import]
+from py4j.java_gateway import JavaClass, JavaObject
 
 from pyspark import RDD, since
 from pyspark.sql.column import _to_seq, _to_java_column, Column
@@ -27,7 +27,7 @@ from pyspark.sql.utils import to_str
 
 if TYPE_CHECKING:
     from pyspark.sql._typing import OptionalPrimitiveType, ColumnOrName
-    from pyspark.sql.context import SQLContext
+    from pyspark.sql.session import SparkSession
     from pyspark.sql.dataframe import DataFrame
     from pyspark.sql.streaming import StreamingQuery
 
@@ -37,7 +37,7 @@ PathOrPaths = Union[str, List[str]]
 TupleOrListOfString = Union[List[str], Tuple[str, ...]]
 
 
-class OptionUtils(object):
+class OptionUtils:
     def _set_opts(
         self,
         schema: Optional[Union[StructType, str]] = None,
@@ -62,8 +62,8 @@ class DataFrameReader(OptionUtils):
     .. versionadded:: 1.4
     """
 
-    def __init__(self, spark: "SQLContext"):
-        self._jreader = spark._ssql_ctx.read()  # type: ignore[attr-defined]
+    def __init__(self, spark: "SparkSession"):
+        self._jreader = spark._jsparkSession.read()
         self._spark = spark
 
     def _df(self, jdf: JavaObject) -> "DataFrame":
@@ -110,11 +110,9 @@ class DataFrameReader(OptionUtils):
         """
         from pyspark.sql import SparkSession
 
-        spark = SparkSession.builder.getOrCreate()
+        spark = SparkSession._getActiveSessionOrCreate()
         if isinstance(schema, StructType):
-            jschema = spark._jsparkSession.parseDataType(
-                schema.json()
-            )  # type: ignore[attr-defined]
+            jschema = spark._jsparkSession.parseDataType(schema.json())
             self._jreader = self._jreader.schema(jschema)
         elif isinstance(schema, str):
             self._jreader = self._jreader.schema(schema)
@@ -180,17 +178,14 @@ class DataFrameReader(OptionUtils):
         elif path is not None:
             if type(path) != list:
                 path = [path]  # type: ignore[list-item]
-            return self._df(
-                self._jreader.load(
-                    self._spark._sc._jvm.PythonUtils.toSeq(path)  # type: ignore[attr-defined]
-                )
-            )
+            assert self._spark._sc._jvm is not None
+            return self._df(self._jreader.load(self._spark._sc._jvm.PythonUtils.toSeq(path)))
         else:
             return self._df(self._jreader.load())
 
     def json(
         self,
-        path: Union[str, List[str], "RDD[str]"],
+        path: Union[str, List[str], RDD[str]],
         schema: Optional[Union[StructType, str]] = None,
         primitivesAsString: Optional[Union[bool, str]] = None,
         prefersDecimal: Optional[Union[bool, str]] = None,
@@ -285,11 +280,8 @@ class DataFrameReader(OptionUtils):
         if isinstance(path, str):
             path = [path]
         if type(path) == list:
-            return self._df(
-                self._jreader.json(
-                    self._spark._sc._jvm.PythonUtils.toSeq(path)  # type: ignore[attr-defined]
-                )
-            )
+            assert self._spark._sc._jvm is not None
+            return self._df(self._jreader.json(self._spark._sc._jvm.PythonUtils.toSeq(path)))
         elif isinstance(path, RDD):
 
             def func(iterator: Iterable) -> Iterable:
@@ -302,7 +294,8 @@ class DataFrameReader(OptionUtils):
 
             keyed = path.mapPartitions(func)
             keyed._bypass_serializer = True  # type: ignore[attr-defined]
-            jrdd = keyed._jrdd.map(self._spark._jvm.BytesToString())  # type: ignore[attr-defined]
+            assert self._spark._jvm is not None
+            jrdd = keyed._jrdd.map(self._spark._jvm.BytesToString())
             return self._df(self._jreader.json(jrdd))
         else:
             raise TypeError("path can be only string, list or RDD")
@@ -424,11 +417,8 @@ class DataFrameReader(OptionUtils):
 
         if isinstance(paths, str):
             paths = [paths]
-        return self._df(
-            self._jreader.text(
-                self._spark._sc._jvm.PythonUtils.toSeq(paths)  # type: ignore[attr-defined]
-            )
-        )
+        assert self._spark._sc._jvm is not None
+        return self._df(self._jreader.text(self._spark._sc._jvm.PythonUtils.toSeq(paths)))
 
     def csv(
         self,
@@ -541,11 +531,8 @@ class DataFrameReader(OptionUtils):
         if isinstance(path, str):
             path = [path]
         if type(path) == list:
-            return self._df(
-                self._jreader.csv(
-                    self._spark._sc._jvm.PythonUtils.toSeq(path)  # type: ignore[attr-defined]
-                )
-            )
+            assert self._spark._sc._jvm is not None
+            return self._df(self._jreader.csv(self._spark._sc._jvm.PythonUtils.toSeq(path)))
         elif isinstance(path, RDD):
 
             def func(iterator):
@@ -563,7 +550,7 @@ class DataFrameReader(OptionUtils):
             # There aren't any jvm api for creating a dataframe from rdd storing csv.
             # We can do it through creating a jvm dataset firstly and using the jvm api
             # for creating a dataframe from dataset storing csv.
-            jdataset = self._spark._ssql_ctx.createDataset(
+            jdataset = self._spark._jsparkSession.createDataset(
                 jrdd.rdd(), self._spark._jvm.Encoders.STRING()
             )
             return self._df(self._jreader.csv(jdataset))
@@ -703,9 +690,10 @@ class DataFrameReader(OptionUtils):
         """
         if properties is None:
             properties = dict()
+        assert self._spark._sc._gateway is not None
         jprop = JavaClass(
             "java.util.Properties",
-            self._spark._sc._gateway._gateway_client,  # type: ignore[attr-defined]
+            self._spark._sc._gateway._gateway_client,
         )()
         for k in properties:
             jprop.setProperty(k, properties[k])
@@ -721,7 +709,8 @@ class DataFrameReader(OptionUtils):
                 )
             )
         if predicates is not None:
-            gateway = self._spark._sc._gateway  # type: ignore[attr-defined]
+            gateway = self._spark._sc._gateway
+            assert gateway is not None
             jpredicates = utils.toJArray(gateway, gateway.jvm.java.lang.String, predicates)
             return self._df(self._jreader.jdbc(url, table, jpredicates, jprop))
         return self._df(self._jreader.jdbc(url, table, jprop))
@@ -738,8 +727,8 @@ class DataFrameWriter(OptionUtils):
 
     def __init__(self, df: "DataFrame"):
         self._df = df
-        self._spark = df.sql_ctx
-        self._jwrite = df._jdf.write()  # type: ignore[operator]
+        self._spark = df.sparkSession
+        self._jwrite = df._jdf.write()
 
     def _sq(self, jsq: JavaObject) -> "StreamingQuery":
         from pyspark.sql.streaming import StreamingQuery
@@ -1340,16 +1329,18 @@ class DataFrameWriter(OptionUtils):
         """
         if properties is None:
             properties = dict()
+
+        assert self._spark._sc._gateway is not None
         jprop = JavaClass(
             "java.util.Properties",
-            self._spark._sc._gateway._gateway_client,  # type: ignore[attr-defined]
+            self._spark._sc._gateway._gateway_client,
         )()
         for k in properties:
             jprop.setProperty(k, properties[k])
         self.mode(mode)._jwrite.jdbc(url, table, jprop)
 
 
-class DataFrameWriterV2(object):
+class DataFrameWriterV2:
     """
     Interface used to write a class:`pyspark.sql.dataframe.DataFrame`
     to external storage using the v2 API.
@@ -1359,8 +1350,8 @@ class DataFrameWriterV2(object):
 
     def __init__(self, df: "DataFrame", table: str):
         self._df = df
-        self._spark = df.sql_ctx
-        self._jwriter = df._jdf.writeTo(table)  # type: ignore[operator]
+        self._spark = df.sparkSession
+        self._jwriter = df._jdf.writeTo(table)
 
     @since(3.1)
     def using(self, provider: str) -> "DataFrameWriterV2":
@@ -1502,7 +1493,7 @@ def _test() -> None:
     globs = pyspark.sql.readwriter.__dict__.copy()
     sc = SparkContext("local[4]", "PythonTest")
     try:
-        spark = SparkSession.builder.getOrCreate()
+        spark = SparkSession._getActiveSessionOrCreate()
     except py4j.protocol.Py4JError:
         spark = SparkSession(sc)
 

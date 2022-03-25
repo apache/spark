@@ -317,7 +317,10 @@ trait Row extends Serializable {
    *
    * @throws ClassCastException when data type does not match.
    */
-  def getSeq[T](i: Int): Seq[T] = getAs[scala.collection.Seq[T]](i).toSeq
+  def getSeq[T](i: Int): Seq[T] = {
+    val res = getAs[scala.collection.Seq[T]](i)
+    if (res != null) res.toSeq else null
+  }
 
   /**
    * Returns the value at position i of array type as `java.util.List`.
@@ -603,7 +606,7 @@ trait Row extends Serializable {
 
     // Convert the row fields to json
     var n = 0
-    var elements = new mutable.ListBuffer[JField]
+    val elements = new mutable.ListBuffer[JField]
     val len = length
     while (n < len) {
       val field = schema(n)

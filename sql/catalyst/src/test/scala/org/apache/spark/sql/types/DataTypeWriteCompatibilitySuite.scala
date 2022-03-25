@@ -154,6 +154,15 @@ class ANSIDataTypeWriteCompatibilitySuite extends DataTypeWriteCompatibilityBase
     }
   }
 
+  test("SPARK-37707: Check datetime types compatible with each other") {
+    val dateTimeTypes = Seq(DateType, TimestampType, TimestampNTZType)
+    dateTimeTypes.foreach { t1 =>
+      dateTimeTypes.foreach { t2 =>
+        assertAllowed(t1, t2, "date time types", s"Should allow writing $t1 to type $t2")
+      }
+    }
+  }
+
   test("Check NullType is compatible with all other types") {
     allNonNullTypes.foreach { t =>
       assertAllowed(NullType, t, "nulls", s"Should allow writing None to type $t")

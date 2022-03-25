@@ -165,6 +165,7 @@ object InternalRow {
   /**
    * Returns a writer for an `InternalRow` with given data type.
    */
+  @scala.annotation.tailrec
   def getWriter(ordinal: Int, dt: DataType): (InternalRow, Any) => Unit = dt match {
     case BooleanType => (input, v) => input.setBoolean(ordinal, v.asInstanceOf[Boolean])
     case ByteType => (input, v) => input.setByte(ordinal, v.asInstanceOf[Byte])

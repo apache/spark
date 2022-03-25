@@ -131,7 +131,7 @@ private[spark] class SortShuffleManager(conf: SparkConf) extends ShuffleManager 
       metrics: ShuffleReadMetricsReporter): ShuffleReader[K, C] = {
     val baseShuffleHandle = handle.asInstanceOf[BaseShuffleHandle[K, _, C]]
     val (blocksByAddress, canEnableBatchFetch) =
-      if (baseShuffleHandle.dependency.shuffleMergeEnabled) {
+      if (baseShuffleHandle.dependency.isShuffleMergeFinalizedMarked) {
         val res = SparkEnv.get.mapOutputTracker.getPushBasedShuffleMapSizesByExecutorId(
           handle.shuffleId, startMapIndex, endMapIndex, startPartition, endPartition)
         (res.iter, res.enableBatchFetch)

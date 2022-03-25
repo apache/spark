@@ -91,6 +91,7 @@ class StagePageSuite extends SparkFunSuite with LocalSparkContext {
         accumulatorUpdates = Seq(new UIAccumulableInfo(0L, "acc", None, "value")),
         tasks = None,
         executorSummary = None,
+        speculationSummary = None,
         killedTasksSummary = Map.empty,
         ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID,
         peakExecutorMetrics = None,

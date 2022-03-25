@@ -32,7 +32,7 @@ if TYPE_CHECKING:
     from pyspark.sql.group import GroupedData
 
 
-class PandasGroupedOpsMixin(object):
+class PandasGroupedOpsMixin:
     """
     Min-in for pandas grouped operations. Currently, only :class:`GroupedData`
     can use this class.
@@ -199,12 +199,6 @@ class PandasGroupedOpsMixin(object):
         into memory, so the user should be aware of the potential OOM risk if data is skewed
         and certain groups are too large to fit in memory.
 
-        If returning a new `pandas.DataFrame` constructed with a dictionary, it is
-        recommended to explicitly index the columns by name to ensure the positions are correct,
-        or alternatively use an `OrderedDict`.
-        For example, `pd.DataFrame({'id': ids, 'a': data}, columns=['id', 'a'])` or
-        `pd.DataFrame(OrderedDict([('id', ids), ('a', data)]))`.
-
         This API is experimental.
 
         See Also
@@ -219,8 +213,8 @@ class PandasGroupedOpsMixin(object):
         udf = pandas_udf(func, returnType=schema, functionType=PandasUDFType.GROUPED_MAP)
         df = self._df
         udf_column = udf(*[df[col] for col in df.columns])
-        jdf = self._jgd.flatMapGroupsInPandas(udf_column._jc.expr())  # type: ignore[attr-defined]
-        return DataFrame(jdf, self.sql_ctx)
+        jdf = self._jgd.flatMapGroupsInPandas(udf_column._jc.expr())
+        return DataFrame(jdf, self.session)
 
     def cogroup(self, other: "GroupedData") -> "PandasCogroupedOps":
         """
@@ -237,7 +231,7 @@ class PandasGroupedOpsMixin(object):
         return PandasCogroupedOps(self, other)
 
 
-class PandasCogroupedOps(object):
+class PandasCogroupedOps:
     """
     A logical grouping of two :class:`GroupedData`,
     created by :func:`GroupedData.cogroup`.
@@ -252,7 +246,6 @@ class PandasCogroupedOps(object):
     def __init__(self, gd1: "GroupedData", gd2: "GroupedData"):
         self._gd1 = gd1
         self._gd2 = gd2
-        self.sql_ctx = gd1.sql_ctx
 
     def applyInPandas(
         self, func: "PandasCogroupedMapFunction", schema: Union[StructType, str]
@@ -333,12 +326,6 @@ class PandasCogroupedOps(object):
         into memory, so the user should be aware of the potential OOM risk if data is skewed
         and certain groups are too large to fit in memory.
 
-        If returning a new `pandas.DataFrame` constructed with a dictionary, it is
-        recommended to explicitly index the columns by name to ensure the positions are correct,
-        or alternatively use an `OrderedDict`.
-        For example, `pd.DataFrame({'id': ids, 'a': data}, columns=['id', 'a'])` or
-        `pd.DataFrame(OrderedDict([('id', ids), ('a', data)]))`.
-
         This API is experimental.
 
         See Also
@@ -354,10 +341,8 @@ class PandasCogroupedOps(object):
 
         all_cols = self._extract_cols(self._gd1) + self._extract_cols(self._gd2)
         udf_column = udf(*all_cols)
-        jdf = self._gd1._jgd.flatMapCoGroupsInPandas(  # type: ignore[attr-defined]
-            self._gd2._jgd, udf_column._jc.expr()  # type: ignore[attr-defined]
-        )
-        return DataFrame(jdf, self.sql_ctx)
+        jdf = self._gd1._jgd.flatMapCoGroupsInPandas(self._gd2._jgd, udf_column._jc.expr())
+        return DataFrame(jdf, self._gd1.session)
 
     @staticmethod
     def _extract_cols(gd: "GroupedData") -> List[Column]:

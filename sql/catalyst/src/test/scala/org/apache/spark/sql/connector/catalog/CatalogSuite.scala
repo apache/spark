@@ -820,7 +820,7 @@ class CatalogSuite extends SparkFunSuite {
 
     assert(catalog.namespaceExists(testNs) === false)
 
-    val ret = catalog.dropNamespace(testNs)
+    val ret = catalog.dropNamespace(testNs, cascade = false)
 
     assert(ret === false)
   }
@@ -833,7 +833,7 @@ class CatalogSuite extends SparkFunSuite {
     assert(catalog.namespaceExists(testNs) === true)
     assert(catalog.loadNamespaceMetadata(testNs).asScala === Map("property" -> "value"))
 
-    val ret = catalog.dropNamespace(testNs)
+    val ret = catalog.dropNamespace(testNs, cascade = false)
 
     assert(ret === true)
     assert(catalog.namespaceExists(testNs) === false)
@@ -845,7 +845,7 @@ class CatalogSuite extends SparkFunSuite {
     catalog.createNamespace(testNs, Map("property" -> "value").asJava)
     catalog.createTable(testIdent, schema, Array.empty, emptyProps)
 
-    assert(catalog.dropNamespace(testNs))
+    assert(catalog.dropNamespace(testNs, cascade = true))
 
     assert(!catalog.namespaceExists(testNs))
     intercept[NoSuchNamespaceException](catalog.listTables(testNs))

@@ -21,7 +21,7 @@ from pyspark.resource import ResourceInformation
 from pyspark.serializers import read_int, write_int, write_with_length, UTF8Deserializer
 
 
-class TaskContext(object):
+class TaskContext:
 
     """
     Contextual information about a task which can be read or mutated during
@@ -183,7 +183,7 @@ class BarrierTaskContext(TaskContext):
         """
         if not isinstance(cls._taskContext, BarrierTaskContext):
             cls._taskContext = object.__new__(cls)
-        return cast(BarrierTaskContext, cls._taskContext)
+        return cls._taskContext
 
     @classmethod
     def get(cls: Type["BarrierTaskContext"]) -> "BarrierTaskContext":
@@ -282,7 +282,7 @@ class BarrierTaskContext(TaskContext):
             return [BarrierTaskInfo(h.strip()) for h in addresses.split(",")]
 
 
-class BarrierTaskInfo(object):
+class BarrierTaskInfo:
     """
     Carries all task infos of a barrier task.
 

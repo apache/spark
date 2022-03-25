@@ -20,10 +20,10 @@ __all__ = ["SparkConf"]
 import sys
 from typing import Dict, List, Optional, Tuple, cast, overload
 
-from py4j.java_gateway import JVMView, JavaObject  # type: ignore[import]
+from py4j.java_gateway import JVMView, JavaObject
 
 
-class SparkConf(object):
+class SparkConf:
     """
     Configuration for a Spark application. Used to set various Spark
     parameters as key-value pairs.
@@ -124,7 +124,7 @@ class SparkConf(object):
         else:
             from pyspark.context import SparkContext
 
-            _jvm = _jvm or SparkContext._jvm  # type: ignore[attr-defined]
+            _jvm = _jvm or SparkContext._jvm
 
             if _jvm is not None:
                 # JVM is created, so create self._jconf directly through JVM
@@ -202,6 +202,18 @@ class SparkConf(object):
         for (k, v) in pairs:
             self.set(k, v)
         return self
+
+    @overload
+    def get(self, key: str) -> Optional[str]:
+        ...
+
+    @overload
+    def get(self, key: str, defaultValue: None) -> Optional[str]:
+        ...
+
+    @overload
+    def get(self, key: str, defaultValue: str) -> str:
+        ...
 
     def get(self, key: str, defaultValue: Optional[str] = None) -> Optional[str]:
         """Get the configured value for some key, or return a default otherwise."""

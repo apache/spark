@@ -23,7 +23,7 @@ A collections of builtin avro functions
 from typing import Dict, Optional, TYPE_CHECKING
 from pyspark import SparkContext
 from pyspark.sql.column import Column, _to_java_column
-from pyspark.util import _print_missing_jar  # type: ignore[attr-defined]
+from pyspark.util import _print_missing_jar
 
 if TYPE_CHECKING:
     from pyspark.sql._typing import ColumnOrName
@@ -73,7 +73,8 @@ def from_avro(
     [Row(value=Row(avro=Row(age=2, name='Alice')))]
     """
 
-    sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
+    sc = SparkContext._active_spark_context
+    assert sc is not None and sc._jvm is not None
     try:
         jc = sc._jvm.org.apache.spark.sql.avro.functions.from_avro(
             _to_java_column(data), jsonFormatSchema, options or {}
@@ -118,7 +119,8 @@ def to_avro(data: "ColumnOrName", jsonFormatSchema: str = "") -> Column:
     [Row(suite=bytearray(b'\\x02\\x00'))]
     """
 
-    sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
+    sc = SparkContext._active_spark_context
+    assert sc is not None and sc._jvm is not None
     try:
         if jsonFormatSchema == "":
             jc = sc._jvm.org.apache.spark.sql.avro.functions.to_avro(_to_java_column(data))

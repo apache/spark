@@ -612,12 +612,17 @@ object ViewHelper extends SQLConfHelper with Logging {
     val uncache = getRawTempView(name.table).map { r =>
       needsToUncache(r, aliasedPlan)
     }.getOrElse(false)
+    val storeAnalyzedPlanForView = conf.storeAnalyzedPlanForView || originalText.isEmpty
     if (replace && uncache) {
       logDebug(s"Try to uncache ${name.quotedString} before replacing.")
-      checkCyclicViewReference(analyzedPlan, Seq(name), name)
+      if (!storeAnalyzedPlanForView) {
+        // Skip cyclic check because when stored analyzed plan for view, the depended
+        // view is already converted to the underlying tables. So no cyclic views.
+        checkCyclicViewReference(analyzedPlan, Seq(name), name)
+      }
       CommandUtils.uncacheTableOrView(session, name.quotedString)
     }
-    if (!conf.storeAnalyzedPlanForView && originalText.nonEmpty) {
+    if (!storeAnalyzedPlanForView) {
       TemporaryViewRelation(
         prepareTemporaryView(
           name,

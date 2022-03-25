@@ -21,11 +21,10 @@ import datetime
 import pandas as pd
 
 from pyspark import pandas as ps
-from pyspark.pandas.tests.data_type_ops.testing_utils import TestCasesUtils
-from pyspark.testing.pandasutils import PandasOnSparkTestCase
+from pyspark.pandas.tests.data_type_ops.testing_utils import OpsTestBase
 
 
-class ComplexOpsTest(PandasOnSparkTestCase, TestCasesUtils):
+class ComplexOpsTest(OpsTestBase):
     @property
     def pser(self):
         return pd.Series([[1, 2, 3]])

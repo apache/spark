@@ -41,7 +41,7 @@ if __name__ == "__main__":
     lines = ssc.textFileStream(sys.argv[1])
     counts = lines.flatMap(lambda line: line.split(" "))\
                   .map(lambda x: (x, 1))\
-                  .reduceByKey(lambda a, b: a+b)
+                  .reduceByKey(lambda a, b: a + b)
     counts.pprint()
 
     ssc.start()

@@ -304,12 +304,13 @@ class TableIdentifierParserSuite extends SQLKeywordUtils {
   }
 
   test("table identifier - reserved/non-reserved keywords if ANSI mode enabled") {
-    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true",
+      SQLConf.ENFORCE_RESERVED_KEYWORDS.key -> "true") {
       reservedKeywordsInAnsiMode.foreach { keyword =>
         val errMsg = intercept[ParseException] {
           parseTableIdentifier(keyword)
         }.getMessage
-        assert(errMsg.contains("no viable alternative at input"))
+        assert(errMsg.contains("Syntax error at or near"))
         assert(TableIdentifier(keyword) === parseTableIdentifier(s"`$keyword`"))
         assert(TableIdentifier(keyword, Option("db")) === parseTableIdentifier(s"db.`$keyword`"))
       }

@@ -24,14 +24,17 @@ from shutil import rmtree
 # NOTE that we shouldn't import pyspark here because this is used in
 # setup.py, and assume there's no PySpark imported.
 
-DEFAULT_HADOOP = "hadoop3.2"
+DEFAULT_HADOOP = "hadoop3"
 DEFAULT_HIVE = "hive2.3"
-SUPPORTED_HADOOP_VERSIONS = ["hadoop2.7", "hadoop3.2", "without-hadoop"]
+SUPPORTED_HADOOP_VERSIONS = ["hadoop2", "hadoop3", "without-hadoop"]
 SUPPORTED_HIVE_VERSIONS = ["hive2.3"]
 UNSUPPORTED_COMBINATIONS = []  # type: ignore
 
 
 def checked_package_name(spark_version, hadoop_version, hive_version):
+    """
+    Check the generated package name, here we need to use the final hadoop version.
+    """
     return "%s-bin-%s" % (spark_version, hadoop_version)
 
 
@@ -44,7 +47,7 @@ def checked_versions(spark_version, hadoop_version, hive_version):
     spark_version : str
         Spark version. It should be X.X.X such as '3.0.0' or spark-3.0.0.
     hadoop_version : str
-        Hadoop version. It should be X.X such as '2.7' or 'hadoop2.7'.
+        Hadoop version. It should be X such as '2' or 'hadoop2'.
         'without' and 'without-hadoop' are supported as special keywords for Hadoop free
         distribution.
     hive_version : str
@@ -54,7 +57,7 @@ def checked_versions(spark_version, hadoop_version, hive_version):
     ----------
     tuple
         fully-qualified versions of Spark, Hadoop and Hive in a tuple.
-        For example, spark-3.0.0, hadoop3.2 and hive2.3.
+        For example, spark-3.2.0, hadoop3 and hive2.3.
     """
     if re.match("^[0-9]+\\.[0-9]+\\.[0-9]+$", spark_version):
         spark_version = "spark-%s" % spark_version
@@ -65,7 +68,7 @@ def checked_versions(spark_version, hadoop_version, hive_version):
 
     if hadoop_version == "without":
         hadoop_version = "without-hadoop"
-    elif re.match("^[0-9]+\\.[0-9]+$", hadoop_version):
+    elif re.match("^[0-9]+$", hadoop_version):
         hadoop_version = "hadoop%s" % hadoop_version
 
     if hadoop_version not in SUPPORTED_HADOOP_VERSIONS:
@@ -83,7 +86,23 @@ def checked_versions(spark_version, hadoop_version, hive_version):
             "one of [%s]" % (hive_version, ", ".join(SUPPORTED_HADOOP_VERSIONS))
         )
 
-    return spark_version, hadoop_version, hive_version
+    return spark_version, convert_old_hadoop_version(spark_version, hadoop_version), hive_version
+
+
+def convert_old_hadoop_version(spark_version, hadoop_version):
+    # check if Spark version <= 3.2, if so, convert hadoop3 to hadoop3.2 and hadoop2 to hadoop2.7
+    version_dict = {
+        "hadoop3": "hadoop3.2",
+        "hadoop2": "hadoop2.7",
+        "without": "without",
+        "without-hadoop": "without-hadoop",
+    }
+    spark_version_parts = re.search("^spark-([0-9]+)\\.([0-9]+)\\.[0-9]+$", spark_version)
+    spark_major_version = int(spark_version_parts.group(1))
+    spark_minor_version = int(spark_version_parts.group(2))
+    if spark_major_version < 3 or (spark_major_version == 3 and spark_minor_version <= 2):
+        hadoop_version = version_dict[hadoop_version]
+    return hadoop_version
 
 
 def install_spark(dest, spark_version, hadoop_version, hive_version):

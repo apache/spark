@@ -1053,6 +1053,7 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
 }
 
 
+@SlowHiveTest
 class HashAggregationQuerySuite extends AggregationQuerySuite
 
 

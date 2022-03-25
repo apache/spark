@@ -766,12 +766,15 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
     assert(daysToMicros(16800, UTC) === expected)
 
     // There are some days are skipped entirely in some timezone, skip them here.
+    // JDK-8274407 and its backport commits renamed 'Pacific/Enderbury' to 'Pacific/Kanton'
+    // in Java 8u311, 11.0.14, and 17.0.2
     val skipped_days = Map[String, Set[Int]](
       "Kwajalein" -> Set(8632, 8633, 8634),
       "Pacific/Apia" -> Set(15338),
       "Pacific/Enderbury" -> Set(9130, 9131),
       "Pacific/Fakaofo" -> Set(15338),
       "Pacific/Kiritimati" -> Set(9130, 9131),
+      "Pacific/Kanton" -> Set(9130, 9131),
       "Pacific/Kwajalein" -> Set(8632, 8633, 8634),
       MIT.getId -> Set(15338))
     for (zid <- ALL_TIMEZONES) {
@@ -927,5 +930,117 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
   test("SPARK-35679: instantToMicros should be able to return microseconds of Long.MinValue") {
     assert(instantToMicros(microsToInstant(Long.MaxValue)) === Long.MaxValue)
     assert(instantToMicros(microsToInstant(Long.MinValue)) === Long.MinValue)
+  }
+
+  test("SPARK-37552: convert a timestamp_ntz from a source time zone to target one") {
+    Seq(
+      ("1970-01-01T00:00:00", "UTC") -> ("1969-12-31T16:00:00", "America/Los_Angeles"),
+      ("2021-12-05T22:00:00", "Europe/Moscow") -> ("2021-12-06T00:00:00", "Asia/Yekaterinburg"),
+      ("2021-12-06T00:01:02.123456", "Asia/Yekaterinburg") ->
+        ("2021-12-05T20:01:02.123456", "Europe/Amsterdam"),
+      // 7 Nov 2021 is the DST day in the America/Los_Angeles time zone
+      // Sunday, 7 November 2021, 02:00:00 clocks were turned backward 1 hour to
+      // Sunday, 7 November 2021, 01:00:00 local standard time instead.
+      ("2021-11-07T09:00:00", "Europe/Amsterdam") -> ("2021-11-07T01:00:00", "America/Los_Angeles"),
+      ("2021-11-07T10:00:00", "Europe/Amsterdam") -> ("2021-11-07T01:00:00", "America/Los_Angeles"),
+      ("2021-11-07T11:00:00", "Europe/Amsterdam") -> ("2021-11-07T02:00:00", "America/Los_Angeles"),
+      ("2021-11-07T00:30:00", "America/Los_Angeles") -> ("2021-11-07T08:30:00", "Europe/Amsterdam"),
+      ("2021-11-07T01:30:00", "America/Los_Angeles") -> ("2021-11-07T09:30:00", "Europe/Amsterdam"),
+      ("2021-11-07T02:30:00", "America/Los_Angeles") -> ("2021-11-07T11:30:00", "Europe/Amsterdam")
+    ).foreach { case ((inputTs, sourceTz), (expectedTs, targetTz)) =>
+      val micros = DateTimeUtils.localDateTimeToMicros(LocalDateTime.parse(inputTs))
+      val result = DateTimeUtils.convertTimestampNtzToAnotherTz(sourceTz, targetTz, micros)
+      val expectedMicros = DateTimeUtils.localDateTimeToMicros(LocalDateTime.parse(expectedTs))
+      assert(expectedMicros === result,
+        s"The difference is ${(result - expectedMicros) / MICROS_PER_HOUR} hours")
+    }
+  }
+
+  test("SPARK-38195: add a quantity of interval units to a timestamp") {
+    outstandingZoneIds.foreach { zid =>
+      assert(timestampAdd("MICROSECOND", 1, date(2022, 2, 14, 11, 27, 0, 0, zid), zid) ===
+        date(2022, 2, 14, 11, 27, 0, 1, zid))
+      assert(timestampAdd("MILLISECOND", -1, date(2022, 2, 14, 11, 27, 0, 1000, zid), zid) ===
+        date(2022, 2, 14, 11, 27, 0, 0, zid))
+      assert(timestampAdd("SECOND", 0, date(2022, 2, 14, 11, 27, 0, 1001, zid), zid) ===
+        date(2022, 2, 14, 11, 27, 0, 1001, zid))
+      assert(timestampAdd("MINUTE", -90, date(2022, 2, 14, 11, 0, 1, 1, zid), zid) ===
+        date(2022, 2, 14, 9, 30, 1, 1, zid))
+      assert(timestampAdd("HOUR", 24, date(2022, 2, 14, 11, 0, 1, 0, zid), zid) ===
+        date(2022, 2, 15, 11, 0, 1, 0, zid))
+      assert(timestampAdd("DAY", 1, date(2022, 2, 28, 11, 1, 0, 0, zid), zid) ===
+        date(2022, 3, 1, 11, 1, 0, 0, zid))
+      assert(timestampAdd("DAYOFYEAR", 364, date(2022, 1, 1, 0, 0, 0, 0, zid), zid) ===
+        date(2022, 12, 31, 0, 0, 0, 0, zid))
+      assert(timestampAdd("WEEK", 1, date(2022, 2, 14, 11, 43, 0, 1, zid), zid) ===
+        date(2022, 2, 21, 11, 43, 0, 1, zid))
+      assert(timestampAdd("MONTH", 10, date(2022, 2, 14, 11, 43, 0, 1, zid), zid) ===
+        date(2022, 12, 14, 11, 43, 0, 1, zid))
+      assert(timestampAdd("QUARTER", 1, date(1900, 2, 1, 0, 0, 0, 1, zid), zid) ===
+        date(1900, 5, 1, 0, 0, 0, 1, zid))
+      assert(timestampAdd("YEAR", 1, date(9998, 1, 1, 0, 0, 0, 1, zid), zid) ===
+        date(9999, 1, 1, 0, 0, 0, 1, zid))
+      assert(timestampAdd("YEAR", -9998, date(9999, 1, 1, 0, 0, 0, 1, zid), zid) ===
+        date(1, 1, 1, 0, 0, 0, 1, zid))
+    }
+
+    val e = intercept[IllegalStateException] {
+      timestampAdd("SECS", 1, date(1969, 1, 1, 0, 0, 0, 1, getZoneId("UTC")), getZoneId("UTC"))
+    }
+    assert(e.getMessage === "Got the unexpected unit 'SECS'.")
+  }
+
+  test("SPARK-38284: difference between two timestamps in units") {
+    outstandingZoneIds.foreach { zid =>
+      assert(timestampDiff("MICROSECOND",
+        date(2022, 2, 14, 11, 27, 0, 0, zid), date(2022, 2, 14, 11, 27, 0, 1, zid), zid) === 1)
+      assert(timestampDiff("MILLISECOND",
+        date(2022, 2, 14, 11, 27, 0, 1000, zid), date(2022, 2, 14, 11, 27, 0, 0, zid), zid) === -1)
+      assert(timestampDiff(
+        "SECOND",
+        date(2022, 2, 14, 11, 27, 0, 1001, zid),
+        date(2022, 2, 14, 11, 27, 0, 1002, zid),
+        zid) === 0)
+      assert(timestampDiff(
+        "MINUTE",
+        date(2022, 2, 14, 11, 0, 1, 1, zid),
+        date(2022, 2, 14, 9, 30, 1, 1, zid),
+        zid) === -90)
+      assert(timestampDiff(
+        "HOUR",
+        date(2022, 2, 14, 11, 0, 1, 0, zid),
+        date(2022, 2, 15, 11, 0, 1, 2, zid),
+        zid) === 24)
+      assert(timestampDiff(
+        "DAY",
+        date(2022, 2, 28, 11, 1, 0, 0, zid),
+        date(2022, 3, 1, 11, 1, 0, 0, zid),
+        zid) === 1)
+      assert(timestampDiff("WEEK",
+        date(2022, 2, 14, 11, 43, 0, 1, zid), date(2022, 2, 21, 11, 42, 59, 1, zid), zid) === 0)
+      assert(timestampDiff("MONTH",
+        date(2022, 2, 14, 11, 43, 0, 1, zid), date(2022, 12, 14, 11, 43, 0, 1, zid), zid) === 10)
+      assert(timestampDiff("QUARTER",
+        date(1900, 2, 1, 0, 0, 0, 1, zid), date(1900, 5, 1, 2, 0, 0, 1, zid), zid) === 1)
+      assert(timestampDiff(
+        "YEAR",
+        date(9998, 1, 1, 0, 0, 0, 1, zid),
+        date(9999, 1, 1, 0, 0, 1, 2, zid),
+        zid) === 1)
+      assert(timestampDiff(
+        "YEAR",
+        date(9999, 1, 1, 0, 0, 0, 1, zid),
+        date(1, 1, 1, 0, 0, 0, 1, zid),
+        zid) === -9998)
+    }
+
+    val e = intercept[IllegalStateException] {
+      timestampDiff(
+        "SECS",
+        date(1969, 1, 1, 0, 0, 0, 1, getZoneId("UTC")),
+        date(2022, 1, 1, 0, 0, 0, 1, getZoneId("UTC")),
+        getZoneId("UTC"))
+    }
+    assert(e.getMessage === "Got the unexpected unit 'SECS'.")
   }
 }

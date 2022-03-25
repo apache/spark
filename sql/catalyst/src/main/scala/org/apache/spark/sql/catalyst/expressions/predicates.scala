@@ -128,6 +128,7 @@ trait PredicateHelper extends AliasHelper with Logging {
   def findExpressionAndTrackLineageDown(
       exp: Expression,
       plan: LogicalPlan): Option[(Expression, LogicalPlan)] = {
+    if (exp.references.isEmpty) return None
 
     plan match {
       case p: Project =>
@@ -287,6 +288,22 @@ trait PredicateHelper extends AliasHelper with Logging {
       }
     }
   }
+
+  /**
+   * Returns whether an expression is likely to be selective
+   */
+  def isLikelySelective(e: Expression): Boolean = e match {
+    case Not(expr) => isLikelySelective(expr)
+    case And(l, r) => isLikelySelective(l) || isLikelySelective(r)
+    case Or(l, r) => isLikelySelective(l) && isLikelySelective(r)
+    case _: StringRegexExpression => true
+    case _: BinaryComparison => true
+    case _: In | _: InSet => true
+    case _: StringPredicate => true
+    case BinaryPredicate(_) => true
+    case _: MultiLikeBase => true
+    case _ => false
+  }
 }
 
 @ExpressionDescription(
@@ -310,6 +327,16 @@ case class Not(child: Expression)
   override def inputTypes: Seq[DataType] = Seq(BooleanType)
 
   final override val nodePatterns: Seq[TreePattern] = Seq(NOT)
+
+  override lazy val preCanonicalized: Expression = {
+    withNewChildren(Seq(child.preCanonicalized)) match {
+      case Not(GreaterThan(l, r)) => LessThanOrEqual(l, r)
+      case Not(LessThan(l, r)) => GreaterThanOrEqual(l, r)
+      case Not(GreaterThanOrEqual(l, r)) => LessThan(l, r)
+      case Not(LessThanOrEqual(l, r)) => GreaterThan(l, r)
+      case other => other
+    }
+  }
 
   // +---------+-----------+
   // | CHILD   | NOT CHILD |
@@ -438,6 +465,15 @@ case class In(value: Expression, list: Seq[Expression]) extends Predicate {
   override def foldable: Boolean = children.forall(_.foldable)
 
   final override val nodePatterns: Seq[TreePattern] = Seq(IN)
+
+  override lazy val preCanonicalized: Expression = {
+    val basic = withNewChildren(children.map(_.preCanonicalized)).asInstanceOf[In]
+    if (list.size > 1) {
+      basic.copy(list = basic.list.sortBy(_.hashCode()))
+    } else {
+      basic
+    }
+  }
 
   override def toString: String = s"$value IN ${list.mkString("(", ",", ")")}"
 
@@ -871,6 +907,21 @@ abstract class BinaryComparison extends BinaryOperator with Predicate {
 
   final override val nodePatterns: Seq[TreePattern] = Seq(BINARY_COMPARISON)
 
+  override lazy val preCanonicalized: Expression = {
+    withNewChildren(children.map(_.preCanonicalized)) match {
+      case EqualTo(l, r) if l.hashCode() > r.hashCode() => EqualTo(r, l)
+      case EqualNullSafe(l, r) if l.hashCode() > r.hashCode() => EqualNullSafe(r, l)
+
+      case GreaterThan(l, r) if l.hashCode() > r.hashCode() => LessThan(r, l)
+      case LessThan(l, r) if l.hashCode() > r.hashCode() => GreaterThan(r, l)
+
+      case GreaterThanOrEqual(l, r) if l.hashCode() > r.hashCode() => LessThanOrEqual(r, l)
+      case LessThanOrEqual(l, r) if l.hashCode() > r.hashCode() => GreaterThanOrEqual(r, l)
+
+      case other => other
+    }
+  }
+
   override def checkInputDataTypes(): TypeCheckResult = super.checkInputDataTypes() match {
     case TypeCheckResult.TypeCheckSuccess =>
       TypeUtils.checkForOrderingExpr(left.dataType, this.getClass.getSimpleName)
@@ -1100,7 +1151,7 @@ case class LessThanOrEqual(left: Expression, right: Expression)
     Examples:
       > SELECT 2 _FUNC_ 1;
        true
-      > SELECT 2 _FUNC_ '1.1';
+      > SELECT 2 _FUNC_ 1.1;
        true
       > SELECT to_date('2009-07-30 04:17:52') _FUNC_ to_date('2009-07-30 04:17:52');
        false

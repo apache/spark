@@ -43,24 +43,36 @@ class ResolveSQLOnFile(sparkSession: SparkSession) extends Rule[LogicalPlan] {
     conf.runSQLonFile && u.multipartIdentifier.size == 2
   }
 
+  private def resolveDataSource(ident: Seq[String]): DataSource = {
+    val dataSource = DataSource(sparkSession, paths = Seq(ident.last), className = ident.head)
+    // `dataSource.providingClass` may throw ClassNotFoundException, the caller side will try-catch
+    // it and return the original plan, so that the analyzer can report table not found later.
+    val isFileFormat = classOf[FileFormat].isAssignableFrom(dataSource.providingClass)
+    if (!isFileFormat ||
+      dataSource.className.toLowerCase(Locale.ROOT) == DDLUtils.HIVE_PROVIDER) {
+      throw QueryCompilationErrors.unsupportedDataSourceTypeForDirectQueryOnFilesError(
+        dataSource.className)
+    }
+    dataSource
+  }
+
   def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
+    case r @ RelationTimeTravel(u: UnresolvedRelation, timestamp, _)
+        if maybeSQLFile(u) && timestamp.forall(_.resolved) =>
+      // If we successfully look up the data source, then this is a path-based table, so we should
+      // fail to time travel. Otherwise, this is some other catalog table that isn't resolved yet,
+      // so we should leave it be for now.
+      try {
+        resolveDataSource(u.multipartIdentifier)
+        throw QueryCompilationErrors.timeTravelUnsupportedError("path-based tables")
+      } catch {
+        case _: ClassNotFoundException => r
+      }
+
     case u: UnresolvedRelation if maybeSQLFile(u) =>
       try {
-        val dataSource = DataSource(
-          sparkSession,
-          paths = u.multipartIdentifier.last :: Nil,
-          className = u.multipartIdentifier.head)
-
-        // `dataSource.providingClass` may throw ClassNotFoundException, then the outer try-catch
-        // will catch it and return the original plan, so that the analyzer can report table not
-        // found later.
-        val isFileFormat = classOf[FileFormat].isAssignableFrom(dataSource.providingClass)
-        if (!isFileFormat ||
-            dataSource.className.toLowerCase(Locale.ROOT) == DDLUtils.HIVE_PROVIDER) {
-          throw QueryCompilationErrors.unsupportedDataSourceTypeForDirectQueryOnFilesError(
-            dataSource.className)
-        }
-        LogicalRelation(dataSource.resolveRelation())
+        val ds = resolveDataSource(u.multipartIdentifier)
+        LogicalRelation(ds.resolveRelation())
       } catch {
         case _: ClassNotFoundException => u
         case e: Exception =>
@@ -307,15 +319,7 @@ case class PreprocessTableCreation(sparkSession: SparkSession) extends Rule[Logi
       conf.resolver)
 
     if (schema.nonEmpty && normalizedPartitionCols.length == schema.length) {
-      if (DDLUtils.isHiveTable(table)) {
-        // When we hit this branch, it means users didn't specify schema for the table to be
-        // created, as we always include partition columns in table schema for hive serde tables.
-        // The real schema will be inferred at hive metastore by hive serde, plus the given
-        // partition columns, so we should not fail the analysis here.
-      } else {
-        failAnalysis("Cannot use all columns for partition columns")
-      }
-
+      failAnalysis("Cannot use all columns for partition columns")
     }
 
     schema.filter(f => normalizedPartitionCols.contains(f.name)).map(_.dataType).foreach {

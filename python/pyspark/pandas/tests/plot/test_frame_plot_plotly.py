@@ -186,6 +186,13 @@ class DataFramePlotPlotlyTest(PandasOnSparkTestCase, TestUtils):
         # )
         # check_pie_plot(psdf1)
 
+    def test_hist_layout_kwargs(self):
+        s = ps.Series([1, 3, 2])
+        plt = s.plot.hist(title="Title", foo="xxx")
+        self.assertEqual(plt.layout.barmode, "stack")
+        self.assertEqual(plt.layout.title.text, "Title")
+        self.assertFalse(hasattr(plt.layout, "foo"))
+
     def test_hist_plot(self):
         def check_hist_plot(psdf):
             bins = np.array([1.0, 5.9, 10.8, 15.7, 20.6, 25.5, 30.4, 35.3, 40.2, 45.1, 50.0])

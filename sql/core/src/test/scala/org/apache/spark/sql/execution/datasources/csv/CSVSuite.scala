@@ -805,6 +805,17 @@ abstract class CSVSuite
     }
   }
 
+  test("SPARK-37575: null values should be saved as nothing rather than " +
+    "quoted empty Strings \"\" with default settings") {
+    withTempPath { path =>
+      Seq(("Tesla", null: String, ""))
+        .toDF("make", "comment", "blank")
+        .write
+        .csv(path.getCanonicalPath)
+      checkAnswer(spark.read.text(path.getCanonicalPath), Row("Tesla,,\"\""))
+    }
+  }
+
   test("save csv with compression codec option") {
     withTempDir { dir =>
       val csvDir = new File(dir, "csv").getCanonicalPath
@@ -1610,38 +1621,30 @@ abstract class CSVSuite
     checkAnswer(df, Row("a", null, "a"))
   }
 
-  test("SPARK-21610: Corrupt records are not handled properly when creating a dataframe " +
-    "from a file") {
-    val columnNameOfCorruptRecord = "_corrupt_record"
+  test("SPARK-38523: referring to the corrupt record column") {
     val schema = new StructType()
       .add("a", IntegerType)
       .add("b", DateType)
-      .add(columnNameOfCorruptRecord, StringType)
-    // negative cases
-    val msg = intercept[AnalysisException] {
-      spark
-        .read
-        .option("columnNameOfCorruptRecord", columnNameOfCorruptRecord)
-        .schema(schema)
-        .csv(testFile(valueMalformedFile))
-        .select(columnNameOfCorruptRecord)
-        .collect()
-    }.getMessage
-    assert(msg.contains("only include the internal corrupt record column"))
-
-    // workaround
-    val df = spark
+      .add("corrRec", StringType)
+    val readback = spark
       .read
-      .option("columnNameOfCorruptRecord", columnNameOfCorruptRecord)
+      .option("columnNameOfCorruptRecord", "corrRec")
       .schema(schema)
       .csv(testFile(valueMalformedFile))
-      .cache()
-    assert(df.filter($"_corrupt_record".isNotNull).count() == 1)
-    assert(df.filter($"_corrupt_record".isNull).count() == 1)
     checkAnswer(
-      df.select(columnNameOfCorruptRecord),
-      Row("0,2013-111_11 12:13:14") :: Row(null) :: Nil
-    )
+      readback,
+      Row(0, null, "0,2013-111_11 12:13:14") ::
+      Row(1, Date.valueOf("1983-08-04"), null) :: Nil)
+    checkAnswer(
+      readback.filter($"corrRec".isNotNull),
+      Row(0, null, "0,2013-111_11 12:13:14"))
+    checkAnswer(
+      readback.select($"corrRec", $"b"),
+      Row("0,2013-111_11 12:13:14", null) ::
+      Row(null, Date.valueOf("1983-08-04")) :: Nil)
+    checkAnswer(
+      readback.filter($"corrRec".isNull && $"a" === 1),
+      Row(1, Date.valueOf("1983-08-04"), null) :: Nil)
   }
 
   test("SPARK-23846: schema inferring touches less data if samplingRatio < 1.0") {
@@ -1769,7 +1772,7 @@ abstract class CSVSuite
         (1, "John Doe"),
         (2, "-"),
         (3, "-"),
-        (4, "-")
+        (4, null)
       ).toDF("id", "name")
 
       checkAnswer(computed, expected)
@@ -1825,7 +1828,7 @@ abstract class CSVSuite
       val idf = spark.read
         .schema(schema)
         .csv(path.getCanonicalPath)
-        .select('f15, 'f10, 'f5)
+        .select(Symbol("f15"), Symbol("f10"), Symbol("f5"))
 
       assert(idf.count() == 2)
       checkAnswer(idf, List(Row(15, 10, 5), Row(-15, -10, -5)))
@@ -1986,7 +1989,8 @@ abstract class CSVSuite
       spark.read.schema(ischema).option("header", true).option("enforceSchema", true).csv(ds)
     }
     assert(testAppender1.loggingEvents
-      .exists(msg => msg.getRenderedMessage.contains("CSV header does not conform to the schema")))
+      .exists(msg =>
+        msg.getMessage.getFormattedMessage.contains("CSV header does not conform to the schema")))
 
     val testAppender2 = new LogAppender("CSV header matches to schema w/ enforceSchema")
     withLogAppender(testAppender2) {
@@ -2004,7 +2008,8 @@ abstract class CSVSuite
       }
     }
     assert(testAppender2.loggingEvents
-      .exists(msg => msg.getRenderedMessage.contains("CSV header does not conform to the schema")))
+      .exists(msg =>
+        msg.getMessage.getFormattedMessage.contains("CSV header does not conform to the schema")))
   }
 
   test("SPARK-25134: check header on parsing of dataset with projection and column pruning") {

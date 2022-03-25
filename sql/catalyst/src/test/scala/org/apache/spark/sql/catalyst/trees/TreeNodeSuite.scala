@@ -248,6 +248,44 @@ class TreeNodeSuite extends SparkFunSuite with SQLHelper {
     assert(expected === actual)
   }
 
+  test("exists") {
+    val expression = Add(Literal(1), Multiply(Literal(2), Subtract(Literal(3), Literal(4))))
+    // Check the top node.
+    var exists = expression.exists {
+      case _: Add => true
+      case _ => false
+    }
+    assert(exists)
+
+    // Check the first children.
+    exists = expression.exists {
+      case Literal(1, IntegerType) => true
+      case _ => false
+    }
+    assert(exists)
+
+    // Check an internal node (Subtract).
+    exists = expression.exists {
+      case _: Subtract => true
+      case _ => false
+    }
+    assert(exists)
+
+    // Check a leaf node.
+    exists = expression.exists {
+      case Literal(3, IntegerType) => true
+      case _ => false
+    }
+    assert(exists)
+
+    // Check not exists.
+    exists = expression.exists {
+      case Literal(100, IntegerType) => true
+      case _ => false
+    }
+    assert(!exists)
+  }
+
   test("collectFirst") {
     val expression = Add(Literal(1), Multiply(Literal(2), Subtract(Literal(3), Literal(4))))
 
@@ -809,5 +847,13 @@ class TreeNodeSuite extends SparkFunSuite with SQLHelper {
       case ex: java.lang.InternalError if ex.getMessage.contains("Malformed class name") =>
         fail("TreeNode.nodeName should not throw malformed class name error")
     }
+  }
+
+  test("SPARK-37800: TreeNode.argString incorrectly formats arguments of type Set[_]") {
+    case class Node(set: Set[String], nested: Seq[Set[Int]]) extends LeafNode {
+      val output: Seq[Attribute] = Nil
+    }
+    val node = Node(Set("second", "first"), Seq(Set(3, 1), Set(2, 1)))
+    assert(node.argString(10) == "{first, second}, [{1, 3}, {1, 2}]")
   }
 }

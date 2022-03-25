@@ -74,7 +74,7 @@ class ProfilerTests(PySparkTestCase):
     def do_computation(self):
         def heavy_foo(x):
             for i in range(1 << 18):
-                x = 1
+                x = 1  # noqa: F841
 
         rdd = self.sc.parallelize(range(100))
         rdd.foreach(heavy_foo)

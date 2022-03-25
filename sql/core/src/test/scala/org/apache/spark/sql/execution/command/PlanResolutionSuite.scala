@@ -249,9 +249,7 @@ class PlanResolutionSuite extends AnalysisTest {
   }
 
   test("create table - partitioned by transforms") {
-    val transforms = Seq(
-        "bucket(16, b)", "years(ts)", "months(ts)", "days(ts)", "hours(ts)", "foo(a, 'bar', 34)",
-        "bucket(32, b), days(ts)")
+    val transforms = Seq("years(ts)", "months(ts)", "days(ts)", "hours(ts)", "foo(a, 'bar', 34)")
     transforms.foreach { transform =>
       val query =
         s"""
@@ -259,12 +257,30 @@ class PlanResolutionSuite extends AnalysisTest {
            |PARTITIONED BY ($transform)
            """.stripMargin
 
-      val ae = intercept[AnalysisException] {
+      val ae = intercept[UnsupportedOperationException] {
         parseAndResolve(query)
       }
 
-      assert(ae.message
-          .contains(s"Transforms cannot be converted to partition columns: $transform"))
+      assert(ae.getMessage
+        .contains(s"Unsupported partition transform: $transform"))
+    }
+  }
+
+  test("create table - partitioned by multiple bucket transforms") {
+    val transforms = Seq("bucket(32, b), sorted_bucket(b, 32, c)")
+    transforms.foreach { transform =>
+      val query =
+        s"""
+           |CREATE TABLE my_tab(a INT, b STRING, c String) USING parquet
+           |PARTITIONED BY ($transform)
+           """.stripMargin
+
+      val ae = intercept[UnsupportedOperationException] {
+        parseAndResolve(query)
+      }
+
+      assert(ae.getMessage
+        .contains("Multiple bucket transforms are not supported."))
     }
   }
 
@@ -563,20 +579,12 @@ class PlanResolutionSuite extends AnalysisTest {
          |AS SELECT * FROM src
       """.stripMargin
 
-    val expectedProperties = Map(
-      "p1" -> "v1",
-      "p2" -> "v2",
-      "option.other" -> "20",
-      "provider" -> "parquet",
-      "location" -> "s3://bucket/path/to/data",
-      "comment" -> "table comment",
-      "other" -> "20")
-
     parseAndResolve(sql) match {
       case ctas: CreateTableAsSelect =>
-        assert(ctas.catalog.name == "testcat")
-        assert(ctas.tableName == Identifier.of(Array("mydb"), "table_name"))
-        assert(ctas.properties == expectedProperties)
+        assert(ctas.name.asInstanceOf[ResolvedDBObjectName].catalog.name == "testcat")
+        assert(
+          ctas.name.asInstanceOf[ResolvedDBObjectName].nameParts.mkString(".") == "mydb.table_name"
+        )
         assert(ctas.writeOptions.isEmpty)
         assert(ctas.partitioning.isEmpty)
         assert(ctas.ignoreIfExists)
@@ -598,20 +606,12 @@ class PlanResolutionSuite extends AnalysisTest {
          |AS SELECT * FROM src
       """.stripMargin
 
-    val expectedProperties = Map(
-      "p1" -> "v1",
-      "p2" -> "v2",
-      "option.other" -> "20",
-      "provider" -> "parquet",
-      "location" -> "s3://bucket/path/to/data",
-      "comment" -> "table comment",
-      "other" -> "20")
-
     parseAndResolve(sql, withDefault = true) match {
       case ctas: CreateTableAsSelect =>
-        assert(ctas.catalog.name == "testcat")
-        assert(ctas.tableName == Identifier.of(Array("mydb"), "table_name"))
-        assert(ctas.properties == expectedProperties)
+        assert(ctas.name.asInstanceOf[ResolvedDBObjectName].catalog.name == "testcat")
+        assert(
+          ctas.name.asInstanceOf[ResolvedDBObjectName].nameParts.mkString(".") == "mydb.table_name"
+        )
         assert(ctas.writeOptions.isEmpty)
         assert(ctas.partitioning.isEmpty)
         assert(ctas.ignoreIfExists)
@@ -633,18 +633,12 @@ class PlanResolutionSuite extends AnalysisTest {
         |AS SELECT * FROM src
       """.stripMargin
 
-    val expectedProperties = Map(
-      "p1" -> "v1",
-      "p2" -> "v2",
-      "provider" -> v2Format,
-      "location" -> "/user/external/page_view",
-      "comment" -> "This is the staging page view table")
-
     parseAndResolve(sql) match {
       case ctas: CreateTableAsSelect =>
-        assert(ctas.catalog.name == CatalogManager.SESSION_CATALOG_NAME)
-        assert(ctas.tableName == Identifier.of(Array("mydb"), "page_view"))
-        assert(ctas.properties == expectedProperties)
+        assert(ctas.name.asInstanceOf[ResolvedDBObjectName].catalog.name ==
+          CatalogManager.SESSION_CATALOG_NAME)
+        assert(ctas.name.asInstanceOf[ResolvedDBObjectName].nameParts.mkString(".") ==
+          "mydb.page_view")
         assert(ctas.writeOptions.isEmpty)
         assert(ctas.partitioning.isEmpty)
         assert(ctas.ignoreIfExists)
@@ -928,14 +922,14 @@ class PlanResolutionSuite extends AnalysisTest {
       val parsed4 = parseAndResolve(sql4)
 
       parsed1 match {
-        case DeleteFromTable(AsDataSourceV2Relation(_), None) =>
+        case DeleteFromTable(AsDataSourceV2Relation(_), Literal.TrueLiteral) =>
         case _ => fail("Expect DeleteFromTable, but got:\n" + parsed1.treeString)
       }
 
       parsed2 match {
         case DeleteFromTable(
           AsDataSourceV2Relation(_),
-          Some(EqualTo(name: UnresolvedAttribute, StringLiteral("Robert")))) =>
+          EqualTo(name: UnresolvedAttribute, StringLiteral("Robert"))) =>
           assert(name.name == "name")
         case _ => fail("Expect DeleteFromTable, but got:\n" + parsed2.treeString)
       }
@@ -943,7 +937,7 @@ class PlanResolutionSuite extends AnalysisTest {
       parsed3 match {
         case DeleteFromTable(
           SubqueryAlias(AliasIdentifier("t", Seq()), AsDataSourceV2Relation(_)),
-          Some(EqualTo(name: UnresolvedAttribute, StringLiteral("Robert")))) =>
+          EqualTo(name: UnresolvedAttribute, StringLiteral("Robert"))) =>
           assert(name.name == "t.name")
         case _ => fail("Expect DeleteFromTable, but got:\n" + parsed3.treeString)
       }
@@ -951,7 +945,7 @@ class PlanResolutionSuite extends AnalysisTest {
       parsed4 match {
         case DeleteFromTable(
             SubqueryAlias(AliasIdentifier("t", Seq()), AsDataSourceV2Relation(_)),
-            Some(InSubquery(values, query))) =>
+            InSubquery(values, query)) =>
           assert(values.size == 1 && values.head.isInstanceOf[UnresolvedAttribute])
           assert(values.head.asInstanceOf[UnresolvedAttribute].name == "t.name")
           query match {
@@ -1756,7 +1750,7 @@ class PlanResolutionSuite extends AnalysisTest {
 
     interceptParseException(parsePlan)(
       "CREATE TABLE my_tab(a: INT COMMENT 'test', b: STRING)",
-      "extraneous input ':'")
+      "Syntax error at or near ':': extra input ':'")()
   }
 
   test("create hive table - table file format") {
@@ -1881,7 +1875,7 @@ class PlanResolutionSuite extends AnalysisTest {
 
   test("Duplicate clauses - create hive table") {
     def intercept(sqlCommand: String, messages: String*): Unit =
-      interceptParseException(parsePlan)(sqlCommand, messages: _*)
+      interceptParseException(parsePlan)(sqlCommand, messages: _*)()
 
     def createTableHeader(duplicateClause: String): String = {
       s"CREATE TABLE my_tab(a INT, b STRING) STORED AS parquet $duplicateClause $duplicateClause"

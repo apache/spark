@@ -34,13 +34,32 @@ import com.typesafe.tools.mima.core.ProblemFilters._
  */
 object MimaExcludes {
 
+  // Exclude rules for 3.4.x
+  lazy val v34excludes = v33excludes ++ Seq(
+  )
+
   // Exclude rules for 3.3.x from 3.2.0
   lazy val v33excludes = v32excludes ++ Seq(
     // [SPARK-35672][CORE][YARN] Pass user classpath entries to executors using config instead of command line
     // The followings are necessary for Scala 2.13.
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.executor.CoarseGrainedExecutorBackend#Arguments.*"),
     ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.executor.CoarseGrainedExecutorBackend#Arguments.*"),
-    ProblemFilters.exclude[MissingTypesProblem]("org.apache.spark.executor.CoarseGrainedExecutorBackend$Arguments$")
+    ProblemFilters.exclude[MissingTypesProblem]("org.apache.spark.executor.CoarseGrainedExecutorBackend$Arguments$"),
+
+    // [SPARK-37391][SQL] JdbcConnectionProvider tells if it modifies security context
+    ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.sql.jdbc.JdbcConnectionProvider.modifiesSecurityContext"),
+
+    // [SPARK-37780][SQL] QueryExecutionListener support SQLConf as constructor parameter
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.util.ExecutionListenerManager.this"),
+    // [SPARK-37786][SQL] StreamingQueryListener support use SQLConf.get to get corresponding SessionState's SQLConf
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.streaming.StreamingQueryManager.this"),
+    // [SPARK-38432][SQL] Reactor framework so as JDBC dialect could compile filter by self way
+    ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.sql.sources.Filter.toV2"),
+
+    // [SPARK-37600][BUILD] Upgrade to Hadoop 3.3.2
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.hadoop.shaded.net.jpountz.lz4.LZ4Compressor"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.hadoop.shaded.net.jpountz.lz4.LZ4Factory"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.hadoop.shaded.net.jpountz.lz4.LZ4SafeDecompressor")
   )
 
   // Exclude rules for 3.2.x from 3.1.1
@@ -58,6 +77,12 @@ object MimaExcludes {
     ProblemFilters.exclude[Problem]("org.apache.spark.sql.catalyst.*"),
     ProblemFilters.exclude[Problem]("org.apache.spark.sql.execution.*"),
     ProblemFilters.exclude[Problem]("org.apache.spark.sql.internal.*"),
+    ProblemFilters.exclude[Problem]("org.apache.spark.sql.errors.*"),
+    // DSv2 catalog and expression APIs are unstable yet. We should enable this back.
+    ProblemFilters.exclude[Problem]("org.apache.spark.sql.connector.catalog.*"),
+    ProblemFilters.exclude[Problem]("org.apache.spark.sql.connector.expressions.*"),
+    // Avro source implementation is internal.
+    ProblemFilters.exclude[Problem]("org.apache.spark.sql.v2.avro.*"),
 
     // [SPARK-34848][CORE] Add duration to TaskMetricDistributions
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.status.api.v1.TaskMetricDistributions.this"),
@@ -115,6 +140,7 @@ object MimaExcludes {
   )
 
   def excludes(version: String) = version match {
+    case v if v.startsWith("3.4") => v34excludes
     case v if v.startsWith("3.3") => v33excludes
     case v if v.startsWith("3.2") => v32excludes
     case _ => Seq()

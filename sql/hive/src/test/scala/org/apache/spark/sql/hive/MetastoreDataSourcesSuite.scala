@@ -22,7 +22,7 @@ import java.io.File
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.hadoop.fs.Path
-import org.apache.log4j.Level
+import org.apache.logging.log4j.Level
 
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
@@ -1429,18 +1429,19 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
             |  c10 ARRAY<INTERVAL YEAR>,
             |  c11 MAP<INT, STRING>,
             |  c12 MAP<INT, INTERVAL DAY>,
-            |  c13 MAP<INTERVAL MINUTE TO SECOND, STRING>
+            |  c13 MAP<INTERVAL MINUTE TO SECOND, STRING>,
+            |  c14 TIMESTAMP_NTZ
             |) USING Parquet""".stripMargin)
       }
       val expectedMsg = "Hive incompatible types found: interval day to minute, " +
         "interval year to month, interval hour, interval month, " +
         "struct<a:int,b:interval hour to second>, " +
         "array<interval year>, map<int,interval day>, " +
-        "map<interval minute to second,string>. " +
+        "map<interval minute to second,string>, timestamp_ntz. " +
         "Persisting data source table `default`.`t` into Hive metastore in " +
         "Spark SQL specific format, which is NOT compatible with Hive."
       val actualMessages = logAppender.loggingEvents
-        .map(_.getRenderedMessage)
+        .map(_.getMessage.getFormattedMessage)
         .filter(_.contains("incompatible"))
       assert(actualMessages.contains(expectedMsg))
       assert(hiveClient.getTable("default", "t").schema
@@ -1467,7 +1468,8 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
           StructField("c10", ArrayType(YearMonthIntervalType(YEAR))),
           StructField("c11", MapType(IntegerType, StringType)),
           StructField("c12", MapType(IntegerType, DayTimeIntervalType(DAY))),
-          StructField("c13", MapType(DayTimeIntervalType(MINUTE, SECOND), StringType)))))
+          StructField("c13", MapType(DayTimeIntervalType(MINUTE, SECOND), StringType)),
+          StructField("c14", TimestampNTZType))))
     }
   }
 

@@ -26,10 +26,6 @@ class SQLTest(PandasOnSparkTestCase, SQLTestUtils):
         with self.assertRaisesRegex(KeyError, "variable_foo"):
             ps.sql("select * from {variable_foo}")
 
-    def test_error_unsupported_type(self):
-        with self.assertRaisesRegex(KeyError, "some_dict"):
-            ps.sql("select * from {some_dict}")
-
     def test_error_bad_sql(self):
         with self.assertRaises(ParseException):
             ps.sql("this is not valid sql")
