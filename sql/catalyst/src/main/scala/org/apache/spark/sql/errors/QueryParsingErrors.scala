@@ -222,8 +222,7 @@ object QueryParsingErrors {
   }
 
   def charTypeMissingLengthError(dataType: String, ctx: PrimitiveDataTypeContext): Throwable = {
-    new ParseException(s"DataType $dataType requires a length parameter, for example " +
-      s"$dataType(10). Please specify the length.", ctx)
+    new ParseException("PARSE_CHAR_MISSING_LENGTH", Array(dataType, dataType), ctx)
   }
 
   def partitionTransformNotExpectedError(
