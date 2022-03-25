@@ -22,12 +22,12 @@ struct<>
 
 -- !query
 CREATE TEMPORARY VIEW DEPT AS SELECT * FROM VALUES
-  (10, "dept 1", "CA"),
-  (20, "dept 2", "NY"),
-  (30, "dept 3", "TX"),
-  (40, "dept 4 - unassigned", "OR"),
-  (50, "dept 5 - unassigned", "NJ"),
-  (70, "dept 7", "FL")
+  (10, 'dept 1', 'CA'),
+  (20, 'dept 2', 'NY'),
+  (30, 'dept 3', 'TX'),
+  (40, 'dept 4 - unassigned', 'OR'),
+  (50, 'dept 5 - unassigned', 'NJ'),
+  (70, 'dept 7', 'FL')
 AS DEPT(dept_id, dept_name, state)
 -- !query schema
 struct<>
@@ -37,14 +37,14 @@ struct<>
 
 -- !query
 CREATE TEMPORARY VIEW BONUS AS SELECT * FROM VALUES
-  ("emp 1", 10.00D),
-  ("emp 1", 20.00D),
-  ("emp 2", 300.00D),
-  ("emp 2", 100.00D),
-  ("emp 3", 300.00D),
-  ("emp 4", 100.00D),
-  ("emp 5", 1000.00D),
-  ("emp 6 - no dept", 500.00D)
+  ('emp 1', 10.00D),
+  ('emp 1', 20.00D),
+  ('emp 2', 300.00D),
+  ('emp 2', 100.00D),
+  ('emp 3', 300.00D),
+  ('emp 4', 100.00D),
+  ('emp 5', 1000.00D),
+  ('emp 6 - no dept', 500.00D)
 AS BONUS(emp_name, bonus_amt)
 -- !query schema
 struct<>
