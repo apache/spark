@@ -19,12 +19,11 @@ package org.apache.spark.sql.catalyst.expressions.aggregate
 
 import java.io.{ByteArrayInputStream, ByteArrayOutputStream, DataInputStream, DataOutputStream}
 import java.util
-
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{TypeCheckFailure, TypeCheckSuccess}
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.trees.TernaryLike
+import org.apache.spark.sql.catalyst.trees.{BinaryLike, TernaryLike}
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types._
@@ -337,6 +336,25 @@ case class Percentile(
     percentageExpression = newSecond,
     frequencyExpression = newThird
   )
+}
+
+/**
+ * Return a percentile value based on a continuous distribution of
+ * numeric or ansi interval column at the given percentage (specified in ORDER BY clause).
+ * The value of percentage must be between 0.0 and 1.0.
+ */
+case class PercentileCont(left: Expression, right: Expression)
+  extends AggregateFunction
+  with RuntimeReplaceableAggregate
+  with ImplicitCastInputTypes
+  with BinaryLike[Expression] {
+  private lazy val percentile = new Percentile(left, right)
+  override def replacement: Expression = percentile
+  override def nodeName: String = "percentile_cont"
+  override def inputTypes: Seq[AbstractDataType] = percentile.inputTypes
+  override protected def withNewChildrenInternal(
+      newLeft: Expression, newRight: Expression): PercentileCont =
+    this.copy(left = newLeft, right = newRight)
 }
 
 /**

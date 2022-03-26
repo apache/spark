@@ -1844,8 +1844,8 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
     val percentile = ctx.name.getType match {
       case SqlBaseParser.PERCENTILE_CONT =>
         sortOrder.direction match {
-          case Ascending => new PercentileCont(sortOrder.child, percentage)
-          case Descending => new PercentileCont(sortOrder.child, Subtract(Literal(1), percentage))
+          case Ascending => PercentileCont(sortOrder.child, percentage)
+          case Descending => PercentileCont(sortOrder.child, Subtract(Literal(1), percentage))
         }
       case SqlBaseParser.PERCENTILE_DISC =>
         sortOrder.direction match {
@@ -1853,7 +1853,7 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
           case Descending => new PercentileDisc(sortOrder.child, percentage, true)
         }
     }
-    val aggregateExpression = percentileCont.toAggregateExpression()
+    val aggregateExpression = percentile.toAggregateExpression()
     ctx.windowSpec match {
       case spec: WindowRefContext =>
         UnresolvedWindowExpression(aggregateExpression, visitWindowRef(spec))
