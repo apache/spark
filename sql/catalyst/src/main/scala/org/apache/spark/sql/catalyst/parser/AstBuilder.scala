@@ -24,6 +24,7 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable.{ArrayBuffer, Set}
 
 import org.antlr.v4.runtime.{ParserRuleContext, Token}
+import org.antlr.v4.runtime.misc.Interval
 import org.antlr.v4.runtime.tree.{ParseTree, RuleNode, TerminalNode}
 import org.apache.commons.codec.DecoderException
 import org.apache.commons.codec.binary.Hex
@@ -39,7 +40,7 @@ import org.apache.spark.sql.catalyst.parser.SqlBaseParser._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin
-import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, DateTimeUtils, IntervalUtils}
+import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, DateTimeUtils, IntervalUtils, ResolveDefaultColumns}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.{convertSpecialDate, convertSpecialTimestamp, convertSpecialTimestampNTZ, getZoneId, stringToDate, stringToTimestamp, stringToTimestampWithoutTimeZone}
 import org.apache.spark.sql.connector.catalog.{SupportsNamespaces, TableCatalog}
 import org.apache.spark.sql.connector.catalog.TableChange.ColumnPosition
@@ -2788,13 +2789,18 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
     Option(commentSpec()).map(visitCommentSpec).foreach {
       builder.putString("comment", _)
     }
-
-    // Process the 'DEFAULT expression' clause in the column definition, if any.
-    val name: String = colName.getText
-    val defaultExpr = Option(ctx.defaultExpression()).map(visitDefaultExpression)
-    if (defaultExpr.isDefined) {
-      throw QueryParsingErrors.defaultColumnNotImplementedYetError(ctx)
+    // Add the 'DEFAULT expression' clause in the column definition, if any, to the column metadata.
+    Option(ctx.defaultExpression()).map(visitDefaultExpression).foreach { field =>
+      if (conf.getConf(SQLConf.ENABLE_DEFAULT_COLUMNS)) {
+        // Add default to metadata
+        builder.putString(ResolveDefaultColumns.CURRENT_DEFAULT_COLUMN_METADATA_KEY, field)
+        builder.putString(ResolveDefaultColumns.EXISTS_DEFAULT_COLUMN_METADATA_KEY, field)
+      } else {
+        throw QueryParsingErrors.defaultColumnNotEnabledError(ctx)
+      }
     }
+
+    val name: String = colName.getText
 
     StructField(
       name = name,
@@ -2849,6 +2855,22 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
    */
   override def visitCommentSpec(ctx: CommentSpecContext): String = withOrigin(ctx) {
     string(ctx.STRING)
+  }
+
+  /**
+   * Create a default string.
+   */
+  override def visitDefaultExpression(ctx: DefaultExpressionContext): String = withOrigin(ctx) {
+    val exprCtx = ctx.expression()
+    // Make sure it can be converted to Catalyst expressions.
+    expression(exprCtx)
+    // Extract the raw expression text so that we can save the user provided text. We don't
+    // use `Expression.sql` to avoid storing incorrect text caused by bugs in any expression's
+    // `sql` method. Note: `exprCtx.getText` returns a string without spaces, so we need to
+    // get the text from the underlying char stream instead.
+    val start = exprCtx.getStart.getStartIndex
+    val end = exprCtx.getStop.getStopIndex
+    exprCtx.getStart.getInputStream.getText(new Interval(start, end))
   }
 
   /**
