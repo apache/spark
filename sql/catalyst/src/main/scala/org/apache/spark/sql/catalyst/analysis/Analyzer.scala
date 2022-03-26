@@ -2225,7 +2225,7 @@ class Analyzer(override val catalogManager: CatalogManager)
             throw QueryCompilationErrors.nonDeterministicFilterInAggregateError
           }
           if (u.filter.isDefined &&
-            u.filter.get.children.exists(_.isInstanceOf[AggregateExpression])) {
+            u.filter.get.exists(_.isInstanceOf[AggregateExpression])) {
             throw QueryCompilationErrors.aggregateInAggregateFilterError
           }
           if (u.ignoreNulls) {

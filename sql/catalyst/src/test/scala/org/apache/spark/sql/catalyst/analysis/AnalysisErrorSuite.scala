@@ -592,6 +592,12 @@ class AnalysisErrorSuite extends AnalysisTest {
       "explode(array(min(a))), explode(array(max(a)))" :: Nil
   )
 
+  errorTest(
+    "aggregate in aggregate filter",
+    CatalystSqlParser.parsePlan("SELECT sum(c) filter (where max(e) > 1) FROM TaBlE2"),
+    "FILTER expression contains aggregate, " +
+      "it cannot be used in aggregate functions" :: Nil)
+
   test("SPARK-6452 regression test") {
     // CheckAnalysis should throw AnalysisException when Aggregate contains missing attribute(s)
     // Since we manually construct the logical plan at here and Sum only accept
