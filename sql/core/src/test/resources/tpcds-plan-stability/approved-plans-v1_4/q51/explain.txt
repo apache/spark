@@ -203,7 +203,7 @@ Condition : ((isnotnull(web_cumulative#35) AND isnotnull(store_cumulative#36)) A
 
 (37) TakeOrderedAndProject
 Input [6]: [item_sk#30, d_date#31, web_sales#32, store_sales#33, web_cumulative#35, store_cumulative#36]
-Arguments: 100, [item_sk#30 ASC NULLS FIRST, d_date#31 ASC NULLS FIRST], [item_sk#30, d_date#31, web_sales#32, store_sales#33, web_cumulative#35, store_cumulative#36]
+Arguments: 100, 0, [item_sk#30 ASC NULLS FIRST, d_date#31 ASC NULLS FIRST], [item_sk#30, d_date#31, web_sales#32, store_sales#33, web_cumulative#35, store_cumulative#36]
 
 ===== Subqueries =====
 

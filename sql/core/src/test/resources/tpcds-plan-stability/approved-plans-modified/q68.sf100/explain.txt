@@ -248,7 +248,7 @@ Input [10]: [ss_ticket_number#5, bought_city#32, extended_price#33, list_price#3
 
 (45) TakeOrderedAndProject
 Input [8]: [c_last_name#40, c_first_name#39, ca_city#43, bought_city#32, ss_ticket_number#5, extended_price#33, extended_tax#35, list_price#34]
-Arguments: 100, [c_last_name#40 ASC NULLS FIRST, ss_ticket_number#5 ASC NULLS FIRST], [c_last_name#40, c_first_name#39, ca_city#43, bought_city#32, ss_ticket_number#5, extended_price#33, extended_tax#35, list_price#34]
+Arguments: 100, 0, [c_last_name#40 ASC NULLS FIRST, ss_ticket_number#5 ASC NULLS FIRST], [c_last_name#40, c_first_name#39, ca_city#43, bought_city#32, ss_ticket_number#5, extended_price#33, extended_tax#35, list_price#34]
 
 ===== Subqueries =====
 

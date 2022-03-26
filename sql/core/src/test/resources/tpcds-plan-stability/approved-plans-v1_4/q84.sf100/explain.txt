@@ -201,5 +201,5 @@ Input [5]: [c_customer_id#1, c_first_name#5, c_last_name#6, cd_demo_sk#18, sr_cd
 
 (37) TakeOrderedAndProject
 Input [3]: [customer_id#22, customername#23, c_customer_id#1]
-Arguments: 100, [c_customer_id#1 ASC NULLS FIRST], [customer_id#22, customername#23]
+Arguments: 100, 0, [c_customer_id#1 ASC NULLS FIRST], [customer_id#22, customername#23]
 

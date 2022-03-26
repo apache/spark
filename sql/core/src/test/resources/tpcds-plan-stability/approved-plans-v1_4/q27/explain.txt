@@ -167,7 +167,7 @@ Results [7]: [i_item_id#22, s_state#23, cast((shiftright(spark_grouping_id#24, 0
 
 (30) TakeOrderedAndProject
 Input [7]: [i_item_id#22, s_state#23, g_state#46, agg1#47, agg2#48, agg3#49, agg4#50]
-Arguments: 100, [i_item_id#22 ASC NULLS FIRST, s_state#23 ASC NULLS FIRST], [i_item_id#22, s_state#23, g_state#46, agg1#47, agg2#48, agg3#49, agg4#50]
+Arguments: 100, 0, [i_item_id#22 ASC NULLS FIRST, s_state#23 ASC NULLS FIRST], [i_item_id#22, s_state#23, g_state#46, agg1#47, agg2#48, agg3#49, agg4#50]
 
 ===== Subqueries =====
 

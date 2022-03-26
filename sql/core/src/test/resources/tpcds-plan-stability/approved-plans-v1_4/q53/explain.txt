@@ -154,7 +154,7 @@ Input [4]: [i_manufact_id#5, sum_sales#24, _w0#25, avg_quarterly_sales#27]
 
 (28) TakeOrderedAndProject
 Input [3]: [i_manufact_id#5, sum_sales#24, avg_quarterly_sales#27]
-Arguments: 100, [avg_quarterly_sales#27 ASC NULLS FIRST, sum_sales#24 ASC NULLS FIRST, i_manufact_id#5 ASC NULLS FIRST], [i_manufact_id#5, sum_sales#24, avg_quarterly_sales#27]
+Arguments: 100, 0, [avg_quarterly_sales#27 ASC NULLS FIRST, sum_sales#24 ASC NULLS FIRST, i_manufact_id#5 ASC NULLS FIRST], [i_manufact_id#5, sum_sales#24, avg_quarterly_sales#27]
 
 ===== Subqueries =====
 

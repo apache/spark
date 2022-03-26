@@ -167,7 +167,7 @@ Results [5]: [i_item_id#17, avg(cs_quantity#4)#40 AS agg1#44, cast((avg(Unscaled
 
 (30) TakeOrderedAndProject
 Input [5]: [i_item_id#17, agg1#44, agg2#45, agg3#46, agg4#47]
-Arguments: 100, [i_item_id#17 ASC NULLS FIRST], [i_item_id#17, agg1#44, agg2#45, agg3#46, agg4#47]
+Arguments: 100, 0, [i_item_id#17 ASC NULLS FIRST], [i_item_id#17, agg1#44, agg2#45, agg3#46, agg4#47]
 
 ===== Subqueries =====
 

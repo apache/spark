@@ -222,7 +222,7 @@ Results [7]: [i_item_id#28, i_item_desc#29, s_store_id#24, s_store_name#25, Make
 
 (40) TakeOrderedAndProject
 Input [7]: [i_item_id#28, i_item_desc#29, s_store_id#24, s_store_name#25, store_sales_profit#41, store_returns_loss#42, catalog_sales_profit#43]
-Arguments: 100, [i_item_id#28 ASC NULLS FIRST, i_item_desc#29 ASC NULLS FIRST, s_store_id#24 ASC NULLS FIRST, s_store_name#25 ASC NULLS FIRST], [i_item_id#28, i_item_desc#29, s_store_id#24, s_store_name#25, store_sales_profit#41, store_returns_loss#42, catalog_sales_profit#43]
+Arguments: 100, 0, [i_item_id#28 ASC NULLS FIRST, i_item_desc#29 ASC NULLS FIRST, s_store_id#24 ASC NULLS FIRST, s_store_name#25 ASC NULLS FIRST], [i_item_id#28, i_item_desc#29, s_store_id#24, s_store_name#25, store_sales_profit#41, store_returns_loss#42, catalog_sales_profit#43]
 
 ===== Subqueries =====
 

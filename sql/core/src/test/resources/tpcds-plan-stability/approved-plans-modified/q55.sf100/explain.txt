@@ -119,7 +119,7 @@ Results [3]: [i_brand_id#10 AS brand_id#18, i_brand#11 AS brand#19, MakeDecimal(
 
 (21) TakeOrderedAndProject
 Input [3]: [brand_id#18, brand#19, ext_price#20]
-Arguments: 100, [ext_price#20 DESC NULLS LAST, brand_id#18 ASC NULLS FIRST], [brand_id#18, brand#19, ext_price#20]
+Arguments: 100, 0, [ext_price#20 DESC NULLS LAST, brand_id#18 ASC NULLS FIRST], [brand_id#18, brand#19, ext_price#20]
 
 ===== Subqueries =====
 

@@ -96,7 +96,7 @@ Results [4]: [d_year#11, i_brand_id#6 AS brand_id#16, i_brand#7 AS brand#17, Mak
 
 (17) TakeOrderedAndProject
 Input [4]: [d_year#11, brand_id#16, brand#17, sum_agg#18]
-Arguments: 100, [d_year#11 ASC NULLS FIRST, sum_agg#18 DESC NULLS LAST, brand_id#16 ASC NULLS FIRST], [d_year#11, brand_id#16, brand#17, sum_agg#18]
+Arguments: 100, 0, [d_year#11 ASC NULLS FIRST, sum_agg#18 DESC NULLS LAST, brand_id#16 ASC NULLS FIRST], [d_year#11, brand_id#16, brand#17, sum_agg#18]
 
 ===== Subqueries =====
 

@@ -201,7 +201,7 @@ Input [6]: [total_sum#14, i_category#8, i_class#7, lochierarchy#17, _w0#45, rank
 
 (34) TakeOrderedAndProject
 Input [5]: [total_sum#14, i_category#8, i_class#7, lochierarchy#17, rank_within_parent#47]
-Arguments: 100, [lochierarchy#17 DESC NULLS LAST, CASE WHEN (lochierarchy#17 = 0) THEN i_category#8 END ASC NULLS FIRST, rank_within_parent#47 ASC NULLS FIRST], [total_sum#14, i_category#8, i_class#7, lochierarchy#17, rank_within_parent#47]
+Arguments: 100, 0, [lochierarchy#17 DESC NULLS LAST, CASE WHEN (lochierarchy#17 = 0) THEN i_category#8 END ASC NULLS FIRST, rank_within_parent#47 ASC NULLS FIRST], [total_sum#14, i_category#8, i_class#7, lochierarchy#17, rank_within_parent#47]
 
 ===== Subqueries =====
 

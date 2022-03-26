@@ -182,7 +182,7 @@ Input [8]: [ss_ticket_number#5, ss_customer_sk#1, s_city#17, amt#26, profit#27, 
 
 (33) TakeOrderedAndProject
 Input [7]: [c_last_name#31, c_first_name#30, substr(s_city, 1, 30)#33, ss_ticket_number#5, amt#26, profit#27, s_city#17]
-Arguments: 100, [c_last_name#31 ASC NULLS FIRST, c_first_name#30 ASC NULLS FIRST, substr(s_city#17, 1, 30) ASC NULLS FIRST, profit#27 ASC NULLS FIRST], [c_last_name#31, c_first_name#30, substr(s_city, 1, 30)#33, ss_ticket_number#5, amt#26, profit#27]
+Arguments: 100, 0, [c_last_name#31 ASC NULLS FIRST, c_first_name#30 ASC NULLS FIRST, substr(s_city#17, 1, 30) ASC NULLS FIRST, profit#27 ASC NULLS FIRST], [c_last_name#31, c_first_name#30, substr(s_city, 1, 30)#33, ss_ticket_number#5, amt#26, profit#27]
 
 ===== Subqueries =====
 
