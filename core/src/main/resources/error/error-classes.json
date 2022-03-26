@@ -120,6 +120,9 @@
     "message" : [ "Invalid SQL syntax: %s" ],
     "sqlState" : "42000"
   },
+  "INVALID_UDF" : {
+    "message" : [ "Invalid UDF: %s" ]
+  },
   "MAP_KEY_DOES_NOT_EXIST" : {
     "message" : [ "Key %s does not exist. If necessary set %s to false to bypass this error.%s" ]
   },
