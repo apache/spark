@@ -21,7 +21,7 @@ import scala.collection.mutable
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.SubExprUtils._
-import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
+import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, PercentileCont}
 import org.apache.spark.sql.catalyst.optimizer.{BooleanSimplification, DecorrelateInnerQuery}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -226,6 +226,10 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
             // Only allow window functions with an aggregate expression or an offset window
             // function or a Pandas window UDF.
             w.windowFunction match {
+              case AggregateExpression(_: PercentileCont, _, _, _, _)
+                if w.windowSpec.orderSpec.nonEmpty || w.windowSpec.frameSpecification !=
+                    SpecifiedWindowFrame(RowFrame, UnboundedPreceding, UnboundedFollowing) =>
+                failAnalysis("Cannot specify order by or frame for 'PERCENTILE_CONT'.")
               case _: AggregateExpression | _: FrameLessOffsetWindowFunction |
                   _: AggregateWindowFunction => // OK
               case f: PythonUDF if PythonUDF.isWindowPandasUDF(f) => // OK

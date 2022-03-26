@@ -221,6 +221,12 @@ class LogisticRegressionSuite extends MLTest with DefaultReadWriteTest {
     assert(!model.hasSummary)
   }
 
+  test("LogisticRegression validate input dataset") {
+    testInvalidClassificationLabels(new LogisticRegression().fit(_), None)
+    testInvalidWeights(new LogisticRegression().setWeightCol("weight").fit(_))
+    testInvalidVectors(new LogisticRegression().fit(_))
+  }
+
   test("logistic regression: illegal params") {
     val lowerBoundsOnCoefficients = Matrices.dense(1, 4, Array(1.0, 0.0, 1.0, 0.0))
     val upperBoundsOnCoefficients1 = Matrices.dense(1, 4, Array(0.0, 1.0, 1.0, 0.0))
