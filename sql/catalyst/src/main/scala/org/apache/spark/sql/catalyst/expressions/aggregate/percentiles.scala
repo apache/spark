@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.expressions.aggregate
 
 import java.io.{ByteArrayInputStream, ByteArrayOutputStream, DataInputStream, DataOutputStream}
 import java.util
+
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{TypeCheckFailure, TypeCheckSuccess}
@@ -160,9 +161,6 @@ abstract class PercentileBase() extends TypedImperativeAggregate[OpenHashMap[Any
 
   /**
    * Get the percentile value.
-   *
-   * This function has been based upon similar function from HIVE
-   * `org.apache.hadoop.hive.ql.udf.UDAFPercentile.getPercentile()`.
    */
   protected def getPercentiles(sortedCounts: Seq[(AnyRef, Long)]): Seq[Double]
 
@@ -286,6 +284,10 @@ case class Percentile(
 
   override def prettyName: String = "percentile"
 
+  /**
+   * This function has been based upon similar function from HIVE
+   * `org.apache.hadoop.hive.ql.udf.UDAFPercentile.getPercentile()`.
+   */
   override protected def getPercentiles(sortedCounts: Seq[(AnyRef, Long)]): Seq[Double] = {
     val accumulatedCounts = sortedCounts.scanLeft((sortedCounts.head._1, 0L)) {
       case ((key1, count1), (key2, count2)) => (key2, count1 + count2)
