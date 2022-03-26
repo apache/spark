@@ -564,7 +564,7 @@ class AnalysisErrorSuite extends AnalysisTest {
     val resolved = s"${attrA.toString},${attrC.toString}"
 
     val errorMsg = s"Resolved attribute(s) $resolved missing from ${otherA.toString} " +
-                     s"in operator !Aggregate [${aliases.mkString(", ")}]. " +
+                     s"in operator !Aggregate [${aliases.mkString(", ")}], false. " +
                      s"Attribute(s) with the same name appear in the operation: a. " +
                      "Please check if the right attribute(s) are used."
 
