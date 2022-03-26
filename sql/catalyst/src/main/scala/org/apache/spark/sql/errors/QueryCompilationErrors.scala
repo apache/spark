@@ -334,9 +334,14 @@ object QueryCompilationErrors extends QueryErrorsBase {
       "it cannot be used in aggregate functions")
   }
 
+  def nonBooleanAggregateFilterError(): Throwable = {
+    new AnalysisException("FILTER expression does not return true or false. " +
+      "It cannot be used in an aggregate function")
+  }
+
   def aggregateInAggregateFilterError(): Throwable = {
-    new AnalysisException("FILTER expression contains aggregate, " +
-      "it cannot be used in aggregate functions")
+    new AnalysisException("FILTER expression contains aggregate. " +
+      "It cannot be used in an aggregate function")
   }
 
   def aliasNumberNotMatchColumnNumberError(
