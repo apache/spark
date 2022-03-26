@@ -166,7 +166,7 @@ abstract class OffsetWindowFunctionFrameBase(
       inputIndex += 1
     }
     if (skippedNonNullCount < offset && inputIndex == input.length) {
-      // The size of not null input less than offset, cannot find the offset row whose input
+      // The size of non-null input is less than offset, cannot find the offset row whose input
       // is not null. Therefore, reset `nextSelectedRow` with empty row.
       nextSelectedRow = EmptyRow
     }
