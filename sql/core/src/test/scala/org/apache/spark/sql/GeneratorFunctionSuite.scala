@@ -357,6 +357,13 @@ class GeneratorFunctionSuite extends QueryTest with SharedSparkSession {
     val df = Seq(1, 2, 3).toDF("v")
     checkAnswer(df.select(explode(array(min($"v"), max($"v")))), Row(1) :: Row(3) :: Nil)
   }
+
+  test("SPARK-38528: generator in stream of aggregate expressions") {
+    val df = Seq(1, 2, 3).toDF("v")
+    checkAnswer(
+      df.select(Stream(explode(array(min($"v"), max($"v"))), sum($"v")): _*),
+      Row(1, 6) :: Row(3, 6) :: Nil)
+  }
 }
 
 case class EmptyGenerator() extends Generator with LeafLike[Expression] {
