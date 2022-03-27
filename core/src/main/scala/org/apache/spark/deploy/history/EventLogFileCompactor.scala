@@ -221,5 +221,5 @@ private class CompactedEventLogFileWriter(
     hadoopConf: Configuration)
   extends SingleEventLogFileWriter(appId, appAttemptId, logBaseDir, sparkConf, hadoopConf) {
 
-  override val logPath: String = originalFilePath.toUri.toString + EventLogFileWriter.COMPACTED
+  override val logPath: String = originalFilePath.toString + EventLogFileWriter.COMPACTED
 }

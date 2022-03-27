@@ -17,6 +17,8 @@
 
 package org.apache.spark.deploy.history
 
+import java.io.File
+
 import scala.collection.mutable
 import scala.io.{Codec, Source}
 
@@ -281,6 +283,20 @@ class EventLogFileCompactorSuite extends SparkFunSuite {
         }
         assert(linesLength === expectedLines.length)
       }
+    }
+  }
+
+  test("SPARK-38664: Support compact EventLog when there are illegal characters in the path") {
+    withTempDir { dir =>
+      val baseDir = new File(dir, "spark-%")
+      Utils.createDirectory(baseDir)
+      val fs = new Path(dir.getAbsolutePath).getFileSystem(hadoopConf)
+      val fileStatuses = writeEventsToRollingWriter(fs, "app", baseDir, sparkConf, hadoopConf,
+        (1 to 4).map(_ => testEvent): _*)
+      val compactor = new EventLogFileCompactor(sparkConf, hadoopConf, fs,
+        TEST_ROLLING_MAX_FILES_TO_RETAIN, TEST_COMPACTION_SCORE_THRESHOLD)
+      assertCompaction(fs, fileStatuses, compactor.compact(fileStatuses),
+        expectedNumOfFilesCompacted = 1)
     }
   }
 
