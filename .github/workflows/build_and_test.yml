@@ -512,7 +512,6 @@ jobs:
         restore-keys: |
           docs-maven-
     - name: Install Python linter dependencies
-      id: py-linter-deps
       run: |
         # TODO(SPARK-32407): Sphinx 3.1+ does not correctly index nested classes.
         #   See also https://github.com/sphinx-doc/sphinx/issues/7551.
@@ -521,19 +520,16 @@ jobs:
         python3.9 -m pip install 'flake8==3.9.0' pydata_sphinx_theme 'mypy==0.920' 'pytest-mypy-plugins==1.9.3' numpydoc 'jinja2<3.0.0' 'black==21.12b0'
         python3.9 -m pip install pandas-stubs
     - name: Install R linter dependencies and SparkR
-      id: r-linter-deps
       run: |
         apt-get install -y libcurl4-openssl-dev libgit2-dev libssl-dev libxml2-dev
         Rscript -e "install.packages(c('devtools'), repos='https://cloud.r-project.org/')"
         Rscript -e "devtools::install_version('lintr', version='2.0.1', repos='https://cloud.r-project.org')"
         ./R/install-dev.sh
     - name: Install JavaScript linter dependencies
-      id: js-linter-deps
       run: |
         apt update
         apt-get install -y nodejs npm
     - name: Install dependencies for documentation generation
-      id: doc-deps
       run: |
         # pandoc is required to generate PySpark APIs as well in nbsphinx.
         apt-get install -y libcurl4-openssl-dev pandoc libfontconfig1-dev libharfbuzz-dev \
@@ -555,37 +551,39 @@ jobs:
         gem install bundler
         cd docs
         bundle install
+    # this is the last step of setting up the linter steps, this is referenced by linter steps through the id
     - name: Install Java 8
-      id: java-deps
+      id: setup
       uses: actions/setup-java@v1
       with:
         java-version: 8
-      # fast-fail from here on, unless running in a non 'apache' org fork
-      # success() evaluates to true when none of the previous steps have failed or been canceled
-      # on a fork, all linter steps are executed, even if one fails
+
+    # fast-fail from here on, unless running in a non 'apache' org fork
+    # success() evaluates to true when none of the previous steps have failed or been canceled
+    # on a fork, all linter steps are executed, even if one fails
     - name: Scala linter
-      if: (success() || github.repository_owner != 'apache') && steps.java-deps.outcome == 'success'
+      if: (success() || github.repository_owner != 'apache') && steps.setup.outcome == 'success'
       run: ./dev/lint-scala
     - name: Java linter
-      if: (success() || github.repository_owner != 'apache') && steps.java-deps.outcome == 'success'
+      if: (success() || github.repository_owner != 'apache') && steps.setup.outcome == 'success'
       run: ./dev/lint-java
     - name: Python linter
-      if: (success() || github.repository_owner != 'apache') && steps.py-linter-deps.outcome == 'success'
+      if: (success() || github.repository_owner != 'apache') && steps.setup.outcome == 'success'
       run: PYTHON_EXECUTABLE=python3.9 ./dev/lint-python
     - name: R linter
-      if: (success() || github.repository_owner != 'apache') && steps.r-linter-deps.outcome == 'success'
+      if: (success() || github.repository_owner != 'apache') && steps.setup.outcome == 'success'
       run: ./dev/lint-r
     - name: JS linter
-      if: (success() || github.repository_owner != 'apache') && steps.js-linter-deps.outcome == 'success'
+      if: (success() || github.repository_owner != 'apache') && steps.setup.outcome == 'success'
       run: ./dev/lint-js
     - name: License test
-      if: (success() || github.repository_owner != 'apache') && steps.java-deps.outcome == 'success'
+      if: (success() || github.repository_owner != 'apache') && steps.setup.outcome == 'success'
       run: ./dev/check-license
     - name: Dependencies test
-      if: (success() || github.repository_owner != 'apache') && steps.java-deps.outcome == 'success'
+      if: (success() || github.repository_owner != 'apache') && steps.setup.outcome == 'success'
       run: ./dev/test-dependencies.sh
     - name: Run documentation build
-      if: (success() || github.repository_owner != 'apache') && steps.doc-deps.outcome == 'success'
+      if: (success() || github.repository_owner != 'apache') && steps.setup.outcome == 'success'
       run: |
         cd docs
         bundle exec jekyll build
