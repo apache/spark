@@ -480,6 +480,11 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
     val legacyNullAsString =
       conf.getConf(SQLConf.LEGACY_PARSE_NULL_PARTITION_SPEC_AS_STRING_LITERAL)
     val parts = ctx.partitionVal.asScala.map { pVal =>
+      // Check if the query attempted to refer to a DEFAULT column value within the PARTITION clause
+      // and return a specific error to help guide the user, since this is not allowed.
+      if (pVal.DEFAULT != null) {
+        throw QueryParsingErrors.defaultColumnReferencesNotAllowedInPartitionSpec(ctx)
+      }
       val name = pVal.identifier.getText
       val value = Option(pVal.constant).map(v => visitStringConstant(v, legacyNullAsString))
       name -> value

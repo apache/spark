@@ -18,13 +18,226 @@
 package org.apache.spark.sql.catalyst.util
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.analysis.Analyzer
+import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.analysis.{Analyzer, NoSuchTableException, UnresolvedAttribute, UnresolvedInlineTable, UnresolvedRelation}
+import org.apache.spark.sql.catalyst.catalog.{SessionCatalog, UnresolvedCatalogRelation}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.optimizer.ConstantFolding
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException}
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
+
+/**
+ * This is a rule to process DEFAULT columns in statements such as CREATE/REPLACE TABLE.
+ *
+ * Background: CREATE TABLE and ALTER TABLE invocations support setting column default values for
+ * later operations. Following INSERT, and INSERT MERGE commands may then reference the value
+ * using the DEFAULT keyword as needed.
+ *
+ * Example:
+ * CREATE TABLE T(a INT DEFAULT 4, b INT NOT NULL DEFAULT 5);
+ * INSERT INTO T VALUES (1, 2);
+ * INSERT INTO T VALUES (1, DEFAULT);
+ * INSERT INTO T VALUES (DEFAULT, 6);
+ * SELECT * FROM T;
+ * (1, 2)
+ * (1, 5)
+ * (4, 6)
+ *
+ * @param analyzer analyzer to use for processing DEFAULT values stored as text.
+ * @param catalog the catalog to use for looking up the schema of INSERT INTO table objects.
+ * @param insert the enclosing INSERT statement for which this rule is processing the query, if any.
+ */
+case class ResolveDefaultColumns(
+  analyzer: Analyzer,
+  catalog: SessionCatalog,
+  insert: Option[InsertIntoStatement] = None) extends Rule[LogicalPlan] {
+  override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsWithPruning(
+    (_ => SQLConf.get.enableDefaultColumns), ruleId) {
+    case i@InsertIntoStatement(_, _, _, _, _, _)
+      if i.query.collectFirst { case u: UnresolvedInlineTable => u }.isDefined =>
+      // Create a helper instance of this same rule with the `insert` argument populated as `i`.
+      // Then recursively apply it on the `query` of `i` to transform the result. This recursive
+      // application lets the below case matching against `UnresolvedInlineTable` to trigger
+      // anywhere that operator may appear in the descendants of `i.query`.
+      val helper = ResolveDefaultColumns(analyzer, catalog, Some(i))
+      val newQuery = helper.apply(i.query)
+      i.copy(query = newQuery)
+
+    case table: UnresolvedInlineTable
+      if insert.isDefined &&
+        table.rows.nonEmpty && table.rows.forall(_.size == table.rows(0).size) =>
+      val expanded: UnresolvedInlineTable = addMissingDefaultColumnValues(table).getOrElse(table)
+      replaceExplicitDefaultColumnValues(analyzer, expanded).getOrElse(table)
+
+    case i@InsertIntoStatement(_, _, _, project: Project, _, _)
+      if !project.resolved =>
+      val helper = ResolveDefaultColumns(analyzer, catalog, Some(i))
+      val replaced: Option[Project] = helper.replaceExplicitDefaultColumnValues(analyzer, project)
+      if (replaced.isDefined) i.copy(query = replaced.get) else i
+
+    case i@InsertIntoStatement(_, _, _, project: Project, _, _)
+      if project.resolved =>
+      val helper = ResolveDefaultColumns(analyzer, catalog, Some(i))
+      val expanded: Project = helper.addMissingDefaultColumnValues(project).getOrElse(project)
+      val replaced: Option[Project] = helper.replaceExplicitDefaultColumnValues(analyzer, expanded)
+      if (replaced.isDefined) i.copy(query = replaced.get) else i
+  }
+
+  // Helper method to check if an expression is an explicit DEFAULT column reference.
+  private def isExplicitDefaultColumn(expr: Expression): Boolean = expr match {
+    case u: UnresolvedAttribute if u.name.equalsIgnoreCase(CURRENT_DEFAULT_COLUMN_NAME) => true
+    case _ => false
+  }
+
+  // Each of the following methods adds a projection over the input plan to generate missing default
+  // column values.
+  private def addMissingDefaultColumnValues(
+      table: UnresolvedInlineTable): Option[UnresolvedInlineTable] = {
+    assert(insert.isDefined)
+    val numQueryOutputs: Int = table.rows(0).size
+    val schema: StructType = getInsertTableSchema.getOrElse(return None)
+    val schemaWithoutPartitionCols =
+      StructType(schema.fields.dropRight(insert.get.partitionSpec.size))
+    val newDefaultExprs: Seq[Expression] =
+      getDefaultExprs(numQueryOutputs, schemaWithoutPartitionCols)
+    val newNames: Seq[String] =
+      schemaWithoutPartitionCols.fields.drop(numQueryOutputs).map { _.name }
+    if (newDefaultExprs.isEmpty) return None
+    Some(table.copy(names = table.names ++ newNames,
+      rows = table.rows.map { row => row ++ newDefaultExprs }))
+  }
+
+  private def addMissingDefaultColumnValues(project: Project): Option[Project] = {
+    val numQueryOutputs: Int = project.projectList.size
+    val schema: StructType = getInsertTableSchema.getOrElse(return None)
+    val schemaWithoutPartitionCols =
+      StructType(schema.fields.dropRight(insert.get.partitionSpec.size))
+    val newDefaultExprs: Seq[Expression] =
+      getDefaultExprs(numQueryOutputs, schemaWithoutPartitionCols)
+    val newAliases: Seq[NamedExpression] =
+      newDefaultExprs.zip(schemaWithoutPartitionCols.fields).map {
+        case (expr, field) => Alias(expr, field.name)()
+      }
+    if (newDefaultExprs.isEmpty) return None
+    Some(project.copy(projectList = project.projectList ++ newAliases))
+  }
+
+  // This is a helper for the addMissingDefaultColumnValues methods above.
+  private def getDefaultExprs(
+      numQueryOutputs: Int, schemaWithoutPartitionCols: StructType): Seq[Expression] = {
+    val remainingFields: Seq[StructField] = schemaWithoutPartitionCols.fields.drop(numQueryOutputs)
+    val numDefaultExprsToAdd: Int = {
+      if (SQLConf.get.useNullsForMissingDefaultColumnValues) {
+        remainingFields.size
+      } else {
+        remainingFields.takeWhile(_.metadata.contains(CURRENT_DEFAULT_COLUMN_METADATA_KEY)).size
+      }
+    }
+    Seq.fill(numDefaultExprsToAdd)(UnresolvedAttribute(CURRENT_DEFAULT_COLUMN_NAME))
+  }
+
+  // Each of the following methods replaces unresolved "DEFAULT" column references with matching
+  // default column values.
+  private def replaceExplicitDefaultColumnValues(
+      analyzer: Analyzer,
+      table: UnresolvedInlineTable): Option[UnresolvedInlineTable] = {
+    assert(insert.isDefined)
+    val schema: StructType = getInsertTableSchema.getOrElse(return None)
+    val schemaWithoutPartitionCols =
+      StructType(schema.fields.dropRight(insert.get.partitionSpec.size))
+    val defaultExprs: Seq[Expression] = schemaWithoutPartitionCols.fields.map {
+      case f if f.metadata.contains(CURRENT_DEFAULT_COLUMN_METADATA_KEY) =>
+        analyze(analyzer, f, "INSERT")
+      case _ => Literal(null)
+    }
+    var replaced = false
+    val newRows: Seq[Seq[Expression]] = {
+      table.rows.map { row: Seq[Expression] =>
+        for {
+          i <- 0 until row.size
+          expr = row(i)
+          defaultExpr = if (i < defaultExprs.size) defaultExprs(i) else Literal(null)
+        } yield expr match {
+          case u: UnresolvedAttribute if isExplicitDefaultColumn(u) =>
+            replaced = true
+            defaultExpr
+          case expr@_ if expr.find{isExplicitDefaultColumn}.isDefined =>
+            // Return a more descriptive error message if the user tries to nest the DEFAULT column
+            // reference inside some other expression, such as DEFAULT + 1 (this is not allowed).
+            throw new AnalysisException(DEFAULTS_IN_EXPRESSIONS_ERROR)
+          case _ => expr
+        }
+      }
+    }
+    if (!replaced) return None
+    Some(table.copy(rows = newRows))
+  }
+
+  private def replaceExplicitDefaultColumnValues(
+      analyzer: Analyzer,
+      project: Project): Option[Project] = {
+    assert(insert.isDefined)
+    val schema: StructType = getInsertTableSchema.getOrElse(return None)
+    val schemaWithoutPartitionCols =
+      StructType(schema.fields.dropRight(insert.get.partitionSpec.size))
+    val colNames: Seq[String] = schemaWithoutPartitionCols.fields.map { _.name }
+    val defaultExprs: Seq[Expression] = schemaWithoutPartitionCols.fields.map {
+      case f if f.metadata.contains(CURRENT_DEFAULT_COLUMN_METADATA_KEY) =>
+        analyze(analyzer, f, "INSERT")
+      case _ => Literal(null)
+    }
+    var replaced = false
+    val updated: Seq[NamedExpression] = {
+      for {
+        i <- 0 until project.projectList.size
+        projectExpr = project.projectList(i)
+        defaultExpr = if (i < defaultExprs.size) defaultExprs(i) else Literal(null)
+        colName = if (i < colNames.size) colNames(i) else ""
+      } yield projectExpr match {
+        case Alias(u: UnresolvedAttribute, _) if isExplicitDefaultColumn(u) =>
+          replaced = true
+          Alias(defaultExpr, colName)()
+        case u: UnresolvedAttribute if isExplicitDefaultColumn(u) =>
+          replaced = true
+          Alias(defaultExpr, colName)()
+        case expr@_ if expr.find{isExplicitDefaultColumn}.isDefined =>
+          // Return a more descriptive error message if the user tries to nest the DEFAULT column
+          // reference inside some other expression, such as DEFAULT + 1 (this is not allowed).
+          throw new AnalysisException(DEFAULTS_IN_EXPRESSIONS_ERROR)
+        case _ => projectExpr
+      }
+    }
+    if (!replaced) return None
+    Some(project.copy(projectList = updated))
+  }
+
+  /**
+   * Looks up the schema for the table object of an INSERT INTO statement from the catalog.
+   *
+   * @return the schema of the indicated table, or None if the lookup found nothing.
+   */
+  private def getInsertTableSchema: Option[StructType] = {
+    assert(insert.isDefined)
+    val lookup = try {
+      val tableName = insert.get.table match {
+        case r: UnresolvedRelation => TableIdentifier(r.name)
+        case r: UnresolvedCatalogRelation => r.tableMeta.identifier
+        case _ => return None
+      }
+      catalog.lookupRelation(tableName)
+    } catch {
+      case _: NoSuchTableException => return None
+    }
+    lookup match {
+      case SubqueryAlias(_, r: UnresolvedCatalogRelation) => Some(r.tableMeta.schema)
+      case _ => None
+    }
+  }
+}
 
 /**
  * This object contains fields to help process DEFAULT columns.
@@ -52,6 +265,13 @@ object ResolveDefaultColumns {
   // corresponding DEFAULT value instead. We choose option (2) for efficiency, and represent this
   // value as the text representation of a folded constant in the "EXISTS_DEFAULT" column metadata.
   val EXISTS_DEFAULT_COLUMN_METADATA_KEY = "EXISTS_DEFAULT"
+  // Name of attributes representing explicit references to the value stored in the above
+  // CURRENT_DEFAULT_COLUMN_METADATA.
+  val CURRENT_DEFAULT_COLUMN_NAME = "DEFAULT"
+  // Return a more descriptive error message if the user tries to nest the DEFAULT column
+  // reference inside some other expression, such as DEFAULT + 1 (this is not allowed).
+  val DEFAULTS_IN_EXPRESSIONS_ERROR = "Failed to execute INSERT INTO command because the VALUES " +
+    "list contains a DEFAULT column reference as part of another expression; this is not allowed"
 
   /**
    * Finds "current default" expressions in CREATE/REPLACE TABLE columns and constant-folds them.

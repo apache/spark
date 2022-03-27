@@ -2816,6 +2816,17 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val USE_NULLS_FOR_MISSING_DEFAULT_COLUMN_VALUES =
+    buildConf("spark.sql.defaultColumn.useNullsForMissingDefautValues")
+      .internal()
+      .doc("When true, and DEFAULT columns are enabled, allow column definitions lacking " +
+        "explicit default values to behave as if they had specified DEFAULT NULL instead. " +
+        "For example, this allows most INSERT INTO statements to specify only a prefix of the " +
+        "columns in the target table, and the remaining columns will receive NULL values.")
+      .version("3.4.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val ENFORCE_RESERVED_KEYWORDS = buildConf("spark.sql.ansi.enforceReservedKeywords")
     .doc(s"When true and '${ANSI_ENABLED.key}' is true, the Spark SQL parser enforces the ANSI " +
       "reserved keywords and forbids SQL queries that use reserved keywords as alias names " +
@@ -4317,6 +4328,9 @@ class SQLConf extends Serializable with Logging {
   def ansiEnabled: Boolean = getConf(ANSI_ENABLED)
 
   def enableDefaultColumns: Boolean = getConf(SQLConf.ENABLE_DEFAULT_COLUMNS)
+
+  def useNullsForMissingDefaultColumnValues: Boolean =
+    getConf(SQLConf.USE_NULLS_FOR_MISSING_DEFAULT_COLUMN_VALUES)
 
   def enforceReservedKeywords: Boolean = ansiEnabled && getConf(ENFORCE_RESERVED_KEYWORDS)
 

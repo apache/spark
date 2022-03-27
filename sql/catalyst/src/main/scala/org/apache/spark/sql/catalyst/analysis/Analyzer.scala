@@ -42,7 +42,7 @@ import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
 import org.apache.spark.sql.catalyst.trees.{AlwaysProcess, CurrentOrigin}
 import org.apache.spark.sql.catalyst.trees.TreePattern._
-import org.apache.spark.sql.catalyst.util.{toPrettySQL, CharVarcharUtils}
+import org.apache.spark.sql.catalyst.util.{toPrettySQL, CharVarcharUtils, ResolveDefaultColumns}
 import org.apache.spark.sql.connector.catalog._
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.connector.catalog.TableChange.{After, ColumnPosition}
@@ -311,6 +311,7 @@ class Analyzer(override val catalogManager: CatalogManager)
       ResolveAggregateFunctions ::
       TimeWindowing ::
       SessionWindowing ::
+      ResolveDefaultColumns(this, v1SessionCatalog) ::
       ResolveInlineTables ::
       ResolveLambdaVariables ::
       ResolveTimeZone ::
