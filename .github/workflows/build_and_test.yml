@@ -560,29 +560,32 @@ jobs:
       uses: actions/setup-java@v1
       with:
         java-version: 8
+      # fast-fail from here on, unless running in a non 'apache' org fork
+      # success() evaluates to true when none of the previous steps have failed or been canceled
+      # on a fork, all linter steps are executed, even if one fails
     - name: Scala linter
-      if: always() && steps.java-deps.outcome == 'success'
+      if: (success() || github.repository_owner != 'apache') && steps.java-deps.outcome == 'success'
       run: ./dev/lint-scala
     - name: Java linter
-      if: always() && steps.java-deps.outcome == 'success'
+      if: (success() || github.repository_owner != 'apache') && steps.java-deps.outcome == 'success'
       run: ./dev/lint-java
     - name: Python linter
-      if: always() && steps.py-linter-deps.outcome == 'success'
+      if: (success() || github.repository_owner != 'apache') && steps.py-linter-deps.outcome == 'success'
       run: PYTHON_EXECUTABLE=python3.9 ./dev/lint-python
     - name: R linter
-      if: always() && steps.r-linter-deps.outcome == 'success'
+      if: (success() || github.repository_owner != 'apache') && steps.r-linter-deps.outcome == 'success'
       run: ./dev/lint-r
     - name: JS linter
-      if: always() && steps.js-linter-deps.outcome == 'success'
+      if: (success() || github.repository_owner != 'apache') && steps.js-linter-deps.outcome == 'success'
       run: ./dev/lint-js
     - name: License test
-      if: always() && steps.java-deps.outcome == 'success'
+      if: (success() || github.repository_owner != 'apache') && steps.java-deps.outcome == 'success'
       run: ./dev/check-license
     - name: Dependencies test
-      if: always() && steps.java-deps.outcome == 'success'
+      if: (success() || github.repository_owner != 'apache') && steps.java-deps.outcome == 'success'
       run: ./dev/test-dependencies.sh
     - name: Run documentation build
-      if: always() && steps.doc-deps.outcome == 'success'
+      if: (success() || github.repository_owner != 'apache') && steps.doc-deps.outcome == 'success'
       run: |
         cd docs
         bundle exec jekyll build
