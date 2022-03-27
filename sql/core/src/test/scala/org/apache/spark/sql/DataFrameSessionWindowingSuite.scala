@@ -540,7 +540,7 @@ class DataFrameSessionWindowingSuite extends QueryTest with SharedSparkSession
     val filter3 = df3.queryExecution.optimizedPlan.find(_.isInstanceOf[Filter])
     assert(filter3.isDefined)
     val exist3 = filter3.filter(_.toString.contains(">"))
-    assert(exist3.isEmpty, "No need to filter windows when gapDuration value greater than 0")
+    assert(exist3.nonEmpty, "Need to filter windows when gapDuration value greater than 0")
 
     // udf
     withTempTable { table =>

@@ -42,7 +42,7 @@ import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
 import org.apache.spark.sql.catalyst.trees.{AlwaysProcess, CurrentOrigin}
 import org.apache.spark.sql.catalyst.trees.TreePattern._
-import org.apache.spark.sql.catalyst.util.{toPrettySQL, CharVarcharUtils, IntervalUtils}
+import org.apache.spark.sql.catalyst.util.{toPrettySQL, CharVarcharUtils}
 import org.apache.spark.sql.connector.catalog._
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.connector.catalog.TableChange.{After, ColumnPosition}
@@ -57,7 +57,7 @@ import org.apache.spark.sql.internal.connector.V1Function
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.types.DayTimeIntervalType.DAY
 import org.apache.spark.sql.util.{CaseInsensitiveStringMap, SchemaUtils}
-import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 import org.apache.spark.util.Utils
 
 /**
@@ -4061,20 +4061,13 @@ object SessionWindowing extends Rule[LogicalPlan] {
           case s: SessionWindow => sessionAttr
         }
 
-        def isGapInvalid(child: Expression): Boolean = {
-          val calendarInterval = IntervalUtils
-            .safeStringToInterval(UTF8String.fromString(child.toString))
-          calendarInterval == null ||
-            calendarInterval.months + calendarInterval.days + calendarInterval.microseconds <= 0
-        }
-
-        val filterTimeSize = gapDuration match {
-          case gapDuration if gapDuration.find(_.isInstanceOf[ScalaUDF]).nonEmpty => true
-          case _ => gapDuration.child.children match {
-            case children if children.size > 0 =>
-              children.filter(_.dataType != BooleanType).exists(isGapInvalid(_))
-            case _ => isGapInvalid(gapDuration.child)
-          }
+        val filterTimeSize = gapDuration.child.dataType match {
+          case CalendarIntervalType =>
+            val calendarInterval =
+              gapDuration.child.asInstanceOf[Literal].value.asInstanceOf[CalendarInterval]
+            calendarInterval == null ||
+              calendarInterval.months + calendarInterval.days + calendarInterval.microseconds <= 0
+          case _ => true
         }
 
         // As same as tumbling window, we add a filter to filter out nulls.
