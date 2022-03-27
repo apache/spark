@@ -267,6 +267,30 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
     checkAnswer(df8, Seq(Row(2, "alex", 12000.00, 1200.0, false)))
   }
 
+  test("simple scan with top N: order by with alias") {
+    val df1 = spark.read
+      .table("h2.test.employee")
+      .select($"NAME", $"SALARY".as("mySalary"))
+      .sort("mySalary")
+      .limit(1)
+    checkSortRemoved(df1)
+    checkPushedInfo(df1,
+      "PushedFilters: [], PushedTopN: ORDER BY [SALARY ASC NULLS FIRST] LIMIT 1, ")
+    checkAnswer(df1, Seq(Row("cathy", 9000.00)))
+
+    val df2 = spark.read
+      .table("h2.test.employee")
+      .select($"DEPT", $"NAME", $"SALARY".as("mySalary"))
+      .filter($"DEPT" > 1)
+      .sort("mySalary")
+      .limit(1)
+    checkSortRemoved(df2)
+    checkPushedInfo(df2,
+      "PushedFilters: [DEPT IS NOT NULL, DEPT > 1], " +
+        "PushedTopN: ORDER BY [SALARY ASC NULLS FIRST] LIMIT 1, ")
+    checkAnswer(df2, Seq(Row(2, "david", 10000.00)))
+  }
+
   test("scan with filter push-down") {
     val df = spark.table("h2.test.people").filter($"id" > 1)
     checkFiltersRemoved(df)

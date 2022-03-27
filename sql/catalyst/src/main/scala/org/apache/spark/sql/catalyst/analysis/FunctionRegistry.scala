@@ -549,6 +549,7 @@ object FunctionRegistry {
     expression[SoundEx]("soundex"),
     expression[StringSpace]("space"),
     expression[StringSplit]("split"),
+    expression[SplitPart]("split_part"),
     expression[Substring]("substr", true),
     expression[Substring]("substring"),
     expression[Left]("left"),

@@ -2095,10 +2095,12 @@ case class ArrayPosition(left: Expression, right: Expression)
 case class ElementAt(
     left: Expression,
     right: Expression,
+    // The value to return if index is out of bound
+    defaultValueOutOfBound: Option[Literal] = None,
     failOnError: Boolean = SQLConf.get.ansiEnabled)
   extends GetMapValueUtil with GetArrayItemUtil with NullIntolerant {
 
-  def this(left: Expression, right: Expression) = this(left, right, SQLConf.get.ansiEnabled)
+  def this(left: Expression, right: Expression) = this(left, right, None, SQLConf.get.ansiEnabled)
 
   @transient private lazy val mapKeyType = left.dataType.asInstanceOf[MapType].keyType
 
@@ -2179,7 +2181,10 @@ case class ElementAt(
           if (failOnError) {
             throw QueryExecutionErrors.invalidElementAtIndexError(index, array.numElements())
           } else {
-            null
+            defaultValueOutOfBound match {
+              case Some(value) => value.eval()
+              case None => null
+            }
           }
         } else {
           val idx = if (index == 0) {
@@ -2218,7 +2223,16 @@ case class ElementAt(
           val indexOutOfBoundBranch = if (failOnError) {
             s"throw QueryExecutionErrors.invalidElementAtIndexError($index, $eval1.numElements());"
           } else {
-            s"${ev.isNull} = true;"
+            defaultValueOutOfBound match {
+              case Some(value) =>
+                val defaultValueEval = value.genCode(ctx)
+                s"""
+                  ${defaultValueEval.code}
+                  ${ev.isNull} = ${defaultValueEval.isNull}
+                  ${ev.value} = ${defaultValueEval.value}
+                """.stripMargin
+              case None => s"${ev.isNull} = true;"
+            }
           }
 
           s"""
@@ -2278,7 +2292,7 @@ case class ElementAt(
 case class TryElementAt(left: Expression, right: Expression, replacement: Expression)
   extends RuntimeReplaceable with InheritAnalysisRules {
   def this(left: Expression, right: Expression) =
-    this(left, right, ElementAt(left, right, failOnError = false))
+    this(left, right, ElementAt(left, right, None, failOnError = false))
 
   override def prettyName: String = "try_element_at"
 

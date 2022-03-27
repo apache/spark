@@ -22,12 +22,13 @@ import java.util.Locale
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions.{EqualTo, Hex, Literal}
-import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.plans.logical.{TableSpec => LogicalTableSpec, _}
+import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns
 import org.apache.spark.sql.connector.catalog.TableChange.ColumnPosition.{after, first}
 import org.apache.spark.sql.connector.expressions.{ApplyTransform, BucketTransform, DaysTransform, FieldReference, HoursTransform, IdentityTransform, LiteralValue, MonthsTransform, Transform, YearsTransform}
 import org.apache.spark.sql.connector.expressions.LogicalExpressions.bucket
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{IntegerType, LongType, StringType, StructType, TimestampType}
+import org.apache.spark.sql.types.{IntegerType, LongType, MetadataBuilder, StringType, StructType, TimestampType}
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
 class DDLParserSuite extends AnalysisTest {
@@ -2240,20 +2241,45 @@ class DDLParserSuite extends AnalysisTest {
   }
 
   test("SPARK-38335: Implement parser support for DEFAULT values for columns in tables") {
-    // The following commands will support DEFAULT columns, but this has not been implemented yet.
-    for (sql <- Seq(
-      "ALTER TABLE t1 ADD COLUMN x int NOT NULL DEFAULT 42",
-      "ALTER TABLE t1 ALTER COLUMN a.b.c SET DEFAULT 42",
-      "ALTER TABLE t1 ALTER COLUMN a.b.c DROP DEFAULT",
-      "ALTER TABLE t1 REPLACE COLUMNS (x STRING DEFAULT 42)",
-      "CREATE TABLE my_tab(a INT COMMENT 'test', b STRING NOT NULL DEFAULT \"abc\") USING parquet",
-      "REPLACE TABLE my_tab(a INT COMMENT 'test', b STRING NOT NULL DEFAULT \"xyz\") USING parquet"
-    )) {
-      val exc = intercept[ParseException] {
-        parsePlan(sql);
-      }
-      assert(exc.getMessage.contains("Support for DEFAULT column values is not implemented yet"));
+    // The following ALTER TABLE commands will support DEFAULT columns, but this has not been
+    // implemented yet.
+    val unsupportedError = "Support for DEFAULT column values is not implemented yet"
+    assert(intercept[ParseException] {
+      parsePlan("ALTER TABLE t1 ADD COLUMN x int NOT NULL DEFAULT 42")
+    }.getMessage.contains(unsupportedError))
+    assert(intercept[ParseException] {
+      parsePlan("ALTER TABLE t1 ALTER COLUMN a.b.c SET DEFAULT 42")
+    }.getMessage.contains(unsupportedError))
+    assert(intercept[ParseException] {
+      parsePlan("ALTER TABLE t1 ALTER COLUMN a.b.c DROP DEFAULT")
+    }.getMessage.contains(unsupportedError))
+    assert(intercept[ParseException] {
+      parsePlan("ALTER TABLE t1 REPLACE COLUMNS (x STRING DEFAULT 42)")
+    }.getMessage.contains(unsupportedError))
+    // These CREATE/REPLACE TABLE statements should parse successfully.
+    val schemaWithDefaultColumn = new StructType()
+      .add("a", IntegerType, true)
+      .add("b", StringType, false,
+        new MetadataBuilder()
+          .putString(ResolveDefaultColumns.CURRENT_DEFAULT_COLUMN_METADATA_KEY, "\"abc\"")
+          .putString(ResolveDefaultColumns.EXISTS_DEFAULT_COLUMN_METADATA_KEY, "\"abc\"").build())
+    comparePlans(parsePlan(
+      "CREATE TABLE my_tab(a INT, b STRING NOT NULL DEFAULT \"abc\") USING parquet"),
+      CreateTable(UnresolvedDBObjectName(Seq("my_tab"), false), schemaWithDefaultColumn,
+        Seq.empty[Transform], LogicalTableSpec(Map.empty[String, String], Some("parquet"),
+          Map.empty[String, String], None, None, None, false), false))
+    comparePlans(parsePlan("REPLACE TABLE my_tab(a INT, " +
+      "b STRING NOT NULL DEFAULT \"abc\") USING parquet"),
+      ReplaceTable(UnresolvedDBObjectName(Seq("my_tab"), false), schemaWithDefaultColumn,
+        Seq.empty[Transform], LogicalTableSpec(Map.empty[String, String], Some("parquet"),
+          Map.empty[String, String], None, None, None, false), false))
+    // Make sure that the parser returns an exception when the feature is disabled.
+    withSQLConf(SQLConf.ENABLE_DEFAULT_COLUMNS.key -> "false") {
+      intercept(
+        "CREATE TABLE my_tab(a INT, b STRING NOT NULL DEFAULT \"abc\") USING parquet",
+        "Support for DEFAULT column values is not allowed")
     }
+
     // In each of the following cases, the DEFAULT reference parses as an unresolved attribute
     // reference. We can handle these cases after the parsing stage, at later phases of analysis.
     comparePlans(parsePlan("VALUES (1, 2, DEFAULT) AS val"),

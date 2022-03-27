@@ -165,7 +165,7 @@ class BloomFilterAggregateQuerySuite extends QueryTest with SharedSparkSession {
     val exception1 = intercept[AnalysisException] {
       spark.sql("""
                   |SELECT might_contain(cast(a as binary), cast(5 as long))
-                  |FROM values (cast(1 as long)), (cast(2 as long)) as t(a)"""
+                  |FROM values (cast(1 as string)), (cast(2 as string)) as t(a)"""
         .stripMargin)
     }
     assert(exception1.getMessage.contains(
@@ -175,7 +175,7 @@ class BloomFilterAggregateQuerySuite extends QueryTest with SharedSparkSession {
     val exception2 = intercept[AnalysisException] {
       spark.sql("""
                   |SELECT might_contain((select cast(a as binary)), cast(5 as long))
-                  |FROM values (cast(1 as long)), (cast(2 as long)) as t(a)"""
+                  |FROM values (cast(1 as string)), (cast(2 as string)) as t(a)"""
         .stripMargin)
     }
     assert(exception2.getMessage.contains(
