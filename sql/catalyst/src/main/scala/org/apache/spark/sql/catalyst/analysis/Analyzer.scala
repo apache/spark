@@ -2231,7 +2231,7 @@ class Analyzer(override val catalogManager: CatalogManager)
             if (u.filter.get.exists(_.isInstanceOf[AggregateExpression])) {
               throw QueryCompilationErrors.aggregateInAggregateFilterError
             }
-            if (u.filter.get.exists(_.isInstanceOf[WindowFunction])) {
+            if (u.filter.get.exists(_.isInstanceOf[WindowExpression])) {
               throw QueryCompilationErrors.windowFunctionInAggregateFilterError
             }
           }
