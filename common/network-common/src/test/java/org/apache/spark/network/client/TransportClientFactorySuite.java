@@ -31,6 +31,10 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotSame;
+import static org.junit.Assert.assertTrue;
+
 import org.apache.spark.network.TestUtils;
 import org.apache.spark.network.TransportContext;
 import org.apache.spark.network.server.NoOpRpcHandler;
@@ -40,8 +44,6 @@ import org.apache.spark.network.util.ConfigProvider;
 import org.apache.spark.network.util.MapConfigProvider;
 import org.apache.spark.network.util.JavaUtils;
 import org.apache.spark.network.util.TransportConf;
-
-import static org.junit.Assert.*;
 
 public class TransportClientFactorySuite {
   private TransportConf conf;
@@ -229,7 +231,7 @@ public class TransportClientFactorySuite {
     TransportServer server = context.createServer();
     int unreachablePort = server.getPort();
     server.close();
-    assertThrows(IOException.class,
+    Assert.assertThrows(IOException.class,
       () -> factory.createClient(TestUtils.getLocalHost(), unreachablePort, true));
     Assert.assertThrows("fail this connection directly", IOException.class,
       () -> factory.createClient(TestUtils.getLocalHost(), unreachablePort, true));
