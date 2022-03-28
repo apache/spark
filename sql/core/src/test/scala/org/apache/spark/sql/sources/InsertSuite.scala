@@ -1096,7 +1096,16 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
       }.getMessage.contains(
         "References to DEFAULT column values are not allowed within the PARTITION clause"))
     }
-
+    // The configuration option to append missing NULL values to the end of the INSERT INTO
+    // statement is not enabled.
+    withSQLConf(SQLConf.USE_NULLS_FOR_MISSING_DEFAULT_COLUMN_VALUES.key -> "false") {
+      withTable("t") {
+        sql("create table t(i boolean, s bigint) using parquet")
+        assert(intercept[AnalysisException] {
+          sql("insert into t values(true)")
+        }.getMessage.contains("target table has 2 column(s) but the inserted data has 1 column(s)"))
+      }
+    }
   }
 
   test("Stop task set if FileAlreadyExistsException was thrown") {
