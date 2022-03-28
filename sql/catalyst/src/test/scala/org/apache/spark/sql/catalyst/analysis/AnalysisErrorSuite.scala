@@ -595,7 +595,7 @@ class AnalysisErrorSuite extends AnalysisTest {
   errorTest(
     "SPARK-38666: non-boolean aggregate filter",
     CatalystSqlParser.parsePlan("SELECT sum(c) filter (where e) FROM TaBlE2"),
-    "FILTER expression does not return true or false" :: Nil)
+    "FILTER expression is not of type boolean" :: Nil)
 
   errorTest(
     "SPARK-38666: aggregate in aggregate filter",
