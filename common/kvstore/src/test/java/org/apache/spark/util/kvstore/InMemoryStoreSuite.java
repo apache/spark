@@ -159,25 +159,25 @@ public class InMemoryStoreSuite {
     assertEquals(9, store.count(ArrayKeyIndexType.class));
 
     // Try removing non-existing keys
-    assert(!store.removeAllByIndexValues(
+    assertFalse(store.removeAllByIndexValues(
       ArrayKeyIndexType.class,
       KVIndex.NATURAL_INDEX_NAME,
       ImmutableSet.of(new int[] {10, 10, 10}, new int[] { 3, 3, 3 })));
     assertEquals(9, store.count(ArrayKeyIndexType.class));
 
-    assert(store.removeAllByIndexValues(
+    assertTrue(store.removeAllByIndexValues(
       ArrayKeyIndexType.class,
       KVIndex.NATURAL_INDEX_NAME,
       ImmutableSet.of(new int[] {0, 0, 0}, new int[] { 2, 2, 2 })));
     assertEquals(7, store.count(ArrayKeyIndexType.class));
 
-    assert(store.removeAllByIndexValues(
+    assertTrue(store.removeAllByIndexValues(
       ArrayKeyIndexType.class,
       "id",
       ImmutableSet.of(new String [] { "things" })));
     assertEquals(4, store.count(ArrayKeyIndexType.class));
 
-    assert(store.removeAllByIndexValues(
+    assertTrue(store.removeAllByIndexValues(
       ArrayKeyIndexType.class,
       "id",
       ImmutableSet.of(new String [] { "more things" })));
