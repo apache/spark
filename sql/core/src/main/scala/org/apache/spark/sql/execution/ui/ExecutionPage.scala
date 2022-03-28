@@ -31,6 +31,8 @@ import org.apache.spark.ui.{UIUtils, WebUIPage}
 
 class ExecutionPage(parent: SQLTab) extends WebUIPage("execution") with Logging {
 
+  private val pandasOnSparkConfPrefix = "pandas_on_Spark."
+
   private val sqlStore = parent.sqlStore
 
   override def render(request: HttpServletRequest): Seq[Node] = {
@@ -87,9 +89,9 @@ class ExecutionPage(parent: SQLTab) extends WebUIPage("execution") with Logging 
         planVisualization(request, metrics, graph) ++
         physicalPlanDescription(executionUIData.physicalPlanDescription) ++
         modifiedConfigs(
-          executionUIData.modifiedConfigs.filterKeys(!_.startsWith("pandas_on_Spark."))) ++
+          executionUIData.modifiedConfigs.filterKeys(!_.startsWith(pandasOnSparkConfPrefix))) ++
         modifiedPandasOnSparkConfigs(
-          executionUIData.modifiedConfigs.filterKeys(_.startsWith("pandas_on_Spark.")))
+          executionUIData.modifiedConfigs.filterKeys(_.startsWith(pandasOnSparkConfPrefix)))
     }.getOrElse {
       <div>No information to display for query {executionId}</div>
     }
@@ -183,7 +185,7 @@ class ExecutionPage(parent: SQLTab) extends WebUIPage("execution") with Logging 
 
     val modifiedOptions = modifiedPandasOnSparkConfigs.toSeq.map { case (k, v) =>
       // Remove prefix.
-      val key = k.slice("pandas_on_Spark.".length, k.length)
+      val key = k.slice(pandasOnSparkConfPrefix.length, k.length)
       // The codes below is a simple version of Python's repr().
       // Pandas API on Spark does not support other types in the options yet.
       val pyValue = parse(v) match {
@@ -207,7 +209,7 @@ class ExecutionPage(parent: SQLTab) extends WebUIPage("execution") with Logging 
             onClick="collapseTable('collapse-pandas-on-spark-properties',
              'pandas-on-spark-properties')">
         <span class="collapse-table-arrow arrow-closed"></span>
-        <a>Pandas API on Spark: Properties</a>
+        <a>Pandas API Properties</a>
       </span>
       <div class="pandas-on-spark-properties collapsible-table collapsed">
         {configs}
