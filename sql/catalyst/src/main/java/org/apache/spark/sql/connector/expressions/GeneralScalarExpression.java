@@ -28,7 +28,7 @@ import org.apache.spark.sql.connector.util.V2ExpressionSQLBuilder;
 /**
  * The general representation of SQL scalar expressions, which contains the upper-cased
  * expression name and all the children expressions. Please also see {@link Predicate}
- * for the supported predicate expressions and {@link Cast} for the cast expression.
+ * for the supported predicate expressions.
  * <p>
  * The currently supported SQL scalar expressions:
  * <ol>
