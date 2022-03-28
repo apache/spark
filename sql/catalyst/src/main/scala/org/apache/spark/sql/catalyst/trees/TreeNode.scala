@@ -52,9 +52,19 @@ import org.apache.spark.util.collection.BitSet
 /** Used by [[TreeNode.getNodeNumbered]] when traversing the tree for a given number */
 private class MutableInt(var i: Int)
 
+/**
+ * Contexts of TreeNodes, including location, SQL text, object type and object name.
+ * The only supported object type is "VIEW" now. In the future, we may support SQL UDF or other
+ * objects which contain SQL text.
+ */
 case class Origin(
   line: Option[Int] = None,
-  startPosition: Option[Int] = None)
+  startPosition: Option[Int] = None,
+  startIndex: Option[Int] = None,
+  stopIndex: Option[Int] = None,
+  sqlText: Option[String] = None,
+  objectType: Option[String] = None,
+  objectName: Option[String] = None)
 
 /**
  * Provides a location for TreeNodes to ask about the context of their origin.  For example, which
