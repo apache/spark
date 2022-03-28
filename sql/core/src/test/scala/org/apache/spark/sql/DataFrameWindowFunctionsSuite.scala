@@ -710,6 +710,50 @@ class DataFrameWindowFunctionsSuite extends QueryTest
         Row("a", 4, "x", "x", "y", "x", "x", "y"),
         Row("b", 1, null, null, null, null, null, null),
         Row("b", 2, null, null, null, null, null, null)))
+
+    val df2 = Seq(
+      ("a", 1, "x"),
+      ("a", 2, "y"),
+      ("a", 3, "z")).
+      toDF("key", "order", "value")
+    checkAnswer(
+      df2.select(
+        $"key",
+        $"order",
+        nth_value($"value", 2).over(window1),
+        nth_value($"value", 2, ignoreNulls = true).over(window1),
+        nth_value($"value", 2).over(window2),
+        nth_value($"value", 2, ignoreNulls = true).over(window2),
+        nth_value($"value", 3).over(window1),
+        nth_value($"value", 3, ignoreNulls = true).over(window1),
+        nth_value($"value", 3).over(window2),
+        nth_value($"value", 3, ignoreNulls = true).over(window2),
+        nth_value($"value", 4).over(window1),
+        nth_value($"value", 4, ignoreNulls = true).over(window1),
+        nth_value($"value", 4).over(window2),
+        nth_value($"value", 4, ignoreNulls = true).over(window2)),
+      Seq(
+        Row("a", 1, "y", "y", null, null, "z", "z", null, null, null, null, null, null),
+        Row("a", 2, "y", "y", "y", "y", "z", "z", null, null, null, null, null, null),
+        Row("a", 3, "y", "y", "y", "y", "z", "z", "z", "z", null, null, null, null)))
+
+    val df3 = Seq(
+      ("a", 1, "x"),
+      ("a", 2, nullStr),
+      ("a", 3, "z")).
+      toDF("key", "order", "value")
+    checkAnswer(
+      df3.select(
+        $"key",
+        $"order",
+        nth_value($"value", 3).over(window1),
+        nth_value($"value", 3, ignoreNulls = true).over(window1),
+        nth_value($"value", 3).over(window2),
+        nth_value($"value", 3, ignoreNulls = true).over(window2)),
+      Seq(
+        Row("a", 1, "z", null, null, null),
+        Row("a", 2, "z", null, null, null),
+        Row("a", 3, "z", null, "z", null)))
   }
 
   test("nth_value on descending ordered window") {
