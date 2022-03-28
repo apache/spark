@@ -24,6 +24,11 @@ import com.fasterxml.jackson.annotation.JsonIgnore
 import org.apache.spark.status.KVUtils.KVIndexParam
 import org.apache.spark.util.kvstore.{KVIndex, KVStore}
 
+/**
+ * Provides a view of a KVStore with methods that make it easy to query diagnostic-specific
+ * information. There's no state kept in this class, so it's ok to have multiple instances
+ * of it in an application.
+ */
 class DiagnosticStore(store: KVStore) {
 
   def diagnosticsList(offset: Int, length: Int): Seq[ExecutionDiagnosticData] = {
@@ -47,6 +52,7 @@ class DiagnosticStore(store: KVStore) {
   }
 }
 
+/* Represents the diagnostic data of a SQL execution */
 class ExecutionDiagnosticData(
     @KVIndexParam val executionId: Long,
     val physicalPlan: String,
@@ -54,6 +60,7 @@ class ExecutionDiagnosticData(
     val completionTime: Option[Long],
     val errorMessage: Option[String])
 
+/* Represents the plan change of an adaptive execution */
 class AdaptiveExecutionUpdate(
     @KVIndexParam("id")
     val executionId: Long,

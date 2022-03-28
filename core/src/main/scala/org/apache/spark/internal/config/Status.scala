@@ -75,7 +75,7 @@ private[spark] object Status {
     ConfigBuilder("spark.appStatusStore.diskStore.dir")
       .doc("Local directory where to store app status. " +
            "It's an alternative to the in-memory kv store")
-      .version("3.3.0")
+      .version("3.4.0")
       .stringConf
       .createOptional
 }
