@@ -1673,8 +1673,8 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
         See Also
         --------
-        Index.drop_duplicates : Equivalent method on pandas.Index.
-        DataFrame.duplicated : Equivalent method on pandas.DataFrame.
+        Index.drop_duplicates : Remove duplicate values from Index.
+        DataFrame.duplicated : Equivalent method on DataFrame.
         Series.drop_duplicates : Remove duplicate values from Series.
 
         Examples
