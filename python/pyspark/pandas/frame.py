@@ -6874,7 +6874,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         elif keep == "all":
             raise NotImplementedError("`keep`=all is not implemented yet.")
         elif keep != "first":
-            raise ValueError('keep must be either "first", "last" or "all"')
+            raise ValueError('keep must be either "first", "last" or "all".')
         sdf = self._internal.resolved_copy.spark_frame.sort(*by, natural_order_scol)
         return DataFrame(self._internal.with_new_sdf(sdf))
 
