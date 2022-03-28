@@ -17,23 +17,29 @@
 
 package org.apache.spark.sql.connector.expressions;
 
+import java.io.Serializable;
+
 import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.types.DataType;
 
 /**
  * Represents a cast expression in the public logical expression API.
  *
- * @since 3.4.0
+ * @since 3.3.0
  */
 @Evolving
-public class Cast extends GeneralScalarExpression {
+public class Cast implements Expression, Serializable {
+  private Expression expression;
   private DataType dataType;
 
   public Cast(Expression expression, DataType dataType) {
-    super("CAST", new Expression[]{ expression });
+    this.expression = expression;
     this.dataType = dataType;
   }
 
-  public Expression expression() { return children()[0]; }
+  public Expression expression() { return expression; }
   public DataType dataType() { return dataType; }
+
+  @Override
+  public Expression[] children() { return new Expression[]{ expression() }; }
 }

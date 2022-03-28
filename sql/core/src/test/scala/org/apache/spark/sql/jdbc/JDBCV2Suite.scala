@@ -414,7 +414,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
           case _: DataSourceV2ScanRelation =>
             val expected_plan_fragment = if (ansiMode) {
               "PushedFilters: [SALARY IS NOT NULL, " +
-                "CAST( SALARY AS double ) > 1000.0, CAST( SALARY AS double ) < 12000.0], "
+                "CAST(SALARY AS double) > 1000.0, CAST(SALARY AS double) < 12000.0], "
             } else {
               "PushedFilters: [SALARY IS NOT NULL], "
             }

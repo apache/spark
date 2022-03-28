@@ -38,6 +38,9 @@ public class V2ExpressionSQLBuilder {
       return visitLiteral((Literal) expr);
     } else if (expr instanceof NamedReference) {
       return visitNamedReference((NamedReference) expr);
+    } else if (expr instanceof Cast) {
+      Cast cast = (Cast) expr;
+      return visitCast(build(cast.expression()), cast.dataType());
     } else if (expr instanceof GeneralScalarExpression) {
       GeneralScalarExpression e = (GeneralScalarExpression) expr;
       String name = e.name();
@@ -82,10 +85,6 @@ public class V2ExpressionSQLBuilder {
             return visitBinaryArithmetic(
               name, inputToSQL(e.children()[0]), inputToSQL(e.children()[1]));
           }
-        case "CAST":
-          assert e instanceof Cast;
-          Cast cast = (Cast) e;
-          return visitCast(name, build(cast.expression()), cast.dataType());
         case "AND":
           return visitAnd(name, build(e.children()[0]), build(e.children()[1]));
         case "OR":
@@ -173,8 +172,8 @@ public class V2ExpressionSQLBuilder {
     return l + " " + name + " " + r;
   }
 
-  protected String visitCast(String name, String l, DataType dataType) {
-    return name + "( " + l + " AS " + dataType.typeName() + " )";
+  protected String visitCast(String l, DataType dataType) {
+    return "CAST(" + l + " AS " + dataType.typeName() + ")";
   }
 
   protected String visitAnd(String name, String l, String r) {
