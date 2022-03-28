@@ -1765,7 +1765,9 @@ class Analyzer(override val catalogManager: CatalogManager)
     try {
       innerResolve(expr, isTopLevel = true)
     } catch {
-      case _: AnalysisException if !throws => expr
+      case ae: AnalysisException if !throws =>
+        logWarning(ae.message)
+        expr
     }
   }
 
@@ -2385,7 +2387,9 @@ class Analyzer(override val catalogManager: CatalogManager)
                     case None => u
                   }
                 } catch {
-                  case _: AnalysisException => u
+                  case ae: AnalysisException =>
+                    logWarning(ae.getMessage)
+                    u
                 }
               }
           }
@@ -2591,7 +2595,9 @@ class Analyzer(override val catalogManager: CatalogManager)
                 case o => TempResolvedColumn(o, u.nameParts)
               }).getOrElse(u)
             } catch {
-              case _: AnalysisException => u
+              case ae: AnalysisException =>
+                logWarning(ae.getMessage)
+                u
             }
         }
       }
