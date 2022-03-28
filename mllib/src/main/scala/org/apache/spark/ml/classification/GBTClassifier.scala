@@ -29,11 +29,12 @@ import org.apache.spark.ml.regression.DecisionTreeRegressionModel
 import org.apache.spark.ml.tree._
 import org.apache.spark.ml.tree.impl.GradientBoostedTrees
 import org.apache.spark.ml.util._
+import org.apache.spark.ml.util.DatasetUtils._
 import org.apache.spark.ml.util.DefaultParamsReader.Metadata
 import org.apache.spark.ml.util.Instrumentation.instrumented
 import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo}
 import org.apache.spark.mllib.tree.model.{GradientBoostedTreesModel => OldGBTModel}
-import org.apache.spark.sql.{DataFrame, Dataset}
+import org.apache.spark.sql._
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.StructType
 
@@ -168,20 +169,21 @@ class GBTClassifier @Since("1.4.0") (
 
   override protected def train(
       dataset: Dataset[_]): GBTClassificationModel = instrumented { instr =>
-    val withValidation = isDefined(validationIndicatorCol) && $(validationIndicatorCol).nonEmpty
 
-    val validateInstance = (instance: Instance) => {
-      val label = instance.label
-      require(label == 0 || label == 1, s"GBTClassifier was given" +
-        s" dataset with invalid label $label.  Labels must be in {0,1}; note that" +
-        s" GBTClassifier currently only supports binary classification.")
+    def extractInstances(df: Dataset[_]) = {
+      df.select(
+        checkClassificationLabels($(labelCol), Some(2)),
+        checkNonNegativeWeights(get(weightCol)),
+        checkNonNanVectors($(featuresCol))
+      ).rdd.map { case Row(l: Double, w: Double, v: Vector) => Instance(l, w, v) }
     }
 
+    val withValidation = isDefined(validationIndicatorCol) && $(validationIndicatorCol).nonEmpty
     val (trainDataset, validationDataset) = if (withValidation) {
-      (extractInstances(dataset.filter(not(col($(validationIndicatorCol)))), validateInstance),
-        extractInstances(dataset.filter(col($(validationIndicatorCol))), validateInstance))
+      (extractInstances(dataset.filter(not(col($(validationIndicatorCol))))),
+        extractInstances(dataset.filter(col($(validationIndicatorCol)))))
     } else {
-      (extractInstances(dataset, validateInstance), null)
+      (extractInstances(dataset), null)
     }
 
     val numClasses = 2

@@ -184,7 +184,7 @@ trait FileSourceAggregatePushDownSuite
     }
   }
 
-  test("aggregate over alias not push down") {
+  test("aggregate over alias push down") {
     val data = Seq((-2, "abc", 2), (3, "def", 4), (6, "ghi", 2), (0, null, 19),
       (9, "mno", 7), (2, null, 6))
     withDataSourceTable(data, "t") {
@@ -194,7 +194,7 @@ trait FileSourceAggregatePushDownSuite
         query.queryExecution.optimizedPlan.collect {
           case _: DataSourceV2ScanRelation =>
             val expected_plan_fragment =
-              "PushedAggregation: []"  // aggregate alias not pushed down
+              "PushedAggregation: [MIN(_1)]"
             checkKeywordsExistsInExplain(query, expected_plan_fragment)
         }
         checkAnswer(query, Seq(Row(-2)))

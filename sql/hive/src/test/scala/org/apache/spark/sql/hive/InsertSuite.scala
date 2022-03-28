@@ -869,25 +869,25 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
             |SORTED BY (s1)
             |INTO 200 BUCKETS
             |STORED AS PARQUET
-          """.stripMargin
+        """.stripMargin
         } else {
           """
-             |CREATE TABLE test1(
-             |v1 BIGINT,
-             |s1 INT)
-             |USING PARQUET
-             |PARTITIONED BY (pk BIGINT)
-             |CLUSTERED BY (v1)
-             |SORTED BY (s1)
-             |INTO 200 BUCKETS
-          """.stripMargin
+            |CREATE TABLE test1(
+            |v1 BIGINT,
+            |s1 INT)
+            |USING PARQUET
+            |PARTITIONED BY (pk BIGINT)
+            |CLUSTERED BY (v1)
+            |SORTED BY (s1)
+            |INTO 200 BUCKETS
+        """.stripMargin
         }
 
         val insertString =
           """
             |INSERT INTO test1
             |SELECT * FROM VALUES(1,1,1)
-          """.stripMargin
+        """.stripMargin
 
         val dropString = "DROP TABLE IF EXISTS test1"
 

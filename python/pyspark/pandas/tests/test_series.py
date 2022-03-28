@@ -3006,7 +3006,7 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
         with self.assertRaisesRegex(
             ValueError,
             r"Expected the return type of this function to be of scalar type, "
-            r"but found type SeriesType\[LongType\]",
+            r"but found type SeriesType\[LongType\(\)\]",
         ):
             psser.apply(udf)
 

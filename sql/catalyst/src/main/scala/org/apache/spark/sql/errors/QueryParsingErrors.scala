@@ -444,4 +444,8 @@ object QueryParsingErrors {
   def defaultColumnNotImplementedYetError(ctx: ParserRuleContext): Throwable = {
     new ParseException("Support for DEFAULT column values is not implemented yet", ctx)
   }
+
+  def defaultColumnNotEnabledError(ctx: ParserRuleContext): Throwable = {
+    new ParseException("Support for DEFAULT column values is not allowed", ctx)
+  }
 }
