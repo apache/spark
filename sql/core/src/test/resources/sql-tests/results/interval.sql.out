@@ -1336,7 +1336,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 
-extraneous input 'day' expecting {<EOF>, ';'}(line 1, pos 27)
+Syntax error at or near 'day': extra input 'day'(line 1, pos 27)
 
 == SQL ==
 select interval 30 day day day
@@ -1368,7 +1368,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 
-extraneous input 'days' expecting {<EOF>, ';'}(line 1, pos 29)
+Syntax error at or near 'days': extra input 'days'(line 1, pos 29)
 
 == SQL ==
 select interval 30 days days days

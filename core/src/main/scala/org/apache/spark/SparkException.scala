@@ -71,9 +71,22 @@ private[spark] case class ExecutorDeadException(message: String)
 /**
  * Exception thrown when Spark returns different result after upgrading to a new version.
  */
-private[spark] class SparkUpgradeException(version: String, message: String, cause: Throwable)
-  extends RuntimeException("You may get a different result due to the upgrading of Spark" +
-    s" $version: $message", cause)
+private[spark] class SparkUpgradeException(
+    errorClass: String,
+    messageParameters: Array[String],
+    cause: Throwable)
+  extends RuntimeException(SparkThrowableHelper.getMessage(errorClass, messageParameters), cause)
+    with SparkThrowable {
+
+  def this(version: String, message: String, cause: Throwable) =
+    this (
+      errorClass = "INCONSISTENT_BEHAVIOR_CROSS_VERSION",
+      messageParameters = Array(version, message),
+      cause = cause
+    )
+
+  override def getErrorClass: String = errorClass
+}
 
 /**
  * Arithmetic exception thrown from Spark with an error class.

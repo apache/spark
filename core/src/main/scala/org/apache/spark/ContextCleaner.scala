@@ -235,8 +235,10 @@ private[spark] class ContextCleaner(
     try {
       if (mapOutputTrackerMaster.containsShuffle(shuffleId)) {
         logDebug("Cleaning shuffle " + shuffleId)
-        mapOutputTrackerMaster.unregisterShuffle(shuffleId)
+        // Shuffle must be removed before it's unregistered from the output tracker
+        // to find blocks served by the shuffle service on deallocated executors
         shuffleDriverComponents.removeShuffle(shuffleId, blocking)
+        mapOutputTrackerMaster.unregisterShuffle(shuffleId)
         listeners.asScala.foreach(_.shuffleCleaned(shuffleId))
         logDebug("Cleaned shuffle " + shuffleId)
       } else {

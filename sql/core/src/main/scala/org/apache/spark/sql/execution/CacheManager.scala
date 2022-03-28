@@ -161,7 +161,7 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
       blocking: Boolean = false): Unit = {
     val shouldRemove: LogicalPlan => Boolean =
       if (cascade) {
-        _.find(_.sameResult(plan)).isDefined
+        _.exists(_.sameResult(plan))
       } else {
         _.sameResult(plan)
       }
@@ -187,7 +187,7 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
         //    will keep it as it is. It means the physical plan has been re-compiled already in the
         //    other thread.
         val cacheAlreadyLoaded = cd.cachedRepresentation.cacheBuilder.isCachedColumnBuffersLoaded
-        cd.plan.find(_.sameResult(plan)).isDefined && !cacheAlreadyLoaded
+        cd.plan.exists(_.sameResult(plan)) && !cacheAlreadyLoaded
       })
     }
   }
@@ -207,7 +207,7 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
    * Tries to re-cache all the cache entries that refer to the given plan.
    */
   def recacheByPlan(spark: SparkSession, plan: LogicalPlan): Unit = {
-    recacheByCondition(spark, _.plan.find(_.sameResult(plan)).isDefined)
+    recacheByCondition(spark, _.plan.exists(_.sameResult(plan)))
   }
 
   /**
@@ -288,7 +288,7 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
    */
   def recacheByPath(spark: SparkSession, resourcePath: Path, fs: FileSystem): Unit = {
     val qualifiedPath = fs.makeQualified(resourcePath)
-    recacheByCondition(spark, _.plan.find(lookupAndRefresh(_, fs, qualifiedPath)).isDefined)
+    recacheByCondition(spark, _.plan.exists(lookupAndRefresh(_, fs, qualifiedPath)))
   }
 
   /**

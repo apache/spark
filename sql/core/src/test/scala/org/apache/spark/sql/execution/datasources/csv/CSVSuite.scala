@@ -1621,38 +1621,30 @@ abstract class CSVSuite
     checkAnswer(df, Row("a", null, "a"))
   }
 
-  test("SPARK-21610: Corrupt records are not handled properly when creating a dataframe " +
-    "from a file") {
-    val columnNameOfCorruptRecord = "_corrupt_record"
+  test("SPARK-38523: referring to the corrupt record column") {
     val schema = new StructType()
       .add("a", IntegerType)
       .add("b", DateType)
-      .add(columnNameOfCorruptRecord, StringType)
-    // negative cases
-    val msg = intercept[AnalysisException] {
-      spark
-        .read
-        .option("columnNameOfCorruptRecord", columnNameOfCorruptRecord)
-        .schema(schema)
-        .csv(testFile(valueMalformedFile))
-        .select(columnNameOfCorruptRecord)
-        .collect()
-    }.getMessage
-    assert(msg.contains("only include the internal corrupt record column"))
-
-    // workaround
-    val df = spark
+      .add("corrRec", StringType)
+    val readback = spark
       .read
-      .option("columnNameOfCorruptRecord", columnNameOfCorruptRecord)
+      .option("columnNameOfCorruptRecord", "corrRec")
       .schema(schema)
       .csv(testFile(valueMalformedFile))
-      .cache()
-    assert(df.filter($"_corrupt_record".isNotNull).count() == 1)
-    assert(df.filter($"_corrupt_record".isNull).count() == 1)
     checkAnswer(
-      df.select(columnNameOfCorruptRecord),
-      Row("0,2013-111_11 12:13:14") :: Row(null) :: Nil
-    )
+      readback,
+      Row(0, null, "0,2013-111_11 12:13:14") ::
+      Row(1, Date.valueOf("1983-08-04"), null) :: Nil)
+    checkAnswer(
+      readback.filter($"corrRec".isNotNull),
+      Row(0, null, "0,2013-111_11 12:13:14"))
+    checkAnswer(
+      readback.select($"corrRec", $"b"),
+      Row("0,2013-111_11 12:13:14", null) ::
+      Row(null, Date.valueOf("1983-08-04")) :: Nil)
+    checkAnswer(
+      readback.filter($"corrRec".isNull && $"a" === 1),
+      Row(1, Date.valueOf("1983-08-04"), null) :: Nil)
   }
 
   test("SPARK-23846: schema inferring touches less data if samplingRatio < 1.0") {

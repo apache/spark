@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources.jdbc
 
-import java.sql.{Connection, Driver, JDBCType, PreparedStatement, ResultSet, ResultSetMetaData, SQLException}
+import java.sql.{Connection, JDBCType, PreparedStatement, ResultSet, ResultSetMetaData, SQLException}
 import java.time.{Instant, LocalDate}
 import java.util
 import java.util.Locale
@@ -43,7 +43,6 @@ import org.apache.spark.sql.connector.catalog.TableChange
 import org.apache.spark.sql.connector.catalog.index.{SupportsIndex, TableIndex}
 import org.apache.spark.sql.connector.expressions.NamedReference
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
-import org.apache.spark.sql.execution.datasources.jdbc.connection.ConnectionProvider
 import org.apache.spark.sql.jdbc.{JdbcDialect, JdbcDialects, JdbcType}
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.SchemaUtils
@@ -54,24 +53,6 @@ import org.apache.spark.util.NextIterator
  * Util functions for JDBC tables.
  */
 object JdbcUtils extends Logging with SQLConfHelper {
-  /**
-   * Returns a factory for creating connections to the given JDBC URL.
-   *
-   * @param options - JDBC options that contains url, table and other information.
-   * @throws IllegalArgumentException if the driver could not open a JDBC connection.
-   */
-  def createConnectionFactory(options: JDBCOptions): () => Connection = {
-    val driverClass: String = options.driverClass
-    () => {
-      DriverRegistry.register(driverClass)
-      val driver: Driver = DriverRegistry.get(driverClass)
-      val connection =
-        ConnectionProvider.create(driver, options.parameters, options.connectionProviderName)
-      require(connection != null,
-        s"The driver could not open a JDBC connection. Check the URL: ${options.url}")
-      connection
-    }
-  }
 
   /**
    * Returns true if the table already exists in the JDBC database.
@@ -651,7 +632,6 @@ object JdbcUtils extends Logging with SQLConfHelper {
    * updated even with error if it doesn't support transaction, as there're dirty outputs.
    */
   def savePartition(
-      getConnection: () => Connection,
       table: String,
       iterator: Iterator[Row],
       rddSchema: StructType,
@@ -667,7 +647,7 @@ object JdbcUtils extends Logging with SQLConfHelper {
 
     val outMetrics = TaskContext.get().taskMetrics().outputMetrics
 
-    val conn = getConnection()
+    val conn = dialect.createConnectionFactory(options)(-1)
     var committed = false
 
     var finalIsolationLevel = Connection.TRANSACTION_NONE
@@ -874,7 +854,6 @@ object JdbcUtils extends Logging with SQLConfHelper {
     val table = options.table
     val dialect = JdbcDialects.get(url)
     val rddSchema = df.schema
-    val getConnection: () => Connection = createConnectionFactory(options)
     val batchSize = options.batchSize
     val isolationLevel = options.isolationLevel
 
@@ -886,8 +865,7 @@ object JdbcUtils extends Logging with SQLConfHelper {
       case _ => df
     }
     repartitionedDF.rdd.foreachPartition { iterator => savePartition(
-      getConnection, table, iterator, rddSchema, insertStmt, batchSize, dialect, isolationLevel,
-      options)
+      table, iterator, rddSchema, insertStmt, batchSize, dialect, isolationLevel, options)
     }
   }
 
@@ -1177,7 +1155,8 @@ object JdbcUtils extends Logging with SQLConfHelper {
   }
 
   def withConnection[T](options: JDBCOptions)(f: Connection => T): T = {
-    val conn = createConnectionFactory(options)()
+    val dialect = JdbcDialects.get(options.url)
+    val conn = dialect.createConnectionFactory(options)(-1)
     try {
       f(conn)
     } finally {

@@ -21,7 +21,7 @@ import scala.collection.mutable
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.SubExprUtils._
-import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
+import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, PercentileCont}
 import org.apache.spark.sql.catalyst.optimizer.{BooleanSimplification, DecorrelateInnerQuery}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -226,6 +226,10 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
             // Only allow window functions with an aggregate expression or an offset window
             // function or a Pandas window UDF.
             w.windowFunction match {
+              case AggregateExpression(_: PercentileCont, _, _, _, _)
+                if w.windowSpec.orderSpec.nonEmpty || w.windowSpec.frameSpecification !=
+                    SpecifiedWindowFrame(RowFrame, UnboundedPreceding, UnboundedFollowing) =>
+                failAnalysis("Cannot specify order by or frame for 'PERCENTILE_CONT'.")
               case _: AggregateExpression | _: FrameLessOffsetWindowFunction |
                   _: AggregateWindowFunction => // OK
               case f: PythonUDF if PythonUDF.isWindowPandasUDF(f) => // OK
@@ -334,7 +338,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
             }
 
             def checkValidGroupingExprs(expr: Expression): Unit = {
-              if (expr.find(_.isInstanceOf[AggregateExpression]).isDefined) {
+              if (expr.exists(_.isInstanceOf[AggregateExpression])) {
                 failAnalysis(
                   "aggregate functions are not allowed in GROUP BY, but found " + expr.sql)
               }
@@ -435,7 +439,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
               // Check if the data types match.
               dataTypes(child).zip(ref).zipWithIndex.foreach { case ((dt1, dt2), ci) =>
                 // SPARK-18058: we shall not care about the nullability of columns
-                if (dataTypesAreCompatibleFn(dt1, dt2)) {
+                if (!dataTypesAreCompatibleFn(dt1, dt2)) {
                   val errorMessage =
                     s"""
                        |${operator.nodeName} can only be performed on tables with the compatible
@@ -607,11 +611,11 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
     val isUnion = plan.isInstanceOf[Union]
     if (isUnion) {
       (dt1: DataType, dt2: DataType) =>
-        !DataType.equalsStructurally(dt1, dt2, true)
+        DataType.equalsStructurally(dt1, dt2, true)
     } else {
       // SPARK-18058: we shall not care about the nullability of columns
       (dt1: DataType, dt2: DataType) =>
-        TypeCoercion.findWiderTypeForTwo(dt1.asNullable, dt2.asNullable).isEmpty
+        TypeCoercion.findWiderTypeForTwo(dt1.asNullable, dt2.asNullable).nonEmpty
     }
   }
 
@@ -662,7 +666,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
           nonAnsiPlan.children.tail.zipWithIndex.foreach { case (child, ti) =>
             // Check if the data types match.
             dataTypes(child).zip(ref).zipWithIndex.foreach { case ((dt1, dt2), ci) =>
-              if (dataTypesAreCompatibleFn(dt1, dt2)) {
+              if (!dataTypesAreCompatibleFn(dt1, dt2)) {
                 issueFixedIfAnsiOff = false
               }
             }
@@ -718,7 +722,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
 
     // Check whether the given expressions contains the subquery expression.
     def containsExpr(expressions: Seq[Expression]): Boolean = {
-      expressions.exists(_.find(_.semanticEquals(expr)).isDefined)
+      expressions.exists(_.exists(_.semanticEquals(expr)))
     }
 
     // Validate the subquery plan.
@@ -782,10 +786,11 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
 
       case inSubqueryOrExistsSubquery =>
         plan match {
-          case _: Filter | _: SupportsSubquery | _: Join => // Ok
+          case _: Filter | _: SupportsSubquery | _: Join |
+            _: Project | _: Aggregate | _: Window => // Ok
           case _ =>
             failAnalysis(s"IN/EXISTS predicate sub-queries can only be used in" +
-                s" Filter/Join and a few commands: $plan")
+              s" Filter/Join/Project/Aggregate/Window and a few commands: $plan")
         }
         // Validate to make sure the correlations appearing in the query are valid and
         // allowed by spark.

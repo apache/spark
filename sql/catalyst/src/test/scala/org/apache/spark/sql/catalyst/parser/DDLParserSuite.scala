@@ -22,12 +22,13 @@ import java.util.Locale
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions.{EqualTo, Hex, Literal}
-import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.plans.logical.{TableSpec => LogicalTableSpec, _}
+import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns
 import org.apache.spark.sql.connector.catalog.TableChange.ColumnPosition.{after, first}
 import org.apache.spark.sql.connector.expressions.{ApplyTransform, BucketTransform, DaysTransform, FieldReference, HoursTransform, IdentityTransform, LiteralValue, MonthsTransform, Transform, YearsTransform}
 import org.apache.spark.sql.connector.expressions.LogicalExpressions.bucket
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{IntegerType, LongType, StringType, StructType, TimestampType}
+import org.apache.spark.sql.types.{IntegerType, LongType, MetadataBuilder, StringType, StructType, TimestampType}
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
 class DDLParserSuite extends AnalysisTest {
@@ -44,7 +45,10 @@ class DDLParserSuite extends AnalysisTest {
   }
 
   private def intercept(sqlCommand: String, messages: String*): Unit =
-    interceptParseException(parsePlan)(sqlCommand, messages: _*)
+    interceptParseException(parsePlan)(sqlCommand, messages: _*)()
+
+  private def intercept(sqlCommand: String, errorClass: Option[String], messages: String*): Unit =
+    interceptParseException(parsePlan)(sqlCommand, messages: _*)(errorClass)
 
   private def parseCompare(sql: String, expected: LogicalPlan): Unit = {
     comparePlans(parsePlan(sql), expected, checkAnalysis = false)
@@ -71,7 +75,7 @@ class DDLParserSuite extends AnalysisTest {
     }
 
     intercept("CREATE TABLE my_tab(a: INT COMMENT 'test', b: STRING) USING parquet",
-      "extraneous input ':'")
+      "Syntax error at or near ':': extra input ':'")
   }
 
   test("create/replace table - with IF NOT EXISTS") {
@@ -1366,14 +1370,14 @@ class DDLParserSuite extends AnalysisTest {
     parseCompare("DELETE FROM testcat.ns1.ns2.tbl",
       DeleteFromTable(
         UnresolvedRelation(Seq("testcat", "ns1", "ns2", "tbl")),
-        None))
+        Literal.TrueLiteral))
   }
 
   test("delete from table: with alias and where clause") {
     parseCompare("DELETE FROM testcat.ns1.ns2.tbl AS t WHERE t.a = 2",
       DeleteFromTable(
         SubqueryAlias("t", UnresolvedRelation(Seq("testcat", "ns1", "ns2", "tbl"))),
-        Some(EqualTo(UnresolvedAttribute("t.a"), Literal(2)))))
+        EqualTo(UnresolvedAttribute("t.a"), Literal(2))))
   }
 
   test("delete from table: columns aliases is not allowed") {
@@ -1774,9 +1778,9 @@ class DDLParserSuite extends AnalysisTest {
         allColumns = true))
 
     intercept("ANALYZE TABLE a.b.c COMPUTE STATISTICS FOR ALL COLUMNS key, value",
-      "mismatched input 'key' expecting {<EOF>, ';'}")
+      Some("PARSE_SYNTAX_ERROR"), "Syntax error at or near 'key'") // expecting {<EOF>, ';'}
     intercept("ANALYZE TABLE a.b.c COMPUTE STATISTICS FOR ALL",
-      "missing 'COLUMNS' at '<EOF>'")
+      "Syntax error at or near end of input: missing 'COLUMNS'")
   }
 
   test("LOAD DATA INTO table") {
@@ -2234,5 +2238,83 @@ class DDLParserSuite extends AnalysisTest {
       insertPartitionPlan("INTERVAL '1 02:03:04.128462' DAY TO SECOND"))
     comparePlans(parsePlan(timestampTypeSql), insertPartitionPlan(timestamp))
     comparePlans(parsePlan(binaryTypeSql), insertPartitionPlan(binaryStr))
+  }
+
+  test("SPARK-38335: Implement parser support for DEFAULT values for columns in tables") {
+    // The following ALTER TABLE commands will support DEFAULT columns, but this has not been
+    // implemented yet.
+    val unsupportedError = "Support for DEFAULT column values is not implemented yet"
+    assert(intercept[ParseException] {
+      parsePlan("ALTER TABLE t1 ADD COLUMN x int NOT NULL DEFAULT 42")
+    }.getMessage.contains(unsupportedError))
+    assert(intercept[ParseException] {
+      parsePlan("ALTER TABLE t1 ALTER COLUMN a.b.c SET DEFAULT 42")
+    }.getMessage.contains(unsupportedError))
+    assert(intercept[ParseException] {
+      parsePlan("ALTER TABLE t1 ALTER COLUMN a.b.c DROP DEFAULT")
+    }.getMessage.contains(unsupportedError))
+    assert(intercept[ParseException] {
+      parsePlan("ALTER TABLE t1 REPLACE COLUMNS (x STRING DEFAULT 42)")
+    }.getMessage.contains(unsupportedError))
+    // These CREATE/REPLACE TABLE statements should parse successfully.
+    val schemaWithDefaultColumn = new StructType()
+      .add("a", IntegerType, true)
+      .add("b", StringType, false,
+        new MetadataBuilder()
+          .putString(ResolveDefaultColumns.CURRENT_DEFAULT_COLUMN_METADATA_KEY, "\"abc\"")
+          .putString(ResolveDefaultColumns.EXISTS_DEFAULT_COLUMN_METADATA_KEY, "\"abc\"").build())
+    comparePlans(parsePlan(
+      "CREATE TABLE my_tab(a INT, b STRING NOT NULL DEFAULT \"abc\") USING parquet"),
+      CreateTable(UnresolvedDBObjectName(Seq("my_tab"), false), schemaWithDefaultColumn,
+        Seq.empty[Transform], LogicalTableSpec(Map.empty[String, String], Some("parquet"),
+          Map.empty[String, String], None, None, None, false), false))
+    comparePlans(parsePlan("REPLACE TABLE my_tab(a INT, " +
+      "b STRING NOT NULL DEFAULT \"abc\") USING parquet"),
+      ReplaceTable(UnresolvedDBObjectName(Seq("my_tab"), false), schemaWithDefaultColumn,
+        Seq.empty[Transform], LogicalTableSpec(Map.empty[String, String], Some("parquet"),
+          Map.empty[String, String], None, None, None, false), false))
+    // Make sure that the parser returns an exception when the feature is disabled.
+    withSQLConf(SQLConf.ENABLE_DEFAULT_COLUMNS.key -> "false") {
+      intercept(
+        "CREATE TABLE my_tab(a INT, b STRING NOT NULL DEFAULT \"abc\") USING parquet",
+        "Support for DEFAULT column values is not allowed")
+    }
+
+    // In each of the following cases, the DEFAULT reference parses as an unresolved attribute
+    // reference. We can handle these cases after the parsing stage, at later phases of analysis.
+    comparePlans(parsePlan("VALUES (1, 2, DEFAULT) AS val"),
+      SubqueryAlias("val",
+        UnresolvedInlineTable(Seq("col1", "col2", "col3"), Seq(Seq(Literal(1), Literal(2),
+          UnresolvedAttribute("DEFAULT"))))))
+    comparePlans(parsePlan(
+      "INSERT INTO t PARTITION(part = date'2019-01-02') VALUES ('a', DEFAULT)"),
+      InsertIntoStatement(
+        UnresolvedRelation(Seq("t")),
+        Map("part" -> Some("2019-01-02")),
+        userSpecifiedCols = Seq.empty[String],
+        query = UnresolvedInlineTable(Seq("col1", "col2"), Seq(Seq(Literal("a"),
+          UnresolvedAttribute("DEFAULT")))),
+        overwrite = false, ifPartitionNotExists = false))
+    parseCompare(
+      """
+        |MERGE INTO testcat1.ns1.ns2.tbl AS target
+        |USING testcat2.ns1.ns2.tbl AS source
+        |ON target.col1 = source.col1
+        |WHEN MATCHED AND (target.col2='delete') THEN DELETE
+        |WHEN MATCHED AND (target.col2='update') THEN UPDATE SET target.col2 = DEFAULT
+        |WHEN NOT MATCHED AND (target.col2='insert')
+        |THEN INSERT (target.col1, target.col2) VALUES (source.col1, DEFAULT)
+      """.stripMargin,
+      MergeIntoTable(
+        SubqueryAlias("target", UnresolvedRelation(Seq("testcat1", "ns1", "ns2", "tbl"))),
+        SubqueryAlias("source", UnresolvedRelation(Seq("testcat2", "ns1", "ns2", "tbl"))),
+        EqualTo(UnresolvedAttribute("target.col1"), UnresolvedAttribute("source.col1")),
+        Seq(DeleteAction(Some(EqualTo(UnresolvedAttribute("target.col2"), Literal("delete")))),
+          UpdateAction(Some(EqualTo(UnresolvedAttribute("target.col2"), Literal("update"))),
+            Seq(Assignment(UnresolvedAttribute("target.col2"),
+              UnresolvedAttribute("DEFAULT"))))),
+        Seq(InsertAction(Some(EqualTo(UnresolvedAttribute("target.col2"), Literal("insert"))),
+          Seq(Assignment(UnresolvedAttribute("target.col1"), UnresolvedAttribute("source.col1")),
+            Assignment(UnresolvedAttribute("target.col2"), UnresolvedAttribute("DEFAULT")))))))
   }
 }

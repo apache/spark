@@ -40,7 +40,7 @@ def repeat(col: Column, n: Union[int, Column]) -> Column:
     """
     Repeats a string column n times, and returns it as a new string column.
     """
-    sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
+    sc = SparkContext._active_spark_context
     n = _to_java_column(n) if isinstance(n, Column) else _create_column_from_literal(n)
     return _call_udf(sc, "repeat", _to_java_column(col), n)
 
@@ -49,7 +49,7 @@ def date_part(field: Union[str, Column], source: Column) -> Column:
     """
     Extracts a part of the date/timestamp or interval source.
     """
-    sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
+    sc = SparkContext._active_spark_context
     field = (
         _to_java_column(field) if isinstance(field, Column) else _create_column_from_literal(field)
     )

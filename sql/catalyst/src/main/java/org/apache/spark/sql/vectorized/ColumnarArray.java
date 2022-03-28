@@ -68,7 +68,7 @@ public final class ColumnarArray extends ArrayData {
     } else if (dt instanceof DoubleType) {
       return UnsafeArrayData.fromPrimitiveArray(toDoubleArray());
     } else {
-      return new GenericArrayData(toObjectArray(dt));
+      return new GenericArrayData(toObjectArray(dt)).copy(); // ensure the elements are copied.
     }
   }
 
