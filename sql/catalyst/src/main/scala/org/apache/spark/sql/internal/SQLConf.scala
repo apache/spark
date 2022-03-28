@@ -1661,7 +1661,8 @@ object SQLConf {
   val STREAMING_HDFS_METADATALOG_FS_NUM_RETRIES =
     buildConf("spark.sql.streaming.hdfsMetadataLog.fsNumRetries")
       .internal()
-      .doc("The maximum number of retrying when opening file in HDFSMetadataLog for streaming queries")
+      .doc("The maximum number of retrying when opening file in HDFSMetadataLog for " +
+        "streaming queries")
       .version("3.4.0")
       .intConf
       .createWithDefault(3)
