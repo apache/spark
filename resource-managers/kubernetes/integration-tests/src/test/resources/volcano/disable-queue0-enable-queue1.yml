@@ -19,7 +19,9 @@ kind: Queue
 metadata:
   name: queue0
 spec:
-  weight: 0
+  weight: 1
+  capability:
+    cpu: "0.001"
 ---
 apiVersion: scheduling.volcano.sh/v1beta1
 kind: Queue

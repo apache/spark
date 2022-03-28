@@ -1110,16 +1110,40 @@ class DataFrameWindowFunctionsSuite extends QueryTest
 
       checkAnswer(windowed, Seq(Row("b", 4), Row(null, null), Row(null, null), Row(null, null)))
 
-      val shuffleByRequirement = windowed.queryExecution.executedPlan.find {
+      val shuffleByRequirement = windowed.queryExecution.executedPlan.exists {
         case w: WindowExec =>
-          w.child.find {
+          w.child.exists {
             case s: ShuffleExchangeExec => isShuffleExecByRequirement(s, Seq("key1", "key2"))
             case _ => false
-          }.nonEmpty
+          }
         case _ => false
       }
 
-      assert(shuffleByRequirement.nonEmpty, "Can't find desired shuffle node from the query plan")
+      assert(shuffleByRequirement, "Can't find desired shuffle node from the query plan")
     }
+  }
+
+  test("SPARK-38308: Properly handle Stream of window expressions") {
+    val df = Seq(
+      (1, 2, 3),
+      (1, 3, 4),
+      (2, 4, 5),
+      (2, 5, 6)
+    ).toDF("a", "b", "c")
+
+    val w = Window.partitionBy("a").orderBy("b")
+    val selectExprs = Stream(
+      sum("c").over(w.rowsBetween(Window.unboundedPreceding, Window.currentRow)).as("sumc"),
+      avg("c").over(w.rowsBetween(Window.unboundedPreceding, Window.currentRow)).as("avgc")
+    )
+    checkAnswer(
+      df.select(selectExprs: _*),
+      Seq(
+        Row(3, 3),
+        Row(7, 3.5),
+        Row(5, 5),
+        Row(11, 5.5)
+      )
+    )
   }
 }

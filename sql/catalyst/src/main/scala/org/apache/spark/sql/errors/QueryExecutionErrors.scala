@@ -48,7 +48,7 @@ import org.apache.spark.sql.catalyst.plans.JoinType
 import org.apache.spark.sql.catalyst.plans.logical.{DomainJoin, LogicalPlan}
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.ValueInterval
 import org.apache.spark.sql.catalyst.trees.TreeNode
-import org.apache.spark.sql.catalyst.util.{sideBySide, BadRecordException, FailFastMode}
+import org.apache.spark.sql.catalyst.util.{sideBySide, BadRecordException, DateTimeUtils, FailFastMode}
 import org.apache.spark.sql.connector.catalog.{CatalogNotFoundException, Identifier, Table, TableProvider}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.connector.expressions.Transform
@@ -1954,6 +1954,13 @@ object QueryExecutionErrors {
       messageParameters = Array("Unable to convert timestamp of Orc to data type 'timestamp_ntz'"))
   }
 
+  def cannotConvertOrcTimestampNTZToTimestampLTZError(): Throwable = {
+    new SparkUnsupportedOperationException(
+      errorClass = "UNSUPPORTED_OPERATION",
+      messageParameters =
+        Array("Unable to convert timestamp ntz of Orc to data type 'timestamp_ltz'"))
+  }
+
   def writePartitionExceedConfigSizeWhenDynamicPartitionError(
       numWrittenParts: Int,
       maxDynamicPartitions: Int,
@@ -1986,15 +1993,9 @@ object QueryExecutionErrors {
     new SQLFeatureNotSupportedException("Drop namespace restrict is not supported")
   }
 
-  def invalidUnitInTimestampAdd(unit: String): Throwable = {
-    new SparkIllegalArgumentException(
-      errorClass = "INVALID_PARAMETER_VALUE",
-      messageParameters = Array("unit", "timestampadd", unit))
-  }
-
-  def invalidUnitInTimestampDiff(unit: String): Throwable = {
-    new SparkIllegalArgumentException(
-      errorClass = "INVALID_PARAMETER_VALUE",
-      messageParameters = Array("unit", "timestampdiff", unit))
+  def timestampAddOverflowError(micros: Long, amount: Int, unit: String): ArithmeticException = {
+    new SparkArithmeticException(
+      errorClass = "DATETIME_OVERFLOW",
+      messageParameters = Array(s"add $amount $unit to '${DateTimeUtils.microsToInstant(micros)}'"))
   }
 }

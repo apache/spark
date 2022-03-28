@@ -207,7 +207,7 @@ private[execution] class ValueRowWithKeyIndex {
  * A HashedRelation for UnsafeRow, which is backed BytesToBytesMap.
  *
  * It's serialized in the following format:
- *  [number of keys]
+ *  [number of keys] [number of fields]
  *  [size of key] [size of value] [key bytes] [bytes for value]
  */
 private[joins] class UnsafeHashedRelation(
@@ -364,6 +364,7 @@ private[joins] class UnsafeHashedRelation(
       writeInt: (Int) => Unit,
       writeLong: (Long) => Unit,
       writeBuffer: (Array[Byte], Int, Int) => Unit) : Unit = {
+    writeInt(numKeys)
     writeInt(numFields)
     // TODO: move these into BytesToBytesMap
     writeLong(binaryMap.numKeys())
@@ -397,6 +398,7 @@ private[joins] class UnsafeHashedRelation(
       readInt: () => Int,
       readLong: () => Long,
       readBuffer: (Array[Byte], Int, Int) => Unit): Unit = {
+    numKeys = readInt()
     numFields = readInt()
     resultRow = new UnsafeRow(numFields)
     val nKeys = readLong()

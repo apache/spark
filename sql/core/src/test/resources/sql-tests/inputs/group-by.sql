@@ -199,6 +199,7 @@ FROM testData
 GROUP BY a IS NULL;
 
 
+-- Histogram aggregates with different numeric input types
 SELECT
   histogram_numeric(col, 2) as histogram_2,
   histogram_numeric(col, 3) as histogram_3,
@@ -210,6 +211,32 @@ FROM VALUES
  (21), (22), (23), (24), (25), (26), (27), (28), (29), (30),
  (31), (32), (33), (34), (35), (3), (37), (38), (39), (40),
  (41), (42), (43), (44), (45), (46), (47), (48), (49), (50) AS tab(col);
+SELECT histogram_numeric(col, 3) FROM VALUES (1), (2), (3) AS tab(col);
+SELECT histogram_numeric(col, 3) FROM VALUES (1L), (2L), (3L) AS tab(col);
+SELECT histogram_numeric(col, 3) FROM VALUES (1F), (2F), (3F) AS tab(col);
+SELECT histogram_numeric(col, 3) FROM VALUES (1D), (2D), (3D) AS tab(col);
+SELECT histogram_numeric(col, 3) FROM VALUES (1S), (2S), (3S) AS tab(col);
+SELECT histogram_numeric(col, 3) FROM VALUES
+  (CAST(1 AS BYTE)), (CAST(2 AS BYTE)), (CAST(3 AS BYTE)) AS tab(col);
+SELECT histogram_numeric(col, 3) FROM VALUES
+  (CAST(1 AS TINYINT)), (CAST(2 AS TINYINT)), (CAST(3 AS TINYINT)) AS tab(col);
+SELECT histogram_numeric(col, 3) FROM VALUES
+  (CAST(1 AS SMALLINT)), (CAST(2 AS SMALLINT)), (CAST(3 AS SMALLINT)) AS tab(col);
+SELECT histogram_numeric(col, 3) FROM VALUES
+  (CAST(1 AS BIGINT)), (CAST(2 AS BIGINT)), (CAST(3 AS BIGINT)) AS tab(col);
+SELECT histogram_numeric(col, 3) FROM VALUES (TIMESTAMP '2017-03-01 00:00:00'),
+  (TIMESTAMP '2017-04-01 00:00:00'), (TIMESTAMP '2017-05-01 00:00:00') AS tab(col);
+SELECT histogram_numeric(col, 3) FROM VALUES (INTERVAL '100-00' YEAR TO MONTH),
+  (INTERVAL '110-00' YEAR TO MONTH), (INTERVAL '120-00' YEAR TO MONTH) AS tab(col);
+SELECT histogram_numeric(col, 3) FROM VALUES (INTERVAL '12 20:4:0' DAY TO SECOND),
+  (INTERVAL '12 21:4:0' DAY TO SECOND), (INTERVAL '12 22:4:0' DAY TO SECOND) AS tab(col);
+SELECT histogram_numeric(col, 3)
+FROM VALUES (NULL), (NULL), (NULL) AS tab(col);
+SELECT histogram_numeric(col, 3)
+FROM VALUES (CAST(NULL AS DOUBLE)), (CAST(NULL AS DOUBLE)), (CAST(NULL AS DOUBLE)) AS tab(col);
+SELECT histogram_numeric(col, 3)
+FROM VALUES (CAST(NULL AS INT)), (CAST(NULL AS INT)), (CAST(NULL AS INT)) AS tab(col);
+
 
 -- SPARK-37613: Support ANSI Aggregate Function: regr_count
 SELECT regr_count(y, x) FROM testRegression;
