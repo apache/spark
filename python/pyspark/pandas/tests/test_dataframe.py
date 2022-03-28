@@ -3991,8 +3991,14 @@ class DataFrameTest(ComparisonTestBase, SQLTestUtils):
             pdf.rank(numeric_only=True).sort_index(), psdf.rank(numeric_only=True).sort_index()
         )
         self.assert_eq(
-            pdf[["col2"]].rank(numeric_only=True).sort_index(),
-            psdf[["col2"]].rank(numeric_only=True).sort_index(),
+            pdf.rank(numeric_only=False).sort_index(), psdf.rank(numeric_only=False).sort_index()
+        )
+        self.assert_eq(
+            pdf.rank(numeric_only=None).sort_index(), psdf.rank(numeric_only=None).sort_index()
+        )
+        self.assert_eq(
+            pdf[["col2"]].rank(numeric_only=True),
+            psdf[["col2"]].rank(numeric_only=True),
         )
 
     def test_round(self):

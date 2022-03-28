@@ -1348,12 +1348,20 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
         non_numeric_pser = pd.Series(["a", "c", "b", "d"], name="x", index=[10, 11, 12, 13])
         non_numeric_psser = ps.from_pandas(non_numeric_pser)
         self.assert_eq(
-            non_numeric_pser.rank(numeric_only=True).sort_index(),
-            non_numeric_psser.rank(numeric_only=True).sort_index(),
+            non_numeric_pser.rank(numeric_only=True),
+            non_numeric_psser.rank(numeric_only=True),
         )
         self.assert_eq(
-            (non_numeric_pser + "x").rank(numeric_only=True).sort_index(),
-            (non_numeric_psser + "x").rank(numeric_only=True).sort_index(),
+            non_numeric_pser.rank(numeric_only=None),
+            non_numeric_psser.rank(numeric_only=None).sort_index(),
+        )
+        self.assert_eq(
+            non_numeric_pser.rank(numeric_only=False),
+            non_numeric_psser.rank(numeric_only=False).sort_index(),
+        )
+        self.assert_eq(
+            (non_numeric_pser + "x").rank(numeric_only=True),
+            (non_numeric_psser + "x").rank(numeric_only=True),
         )
 
         msg = "method must be one of 'average', 'min', 'max', 'first', 'dense'"
