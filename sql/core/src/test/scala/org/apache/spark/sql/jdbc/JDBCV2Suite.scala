@@ -350,6 +350,13 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
       "WHEN IS_MANAGER = true THEN FALSE ELSE DEPT > 3 END], ")
     checkAnswer(df9, Seq(Row(2, "alex", 12000, 1200, false),
       Row(2, "david", 10000, 1300, true), Row(6, "jen", 12000, 1200, true)))
+
+    val df10 = spark.table("h2.test.people")
+      .select($"NAME".as("myName"), $"ID".as("myID"))
+      .filter($"myID" > 1)
+    checkFiltersRemoved(df10)
+    checkPushedInfo(df10, "PushedFilters: [ID IS NOT NULL, ID > 1], ")
+    checkAnswer(df10, Row("mary", 2))
   }
 
   test("scan with complex filter push-down") {
