@@ -20,10 +20,7 @@ package org.apache.spark.util.kvstore;
 import java.io.File;
 
 import org.apache.commons.io.FileUtils;
-import org.apache.commons.lang3.SystemUtils;
 import org.junit.AfterClass;
-
-import static org.junit.Assume.assumeFalse;
 
 public class RocksDBIteratorSuite extends DBIteratorSuite {
 
