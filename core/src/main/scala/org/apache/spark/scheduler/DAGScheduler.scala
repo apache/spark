@@ -254,7 +254,8 @@ private[spark] class DAGScheduler(
   private[spark] val eventProcessLoop = new DAGSchedulerEventProcessLoop(this)
   taskScheduler.setDAGScheduler(this)
 
-  private val reorderTasksEnabled = sc.getConf.get(config.SCHEDULER_REORDER_TASKS)
+  private val sortTasksByInputSizeEnabled =
+    sc.getConf.get(config.SCHEDULER_SORT_TASKS_BY_INPUT_SIZE)
 
   private val pushBasedShuffleEnabled = Utils.isPushBasedShuffleEnabled(sc.getConf, isDriver = true)
 
@@ -1562,16 +1563,16 @@ private[spark] class DAGScheduler(
     }
 
     if (tasks.nonEmpty) {
-      var reordered = false
+      var sorted = false
       val orderedTasks =
-        if (reorderTasksEnabled && tasks.forall(_.partition.predictedInputBytes.isDefined)) {
-          reordered = true
-          tasks.sortBy(_.partition.predictedInputBytes.get)(Ordering[Long].reverse)
+        if (sortTasksByInputSizeEnabled && tasks.forall(_.partition.inputSize.isDefined)) {
+          sorted = true
+          tasks.sortBy(_.partition.inputSize.get)(Ordering[Long].reverse)
         } else {
           tasks
         }
       logInfo(s"Submitting ${orderedTasks.size} missing tasks from $stage (${stage.rdd}), " +
-        s"reordered: $reordered. (first 15 tasks are for partitions " +
+        s"sorted: $sorted. (first 15 tasks are for partitions " +
         s"${orderedTasks.take(15).map(_.partitionId)})")
       taskScheduler.submitTasks(new TaskSet(
         orderedTasks.toArray, stage.id, stage.latestInfo.attemptNumber, jobId, properties,

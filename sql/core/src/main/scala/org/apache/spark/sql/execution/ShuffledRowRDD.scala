@@ -70,7 +70,7 @@ case class CoalescedMapperPartitionSpec(
 private final case class ShuffledRowRDDPartition(
   index: Int,
   spec: ShufflePartitionSpec,
-  @transient override val predictedInputBytes: Option[Long] = None) extends Partition
+  @transient override val inputSize: Option[Long] = None) extends Partition
 
 /**
  * A dummy partitioner for use with records whose partition ids have been pre-computed (i.e. for

@@ -27,11 +27,11 @@ trait Partition extends Serializable {
   def index: Int
 
   /**
-   * Get the partition's predicted input size before actually executing, return none if input size
-   * is unknown. During scheduling tasks, the bigger input size has the higher priority if all
-   * partitions define the value.
+   * Get the partition's input size before actually executing, return none means input size
+   * is unknown. During scheduling tasks, the big input size task can take precedence.
+   * Note that, the actually priority of task who can be offered resource depend on data locality.
    */
-  def predictedInputBytes: Option[Long] = None
+  def inputSize: Option[Long] = None
 
   // A better default implementation of HashCode
   override def hashCode(): Int = index

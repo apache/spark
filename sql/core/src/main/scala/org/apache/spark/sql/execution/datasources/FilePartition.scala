@@ -30,6 +30,11 @@ import org.apache.spark.sql.connector.read.InputPartition
  */
 case class FilePartition(index: Int, files: Array[PartitionedFile])
   extends Partition with InputPartition {
+
+  override def inputSize: Option[Long] = {
+    Some(files.map(_.length).sum)
+  }
+
   override def preferredLocations(): Array[String] = {
     // Computes total number of bytes can be retrieved from each host.
     val hostToNumBytes = mutable.HashMap.empty[String, Long]

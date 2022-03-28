@@ -29,7 +29,10 @@ import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.metric.{CustomMetrics, SQLMetric}
 import org.apache.spark.sql.vectorized.ColumnarBatch
 
-class DataSourceRDDPartition(val index: Int, val inputPartition: InputPartition)
+class DataSourceRDDPartition(
+    override val index: Int,
+    override val inputSize: Option[Long],
+    val inputPartition: InputPartition)
   extends Partition with Serializable
 
 // TODO: we should have 2 RDDs: an RDD[InternalRow] for row-based scan, an `RDD[ColumnarBatch]` for
@@ -44,7 +47,13 @@ class DataSourceRDD(
 
   override protected def getPartitions: Array[Partition] = {
     inputPartitions.zipWithIndex.map {
-      case (inputPartition, index) => new DataSourceRDDPartition(index, inputPartition)
+      case (inputPartition, index) =>
+        val inputSize = if (inputPartition.getLength.isPresent) {
+          Some(inputPartition.getLength.getAsLong)
+        } else {
+          None
+        }
+        new DataSourceRDDPartition(index, inputSize, inputPartition)
     }.toArray
   }
 

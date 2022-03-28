@@ -109,7 +109,7 @@ class MyRDD(
     assert(inputBytes.size == numPartitions)
     (0 until numPartitions).map(i => new Partition {
       override def index: Int = i
-      override def predictedInputBytes: Option[Long] = inputBytes(i)
+      override def inputSize: Option[Long] = inputBytes(i)
     }).toArray
   }
 
@@ -4369,9 +4369,9 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     submit(rdd, (0 until 3).toArray)
     assert(taskSets.size == 1)
     assert(taskSets.head.tasks.size == 3)
-    assert(taskSets.head.tasks(0).partition.predictedInputBytes == Some(3))
-    assert(taskSets.head.tasks(1).partition.predictedInputBytes == Some(2))
-    assert(taskSets.head.tasks(2).partition.predictedInputBytes == Some(1))
+    assert(taskSets.head.tasks(0).partition.inputSize == Some(3))
+    assert(taskSets.head.tasks(1).partition.inputSize == Some(2))
+    assert(taskSets.head.tasks(2).partition.inputSize == Some(1))
     taskSets.clear()
 
     val inputBytes2: Seq[Option[Long]] = Seq(Some(1), Some(3), Some(2), None)
@@ -4379,10 +4379,10 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     submit(rdd2, (0 until 4).toArray)
     assert(taskSets.size == 1)
     assert(taskSets.head.tasks.size == 4)
-    assert(taskSets.head.tasks(0).partition.predictedInputBytes == Some(1))
-    assert(taskSets.head.tasks(1).partition.predictedInputBytes == Some(3))
-    assert(taskSets.head.tasks(2).partition.predictedInputBytes == Some(2))
-    assert(taskSets.head.tasks(3).partition.predictedInputBytes == None)
+    assert(taskSets.head.tasks(0).partition.inputSize == Some(1))
+    assert(taskSets.head.tasks(1).partition.inputSize == Some(3))
+    assert(taskSets.head.tasks(2).partition.inputSize == Some(2))
+    assert(taskSets.head.tasks(3).partition.inputSize == None)
     taskSets.clear()
   }
 

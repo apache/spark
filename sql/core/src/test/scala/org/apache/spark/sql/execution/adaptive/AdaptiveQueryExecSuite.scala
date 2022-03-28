@@ -2439,7 +2439,7 @@ class AdaptiveQueryExecSuite
     }
   }
 
-  test("SPARK-37528: Support reorder tasks during scheduling by shuffle partition size in AQE") {
+  test("SPARK-37528: Support schedule tasks by partition input size") {
     withTempView("v") {
       withSQLConf(
         SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
@@ -2471,10 +2471,10 @@ class AdaptiveQueryExecSuite
               assert(parts1.length == 3)
               assert(parts1.forall(_.asInstanceOf[ShuffledRowRDDPartition]
                 .spec.isInstanceOf[CoalescedPartitionSpec]))
-              assert(parts1.forall(_.predictedInputBytes.isDefined))
+              assert(parts1.forall(_.inputSize.isDefined))
             } else {
               assert(parts1.length == 5)
-              assert(parts1.forall(_.predictedInputBytes.isEmpty))
+              assert(parts1.forall(_.inputSize.isEmpty))
             }
           }
         }
@@ -2488,7 +2488,7 @@ class AdaptiveQueryExecSuite
         assert(parts2.length == 4)
         parts2.exists(_.asInstanceOf[ShuffledRowRDDPartition]
           .spec.isInstanceOf[PartialReducerPartitionSpec])
-        assert(parts2.forall(_.predictedInputBytes.isDefined))
+        assert(parts2.forall(_.inputSize.isDefined))
       }
     }
   }

@@ -2346,11 +2346,11 @@ package object config {
       .intConf
       .createWithDefault(5)
 
-  private[spark] val SCHEDULER_REORDER_TASKS =
-    ConfigBuilder("spark.scheduler.reorderTasks.enabled")
-      .doc("When true, Spark will reorder the tasks based on the partition's predicted input " +
-        "size, so the big task can take precedence.")
-      .version("3.3.0")
+  private[spark] val SCHEDULER_SORT_TASKS_BY_INPUT_SIZE =
+    ConfigBuilder("spark.scheduler.sortTasksByInputSize.enabled")
+      .doc("When true, Spark will sort the tasks based on the partition's input size, " +
+        "so the big input size task can take precedence.")
+      .version("3.4.0")
       .booleanConf
       .createWithDefault(true)
 }
