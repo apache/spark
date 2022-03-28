@@ -215,6 +215,8 @@ class BarrierTaskContext private[spark] (
 
   override def partitionId(): Int = taskContext.partitionId()
 
+  override def numPartitions(): Int = taskContext.numPartitions()
+
   override def attemptNumber(): Int = taskContext.attemptNumber()
 
   override def taskAttemptId(): Long = taskContext.taskAttemptId()

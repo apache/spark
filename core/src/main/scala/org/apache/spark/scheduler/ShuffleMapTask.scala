@@ -37,6 +37,7 @@ import org.apache.spark.rdd.RDD
  * @param taskBinary broadcast version of the RDD and the ShuffleDependency. Once deserialized,
  *                   the type should be (RDD[_], ShuffleDependency[_, _, _]).
  * @param partition partition of the RDD this task is associated with
+ * @param numPartitions Total number of partitions in the stage that this task belongs to.
  * @param locs preferred task execution locations for locality scheduling
  * @param localProperties copy of thread-local properties set by the user on the driver side.
  * @param serializedTaskMetrics a `TaskMetrics` that is created and serialized on the driver side
@@ -54,6 +55,7 @@ private[spark] class ShuffleMapTask(
     stageAttemptId: Int,
     taskBinary: Broadcast[Array[Byte]],
     partition: Partition,
+    numPartitions: Int,
     @transient private var locs: Seq[TaskLocation],
     localProperties: Properties,
     serializedTaskMetrics: Array[Byte],
@@ -61,13 +63,13 @@ private[spark] class ShuffleMapTask(
     appId: Option[String] = None,
     appAttemptId: Option[String] = None,
     isBarrier: Boolean = false)
-  extends Task[MapStatus](stageId, stageAttemptId, partition.index, localProperties,
+  extends Task[MapStatus](stageId, stageAttemptId, partition.index, numPartitions, localProperties,
     serializedTaskMetrics, jobId, appId, appAttemptId, isBarrier)
   with Logging {
 
   /** A constructor used only in test suites. This does not require passing in an RDD. */
   def this(partitionId: Int) = {
-    this(0, 0, null, new Partition { override def index: Int = 0 }, null, new Properties, null)
+    this(0, 0, null, new Partition { override def index: Int = 0 }, 1, null, new Properties, null)
   }
 
   @transient private val preferredLocs: Seq[TaskLocation] = {
