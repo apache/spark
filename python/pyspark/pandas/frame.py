@@ -7338,7 +7338,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             Number of rows to return.
         columns : label or list of labels
             Column label(s) to order by.
-        keep : {'first', 'last'}, default 'first'
+        keep : {'first', 'last'}, default 'first'. 'all' is not implemented yet.
             Determines which duplicates (if any) to keep.
             - ``first`` : Keep the first occurrence.
             - ``last`` : Keep the last occurrence.
@@ -7451,7 +7451,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             Number of items to retrieve.
         columns : list or str
             Column name or names to order by.
-        keep : {'first', 'last'}, default 'first'
+        keep : {'first', 'last'}, default 'first'. 'all' is not implemented yet.
             Determines which duplicates (if any) to keep.
             - ``first`` : Keep the first occurrence.
             - ``last`` : Keep the last occurrence.
