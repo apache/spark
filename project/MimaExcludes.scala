@@ -34,6 +34,10 @@ import com.typesafe.tools.mima.core.ProblemFilters._
  */
 object MimaExcludes {
 
+  // Exclude rules for 3.4.x
+  lazy val v34excludes = v33excludes ++ Seq(
+  )
+
   // Exclude rules for 3.3.x from 3.2.0
   lazy val v33excludes = v32excludes ++ Seq(
     // [SPARK-35672][CORE][YARN] Pass user classpath entries to executors using config instead of command line
@@ -49,6 +53,8 @@ object MimaExcludes {
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.util.ExecutionListenerManager.this"),
     // [SPARK-37786][SQL] StreamingQueryListener support use SQLConf.get to get corresponding SessionState's SQLConf
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.streaming.StreamingQueryManager.this"),
+    // [SPARK-38432][SQL] Reactor framework so as JDBC dialect could compile filter by self way
+    ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.sql.sources.Filter.toV2"),
 
     // [SPARK-37831][CORE] Add task partition id in TaskInfo and Task Metrics
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.status.api.v1.TaskData.this"),
@@ -137,6 +143,7 @@ object MimaExcludes {
   )
 
   def excludes(version: String) = version match {
+    case v if v.startsWith("3.4") => v34excludes
     case v if v.startsWith("3.3") => v33excludes
     case v if v.startsWith("3.2") => v32excludes
     case _ => Seq()

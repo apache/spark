@@ -299,7 +299,7 @@ public class ExternalBlockStoreClient extends BlockStoreClient {
           BlockTransferMessage msgObj = BlockTransferMessage.Decoder.fromByteBuffer(response);
           numRemovedBlocksFuture.complete(((BlocksRemoved) msgObj).numRemovedBlocks);
         } catch (Throwable t) {
-          logger.warn("Error trying to remove RDD blocks " + Arrays.toString(blockIds) +
+          logger.warn("Error trying to remove blocks " + Arrays.toString(blockIds) +
             " via external shuffle service from executor: " + execId, t);
           numRemovedBlocksFuture.complete(0);
         }
@@ -307,7 +307,7 @@ public class ExternalBlockStoreClient extends BlockStoreClient {
 
       @Override
       public void onFailure(Throwable e) {
-        logger.warn("Error trying to remove RDD blocks " + Arrays.toString(blockIds) +
+        logger.warn("Error trying to remove blocks " + Arrays.toString(blockIds) +
           " via external shuffle service from executor: " + execId, e);
         numRemovedBlocksFuture.complete(0);
       }

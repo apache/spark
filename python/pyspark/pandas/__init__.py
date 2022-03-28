@@ -101,8 +101,8 @@ def _auto_patch_spark() -> None:
     import os
     import logging
 
-    # Attach a usage logger.
-    logger_module = os.getenv("KOALAS_USAGE_LOGGER", "")
+    # Attach a usage logger. 'KOALAS_USAGE_LOGGER' is legacy, and it's for compatibility.
+    logger_module = os.getenv("PYSPARK_PANDAS_USAGE_LOGGER", os.getenv("KOALAS_USAGE_LOGGER", ""))
     if logger_module != "":
         try:
             from pyspark.pandas import usage_logging

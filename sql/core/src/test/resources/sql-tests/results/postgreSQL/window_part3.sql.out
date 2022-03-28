@@ -361,7 +361,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 
-extraneous input 'BY' expecting {')', ',', 'ORDER', 'RANGE', 'ROWS', 'SORT'}(line 1, pos 45)
+Syntax error at or near 'BY': extra input 'BY'(line 1, pos 45)
 
 == SQL ==
 select rank() OVER (PARTITION BY four, ORDER BY ten) FROM tenk1

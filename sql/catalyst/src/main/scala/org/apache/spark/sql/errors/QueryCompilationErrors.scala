@@ -775,7 +775,7 @@ object QueryCompilationErrors {
         s"$v2WriteClassName is not an instance of $v1WriteClassName")
   }
 
-  def unsupportedDeleteByConditionWithSubqueryError(condition: Option[Expression]): Throwable = {
+  def unsupportedDeleteByConditionWithSubqueryError(condition: Expression): Throwable = {
     new AnalysisException(
       s"Delete by condition with subquery is not supported: $condition")
   }
