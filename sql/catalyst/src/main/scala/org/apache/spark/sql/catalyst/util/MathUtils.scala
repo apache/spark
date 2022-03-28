@@ -26,15 +26,33 @@ object MathUtils {
 
   def addExact(a: Int, b: Int): Int = withOverflow(Math.addExact(a, b))
 
+  def addExact(a: Int, b: Int, errorContext: String): Int =
+    withOverflow(Math.addExact(a, b), errorContext = errorContext)
+
   def addExact(a: Long, b: Long): Long = withOverflow(Math.addExact(a, b))
+
+  def addExact(a: Long, b: Long, errorContext: String): Long =
+    withOverflow(Math.addExact(a, b), errorContext = errorContext)
 
   def subtractExact(a: Int, b: Int): Int = withOverflow(Math.subtractExact(a, b))
 
+  def subtractExact(a: Int, b: Int, errorContext: String): Int =
+    withOverflow(Math.subtractExact(a, b), errorContext = errorContext)
+
   def subtractExact(a: Long, b: Long): Long = withOverflow(Math.subtractExact(a, b))
+
+  def subtractExact(a: Long, b: Long, errorContext: String): Long =
+    withOverflow(Math.subtractExact(a, b), errorContext = errorContext)
 
   def multiplyExact(a: Int, b: Int): Int = withOverflow(Math.multiplyExact(a, b))
 
+  def multiplyExact(a: Int, b: Int, errorContext: String): Int =
+    withOverflow(Math.multiplyExact(a, b), errorContext = errorContext)
+
   def multiplyExact(a: Long, b: Long): Long = withOverflow(Math.multiplyExact(a, b))
+
+  def multiplyExact(a: Long, b: Long, errorContext: String): Long =
+    withOverflow(Math.multiplyExact(a, b), errorContext = errorContext)
 
   def negateExact(a: Int): Int = withOverflow(Math.negateExact(a))
 
@@ -50,12 +68,12 @@ object MathUtils {
 
   def floorMod(a: Long, b: Long): Long = withOverflow(Math.floorMod(a, b))
 
-  private def withOverflow[A](f: => A, hint: String = ""): A = {
+  private def withOverflow[A](f: => A, hint: String = "", errorContext: String = ""): A = {
     try {
       f
     } catch {
       case e: ArithmeticException =>
-        throw QueryExecutionErrors.arithmeticOverflowError(e.getMessage, hint)
+        throw QueryExecutionErrors.arithmeticOverflowError(e.getMessage, hint, errorContext)
     }
   }
 }

@@ -64,7 +64,33 @@ case class Origin(
   stopIndex: Option[Int] = None,
   sqlText: Option[String] = None,
   objectType: Option[String] = None,
-  objectName: Option[String] = None)
+  objectName: Option[String] = None) {
+
+  lazy val context: String = {
+    val positionContext = if (line.isDefined && startPosition.isDefined) {
+      s"(line ${line.get}, position ${startPosition.get})"
+    } else {
+      ""
+    }
+    val objectContext = if (objectType.isDefined && objectName.isDefined) {
+      s" of ${objectType.get} ${objectName.get}"
+    } else {
+      ""
+    }
+
+    if (sqlText.isDefined) {
+      val start = startIndex.getOrElse(0)
+      val stop = stopIndex.getOrElse(sqlText.get.length - 1)
+      s"""
+         |
+         |== SQL$objectContext$positionContext ==
+         |${sqlText.map(_.substring(start, stop + 1)).getOrElse("")}
+         |""".stripMargin
+    } else {
+      ""
+    }
+  }
+}
 
 /**
  * Provides a location for TreeNodes to ask about the context of their origin.  For example, which
