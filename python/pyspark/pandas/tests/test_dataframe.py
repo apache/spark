@@ -1793,20 +1793,20 @@ class DataFrameTest(ComparisonTestBase, SQLTestUtils):
             index=np.random.rand(7),
         )
         psdf = ps.from_pandas(pdf)
-        self.assert_eq(psdf.nlargest(n=5, columns="a"), pdf.nlargest(5, columns="a"))
-        self.assert_eq(psdf.nlargest(n=5, columns=["a", "b"]), pdf.nlargest(5, columns=["a", "b"]))
-        self.assert_eq(psdf.nlargest(n=5, columns=["c"]), pdf.nlargest(5, columns=["c"]))
+        self.assert_eq(psdf.nlargest(5, columns="a"), pdf.nlargest(5, columns="a"))
+        self.assert_eq(psdf.nlargest(5, columns=["a", "b"]), pdf.nlargest(5, columns=["a", "b"]))
+        self.assert_eq(psdf.nlargest(5, columns=["c"]), pdf.nlargest(5, columns=["c"]))
         self.assert_eq(
-            psdf.nlargest(n=5, columns=["c"], keep="first"),
+            psdf.nlargest(5, columns=["c"], keep="first"),
             pdf.nlargest(5, columns=["c"], keep="first"),
         )
         self.assert_eq(
-            psdf.nlargest(n=5, columns=["c"], keep="last"),
+            psdf.nlargest(5, columns=["c"], keep="last"),
             pdf.nlargest(5, columns=["c"], keep="last"),
         )
         msg = "`keep`=all is not supported. Only 'first' and 'last' are supported."
         with self.assertRaisesRegex(NotImplementedError, msg):
-            psdf.nlargest(n=5, columns=["c"], keep="all")
+            psdf.nlargest(5, columns=["c"], keep="all")
 
     def test_nsmallest(self):
         pdf = pd.DataFrame(
