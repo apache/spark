@@ -745,25 +745,40 @@ case class WholeStageCodegenExec(child: SparkPlan)(val codegenStageId: Int)
 
     val durationMs = longMetric("pipelineTime")
 
+    val ignoreCorruptRecord: Boolean = conf.ignoreCorruptRecord
+    def itrInternalRow(index: Int, leftIter: Iterator[InternalRow],
+                       rightIter: Iterator[InternalRow] = null): Iterator[InternalRow] = {
+      val (clazz, _) = CodeGenerator.compile(cleanedSource)
+      val buffer = clazz.generate(references).asInstanceOf[BufferedRowIterator]
+      val iters = if (null == rightIter) Array(leftIter) else Array(leftIter, rightIter)
+      buffer.init(index, iters)
+      new Iterator[InternalRow] {
+        override def hasNext: Boolean = {
+          val v = try {
+            buffer.hasNext
+          } catch {
+            case ex: Throwable =>
+              if (ignoreCorruptRecord) {
+                logInfo(s"Exception thrown in InternalRow#hasNext", ex)
+                false
+              } else {
+                throw ex
+              }
+          }
+          if (!v) durationMs += buffer.durationMs()
+          v
+        }
+        override def next: InternalRow = buffer.next()
+      }
+    }
+
     // Even though rdds is an RDD[InternalRow] it may actually be an RDD[ColumnarBatch] with
     // type erasure hiding that. This allows for the input to a code gen stage to be columnar,
     // but the output must be rows.
     val rdds = child.asInstanceOf[CodegenSupport].inputRDDs()
     assert(rdds.size <= 2, "Up to two input RDDs can be supported")
     if (rdds.length == 1) {
-      rdds.head.mapPartitionsWithIndex { (index, iter) =>
-        val (clazz, _) = CodeGenerator.compile(cleanedSource)
-        val buffer = clazz.generate(references).asInstanceOf[BufferedRowIterator]
-        buffer.init(index, Array(iter))
-        new Iterator[InternalRow] {
-          override def hasNext: Boolean = {
-            val v = buffer.hasNext
-            if (!v) durationMs += buffer.durationMs()
-            v
-          }
-          override def next: InternalRow = buffer.next()
-        }
-      }
+      rdds.head.mapPartitionsWithIndex { (index, iter) => itrInternalRow(index, iter) }
     } else {
       // Right now, we support up to two input RDDs.
       rdds.head.zipPartitions(rdds(1)) { (leftIter, rightIter) =>
@@ -771,17 +786,7 @@ case class WholeStageCodegenExec(child: SparkPlan)(val codegenStageId: Int)
         // a small hack to obtain the correct partition index
       }.mapPartitionsWithIndex { (index, zippedIter) =>
         val (leftIter, rightIter) = zippedIter.next()
-        val (clazz, _) = CodeGenerator.compile(cleanedSource)
-        val buffer = clazz.generate(references).asInstanceOf[BufferedRowIterator]
-        buffer.init(index, Array(leftIter, rightIter))
-        new Iterator[InternalRow] {
-          override def hasNext: Boolean = {
-            val v = buffer.hasNext
-            if (!v) durationMs += buffer.durationMs()
-            v
-          }
-          override def next: InternalRow = buffer.next()
-        }
+        itrInternalRow(index, leftIter, rightIter)
       }
     }
   }

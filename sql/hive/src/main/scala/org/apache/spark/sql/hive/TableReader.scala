@@ -129,13 +129,15 @@ class HadoopTableReader(
     val attrsWithIndex = attributes.zipWithIndex
     val mutableRow = new SpecificInternalRow(attributes.map(_.dataType))
 
+    val ignoreCorruptRecord = conf.ignoreCorruptRecord
     val deserializedHadoopRDD = hadoopRDD.mapPartitions { iter =>
       val hconf = broadcastedHadoopConf.value.value
       val deserializer = deserializerClass.getConstructor().newInstance()
       DeserializerLock.synchronized {
         deserializer.initialize(hconf, localTableDesc.getProperties)
       }
-      HadoopTableReader.fillObject(iter, deserializer, attrsWithIndex, mutableRow, deserializer)
+      HadoopTableReader.fillObject(iter, deserializer, attrsWithIndex, mutableRow, deserializer,
+        ignoreCorruptRecord)
     }
 
     deserializedHadoopRDD
@@ -271,9 +273,10 @@ class HadoopTableReader(
           tableSerDe.initialize(hconf, tableProperties)
         }
 
+        val ignoreCorruptRecord = conf.ignoreCorruptRecord
         // fill the non partition key attributes
         HadoopTableReader.fillObject(iter, deserializer, nonPartitionKeyAttrs,
-          mutableRow, tableSerDe)
+          mutableRow, tableSerDe, ignoreCorruptRecord)
       }
     }.toSeq
 
@@ -465,7 +468,8 @@ private[hive] object HadoopTableReader extends HiveInspectors with Logging {
       rawDeser: Deserializer,
       nonPartitionKeyAttrs: Seq[(Attribute, Int)],
       mutableRow: InternalRow,
-      tableDeser: Deserializer): Iterator[InternalRow] = {
+      tableDeser: Deserializer,
+      ignoreCorruptRecord: Boolean = false): Iterator[InternalRow] = {
 
     val soi = if (rawDeser.getObjectInspector.equals(tableDeser.getObjectInspector)) {
       rawDeser.getObjectInspector.asInstanceOf[StructObjectInspector]
@@ -526,13 +530,26 @@ private[hive] object HadoopTableReader extends HiveInspectors with Logging {
     }
 
     val converter = ObjectInspectorConverters.getConverter(rawDeser.getObjectInspector, soi)
-
+    val empty = InternalRow.empty
     // Map each tuple to a row object
     iterator.map { value =>
-      val raw = converter.convert(rawDeser.deserialize(value))
-      var i = 0
+      var notSkip = true
+      var raw: AnyRef = null
+      try {
+        raw = converter.convert(rawDeser.deserialize(value))
+      } catch {
+        case ex: Throwable =>
+          if (ignoreCorruptRecord) {
+            notSkip = false
+            logWarning(s"Exception thrown in converter", ex)
+          } else {
+            throw ex
+          }
+      }
+
       val length = fieldRefs.length
-      while (i < length) {
+      var i = 0
+      while (notSkip && i < length) {
         try {
           val fieldValue = soi.getStructFieldData(raw, fieldRefs(i))
           if (fieldValue == null) {
@@ -548,7 +565,11 @@ private[hive] object HadoopTableReader extends HiveInspectors with Logging {
         }
       }
 
-      mutableRow: InternalRow
-    }
+      if (notSkip) {
+        mutableRow: InternalRow
+      } else {
+        empty
+      }
+    }.filter(o => !empty.equals(o))
   }
 }
