@@ -42,7 +42,6 @@ public class RocksDBIteratorSuite extends DBIteratorSuite {
 
   @Override
   protected KVStore createStore() throws Exception {
-    assumeFalse(SystemUtils.IS_OS_MAC_OSX && SystemUtils.OS_ARCH.equals("aarch64"));
     dbpath = File.createTempFile("test.", ".rdb");
     dbpath.delete();
     db = new RocksDB(dbpath);

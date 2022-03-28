@@ -28,7 +28,7 @@ import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.internal.config.History._
 import org.apache.spark.internal.config.History.HybridStoreDiskBackend
 import org.apache.spark.status.KVUtils
-import org.apache.spark.tags.{ExtendedLevelDBTest, ExtendedRocksDBTest}
+import org.apache.spark.tags.ExtendedLevelDBTest
 import org.apache.spark.util.{ManualClock, Utils}
 import org.apache.spark.util.kvstore.KVStore
 
@@ -232,7 +232,6 @@ class HistoryServerDiskManagerUseLevelDBSuite extends HistoryServerDiskManagerSu
   override protected def extension: String = ".ldb"
 }
 
-@ExtendedRocksDBTest
 class HistoryServerDiskManagerUseRocksDBSuite extends HistoryServerDiskManagerSuite {
   override protected def backend: HybridStoreDiskBackend.Value = HybridStoreDiskBackend.ROCKSDB
   override protected def extension: String = ".rdb"
