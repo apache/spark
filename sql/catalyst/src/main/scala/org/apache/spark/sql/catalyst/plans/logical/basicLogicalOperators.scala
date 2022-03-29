@@ -955,6 +955,7 @@ case class Range(
  * @param groupingExpressions expressions for grouping keys
  * @param aggregateExpressions expressions for a project list, which could contain
  *                             [[AggregateExpression]]s.
+ * @param isPartialOnly whether this aggregate only do partial aggregation.
  *
  * Note: Currently, aggregateExpressions is the project list of this Group by operator. Before
  * separating projection from grouping and aggregate, we should avoid expression-level optimization
