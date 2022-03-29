@@ -88,6 +88,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
         LimitPushDownThroughWindow,
         ColumnPruning,
         GenerateOptimization,
+        PushPartialAggregationThroughJoin,
         // Operator combine
         CollapseRepartition,
         CollapseProject,

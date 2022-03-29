@@ -40,7 +40,11 @@ object BasicStatsPlanVisitor extends LogicalPlanVisitor[Statistics] {
   }
 
   override def visitAggregate(p: Aggregate): Statistics = {
-    AggregateEstimation.estimate(p).getOrElse(fallback(p))
+    if (p.groupOnly) {
+      p.child.stats
+    } else {
+      AggregateEstimation.estimate(p).getOrElse(fallback(p))
+    }
   }
 
   override def visitDistinct(p: Distinct): Statistics = {

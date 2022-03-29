@@ -122,6 +122,7 @@ object AggUtils {
       groupingExpressions: Seq[NamedExpression],
       aggregateExpressions: Seq[AggregateExpression],
       resultExpressions: Seq[NamedExpression],
+      isPartialOnly: Boolean,
       child: SparkPlan): Seq[SparkPlan] = {
     // Check if we can use HashAggregate.
 
@@ -164,7 +165,11 @@ object AggUtils {
         resultExpressions = resultExpressions,
         child = interExec)
 
-    finalAggregate :: Nil
+    if (isPartialOnly) {
+      partialAggregate :: Nil
+    } else {
+      finalAggregate :: Nil
+    }
   }
 
   def planAggregateWithOneDistinct(

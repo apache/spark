@@ -254,7 +254,7 @@ object ExtractFiltersAndInnerJoins extends PredicateHelper {
 object PhysicalAggregation {
   // groupingExpressions, aggregateExpressions, resultExpressions, child
   type ReturnType =
-    (Seq[NamedExpression], Seq[Expression], Seq[NamedExpression], LogicalPlan)
+    (Seq[NamedExpression], Seq[Expression], Seq[NamedExpression], Boolean, LogicalPlan)
 
   def unapply(a: Any): Option[ReturnType] = a match {
     case logical.Aggregate(groupingExpressions, resultExpressions, isPartialOnly, child) =>
@@ -316,6 +316,7 @@ object PhysicalAggregation {
         namedGroupingExpressions.map(_._2),
         aggregateExpressions,
         rewrittenResultExpressions,
+        isPartialOnly,
         child))
 
     case _ => None

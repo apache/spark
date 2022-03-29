@@ -370,7 +370,8 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         EventTimeWatermarkExec(columnName, delay, planLater(child)) :: Nil
 
       case PhysicalAggregation(
-        namedGroupingExpressions, aggregateExpressions, rewrittenResultExpressions, child) =>
+        namedGroupingExpressions, aggregateExpressions, rewrittenResultExpressions,
+        isPartialOnly, child) =>
 
         if (aggregateExpressions.exists(PythonUDF.isGroupedAggPandasUDF)) {
           throw new AnalysisException(
@@ -493,7 +494,8 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
    */
   object Aggregation extends Strategy {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
-      case PhysicalAggregation(groupingExpressions, aggExpressions, resultExpressions, child)
+      case PhysicalAggregation(groupingExpressions, aggExpressions, resultExpressions,
+          isPartialOnly, child)
         if aggExpressions.forall(expr => expr.isInstanceOf[AggregateExpression]) =>
         val aggregateExpressions = aggExpressions.map(expr =>
           expr.asInstanceOf[AggregateExpression])
@@ -524,6 +526,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
               normalizedGroupingExpressions,
               aggregateExpressions,
               resultExpressions,
+              isPartialOnly,
               planLater(child))
           } else {
             // functionsWithDistinct is guaranteed to be non-empty. Even though it may contain
@@ -561,7 +564,8 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
 
         aggregateOperator
 
-      case PhysicalAggregation(groupingExpressions, aggExpressions, resultExpressions, child)
+      case PhysicalAggregation(groupingExpressions, aggExpressions, resultExpressions,
+          isPartialOnly, child)
         if aggExpressions.forall(expr => expr.isInstanceOf[PythonUDF]) =>
         val udfExpressions = aggExpressions.map(expr => expr.asInstanceOf[PythonUDF])
 
@@ -571,7 +575,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           resultExpressions,
           planLater(child)))
 
-      case PhysicalAggregation(_, aggExpressions, _, _) =>
+      case PhysicalAggregation(_, aggExpressions, _, _, _) =>
         val groupAggPandasUDFNames = aggExpressions
           .filter(_.isInstanceOf[PythonUDF])
           .map(_.asInstanceOf[PythonUDF].name)
