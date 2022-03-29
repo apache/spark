@@ -66,7 +66,7 @@ case class Origin(
   objectType: Option[String] = None,
   objectName: Option[String] = None) {
 
-  lazy val context: String = {
+  lazy val context: String = sqlText.map { text =>
     val positionContext = if (line.isDefined && startPosition.isDefined) {
       s"(line ${line.get}, position ${startPosition.get})"
     } else {
@@ -78,18 +78,36 @@ case class Origin(
       ""
     }
 
-    if (sqlText.isDefined) {
-      val start = startIndex.getOrElse(0)
-      val stop = stopIndex.getOrElse(sqlText.get.length - 1)
-      s"""
-         |
-         |== SQL$objectContext$positionContext ==
-         |${sqlText.map(_.substring(start, stop + 1)).getOrElse("")}
-         |""".stripMargin
-    } else {
-      ""
+    val start = startIndex.getOrElse(0)
+    val stop = stopIndex.getOrElse(sqlText.get.length - 1)
+    var lineStartIndex = start
+    while(lineStartIndex >= 0 && text.charAt(lineStartIndex) != '\n') {
+      lineStartIndex -= 1
     }
-  }
+    var lineStopIndex = stop
+    while(lineStopIndex < text.length && text.charAt(lineStopIndex) != '\n') {
+      lineStopIndex += 1
+    }
+    val lines = text.substring(lineStartIndex + 1, lineStopIndex).split("\n")
+
+    val builder = new StringBuilder
+    builder ++= s"\n== SQL$objectContext$positionContext ==\n"
+    var currentIndex = lineStartIndex
+    lines.foreach { lineText =>
+      builder ++= lineText + "\n"
+      currentIndex += 1
+      (0 until lineText.length).foreach { _ =>
+        if (currentIndex >= start && currentIndex <= stop) {
+          builder ++= "^"
+        } else {
+          builder ++= " "
+        }
+        currentIndex += 1
+      }
+      builder ++= "\n"
+    }
+    builder.result()
+  }.getOrElse("")
 }
 
 /**
