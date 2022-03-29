@@ -32,6 +32,7 @@ jobs:
       matrix:
         branch:
           - master
+          - branch-3.3
           - branch-3.2
           - branch-3.1
     steps:

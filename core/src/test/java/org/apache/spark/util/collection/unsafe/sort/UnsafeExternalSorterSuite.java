@@ -602,9 +602,9 @@ public class UnsafeExternalSorterSuite {
   private void verifyIntIterator(UnsafeSorterIterator iter, int start, int end)
       throws IOException {
     for (int i = start; i < end; i++) {
-      assert (iter.hasNext());
+      assertTrue(iter.hasNext());
       iter.loadNext();
-      assert (Platform.getInt(iter.getBaseObject(), iter.getBaseOffset()) == i);
+      assertEquals(Platform.getInt(iter.getBaseObject(), iter.getBaseOffset()), i);
     }
   }
 }

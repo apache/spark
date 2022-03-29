@@ -20,7 +20,10 @@ package org.apache.spark.sql.execution
 import org.apache.spark.SparkException
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.expressions.{Add, Alias, Divide}
 import org.apache.spark.sql.catalyst.parser.ParseException
+import org.apache.spark.sql.catalyst.plans.logical.Project
+import org.apache.spark.sql.catalyst.trees.Origin
 import org.apache.spark.sql.internal.SQLConf._
 import org.apache.spark.sql.test.{SharedSparkSession, SQLTestUtils}
 
@@ -905,6 +908,58 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
           sql("SELECT * FROM v1").collect()
         }.getMessage
         assert(e.contains("divide by zero"))
+      }
+    }
+  }
+
+  test("CurrentOrigin is correctly set in and out of the View") {
+    withTable("t") {
+      Seq((1, 1), (2, 2)).toDF("a", "b").write.format("parquet").saveAsTable("t")
+      Seq("VIEW", "TEMPORARY VIEW").foreach { viewType =>
+        val viewId = "v"
+        withView(viewId) {
+          val viewText = "SELECT a + b c FROM t"
+          sql(
+            s"""
+              |CREATE $viewType $viewId AS
+              |-- the body of the view
+              |$viewText
+              |""".stripMargin)
+          val plan = sql("select c / 2.0D d from v").logicalPlan
+          val add = plan.collectFirst {
+            case Project(Seq(Alias(a: Add, _)), _) => a
+          }
+          assert(add.isDefined)
+          val qualifiedName = if (viewType == "VIEW") {
+            s"default.$viewId"
+          } else {
+            viewId
+          }
+          val expectedAddOrigin = Origin(
+            line = Some(1),
+            startPosition = Some(7),
+            startIndex = Some(7),
+            stopIndex = Some(11),
+            sqlText = Some("SELECT a + b c FROM t"),
+            objectType = Some("VIEW"),
+            objectName = Some(qualifiedName)
+          )
+          assert(add.get.origin == expectedAddOrigin)
+
+          val divide = plan.collectFirst {
+            case Project(Seq(Alias(d: Divide, _)), _) => d
+          }
+          assert(divide.isDefined)
+          val expectedDivideOrigin = Origin(
+            line = Some(1),
+            startPosition = Some(7),
+            startIndex = Some(7),
+            stopIndex = Some(14),
+            sqlText = Some("select c / 2.0D d from v"),
+            objectType = None,
+            objectName = None)
+          assert(divide.get.origin == expectedDivideOrigin)
+        }
       }
     }
   }

@@ -15,25 +15,31 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.connector.expressions.filter;
+package org.apache.spark.sql.connector.expressions;
+
+import java.io.Serializable;
 
 import org.apache.spark.annotation.Evolving;
-import org.apache.spark.sql.connector.expressions.NamedReference;
-import org.apache.spark.unsafe.types.UTF8String;
+import org.apache.spark.sql.types.DataType;
 
 /**
- * A filter that evaluates to {@code true} iff the {@code column} evaluates to
- * a string that ends with {@code value}.
+ * Represents a cast expression in the public logical expression API.
  *
  * @since 3.3.0
  */
 @Evolving
-public final class StringEndsWith extends StringPredicate {
+public class Cast implements Expression, Serializable {
+  private Expression expression;
+  private DataType dataType;
 
-  public StringEndsWith(NamedReference column, UTF8String value) {
-    super(column, value);
+  public Cast(Expression expression, DataType dataType) {
+    this.expression = expression;
+    this.dataType = dataType;
   }
 
+  public Expression expression() { return expression; }
+  public DataType dataType() { return dataType; }
+
   @Override
-  public String toString() { return "STRING_ENDS_WITH(" + column.describe() + ", " + value + ")"; }
+  public Expression[] children() { return new Expression[]{ expression() }; }
 }

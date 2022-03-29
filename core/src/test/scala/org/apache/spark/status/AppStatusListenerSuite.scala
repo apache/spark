@@ -37,7 +37,7 @@ import org.apache.spark.scheduler.cluster._
 import org.apache.spark.status.ListenerEventsTestHelper._
 import org.apache.spark.status.api.v1
 import org.apache.spark.storage._
-import org.apache.spark.tags.{ExtendedLevelDBTest, ExtendedRocksDBTest}
+import org.apache.spark.tags.ExtendedLevelDBTest
 import org.apache.spark.util.Utils
 import org.apache.spark.util.kvstore.{InMemoryStore, KVStore}
 
@@ -1899,7 +1899,6 @@ class AppStatusListenerWithLevelDBSuite extends AppStatusListenerSuite {
     .set(HYBRID_STORE_DISK_BACKEND, HybridStoreDiskBackend.LEVELDB.toString)
 }
 
-@ExtendedRocksDBTest
 class AppStatusListenerWithRocksDBSuite extends AppStatusListenerSuite {
   override def conf: SparkConf = super.conf
     .set(HYBRID_STORE_DISK_BACKEND, HybridStoreDiskBackend.ROCKSDB.toString)
