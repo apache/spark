@@ -17,17 +17,15 @@
 
 package org.apache.spark.sql.errors
 
-import java.sql.Timestamp
-
-import org.apache.spark.{SparkArithmeticException, SparkException, SparkIllegalArgumentException, SparkRuntimeException, SparkUnsupportedOperationException, SparkUpgradeException}
-import org.apache.spark.sql.{DataFrame, QueryTest, Row}
+import org.apache.spark.{SparkArithmeticException, SparkException, SparkRuntimeException, SparkUnsupportedOperationException, SparkUpgradeException}
+import org.apache.spark.sql.{DataFrame, QueryTest}
 import org.apache.spark.sql.execution.datasources.orc.OrcTest
 import org.apache.spark.sql.execution.datasources.parquet.ParquetTest
 import org.apache.spark.sql.functions.{lit, lower, struct, sum}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy.EXCEPTION
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{StructField, StructType, TimestampNTZType, TimestampType}
+import org.apache.spark.sql.types.{StructType, TimestampType}
 import org.apache.spark.sql.util.ArrowUtils
 
 class QueryExecutionErrorsSuite extends QueryTest
@@ -99,26 +97,6 @@ class QueryExecutionErrorsSuite extends QueryTest
         "is invalid: Detail message: " +
         "Given final block not properly padded. " +
         "Such issues can arise if a bad key is used during decryption.")
-    }
-  }
-
-  test("INVALID_PARAMETER_VALUE: invalid unit passed to timestampadd/timestampdiff") {
-    Seq(
-      "timestampadd" ->
-        "select timestampadd(nanosecond, 100, timestamp'2022-02-13 18:00:00')",
-      "timestampdiff" ->
-        """select timestampdiff(
-          |  nanosecond,
-          |  timestamp'2022-02-13 18:00:00',
-          |  timestamp'2022-02-22 12:52:00')""".stripMargin
-    ).foreach { case (funcName, sqlStmt) =>
-      val e = intercept[SparkIllegalArgumentException] {
-        sql(sqlStmt).collect()
-      }
-      assert(e.getErrorClass === "INVALID_PARAMETER_VALUE")
-      assert(e.getSqlState === "22023")
-      assert(e.getMessage ===
-        s"The value of parameter(s) 'unit' in $funcName is invalid: nanosecond")
     }
   }
 
@@ -262,25 +240,31 @@ class QueryExecutionErrorsSuite extends QueryTest
   }
 
   test("UNSUPPORTED_OPERATION - SPARK-36346: can't read Timestamp as TimestampNTZ") {
-    val data = (1 to 10).map { i =>
-      val ts = new Timestamp(i)
-      Row(ts)
-    }
-
-    val actualSchema = StructType(Seq(StructField("time", TimestampType, false)))
-    val providedSchema = StructType(Seq(StructField("time", TimestampNTZType, false)))
-
     withTempPath { file =>
-      val df = spark.createDataFrame(sparkContext.parallelize(data), actualSchema)
-      df.write.orc(file.getCanonicalPath)
+      sql("select timestamp_ltz'2019-03-21 00:02:03'").write.orc(file.getCanonicalPath)
       withAllNativeOrcReaders {
         val e = intercept[SparkException] {
-          spark.read.schema(providedSchema).orc(file.getCanonicalPath).collect()
+          spark.read.schema("time timestamp_ntz").orc(file.getCanonicalPath).collect()
         }.getCause.asInstanceOf[SparkUnsupportedOperationException]
 
         assert(e.getErrorClass === "UNSUPPORTED_OPERATION")
         assert(e.getMessage === "The operation is not supported: " +
           "Unable to convert timestamp of Orc to data type 'timestamp_ntz'")
+      }
+    }
+  }
+
+  test("UNSUPPORTED_OPERATION - SPARK-38504: can't read TimestampNTZ as TimestampLTZ") {
+    withTempPath { file =>
+      sql("select timestamp_ntz'2019-03-21 00:02:03'").write.orc(file.getCanonicalPath)
+      withAllNativeOrcReaders {
+        val e = intercept[SparkException] {
+          spark.read.schema("time timestamp_ltz").orc(file.getCanonicalPath).collect()
+        }.getCause.asInstanceOf[SparkUnsupportedOperationException]
+
+        assert(e.getErrorClass === "UNSUPPORTED_OPERATION")
+        assert(e.getMessage === "The operation is not supported: " +
+          "Unable to convert timestamp ntz of Orc to data type 'timestamp_ltz'")
       }
     }
   }

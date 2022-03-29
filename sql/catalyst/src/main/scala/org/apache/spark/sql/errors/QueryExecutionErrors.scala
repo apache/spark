@@ -1954,6 +1954,13 @@ object QueryExecutionErrors {
       messageParameters = Array("Unable to convert timestamp of Orc to data type 'timestamp_ntz'"))
   }
 
+  def cannotConvertOrcTimestampNTZToTimestampLTZError(): Throwable = {
+    new SparkUnsupportedOperationException(
+      errorClass = "UNSUPPORTED_OPERATION",
+      messageParameters =
+        Array("Unable to convert timestamp ntz of Orc to data type 'timestamp_ltz'"))
+  }
+
   def writePartitionExceedConfigSizeWhenDynamicPartitionError(
       numWrittenParts: Int,
       maxDynamicPartitions: Int,
@@ -1984,18 +1991,6 @@ object QueryExecutionErrors {
 
   def unsupportedDropNamespaceRestrictError(): Throwable = {
     new SQLFeatureNotSupportedException("Drop namespace restrict is not supported")
-  }
-
-  def invalidUnitInTimestampAdd(unit: String): Throwable = {
-    new SparkIllegalArgumentException(
-      errorClass = "INVALID_PARAMETER_VALUE",
-      messageParameters = Array("unit", "timestampadd", unit))
-  }
-
-  def invalidUnitInTimestampDiff(unit: String): Throwable = {
-    new SparkIllegalArgumentException(
-      errorClass = "INVALID_PARAMETER_VALUE",
-      messageParameters = Array("unit", "timestampdiff", unit))
   }
 
   def timestampAddOverflowError(micros: Long, amount: Int, unit: String): ArithmeticException = {

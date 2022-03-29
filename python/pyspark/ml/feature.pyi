@@ -42,7 +42,7 @@ from pyspark.ml.linalg import Vector, DenseVector, DenseMatrix
 from pyspark.sql.dataframe import DataFrame
 from pyspark.ml.param import Param
 
-from py4j.java_gateway import JavaObject  # type: ignore[import]
+from py4j.java_gateway import JavaObject
 
 class Binarizer(
     JavaTransformer,

@@ -28,6 +28,7 @@ import java.util.List;
 import java.util.stream.Collectors;
 import static java.nio.file.attribute.PosixFilePermission.*;
 
+import org.apache.logging.log4j.core.config.Property;
 import org.apache.logging.log4j.core.config.plugins.*;
 import org.apache.logging.log4j.core.Filter;
 import org.apache.logging.log4j.core.Layout;
@@ -249,7 +250,7 @@ public class ChildProcAppHandleSuite extends BaseSuite {
                           Filter filter,
                           Layout<? extends Serializable> layout,
                           boolean ignoreExceptions) {
-      super(name, filter, layout, ignoreExceptions);
+      super(name, filter, layout, ignoreExceptions, Property.EMPTY_ARRAY);
     }
 
     @Override

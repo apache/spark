@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.datasources.orc
 import java.io.File
 import java.nio.charset.StandardCharsets
 import java.sql.Timestamp
-import java.time.{LocalDateTime, ZoneOffset}
+import java.time.LocalDateTime
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
@@ -35,6 +35,7 @@ import org.apache.orc.mapreduce.OrcInputFormat
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.util.DateTimeTestUtils
 import org.apache.spark.sql.execution.FileSourceScanExec
 import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation, RecordReaderIterator}
 import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
@@ -804,25 +805,27 @@ abstract class OrcQuerySuite extends OrcQueryTest with SharedSparkSession {
     }
   }
 
-  test("SPARK-36346: read TimestampNTZ as TimestampLTZ") {
-    val data = (1 to 10).map { i =>
-      // The second parameter is `nanoOfSecond`, while java.sql.Timestamp accepts milliseconds
-      // as input. So here we multiple the `nanoOfSecond` by NANOS_PER_MILLIS
-      val ts = LocalDateTime.ofEpochSecond(0, i * 1000000, ZoneOffset.UTC)
-      Row(ts)
-    }
-    val answer = (1 to 10).map { i =>
-      val ts = new java.sql.Timestamp(i)
-      Row(ts)
-    }
-    val actualSchema = StructType(Seq(StructField("time", TimestampNTZType, false)))
-    val providedSchema = StructType(Seq(StructField("time", TimestampType, false)))
+  test("SPARK-37463: read/write Timestamp ntz to Orc with different time zone") {
+    DateTimeTestUtils.withDefaultTimeZone(DateTimeTestUtils.LA) {
+      val sqlText = """
+                      |select
+                      | timestamp_ntz '2021-06-01 00:00:00' ts_ntz1,
+                      | timestamp_ntz '1883-11-16 00:00:00.0' as ts_ntz2,
+                      | timestamp_ntz '2021-03-14 02:15:00.0' as ts_ntz3
+                      |""".stripMargin
 
-    withTempPath { file =>
-      val df = spark.createDataFrame(sparkContext.parallelize(data), actualSchema)
-      df.write.orc(file.getCanonicalPath)
-      withAllNativeOrcReaders {
-        checkAnswer(spark.read.schema(providedSchema).orc(file.getCanonicalPath), answer)
+      val df = sql(sqlText)
+
+      df.write.mode("overwrite").orc("ts_ntz_orc")
+
+      val query = "select * from `orc`.`ts_ntz_orc`"
+
+      DateTimeTestUtils.outstandingZoneIds.foreach { zoneId =>
+        DateTimeTestUtils.withDefaultTimeZone(zoneId) {
+          withAllNativeOrcReaders {
+            checkAnswer(sql(query), df)
+          }
+        }
       }
     }
   }

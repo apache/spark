@@ -42,6 +42,14 @@ trait ShuffleBlockResolver {
   def getBlockData(blockId: BlockId, dirs: Option[Array[String]] = None): ManagedBuffer
 
   /**
+   * Retrieve a list of BlockIds for a given shuffle map. Used to delete shuffle files
+   * from the external shuffle service after the associated executor has been removed.
+   */
+  def getBlocksForShuffle(shuffleId: Int, mapId: Long): Seq[BlockId] = {
+    Seq.empty
+  }
+
+  /**
    * Retrieve the data for the specified merged shuffle block as multiple chunks.
    */
   def getMergedBlockData(
