@@ -4061,18 +4061,15 @@ object SessionWindowing extends Rule[LogicalPlan] {
           case s: SessionWindow => sessionAttr
         }
 
-        val filterTimeSize = gapDuration.child.dataType match {
-          case CalendarIntervalType =>
-            val calendarInterval =
-              gapDuration.child.asInstanceOf[Literal].value.asInstanceOf[CalendarInterval]
-            calendarInterval == null ||
-              calendarInterval.months + calendarInterval.days + calendarInterval.microseconds <= 0
+        val filterByTimeRange = session.gapDuration match {
+          case Literal(interval: CalendarInterval, CalendarIntervalType) =>
+            interval == null || interval.months + interval.days + interval.microseconds <= 0
           case _ => true
         }
 
         // As same as tumbling window, we add a filter to filter out nulls.
         // And we also filter out events with negative or zero or invalid gap duration.
-        val filterExpr = if (filterTimeSize) {
+        val filterExpr = if (filterByTimeRange) {
           IsNotNull(session.timeColumn) &&
             (sessionAttr.getField(SESSION_END) > sessionAttr.getField(SESSION_START))
         } else {

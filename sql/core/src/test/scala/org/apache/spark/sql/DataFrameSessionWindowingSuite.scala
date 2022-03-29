@@ -22,8 +22,8 @@ import java.time.LocalDateTime
 import org.scalatest.BeforeAndAfterEach
 
 import org.apache.spark.sql.catalyst.encoders.RowEncoder
-import org.apache.spark.sql.catalyst.expressions.AttributeReference
-import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Expand, Filter}
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, GreaterThan}
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Expand, Filter, LogicalPlan, Project}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
@@ -497,63 +497,54 @@ class DataFrameSessionWindowingSuite extends QueryTest with SharedSparkSession
   }
 
   test("SPARK-38349: No need to filter events when gapDuration greater than 0") {
-    // negative value
-    val df1 = Seq(
-      ("2016-03-27 19:39:30", 1, "a")).toDF("time", "value", "id")
-      .groupBy(session_window($"time", "-5 seconds"))
-      .agg(count("*").as("counts"))
-      .orderBy($"session_window.start".asc)
-      .select($"session_window.start".cast("string"), $"session_window.end".cast("string"),
-        $"counts")
+    // negative gap duration
+    check("-5 seconds", true, "Need to filter events when gap duration less than 0")
 
-    val filter1 = df1.queryExecution.optimizedPlan.find(_.isInstanceOf[Filter])
-    assert(filter1.isDefined)
-    val exist1 = filter1.filter(_.toString.contains(">"))
-    assert(exist1.nonEmpty, "Need to filter windows when gapDuration less than 0")
+    // positive gap duration
+    check("5 seconds", false, "No need to filter events when gap duration greater than 0")
 
-    // positive value
-    val df2 = Seq(
-      ("2016-03-27 19:39:40", 2, "a")).toDF("time", "value", "id")
-      .groupBy(session_window($"time", "5 seconds"))
-      .agg(count("*").as("counts"))
-      .orderBy($"session_window.start".asc)
-      .select($"session_window.start".cast("string"), $"session_window.end".cast("string"),
-        $"counts")
+    // invalid gap duration
+    check("x seconds", true, "Need to filter events when gap duration invalid")
 
-    val filter2 = df2.queryExecution.optimizedPlan.find(_.isInstanceOf[Filter])
-    assert(filter2.isDefined)
-    val exist2 = filter2.filter(_.toString.contains(">"))
-    assert(exist2.isEmpty, "No need to filter windows when gapDuration value greater than 0")
+    // dynamic gap duration
+    check(when(col("time").equalTo("1"), "5 seconds")
+      .when(col("time").equalTo("2"), "10 seconds")
+      .otherwise("10 seconds"), true, "Need to filter events when gap duration dynamically")
 
-    // case when
-    val df3 = Seq(
-      ("2016-03-27 19:39:40", 2, "a")).toDF("time", "value", "id")
-      .groupBy(session_window($"time",
-        when(col("time").equalTo("1"), "5 seconds")
-        .when(col("time").equalTo("2"), "10 seconds")
-        .otherwise("10 seconds")))
-      .agg(count("*").as("counts"))
-      .orderBy($"session_window.start".asc)
-      .select($"session_window.start".cast("string"), $"session_window.end".cast("string"),
-        $"counts")
+    def check(
+               gapDuration: Any,
+               expectTimeRange: Boolean,
+               assertHintMsg: String): Unit = {
+      val data = Seq(
+        ("2016-03-27 19:39:30", 1, "a")).toDF("time", "value", "id")
+      val df = if (gapDuration.isInstanceOf[String]) {
+        data.groupBy(session_window($"time", gapDuration.asInstanceOf[String]))
+      } else {
+        data.groupBy(session_window($"time", gapDuration.asInstanceOf[Column]))
+      }
+      val aggregate = df.agg(count("*").as("counts"))
+        .select($"session_window.start".cast("string"), $"session_window.end".cast("string"),
+          $"counts")
 
-    val filter3 = df3.queryExecution.optimizedPlan.find(_.isInstanceOf[Filter])
-    assert(filter3.isDefined)
-    val exist3 = filter3.filter(_.toString.contains(">"))
-    assert(exist3.nonEmpty, "Need to filter windows when gapDuration value greater than 0")
+      checkFilterCondition(aggregate.queryExecution.logical, expectTimeRange, assertHintMsg)
+    }
 
-    // udf
-    withTempTable { table =>
-      spark.udf.register("gapDuration",
-        (i: java.lang.Integer) => s"${i * 10} seconds")
-      val filter4 = spark.sql(
-        s"""select session_window(time, gapDuration(value)),
-           | value from $table""".stripMargin)
-          .select($"session_window.start".cast(StringType), $"session_window.end".cast(StringType),
-            $"value").queryExecution.optimizedPlan.find(_.isInstanceOf[Filter])
-      assert(filter4.isDefined)
-      val exist4 = filter4.filter(_.toString.contains(">"))
-      assert(exist4.nonEmpty, "Need to filter windows when gapDuration is udf")
+    def checkFilterCondition(
+                              logicalPlan: LogicalPlan,
+                              expectTimeRange: Boolean,
+                              assertHintMsg: String): Unit = {
+      val filter = logicalPlan.find { plan =>
+        plan.isInstanceOf[Filter] && plan.children.head.isInstanceOf[Project]
+      }
+      assert(filter.isDefined)
+      val exist = filter.get.expressions.flatMap { expr =>
+        expr.collect { case gt: GreaterThan => gt }
+      }
+      if (expectTimeRange) {
+        assert(exist.nonEmpty, assertHintMsg)
+      } else {
+        assert(exist.isEmpty, assertHintMsg)
+      }
     }
   }
 }
