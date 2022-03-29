@@ -72,6 +72,8 @@ class ReportSinkMetricsSuite extends StreamTest {
           query.processAllAvailable()
         }
 
+        spark.sparkContext.listenerBus.waitUntilEmpty()
+
         assertResult(metricsMap) {
           Map("metrics-1" -> "value-1", "metrics-2" -> "value-2").asJava
         }

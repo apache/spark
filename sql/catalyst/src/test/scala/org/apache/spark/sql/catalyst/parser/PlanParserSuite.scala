@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.parser
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, RelationTimeTravel, UnresolvedAlias, UnresolvedAttribute, UnresolvedFunction, UnresolvedGenerator, UnresolvedInlineTable, UnresolvedRelation, UnresolvedStar, UnresolvedSubqueryColumnAliases, UnresolvedTableValuedFunction}
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.aggregate.Percentile
+import org.apache.spark.sql.catalyst.expressions.aggregate.PercentileCont
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.internal.SQLConf
@@ -283,8 +283,8 @@ class PlanParserSuite extends AnalysisTest {
     assertEqual("from a select distinct b, c", Distinct(table("a").select('b, 'c)))
 
     // Weird "FROM table" queries, should be invalid anyway
-    intercept("from a", "no viable alternative at input 'from a'")
-    intercept("from (from a union all from b) c select *", "no viable alternative at input 'from")
+    intercept("from a", "Syntax error at or near end of input")
+    intercept("from (from a union all from b) c select *", "Syntax error at or near 'union'")
   }
 
   test("multi select query") {
@@ -292,10 +292,10 @@ class PlanParserSuite extends AnalysisTest {
       "from a select * select * where s < 10",
       table("a").select(star()).union(table("a").where('s < 10).select(star())))
     intercept(
-      "from a select * select * from x where a.s < 10", Some("PARSE_INPUT_MISMATCHED"),
+      "from a select * select * from x where a.s < 10", Some("PARSE_SYNTAX_ERROR"),
       "Syntax error at or near 'from'")
     intercept(
-      "from a select * from b", Some("PARSE_INPUT_MISMATCHED"),
+      "from a select * from b", Some("PARSE_SYNTAX_ERROR"),
       "Syntax error at or near 'from'")
     assertEqual(
       "from a insert into tbl1 select * insert into tbl2 select * where s < 10",
@@ -404,7 +404,7 @@ class PlanParserSuite extends AnalysisTest {
     val m = intercept[ParseException] {
       parsePlan("SELECT a, b, count(distinct a, distinct b) as c FROM d GROUP BY a, b")
     }.getMessage
-    assert(m.contains("extraneous input 'b'"))
+    assert(m.contains("Syntax error at or near 'b': extra input 'b'"))
 
   }
 
@@ -778,11 +778,11 @@ class PlanParserSuite extends AnalysisTest {
 
   test("select hint syntax") {
     // Hive compatibility: Missing parameter raises ParseException.
-    intercept("SELECT /*+ HINT() */ * FROM t", Some("PARSE_INPUT_MISMATCHED"),
+    intercept("SELECT /*+ HINT() */ * FROM t", Some("PARSE_SYNTAX_ERROR"),
       "Syntax error at or near")
 
     // Disallow space as the delimiter.
-    intercept("SELECT /*+ INDEX(a b c) */ * from default.t", Some("PARSE_INPUT_MISMATCHED"),
+    intercept("SELECT /*+ INDEX(a b c) */ * from default.t", Some("PARSE_SYNTAX_ERROR"),
       "Syntax error at or near 'b'")
 
     comparePlans(
@@ -840,7 +840,7 @@ class PlanParserSuite extends AnalysisTest {
         UnresolvedHint("REPARTITION", Seq(Literal(100)),
           table("t").select(star()))))
 
-    intercept("SELECT /*+ COALESCE(30 + 50) */ * FROM t", Some("PARSE_INPUT_MISMATCHED"),
+    intercept("SELECT /*+ COALESCE(30 + 50) */ * FROM t", Some("PARSE_SYNTAX_ERROR"),
       "Syntax error at or near")
 
     comparePlans(
@@ -965,9 +965,9 @@ class PlanParserSuite extends AnalysisTest {
       )
     }
 
-    intercept("select ltrim(both 'S' from 'SS abc S'", Some("PARSE_INPUT_MISMATCHED"),
+    intercept("select ltrim(both 'S' from 'SS abc S'", Some("PARSE_SYNTAX_ERROR"),
       "Syntax error at or near 'from'") // expecting {')'
-    intercept("select rtrim(trailing 'S' from 'SS abc S'", Some("PARSE_INPUT_MISMATCHED"),
+    intercept("select rtrim(trailing 'S' from 'SS abc S'", Some("PARSE_SYNTAX_ERROR"),
       "Syntax error at or near 'from'") //  expecting {')'
 
     assertTrimPlans(
@@ -1113,7 +1113,7 @@ class PlanParserSuite extends AnalysisTest {
     val m1 = intercept[ParseException] {
       parsePlan("SELECT * FROM (INSERT INTO BAR VALUES (2))")
     }.getMessage
-    assert(m1.contains("missing ')' at 'BAR'"))
+    assert(m1.contains("Syntax error at or near 'BAR': missing ')'"))
     val m2 = intercept[ParseException] {
       parsePlan("SELECT * FROM S WHERE C1 IN (INSERT INTO T VALUES (2))")
     }.getMessage
@@ -1313,13 +1313,13 @@ class PlanParserSuite extends AnalysisTest {
 
     assertPercentileContPlans(
       "SELECT PERCENTILE_CONT(0.1) WITHIN GROUP (ORDER BY col)",
-      new Percentile(UnresolvedAttribute("col"), Literal(Decimal(0.1), DecimalType(1, 1)))
+      PercentileCont(UnresolvedAttribute("col"), Literal(Decimal(0.1), DecimalType(1, 1)))
         .toAggregateExpression()
     )
 
     assertPercentileContPlans(
       "SELECT PERCENTILE_CONT(0.1) WITHIN GROUP (ORDER BY col DESC)",
-      new Percentile(UnresolvedAttribute("col"),
+      PercentileCont(UnresolvedAttribute("col"),
         Subtract(Literal(1), Literal(Decimal(0.1), DecimalType(1, 1)))).toAggregateExpression()
     )
   }

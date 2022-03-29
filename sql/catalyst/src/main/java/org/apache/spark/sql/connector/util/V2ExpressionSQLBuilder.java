@@ -21,10 +21,12 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.stream.Collectors;
 
+import org.apache.spark.sql.connector.expressions.Cast;
 import org.apache.spark.sql.connector.expressions.Expression;
 import org.apache.spark.sql.connector.expressions.NamedReference;
 import org.apache.spark.sql.connector.expressions.GeneralScalarExpression;
 import org.apache.spark.sql.connector.expressions.Literal;
+import org.apache.spark.sql.types.DataType;
 
 /**
  * The builder to generate SQL from V2 expressions.
@@ -36,6 +38,9 @@ public class V2ExpressionSQLBuilder {
       return visitLiteral((Literal) expr);
     } else if (expr instanceof NamedReference) {
       return visitNamedReference((NamedReference) expr);
+    } else if (expr instanceof Cast) {
+      Cast cast = (Cast) expr;
+      return visitCast(build(cast.expression()), cast.dataType());
     } else if (expr instanceof GeneralScalarExpression) {
       GeneralScalarExpression e = (GeneralScalarExpression) expr;
       String name = e.name();
@@ -75,7 +80,7 @@ public class V2ExpressionSQLBuilder {
             name, inputToSQL(e.children()[0]), inputToSQL(e.children()[1]));
         case "-":
           if (e.children().length == 1) {
-            return visitUnaryArithmetic(name, build(e.children()[0]));
+            return visitUnaryArithmetic(name, inputToSQL(e.children()[0]));
           } else {
             return visitBinaryArithmetic(
               name, inputToSQL(e.children()[0]), inputToSQL(e.children()[1]));
@@ -87,7 +92,7 @@ public class V2ExpressionSQLBuilder {
         case "NOT":
           return visitNot(build(e.children()[0]));
         case "~":
-          return visitUnaryArithmetic(name, build(e.children()[0]));
+          return visitUnaryArithmetic(name, inputToSQL(e.children()[0]));
         case "CASE_WHEN": {
           List<String> children =
             Arrays.stream(e.children()).map(c -> build(c)).collect(Collectors.toList());
@@ -167,6 +172,10 @@ public class V2ExpressionSQLBuilder {
     return l + " " + name + " " + r;
   }
 
+  protected String visitCast(String l, DataType dataType) {
+    return "CAST(" + l + " AS " + dataType.typeName() + ")";
+  }
+
   protected String visitAnd(String name, String l, String r) {
     return "(" + l + ") " + name + " (" + r + ")";
   }
@@ -179,7 +188,7 @@ public class V2ExpressionSQLBuilder {
     return "NOT (" + v + ")";
   }
 
-  protected String visitUnaryArithmetic(String name, String v) { return name +" (" + v + ")"; }
+  protected String visitUnaryArithmetic(String name, String v) { return name + v; }
 
   protected String visitCaseWhen(String[] children) {
     StringBuilder sb = new StringBuilder("CASE");
