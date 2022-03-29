@@ -163,6 +163,8 @@ private[yarn] class YarnAllocator(
 
   private val isPythonApp = sparkConf.get(IS_PYTHON_APP)
 
+  private val isYarnExecutorDecommissionEnabled = sparkConf.get(YARN_EXECUTOR_DECOMMISSION_ENABLED)
+
   private val memoryOverheadFactor = sparkConf.get(EXECUTOR_MEMORY_OVERHEAD_FACTOR)
 
   private val launcherPool = ThreadUtils.newDaemonCachedThreadPool(
@@ -401,7 +403,7 @@ private[yarn] class YarnAllocator(
     val allocatedContainers = allocateResponse.getAllocatedContainers()
     allocatorNodeHealthTracker.setNumClusterNodes(allocateResponse.getNumClusterNodes)
 
-    if (sparkConf.get(YARN_EXECUTOR_DECOMMISSION_ENABLED)) {
+    if (isYarnExecutorDecommissionEnabled) {
       handleNodesInDecommissioningState(allocateResponse)
     }
 
@@ -428,10 +430,14 @@ private[yarn] class YarnAllocator(
 
   private def handleNodesInDecommissioningState(allocateResponse: AllocateResponse): Unit = {
     try {
+      // some of the nodes are put in decommissioning state where RM did allocate
+      // resources on those nodes for earlier allocateResource calls, so notifying driver
+      // to put those executors in decommissioning state
       allocateResponse.getUpdatedNodes.asScala.filter(_.getNodeState == NodeState.DECOMMISSIONING).
         foreach(node => driverRef.send(DecommissionExecutorsOnHost(getHostAddress(node))))
     } catch {
-      case e: Exception => logError("Node decommissioning failed", e)
+      case e: Exception => logError("Sending Message to Driver to Decommission Executors" +
+        "on Decommissioning Nodes failed", e)
     }
   }
 
