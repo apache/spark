@@ -10263,7 +10263,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         ascending : boolean, default True
             False for ranks by high (1) to low (N)
         numeric_only : bool, optional
-            Rank only numeric columns if set to True.
+            For DataFrame objects, rank only numeric columns if set to True.
 
         Returns
         -------

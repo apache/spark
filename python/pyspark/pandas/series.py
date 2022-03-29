@@ -3586,7 +3586,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         ascending : boolean, default True
             False for ranks by high (1) to low (N)
         numeric_only : bool, optional
-            Rank only numeric columns if set to True.
+            If set to True, rank numeric Series, or return an empty Series for non-numeric Series
 
         Returns
         -------
