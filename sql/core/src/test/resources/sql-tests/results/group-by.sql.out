@@ -978,7 +978,7 @@ SELECT
  percentile_cont(0.25) WITHIN GROUP (ORDER BY v DESC)
 FROM aggr
 -- !query schema
-struct<percentile_cont(v, 0.25):double,percentile_cont(v, (1 - 0.25)):double>
+struct<percentile(v, 0.25, 1):double,percentile(v, (1 - 0.25), 1):double>
 -- !query output
 10.0	30.0
 
@@ -992,7 +992,7 @@ FROM aggr
 GROUP BY k
 ORDER BY k
 -- !query schema
-struct<k:int,percentile_cont(v, 0.25):double,percentile_cont(v, (1 - 0.25)):double>
+struct<k:int,percentile(v, 0.25, 1):double,percentile(v, (1 - 0.25), 1):double>
 -- !query output
 0	10.0	30.0
 1	12.5	17.5

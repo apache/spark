@@ -35,7 +35,7 @@ import org.apache.spark.sql.catalyst.{FunctionIdentifier, SQLConfHelper, TableId
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat}
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.aggregate.{First, Last, PercentileCont}
+import org.apache.spark.sql.catalyst.expressions.aggregate.{First, Last, Percentile}
 import org.apache.spark.sql.catalyst.parser.SqlBaseParser._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -1836,11 +1836,12 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
   override def visitPercentile(ctx: PercentileContext): Expression = withOrigin(ctx) {
     val percentage = expression(ctx.percentage)
     val sortOrder = visitSortItem(ctx.sortItem)
-    val percentileCont = sortOrder.direction match {
-      case Ascending => PercentileCont(sortOrder.child, percentage)
-      case Descending => PercentileCont(sortOrder.child, Subtract(Literal(1), percentage))
+    val percentile = sortOrder.direction match {
+      case Ascending => new Percentile(sortOrder.child, percentage)
+      case Descending => new Percentile(sortOrder.child, Subtract(Literal(1), percentage))
     }
-    val aggregateExpression = percentileCont.toAggregateExpression()
+    percentile.setTagValue(Percentile.IS_ORDERED_SET, true)
+    val aggregateExpression = percentile.toAggregateExpression()
     ctx.windowSpec match {
       case spec: WindowRefContext =>
         UnresolvedWindowExpression(aggregateExpression, visitWindowRef(spec))
