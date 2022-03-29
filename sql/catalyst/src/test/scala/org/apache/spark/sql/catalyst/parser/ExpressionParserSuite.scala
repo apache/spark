@@ -309,10 +309,10 @@ class ExpressionParserSuite extends AnalysisTest {
     assertEqual("foo(*) over (partition by a, b)", windowed(Seq('a, 'b)))
     assertEqual("foo(*) over (distribute by a, b)", windowed(Seq('a, 'b)))
     assertEqual("foo(*) over (cluster by a, b)", windowed(Seq('a, 'b)))
-    assertEqual("foo(*) over (order by a desc, b asc)", windowed(Seq.empty, Seq('a.desc, 'b.asc)))
-    assertEqual("foo(*) over (sort by a desc, b asc)", windowed(Seq.empty, Seq('a.desc, 'b.asc)))
-    assertEqual("foo(*) over (partition by a, b order by c)", windowed(Seq('a, 'b), Seq('c.asc)))
-    assertEqual("foo(*) over (distribute by a, b sort by c)", windowed(Seq('a, 'b), Seq('c.asc)))
+    assertEqual("foo(*) over (order by a desc, b asc)", windowed(Seq.empty, Seq('$"a".desc, '$"b".asc)))
+    assertEqual("foo(*) over (sort by a desc, b asc)", windowed(Seq.empty, Seq('$"a".desc, '$"b".asc)))
+    assertEqual("foo(*) over (partition by a, b order by c)", windowed(Seq('a, 'b), Seq('$"c".asc)))
+    assertEqual("foo(*) over (distribute by a, b sort by c)", windowed(Seq('a, 'b), Seq('$"c".asc)))
 
     // Test use of expressions in window functions.
     assertEqual(
@@ -385,7 +385,7 @@ class ExpressionParserSuite extends AnalysisTest {
         boundaries.foreach {
           case (boundarySql, begin, end) =>
             val query = s"foo(*) over (partition by a order by b $frameTypeSql $boundarySql)"
-            val expr = windowed(Seq('a), Seq('b.asc), SpecifiedWindowFrame(frameType, begin, end))
+            val expr = windowed(Seq('a), Seq('$"b".asc), SpecifiedWindowFrame(frameType, begin, end))
             assertEqual(query, expr)
         }
     }

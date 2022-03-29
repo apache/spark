@@ -230,7 +230,7 @@ class ErrorParserSuite extends AnalysisTest {
       table("t")
         .where('a - $"b" > 10)
         .groupBy('fake - 'breaker)('a, 'b)
-        .orderBy('c.asc))
+        .orderBy('$"c".asc))
     intercept(
       """
         |SELECT * FROM tab

@@ -184,7 +184,7 @@ class PropagateEmptyRelationSuite extends PlanTest {
       .select('a)
       .groupBy('a)('a)
       .where($"a" > 1)
-      .orderBy('a.asc)
+      .orderBy('$"a".asc)
 
     val optimized = Optimize.execute(query.analyze)
     val correctAnswer = LocalRelation($"a".int)
@@ -207,7 +207,7 @@ class PropagateEmptyRelationSuite extends PlanTest {
       .select('a)
       .where($"a" > 1)
       .where($"a" =!= 200)
-      .orderBy('a.asc)
+      .orderBy('$"a".asc)
 
     val optimized = Optimize.execute(query.analyze)
     val correctAnswer = LocalRelation(output, isStreaming = true)
@@ -239,14 +239,14 @@ class PropagateEmptyRelationSuite extends PlanTest {
       .where(true)
       .groupBy('a)('a)
       .where($"a" > 1)
-      .orderBy('a.asc)
+      .orderBy('$"a".asc)
       .select('a)
 
     val optimized = Optimize.execute(query.analyze)
     val correctAnswer = testRelation1
       .where($"a" > 1)
       .groupBy('a)('a)
-      .orderBy('a.asc)
+      .orderBy('$"a".asc)
       .select('a)
 
     comparePlans(optimized, correctAnswer.analyze)

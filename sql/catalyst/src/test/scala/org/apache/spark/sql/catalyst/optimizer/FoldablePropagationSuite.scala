@@ -74,11 +74,11 @@ class FoldablePropagationSuite extends PlanTest {
   test("Propagate to orderBy clause") {
     val query = testRelation
       .select('a.as('x), Year(CurrentDate()).as('y), 'b)
-      .orderBy('x.asc, 'y.asc, 'b.desc)
+      .orderBy('$"x".asc, '$"y".asc, '$"b".desc)
     val optimized = Optimize.execute(query.analyze)
     val correctAnswer = testRelation
       .select('a.as('x), Year(CurrentDate()).as('y), 'b)
-      .orderBy('x.asc, SortOrder(Year(CurrentDate()), Ascending), 'b.desc).analyze
+      .orderBy('$"x".asc, SortOrder(Year(CurrentDate()), Ascending), '$"b".desc).analyze
 
     comparePlans(optimized, correctAnswer)
   }
@@ -101,14 +101,14 @@ class FoldablePropagationSuite extends PlanTest {
       .select('a.as('x), Year(CurrentDate()).as('y), 'b)
       .where($"x" > 1 && $"y" === 2016 && $"b" > 1)
       .groupBy('x, 'y, 'b)(sum('x), avg('y).as('AVG), count('b))
-      .orderBy('x.asc, 'AVG.asc)
+      .orderBy('$"x".asc, '$"AVG".asc)
     val optimized = Optimize.execute(query.analyze)
     val correctAnswer = testRelation
       .select('a.as('x), Year(CurrentDate()).as('y), 'b)
       .where($"x" > 1 && Year(CurrentDate()).as('y) === 2016 && $"b" > 1)
       .groupBy('x, Year(CurrentDate()).as("y"), 'b)(sum('x), avg(Year(CurrentDate())).as('AVG),
         count('b))
-      .orderBy('x.asc, 'AVG.asc).analyze
+      .orderBy('$"x".asc, '$"AVG".asc).analyze
 
     comparePlans(optimized, correctAnswer)
   }

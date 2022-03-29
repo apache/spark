@@ -153,7 +153,7 @@ class DistinctKeyVisitorSuite extends PlanTest {
   }
 
   test("Window's distinct attributes") {
-    val winExpr = windowExpr(count('b), windowSpec('a :: Nil, 'b.asc :: Nil, UnspecifiedFrame))
+    val winExpr = windowExpr(count('b), windowSpec('a :: Nil, '$"b".asc :: Nil, UnspecifiedFrame))
 
     checkDistinctAttributes(
       Distinct(t1).select('a, 'b, 'c, winExpr.as('window)), Set(ExpressionSet(Seq(a, b, c))))
@@ -166,8 +166,8 @@ class DistinctKeyVisitorSuite extends PlanTest {
   }
 
   test("Sort's distinct attributes") {
-    checkDistinctAttributes(t1.sortBy('a.asc), Set.empty)
-    checkDistinctAttributes(Distinct(t1).sortBy('a.asc), Set(ExpressionSet(Seq(a, b, c))))
+    checkDistinctAttributes(t1.sortBy('$"a".asc), Set.empty)
+    checkDistinctAttributes(Distinct(t1).sortBy('$"a".asc), Set(ExpressionSet(Seq(a, b, c))))
   }
 
   test("RebalancePartitions's distinct attributes") {

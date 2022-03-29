@@ -167,7 +167,7 @@ class LeftSemiPushdownSuite extends PlanTest {
   }
 
   test("LeftSemiAnti join over Window") {
-    val winExpr = windowExpr(count('b), windowSpec('a :: Nil, 'b.asc :: Nil, UnspecifiedFrame))
+    val winExpr = windowExpr(count('b), windowSpec('a :: Nil, '$"b".asc :: Nil, UnspecifiedFrame))
 
     val originalQuery = testRelation
       .select('a, 'b, 'c, winExpr.as('window))
@@ -178,7 +178,7 @@ class LeftSemiPushdownSuite extends PlanTest {
     val correctAnswer = testRelation
       .join(testRelation1, joinType = LeftSemi, condition = Some($"a" === $"d"))
       .select('a, 'b, 'c)
-      .window(winExpr.as('window) :: Nil, 'a :: Nil, 'b.asc :: Nil)
+      .window(winExpr.as('window) :: Nil, 'a :: Nil, '$"b".asc :: Nil)
       .select('a, 'b, 'c, 'window).analyze
 
     comparePlans(optimized, correctAnswer)
@@ -187,7 +187,7 @@ class LeftSemiPushdownSuite extends PlanTest {
   test("Window: LeftSemi partial pushdown") {
     // Attributes from join condition which does not refer to the window partition spec
     // are kept up in the plan as a Filter operator above Window.
-    val winExpr = windowExpr(count('b), windowSpec('a :: Nil, 'b.asc :: Nil, UnspecifiedFrame))
+    val winExpr = windowExpr(count('b), windowSpec('a :: Nil, '$"b".asc :: Nil, UnspecifiedFrame))
 
     val originalQuery = testRelation
       .select('a, 'b, 'c, winExpr.as('window))
@@ -198,7 +198,7 @@ class LeftSemiPushdownSuite extends PlanTest {
     val correctAnswer = testRelation
       .join(testRelation1, joinType = LeftSemi, condition = Some($"a" === $"d"))
       .select('a, 'b, 'c)
-      .window(winExpr.as('window) :: Nil, 'a :: Nil, 'b.asc :: Nil)
+      .window(winExpr.as('window) :: Nil, 'a :: Nil, '$"b".asc :: Nil)
       .where($"b" > 5)
       .select('a, 'b, 'c, 'window).analyze
 
@@ -208,7 +208,7 @@ class LeftSemiPushdownSuite extends PlanTest {
   test("Window: LeftAnti no pushdown") {
     // Attributes from join condition which does not refer to the window partition spec
     // are kept up in the plan as a Filter operator above Window.
-    val winExpr = windowExpr(count('b), windowSpec('a :: Nil, 'b.asc :: Nil, UnspecifiedFrame))
+    val winExpr = windowExpr(count('b), windowSpec('a :: Nil, '$"b".asc :: Nil, UnspecifiedFrame))
 
     val originalQuery = testRelation
       .select('a, 'b, 'c, winExpr.as('window))
@@ -218,7 +218,7 @@ class LeftSemiPushdownSuite extends PlanTest {
 
     val correctAnswer = testRelation
       .select('a, 'b, 'c)
-      .window(winExpr.as('window) :: Nil, 'a :: Nil, 'b.asc :: Nil)
+      .window(winExpr.as('window) :: Nil, 'a :: Nil, '$"b".asc :: Nil)
       .join(testRelation1, joinType = LeftAnti, condition = Some($"a" === $"d" && $"b" > 5))
       .select('a, 'b, 'c, 'window).analyze
     comparePlans(optimized, correctAnswer)

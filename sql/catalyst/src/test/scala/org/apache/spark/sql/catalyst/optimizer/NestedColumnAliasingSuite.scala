@@ -146,8 +146,8 @@ class NestedColumnAliasingSuite extends SchemaPruningTest {
   test("Pushing a single nested field projection - negative") {
     val ops = Seq(
       (input: LogicalPlan) => input.distribute('name)(1),
-      (input: LogicalPlan) => input.orderBy('name.asc),
-      (input: LogicalPlan) => input.sortBy('name.asc),
+      (input: LogicalPlan) => input.orderBy('$"name".asc),
+      (input: LogicalPlan) => input.sortBy('$"name".asc),
       (input: LogicalPlan) => input.union(input)
     )
 

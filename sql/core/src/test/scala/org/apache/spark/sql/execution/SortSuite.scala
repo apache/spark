@@ -108,7 +108,7 @@ class SortSuite extends SparkPlanTest with SharedSparkSession {
     )
     checkAnswer(
       input.toDF("a", "b", "c"),
-      (child: SparkPlan) => SortExec(Stream($"a".asc, 'b.asc, 'c.asc),
+      (child: SparkPlan) => SortExec(Stream($"a".asc, $"b".asc, $"c".asc),
         global = true, child = child),
       input.sortBy(t => (t._1, t._2, t._3)).map(Row.fromTuple),
       sortAnswers = false)
@@ -119,7 +119,7 @@ class SortSuite extends SparkPlanTest with SharedSparkSession {
     dataType <- DataTypeTestUtils.atomicTypes ++ Set(NullType);
     nullable <- Seq(true, false);
     sortOrder <-
-      Seq('a.asc :: Nil, 'a.asc_nullsLast :: Nil, 'a.desc :: Nil, 'a.desc_nullsFirst :: Nil);
+      Seq($"a".asc :: Nil, $"a".asc_nullsLast :: Nil, $"a".desc :: Nil, $"a".desc_nullsFirst :: Nil);
     randomDataGenerator <- RandomDataGenerator.forType(dataType, nullable)
   ) {
     test(s"sorting on $dataType with nullable=$nullable, sortOrder=$sortOrder") {

@@ -65,7 +65,7 @@ class SameResultSuite extends SparkFunSuite {
   }
 
   test("sorts") {
-    assertSameResult(testRelation.orderBy('a.asc), testRelation2.orderBy('a.asc))
+    assertSameResult(testRelation.orderBy('$"a".asc), testRelation2.orderBy('$"a".asc))
   }
 
   test("union") {

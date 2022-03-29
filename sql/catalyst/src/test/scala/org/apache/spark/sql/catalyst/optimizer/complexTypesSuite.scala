@@ -342,13 +342,13 @@ class ComplexTypesSuite extends PlanTest with ExpressionEvalHelper {
             numFields = 1,
             containsNull = false),
           ordinal = 1) as "a2")
-      .orderBy('id.asc)
+      .orderBy('$"id".asc)
 
     val expected = LocalRelation('id.long)
       .select(
         ('id + 1L) as "a1",
         ('id + 1L) as "a2")
-      .orderBy('id.asc)
+      .orderBy('$"id".asc)
     checkRule(query, expected)
   }
 
@@ -362,14 +362,14 @@ class ComplexTypesSuite extends PlanTest with ExpressionEvalHelper {
         .select(
           GetMapValue('m, "r1") as "a1",
           GetMapValue('m, "r32") as "a2")
-        .orderBy('id.asc)
+        .orderBy('$"id".asc)
         .select('a1, 'a2)
 
     val expected =
       LocalRelation('id.long).select(
         'id as "a1",
         Literal.create(null, LongType) as "a2")
-        .orderBy('id.asc)
+        .orderBy('$"id".asc)
     checkRule(query, expected)
   }
 

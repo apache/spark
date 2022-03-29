@@ -181,10 +181,10 @@ class ColumnPruningSuite extends PlanTest {
   test("Column pruning for Project on Sort") {
     val input = LocalRelation($"a".int, 'b.string, 'c.double)
 
-    val query = input.orderBy('b.asc).select('a).analyze
+    val query = input.orderBy('$"b".asc).select('a).analyze
     val optimized = Optimize.execute(query)
 
-    val correctAnswer = input.select('a, 'b).orderBy('b.asc).select('a).analyze
+    val correctAnswer = input.select('a, 'b).orderBy('$"b".asc).select('a).analyze
 
     comparePlans(optimized, correctAnswer)
   }
@@ -353,7 +353,7 @@ class ColumnPruningSuite extends PlanTest {
 
   test("Column pruning on Window with useless aggregate functions") {
     val input = LocalRelation($"a".int, 'b.string, 'c.double, $"d".int)
-    val winSpec = windowSpec('a :: Nil, 'd.asc :: Nil, UnspecifiedFrame)
+    val winSpec = windowSpec('a :: Nil, '$"d".asc :: Nil, UnspecifiedFrame)
     val winExpr = windowExpr(count('d), winSpec)
 
     val originalQuery = input.groupBy('a, 'c, 'd)('a, 'c, 'd, winExpr.as('window)).select('a, 'c)
@@ -365,14 +365,14 @@ class ColumnPruningSuite extends PlanTest {
 
   test("Column pruning on Window with selected agg expressions") {
     val input = LocalRelation($"a".int, 'b.string, 'c.double, $"d".int)
-    val winSpec = windowSpec('a :: Nil, 'b.asc :: Nil, UnspecifiedFrame)
+    val winSpec = windowSpec('a :: Nil, '$"b".asc :: Nil, UnspecifiedFrame)
     val winExpr = windowExpr(count('b), winSpec)
 
     val originalQuery =
       input.select('a, 'b, 'c, 'd, winExpr.as('window)).where($"window" > 1).select('a, 'c)
     val correctAnswer =
       input.select('a, 'b, 'c)
-        .window(winExpr.as('window) :: Nil, 'a :: Nil, 'b.asc :: Nil)
+        .window(winExpr.as('window) :: Nil, 'a :: Nil, '$"b".asc :: Nil)
         .where($"window" > 1).select('a, 'c).analyze
     val optimized = Optimize.execute(originalQuery.analyze)
 
@@ -381,7 +381,7 @@ class ColumnPruningSuite extends PlanTest {
 
   test("Column pruning on Window in select") {
     val input = LocalRelation($"a".int, 'b.string, 'c.double, $"d".int)
-    val winSpec = windowSpec('a :: Nil, 'b.asc :: Nil, UnspecifiedFrame)
+    val winSpec = windowSpec('a :: Nil, '$"b".asc :: Nil, UnspecifiedFrame)
     val winExpr = windowExpr(count('b), winSpec)
 
     val originalQuery = input.select('a, 'b, 'c, 'd, winExpr.as('window)).select('a, 'c)

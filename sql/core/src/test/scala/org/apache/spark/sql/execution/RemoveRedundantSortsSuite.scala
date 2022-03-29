@@ -125,13 +125,13 @@ abstract class RemoveRedundantSortsSuiteBase
     withSQLConf(SQLConf.REMOVE_REDUNDANT_SORTS_ENABLED.key -> "true") {
       val df = spark.range(1000).select($"id" as "key").sort($"key".desc).cache()
       val resorted = df.sort($"key".desc)
-      val sortedAsc = df.sort('key.asc)
+      val sortedAsc = df.sort($"key".asc)
       checkNumSorts(df, 0)
       checkNumSorts(resorted, 0)
       checkNumSorts(sortedAsc, 1)
       val result = resorted.collect()
       withSQLConf(SQLConf.REMOVE_REDUNDANT_SORTS_ENABLED.key -> "false") {
-        val resorted = df.sort('key.desc)
+        val resorted = df.sort('$"key".desc)
         checkNumSorts(resorted, 1)
         checkAnswer(resorted, result)
       }
