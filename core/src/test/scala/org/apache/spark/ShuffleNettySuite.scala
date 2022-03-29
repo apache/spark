@@ -17,9 +17,8 @@
 
 package org.apache.spark
 
-import org.scalatest.{BeforeAndAfterAll, Ignore}
+import org.scalatest.BeforeAndAfterAll
 
-@Ignore
 class ShuffleNettySuite extends ShuffleSuite with BeforeAndAfterAll {
 
   // This test suite should run all tests in ShuffleSuite with Netty shuffle mode.
