@@ -1495,11 +1495,10 @@ package object config {
       .createWithDefault(10000)
 
   private[spark] val SHUFFLE_SPILL_MERGE_USE_TRANSFER_TO =
-    ConfigBuilder(" spark.shuffle.spill.mergeUseTransferTo")
+    ConfigBuilder("spark.file.transferTo")
       .doc("If true, NIO's `transferTo` API will be preferentially used when merging " +
         "Spark shuffle spill files")
-      .withAlternative("spark.file.transferTo")
-      .version("3.4.0")
+      .version("1.4.0")
       .booleanConf
       .createWithDefault(true)
 
