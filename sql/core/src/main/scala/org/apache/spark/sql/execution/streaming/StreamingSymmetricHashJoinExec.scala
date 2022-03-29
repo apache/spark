@@ -671,7 +671,6 @@ case class StreamingSymmetricHashJoinExec(
     private lazy val iter: Iterator[JoinedRow] = initFn()
 
     override def hasNext: Boolean = iter.hasNext
-
     override def next(): JoinedRow = iter.next()
   }
 }
