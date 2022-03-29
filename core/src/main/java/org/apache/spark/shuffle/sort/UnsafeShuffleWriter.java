@@ -135,7 +135,8 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
     this.shuffleExecutorComponents = shuffleExecutorComponents;
     this.taskContext = taskContext;
     this.sparkConf = sparkConf;
-    this.transferToEnabled = sparkConf.getBoolean("spark.file.transferTo", true);
+    this.transferToEnabled =
+      (boolean)sparkConf.get(package$.MODULE$.SHUFFLE_SPILL_MERGE_USE_TRANSFER_TO());
     this.initialSortBufferSize =
       (int) (long) sparkConf.get(package$.MODULE$.SHUFFLE_SORT_INIT_BUFFER_SIZE());
     this.inputBufferSizeInBytes =

@@ -1494,6 +1494,15 @@ package object config {
       .longConf
       .createWithDefault(10000)
 
+  private[spark] val SHUFFLE_SPILL_MERGE_USE_TRANSFER_TO =
+    ConfigBuilder(" spark.shuffle.spill.mergeUseTransferTo")
+      .doc("If true, NIO's `transferTo` API will be preferentially used when merging " +
+        "Spark shuffle spill files")
+      .withAlternative("spark.file.transferTo")
+      .version("3.4.0")
+      .booleanConf
+      .createWithDefault(true)
+
   private[spark] val SHUFFLE_SORT_BYPASS_MERGE_THRESHOLD =
     ConfigBuilder("spark.shuffle.sort.bypassMergeThreshold")
       .doc("In the sort-based shuffle manager, avoid merge-sorting data if there is no " +

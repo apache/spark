@@ -181,7 +181,8 @@ public class UnsafeShuffleWriterSuite implements ShuffleChecksumTestHelper {
   private UnsafeShuffleWriter<Object, Object> createWriter(
     boolean transferToEnabled,
     IndexShuffleBlockResolver blockResolver) throws SparkException {
-    conf.set("spark.file.transferTo", String.valueOf(transferToEnabled));
+    conf.set(package$.MODULE$.SHUFFLE_SPILL_MERGE_USE_TRANSFER_TO().key(),
+      String.valueOf(transferToEnabled));
     return new UnsafeShuffleWriter<>(
       blockManager,
       taskMemoryManager,
