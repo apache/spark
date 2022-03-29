@@ -26,7 +26,6 @@ import com.google.common.io.{ByteStreams, Files}
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.scalatest.BeforeAndAfter
-import org.scalatest.Ignore
 
 import org.apache.spark.{LocalSparkContext, SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.SparkHadoopUtil
@@ -229,7 +228,6 @@ class SingleFileEventLogFileReaderSuite extends EventLogFileReadersSuite {
   }
 }
 
-@Ignore
 class RollingEventLogFilesReaderSuite extends EventLogFileReadersSuite {
   allCodecs.foreach { codecShortName =>
     test(s"rolling event log files - codec $codecShortName") {

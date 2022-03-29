@@ -26,7 +26,6 @@ import scala.io.{Codec, Source}
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, FileSystem, Path}
 import org.scalatest.BeforeAndAfter
-import org.scalatest.Ignore
 
 import org.apache.spark.{LocalSparkContext, SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.SparkHadoopUtil
@@ -95,7 +94,8 @@ abstract class EventLogFileWritersSuite extends SparkFunSuite with LocalSparkCon
 
       writer.stop()
 
-      verifyWriteEventLogFile(appId, attemptId, testDirPath.toUri, codecShortName, dummyData)
+      verifyWriteEventLogFile(appId,
+        attemptId, testDirPath.toUri, codecShortName, dummyData, writer)
     }
   }
 
@@ -136,7 +136,8 @@ abstract class EventLogFileWritersSuite extends SparkFunSuite with LocalSparkCon
       appAttemptId : Option[String],
       logBaseDir: URI,
       compressionCodecShortName: Option[String],
-      expectedLines: Seq[String] = Seq.empty): Unit
+      expectedLines: Seq[String] = Seq.empty,
+      writer: EventLogFileWriter): Unit
 }
 
 class SingleEventLogFileWriterSuite extends EventLogFileWritersSuite {
@@ -201,7 +202,8 @@ class SingleEventLogFileWriterSuite extends EventLogFileWritersSuite {
       appAttemptId: Option[String],
       logBaseDir: URI,
       compressionCodecShortName: Option[String],
-      expectedLines: Seq[String]): Unit = {
+      expectedLines: Seq[String],
+      writer: EventLogFileWriter): Unit = {
     // read single event log file
     val logPath = SingleEventLogFileWriter.getLogPath(logBaseDir, appId, appAttemptId,
       compressionCodecShortName)
@@ -212,11 +214,10 @@ class SingleEventLogFileWriterSuite extends EventLogFileWritersSuite {
   }
 }
 
-@Ignore
 class RollingEventLogFilesWriterSuite extends EventLogFileWritersSuite {
   import RollingEventLogFilesWriter._
 
-  test("Event log names") {
+  ignore("Event log names") {
     val baseDirUri = Utils.resolveURI("/base-dir")
     val appId = "app1"
     val appAttemptId = None
@@ -258,7 +259,7 @@ class RollingEventLogFilesWriterSuite extends EventLogFileWritersSuite {
     val hadoopConf = SparkHadoopUtil.get.newConfiguration(conf)
     val writer = createWriter(appId, appAttemptId, testDir.toURI, conf, hadoopConf)
 
-    val logPath = logDirPath.toUri.getPath
+    val logPath = new Path(writer.logPath).toUri.getPath
 
     // Create file before writing the event log directory
     // it doesn't matter whether the existing one is file or directory
@@ -305,7 +306,7 @@ class RollingEventLogFilesWriterSuite extends EventLogFileWritersSuite {
       val dummyStr = "dummy" * 1024
       val expectedLines = writeTestEvents(writer, dummyStr, 1024 * 1024 * 21)
 
-      val logDirPath = getAppEventLogDirPath(testDirPath.toUri, appId, attemptId)
+      val logDirPath = new Path(writer.logPath)
 
       val eventLogFiles = listEventLogFiles(logDirPath)
       assertEventLogFilesIndex(eventLogFiles, 3, 1024 * 1024 * 10)
@@ -316,11 +317,11 @@ class RollingEventLogFilesWriterSuite extends EventLogFileWritersSuite {
       assertEventLogFilesIndex(eventLogFiles2, 3, 1024 * 1024 * 10)
 
       verifyWriteEventLogFile(appId, attemptId, testDirPath.toUri,
-        codecShortName, expectedLines)
+        codecShortName, expectedLines, writer)
     }
   }
 
-  test(s"rolling event log files - the max size of event log file size less than lower limit") {
+  ignore(s"rolling event log files - the max size of event log file size less than lower limit") {
     val appId = getUniqueApplicationId
     val attemptId = None
 
@@ -349,8 +350,9 @@ class RollingEventLogFilesWriterSuite extends EventLogFileWritersSuite {
       appAttemptId: Option[String],
       logBaseDir: URI,
       compressionCodecShortName: Option[String],
-      expectedLines: Seq[String]): Unit = {
-    val logDirPath = getAppEventLogDirPath(logBaseDir, appId, appAttemptId)
+      expectedLines: Seq[String],
+      writer: EventLogFileWriter): Unit = {
+    val logDirPath = new Path(writer.logPath)
 
     assert(fileSystem.exists(logDirPath) && fileSystem.getFileStatus(logDirPath).isDirectory)
 
