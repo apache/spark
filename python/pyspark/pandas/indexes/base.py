@@ -905,7 +905,7 @@ class Index(IndexOpsMixin):
 
         Examples
         --------
-        Generate a Index with duplicate values.
+        Generate an Index with duplicate values.
 
         >>> idx = ps.Index(['lama', 'cow', 'lama', 'beetle', 'lama', 'hippo'])
 
