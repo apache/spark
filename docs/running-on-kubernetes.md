@@ -1724,7 +1724,7 @@ Spark allows users to specify a custom Kubernetes schedulers.
 
 2. Specify scheduler related configurations.
 
-   To configure the custom scheduler the user can use [Pod templates](#pod-template), add labels (<code>spark.kubernetes.{driver,executor}.label.*</code>)  and/or annotations (<code>spark.kubernetes.{driver/executor}.annotation.*</code>).
+   To configure the custom scheduler the user can use [Pod templates](#pod-template), add labels (<code>spark.kubernetes.{driver,executor}.label.*</code>), annotations (<code>spark.kubernetes.{driver/executor}.annotation.*</code>) or scheduler specific configurations (such as <code>spark.kubernetes.scheduler.volcano.podGroupTemplateFile</code>).
 
 3. Specify scheduler feature step.
 
