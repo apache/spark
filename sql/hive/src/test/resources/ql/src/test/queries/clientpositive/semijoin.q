@@ -29,8 +29,8 @@ select * from t1 a left semi join t4 b on b.key=a.key sort by a.key, a.value;
 explain select a.value from t1 a left semi join t3 b on (b.key = a.key and b.key < '15') sort by a.value;
 select a.value from t1 a left semi join t3 b on (b.key = a.key and b.key < '15') sort by a.value;
 
-explain select * from t1 a left semi join t2 b on a.key = b.key and b.value < "val_10" sort by a.key, a.value;
-select * from t1 a left semi join t2 b on a.key = b.key and b.value < "val_10" sort by a.key, a.value;
+explain select * from t1 a left semi join t2 b on a.key = b.key and b.value < 'val_10' sort by a.key, a.value;
+select * from t1 a left semi join t2 b on a.key = b.key and b.value < 'val_10' sort by a.key, a.value;
 
 explain select a.value from t1 a left semi join (select key from t3 where key > 5) b on a.key = b.key sort by a.value;
 select a.value from t1 a left semi join (select key from t3 where key > 5) b on a.key = b.key sort by a.value;

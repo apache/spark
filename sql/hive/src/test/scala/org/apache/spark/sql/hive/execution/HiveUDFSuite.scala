@@ -108,32 +108,32 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
     checkAnswer(sql(
       """
         |SELECT max(named_struct(
-        |           "key", key,
-        |           "value", value)).value FROM src
+        |           'key', key,
+        |           'value', value)).value FROM src
       """.stripMargin), Seq(Row("val_498")))
     checkAnswer(sql(
       """
         |SELECT min(named_struct(
-        |           "key", key,
-        |           "value", value)).value FROM src
+        |           'key', key,
+        |           'value', value)).value FROM src
       """.stripMargin), Seq(Row("val_0")))
 
     // nested struct cases
     checkAnswer(sql(
       """
         |SELECT max(named_struct(
-        |           "key", named_struct(
-                            "key", key,
-                            "value", value),
-        |           "value", value)).value FROM src
+        |           'key', named_struct(
+                            'key', key,
+                            'value', value),
+        |           'value', value)).value FROM src
       """.stripMargin), Seq(Row("val_498")))
     checkAnswer(sql(
       """
         |SELECT min(named_struct(
-        |           "key", named_struct(
-                           "key", key,
-                           "value", value),
-        |           "value", value)).value FROM src
+        |           'key', named_struct(
+                           'key', key,
+                           'value', value),
+        |           'value', value)).value FROM src
       """.stripMargin), Seq(Row("val_0")))
   }
 
@@ -361,11 +361,11 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
 
     sql(s"CREATE TEMPORARY FUNCTION testStringStringUDF AS '${classOf[UDFStringString].getName}'")
     checkAnswer(
-      sql("SELECT testStringStringUDF(\"hello\", s) FROM stringTable"),
+      sql("SELECT testStringStringUDF('hello', s) FROM stringTable"),
       Seq(Row("hello world"), Row("hello goodbye")))
 
     checkAnswer(
-      sql("SELECT testStringStringUDF(\"\", testStringStringUDF(\"hello\", s)) FROM stringTable"),
+      sql("SELECT testStringStringUDF('', testStringStringUDF('hello', s)) FROM stringTable"),
       Seq(Row(" hello world"), Row(" hello goodbye")))
 
     sql("DROP TEMPORARY FUNCTION IF EXISTS testStringStringUDF")
@@ -394,7 +394,7 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
     withUserDefinedFunction("testStringStringUDF" -> true, "testGenericUDFHash" -> true) {
       // HiveSimpleUDF
       sql(s"CREATE TEMPORARY FUNCTION testStringStringUDF AS '${classOf[UDFStringString].getName}'")
-      val df1 = sql("SELECT testStringStringUDF(rand(), \"hello\")")
+      val df1 = sql("SELECT testStringStringUDF(rand(), 'hello')")
       assert(!df1.logicalPlan.asInstanceOf[Project].projectList.forall(_.deterministic))
 
       // HiveGenericUDF
@@ -466,9 +466,9 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
         s"""CREATE EXTERNAL TABLE csv_table(page_id INT, impressions INT)
         ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.OpenCSVSerde'
         WITH SERDEPROPERTIES (
-          \"separatorChar\" = \",\",
-          \"quoteChar\"     = \"\\\"\",
-          \"escapeChar\"    = \"\\\\\")
+          'separatorChar' = ',',
+          'quoteChar'     = '\\\"',
+          'escapeChar'    = '\\\\')
         LOCATION '${tempDir.toURI}'
       """)
 

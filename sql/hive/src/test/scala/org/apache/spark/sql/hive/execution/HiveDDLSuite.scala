@@ -2721,7 +2721,7 @@ class HiveDDLSuite
                |CREATE TABLE t
                |PARTITIONED BY (b)
                |STORED AS $format
-               |AS SELECT 1 as a, "a" as b
+               |AS SELECT 1 as a, 'a' as b
                """.stripMargin)
           checkAnswer(spark.table("t"), Row(1, "a"))
 

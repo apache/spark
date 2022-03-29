@@ -11,7 +11,7 @@ CREATE TABLE serde_regex(
   agent STRING)
 ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.RegexSerDe'
 WITH SERDEPROPERTIES (
-  "input.regex" = "([^ ]*) ([^ ]*) ([^ ]*) (-|\\[[^\\]]*\\]) ([^ \"]*|\"[^\"]*\") (-|[0-9]*) (-|[0-9]*)(?: ([^ \"]*|\"[^\"]*\") ([^ \"]*|\"[^\"]*\"))?"
+  'input.regex' = '([^ ]*) ([^ ]*) ([^ ]*) (-|\\[[^\\]]*\\]) ([^ \"]*|\"[^\"]*\") (-|[0-9]*) (-|[0-9]*)(?: ([^ \"]*|\"[^\"]*\") ([^ \"]*|\"[^\"]*\"))?'
 )
 STORED AS TEXTFILE;
 
@@ -27,7 +27,7 @@ CREATE TABLE serde_regex(
   agent STRING)
 ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.RegexSerDe'
 WITH SERDEPROPERTIES (
-  "input.regex" = "([^ ]*) ([^ ]*) ([^ ]*) (-|\\[[^\\]]*\\]) ([^ \"]*|\"[^\"]*\") (-|[0-9]*) (-|[0-9]*)(?: ([^ \"]*|\"[^\"]*\") ([^ \"]*|\"[^\"]*\"))?"
+  'input.regex' = ''([^ ]*) ([^ ]*) ([^ ]*) (-|\\[[^\\]]*\\]) ([^ \"]*|\"[^\"]*\") (-|[0-9]*) (-|[0-9]*)(?: ([^ \"]*|\"[^\"]*\") ([^ \"]*|\"[^\"]*\"))?'
 )
 STORED AS TEXTFILE;
 
@@ -46,7 +46,7 @@ CREATE TABLE serde_regex1(
   value int)
 ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.RegexSerDe'
 WITH SERDEPROPERTIES (
-  "input.regex" = "([^ ]*) ([^ ]*)"
+  'input.regex' = '([^ ]*) ([^ ]*)'
 )
 STORED AS TEXTFILE;
 
@@ -55,7 +55,7 @@ CREATE TABLE serde_regex1(
   value int)
 ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.RegexSerDe'
 WITH SERDEPROPERTIES (
-  "input.regex" = "([^ ]*) ([^ ]*)"
+  'input.regex' = '([^ ]*) ([^ ]*)'
 )
 STORED AS TEXTFILE;
 

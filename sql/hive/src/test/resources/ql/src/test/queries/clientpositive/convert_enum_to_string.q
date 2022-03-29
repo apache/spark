@@ -2,9 +2,9 @@
 
 create table convert_enum_to_string
   partitioned by (b string)
-  row format serde "org.apache.hadoop.hive.serde2.thrift.ThriftDeserializer"
+  row format serde 'org.apache.hadoop.hive.serde2.thrift.ThriftDeserializer'
     with serdeproperties (
-      "serialization.class"="org.apache.hadoop.hive.serde2.thrift.test.MegaStruct",
-      "serialization.format"="org.apache.thrift.protocol.TBinaryProtocol");
+      'serialization.class'='org.apache.hadoop.hive.serde2.thrift.test.MegaStruct',
+      'serialization.format'='org.apache.thrift.protocol.TBinaryProtocol');
 
 describe convert_enum_to_string;

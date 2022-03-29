@@ -636,10 +636,10 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
       sql("CREATE TABLE ctas1 AS SELECT key k, value FROM src ORDER BY k, value")
       sql(
         """CREATE TABLE ctas2
-          | ROW FORMAT SERDE "org.apache.hadoop.hive.serde2.columnar.ColumnarSerDe"
-          | WITH SERDEPROPERTIES("serde_p1"="p1","serde_p2"="p2")
+          | ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.columnar.ColumnarSerDe'
+          | WITH SERDEPROPERTIES('serde_p1'='p1','serde_p2'='p2')
           | STORED AS RCFile
-          | TBLPROPERTIES("tbl_p1"="p11", "tbl_p2"="p22")
+          | TBLPROPERTIES('tbl_p1'='p11', 'tbl_p2'='p22')
           | AS
           |   SELECT key, value
           |   FROM src
@@ -2096,14 +2096,14 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
       sql(
         """
           |INSERT OVERWRITE TABLE tableWithPartition PARTITION (part = '1')
-          |SELECT * FROM VALUES (1, "one"), (2, "two"), (3, null) AS data(key, value)
+          |SELECT * FROM VALUES (1, 'one'), (2, 'two'), (3, null) AS data(key, value)
         """.stripMargin)
       checkAnswer(
         sql("SELECT part, key, value FROM tableWithPartition"),
         sql(
           """
             |SELECT '1' AS part, key, value FROM VALUES
-            |(1, "one"), (2, "two"), (3, null) AS data(key, value)
+            |(1, 'one'), (2, 'two'), (3, null) AS data(key, value)
           """.stripMargin)
       )
     }

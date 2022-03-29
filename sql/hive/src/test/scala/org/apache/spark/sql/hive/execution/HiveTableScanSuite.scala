@@ -88,7 +88,7 @@ class HiveTableScanSuite extends HiveComparisonTest with SQLTestUtils with TestH
   test("Spark-4959 Attributes are case sensitive when using a select query from a projection") {
     withTable("spark_4959") {
       sql("create table spark_4959 (col1 string)")
-      sql("""insert into table spark_4959 select "hi" from src limit 1""")
+      sql("""insert into table spark_4959 select 'hi' from src limit 1""")
       table("spark_4959").select(
         $"col1".as("CaseSensitiveColName"),
         $"col1".as("CaseSensitiveColName2")).createOrReplaceTempView("spark_4959_2")

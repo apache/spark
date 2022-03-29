@@ -173,11 +173,11 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
 
   createQueryTest("constant object inspector for generic udf",
     """SELECT named_struct(
-      lower("AA"), "10",
-      repeat(lower("AA"), 3), "11",
-      lower(repeat("AA", 3)), "12",
-      printf("bb%d", 12), "13",
-      repeat(printf("s%d", 14), 2), "14") FROM src LIMIT 1""")
+      lower('AA'), '10',
+      repeat(lower('AA'), 3), '11',
+      lower(repeat('AA', 3)), '12',
+      printf('bb%d', 12), '13',
+      repeat(printf('s%d', 14), 2), '14') FROM src LIMIT 1""")
 
   createQueryTest("NaN to Decimal",
     "SELECT CAST(CAST('NaN' AS DOUBLE) AS DECIMAL(1,1)) FROM src LIMIT 1")
@@ -202,8 +202,8 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
       |IF(TRUE, CAST(NULL AS TINYINT), CAST(1 AS TINYINT)) AS COL16,
       |IF(FALSE, CAST(NULL AS BINARY), CAST("1" AS BINARY)) AS COL17,
       |IF(TRUE, CAST(NULL AS BINARY), CAST("1" AS BINARY)) AS COL18,
-      |IF(FALSE, CAST(NULL AS DATE), CAST("1970-01-01" AS DATE)) AS COL19,
-      |IF(TRUE, CAST(NULL AS DATE), CAST("1970-01-01" AS DATE)) AS COL20,
+      |IF(FALSE, CAST(NULL AS DATE), CAST('1970-01-01' AS DATE)) AS COL19,
+      |IF(TRUE, CAST(NULL AS DATE), CAST('1970-01-01' AS DATE)) AS COL20,
       |IF(TRUE, CAST(NULL AS TIMESTAMP), CAST('1969-12-31 16:00:01' AS TIMESTAMP)) AS COL21,
       |IF(FALSE, CAST(NULL AS DECIMAL), CAST(1 AS DECIMAL)) AS COL22,
       |IF(TRUE, CAST(NULL AS DECIMAL), CAST(1 AS DECIMAL)) AS COL23
@@ -270,7 +270,7 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
   }
 
   createQueryTest("modulus",
-    "SELECT 11 % 10, IF((101.1 % 100.0) BETWEEN 1.01 AND 1.11, \"true\", \"false\"), " +
+    "SELECT 11 % 10, IF((101.1 % 100.0) BETWEEN 1.01 AND 1.11, 'true', 'false'), " +
       "(101 / 2) % 10 FROM src LIMIT 1")
 
   test("Query expressed in HiveQL") {
@@ -325,7 +325,7 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
     "SELECT * FROM src a JOIN src b ON a.key = b.key")
 
   createQueryTest("length.udf",
-    "SELECT length(\"test\") FROM src LIMIT 1")
+    "SELECT length('test') FROM src LIMIT 1")
 
   createQueryTest("partitioned table scan",
     "SELECT ds, hr, key, value FROM srcpart")

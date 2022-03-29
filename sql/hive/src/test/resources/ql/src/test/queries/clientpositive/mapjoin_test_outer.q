@@ -3,7 +3,7 @@ set hive.auto.convert.join = false;
 
 create table dest_1 (key STRING, value STRING) stored as textfile;
 insert overwrite table dest_1 select * from src1 order by src1.value limit 8;
-insert into table dest_1 select "333444","555666" from src1 limit 1;
+insert into table dest_1 select '333444','555666' from src1 limit 1;
 
 create table dest_2 (key STRING, value STRING) stored as textfile;
 
