@@ -76,6 +76,8 @@ class YarnShuffleServiceSuite extends SparkFunSuite with Matchers {
     yarnConfig.setBoolean(YarnShuffleService.STOP_ON_FAILURE_KEY, true)
     val localDir = Utils.createTempDir()
     yarnConfig.set(YarnConfiguration.NM_LOCAL_DIRS, localDir.getAbsolutePath)
+    yarnConfig.set("spark.shuffle.push.server.mergedShuffleFileManagerImpl",
+      "org.apache.spark.network.shuffle.RemoteBlockPushResolver")
 
     recoveryLocalDir = Utils.createTempDir()
     tempDir = Utils.createTempDir()
@@ -162,9 +164,10 @@ class YarnShuffleServiceSuite extends SparkFunSuite with Matchers {
     val shuffleInfo1 = new ExecutorShuffleInfo(Array("/foo", "/bar"), 3, SORT_MANAGER)
     val shuffleInfo2 = new ExecutorShuffleInfo(Array("/bippy"), 5, SORT_MANAGER)
     val mergedShuffleInfo3 =
-      new ExecutorShuffleInfo(Array("/foo", "/bar"), 3, SORT_MANAGER_WITH_MERGE_SHUFFLE_META)
+      new ExecutorShuffleInfo(
+        Array("/foo/foo", "/bar/bar"),3, SORT_MANAGER_WITH_MERGE_SHUFFLE_META)
     val mergedShuffleInfo4 =
-      new ExecutorShuffleInfo(Array("/bippy"), 5, SORT_MANAGER_WITH_MERGE_SHUFFLE_META)
+      new ExecutorShuffleInfo(Array("/bippy/bippy"), 5, SORT_MANAGER_WITH_MERGE_SHUFFLE_META)
 
     val blockHandler = s1.blockHandler
     val blockResolver = ShuffleTestAccessor.getBlockResolver(blockHandler)
@@ -187,9 +190,9 @@ class YarnShuffleServiceSuite extends SparkFunSuite with Matchers {
       be (Some(mergedShuffleInfo4))
 
 
-    val localDirs3 = Array(new File(tempDir, "foo").getAbsolutePath,
-      new File(tempDir, "bar").getAbsolutePath)
-    val localDirs4 = Array(new File(tempDir, "bippy").getAbsolutePath)
+    val localDirs3 = Array(new File("/foo/merge_manager1").getAbsolutePath,
+      new File("/bar/merge_manager_1").getAbsolutePath)
+    val localDirs4 = Array(new File("/bippy/merge_manager_1").getAbsolutePath)
     val appPathsInfo3 = new AppPathsInfo(localDirs3, 3)
     val appPathsInfo4 = new AppPathsInfo(localDirs4, 5)
     mergeManager.registerExecutor(app3Id.toString, mergedShuffleInfo3)

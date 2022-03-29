@@ -242,7 +242,7 @@ public class YarnShuffleService extends AuxiliaryService {
         mergeManagerFile = initRecoveryDb(MERGE_MANAGER_FILE_NAME);
       }
 
-      TransportConf transportConf = new TransportConf("shuffle", new HadoopConfigProvider(_conf));
+      TransportConf transportConf = new TransportConf("shuffle",new HadoopConfigProvider(_conf));
       shuffleMergeManager = newMergedShuffleFileManagerInstance(
         transportConf, mergeManagerFile);
       blockHandler = new ExternalBlockHandler(

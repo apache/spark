@@ -1329,17 +1329,17 @@ public class RemoteBlockPushResolverSuite {
     useTestFiles(false, true, true);
     RemoteBlockPushResolver.PushBlockStreamCallback callback =
       (RemoteBlockPushResolver.PushBlockStreamCallback) pushResolver.receiveBlockDataAsStream(
-        new PushBlockStream(TEST_APP, NO_ATTEMPT_ID, 1, 0, 1, 100, 0));
+        new PushBlockStream(TEST_APP, NO_ATTEMPT_ID, 1, 0, 0, 100, 0));
     callback.onData(callback.getID(), ByteBuffer.wrap(new byte[2]));
     callback.onComplete(callback.getID());
     callback =
       (RemoteBlockPushResolver.PushBlockStreamCallback) pushResolver.receiveBlockDataAsStream(
-        new PushBlockStream(TEST_APP, NO_ATTEMPT_ID, 1, 0, 2, 100, 0));
+        new PushBlockStream(TEST_APP, NO_ATTEMPT_ID, 1, 0, 5, 100, 0));
     callback.onData(callback.getID(), ByteBuffer.wrap(new byte[1]));
     callback.onComplete(callback.getID());
     callback =
       (RemoteBlockPushResolver.PushBlockStreamCallback) pushResolver.receiveBlockDataAsStream(
-        new PushBlockStream(TEST_APP, NO_ATTEMPT_ID, 1, 0, 3, 100, 0));
+        new PushBlockStream(TEST_APP, NO_ATTEMPT_ID, 1, 0, 10, 100, 0));
     callback.onData(callback.getID(), ByteBuffer.wrap(new byte[1]));
     callback.onComplete(callback.getID());
 
@@ -1354,7 +1354,7 @@ public class RemoteBlockPushResolverSuite {
     testMetaFile.getDos().write(randomBytes);
     testMetaFile.close();
     StreamCallbackWithID callback2 = pushResolver.receiveBlockDataAsStream(
-      new PushBlockStream(TEST_APP, NO_ATTEMPT_ID, 1, 0, 4, 100, 0));
+      new PushBlockStream(TEST_APP, NO_ATTEMPT_ID, 1, 0, 1, 100, 0));
     callback2.onData(callback2.getID(), ByteBuffer.wrap(new byte[5]));
     // This will complete without any IOExceptions because number of IOExceptions are less than
     // the threshold but the update to index and meta file will be unsuccessful.
@@ -1363,7 +1363,7 @@ public class RemoteBlockPushResolverSuite {
     // Restore the meta stream so it can write successfully again.
     testMetaFile.restore(metaPosBeforeClose);
     StreamCallbackWithID callback3 = pushResolver.receiveBlockDataAsStream(
-      new PushBlockStream(TEST_APP, NO_ATTEMPT_ID, 1, 0, 5, 100, 0));
+      new PushBlockStream(TEST_APP, NO_ATTEMPT_ID, 1, 0, 2, 100, 0));
     callback3.onData(callback3.getID(), ByteBuffer.wrap(new byte[2]));
     callback3.onComplete(callback3.getID());
     assertTrue("meta position", testMetaFile.getPos() > metaPosBeforeClose);

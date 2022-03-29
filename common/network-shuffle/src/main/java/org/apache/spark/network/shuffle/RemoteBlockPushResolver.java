@@ -1902,11 +1902,8 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
     }
 
     void close() throws IOException {
-      try {
+      if (channel.isOpen()) {
         fos.close();
-      } finally {
-        fos = null;
-        channel = null;
       }
     }
 
