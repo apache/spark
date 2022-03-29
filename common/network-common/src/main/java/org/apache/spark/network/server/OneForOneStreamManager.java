@@ -51,6 +51,7 @@ public class OneForOneStreamManager extends StreamManager {
 
     // The channel associated to the stream
     final Channel associatedChannel;
+    final boolean shouldRelease;
 
     // Used to keep track of the index of the buffer that the user has retrieved, just to ensure
     // that the caller only requests each chunk one at a time, in order.
@@ -59,10 +60,12 @@ public class OneForOneStreamManager extends StreamManager {
     // Used to keep track of the number of chunks being transferred and not finished yet.
     final AtomicLong chunksBeingTransferred = new AtomicLong(0L);
 
-    StreamState(String appId, Iterator<ManagedBuffer> buffers, Channel channel) {
+    StreamState(String appId, Iterator<ManagedBuffer> buffers, Channel channel,
+        boolean shouldRelease) {
       this.appId = appId;
       this.buffers = Preconditions.checkNotNull(buffers);
       this.associatedChannel = channel;
+      this.shouldRelease = shouldRelease;
     }
   }
 
@@ -130,7 +133,7 @@ public class OneForOneStreamManager extends StreamManager {
 
         try {
           // Release all remaining buffers.
-          while (state.buffers.hasNext()) {
+          while (state.shouldRelease && state.buffers.hasNext()) {
             ManagedBuffer buffer = state.buffers.next();
             if (buffer != null) {
               buffer.release();
@@ -215,10 +218,15 @@ public class OneForOneStreamManager extends StreamManager {
    * to be the only reader of the stream. Once the connection is closed, the stream will never
    * be used again, enabling cleanup by `connectionTerminated`.
    */
-  public long registerStream(String appId, Iterator<ManagedBuffer> buffers, Channel channel) {
+  public long registerStream(String appId, Iterator<ManagedBuffer> buffers, Channel channel,
+      boolean shouldRelease) {
     long myStreamId = nextStreamId.getAndIncrement();
-    streams.put(myStreamId, new StreamState(appId, buffers, channel));
+    streams.put(myStreamId, new StreamState(appId, buffers, channel, shouldRelease));
     return myStreamId;
+  }
+
+  public long registerStream(String appId, Iterator<ManagedBuffer> buffers, Channel channel) {
+    return registerStream(appId, buffers, channel, true);
   }
 
   @VisibleForTesting
