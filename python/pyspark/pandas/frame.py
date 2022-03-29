@@ -10070,7 +10070,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             )
         )
 
-    # TODO: axis, skipna, and many arguments should be implemented.
+    # TODO: axis, skipna, level and **kwargs should be implemented.
     def all(self, axis: Axis = 0, bool_only: Optional[bool] = None) -> "Series":
         """
         Return whether all elements are True.
@@ -10143,7 +10143,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         return self._result_aggregated(column_labels, applied)
 
-    # TODO: axis, skipna, and many arguments should be implemented.
+    # TODO: axis, skipna, level and **kwargs should be implemented.
     def any(self, axis: Axis = 0, bool_only: Optional[bool] = None) -> "Series":
         """
         Return whether any element is True.
