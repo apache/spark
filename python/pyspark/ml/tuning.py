@@ -63,8 +63,8 @@ from pyspark.sql.dataframe import DataFrame
 
 if TYPE_CHECKING:
     from pyspark.ml._typing import ParamMap
-    from py4j.java_gateway import JavaObject  # type: ignore[import]
-    from py4j.java_collections import JavaArray  # type: ignore[import]
+    from py4j.java_gateway import JavaObject
+    from py4j.java_collections import JavaArray
 
 __all__ = [
     "ParamGridBuilder",
@@ -257,7 +257,7 @@ class _ValidatorParams(HasSeed):
         evaluator: Evaluator = JavaParams._from_java(java_stage.getEvaluator())
         if isinstance(estimator, JavaEstimator):
             epms = [
-                cast("JavaEstimator", estimator)._transfer_param_map_from_java(epm)
+                estimator._transfer_param_map_from_java(epm)
                 for epm in java_stage.getEstimatorParamMaps()
             ]
         elif MetaAlgorithmReadWrite.isMetaEstimator(estimator):
@@ -284,7 +284,7 @@ class _ValidatorParams(HasSeed):
         if isinstance(estimator, JavaEstimator):
             java_epms = gateway.new_array(cls, len(self.getEstimatorParamMaps()))
             for idx, epm in enumerate(self.getEstimatorParamMaps()):
-                java_epms[idx] = cast(JavaEstimator, estimator)._transfer_param_map_to_java(epm)
+                java_epms[idx] = estimator._transfer_param_map_to_java(epm)
         elif MetaAlgorithmReadWrite.isMetaEstimator(estimator):
             # Meta estimator such as Pipeline, OneVsRest
             java_epms = _ValidatorSharedReadWrite.meta_estimator_transfer_param_maps_to_java(

@@ -21,7 +21,8 @@ coverage
 mypy
 pytest-mypy-plugins==1.9.3
 flake8==3.9.0
-pandas-stubs
+# See SPARK-38680.
+pandas-stubs<1.2.0.54
 
 # Documentation (SQL)
 mkdocs

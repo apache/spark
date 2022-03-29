@@ -1074,8 +1074,8 @@ class JoinSuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlan
     val df = left.crossJoin(right).where(pythonTestUDF(left("a")) === right.col("c"))
 
     // Before optimization, there is a logical Filter operator.
-    val filterInAnalysis = df.queryExecution.analyzed.find(_.isInstanceOf[Filter])
-    assert(filterInAnalysis.isDefined)
+    val filterInAnalysis = df.queryExecution.analyzed.exists(_.isInstanceOf[Filter])
+    assert(filterInAnalysis)
 
     // Filter predicate was pushdown as join condition. So there is no Filter exec operator.
     val filterExec = find(df.queryExecution.executedPlan)(_.isInstanceOf[FilterExec])

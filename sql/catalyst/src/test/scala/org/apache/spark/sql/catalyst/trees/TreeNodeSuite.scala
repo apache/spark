@@ -248,6 +248,44 @@ class TreeNodeSuite extends SparkFunSuite with SQLHelper {
     assert(expected === actual)
   }
 
+  test("exists") {
+    val expression = Add(Literal(1), Multiply(Literal(2), Subtract(Literal(3), Literal(4))))
+    // Check the top node.
+    var exists = expression.exists {
+      case _: Add => true
+      case _ => false
+    }
+    assert(exists)
+
+    // Check the first children.
+    exists = expression.exists {
+      case Literal(1, IntegerType) => true
+      case _ => false
+    }
+    assert(exists)
+
+    // Check an internal node (Subtract).
+    exists = expression.exists {
+      case _: Subtract => true
+      case _ => false
+    }
+    assert(exists)
+
+    // Check a leaf node.
+    exists = expression.exists {
+      case Literal(3, IntegerType) => true
+      case _ => false
+    }
+    assert(exists)
+
+    // Check not exists.
+    exists = expression.exists {
+      case Literal(100, IntegerType) => true
+      case _ => false
+    }
+    assert(!exists)
+  }
+
   test("collectFirst") {
     val expression = Add(Literal(1), Multiply(Literal(2), Subtract(Literal(3), Literal(4))))
 

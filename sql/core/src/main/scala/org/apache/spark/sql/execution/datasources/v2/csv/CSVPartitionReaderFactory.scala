@@ -46,7 +46,6 @@ case class CSVPartitionReaderFactory(
     partitionSchema: StructType,
     parsedOptions: CSVOptions,
     filters: Seq[Filter]) extends FilePartitionReaderFactory {
-  private val columnPruning = sqlConf.csvColumnPruning
 
   override def buildReader(file: PartitionedFile): PartitionReader[InternalRow] = {
     val conf = broadcastedConf.value.value
@@ -59,7 +58,7 @@ case class CSVPartitionReaderFactory(
       actualReadDataSchema,
       parsedOptions,
       filters)
-    val schema = if (columnPruning) actualReadDataSchema else actualDataSchema
+    val schema = if (parsedOptions.columnPruning) actualReadDataSchema else actualDataSchema
     val isStartOfFile = file.start == 0
     val headerChecker = new CSVHeaderChecker(
       schema, parsedOptions, source = s"CSV file: ${file.filePath}", isStartOfFile)

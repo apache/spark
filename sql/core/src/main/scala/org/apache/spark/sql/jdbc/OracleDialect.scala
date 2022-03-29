@@ -41,26 +41,26 @@ private case object OracleDialect extends JdbcDialect {
     super.compileAggregate(aggFunction).orElse(
       aggFunction match {
         case f: GeneralAggregateFunc if f.name() == "VAR_POP" && f.isDistinct == false =>
-          assert(f.inputs().length == 1)
-          Some(s"VAR_POP(${f.inputs().head})")
+          assert(f.children().length == 1)
+          Some(s"VAR_POP(${f.children().head})")
         case f: GeneralAggregateFunc if f.name() == "VAR_SAMP" && f.isDistinct == false =>
-          assert(f.inputs().length == 1)
-          Some(s"VAR_SAMP(${f.inputs().head})")
+          assert(f.children().length == 1)
+          Some(s"VAR_SAMP(${f.children().head})")
         case f: GeneralAggregateFunc if f.name() == "STDDEV_POP" && f.isDistinct == false =>
-          assert(f.inputs().length == 1)
-          Some(s"STDDEV_POP(${f.inputs().head})")
+          assert(f.children().length == 1)
+          Some(s"STDDEV_POP(${f.children().head})")
         case f: GeneralAggregateFunc if f.name() == "STDDEV_SAMP" && f.isDistinct == false =>
-          assert(f.inputs().length == 1)
-          Some(s"STDDEV_SAMP(${f.inputs().head})")
+          assert(f.children().length == 1)
+          Some(s"STDDEV_SAMP(${f.children().head})")
         case f: GeneralAggregateFunc if f.name() == "COVAR_POP" && f.isDistinct == false =>
-          assert(f.inputs().length == 2)
-          Some(s"COVAR_POP(${f.inputs().head}, ${f.inputs().last})")
+          assert(f.children().length == 2)
+          Some(s"COVAR_POP(${f.children().head}, ${f.children().last})")
         case f: GeneralAggregateFunc if f.name() == "COVAR_SAMP" && f.isDistinct == false =>
-          assert(f.inputs().length == 2)
-          Some(s"COVAR_SAMP(${f.inputs().head}, ${f.inputs().last})")
+          assert(f.children().length == 2)
+          Some(s"COVAR_SAMP(${f.children().head}, ${f.children().last})")
         case f: GeneralAggregateFunc if f.name() == "CORR" && f.isDistinct == false =>
-          assert(f.inputs().length == 2)
-          Some(s"CORR(${f.inputs().head}, ${f.inputs().last})")
+          assert(f.children().length == 2)
+          Some(s"CORR(${f.children().head}, ${f.children().last})")
         case _ => None
       }
     )

@@ -452,6 +452,7 @@ object FunctionRegistry {
     expression[TrySubtract]("try_subtract"),
     expression[TryMultiply]("try_multiply"),
     expression[TryElementAt]("try_element_at"),
+    expression[TrySum]("try_sum"),
 
     // aggregate functions
     expression[HyperLogLogPlusPlus]("approx_count_distinct"),
@@ -548,6 +549,7 @@ object FunctionRegistry {
     expression[SoundEx]("soundex"),
     expression[StringSpace]("space"),
     expression[StringSplit]("split"),
+    expression[SplitPart]("split_part"),
     expression[Substring]("substr", true),
     expression[Substring]("substring"),
     expression[Left]("left"),
@@ -631,8 +633,6 @@ object FunctionRegistry {
     expression[UnixMillis]("unix_millis"),
     expression[UnixMicros]("unix_micros"),
     expression[ConvertTimezone]("convert_timezone"),
-    expression[TimestampAdd]("timestampadd"),
-    expression[TimestampDiff]("timestampdiff"),
 
     // collection functions
     expression[CreateArray]("array"),

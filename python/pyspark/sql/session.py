@@ -36,7 +36,7 @@ from typing import (
     TYPE_CHECKING,
 )
 
-from py4j.java_gateway import JavaObject  # type: ignore[import]
+from py4j.java_gateway import JavaObject
 
 from pyspark import SparkConf, SparkContext, since
 from pyspark.rdd import RDD
@@ -261,7 +261,7 @@ class SparkSession(SparkConversionMixin):
                 from pyspark.conf import SparkConf
 
                 session = SparkSession._instantiatedSession
-                if session is None or session._sc._jsc is None:  # type: ignore[attr-defined]
+                if session is None or session._sc._jsc is None:
                     sparkConf = SparkConf()
                     for key, value in self._options.items():
                         sparkConf.set(key, value)
@@ -317,7 +317,7 @@ class SparkSession(SparkConversionMixin):
         # Otherwise, we will use invalid SparkSession when we call Builder.getOrCreate.
         if (
             SparkSession._instantiatedSession is None
-            or SparkSession._instantiatedSession._sc._jsc is None  # type: ignore[attr-defined]
+            or SparkSession._instantiatedSession._sc._jsc is None
         ):
             SparkSession._instantiatedSession = self
             SparkSession._activeSession = self
@@ -333,7 +333,7 @@ class SparkSession(SparkConversionMixin):
             </div>
         """.format(
             catalogImplementation=self.conf.get("spark.sql.catalogImplementation"),
-            sc_HTML=self.sparkContext._repr_html_(),  # type: ignore[attr-defined]
+            sc_HTML=self.sparkContext._repr_html_(),
         )
 
     @property
@@ -512,7 +512,7 @@ class SparkSession(SparkConversionMixin):
         """
         if not data:
             raise ValueError("can not infer schema from empty dataset")
-        infer_dict_as_struct = self._jconf.inferDictAsStruct()  # type: ignore[attr-defined]
+        infer_dict_as_struct = self._jconf.inferDictAsStruct()
         prefer_timestamp_ntz = is_timestamp_ntz_preferred()
         schema = reduce(
             _merge_type,
@@ -547,7 +547,7 @@ class SparkSession(SparkConversionMixin):
         if not first:
             raise ValueError("The first row in RDD is empty, " "can not infer schema")
 
-        infer_dict_as_struct = self._jconf.inferDictAsStruct()  # type: ignore[attr-defined]
+        infer_dict_as_struct = self._jconf.inferDictAsStruct()
         prefer_timestamp_ntz = is_timestamp_ntz_preferred()
         if samplingRatio is None:
             schema = _infer_schema(
@@ -662,13 +662,13 @@ class SparkSession(SparkConversionMixin):
             # Try to access HiveConf, it will raise exception if Hive is not added
             conf = SparkConf()
             assert SparkContext._jvm is not None
-            if cast(str, conf.get("spark.sql.catalogImplementation", "hive")).lower() == "hive":
+            if conf.get("spark.sql.catalogImplementation", "hive").lower() == "hive":
                 SparkContext._jvm.org.apache.hadoop.hive.conf.HiveConf()
                 return SparkSession.builder.enableHiveSupport().getOrCreate()
             else:
                 return SparkSession._getActiveSessionOrCreate()
         except (py4j.protocol.Py4JError, TypeError):
-            if cast(str, conf.get("spark.sql.catalogImplementation", "")).lower() == "hive":
+            if conf.get("spark.sql.catalogImplementation", "").lower() == "hive":
                 warnings.warn(
                     "Fall back to non-hive support because failing to access HiveConf, "
                     "please make sure you build spark with hive"
@@ -935,9 +935,7 @@ class SparkSession(SparkConversionMixin):
         else:
             rdd, struct = self._createFromLocal(map(prepare, data), schema)
         assert self._jvm is not None
-        jrdd = self._jvm.SerDeUtil.toJavaArray(
-            rdd._to_java_object_rdd()  # type: ignore[attr-defined]
-        )
+        jrdd = self._jvm.SerDeUtil.toJavaArray(rdd._to_java_object_rdd())
         jdf = self._jsparkSession.applySchemaToPythonRDD(jrdd.rdd(), struct.json())
         df = DataFrame(jdf, self)
         df._schema = struct

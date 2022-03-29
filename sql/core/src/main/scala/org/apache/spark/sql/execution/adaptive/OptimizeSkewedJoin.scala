@@ -121,8 +121,8 @@ case class OptimizeSkewedJoin(ensureRequirements: EnsureRequirements)
     assert(leftSizes.length == rightSizes.length)
     val numPartitions = leftSizes.length
     // We use the median size of the original shuffle partitions to detect skewed partitions.
-    val leftMedSize = Utils.median(leftSizes)
-    val rightMedSize = Utils.median(rightSizes)
+    val leftMedSize = Utils.median(leftSizes, false)
+    val rightMedSize = Utils.median(rightSizes, false)
     logDebug(
       s"""
          |Optimizing skewed join.
