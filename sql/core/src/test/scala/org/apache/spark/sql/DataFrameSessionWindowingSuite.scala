@@ -512,9 +512,9 @@ class DataFrameSessionWindowingSuite extends QueryTest with SharedSparkSession
       .otherwise("10 seconds"), true, "Need to filter events when gap duration dynamically")
 
     def check(
-               gapDuration: Any,
-               expectTimeRange: Boolean,
-               assertHintMsg: String): Unit = {
+        gapDuration: Any,
+        expectTimeRange: Boolean,
+        assertHintMsg: String): Unit = {
       val data = Seq(
         ("2016-03-27 19:39:30", 1, "a")).toDF("time", "value", "id")
       val df = if (gapDuration.isInstanceOf[String]) {
@@ -530,9 +530,9 @@ class DataFrameSessionWindowingSuite extends QueryTest with SharedSparkSession
     }
 
     def checkFilterCondition(
-                              logicalPlan: LogicalPlan,
-                              expectTimeRange: Boolean,
-                              assertHintMsg: String): Unit = {
+        logicalPlan: LogicalPlan,
+        expectTimeRange: Boolean,
+        assertHintMsg: String): Unit = {
       val filter = logicalPlan.find { plan =>
         plan.isInstanceOf[Filter] && plan.children.head.isInstanceOf[Project]
       }
