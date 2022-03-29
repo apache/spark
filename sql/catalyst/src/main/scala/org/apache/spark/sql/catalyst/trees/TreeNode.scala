@@ -77,25 +77,48 @@ case class Origin(
     } else {
       ""
     }
+    val builder = new StringBuilder
+    builder ++= s"\n== SQL$objectContext$positionContext ==\n"
 
     val start = startIndex.getOrElse(0)
     val stop = stopIndex.getOrElse(sqlText.get.length - 1)
+    // Ideally we should show all the lines which contains the SQL text context of the current node:
+    // [additional text] [current tree node] [additional text]
+    // However, we need to truncate the additional text in case it is too long. The following
+    // variable is to define the max length of additional text.
+    val maxExtraContextLength = 32
+    val truncatedText = "..."
     var lineStartIndex = start
-    while(lineStartIndex >= 0 && text.charAt(lineStartIndex) != '\n') {
+    while(lineStartIndex >= 0 &&
+      start - lineStartIndex <= maxExtraContextLength &&
+      text.charAt(lineStartIndex) != '\n') {
       lineStartIndex -= 1
     }
+    var startTruncated = start - lineStartIndex > maxExtraContextLength
+    if (startTruncated) {
+      builder ++= truncatedText
+    }
+
     var lineStopIndex = stop
-    while(lineStopIndex < text.length && text.charAt(lineStopIndex) != '\n') {
+    while(lineStopIndex < text.length &&
+      lineStopIndex - stop <= maxExtraContextLength &&
+      text.charAt(lineStopIndex) != '\n') {
       lineStopIndex += 1
     }
-    val lines = text.substring(lineStartIndex + 1, lineStopIndex).split("\n")
+    val stopTruncated = lineStopIndex - stop > maxExtraContextLength
 
-    val builder = new StringBuilder
-    builder ++= s"\n== SQL$objectContext$positionContext ==\n"
+    val subText = text.substring(lineStartIndex + 1, lineStopIndex) +
+      (if (stopTruncated) truncatedText else "")
+    val lines = subText.split("\n")
     var currentIndex = lineStartIndex
     lines.foreach { lineText =>
       builder ++= lineText + "\n"
       currentIndex += 1
+      if (startTruncated) {
+        builder ++= truncatedText.map(_ => ' ').mkString
+        // We only do this for the text at the beginning once.
+        startTruncated = false
+      }
       (0 until lineText.length).foreach { _ =>
         if (currentIndex >= start && currentIndex <= stop) {
           builder ++= "^"
