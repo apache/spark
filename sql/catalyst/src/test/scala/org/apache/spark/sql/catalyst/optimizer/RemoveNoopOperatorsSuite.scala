@@ -35,8 +35,8 @@ class RemoveNoopOperatorsSuite extends PlanTest {
 
   test("Remove all redundant projections in one iteration") {
     val originalQuery = testRelation
-      .select('a, 'b, 'c)
-      .select('a, 'b, 'c)
+      .select($"a", $"b", $"c")
+      .select($"a", $"b", $"c")
       .analyze
 
     val optimized = Optimize.execute(originalQuery.analyze)

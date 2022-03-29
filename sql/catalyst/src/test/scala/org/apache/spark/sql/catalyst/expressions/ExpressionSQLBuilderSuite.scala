@@ -144,7 +144,7 @@ class ExpressionSQLBuilderSuite extends SparkFunSuite {
     )
 
     checkSQL(
-      WindowSpecDefinition($"a".int :: 'b.string :: Nil, Nil, frame),
+      WindowSpecDefinition($"a".int :: $"b".string :: Nil, Nil, frame),
       s"(PARTITION BY a, b ${frame.sql})"
     )
 
@@ -154,12 +154,12 @@ class ExpressionSQLBuilderSuite extends SparkFunSuite {
     )
 
     checkSQL(
-      WindowSpecDefinition(Nil, $"a".int.asc :: 'b.string.desc :: Nil, frame),
+      WindowSpecDefinition(Nil, $"a".int.asc :: $"b".string.desc :: Nil, frame),
       s"(ORDER BY a ASC NULLS FIRST, b DESC NULLS LAST ${frame.sql})"
     )
 
     checkSQL(
-      WindowSpecDefinition($"a".int :: 'b.string :: Nil, $"c".int.asc :: 'd.string.desc :: Nil, frame),
+      WindowSpecDefinition($"a".int :: $"b".string :: Nil, $"c".int.asc :: $"d".string.desc :: Nil, frame),
       s"(PARTITION BY a, b ORDER BY c ASC NULLS FIRST, d DESC NULLS LAST ${frame.sql})"
     )
   }
@@ -168,17 +168,17 @@ class ExpressionSQLBuilderSuite extends SparkFunSuite {
     val interval = Literal(new CalendarInterval(0, 0, MICROS_PER_HOUR))
 
     checkSQL(
-      TimeAdd('a, interval),
+      TimeAdd($"a", interval),
       "a + INTERVAL '1 hours'"
     )
 
     checkSQL(
-      DatetimeSub('a, interval, Literal.default(TimestampType)),
+      DatetimeSub($"a", interval, Literal.default(TimestampType)),
       "a - INTERVAL '1 hours'"
     )
 
     checkSQL(
-      DateAddInterval('a, interval),
+      DateAddInterval($"a", interval),
       "a + INTERVAL '1 hours'"
     )
   }

@@ -525,10 +525,10 @@ abstract class ExternalCatalogSuite extends SparkFunSuite with BeforeAndAfterEac
     checkAnswer(tbl2, Seq($"a".int === 2), Set.empty)
     checkAnswer(tbl2, Seq(In($"a".int * 10, Seq(30))), Set(part2))
     checkAnswer(tbl2, Seq(Not(In($"a".int, Seq(4)))), Set(part1, part2))
-    checkAnswer(tbl2, Seq($"a".int === 1, 'b.string === "2"), Set(part1))
-    checkAnswer(tbl2, Seq($"a".int === 1 && 'b.string === "2"), Set(part1))
-    checkAnswer(tbl2, Seq($"a".int === 1, 'b.string === "x"), Set.empty)
-    checkAnswer(tbl2, Seq($"a".int === 1 || 'b.string === "x"), Set(part1))
+    checkAnswer(tbl2, Seq($"a".int === 1, $"b".string === "2"), Set(part1))
+    checkAnswer(tbl2, Seq($"a".int === 1 && $"b".string === "2"), Set(part1))
+    checkAnswer(tbl2, Seq($"a".int === 1, $"b".string === "x"), Set.empty)
+    checkAnswer(tbl2, Seq($"a".int === 1 || $"b".string === "x"), Set(part1))
 
     intercept[AnalysisException] {
       try {

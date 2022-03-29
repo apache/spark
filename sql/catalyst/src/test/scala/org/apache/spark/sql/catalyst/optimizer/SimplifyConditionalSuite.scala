@@ -167,19 +167,19 @@ class SimplifyConditionalSuite extends PlanTest with ExpressionEvalHelper with P
   }
 
   test("simplify if when one clause is null and another is boolean") {
-    val p = IsNull('a)
+    val p = IsNull($"a")
     val nullLiteral = Literal(null, BooleanType)
     assertEquivalent(If(p, nullLiteral, FalseLiteral), And(p, nullLiteral))
-    assertEquivalent(If(p, nullLiteral, TrueLiteral), Or(IsNotNull('a), nullLiteral))
-    assertEquivalent(If(p, FalseLiteral, nullLiteral), And(IsNotNull('a), nullLiteral))
+    assertEquivalent(If(p, nullLiteral, TrueLiteral), Or(IsNotNull($"a"), nullLiteral))
+    assertEquivalent(If(p, FalseLiteral, nullLiteral), And(IsNotNull($"a"), nullLiteral))
     assertEquivalent(If(p, TrueLiteral, nullLiteral), Or(p, nullLiteral))
 
     // the rule should not apply to nullable predicate
     Seq(TrueLiteral, FalseLiteral).foreach { b =>
-      assertEquivalent(If(GreaterThan('a, 42), nullLiteral, b),
-        If(GreaterThan('a, 42), nullLiteral, b))
-      assertEquivalent(If(GreaterThan('a, 42), b, nullLiteral),
-        If(GreaterThan('a, 42), b, nullLiteral))
+      assertEquivalent(If(GreaterThan($"a", 42), nullLiteral, b),
+        If(GreaterThan($"a", 42), nullLiteral, b))
+      assertEquivalent(If(GreaterThan($"a", 42), b, nullLiteral),
+        If(GreaterThan($"a", 42), b, nullLiteral))
     }
 
     // check evaluation also
@@ -238,7 +238,7 @@ class SimplifyConditionalSuite extends PlanTest with ExpressionEvalHelper with P
 
   test("SPARK-33847: Remove the CaseWhen if elseValue is empty and other outputs are null") {
     assertEquivalent(
-      CaseWhen((GreaterThan('a, 1), Literal.create(null, IntegerType)) :: Nil, None),
+      CaseWhen((GreaterThan($"a", 1), Literal.create(null, IntegerType)) :: Nil, None),
       Literal.create(null, IntegerType))
 
     assertEquivalent(
@@ -284,13 +284,13 @@ class SimplifyConditionalSuite extends PlanTest with ExpressionEvalHelper with P
 
   test("SPARK-37270: Remove elseValue if it is null Literal") {
     assertEquivalent(
-      CaseWhen((GreaterThan('a, Rand(1)), Literal.create(null, BooleanType)) :: Nil,
+      CaseWhen((GreaterThan($"a", Rand(1)), Literal.create(null, BooleanType)) :: Nil,
         Some(Literal.create(null, BooleanType))),
-      CaseWhen((GreaterThan('a, Rand(1)), Literal.create(null, BooleanType)) :: Nil))
+      CaseWhen((GreaterThan($"a", Rand(1)), Literal.create(null, BooleanType)) :: Nil))
 
     assertEquivalent(
-      CaseWhen((GreaterThan('a, 1), Literal.create(1, IntegerType)) :: Nil,
+      CaseWhen((GreaterThan($"a", 1), Literal.create(1, IntegerType)) :: Nil,
         Some(Literal.create(null, IntegerType))),
-      CaseWhen((GreaterThan('a, 1), Literal.create(1, IntegerType)) :: Nil))
+      CaseWhen((GreaterThan($"a", 1), Literal.create(1, IntegerType)) :: Nil))
   }
 }

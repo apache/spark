@@ -131,7 +131,7 @@ abstract class RemoveRedundantSortsSuiteBase
       checkNumSorts(sortedAsc, 1)
       val result = resorted.collect()
       withSQLConf(SQLConf.REMOVE_REDUNDANT_SORTS_ENABLED.key -> "false") {
-        val resorted = df.sort('$"key".desc)
+        val resorted = df.sort($"key".desc)
         checkNumSorts(resorted, 1)
         checkAnswer(resorted, result)
       }

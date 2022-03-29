@@ -79,7 +79,7 @@ class ConvertToLocalRelationSuite extends PlanTest {
       InternalRow(1) :: InternalRow(2) :: Nil)
 
     val correctAnswer = LocalRelation(
-      LocalRelation('a.struct($"a1".int)).output,
+      LocalRelation($"a".struct($"a1".int)).output,
       InternalRow(InternalRow(1)) :: InternalRow(InternalRow(2)) :: Nil)
 
     val projected = testRelation.select(ExprReuseOutput(UnresolvedAttribute("a")).as("a"))

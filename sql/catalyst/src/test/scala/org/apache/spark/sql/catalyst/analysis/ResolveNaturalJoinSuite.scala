@@ -27,7 +27,7 @@ class ResolveNaturalJoinSuite extends AnalysisTest {
   lazy val a = $"a".string
   lazy val b = $"b".string
   lazy val c = $"c".string
-  lazy val d = $"d".struct($"f1".int, 'f2.long)
+  lazy val d = $"d".struct($"f1".int, $"f2".long)
   lazy val aNotNull = a.notNull
   lazy val bNotNull = b.notNull
   lazy val cNotNull = c.notNull

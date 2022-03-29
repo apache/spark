@@ -264,23 +264,23 @@ class PlanParserSuite extends AnalysisTest {
 
   test("simple select query") {
     assertEqual("select 1", OneRowRelation().select(1))
-    assertEqual("select a, b", OneRowRelation().select('a, 'b))
-    assertEqual("select a, b from db.c", table("db", "c").select('a, 'b))
-    assertEqual("select a, b from db.c where x < 1", table("db", "c").where('x < 1).select('a, 'b))
+    assertEqual("select a, b", OneRowRelation().select($"a", $"b"))
+    assertEqual("select a, b from db.c", table("db", "c").select($"a", $"b"))
+    assertEqual("select a, b from db.c where x < 1", table("db", "c").where('x < 1).select($"a", $"b"))
     assertEqual(
       "select a, b from db.c having x < 1",
-      table("db", "c").having()('a, 'b)('x < 1))
-    assertEqual("select distinct a, b from db.c", Distinct(table("db", "c").select('a, 'b)))
-    assertEqual("select all a, b from db.c", table("db", "c").select('a, 'b))
-    assertEqual("select from tbl", OneRowRelation().select('from.as("tbl")))
-    assertEqual("select a from 1k.2m", table("1k", "2m").select('a))
+      table("db", "c").having()($"a", $"b")('x < 1))
+    assertEqual("select distinct a, b from db.c", Distinct(table("db", "c").select($"a", $"b")))
+    assertEqual("select all a, b from db.c", table("db", "c").select($"a", $"b"))
+    assertEqual("select from tbl", OneRowRelation().select($"from".as("tbl")))
+    assertEqual("select a from 1k.2m", table("1k", "2m").select($"a"))
   }
 
   test("hive-style single-FROM statement") {
-    assertEqual("from a select b, c", table("a").select('b, 'c))
+    assertEqual("from a select b, c", table("a").select($"b", $"c"))
     assertEqual(
-      "from db.a select b, c where d < 1", table("db", "a").where('d < 1).select('b, 'c))
-    assertEqual("from a select distinct b, c", Distinct(table("a").select('b, 'c)))
+      "from db.a select b, c where d < 1", table("db", "a").where('d < 1).select($"b", $"c"))
+    assertEqual("from a select distinct b, c", Distinct(table("a").select($"b", $"c")))
 
     // Weird "FROM table" queries, should be invalid anyway
     intercept("from a", "Syntax error at or near end of input")
@@ -323,8 +323,8 @@ class PlanParserSuite extends AnalysisTest {
 
     val orderSortDistrClusterClauses = Seq(
       ("", basePlan),
-      (" order by a, b desc", basePlan.orderBy('$"a".asc, '$"b".desc)),
-      (" sort by a, b desc", basePlan.sortBy('$"a".asc, '$"b".desc))
+      (" order by a, b desc", basePlan.orderBy($"a".asc, $"b".desc)),
+      (" sort by a, b desc", basePlan.sortBy($"a".asc, $"b".desc))
     )
 
     orderSortDistrClusterClauses.foreach {
@@ -360,7 +360,7 @@ class PlanParserSuite extends AnalysisTest {
       insert(Map("e" -> Option("1")), overwrite = true, ifPartitionNotExists = true))
     assertEqual(s"insert into s $sql",
       insert(Map.empty))
-    assertEqual(s"insert into table s partition (c = $"d"', e = 1) $sql",
+    assertEqual(s"insert into table s partition (c = 'd', e = 1) $sql",
       insert(Map("c" -> Option("d"), "e" -> Option("1"))))
 
     // Multi insert
@@ -374,32 +374,32 @@ class PlanParserSuite extends AnalysisTest {
     val sqlWithoutGroupBy = "select a, b, sum(c) as c from d"
 
     // Normal
-    assertEqual(sql, table("d").groupBy('a, 'b)('a, 'b, 'sum.function('c).as("c")))
+    assertEqual(sql, table("d").groupBy($"a", $"b")($"a", $"b", $"sum".function($"c").as("c")))
 
     // Cube
     assertEqual(s"$sql with cube",
-      table("d").groupBy(Cube(Seq(Seq('a), Seq('b))))('a, 'b, 'sum.function('c).as("c")))
+      table("d").groupBy(Cube(Seq(Seq($"a"), Seq($"b"))))($"a", $"b", $"sum".function($"c").as("c")))
     assertEqual(s"$sqlWithoutGroupBy group by cube(a, b)",
-      table("d").groupBy(Cube(Seq(Seq('a), Seq('b))))('a, 'b, 'sum.function('c).as("c")))
+      table("d").groupBy(Cube(Seq(Seq($"a"), Seq($"b"))))($"a", $"b", $"sum".function($"c").as("c")))
     assertEqual(s"$sqlWithoutGroupBy group by cube (a, b)",
-      table("d").groupBy(Cube(Seq(Seq('a), Seq('b))))('a, 'b, 'sum.function('c).as("c")))
+      table("d").groupBy(Cube(Seq(Seq($"a"), Seq($"b"))))($"a", $"b", $"sum".function($"c").as("c")))
 
     // Rollup
     assertEqual(s"$sql with rollup",
-      table("d").groupBy(Rollup(Seq(Seq('a), Seq('b))))('a, 'b, 'sum.function('c).as("c")))
+      table("d").groupBy(Rollup(Seq(Seq($"a"), Seq($"b"))))($"a", $"b", $"sum".function($"c").as("c")))
     assertEqual(s"$sqlWithoutGroupBy group by rollup(a, b)",
-      table("d").groupBy(Rollup(Seq(Seq('a), Seq('b))))('a, 'b, 'sum.function('c).as("c")))
+      table("d").groupBy(Rollup(Seq(Seq($"a"), Seq($"b"))))($"a", $"b", $"sum".function($"c").as("c")))
     assertEqual(s"$sqlWithoutGroupBy group by rollup (a, b)",
-      table("d").groupBy(Rollup(Seq(Seq('a), Seq('b))))('a, 'b, 'sum.function('c).as("c")))
+      table("d").groupBy(Rollup(Seq(Seq($"a"), Seq($"b"))))($"a", $"b", $"sum".function($"c").as("c")))
 
     // Grouping Sets
     assertEqual(s"$sql grouping sets((a, b), (a), ())",
-      Aggregate(Seq(GroupingSets(Seq(Seq('a, 'b), Seq('a), Seq()), Seq('a, 'b))),
-        Seq('a, 'b, 'sum.function('c).as("c")), table("d")))
+      Aggregate(Seq(GroupingSets(Seq(Seq($"a", $"b"), Seq($"a"), Seq()), Seq($"a", $"b"))),
+        Seq($"a", $"b", $"sum".function($"c").as("c")), table("d")))
 
     assertEqual(s"$sqlWithoutGroupBy group by grouping sets((a, b), (a), ())",
-      Aggregate(Seq(GroupingSets(Seq(Seq('a, 'b), Seq('a), Seq()))),
-        Seq('a, 'b, 'sum.function('c).as("c")), table("d")))
+      Aggregate(Seq(GroupingSets(Seq(Seq($"a", $"b"), Seq($"a"), Seq()))),
+        Seq($"a", $"b", $"sum".function($"c").as("c")), table("d")))
 
     val m = intercept[ParseException] {
       parsePlan("SELECT a, b, count(distinct a, distinct b) as c FROM d GROUP BY a, b")
@@ -419,7 +419,7 @@ class PlanParserSuite extends AnalysisTest {
     // Note that WindowSpecs are testing in the ExpressionParserSuite
     val sql = "select * from t"
     val plan = table("t").select(star())
-    val spec = WindowSpecDefinition(Seq('a, 'b), Seq('$"c".asc),
+    val spec = WindowSpecDefinition(Seq($"a", $"b"), Seq($"c".asc),
       SpecifiedWindowFrame(RowFrame, -Literal(1), Literal(1)))
 
     // Test window resolution.
@@ -445,8 +445,8 @@ class PlanParserSuite extends AnalysisTest {
   }
 
   test("lateral view") {
-    val explode = UnresolvedGenerator(FunctionIdentifier("explode"), Seq('x))
-    val jsonTuple = UnresolvedGenerator(FunctionIdentifier("json_tuple"), Seq('x, 'y))
+    val explode = UnresolvedGenerator(FunctionIdentifier("explode"), Seq($"x"))
+    val jsonTuple = UnresolvedGenerator(FunctionIdentifier("json_tuple"), Seq($"x", $"y"))
 
     // Single lateral view
     assertEqual(
@@ -487,7 +487,7 @@ class PlanParserSuite extends AnalysisTest {
     // Unresolved generator.
     val expected = table("t")
       .generate(
-        UnresolvedGenerator(FunctionIdentifier("posexplode"), Seq('x)),
+        UnresolvedGenerator(FunctionIdentifier("posexplode"), Seq($"x")),
         alias = Some("posexpl"),
         outputNames = Seq("x", "y"))
       .select(star())
@@ -647,7 +647,7 @@ class PlanParserSuite extends AnalysisTest {
   }
 
   test("sub-query") {
-    val plan = table("t0").select('id)
+    val plan = table("t0").select($"id")
     assertEqual("select id from (t0)", plan)
     assertEqual("select id from ((((((t0))))))", plan)
     assertEqual(
@@ -665,20 +665,20 @@ class PlanParserSuite extends AnalysisTest {
         |      union all
         |      (select id from t0)) as u_1
       """.stripMargin,
-      plan.union(plan).union(plan).as("u_1").select('id))
+      plan.union(plan).union(plan).as("u_1").select($"id"))
   }
 
   test("scalar sub-query") {
     assertEqual(
       "select (select max(b) from s) ss from t",
-      table("t").select(ScalarSubquery(table("s").select('max.function('b))).as("ss")))
+      table("t").select(ScalarSubquery(table("s").select($"max".function($"b"))).as("ss")))
     assertEqual(
       "select * from t where a = (select b from s)",
-      table("t").where($"a" === ScalarSubquery(table("s").select('b))).select(star()))
+      table("t").where($"a" === ScalarSubquery(table("s").select($"b"))).select(star()))
     assertEqual(
       "select g from t group by g having a > (select b from s)",
       table("t")
-        .having('g)('g)($"a" > ScalarSubquery(table("s").select('b))))
+        .having($"g")($"g")($"a" > ScalarSubquery(table("s").select($"b"))))
   }
 
   test("table reference") {
@@ -725,7 +725,7 @@ class PlanParserSuite extends AnalysisTest {
         "t",
         UnresolvedSubqueryColumnAliases(
           Seq("col1", "col2"),
-          UnresolvedRelation(TableIdentifier("t")).select('a.as("x"), 'b.as("y"))
+          UnresolvedRelation(TableIdentifier("t")).select($"a".as("x"), $"b".as("y"))
         )
       ).select(star()))
   }
@@ -751,7 +751,7 @@ class PlanParserSuite extends AnalysisTest {
         "t",
         UnresolvedSubqueryColumnAliases(
           Seq("col1", "col2"),
-          UnresolvedRelation(TableIdentifier("t")).select('a.as("x"), 'b.as("y")))
+          UnresolvedRelation(TableIdentifier("t")).select($"a".as("x"), $"b".as("y")))
       ).select($"t.col1", $"t.col2")
     )
   }
@@ -770,10 +770,10 @@ class PlanParserSuite extends AnalysisTest {
   test("simple select query with !> and !<") {
     // !< is equivalent to >=
     assertEqual("select a, b from db.c where x !< 1",
-      table("db", "c").where($"x" >= 1).select('a, 'b))
+      table("db", "c").where($"x" >= 1).select($"a", $"b"))
     // !> is equivalent to <=
     assertEqual("select a, b from db.c where x !> 1",
-      table("db", "c").where('x <= 1).select('a, 'b))
+      table("db", "c").where('x <= 1).select($"a", $"b"))
   }
 
   test("select hint syntax") {
@@ -813,7 +813,7 @@ class PlanParserSuite extends AnalysisTest {
     comparePlans(
       parsePlan("SELECT /*+ MAPJOIN(t) */ a from t where true group by a order by a"),
       UnresolvedHint("MAPJOIN", Seq($"t"),
-        table("t").where(Literal(true)).groupBy('a)('a)).orderBy('$"a".asc))
+        table("t").where(Literal(true)).groupBy($"a")($"a")).orderBy($"a".asc))
 
     comparePlans(
       parsePlan("SELECT /*+ COALESCE(10) */ * FROM t"),
@@ -1140,14 +1140,14 @@ class PlanParserSuite extends AnalysisTest {
   test("CTE with column alias") {
     assertEqual(
       "WITH t(x) AS (SELECT c FROM a) SELECT * FROM t",
-      cte(table("t").select(star()), "t" -> ((table("a").select('c), Seq("x")))))
+      cte(table("t").select(star()), "t" -> ((table("a").select($"c"), Seq("x")))))
   }
 
   test("statement containing terminal semicolons") {
     assertEqual("select 1;", OneRowRelation().select(1))
-    assertEqual("select a, b;", OneRowRelation().select('a, 'b))
-    assertEqual("select a, b from db.c;;;", table("db", "c").select('a, 'b))
-    assertEqual("select a, b from db.c; ;;  ;", table("db", "c").select('a, 'b))
+    assertEqual("select a, b;", OneRowRelation().select($"a", $"b"))
+    assertEqual("select a, b from db.c;;;", table("db", "c").select($"a", $"b"))
+    assertEqual("select a, b from db.c; ;;  ;", table("db", "c").select($"a", $"b"))
   }
 
   test("SPARK-32106: TRANSFORM plan") {
@@ -1162,7 +1162,7 @@ class PlanParserSuite extends AnalysisTest {
         "cat",
         Seq(AttributeReference("key", StringType)(),
           AttributeReference("value", StringType)()),
-        Project(Seq('a, 'b, 'c), UnresolvedRelation(TableIdentifier("testData"))),
+        Project(Seq($"a", $"b", $"c"), UnresolvedRelation(TableIdentifier("testData"))),
         ScriptInputOutputSchema(List.empty, List.empty, None, None,
           List.empty, List.empty, None, None, true))
     )
@@ -1179,7 +1179,7 @@ class PlanParserSuite extends AnalysisTest {
         Seq(AttributeReference("a", StringType)(),
           AttributeReference("b", StringType)(),
           AttributeReference("c", StringType)()),
-        Project(Seq('a, 'b, 'c), UnresolvedRelation(TableIdentifier("testData"))),
+        Project(Seq($"a", $"b", $"c"), UnresolvedRelation(TableIdentifier("testData"))),
         ScriptInputOutputSchema(List.empty, List.empty, None, None,
           List.empty, List.empty, None, None, false)))
 
@@ -1195,7 +1195,7 @@ class PlanParserSuite extends AnalysisTest {
         Seq(AttributeReference("a", IntegerType)(),
           AttributeReference("b", StringType)(),
           AttributeReference("c", LongType)()),
-        Project(Seq('a, 'b, 'c), UnresolvedRelation(TableIdentifier("testData"))),
+        Project(Seq($"a", $"b", $"c"), UnresolvedRelation(TableIdentifier("testData"))),
         ScriptInputOutputSchema(List.empty, List.empty, None, None,
           List.empty, List.empty, None, None, false)))
 
@@ -1223,7 +1223,7 @@ class PlanParserSuite extends AnalysisTest {
         Seq(AttributeReference("a", StringType)(),
           AttributeReference("b", StringType)(),
           AttributeReference("c", StringType)()),
-        Project(Seq('a, 'b, 'c), UnresolvedRelation(TableIdentifier("testData"))),
+        Project(Seq($"a", $"b", $"c"), UnresolvedRelation(TableIdentifier("testData"))),
         ScriptInputOutputSchema(
           Seq(("TOK_TABLEROWFORMATFIELD", "\t"),
             ("TOK_TABLEROWFORMATCOLLITEMS", "\u0002"),

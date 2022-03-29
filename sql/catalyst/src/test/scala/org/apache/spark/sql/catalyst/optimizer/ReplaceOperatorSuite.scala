@@ -167,8 +167,8 @@ class ReplaceOperatorSuite extends PlanTest {
 
   test("replace Except with Filter when only right filter can be applied to the left") {
     val table = LocalRelation(Seq($"a".int, $"b".int))
-    val left = table.where($"b" < 1).select('a).as("left")
-    val right = table.where($"b" < 3).select('a).as("right")
+    val left = table.where($"b" < 1).select($"a").as("left")
+    val right = table.where($"b" < 3).select($"a").as("right")
 
     val query = Except(left, right, isAll = false)
     val optimized = Optimize.execute(query.analyze)
@@ -229,12 +229,12 @@ class ReplaceOperatorSuite extends PlanTest {
 
   test("SPARK-26366: ReplaceExceptWithFilter should handle properly NULL") {
     val basePlan = LocalRelation(Seq($"a".int, $"b".int))
-    val otherPlan = basePlan.where('a.in(1, 2) || 'b.in())
+    val otherPlan = basePlan.where($"a".in(1, 2) || $"b".in())
     val except = Except(basePlan, otherPlan, false)
     val result = OptimizeIn(Optimize.execute(except.analyze))
     val correctAnswer = Aggregate(basePlan.output, basePlan.output,
       Filter(!Coalesce(Seq(
-        'a.in(1, 2) || If('b.isNotNull, Literal.FalseLiteral, Literal(null, BooleanType)),
+        $"a".in(1, 2) || If('b.isNotNull, Literal.FalseLiteral, Literal(null, BooleanType)),
         Literal.FalseLiteral)),
         basePlan)).analyze
     comparePlans(result, correctAnswer)

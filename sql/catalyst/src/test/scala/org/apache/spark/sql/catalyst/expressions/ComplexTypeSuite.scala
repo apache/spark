@@ -410,11 +410,11 @@ class ComplexTypeSuite extends SparkFunSuite with ExpressionEvalHelper {
       ExtractValue(u.child, u.extraction, _ == _)
     }
 
-    checkEvaluation(quickResolve('c.map(MapType(StringType, StringType)).at(0).getItem("a")),
+    checkEvaluation(quickResolve($"c".map(MapType(StringType, StringType)).at(0).getItem("a")),
       "b", create_row(Map("a" -> "b")))
-    checkEvaluation(quickResolve('c.array(StringType).at(0).getItem(1)),
+    checkEvaluation(quickResolve($"c".array(StringType).at(0).getItem(1)),
       "b", create_row(Seq("a", "b")))
-    checkEvaluation(quickResolve('c.struct($"a".int).at(0).getField("a")),
+    checkEvaluation(quickResolve($"c".struct($"a".int).at(0).getField("a")),
       1, create_row(create_row(1)))
   }
 

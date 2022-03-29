@@ -52,7 +52,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
   test("fail for unresolved plan") {
     intercept[AnalysisException] {
       // `testRelation` does not have column `b`.
-      testRelation.select('b).analyze
+      testRelation.select($"b").analyze
     }
   }
 
@@ -679,7 +679,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
         testRelation,
         testRelation,
         cond,
-        UpdateAction(Some(cond), Assignment('a, 'a) :: Nil) :: Nil,
+        UpdateAction(Some(cond), Assignment($"a", $"a") :: Nil) :: Nil,
         Nil
       ),
       "Reference 'a' is ambiguous" :: Nil)

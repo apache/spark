@@ -53,7 +53,7 @@ class TypedFilterOptimizationSuite extends PlanTest {
 
     val expected = testRelation
       .deserialize[(Int, Int)]
-      .where(callFunction(f, BooleanType, 'obj))
+      .where(callFunction(f, BooleanType, $"obj"))
       .serialize[(Int, Int)].analyze
 
     comparePlans(optimized, expected)
@@ -82,7 +82,7 @@ class TypedFilterOptimizationSuite extends PlanTest {
 
     val expected = testRelation
       .deserialize[(Int, Int)]
-      .where(callFunction(f, BooleanType, 'obj))
+      .where(callFunction(f, BooleanType, $"obj"))
       .serialize[(Int, Int)].analyze
 
     comparePlans(optimized, expected)

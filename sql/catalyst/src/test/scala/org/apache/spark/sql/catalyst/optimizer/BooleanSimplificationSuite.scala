@@ -42,7 +42,7 @@ class BooleanSimplificationSuite extends PlanTest with ExpressionEvalHelper with
         PruneFilters) :: Nil
   }
 
-  val testRelation = LocalRelation($"a".int, $"b".int, $"c".int, 'd.string,
+  val testRelation = LocalRelation($"a".int, $"b".int, $"c".int, $"d".string,
     $"e".boolean, $"f".boolean, $"g".boolean, $"h".boolean)
 
   val testRelationWithData = LocalRelation.fromExternalRows(
@@ -50,7 +50,7 @@ class BooleanSimplificationSuite extends PlanTest with ExpressionEvalHelper with
   )
 
   val testNotNullableRelation = LocalRelation($"a".int.notNull, $"b".int.notNull, $"c".int.notNull,
-    'd.string.notNull, $"e".boolean.notNull, $"f".boolean.notNull, $"g".boolean.notNull,
+    $"d".string.notNull, $"e".boolean.notNull, $"f".boolean.notNull, $"g".boolean.notNull,
     $"h".boolean.notNull)
 
   val testNotNullableRelationWithData = LocalRelation.fromExternalRows(
@@ -285,8 +285,8 @@ class BooleanSimplificationSuite extends PlanTest with ExpressionEvalHelper with
   }
 
   test("simplify NOT(IsNull(x)) and NOT(IsNotNull(x))") {
-    checkCondition(Not(IsNotNull('b)), IsNull('b))
-    checkCondition(Not(IsNull('b)), IsNotNull('b))
+    checkCondition(Not(IsNotNull($"b")), IsNull($"b"))
+    checkCondition(Not(IsNull($"b")), IsNotNull($"b"))
   }
 
   protected def assertEquivalent(e1: Expression, e2: Expression): Unit = {

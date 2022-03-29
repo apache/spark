@@ -51,13 +51,13 @@ class SameResultSuite extends SparkFunSuite {
   }
 
   test("projections") {
-    assertSameResult(testRelation.select('a), testRelation2.select('a))
-    assertSameResult(testRelation.select('b), testRelation2.select('b))
-    assertSameResult(testRelation.select('a, 'b), testRelation2.select('a, 'b))
-    assertSameResult(testRelation.select('b, 'a), testRelation2.select('b, 'a))
+    assertSameResult(testRelation.select($"a"), testRelation2.select($"a"))
+    assertSameResult(testRelation.select($"b"), testRelation2.select($"b"))
+    assertSameResult(testRelation.select($"a", $"b"), testRelation2.select($"a", $"b"))
+    assertSameResult(testRelation.select($"b", $"a"), testRelation2.select($"b", $"a"))
 
-    assertSameResult(testRelation, testRelation2.select('a), result = false)
-    assertSameResult(testRelation.select('b, 'a), testRelation2.select('a, 'b), result = false)
+    assertSameResult(testRelation, testRelation2.select($"a"), result = false)
+    assertSameResult(testRelation.select($"b", $"a"), testRelation2.select($"a", $"b"), result = false)
   }
 
   test("filters") {
@@ -65,7 +65,7 @@ class SameResultSuite extends SparkFunSuite {
   }
 
   test("sorts") {
-    assertSameResult(testRelation.orderBy('$"a".asc), testRelation2.orderBy('$"a".asc))
+    assertSameResult(testRelation.orderBy($"a".asc), testRelation2.orderBy($"a".asc))
   }
 
   test("union") {

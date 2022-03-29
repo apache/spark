@@ -90,8 +90,8 @@ class ExpressionParserSuite extends AnalysisTest {
     assertEqual("a b", r1)
 
     // Multi-Alias
-    assertEqual("a as (b, c)", MultiAlias('a, Seq("b", "c")))
-    assertEqual("a() (b, c)", MultiAlias('a.function(), Seq("b", "c")))
+    assertEqual("a as (b, c)", MultiAlias($"a", Seq("b", "c")))
+    assertEqual("a() (b, c)", MultiAlias($"a".function(), Seq("b", "c")))
 
     // Numeric literals without a space between the literal qualifier and the alias, should not be
     // interpreted as such. An unresolved reference should be returned instead.
@@ -161,26 +161,26 @@ class ExpressionParserSuite extends AnalysisTest {
   }
 
   test("in expressions") {
-    assertEqual("a in (b, c, d)", 'a in ('b, 'c, 'd))
-    assertEqual("a not in (b, c, d)", !('a in ('b, 'c, 'd)))
+    assertEqual("a in (b, c, d)", 'a in ($"b", $"c", $"d"))
+    assertEqual("a not in (b, c, d)", !('a in ($"b", $"c", $"d")))
   }
 
   test("in sub-query") {
     assertEqual(
       "a in (select b from c)",
-      InSubquery(Seq('a), ListQuery(table("c").select('b))))
+      InSubquery(Seq($"a"), ListQuery(table("c").select($"b"))))
 
     assertEqual(
       "(a, b, c) in (select d, e, f from g)",
-      InSubquery(Seq('a, 'b, 'c), ListQuery(table("g").select('d, 'e, 'f))))
+      InSubquery(Seq($"a", $"b", $"c"), ListQuery(table("g").select($"d", $"e", $"f"))))
 
     assertEqual(
       "(a, b) in (select c from d)",
-      InSubquery(Seq('a, 'b), ListQuery(table("d").select('c))))
+      InSubquery(Seq($"a", $"b"), ListQuery(table("d").select($"c"))))
 
     assertEqual(
       "(a) in (select b from c)",
-      InSubquery(Seq('a), ListQuery(table("c").select('b))))
+      InSubquery(Seq($"a"), ListQuery(table("c").select($"b"))))
   }
 
   test("like expressions") {
@@ -194,12 +194,12 @@ class ExpressionParserSuite extends AnalysisTest {
 
   test("like escape expressions") {
     val message = "Escape string must contain only one character."
-    assertEqual("a like 'pattern%' escape '#'", 'a.like("pattern%", '#'))
-    assertEqual("a like 'pattern%' escape '\"'", 'a.like("pattern%", '\"'))
+    assertEqual("a like 'pattern%' escape '#'", $"a".like("pattern%", '#'))
+    assertEqual("a like 'pattern%' escape '\"'", $"a".like("pattern%", '\"'))
     intercept("a like 'pattern%' escape '##'", message)
     intercept("a like 'pattern%' escape ''", message)
-    assertEqual("a not like 'pattern%' escape '#'", !('a.like("pattern%", '#')))
-    assertEqual("a not like 'pattern%' escape '\"'", !('a.like("pattern%", '\"')))
+    assertEqual("a not like 'pattern%' escape '#'", !($"a".like("pattern%", '#')))
+    assertEqual("a not like 'pattern%' escape '\"'", !($"a".like("pattern%", '\"')))
     intercept("a not like 'pattern%' escape '\"/'", message)
     intercept("a not like 'pattern%' escape ''", message)
   }
@@ -267,31 +267,31 @@ class ExpressionParserSuite extends AnalysisTest {
 
   test("cast expressions") {
     // Note that DataType parsing is tested elsewhere.
-    assertEqual("cast(a as int)", 'a.cast(IntegerType))
-    assertEqual("cast(a as timestamp)", 'a.cast(TimestampType))
-    assertEqual("cast(a as array<int>)", 'a.cast(ArrayType(IntegerType)))
-    assertEqual("cast(cast(a as int) as long)", 'a.cast(IntegerType).cast(LongType))
+    assertEqual("cast(a as int)", $"a".cast(IntegerType))
+    assertEqual("cast(a as timestamp)", $"a".cast(TimestampType))
+    assertEqual("cast(a as array<int>)", $"a".cast(ArrayType(IntegerType)))
+    assertEqual("cast(cast(a as int) as long)", $"a".cast(IntegerType).cast(LongType))
   }
 
   test("function expressions") {
-    assertEqual("foo()", 'foo.function())
+    assertEqual("foo()", $"foo".function())
     assertEqual("foo.bar()",
       UnresolvedFunction(FunctionIdentifier("bar", Some("foo")), Seq.empty, isDistinct = false))
-    assertEqual("foo(*)", 'foo.function(star()))
-    assertEqual("count(*)", 'count.function(1))
-    assertEqual("foo(a, b)", 'foo.function('a, 'b))
-    assertEqual("foo(all a, b)", 'foo.function('a, 'b))
-    assertEqual("foo(distinct a, b)", 'foo.distinctFunction('a, 'b))
-    assertEqual("grouping(distinct a, b)", 'grouping.distinctFunction('a, 'b))
-    assertEqual("`select`(all a, b)", 'select.function('a, 'b))
+    assertEqual("foo(*)", $"foo".function(star()))
+    assertEqual("count(*)", $"count".function(1))
+    assertEqual("foo(a, b)", $"foo".function($"a", $"b"))
+    assertEqual("foo(all a, b)", $"foo".function($"a", $"b"))
+    assertEqual("foo(distinct a, b)", $"foo".distinctFunction($"a", $"b"))
+    assertEqual("grouping(distinct a, b)", $"grouping".distinctFunction($"a", $"b"))
+    assertEqual("`select`(all a, b)", $"select".function($"a", $"b"))
     intercept("foo(a x)", "Syntax error at or near 'x': extra input 'x'")
   }
 
   private def lv(s: Symbol) = UnresolvedNamedLambdaVariable(Seq(s.name))
 
   test("lambda functions") {
-    assertEqual("x -> x + 1", LambdaFunction(lv('x) + 1, Seq(lv('x))))
-    assertEqual("(x, y) -> x + y", LambdaFunction(lv('x) + lv('y), Seq(lv('x), lv('y))))
+    assertEqual("x -> x + 1", LambdaFunction(lv(Symbol("x")) + 1, Seq(lv(Symbol("x")))))
+    assertEqual("(x, y) -> x + y", LambdaFunction(lv(Symbol("x")) + lv(Symbol("y")), Seq(lv(Symbol("x")), lv(Symbol("y")))))
   }
 
   test("window function expressions") {
@@ -306,22 +306,22 @@ class ExpressionParserSuite extends AnalysisTest {
     // Basic window testing.
     assertEqual("foo(*) over w1", UnresolvedWindowExpression(func, WindowSpecReference("w1")))
     assertEqual("foo(*) over ()", windowed())
-    assertEqual("foo(*) over (partition by a, b)", windowed(Seq('a, 'b)))
-    assertEqual("foo(*) over (distribute by a, b)", windowed(Seq('a, 'b)))
-    assertEqual("foo(*) over (cluster by a, b)", windowed(Seq('a, 'b)))
-    assertEqual("foo(*) over (order by a desc, b asc)", windowed(Seq.empty, Seq('$"a".desc, '$"b".asc)))
-    assertEqual("foo(*) over (sort by a desc, b asc)", windowed(Seq.empty, Seq('$"a".desc, '$"b".asc)))
-    assertEqual("foo(*) over (partition by a, b order by c)", windowed(Seq('a, 'b), Seq('$"c".asc)))
-    assertEqual("foo(*) over (distribute by a, b sort by c)", windowed(Seq('a, 'b), Seq('$"c".asc)))
+    assertEqual("foo(*) over (partition by a, b)", windowed(Seq($"a", $"b")))
+    assertEqual("foo(*) over (distribute by a, b)", windowed(Seq($"a", $"b")))
+    assertEqual("foo(*) over (cluster by a, b)", windowed(Seq($"a", $"b")))
+    assertEqual("foo(*) over (order by a desc, b asc)", windowed(Seq.empty, Seq($"a".desc, $"b".asc)))
+    assertEqual("foo(*) over (sort by a desc, b asc)", windowed(Seq.empty, Seq($"a".desc, $"b".asc)))
+    assertEqual("foo(*) over (partition by a, b order by c)", windowed(Seq($"a", $"b"), Seq($"c".asc)))
+    assertEqual("foo(*) over (distribute by a, b sort by c)", windowed(Seq($"a", $"b"), Seq($"c".asc)))
 
     // Test use of expressions in window functions.
     assertEqual(
       "sum(product + 1) over (partition by ((product) + (1)) order by 2)",
-      WindowExpression('sum.function('product + 1),
+      WindowExpression($"sum".function('product + 1),
         WindowSpecDefinition(Seq('product + 1), Seq(Literal(2).asc), UnspecifiedFrame)))
     assertEqual(
       "sum(product + 1) over (partition by ((product / 2) + 1) order by 2)",
-      WindowExpression('sum.function('product + 1),
+      WindowExpression($"sum".function('product + 1),
         WindowSpecDefinition(Seq('product / 2 + 1), Seq(Literal(2).asc), UnspecifiedFrame)))
   }
 
@@ -385,7 +385,7 @@ class ExpressionParserSuite extends AnalysisTest {
         boundaries.foreach {
           case (boundarySql, begin, end) =>
             val query = s"foo(*) over (partition by a order by b $frameTypeSql $boundarySql)"
-            val expr = windowed(Seq('a), Seq('$"b".asc), SpecifiedWindowFrame(frameType, begin, end))
+            val expr = windowed(Seq($"a"), Seq($"b".asc), SpecifiedWindowFrame(frameType, begin, end))
             assertEqual(query, expr)
         }
     }
@@ -397,31 +397,31 @@ class ExpressionParserSuite extends AnalysisTest {
 
   test("row constructor") {
     // Note that '(a)' will be interpreted as a nested expression.
-    assertEqual("(a, b)", CreateStruct(Seq('a, 'b)))
-    assertEqual("(a, b, c)", CreateStruct(Seq('a, 'b, 'c)))
+    assertEqual("(a, b)", CreateStruct(Seq($"a", $"b")))
+    assertEqual("(a, b, c)", CreateStruct(Seq($"a", $"b", $"c")))
     assertEqual("(a as b, b as c)", CreateStruct(Seq('a as 'b, 'b as 'c)))
   }
 
   test("scalar sub-query") {
     assertEqual(
       "(select max(val) from tbl) > current",
-      ScalarSubquery(table("tbl").select('max.function('val))) > $"current")
+      ScalarSubquery(table("tbl").select($"max".function($"val"))) > $"current")
     assertEqual(
       "a = (select b from s)",
-      $"a" === ScalarSubquery(table("s").select('b)))
+      $"a" === ScalarSubquery(table("s").select($"b")))
   }
 
   test("case when") {
     assertEqual("case a when 1 then b when 2 then c else d end",
-      CaseKeyWhen('a, Seq(1, 'b, 2, 'c, 'd)))
+      CaseKeyWhen($"a", Seq(1, $"b", 2, $"c", $"d")))
     assertEqual("case (a or b) when true then c when false then d else e end",
-      CaseKeyWhen('a || 'b, Seq(true, 'c, false, 'd, 'e)))
+      CaseKeyWhen('a || 'b, Seq(true, $"c", false, $"d", $"e")))
     assertEqual("case 'a'='a' when true then 1 end",
       CaseKeyWhen("a" ===  "a", Seq(true, 1)))
     assertEqual("case when a = 1 then b when a = 2 then c else d end",
-      CaseWhen(Seq(($"a" === 1, 'b.expr), ($"a" === 2, 'c.expr)), 'd))
+      CaseWhen(Seq(($"a" === 1, 'b.expr), ($"a" === 2, 'c.expr)), $"d"))
     assertEqual("case when (1) + case when a > b then c else d end then f else g end",
-      CaseWhen(Seq((Literal(1) + CaseWhen(Seq(($"a" > $"b", 'c.expr)), 'd.expr), 'f.expr)), 'g))
+      CaseWhen(Seq((Literal(1) + CaseWhen(Seq(($"a" > $"b", 'c.expr)), 'd.expr), 'f.expr)), $"g"))
   }
 
   test("dereference") {
@@ -430,31 +430,31 @@ class ExpressionParserSuite extends AnalysisTest {
     assertEqual("(a + b).b", ('a + 'b).getField("b")) // This will fail analysis.
     assertEqual(
       "struct(a, b).b",
-      namedStruct(Literal("a"), 'a, Literal("b"), 'b).getField("b"))
+      namedStruct(Literal("a"), $"a", Literal("b"), $"b").getField("b"))
   }
 
   test("reference") {
     // Regular
-    assertEqual("a", 'a)
+    assertEqual("a", $"a")
 
     // Starting with a digit.
     assertEqual("1a", $"1a")
 
     // Quoted using a keyword.
-    assertEqual("`select`", 'select)
+    assertEqual("`select`", $"select")
 
     // Unquoted using an unreserved keyword.
-    assertEqual("columns", 'columns)
+    assertEqual("columns", $"columns")
   }
 
   test("subscript") {
-    assertEqual("a[b]", 'a.getItem('b))
-    assertEqual("a[1 + 1]", 'a.getItem(Literal(1) + 1))
-    assertEqual("`c`.a[b]", UnresolvedAttribute("c.a").getItem('b))
+    assertEqual("a[b]", $"a".getItem($"b"))
+    assertEqual("a[1 + 1]", $"a".getItem(Literal(1) + 1))
+    assertEqual("`c`.a[b]", UnresolvedAttribute("c.a").getItem($"b"))
   }
 
   test("parenthesis") {
-    assertEqual("(a)", 'a)
+    assertEqual("(a)", $"a")
     assertEqual("r * (a + b)", 'r * ('a + 'b))
   }
 
@@ -865,7 +865,7 @@ class ExpressionParserSuite extends AnalysisTest {
 
   test("composed expressions") {
     assertEqual("1 + r.r As q", (Literal(1) + UnresolvedAttribute("r.r")).as("q"))
-    assertEqual("1 - f('o', o(bar))", Literal(1) - 'f.function("o", 'o.function('bar)))
+    assertEqual("1 - f('o', o(bar))", Literal(1) - $"f".function("o", $"o".function($"bar")))
     intercept("1 - f('o', o(bar)) hello * world", Some("PARSE_SYNTAX_ERROR"),
       "Syntax error at or near '*'")
   }
@@ -894,10 +894,10 @@ class ExpressionParserSuite extends AnalysisTest {
   }
 
   test("SPARK-19526 Support ignore nulls keywords for first and last") {
-    assertEqual("first(a ignore nulls)", First('a, true).toAggregateExpression())
-    assertEqual("first(a)", First('a, false).toAggregateExpression())
-    assertEqual("last(a ignore nulls)", Last('a, true).toAggregateExpression())
-    assertEqual("last(a)", Last('a, false).toAggregateExpression())
+    assertEqual("first(a ignore nulls)", First($"a", true).toAggregateExpression())
+    assertEqual("first(a)", First($"a", false).toAggregateExpression())
+    assertEqual("last(a ignore nulls)", Last($"a", true).toAggregateExpression())
+    assertEqual("last(a)", Last($"a", false).toAggregateExpression())
   }
 
   test("timestamp literals") {

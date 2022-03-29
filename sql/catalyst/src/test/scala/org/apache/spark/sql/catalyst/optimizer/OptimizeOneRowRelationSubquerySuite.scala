@@ -65,33 +65,33 @@ class OptimizeOneRowRelationSubquerySuite extends PlanTest {
 
   test("Optimize scalar subquery with a single project") {
     // SELECT (SELECT a) FROM t1
-    val query = t1.select(ScalarSubquery(t0.select('a)).as("sub"))
+    val query = t1.select(ScalarSubquery(t0.select($"a")).as("sub"))
     val optimized = Optimize.execute(query.analyze)
-    val correctAnswer = t1.select('a.as("sub"))
+    val correctAnswer = t1.select($"a".as("sub"))
     comparePlans(optimized, correctAnswer.analyze)
   }
 
   test("Optimize lateral subquery with a single project") {
     Seq(Inner, LeftOuter, Cross).foreach { joinType =>
       // SELECT * FROM t1 JOIN LATERAL (SELECT a, b)
-      val query = t1.lateralJoin(t0.select('a, 'b), joinType, None)
+      val query = t1.lateralJoin(t0.select($"a", $"b"), joinType, None)
       val optimized = Optimize.execute(query.analyze)
-      val correctAnswer = t1.select('a, 'b, 'a.as("a"), 'b.as("b"))
+      val correctAnswer = t1.select($"a", $"b", $"a".as("a"), $"b".as("b"))
       comparePlans(optimized, correctAnswer.analyze)
     }
   }
 
   test("Optimize subquery with subquery alias") {
-    val inner = t0.select('a).as("t2")
+    val inner = t0.select($"a").as("t2")
     val query = t1.select(ScalarSubquery(inner).as("sub"))
     val optimized = Optimize.execute(query.analyze)
-    val correctAnswer = t1.select('a.as("sub"))
+    val correctAnswer = t1.select($"a".as("sub"))
     comparePlans(optimized, correctAnswer.analyze)
   }
 
   test("Optimize scalar subquery with multiple projects") {
     // SELECT (SELECT a1 + b1 FROM (SELECT a AS a1, b AS b1)) FROM t1
-    val inner = t0.select('a.as("a1"), 'b.as("b1")).select(('a1 + 'b1).as("c"))
+    val inner = t0.select($"a".as("a1"), $"b".as("b1")).select(('a1 + 'b1).as("c"))
     val query = t1.select(ScalarSubquery(inner).as("sub"))
     val optimized = Optimize.execute(query.analyze)
     val correctAnswer = t1.select(('a + 'b).as("c").as("sub"))
@@ -100,21 +100,21 @@ class OptimizeOneRowRelationSubquerySuite extends PlanTest {
 
   test("Optimize lateral subquery with multiple projects") {
     Seq(Inner, LeftOuter, Cross).foreach { joinType =>
-      val inner = t0.select('a.as("a1"), 'b.as("b1"))
+      val inner = t0.select($"a".as("a1"), $"b".as("b1"))
         .select(('a1 + 'b1).as("c1"), ('a1 - 'b1).as("c2"))
       val query = t1.lateralJoin(inner, joinType, None)
       val optimized = Optimize.execute(query.analyze)
-      val correctAnswer = t1.select('a, 'b, ('a + 'b).as("c1"), ('a - 'b).as("c2"))
+      val correctAnswer = t1.select($"a", $"b", ('a + 'b).as("c1"), ('a - 'b).as("c2"))
       comparePlans(optimized, correctAnswer.analyze)
     }
   }
 
   test("Optimize subquery with nested correlated subqueries") {
     // SELECT (SELECT (SELECT b) FROM (SELECT a AS b)) FROM t1
-    val inner = t0.select('a.as("b")).select(ScalarSubquery(t0.select('b)).as("s"))
+    val inner = t0.select($"a".as("b")).select(ScalarSubquery(t0.select($"b")).as("s"))
     val query = t1.select(ScalarSubquery(inner).as("sub"))
     val optimized = Optimize.execute(query.analyze)
-    val correctAnswer = t1.select('a.as("s").as("sub"))
+    val correctAnswer = t1.select($"a".as("s").as("sub"))
     comparePlans(optimized, correctAnswer.analyze)
   }
 
@@ -129,7 +129,7 @@ class OptimizeOneRowRelationSubquerySuite extends PlanTest {
 
   test("Should not optimize scalar subquery with operators other than project") {
     // SELECT (SELECT a AS a1 WHERE a = 1) FROM t1
-    val inner = t0.where($"a" === 1).select('a.as("a1"))
+    val inner = t0.where($"a" === 1).select($"a".as("a1"))
     val query = t1.select(ScalarSubquery(inner).as("sub"))
     val optimized = Optimize.execute(query.analyze)
     assertHasDomainJoin(optimized)
@@ -137,7 +137,7 @@ class OptimizeOneRowRelationSubquerySuite extends PlanTest {
 
   test("Should not optimize subquery with non-deterministic expressions") {
     // SELECT (SELECT r FROM (SELECT a + rand() AS r)) FROM t1
-    val inner = t0.select(('a + rand(0)).as("r")).select('r)
+    val inner = t0.select(('a + rand(0)).as("r")).select($"r")
     val query = t1.select(ScalarSubquery(inner).as("sub"))
     val optimized = Optimize.execute(query.analyze)
     assertHasDomainJoin(optimized)
@@ -146,7 +146,7 @@ class OptimizeOneRowRelationSubquerySuite extends PlanTest {
   test("Should not optimize lateral join with non-empty join conditions") {
     Seq(Inner, LeftOuter).foreach { joinType =>
       // SELECT * FROM t1 JOIN LATERAL (SELECT a AS a1, b AS b1) ON a = b1
-      val query = t1.lateralJoin(t0.select('a.as("a1"), 'b.as("b1")), joinType, Some($"a" === $"b1"))
+      val query = t1.lateralJoin(t0.select($"a".as("a1"), $"b".as("b1")), joinType, Some($"a" === $"b1"))
       val optimized = Optimize.execute(query.analyze)
       assertHasDomainJoin(optimized)
     }
@@ -155,8 +155,8 @@ class OptimizeOneRowRelationSubquerySuite extends PlanTest {
   test("Should not optimize subquery with nested subqueries that can't be optimized") {
     // SELECT (SELECT (SELECT a WHERE a = 1) FROM (SELECT a AS a)) FROM t1
     // Filter (a = 1) cannot be optimized.
-    val inner = t0.select('a).where($"a" === 1)
-    val subquery = t0.select('a.as("a"))
+    val inner = t0.select($"a").where($"a" === 1)
+    val subquery = t0.select($"a".as("a"))
       .select(ScalarSubquery(inner).as("s")).select('s + 1)
     val query = t1.select(ScalarSubquery(subquery).as("sub"))
     val optimized = Optimize.execute(query.analyze)

@@ -38,7 +38,7 @@ class CheckCartesianProductsSuite extends PlanTest {
   val testRelation2 = LocalRelation($"c".int, $"d".int)
 
   val joinTypesWithRequiredCondition = Seq(Inner, LeftOuter, RightOuter, FullOuter)
-  val joinTypesWithoutRequiredCondition = Seq(LeftSemi, LeftAnti, ExistenceJoin('exists))
+  val joinTypesWithoutRequiredCondition = Seq(LeftSemi, LeftAnti, ExistenceJoin($"exists"))
 
   test("CheckCartesianProducts doesn't throw an exception if cross joins are enabled)") {
     withSQLConf(CROSS_JOINS_ENABLED.key -> "true") {

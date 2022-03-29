@@ -671,7 +671,7 @@ class ExplainSuiteAE extends ExplainSuiteHelper with EnableAdaptiveExecutionSuit
           assert(normalizedOutput.contains(expectedNoCodegenText))
         }
 
-        val aggDf = df.groupBy($"key").agg(max('value))
+        val aggDf = df.groupBy($"key").agg(max($"value"))
         withNormalizedExplain(aggDf, CodegenMode) { normalizedOutput =>
           assert(normalizedOutput.contains(expectedNoCodegenText))
         }

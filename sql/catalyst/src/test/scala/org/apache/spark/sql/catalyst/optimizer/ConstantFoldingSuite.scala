@@ -46,13 +46,13 @@ class ConstantFoldingSuite extends PlanTest {
   test("eliminate subqueries") {
     val originalQuery =
       testRelation
-        .subquery('y)
-        .select('a)
+        .subquery($"y")
+        .select($"a")
 
     val optimized = Optimize.execute(originalQuery.analyze)
     val correctAnswer =
       testRelation
-        .select('a.attr)
+        .select($"a".attr)
         .analyze
 
     comparePlans(optimized, correctAnswer)
@@ -163,7 +163,7 @@ class ConstantFoldingSuite extends PlanTest {
       testRelation
         .select(
           Rand(5L) + Literal(1) as Symbol("c1"),
-          sum('a) as Symbol("c2"))
+          sum($"a") as Symbol("c2"))
 
     val optimized = Optimize.execute(originalQuery.analyze)
 
@@ -171,7 +171,7 @@ class ConstantFoldingSuite extends PlanTest {
       testRelation
         .select(
           Rand(5L) + Literal(1.0) as Symbol("c1"),
-          sum('a) as Symbol("c2"))
+          sum($"a") as Symbol("c2"))
         .analyze
 
     comparePlans(optimized, correctAnswer)
@@ -253,14 +253,14 @@ class ConstantFoldingSuite extends PlanTest {
   test("Constant folding test: Fold In(v, list) into true or false") {
     val originalQuery =
       testRelation
-        .select('a)
+        .select($"a")
         .where(In(Literal(1), Seq(Literal(1), Literal(2))))
 
     val optimized = Optimize.execute(originalQuery.analyze)
 
     val correctAnswer =
       testRelation
-        .select('a)
+        .select($"a")
         .where(Literal(true))
         .analyze
 
@@ -270,7 +270,7 @@ class ConstantFoldingSuite extends PlanTest {
   test("SPARK-33544: Constant folding test with side effects") {
     val originalQuery =
       testRelation
-        .select('a)
+        .select($"a")
         .where(Size(CreateArray(Seq(AssertTrue(false)))) > 0)
 
     val optimized = Optimize.execute(originalQuery.analyze)
@@ -290,14 +290,14 @@ class ConstantFoldingSuite extends PlanTest {
   test("SPARK-33544: Constant folding test CreateArray") {
     val originalQuery =
       testRelation
-        .select('a)
-        .where(Size(CreateArray(Seq('a))) > 0)
+        .select($"a")
+        .where(Size(CreateArray(Seq($"a"))) > 0)
 
     val optimized = OptimizeForCreate.execute(originalQuery.analyze)
 
     val correctAnswer =
       testRelation
-        .select('a)
+        .select($"a")
         .analyze
 
     comparePlans(optimized, correctAnswer)
