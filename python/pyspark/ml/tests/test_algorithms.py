@@ -106,7 +106,7 @@ class MultilayerPerceptronClassifierTest(SparkSessionTestCase):
         np.testing.assert_allclose(
             result.rawPrediction,
             expected_rawPrediction,
-            rtol=0.15,
+            rtol=0.3,
             # Use the same default value as `np.allclose`
             atol=1e-08,
         )
