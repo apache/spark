@@ -193,10 +193,15 @@ object EventLogFileWriter {
   }
 
   def codecName(log: Path): Option[String] = {
-    // Compression codec is encoded as an extension, e.g. app_123.lzf
+    // Compression codec is encoded as an extension, e.g. app_123.lzf_1647506941544
     // Since we sanitize the app ID to not include periods, it is safe to split on it
     val logName = log.getName.stripSuffix(COMPACTED).stripSuffix(IN_PROGRESS)
-    logName.split("\\.").tail.lastOption
+    val codecAndtime = logName.split("\\.").tail.lastOption
+    if(codecAndtime.isDefined) {
+      codecAndtime.get.split("_").headOption
+    } else {
+      None
+    }
   }
 
   def isCompacted(log: Path): Boolean = log.getName.endsWith(COMPACTED)
