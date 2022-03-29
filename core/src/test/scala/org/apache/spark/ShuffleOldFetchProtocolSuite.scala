@@ -17,8 +17,8 @@
 
 package org.apache.spark
 
-import org.scalatest.{BeforeAndAfterAll, Ignore}
-@Ignore
+import org.scalatest.BeforeAndAfterAll
+
 class ShuffleOldFetchProtocolSuite extends ShuffleSuite with BeforeAndAfterAll {
 
   // This test suite should run all tests by setting spark.shuffle.useOldFetchProtocol=true.
