@@ -1737,14 +1737,21 @@ Spark allows users to specify a custom Kubernetes schedulers.
 **This feature is currently experimental. In future versions, there may be behavioral changes around configuration, feature step improvement.**
 
 ##### Prerequisites
-* Spark on Kubernetes with Volcano as a custom scheduler is supported since Spark v3.3.0 and Volcano v1.5.1.
-* See also [Volcano installation](https://volcano.sh/en/docs/installation).
+* Spark on Kubernetes with [Volcano](https://volcano.sh/en) as a custom scheduler is supported since Spark v3.3.0 and Volcano v1.5.1. Below is an example to install Volcano 1.5.1:
+
+  ```bash
+  # x86_64
+  kubectl apply -f https://raw.githubusercontent.com/volcano-sh/volcano/v1.5.1/installer/volcano-development.yaml
+
+  # arm64:
+  kubectl apply -f https://raw.githubusercontent.com/volcano-sh/volcano/v1.5.1/installer/volcano-development-arm64.yaml
+  ```
 
 ##### Build
-To create a Spark distribution along with Volcano suppport like those distributed by the Spark [Downloads page](https://spark.apache.org/downloads.html):
+To create a Spark distribution along with Volcano suppport like those distributed by the Spark [Downloads page](https://spark.apache.org/downloads.html), also see more in ["Building Spark"](https://spark.apache.org/docs/latest/building-spark.html):
 
-```
-./dev/make-distribution.sh --name custom-spark --pip --r --tgz -Psparkr -Phive -Phive-thriftserver -Pmesos -Pyarn -Pkubernetes -Pvolcano
+```bash
+./dev/make-distribution.sh --name custom-spark --pip --r --tgz -Psparkr -Phive -Phive-thriftserver -Pkubernetes -Pvolcano
 ```
 
 ##### Usage
@@ -1753,73 +1760,44 @@ support more advanced resource scheduling: queue scheduling, resource reservatio
 
 To use Volcano as a custom scheduler the user needs to specify the following configuration options:
 
-```
-# Specify volcano scheduler
+```bash
+# Specify volcano scheduler and PodGroup template
 --conf spark.kubernetes.scheduler.name=volcano
+--conf spark.kubernetes.scheduler.volcano.podGroupTemplateFile=/path/to/podgroup-template.yaml
 # Specify driver/executor VolcanoFeatureStep
 --conf spark.kubernetes.driver.pod.featureSteps=org.apache.spark.deploy.k8s.features.VolcanoFeatureStep
---conf spark.kubernetes.executor.pod.featureSteps=org.apache.spark.deploy.k8s.features.VolcanoFeatureStep
-# Specify PodGroup template
---conf spark.kubernetes.scheduler.volcano.podGroupTemplateFile=/path/to/podgroup-template.yaml
+--conf spark.kubernetes.executor.pod.featureSteps=org.apache.spark.deploy.k8s.features.VolcanoFeatureStep```
 ```
 
 ##### Volcano Feature Step
-Volcano feature steps help users to create a Volcano PodGroup and set driver/executor pod annotation to link with this PodGroup.
+Volcano feature steps help users to create a Volcano PodGroup and set driver/executor pod annotation to link with this [PodGroup](https://volcano.sh/en/docs/podgroup/).
 
 Note that currently only driver/job level PodGroup is supported in Volcano Feature Step.
 
 ##### Volcano PodGroup Template
-Volcano defines PodGroup spec using [CRD yaml](https://volcano.sh/en/docs/podgroup/#example)
+Volcano defines PodGroup spec using [CRD yaml](https://volcano.sh/en/docs/podgroup/#example).
 
-Similar to [Pod template](#pod-template), Spark users can similarly use Volcano PodGroup Template to define the PodGroup spec configurations.
+Similar to [Pod template](#pod-template), Spark users can use Volcano PodGroup Template to define the PodGroup spec configurations.
+To do so, specify the Spark property `spark.kubernetes.scheduler.volcano.podGroupTemplateFile` to point to files accessible to the `spark-submit` process.
+Below is an example of PodGroup template:
 
-To do so, specify the Spark properties `spark.kubernetes.scheduler.volcano.podGroupTemplateFile` to point to files accessible to the `spark-submit` process.
-
-Below is an example of PodGroup template, see also [PodGroup Introduction](https://volcano.sh/en/docs/podgroup/#introduction):
-
-```
+```yaml
 apiVersion: scheduling.volcano.sh/v1beta1
 kind: PodGroup
 spec:
-  # Specify minMember to 1 to make driver
+  # Specify minMember to 1 to make a driver pod
   minMember: 1
-  # Specify minResources to support resource reservation
+  # Specify minResources to support resource reservation (the driver pod resource and executors pod resource should be considered)
+  # It is useful for ensource the available resources meet the minimum requirements of the Spark job and avoiding the
+  # situation where drivers are scheduled, and then they are unable to schedule sufficient executors to progress.
   minResources:
     cpu: "2"
     memory: "3Gi"
-  # Specify the priority
-  priorityClassName: high-priority
+  # Specify the priority, help users to specify job priority in the queue during scheduling.
+  priorityClassName: system-node-critical
+  # Specify the queue, indicates the resource queue which the job should be submitted to
   queue: default
 ```
-
-##### Features
-<table class="table">
-<tr><th>Scheduling</th><th>Description</th><th>Configuration</th></tr>
-<tr>
-  <td>Queue scheduling</td>
-  <td>
-    <a href="https://volcano.sh/en/docs/queue">Queue</a> indicates the resource queue, which adopts FIFO. It is also used as the basis for resource division.
-    Helps the user to specify to which queue the job should be submitted to.
-  </td>
-  <td>`spec.queue` field in PodGroup template</td>
-</tr>
-<tr>
-  <td>Resource reservation</td>
-  <td>
-    Resource reservation, aka `Gang` scheduling (start all or nothing), helps users reserve resources for specific jobs.
-    It is useful for ensource the available resources meet the minimum requirements of the Spark job and avoiding the
-    situation where drivers are scheduled, and then they are unable to schedule sufficient executors to progress.
-  </td>
-  <td>`spec.minResources` field in PodGroup template</td>
-</tr>
-<tr>
-  <td>Priority scheduling</td>
-  <td>
-    It is used to help users to specify job <a href="https://volcano.sh/en/docs/podgroup/#priorityclassname">priority</a> in the queue during scheduling.
-  </td>
-  <td>`spec.priorityClassName` field in PodGroup template</td>
-</tr>
-</table>
 
 ### Stage Level Scheduling Overview
 
