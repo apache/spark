@@ -175,10 +175,6 @@ object QueryExecutionErrors {
     }
   }
 
-  def inputTypeUnsupportedError(dataType: DataType): Throwable = {
-    new IllegalArgumentException(s"Unsupported input type ${dataType.catalogString}")
-  }
-
   def invalidFractionOfSecondError(): DateTimeException = {
     new SparkDateTimeException(errorClass = "INVALID_FRACTION_OF_SECOND",
       Array(SQLConf.ANSI_ENABLED.key))
