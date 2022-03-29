@@ -53,6 +53,24 @@ class ParserUtilsSuite extends SparkFunSuite {
     parser.statement().asInstanceOf[CreateNamespaceContext]
   }
 
+  val castClause =
+    """
+      |CAST(1 /* Convert
+      |   INT
+      |   AS
+      |   String */ as STRING)""".stripMargin.trim
+
+  val castQuery =
+    s"""
+       |SELECT
+       |$castClause /* SHOULD NOT INCLUDE THIS */
+       | AS s
+       |""".stripMargin
+
+  val castQueryContext = buildContext(castQuery) { parser =>
+    parser.statement().asInstanceOf[StatementDefaultContext]
+  }
+
   val emptyContext = buildContext("") { parser =>
     parser.statement
   }
@@ -198,5 +216,43 @@ class ParserUtilsSuite extends SparkFunSuite {
     assert(location == "/home/user/db")
     assert(origin == Origin(Some(3), Some(27)))
     assert(CurrentOrigin.get == current)
+  }
+
+  private def findCastContext(ctx: ParserRuleContext): Option[CastContext] = {
+    ctx match {
+      case context: CastContext =>
+        Some(context)
+      case _ =>
+        val it = ctx.children.iterator()
+        while(it.hasNext) {
+          it.next() match {
+            case p: ParserRuleContext =>
+              val childResult = findCastContext(p)
+              if (childResult.isDefined) {
+                return childResult
+              }
+            case _ =>
+          }
+        }
+        None
+    }
+  }
+
+  test("withOrigin: setting SQL text") {
+    withOrigin(castQueryContext, Some(castQuery)) {
+      assert(CurrentOrigin.get.sqlText.contains(castQuery))
+      val castContext = findCastContext(castQueryContext)
+      assert(castContext.isDefined)
+      withOrigin(castContext.get) {
+        val current = CurrentOrigin.get
+        assert(current.sqlText.contains(castQuery))
+        assert(current.startIndex.isDefined)
+        assert(current.stopIndex.isDefined)
+        // With sqlText, startIndex, stopIndex, we can get the corresponding SQL text of the
+        // Cast clause.
+        assert(current.sqlText.get.substring(current.startIndex.get, current.stopIndex.get + 1) ==
+          castClause)
+      }
+    }
   }
 }

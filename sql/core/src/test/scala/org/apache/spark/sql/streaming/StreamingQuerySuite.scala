@@ -316,6 +316,7 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
         assert(query.recentProgress.last.eq(query.lastProgress))
 
         val progress = query.lastProgress
+
         assert(progress.id === query.id)
         assert(progress.name === query.name)
         assert(progress.batchId === 0)
@@ -326,6 +327,7 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
         assert(progress.durationMs.get("latestOffset") === 50)
         assert(progress.durationMs.get("queryPlanning") === 100)
         assert(progress.durationMs.get("walCommit") === 0)
+        assert(progress.durationMs.get("commitOffsets") === 0)
         assert(progress.durationMs.get("addBatch") === 350)
         assert(progress.durationMs.get("triggerExecution") === 500)
 

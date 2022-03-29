@@ -26,6 +26,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, SQLConfHelper, TableIdentifier}
 import org.apache.spark.sql.catalyst.expressions.Expression
+import org.apache.spark.sql.catalyst.parser.ParserUtils.withOrigin
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.trees.Origin
 import org.apache.spark.sql.errors.QueryParsingErrors
@@ -43,7 +44,10 @@ abstract class AbstractSqlParser extends ParserInterface with SQLConfHelper with
 
   /** Creates Expression for a given SQL string. */
   override def parseExpression(sqlText: String): Expression = parse(sqlText) { parser =>
-    astBuilder.visitSingleExpression(parser.singleExpression())
+    val ctx = parser.singleExpression()
+    withOrigin(ctx, Some(sqlText)) {
+      astBuilder.visitSingleExpression(ctx)
+    }
   }
 
   /** Creates TableIdentifier for a given SQL string. */
@@ -75,16 +79,22 @@ abstract class AbstractSqlParser extends ParserInterface with SQLConfHelper with
 
   /** Creates LogicalPlan for a given SQL string of query. */
   override def parseQuery(sqlText: String): LogicalPlan = parse(sqlText) { parser =>
-    astBuilder.visitQuery(parser.query())
+    val ctx = parser.query()
+    withOrigin(ctx, Some(sqlText)) {
+      astBuilder.visitQuery(ctx)
+    }
   }
 
   /** Creates LogicalPlan for a given SQL string. */
   override def parsePlan(sqlText: String): LogicalPlan = parse(sqlText) { parser =>
-    astBuilder.visitSingleStatement(parser.singleStatement()) match {
-      case plan: LogicalPlan => plan
-      case _ =>
-        val position = Origin(None, None)
-        throw QueryParsingErrors.sqlStatementUnsupportedError(sqlText, position)
+    val ctx = parser.singleStatement()
+    withOrigin(ctx, Some(sqlText)) {
+      astBuilder.visitSingleStatement(ctx) match {
+        case plan: LogicalPlan => plan
+        case _ =>
+          val position = Origin(None, None)
+          throw QueryParsingErrors.sqlStatementUnsupportedError(sqlText, position)
+      }
     }
   }
 
@@ -271,7 +281,7 @@ class ParseException(
     val builder = new StringBuilder
     builder ++= "\n" ++= message
     start match {
-      case Origin(Some(l), Some(p)) =>
+      case Origin(Some(l), Some(p), _, _, _, _, _) =>
         builder ++= s"(line $l, pos $p)\n"
         command.foreach { cmd =>
           val (above, below) = cmd.split("\n").splitAt(l)

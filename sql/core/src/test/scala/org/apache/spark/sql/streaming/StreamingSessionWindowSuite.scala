@@ -28,7 +28,6 @@ import org.apache.spark.sql.execution.streaming.MemoryStream
 import org.apache.spark.sql.execution.streaming.state.{HDFSBackedStateStoreProvider, RocksDBStateStoreProvider}
 import org.apache.spark.sql.functions.{count, session_window, sum}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.util.Utils
 
 class StreamingSessionWindowSuite extends StreamTest
   with BeforeAndAfter with Matchers with Logging {
@@ -44,16 +43,11 @@ class StreamingSessionWindowSuite extends StreamTest
     val mergingSessionOptions = Seq(true, false).map { value =>
       (SQLConf.STREAMING_SESSION_WINDOW_MERGE_SESSIONS_IN_LOCAL_PARTITION.key, value)
     }
-    var providerOptions = Seq(
+    val providerOptions = Seq(
       classOf[HDFSBackedStateStoreProvider].getCanonicalName,
       classOf[RocksDBStateStoreProvider].getCanonicalName
     ).map { value =>
       (SQLConf.STATE_STORE_PROVIDER_CLASS.key, value.stripSuffix("$"))
-    }
-    // RocksDB doesn't support Apple Silicon yet
-    if (Utils.isMacOnAppleSilicon) {
-      providerOptions = providerOptions
-        .filterNot(_._2.contains(classOf[RocksDBStateStoreProvider].getSimpleName))
     }
 
     val availableOptions = for (
