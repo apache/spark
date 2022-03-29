@@ -84,11 +84,11 @@ class ExecutionPage(parent: SQLTab) extends WebUIPage("execution") with Logging 
         physicalPlanDescription(executionUIData.physicalPlanDescription) ++
         modifiedConfigs(executionUIData.modifiedConfigs)
     }.getOrElse {
-      <div>No information to display for execution {executionId}</div>
+      <div>No information to display for query {executionId}</div>
     }
 
     UIUtils.headerSparkPage(
-      request, s"Details for Execution $executionId", content, parent)
+      request, s"Details for Query $executionId", content, parent)
   }
 
 

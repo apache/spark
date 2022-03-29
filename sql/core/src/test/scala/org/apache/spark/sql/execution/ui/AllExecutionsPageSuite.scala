@@ -56,7 +56,7 @@ class AllExecutionsPageSuite extends SharedSparkSession with BeforeAndAfter {
     when(tab.headerTabs).thenReturn(Seq.empty)
 
     val html = renderSQLPage(request, tab, statusStore).toString().toLowerCase(Locale.ROOT)
-    assert(html.contains("failed executions"))
+    assert(html.contains("failed queries"))
     assert(!html.contains("1970/01/01"))
   }
 
