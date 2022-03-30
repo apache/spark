@@ -51,11 +51,11 @@ public class OneForOneStreamManager extends StreamManager {
 
     // The channel associated to the stream
     final Channel associatedChannel;
-    // Indicates whether the buffers is materialized, some buffers like
+    // Indicates whether the buffers is only materialized when next() is called. Some buffers like
     // ShuffleManagedBufferIterator, ShuffleChunkManagedBufferIterator, ManagedBufferIterator are
-    // materialized only when the iterator is requested by the next method, so we should not
-    // request and release them, to reduce I/O operations and improve performance for the External
-    // Shuffle Service.
+    // not materialized until the iterator is traversed by calling next(). We use it to decide
+    // whether buffers should be released at connectionTerminated() in order to avoid unnecessary
+    // buffer materialization, which could be I/O based.
     final boolean isBufferMaterializedOnNext;
 
     // Used to keep track of the index of the buffer that the user has retrieved, just to ensure
