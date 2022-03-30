@@ -234,6 +234,12 @@ abstract class JdbcDialect extends Serializable with Logging{
       }
       quoteIdentifier(namedRef.fieldNames.head)
     }
+
+    override def visitCast(l: String, dataType: DataType): String = {
+      val databaseTypeDefinition =
+        getJDBCType(dataType).map(_.databaseTypeDefinition).getOrElse(dataType.typeName)
+      s"CAST($l AS $databaseTypeDefinition)"
+    }
   }
 
   /**

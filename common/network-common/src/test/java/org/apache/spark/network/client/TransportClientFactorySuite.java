@@ -231,11 +231,8 @@ public class TransportClientFactorySuite {
     TransportServer server = context.createServer();
     int unreachablePort = server.getPort();
     server.close();
-    try {
-      factory.createClient(TestUtils.getLocalHost(), unreachablePort, true);
-    } catch (Exception e) {
-      assert(e instanceof IOException);
-    }
+    Assert.assertThrows(IOException.class,
+      () -> factory.createClient(TestUtils.getLocalHost(), unreachablePort, true));
     Assert.assertThrows("fail this connection directly", IOException.class,
       () -> factory.createClient(TestUtils.getLocalHost(), unreachablePort, true));
   }

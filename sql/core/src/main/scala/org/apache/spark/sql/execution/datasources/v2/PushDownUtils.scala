@@ -129,11 +129,14 @@ object PushDownUtils extends PredicateHelper {
   /**
    * Pushes down top N to the data source Scan
    */
-  def pushTopN(scanBuilder: ScanBuilder, order: Array[SortOrder], limit: Int): Boolean = {
+  def pushTopN(
+      scanBuilder: ScanBuilder,
+      order: Array[SortOrder],
+      limit: Int): (Boolean, Boolean) = {
     scanBuilder match {
-      case s: SupportsPushDownTopN =>
-        s.pushTopN(order, limit)
-      case _ => false
+      case s: SupportsPushDownTopN if s.pushTopN(order, limit) =>
+        (true, s.isPartiallyPushed)
+      case _ => (false, false)
     }
   }
 
