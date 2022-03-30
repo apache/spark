@@ -53,7 +53,10 @@ class PathFilterIgnoreNonData(stagingDir: String) extends PathFilter with Serial
 object CommandUtils extends Logging {
 
   /** Change statistics after changing data by commands. */
-  def updateTableStats(sparkSession: SparkSession, table: CatalogTable): Unit = {
+  def updateTableStats(
+      sparkSession: SparkSession,
+      table: CatalogTable,
+      partitionSpec: Map[String, Option[String]] = Map.empty): Unit = {
     val catalog = sparkSession.sessionState.catalog
     if (sparkSession.sessionState.conf.autoSizeUpdateEnabled) {
       val newTable = catalog.getTableMetadata(table.identifier)
@@ -62,6 +65,13 @@ object CommandUtils extends Logging {
       if (isNewStats) {
         val newStats = CatalogStatistics(sizeInBytes = newSize)
         catalog.alterTableStats(table.identifier, Some(newStats))
+
+        if (partitionSpec.nonEmpty) {
+          AnalyzePartitionCommand(table.identifier, partitionSpec, false).run(sparkSession)
+        } else if (table.partitionColumnNames.nonEmpty) {
+          val partitionSpec = table.partitionColumnNames.map(_ -> None).toMap
+          AnalyzePartitionCommand(table.identifier, partitionSpec, false).run(sparkSession)
+        }
       }
     } else if (table.stats.nonEmpty) {
       catalog.alterTableStats(table.identifier, None)

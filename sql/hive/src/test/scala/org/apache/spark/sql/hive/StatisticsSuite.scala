@@ -984,6 +984,13 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
               assert(fetched2.get.colStats.isEmpty)
               val statsProp = getStatsProperties(table)
               assert(statsProp(STATISTICS_TOTAL_SIZE).toLong == fetched2.get.sizeInBytes)
+
+              val partStats1 = getPartitionStats(table, Map("ds" -> "2008-04-09", "hr" -> "11"))
+              assert(partStats1.sizeInBytes > 0)
+              assert(partStats1.rowCount == Some(1))
+              val partStats2 = getPartitionStats(table, Map("ds" -> "2008-04-09", "hr" -> "12"))
+              assert(partStats2.sizeInBytes > 0)
+              assert(partStats2.rowCount == Some(1))
             } else {
               assert(getStatsProperties(table).isEmpty)
             }
@@ -1006,6 +1013,13 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
               assert(fetched4.get.colStats.isEmpty)
               val statsProp = getStatsProperties(table)
               assert(statsProp(STATISTICS_TOTAL_SIZE).toLong == fetched4.get.sizeInBytes)
+
+              val partStats1 = getPartitionStats(table, Map("ds" -> "2008-04-09", "hr" -> "11"))
+              assert(partStats1.sizeInBytes > 0)
+              assert(partStats1.rowCount == Some(1))
+              val partStats2 = getPartitionStats(table, Map("ds" -> "2008-04-09", "hr" -> "12"))
+              assert(partStats2.sizeInBytes == 0)
+              assert(partStats2.rowCount == Some(0))
             } else {
               assert(getStatsProperties(table).isEmpty)
             }

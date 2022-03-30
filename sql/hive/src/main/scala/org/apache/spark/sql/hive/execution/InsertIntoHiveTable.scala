@@ -114,7 +114,11 @@ case class InsertIntoHiveTable(
     CommandUtils.uncacheTableOrView(sparkSession, table.identifier.quotedString)
     sparkSession.sessionState.catalog.refreshTable(table.identifier)
 
-    CommandUtils.updateTableStats(sparkSession, table)
+    val partitionSpec = partition.map {
+      case (key, Some(null)) => key -> Some(ExternalCatalogUtils.DEFAULT_PARTITION_NAME)
+      case other => other
+    }
+    CommandUtils.updateTableStats(sparkSession, table, partitionSpec)
 
     // It would be nice to just return the childRdd unchanged so insert operations could be chained,
     // however for now we return an empty list to simplify compatibility checks with hive, which
