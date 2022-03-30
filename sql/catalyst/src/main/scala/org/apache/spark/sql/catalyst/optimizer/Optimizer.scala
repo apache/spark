@@ -836,16 +836,7 @@ object ColumnPruning extends Rule[LogicalPlan] {
     //    we directly remove it from the output list of g.child.
     // 2. For attributes that is not used by the project but it is used by the generator, we put
     //    it in g.unrequiredChildIndex to save memory usage.
-    case p @ Project(_, g: Generate) if g.child.output.zipWithIndex.exists(
-      pair =>
-      !p.references.contains(pair._1) &&
-        (!g.generator.references.contains(pair._1) || !g.unrequiredChildIndex.contains(pair._2))) =>
-      val requiredAttrs = p.references ++ g.generator.references
-      val newChild = prunedChild(g.child, requiredAttrs)
-      val unrequired = g.generator.references -- p.references
-      val unrequiredIndices = newChild.output.zipWithIndex.filter(t => unrequired.contains(t._1))
-        .map(_._2)
-      p.copy(child = g.copy(child = newChild, unrequiredChildIndex = unrequiredIndices))
+    case GeneratorUnrequiredChildrenPruning(rewrittenPlan) => rewrittenPlan
 
     // prune unrequired nested fields from `Generate`.
     case GeneratorNestedColumnAliasing(rewrittenPlan) => rewrittenPlan
