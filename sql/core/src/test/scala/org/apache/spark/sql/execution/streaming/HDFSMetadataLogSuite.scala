@@ -18,10 +18,12 @@
 package org.apache.spark.sql.execution.streaming
 
 import java.io.File
+import java.net.URI
 import java.util.ConcurrentModificationException
 
 import scala.language.implicitConversions
 
+import org.apache.hadoop.fs.{FileStatus, FSDataInputStream, FSInputStream, Path, RawLocalFileSystem}
 import org.scalatest.concurrent.Waiters._
 import org.scalatest.time.SpanSugar._
 
@@ -205,4 +207,48 @@ class HDFSMetadataLogSuite extends SharedSparkSession {
     intercept[AssertionError](verifyBatchIds(Seq(1), Some(2L), Some(1L)))
     intercept[AssertionError](verifyBatchIds(Seq(0), Some(2L), Some(1L)))
   }
+
+  test("SPARK-38605: Retrying on file manager open operation in HDFSMetadataLog") {
+    val scheme = OpensThrowsExceptionFileSystem.scheme
+    spark.conf.set(
+      s"fs.$scheme.impl",
+      classOf[OpensThrowsExceptionFileSystem].getName)
+
+    val metadataLog = new HDFSMetadataLog[String](spark, s"$scheme:///dir")
+    metadataLog.applyFnToBatchByStream(0) { _ =>
+    }
+  }
+}
+
+class OpensThrowsExceptionFileSystem extends RawLocalFileSystem {
+  import OpensThrowsExceptionFileSystem._
+
+  override def getUri: URI = {
+    URI.create(s"$scheme:///")
+  }
+
+  override def open(f: Path): FSDataInputStream = {
+    if (openCounter < 1) {
+      openCounter += 1
+      throw new IllegalArgumentException("Please retry!")
+    } else {
+      new FSDataInputStream(new FSInputStream() {
+        override def seek(l: Long): Unit = {}
+        override def getPos: Long = 1
+        override def seekToNewSource(l: Long): Boolean = true
+        override def read(): Int = 1
+      })
+    }
+  }
+
+  override def exists(f: Path): Boolean = true
+
+  override def getFileStatus(f: Path): FileStatus = {
+    new FileStatus()
+  }
+}
+
+object OpensThrowsExceptionFileSystem {
+  val scheme = "OpensThrowsExceptionFileSystem"
+  private var openCounter = 0
 }
