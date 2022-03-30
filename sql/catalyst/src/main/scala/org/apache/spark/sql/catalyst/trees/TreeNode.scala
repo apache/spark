@@ -120,10 +120,10 @@ case class Origin(
         startTruncated = false
       }
       (0 until lineText.length).foreach { _ =>
-        if (currentIndex >= start && currentIndex <= stop) {
-          builder ++= "^"
-        } else {
+        if (currentIndex < start) {
           builder ++= " "
+        } else if (currentIndex >= start && currentIndex <= stop) {
+          builder ++= "^"
         }
         currentIndex += 1
       }

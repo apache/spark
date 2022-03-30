@@ -877,16 +877,15 @@ class TreeNodeSuite extends SparkFunSuite with SQLHelper {
       objectName = Some("some_view"))
     val expected =
       """
-        |== SQL of VIEW some_view ==
-        |...7890 + 1234567890 + 1234567890, cast(1
-        |                                   ^^^^^
+        |== SQL of VIEW some_view(line 3, position 38) ==
+        |...7890 + 1234567890 + 1234567890, cast('a'
+        |                                   ^^^^^^^^
         |as /* comment */
         |^^^^^^^^^^^^^^^^
-        |string), 1234567890 + 1234567890 + 1234...
-        |^^^^^^^^
+        |int), 1234567890 + 1234567890 + 12345...
+        |^^^^^
         |""".stripMargin
 
-    println(origin.context)
-    assert(origin.context.trim == expected)
+    assert(origin.context == expected)
   }
 }
