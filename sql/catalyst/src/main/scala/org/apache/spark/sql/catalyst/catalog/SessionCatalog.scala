@@ -38,6 +38,7 @@ import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.FunctionBuilder
 import org.apache.spark.sql.catalyst.expressions.{Alias, Expression, ExpressionInfo, UpCast}
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException, ParserInterface}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project, SubqueryAlias, View}
+import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin}
 import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, StringUtils}
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -872,9 +873,15 @@ class SessionCatalog(
       throw new IllegalStateException("Invalid view without text.")
     }
     val viewConfigs = metadata.viewSQLConfigs
+    val origin = Origin(
+      objectType = Some("VIEW"),
+      objectName = Some(metadata.qualifiedName)
+    )
     val parsedPlan = SQLConf.withExistingConf(View.effectiveSQLConf(viewConfigs, isTempView)) {
       try {
-        parser.parseQuery(viewText)
+        CurrentOrigin.withOrigin(origin) {
+          parser.parseQuery(viewText)
+        }
       } catch {
         case _: ParseException =>
           throw QueryCompilationErrors.invalidViewText(viewText, metadata.qualifiedName)

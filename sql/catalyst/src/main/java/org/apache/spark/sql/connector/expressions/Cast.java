@@ -15,16 +15,31 @@
  * limitations under the License.
  */
 
-package org.apache.spark.tags;
+package org.apache.spark.sql.connector.expressions;
 
-import org.scalatest.TagAnnotation;
+import java.io.Serializable;
 
-import java.lang.annotation.ElementType;
-import java.lang.annotation.Retention;
-import java.lang.annotation.RetentionPolicy;
-import java.lang.annotation.Target;
+import org.apache.spark.annotation.Evolving;
+import org.apache.spark.sql.types.DataType;
 
-@TagAnnotation
-@Retention(RetentionPolicy.RUNTIME)
-@Target({ElementType.METHOD, ElementType.TYPE})
-public @interface ExtendedRocksDBTest { }
+/**
+ * Represents a cast expression in the public logical expression API.
+ *
+ * @since 3.3.0
+ */
+@Evolving
+public class Cast implements Expression, Serializable {
+  private Expression expression;
+  private DataType dataType;
+
+  public Cast(Expression expression, DataType dataType) {
+    this.expression = expression;
+    this.dataType = dataType;
+  }
+
+  public Expression expression() { return expression; }
+  public DataType dataType() { return dataType; }
+
+  @Override
+  public Expression[] children() { return new Expression[]{ expression() }; }
+}
