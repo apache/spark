@@ -378,6 +378,7 @@ class IndexesTest(ComparisonTestBase, TestUtils):
         arrays = [[1, 2, 3, 1, 2], ["red", "blue", "black", "red", "blue"]]
         pmidx = pd.MultiIndex.from_arrays(arrays, names=("number", "color"))
         psmidx = ps.from_pandas(pmidx)
+        self.assert_eq(psmidx.drop_duplicates(), pmidx.drop_duplicates())
         self.assert_eq(psmidx.drop_duplicates(keep="first"), pmidx.drop_duplicates(keep="first"))
         self.assert_eq(psmidx.drop_duplicates(keep="last"), pmidx.drop_duplicates(keep="last"))
         self.assert_eq(psmidx.drop_duplicates(keep=False), pmidx.drop_duplicates(keep=False))
