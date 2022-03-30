@@ -141,10 +141,10 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper wit
                         val count = aggregate.Count(avg.child).toAggregateExpression(isDistinct)
                         // Closely follow `Average.evaluateExpression`
                         avg.dataType match {
-                          case dt: DecimalType =>
+                          case dt: DecimalType if avg.failOnError =>
                             addCastIfNeeded(DecimalPrecision.decimalAndDecimal()(
                               Divide(
-                                CheckOverflowInSum(sum, dt, !avg.failOnError),
+                                CheckOverflowInSum(sum, dt, false),
                                 addCastIfNeeded(count, dt), failOnError = false)), avg.dataType)
                           case _: YearMonthIntervalType =>
                             If(EqualTo(count, Literal(0L)),
