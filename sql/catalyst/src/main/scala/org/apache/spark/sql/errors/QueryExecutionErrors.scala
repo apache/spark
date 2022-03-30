@@ -222,10 +222,6 @@ object QueryExecutionErrors {
       s"${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH}.")
   }
 
-  def copyNullFieldNotAllowedError(): Throwable = {
-    new IllegalStateException("Do not attempt to copy a null field")
-  }
-
   def literalTypeUnsupportedError(v: Any): RuntimeException = {
     new SparkRuntimeException(
       errorClass = "UNSUPPORTED_FEATURE",
@@ -242,10 +238,6 @@ object QueryExecutionErrors {
 
   def noDefaultForDataTypeError(dataType: DataType): RuntimeException = {
     new RuntimeException(s"no default for type $dataType")
-  }
-
-  def doGenCodeOfAliasShouldNotBeCalledError(): Throwable = {
-    new IllegalStateException("Alias.doGenCode should not be called.")
   }
 
   def orderedOperationUnsupportedByDataTypeError(dataType: DataType): Throwable = {
@@ -428,10 +420,6 @@ object QueryExecutionErrors {
     new UnsupportedOperationException(s"$methodName is not implemented")
   }
 
-  def tableStatsNotSpecifiedError(): Throwable = {
-    new IllegalStateException("table stats must be specified.")
-  }
-
   def arithmeticOverflowError(e: ArithmeticException): ArithmeticException = {
     new ArithmeticException(s"${e.getMessage}. If necessary set ${SQLConf.ANSI_ENABLED.key} " +
       s"to false to bypass this error.")
@@ -454,15 +442,6 @@ object QueryExecutionErrors {
   def binaryArithmeticCauseOverflowError(
       eval1: Short, symbol: String, eval2: Short): ArithmeticException = {
     arithmeticOverflowError(s"$eval1 $symbol $eval2 caused overflow")
-  }
-
-  def failedSplitSubExpressionMsg(length: Int): String = {
-    "Failed to split subexpression code into small functions because " +
-      s"the parameter length of at least one split function went over the JVM limit: $length"
-  }
-
-  def failedSplitSubExpressionError(length: Int): Throwable = {
-    new IllegalStateException(failedSplitSubExpressionMsg(length))
   }
 
   def failedToCompileMsg(e: Exception): String = {
@@ -525,10 +504,6 @@ object QueryExecutionErrors {
 
   def incompatibleDataSourceRegisterError(e: Throwable): Throwable = {
     new SparkClassNotFoundException("INCOMPATIBLE_DATASOURCE_REGISTER", Array(e.getMessage), e)
-  }
-
-  def unrecognizedFileFormatError(format: String): Throwable = {
-    new IllegalStateException(s"unrecognized format $format")
   }
 
   def sparkUpgradeInReadingDatesError(
