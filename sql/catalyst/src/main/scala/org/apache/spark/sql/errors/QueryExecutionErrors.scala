@@ -651,10 +651,6 @@ object QueryExecutionErrors {
     new UnsupportedOperationException(s"Cannot remove reserved property: $property")
   }
 
-  def namespaceNotEmptyError(namespace: Array[String]): Throwable = {
-    new IllegalStateException(s"Namespace ${namespace.quoted} is not empty")
-  }
-
   def writingJobFailedError(cause: Throwable): Throwable = {
     new SparkException("Writing job failed.", cause)
   }
@@ -806,10 +802,6 @@ object QueryExecutionErrors {
 
   def ddlUnsupportedTemporarilyError(ddl: String): Throwable = {
     new UnsupportedOperationException(s"$ddl is not supported temporarily.")
-  }
-
-  def operatingOnCanonicalizationPlanError(): Throwable = {
-    new IllegalStateException("operating on canonicalization plan")
   }
 
   def executeBroadcastTimeoutError(timeout: Long, ex: Option[TimeoutException]): Throwable = {
@@ -1236,12 +1228,6 @@ object QueryExecutionErrors {
          |Parse Mode: ${FailFastMode.name}. Reasons: Failed to infer a common schema.
          |Struct types are expected, but `${dataType.catalogString}` was found.
        """.stripMargin.replaceAll("\n", " "))
-  }
-
-  def cannotRewriteDomainJoinWithConditionsError(
-      conditions: Seq[Expression], d: DomainJoin): Throwable = {
-    new IllegalStateException(
-      s"Unable to rewrite domain join with conditions: $conditions\n$d")
   }
 
   def decorrelateInnerQueryThroughPlanUnsupportedError(plan: LogicalPlan): Throwable = {
