@@ -160,7 +160,8 @@
     <commons.httpcore.version>4.4.14</commons.httpcore.version>
     <commons.math3.version>3.6.1</commons.math3.version>
     <!-- managed up from 3.2.1 for SPARK-11652 -->
-    <commons.collections.version>4.4</commons.collections.version>
+    <commons.collections.version>3.2.2</commons.collections.version>
+    <commons.collections4.version>4.4</commons.collections4.version>
     <scala.version>2.12.15</scala.version>
     <scala.binary.version>2.12</scala.binary.version>
     <scalatest-maven-plugin.version>2.0.2</scalatest-maven-plugin.version>
@@ -620,9 +621,14 @@
         <version>${commons.math3.version}</version>
       </dependency>
       <dependency>
+        <groupId>commons-collections</groupId>
+        <artifactId>commons-collections</artifactId>
+        <version>${commons.collections.version}</version>
+      </dependency>
+      <dependency>
         <groupId>org.apache.commons</groupId>
         <artifactId>commons-collections4</artifactId>
-        <version>${commons.collections.version}</version>
+        <version>${commons.collections4.version}</version>
       </dependency>
       <dependency>
         <groupId>commons-beanutils</groupId>
