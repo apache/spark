@@ -15,25 +15,31 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.ui
+package org.apache.spark.sql.connector.expressions;
 
-import org.apache.spark.internal.Logging
-import org.apache.spark.ui.{SparkUI, SparkUITab}
+import java.io.Serializable;
 
-class SQLTab(val sqlStore: SQLAppStatusStore, sparkUI: SparkUI)
-  extends SparkUITab(sparkUI, "SQL") with Logging {
+import org.apache.spark.annotation.Evolving;
+import org.apache.spark.sql.types.DataType;
 
-  override val name = "SQL / DataFrame"
+/**
+ * Represents a cast expression in the public logical expression API.
+ *
+ * @since 3.3.0
+ */
+@Evolving
+public class Cast implements Expression, Serializable {
+  private Expression expression;
+  private DataType dataType;
 
-  val parent = sparkUI
+  public Cast(Expression expression, DataType dataType) {
+    this.expression = expression;
+    this.dataType = dataType;
+  }
 
-  attachPage(new AllExecutionsPage(this))
-  attachPage(new ExecutionPage(this))
-  parent.attachTab(this)
+  public Expression expression() { return expression; }
+  public DataType dataType() { return dataType; }
 
-  parent.addStaticHandler(SQLTab.STATIC_RESOURCE_DIR, "/static/sql")
-}
-
-object SQLTab {
-  private val STATIC_RESOURCE_DIR = "org/apache/spark/sql/execution/ui/static"
+  @Override
+  public Expression[] children() { return new Expression[]{ expression() }; }
 }

@@ -497,6 +497,7 @@ object FunctionRegistry {
     expression[RegrCount]("regr_count"),
     expression[RegrAvgX]("regr_avgx"),
     expression[RegrAvgY]("regr_avgy"),
+    expression[RegrR2]("regr_r2"),
 
     // string functions
     expression[Ascii]("ascii"),
