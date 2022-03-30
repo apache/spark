@@ -151,9 +151,9 @@ public class OneForOneStreamManagerSuite {
 
     Channel dummyChannel = Mockito.mock(Channel.class, Mockito.RETURNS_SMART_NULLS);
     // should Release,
-    manager.registerStream("appId", buffers1, dummyChannel, true);
+    manager.registerStream("appId", buffers1, dummyChannel, false);
     // should NOT Release
-    manager.registerStream("appId", buffers2, dummyChannel, false);
+    manager.registerStream("appId", buffers2, dummyChannel, true);
     Assert.assertEquals(2, manager.numStreamStates());
 
     // connectionTerminated

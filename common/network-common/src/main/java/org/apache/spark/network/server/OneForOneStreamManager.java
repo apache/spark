@@ -141,7 +141,7 @@ public class OneForOneStreamManager extends StreamManager {
 
         try {
           // Release all remaining buffers.
-          while (state.isBufferMaterializedOnNext && state.buffers.hasNext()) {
+          while (!state.isBufferMaterializedOnNext && state.buffers.hasNext()) {
             ManagedBuffer buffer = state.buffers.next();
             if (buffer != null) {
               buffer.release();
@@ -240,7 +240,7 @@ public class OneForOneStreamManager extends StreamManager {
   }
 
   public long registerStream(String appId, Iterator<ManagedBuffer> buffers, Channel channel) {
-    return registerStream(appId, buffers, channel, true);
+    return registerStream(appId, buffers, channel, false);
   }
 
   @VisibleForTesting
