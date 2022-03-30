@@ -2951,6 +2951,30 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
         self.assert_eq(pser.rpow(np.nan), psser.rpow(np.nan))
         self.assert_eq(1 ** pser, 1 ** psser)
 
+    def test_between(self):
+        pser = pd.Series([np.nan, 1, 2, 3, 4])
+        psser = ps.from_pandas(pser)
+        self.assert_eq(psser.between(1, 4), pser.between(1, 4))
+        self.assert_eq(psser.between(1, 4, inclusive="both"), pser.between(1, 4, inclusive="both"))
+        self.assert_eq(
+            psser.between(1, 4, inclusive="neither"), pser.between(1, 4, inclusive="neither")
+        )
+        self.assert_eq(psser.between(1, 4, inclusive="left"), pser.between(1, 4, inclusive="left"))
+        self.assert_eq(
+            psser.between(1, 4, inclusive="right"), pser.between(1, 4, inclusive="right")
+        )
+        expected_err_msg = (
+            "Inclusive has to be either string of 'both'," "'left', 'right', or 'neither'"
+        )
+        with self.assertRaisesRegex(ValueError, expected_err_msg):
+            psser.between(1, 4, inclusive="middle")
+
+        # Test for backward compatibility
+        self.assert_eq(psser.between(1, 4, inclusive=True), pser.between(1, 4, inclusive=True))
+        self.assert_eq(psser.between(1, 4, inclusive=False), pser.between(1, 4, inclusive=False))
+        with self.assertWarns(FutureWarning):
+            psser.between(1, 4, inclusive=True)
+
     def test_between_time(self):
         idx = pd.date_range("2018-04-09", periods=4, freq="1D20min")
         pser = pd.Series([1, 2, 3, 4], index=idx)
