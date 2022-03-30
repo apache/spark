@@ -22,6 +22,7 @@ import java.util.List;
 import java.util.Set;
 
 import com.google.common.base.Preconditions;
+
 import org.apache.spark.memory.MemoryMode;
 import org.apache.spark.sql.execution.vectorized.OffHeapColumnVector;
 import org.apache.spark.sql.execution.vectorized.OnHeapColumnVector;
