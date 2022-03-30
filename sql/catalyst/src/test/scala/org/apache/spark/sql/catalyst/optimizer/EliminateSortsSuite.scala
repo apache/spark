@@ -97,11 +97,11 @@ class EliminateSortsSuite extends AnalysisTest {
   test("Remove no-op alias") {
     val x = testRelation
 
-    val query = x.select($"a".as($"x"), Year(CurrentDate()).as($"y"), $"b")
+    val query = x.select($"a".as(Symbol("x")), Year(CurrentDate()).as(Symbol("y")), $"b")
       .orderBy($"x".asc, $"y".asc, $"b".desc)
     val optimized = Optimize.execute(analyzer.execute(query))
     val correctAnswer = analyzer.execute(
-      x.select($"a".as($"x"), Year(CurrentDate()).as($"y"), $"b").orderBy($"x".asc, $"b".desc))
+      x.select($"a".as(Symbol("x")), Year(CurrentDate()).as(Symbol("y")), $"b").orderBy($"x".asc, $"b".desc))
 
     comparePlans(optimized, correctAnswer)
   }
@@ -246,10 +246,10 @@ class EliminateSortsSuite extends AnalysisTest {
       testRelation.select($"b").where($"b" > Literal(0)).orderBy($"b".desc).analyze
     comparePlans(optimizedWithBoth, correctAnswerWithBoth)
 
-    val orderedThrice = orderedTwiceWithBoth.select(('b + 1).as($"c")).orderBy($"c".asc)
+    val orderedThrice = orderedTwiceWithBoth.select(($"b" + 1).as(Symbol("c"))).orderBy($"c".asc)
     val optimizedThrice = Optimize.execute(orderedThrice.analyze)
     val correctAnswerThrice = testRelation.select($"b").where($"b" > Literal(0))
-      .select(('b + 1).as($"c")).orderBy($"c".asc).analyze
+      .select(($"b" + 1).as(Symbol("c"))).orderBy($"c".asc).analyze
     comparePlans(optimizedThrice, correctAnswerThrice)
   }
 
@@ -313,7 +313,7 @@ class EliminateSortsSuite extends AnalysisTest {
   }
 
   test("should not remove orderBy in groupBy clause with ScalaUDF as aggs") {
-    val scalaUdf = ScalaUDF((s: Int) => s, IntegerType, 'a :: Nil,
+    val scalaUdf = ScalaUDF((s: Int) => s, IntegerType, $"a" :: Nil,
       Option(ExpressionEncoder[Int]()) :: Nil)
     val projectPlan = testRelation.select($"a", $"b")
     val orderByPlan = projectPlan.orderBy($"a".asc, $"b".desc)

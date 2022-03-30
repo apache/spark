@@ -99,23 +99,23 @@ class ExpressionParserSuite extends AnalysisTest {
     assertEqual("1SL", $"1SL")
 
     // Aliased star is allowed.
-    assertEqual("a.* b", UnresolvedStar(Option(Seq("a"))) as 'b)
+    assertEqual("a.* b", UnresolvedStar(Option(Seq("a"))) as Symbol("b"))
   }
 
   test("binary logical expressions") {
     // And
-    assertEqual("a and b", 'a && 'b)
+    assertEqual("a and b", $"a" && $"b")
 
     // Or
-    assertEqual("a or b", 'a || 'b)
+    assertEqual("a or b", $"a" || $"b")
 
     // Combination And/Or check precedence
-    assertEqual("a and b or c and d", ('a && 'b) || ('c && 'd))
-    assertEqual("a or b or c and d", 'a || 'b || ('c && 'd))
+    assertEqual("a and b or c and d", ($"a" && $"b") || ($"c" && $"d"))
+    assertEqual("a or b or c and d", $"a" || $"b" || ($"c" && $"d"))
 
     // Multiple AND/OR get converted into a balanced tree
-    assertEqual("a or b or c or d or e or f", (('a || 'b) || 'c) || (('d || 'e) || 'f))
-    assertEqual("a and b and c and d and e and f", (('a && 'b) && 'c) && (('d && 'e) && 'f))
+    assertEqual("a or b or c or d or e or f", (($"a" || $"b") || $"c") || (($"d" || $"e") || $"f"))
+    assertEqual("a and b and c and d and e and f", (($"a" && $"b") && $"c") && (($"d" && $"e") && $"f"))
   }
 
   test("long binary logical expressions") {
@@ -130,8 +130,8 @@ class ExpressionParserSuite extends AnalysisTest {
   }
 
   test("not expressions") {
-    assertEqual("not a", !'a)
-    assertEqual("!a", !'a)
+    assertEqual("not a", !$"a")
+    assertEqual("!a", !$"a")
     assertEqual("not true > true", Not(GreaterThan(true, true)))
   }
 
@@ -144,25 +144,25 @@ class ExpressionParserSuite extends AnalysisTest {
   test("comparison expressions") {
     assertEqual("a = b", $"a" === $"b")
     assertEqual("a == b", $"a" === $"b")
-    assertEqual("a <=> b", 'a <=> $"b")
+    assertEqual("a <=> b", $"a" <=> $"b")
     assertEqual("a <> b", $"a" =!= $"b")
     assertEqual("a != b", $"a" =!= $"b")
-    assertEqual("a < b", 'a < 'b)
-    assertEqual("a <= b", 'a <= $"b")
-    assertEqual("a !> b", 'a <= $"b")
+    assertEqual("a < b", $"a" < $"b")
+    assertEqual("a <= b", $"a" <= $"b")
+    assertEqual("a !> b", $"a" <= $"b")
     assertEqual("a > b", $"a" > $"b")
     assertEqual("a >= b", $"a" >= $"b")
     assertEqual("a !< b", $"a" >= $"b")
   }
 
   test("between expressions") {
-    assertEqual("a between b and c", $"a" >= $"b" && 'a <= $"c")
-    assertEqual("a not between b and c", !($"a" >= $"b" && 'a <= $"c"))
+    assertEqual("a between b and c", $"a" >= $"b" && $"a" <= $"c")
+    assertEqual("a not between b and c", !($"a" >= $"b" && $"a" <= $"c"))
   }
 
   test("in expressions") {
-    assertEqual("a in (b, c, d)", 'a in ($"b", $"c", $"d"))
-    assertEqual("a not in (b, c, d)", !('a in ($"b", $"c", $"d")))
+    assertEqual("a in (b, c, d)", $"a" in ($"b", $"c", $"d"))
+    assertEqual("a not in (b, c, d)", !($"a" in ($"b", $"c", $"d")))
   }
 
   test("in sub-query") {
@@ -184,12 +184,12 @@ class ExpressionParserSuite extends AnalysisTest {
   }
 
   test("like expressions") {
-    assertEqual("a like 'pattern%'", 'a like "pattern%")
-    assertEqual("a not like 'pattern%'", !('a like "pattern%"))
-    assertEqual("a rlike 'pattern%'", 'a rlike "pattern%")
-    assertEqual("a not rlike 'pattern%'", !('a rlike "pattern%"))
-    assertEqual("a regexp 'pattern%'", 'a rlike "pattern%")
-    assertEqual("a not regexp 'pattern%'", !('a rlike "pattern%"))
+    assertEqual("a like 'pattern%'", $"a" like "pattern%")
+    assertEqual("a not like 'pattern%'", !($"a" like "pattern%"))
+    assertEqual("a rlike 'pattern%'", $"a" rlike "pattern%")
+    assertEqual("a not rlike 'pattern%'", !($"a" rlike "pattern%"))
+    assertEqual("a regexp 'pattern%'", $"a" rlike "pattern%")
+    assertEqual("a not regexp 'pattern%'", !($"a" rlike "pattern%"))
   }
 
   test("like escape expressions") {
@@ -207,21 +207,21 @@ class ExpressionParserSuite extends AnalysisTest {
   test("like expressions with ESCAPED_STRING_LITERALS = true") {
     withSQLConf(SQLConf.ESCAPED_STRING_LITERALS.key -> "true") {
       val parser = new CatalystSqlParser()
-      assertEqual("a rlike '^\\x20[\\x20-\\x23]+$'", 'a rlike "^\\x20[\\x20-\\x23]+$", parser)
-      assertEqual("a rlike 'pattern\\\\'", 'a rlike "pattern\\\\", parser)
-      assertEqual("a rlike 'pattern\\t\\n'", 'a rlike "pattern\\t\\n", parser)
+      assertEqual("a rlike '^\\x20[\\x20-\\x23]+$'", $"a" rlike "^\\x20[\\x20-\\x23]+$", parser)
+      assertEqual("a rlike 'pattern\\\\'", $"a" rlike "pattern\\\\", parser)
+      assertEqual("a rlike 'pattern\\t\\n'", $"a" rlike "pattern\\t\\n", parser)
     }
   }
 
   test("(NOT) LIKE (ANY | SOME | ALL) expressions") {
     Seq("any", "some").foreach { quantifier =>
-      assertEqual(s"a like $quantifier ('foo%', 'b%')", 'a likeAny("foo%", "b%"))
-      assertEqual(s"a not like $quantifier ('foo%', 'b%')", 'a notLikeAny("foo%", "b%"))
-      assertEqual(s"not (a like $quantifier ('foo%', 'b%'))", !('a likeAny("foo%", "b%")))
+      assertEqual(s"a like $quantifier ('foo%', 'b%')", $"a" likeAny("foo%", "b%"))
+      assertEqual(s"a not like $quantifier ('foo%', 'b%')", $"a" notLikeAny("foo%", "b%"))
+      assertEqual(s"not (a like $quantifier ('foo%', 'b%'))", !($"a" likeAny("foo%", "b%")))
     }
-    assertEqual("a like all ('foo%', 'b%')", 'a likeAll("foo%", "b%"))
-    assertEqual("a not like all ('foo%', 'b%')", 'a notLikeAll("foo%", "b%"))
-    assertEqual("not (a like all ('foo%', 'b%'))", !('a likeAll("foo%", "b%")))
+    assertEqual("a like all ('foo%', 'b%')", $"a" likeAll("foo%", "b%"))
+    assertEqual("a not like all ('foo%', 'b%')", $"a" notLikeAll("foo%", "b%"))
+    assertEqual("not (a like all ('foo%', 'b%'))", !($"a" likeAll("foo%", "b%")))
 
     Seq("any", "some", "all").foreach { quantifier =>
       intercept(s"a like $quantifier()", "Expected something between '(' and ')'")
@@ -229,40 +229,40 @@ class ExpressionParserSuite extends AnalysisTest {
   }
 
   test("is null expressions") {
-    assertEqual("a is null", 'a.isNull)
-    assertEqual("a is not null", 'a.isNotNull)
+    assertEqual("a is null", $"a".isNull)
+    assertEqual("a is not null", $"a".isNotNull)
     assertEqual("a = b is null", ($"a" === $"b").isNull)
     assertEqual("a = b is not null", ($"a" === $"b").isNotNull)
   }
 
   test("is distinct expressions") {
-    assertEqual("a is distinct from b", !('a <=> $"b"))
-    assertEqual("a is not distinct from b", 'a <=> $"b")
+    assertEqual("a is distinct from b", !($"a" <=> $"b"))
+    assertEqual("a is not distinct from b", $"a" <=> $"b")
   }
 
   test("binary arithmetic expressions") {
     // Simple operations
-    assertEqual("a * b", 'a * 'b)
-    assertEqual("a / b", 'a / 'b)
-    assertEqual("a DIV b", 'a div 'b)
-    assertEqual("a % b", 'a % 'b)
-    assertEqual("a + b", 'a + 'b)
-    assertEqual("a - b", 'a - 'b)
-    assertEqual("a & b", 'a & 'b)
-    assertEqual("a ^ b", 'a ^ 'b)
-    assertEqual("a | b", 'a | 'b)
+    assertEqual("a * b", $"a" * $"b")
+    assertEqual("a / b", $"a" / $"b")
+    assertEqual("a DIV b", $"a" div $"b")
+    assertEqual("a % b", $"a" % $"b")
+    assertEqual("a + b", $"a" + $"b")
+    assertEqual("a - b", $"a" - $"b")
+    assertEqual("a & b", $"a" & $"b")
+    assertEqual("a ^ b", $"a" ^ $"b")
+    assertEqual("a | b", $"a" | $"b")
 
     // Check precedences
     assertEqual(
       "a * t | b ^ c & d - e + f % g DIV h / i * k",
-      'a * 't | ('b ^ ('c & ('d - 'e + (('f % 'g div 'h) / 'i * 'k)))))
+      $"a" * $"t" | ($"b" ^ ($"c" & ($"d" - $"e" + (($"f" % $"g" div $"h") / $"i" * $"k")))))
   }
 
   test("unary arithmetic expressions") {
-    assertEqual("+a", +'a)
-    assertEqual("-a", -'a)
-    assertEqual("~a", ~'a)
-    assertEqual("-+~~a", -( +(~(~'a))))
+    assertEqual("+a", +$"a")
+    assertEqual("-a", -$"a")
+    assertEqual("~a", ~$"a")
+    assertEqual("-+~~a", -( +(~(~$"a"))))
   }
 
   test("cast expressions") {
@@ -317,12 +317,12 @@ class ExpressionParserSuite extends AnalysisTest {
     // Test use of expressions in window functions.
     assertEqual(
       "sum(product + 1) over (partition by ((product) + (1)) order by 2)",
-      WindowExpression($"sum".function('product + 1),
-        WindowSpecDefinition(Seq('product + 1), Seq(Literal(2).asc), UnspecifiedFrame)))
+      WindowExpression($"sum".function($"product" + 1),
+        WindowSpecDefinition(Seq($"product" + 1), Seq(Literal(2).asc), UnspecifiedFrame)))
     assertEqual(
       "sum(product + 1) over (partition by ((product / 2) + 1) order by 2)",
-      WindowExpression($"sum".function('product + 1),
-        WindowSpecDefinition(Seq('product / 2 + 1), Seq(Literal(2).asc), UnspecifiedFrame)))
+      WindowExpression($"sum".function($"product" + 1),
+        WindowSpecDefinition(Seq($"product" / 2 + 1), Seq(Literal(2).asc), UnspecifiedFrame)))
   }
 
   test("range/rows window function expressions") {
@@ -399,7 +399,7 @@ class ExpressionParserSuite extends AnalysisTest {
     // Note that '(a)' will be interpreted as a nested expression.
     assertEqual("(a, b)", CreateStruct(Seq($"a", $"b")))
     assertEqual("(a, b, c)", CreateStruct(Seq($"a", $"b", $"c")))
-    assertEqual("(a as b, b as c)", CreateStruct(Seq('a as 'b, 'b as 'c)))
+    assertEqual("(a as b, b as c)", CreateStruct(Seq($"a" as Symbol("b"), $"b" as Symbol("c"))))
   }
 
   test("scalar sub-query") {
@@ -415,19 +415,19 @@ class ExpressionParserSuite extends AnalysisTest {
     assertEqual("case a when 1 then b when 2 then c else d end",
       CaseKeyWhen($"a", Seq(1, $"b", 2, $"c", $"d")))
     assertEqual("case (a or b) when true then c when false then d else e end",
-      CaseKeyWhen('a || 'b, Seq(true, $"c", false, $"d", $"e")))
+      CaseKeyWhen($"a" || $"b", Seq(true, $"c", false, $"d", $"e")))
     assertEqual("case 'a'='a' when true then 1 end",
       CaseKeyWhen("a" ===  "a", Seq(true, 1)))
     assertEqual("case when a = 1 then b when a = 2 then c else d end",
-      CaseWhen(Seq(($"a" === 1, 'b.expr), ($"a" === 2, 'c.expr)), $"d"))
+      CaseWhen(Seq(($"a" === 1, $"b".expr), ($"a" === 2, $"c".expr)), $"d"))
     assertEqual("case when (1) + case when a > b then c else d end then f else g end",
-      CaseWhen(Seq((Literal(1) + CaseWhen(Seq(($"a" > $"b", 'c.expr)), 'd.expr), 'f.expr)), $"g"))
+      CaseWhen(Seq((Literal(1) + CaseWhen(Seq(($"a" > $"b", $"c".expr)), $"d".expr), $"f".expr)), $"g"))
   }
 
   test("dereference") {
     assertEqual("a.b", UnresolvedAttribute("a.b"))
     assertEqual("`select`.b", UnresolvedAttribute("select.b"))
-    assertEqual("(a + b).b", ('a + 'b).getField("b")) // This will fail analysis.
+    assertEqual("(a + b).b", ($"a" + $"b").getField("b")) // This will fail analysis.
     assertEqual(
       "struct(a, b).b",
       namedStruct(Literal("a"), $"a", Literal("b"), $"b").getField("b"))
@@ -455,7 +455,7 @@ class ExpressionParserSuite extends AnalysisTest {
 
   test("parenthesis") {
     assertEqual("(a)", $"a")
-    assertEqual("r * (a + b)", 'r * ('a + 'b))
+    assertEqual("r * (a + b)", $"r" * ($"a" + $"b"))
   }
 
   test("type constructors") {

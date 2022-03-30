@@ -126,9 +126,9 @@ class SimplifyConditionalSuite extends PlanTest with ExpressionEvalHelper with P
   test("simplify CaseWhen if all the outputs are semantic equivalence") {
     // When the conditions in `CaseWhen` are all deterministic, `CaseWhen` can be removed.
     assertEquivalent(
-      CaseWhen(('a.isNotNull, Subtract(Literal(3), Literal(2))) ::
-        ('b.isNull, Literal(1)) ::
-        (!'c, Add(Literal(6), Literal(-5))) ::
+      CaseWhen(($"a".isNotNull, Subtract(Literal(3), Literal(2))) ::
+        ($"b".isNull, Literal(1)) ::
+        (!$"c", Add(Literal(6), Literal(-5))) ::
         Nil,
         Add(Literal(2), Literal(-1))),
       Literal(1)

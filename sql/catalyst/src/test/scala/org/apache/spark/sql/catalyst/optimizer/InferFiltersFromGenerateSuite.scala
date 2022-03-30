@@ -76,7 +76,7 @@ class InferFiltersFromGenerateSuite extends PlanTest {
     val generatorWithFromJson = f(JsonToStructs(
       ArrayType(new StructType().add("s", "string")),
       Map.empty,
-      'c1))
+      $"c1"))
     test("SPARK-37392: Don't infer filters from " + generatorWithFromJson) {
       val originalQuery = testRelation.generate(generatorWithFromJson).analyze
       val optimized = Optimize.execute(originalQuery)
@@ -89,7 +89,7 @@ class InferFiltersFromGenerateSuite extends PlanTest {
     )))
     val fakeUDF = ScalaUDF(
       (i: Int) => Array(Row.fromSeq(Seq(1, "a")), Row.fromSeq(Seq(2, "b"))),
-      returnSchema, 'c3 :: Nil, Nil)
+      returnSchema, $"c3" :: Nil, Nil)
     val generatorWithUDF = f(fakeUDF)
     test("SPARK-36715: Don't infer filters from " + generatorWithUDF) {
       val originalQuery = testRelation.generate(generatorWithUDF).analyze

@@ -100,7 +100,7 @@ class NestedColumnAliasingSuite extends SchemaPruningTest {
       .select($"id", first.as(aliases(0)), last.as(aliases(1)))
       .limit(5)
       .select(
-        'id,
+        $"id",
         ConcatWs(Seq($"${aliases(0)}", $"${aliases(1)}")).as("concat_ws(name.first, name.last)"))
       .analyze
     comparePlans(optimized, expected)
@@ -170,7 +170,7 @@ class NestedColumnAliasingSuite extends SchemaPruningTest {
 
   test("Pushing a single nested field projection through filters - negative") {
     val ops = Array(
-      (input: LogicalPlan) => input.where('name.isNotNull),
+      (input: LogicalPlan) => input.where($"name".isNotNull),
       (input: LogicalPlan) => input.where($"name.middle".isNotNull)
     )
 
@@ -498,7 +498,7 @@ class NestedColumnAliasingSuite extends SchemaPruningTest {
     val spec = windowSpec($"address" :: Nil, $"id".asc :: Nil, UnspecifiedFrame)
     val winExpr = windowExpr(RowNumber(), spec)
     val query = contact
-      .select($"name.first", winExpr.as($"window"))
+      .select($"name.first", winExpr.as(Symbol("window")))
       .orderBy($"name.last".asc)
       .analyze
     val optimized = Optimize.execute(query)
@@ -516,7 +516,7 @@ class NestedColumnAliasingSuite extends SchemaPruningTest {
   test("Nested field pruning for Filter with other supported operators") {
     val spec = windowSpec($"address" :: Nil, $"id".asc :: Nil, UnspecifiedFrame)
     val winExpr = windowExpr(RowNumber(), spec)
-    val query1 = contact.select($"name.first", winExpr.as($"window"))
+    val query1 = contact.select($"name.first", winExpr.as(Symbol("window")))
       .where($"window" === 1 && $"name.first" === "a")
       .analyze
     val optimized1 = Optimize.execute(query1)

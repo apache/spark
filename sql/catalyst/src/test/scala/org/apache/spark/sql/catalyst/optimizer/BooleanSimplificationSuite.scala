@@ -86,13 +86,13 @@ class BooleanSimplificationSuite extends PlanTest with ExpressionEvalHelper with
   }
 
   test("a && a => a") {
-    checkCondition(Literal(1) < 'a && Literal(1) < 'a, Literal(1) < 'a)
-    checkCondition(Literal(1) < 'a && Literal(1) < 'a && Literal(1) < 'a, Literal(1) < 'a)
+    checkCondition(Literal(1) < $"a" && Literal(1) < $"a", Literal(1) < $"a")
+    checkCondition(Literal(1) < $"a" && Literal(1) < $"a" && Literal(1) < $"a", Literal(1) < $"a")
   }
 
   test("a || a => a") {
-    checkCondition(Literal(1) < 'a || Literal(1) < 'a, Literal(1) < 'a)
-    checkCondition(Literal(1) < 'a || Literal(1) < 'a || Literal(1) < 'a, Literal(1) < 'a)
+    checkCondition(Literal(1) < $"a" || Literal(1) < $"a", Literal(1) < $"a")
+    checkCondition(Literal(1) < $"a" || Literal(1) < $"a" || Literal(1) < $"a", Literal(1) < $"a")
   }
 
   test("(a && b && c && ...) || (a && b && d && ...) || (a && b && e && ...) ...") {
@@ -175,64 +175,64 @@ class BooleanSimplificationSuite extends PlanTest with ExpressionEvalHelper with
   }
 
   test("e && (!e || f) - not nullable") {
-    checkConditionInNotNullableRelation('e && (!'e || 'f ), 'e && 'f)
+    checkConditionInNotNullableRelation($"e" && (!$"e" || $"f" ), $"e" && $"f")
 
-    checkConditionInNotNullableRelation('e && ('f || !'e ), 'e && 'f)
+    checkConditionInNotNullableRelation($"e" && ($"f" || !$"e" ), $"e" && $"f")
 
-    checkConditionInNotNullableRelation((!'e || 'f ) && 'e, 'f && 'e)
+    checkConditionInNotNullableRelation((!$"e" || $"f" ) && $"e", $"f" && $"e")
 
-    checkConditionInNotNullableRelation(('f || !'e ) && 'e, 'f && 'e)
+    checkConditionInNotNullableRelation(($"f" || !$"e" ) && $"e", $"f" && $"e")
   }
 
   test("e && (!e || f) - nullable") {
-    Seq ('e && (!'e || 'f ),
-        'e && ('f || !'e ),
-        (!'e || 'f ) && 'e,
-        ('f || !'e ) && 'e,
-        'e || (!'e && 'f),
-        'e || ('f && !'e),
-        ('e && 'f) || !'e,
-        ('f && 'e) || !'e).foreach { expr =>
+    Seq ($"e" && (!$"e" || $"f" ),
+        $"e" && ($"f" || !$"e" ),
+        (!$"e" || $"f" ) && $"e",
+        ($"f" || !$"e" ) && $"e",
+        $"e" || (!$"e" && $"f"),
+        $"e" || ($"f" && !$"e"),
+        ($"e" && $"f") || !$"e",
+        ($"f" && $"e") || !$"e").foreach { expr =>
       checkCondition(expr, expr)
     }
   }
 
   test("a < 1 && (!(a < 1) || f) - not nullable") {
-    checkConditionInNotNullableRelation($"a" < 1 && (!($"a" < 1) || 'f), ($"a" < 1) && 'f)
-    checkConditionInNotNullableRelation($"a" < 1 && ('f || !($"a" < 1)), ($"a" < 1) && 'f)
+    checkConditionInNotNullableRelation($"a" < 1 && (!($"a" < 1) || $"f"), ($"a" < 1) && $"f")
+    checkConditionInNotNullableRelation($"a" < 1 && ($"f" || !($"a" < 1)), ($"a" < 1) && $"f")
 
-    checkConditionInNotNullableRelation($"a" <= 1 && (!($"a" <= 1) || 'f), ($"a" <= 1) && 'f)
-    checkConditionInNotNullableRelation($"a" <= 1 && ('f || !($"a" <= 1)), ($"a" <= 1) && 'f)
+    checkConditionInNotNullableRelation($"a" <= 1 && (!($"a" <= 1) || $"f"), ($"a" <= 1) && $"f")
+    checkConditionInNotNullableRelation($"a" <= 1 && ($"f" || !($"a" <= 1)), ($"a" <= 1) && $"f")
 
-    checkConditionInNotNullableRelation($"a" > 1 && (!($"a" > 1) || 'f), ($"a" > 1) && 'f)
-    checkConditionInNotNullableRelation($"a" > 1 && ('f || !($"a" > 1)), ($"a" > 1) && 'f)
+    checkConditionInNotNullableRelation($"a" > 1 && (!($"a" > 1) || $"f"), ($"a" > 1) && $"f")
+    checkConditionInNotNullableRelation($"a" > 1 && ($"f" || !($"a" > 1)), ($"a" > 1) && $"f")
 
-    checkConditionInNotNullableRelation($"a" >= 1 && (!($"a" >= 1) || 'f), ($"a" >= 1) && 'f)
-    checkConditionInNotNullableRelation($"a" >= 1 && ('f || !($"a" >= 1)), ($"a" >= 1) && 'f)
+    checkConditionInNotNullableRelation($"a" >= 1 && (!($"a" >= 1) || $"f"), ($"a" >= 1) && $"f")
+    checkConditionInNotNullableRelation($"a" >= 1 && ($"f" || !($"a" >= 1)), ($"a" >= 1) && $"f")
   }
 
   test("a < 1 && ((a >= 1) || f) - not nullable") {
-    checkConditionInNotNullableRelation($"a" < 1 && ($"a" >= 1 || 'f ), ($"a" < 1) && 'f)
-    checkConditionInNotNullableRelation($"a" < 1 && ('f || $"a" >= 1), ($"a" < 1) && 'f)
+    checkConditionInNotNullableRelation($"a" < 1 && ($"a" >= 1 || $"f" ), ($"a" < 1) && $"f")
+    checkConditionInNotNullableRelation($"a" < 1 && ($"f" || $"a" >= 1), ($"a" < 1) && $"f")
 
-    checkConditionInNotNullableRelation($"a" <= 1 && ($"a" > 1 || 'f ), ($"a" <= 1) && 'f)
-    checkConditionInNotNullableRelation($"a" <= 1 && ('f || $"a" > 1), ($"a" <= 1) && 'f)
+    checkConditionInNotNullableRelation($"a" <= 1 && ($"a" > 1 || $"f" ), ($"a" <= 1) && $"f")
+    checkConditionInNotNullableRelation($"a" <= 1 && ($"f" || $"a" > 1), ($"a" <= 1) && $"f")
 
-    checkConditionInNotNullableRelation($"a" > 1 && (($"a" <= 1) || 'f), ($"a" > 1) && 'f)
-    checkConditionInNotNullableRelation($"a" > 1 && ('f || ($"a" <= 1)), ($"a" > 1) && 'f)
+    checkConditionInNotNullableRelation($"a" > 1 && (($"a" <= 1) || $"f"), ($"a" > 1) && $"f")
+    checkConditionInNotNullableRelation($"a" > 1 && ($"f" || ($"a" <= 1)), ($"a" > 1) && $"f")
 
-    checkConditionInNotNullableRelation($"a" >= 1 && (($"a" < 1) || 'f), ($"a" >= 1) && 'f)
-    checkConditionInNotNullableRelation($"a" >= 1 && ('f || ($"a" < 1)), ($"a" >= 1) && 'f)
+    checkConditionInNotNullableRelation($"a" >= 1 && (($"a" < 1) || $"f"), ($"a" >= 1) && $"f")
+    checkConditionInNotNullableRelation($"a" >= 1 && ($"f" || ($"a" < 1)), ($"a" >= 1) && $"f")
   }
 
   test("DeMorgan's law") {
-    checkCondition(!('e && 'f), !'e || !'f)
+    checkCondition(!($"e" && $"f"), !$"e" || !$"f")
 
-    checkCondition(!('e || 'f), !'e && !'f)
+    checkCondition(!($"e" || $"f"), !$"e" && !$"f")
 
-    checkCondition(!(('e && 'f) || ('g && 'h)), (!'e || !'f) && (!'g || !'h))
+    checkCondition(!(($"e" && $"f") || ($"g" && $"h")), (!$"e" || !$"f") && (!$"g" || !$"h"))
 
-    checkCondition(!(('e || 'f) && ('g || 'h)), (!'e && !'f) || (!'g && !'h))
+    checkCondition(!(($"e" || $"f") && ($"g" || $"h")), (!$"e" && !$"f") || (!$"g" && !$"h"))
   }
 
   private val analyzer = new Analyzer(
@@ -257,31 +257,31 @@ class BooleanSimplificationSuite extends PlanTest with ExpressionEvalHelper with
   }
 
   test("Complementation Laws") {
-    checkConditionInNotNullableRelation('e && !'e, testNotNullableRelation)
-    checkConditionInNotNullableRelation(!'e && 'e, testNotNullableRelation)
+    checkConditionInNotNullableRelation($"e" && !$"e", testNotNullableRelation)
+    checkConditionInNotNullableRelation(!$"e" && $"e", testNotNullableRelation)
 
-    checkConditionInNotNullableRelation('e || !'e, testNotNullableRelationWithData)
-    checkConditionInNotNullableRelation(!'e || 'e, testNotNullableRelationWithData)
+    checkConditionInNotNullableRelation($"e" || !$"e", testNotNullableRelationWithData)
+    checkConditionInNotNullableRelation(!$"e" || $"e", testNotNullableRelationWithData)
   }
 
   test("Complementation Laws - null handling") {
-    checkCondition('e && !'e,
-      testRelationWithData.where(And(Literal(null, BooleanType), 'e.isNull)).analyze)
-    checkCondition(!'e && 'e,
-      testRelationWithData.where(And(Literal(null, BooleanType), 'e.isNull)).analyze)
+    checkCondition($"e" && !$"e",
+      testRelationWithData.where(And(Literal(null, BooleanType), $"e".isNull)).analyze)
+    checkCondition(!$"e" && $"e",
+      testRelationWithData.where(And(Literal(null, BooleanType), $"e".isNull)).analyze)
 
-    checkCondition('e || !'e,
-      testRelationWithData.where(Or('e.isNotNull, Literal(null, BooleanType))).analyze)
-    checkCondition(!'e || 'e,
-      testRelationWithData.where(Or('e.isNotNull, Literal(null, BooleanType))).analyze)
+    checkCondition($"e" || !$"e",
+      testRelationWithData.where(Or($"e".isNotNull, Literal(null, BooleanType))).analyze)
+    checkCondition(!$"e" || $"e",
+      testRelationWithData.where(Or($"e".isNotNull, Literal(null, BooleanType))).analyze)
   }
 
   test("Complementation Laws - negative case") {
-    checkCondition('e && !'f, testRelationWithData.where('e && !'f).analyze)
-    checkCondition(!'f && 'e, testRelationWithData.where(!'f && 'e).analyze)
+    checkCondition($"e" && !$"f", testRelationWithData.where($"e" && !$"f").analyze)
+    checkCondition(!$"f" && $"e", testRelationWithData.where(!$"f" && $"e").analyze)
 
-    checkCondition('e || !'f, testRelationWithData.where('e || !'f).analyze)
-    checkCondition(!'f || 'e, testRelationWithData.where(!'f || 'e).analyze)
+    checkCondition($"e" || !$"f", testRelationWithData.where($"e" || !$"f").analyze)
+    checkCondition(!$"f" || $"e", testRelationWithData.where(!$"f" || $"e").analyze)
   }
 
   test("simplify NOT(IsNull(x)) and NOT(IsNotNull(x))") {

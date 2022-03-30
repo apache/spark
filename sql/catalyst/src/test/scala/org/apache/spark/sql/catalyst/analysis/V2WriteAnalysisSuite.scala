@@ -224,9 +224,9 @@ abstract class V2WriteAnalysisSuiteBase extends AnalysisTest {
 
   override def extendedAnalysisRules: Seq[Rule[LogicalPlan]] = Seq(EliminateSubqueryAliases)
 
-  val table = TestRelation(Seq('x.float, 'y.float))
+  val table = TestRelation(Seq($"x".float, $"y".float))
 
-  val requiredTable = TestRelation(Seq('x.float.notNull, 'y.float.notNull))
+  val requiredTable = TestRelation(Seq($"x".float.notNull, $"y".float.notNull))
 
   val widerTable = TestRelation(Seq($"x".double, $"y".double))
 
@@ -699,7 +699,7 @@ abstract class V2WriteAnalysisSuiteBase extends AnalysisTest {
 
   test("SPARK-36498: reorder inner fields with byName mode") {
     val table = TestRelation(Seq($"a".int, $"b".struct($"x".int, $"y".int)))
-    val query = TestRelation(Seq($"b".struct($"y".int, 'x.byte), $"a".int))
+    val query = TestRelation(Seq($"b".struct($"y".int, $"x".byte), $"a".int))
 
     val writePlan = byName(table, query).analyze
     assert(writePlan.children.head.schema == table.schema)

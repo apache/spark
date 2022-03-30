@@ -81,7 +81,7 @@ class BinaryComparisonSimplificationSuite extends PlanTest with PredicateHelper 
 
   test("Non-Nullable Simplification Primitive") {
     val plan = nonNullableRelation
-      .select($"a" === $"a", $"a" <=> $"a", $"a" <= $"a", $"a" >= $"a", $"a" < 'a, $"a" > $"a").analyze
+      .select($"a" === $"a", $"a" <=> $"a", $"a" <= $"a", $"a" >= $"a", $"a" < $"a", $"a" > $"a").analyze
     val actual = Optimize.execute(plan)
     val correctAnswer = nonNullableRelation
       .select(
@@ -97,8 +97,8 @@ class BinaryComparisonSimplificationSuite extends PlanTest with PredicateHelper 
 
   test("Expression Normalization") {
     val plan = nonNullableRelation.where(
-      'a * Literal(100) + Pi() === Pi() + Literal(100) * 'a &&
-      DateAdd(CurrentDate(), 'a + Literal(2)) <= DateAdd(CurrentDate(), Literal(2) + 'a))
+      $"a" * Literal(100) + Pi() === Pi() + Literal(100) * $"a" &&
+      DateAdd(CurrentDate(), $"a" + Literal(2)) <= DateAdd(CurrentDate(), Literal(2) + $"a"))
       .analyze
     val actual = Optimize.execute(plan)
     val correctAnswer = nonNullableRelation.analyze
@@ -145,7 +145,7 @@ class BinaryComparisonSimplificationSuite extends PlanTest with PredicateHelper 
     Seq(a === a, a <= a, a >= a).foreach { condition =>
       val plan = nullableRelation.where(condition).analyze
       val actual = Optimize.execute(plan)
-      val correctAnswer = nullableRelation.where('a.isNotNull).analyze
+      val correctAnswer = nullableRelation.where($"a".isNotNull).analyze
       comparePlans(actual, correctAnswer)
     }
 
@@ -165,7 +165,7 @@ class BinaryComparisonSimplificationSuite extends PlanTest with PredicateHelper 
         And(a >= a, a.isNotNull)).foreach { condition =>
         val plan = nullableRelation.where(condition).analyze
         val actual = Optimize.execute(plan)
-        val correctAnswer = nullableRelation.where('a.isNotNull).analyze
+        val correctAnswer = nullableRelation.where($"a".isNotNull).analyze
         comparePlans(actual, correctAnswer)
       }
 
@@ -187,7 +187,7 @@ class BinaryComparisonSimplificationSuite extends PlanTest with PredicateHelper 
       $"d".int.withNullability(true))
 
     comparePlans(
-      Optimize.execute(testRelation.select(Coalesce(Seq($"a", $"b", 'c, $"d")).as("out")).analyze),
+      Optimize.execute(testRelation.select(Coalesce(Seq($"a", $"b", $"c", $"d")).as("out")).analyze),
       testRelation.select($"a".as("out")).analyze)
     comparePlans(
       Optimize.execute(testRelation.select(Coalesce(Seq($"a", $"c")).as("out")).analyze),

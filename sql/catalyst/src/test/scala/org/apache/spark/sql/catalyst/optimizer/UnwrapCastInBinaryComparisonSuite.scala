@@ -38,7 +38,7 @@ class UnwrapCastInBinaryComparisonSuite extends PlanTest with ExpressionEvalHelp
         NullPropagation, UnwrapCastInBinaryComparison) :: Nil
   }
 
-  val testRelation: LocalRelation = LocalRelation('a.short, 'b.float, $"c".decimal(5, 2), $"d".boolean)
+  val testRelation: LocalRelation = LocalRelation('a.short, $"b".float, $"c".decimal(5, 2), $"d".boolean)
   val f: BoundReference = $"a".short.canBeNull.at(0)
   val f2: BoundReference = $"b".float.canBeNull.at(1)
   val f3: BoundReference = $"c".decimal(5, 2).canBeNull.at(2)

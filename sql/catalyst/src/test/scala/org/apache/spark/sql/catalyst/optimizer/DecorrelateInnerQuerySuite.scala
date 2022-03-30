@@ -220,7 +220,7 @@ class DecorrelateInnerQuerySuite extends PlanTest {
           Add(OuterReference(x), OuterReference(y)).as("sum")),
             testRelation)).analyze
     val correctAnswer =
-      Project(Seq(x.as("x1"), $"y1", 'sum, x, y),
+      Project(Seq(x.as("x1"), $"y1", $"sum", x, y),
         Project(Seq(x.as(x.name), y.as("y1"), (x + y).as("sum"), x, y),
           DomainJoin(Seq(x, y), testRelation))).analyze
     check(innerPlan, outerPlan, correctAnswer, Seq(x <=> x, y <=> y))

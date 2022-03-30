@@ -64,8 +64,8 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
   }
 
   test("single inner join: filter out values on either side on equi-join keys") {
-    val x = testRelation.subquery($"x")
-    val y = testRelation.subquery($"y")
+    val x = testRelation.subquery(Symbol("x"))
+    val y = testRelation.subquery(Symbol("y"))
     val originalQuery = x.join(y,
       condition = Some(("x.a".attr === "y.a".attr) && ("x.a".attr === 1) && ("y.c".attr > 5)))
       .analyze
@@ -77,8 +77,8 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
   }
 
   test("single inner join: filter out nulls on either side on non equal keys") {
-    val x = testRelation.subquery($"x")
-    val y = testRelation.subquery($"y")
+    val x = testRelation.subquery(Symbol("x"))
+    val y = testRelation.subquery(Symbol("y"))
     val originalQuery = x.join(y,
       condition = Some(("x.a".attr =!= "y.a".attr) && ("x.b".attr === 1) && ("y.c".attr > 5)))
       .analyze
@@ -90,8 +90,8 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
   }
 
   test("single inner join with pre-existing filters: filter out values on either side") {
-    val x = testRelation.subquery($"x")
-    val y = testRelation.subquery($"y")
+    val x = testRelation.subquery(Symbol("x"))
+    val y = testRelation.subquery(Symbol("y"))
     val originalQuery = x.where($"b" > 5).join(y.where($"a" === 10),
       condition = Some("x.a".attr === "y.a".attr && "x.b".attr === "y.b".attr)).analyze
     val left = x.where(IsNotNull($"a") && $"a" === 10 && IsNotNull($"b") && $"b" > 5)
@@ -103,8 +103,8 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
   }
 
   test("single outer join: no null filters are generated") {
-    val x = testRelation.subquery($"x")
-    val y = testRelation.subquery($"y")
+    val x = testRelation.subquery(Symbol("x"))
+    val y = testRelation.subquery(Symbol("y"))
     val originalQuery = x.join(y, FullOuter,
       condition = Some("x.a".attr === "y.a".attr)).analyze
     val optimized = Optimize.execute(originalQuery)
@@ -112,10 +112,10 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
   }
 
   test("multiple inner joins: filter out values on all sides on equi-join keys") {
-    val t1 = testRelation.subquery($"t1")
-    val t2 = testRelation.subquery($"t2")
-    val t3 = testRelation.subquery($"t3")
-    val t4 = testRelation.subquery($"t4")
+    val t1 = testRelation.subquery(Symbol("t1"))
+    val t2 = testRelation.subquery(Symbol("t2"))
+    val t3 = testRelation.subquery(Symbol("t3"))
+    val t4 = testRelation.subquery(Symbol("t4"))
 
     val originalQuery = t1.where($"b" > 5)
       .join(t2, condition = Some("t1.b".attr === "t2.b".attr))
@@ -131,8 +131,8 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
   }
 
   test("inner join with filter: filter out values on all sides on equi-join keys") {
-    val x = testRelation.subquery($"x")
-    val y = testRelation.subquery($"y")
+    val x = testRelation.subquery(Symbol("x"))
+    val y = testRelation.subquery(Symbol("y"))
 
     val originalQuery =
       x.join(y, Inner, Some("x.a".attr === "y.a".attr)).where("x.a".attr > 5).analyze
@@ -143,15 +143,15 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
   }
 
   test("inner join with alias: alias contains multiple attributes") {
-    val t1 = testRelation.subquery($"t1")
-    val t2 = testRelation.subquery($"t2")
+    val t1 = testRelation.subquery(Symbol("t1"))
+    val t2 = testRelation.subquery(Symbol("t2"))
 
-    val originalQuery = t1.select($"a", Coalesce(Seq($"a", $"b")).as($"int_col")).as("t")
+    val originalQuery = t1.select($"a", Coalesce(Seq($"a", $"b")).as(Symbol("int_col"))).as("t")
       .join(t2, Inner, Some("t.a".attr === "t2.a".attr && "t.int_col".attr === "t2.a".attr))
       .analyze
     val correctAnswer = t1
       .where(IsNotNull($"a") && IsNotNull(Coalesce(Seq($"a", $"b"))) && $"a" === Coalesce(Seq($"a", $"b")))
-      .select($"a", Coalesce(Seq($"a", $"b")).as($"int_col")).as("t")
+      .select($"a", Coalesce(Seq($"a", $"b")).as(Symbol("int_col"))).as("t")
       .join(t2.where(IsNotNull($"a")), Inner,
         Some("t.a".attr === "t2.a".attr && "t.int_col".attr === "t2.a".attr))
       .analyze
@@ -160,15 +160,15 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
   }
 
   test("inner join with alias: alias contains single attributes") {
-    val t1 = testRelation.subquery($"t1")
-    val t2 = testRelation.subquery($"t2")
+    val t1 = testRelation.subquery(Symbol("t1"))
+    val t2 = testRelation.subquery(Symbol("t2"))
 
-    val originalQuery = t1.select($"a", $"b".as($"d")).as("t")
+    val originalQuery = t1.select($"a", $"b".as(Symbol("d"))).as("t")
       .join(t2, Inner, Some("t.a".attr === "t2.a".attr && "t.d".attr === "t2.a".attr))
       .analyze
     val correctAnswer = t1
       .where(IsNotNull($"a") && IsNotNull($"b") &&$"a" === $"b")
-      .select($"a", $"b".as($"d")).as("t")
+      .select($"a", $"b".as(Symbol("d"))).as("t")
       .join(t2.where(IsNotNull($"a")), Inner,
         Some("t.a".attr === "t2.a".attr && "t.d".attr === "t2.a".attr))
       .analyze
@@ -177,12 +177,12 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
   }
 
   test("generate correct filters for alias that don't produce recursive constraints") {
-    val t1 = testRelation.subquery($"t1")
+    val t1 = testRelation.subquery(Symbol("t1"))
 
-    val originalQuery = t1.select($"a".as($"x"), $"b".as($"y")).where($"x" === 1 && $"x" === $"y").analyze
+    val originalQuery = t1.select($"a".as(Symbol("x")), $"b".as(Symbol("y"))).where($"x" === 1 && $"x" === $"y").analyze
     val correctAnswer =
       t1.where($"a" === 1 && $"b" === 1 && $"a" === $"b" && IsNotNull($"a") && IsNotNull($"b"))
-        .select($"a".as($"x"), $"b".as($"y")).analyze
+        .select($"a".as(Symbol("x")), $"b".as(Symbol("y"))).analyze
     val optimized = Optimize.execute(originalQuery)
     comparePlans(optimized, correctAnswer)
   }
@@ -196,10 +196,10 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
   }
 
   test("constraints should be inferred from aliased literals") {
-    val originalLeft = testRelation.subquery($"left").as("left")
-    val optimizedLeft = testRelation.subquery($"left").where(IsNotNull($"a") && $"a" <=> 2).as("left")
+    val originalLeft = testRelation.subquery(Symbol("left")).as("left")
+    val optimizedLeft = testRelation.subquery(Symbol("left")).where(IsNotNull($"a") && $"a" <=> 2).as("left")
 
-    val right = Project(Seq(Literal(2).as("two")), testRelation.subquery($"right")).as("right")
+    val right = Project(Seq(Literal(2).as("two")), testRelation.subquery(Symbol("right"))).as("right")
     val condition = Some("left.a".attr === "right.two".attr)
 
     val original = originalLeft.join(right, Inner, condition)
@@ -209,14 +209,14 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
   }
 
   test("SPARK-23405: left-semi equal-join should filter out null join keys on both sides") {
-    val x = testRelation.subquery($"x")
-    val y = testRelation.subquery($"y")
+    val x = testRelation.subquery(Symbol("x"))
+    val y = testRelation.subquery(Symbol("y"))
     testConstraintsAfterJoin(x, y, x.where(IsNotNull($"a")), y.where(IsNotNull($"a")), LeftSemi)
   }
 
   test("SPARK-21479: Outer join after-join filters push down to null-supplying side") {
-    val x = testRelation.subquery($"x")
-    val y = testRelation.subquery($"y")
+    val x = testRelation.subquery(Symbol("x"))
+    val y = testRelation.subquery(Symbol("y"))
     val condition = Some("x.a".attr === "y.a".attr)
     val originalQuery = x.join(y, LeftOuter, condition).where("x.a".attr === 2).analyze
     val left = x.where(IsNotNull($"a") && $"a" === 2)
@@ -227,8 +227,8 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
   }
 
   test("SPARK-21479: Outer join pre-existing filters push down to null-supplying side") {
-    val x = testRelation.subquery($"x")
-    val y = testRelation.subquery($"y")
+    val x = testRelation.subquery(Symbol("x"))
+    val y = testRelation.subquery(Symbol("y"))
     val condition = Some("x.a".attr === "y.a".attr)
     val originalQuery = x.join(y.where("y.a".attr > 5), RightOuter, condition).analyze
     val left = x.where(IsNotNull($"a") && $"a" > 5)
@@ -239,8 +239,8 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
   }
 
   test("SPARK-21479: Outer join no filter push down to preserved side") {
-    val x = testRelation.subquery($"x")
-    val y = testRelation.subquery($"y")
+    val x = testRelation.subquery(Symbol("x"))
+    val y = testRelation.subquery(Symbol("y"))
     testConstraintsAfterJoin(
       x, y.where("a".attr === 1),
       x, y.where(IsNotNull($"a") && $"a" === 1),
@@ -248,31 +248,31 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
   }
 
   test("SPARK-23564: left anti join should filter out null join keys on right side") {
-    val x = testRelation.subquery($"x")
-    val y = testRelation.subquery($"y")
+    val x = testRelation.subquery(Symbol("x"))
+    val y = testRelation.subquery(Symbol("y"))
     testConstraintsAfterJoin(x, y, x, y.where(IsNotNull($"a")), LeftAnti)
   }
 
   test("SPARK-23564: left outer join should filter out null join keys on right side") {
-    val x = testRelation.subquery($"x")
-    val y = testRelation.subquery($"y")
+    val x = testRelation.subquery(Symbol("x"))
+    val y = testRelation.subquery(Symbol("y"))
     testConstraintsAfterJoin(x, y, x, y.where(IsNotNull($"a")), LeftOuter)
   }
 
   test("SPARK-23564: right outer join should filter out null join keys on left side") {
-    val x = testRelation.subquery($"x")
-    val y = testRelation.subquery($"y")
+    val x = testRelation.subquery(Symbol("x"))
+    val y = testRelation.subquery(Symbol("y"))
     testConstraintsAfterJoin(x, y, x.where(IsNotNull($"a")), y, RightOuter)
   }
 
   test("Constraints should be inferred from cast equality constraint(filter higher data type)") {
     val testRelation1 = LocalRelation($"a".int)
     val testRelation2 = LocalRelation($"b".long)
-    val originalLeft = testRelation1.subquery($"left")
-    val originalRight = testRelation2.where($"b" === 1L).subquery($"right")
+    val originalLeft = testRelation1.subquery(Symbol("left"))
+    val originalRight = testRelation2.where($"b" === 1L).subquery(Symbol("right"))
 
-    val left = testRelation1.where(IsNotNull($"a") && $"a".cast(LongType) === 1L).subquery($"left")
-    val right = testRelation2.where(IsNotNull($"b") && $"b" === 1L).subquery($"right")
+    val left = testRelation1.where(IsNotNull($"a") && $"a".cast(LongType) === 1L).subquery(Symbol("left"))
+    val right = testRelation2.where(IsNotNull($"b") && $"b" === 1L).subquery(Symbol("right"))
 
     Seq(Some("left.a".attr.cast(LongType) === "right.b".attr),
       Some("right.b".attr === "left.a".attr.cast(LongType))).foreach { condition =>
@@ -284,7 +284,7 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
       testConstraintsAfterJoin(
         originalLeft,
         originalRight,
-        testRelation1.where(IsNotNull($"a")).subquery($"left"),
+        testRelation1.where(IsNotNull($"a")).subquery(Symbol("left")),
         right,
         Inner,
         condition)
@@ -294,11 +294,11 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
   test("Constraints shouldn't be inferred from cast equality constraint(filter lower data type)") {
     val testRelation1 = LocalRelation($"a".int)
     val testRelation2 = LocalRelation($"b".long)
-    val originalLeft = testRelation1.where($"a" === 1).subquery($"left")
-    val originalRight = testRelation2.subquery($"right")
+    val originalLeft = testRelation1.where($"a" === 1).subquery(Symbol("left"))
+    val originalRight = testRelation2.subquery(Symbol("right"))
 
-    val left = testRelation1.where(IsNotNull($"a") && $"a" === 1).subquery($"left")
-    val right = testRelation2.where(IsNotNull($"b")).subquery($"right")
+    val left = testRelation1.where(IsNotNull($"a") && $"a" === 1).subquery(Symbol("left"))
+    val right = testRelation2.where(IsNotNull($"b")).subquery(Symbol("right"))
 
     Seq(Some("left.a".attr.cast(LongType) === "right.b".attr),
       Some("right.b".attr === "left.a".attr.cast(LongType))).foreach { condition =>
@@ -311,7 +311,7 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
         originalLeft,
         originalRight,
         left,
-        testRelation2.where(IsNotNull($"b") && $"b".attr.cast(IntegerType) === 1).subquery($"right"),
+        testRelation2.where(IsNotNull($"b") && $"b".attr.cast(IntegerType) === 1).subquery(Symbol("right")),
         Inner,
         condition)
     }

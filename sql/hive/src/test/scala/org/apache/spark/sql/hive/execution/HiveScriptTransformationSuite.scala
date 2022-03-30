@@ -328,7 +328,7 @@ class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with T
         (1, "1", Array(0, 1, 2), Map("a" -> 1)),
         (2, "2", Array(3, 4, 5), Map("b" -> 2))
       ).toDF("a", "b", "c", "d")
-        .select($"a", $"b", 'c, $"d", struct($"a", $"b").as("e"))
+        .select($"a", $"b", $"c", $"d", struct($"a", $"b").as("e"))
       df.createTempView("v")
 
       // Hive serde support ArrayType/MapType/StructType as input and output data type
@@ -357,7 +357,7 @@ class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with T
         (1, "1", Array(0, 1, 2), Map("a" -> 1)),
         (2, "2", Array(3, 4, 5), Map("b" -> 2))
       ).toDF("a", "b", "c", "d")
-        .select($"a", $"b", 'c, $"d", struct($"a", $"b").as("e"))
+        .select($"a", $"b", $"c", $"d", struct($"a", $"b").as("e"))
       df.createTempView("v")
 
       // Hive serde support ArrayType/MapType/StructType as input and output data type

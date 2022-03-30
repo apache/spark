@@ -70,12 +70,12 @@ class DecimalAggregatesSuite extends PlanTest {
 
   test("Decimal Sum Aggregation over Window: Optimized") {
     val spec = windowSpec(Seq($"a"), Nil, UnspecifiedFrame)
-    val originalQuery = testRelation.select(windowExpr(sum($"a"), spec).as($"sum_a"))
+    val originalQuery = testRelation.select(windowExpr(sum($"a"), spec).as(Symbol("sum_a")))
     val optimized = Optimize.execute(originalQuery.analyze)
     val correctAnswer = testRelation
       .select($"a")
       .window(
-        Seq(MakeDecimal(windowExpr(sum(UnscaledValue($"a")), spec), 12, 1).as($"sum_a")),
+        Seq(MakeDecimal(windowExpr(sum(UnscaledValue($"a")), spec), 12, 1).as(Symbol("sum_a"))),
         Seq($"a"),
         Nil)
       .select($"a", $"sum_a", $"sum_a")
@@ -86,7 +86,7 @@ class DecimalAggregatesSuite extends PlanTest {
   }
 
   test("Decimal Sum Aggregation over Window: Not Optimized") {
-    val spec = windowSpec('b :: Nil, Nil, UnspecifiedFrame)
+    val spec = windowSpec($"b" :: Nil, Nil, UnspecifiedFrame)
     val originalQuery = testRelation.select(windowExpr(sum($"b"), spec))
     val optimized = Optimize.execute(originalQuery.analyze)
     val correctAnswer = originalQuery.analyze
@@ -96,12 +96,12 @@ class DecimalAggregatesSuite extends PlanTest {
 
   test("Decimal Average Aggregation over Window: Optimized") {
     val spec = windowSpec(Seq($"a"), Nil, UnspecifiedFrame)
-    val originalQuery = testRelation.select(windowExpr(avg($"a"), spec).as($"avg_a"))
+    val originalQuery = testRelation.select(windowExpr(avg($"a"), spec).as(Symbol("avg_a")))
     val optimized = Optimize.execute(originalQuery.analyze)
     val correctAnswer = testRelation
       .select($"a")
       .window(
-        Seq((windowExpr(avg(UnscaledValue($"a")), spec) / 10.0).cast(DecimalType(6, 5)).as($"avg_a")),
+        Seq((windowExpr(avg(UnscaledValue($"a")), spec) / 10.0).cast(DecimalType(6, 5)).as(Symbol("avg_a"))),
         Seq($"a"),
         Nil)
       .select($"a", $"avg_a", $"avg_a")
@@ -112,7 +112,7 @@ class DecimalAggregatesSuite extends PlanTest {
   }
 
   test("Decimal Average Aggregation over Window: Not Optimized") {
-    val spec = windowSpec('b :: Nil, Nil, UnspecifiedFrame)
+    val spec = windowSpec($"b" :: Nil, Nil, UnspecifiedFrame)
     val originalQuery = testRelation.select(windowExpr(avg($"b"), spec))
     val optimized = Optimize.execute(originalQuery.analyze)
     val correctAnswer = originalQuery.analyze

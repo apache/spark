@@ -72,7 +72,7 @@ class EncoderResolutionSuite extends PlanTest {
     val encoder = ExpressionEncoder.tuple(
       ExpressionEncoder[StringLongClass],
       ExpressionEncoder[Long])
-    val attrs = Seq($"a".struct($"a".string, 'b.byte), $"b".int)
+    val attrs = Seq($"a".struct($"a".string, $"b".byte), $"b".int)
     testFromRow(encoder, attrs, InternalRow(InternalRow(str, 1.toByte), 2))
   }
 

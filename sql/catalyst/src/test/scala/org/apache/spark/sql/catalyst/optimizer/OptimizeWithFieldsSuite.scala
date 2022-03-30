@@ -40,7 +40,7 @@ class OptimizeWithFieldsSuite extends PlanTest {
       .select(Alias(
         UpdateFields(
           UpdateFields(
-            'a,
+            $"a",
             WithField("b1", Literal(4)) :: Nil),
           WithField("c1", Literal(5)) :: Nil), "out")())
 
@@ -59,7 +59,7 @@ class OptimizeWithFieldsSuite extends PlanTest {
         UpdateFields(
           UpdateFields(
             UpdateFields(
-              'a,
+              $"a",
               WithField("b1", Literal(4)) :: Nil),
             WithField("c1", Literal(5)) :: Nil),
           WithField("d1", Literal(6)) :: Nil), "out")())

@@ -93,7 +93,7 @@ class AvroFunctionsSuite extends QueryTest with SharedSparkSession {
     intercept[SparkException] {
       avroStructDF.select(
         functions.from_avro(
-          'avro, avroTypeStruct, Map("mode" -> "FAILFAST").asJava)).collect()
+          $"avro", avroTypeStruct, Map("mode" -> "FAILFAST").asJava)).collect()
     }
 
     // For PERMISSIVE mode, the result should be row of null columns.
@@ -101,7 +101,7 @@ class AvroFunctionsSuite extends QueryTest with SharedSparkSession {
     checkAnswer(
       avroStructDF.select(
        functions.from_avro(
-          'avro, avroTypeStruct, Map("mode" -> "PERMISSIVE").asJava)),
+          $"avro", avroTypeStruct, Map("mode" -> "PERMISSIVE").asJava)),
       expected)
   }
 
@@ -196,7 +196,7 @@ class AvroFunctionsSuite extends QueryTest with SharedSparkSession {
     checkAnswer(
       avroStructDF.select(
         functions.from_avro(
-          'avro,
+          $"avro",
           actualAvroSchema,
           Map("avroSchema" -> evolvedAvroSchema).asJava)),
       expected)

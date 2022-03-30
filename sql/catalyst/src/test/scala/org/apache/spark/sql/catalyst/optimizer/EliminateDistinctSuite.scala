@@ -49,10 +49,10 @@ class EliminateDistinctSuite extends PlanTest {
       val agg = aggBuilder($"a")
       test(s"Eliminate Distinct in $agg") {
         val query = testRelation
-          .select(agg.toAggregateExpression(isDistinct = true).as($"result"))
+          .select(agg.toAggregateExpression(isDistinct = true).as(Symbol("result")))
           .analyze
         val answer = testRelation
-          .select(agg.toAggregateExpression(isDistinct = false).as($"result"))
+          .select(agg.toAggregateExpression(isDistinct = false).as(Symbol("result")))
           .analyze
         assert(query != answer)
         comparePlans(Optimize.execute(query), answer)
@@ -60,11 +60,11 @@ class EliminateDistinctSuite extends PlanTest {
 
       test(s"SPARK-38177: Eliminate Distinct in non-root $agg") {
         val query = testRelation
-          .select(agg.toAggregateExpression(isDistinct = true).as($"result"))
+          .select(agg.toAggregateExpression(isDistinct = true).as(Symbol("result")))
           .limit(1)
           .analyze
         val answer = testRelation
-          .select(agg.toAggregateExpression(isDistinct = false).as($"result"))
+          .select(agg.toAggregateExpression(isDistinct = false).as(Symbol("result")))
           .limit(1)
           .analyze
         assert(query != answer)

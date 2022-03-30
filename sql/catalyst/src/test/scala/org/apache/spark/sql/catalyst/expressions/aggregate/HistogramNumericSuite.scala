@@ -25,7 +25,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.TypeCheckFailure
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
-import org.apache.spark.sql.catalyst.dsl.expressions.{DslString, DslSymbol}
+import org.apache.spark.sql.catalyst.dsl.expressions.{DslAttr, DslString, StringToAttributeConversionHelper}
 import org.apache.spark.sql.catalyst.dsl.plans.DslLogicalPlan
 import org.apache.spark.sql.catalyst.expressions.{Alias, AttributeReference, BoundReference, Cast, GenericInternalRow, Literal}
 import org.apache.spark.sql.catalyst.plans.SQLHelper
@@ -116,7 +116,7 @@ class HistogramNumericSuite extends SparkFunSuite with SQLHelper with Logging {
     // input column types to inspect the behavior of query analysis for the aggregate function.
     val relations = Seq(LocalRelation($"a".double),
       LocalRelation($"a".int),
-      LocalRelation('a.timestamp),
+      LocalRelation($"a".timestamp),
       LocalRelation($"a".dayTimeInterval()),
       LocalRelation($"a".yearMonthInterval()))
 

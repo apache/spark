@@ -58,8 +58,8 @@ class EliminateSortsBeforeRepartitionSuite extends PlanTest {
   }
 
   test("sortBy with projection") {
-    val plan = testRelation.sortBy($"a".asc, $"b".asc).select('a + 1 as "a", 'b + 2 as "b")
-    val optimizedPlan = testRelation.select('a + 1 as "a", 'b + 2 as "b")
+    val plan = testRelation.sortBy($"a".asc, $"b".asc).select($"a" + 1 as "a", $"b" + 2 as "b")
+    val optimizedPlan = testRelation.select($"a" + 1 as "a", $"b" + 2 as "b")
     checkRepartitionCases(plan, optimizedPlan)
   }
 
@@ -88,8 +88,8 @@ class EliminateSortsBeforeRepartitionSuite extends PlanTest {
   }
 
   test("orderBy with projection") {
-    val plan = testRelation.orderBy($"a".asc, $"b".asc).select('a + 1 as "a", 'b + 2 as "b")
-    val optimizedPlan = testRelation.select('a + 1 as "a", 'b + 2 as "b")
+    val plan = testRelation.orderBy($"a".asc, $"b".asc).select($"a" + 1 as "a", $"b" + 2 as "b")
+    val optimizedPlan = testRelation.select($"a" + 1 as "a", $"b" + 2 as "b")
     checkRepartitionCases(plan, optimizedPlan)
   }
 
@@ -118,8 +118,8 @@ class EliminateSortsBeforeRepartitionSuite extends PlanTest {
   }
 
   test("additional projection, repartition and sortBy") {
-    val plan = testRelation.sortBy($"a".asc, $"b".asc).repartition(100).select('a + 1 as "a")
-    val optimizedPlan = testRelation.repartition(100).select('a + 1 as "a")
+    val plan = testRelation.sortBy($"a".asc, $"b".asc).repartition(100).select($"a" + 1 as "a")
+    val optimizedPlan = testRelation.repartition(100).select($"a" + 1 as "a")
     checkRepartitionCases(plan, optimizedPlan)
   }
 

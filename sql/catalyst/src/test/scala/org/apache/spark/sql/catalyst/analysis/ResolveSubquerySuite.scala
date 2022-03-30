@@ -146,7 +146,7 @@ class ResolveSubquerySuite extends AnalysisTest {
     )
     // SELECT * FROM t1, LATERAL (SELECT a, b, c, d FROM t2)
     assertAnalysisErrorClass(
-      lateralJoin(t1, t2.select($"a", $"b", 'c, $"d")),
+      lateralJoin(t1, t2.select($"a", $"b", $"c", $"d")),
       "MISSING_COLUMN",
       Array("d", "b, c")
     )
@@ -179,7 +179,7 @@ class ResolveSubquerySuite extends AnalysisTest {
   }
 
   test("lateral join with unsupported expressions") {
-    val plan = lateralJoin(t1, t0.select(('a + 'b).as("c")),
+    val plan = lateralJoin(t1, t0.select(($"a" + $"b").as("c")),
       condition = Some(sum($"a") === sum($"c")))
     assertAnalysisError(plan, Seq("Invalid expressions: [sum(a), sum(c)]"))
   }
@@ -255,7 +255,7 @@ class ResolveSubquerySuite extends AnalysisTest {
     // SELECT (SELECT a + b + c AS r FROM t2) FROM t1
     checkAnalysis(
       Project(ScalarSubquery(
-        t2.select(('a + 'b + 'c).as("r"))).as("sub") :: Nil, t1),
+        t2.select(($"a" + $"b" + $"c").as("r"))).as("sub") :: Nil, t1),
       Project(ScalarSubquery(
         Project((OuterReference(a) + b + c).as("r") :: Nil, t2), Seq(a)).as("sub") :: Nil, t1)
     )

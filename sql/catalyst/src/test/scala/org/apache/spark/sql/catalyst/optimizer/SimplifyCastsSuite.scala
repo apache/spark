@@ -70,7 +70,7 @@ class SimplifyCastsSuite extends PlanTest {
   }
 
   test("SPARK-37922: Combine to one cast if we can safely up-cast two casts") {
-    val input = LocalRelation($"a".int, $"b".decimal(18, 2), 'c.date, 'd.timestamp)
+    val input = LocalRelation($"a".int, $"b".decimal(18, 2), $"c".date, $"d".timestamp)
 
     // Combine casts
     comparePlans(

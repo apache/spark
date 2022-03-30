@@ -234,7 +234,7 @@ class ReplaceOperatorSuite extends PlanTest {
     val result = OptimizeIn(Optimize.execute(except.analyze))
     val correctAnswer = Aggregate(basePlan.output, basePlan.output,
       Filter(!Coalesce(Seq(
-        $"a".in(1, 2) || If('b.isNotNull, Literal.FalseLiteral, Literal(null, BooleanType)),
+        $"a".in(1, 2) || If($"b".isNotNull, Literal.FalseLiteral, Literal(null, BooleanType)),
         Literal.FalseLiteral)),
         basePlan)).analyze
     comparePlans(result, correctAnswer)

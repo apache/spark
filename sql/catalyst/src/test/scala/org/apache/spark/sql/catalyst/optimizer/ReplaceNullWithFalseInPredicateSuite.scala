@@ -521,8 +521,8 @@ class ReplaceNullWithFalseInPredicateSuite extends PlanTest {
       function = !(cond <=> TrueLiteral),
       arguments = lambdaArgs)
     testProjection(
-      originalExpr = createExpr(argument, lambda1) as 'x,
-      expectedExpr = createExpr(argument, lambda2) as 'x)
+      originalExpr = createExpr(argument, lambda1) as Symbol("x"),
+      expectedExpr = createExpr(argument, lambda2) as Symbol("x"))
   }
 
   private def test(

@@ -266,10 +266,10 @@ class PlanParserSuite extends AnalysisTest {
     assertEqual("select 1", OneRowRelation().select(1))
     assertEqual("select a, b", OneRowRelation().select($"a", $"b"))
     assertEqual("select a, b from db.c", table("db", "c").select($"a", $"b"))
-    assertEqual("select a, b from db.c where x < 1", table("db", "c").where('x < 1).select($"a", $"b"))
+    assertEqual("select a, b from db.c where x < 1", table("db", "c").where($"x" < 1).select($"a", $"b"))
     assertEqual(
       "select a, b from db.c having x < 1",
-      table("db", "c").having()($"a", $"b")('x < 1))
+      table("db", "c").having()($"a", $"b")($"x" < 1))
     assertEqual("select distinct a, b from db.c", Distinct(table("db", "c").select($"a", $"b")))
     assertEqual("select all a, b from db.c", table("db", "c").select($"a", $"b"))
     assertEqual("select from tbl", OneRowRelation().select($"from".as("tbl")))
@@ -279,7 +279,7 @@ class PlanParserSuite extends AnalysisTest {
   test("hive-style single-FROM statement") {
     assertEqual("from a select b, c", table("a").select($"b", $"c"))
     assertEqual(
-      "from db.a select b, c where d < 1", table("db", "a").where('d < 1).select($"b", $"c"))
+      "from db.a select b, c where d < 1", table("db", "a").where($"d" < 1).select($"b", $"c"))
     assertEqual("from a select distinct b, c", Distinct(table("a").select($"b", $"c")))
 
     // Weird "FROM table" queries, should be invalid anyway
@@ -290,7 +290,7 @@ class PlanParserSuite extends AnalysisTest {
   test("multi select query") {
     assertEqual(
       "from a select * select * where s < 10",
-      table("a").select(star()).union(table("a").where('s < 10).select(star())))
+      table("a").select(star()).union(table("a").where($"s" < 10).select(star())))
     intercept(
       "from a select * select * from x where a.s < 10", Some("PARSE_SYNTAX_ERROR"),
       "Syntax error at or near 'from'")
@@ -300,7 +300,7 @@ class PlanParserSuite extends AnalysisTest {
     assertEqual(
       "from a insert into tbl1 select * insert into tbl2 select * where s < 10",
       table("a").select(star()).insertInto("tbl1").union(
-        table("a").where('s < 10).select(star()).insertInto("tbl2")))
+        table("a").where($"s" < 10).select(star()).insertInto("tbl2")))
     assertEqual(
       "select * from (from a select * select *)",
       table("a").select(star())
@@ -482,7 +482,7 @@ class PlanParserSuite extends AnalysisTest {
         .generate(jsonTuple, alias = Some("jtup"), outputNames = Seq("q", "z"))
         .select(star())
         .insertInto("t2"),
-        from.where('s < 10).select(star()).insertInto("t3")))
+        from.where($"s" < 10).select(star()).insertInto("t3")))
 
     // Unresolved generator.
     val expected = table("t")
@@ -773,7 +773,7 @@ class PlanParserSuite extends AnalysisTest {
       table("db", "c").where($"x" >= 1).select($"a", $"b"))
     // !> is equivalent to <=
     assertEqual("select a, b from db.c where x !> 1",
-      table("db", "c").where('x <= 1).select($"a", $"b"))
+      table("db", "c").where($"x" <= 1).select($"a", $"b"))
   }
 
   test("select hint syntax") {

@@ -40,7 +40,7 @@ class PullupCorrelatedPredicatesSuite extends PlanTest {
   test("PullupCorrelatedPredicates should not produce unresolved plan") {
     val subPlan =
       testRelation2
-        .where($"b" < 'd)
+        .where($"b" < $"d")
         .select($"c")
     val inSubquery =
       testRelation
@@ -55,7 +55,7 @@ class PullupCorrelatedPredicatesSuite extends PlanTest {
   test("PullupCorrelatedPredicates in correlated subquery idempotency check") {
     val subPlan =
       testRelation2
-      .where($"b" < 'd)
+      .where($"b" < $"d")
       .select($"c")
     val inSubquery =
       testRelation
