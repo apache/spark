@@ -867,7 +867,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             Left boundary.
         right : scalar or list-like
             Right boundary.
-        inclusive : {"both", "neither", "left", "right"} or boolean.
+        inclusive : {"both", "neither", "left", "right"} or boolean. "both" by default.
             Include boundaries. Whether to set each bound as closed or open.
             Booleans are deprecated in favour of `both` or `neither`.
 
@@ -892,7 +892,27 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
         Boundary values are included by default:
 
-        >>> s.between(1, 4)
+        >>> s.between(0, 4)
+        0     True
+        1     True
+        2     True
+        3    False
+        4    False
+        dtype: bool
+
+        With `inclusive` set to "neither" boundary values are excluded:
+
+        >>> s.between(0, 4, inclusive="neither")
+        0     True
+        1    False
+        2    False
+        3    False
+        4    False
+        dtype: bool
+
+        With `inclusive` set to "right" only right boundary value is included:
+
+        >>> s.between(0, 4, inclusive="right")
         0     True
         1    False
         2     True
@@ -900,11 +920,11 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         4    False
         dtype: bool
 
-        With `inclusive` set to ``False`` boundary values are excluded:
+        With `inclusive` set to "left" only left boundary value is included:
 
-        >>> s.between(1, 4, inclusive=False)
+        >>> s.between(0, 4, inclusive="left")
         0     True
-        1    False
+        1     True
         2    False
         3    False
         4    False
