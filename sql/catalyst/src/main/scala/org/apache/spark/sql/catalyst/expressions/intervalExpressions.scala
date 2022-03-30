@@ -749,7 +749,7 @@ case class DivideDTInterval(
         val checkIntegralDivideOverflow =
           s"""
              |if (${micros.value} == ${Long.MinValue}L && ${num.value} == -1L)
-             |  throw QueryExecutionErrors.overflowInIntegralDivideError();
+             |  throw QueryExecutionErrors.overflowInIntegralDivideError($errorContext);
              |""".stripMargin
         nullSafeCodeGen(ctx, ev, (m, n) =>
           s"""
