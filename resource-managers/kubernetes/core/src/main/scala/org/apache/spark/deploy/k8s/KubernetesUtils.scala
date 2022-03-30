@@ -289,7 +289,7 @@ private[spark] object KubernetesUtils extends Logging {
             fs.mkdirs(new Path(s"${uploadPath}/${randomDirName}"))
             val targetUri = s"${uploadPath}/${randomDirName}/${fileUri.getPath.split("/").last}"
             log.info(s"Uploading file: ${fileUri.getPath} to dest: $targetUri...")
-            uploadFileToHadoopCompatibleFS(new Path(fileUri.getPath), new Path(targetUri), fs)
+            uploadFileToHadoopCompatibleFS(new Path(fileUri), new Path(targetUri), fs)
             targetUri
           } catch {
             case e: Exception =>
