@@ -75,6 +75,7 @@ class SparkOptimizer(
     ExtractPythonUDFFromAggregate.ruleName :+ ExtractGroupingPythonUDFFromAggregate.ruleName :+
     ExtractPythonUDFs.ruleName :+
     V2ScanRelationPushDown.ruleName :+
+    V1Writes.ruleName :+
     V2Writes.ruleName
 
   /**
