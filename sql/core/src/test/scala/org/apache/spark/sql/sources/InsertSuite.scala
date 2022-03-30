@@ -857,12 +857,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
     }
   }
 
-  test("INSERT INTO statements with tables with default columns") {
-    // For most of these cases, the test table 't' has two columns:
-    // (1) name 'i' with boolean type and no default value
-    // (2) name 's' with long integer type and a default value of 42L.
-    //
-    // Positive tests:
+  test("INSERT INTO statements with tables with default columns: positive tests") {
     // When the USE_NULLS_FOR_MISSING_DEFAULT_COLUMN_VALUES configuration is enabled, and no
     // explicit DEFAULT value is available when the INSERT INTO statement provides fewer
     // values than expected, NULL values are appended in their place.
@@ -870,7 +865,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
       withTable("t") {
         sql("create table t(i boolean, s bigint) using parquet")
         sql("insert into t values(true)")
-        checkAnswer(sql("select s from t where i = true"), Seq(null).map(i => Row(i)))
+        checkAnswer(sql("select s from t where i = true"), Seq(Row(null)))
       }
     }
     // The default value for the DEFAULT keyword is the NULL literal.
@@ -988,7 +983,8 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
         val resultSchema = new StructType()
           .add("s", LongType, false)
           .add("x", LongType, false)
-        checkAnswer(sql("select j, s, x from t2 order by j, s, x"),
+        checkAnswer(
+          sql("select j, s, x from t2 order by j, s, x"),
           Seq(
             new GenericRowWithSchema(Array(1, 42L, 43L), resultSchema),
             new GenericRowWithSchema(Array(2, 42L, 43L), resultSchema),
@@ -997,8 +993,9 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
             new GenericRowWithSchema(Array(5, 44L, 43L), resultSchema)))
       }
     }
+  }
 
-    // Negative tests:
+  test("INSERT INTO statements with tables with default columns: negative tests") {
     object Errors {
       val COMMON_SUBSTRING = " has a DEFAULT value"
       val COLUMN_DEFAULT_NOT_FOUND = "Column 'default' does not exist"

@@ -857,7 +857,7 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
   }
 
   test("SPARK-35531: Insert data with different cases of bucket column") {
-    def test: Unit = {
+    def testDefaultColumn: Unit = {
       withTable("test1") {
         Seq(true, false).foreach { isHiveTable =>
           val createSpark = if (isHiveTable) {
@@ -907,15 +907,15 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
       }
     }
     withSQLConf(SQLConf.ENABLE_DEFAULT_COLUMNS.key -> "false") {
-      test
+      testDefaultColumn
     }
     withSQLConf(SQLConf.ENABLE_DEFAULT_COLUMNS.key -> "true",
       SQLConf.USE_NULLS_FOR_MISSING_DEFAULT_COLUMN_VALUES.key -> "false") {
-      test
+      testDefaultColumn
     }
     withSQLConf(SQLConf.ENABLE_DEFAULT_COLUMNS.key -> "true",
       SQLConf.USE_NULLS_FOR_MISSING_DEFAULT_COLUMN_VALUES.key -> "true") {
-      test
+      testDefaultColumn
     }
   }
 }
