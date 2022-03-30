@@ -312,6 +312,10 @@ abstract class BaseSessionStateBuilder(
     extensions.buildQueryStagePrepRules(session)
   }
 
+  protected def runtimeOptimizerRules: Seq[Rule[LogicalPlan]] = {
+    extensions.buildRuntimeOptimizerRules(session)
+  }
+
   /**
    * Create a query execution object.
    */
@@ -366,7 +370,8 @@ abstract class BaseSessionStateBuilder(
       createQueryExecution,
       createClone,
       columnarRules,
-      queryStagePrepRules)
+      queryStagePrepRules,
+      runtimeOptimizerRules)
   }
 }
 

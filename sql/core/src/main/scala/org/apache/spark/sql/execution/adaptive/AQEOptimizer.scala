@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.adaptive
 
+import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.analysis.UpdateAttributeNullability
 import org.apache.spark.sql.catalyst.optimizer.{ConvertToLocalRelation, EliminateLimits, OptimizeOneRowPlan}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, LogicalPlanIntegrity, PlanHelper}
@@ -28,7 +29,9 @@ import org.apache.spark.util.Utils
 /**
  * The optimizer for re-optimizing the logical plan used by AdaptiveSparkPlanExec.
  */
-class AQEOptimizer(conf: SQLConf) extends RuleExecutor[LogicalPlan] {
+class AQEOptimizer(session: SparkSession) extends RuleExecutor[LogicalPlan] {
+  private val conf = session.sessionState.conf
+
   private def fixedPoint =
     FixedPoint(
       conf.optimizerMaxIterations,
@@ -41,8 +44,8 @@ class AQEOptimizer(conf: SQLConf) extends RuleExecutor[LogicalPlan] {
       UpdateAttributeNullability),
     Batch("Dynamic Join Selection", Once, DynamicJoinSelection),
     Batch("Eliminate Limits", fixedPoint, EliminateLimits),
-    Batch("Optimize One Row Plan", fixedPoint, OptimizeOneRowPlan)
-  )
+    Batch("Optimize One Row Plan", fixedPoint, OptimizeOneRowPlan)) :+
+    Batch("User Provided Optimizers", fixedPoint, session.sessionState.runtimeOptimizerRules: _*)
 
   final override protected def batches: Seq[Batch] = {
     val excludedRules = conf.getConf(SQLConf.ADAPTIVE_OPTIMIZER_EXCLUDED_RULES)

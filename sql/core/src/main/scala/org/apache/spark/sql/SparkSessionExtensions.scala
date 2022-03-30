@@ -47,6 +47,7 @@ import org.apache.spark.sql.execution.{ColumnarRule, SparkPlan}
  * <li>(External) Catalog listeners.</li>
  * <li>Columnar Rules.</li>
  * <li>Adaptive Query Stage Preparation Rules.</li>
+ * <li>Adaptive Query Execution Optimizer Rules.</li>
  * </ul>
  *
  * The extensions can be used by calling `withExtensions` on the [[SparkSession.Builder]], for
@@ -293,5 +294,24 @@ class SparkSessionExtensions {
    */
   def injectTableFunction(functionDescription: TableFunctionDescription): Unit = {
     injectedTableFunctions += functionDescription
+  }
+
+  private[this] val runtimeOptimizerRules = mutable.Buffer.empty[RuleBuilder]
+
+  private[sql] def buildRuntimeOptimizerRules(session: SparkSession): Seq[Rule[LogicalPlan]] = {
+    runtimeOptimizerRules.map(_.apply(session)).toSeq
+  }
+
+  /**
+   * Inject a runtime `Rule` builder into the [[SparkSession]].
+   * The injected rules will be executed once after built-in
+   * [[org.apache.spark.sql.execution.adaptive.AQEOptimizer]] rules are applied.
+   * A runtime optimizer rule is used to improve the quality of a logical plan during execution
+   * which can leverage accurate statistics from shuffle.
+   *
+   * Note that, it does not work if adaptive query execution is disabled.
+   */
+  def injectRuntimeOptimizerRule(builder: RuleBuilder): Unit = {
+    runtimeOptimizerRules += builder
   }
 }
