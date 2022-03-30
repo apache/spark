@@ -33,7 +33,7 @@ import org.apache.spark.sql.connector.distributions.{ClusteredDistribution, Dist
 import org.apache.spark.sql.connector.expressions._
 import org.apache.spark.sql.connector.metric.{CustomMetric, CustomTaskMetric}
 import org.apache.spark.sql.connector.read._
-import org.apache.spark.sql.connector.read.partitioning.{DataSourcePartitioning, Partitioning, UnknownPartitioning}
+import org.apache.spark.sql.connector.read.partitioning.{KeyGroupedPartitioning, Partitioning, UnknownPartitioning}
 import org.apache.spark.sql.connector.write._
 import org.apache.spark.sql.connector.write.streaming.{StreamingDataWriterFactory, StreamingWrite}
 import org.apache.spark.sql.internal.connector.SupportsStreamingUpdateAsAppend
@@ -282,7 +282,7 @@ class InMemoryTable(
 
     override def outputPartitioning(): Partitioning = {
       InMemoryTable.this.distribution match {
-        case cd: ClusteredDistribution => new DataSourcePartitioning(cd.clustering(), data.size)
+        case cd: ClusteredDistribution => new KeyGroupedPartitioning(cd.clustering(), data.size)
         case _ => new UnknownPartitioning(data.size)
       }
     }

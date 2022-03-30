@@ -27,7 +27,7 @@ import org.apache.spark.sql.connector.read.SupportsReportPartitioning;
  * Note: implementors <b>should NOT</b> directly implement this interface. Instead, they should
  * use one of the following subclasses:
  * <ul>
- * <li>{@link DataSourcePartitioning}</li>
+ * <li>{@link KeyGroupedPartitioning}</li>
  * <li>{@link UnknownPartitioning}</li>
  * </ul>
  *

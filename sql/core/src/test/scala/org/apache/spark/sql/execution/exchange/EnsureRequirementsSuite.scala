@@ -939,18 +939,18 @@ class EnsureRequirementsSuite extends SharedSparkSession {
   }
 
   def bucket(numBuckets: Int, expr: Expression): TransformExpression = {
-    DataSourceBucketTransformExpression(numBuckets, BucketFunction, Seq(expr))
+    TransformExpression(BucketFunction, Seq(expr), Some(numBuckets))
   }
 
   def buckets(numBuckets: Int, expr: Seq[Expression]): TransformExpression = {
-    DataSourceBucketTransformExpression(numBuckets, BucketFunction, expr)
+    TransformExpression(BucketFunction, expr, Some(numBuckets))
   }
 
   def years(expr: Expression): TransformExpression = {
-    DataSourceTransformExpression(YearsFunction, Seq(expr))
+    TransformExpression(YearsFunction, Seq(expr))
   }
 
   def days(expr: Expression): TransformExpression = {
-    DataSourceTransformExpression(DaysFunction, Seq(expr))
+    TransformExpression(DaysFunction, Seq(expr))
   }
 }

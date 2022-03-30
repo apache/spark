@@ -28,7 +28,7 @@ import org.apache.spark.sql.connector.expressions.Expressions;
 import org.apache.spark.sql.connector.expressions.Transform;
 import org.apache.spark.sql.connector.read.*;
 import org.apache.spark.sql.connector.read.partitioning.Partitioning;
-import org.apache.spark.sql.connector.read.partitioning.DataSourcePartitioning;
+import org.apache.spark.sql.connector.read.partitioning.KeyGroupedPartitioning;
 import org.apache.spark.sql.util.CaseInsensitiveStringMap;
 
 public class JavaPartitionAwareDataSource implements TestingV2Source {
@@ -51,7 +51,7 @@ public class JavaPartitionAwareDataSource implements TestingV2Source {
     @Override
     public Partitioning outputPartitioning() {
       Expression[] clustering = new Transform[] { Expressions.identity("i") };
-      return new DataSourcePartitioning(clustering, 2);
+      return new KeyGroupedPartitioning(clustering, 2);
     }
   }
 

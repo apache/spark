@@ -82,14 +82,15 @@ object V2ExpressionUtils extends SQLConfHelper with Logging {
       funCatalogOpt: Option[FunctionCatalog] = None): Option[Expression] = trans match {
     case IdentityTransform(ref) =>
       Some(resolveRef[NamedExpression](ref, query))
-    case BucketTransform(numBuckets, refs, sorted) if sorted.isEmpty && refs.length == 1 =>
+    case BucketTransform(numBuckets, refs, sorted)
+        if sorted.isEmpty && refs.length == 1 && refs.forall(_.isInstanceOf[NamedReference]) =>
       val resolvedRefs = refs.map(r => resolveRef[NamedExpression](r, query))
       // Create a dummy reference for `numBuckets` here and use that, together with `refs`, to
       // look up the V2 function.
       val numBucketsRef = AttributeReference("numBuckets", IntegerType, nullable = false)()
       funCatalogOpt.flatMap { catalog =>
         loadV2Function(catalog, "bucket", Seq(numBucketsRef) ++ resolvedRefs).map { bound =>
-          DataSourceBucketTransformExpression(numBuckets, bound, resolvedRefs)
+          TransformExpression(bound, resolvedRefs, Some(numBuckets))
         }
       }
     case NamedTransform(name, refs)
@@ -99,7 +100,7 @@ object V2ExpressionUtils extends SQLConfHelper with Logging {
       }
       funCatalogOpt.flatMap { catalog =>
         loadV2Function(catalog, name, resolvedRefs).map { bound =>
-          DataSourceTransformExpression(bound, resolvedRefs)
+          TransformExpression(bound, resolvedRefs)
         }
       }
     case _ =>

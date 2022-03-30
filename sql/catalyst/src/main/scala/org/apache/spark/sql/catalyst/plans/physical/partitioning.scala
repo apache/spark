@@ -642,6 +642,9 @@ case class KeyGroupedShuffleSpec(
    * A sequence where each element is a set of positions of the partition expression to the cluster
    * keys. For instance, if cluster keys are [a, b, b] and partition expressions are
    * [bucket(4, a), years(b)], the result will be [(0), (1, 2)].
+   *
+   * Note that we only allow each partition expression to contain a single partition key.
+   * Therefore the mapping here is very similar to that from `HashShuffleSpec`.
    */
   lazy val keyPositions: Seq[mutable.BitSet] = {
     val distKeyToPos = mutable.Map.empty[Expression, mutable.BitSet]
@@ -650,8 +653,7 @@ case class KeyGroupedShuffleSpec(
     }
     partitioning.expressions.map { e =>
       val leaves = e.collectLeaves()
-      assert(leaves.size == 1, s"Expected exactly one leaf expression from $e, but found " +
-          s"${leaves.size}")
+      assert(leaves.size == 1, s"Expected exactly one child from $e, but found ${leaves.size}")
       distKeyToPos.getOrElse(leaves.head.canonicalized, mutable.BitSet.empty)
     }
   }
@@ -663,52 +665,43 @@ case class KeyGroupedShuffleSpec(
 
   override def isCompatibleWith(other: ShuffleSpec): Boolean = other match {
     // Here we check:
-    //  1. both distributions have the same number of clustering expressions
+    //  1. both distributions have the same number of clustering keys
     //  2. both partitioning have the same number of partitions
-    //  3. clustering expressions from both sides are compatible in terms of number, position
-    //      w.r.t the distribution keys, as well as transform.
+    //  3. partition expressions from both sides are compatible, which means:
+    //    3.1 both sides have the same number of partition expressions
+    //    3.2 for each pair of partition expressions at the same index, the corresponding
+    //        partition keys must share overlapping positions in their respective clustering keys.
+    //    3.3 each pair of partition expressions at the same index must share compatible
+    //        transform functions.
     //  4. the partition values, if present on both sides, are following the same order.
     case otherSpec @ KeyGroupedShuffleSpec(otherPartitioning, otherDistribution) =>
+      val expressions = partitioning.expressions
+      val otherExpressions = otherPartitioning.expressions
+
       distribution.clustering.length == otherDistribution.clustering.length &&
-        numPartitions == other.numPartitions &&
-          isClusteringCompatibleWith(otherSpec) &&
-            partitioning.partitionValuesOpt.zip(otherPartitioning.partitionValuesOpt).forall {
-              case (left, right) => left.zip(right).forall { case (l, r) =>
-                ordering.compare(l, r) == 0
-              }
+          numPartitions == other.numPartitions &&
+          expressions.length == otherExpressions.length && {
+            val otherKeyPositions = otherSpec.keyPositions
+            keyPositions.zip(otherKeyPositions).forall { case (left, right) =>
+              left.intersect(right).nonEmpty
             }
+          } && expressions.zip(otherExpressions).forall {
+            case (l, r) => isExpressionCompatible(l, r)
+          } && partitioning.partitionValuesOpt.zip(otherPartitioning.partitionValuesOpt).forall {
+            case (left, right) => left.zip(right).forall { case (l, r) =>
+              ordering.compare(l, r) == 0
+            }
+         }
     case ShuffleSpecCollection(specs) =>
       specs.exists(isCompatibleWith)
     case _ => false
-  }
-
-  /**
-   * Check if the clustering expressions from this spec and `other` are compatible. In
-   * particular, whether each pair of expressions have compatible transform expressions.
-   *
-   * @param other the partitioning from the other side
-   * @return true if the clustering expressions are compatible, false otherwise
-   */
-  private def isClusteringCompatibleWith(other: KeyGroupedShuffleSpec): Boolean = {
-    val expressions = partitioning.expressions
-    val otherPartitioning = other.partitioning
-    val otherExpressions = otherPartitioning.expressions
-
-    expressions.length == otherExpressions.length && {
-      val otherKeyPositions = other.keyPositions
-      keyPositions.zip(otherKeyPositions).forall { case (left, right) =>
-        left.intersect(right).nonEmpty
-      }
-    } && expressions.zip(otherExpressions).forall { case (l, r) =>
-      isExpressionCompatible(l, r)
-    }
   }
 
   private def isExpressionCompatible(left: Expression, right: Expression): Boolean =
     (left, right) match {
       case (_: LeafExpression, _: LeafExpression) => true
       case (left: TransformExpression, right: TransformExpression) =>
-        left.isCompatibleWith(right)
+        left.isSameFunction(right)
       case _ => false
     }
 

@@ -20,7 +20,18 @@ package org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.connector.catalog.functions.BoundFunction
 import org.apache.spark.sql.types.DataType
 
-abstract class TransformExpression extends Expression with Unevaluable {
+/**
+ * Represents a partition transform expression, for instance, `bucket`, `days`, `years`, etc.
+ *
+ * @param function the transform function itself. Spark will use it to decide whether two
+ *                 partition transform expressions are compatible.
+ * @param numBucketsOpt the number of buckets if the transform is `bucket`. Unset otherwise.
+ */
+case class TransformExpression(
+    function: BoundFunction,
+    children: Seq[Expression],
+    numBucketsOpt: Option[Int] = None) extends Expression with Unevaluable {
+
   override def nullable: Boolean = true
 
   /**
@@ -35,37 +46,10 @@ abstract class TransformExpression extends Expression with Unevaluable {
    * @param other the transform expression to compare to
    * @return true if this and `other` has the same semantics w.r.t to transform, false otherwise.
    */
-  def isCompatibleWith(other: TransformExpression): Boolean
-}
-
-/**
- * A transform expression defined by a V2 data source.
- */
-case class DataSourceTransformExpression(
-    function: BoundFunction,
-    children: Seq[Expression]) extends TransformExpression {
-
-  override def isCompatibleWith(other: TransformExpression): Boolean = other match {
-    case DataSourceTransformExpression(otherFunction, _) =>
-      function.canonicalName() == otherFunction.canonicalName()
-    case _ =>
-      false
-  }
-
-  override def dataType: DataType = function.resultType()
-
-  override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): Expression =
-    copy(children = newChildren)
-}
-
-case class DataSourceBucketTransformExpression(
-    numBuckets: Int,
-    function: BoundFunction,
-    children: Seq[Expression]) extends TransformExpression {
-
-  override def isCompatibleWith(other: TransformExpression): Boolean = other match {
-    case DataSourceBucketTransformExpression(otherNumBuckets, otherFunction, _) =>
-      numBuckets == otherNumBuckets && function.canonicalName() == otherFunction.canonicalName()
+  def isSameFunction(other: TransformExpression): Boolean = other match {
+    case TransformExpression(otherFunction, _, otherNumBucketsOpt) =>
+      function.canonicalName() == otherFunction.canonicalName() &&
+          numBucketsOpt == otherNumBucketsOpt
     case _ =>
       false
   }

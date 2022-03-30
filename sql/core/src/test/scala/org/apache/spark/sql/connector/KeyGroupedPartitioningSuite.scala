@@ -20,7 +20,7 @@ import java.util.Collections
 
 import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Ascending, DataSourceBucketTransformExpression, DataSourceTransformExpression, SortOrder => V1SortOrder}
+import org.apache.spark.sql.catalyst.expressions.{Ascending, SortOrder => V1SortOrder, TransformExpression}
 import org.apache.spark.sql.catalyst.plans.{physical => v1}
 import org.apache.spark.sql.catalyst.plans.physical.{ClusteredDistribution, KeyGroupedPartitioning}
 import org.apache.spark.sql.connector.catalog.Identifier
@@ -39,7 +39,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf._
 import org.apache.spark.sql.types._
 
-class DataSourcePartitioningSuite extends DistributionAndOrderingSuiteBase {
+class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase {
   private var originalV2BucketingEnabled: Boolean = false
   private var originalAutoBroadcastJoinThreshold: Long = -1
 
@@ -93,7 +93,7 @@ class DataSourcePartitioningSuite extends DistributionAndOrderingSuiteBase {
 
     var df = sql(s"SELECT count(*) FROM testcat.ns.$table GROUP BY ts")
     val v1Distribution = v1.ClusteredDistribution(
-      Seq(DataSourceTransformExpression(YearsFunction, Seq(attr("ts")))))
+      Seq(TransformExpression(YearsFunction, Seq(attr("ts")))))
     val partitionValues = Seq(50, 51, 52).map(v => InternalRow.fromSeq(Seq(v)))
 
     checkQueryPlan(df, v1Distribution,
@@ -130,7 +130,7 @@ class DataSourcePartitioningSuite extends DistributionAndOrderingSuiteBase {
 
     val df = sql(s"SELECT * FROM testcat.ns.$table")
     val distribution = v1.ClusteredDistribution(
-      Seq(DataSourceBucketTransformExpression(32, BucketFunction, Seq(attr("ts")))))
+      Seq(TransformExpression(BucketFunction, Seq(attr("ts")), Some(32))))
 
     checkQueryPlan(df, distribution, v1.UnknownPartitioning(0))
   }
@@ -143,7 +143,7 @@ class DataSourcePartitioningSuite extends DistributionAndOrderingSuiteBase {
 
     val df = sql(s"SELECT * FROM testcat.ns.$table")
     val distribution = v1.ClusteredDistribution(
-      Seq(DataSourceBucketTransformExpression(32, BucketFunction, Seq(attr("ts")))))
+      Seq(TransformExpression(BucketFunction, Seq(attr("ts")), Some(32))))
 
     checkQueryPlan(df, distribution, v1.SinglePartition)
   }
@@ -200,7 +200,7 @@ class DataSourcePartitioningSuite extends DistributionAndOrderingSuiteBase {
 
       val df = sql(s"SELECT * FROM testcat.ns.$table")
       val distribution = v1.ClusteredDistribution(
-        Seq(DataSourceBucketTransformExpression(32, BucketFunction, Seq(attr("ts")))))
+        Seq(TransformExpression(BucketFunction, Seq(attr("ts")), Some(32))))
 
       checkQueryPlan(df, distribution, v1.UnknownPartitioning(0))
     }
