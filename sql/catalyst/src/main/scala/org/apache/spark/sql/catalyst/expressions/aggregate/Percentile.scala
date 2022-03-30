@@ -327,7 +327,6 @@ case class Percentile(
 }
 
 object Percentile {
-  
   /**
    * A tag to decide if order by or frame is specified by user.
    */
