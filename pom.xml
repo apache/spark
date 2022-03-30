@@ -97,7 +97,6 @@
     <module>sql/catalyst</module>
     <module>sql/core</module>
     <module>sql/hive</module>
-    <module>assembly</module>
     <module>examples</module>
     <module>repl</module>
     <module>launcher</module>
@@ -106,6 +105,8 @@
     <module>external/kafka-0-10-assembly</module>
     <module>external/kafka-0-10-sql</module>
     <module>external/avro</module>
+    <module>hadoop-cloud</module>
+    <module>assembly</module>
     <!-- See additional modules enabled by profiles below -->
   </modules>
 
@@ -168,6 +169,7 @@
     <scalafmt.skip>true</scalafmt.skip>
     <codehaus.jackson.version>1.9.13</codehaus.jackson.version>
     <fasterxml.jackson.version>2.12.3</fasterxml.jackson.version>
+    <fasterxml.jackson.databind.version>2.12.3</fasterxml.jackson.databind.version>
     <snappy.version>1.1.8.4</snappy.version>
     <netlib.java.version>1.1.2</netlib.java.version>
     <netlib.ludovic.dev.version>2.2.1</netlib.ludovic.dev.version>
@@ -205,6 +207,10 @@
     <!-- org.fusesource.leveldbjni will be used except on arm64 platform. -->
     <leveldbjni.group>org.fusesource.leveldbjni</leveldbjni.group>
     <kubernetes-client.version>5.4.1</kubernetes-client.version>
+
+    <!-- Toast Lib Enhancement -->
+    <!--spark-cassandra-connector.version>2.4.1</spark-cassandra-connector.version-->
+    <spark-alchemy.version>1.2.0</spark-alchemy.version>
 
     <test.java.home>${java.home}</test.java.home>
 
@@ -3301,6 +3307,15 @@
 
     <profile>
       <id>hadoop-3.2</id>
+      <properties>
+        <hadoop.version>3.2.0</hadoop.version>
+        <curator.version>2.12.0</curator.version>
+        <zookeeper.version>3.4.13</zookeeper.version>
+      </properties>
+    </profile>
+
+    <profile>
+      <id>hadoop-3.3</id>
       <!-- Default hadoop profile. Uses global properties. -->
     </profile>
 

@@ -429,7 +429,8 @@ class InMemoryCatalog(
 
       try {
         val fs = tablePath.getFileSystem(hadoopConfig)
-        if (!fs.exists(partitionPath)) {
+        val checkExists = conf.getBoolean("toast.spark.catalog.checkExistsEnabled", true)
+        if (checkExists && !fs.exists(partitionPath)) {
           fs.mkdirs(partitionPath)
         }
       } catch {
