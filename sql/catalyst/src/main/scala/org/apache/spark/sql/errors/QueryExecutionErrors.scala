@@ -137,9 +137,9 @@ object QueryExecutionErrors {
       messageParameters = Array(funcCls, inputTypes, outputType), e)
   }
 
-  def divideByZeroError(): ArithmeticException = {
+  def divideByZeroError(context: String): ArithmeticException = {
     new SparkArithmeticException(
-      errorClass = "DIVIDE_BY_ZERO", messageParameters = Array(SQLConf.ANSI_ENABLED.key))
+      errorClass = "DIVIDE_BY_ZERO", messageParameters = Array(SQLConf.ANSI_ENABLED.key, context))
   }
 
   def invalidArrayIndexError(index: Int, numElements: Int): ArrayIndexOutOfBoundsException = {
@@ -212,8 +212,8 @@ object QueryExecutionErrors {
     arithmeticOverflowError("Overflow in sum of decimals")
   }
 
-  def overflowInIntegralDivideError(): ArithmeticException = {
-    arithmeticOverflowError("Overflow in integral divide", "try_divide")
+  def overflowInIntegralDivideError(context: String): ArithmeticException = {
+    arithmeticOverflowError("Overflow in integral divide", "try_divide", context)
   }
 
   def mapSizeExceedArraySizeWhenZipMapError(size: Int): RuntimeException = {
