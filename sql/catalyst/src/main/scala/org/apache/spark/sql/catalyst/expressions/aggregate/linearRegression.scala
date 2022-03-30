@@ -17,9 +17,10 @@
 
 package org.apache.spark.sql.catalyst.expressions.aggregate
 
+import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions.{And, Expression, ExpressionDescription, If, ImplicitCastInputTypes, IsNotNull, Literal, RuntimeReplaceableAggregate}
 import org.apache.spark.sql.catalyst.trees.BinaryLike
-import org.apache.spark.sql.types.{AbstractDataType, NumericType}
+import org.apache.spark.sql.types.{AbstractDataType, DoubleType, NumericType}
 
 @ExpressionDescription(
   usage = """
@@ -37,7 +38,10 @@ import org.apache.spark.sql.types.{AbstractDataType, NumericType}
   group = "agg_funcs",
   since = "3.3.0")
 case class RegrCount(left: Expression, right: Expression)
-  extends RuntimeReplaceableAggregate with ImplicitCastInputTypes with BinaryLike[Expression] {
+  extends AggregateFunction
+  with RuntimeReplaceableAggregate
+  with ImplicitCastInputTypes
+  with BinaryLike[Expression] {
   override lazy val replacement: Expression = Count(Seq(left, right))
   override def nodeName: String = "regr_count"
   override def inputTypes: Seq[AbstractDataType] = Seq(NumericType, NumericType)
@@ -65,8 +69,13 @@ case class RegrCount(left: Expression, right: Expression)
   group = "agg_funcs",
   since = "3.3.0")
 // scalastyle:on line.size.limit
-case class RegrAvgX(left: Expression, right: Expression)
-  extends RuntimeReplaceableAggregate with ImplicitCastInputTypes with BinaryLike[Expression] {
+case class RegrAvgX(
+    left: Expression,
+    right: Expression)
+  extends AggregateFunction
+  with RuntimeReplaceableAggregate
+  with ImplicitCastInputTypes
+  with BinaryLike[Expression] {
   override lazy val replacement: Expression =
     Average(If(And(IsNotNull(left), IsNotNull(right)), right, Literal.create(null, right.dataType)))
   override def nodeName: String = "regr_avgx"
@@ -95,8 +104,13 @@ case class RegrAvgX(left: Expression, right: Expression)
   group = "agg_funcs",
   since = "3.3.0")
 // scalastyle:on line.size.limit
-case class RegrAvgY(left: Expression, right: Expression)
-  extends RuntimeReplaceableAggregate with ImplicitCastInputTypes with BinaryLike[Expression] {
+case class RegrAvgY(
+    left: Expression,
+    right: Expression)
+  extends AggregateFunction
+  with RuntimeReplaceableAggregate
+  with ImplicitCastInputTypes
+  with BinaryLike[Expression] {
   override lazy val replacement: Expression =
     Average(If(And(IsNotNull(left), IsNotNull(right)), left, Literal.create(null, left.dataType)))
   override def nodeName: String = "regr_avgy"
@@ -104,4 +118,35 @@ case class RegrAvgY(left: Expression, right: Expression)
   override protected def withNewChildrenInternal(
       newLeft: Expression, newRight: Expression): RegrAvgY =
     this.copy(left = newLeft, right = newRight)
+}
+
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = "_FUNC_(y, x) - Returns the coefficient of determination for non-null pairs in a group, where `y` is the dependent variable and `x` is the independent variable.",
+  examples = """
+    Examples:
+      > SELECT _FUNC_(y, x) FROM VALUES (1, 2), (2, 2), (2, 3), (2, 4) AS tab(y, x);
+       0.2727272727272727
+      > SELECT _FUNC_(y, x) FROM VALUES (1, null) AS tab(y, x);
+       NULL
+      > SELECT _FUNC_(y, x) FROM VALUES (null, 1) AS tab(y, x);
+       NULL
+      > SELECT _FUNC_(y, x) FROM VALUES (1, 2), (2, null), (2, 3), (2, 4) AS tab(y, x);
+       0.7500000000000001
+      > SELECT _FUNC_(y, x) FROM VALUES (1, 2), (2, null), (null, 3), (2, 4) AS tab(y, x);
+       1.0
+  """,
+  group = "agg_funcs",
+  since = "3.3.0")
+// scalastyle:on line.size.limit
+case class RegrR2(x: Expression, y: Expression) extends PearsonCorrelation(x, y, true) {
+  override def prettyName: String = "regr_r2"
+  override val evaluateExpression: Expression = {
+    val corr = ck / sqrt(xMk * yMk)
+    If(xMk === 0.0, Literal.create(null, DoubleType),
+      If(yMk === 0.0, Literal.create(1.0, DoubleType), corr * corr))
+  }
+  override protected def withNewChildrenInternal(
+      newLeft: Expression, newRight: Expression): RegrR2 =
+    this.copy(x = newLeft, y = newRight)
 }

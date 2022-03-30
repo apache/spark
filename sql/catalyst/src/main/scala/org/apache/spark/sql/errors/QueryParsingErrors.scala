@@ -90,11 +90,13 @@ object QueryParsingErrors {
   }
 
   def transformNotSupportQuantifierError(ctx: ParserRuleContext): Throwable = {
-    new ParseException("TRANSFORM does not support DISTINCT/ALL in inputs", ctx)
+    new ParseException("UNSUPPORTED_FEATURE",
+      Array("TRANSFORM does not support DISTINCT/ALL in inputs"), ctx)
   }
 
   def transformWithSerdeUnsupportedError(ctx: ParserRuleContext): Throwable = {
-    new ParseException("TRANSFORM with serde is only supported in hive mode", ctx)
+    new ParseException("UNSUPPORTED_FEATURE",
+      Array("TRANSFORM with serde is only supported in hive mode"), ctx)
   }
 
   def lateralWithPivotInFromClauseNotAllowedError(ctx: FromClauseContext): Throwable = {
@@ -118,15 +120,18 @@ object QueryParsingErrors {
   }
 
   def repetitiveWindowDefinitionError(name: String, ctx: WindowClauseContext): Throwable = {
-    new ParseException(s"The definition of window '$name' is repetitive", ctx)
+    new ParseException("INVALID_SQL_SYNTAX",
+      Array(s"The definition of window '$name' is repetitive."), ctx)
   }
 
   def invalidWindowReferenceError(name: String, ctx: WindowClauseContext): Throwable = {
-    new ParseException(s"Window reference '$name' is not a window specification", ctx)
+    new ParseException("INVALID_SQL_SYNTAX",
+      Array(s"Window reference '$name' is not a window specification."), ctx)
   }
 
   def cannotResolveWindowReferenceError(name: String, ctx: WindowClauseContext): Throwable = {
-    new ParseException(s"Cannot resolve window reference '$name'", ctx)
+    new ParseException("INVALID_SQL_SYNTAX",
+      Array(s"Cannot resolve window reference '$name'."), ctx)
   }
 
   def naturalCrossJoinUnsupportedError(ctx: RelationContext): Throwable = {
@@ -156,7 +161,8 @@ object QueryParsingErrors {
   }
 
   def functionNameUnsupportedError(functionName: String, ctx: ParserRuleContext): Throwable = {
-    new ParseException(s"Unsupported function name '$functionName'", ctx)
+    new ParseException("INVALID_SQL_SYNTAX",
+      Array(s"Unsupported function name '$functionName'"), ctx)
   }
 
   def cannotParseValueTypeError(
@@ -221,19 +227,11 @@ object QueryParsingErrors {
   }
 
   def tooManyArgumentsForTransformError(name: String, ctx: ApplyTransformContext): Throwable = {
-    new ParseException(s"Too many arguments for transform $name", ctx)
-  }
-
-  def notEnoughArgumentsForTransformError(name: String, ctx: ApplyTransformContext): Throwable = {
-    new ParseException(s"Not enough arguments for transform $name", ctx)
+    new ParseException("INVALID_SQL_SYNTAX", Array(s"Too many arguments for transform $name"), ctx)
   }
 
   def invalidBucketsNumberError(describe: String, ctx: ApplyTransformContext): Throwable = {
     new ParseException(s"Invalid number of buckets: $describe", ctx)
-  }
-
-  def invalidTransformArgumentError(ctx: TransformArgumentContext): Throwable = {
-    new ParseException("Invalid transform argument", ctx)
   }
 
   def cannotCleanReservedNamespacePropertyError(
@@ -296,12 +294,13 @@ object QueryParsingErrors {
   }
 
   def showFunctionsUnsupportedError(identifier: String, ctx: IdentifierContext): Throwable = {
-    new ParseException(s"SHOW $identifier FUNCTIONS not supported", ctx)
+    new ParseException("INVALID_SQL_SYNTAX",
+      Array(s"SHOW $identifier FUNCTIONS not supported"), ctx)
   }
 
   def showFunctionsInvalidPatternError(pattern: String, ctx: ParserRuleContext): Throwable = {
-    new ParseException(s"Invalid pattern in SHOW FUNCTIONS: $pattern. It must be " +
-      "a string literal.", ctx)
+    new ParseException("INVALID_SQL_SYNTAX",
+      Array(s"Invalid pattern in SHOW FUNCTIONS: $pattern. It must be a string literal."), ctx)
   }
 
   def duplicateCteDefinitionNamesError(duplicateNames: String, ctx: CtesContext): Throwable = {
@@ -406,22 +405,27 @@ object QueryParsingErrors {
   }
 
   def createFuncWithBothIfNotExistsAndReplaceError(ctx: CreateFunctionContext): Throwable = {
-    new ParseException("CREATE FUNCTION with both IF NOT EXISTS and REPLACE is not allowed.", ctx)
+    new ParseException("INVALID_SQL_SYNTAX",
+      Array("CREATE FUNCTION with both IF NOT EXISTS and REPLACE is not allowed."), ctx)
   }
 
   def defineTempFuncWithIfNotExistsError(ctx: CreateFunctionContext): Throwable = {
-    new ParseException("It is not allowed to define a TEMPORARY function with IF NOT EXISTS.", ctx)
+    new ParseException("INVALID_SQL_SYNTAX",
+      Array("It is not allowed to define a TEMPORARY function with IF NOT EXISTS."), ctx)
   }
 
   def unsupportedFunctionNameError(quoted: String, ctx: CreateFunctionContext): Throwable = {
-    new ParseException(s"Unsupported function name '$quoted'", ctx)
+    new ParseException("INVALID_SQL_SYNTAX",
+      Array(s"Unsupported function name '$quoted'"), ctx)
   }
 
   def specifyingDBInCreateTempFuncError(
       databaseName: String,
       ctx: CreateFunctionContext): Throwable = {
     new ParseException(
-      s"Specifying a database in CREATE TEMPORARY FUNCTION is not allowed: '$databaseName'", ctx)
+      "INVALID_SQL_SYNTAX",
+      Array(s"Specifying a database in CREATE TEMPORARY FUNCTION is not allowed: '$databaseName'"),
+      ctx)
   }
 
   def unclosedBracketedCommentError(command: String, position: Origin): Throwable = {
@@ -433,7 +437,15 @@ object QueryParsingErrors {
   }
 
   def invalidNameForDropTempFunc(name: Seq[String], ctx: ParserRuleContext): Throwable = {
-    new ParseException(
-      s"DROP TEMPORARY FUNCTION requires a single part name but got: ${name.quoted}", ctx)
+    new ParseException("INVALID_SQL_SYNTAX",
+      Array(s"DROP TEMPORARY FUNCTION requires a single part name but got: ${name.quoted}"), ctx)
+  }
+
+  def defaultColumnNotImplementedYetError(ctx: ParserRuleContext): Throwable = {
+    new ParseException("Support for DEFAULT column values is not implemented yet", ctx)
+  }
+
+  def defaultColumnNotEnabledError(ctx: ParserRuleContext): Throwable = {
+    new ParseException("Support for DEFAULT column values is not allowed", ctx)
   }
 }

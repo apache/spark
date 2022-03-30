@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, TypeCoercion, Un
 import org.apache.spark.sql.catalyst.expressions.ArraySortLike.NullOrder
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
-import org.apache.spark.sql.catalyst.trees.BinaryLike
+import org.apache.spark.sql.catalyst.trees.{BinaryLike, UnaryLike}
 import org.apache.spark.sql.catalyst.trees.TreePattern.{ARRAYS_ZIP, CONCAT, TreePattern}
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
@@ -131,6 +131,31 @@ case class Size(child: Expression, legacySizeOfNull: Boolean)
 
 object Size {
   def apply(child: Expression): Size = new Size(child)
+}
+
+
+/**
+ * Given an array, returns total number of elements in it.
+ */
+@ExpressionDescription(
+  usage = "_FUNC_(expr) - Returns the size of an array. The function returns null for null input.",
+  examples = """
+    Examples:
+      > SELECT _FUNC_(array('b', 'd', 'c', 'a'));
+       4
+  """,
+  since = "3.3.0",
+  group = "collection_funcs")
+case class ArraySize(child: Expression)
+  extends RuntimeReplaceable with ImplicitCastInputTypes with UnaryLike[Expression] {
+
+  override lazy val replacement: Expression = Size(child, legacySizeOfNull = false)
+
+  override def prettyName: String = "array_size"
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(ArrayType)
+
+  protected def withNewChildInternal(newChild: Expression): ArraySize = copy(child = newChild)
 }
 
 /**
@@ -2070,10 +2095,12 @@ case class ArrayPosition(left: Expression, right: Expression)
 case class ElementAt(
     left: Expression,
     right: Expression,
+    // The value to return if index is out of bound
+    defaultValueOutOfBound: Option[Literal] = None,
     failOnError: Boolean = SQLConf.get.ansiEnabled)
   extends GetMapValueUtil with GetArrayItemUtil with NullIntolerant {
 
-  def this(left: Expression, right: Expression) = this(left, right, SQLConf.get.ansiEnabled)
+  def this(left: Expression, right: Expression) = this(left, right, None, SQLConf.get.ansiEnabled)
 
   @transient private lazy val mapKeyType = left.dataType.asInstanceOf[MapType].keyType
 
@@ -2154,7 +2181,10 @@ case class ElementAt(
           if (failOnError) {
             throw QueryExecutionErrors.invalidElementAtIndexError(index, array.numElements())
           } else {
-            null
+            defaultValueOutOfBound match {
+              case Some(value) => value.eval()
+              case None => null
+            }
           }
         } else {
           val idx = if (index == 0) {
@@ -2193,7 +2223,16 @@ case class ElementAt(
           val indexOutOfBoundBranch = if (failOnError) {
             s"throw QueryExecutionErrors.invalidElementAtIndexError($index, $eval1.numElements());"
           } else {
-            s"${ev.isNull} = true;"
+            defaultValueOutOfBound match {
+              case Some(value) =>
+                val defaultValueEval = value.genCode(ctx)
+                s"""
+                  ${defaultValueEval.code}
+                  ${ev.isNull} = ${defaultValueEval.isNull}
+                  ${ev.value} = ${defaultValueEval.value}
+                """.stripMargin
+              case None => s"${ev.isNull} = true;"
+            }
           }
 
           s"""
@@ -2253,7 +2292,7 @@ case class ElementAt(
 case class TryElementAt(left: Expression, right: Expression, replacement: Expression)
   extends RuntimeReplaceable with InheritAnalysisRules {
   def this(left: Expression, right: Expression) =
-    this(left, right, ElementAt(left, right, failOnError = false))
+    this(left, right, ElementAt(left, right, None, failOnError = false))
 
   override def prettyName: String = "try_element_at"
 

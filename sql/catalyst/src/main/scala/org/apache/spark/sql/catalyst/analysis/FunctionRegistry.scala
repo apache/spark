@@ -344,9 +344,10 @@ object FunctionRegistry {
   //     will be replaced by the actual expression at the end of analysis. See `Left` as an example.
   //   - The function can be implemented by combining some existing expressions. We can use
   //     `RuntimeReplaceable` to define the combination. See `ParseToDate` as an example.
-  //     We can also inherit the analysis behavior from the replacement expression, by
-  //     mixing `InheritAnalysisRules`. See `TryAdd` as an example.
-  //   - Similarly, we can use `RuntimeReplaceableAggregate` to implement new aggregate functions.
+  //     To inherit the analysis behavior from the replacement expression
+  //     mix-in `InheritAnalysisRules` with `RuntimeReplaceable`. See `TryAdd` as an example.
+  //   - For `AggregateFunction`, `RuntimeReplaceableAggregate` should be mixed-in. See
+  //     `CountIf` as an example.
   //
   // Sometimes, multiple functions share the same/similar expression replacement logic and it's
   // tedious to create many similar `RuntimeReplaceable` expressions. We can use `ExpressionBuilder`
@@ -451,6 +452,7 @@ object FunctionRegistry {
     expression[TrySubtract]("try_subtract"),
     expression[TryMultiply]("try_multiply"),
     expression[TryElementAt]("try_element_at"),
+    expression[TrySum]("try_sum"),
 
     // aggregate functions
     expression[HyperLogLogPlusPlus]("approx_count_distinct"),
@@ -495,6 +497,7 @@ object FunctionRegistry {
     expression[RegrCount]("regr_count"),
     expression[RegrAvgX]("regr_avgx"),
     expression[RegrAvgY]("regr_avgy"),
+    expression[RegrR2]("regr_r2"),
 
     // string functions
     expression[Ascii]("ascii"),
@@ -547,6 +550,7 @@ object FunctionRegistry {
     expression[SoundEx]("soundex"),
     expression[StringSpace]("space"),
     expression[StringSplit]("split"),
+    expression[SplitPart]("split_part"),
     expression[Substring]("substr", true),
     expression[Substring]("substring"),
     expression[Left]("left"),
@@ -630,8 +634,6 @@ object FunctionRegistry {
     expression[UnixMillis]("unix_millis"),
     expression[UnixMicros]("unix_micros"),
     expression[ConvertTimezone]("convert_timezone"),
-    expression[TimestampAdd]("timestampadd"),
-    expression[TimestampDiff]("timestampdiff"),
 
     // collection functions
     expression[CreateArray]("array"),
@@ -640,6 +642,7 @@ object FunctionRegistry {
     expression[ArrayIntersect]("array_intersect"),
     expression[ArrayJoin]("array_join"),
     expression[ArrayPosition]("array_position"),
+    expression[ArraySize]("array_size"),
     expression[ArraySort]("array_sort"),
     expression[ArrayExcept]("array_except"),
     expression[ArrayUnion]("array_union"),

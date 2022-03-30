@@ -26,7 +26,7 @@ import java.util.zip.ZipOutputStream
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
-import scala.io.Source
+import scala.io.{Codec, Source}
 import scala.util.control.NonFatal
 import scala.xml.Node
 
@@ -819,7 +819,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
           }
         }
 
-        val source = Source.fromInputStream(in).getLines()
+        val source = Source.fromInputStream(in)(Codec.UTF8).getLines()
 
         // Because skipping may leave the stream in the middle of a line, read the next line
         // before replaying.

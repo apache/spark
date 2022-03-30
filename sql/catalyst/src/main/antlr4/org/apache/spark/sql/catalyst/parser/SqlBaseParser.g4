@@ -83,7 +83,7 @@ statement
         (RESTRICT | CASCADE)?                                          #dropNamespace
     | SHOW namespaces ((FROM | IN) multipartIdentifier)?
         (LIKE? pattern=STRING)?                                        #showNamespaces
-    | createTableHeader (LEFT_PAREN colTypeList RIGHT_PAREN)? tableProvider?
+    | createTableHeader (LEFT_PAREN createOrReplaceTableColTypeList RIGHT_PAREN)? tableProvider?
         createTableClauses
         (AS? query)?                                                   #createTable
     | CREATE TABLE (IF NOT EXISTS)? target=tableIdentifier
@@ -93,7 +93,7 @@ statement
         createFileFormat |
         locationSpec |
         (TBLPROPERTIES tableProps=propertyList))*                      #createTableLike
-    | replaceTableHeader (LEFT_PAREN colTypeList RIGHT_PAREN)? tableProvider?
+    | replaceTableHeader (LEFT_PAREN createOrReplaceTableColTypeList RIGHT_PAREN)? tableProvider?
         createTableClauses
         (AS? query)?                                                   #replaceTable
     | ANALYZE TABLE multipartIdentifier partitionSpec? COMPUTE STATISTICS
@@ -806,10 +806,16 @@ valueExpression
     | left=valueExpression comparisonOperator right=valueExpression                          #comparison
     ;
 
+datetimeUnit
+    : YEAR | QUARTER | MONTH
+    | WEEK | DAY | DAYOFYEAR
+    | HOUR | MINUTE | SECOND | MILLISECOND | MICROSECOND
+    ;
+
 primaryExpression
     : name=(CURRENT_DATE | CURRENT_TIMESTAMP | CURRENT_USER)                                   #currentLike
-    | name=(TIMESTAMPADD | DATEADD | DATE_ADD) LEFT_PAREN unit=identifier COMMA unitsAmount=valueExpression COMMA timestamp=valueExpression RIGHT_PAREN             #timestampadd
-    | name=(TIMESTAMPDIFF | DATEDIFF | DATE_DIFF) LEFT_PAREN unit=identifier COMMA startTimestamp=valueExpression COMMA endTimestamp=valueExpression RIGHT_PAREN    #timestampdiff
+    | name=(TIMESTAMPADD | DATEADD) LEFT_PAREN unit=datetimeUnit COMMA unitsAmount=valueExpression COMMA timestamp=valueExpression RIGHT_PAREN             #timestampadd
+    | name=(TIMESTAMPDIFF | DATEDIFF) LEFT_PAREN unit=datetimeUnit COMMA startTimestamp=valueExpression COMMA endTimestamp=valueExpression RIGHT_PAREN    #timestampdiff
     | CASE whenClause+ (ELSE elseExpression=expression)? END                                   #searchedCase
     | CASE value=expression whenClause+ (ELSE elseExpression=expression)? END                  #simpleCase
     | name=(CAST | TRY_CAST) LEFT_PAREN expression AS dataType RIGHT_PAREN                     #cast
@@ -839,7 +845,7 @@ primaryExpression
     | OVERLAY LEFT_PAREN input=valueExpression PLACING replace=valueExpression
       FROM position=valueExpression (FOR length=valueExpression)? RIGHT_PAREN                  #overlay
     | PERCENTILE_CONT LEFT_PAREN percentage=valueExpression RIGHT_PAREN
-      WITHIN GROUP LEFT_PAREN ORDER BY sortItem RIGHT_PAREN                                    #percentile
+      WITHIN GROUP LEFT_PAREN ORDER BY sortItem RIGHT_PAREN ( OVER windowSpec)?                #percentile
     ;
 
 constant
@@ -911,7 +917,11 @@ qualifiedColTypeWithPositionList
     ;
 
 qualifiedColTypeWithPosition
-    : name=multipartIdentifier dataType (NOT NULL)? commentSpec? colPosition?
+    : name=multipartIdentifier dataType (NOT NULL)? defaultExpression? commentSpec? colPosition?
+    ;
+
+defaultExpression
+    : DEFAULT expression
     ;
 
 colTypeList
@@ -920,6 +930,14 @@ colTypeList
 
 colType
     : colName=errorCapturingIdentifier dataType (NOT NULL)? commentSpec?
+    ;
+
+createOrReplaceTableColTypeList
+    : createOrReplaceTableColType (COMMA createOrReplaceTableColType)*
+    ;
+
+createOrReplaceTableColType
+    : colName=errorCapturingIdentifier dataType (NOT NULL)? defaultExpression? commentSpec?
     ;
 
 complexColTypeList
@@ -1028,6 +1046,8 @@ alterColumnAction
     | commentSpec
     | colPosition
     | setOrDrop=(SET | DROP) NOT NULL
+    | SET defaultExpression
+    | dropDefault=DROP DEFAULT
     ;
 
 
@@ -1081,11 +1101,11 @@ ansiNonReserved
     | DATABASE
     | DATABASES
     | DATEADD
-    | DATE_ADD
     | DATEDIFF
-    | DATE_DIFF
     | DAY
+    | DAYOFYEAR
     | DBPROPERTIES
+    | DEFAULT
     | DEFINED
     | DELETE
     | DELIMITED
@@ -1144,6 +1164,8 @@ ansiNonReserved
     | MAP
     | MATCHED
     | MERGE
+    | MICROSECOND
+    | MILLISECOND
     | MINUTE
     | MONTH
     | MSCK
@@ -1170,6 +1192,7 @@ ansiNonReserved
     | PRINCIPALS
     | PROPERTIES
     | PURGE
+    | QUARTER
     | QUERY
     | RANGE
     | RECORDREADER
@@ -1244,6 +1267,7 @@ ansiNonReserved
     | VERSION
     | VIEW
     | VIEWS
+    | WEEK
     | WINDOW
     | YEAR
     | ZONE
@@ -1333,11 +1357,11 @@ nonReserved
     | DATABASE
     | DATABASES
     | DATEADD
-    | DATE_ADD
     | DATEDIFF
-    | DATE_DIFF
     | DAY
+    | DAYOFYEAR
     | DBPROPERTIES
+    | DEFAULT
     | DEFINED
     | DELETE
     | DELIMITED
@@ -1413,6 +1437,8 @@ nonReserved
     | MAP
     | MATCHED
     | MERGE
+    | MICROSECOND
+    | MILLISECOND
     | MINUTE
     | MONTH
     | MSCK
@@ -1448,6 +1474,7 @@ nonReserved
     | PRINCIPALS
     | PROPERTIES
     | PURGE
+    | QUARTER
     | QUERY
     | RANGE
     | RECORDREADER
@@ -1532,6 +1559,7 @@ nonReserved
     | VERSION
     | VIEW
     | VIEWS
+    | WEEK
     | WHEN
     | WHERE
     | WINDOW

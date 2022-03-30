@@ -46,10 +46,10 @@ object ExecSubqueryExpression {
    * Returns true when an expression contains a subquery
    */
   def hasSubquery(e: Expression): Boolean = {
-    e.find {
+    e.exists {
       case _: ExecSubqueryExpression => true
       case _ => false
-    }.isDefined
+    }
   }
 }
 

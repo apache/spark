@@ -89,7 +89,6 @@ public class UnsafeShuffleWriterSuite implements ShuffleChecksumTestHelper {
   }
 
   @Before
-  @SuppressWarnings("unchecked")
   public void setUp() throws Exception {
     MockitoAnnotations.openMocks(this).close();
     tempDir = Utils.createTempDir(null, "test");
@@ -128,6 +127,10 @@ public class UnsafeShuffleWriterSuite implements ShuffleChecksumTestHelper {
       });
 
     when(shuffleBlockResolver.getDataFile(anyInt(), anyLong())).thenReturn(mergedOutputFile);
+    when(shuffleBlockResolver.createTempFile(any(File.class))).thenAnswer(invocationOnMock -> {
+      File file = (File) invocationOnMock.getArguments()[0];
+      return Utils.tempFileWith(file);
+    });
 
     Answer<?> renameTempAnswer = invocationOnMock -> {
       partitionSizesInMergedFile = (long[]) invocationOnMock.getArguments()[2];
@@ -158,6 +161,10 @@ public class UnsafeShuffleWriterSuite implements ShuffleChecksumTestHelper {
       File file = File.createTempFile("spillFile", ".spill", tempDir);
       spillFilesCreated.add(file);
       return Tuple2$.MODULE$.apply(blockId, file);
+    });
+    when(diskBlockManager.createTempFileWith(any(File.class))).thenAnswer(invocationOnMock -> {
+      File file = (File) invocationOnMock.getArguments()[0];
+      return Utils.tempFileWith(file);
     });
 
     when(taskContext.taskMetrics()).thenReturn(taskMetrics);

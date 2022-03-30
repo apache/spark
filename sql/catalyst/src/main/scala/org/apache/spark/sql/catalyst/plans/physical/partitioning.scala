@@ -516,6 +516,11 @@ case class HashShuffleSpec(
    * A sequence where each element is a set of positions of the hash partition key to the cluster
    * keys. For instance, if cluster keys are [a, b, b] and hash partition keys are [a, b], the
    * result will be [(0), (1, 2)].
+   *
+   * This is useful to check compatibility between two `HashShuffleSpec`s. If the cluster keys are
+   * [a, b, b] and [x, y, z] for the two join children, and the hash partition keys are
+   * [a, b] and [x, z], they are compatible. With the positions, we can do the compatibility check
+   * by looking at if the positions of hash partition keys from two sides have overlapping.
    */
   lazy val hashKeyPositions: Seq[mutable.BitSet] = {
     val distKeyToPos = mutable.Map.empty[Expression, mutable.BitSet]
@@ -533,7 +538,7 @@ case class HashShuffleSpec(
       //  1. both distributions have the same number of clustering expressions
       //  2. both partitioning have the same number of partitions
       //  3. both partitioning have the same number of expressions
-      //  4. each pair of expression from both has overlapping positions in their
+      //  4. each pair of partitioning expression from both sides has overlapping positions in their
       //     corresponding distributions.
       distribution.clustering.length == otherDistribution.clustering.length &&
       partitioning.numPartitions == otherPartitioning.numPartitions &&

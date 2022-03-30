@@ -28,6 +28,7 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType}
 import org.apache.spark.sql.catalyst.parser.ParseException
+import org.apache.spark.sql.execution.datasources.DataSourceUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.PartitionOverwriteMode
 import org.apache.spark.sql.test.SharedSparkSession
@@ -807,13 +808,15 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
 
       Seq((1, 2), (1, 3)).toDF("i", "part")
         .write.partitionBy("part").mode("overwrite")
-        .option("partitionOverwriteMode", "dynamic").parquet(path.getAbsolutePath)
+        .option(DataSourceUtils.PARTITION_OVERWRITE_MODE, PartitionOverwriteMode.DYNAMIC.toString)
+        .parquet(path.getAbsolutePath)
       checkAnswer(spark.read.parquet(path.getAbsolutePath),
         Row(1, 1) :: Row(1, 2) :: Row(1, 3) :: Nil)
 
       Seq((1, 2), (1, 3)).toDF("i", "part")
         .write.partitionBy("part").mode("overwrite")
-        .option("partitionOverwriteMode", "static").parquet(path.getAbsolutePath)
+        .option(DataSourceUtils.PARTITION_OVERWRITE_MODE, PartitionOverwriteMode.STATIC.toString)
+        .parquet(path.getAbsolutePath)
       checkAnswer(spark.read.parquet(path.getAbsolutePath), Row(1, 2) :: Row(1, 3) :: Nil)
     }
   }

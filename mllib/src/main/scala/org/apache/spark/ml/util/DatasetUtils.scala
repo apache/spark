@@ -17,15 +17,81 @@
 
 package org.apache.spark.ml.util
 
-import org.apache.spark.ml.linalg.{Vector, Vectors, VectorUDT}
+import org.apache.spark.ml.linalg._
 import org.apache.spark.mllib.linalg.{Vector => OldVector, Vectors => OldVectors}
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{Column, Dataset, Row}
-import org.apache.spark.sql.functions.{col, udf}
-import org.apache.spark.sql.types.{ArrayType, DoubleType, FloatType}
+import org.apache.spark.sql._
+import org.apache.spark.sql.functions._
+import org.apache.spark.sql.types._
 
 
 private[spark] object DatasetUtils {
+
+  private[ml] def checkNonNanValues(colName: String, displayed: String): Column = {
+    val casted = col(colName).cast(DoubleType)
+    when(casted.isNull || casted.isNaN, raise_error(lit(s"$displayed MUST NOT be Null or NaN")))
+      .when(casted === Double.NegativeInfinity || casted === Double.PositiveInfinity,
+        raise_error(concat(lit(s"$displayed MUST NOT be Infinity, but got "), casted)))
+      .otherwise(casted)
+  }
+
+  private[ml] def checkRegressionLabels(labelCol: String): Column = {
+    checkNonNanValues(labelCol, "Labels")
+  }
+
+  private[ml] def checkClassificationLabels(
+    labelCol: String,
+    numClasses: Option[Int]): Column = {
+    val casted = col(labelCol).cast(DoubleType)
+    numClasses match {
+      case Some(2) =>
+        when(casted.isNull || casted.isNaN, raise_error(lit("Labels MUST NOT be Null or NaN")))
+          .when(casted =!= 0 && casted =!= 1,
+            raise_error(concat(lit("Labels MUST be in {0, 1}, but got "), casted)))
+          .otherwise(casted)
+
+      case _ =>
+        val n = numClasses.getOrElse(Int.MaxValue)
+        require(0 < n && n <= Int.MaxValue)
+        when(casted.isNull || casted.isNaN, raise_error(lit("Labels MUST NOT be Null or NaN")))
+          .when(casted < 0 || casted >= n,
+            raise_error(concat(lit(s"Labels MUST be in [0, $n), but got "), casted)))
+          .when(casted =!= casted.cast(IntegerType),
+            raise_error(concat(lit("Labels MUST be Integers, but got "), casted)))
+          .otherwise(casted)
+    }
+  }
+
+  private[ml] def checkNonNegativeWeights(weightCol: String): Column = {
+    val casted = col(weightCol).cast(DoubleType)
+    when(casted.isNull || casted.isNaN, raise_error(lit("Weights MUST NOT be Null or NaN")))
+      .when(casted < 0 || casted === Double.PositiveInfinity,
+        raise_error(concat(lit("Weights MUST NOT be Negative or Infinity, but got "), casted)))
+      .otherwise(casted)
+  }
+
+  private[ml] def checkNonNegativeWeights(weightCol: Option[String]): Column = weightCol match {
+    case Some(w) if w.nonEmpty => checkNonNegativeWeights(w)
+    case _ => lit(1.0)
+  }
+
+  private[ml] def checkNonNanVectors(vectorCol: String): Column = {
+    val vecCol = col(vectorCol)
+    when(vecCol.isNull, raise_error(lit("Vectors MUST NOT be Null")))
+      .when(!validateVector(vecCol),
+        raise_error(concat(lit("Vector values MUST NOT be NaN or Infinity, but got "),
+          vecCol.cast(StringType))))
+      .otherwise(vecCol)
+  }
+
+  private lazy val validateVector = udf { vector: Vector =>
+    vector match {
+      case dv: DenseVector =>
+        dv.values.forall(v => !v.isNaN && !v.isInfinity)
+      case sv: SparseVector =>
+        sv.values.forall(v => !v.isNaN && !v.isInfinity)
+    }
+  }
 
   /**
    * Cast a column in a Dataset to Vector type.

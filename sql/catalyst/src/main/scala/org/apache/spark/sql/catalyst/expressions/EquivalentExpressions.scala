@@ -194,7 +194,7 @@ class EquivalentExpressions {
       expr.isInstanceOf[LeafExpression] ||
       // `LambdaVariable` is usually used as a loop variable, which can't be evaluated ahead of the
       // loop. So we can't evaluate sub-expressions containing `LambdaVariable` at the beginning.
-      expr.find(_.isInstanceOf[LambdaVariable]).isDefined ||
+      expr.exists(_.isInstanceOf[LambdaVariable]) ||
       // `PlanExpression` wraps query plan. To compare query plans of `PlanExpression` on executor,
       // can cause error like NPE.
       (expr.isInstanceOf[PlanExpression[_]] && Utils.isInRunningSparkTask)

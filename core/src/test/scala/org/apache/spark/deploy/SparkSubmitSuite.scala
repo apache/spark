@@ -23,7 +23,7 @@ import java.nio.charset.StandardCharsets
 import java.nio.file.{Files, Paths}
 
 import scala.collection.mutable.ArrayBuffer
-import scala.io.Source
+import scala.io.{Codec, Source}
 
 import com.google.common.io.ByteStreams
 import org.apache.commons.io.FileUtils
@@ -647,7 +647,7 @@ class SparkSubmitSuite
       runSparkSubmit(args)
       val listStatus = fileSystem.listStatus(testDirPath)
       val logData = EventLogFileReader.openEventLog(listStatus.last.getPath, fileSystem)
-      Source.fromInputStream(logData).getLines().foreach { line =>
+      Source.fromInputStream(logData)(Codec.UTF8).getLines().foreach { line =>
         assert(!line.contains("secret_password"))
       }
     }

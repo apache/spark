@@ -1503,10 +1503,10 @@ class Dataset[T] private[sql](
       case typedCol: TypedColumn[_, _] =>
         // Checks if a `TypedColumn` has been inserted with
         // specific input type and schema by `withInputType`.
-        val needInputType = typedCol.expr.find {
+        val needInputType = typedCol.expr.exists {
           case ta: TypedAggregateExpression if ta.inputDeserializer.isEmpty => true
           case _ => false
-        }.isDefined
+        }
 
         if (!needInputType) {
           typedCol

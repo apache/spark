@@ -286,12 +286,11 @@ class Index(IndexOpsMixin):
         String with a summarized representation of the index
         """
         head, tail, total_count = tuple(
-            cast(
-                pd.DataFrame,
-                self._internal.spark_frame.select(
-                    F.first(self.spark.column), F.last(self.spark.column), F.count(F.expr("*"))
-                ).toPandas(),
-            ).iloc[0]
+            self._internal.spark_frame.select(
+                F.first(self.spark.column), F.last(self.spark.column), F.count(F.expr("*"))
+            )
+            .toPandas()
+            .iloc[0]
         )
 
         if total_count > 0:
@@ -1652,11 +1651,10 @@ class Index(IndexOpsMixin):
         ('a', 'x', 1)
         """
         sdf = self._internal.spark_frame
-        min_row = cast(
-            pd.DataFrame,
+        min_row = (
             sdf.select(F.min(F.struct(*self._internal.index_spark_columns)).alias("min_row"))
             .select("min_row.*")
-            .toPandas(),
+            .toPandas()
         )
         result = tuple(min_row.iloc[0])
 
@@ -1694,11 +1692,10 @@ class Index(IndexOpsMixin):
         ('b', 'y', 2)
         """
         sdf = self._internal.spark_frame
-        max_row = cast(
-            pd.DataFrame,
+        max_row = (
             sdf.select(F.max(F.struct(*self._internal.index_spark_columns)).alias("max_row"))
             .select("max_row.*")
-            .toPandas(),
+            .toPandas()
         )
         result = tuple(max_row.iloc[0])
 
@@ -2285,7 +2282,7 @@ class Index(IndexOpsMixin):
         else:
             raise ValueError("index must be monotonic increasing or decreasing")
 
-        result = cast(pd.DataFrame, sdf.toPandas()).iloc[0, 0]
+        result = sdf.toPandas().iloc[0, 0]
         return result if result is not None else np.nan
 
     def _index_fields_for_union_like(

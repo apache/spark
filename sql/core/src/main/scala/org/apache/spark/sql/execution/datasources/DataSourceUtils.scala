@@ -48,6 +48,12 @@ object DataSourceUtils extends PredicateHelper {
   val PARTITIONING_COLUMNS_KEY = "__partition_columns"
 
   /**
+   * The key to use for specifying partition overwrite mode when
+   * INSERT OVERWRITE a partitioned data source table.
+   */
+  val PARTITION_OVERWRITE_MODE = "partitionOverwriteMode"
+
+  /**
    * Utility methods for converting partitionBy columns to options and back.
    */
   private implicit val formats = Serialization.formats(NoTypeHints)

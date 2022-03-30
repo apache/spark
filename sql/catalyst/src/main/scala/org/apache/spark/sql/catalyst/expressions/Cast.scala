@@ -23,7 +23,7 @@ import java.util.concurrent.TimeUnit._
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, TypeCoercion}
-import org.apache.spark.sql.catalyst.expressions.Cast.{forceNullable, resolvableNullability}
+import org.apache.spark.sql.catalyst.expressions.Cast.resolvableNullability
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
@@ -2226,23 +2226,17 @@ object AnsiCast {
     case (TimestampType, _: NumericType) => true
 
     case (ArrayType(fromType, fn), ArrayType(toType, tn)) =>
-      canCast(fromType, toType) &&
-        resolvableNullability(fn || forceNullable(fromType, toType), tn)
+      canCast(fromType, toType) && resolvableNullability(fn, tn)
 
     case (MapType(fromKey, fromValue, fn), MapType(toKey, toValue, tn)) =>
-      canCast(fromKey, toKey) &&
-        (!forceNullable(fromKey, toKey)) &&
-        canCast(fromValue, toValue) &&
-        resolvableNullability(fn || forceNullable(fromValue, toValue), tn)
+      canCast(fromKey, toKey) && canCast(fromValue, toValue) && resolvableNullability(fn, tn)
 
     case (StructType(fromFields), StructType(toFields)) =>
       fromFields.length == toFields.length &&
         fromFields.zip(toFields).forall {
           case (fromField, toField) =>
             canCast(fromField.dataType, toField.dataType) &&
-              resolvableNullability(
-                fromField.nullable || forceNullable(fromField.dataType, toField.dataType),
-                toField.nullable)
+              resolvableNullability(fromField.nullable, toField.nullable)
         }
 
     case (udt1: UserDefinedType[_], udt2: UserDefinedType[_]) if udt2.acceptsType(udt1) => true

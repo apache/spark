@@ -130,7 +130,6 @@ public class JavaAPISuite implements Serializable {
     assertEquals(4, pUnion.count());
   }
 
-  @SuppressWarnings("unchecked")
   @Test
   public void intersection() {
     List<Integer> ints1 = Arrays.asList(1, 10, 2, 3, 4, 5);
@@ -216,7 +215,6 @@ public class JavaAPISuite implements Serializable {
     assertEquals(new Tuple2<>(3, 2), sortedPairs.get(2));
   }
 
-  @SuppressWarnings("unchecked")
   @Test
   public void repartitionAndSortWithinPartitions() {
     List<Tuple2<Integer, Integer>> pairs = new ArrayList<>();
@@ -356,7 +354,6 @@ public class JavaAPISuite implements Serializable {
     assertEquals(correctIndexes, indexes.collect());
   }
 
-  @SuppressWarnings("unchecked")
   @Test
   public void lookup() {
     JavaPairRDD<String, String> categories = sc.parallelizePairs(Arrays.asList(
@@ -401,7 +398,6 @@ public class JavaAPISuite implements Serializable {
     assertEquals(5, Iterables.size(oddsAndEvens.lookup(false).get(0))); // Odds
   }
 
-  @SuppressWarnings("unchecked")
   @Test
   public void keyByOnPairRDD() {
     // Regression test for SPARK-4459
@@ -413,7 +409,6 @@ public class JavaAPISuite implements Serializable {
     assertEquals(1, (long) keyed.lookup("2").get(0)._1());
   }
 
-  @SuppressWarnings("unchecked")
   @Test
   public void cogroup() {
     JavaPairRDD<String, String> categories = sc.parallelizePairs(Arrays.asList(
@@ -433,7 +428,6 @@ public class JavaAPISuite implements Serializable {
     cogrouped.collect();
   }
 
-  @SuppressWarnings("unchecked")
   @Test
   public void cogroup3() {
     JavaPairRDD<String, String> categories = sc.parallelizePairs(Arrays.asList(
@@ -460,7 +454,6 @@ public class JavaAPISuite implements Serializable {
     cogrouped.collect();
   }
 
-  @SuppressWarnings("unchecked")
   @Test
   public void cogroup4() {
     JavaPairRDD<String, String> categories = sc.parallelizePairs(Arrays.asList(
@@ -491,7 +484,6 @@ public class JavaAPISuite implements Serializable {
     cogrouped.collect();
   }
 
-  @SuppressWarnings("unchecked")
   @Test
   public void leftOuterJoin() {
     JavaPairRDD<Integer, Integer> rdd1 = sc.parallelizePairs(Arrays.asList(
@@ -557,7 +549,6 @@ public class JavaAPISuite implements Serializable {
     }
   }
 
-  @SuppressWarnings("unchecked")
   @Test
   public void aggregateByKey() {
     JavaPairRDD<Integer, Integer> pairs = sc.parallelizePairs(
@@ -583,7 +574,6 @@ public class JavaAPISuite implements Serializable {
     assertEquals(new HashSet<>(Arrays.asList(1, 3)), sets.get(5));
   }
 
-  @SuppressWarnings("unchecked")
   @Test
   public void foldByKey() {
     List<Tuple2<Integer, Integer>> pairs = Arrays.asList(
@@ -600,7 +590,6 @@ public class JavaAPISuite implements Serializable {
     assertEquals(3, sums.lookup(3).get(0).intValue());
   }
 
-  @SuppressWarnings("unchecked")
   @Test
   public void reduceByKey() {
     List<Tuple2<Integer, Integer>> pairs = Arrays.asList(
@@ -836,7 +825,6 @@ public class JavaAPISuite implements Serializable {
     assertEquals(11, pairsRDD.count());
   }
 
-  @SuppressWarnings("unchecked")
   @Test
   public void mapsFromPairsToPairs() {
     List<Tuple2<Integer, String>> pairs = Arrays.asList(
@@ -919,7 +907,6 @@ public class JavaAPISuite implements Serializable {
     }
   }
 
-  @SuppressWarnings("unchecked")
   @Test
   public void persist() {
     JavaDoubleRDD doubleRDD = sc.parallelizeDoubles(Arrays.asList(1.0, 1.0, 2.0, 3.0, 5.0, 8.0));
@@ -1018,7 +1005,6 @@ public class JavaAPISuite implements Serializable {
     assertEquals(expected, readRDD.collect());
   }
 
-  @SuppressWarnings("unchecked")
   @Test
   public void sequenceFile() {
     String outputDir = new File(tempDir, "output").getAbsolutePath();
@@ -1108,7 +1094,6 @@ public class JavaAPISuite implements Serializable {
     }
   }
 
-  @SuppressWarnings("unchecked")
   @Test
   public void writeWithNewAPIHadoopFile() {
     String outputDir = new File(tempDir, "output").getAbsolutePath();
@@ -1159,7 +1144,6 @@ public class JavaAPISuite implements Serializable {
     assertEquals(expected, readRDD.collect());
   }
 
-  @SuppressWarnings("unchecked")
   @Test
   public void objectFilesOfComplexTypes() {
     String outputDir = new File(tempDir, "output").getAbsolutePath();
@@ -1297,7 +1281,6 @@ public class JavaAPISuite implements Serializable {
     assertEquals(expected, results);
   }
 
-  @SuppressWarnings("unchecked")
   @Test
   public void mapOnPairRDD() {
     JavaRDD<Integer> rdd1 = sc.parallelize(Arrays.asList(1,2,3,4));
@@ -1310,7 +1293,6 @@ public class JavaAPISuite implements Serializable {
       new Tuple2<>(0, 4)), rdd3.collect());
   }
 
-  @SuppressWarnings("unchecked")
   @Test
   public void collectPartitions() {
     JavaRDD<Integer> rdd1 = sc.parallelize(Arrays.asList(1, 2, 3, 4, 5, 6, 7), 3);
@@ -1391,7 +1373,6 @@ public class JavaAPISuite implements Serializable {
   }
 
   @Test
-  @SuppressWarnings("unchecked")
   public void sampleByKey() {
     JavaRDD<Integer> rdd1 = sc.parallelize(Arrays.asList(1, 2, 3, 4, 5, 6, 7, 8), 3);
     JavaPairRDD<Integer, Integer> rdd2 = rdd1.mapToPair(i -> new Tuple2<>(i % 2, 1));
@@ -1411,7 +1392,6 @@ public class JavaAPISuite implements Serializable {
   }
 
   @Test
-  @SuppressWarnings("unchecked")
   public void sampleByKeyExact() {
     JavaRDD<Integer> rdd1 = sc.parallelize(Arrays.asList(1, 2, 3, 4, 5, 6, 7, 8), 3);
     JavaPairRDD<Integer, Integer> rdd2 = rdd1.mapToPair(i -> new Tuple2<>(i % 2, 1));

@@ -2227,7 +2227,7 @@ class GroupByTest(PandasOnSparkTestCase, TestUtils):
         with self.assertRaisesRegex(
             TypeError,
             "Expected the return type of this function to be of Series type, "
-            "but found type ScalarType\\[LongType\\]",
+            "but found type ScalarType\\[LongType\\(\\)\\]",
         ):
             psdf.groupby("a").transform(udf)
 
