@@ -66,6 +66,12 @@ case class Origin(
   objectType: Option[String] = None,
   objectName: Option[String] = None) {
 
+  /**
+   * The SQL query context of current node. For example:
+   * == SQL of VIEW v1(line 1, position 25) ==
+   * SELECT '' AS five, i.f1, i.f1 - int('2') AS x FROM INT4_TBL i
+   *                          ^^^^^^^^^^^^^^^
+   */
   lazy val context: String = sqlText.map { text =>
     val positionContext = if (line.isDefined && startPosition.isDefined) {
       s"(line ${line.get}, position ${startPosition.get})"
@@ -89,17 +95,22 @@ case class Origin(
     val maxExtraContextLength = 32
     val truncatedText = "..."
     var lineStartIndex = start
+    // Collect the SQL text within the starting line of current Node.
+    // The text is truncated if it is too long.
     while(lineStartIndex >= 0 &&
       start - lineStartIndex <= maxExtraContextLength &&
       text.charAt(lineStartIndex) != '\n') {
       lineStartIndex -= 1
     }
-    var startTruncated = start - lineStartIndex > maxExtraContextLength
+    val startTruncated = start - lineStartIndex > maxExtraContextLength
+    var currentIndex = lineStartIndex
     if (startTruncated) {
-      builder ++= truncatedText
+      currentIndex -= truncatedText.length
     }
 
     var lineStopIndex = stop
+    // Collect the SQL text within the ending line of current Node.
+    // The text is truncated if it is too long.
     while(lineStopIndex < text.length &&
       lineStopIndex - stop <= maxExtraContextLength &&
       text.charAt(lineStopIndex) != '\n') {
@@ -107,18 +118,13 @@ case class Origin(
     }
     val stopTruncated = lineStopIndex - stop > maxExtraContextLength
 
-    val subText = text.substring(lineStartIndex + 1, lineStopIndex) +
+    val subText = (if (startTruncated) truncatedText else "") +
+      text.substring(lineStartIndex + 1, lineStopIndex) +
       (if (stopTruncated) truncatedText else "")
     val lines = subText.split("\n")
-    var currentIndex = lineStartIndex
     lines.foreach { lineText =>
       builder ++= lineText + "\n"
       currentIndex += 1
-      if (startTruncated) {
-        builder ++= truncatedText.map(_ => ' ').mkString
-        // We only do this for the text at the beginning once.
-        startTruncated = false
-      }
       (0 until lineText.length).foreach { _ =>
         if (currentIndex < start) {
           builder ++= " "
