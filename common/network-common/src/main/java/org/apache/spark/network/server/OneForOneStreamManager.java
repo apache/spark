@@ -51,7 +51,12 @@ public class OneForOneStreamManager extends StreamManager {
 
     // The channel associated to the stream
     final Channel associatedChannel;
-    final boolean shouldRelease;
+    // Indicates whether the buffers is materialized, some buffers like
+    // ShuffleManagedBufferIterator, ShuffleChunkManagedBufferIterator, ManagedBufferIterator are
+    // materialized only when the iterator is requested by the next method, so we should not
+    // request and release them, to reduce I/O operations and improve performance for the External
+    // Shuffle Service.
+    final boolean isBufferMaterializedOnNext;
 
     // Used to keep track of the index of the buffer that the user has retrieved, just to ensure
     // that the caller only requests each chunk one at a time, in order.
@@ -60,12 +65,15 @@ public class OneForOneStreamManager extends StreamManager {
     // Used to keep track of the number of chunks being transferred and not finished yet.
     final AtomicLong chunksBeingTransferred = new AtomicLong(0L);
 
-    StreamState(String appId, Iterator<ManagedBuffer> buffers, Channel channel,
-        boolean shouldRelease) {
+    StreamState(
+        String appId,
+        Iterator<ManagedBuffer> buffers,
+        Channel channel,
+        boolean isBufferMaterializedOnNext) {
       this.appId = appId;
       this.buffers = Preconditions.checkNotNull(buffers);
       this.associatedChannel = channel;
-      this.shouldRelease = shouldRelease;
+      this.isBufferMaterializedOnNext = isBufferMaterializedOnNext;
     }
   }
 
@@ -133,7 +141,7 @@ public class OneForOneStreamManager extends StreamManager {
 
         try {
           // Release all remaining buffers.
-          while (state.shouldRelease && state.buffers.hasNext()) {
+          while (state.isBufferMaterializedOnNext && state.buffers.hasNext()) {
             ManagedBuffer buffer = state.buffers.next();
             if (buffer != null) {
               buffer.release();
@@ -208,8 +216,11 @@ public class OneForOneStreamManager extends StreamManager {
   /**
    * Registers a stream of ManagedBuffers which are served as individual chunks one at a time to
    * callers. Each ManagedBuffer will be release()'d after it is transferred on the wire. If a
-   * client connection is closed before the iterator is fully drained, then the remaining buffers
-   * will all be release()'d.
+   * client connection is closed before the iterator is fully drained, then the remaining
+   * materialized buffers will all be release()'d, but some buffers like
+   * ShuffleManagedBufferIterator, ShuffleChunkManagedBufferIterator, ManagedBufferIterator should
+   * not release, because they have not been materialized before requesting the iterator by
+   * the next method.
    *
    * If an app ID is provided, only callers who've authenticated with the given app ID will be
    * allowed to fetch from this stream.
@@ -218,10 +229,13 @@ public class OneForOneStreamManager extends StreamManager {
    * to be the only reader of the stream. Once the connection is closed, the stream will never
    * be used again, enabling cleanup by `connectionTerminated`.
    */
-  public long registerStream(String appId, Iterator<ManagedBuffer> buffers, Channel channel,
-      boolean shouldRelease) {
+  public long registerStream(
+      String appId,
+      Iterator<ManagedBuffer> buffers,
+      Channel channel,
+      boolean isBufferMaterializedOnNext) {
     long myStreamId = nextStreamId.getAndIncrement();
-    streams.put(myStreamId, new StreamState(appId, buffers, channel, shouldRelease));
+    streams.put(myStreamId, new StreamState(appId, buffers, channel, isBufferMaterializedOnNext));
     return myStreamId;
   }
 
