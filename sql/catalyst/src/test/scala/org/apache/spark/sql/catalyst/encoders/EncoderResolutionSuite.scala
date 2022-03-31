@@ -217,7 +217,7 @@ class EncoderResolutionSuite extends PlanTest {
            |- root class: "java.lang.String"
            |You can either add an explicit cast to the input data or choose a higher precision type
         """.stripMargin.trim + " of the field in the target object")
-      }
+    }
   }
 
   test("throw exception if real type is not compatible with encoder schema") {
