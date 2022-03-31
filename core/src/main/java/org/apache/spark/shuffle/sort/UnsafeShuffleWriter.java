@@ -17,27 +17,9 @@
 
 package org.apache.spark.shuffle.sort;
 
-import java.nio.channels.Channels;
-import java.util.Arrays;
-import java.util.Optional;
-import javax.annotation.Nullable;
-import java.io.*;
-import java.nio.channels.FileChannel;
-import java.nio.channels.WritableByteChannel;
-import java.util.Iterator;
-
-import scala.Option;
-import scala.Product2;
-import scala.collection.JavaConverters;
-import scala.reflect.ClassTag;
-import scala.reflect.ClassTag$;
-
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.io.ByteStreams;
 import com.google.common.io.Closeables;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import org.apache.spark.*;
 import org.apache.spark.annotation.Private;
 import org.apache.spark.internal.config.package$;
@@ -49,19 +31,31 @@ import org.apache.spark.network.shuffle.checksum.ShuffleChecksumHelper;
 import org.apache.spark.network.util.LimitedInputStream;
 import org.apache.spark.scheduler.MapStatus;
 import org.apache.spark.scheduler.MapStatus$;
-import org.apache.spark.shuffle.ShuffleWriteMetricsReporter;
 import org.apache.spark.serializer.SerializationStream;
 import org.apache.spark.serializer.SerializerInstance;
+import org.apache.spark.shuffle.ShuffleWriteMetricsReporter;
 import org.apache.spark.shuffle.ShuffleWriter;
-import org.apache.spark.shuffle.api.ShuffleExecutorComponents;
-import org.apache.spark.shuffle.api.ShuffleMapOutputWriter;
-import org.apache.spark.shuffle.api.ShufflePartitionWriter;
-import org.apache.spark.shuffle.api.SingleSpillShuffleMapOutputWriter;
-import org.apache.spark.shuffle.api.WritableByteChannelWrapper;
+import org.apache.spark.shuffle.api.*;
 import org.apache.spark.storage.BlockManager;
 import org.apache.spark.storage.TimeTrackingOutputStream;
 import org.apache.spark.unsafe.Platform;
 import org.apache.spark.util.Utils;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import scala.Option;
+import scala.Product2;
+import scala.collection.JavaConverters;
+import scala.reflect.ClassTag;
+import scala.reflect.ClassTag$;
+
+import javax.annotation.Nullable;
+import java.io.*;
+import java.nio.channels.Channels;
+import java.nio.channels.FileChannel;
+import java.nio.channels.WritableByteChannel;
+import java.util.Arrays;
+import java.util.Iterator;
+import java.util.Optional;
 
 @Private
 public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
@@ -135,8 +129,7 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
     this.shuffleExecutorComponents = shuffleExecutorComponents;
     this.taskContext = taskContext;
     this.sparkConf = sparkConf;
-    this.transferToEnabled =
-      (boolean)sparkConf.get(package$.MODULE$.SHUFFLE_MERGE_SPILL_USE_NIO());
+    this.transferToEnabled = (boolean) sparkConf.get(package$.MODULE$.SHUFFLE_MERGE_USE_NIO());
     this.initialSortBufferSize =
       (int) (long) sparkConf.get(package$.MODULE$.SHUFFLE_SORT_INIT_BUFFER_SIZE());
     this.inputBufferSizeInBytes =
