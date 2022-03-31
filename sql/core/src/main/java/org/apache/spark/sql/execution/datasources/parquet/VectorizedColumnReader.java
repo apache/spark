@@ -21,6 +21,8 @@ import java.io.IOException;
 import java.time.ZoneId;
 import java.util.PrimitiveIterator;
 
+import org.apache.parquet.CorruptDeltaByteArrays;
+import org.apache.parquet.VersionParser.ParsedVersion;
 import org.apache.parquet.bytes.ByteBufferInputStream;
 import org.apache.parquet.bytes.BytesInput;
 import org.apache.parquet.bytes.BytesUtils;
@@ -28,6 +30,7 @@ import org.apache.parquet.column.ColumnDescriptor;
 import org.apache.parquet.column.Dictionary;
 import org.apache.parquet.column.Encoding;
 import org.apache.parquet.column.page.*;
+import org.apache.parquet.column.values.RequiresPreviousReader;
 import org.apache.parquet.column.values.ValuesReader;
 import org.apache.parquet.schema.LogicalTypeAnnotation;
 import org.apache.parquet.schema.LogicalTypeAnnotation.DateLogicalTypeAnnotation;
@@ -86,6 +89,7 @@ public class VectorizedColumnReader {
   private final ColumnDescriptor descriptor;
   private final LogicalTypeAnnotation logicalTypeAnnotation;
   private final String datetimeRebaseMode;
+  private final ParsedVersion writerVersion;
 
   public VectorizedColumnReader(
       ColumnDescriptor descriptor,
@@ -96,7 +100,8 @@ public class VectorizedColumnReader {
       String datetimeRebaseMode,
       String datetimeRebaseTz,
       String int96RebaseMode,
-      String int96RebaseTz) throws IOException {
+      String int96RebaseTz,
+      ParsedVersion writerVersion) throws IOException {
     this.descriptor = descriptor;
     this.pageReader = pageReader;
     this.readState = new ParquetReadState(descriptor.getMaxDefinitionLevel(), rowIndexes);
@@ -129,6 +134,7 @@ public class VectorizedColumnReader {
     this.datetimeRebaseMode = datetimeRebaseMode;
     assert "LEGACY".equals(int96RebaseMode) || "EXCEPTION".equals(int96RebaseMode) ||
       "CORRECTED".equals(int96RebaseMode);
+    this.writerVersion = writerVersion;
   }
 
   private boolean isLazyDecodingSupported(PrimitiveType.PrimitiveTypeName typeName) {
@@ -259,6 +265,7 @@ public class VectorizedColumnReader {
       int pageValueCount,
       Encoding dataEncoding,
       ByteBufferInputStream in) throws IOException {
+    ValuesReader previousReader = this.dataColumn;
     if (dataEncoding.usesDictionary()) {
       this.dataColumn = null;
       if (dictionary == null) {
@@ -282,6 +289,12 @@ public class VectorizedColumnReader {
       dataColumn.initFromPage(pageValueCount, in);
     } catch (IOException e) {
       throw new IOException("could not read page in col " + descriptor, e);
+    }
+    // for PARQUET-246 (See VectorizedDeltaByteArrayReader.setPreviousValues)
+    if (CorruptDeltaByteArrays.requiresSequentialReads(writerVersion, dataEncoding) &&
+        previousReader instanceof RequiresPreviousReader) {
+      // previousReader can only be set if reading sequentially
+      ((RequiresPreviousReader) dataColumn).setPreviousReader(previousReader);
     }
   }
 
