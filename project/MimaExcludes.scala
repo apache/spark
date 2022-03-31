@@ -52,6 +52,9 @@ object MimaExcludes {
     // [SPARK-38432][SQL] Reactor framework so as JDBC dialect could compile filter by self way
     ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.sql.sources.Filter.toV2"),
 
+    // [SPARK-37831][CORE] Add task partition id in TaskInfo and Task Metrics
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.status.api.v1.TaskData.this"),
+
     // [SPARK-37600][BUILD] Upgrade to Hadoop 3.3.2
     ProblemFilters.exclude[MissingClassProblem]("org.apache.hadoop.shaded.net.jpountz.lz4.LZ4Compressor"),
     ProblemFilters.exclude[MissingClassProblem]("org.apache.hadoop.shaded.net.jpountz.lz4.LZ4Factory"),
