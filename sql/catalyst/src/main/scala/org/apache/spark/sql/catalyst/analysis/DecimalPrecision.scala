@@ -85,7 +85,7 @@ object DecimalPrecision extends TypeCoercionRule {
       .orElse(nondecimalAndDecimal(conf.literalPickMinimumPrecision))
   }
 
-  private[sql] def decimalAndDecimal(): PartialFunction[Expression, Expression] = {
+  private[catalyst] def decimalAndDecimal(): PartialFunction[Expression, Expression] = {
     decimalAndDecimal(conf.decimalOperationsAllowPrecisionLoss, !conf.ansiEnabled)
   }
 
