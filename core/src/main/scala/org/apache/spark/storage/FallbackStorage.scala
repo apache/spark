@@ -63,14 +63,14 @@ private[storage] class FallbackStorage(conf: SparkConf) extends Logging {
         if (indexFile.exists()) {
           val hash = JavaUtils.nonNegativeHash(indexFile.getName)
           fallbackFileSystem.copyFromLocalFile(
-            new Path(indexFile.getAbsolutePath),
+            new Path(Utils.resolveURI(indexFile.getAbsolutePath)),
             new Path(fallbackPath, s"$appId/$shuffleId/$hash/${indexFile.getName}"))
 
           val dataFile = r.getDataFile(shuffleId, mapId)
           if (dataFile.exists()) {
             val hash = JavaUtils.nonNegativeHash(dataFile.getName)
             fallbackFileSystem.copyFromLocalFile(
-              new Path(dataFile.getAbsolutePath),
+              new Path(Utils.resolveURI(dataFile.getAbsolutePath)),
               new Path(fallbackPath, s"$appId/$shuffleId/$hash/${dataFile.getName}"))
           }
 
