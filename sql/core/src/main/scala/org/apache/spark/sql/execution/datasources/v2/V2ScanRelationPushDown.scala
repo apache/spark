@@ -140,11 +140,9 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper wit
                         val count = aggregate.Count(avg.child).toAggregateExpression(isDistinct)
                         // Closely follow `Average.evaluateExpression`
                         avg.evaluateExpression transform {
-                          case a: Attribute
-                            if a.semanticEquals(avg.sum) =>
+                          case a: Attribute if a.semanticEquals(avg.sum) =>
                             addCastIfNeeded(sum, avg.sumDataType)
-                          case a: Attribute
-                            if a.semanticEquals(avg.count) =>
+                          case a: Attribute if a.semanticEquals(avg.count) =>
                             addCastIfNeeded(count, LongType)
                         }
                     }
