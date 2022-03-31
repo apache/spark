@@ -463,6 +463,13 @@ package object dsl {
           orderSpec: Seq[SortOrder]): LogicalPlan =
         Window(windowExpressions, partitionSpec, orderSpec, logicalPlan)
 
+      def rankLimit(
+          partitionSpec: Seq[Expression],
+          orderSpec: Seq[SortOrder],
+          rankFunction: Expression,
+          limit: Int): LogicalPlan =
+        RankLimit(partitionSpec, orderSpec, rankFunction, limit, logicalPlan)
+
       // TODO: Remove at Spark 4.0.0
       @deprecated("Use subquery(alias: String)", "3.4.0")
       def subquery(alias: Symbol): LogicalPlan = SubqueryAlias(alias.name, logicalPlan)

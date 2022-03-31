@@ -627,6 +627,22 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
     }
   }
 
+  object RankLimit extends Strategy {
+    def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
+      case logical.RankLimit(partitionSpec, orderSpec, rankFunction, limit, child) =>
+        // TODO: add a physical rule to remove the partialRankLimit node, if there is no shuffle
+        // between the two nodes (partialRankLimit's outputPartitioning satisfies the
+        // finalRankLimit's requiredChildDistribution)
+        val partialRankLimit = execution.window.RankLimitExec(partitionSpec, orderSpec,
+          rankFunction, limit, execution.window.Partial, planLater(child))
+        val finalRankLimit = execution.window.RankLimitExec(partitionSpec, orderSpec,
+          rankFunction, limit, execution.window.Final, partialRankLimit)
+        finalRankLimit :: Nil
+
+      case _ => Nil
+    }
+  }
+
   protected lazy val singleRowRdd = session.sparkContext.parallelize(Seq(InternalRow()), 1)
 
   object InMemoryScans extends Strategy {

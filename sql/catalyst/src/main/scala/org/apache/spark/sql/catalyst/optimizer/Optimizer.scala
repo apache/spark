@@ -146,7 +146,9 @@ abstract class Optimizer(catalogManager: CatalogManager)
         operatorOptimizationRuleSet: _*) ::
       Batch("Push extra predicate through join", fixedPoint,
         PushExtraPredicateThroughJoin,
-        PushDownPredicates) :: Nil
+        PushDownPredicates) ::
+      Batch("Insert RankLimit", fixedPoint,
+        InsertRankLimit) :: Nil
     }
 
     val batches = (
@@ -1803,6 +1805,7 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
     case _: RebalancePartitions => true
     case _: ScriptTransformation => true
     case _: Sort => true
+    case _: RankLimit => true
     case _: BatchEvalPython => true
     case _: ArrowEvalPython => true
     case _: Expand => true
@@ -2176,6 +2179,66 @@ object ReplaceDeduplicateWithAggregate extends Rule[LogicalPlan] {
       val newAgg = Aggregate(nonemptyKeys, aggCols, child)
       val attrMapping = d.output.zip(newAgg.output)
       newAgg -> attrMapping
+  }
+}
+
+/**
+ * Insert rank-based filter before window.
+ */
+object InsertRankLimit extends Rule[LogicalPlan] with PredicateHelper {
+
+  private def support(rankFunction: Expression): Boolean = rankFunction match {
+    case _: RowNumber => true
+    case _: Rank => true
+    case _: DenseRank => true
+    case _ => false
+  }
+
+  private def extractLimit(condition: Expression, rank: Attribute): Option[Int] = {
+    val limits = splitConjunctivePredicates(condition).collect {
+      case EqualTo(Literal(limit: Int, IntegerType), e)
+        if e.semanticEquals(rank) => limit
+      case EqualTo(e, Literal(limit: Int, IntegerType))
+        if e.semanticEquals(rank) => limit
+      case LessThan(e, Literal(limit: Int, IntegerType))
+        if e.semanticEquals(rank) => limit - 1
+      case GreaterThan(Literal(limit: Int, IntegerType), e)
+        if e.semanticEquals(rank) => limit - 1
+      case LessThanOrEqual(e, Literal(limit: Int, IntegerType))
+        if e.semanticEquals(rank) => limit
+      case GreaterThanOrEqual(Literal(limit: Int, IntegerType), e)
+        if e.semanticEquals(rank) => limit
+    }
+    if (limits.nonEmpty) Some(limits.min) else None
+  }
+
+  private def extractLimitAndRankFunction(f: Filter, w: Window): Option[(Int, Expression)] = {
+    w.windowExpressions.head match {
+      case alias @ Alias(WindowExpression(rankFunction: Expression,
+      WindowSpecDefinition(_, _, SpecifiedWindowFrame(RowFrame, UnboundedPreceding, CurrentRow))),
+      _) if support(rankFunction) =>
+        extractLimit(f.condition, alias.toAttribute).map((_, rankFunction))
+
+      case _ => None
+    }
+  }
+
+  def apply(plan: LogicalPlan): LogicalPlan = {
+    if (!conf.getConf(SQLConf.RANK_LIMIT_ENABLE)) return plan
+
+    plan.transformUpWithPruning(
+      _.containsAllPatterns(FILTER, WINDOW), ruleId) {
+      case f @ Filter(_, w @ Window(_, partitionSpec, orderSpec, c))
+        if !c.isInstanceOf[RankLimit] && w.windowExpressions.size == 1 && orderSpec.nonEmpty =>
+        extractLimitAndRankFunction(f, w) match {
+          case Some((limit, rankFunction)) if limit > 0 =>
+            f.copy(child = w.copy(child =
+              RankLimit(partitionSpec, orderSpec, rankFunction, limit, c)))
+          case Some((limit, _)) if limit <= 0 =>
+            LocalRelation(f.output, data = Seq.empty, isStreaming = f.isStreaming)
+          case _ => f
+        }
+    }
   }
 }
 

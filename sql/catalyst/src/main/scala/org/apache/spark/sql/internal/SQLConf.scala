@@ -866,6 +866,13 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
+  val RANK_LIMIT_ENABLE = buildConf("spark.sql.rankLimit.enabled")
+    .internal()
+    .doc("When true, filter the dataset by the rank limit before window-based top-k computation.")
+    .version("3.3.0")
+    .booleanConf
+    .createWithDefault(false)
+
   val FILE_COMPRESSION_FACTOR = buildConf("spark.sql.sources.fileCompressionFactor")
     .internal()
     .doc("When estimating the output data size of a table scan, multiply the file size with this " +
@@ -3134,8 +3141,13 @@ object SQLConf {
   val TOP_K_SORT_FALLBACK_THRESHOLD =
     buildConf("spark.sql.execution.topKSortFallbackThreshold")
       .doc("In SQL queries with a SORT followed by a LIMIT like " +
-          "'SELECT x FROM t ORDER BY y LIMIT m', if m is under this threshold, do a top-K sort" +
-          " in memory, otherwise do a global sort which spills to disk if necessary.")
+        "'SELECT x FROM t ORDER BY y LIMIT m', " +
+        "or with a Window followed by a RowNumber-based Filter like " +
+        "'SELECT * FROM " +
+        "(SELECT *, ROW_NUMBER() OVER (PARTITION BY key ORDER BY value) AS rn from t) " +
+        "WHERE rn <= m', " +
+        "if m is under this threshold, do a top-K sort in memory, otherwise do a sort which " +
+        "spills to disk if necessary.")
       .version("2.4.0")
       .intConf
       .createWithDefault(ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH)

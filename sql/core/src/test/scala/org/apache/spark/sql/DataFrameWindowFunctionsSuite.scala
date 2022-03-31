@@ -1265,4 +1265,125 @@ class DataFrameWindowFunctionsSuite extends QueryTest
       )
     )
   }
+
+
+  test("SPARK-37099: Insert Rank Limit for Window") {
+    import org.apache.spark.sql.catalyst.plans.logical
+
+    val nullStr: String = null
+    val df = Seq(
+      ("a", 0, "c", 1.0),
+      ("a", 1, "x", 2.0),
+      ("a", 2, "y", 3.0),
+      ("a", 3, "z", -1.0),
+      ("a", 4, "", 2.0),
+      ("b", 1, "h", Double.NaN),
+      ("b", 1, "n", Double.PositiveInfinity),
+      ("c", 1, "z", -2.0),
+      ("c", 1, "a", -4.0),
+      ("c", 2, nullStr, 5.0)).toDF("key", "value", "order", "value2")
+
+    val orderCols = Seq(
+      $"order".asc_nulls_first :: Nil,
+      $"order".asc_nulls_last :: Nil,
+      $"order".desc_nulls_first :: Nil,
+      $"order".desc_nulls_last :: Nil,
+      $"order".asc_nulls_first :: $"value2".asc_nulls_last :: Nil,
+      $"order".asc_nulls_first :: $"value2".desc_nulls_last :: Nil
+    )
+
+    val conditions = Seq(
+      $"rn" === 1,
+      $"rn" <= 3,
+      $"rn" === 2 && $"value2" > 0.5,
+      $"rn" < 2 && $"value2" < 0.01,
+      $"rn" <= 4 && $"value" + $"value2" > 2
+    )
+
+    val rankFunctions = Seq(
+      row_number(),
+      rank(),
+      dense_rank()
+    )
+
+    for (orderCol <- orderCols; condition <- conditions; rankFunction <- rankFunctions) {
+      val window = Window.partitionBy($"key").orderBy(orderCol : _*)
+      val df2 = df.withColumn("rn", rankFunction.over(window))
+
+      var results: Seq[Row] = null
+      withSQLConf(SQLConf.RANK_LIMIT_ENABLE.key -> "false") {
+        spark.sharedState.cacheManager.clearCache()
+        val topDF = df2.where(condition)
+        results = topDF.collect()
+        val plan = topDF.queryExecution.optimizedPlan
+        assert(plan.collect { case _: logical.Window => true }.nonEmpty)
+        assert(plan.collect { case _: logical.RankLimit => true }.isEmpty)
+      }
+
+      withSQLConf(SQLConf.RANK_LIMIT_ENABLE.key -> "true") {
+        spark.sharedState.cacheManager.clearCache()
+        val topDF = df2.where(condition)
+        checkAnswer(topDF, results)
+        val plan = topDF.queryExecution.optimizedPlan
+        assert(plan.collect { case _: logical.Window => true }.nonEmpty)
+        assert(plan.collect { case _: logical.RankLimit => true }.nonEmpty)
+      }
+    }
+
+    // No Partition Defined for Window operation
+    for (orderCol <- orderCols; condition <- conditions; rankFunction <- rankFunctions) {
+      val window = Window.orderBy(orderCol : _*)
+      val df2 = df.withColumn("rn", rankFunction.over(window))
+
+      var results: Seq[Row] = null
+      withSQLConf(SQLConf.RANK_LIMIT_ENABLE.key -> "false") {
+        spark.sharedState.cacheManager.clearCache()
+        val topDF = df2.where(condition)
+        results = topDF.collect()
+        val plan = topDF.queryExecution.optimizedPlan
+        assert(plan.collect { case _: logical.Window => true }.nonEmpty)
+        assert(plan.collect { case _: logical.RankLimit => true }.isEmpty)
+      }
+
+      withSQLConf(SQLConf.RANK_LIMIT_ENABLE.key -> "true") {
+        spark.sharedState.cacheManager.clearCache()
+        val topDF = df2.where(condition)
+        checkAnswer(topDF, results)
+        val plan = topDF.queryExecution.optimizedPlan
+        assert(plan.collect { case _: logical.Window => true }.nonEmpty)
+        assert(plan.collect { case _: logical.RankLimit => true }.nonEmpty)
+      }
+    }
+
+    spark.sharedState.cacheManager.clearCache()
+    withSQLConf(SQLConf.RANK_LIMIT_ENABLE.key -> "true") {
+      // multi windowExpressions
+      df.withColumn("rn", row_number().over(Window.partitionBy($"key").orderBy($"order")))
+        .withColumn("rank", rank().over(Window.partitionBy($"key").orderBy($"order")))
+        .where($"rn" === 1)
+        .queryExecution.optimizedPlan
+        .collect { case _: logical.RankLimit => true }
+        .isEmpty
+
+      // no condition
+      df.withColumn("rn", row_number().over(Window.orderBy($"order")))
+        .queryExecution.optimizedPlan
+        .collect { case _: logical.RankLimit => true }
+        .isEmpty
+
+      // unmatched condition
+      df.withColumn("rn", row_number().over(Window.orderBy($"order")))
+        .where($"rn" > 1)
+        .queryExecution.optimizedPlan
+        .collect { case _: logical.RankLimit => true }
+        .isEmpty
+
+      // unmatched condition
+      df.withColumn("rn", row_number().over(Window.orderBy($"order")))
+        .where($"rn" === 1 || $"value2" >= 0)
+        .queryExecution.optimizedPlan
+        .collect { case _: logical.RankLimit => true }
+        .isEmpty
+    }
+  }
 }
