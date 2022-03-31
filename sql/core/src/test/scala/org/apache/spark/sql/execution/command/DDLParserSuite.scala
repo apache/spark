@@ -434,7 +434,7 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
       CreateFunction(UnresolvedDBObjectName(Seq("a", "b", "c"), false), "fun", Seq(), false, true))
 
     comparePlans(parser.parsePlan("CREATE TEMPORARY FUNCTION a as 'fun'"),
-      CreateFunctionCommand(None, "a", "fun", Seq(), true, false, false))
+      CreateFunctionCommand(Seq("a").asFunctionIdentifier, "fun", Seq(), true, false, false))
 
     comparePlans(parser.parsePlan("CREATE FUNCTION IF NOT EXISTS a.b.c as 'fun'"),
       CreateFunction(UnresolvedDBObjectName(Seq("a", "b", "c"), false), "fun", Seq(), true, false))
@@ -475,13 +475,13 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
       DropFunction(createFuncPlan(Seq("a", "b", "c")), false))
     comparePlans(
       parser.parsePlan("DROP TEMPORARY FUNCTION a"),
-      DropFunctionCommand(None, "a", false, true))
+      DropFunctionCommand(Seq("a").asFunctionIdentifier, false, true))
     comparePlans(
       parser.parsePlan("DROP FUNCTION IF EXISTS a.b.c"),
       DropFunction(createFuncPlan(Seq("a", "b", "c")), true))
     comparePlans(
       parser.parsePlan("DROP TEMPORARY FUNCTION IF EXISTS a"),
-      DropFunctionCommand(None, "a", true, true))
+      DropFunctionCommand(Seq("a").asFunctionIdentifier, true, true))
 
     intercept("DROP TEMPORARY FUNCTION a.b",
       "DROP TEMPORARY FUNCTION requires a single part name")
