@@ -1840,7 +1840,7 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
       case Ascending => new Percentile(sortOrder.child, percentage)
       case Descending => new Percentile(sortOrder.child, Subtract(Literal(1), percentage))
     }
-    percentile.setTagValue(Percentile.IS_ORDERED_SET, true)
+    percentile.setTagValue(FunctionRegistry.FUNC_ALIAS, "percentile_cont")
     val aggregateExpression = percentile.toAggregateExpression()
     ctx.windowSpec match {
       case spec: WindowRefContext =>

@@ -227,7 +227,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
             // function or a Pandas window UDF.
             w.windowFunction match {
               case AggregateExpression(percentile: Percentile, _, _, _, _)
-                if percentile.getTagValue(Percentile.IS_ORDERED_SET).getOrElse(false) &&
+                if percentile.prettyName == "percentile_cont" &&
                   (w.windowSpec.orderSpec.nonEmpty || w.windowSpec.frameSpecification !=
                     SpecifiedWindowFrame(RowFrame, UnboundedPreceding, UnboundedFollowing)) =>
                 failAnalysis("Cannot specify order by or frame for 'PERCENTILE_CONT'.")

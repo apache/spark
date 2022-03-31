@@ -19,12 +19,11 @@ package org.apache.spark.sql.catalyst.expressions.aggregate
 
 import java.io.{ByteArrayInputStream, ByteArrayOutputStream, DataInputStream, DataOutputStream}
 import java.util
-
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
+import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, TypeCheckResult}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{TypeCheckFailure, TypeCheckSuccess}
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.trees.{TernaryLike, TreeNodeTag}
+import org.apache.spark.sql.catalyst.trees.TernaryLike
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types._
@@ -88,7 +87,8 @@ case class Percentile(
     this(child, percentageExpression, frequency, 0, 0)
   }
 
-  override def prettyName: String = "percentile"
+  override def prettyName: String =
+    getTagValue(FunctionRegistry.FUNC_ALIAS).getOrElse("percentile")
 
   override def withNewMutableAggBufferOffset(newMutableAggBufferOffset: Int): Percentile =
     copy(mutableAggBufferOffset = newMutableAggBufferOffset)
@@ -324,11 +324,4 @@ case class Percentile(
     percentageExpression = newSecond,
     frequencyExpression = newThird
   )
-}
-
-object Percentile {
-  /**
-   * A tag to decide if order by or frame is specified by user.
-   */
-  val IS_ORDERED_SET = new TreeNodeTag[Boolean]("is_ordered_set")
 }
