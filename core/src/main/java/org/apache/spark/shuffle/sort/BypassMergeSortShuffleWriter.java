@@ -119,7 +119,7 @@ final class BypassMergeSortShuffleWriter<K, V>
     // Use getSizeAsKb (not bytes) to maintain backwards compatibility if no units are provided
     this.fileBufferSize = (int) (long) conf.get(package$.MODULE$.SHUFFLE_FILE_BUFFER_SIZE()) * 1024;
     this.transferToEnabled =
-      (boolean)conf.get(package$.MODULE$.SHUFFLE_SPILL_MERGE_USE_TRANSFER_TO());
+      (boolean)conf.get(package$.MODULE$.SHUFFLE_MERGE_SPILL_USE_NIO());
     this.blockManager = blockManager;
     final ShuffleDependency<K, V, V> dep = handle.dependency();
     this.mapId = mapId;
