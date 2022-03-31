@@ -138,6 +138,10 @@
     "message" : [ "PARTITION clause cannot contain a non-partition column name: %s" ],
     "sqlState" : "42000"
   },
+  "PARSE_CHAR_MISSING_LENGTH" : {
+    "message" : [ "DataType %s requires a length parameter, for example %s(10). Please specify the length." ],
+    "sqlState" : "42000"
+  },
   "PARSE_EMPTY_STATEMENT" : {
     "message" : [ "Syntax error, unexpected empty statement" ],
     "sqlState" : "42000"

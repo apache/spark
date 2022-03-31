@@ -2679,6 +2679,8 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
         DecimalType(precision.getText.toInt, scale.getText.toInt)
       case ("void", Nil) => NullType
       case ("interval", Nil) => CalendarIntervalType
+      case (dt @ ("character" | "char" | "varchar"), Nil) =>
+        throw QueryParsingErrors.charTypeMissingLengthError(dt, ctx)
       case (dt, params) =>
         val dtStr = if (params.nonEmpty) s"$dt(${params.mkString(",")})" else dt
         throw QueryParsingErrors.dataTypeUnsupportedError(dtStr, ctx)
