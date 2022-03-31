@@ -19,8 +19,7 @@ package org.apache.spark.sql.execution.datasources.v2
 
 import scala.collection.mutable
 
-import org.apache.spark.sql.catalyst.analysis.DecimalPrecision
-import org.apache.spark.sql.catalyst.expressions.{Alias, AliasHelper, And, Attribute, AttributeReference, Cast, CheckOverflowInSum, Divide, DivideDTInterval, DivideYMInterval, EqualTo, Expression, If, IntegerLiteral, Literal, NamedExpression, PredicateHelper, ProjectionOverSchema, SortOrder, SubqueryExpression}
+import org.apache.spark.sql.catalyst.expressions.{Alias, AliasHelper, And, Attribute, AttributeReference, Cast, Expression, IntegerLiteral, NamedExpression, PredicateHelper, ProjectionOverSchema, SortOrder, SubqueryExpression}
 import org.apache.spark.sql.catalyst.expressions.aggregate
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.optimizer.CollapseProject
@@ -33,7 +32,7 @@ import org.apache.spark.sql.connector.expressions.filter.Predicate
 import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownAggregates, SupportsPushDownFilters, V1Scan}
 import org.apache.spark.sql.execution.datasources.DataSourceStrategy
 import org.apache.spark.sql.sources
-import org.apache.spark.sql.types.{DataType, DayTimeIntervalType, DecimalType, LongType, StructType, YearMonthIntervalType}
+import org.apache.spark.sql.types.{DataType, LongType, StructType}
 import org.apache.spark.sql.util.SchemaUtils._
 
 object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper with AliasHelper {
@@ -140,21 +139,13 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper wit
                         val sum = aggregate.Sum(avg.child).toAggregateExpression(isDistinct)
                         val count = aggregate.Count(avg.child).toAggregateExpression(isDistinct)
                         // Closely follow `Average.evaluateExpression`
-                        avg.dataType match {
-                          case dt: DecimalType if avg.failOnError =>
-                            addCastIfNeeded(DecimalPrecision.decimalAndDecimal()(
-                              Divide(
-                                CheckOverflowInSum(sum, dt, false),
-                                addCastIfNeeded(count, dt), failOnError = false)), avg.dataType)
-                          case _: YearMonthIntervalType =>
-                            If(EqualTo(count, Literal(0L)),
-                              Literal(null, YearMonthIntervalType()), DivideYMInterval(sum, count))
-                          case _: DayTimeIntervalType =>
-                            If(EqualTo(count, Literal(0L)),
-                              Literal(null, DayTimeIntervalType()), DivideDTInterval(sum, count))
-                          case _ =>
-                            Divide(addCastIfNeeded(sum, avg.dataType),
-                              addCastIfNeeded(count, avg.dataType), false)
+                        avg.evaluateExpression transform {
+                          case a: Attribute
+                            if a.semanticEquals(avg.sum) =>
+                            addCastIfNeeded(sum, avg.sumDataType)
+                          case a: Attribute
+                            if a.semanticEquals(avg.count) =>
+                            addCastIfNeeded(count, LongType)
                         }
                     }
                   }.asInstanceOf[Seq[NamedExpression]]
