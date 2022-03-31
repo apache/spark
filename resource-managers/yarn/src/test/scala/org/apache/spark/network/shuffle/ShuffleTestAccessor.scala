@@ -48,7 +48,12 @@ object ShuffleTestAccessor {
   def getAppPathsInfo(
       appId: String,
       mergeManager: RemoteBlockPushResolver): Option[AppPathsInfo] = {
-    Option(mergeManager.appsShuffleInfo.get(appId).getAppPathsInfo)
+    val appShuffleInfo = mergeManager.appsShuffleInfo.get(appId)
+    if (appShuffleInfo != null) {
+      Some(appShuffleInfo.getAppPathsInfo)
+    } else {
+      None
+    }
   }
 
   def registeredExecutorFile(resolver: ExternalShuffleBlockResolver): File = {
