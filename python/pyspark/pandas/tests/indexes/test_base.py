@@ -383,7 +383,9 @@ class IndexesTest(ComparisonTestBase, TestUtils):
         self.assert_eq(psidx.dropna(how="any"), pidx.dropna(how="any"))
         self.assert_eq(psidx.dropna(how="all"), pidx.dropna(how="all"))
 
-        pmidx = pd.MultiIndex.from_tuples([(np.nan, 1.0), (2.0, 2.0), (np.nan, None), (3.0, np.nan)])
+        pmidx = pd.MultiIndex.from_tuples(
+            [(np.nan, 1.0), (2.0, 2.0), (np.nan, None), (3.0, np.nan)]
+        )
         psmidx = ps.from_pandas(pmidx)
         self.assert_eq(psmidx.dropna(), pmidx.dropna())
         self.assert_eq(psmidx.dropna(how="any"), pmidx.dropna(how="any"))
