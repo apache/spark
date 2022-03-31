@@ -3381,7 +3381,7 @@ class Analyzer(override val catalogManager: CatalogManager)
           i.userSpecifiedCols.nonEmpty =>
         val resolved = resolveUserSpecifiedColumns(i)
         val projection = addColumnListOnQuery(i.table.output, resolved, i.query)
-        i.copy(userSpecifiedCols = Nil, query = projection)
+        i.copy(query = projection)
     }
 
     private def resolveUserSpecifiedColumns(i: InsertIntoStatement): Seq[NamedExpression] = {

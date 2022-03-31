@@ -99,6 +99,28 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
     )
   }
 
+  test("SPARK-38707 Allow user to insert into only certain columns of a table") {
+    sql(
+      s"""
+         |INSERT OVERWRITE TABLE jsonTable(a) SELECT a FROM jt
+      """.stripMargin)
+
+    checkAnswer(
+      sql("SELECT a, b FROM jsonTable"),
+      (1 to 10).map(i => Row(i, null))
+    )
+
+    sql(
+      s"""
+         |INSERT OVERWRITE TABLE jsonTable(b) SELECT b FROM jt
+      """.stripMargin)
+
+    checkAnswer(
+      sql("SELECT a, b FROM jsonTable"),
+      (1 to 10).map(i => Row(null, s"str$i"))
+    )
+  }
+
   test("insert into a temp view that does not point to an insertable data source") {
     import testImplicits._
     withTempView("t1", "t2") {
