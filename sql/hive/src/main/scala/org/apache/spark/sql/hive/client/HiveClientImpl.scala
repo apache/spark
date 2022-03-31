@@ -54,7 +54,7 @@ import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException}
-import org.apache.spark.sql.catalyst.util.CharVarcharUtils
+import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, CharVarcharUtils}
 import org.apache.spark.sql.connector.catalog.SupportsNamespaces._
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.QueryExecutionException
@@ -1095,7 +1095,11 @@ private[hive] object HiveClientImpl extends Logging {
     table.bucketSpec match {
       case Some(bucketSpec) if !HiveExternalCatalog.isDatasourceTable(table) =>
         hiveTable.setNumBuckets(bucketSpec.numBuckets)
-        hiveTable.setBucketCols(bucketSpec.bucketColumnNames.toList.asJava)
+        // Hive metastore seems to be not case preserving with columns but case preserving with
+        // bucket spec.
+        val columns = CaseInsensitiveMap(schema.map(f => (f.getName, f.getName)).toMap)
+        hiveTable.setBucketCols(
+          bucketSpec.bucketColumnNames.map(c => columns.getOrElse(c, c)).toList.asJava)
 
         if (bucketSpec.sortColumnNames.nonEmpty) {
           hiveTable.setSortCols(
