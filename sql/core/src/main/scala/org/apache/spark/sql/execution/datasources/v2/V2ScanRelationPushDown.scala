@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.datasources.v2
 
 import scala.collection.mutable
 
-import org.apache.spark.sql.catalyst.expressions.{Alias, AliasHelper, And, Attribute, AttributeReference, Cast, Divide, DivideDTInterval, DivideYMInterval, EqualTo, Expression, If, IntegerLiteral, Literal, NamedExpression, PredicateHelper, ProjectionOverSchema, SortOrder, SubqueryExpression}
+import org.apache.spark.sql.catalyst.expressions.{Alias, AliasHelper, And, Attribute, AttributeReference, Cast, Expression, IntegerLiteral, NamedExpression, PredicateHelper, ProjectionOverSchema, SortOrder, SubqueryExpression}
 import org.apache.spark.sql.catalyst.expressions.aggregate
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.optimizer.CollapseProject
@@ -32,7 +32,7 @@ import org.apache.spark.sql.connector.expressions.filter.Predicate
 import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownAggregates, SupportsPushDownFilters, V1Scan}
 import org.apache.spark.sql.execution.datasources.DataSourceStrategy
 import org.apache.spark.sql.sources
-import org.apache.spark.sql.types.{DataType, DayTimeIntervalType, LongType, StructType, YearMonthIntervalType}
+import org.apache.spark.sql.types.{DataType, LongType, StructType}
 import org.apache.spark.sql.util.SchemaUtils._
 
 object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper with AliasHelper {
@@ -138,18 +138,11 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper wit
                       case AggregateExpression(avg: aggregate.Average, _, isDistinct, _, _) =>
                         val sum = aggregate.Sum(avg.child).toAggregateExpression(isDistinct)
                         val count = aggregate.Count(avg.child).toAggregateExpression(isDistinct)
-                        // Closely follow `Average.evaluateExpression`
-                        avg.dataType match {
-                          case _: YearMonthIntervalType =>
-                            If(EqualTo(count, Literal(0L)),
-                              Literal(null, YearMonthIntervalType()), DivideYMInterval(sum, count))
-                          case _: DayTimeIntervalType =>
-                            If(EqualTo(count, Literal(0L)),
-                              Literal(null, DayTimeIntervalType()), DivideDTInterval(sum, count))
-                          case _ =>
-                            // TODO deal with the overflow issue
-                            Divide(addCastIfNeeded(sum, avg.dataType),
-                              addCastIfNeeded(count, avg.dataType), false)
+                        avg.evaluateExpression transform {
+                          case a: Attribute if a.semanticEquals(avg.sum) =>
+                            addCastIfNeeded(sum, avg.sum.dataType)
+                          case a: Attribute if a.semanticEquals(avg.count) =>
+                            addCastIfNeeded(count, avg.count.dataType)
                         }
                     }
                   }.asInstanceOf[Seq[NamedExpression]]
