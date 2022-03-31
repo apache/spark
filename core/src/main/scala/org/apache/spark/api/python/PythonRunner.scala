@@ -188,10 +188,10 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
       // SPARK-35009: avoid creating multiple monitor threads for the same python worker
       // and task context
       if (PythonRunner.runningMonitorThreads.add(key)) {
-        new MonitorThread(SparkEnv.get, worker, context).start()
+        new MonitorThread(SparkEnv.get, worker, writerThread, context).start()
       }
     } else {
-      new MonitorThread(SparkEnv.get, worker, context).start()
+      new MonitorThread(SparkEnv.get, worker, writerThread, context).start()
     }
 
     // Return an iterator that read lines from the process's stdout
@@ -600,11 +600,18 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
   }
 
   /**
-   * It is necessary to have a monitor thread for python workers if the user cancels with
-   * interrupts disabled. In that case we will need to explicitly kill the worker, otherwise the
-   * threads can block indefinitely.
+   * It is necessary to have a monitor thread for python workers to handle the following scenarios:
+   *
+   * 1. The task is canceled, and task interruption is disabled. In that case we will need to
+   *    explicitly kill the worker, otherwise the threads can block indefinitely.
+   *
+   * 2. The task completes while the writer thread is sending input to the Python process (e.g. due
+   *    to the use of `take()`), and the Python process is still producing output. When the inputs
+   *    are sufficiently large, this can result in a deadlock due to the use of blocking I/O
+   *    (SPARK-38677). To resolve the deadlock, we need to close the socket.
    */
-  class MonitorThread(env: SparkEnv, worker: Socket, context: TaskContext)
+  class MonitorThread(
+      env: SparkEnv, worker: Socket, writerThread: WriterThread, context: TaskContext)
     extends Thread(s"Worker Monitor for $pythonExec") {
 
     /** How long to wait before killing the python worker if a task cannot be interrupted. */
@@ -613,14 +620,16 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
     setDaemon(true)
 
     private def monitorWorker(): Unit = {
-      // Kill the worker if it is interrupted, checking until task completion.
+      // Wait until the task is either canceled or completed.
       // TODO: This has a race condition if interruption occurs, as completed may still become true.
       while (!context.isInterrupted && !context.isCompleted) {
         Thread.sleep(2000)
       }
-      if (!context.isCompleted) {
+      if (!context.isCompleted || writerThread.isAlive) {
         Thread.sleep(taskKillTimeout)
-        if (!context.isCompleted) {
+        // If the task fails to complete (scenario 1) or the writer thread continues running
+        // (scenario 2), kill the worker.
+        if (!context.isCompleted || writerThread.isAlive) {
           try {
             // Mimic the task name used in `Executor` to help the user find out the task to blame.
             val taskName = s"${context.partitionId}.${context.attemptNumber} " +
