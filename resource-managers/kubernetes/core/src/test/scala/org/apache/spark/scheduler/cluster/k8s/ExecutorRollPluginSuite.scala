@@ -18,7 +18,6 @@ package org.apache.spark.scheduler.cluster.k8s
 
 import java.util.Date
 
-import org.junit.Assert.assertEquals
 import org.scalatest.PrivateMethodTester
 
 import org.apache.spark.SparkFunSuite
@@ -121,61 +120,59 @@ class ExecutorRollPluginSuite extends SparkFunSuite with PrivateMethodTester {
 
   test("Empty executor list") {
     ExecutorRollPolicy.values.foreach { value =>
-      assertEquals(None, plugin.invokePrivate[Option[String]](_choose(Seq.empty, value)))
+      assert(plugin.invokePrivate[Option[String]](_choose(Seq.empty, value)).isEmpty)
     }
   }
 
   test("Driver summary should be ignored") {
     ExecutorRollPolicy.values.foreach { value =>
-      assertEquals(plugin.invokePrivate(_choose(Seq(driverSummary), value)), None)
+      assert(plugin.invokePrivate(_choose(Seq(driverSummary), value)).isEmpty)
     }
   }
 
   test("A one-item executor list") {
     ExecutorRollPolicy.values.filter(_ != ExecutorRollPolicy.OUTLIER_NO_FALLBACK).foreach { value =>
-      assertEquals(
-        Some(execWithSmallestID.id),
-        plugin.invokePrivate(_choose(Seq(execWithSmallestID), value)))
+      assert(
+        plugin.invokePrivate(_choose(Seq(execWithSmallestID), value))
+          .contains(execWithSmallestID.id))
     }
   }
 
   test("SPARK-37806: All policy should ignore executor if totalTasks < minTasks") {
     plugin.asInstanceOf[ExecutorRollDriverPlugin].minTasks = 1000
     ExecutorRollPolicy.values.foreach { value =>
-      assertEquals(None, plugin.invokePrivate(_choose(list, value)))
+      assert(plugin.invokePrivate(_choose(list, value)).isEmpty)
     }
   }
 
   test("Policy: ID") {
-    assertEquals(Some("1"), plugin.invokePrivate(_choose(list, ExecutorRollPolicy.ID)))
+    assert(plugin.invokePrivate(_choose(list, ExecutorRollPolicy.ID)).contains("1"))
   }
 
   test("Policy: ADD_TIME") {
-    assertEquals(Some("2"), plugin.invokePrivate(_choose(list, ExecutorRollPolicy.ADD_TIME)))
+    assert(plugin.invokePrivate(_choose(list, ExecutorRollPolicy.ADD_TIME)).contains("2"))
   }
 
   test("Policy: TOTAL_GC_TIME") {
-    assertEquals(Some("3"), plugin.invokePrivate(_choose(list, ExecutorRollPolicy.TOTAL_GC_TIME)))
+    assert(plugin.invokePrivate(_choose(list, ExecutorRollPolicy.TOTAL_GC_TIME)).contains("3"))
   }
 
   test("Policy: TOTAL_DURATION") {
-    assertEquals(Some("4"), plugin.invokePrivate(_choose(list, ExecutorRollPolicy.TOTAL_DURATION)))
+    assert(plugin.invokePrivate(_choose(list, ExecutorRollPolicy.TOTAL_DURATION)).contains("4"))
   }
 
   test("Policy: FAILED_TASKS") {
-    assertEquals(Some("5"), plugin.invokePrivate(_choose(list, ExecutorRollPolicy.FAILED_TASKS)))
+    assert(plugin.invokePrivate(_choose(list, ExecutorRollPolicy.FAILED_TASKS)).contains("5"))
   }
 
   test("Policy: AVERAGE_DURATION") {
-    assertEquals(
-      Some("6"),
-      plugin.invokePrivate(_choose(list, ExecutorRollPolicy.AVERAGE_DURATION)))
+    assert(plugin.invokePrivate(_choose(list, ExecutorRollPolicy.AVERAGE_DURATION)).contains("6"))
   }
 
   test("Policy: OUTLIER - Work like TOTAL_DURATION if there is no outlier") {
-    assertEquals(
-      plugin.invokePrivate(_choose(list, ExecutorRollPolicy.TOTAL_DURATION)),
-      plugin.invokePrivate(_choose(list, ExecutorRollPolicy.OUTLIER)))
+    assert(
+      plugin.invokePrivate(_choose(list, ExecutorRollPolicy.TOTAL_DURATION)) ==
+        plugin.invokePrivate(_choose(list, ExecutorRollPolicy.OUTLIER)))
   }
 
   test("Policy: OUTLIER - Detect an average task duration outlier") {
@@ -186,9 +183,9 @@ class ExecutorRollPluginSuite extends SparkFunSuite with PrivateMethodTester {
       0, false, 0, new Date(1639300001000L),
       Option.empty, Option.empty, Map(), Option.empty, Set(), Option.empty, Map(), Map(), 1,
       false, Set())
-    assertEquals(
-      plugin.invokePrivate(_choose(list :+ outlier, ExecutorRollPolicy.AVERAGE_DURATION)),
-      plugin.invokePrivate(_choose(list :+ outlier, ExecutorRollPolicy.OUTLIER)))
+    assert(
+      plugin.invokePrivate(_choose(list :+ outlier, ExecutorRollPolicy.AVERAGE_DURATION)) ==
+        plugin.invokePrivate(_choose(list :+ outlier, ExecutorRollPolicy.OUTLIER)))
   }
 
   test("Policy: OUTLIER - Detect a total task duration outlier") {
@@ -199,9 +196,9 @@ class ExecutorRollPluginSuite extends SparkFunSuite with PrivateMethodTester {
       0, false, 0, new Date(1639300001000L),
       Option.empty, Option.empty, Map(), Option.empty, Set(), Option.empty, Map(), Map(), 1,
       false, Set())
-    assertEquals(
-      plugin.invokePrivate(_choose(list :+ outlier, ExecutorRollPolicy.TOTAL_DURATION)),
-      plugin.invokePrivate(_choose(list :+ outlier, ExecutorRollPolicy.OUTLIER)))
+    assert(
+      plugin.invokePrivate(_choose(list :+ outlier, ExecutorRollPolicy.TOTAL_DURATION)) ==
+        plugin.invokePrivate(_choose(list :+ outlier, ExecutorRollPolicy.OUTLIER)))
   }
 
   test("Policy: OUTLIER - Detect a total GC time outlier") {
@@ -212,13 +209,13 @@ class ExecutorRollPluginSuite extends SparkFunSuite with PrivateMethodTester {
       0, false, 0, new Date(1639300001000L),
       Option.empty, Option.empty, Map(), Option.empty, Set(), Option.empty, Map(), Map(), 1,
       false, Set())
-    assertEquals(
-      plugin.invokePrivate(_choose(list :+ outlier, ExecutorRollPolicy.TOTAL_GC_TIME)),
-      plugin.invokePrivate(_choose(list :+ outlier, ExecutorRollPolicy.OUTLIER)))
+    assert(
+      plugin.invokePrivate(_choose(list :+ outlier, ExecutorRollPolicy.TOTAL_GC_TIME)) ==
+        plugin.invokePrivate(_choose(list :+ outlier, ExecutorRollPolicy.OUTLIER)))
   }
 
   test("Policy: OUTLIER_NO_FALLBACK - Return None if there are no outliers") {
-    assertEquals(None, plugin.invokePrivate(_choose(list, ExecutorRollPolicy.OUTLIER_NO_FALLBACK)))
+    assert(plugin.invokePrivate(_choose(list, ExecutorRollPolicy.OUTLIER_NO_FALLBACK)).isEmpty)
   }
 
   test("Policy: OUTLIER_NO_FALLBACK - Detect an average task duration outlier") {
@@ -229,9 +226,9 @@ class ExecutorRollPluginSuite extends SparkFunSuite with PrivateMethodTester {
       0, false, 0, new Date(1639300001000L),
       Option.empty, Option.empty, Map(), Option.empty, Set(), Option.empty, Map(), Map(), 1,
       false, Set())
-    assertEquals(
-      plugin.invokePrivate(_choose(list :+ outlier, ExecutorRollPolicy.AVERAGE_DURATION)),
-      plugin.invokePrivate(_choose(list :+ outlier, ExecutorRollPolicy.OUTLIER_NO_FALLBACK)))
+    assert(
+      plugin.invokePrivate(_choose(list :+ outlier, ExecutorRollPolicy.AVERAGE_DURATION)) ==
+        plugin.invokePrivate(_choose(list :+ outlier, ExecutorRollPolicy.OUTLIER_NO_FALLBACK)))
   }
 
   test("Policy: OUTLIER_NO_FALLBACK - Detect a total task duration outlier") {
@@ -242,9 +239,9 @@ class ExecutorRollPluginSuite extends SparkFunSuite with PrivateMethodTester {
       0, false, 0, new Date(1639300001000L),
       Option.empty, Option.empty, Map(), Option.empty, Set(), Option.empty, Map(), Map(), 1,
       false, Set())
-    assertEquals(
-      plugin.invokePrivate(_choose(list :+ outlier, ExecutorRollPolicy.TOTAL_DURATION)),
-      plugin.invokePrivate(_choose(list :+ outlier, ExecutorRollPolicy.OUTLIER_NO_FALLBACK)))
+    assert(
+      plugin.invokePrivate(_choose(list :+ outlier, ExecutorRollPolicy.TOTAL_DURATION)) ==
+        plugin.invokePrivate(_choose(list :+ outlier, ExecutorRollPolicy.OUTLIER_NO_FALLBACK)))
   }
 
   test("Policy: OUTLIER_NO_FALLBACK - Detect a total GC time outlier") {
@@ -255,8 +252,8 @@ class ExecutorRollPluginSuite extends SparkFunSuite with PrivateMethodTester {
       0, false, 0, new Date(1639300001000L),
       Option.empty, Option.empty, Map(), Option.empty, Set(), Option.empty, Map(), Map(), 1,
       false, Set())
-    assertEquals(
-      plugin.invokePrivate(_choose(list :+ outlier, ExecutorRollPolicy.TOTAL_GC_TIME)),
-      plugin.invokePrivate(_choose(list :+ outlier, ExecutorRollPolicy.OUTLIER_NO_FALLBACK)))
+    assert(
+      plugin.invokePrivate(_choose(list :+ outlier, ExecutorRollPolicy.TOTAL_GC_TIME)) ==
+        plugin.invokePrivate(_choose(list :+ outlier, ExecutorRollPolicy.OUTLIER_NO_FALLBACK)))
   }
 }

@@ -21,21 +21,21 @@ import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.connector.expressions.{FieldReference, LiteralValue}
-import org.apache.spark.sql.connector.expressions.filter.{EqualTo => V2EqualTo, Filter => V2Filter}
+import org.apache.spark.sql.connector.expressions.filter.Predicate
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.BooleanType
 
 class DataSourceV2StrategySuite extends PlanTest with SharedSparkSession {
   test("SPARK-36644: Push down boolean column filter") {
     testTranslateFilter(Symbol("col").boolean,
-      Some(new V2EqualTo(FieldReference("col"), LiteralValue(true, BooleanType))))
+      Some(new Predicate("=", Array(FieldReference("col"), LiteralValue(true, BooleanType)))))
   }
 
   /**
-   * Translate the given Catalyst [[Expression]] into data source [[V2Filter]]
-   * then verify against the given [[V2Filter]].
+   * Translate the given Catalyst [[Expression]] into data source V2 [[Predicate]]
+   * then verify against the given [[Predicate]].
    */
-  def testTranslateFilter(catalystFilter: Expression, result: Option[V2Filter]): Unit = {
+  def testTranslateFilter(catalystFilter: Expression, result: Option[Predicate]): Unit = {
     assertResult(result) {
       DataSourceV2Strategy.translateFilterV2(catalystFilter, true)
     }

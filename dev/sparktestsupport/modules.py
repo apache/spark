@@ -613,6 +613,7 @@ pyspark_pandas = Module(
         "pyspark.pandas.tests.data_type_ops.test_num_ops",
         "pyspark.pandas.tests.data_type_ops.test_string_ops",
         "pyspark.pandas.tests.data_type_ops.test_udt_ops",
+        "pyspark.pandas.tests.data_type_ops.test_timedelta_ops",
         "pyspark.pandas.tests.indexes.test_category",
         "pyspark.pandas.tests.indexes.test_timedelta",
         "pyspark.pandas.tests.plot.test_frame_plot",

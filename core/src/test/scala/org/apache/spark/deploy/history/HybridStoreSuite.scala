@@ -28,7 +28,7 @@ import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.status.KVUtils._
-import org.apache.spark.tags.{ExtendedLevelDBTest, ExtendedRocksDBTest}
+import org.apache.spark.tags.ExtendedLevelDBTest
 import org.apache.spark.util.kvstore._
 
 abstract class HybridStoreSuite extends SparkFunSuite with BeforeAndAfter with TimeLimits {
@@ -207,7 +207,6 @@ class LevelDBHybridStoreSuite extends HybridStoreSuite {
   }
 }
 
-@ExtendedRocksDBTest
 class RocksDBHybridStoreSuite extends HybridStoreSuite {
   before {
     dbpath = File.createTempFile("test.", ".rdb")

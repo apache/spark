@@ -114,14 +114,14 @@ class PullupCorrelatedPredicatesSuite extends PlanTest {
   test("PullupCorrelatedPredicates should handle deletes") {
     val subPlan = testRelation2.where('a === 'c).select('c)
     val cond = InSubquery(Seq('a), ListQuery(subPlan))
-    val deletePlan = DeleteFromTable(testRelation, Some(cond)).analyze
+    val deletePlan = DeleteFromTable(testRelation, cond).analyze
     assert(deletePlan.resolved)
 
     val optimized = Optimize.execute(deletePlan)
     assert(optimized.resolved)
 
     optimized match {
-      case DeleteFromTable(_, Some(s: InSubquery)) =>
+      case DeleteFromTable(_, s: InSubquery) =>
         val outerRefs = SubExprUtils.getOuterReferences(s.query.plan)
         assert(outerRefs.isEmpty, "should be no outer refs")
       case other =>

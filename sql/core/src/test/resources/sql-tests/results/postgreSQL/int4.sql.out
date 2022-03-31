@@ -201,6 +201,9 @@ struct<>
 -- !query output
 java.lang.ArithmeticException
 integer overflow. If necessary set spark.sql.ansi.enabled to false (except for ANSI interval type) to bypass this error.
+== SQL(line 1, position 25) ==
+SELECT '' AS five, i.f1, i.f1 * smallint('2') AS x FROM INT4_TBL i
+                         ^^^^^^^^^^^^^^^^^^^^
 
 
 -- !query
@@ -221,6 +224,9 @@ struct<>
 -- !query output
 java.lang.ArithmeticException
 integer overflow. If necessary set spark.sql.ansi.enabled to false (except for ANSI interval type) to bypass this error.
+== SQL(line 1, position 25) ==
+SELECT '' AS five, i.f1, i.f1 * int('2') AS x FROM INT4_TBL i
+                         ^^^^^^^^^^^^^^^
 
 
 -- !query
@@ -241,6 +247,9 @@ struct<>
 -- !query output
 java.lang.ArithmeticException
 integer overflow. If necessary set spark.sql.ansi.enabled to false (except for ANSI interval type) to bypass this error.
+== SQL(line 1, position 25) ==
+SELECT '' AS five, i.f1, i.f1 + smallint('2') AS x FROM INT4_TBL i
+                         ^^^^^^^^^^^^^^^^^^^^
 
 
 -- !query
@@ -262,6 +271,9 @@ struct<>
 -- !query output
 java.lang.ArithmeticException
 integer overflow. If necessary set spark.sql.ansi.enabled to false (except for ANSI interval type) to bypass this error.
+== SQL(line 1, position 25) ==
+SELECT '' AS five, i.f1, i.f1 + int('2') AS x FROM INT4_TBL i
+                         ^^^^^^^^^^^^^^^
 
 
 -- !query
@@ -283,6 +295,9 @@ struct<>
 -- !query output
 java.lang.ArithmeticException
 integer overflow. If necessary set spark.sql.ansi.enabled to false (except for ANSI interval type) to bypass this error.
+== SQL(line 1, position 25) ==
+SELECT '' AS five, i.f1, i.f1 - smallint('2') AS x FROM INT4_TBL i
+                         ^^^^^^^^^^^^^^^^^^^^
 
 
 -- !query
@@ -304,6 +319,9 @@ struct<>
 -- !query output
 java.lang.ArithmeticException
 integer overflow. If necessary set spark.sql.ansi.enabled to false (except for ANSI interval type) to bypass this error.
+== SQL(line 1, position 25) ==
+SELECT '' AS five, i.f1, i.f1 - int('2') AS x FROM INT4_TBL i
+                         ^^^^^^^^^^^^^^^
 
 
 -- !query
