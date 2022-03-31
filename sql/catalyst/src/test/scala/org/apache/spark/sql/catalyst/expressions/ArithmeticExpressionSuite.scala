@@ -27,6 +27,8 @@ import org.apache.spark.sql.catalyst.analysis.DecimalPrecision
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.TypeCheckFailure
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
+import org.apache.spark.sql.catalyst.trees.CurrentOrigin.withOrigin
+import org.apache.spark.sql.catalyst.trees.Origin
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
@@ -67,6 +69,34 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
         DataTypeTestUtils.numericAndInterval.foreach { tpe =>
           checkConsistencyBetweenInterpretedAndCodegenAllowingException(Add(_, _), tpe, tpe)
         }
+      }
+    }
+  }
+
+  private def getMaxValue(dt: DataType): Literal = dt match {
+    case IntegerType => Literal.create(Int.MaxValue, IntegerType)
+    case LongType => Literal.create(Long.MaxValue, LongType)
+    case _ => s"Fail to find the max value of $dt"
+  }
+
+  private def getMinValue(dt: DataType): Literal = dt match {
+    case IntegerType => Literal.create(Int.MinValue, IntegerType)
+    case LongType => Literal.create(Long.MinValue, LongType)
+    case _ => s"Fail to find the min value of $dt"
+  }
+
+  test("Add: Overflow exception should contain SQL text context") {
+    Seq(IntegerType, LongType).foreach { dt =>
+      val maxValue = getMaxValue(dt)
+      val query = s"${maxValue.sql} + ${maxValue.sql}"
+      val o = Origin(
+        line = Some(1),
+        startPosition = Some(7),
+        startIndex = Some(7),
+        sqlText = Some(s"select $query"))
+      withOrigin(o) {
+        val expr = Add(maxValue, maxValue, failOnError = true)
+        checkExceptionInExpression[ArithmeticException](expr, EmptyRow, query)
       }
     }
   }
@@ -138,6 +168,23 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
     }
   }
 
+  test("Minus: Overflow exception should contain SQL text context") {
+    Seq(IntegerType, LongType).foreach { dt =>
+      val minValue = getMinValue(dt)
+      val maxValue = getMaxValue(dt)
+      val query = s"${minValue.sql} - ${maxValue.sql}"
+      val o = Origin(
+        line = Some(1),
+        startPosition = Some(7),
+        startIndex = Some(7),
+        sqlText = Some(s"select $query"))
+      withOrigin(o) {
+        val expr = Subtract(minValue, maxValue, failOnError = true)
+        checkExceptionInExpression[ArithmeticException](expr, EmptyRow, query)
+      }
+    }
+  }
+
   test("* (Multiply)") {
     testNumericDataTypes { convert =>
       val left = Literal(convert(1))
@@ -156,6 +203,22 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
         DataTypeTestUtils.numericTypeWithoutDecimal.foreach { tpe =>
           checkConsistencyBetweenInterpretedAndCodegenAllowingException(Multiply(_, _), tpe, tpe)
         }
+      }
+    }
+  }
+
+  test("Multiply: Overflow exception should contain SQL text context") {
+    Seq(IntegerType, LongType).foreach { dt =>
+      val maxValue = getMaxValue(dt)
+      val query = s"${maxValue.sql} * ${maxValue.sql}"
+      val o = Origin(
+        line = Some(1),
+        startPosition = Some(7),
+        startIndex = Some(7),
+        sqlText = Some(s"select $query"))
+      withOrigin(o) {
+        val expr = Multiply(maxValue, maxValue, failOnError = true)
+        checkExceptionInExpression[ArithmeticException](expr, EmptyRow, query)
       }
     }
   }
@@ -187,6 +250,19 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
           checkConsistencyBetweenInterpretedAndCodegenAllowingException(Divide(_, _), tpe, tpe)
         }
       }
+    }
+  }
+
+  test("Divide: divide by 0 exception should contain SQL text context") {
+    val query = "1234.5D / 0"
+    val o = Origin(
+      line = Some(1),
+      startPosition = Some(7),
+      startIndex = Some(7),
+      sqlText = Some(s"select $query"))
+    withOrigin(o) {
+      val expr = Divide(Literal(1234.5, DoubleType), Literal(0.0, DoubleType), failOnError = true)
+      checkExceptionInExpression[ArithmeticException](expr, EmptyRow, query)
     }
   }
 
@@ -229,6 +305,23 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
     }
   }
 
+  test("IntegralDivide: exception should contain SQL text context") {
+    Seq(-1L, 0L).foreach { right =>
+      val query = s"${Long.MinValue} div right"
+      val o = Origin(
+        line = Some(1),
+        startPosition = Some(7),
+        startIndex = Some(7),
+        sqlText = Some(s"select $query"))
+      withOrigin(o) {
+        val expr =
+          IntegralDivide(
+            Literal(Long.MinValue, LongType), Literal(right, LongType), failOnError = true)
+        checkExceptionInExpression[ArithmeticException](expr, EmptyRow, query)
+      }
+    }
+  }
+
   test("% (Remainder)") {
     testNumericDataTypes { convert =>
       val left = Literal(convert(1))
@@ -257,6 +350,22 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
           checkConsistencyBetweenInterpretedAndCodegenAllowingException(Remainder(_, _), tpe, tpe)
         }
       }
+    }
+  }
+
+  test("Remainder/Pmod: exception should contain SQL text context") {
+    Seq(
+      Remainder(Literal(1L, LongType), Literal(0L, LongType), failOnError = true),
+      Pmod(Literal(1L, LongType), Literal(0L, LongType), failOnError = true)).foreach { expr =>
+        val query = s"1L ${expr.symbol} 0L"
+        val o = Origin(
+          line = Some(1),
+          startPosition = Some(7),
+          startIndex = Some(7),
+          sqlText = Some(s"select $query"))
+        withOrigin(o) {
+          checkExceptionInExpression[ArithmeticException](expr, EmptyRow, query)
+        }
     }
   }
 

@@ -618,33 +618,14 @@ public abstract class AbstractBytesToBytesMapSuite {
 
   @Test
   public void initialCapacityBoundsChecking() {
-    try {
-      new BytesToBytesMap(taskMemoryManager, 0, PAGE_SIZE_BYTES);
-      Assert.fail("Expected IllegalArgumentException to be thrown");
-    } catch (IllegalArgumentException e) {
-      // expected exception
-    }
-
-    try {
-      new BytesToBytesMap(
-        taskMemoryManager,
-        BytesToBytesMap.MAX_CAPACITY + 1,
-        PAGE_SIZE_BYTES);
-      Assert.fail("Expected IllegalArgumentException to be thrown");
-    } catch (IllegalArgumentException e) {
-      // expected exception
-    }
-
-    try {
-      new BytesToBytesMap(
-        taskMemoryManager,
-        1,
-        TaskMemoryManager.MAXIMUM_PAGE_SIZE_BYTES + 1);
-      Assert.fail("Expected IllegalArgumentException to be thrown");
-    } catch (IllegalArgumentException e) {
-      // expected exception
-    }
-
+    assertThrows(IllegalArgumentException.class,
+      () -> new BytesToBytesMap(taskMemoryManager, 0, PAGE_SIZE_BYTES));
+    assertThrows(IllegalArgumentException.class,
+      () -> new BytesToBytesMap(taskMemoryManager,
+              BytesToBytesMap.MAX_CAPACITY + 1, PAGE_SIZE_BYTES));
+    assertThrows(IllegalArgumentException.class,
+      () -> new BytesToBytesMap(taskMemoryManager, 1,
+              TaskMemoryManager.MAXIMUM_PAGE_SIZE_BYTES + 1));
   }
 
   @Test
@@ -742,10 +723,7 @@ public abstract class AbstractBytesToBytesMapSuite {
     // Force OOM on next memory allocation.
     memoryManager.markExecutionAsOutOfMemoryOnce();
     try {
-      map.reset();
-      Assert.fail("Expected SparkOutOfMemoryError to be thrown");
-    } catch (SparkOutOfMemoryError e) {
-      // Expected exception; do nothing.
+      assertThrows(SparkOutOfMemoryError.class, map::reset);
     } finally {
       map.free();
     }

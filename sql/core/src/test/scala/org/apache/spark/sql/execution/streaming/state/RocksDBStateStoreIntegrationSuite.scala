@@ -107,7 +107,7 @@ class RocksDBStateStoreIntegrationSuite extends StreamTest {
   testQuietly("SPARK-36519: store RocksDB format version in the checkpoint") {
     def getFormatVersion(query: StreamingQuery): Int = {
       query.asInstanceOf[StreamingQueryWrapper].streamingQuery.lastExecution.sparkSession
-        .sessionState.conf.getConf(SQLConf.STATE_STORE_ROCKSDB_FORMAT_VERSION)
+        .conf.get(SQLConf.STATE_STORE_ROCKSDB_FORMAT_VERSION)
     }
 
     withSQLConf(

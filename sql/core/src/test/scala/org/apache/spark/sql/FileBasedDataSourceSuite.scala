@@ -53,7 +53,7 @@ class FileBasedDataSourceSuite extends QueryTest
 
   override def beforeAll(): Unit = {
     super.beforeAll()
-    spark.sessionState.conf.setConf(SQLConf.ORC_IMPLEMENTATION, "native")
+    spark.conf.set(SQLConf.ORC_IMPLEMENTATION, "native")
   }
 
   override def afterAll(): Unit = {

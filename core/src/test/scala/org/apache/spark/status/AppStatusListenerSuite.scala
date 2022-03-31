@@ -1860,7 +1860,8 @@ abstract class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter 
 
   private def newAttempt(orig: TaskInfo, nextId: Long): TaskInfo = {
     // Task reattempts have a different ID, but the same index as the original.
-    new TaskInfo(nextId, orig.index, orig.attemptNumber + 1, time, orig.executorId,
+    new TaskInfo(
+      nextId, orig.index, orig.attemptNumber + 1, orig.partitionId, time, orig.executorId,
       s"${orig.executorId}.example.com", TaskLocality.PROCESS_LOCAL, orig.speculative)
   }
 
@@ -1868,7 +1869,9 @@ abstract class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter 
     (1 to count).map { id =>
       val exec = execs(id.toInt % execs.length)
       val taskId = nextTaskId()
-      new TaskInfo(taskId, taskId.toInt, 1, time, exec, s"$exec.example.com",
+      val taskIndex = id - 1
+      val partitionId = taskIndex
+      new TaskInfo(taskId, taskIndex, 1, partitionId, time, exec, s"$exec.example.com",
         TaskLocality.PROCESS_LOCAL, id % 2 == 0)
     }
   }

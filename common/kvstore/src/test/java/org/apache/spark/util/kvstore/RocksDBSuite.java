@@ -69,36 +69,21 @@ public class RocksDBSuite {
     db.close();
     db = null;
 
-    try {
-      db = new RocksDB(dbpath);
-      fail("Should have failed version check.");
-    } catch (UnsupportedStoreVersionException e) {
-      // Expected.
-    }
+    assertThrows(UnsupportedStoreVersionException.class, () -> db = new RocksDB(dbpath));
   }
 
   @Test
   public void testObjectWriteReadDelete() throws Exception {
     CustomType1 t = createCustomType1(1);
 
-    try {
-      db.read(CustomType1.class, t.key);
-      fail("Expected exception for non-existent object.");
-    } catch (NoSuchElementException nsee) {
-      // Expected.
-    }
+    assertThrows(NoSuchElementException.class, () -> db.read(CustomType1.class, t.key));
 
     db.write(t);
     assertEquals(t, db.read(t.getClass(), t.key));
     assertEquals(1L, db.count(t.getClass()));
 
     db.delete(t.getClass(), t.key);
-    try {
-      db.read(t.getClass(), t.key);
-      fail("Expected exception for deleted object.");
-    } catch (NoSuchElementException nsee) {
-      // Expected.
-    }
+    assertThrows(NoSuchElementException.class, () -> db.read(t.getClass(), t.key));
 
     // Look into the actual DB and make sure that all the keys related to the type have been
     // removed.
