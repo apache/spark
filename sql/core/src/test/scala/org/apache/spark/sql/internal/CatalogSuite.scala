@@ -255,7 +255,7 @@ class CatalogSuite extends SharedSparkSession with AnalysisTest {
 
   test("Database.toString") {
     assert(new Database("cool_db", "cool_desc", "cool_path").toString ==
-      "Database[name='cool_db', description='cool.desc', path='cool_path']")
+      "Database[name='cool_db', description='cool_desc', path='cool_path']")
     assert(new Database("cool_db", null, "cool_path").toString ==
       "Database[name='cool_db', path='cool_path']")
   }

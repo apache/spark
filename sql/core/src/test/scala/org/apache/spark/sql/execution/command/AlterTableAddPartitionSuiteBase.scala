@@ -132,8 +132,8 @@ trait AlterTableAddPartitionSuiteBase extends QueryTest with DDLCommandTestUtils
         |  part5 = 3.14,
         |  part6 = 'abc',
         |  part7 = true,
-        |  part8 = $"2020"-11-23',
-        |  part9 = $"2020"-11-23 22:13:10.123456'
+        |  part8 = '2020-11-23',
+        |  part9 = '2020-11-23 22:13:10.123456'
         |""".stripMargin
       sql(s"ALTER TABLE $t ADD PARTITION ($partSpec)")
       val expected = Map(

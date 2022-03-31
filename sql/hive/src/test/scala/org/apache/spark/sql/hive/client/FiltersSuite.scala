@@ -94,7 +94,7 @@ class FiltersSuite extends SparkFunSuite with Logging with PlanTest {
   filterTest("SPARK-19912 String literals should be escaped for Hive metastore partition pruning",
     (a("stringcol", StringType) === Literal("p1\" and q=\"q1")) ::
       (Literal("p2\" and q=\"q2") === a("stringcol", StringType)) :: Nil,
-    """stringcol = $"p1"" and q="q1' and 'p2" and q="q2' = stringcol""")
+    """stringcol = 'p1" and q="q1' and 'p2" and q="q2' = stringcol""")
 
   filterTest("SPARK-24879 null literals should be ignored for IN constructs",
     (a("intcol", IntegerType) in (Literal(1), Literal(null))) :: Nil,
