@@ -70,13 +70,16 @@ trait AliasHelper {
   protected def replaceAliasButKeepName(
      expr: NamedExpression,
      aliasMap: AttributeMap[Alias]): NamedExpression = {
-    // Use transformUp to prevent infinite recursion when the replacement expression
-    // redefines the same ExprId,
     expr match {
+      // We need to keep the `Alias` if we replace a top-level Attribute, so that it's still a
+      // `NamedExpression`. We also need to keep the name of the original Attribute.
       case a: Attribute => aliasMap.get(a).map(_.withName(a.name)).getOrElse(a)
-      case o => o.mapChildren(_.transformUp {
-        case a: Attribute => aliasMap.get(a).map(_.child).getOrElse(a)
-      }).asInstanceOf[NamedExpression]
+      case o =>
+        // Use transformUp to prevent infinite recursion when the replacement expression
+        // redefines the same ExprId.
+        o.mapChildren(_.transformUp {
+          case a: Attribute => aliasMap.get(a).map(_.child).getOrElse(a)
+        }).asInstanceOf[NamedExpression]
     }
   }
 
