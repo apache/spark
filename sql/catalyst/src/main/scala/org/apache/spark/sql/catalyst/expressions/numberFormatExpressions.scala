@@ -22,7 +22,7 @@ import java.util.Locale
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode}
 import org.apache.spark.sql.catalyst.expressions.codegen.Block.BlockHelper
-import org.apache.spark.sql.catalyst.util.NumberFormatter
+import org.apache.spark.sql.catalyst.util.ToNumberParser
 import org.apache.spark.sql.types.{DataType, StringType}
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -58,7 +58,7 @@ case class ToNumber(left: Expression, right: Expression)
   extends BinaryExpression with ImplicitCastInputTypes with NullIntolerant {
 
   private lazy val numberFormat = right.eval().toString.toUpperCase(Locale.ROOT)
-  private lazy val numberFormatter = new NumberFormatter(numberFormat)
+  private lazy val numberFormatter = new ToNumberParser(numberFormat)
 
   override def dataType: DataType = numberFormatter.parsedDecimalType
 
@@ -86,7 +86,7 @@ case class ToNumber(left: Expression, right: Expression)
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val builder =
-      ctx.addReferenceObj("builder", numberFormatter, classOf[NumberFormatter].getName)
+      ctx.addReferenceObj("builder", numberFormatter, classOf[ToNumberParser].getName)
     val eval = left.genCode(ctx)
     ev.copy(code =
       code"""

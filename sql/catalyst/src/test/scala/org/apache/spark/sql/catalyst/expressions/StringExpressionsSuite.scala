@@ -903,8 +903,26 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         assert(msg.contains("Format expression must be foldable"))
     }
 
-    // Test '0' and '9'
+    // Start with some basic cases.
+    Seq(
+      ("454", "099") -> Some(Decimal(454)),
+      ("454", "09") -> None
+    ).foreach { case ((str: String, format: String), expected: Option[Decimal]) =>
+      if (expected.isDefined) {
+        checkEvaluation(ToNumber(Literal(str), Literal(format)), expected.get)
+      } else {
+        checkExceptionInExpression[IllegalArgumentException](
+          ToNumber(Literal(str), Literal(format)),
+          s"The input string '$str' does not match the given number format: '$format'")
+      }
+    }
+    Seq(
+      ("454", "09") -> Decimal(454)
+    ).foreach { case ((str, format), expected) =>
+      checkEvaluation(ToNumber(Literal(str), Literal(format)), expected)
+    }
 
+    // Test '0' and '9'
     Seq("454", "054", "54", "450").foreach { input =>
       val invalidFormat1 = 0.until(input.length - 1).map(_ => '0').mkString
       val invalidFormat2 = 0.until(input.length - 2).map(_ => '0').mkString
@@ -925,6 +943,13 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       val format6 = 0.until(input.length + 1).map(i => i % 2 * 9).mkString
       Seq(format1, format2, format3, format4, format5, format6).foreach { format =>
         checkEvaluation(ToNumber(Literal(input), Literal(format)), Decimal(input))
+        // Also test with leading and/or trailing spaces in the input string.
+        val input1 = s"  $input"
+        val input2 = s"$input "
+        val input3 = s"  $input "
+        Seq(input1, input2, input3).foreach { currentInput =>
+          checkEvaluation(ToNumber(Literal(currentInput), Literal(format)), Decimal(input))
+        }
       }
     }
 
@@ -1043,6 +1068,11 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       val format4 = format2.replace('-', 'S')
       checkEvaluation(ToNumber(Literal(str), Literal(format4)), expected)
     }
+    Seq(
+      ("454+", "999S") -> Decimal(454)
+    ).foreach { case ((str, format), expected) =>
+      checkEvaluation(ToNumber(Literal(str), Literal(format)), expected)
+    }
 
     ToNumber(Literal("454.3--"), Literal("999D9SS")).checkInputDataTypes() match {
       case TypeCheckResult.TypeCheckFailure(msg) =>
@@ -1055,6 +1085,54 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
           assert(msg.contains(
             s"'S' or '-' must be the first or last char in the number format: '$str'"))
       }
+    }
+
+    // Test 'MI'
+    Seq(
+      ("454-", "999-") -> Decimal(-454),
+      ("454-", "999MI") -> Decimal(-454)
+    ).foreach {case ((str, format), expected) =>
+      checkEvaluation(ToNumber(Literal(str), Literal(format)), expected)
+    }
+    Seq(
+      ("454+", "999MI"),
+      ("454+", "MI999")
+    ).foreach { case (str, format) =>
+      checkExceptionInExpression[IllegalArgumentException](
+        ToNumber(Literal(str), Literal(format)),
+        s"The input string '$str' does not match the given number format: '$format'")
+    }
+    ToNumber(Literal("454.3--"), Literal("999D9MIMI")).checkInputDataTypes() match {
+      case TypeCheckResult.TypeCheckFailure(msg) =>
+        assert(msg.contains("At most one MI is allowed in the number format: '999D9MIMI'"))
+    }
+    ToNumber(Literal("454-"), Literal("99MI9")).checkInputDataTypes() match {
+      case TypeCheckResult.TypeCheckFailure(msg) =>
+        assert(msg.contains("'MI' must be at the end of the number format: '99MI9'"))
+    }
+
+    // Test 'PR'
+    Seq(
+      ("<454>", "999PR") -> Decimal(-454)
+    ).foreach {case ((str, format), expected) =>
+      checkEvaluation(ToNumber(Literal(str), Literal(format)), expected)
+    }
+    Seq(
+      ("<454", "999PR"),
+      ("454>", "999PR"),
+      ("<454>", "PR999")
+    ).foreach { case (str, format) =>
+      checkExceptionInExpression[IllegalArgumentException](
+        ToNumber(Literal(str), Literal(format)),
+        s"The input string '$str' does not match the given number format: '$format'")
+    }
+    ToNumber(Literal("<<454.3>>"), Literal("999D9PRPR")).checkInputDataTypes() match {
+      case TypeCheckResult.TypeCheckFailure(msg) =>
+        assert(msg.contains("At most one PR is allowed in the number format: '999D9PRPR'"))
+    }
+    ToNumber(Literal("<454>"), Literal("99PR9")).checkInputDataTypes() match {
+      case TypeCheckResult.TypeCheckFailure(msg) =>
+        assert(msg.contains("'PR' must be at the end of the number format: '99PR9'"))
     }
   }
 
