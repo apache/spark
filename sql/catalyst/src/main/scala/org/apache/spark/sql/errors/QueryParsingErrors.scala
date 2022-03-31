@@ -452,4 +452,9 @@ object QueryParsingErrors {
   def defaultColumnNotEnabledError(ctx: ParserRuleContext): Throwable = {
     new ParseException("Support for DEFAULT column values is not allowed", ctx)
   }
+
+  def defaultColumnReferencesNotAllowedInPartitionSpec(ctx: ParserRuleContext): Throwable = {
+    new ParseException(
+      "References to DEFAULT column values are not allowed within the PARTITION clause", ctx)
+  }
 }

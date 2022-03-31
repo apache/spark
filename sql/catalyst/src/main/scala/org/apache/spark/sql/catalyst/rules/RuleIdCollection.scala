@@ -81,6 +81,7 @@ object RuleIdCollection {
       "org.apache.spark.sql.catalyst.analysis.DeduplicateRelations" ::
       "org.apache.spark.sql.catalyst.analysis.EliminateSubqueryAliases" ::
       "org.apache.spark.sql.catalyst.analysis.EliminateUnions" ::
+      "org.apache.spark.sql.catalyst.analysis.ResolveDefaultColumns" ::
       "org.apache.spark.sql.catalyst.analysis.ResolveExpressionsWithNamePlaceholders" ::
       "org.apache.spark.sql.catalyst.analysis.ResolveHints$ResolveCoalesceHints" ::
       "org.apache.spark.sql.catalyst.analysis.ResolveHints$ResolveJoinStrategyHints" ::
