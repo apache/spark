@@ -3178,7 +3178,7 @@ object SQLConf {
     buildConf("spark.sql.debug.maxToStringFieldsForDiagnostic")
       .doc(s"Similar to ${MAX_TO_STRING_FIELDS.key}, but it will take effect when the " +
         s"output will be stored for the diagnostics API. The output will be stored in " +
-        s"disk instead of memory. So it can be larger than ${MAX_TO_STRING_FIELDS}")
+        s"disk instead of memory. So it can be larger than ${MAX_TO_STRING_FIELDS.key}")
       .version("3.4.0")
       .intConf
       .createWithDefault(10000)

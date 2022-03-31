@@ -52,8 +52,10 @@ class DiagnosticListener(
   }
 
   private def onExecutionStart(event: SparkListenerSQLExecutionStart): Unit = {
-    val planDescriptionMode = ExplainMode.fromString(SQLConf.get.uiExplainMode)
-    val physicalPlan = event.qe.explainString(planDescriptionMode, Int.MaxValue)
+    val sqlConf = event.qe.sparkSession.sessionState.conf
+    val planDescriptionMode = ExplainMode.fromString(sqlConf.uiExplainMode)
+    val physicalPlan = event.qe.explainString(
+      planDescriptionMode, sqlConf.maxToStringFieldsForDiagnostic)
     val data = new ExecutionDiagnosticData(
       event.executionId,
       physicalPlan,
@@ -68,9 +70,10 @@ class DiagnosticListener(
   private def onExecutionEnd(event: SparkListenerSQLExecutionEnd): Unit = {
     try {
       val existing = kvStore.read(classOf[ExecutionDiagnosticData], event.executionId)
-      val planDescriptionMode = ExplainMode.fromString(SQLConf.get.uiExplainMode)
+      val sqlConf = event.qe.sparkSession.sessionState.conf
+      val planDescriptionMode = ExplainMode.fromString(sqlConf.uiExplainMode)
       val physicalPlan = event.qe.explainString(
-        planDescriptionMode, SQLConf.get.maxToStringFieldsForDiagnostic)
+        planDescriptionMode, sqlConf.maxToStringFieldsForDiagnostic)
       val data = new ExecutionDiagnosticData(
         event.executionId,
         physicalPlan,
