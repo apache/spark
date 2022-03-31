@@ -177,7 +177,7 @@ class RocksDB(
         numKeysOnWritingVersion -= 1
       }
     }
-    writeBatch.remove(key)
+    writeBatch.delete(key)
   }
 
   /**

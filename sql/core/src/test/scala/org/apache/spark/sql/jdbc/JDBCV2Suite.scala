@@ -350,9 +350,16 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
       "WHEN IS_MANAGER = true THEN FALSE ELSE DEPT > 3 END], ")
     checkAnswer(df9, Seq(Row(2, "alex", 12000, 1200, false),
       Row(2, "david", 10000, 1300, true), Row(6, "jen", 12000, 1200, true)))
+
+    val df10 = spark.table("h2.test.people")
+      .select($"NAME".as("myName"), $"ID".as("myID"))
+      .filter($"myID" > 1)
+    checkFiltersRemoved(df10)
+    checkPushedInfo(df10, "PushedFilters: [ID IS NOT NULL, ID > 1], ")
+    checkAnswer(df10, Row("mary", 2))
   }
 
-  test("scan with complex filter push-down") {
+  test("scan with filter push-down with ansi mode") {
     Seq(false, true).foreach { ansiMode =>
       withSQLConf(SQLConf.ANSI_ENABLED.key -> ansiMode.toString) {
         val df = spark.table("h2.test.people").filter($"id" + 1 > 1)
@@ -404,6 +411,25 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
         checkPushedInfo(df3, expectedPlanFragment3)
         checkAnswer(df3,
           Seq(Row(1, "cathy", 9000, 1200, false), Row(2, "david", 10000, 1300, true)))
+
+        val df4 = spark.table("h2.test.employee")
+          .filter(($"salary" > 1000d).and($"salary" < 12000d))
+
+        checkFiltersRemoved(df4, ansiMode)
+
+        df4.queryExecution.optimizedPlan.collect {
+          case _: DataSourceV2ScanRelation =>
+            val expected_plan_fragment = if (ansiMode) {
+              "PushedFilters: [SALARY IS NOT NULL, " +
+                "CAST(SALARY AS double) > 1000.0, CAST(SALARY AS double) < 12000.0], "
+            } else {
+              "PushedFilters: [SALARY IS NOT NULL], "
+            }
+            checkKeywordsExistsInExplain(df4, expected_plan_fragment)
+        }
+
+        checkAnswer(df4, Seq(Row(1, "amy", 10000, 1000, true),
+          Row(1, "cathy", 9000, 1200, false), Row(2, "david", 10000, 1300, true)))
       }
     }
   }

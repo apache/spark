@@ -32,7 +32,7 @@ import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.fail;
+import static org.junit.Assert.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.Mockito.mock;
@@ -67,21 +67,12 @@ public class TransportCipherSuite {
     ByteBuf buffer = Unpooled.wrappedBuffer(new byte[] { 1, 2 });
     ByteBuf buffer2 = Unpooled.wrappedBuffer(new byte[] { 1, 2 });
 
-    try {
-      channel.writeInbound(buffer);
-      fail("Should have raised InternalError");
-    } catch (InternalError expected) {
-      // expected
-      assertEquals(0, buffer.refCnt());
-    }
+    assertThrows(InternalError.class, () -> channel.writeInbound(buffer));
+    assertEquals(0, buffer.refCnt());
 
-    try {
-      channel.writeInbound(buffer2);
-      fail("Should have raised an exception");
-    } catch (Throwable expected) {
-      assertEquals(expected.getClass(), IOException.class);
-      assertEquals(0, buffer2.refCnt());
-    }
+    Throwable expected = assertThrows(Throwable.class, () -> channel.writeInbound(buffer2));
+    assertEquals(expected.getClass(), IOException.class);
+    assertEquals(0, buffer2.refCnt());
 
     // Simulate closing the connection
     assertFalse(channel.finish());

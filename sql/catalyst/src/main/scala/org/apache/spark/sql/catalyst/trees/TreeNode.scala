@@ -64,7 +64,80 @@ case class Origin(
   stopIndex: Option[Int] = None,
   sqlText: Option[String] = None,
   objectType: Option[String] = None,
-  objectName: Option[String] = None)
+  objectName: Option[String] = None) {
+
+  /**
+   * The SQL query context of current node. For example:
+   * == SQL of VIEW v1(line 1, position 25) ==
+   * SELECT '' AS five, i.f1, i.f1 - int('2') AS x FROM INT4_TBL i
+   *                          ^^^^^^^^^^^^^^^
+   */
+  lazy val context: String = sqlText.map { text =>
+    val positionContext = if (line.isDefined && startPosition.isDefined) {
+      s"(line ${line.get}, position ${startPosition.get})"
+    } else {
+      ""
+    }
+    val objectContext = if (objectType.isDefined && objectName.isDefined) {
+      s" of ${objectType.get} ${objectName.get}"
+    } else {
+      ""
+    }
+    val builder = new StringBuilder
+    builder ++= s"\n== SQL$objectContext$positionContext ==\n"
+
+    val start = startIndex.getOrElse(0)
+    val stop = stopIndex.getOrElse(sqlText.get.length - 1)
+    // Ideally we should show all the lines which contains the SQL text context of the current node:
+    // [additional text] [current tree node] [additional text]
+    // However, we need to truncate the additional text in case it is too long. The following
+    // variable is to define the max length of additional text.
+    val maxExtraContextLength = 32
+    val truncatedText = "..."
+    var lineStartIndex = start
+    // Collect the SQL text within the starting line of current Node.
+    // The text is truncated if it is too long.
+    while(lineStartIndex >= 0 &&
+      start - lineStartIndex <= maxExtraContextLength &&
+      text.charAt(lineStartIndex) != '\n') {
+      lineStartIndex -= 1
+    }
+    val startTruncated = start - lineStartIndex > maxExtraContextLength
+    var currentIndex = lineStartIndex
+    if (startTruncated) {
+      currentIndex -= truncatedText.length
+    }
+
+    var lineStopIndex = stop
+    // Collect the SQL text within the ending line of current Node.
+    // The text is truncated if it is too long.
+    while(lineStopIndex < text.length &&
+      lineStopIndex - stop <= maxExtraContextLength &&
+      text.charAt(lineStopIndex) != '\n') {
+      lineStopIndex += 1
+    }
+    val stopTruncated = lineStopIndex - stop > maxExtraContextLength
+
+    val subText = (if (startTruncated) truncatedText else "") +
+      text.substring(lineStartIndex + 1, lineStopIndex) +
+      (if (stopTruncated) truncatedText else "")
+    val lines = subText.split("\n")
+    lines.foreach { lineText =>
+      builder ++= lineText + "\n"
+      currentIndex += 1
+      (0 until lineText.length).foreach { _ =>
+        if (currentIndex < start) {
+          builder ++= " "
+        } else if (currentIndex >= start && currentIndex <= stop) {
+          builder ++= "^"
+        }
+        currentIndex += 1
+      }
+      builder ++= "\n"
+    }
+    builder.result()
+  }.getOrElse("")
+}
 
 /**
  * Provides a location for TreeNodes to ask about the context of their origin.  For example, which
