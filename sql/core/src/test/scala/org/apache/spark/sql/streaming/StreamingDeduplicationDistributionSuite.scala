@@ -37,7 +37,8 @@ class StreamingDeduplicationDistributionSuite extends StreamTest
 
     val input = MemoryStream[Int]
     val df1 = input.toDF()
-      .select($"value" as Symbol("key1"), $"value" * 2 as Symbol("key2"), $"value" * 3 as Symbol("value"))
+      .select($"value" as Symbol("key1"), $"value" * 2 as Symbol("key2"),
+        $"value" * 3 as Symbol("value"))
     val dedup = df1.repartition($"key1").dropDuplicates("key1", "key2")
 
     testStream(dedup, OutputMode.Update())(
@@ -64,7 +65,8 @@ class StreamingDeduplicationDistributionSuite extends StreamTest
 
     val inputData = MemoryStream[Int]
     val df1 = inputData.toDF()
-      .select($"value" as Symbol("key1"), $"value" * 2 as Symbol("key2"), $"value" * 3 as Symbol("value"))
+      .select($"value" as Symbol("key1"), $"value" * 2 as Symbol("key2"),
+        $"value" * 3 as Symbol("value"))
     val dedup = df1.repartition($"key1").dropDuplicates("key1", "key2")
 
     val resourceUri = this.getClass.getResource(

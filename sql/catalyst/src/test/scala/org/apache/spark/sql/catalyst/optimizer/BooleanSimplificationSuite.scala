@@ -119,7 +119,8 @@ class BooleanSimplificationSuite extends PlanTest with ExpressionEvalHelper with
 
     checkCondition($"a" < 2 && ($"a" < 2 || $"a" > 3 || $"b" > 5), $"a" < 2)
 
-    checkCondition(($"a" < 2 || $"b" > 3) && ($"a" < 2 || $"c" > 5), $"a" < 2 || ($"b" > 3 && $"c" > 5))
+    checkCondition(($"a" < 2 || $"b" > 3) && ($"a" < 2 || $"c" > 5), $"a" < 2
+      || ($"b" > 3 && $"c" > 5))
 
     checkCondition(
       ($"a" === $"b" || $"b" > 3) && ($"a" === $"b" || $"a" > 3) && ($"a" === $"b" || $"a" < 5),
@@ -138,7 +139,8 @@ class BooleanSimplificationSuite extends PlanTest with ExpressionEvalHelper with
       $"a" > 1 && $"b" > 3 && $"c" > 1)
 
     checkCondition(
-      ($"a" > 1 || $"b" > 3) && (($"a" > 1 || $"b" > 3) && $"d" > 0L && (($"a" > 1 || $"b" > 3) && $"c" > 1)),
+      ($"a" > 1 || $"b" > 3) && (($"a" > 1 || $"b" > 3) && $"d" > 0L
+        && (($"a" > 1 || $"b" > 3) && $"c" > 1)),
       ($"a" > 1 || $"b" > 3) && $"d" > 0L && $"c" > 1)
 
     checkCondition(

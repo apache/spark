@@ -713,7 +713,8 @@ class NestedColumnAliasingSuite extends SchemaPruningTest {
 
   test("SPARK-35636: do not push lambda key out of lambda function") {
     val rel = LocalRelation(
-      Symbol("kvs").map(StringType, new StructType().add("v1", IntegerType)), $"keys".array(StringType))
+      Symbol("kvs").map(StringType, new StructType().add("v1", IntegerType)),
+      $"keys".array(StringType))
     val key = UnresolvedNamedLambdaVariable("key" :: Nil)
     val lambda = LambdaFunction($"kvs".getItem(key).getField("v1"), key :: Nil)
     val query = rel

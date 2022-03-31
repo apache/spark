@@ -86,7 +86,8 @@ class RemoveRedundantAliasAndProjectSuite extends PlanTest with PredicateHelper 
   test("remove redundant project with self-join") {
     val relation = LocalRelation($"a".int)
     val fragment = relation.select($"a" as Symbol("a"))
-    val query = fragment.select($"a" as Symbol("a")).join(fragment.select($"a" as Symbol("a"))).analyze
+    val query = fragment.select($"a" as Symbol("a"))
+      .join(fragment.select($"a" as Symbol("a"))).analyze
     val optimized = Optimize.execute(query)
     val expected = relation.join(relation).analyze
     comparePlans(optimized, expected)
@@ -95,7 +96,8 @@ class RemoveRedundantAliasAndProjectSuite extends PlanTest with PredicateHelper 
   test("alias removal should not break after push project through union") {
     val r1 = LocalRelation($"a".int)
     val r2 = LocalRelation($"b".int)
-    val query = r1.select($"a" as Symbol("a")).union(r2.select($"b" as Symbol("b"))).select($"a").analyze
+    val query = r1.select($"a" as Symbol("a"))
+      .union(r2.select($"b" as Symbol("b"))).select($"a").analyze
     val optimized = Optimize.execute(query)
     val expected = r1.union(r2)
     comparePlans(optimized, expected)

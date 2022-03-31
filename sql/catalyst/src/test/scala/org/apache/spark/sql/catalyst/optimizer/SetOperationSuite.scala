@@ -269,7 +269,8 @@ class SetOperationSuite extends PlanTest {
       .where(And(GreaterThanOrEqual($"vcol1_count", Literal(1L)),
         GreaterThanOrEqual($"vcol2_count", Literal(1L))))
       .select($"a", $"b", $"c",
-        If(GreaterThan($"vcol1_count", $"vcol2_count"), $"vcol2_count", $"vcol1_count").as("min_count"))
+        If(GreaterThan($"vcol1_count", $"vcol2_count"), $"vcol2_count", $"vcol1_count")
+          .as("min_count"))
       .analyze
     val multiplierAttr = planFragment.output.last
     val output = planFragment.output.dropRight(1)

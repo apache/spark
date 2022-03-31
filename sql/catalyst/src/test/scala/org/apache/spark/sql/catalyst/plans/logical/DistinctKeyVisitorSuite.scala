@@ -105,11 +105,13 @@ class DistinctKeyVisitorSuite extends PlanTest {
       Set(ExpressionSet(Seq(a, b, c)), ExpressionSet(Seq(x, y, z))))
 
     checkDistinctAttributes(
-      Distinct(t1).join(Distinct(t2), LeftOuter, Some($"a" === $"x" && $"b" === $"y" && $"c" === $"z")),
+      Distinct(t1)
+        .join(Distinct(t2), LeftOuter, Some($"a" === $"x" && $"b" === $"y" && $"c" === $"z")),
       Set(ExpressionSet(Seq(a, b, c))))
 
     checkDistinctAttributes(
-      Distinct(t1).join(Distinct(t2), RightOuter, Some($"a" === $"x" && $"b" === $"y" && $"c" === $"z")),
+      Distinct(t1)
+        .join(Distinct(t2), RightOuter, Some($"a" === $"x" && $"b" === $"y" && $"c" === $"z")),
       Set(ExpressionSet(Seq(x, y, z))))
 
     Seq(Inner, Cross, LeftOuter, RightOuter).foreach { joinType =>
@@ -133,7 +135,8 @@ class DistinctKeyVisitorSuite extends PlanTest {
     checkDistinctAttributes(t1.select($"a", $"b"), Set.empty)
     checkDistinctAttributes(Distinct(t1).select($"a"), Set.empty)
     checkDistinctAttributes(Distinct(t1).select($"a", $"b", d, e), Set.empty)
-    checkDistinctAttributes(Distinct(t1).select($"a", $"b", $"c", 1), Set(ExpressionSet(Seq(a, b, c))))
+    checkDistinctAttributes(Distinct(t1)
+      .select($"a", $"b", $"c", 1), Set(ExpressionSet(Seq(a, b, c))))
     checkDistinctAttributes(Distinct(t1).select($"a", $"b", c, d),
       Set(ExpressionSet(Seq(a, b, c)), ExpressionSet(Seq(b, c, d.toAttribute))))
     checkDistinctAttributes(t1.groupBy($"a", $"b")($"a", $"b", d).select($"a", $"b", e),
@@ -153,10 +156,12 @@ class DistinctKeyVisitorSuite extends PlanTest {
   }
 
   test("Window's distinct attributes") {
-    val winExpr = windowExpr(count($"b"), windowSpec($"a" :: Nil, $"b".asc :: Nil, UnspecifiedFrame))
+    val winExpr = windowExpr(count($"b"),
+      windowSpec($"a" :: Nil, $"b".asc :: Nil, UnspecifiedFrame))
 
     checkDistinctAttributes(
-      Distinct(t1).select($"a", $"b", $"c", winExpr.as(Symbol("window"))), Set(ExpressionSet(Seq(a, b, c))))
+      Distinct(t1)
+        .select($"a", $"b", $"c", winExpr.as(Symbol("window"))), Set(ExpressionSet(Seq(a, b, c))))
     checkDistinctAttributes(
       Distinct(t1).select($"a", $"b", winExpr.as(Symbol("window"))), Set())
   }

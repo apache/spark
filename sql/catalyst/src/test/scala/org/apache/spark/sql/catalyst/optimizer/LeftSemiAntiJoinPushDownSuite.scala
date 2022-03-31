@@ -167,7 +167,8 @@ class LeftSemiPushdownSuite extends PlanTest {
   }
 
   test("LeftSemiAnti join over Window") {
-    val winExpr = windowExpr(count($"b"), windowSpec($"a" :: Nil, $"b".asc :: Nil, UnspecifiedFrame))
+    val winExpr = windowExpr(count($"b"),
+      windowSpec($"a" :: Nil, $"b".asc :: Nil, UnspecifiedFrame))
 
     val originalQuery = testRelation
       .select($"a", $"b", $"c", winExpr.as(Symbol("window")))
@@ -187,7 +188,8 @@ class LeftSemiPushdownSuite extends PlanTest {
   test("Window: LeftSemi partial pushdown") {
     // Attributes from join condition which does not refer to the window partition spec
     // are kept up in the plan as a Filter operator above Window.
-    val winExpr = windowExpr(count($"b"), windowSpec($"a" :: Nil, $"b".asc :: Nil, UnspecifiedFrame))
+    val winExpr = windowExpr(count($"b"),
+      windowSpec($"a" :: Nil, $"b".asc :: Nil, UnspecifiedFrame))
 
     val originalQuery = testRelation
       .select($"a", $"b", $"c", winExpr.as(Symbol("window")))
@@ -208,7 +210,8 @@ class LeftSemiPushdownSuite extends PlanTest {
   test("Window: LeftAnti no pushdown") {
     // Attributes from join condition which does not refer to the window partition spec
     // are kept up in the plan as a Filter operator above Window.
-    val winExpr = windowExpr(count($"b"), windowSpec($"a" :: Nil, $"b".asc :: Nil, UnspecifiedFrame))
+    val winExpr = windowExpr(count($"b"),
+      windowSpec($"a" :: Nil, $"b".asc :: Nil, UnspecifiedFrame))
 
     val originalQuery = testRelation
       .select($"a", $"b", $"c", winExpr.as(Symbol("window")))
@@ -293,7 +296,8 @@ class LeftSemiPushdownSuite extends PlanTest {
     val testRelationWithArrayType = LocalRelation($"a".int, $"b".int, $"c_arr".array(IntegerType))
     val originalQuery = testRelationWithArrayType
       .generate(Explode($"c_arr"), alias = Some("arr"), outputNames = Seq("out_col"))
-      .join(testRelation1, joinType = LeftSemi, condition = Some($"b" === $"d" && $"b" === $"out_col"))
+      .join(testRelation1, joinType = LeftSemi,
+        condition = Some($"b" === $"d" && $"b" === $"out_col"))
 
     val optimized = Optimize.execute(originalQuery.analyze)
     val correctAnswer = testRelationWithArrayType
@@ -309,7 +313,8 @@ class LeftSemiPushdownSuite extends PlanTest {
     val testRelationWithArrayType = LocalRelation($"a".int, $"b".int, $"c_arr".array(IntegerType))
     val originalQuery = testRelationWithArrayType
       .generate(Explode($"c_arr"), alias = Some("arr"), outputNames = Seq("out_col"))
-      .join(testRelation1, joinType = LeftAnti, condition = Some($"b" === $"d" && $"b" === $"out_col"))
+      .join(testRelation1, joinType = LeftAnti,
+        condition = Some($"b" === $"d" && $"b" === $"out_col"))
 
     val optimized = Optimize.execute(originalQuery.analyze)
     comparePlans(optimized, originalQuery.analyze)
@@ -319,7 +324,8 @@ class LeftSemiPushdownSuite extends PlanTest {
     val testRelationWithArrayType = LocalRelation($"a".int, $"b".int, $"c_arr".array(IntegerType))
     val originalQuery = testRelationWithArrayType
       .generate(Explode($"c_arr"), alias = Some("arr"), outputNames = Seq("out_col"))
-      .join(testRelation1, joinType = LeftSemi, condition = Some($"b" === $"d" && $"d" === $"out_col"))
+      .join(testRelation1, joinType = LeftSemi,
+        condition = Some($"b" === $"d" && $"d" === $"out_col"))
 
     val optimized = Optimize.execute(originalQuery.analyze)
     comparePlans(optimized, originalQuery.analyze)

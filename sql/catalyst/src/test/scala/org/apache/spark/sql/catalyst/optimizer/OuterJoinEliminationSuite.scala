@@ -168,7 +168,8 @@ class OuterJoinEliminationSuite extends PlanTest {
 
     val optimized = Optimize.execute(originalQuery.analyze)
     val left = testRelation
-    val right = testRelation1.where((!$"e".isNull || ($"d".isNotNull && $"f".isNull)) && $"e".isNull)
+    val right = testRelation1.where((!$"e".isNull || ($"d".isNotNull && $"f".isNull))
+      && $"e".isNull)
     val correctAnswer =
       left.join(right, Inner, Option("a".attr === "d".attr)).analyze
 

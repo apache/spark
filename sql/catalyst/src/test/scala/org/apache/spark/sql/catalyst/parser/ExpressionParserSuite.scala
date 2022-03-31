@@ -115,7 +115,8 @@ class ExpressionParserSuite extends AnalysisTest {
 
     // Multiple AND/OR get converted into a balanced tree
     assertEqual("a or b or c or d or e or f", (($"a" || $"b") || $"c") || (($"d" || $"e") || $"f"))
-    assertEqual("a and b and c and d and e and f", (($"a" && $"b") && $"c") && (($"d" && $"e") && $"f"))
+    assertEqual("a and b and c and d and e and f", (($"a" && $"b") && $"c")
+      && (($"d" && $"e") && $"f"))
   }
 
   test("long binary logical expressions") {
@@ -291,7 +292,8 @@ class ExpressionParserSuite extends AnalysisTest {
 
   test("lambda functions") {
     assertEqual("x -> x + 1", LambdaFunction(lv(Symbol("x")) + 1, Seq(lv(Symbol("x")))))
-    assertEqual("(x, y) -> x + y", LambdaFunction(lv(Symbol("x")) + lv(Symbol("y")), Seq(lv(Symbol("x")), lv(Symbol("y")))))
+    assertEqual("(x, y) -> x + y", LambdaFunction(lv(Symbol("x")) + lv(Symbol("y")),
+      Seq(lv(Symbol("x")), lv(Symbol("y")))))
   }
 
   test("window function expressions") {
@@ -309,10 +311,14 @@ class ExpressionParserSuite extends AnalysisTest {
     assertEqual("foo(*) over (partition by a, b)", windowed(Seq($"a", $"b")))
     assertEqual("foo(*) over (distribute by a, b)", windowed(Seq($"a", $"b")))
     assertEqual("foo(*) over (cluster by a, b)", windowed(Seq($"a", $"b")))
-    assertEqual("foo(*) over (order by a desc, b asc)", windowed(Seq.empty, Seq($"a".desc, $"b".asc)))
-    assertEqual("foo(*) over (sort by a desc, b asc)", windowed(Seq.empty, Seq($"a".desc, $"b".asc)))
-    assertEqual("foo(*) over (partition by a, b order by c)", windowed(Seq($"a", $"b"), Seq($"c".asc)))
-    assertEqual("foo(*) over (distribute by a, b sort by c)", windowed(Seq($"a", $"b"), Seq($"c".asc)))
+    assertEqual("foo(*) over (order by a desc, b asc)",
+      windowed(Seq.empty, Seq($"a".desc, $"b".asc)))
+    assertEqual("foo(*) over (sort by a desc, b asc)",
+      windowed(Seq.empty, Seq($"a".desc, $"b".asc)))
+    assertEqual("foo(*) over (partition by a, b order by c)",
+      windowed(Seq($"a", $"b"), Seq($"c".asc)))
+    assertEqual("foo(*) over (distribute by a, b sort by c)",
+      windowed(Seq($"a", $"b"), Seq($"c".asc)))
 
     // Test use of expressions in window functions.
     assertEqual(
@@ -385,7 +391,8 @@ class ExpressionParserSuite extends AnalysisTest {
         boundaries.foreach {
           case (boundarySql, begin, end) =>
             val query = s"foo(*) over (partition by a order by b $frameTypeSql $boundarySql)"
-            val expr = windowed(Seq($"a"), Seq($"b".asc), SpecifiedWindowFrame(frameType, begin, end))
+            val expr = windowed(Seq($"a"), Seq($"b".asc),
+              SpecifiedWindowFrame(frameType, begin, end))
             assertEqual(query, expr)
         }
     }
@@ -421,7 +428,8 @@ class ExpressionParserSuite extends AnalysisTest {
     assertEqual("case when a = 1 then b when a = 2 then c else d end",
       CaseWhen(Seq(($"a" === 1, $"b".expr), ($"a" === 2, $"c".expr)), $"d"))
     assertEqual("case when (1) + case when a > b then c else d end then f else g end",
-      CaseWhen(Seq((Literal(1) + CaseWhen(Seq(($"a" > $"b", $"c".expr)), $"d".expr), $"f".expr)), $"g"))
+      CaseWhen(Seq((Literal(1)
+        + CaseWhen(Seq(($"a" > $"b", $"c".expr)), $"d".expr), $"f".expr)), $"g"))
   }
 
   test("dereference") {

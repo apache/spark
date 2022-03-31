@@ -796,14 +796,16 @@ class FilterPushdownSuite extends PlanTest {
   test("aggregate: don't push down filters that are nondeterministic") {
     val originalQuery = testRelation
       .select($"a", $"b")
-      .groupBy($"a")($"a" + Rand(10) as Symbol("aa"), count($"b") as Symbol("c"), Rand(11).as("rnd"))
+      .groupBy($"a")($"a" + Rand(10) as Symbol("aa"), count($"b") as Symbol("c"),
+        Rand(11).as("rnd"))
       .where($"c" === 2L && $"aa" + Rand(10).as("rnd") === 3 && $"rnd" === 5)
 
     val optimized = Optimize.execute(originalQuery.analyze)
 
     val correctAnswer = testRelation
       .select($"a", $"b")
-      .groupBy($"a")($"a" + Rand(10) as Symbol("aa"), count($"b") as Symbol("c"), Rand(11).as("rnd"))
+      .groupBy($"a")($"a" + Rand(10) as Symbol("aa"), count($"b") as Symbol("c"),
+        Rand(11).as("rnd"))
       .where($"c" === 2L && $"aa" + Rand(10).as("rnd") === 3 && $"rnd" === 5)
       .analyze
 
@@ -953,9 +955,11 @@ class FilterPushdownSuite extends PlanTest {
   }
 
   test("Window: predicate push down -- basic") {
-    val winExpr = windowExpr(count($"b"), windowSpec($"a" :: Nil, $"b".asc :: Nil, UnspecifiedFrame))
+    val winExpr = windowExpr(count($"b"),
+      windowSpec($"a" :: Nil, $"b".asc :: Nil, UnspecifiedFrame))
 
-    val originalQuery = testRelation.select($"a", $"b", $"c", winExpr.as(Symbol("window"))).where($"a" > 1)
+    val originalQuery = testRelation.select($"a", $"b", $"c",
+      winExpr.as(Symbol("window"))).where($"a" > 1)
     val correctAnswer = testRelation
       .where($"a" > 1).select($"a", $"b", $"c")
       .window(winExpr.as(Symbol("window")) :: Nil, $"a" :: Nil, $"b".asc :: Nil)
@@ -966,9 +970,11 @@ class FilterPushdownSuite extends PlanTest {
 
   test("Window: predicate push down -- predicates with compound predicate using only one column") {
     val winExpr =
-      windowExpr(count($"b"), windowSpec($"a".attr :: $"b".attr :: Nil, $"b".asc :: Nil, UnspecifiedFrame))
+      windowExpr(count($"b"),
+        windowSpec($"a".attr :: $"b".attr :: Nil, $"b".asc :: Nil, UnspecifiedFrame))
 
-    val originalQuery = testRelation.select($"a", $"b", $"c", winExpr.as(Symbol("window"))).where($"a" * 3 > 15)
+    val originalQuery = testRelation.select($"a", $"b", $"c",
+      winExpr.as(Symbol("window"))).where($"a" * 3 > 15)
     val correctAnswer = testRelation
       .where($"a" * 3 > 15).select($"a", $"b", $"c")
       .window(winExpr.as(Symbol("window")) :: Nil, $"a".attr :: $"b".attr :: Nil, $"b".asc :: Nil)
@@ -982,7 +988,8 @@ class FilterPushdownSuite extends PlanTest {
     val winExpr1 = windowExpr(count($"b"), winSpec)
     val winExpr2 = windowExpr(sum($"b"), winSpec)
     val originalQuery = testRelation
-      .select($"a", $"b", $"c", winExpr1.as(Symbol("window1")), winExpr2.as(Symbol("window2"))).where($"a" > 1)
+      .select($"a", $"b", $"c", winExpr1.as(Symbol("window1")), winExpr2.as(Symbol("window2")))
+      .where($"a" > 1)
 
     val correctAnswer = testRelation
       .where($"a" > 1).select($"a", $"b", $"c")
@@ -1000,7 +1007,8 @@ class FilterPushdownSuite extends PlanTest {
     val winSpec2 = windowSpec($"a".attr :: $"b".attr :: Nil, $"a".asc :: Nil, UnspecifiedFrame)
     val winExpr2 = windowExpr(count($"b"), winSpec2)
     val originalQuery = testRelation
-      .select($"a", $"b", $"c", winExpr1.as(Symbol("window1")), winExpr2.as(Symbol("window2"))).where($"a" > 1)
+      .select($"a", $"b", $"c", winExpr1.as(Symbol("window1")), winExpr2.as(Symbol("window2")))
+      .where($"a" > 1)
 
     val correctAnswer1 = testRelation
       .where($"a" > 1).select($"a", $"b", $"c")
@@ -1032,7 +1040,8 @@ class FilterPushdownSuite extends PlanTest {
     val winSpec2 = windowSpec($"b".attr :: Nil, $"b".asc :: Nil, UnspecifiedFrame)
     val winExpr2 = windowExpr(count($"a"), winSpec2)
     val originalQuery = testRelation
-      .select($"a", winExpr1.as(Symbol("window1")), $"b", $"c", winExpr2.as(Symbol("window2"))).where($"b" > 1)
+      .select($"a", winExpr1.as(Symbol("window1")), $"b", $"c", winExpr2.as(Symbol("window2")))
+      .where($"b" > 1)
 
     val correctAnswer1 = testRelation.select($"a", $"b", $"c")
       .window(winExpr1.as(Symbol("window1")) :: Nil, $"a".attr :: Nil, $"b".asc :: Nil)
@@ -1059,9 +1068,11 @@ class FilterPushdownSuite extends PlanTest {
 
   test("Window: predicate push down -- predicates with multiple partitioning columns") {
     val winExpr =
-      windowExpr(count($"b"), windowSpec($"a".attr :: $"b".attr :: Nil, $"b".asc :: Nil, UnspecifiedFrame))
+      windowExpr(count($"b"),
+        windowSpec($"a".attr :: $"b".attr :: Nil, $"b".asc :: Nil, UnspecifiedFrame))
 
-    val originalQuery = testRelation.select($"a", $"b", $"c", winExpr.as(Symbol("window"))).where($"a" + $"b" > 1)
+    val originalQuery = testRelation.select($"a", $"b", $"c", winExpr.as(Symbol("window")))
+      .where($"a" + $"b" > 1)
     val correctAnswer = testRelation
       .where($"a" + $"b" > 1).select($"a", $"b", $"c")
       .window(winExpr.as(Symbol("window")) :: Nil, $"a".attr :: $"b".attr :: Nil, $"b".asc :: Nil)
@@ -1086,7 +1097,8 @@ class FilterPushdownSuite extends PlanTest {
       UnspecifiedFrame)
     val winExprAnalyzed = windowExpr(count($"b"), winSpecAnalyzed)
 
-    val originalQuery = testRelation.select($"a", $"b", $"c", winExpr.as(Symbol("window"))).where($"a" + $"b" > 1)
+    val originalQuery = testRelation.select($"a", $"b", $"c", winExpr.as(Symbol("window")))
+      .where($"a" + $"b" > 1)
     val correctAnswer = testRelation
       .where($"a" + $"b" > 1).select($"a", $"b", $"c", ($"a" + $"b").as("_w0"))
       .window(winExprAnalyzed.as(Symbol("window")) :: Nil, $"_w0" :: Nil, $"b".asc :: Nil)
@@ -1103,7 +1115,8 @@ class FilterPushdownSuite extends PlanTest {
     val winExpr = windowExpr(count($"b"), winSpec)
 
     // No push down: the predicate is c > 1, but the partitioning key is (a, b).
-    val originalQuery = testRelation.select($"a", $"b", $"c", winExpr.as(Symbol("window"))).where($"c" > 1)
+    val originalQuery = testRelation.select($"a", $"b", $"c", winExpr.as(Symbol("window")))
+      .where($"c" > 1)
     val correctAnswer = testRelation.select($"a", $"b", $"c")
       .window(winExpr.as(Symbol("window")) :: Nil, $"a".attr :: $"b".attr :: Nil, $"b".asc :: Nil)
       .where($"c" > 1).select($"a", $"b", $"c", $"window").analyze
@@ -1119,7 +1132,8 @@ class FilterPushdownSuite extends PlanTest {
     val winExpr = windowExpr(count($"b"), winSpec)
 
     // No push down: the predicate is a > 1, but the partitioning key is (a + b, b)
-    val originalQuery = testRelation.select($"a", $"b", $"c", winExpr.as(Symbol("window"))).where($"a" > 1)
+    val originalQuery = testRelation.select($"a", $"b", $"c", winExpr.as(Symbol("window")))
+      .where($"a" > 1)
 
     val winSpecAnalyzed = windowSpec(
       partitionSpec = $"_w0".attr :: $"b".attr :: Nil,
@@ -1127,7 +1141,8 @@ class FilterPushdownSuite extends PlanTest {
       UnspecifiedFrame)
     val winExprAnalyzed = windowExpr(count($"b"), winSpecAnalyzed)
     val correctAnswer = testRelation.select($"a", $"b", $"c", ($"a" + $"b").as("_w0"))
-      .window(winExprAnalyzed.as(Symbol("window")) :: Nil, $"_w0" :: $"b".attr :: Nil, $"b".asc :: Nil)
+      .window(
+        winExprAnalyzed.as(Symbol("window")) :: Nil, $"_w0" :: $"b".attr :: Nil, $"b".asc :: Nil)
       .where($"a" > 1).select($"a", $"b", $"c", $"window").analyze
 
     comparePlans(Optimize.execute(originalQuery.analyze), correctAnswer)
@@ -1139,7 +1154,8 @@ class FilterPushdownSuite extends PlanTest {
     val winExpr = windowExpr(count($"b"), winSpec)
 
     // No push down: the predicate is a + b > 1, but the partitioning key is b.
-    val originalQuery = testRelation.select($"a", $"b", $"c", winExpr.as(Symbol("window"))).where($"a" + $"b" > 1)
+    val originalQuery = testRelation.select($"a", $"b", $"c", winExpr.as(Symbol("window")))
+      .where($"a" + $"b" > 1)
     val correctAnswer = testRelation
       .select($"a", $"b", $"c")
       .window(winExpr.as(Symbol("window")) :: Nil, $"b".attr :: Nil, $"b".asc :: Nil)
@@ -1163,7 +1179,8 @@ class FilterPushdownSuite extends PlanTest {
     val winExprAnalyzed = windowExpr(count($"b"), winSpecAnalyzed)
 
     // No push down: the predicate is a + b > 1, but the partitioning key is a + b.
-    val originalQuery = testRelation.select($"a", $"b", $"c", winExpr.as(Symbol("window"))).where($"a" - $"b" > 1)
+    val originalQuery = testRelation.select($"a", $"b", $"c", winExpr.as(Symbol("window")))
+      .where($"a" - $"b" > 1)
     val correctAnswer = testRelation.select($"a", $"b", $"c", ($"a" + $"b").as("_w0"))
       .window(winExprAnalyzed.as(Symbol("window")) :: Nil, $"_w0" :: Nil, $"b".asc :: Nil)
       .where($"a" - $"b" > 1).select($"a", $"b", $"c", $"window").analyze
@@ -1309,7 +1326,8 @@ class FilterPushdownSuite extends PlanTest {
     val left = testRelation.where(
       ($"a" === 5 || $"a" === 2 || $"a" === 1)).subquery(Symbol("x"))
     val right = testRelation.where(
-      ($"a" >= 2 && $"a" <= 3) || ($"a" >= 1 && $"a" <= 14) || ($"a" >= 9 && $"a" <= 27)).subquery(Symbol("y"))
+      ($"a" >= 2 && $"a" <= 3) || ($"a" >= 1 && $"a" <= 14) || ($"a" >= 9 && $"a" <= 27))
+      .subquery(Symbol("y"))
     val correctAnswer = left.join(right, condition = Some(joinCondition)).analyze
 
     comparePlans(optimized, correctAnswer)

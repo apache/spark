@@ -84,7 +84,8 @@ class ObjectSerializerPruningSuite extends PlanTest {
 
   test("Prune nested serializers") {
     withSQLConf(SQLConf.SERIALIZER_NESTED_SCHEMA_PRUNING_ENABLED.key -> "true") {
-      val testRelation = LocalRelation($"_1".struct(StructType.fromDDL("_1 int, _2 string")), $"_2".int)
+      val testRelation = LocalRelation(
+        $"_1".struct(StructType.fromDDL("_1 int, _2 string")), $"_2".int)
       val serializerObject = CatalystSerde.serialize[((Int, String), Int)](
         CatalystSerde.deserialize[((Int, String), Int)](testRelation))
       val query = serializerObject.select($"_1._1")

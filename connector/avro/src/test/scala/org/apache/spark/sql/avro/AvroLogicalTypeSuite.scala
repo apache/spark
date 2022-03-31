@@ -194,7 +194,8 @@ abstract class AvroLogicalTypeSuite extends QueryTest with SharedSparkSession {
     withTempDir { dir =>
       val timestampAvro = timestampFile(dir.getAbsolutePath)
       val df =
-        spark.read.format("avro").load(timestampAvro).select($"timestamp_millis", $"timestamp_micros")
+        spark.read.format("avro").load(timestampAvro)
+          .select($"timestamp_millis", $"timestamp_micros")
 
       val expected = timestampInputData.map(t => Row(new Timestamp(t._1), new Timestamp(t._2)))
 

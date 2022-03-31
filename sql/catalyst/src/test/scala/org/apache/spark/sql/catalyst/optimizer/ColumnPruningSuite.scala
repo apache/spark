@@ -356,7 +356,8 @@ class ColumnPruningSuite extends PlanTest {
     val winSpec = windowSpec($"a" :: Nil, $"d".asc :: Nil, UnspecifiedFrame)
     val winExpr = windowExpr(count($"d"), winSpec)
 
-    val originalQuery = input.groupBy($"a", $"c", $"d")($"a", $"c", $"d", winExpr.as(Symbol("window"))).select($"a", $"c")
+    val originalQuery = input.groupBy($"a", $"c", $"d")($"a", $"c", $"d",
+      winExpr.as(Symbol("window"))).select($"a", $"c")
     val correctAnswer = input.select($"a", $"c", $"d").groupBy($"a", $"c", $"d")($"a", $"c").analyze
     val optimized = Optimize.execute(originalQuery.analyze)
 
@@ -369,7 +370,8 @@ class ColumnPruningSuite extends PlanTest {
     val winExpr = windowExpr(count($"b"), winSpec)
 
     val originalQuery =
-      input.select($"a", $"b", $"c", $"d", winExpr.as(Symbol("window"))).where($"window" > 1).select($"a", $"c")
+      input.select($"a", $"b", $"c", $"d", winExpr.as(Symbol("window")))
+        .where($"window" > 1).select($"a", $"c")
     val correctAnswer =
       input.select($"a", $"b", $"c")
         .window(winExpr.as(Symbol("window")) :: Nil, $"a" :: Nil, $"b".asc :: Nil)
@@ -384,7 +386,8 @@ class ColumnPruningSuite extends PlanTest {
     val winSpec = windowSpec($"a" :: Nil, $"b".asc :: Nil, UnspecifiedFrame)
     val winExpr = windowExpr(count($"b"), winSpec)
 
-    val originalQuery = input.select($"a", $"b", $"c", $"d", winExpr.as(Symbol("window"))).select($"a", $"c")
+    val originalQuery = input.select($"a", $"b", $"c", $"d",
+      winExpr.as(Symbol("window"))).select($"a", $"c")
     val correctAnswer = input.select($"a", $"c").analyze
     val optimized = Optimize.execute(originalQuery.analyze)
 
@@ -395,7 +398,8 @@ class ColumnPruningSuite extends PlanTest {
     val input1 = LocalRelation($"a".int, $"b".string, $"c".double)
     val input2 = LocalRelation($"c".int, $"d".string, $"e".double)
     val query = Project($"b" :: Nil, Union(input1 :: input2 :: Nil)).analyze
-    val expected = Union(Project($"b" :: Nil, input1) :: Project($"d" :: Nil, input2) :: Nil).analyze
+    val expected = Union(Project($"b" :: Nil, input1) :: Project($"d" :: Nil, input2) :: Nil)
+      .analyze
     comparePlans(Optimize.execute(query), expected)
   }
 

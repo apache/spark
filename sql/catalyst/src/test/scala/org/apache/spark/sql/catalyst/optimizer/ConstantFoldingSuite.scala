@@ -184,7 +184,8 @@ class ConstantFoldingSuite extends PlanTest {
 
       UnresolvedExtractValue(Literal.create(null, ArrayType(IntegerType)), 1) as Symbol("c3"),
       UnresolvedExtractValue(
-        Literal.create(Seq(1), ArrayType(IntegerType)), Literal.create(null, IntegerType)) as Symbol("c4"),
+        Literal.create(Seq(1), ArrayType(IntegerType)),
+        Literal.create(null, IntegerType)) as Symbol("c4"),
       UnresolvedExtractValue(
         Literal.create(null, StructType(Seq(StructField("a", IntegerType, true)))),
         "a") as Symbol("c5"),

@@ -559,7 +559,8 @@ class ComplexTypesSuite extends PlanTest with ExpressionEvalHelper {
 
     def addFieldFromSameStructAndThenExtractIt(relation: LocalRelation): LogicalPlan =
       relation.select(GetStructField(
-        UpdateFields($"struct1", WithField("b", GetStructField($"struct1", 0)) :: Nil), 1).as("res"))
+        UpdateFields($"struct1", WithField("b", GetStructField($"struct1", 0)) :: Nil), 1)
+        .as("res"))
 
     checkRule(
       addFieldFromSameStructAndThenExtractIt(testStructRelation),
@@ -575,7 +576,8 @@ class ComplexTypesSuite extends PlanTest with ExpressionEvalHelper {
 
     def addFieldFromAnotherStructAndThenExtractIt(relation: LocalRelation): LogicalPlan =
       relation.select(GetStructField(
-        UpdateFields($"struct1", WithField("b", GetStructField($"struct2", 0)) :: Nil), 1).as("res"))
+        UpdateFields($"struct1", WithField("b", GetStructField($"struct2", 0)) :: Nil), 1)
+        .as("res"))
 
     checkRule(
       addFieldFromAnotherStructAndThenExtractIt(testStructRelation),
@@ -584,7 +586,8 @@ class ComplexTypesSuite extends PlanTest with ExpressionEvalHelper {
     checkRule(
       addFieldFromAnotherStructAndThenExtractIt(testNullableStructRelation),
       testNullableStructRelation.select(
-        If(IsNull($"struct1"), Literal(null, IntegerType), GetStructField($"struct2", 0)).as("res")))
+        If(IsNull($"struct1"), Literal(null, IntegerType), GetStructField($"struct2", 0))
+          .as("res")))
   }
 
   test("simplify GetStructField on nested UpdateFields") {
@@ -759,7 +762,8 @@ class ComplexTypesSuite extends PlanTest with ExpressionEvalHelper {
 
     val expected = structLevel2.select(
       UpdateFields($"a1", Seq(
-        WithField("a2", UpdateFields(GetStructField($"a1", 0), Seq(DropField("b3"), DropField("c3"))))
+        WithField("a2", UpdateFields(GetStructField($"a1", 0), Seq(DropField("b3"),
+          DropField("c3"))))
       )).as("a1"))
 
     checkRule(query, expected)

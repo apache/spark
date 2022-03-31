@@ -41,7 +41,8 @@ class CollapseProjectSuite extends PlanTest {
       .select($"a_plus_1", ($"b" + 1).as(Symbol("b_plus_1")))
 
     val optimized = Optimize.execute(query.analyze)
-    val correctAnswer = testRelation.select(($"a" + 1).as(Symbol("a_plus_1")), ($"b" + 1).as(Symbol("b_plus_1"))).analyze
+    val correctAnswer = testRelation.select(($"a" + 1).as(Symbol("a_plus_1")),
+      ($"b" + 1).as(Symbol("b_plus_1"))).analyze
 
     comparePlans(optimized, correctAnswer)
   }
@@ -105,7 +106,8 @@ class CollapseProjectSuite extends PlanTest {
     val optimized = Optimize.execute(query.analyze)
 
     val correctAnswer = testRelation
-      .groupBy($"a", $"b")(($"a" + 1).as(Symbol("a_plus_1")), ($"b" + 1).as(Symbol("b_plus_1"))).analyze
+      .groupBy($"a", $"b")(($"a" + 1).as(Symbol("a_plus_1")), ($"b" + 1).as(Symbol("b_plus_1")))
+      .analyze
 
     comparePlans(optimized, correctAnswer)
   }
@@ -159,7 +161,8 @@ class CollapseProjectSuite extends PlanTest {
 
   test("collapse redundant alias through local limit") {
     val relation = LocalRelation($"a".int, $"b".int)
-    val query = LocalLimit(1, relation.select($"a" as Symbol("b"))).select($"b" as Symbol("c")).analyze
+    val query = LocalLimit(1, relation.select($"a" as Symbol("b")))
+      .select($"b" as Symbol("c")).analyze
     val optimized = Optimize.execute(query)
     val expected = LocalLimit(1, relation.select($"a" as Symbol("c"))).analyze
     comparePlans(optimized, expected)
@@ -167,7 +170,8 @@ class CollapseProjectSuite extends PlanTest {
 
   test("collapse redundant alias through repartition") {
     val relation = LocalRelation($"a".int, $"b".int)
-    val query = relation.select($"a" as Symbol("b")).repartition(1).select($"b" as Symbol("c")).analyze
+    val query = relation.select($"a" as Symbol("b")).repartition(1)
+      .select($"b" as Symbol("c")).analyze
     val optimized = Optimize.execute(query)
     val expected = relation.select($"a" as Symbol("c")).repartition(1).analyze
     comparePlans(optimized, expected)
@@ -175,7 +179,8 @@ class CollapseProjectSuite extends PlanTest {
 
   test("collapse redundant alias through sample") {
     val relation = LocalRelation($"a".int, $"b".int)
-    val query = Sample(0.0, 0.6, false, 11L, relation.select($"a" as Symbol("b"))).select($"b" as Symbol("c")).analyze
+    val query = Sample(0.0, 0.6, false, 11L, relation.select($"a" as Symbol("b")))
+      .select($"b" as Symbol("c")).analyze
     val optimized = Optimize.execute(query)
     val expected = Sample(0.0, 0.6, false, 11L, relation.select($"a" as Symbol("c"))).analyze
     comparePlans(optimized, expected)

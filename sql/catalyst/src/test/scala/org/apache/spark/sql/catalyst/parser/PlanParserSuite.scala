@@ -266,7 +266,8 @@ class PlanParserSuite extends AnalysisTest {
     assertEqual("select 1", OneRowRelation().select(1))
     assertEqual("select a, b", OneRowRelation().select($"a", $"b"))
     assertEqual("select a, b from db.c", table("db", "c").select($"a", $"b"))
-    assertEqual("select a, b from db.c where x < 1", table("db", "c").where($"x" < 1).select($"a", $"b"))
+    assertEqual("select a, b from db.c where x < 1",
+      table("db", "c").where($"x" < 1).select($"a", $"b"))
     assertEqual(
       "select a, b from db.c having x < 1",
       table("db", "c").having()($"a", $"b")($"x" < 1))
@@ -378,19 +379,25 @@ class PlanParserSuite extends AnalysisTest {
 
     // Cube
     assertEqual(s"$sql with cube",
-      table("d").groupBy(Cube(Seq(Seq($"a"), Seq($"b"))))($"a", $"b", $"sum".function($"c").as("c")))
+      table("d").groupBy(Cube(Seq(Seq($"a"), Seq($"b"))))($"a", $"b", $"sum".function($"c")
+        .as("c")))
     assertEqual(s"$sqlWithoutGroupBy group by cube(a, b)",
-      table("d").groupBy(Cube(Seq(Seq($"a"), Seq($"b"))))($"a", $"b", $"sum".function($"c").as("c")))
+      table("d").groupBy(Cube(Seq(Seq($"a"), Seq($"b"))))($"a", $"b", $"sum".function($"c")
+        .as("c")))
     assertEqual(s"$sqlWithoutGroupBy group by cube (a, b)",
-      table("d").groupBy(Cube(Seq(Seq($"a"), Seq($"b"))))($"a", $"b", $"sum".function($"c").as("c")))
+      table("d").groupBy(Cube(Seq(Seq($"a"), Seq($"b"))))($"a", $"b", $"sum".function($"c")
+        .as("c")))
 
     // Rollup
     assertEqual(s"$sql with rollup",
-      table("d").groupBy(Rollup(Seq(Seq($"a"), Seq($"b"))))($"a", $"b", $"sum".function($"c").as("c")))
+      table("d").groupBy(Rollup(Seq(Seq($"a"), Seq($"b"))))($"a", $"b", $"sum".function($"c")
+        .as("c")))
     assertEqual(s"$sqlWithoutGroupBy group by rollup(a, b)",
-      table("d").groupBy(Rollup(Seq(Seq($"a"), Seq($"b"))))($"a", $"b", $"sum".function($"c").as("c")))
+      table("d").groupBy(Rollup(Seq(Seq($"a"), Seq($"b"))))($"a", $"b", $"sum".function($"c")
+        .as("c")))
     assertEqual(s"$sqlWithoutGroupBy group by rollup (a, b)",
-      table("d").groupBy(Rollup(Seq(Seq($"a"), Seq($"b"))))($"a", $"b", $"sum".function($"c").as("c")))
+      table("d").groupBy(Rollup(Seq(Seq($"a"), Seq($"b"))))($"a", $"b", $"sum".function($"c")
+        .as("c")))
 
     // Grouping Sets
     assertEqual(s"$sql grouping sets((a, b), (a), ())",
@@ -586,7 +593,8 @@ class PlanParserSuite extends AnalysisTest {
       "select * from t1 inner join (t2 inner join t3 on col3 = col2) on col3 = col1",
       table("t1")
         .join(table("t2")
-          .join(table("t3"), Inner, Option($"col3" === $"col2")), Inner, Option($"col3" === $"col1"))
+          .join(table("t3"), Inner, Option($"col3" === $"col2")), Inner,
+            Option($"col3" === $"col1"))
         .select(star()))
     assertEqual(
       "select * from t1 inner join (t2 inner join t3) on col3 = col2",

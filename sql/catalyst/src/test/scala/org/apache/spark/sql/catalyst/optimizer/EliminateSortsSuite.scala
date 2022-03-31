@@ -101,7 +101,8 @@ class EliminateSortsSuite extends AnalysisTest {
       .orderBy($"x".asc, $"y".asc, $"b".desc)
     val optimized = Optimize.execute(analyzer.execute(query))
     val correctAnswer = analyzer.execute(
-      x.select($"a".as(Symbol("x")), Year(CurrentDate()).as(Symbol("y")), $"b").orderBy($"x".asc, $"b".desc))
+      x.select($"a".as(Symbol("x")), Year(CurrentDate()).as(Symbol("y")), $"b")
+        .orderBy($"x".asc, $"b".desc))
 
     comparePlans(optimized, correctAnswer)
   }
@@ -115,7 +116,8 @@ class EliminateSortsSuite extends AnalysisTest {
 
   test("SPARK-33183: remove redundant sort by") {
     val orderedPlan = testRelation.select($"a", $"b").orderBy($"a".asc, $"b".desc_nullsFirst)
-    val unnecessaryReordered = orderedPlan.limit(2).select($"a").sortBy($"a".asc, $"b".desc_nullsFirst)
+    val unnecessaryReordered = orderedPlan.limit(2).select($"a")
+      .sortBy($"a".asc, $"b".desc_nullsFirst)
     val optimized = Optimize.execute(unnecessaryReordered.analyze)
     val correctAnswer = orderedPlan.limit(2).select($"a").analyze
     comparePlans(optimized, correctAnswer)

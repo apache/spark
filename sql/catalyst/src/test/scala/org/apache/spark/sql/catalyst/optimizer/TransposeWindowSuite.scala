@@ -91,7 +91,8 @@ class TransposeWindowSuite extends PlanTest {
 
   test("don't transpose two adjacent windows with intersection of partition and output set") {
     val query = testRelation
-      .window(Seq(Concat(Seq($"a", $"b")).as(Symbol("e")), sum(c).as(Symbol("sum_a_2"))), partitionSpec3, Seq.empty)
+      .window(Seq(Concat(Seq($"a", $"b")).as(Symbol("e")),
+        sum(c).as(Symbol("sum_a_2"))), partitionSpec3, Seq.empty)
       .window(Seq(sum(c).as(Symbol("sum_a_1"))), Seq(a, $"e"), Seq.empty)
 
     val analyzed = query.analyze

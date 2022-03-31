@@ -101,7 +101,8 @@ class DecimalAggregatesSuite extends PlanTest {
     val correctAnswer = testRelation
       .select($"a")
       .window(
-        Seq((windowExpr(avg(UnscaledValue($"a")), spec) / 10.0).cast(DecimalType(6, 5)).as(Symbol("avg_a"))),
+        Seq((windowExpr(avg(UnscaledValue($"a")), spec) / 10.0).cast(DecimalType(6, 5))
+          .as(Symbol("avg_a"))),
         Seq($"a"),
         Nil)
       .select($"a", $"avg_a", $"avg_a")

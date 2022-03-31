@@ -86,7 +86,8 @@ class ConstraintPropagationSuite extends SparkFunSuite with PlanTest {
     assert(tr.analyze.constraints.isEmpty)
 
     val aliasedRelation = tr.where($"c".attr > 10 && $"a".attr < 5)
-      .groupBy($"a", $"c", $"b")($"a", $"c".as("c1"), count($"a").as("a3")).select($"c1", $"a", $"a3").analyze
+      .groupBy($"a", $"c", $"b")($"a", $"c".as("c1"), count($"a").as("a3"))
+      .select($"c1", $"a", $"a3").analyze
 
     // SPARK-16644: aggregate expression count(a) should not appear in the constraints.
     verifyConstraints(aliasedRelation.analyze.constraints,
@@ -127,9 +128,11 @@ class ConstraintPropagationSuite extends SparkFunSuite with PlanTest {
   test("propagating constraints in aliases") {
     val tr = LocalRelation($"a".int, $"b".string, $"c".int)
 
-    assert(tr.where($"c".attr > 10).select($"a".as(Symbol("x")), $"b".as(Symbol("y"))).analyze.constraints.isEmpty)
+    assert(tr.where($"c".attr > 10).select($"a".as(Symbol("x")), $"b".as(Symbol("y")))
+      .analyze.constraints.isEmpty)
 
-    val aliasedRelation = tr.where($"a".attr > 10).select($"a".as(Symbol("x")), $"b", $"b".as(Symbol("y")), $"a".as(Symbol("z")))
+    val aliasedRelation = tr.where($"a".attr > 10).select($"a".as(Symbol("x")), $"b",
+      $"b".as(Symbol("y")), $"a".as(Symbol("z")))
 
     verifyConstraints(aliasedRelation.analyze.constraints,
       ExpressionSet(Seq(resolveColumn(aliasedRelation.analyze, "x") > 10,
@@ -313,7 +316,8 @@ class ConstraintPropagationSuite extends SparkFunSuite with PlanTest {
             resolveColumn(tr, "e"), LongType), LongType), LongType)))))
 
     verifyConstraints(
-      tr.where(($"a".attr * $"b".attr + 100) === $"c".attr && $"d" / 10 === $"e").analyze.constraints,
+      tr.where(($"a".attr * $"b".attr + 100) === $"c".attr && $"d" / 10 === $"e")
+        .analyze.constraints,
       ExpressionSet(Seq(
         castWithTimeZone(resolveColumn(tr, "a"), LongType) * resolveColumn(tr, "b") +
           castWithTimeZone(100, LongType) ===
@@ -343,7 +347,8 @@ class ConstraintPropagationSuite extends SparkFunSuite with PlanTest {
         IsNotNull(resolveColumn(tr, "e")))))
 
     verifyConstraints(
-      tr.where($"a".attr + $"b".attr - $"c".attr * $"d".attr > $"e".attr * 1000).analyze.constraints,
+      tr.where($"a".attr + $"b".attr - $"c".attr * $"d".attr > $"e".attr * 1000)
+        .analyze.constraints,
       ExpressionSet(Seq(
         (castWithTimeZone(resolveColumn(tr, "a"), LongType) + resolveColumn(tr, "b")) -
           (castWithTimeZone(resolveColumn(tr, "c"), LongType) * resolveColumn(tr, "d")) >
@@ -412,7 +417,8 @@ class ConstraintPropagationSuite extends SparkFunSuite with PlanTest {
     }
 
     val aliasedRelation = tr.where($"c".attr > 10 && $"a".attr < 5)
-      .groupBy($"a", $"c", $"b")($"a", $"c".as("c1"), count($"a").as("a3")).select($"c1", $"a", $"a3")
+      .groupBy($"a", $"c", $"b")($"a", $"c".as("c1"), count($"a").as("a3"))
+      .select($"c1", $"a", $"a3")
 
     withSQLConf(SQLConf.CONSTRAINT_PROPAGATION_ENABLED.key -> "true") {
       assert(aliasedRelation.analyze.constraints.nonEmpty)

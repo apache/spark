@@ -159,7 +159,8 @@ class ExpressionSQLBuilderSuite extends SparkFunSuite {
     )
 
     checkSQL(
-      WindowSpecDefinition($"a".int :: $"b".string :: Nil, $"c".int.asc :: $"d".string.desc :: Nil, frame),
+      WindowSpecDefinition($"a".int :: $"b".string :: Nil,
+        $"c".int.asc :: $"d".string.desc :: Nil, frame),
       s"(PARTITION BY a, b ORDER BY c ASC NULLS FIRST, d DESC NULLS LAST ${frame.sql})"
     )
   }

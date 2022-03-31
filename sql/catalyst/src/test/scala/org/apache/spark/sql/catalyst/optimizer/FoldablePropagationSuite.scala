@@ -90,7 +90,8 @@ class FoldablePropagationSuite extends PlanTest {
     val optimized = Optimize.execute(query.analyze)
     val correctAnswer = testRelation
       .select($"a".as(Symbol("x")), Year(CurrentDate()).as(Symbol("y")), $"b")
-      .groupBy($"x", Year(CurrentDate()).as(Symbol("y")), $"b")(sum($"x"), avg(Year(CurrentDate())).as(Symbol("AVG")),
+      .groupBy($"x", Year(CurrentDate()).as(Symbol("y")), $"b")(sum($"x"),
+        avg(Year(CurrentDate())).as(Symbol("AVG")),
         count($"b")).analyze
 
     comparePlans(optimized, correctAnswer)
@@ -106,7 +107,8 @@ class FoldablePropagationSuite extends PlanTest {
     val correctAnswer = testRelation
       .select($"a".as(Symbol("x")), Year(CurrentDate()).as(Symbol("y")), $"b")
       .where($"x" > 1 && Year(CurrentDate()).as(Symbol("y")) === 2016 && $"b" > 1)
-      .groupBy($"x", Year(CurrentDate()).as("y"), $"b")(sum($"x"), avg(Year(CurrentDate())).as(Symbol("AVG")),
+      .groupBy($"x", Year(CurrentDate()).as("y"), $"b")(sum($"x"),
+        avg(Year(CurrentDate())).as(Symbol("AVG")),
         count($"b"))
       .orderBy($"x".asc, $"AVG".asc).analyze
 

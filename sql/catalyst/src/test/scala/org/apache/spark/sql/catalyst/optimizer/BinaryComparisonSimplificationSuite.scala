@@ -81,7 +81,8 @@ class BinaryComparisonSimplificationSuite extends PlanTest with PredicateHelper 
 
   test("Non-Nullable Simplification Primitive") {
     val plan = nonNullableRelation
-      .select($"a" === $"a", $"a" <=> $"a", $"a" <= $"a", $"a" >= $"a", $"a" < $"a", $"a" > $"a").analyze
+      .select($"a" === $"a", $"a" <=> $"a", $"a" <= $"a", $"a" >= $"a", $"a" < $"a", $"a" > $"a")
+      .analyze
     val actual = Optimize.execute(plan)
     val correctAnswer = nonNullableRelation
       .select(
@@ -187,7 +188,8 @@ class BinaryComparisonSimplificationSuite extends PlanTest with PredicateHelper 
       $"d".int.withNullability(true))
 
     comparePlans(
-      Optimize.execute(testRelation.select(Coalesce(Seq($"a", $"b", $"c", $"d")).as("out")).analyze),
+      Optimize.execute(testRelation.select(Coalesce(Seq($"a", $"b", $"c", $"d")).as("out"))
+        .analyze),
       testRelation.select($"a".as("out")).analyze)
     comparePlans(
       Optimize.execute(testRelation.select(Coalesce(Seq($"a", $"c")).as("out")).analyze),

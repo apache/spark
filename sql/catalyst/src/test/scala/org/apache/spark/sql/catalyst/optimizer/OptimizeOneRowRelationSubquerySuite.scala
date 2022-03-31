@@ -146,7 +146,8 @@ class OptimizeOneRowRelationSubquerySuite extends PlanTest {
   test("Should not optimize lateral join with non-empty join conditions") {
     Seq(Inner, LeftOuter).foreach { joinType =>
       // SELECT * FROM t1 JOIN LATERAL (SELECT a AS a1, b AS b1) ON a = b1
-      val query = t1.lateralJoin(t0.select($"a".as("a1"), $"b".as("b1")), joinType, Some($"a" === $"b1"))
+      val query = t1.lateralJoin(t0.select($"a".as("a1"), $"b".as("b1")),
+        joinType, Some($"a" === $"b1"))
       val optimized = Optimize.execute(query.analyze)
       assertHasDomainJoin(optimized)
     }

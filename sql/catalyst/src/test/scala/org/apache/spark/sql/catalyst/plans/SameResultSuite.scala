@@ -57,7 +57,8 @@ class SameResultSuite extends SparkFunSuite {
     assertSameResult(testRelation.select($"b", $"a"), testRelation2.select($"b", $"a"))
 
     assertSameResult(testRelation, testRelation2.select($"a"), result = false)
-    assertSameResult(testRelation.select($"b", $"a"), testRelation2.select($"a", $"b"), result = false)
+    assertSameResult(testRelation.select($"b", $"a"),
+      testRelation2.select($"a", $"b"), result = false)
   }
 
   test("filters") {

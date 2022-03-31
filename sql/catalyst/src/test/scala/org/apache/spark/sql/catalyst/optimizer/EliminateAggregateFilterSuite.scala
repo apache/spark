@@ -44,7 +44,8 @@ class EliminateAggregateFilterSuite extends PlanTest {
 
   test("Eliminate Filter is foldable and always is true") {
     val query = testRelation
-      .select(countDistinctWithFilter(GreaterThan(Literal(2), Literal(1)), $"a").as(Symbol("result")))
+      .select(countDistinctWithFilter(GreaterThan(Literal(2), Literal(1)), $"a")
+        .as(Symbol("result")))
       .analyze
     val answer = testRelation
       .select(countDistinct($"a").as(Symbol("result")))
@@ -64,7 +65,8 @@ class EliminateAggregateFilterSuite extends PlanTest {
 
   test("Eliminate Filter is foldable and always is false") {
     val query = testRelation
-      .select(countDistinctWithFilter(GreaterThan(Literal(1), Literal(2)), $"a").as(Symbol("result")))
+      .select(countDistinctWithFilter(GreaterThan(Literal(1), Literal(2)), $"a")
+        .as(Symbol("result")))
       .analyze
     val answer = testRelation
       .groupBy()(Literal.create(0L, LongType).as(Symbol("result")))
@@ -74,7 +76,8 @@ class EliminateAggregateFilterSuite extends PlanTest {
 
   test("SPARK-38177: Eliminate Filter in non-root node") {
     val query = testRelation
-      .select(countDistinctWithFilter(GreaterThan(Literal(1), Literal(2)), $"a").as(Symbol("result")))
+      .select(countDistinctWithFilter(GreaterThan(Literal(1), Literal(2)), $"a")
+        .as(Symbol("result")))
       .limit(1)
       .analyze
     val answer = testRelation

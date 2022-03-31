@@ -61,15 +61,18 @@ class AggregateOptimizeSuite extends AnalysisTest {
   }
 
   test("Remove aliased literals") {
-    val query = testRelation.select($"a", $"b", Literal(1).as(Symbol("y"))).groupBy($"a", $"y")(sum($"b"))
+    val query = testRelation.select($"a", $"b", Literal(1).as(Symbol("y")))
+      .groupBy($"a", $"y")(sum($"b"))
     val optimized = Optimize.execute(analyzer.execute(query))
-    val correctAnswer = testRelation.select($"a", $"b", Literal(1).as(Symbol("y"))).groupBy($"a")(sum($"b")).analyze
+    val correctAnswer = testRelation.select($"a", $"b", Literal(1).as(Symbol("y")))
+      .groupBy($"a")(sum($"b")).analyze
 
     comparePlans(optimized, correctAnswer)
   }
 
   test("remove repetition in grouping expression") {
-    val query = testRelation.groupBy($"a" + 1, $"b" + 2, Literal(1) + $"A", Literal(2) + $"B")(sum($"c"))
+    val query = testRelation.groupBy($"a" + 1, $"b" + 2,
+      Literal(1) + $"A", Literal(2) + $"B")(sum($"c"))
     val optimized = Optimize.execute(analyzer.execute(query))
     val correctAnswer = testRelation.groupBy($"a" + 1, $"b" + 2)(sum($"c")).analyze
 

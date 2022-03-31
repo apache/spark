@@ -119,10 +119,12 @@ class PropagateEmptyRelationSuite extends PlanTest {
       (true, false, Inner, Some(LocalRelation($"a".int, $"b".int))),
       (true, false, Cross, Some(LocalRelation($"a".int, $"b".int))),
       (true, false, LeftOuter,
-        Some(Project(Seq($"a", Literal(null).cast(IntegerType).as(Symbol("b"))), testRelation1).analyze)),
+        Some(Project(Seq($"a", Literal(null).cast(IntegerType).as(Symbol("b"))), testRelation1)
+          .analyze)),
       (true, false, RightOuter, Some(LocalRelation($"a".int, $"b".int))),
       (true, false, FullOuter,
-        Some(Project(Seq($"a", Literal(null).cast(IntegerType).as(Symbol("b"))), testRelation1).analyze)),
+        Some(Project(Seq($"a", Literal(null).cast(IntegerType).as(Symbol("b"))), testRelation1)
+          .analyze)),
       (true, false, LeftAnti, Some(testRelation1)),
       (true, false, LeftSemi, Some(LocalRelation($"a".int))),
 
@@ -130,9 +132,11 @@ class PropagateEmptyRelationSuite extends PlanTest {
       (false, true, Cross, Some(LocalRelation($"a".int, $"b".int))),
       (false, true, LeftOuter, Some(LocalRelation($"a".int, $"b".int))),
       (false, true, RightOuter,
-        Some(Project(Seq(Literal(null).cast(IntegerType).as(Symbol("a")), $"b"), testRelation2).analyze)),
+        Some(Project(Seq(Literal(null).cast(IntegerType).as(Symbol("a")), $"b"), testRelation2)
+          .analyze)),
       (false, true, FullOuter,
-        Some(Project(Seq(Literal(null).cast(IntegerType).as(Symbol("a")), $"b"), testRelation2).analyze)),
+        Some(Project(Seq(Literal(null).cast(IntegerType).as(Symbol("a")), $"b"), testRelation2)
+          .analyze)),
       (false, true, LeftAnti, Some(LocalRelation($"a".int))),
       (false, true, LeftSemi, Some(LocalRelation($"a".int))),
 
@@ -161,9 +165,11 @@ class PropagateEmptyRelationSuite extends PlanTest {
       (Inner, Some(LocalRelation($"a".int, $"b".int))),
       (Cross, Some(LocalRelation($"a".int, $"b".int))),
       (LeftOuter,
-        Some(Project(Seq($"a", Literal(null).cast(IntegerType).as(Symbol("b"))), testRelation1).analyze)),
+        Some(Project(Seq($"a", Literal(null).cast(IntegerType).as(Symbol("b"))), testRelation1)
+          .analyze)),
       (RightOuter,
-        Some(Project(Seq(Literal(null).cast(IntegerType).as(Symbol("a")), $"b"), testRelation2).analyze)),
+        Some(Project(Seq(Literal(null).cast(IntegerType).as(Symbol("a")), $"b"), testRelation2)
+          .analyze)),
       (FullOuter, None),
       (LeftAnti, Some(testRelation1)),
       (LeftSemi, Some(LocalRelation($"a".int)))

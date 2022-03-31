@@ -58,9 +58,11 @@ class RewriteSubquerySuite extends PlanTest {
     val relation2 = LocalRelation($"c".int, $"d".int)
     val exists = $"exists".boolean.notNull
 
-    val query = relation1.where($"b" === 1 || Not($"a".in(ListQuery(relation2.select($"c"))))).select($"a")
+    val query = relation1.where($"b" === 1
+      || Not($"a".in(ListQuery(relation2.select($"c"))))).select($"a")
     val correctAnswer = relation1
-      .join(relation2.select($"c"), ExistenceJoin(exists), Some($"a" === $"c" || IsNull($"a" === $"c")))
+      .join(relation2.select($"c"), ExistenceJoin(exists), Some($"a" === $"c"
+        || IsNull($"a" === $"c")))
       .where($"b" === 1 || Not(exists))
       .select($"a")
       .analyze
@@ -71,7 +73,8 @@ class RewriteSubquerySuite extends PlanTest {
 
   test("SPARK-34598: Filters without subquery must not be modified by RewritePredicateSubquery") {
     val relation = LocalRelation($"a".int, $"b".int, $"c".int, $"d".int)
-    val query = relation.where(($"a" === 1 || $"b" === 2) && ($"c" === 3 && $"d" === 4)).select($"a")
+    val query = relation.where(($"a" === 1 || $"b" === 2)
+      && ($"c" === 3 && $"d" === 4)).select($"a")
     val tracker = new QueryPlanningTracker
     Optimize.executeAndTrack(query.analyze, tracker)
     assert(tracker.rules(RewritePredicateSubquery.ruleName).numEffectiveInvocations == 0)
