@@ -435,6 +435,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
   test("vectorized reader: array of struct") {
     val data = Seq(
       Tuple1(null),
+      Tuple1(Seq()),
       Tuple1(Seq(Tuple2("a", null), Tuple2(null, "b"))),
       Tuple1(Seq(null)),
       Tuple1(Seq(Tuple2(null, null), Tuple2("c", null), null)),
@@ -445,6 +446,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
       readParquetFile(file) { df =>
         checkAnswer(df,
           Row(null) ::
+              Row(Seq()) ::
               Row(Seq(Row("a", null), Row(null, "b"))) ::
               Row(Seq(null)) ::
               Row(Seq(Row(null, null), Row("c", null), null)) ::

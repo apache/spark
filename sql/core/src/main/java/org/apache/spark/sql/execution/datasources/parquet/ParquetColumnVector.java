@@ -145,12 +145,12 @@ final class ParquetColumnVector {
       for (ParquetColumnVector child : children) {
         child.assemble();
       }
-      calculateCollectionOffsets();
+      assembleCollection();
     } else if (type instanceof StructType) {
       for (ParquetColumnVector child : children) {
         child.assemble();
       }
-      calculateStructOffsets();
+      assembleStruct();
     }
   }
 
@@ -216,13 +216,12 @@ final class ParquetColumnVector {
     this.columnReader = reader;
   }
 
-  private void calculateCollectionOffsets() {
+  /**
+   * Assemble collections, e.g., array, map.
+   */
+  private void assembleCollection() {
     int maxDefinitionLevel = column.definitionLevel();
     int maxElementRepetitionLevel = column.repetitionLevel();
-
-    ParquetColumn child = column.children().apply(0);
-    int maxElementDefinitionLevel = child.definitionLevel();
-    if (!child.required()) maxElementDefinitionLevel -= 1;
 
     // There are 4 cases when calculating definition levels:
     //   1. definitionLevel == maxDefinitionLevel
@@ -241,23 +240,25 @@ final class ParquetColumnVector {
          i = getNextCollectionStart(maxElementRepetitionLevel, i)) {
       vector.reserve(rowId + 1);
       int definitionLevel = definitionLevels.getInt(i);
-      if (definitionLevel < maxElementDefinitionLevel) {
-        // This means the collection is null, and it is not an array element. In this case, we
-        // should increase offset to skip it when returning an array starting from the offset.
+      if (definitionLevel <= maxDefinitionLevel) {
+        // This means the value is not an array element, but a collection that is either null or
+        // empty. In this case, we should increase offset to skip it when returning an array
+        // starting from the offset.
         //
-        // For instance, considering an array of strings with 2 elements like the following:
-        //  null, [a, b, c]
+        // For instance, considering an array of strings with 3 elements like the following:
+        //  null, [], [a, b, c]
         // the child array (which is of String type) in this case will be:
-        //  null:   1 0 0 0
-        //  length: 0 1 1 1
-        //  offset: 0 0 1 2
+        //  null:   1 1 0 0 0
+        //  length: 0 0 1 1 1
+        //  offset: 0 0 0 1 2
         // and the array itself will be:
-        //  null:   1 0
-        //  length: 0 3
-        //  offset: 0 1
+        //  null:   1 0 0
+        //  length: 0 0 3
+        //  offset: 0 1 2
         //
-        // It's important that for the second element `[a, b, c]`, the offset starts from 1
-        // since otherwise we'd include the first null element from child array in the result.
+        // It's important that for the third element `[a, b, c]`, the offset in the array
+        // (not the elements) starts from 2 since otherwise we'd include the first & second null
+        // element from child array in the result.
         offset += 1;
       }
       if (definitionLevel <= maxDefinitionLevel - 1) {
@@ -281,7 +282,7 @@ final class ParquetColumnVector {
     vector.addElementsAppended(rowId);
   }
 
-  private void calculateStructOffsets() {
+  private void assembleStruct() {
     int maxRepetitionLevel = column.repetitionLevel();
     int maxDefinitionLevel = column.definitionLevel();
 

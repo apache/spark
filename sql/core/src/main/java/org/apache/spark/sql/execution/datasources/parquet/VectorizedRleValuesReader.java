@@ -157,12 +157,14 @@ public final class VectorizedRleValuesReader extends ValuesReader
   }
 
   /**
-   * Reads a batch of values into vector `values`, using `valueReader`. The related states such
-   * as row index, offset, number of values left in the batch and page, etc, are tracked by
-   * `state`. The type-specific `updater` is used to update or skip values.
+   * Reads a batch of definition levels and values into vector 'defLevels' and 'values'
+   * respectively. The values are read using 'valueReader'.
    * <p>
-   * This reader reads the definition levels and then will read from `valueReader` for the
-   * non-null values. If the value is null, `values` will be populated with null value.
+   * The related states such as row index, offset, number of values left in the batch and page,
+   * are tracked by 'state'. The type-specific 'updater' is used to update or skip values.
+   * <p>
+   * This reader reads the definition levels and then will read from 'valueReader' for the
+   * non-null values. If the value is null, 'values' will be populated with null value.
    */
   public void readBatch(
       ParquetReadState state,
@@ -174,8 +176,8 @@ public final class VectorizedRleValuesReader extends ValuesReader
   }
 
   /**
-   * Decoding for dictionary ids. The IDs are populated into `values` and the nullability is
-   * populated into `nulls`.
+   * Decoding for dictionary ids. The IDs are populated into 'values' and the nullability is
+   * populated into 'nulls'.
    */
   public void readIntegers(
       ParquetReadState state,
@@ -269,7 +271,15 @@ public final class VectorizedRleValuesReader extends ValuesReader
     state.rowId = rowId;
   }
 
-  public void readBatchNested(
+  /**
+   * Reads a batch of repetition levels, definition levels and values into 'repLevels',
+   * 'defLevels' and 'values' respectively. The definition levels and values are read via
+   * 'defLevelsReader' and 'valueReader' respectively.
+   * <p>
+   * The related states such as row index, offset, number of rows left in the batch and page,
+   * are tracked by 'state'. The type-specific 'updater' is used to update or skip values.
+   */
+  public void readBatchRepeated(
       ParquetReadState state,
       WritableColumnVector repLevels,
       VectorizedRleValuesReader defLevelsReader,
@@ -277,11 +287,24 @@ public final class VectorizedRleValuesReader extends ValuesReader
       WritableColumnVector values,
       VectorizedValuesReader valueReader,
       ParquetVectorUpdater updater) {
-    readBatchNestedInternal(state, repLevels, defLevelsReader, defLevels, values, values, true,
+    readBatchRepeatedInternal(state, repLevels, defLevelsReader, defLevels, values, values, true,
       valueReader, updater);
   }
 
-  public void readIntegersNested(
+  /**
+   * Reads a batch of repetition levels, definition levels and integer values into 'repLevels',
+   * 'defLevels', 'values' and 'nulls' respectively. The definition levels and values are read via
+   * 'defLevelsReader' and 'valueReader' respectively.
+   * <p>
+   * The 'values' vector is used to hold non-null values, while 'nulls' vector is used to hold
+   * null values.
+   * <p>
+   * The related states such as row index, offset, number of rows left in the batch and page,
+   * are tracked by 'state'.
+   * <p>
+   * Unlike 'readBatchRepeated', this is used to decode dictionary indices in dictionary encoding.
+   */
+  public void readIntegersRepeated(
       ParquetReadState state,
       WritableColumnVector repLevels,
       VectorizedRleValuesReader defLevelsReader,
@@ -289,7 +312,7 @@ public final class VectorizedRleValuesReader extends ValuesReader
       WritableColumnVector values,
       WritableColumnVector nulls,
       VectorizedValuesReader valueReader) {
-    readBatchNestedInternal(state, repLevels, defLevelsReader, defLevels, values, nulls, false,
+    readBatchRepeatedInternal(state, repLevels, defLevelsReader, defLevels, values, nulls, false,
       valueReader, new ParquetVectorUpdaterFactory.IntegerUpdater());
   }
 
@@ -299,7 +322,7 @@ public final class VectorizedRleValuesReader extends ValuesReader
    *
    * @param valuesReused whether 'values' vector is reused for 'nulls'
    */
-  public void readBatchNestedInternal(
+  public void readBatchRepeatedInternal(
       ParquetReadState state,
       WritableColumnVector repLevels,
       VectorizedRleValuesReader defLevelsReader,

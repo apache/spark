@@ -164,7 +164,7 @@ public class VectorizedColumnReader {
   }
 
   /**
-   * Reads `total` values from this columnReader into column.
+   * Reads `total` rows from this columnReader into column.
    */
   void readBatch(
       int total,
@@ -204,7 +204,7 @@ public class VectorizedColumnReader {
           defColumn.readIntegers(readState, dictionaryIds, column, definitionLevels,
             (VectorizedValuesReader) dataColumn);
         } else {
-          repColumn.readIntegersNested(readState, repetitionLevels, defColumn, definitionLevels,
+          repColumn.readIntegersRepeated(readState, repetitionLevels, defColumn, definitionLevels,
             dictionaryIds, column, (VectorizedValuesReader) dataColumn);
         }
 
@@ -251,7 +251,7 @@ public class VectorizedColumnReader {
         if (readState.maxRepetitionLevel == 0) {
           defColumn.readBatch(readState, column, definitionLevels, valuesReader, updater);
         } else {
-          repColumn.readBatchNested(readState, repetitionLevels, defColumn, definitionLevels,
+          repColumn.readBatchRepeated(readState, repetitionLevels, defColumn, definitionLevels,
             column, valuesReader, updater);
         }
       }

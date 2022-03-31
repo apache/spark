@@ -732,7 +732,7 @@ public abstract class WritableColumnVector extends ColumnVector {
   /**
    * Increment number of elements appended by 'num'.
    *
-   * This is useful when one wants to the 'putXXX' API to add new elements to the vector, but
+   * This is useful when one wants to use the 'putXXX' API to add new elements to the vector, but
    * still want to keep count of how many elements have been added (since the 'putXXX' APIs don't
    * increment count).
    */
@@ -782,8 +782,8 @@ public abstract class WritableColumnVector extends ColumnVector {
   protected boolean isConstant;
 
   /**
-   * True if this column only contains nulls. Comparing to 'isConstant' above, this doesn't require
-   * any allocation of space.
+   * True if this column only contains nulls. This means the column values never change, even
+   * across resets. Comparing to 'isConstant' above, this doesn't require any allocation of space.
    */
   protected boolean isAllNull;
 
