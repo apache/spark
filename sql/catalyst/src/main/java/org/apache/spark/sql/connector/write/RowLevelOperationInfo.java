@@ -15,25 +15,26 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.connector.expressions.filter;
+package org.apache.spark.sql.connector.write;
 
-import org.apache.spark.annotation.Evolving;
-import org.apache.spark.sql.connector.expressions.NamedReference;
-import org.apache.spark.unsafe.types.UTF8String;
+import org.apache.spark.annotation.Experimental;
+import org.apache.spark.sql.connector.write.RowLevelOperation.Command;
+import org.apache.spark.sql.util.CaseInsensitiveStringMap;
 
 /**
- * A filter that evaluates to {@code true} iff the {@code column} evaluates to
- * a string that contains {@code value}.
+ * An interface with logical information for a row-level operation such as DELETE, UPDATE, MERGE.
  *
  * @since 3.3.0
  */
-@Evolving
-public final class StringContains extends StringPredicate {
+@Experimental
+public interface RowLevelOperationInfo {
+  /**
+   * Returns options that the user specified when performing the row-level operation.
+   */
+  CaseInsensitiveStringMap options();
 
-  public StringContains(NamedReference column, UTF8String value) {
-    super(column, value);
-  }
-
-  @Override
-  public String toString() { return "STRING_CONTAINS(" + column.describe() + ", " + value + ")"; }
+  /**
+   * Returns the row-level SQL command (e.g. DELETE, UPDATE, MERGE).
+   */
+  Command command();
 }

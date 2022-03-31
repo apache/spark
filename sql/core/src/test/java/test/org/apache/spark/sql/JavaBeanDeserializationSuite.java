@@ -183,18 +183,9 @@ public class JavaBeanDeserializationSuite implements Serializable {
 
     Dataset<Row> dataFrame = spark.createDataFrame(inputRows, schema);
 
-    try {
-      dataFrame.as(encoder).collect();
-      Assert.fail("Expected AnalysisException, but passed.");
-    } catch (Throwable e) {
-      // Here we need to handle weird case: compiler complains AnalysisException never be thrown
-      // in try statement, but it can be thrown actually. Maybe Scala-Java interop issue?
-      if (e instanceof AnalysisException) {
-        Assert.assertTrue(e.getMessage().contains("Cannot up cast "));
-      } else {
-        throw e;
-      }
-    }
+    AnalysisException e = Assert.assertThrows(AnalysisException.class,
+      () -> dataFrame.as(encoder).collect());
+    Assert.assertTrue(e.getMessage().contains("Cannot up cast "));
   }
 
   private static Row createRecordSpark22000Row(Long index) {

@@ -19,21 +19,23 @@ package org.apache.spark.sql.execution.datasources.v2
 
 import scala.collection.mutable
 
-import org.apache.spark.sql.catalyst.expressions.{Alias, And, Attribute, AttributeReference, Cast, Divide, DivideDTInterval, DivideYMInterval, EqualTo, Expression, If, IntegerLiteral, Literal, NamedExpression, PredicateHelper, ProjectionOverSchema, SubqueryExpression}
+import org.apache.spark.sql.catalyst.expressions.{Alias, AliasHelper, And, Attribute, AttributeReference, Cast, Divide, DivideDTInterval, DivideYMInterval, EqualTo, Expression, If, IntegerLiteral, Literal, NamedExpression, PredicateHelper, ProjectionOverSchema, SortOrder, SubqueryExpression}
 import org.apache.spark.sql.catalyst.expressions.aggregate
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
+import org.apache.spark.sql.catalyst.optimizer.CollapseProject
 import org.apache.spark.sql.catalyst.planning.ScanOperation
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, LeafNode, Limit, LocalLimit, LogicalPlan, Project, Sample, Sort}
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.connector.expressions.SortOrder
+import org.apache.spark.sql.connector.expressions.{SortOrder => V2SortOrder}
 import org.apache.spark.sql.connector.expressions.aggregate.{Aggregation, Avg, Count, GeneralAggregateFunc, Sum}
+import org.apache.spark.sql.connector.expressions.filter.Predicate
 import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownAggregates, SupportsPushDownFilters, V1Scan}
 import org.apache.spark.sql.execution.datasources.DataSourceStrategy
 import org.apache.spark.sql.sources
 import org.apache.spark.sql.types.{DataType, DayTimeIntervalType, LongType, StructType, YearMonthIntervalType}
 import org.apache.spark.sql.util.SchemaUtils._
 
-object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
+object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper with AliasHelper {
   import DataSourceV2Implicits._
 
   def apply(plan: LogicalPlan): LogicalPlan = {
@@ -72,6 +74,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
       val pushedFiltersStr = if (pushedFilters.isLeft) {
         pushedFilters.left.get.mkString(", ")
       } else {
+        sHolder.pushedPredicates = pushedFilters.right.get
         pushedFilters.right.get.mkString(", ")
       }
 
@@ -93,22 +96,27 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
     case aggNode @ Aggregate(groupingExpressions, resultExpressions, child) =>
       child match {
         case ScanOperation(project, filters, sHolder: ScanBuilderHolder)
-          if filters.isEmpty && project.forall(_.isInstanceOf[AttributeReference]) =>
+          if filters.isEmpty && CollapseProject.canCollapseExpressions(
+            resultExpressions, project, alwaysInline = true) =>
           sHolder.builder match {
             case r: SupportsPushDownAggregates =>
+              val aliasMap = getAliasMap(project)
+              val actualResultExprs = resultExpressions.map(replaceAliasButKeepName(_, aliasMap))
+              val actualGroupExprs = groupingExpressions.map(replaceAlias(_, aliasMap))
+
               val aggExprToOutputOrdinal = mutable.HashMap.empty[Expression, Int]
-              val aggregates = collectAggregates(resultExpressions, aggExprToOutputOrdinal)
+              val aggregates = collectAggregates(actualResultExprs, aggExprToOutputOrdinal)
               val normalizedAggregates = DataSourceStrategy.normalizeExprs(
                 aggregates, sHolder.relation.output).asInstanceOf[Seq[AggregateExpression]]
               val normalizedGroupingExpressions = DataSourceStrategy.normalizeExprs(
-                groupingExpressions, sHolder.relation.output)
+                actualGroupExprs, sHolder.relation.output)
               val translatedAggregates = DataSourceStrategy.translateAggregation(
                 normalizedAggregates, normalizedGroupingExpressions)
               val (finalResultExpressions, finalAggregates, finalTranslatedAggregates) = {
                 if (translatedAggregates.isEmpty ||
                   r.supportCompletePushDown(translatedAggregates.get) ||
                   translatedAggregates.get.aggregateExpressions().forall(!_.isInstanceOf[Avg])) {
-                  (resultExpressions, aggregates, translatedAggregates)
+                  (actualResultExprs, aggregates, translatedAggregates)
                 } else {
                   // scalastyle:off
                   // The data source doesn't support the complete push-down of this aggregation.
@@ -125,7 +133,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
                   // Aggregate [c2#10],[sum(c1#9)/count(c1#9) AS avg(c1)#19]
                   // +- ScanOperation[...]
                   // scalastyle:on
-                  val newResultExpressions = resultExpressions.map { expr =>
+                  val newResultExpressions = actualResultExprs.map { expr =>
                     expr.transform {
                       case AggregateExpression(avg: aggregate.Average, _, isDistinct, _, _) =>
                         val sum = aggregate.Sum(avg.child).toAggregateExpression(isDistinct)
@@ -204,7 +212,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
                   val scanRelation =
                     DataSourceV2ScanRelation(sHolder.relation, wrappedScan, output)
                   if (r.supportCompletePushDown(pushedAggregates.get)) {
-                    val projectExpressions = resultExpressions.map { expr =>
+                    val projectExpressions = finalResultExpressions.map { expr =>
                       // TODO At present, only push down group by attribute is supported.
                       // In future, more attribute conversion is extended here. e.g. GetStructField
                       expr.transform {
@@ -366,15 +374,23 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
         sHolder.pushedLimit = Some(limit)
       }
       operation
-    case s @ Sort(order, _, operation @ ScanOperation(_, filter, sHolder: ScanBuilderHolder))
-        if filter.isEmpty =>
-      val orders = DataSourceStrategy.translateSortOrders(order)
+    case s @ Sort(order, _, operation @ ScanOperation(project, filter, sHolder: ScanBuilderHolder))
+        if filter.isEmpty && CollapseProject.canCollapseExpressions(
+          order, project, alwaysInline = true) =>
+      val aliasMap = getAliasMap(project)
+      val newOrder = order.map(replaceAlias(_, aliasMap)).asInstanceOf[Seq[SortOrder]]
+      val orders = DataSourceStrategy.translateSortOrders(newOrder)
       if (orders.length == order.length) {
-        val topNPushed = PushDownUtils.pushTopN(sHolder.builder, orders.toArray, limit)
-        if (topNPushed) {
+        val (isPushed, isPartiallyPushed) =
+          PushDownUtils.pushTopN(sHolder.builder, orders.toArray, limit)
+        if (isPushed) {
           sHolder.pushedLimit = Some(limit)
           sHolder.sortOrders = orders
-          operation
+          if (isPartiallyPushed) {
+            s
+          } else {
+            operation
+          }
         } else {
           s
         }
@@ -405,8 +421,8 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
             f.pushedFilters()
           case _ => Array.empty[sources.Filter]
         }
-        val pushedDownOperators = PushedDownOperators(aggregation,
-          sHolder.pushedSample, sHolder.pushedLimit, sHolder.sortOrders)
+        val pushedDownOperators = PushedDownOperators(aggregation, sHolder.pushedSample,
+          sHolder.pushedLimit, sHolder.sortOrders, sHolder.pushedPredicates)
         V1ScanWrapper(v1, pushedFilters, pushedDownOperators)
       case _ => scan
     }
@@ -419,9 +435,11 @@ case class ScanBuilderHolder(
     builder: ScanBuilder) extends LeafNode {
   var pushedLimit: Option[Int] = None
 
-  var sortOrders: Seq[SortOrder] = Seq.empty[SortOrder]
+  var sortOrders: Seq[V2SortOrder] = Seq.empty[V2SortOrder]
 
   var pushedSample: Option[TableSampleInfo] = None
+
+  var pushedPredicates: Seq[Predicate] = Seq.empty[Predicate]
 }
 
 

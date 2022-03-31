@@ -15,27 +15,20 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.connector.expressions.filter;
+package org.apache.spark.sql.connector.write;
 
-import org.apache.spark.annotation.Evolving;
-import org.apache.spark.sql.connector.expressions.NamedReference;
-import org.apache.spark.unsafe.types.UTF8String;
+import org.apache.spark.annotation.Experimental;
 
 /**
- * A filter that evaluates to {@code true} iff the {@code column} evaluates to
- * a string that starts with {@code value}.
+ * An interface for building a {@link RowLevelOperation}.
  *
  * @since 3.3.0
  */
-@Evolving
-public final class StringStartsWith extends StringPredicate {
-
-  public StringStartsWith(NamedReference column, UTF8String value) {
-    super(column, value);
-  }
-
-  @Override
-  public String toString() {
-    return "STRING_STARTS_WITH(" + column.describe() + ", " + value + ")";
-  }
+@Experimental
+public interface RowLevelOperationBuilder {
+  /**
+   * Returns a {@link RowLevelOperation} that controls how Spark rewrites data
+   * for DELETE, UPDATE, MERGE commands.
+   */
+  RowLevelOperation build();
 }

@@ -332,21 +332,11 @@ public class ExternalBlockHandlerSuite {
     RpcResponseCallback callback = mock(RpcResponseCallback.class);
 
     ByteBuffer unserializableMsg = ByteBuffer.wrap(new byte[] { 0x12, 0x34, 0x56 });
-    try {
-      handler.receive(client, unserializableMsg, callback);
-      fail("Should have thrown");
-    } catch (Exception e) {
-      // pass
-    }
+    assertThrows(Exception.class, () -> handler.receive(client, unserializableMsg, callback));
 
     ByteBuffer unexpectedMsg = new UploadBlock("a", "e", "b", new byte[1],
       new byte[2]).toByteBuffer();
-    try {
-      handler.receive(client, unexpectedMsg, callback);
-      fail("Should have thrown");
-    } catch (UnsupportedOperationException e) {
-      // pass
-    }
+    assertThrows(Exception.class, () -> handler.receive(client, unexpectedMsg, callback));
 
     verify(callback, never()).onSuccess(any(ByteBuffer.class));
     verify(callback, never()).onFailure(any(Throwable.class));

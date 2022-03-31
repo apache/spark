@@ -18,7 +18,6 @@
 package org.apache.spark.sql.execution.datasources.orc
 
 import java.nio.charset.StandardCharsets.UTF_8
-import java.sql.Timestamp
 import java.util.Locale
 
 import scala.collection.JavaConverters._
@@ -29,7 +28,6 @@ import org.apache.hadoop.fs.{FileStatus, Path}
 import org.apache.hadoop.hive.serde2.io.DateWritable
 import org.apache.hadoop.io.{BooleanWritable, ByteWritable, DoubleWritable, FloatWritable, IntWritable, LongWritable, ShortWritable, WritableComparable}
 import org.apache.orc.{BooleanColumnStatistics, ColumnStatistics, DateColumnStatistics, DoubleColumnStatistics, IntegerColumnStatistics, OrcConf, OrcFile, Reader, TypeDescription, Writer}
-import org.apache.orc.mapred.OrcTimestamp
 
 import org.apache.spark.{SPARK_VERSION_SHORT, SparkException}
 import org.apache.spark.deploy.SparkHadoopUtil
@@ -39,8 +37,8 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.caseSensitiveResolution
 import org.apache.spark.sql.catalyst.expressions.JoinedRow
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
-import org.apache.spark.sql.catalyst.util.{quoteIdentifier, CharVarcharUtils, DateTimeUtils}
-import org.apache.spark.sql.catalyst.util.DateTimeConstants._
+import org.apache.spark.sql.catalyst.util.CharVarcharUtils
+import org.apache.spark.sql.catalyst.util.quoteIdentifier
 import org.apache.spark.sql.connector.expressions.aggregate.{Aggregation, Count, CountStar, Max, Min}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.datasources.{AggregatePushDownUtils, SchemaMergeUtils}
@@ -199,7 +197,7 @@ object OrcUtils extends Logging {
       isCaseSensitive: Boolean,
       dataSchema: StructType,
       requiredSchema: StructType,
-      reader: Reader,
+      orcSchema: TypeDescription,
       conf: Configuration): Option[(Array[Int], Boolean)] = {
     def checkTimestampCompatibility(orcCatalystSchema: StructType, dataSchema: StructType): Unit = {
       orcCatalystSchema.fields.map(_.dataType).zip(dataSchema.fields.map(_.dataType)).foreach {
@@ -212,7 +210,6 @@ object OrcUtils extends Logging {
       }
     }
 
-    val orcSchema = reader.getSchema
     checkTimestampCompatibility(toCatalystSchema(orcSchema), dataSchema)
     val orcFieldNames = orcSchema.getFieldNames.asScala
     val forcePositionalEvolution = OrcConf.FORCE_POSITIONAL_EVOLUTION.getBoolean(conf)
@@ -261,7 +258,6 @@ object OrcUtils extends Logging {
                 if (matchedOrcFields.size > 1) {
                   // Need to fail if there is ambiguity, i.e. more than one field is matched.
                   val matchedOrcFieldsString = matchedOrcFields.mkString("[", ", ", "]")
-                  reader.close()
                   throw QueryExecutionErrors.foundDuplicateFieldInCaseInsensitiveModeError(
                     requiredFieldName, matchedOrcFieldsString)
                 } else {
@@ -285,18 +281,17 @@ object OrcUtils extends Logging {
    * Given a `StructType` object, this methods converts it to corresponding string representation
    * in ORC.
    */
-  def orcTypeDescriptionString(dt: DataType): String = dt match {
+  def getOrcSchemaString(dt: DataType): String = dt match {
     case s: StructType =>
       val fieldTypes = s.fields.map { f =>
-        s"${quoteIdentifier(f.name)}:${orcTypeDescriptionString(f.dataType)}"
+        s"${quoteIdentifier(f.name)}:${getOrcSchemaString(f.dataType)}"
       }
       s"struct<${fieldTypes.mkString(",")}>"
     case a: ArrayType =>
-      s"array<${orcTypeDescriptionString(a.elementType)}>"
+      s"array<${getOrcSchemaString(a.elementType)}>"
     case m: MapType =>
-      s"map<${orcTypeDescriptionString(m.keyType)},${orcTypeDescriptionString(m.valueType)}>"
-    case TimestampNTZType => TypeDescription.Category.TIMESTAMP.getName
-    case _: DayTimeIntervalType => LongType.catalogString
+      s"map<${getOrcSchemaString(m.keyType)},${getOrcSchemaString(m.valueType)}>"
+    case _: DayTimeIntervalType | _: TimestampNTZType => LongType.catalogString
     case _: YearMonthIntervalType => IntegerType.catalogString
     case _ => dt.catalogString
   }
@@ -306,16 +301,14 @@ object OrcUtils extends Logging {
       dt match {
         case y: YearMonthIntervalType =>
           val typeDesc = new TypeDescription(TypeDescription.Category.INT)
-          typeDesc.setAttribute(
-            CATALYST_TYPE_ATTRIBUTE_NAME, y.typeName)
+          typeDesc.setAttribute(CATALYST_TYPE_ATTRIBUTE_NAME, y.typeName)
           Some(typeDesc)
         case d: DayTimeIntervalType =>
           val typeDesc = new TypeDescription(TypeDescription.Category.LONG)
-          typeDesc.setAttribute(
-            CATALYST_TYPE_ATTRIBUTE_NAME, d.typeName)
+          typeDesc.setAttribute(CATALYST_TYPE_ATTRIBUTE_NAME, d.typeName)
           Some(typeDesc)
         case n: TimestampNTZType =>
-          val typeDesc = new TypeDescription(TypeDescription.Category.TIMESTAMP)
+          val typeDesc = new TypeDescription(TypeDescription.Category.LONG)
           typeDesc.setAttribute(CATALYST_TYPE_ATTRIBUTE_NAME, n.typeName)
           Some(typeDesc)
         case t: TimestampType =>
@@ -378,9 +371,9 @@ object OrcUtils extends Logging {
       partitionSchema: StructType,
       conf: Configuration): String = {
     val resultSchemaString = if (canPruneCols) {
-      OrcUtils.orcTypeDescriptionString(resultSchema)
+      OrcUtils.getOrcSchemaString(resultSchema)
     } else {
-      OrcUtils.orcTypeDescriptionString(StructType(dataSchema.fields ++ partitionSchema.fields))
+      OrcUtils.getOrcSchemaString(StructType(dataSchema.fields ++ partitionSchema.fields))
     }
     OrcConf.MAPRED_INPUT_SCHEMA.setString(conf, resultSchemaString)
     resultSchemaString
@@ -531,18 +524,5 @@ object OrcUtils extends Logging {
     } else {
       resultRow
     }
-  }
-
-  def fromOrcNTZ(ts: Timestamp): Long = {
-    DateTimeUtils.millisToMicros(ts.getTime) +
-      (ts.getNanos / NANOS_PER_MICROS) % MICROS_PER_MILLIS
-  }
-
-  def toOrcNTZ(micros: Long): OrcTimestamp = {
-    val seconds = Math.floorDiv(micros, MICROS_PER_SECOND)
-    val nanos = (micros - seconds * MICROS_PER_SECOND) * NANOS_PER_MICROS
-    val result = new OrcTimestamp(seconds * MILLIS_PER_SECOND)
-    result.setNanos(nanos.toInt)
-    result
   }
 }
