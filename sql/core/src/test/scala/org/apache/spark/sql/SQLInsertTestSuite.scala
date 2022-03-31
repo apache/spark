@@ -228,7 +228,7 @@ trait SQLInsertTestSuite extends QueryTest with SQLTestUtils {
            | part1 = date'2019-01-01',
            | part2 = timestamp'2019-01-01 11:11:11',
            | part3 = X'$binaryHexStr',
-           | part4 = $"p1"',
+           | part4 = 'p1',
            | part5 = date'2019-01-01',
            | part6 = timestamp'2019-01-01 11:11:11',
            | part7 = X'$binaryHexStr'

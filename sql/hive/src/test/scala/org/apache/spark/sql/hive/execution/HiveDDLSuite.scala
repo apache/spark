@@ -2783,7 +2783,7 @@ class HiveDDLSuite
         """
           |CREATE TABLE targetHiveTable LIKE sourceHiveTable USING hive
           |ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'
-          |WITH SERDEPROPERTIES ('test' = $"test"')
+          |WITH SERDEPROPERTIES ('test' = 'test')
         """.stripMargin,
         "Operation not allowed: CREATE TABLE LIKE ... USING ... ROW FORMAT SERDE")
 
@@ -2792,7 +2792,7 @@ class HiveDDLSuite
         """
           |CREATE TABLE targetDsTable LIKE sourceDsTable
           |ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'
-          |WITH SERDEPROPERTIES ('test' = $"test"')
+          |WITH SERDEPROPERTIES ('test' = 'test')
         """.stripMargin,
         "'ROW FORMAT' must be used with 'STORED AS'")
 

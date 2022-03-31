@@ -756,7 +756,7 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
       s"""
          |CREATE TABLE $tabName (key STRING, value STRING)
          |STORED AS TEXTFILE
-         |TBLPROPERTIES ('prop1' = $"val1"', 'prop2' = $"val2"')
+         |TBLPROPERTIES ('prop1' = 'val1', 'prop2' = 'val2')
        """.stripMargin)
     sql(s"INSERT INTO TABLE $tabName SELECT * FROM src")
     if (analyzedBySpark) sql(s"ANALYZE TABLE $tabName COMPUTE STATISTICS")

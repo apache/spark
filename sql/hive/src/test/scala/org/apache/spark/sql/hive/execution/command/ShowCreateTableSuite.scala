@@ -43,8 +43,8 @@ class ShowCreateTableSuite extends v1.ShowCreateTableSuiteBase with CommandSuite
            |  c2 STRING
            |)
            |TBLPROPERTIES (
-           |  'prop1' = $"value1"',
-           |  'prop2' = $"value2"'
+           |  'prop1' = 'value1',
+           |  'prop2' = 'value2'
            |)
          """.stripMargin
       )
@@ -68,8 +68,8 @@ class ShowCreateTableSuite extends v1.ShowCreateTableSuiteBase with CommandSuite
              |)
              |LOCATION '${dir.toURI}'
              |TBLPROPERTIES (
-             |  'prop1' = $"value1"',
-             |  'prop2' = $"value2"'
+             |  'prop1' = 'value1',
+             |  'prop2' = 'value2'
              |)
            """.stripMargin
         )

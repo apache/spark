@@ -1686,12 +1686,12 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
       """.stripMargin)
     sql(
       """
-        |ALTER TABLE test_table ADD PARTITION (part = $"1"')
+        |ALTER TABLE test_table ADD PARTITION (part = '1')
         |LOCATION 'file:${system:test.tmp.dir}/drop_database_removes_partition_dirs_table2/part=1'
       """.stripMargin)
     sql(
       """
-        |INSERT OVERWRITE TABLE test_table PARTITION (part = $"1"')
+        |INSERT OVERWRITE TABLE test_table PARTITION (part = '1')
         |SELECT * FROM default.src
       """.stripMargin)
      checkAnswer(
@@ -1736,12 +1736,12 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
       """.stripMargin)
     sql(
       """
-        |ALTER TABLE test_table ADD PARTITION (part = $"1"')
+        |ALTER TABLE test_table ADD PARTITION (part = '1')
         |LOCATION 'file:${system:test.tmp.dir}/drop_table_removes_partition_dirs_table2/part=1'
       """.stripMargin)
     sql(
       """
-        |INSERT OVERWRITE TABLE test_table PARTITION (part = $"1"')
+        |INSERT OVERWRITE TABLE test_table PARTITION (part = '1')
         |SELECT * FROM default.src
       """.stripMargin)
     checkAnswer(
@@ -2085,7 +2085,7 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
         """.stripMargin)
       sql(
         """
-          |INSERT OVERWRITE TABLE tableWithPartition PARTITION (part = $"1"')
+          |INSERT OVERWRITE TABLE tableWithPartition PARTITION (part = '1')
           |SELECT * FROM default.src
         """.stripMargin)
        checkAnswer(
@@ -2095,7 +2095,7 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
 
       sql(
         """
-          |INSERT OVERWRITE TABLE tableWithPartition PARTITION (part = $"1"')
+          |INSERT OVERWRITE TABLE tableWithPartition PARTITION (part = '1')
           |SELECT * FROM VALUES (1, "one"), (2, "two"), (3, null) AS data(key, value)
         """.stripMargin)
       checkAnswer(
@@ -2263,7 +2263,7 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
             client.runSqlHive(
               s"""
                  |INSERT INTO TABLE $db.t
-                 |PARTITION (ts = $"98765"', hour = $"01"')
+                 |PARTITION (ts = '98765', hour = '01')
                  |VALUES (12, 2, 12345)
               """.stripMargin
             )
