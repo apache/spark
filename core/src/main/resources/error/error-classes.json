@@ -3,6 +3,10 @@
     "message" : [ "Field name %s is ambiguous and has %s matching fields in the struct." ],
     "sqlState" : "42000"
   },
+  "ARITHMETIC_OVERFLOW" : {
+    "message" : [ "%s.%s If necessary set %s to false (except for ANSI interval type) to bypass this error.%s" ],
+    "sqlState" : "22003"
+  },
   "CANNOT_CAST_DATATYPE" : {
     "message" : [ "Cannot cast %s to %s." ],
     "sqlState" : "22005"
