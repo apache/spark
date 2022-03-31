@@ -37,7 +37,7 @@ case class BatchScanExec(
     output: Seq[AttributeReference],
     @transient scan: Scan,
     runtimeFilters: Seq[Expression],
-    clustering: Option[Seq[Expression]] = None) extends DataSourceV2ScanExecBase {
+    keyGroupedPartitioning: Option[Seq[Expression]] = None) extends DataSourceV2ScanExecBase {
 
   @transient lazy val batch = scan.toBatch
 

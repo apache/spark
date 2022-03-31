@@ -49,7 +49,7 @@ case class TransformExpression(
   def isSameFunction(other: TransformExpression): Boolean = other match {
     case TransformExpression(otherFunction, _, otherNumBucketsOpt) =>
       function.canonicalName() == otherFunction.canonicalName() &&
-          numBucketsOpt == otherNumBucketsOpt
+        numBucketsOpt == otherNumBucketsOpt
     case _ =>
       false
   }

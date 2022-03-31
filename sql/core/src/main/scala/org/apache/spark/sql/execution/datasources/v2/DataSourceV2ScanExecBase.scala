@@ -46,8 +46,9 @@ trait DataSourceV2ScanExecBase extends LeafExecNode {
 
   def readerFactory: PartitionReaderFactory
 
-  /** Optional clustering expressions provided by the V2 data source */
-  def clustering: Option[Seq[Expression]]
+  /** Optional partitioning expressions provided by the V2 data sources, through
+   * `SupportsReportPartitioning` */
+  def keyGroupedPartitioning: Option[Seq[Expression]]
 
   protected def inputPartitions: Seq[InputPartition]
 
@@ -88,7 +89,7 @@ trait DataSourceV2ScanExecBase extends LeafExecNode {
   override def outputPartitioning: physical.Partitioning = {
     if (partitions.length == 1) SinglePartition
     else groupedPartitions.map { partitionValues =>
-      KeyGroupedPartitioning(clustering.get,
+      KeyGroupedPartitioning(keyGroupedPartitioning.get,
         partitionValues.size, Some(partitionValues.map(_._1)))
     }.getOrElse(super.outputPartitioning)
   }
@@ -100,7 +101,7 @@ trait DataSourceV2ScanExecBase extends LeafExecNode {
    * Group partition values for all the input partitions. This returns `Some` iff:
    *   - [[SQLConf.V2_BUCKETING_ENABLED]] is turned on
    *   - all input partitions implement [[HasPartitionKey]]
-   *   - `clustering` is set
+   *   - `keyGroupedPartitioning` is set
    *
    * The result, if defined, is a list of tuples where the first element is a partition value,
    * and the second element is a list of input partitions that share the same partition value.
@@ -111,7 +112,7 @@ trait DataSourceV2ScanExecBase extends LeafExecNode {
   def groupPartitions(
       inputPartitions: Seq[InputPartition]): Option[Seq[(InternalRow, Seq[InputPartition])]] = {
     if (!SQLConf.get.v2BucketingEnabled) return None
-    clustering.flatMap { expressions =>
+    keyGroupedPartitioning.flatMap { expressions =>
       val results = inputPartitions.takeWhile {
         case _: HasPartitionKey => true
         case _ => false

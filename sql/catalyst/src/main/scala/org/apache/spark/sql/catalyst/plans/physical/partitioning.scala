@@ -679,7 +679,7 @@ case class KeyGroupedShuffleSpec(
       val otherExpressions = otherPartitioning.expressions
 
       distribution.clustering.length == otherDistribution.clustering.length &&
-          numPartitions == other.numPartitions &&
+        numPartitions == other.numPartitions &&
           expressions.length == otherExpressions.length && {
             val otherKeyPositions = otherSpec.keyPositions
             keyPositions.zip(otherKeyPositions).forall { case (left, right) =>

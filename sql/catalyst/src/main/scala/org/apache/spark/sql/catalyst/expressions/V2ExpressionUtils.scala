@@ -55,7 +55,7 @@ object V2ExpressionUtils extends SQLConfHelper with Logging {
    */
   def toCatalystOrdering(ordering: Array[V2SortOrder], query: LogicalPlan): Seq[SortOrder] = {
     sequenceToOption(ordering.map(toCatalyst(_, query))).asInstanceOf[Option[Seq[SortOrder]]]
-        .getOrElse(Seq.empty)
+      .getOrElse(Seq.empty)
   }
 
   def toCatalyst(

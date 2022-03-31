@@ -221,9 +221,9 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase {
 
     resolveDistribution(distribution, relation) match {
       case ClusteredDistribution(clustering, _, _) =>
-        assert(relation.clustering.isDefined && relation.clustering.get == clustering)
+        assert(relation.keyGroupedPartitioning.isDefined && relation.keyGroupedPartitioning.get == clustering)
       case _ =>
-        assert(relation.clustering.isEmpty)
+        assert(relation.keyGroupedPartitioning.isEmpty)
     }
 
     // check distribution, ordering and output partitioning are correctly populated in physical plan

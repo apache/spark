@@ -113,14 +113,14 @@ case class DataSourceV2Relation(
  * @param relation a [[DataSourceV2Relation]]
  * @param scan a DSv2 [[Scan]]
  * @param output the output attributes of this relation
- * @param clustering if set, the clustering expressions that are used to split the rows in the scan
- *                   across different partitions
+ * @param keyGroupedPartitioning if set, the partitioning expressions that are used to split the
+ *                               rows in the scan across different partitions
  */
 case class DataSourceV2ScanRelation(
     relation: DataSourceV2Relation,
     scan: Scan,
     output: Seq[AttributeReference],
-    clustering: Option[Seq[Expression]] = None) extends LeafNode with NamedRelation {
+    keyGroupedPartitioning: Option[Seq[Expression]] = None) extends LeafNode with NamedRelation {
 
   override def name: String = relation.table.name()
 

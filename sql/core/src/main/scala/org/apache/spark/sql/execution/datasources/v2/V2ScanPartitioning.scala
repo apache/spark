@@ -26,8 +26,9 @@ import org.apache.spark.sql.connector.read.partitioning.{KeyGroupedPartitioning,
 import org.apache.spark.util.collection.Utils.sequenceToOption
 
 /**
- * Extract [[DataSourceV2ScanRelation]] from the input logical plan, convert any V2 partitioning
- * reported by data sources to their catalyst counterparts. Then, annotate the plan with the result.
+ * Extracts [[DataSourceV2ScanRelation]] from the input logical plan, converts any V2 partitioning
+ * reported by data sources to their catalyst counterparts. Then, annotates the plan with the
+ * result.
  */
 object V2ScanPartitioning extends Rule[LogicalPlan] with SQLConfHelper {
   override def apply(plan: LogicalPlan): LogicalPlan = plan transformDown {
@@ -37,14 +38,14 @@ object V2ScanPartitioning extends Rule[LogicalPlan] with SQLConfHelper {
         case _ => None
       }
 
-      val catalystClustering = scan.outputPartitioning() match {
-        case hp: KeyGroupedPartitioning => sequenceToOption(hp.clustering().map(
+      val catalystPartitioning = scan.outputPartitioning() match {
+        case kgp: KeyGroupedPartitioning => sequenceToOption(kgp.clustering().map(
           V2ExpressionUtils.toCatalyst(_, relation, funCatalogOpt)))
         case _: UnknownPartitioning => None
         case p => throw new IllegalArgumentException("Unsupported data source V2 partitioning " +
             "type: " + p.getClass.getSimpleName)
       }
 
-      d.copy(clustering = catalystClustering)
+      d.copy(keyGroupedPartitioning = catalystPartitioning)
   }
 }

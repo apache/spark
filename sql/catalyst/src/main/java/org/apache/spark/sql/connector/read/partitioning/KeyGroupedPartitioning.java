@@ -21,12 +21,13 @@ import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.connector.expressions.Expression;
 
 /**
- * Represents a partitioning where rows are split across partitions based on the expressions
- * returned by {@link KeyGroupedPartitioning#clustering}.
+ * Represents a partitioning where rows are split across partitions based on the
+ * partition transform expressions returned by {@link KeyGroupedPartitioning#clustering}.
  * <p>
- * Data source implementations should make sure that all rows where
- * {@link KeyGroupedPartitioning#clustering} evaluate to the same value should be in the same
- * partition.
+ * Note: Data source implementations should make sure that for a single partition, all of its
+ * rows must be evaluated to the same partition value after being applied by
+ * {@link KeyGroupedPartitioning#clustering} expressions. Different partitions can share the same
+ * partition value: Spark will group these into a single logical partition during planning phase.
  *
  * @since 3.3.0
  */
