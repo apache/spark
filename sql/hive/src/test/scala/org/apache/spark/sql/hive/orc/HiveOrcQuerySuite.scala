@@ -261,7 +261,7 @@ class HiveOrcQuerySuite extends OrcQueryTest with TestHiveSingleton {
             spark.sql(
               s"""
                  |INSERT INTO TABLE dummy_orc_partitioned
-                 |PARTITION (`date` = $"2019"-04-01')
+                 |PARTITION (`date` = '2019-04-01')
                  |SELECT key, value FROM single
                  """.stripMargin)
 
