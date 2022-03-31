@@ -154,7 +154,7 @@ class EquivalentExpressions {
       expr.find(_.isInstanceOf[LambdaVariable]).isDefined ||
       // `PlanExpression` wraps query plan. To compare query plans of `PlanExpression` on executor,
       // can cause error like NPE.
-      (expr.isInstanceOf[PlanExpression[_]] && TaskContext.get != null)
+      (expr.find(_.isInstanceOf[PlanExpression[_]]).isDefined && TaskContext.get != null)
 
     if (!skip && !addFunc(expr)) {
       childrenToRecurse(expr).foreach(addExprTree(_, addFunc))
