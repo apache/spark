@@ -21,7 +21,7 @@ import java.io.{ByteArrayInputStream, ByteArrayOutputStream, DataInputStream, Da
 import java.util
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, TypeCheckResult}
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{TypeCheckFailure, TypeCheckSuccess}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.trees.TernaryLike
@@ -88,8 +88,7 @@ case class Percentile(
     this(child, percentageExpression, frequency, 0, 0)
   }
 
-  override def prettyName: String =
-    getTagValue(FunctionRegistry.FUNC_ALIAS).getOrElse("percentile")
+  override def nodeName: String = "percentile"
 
   override def withNewMutableAggBufferOffset(newMutableAggBufferOffset: Int): Percentile =
     copy(mutableAggBufferOffset = newMutableAggBufferOffset)

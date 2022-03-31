@@ -1209,7 +1209,7 @@ SELECT
 FROM basic_pays
 ORDER BY salary
 -- !query schema
-struct<employee_name:string,department:string,salary:int,percentile(salary, 0.25, 1) OVER (PARTITION BY department ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING):double,percentile(salary, (1 - 0.25), 1) OVER (PARTITION BY department ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING):double>
+struct<employee_name:string,department:string,salary:int,percentile_cont(salary, 0.25, 1) OVER (PARTITION BY department ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING):double,percentile_cont(salary, (1 - 0.25), 1) OVER (PARTITION BY department ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING):double>
 -- !query output
 Leslie Thompson	IT	5186	5917.75	7381.25
 Anthony Bow	Accounting	6627	8543.75	9746.5
@@ -1273,7 +1273,7 @@ FROM basic_pays
 WINDOW w AS (PARTITION BY department)
 ORDER BY salary
 -- !query schema
-struct<employee_name:string,department:string,salary:int,percentile(salary, 0.25, 1) OVER (PARTITION BY department ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING):double,percentile(salary, (1 - 0.25), 1) OVER (PARTITION BY department ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING):double>
+struct<employee_name:string,department:string,salary:int,percentile_cont(salary, 0.25, 1) OVER (PARTITION BY department ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING):double,percentile_cont(salary, (1 - 0.25), 1) OVER (PARTITION BY department ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING):double>
 -- !query output
 Leslie Thompson	IT	5186	5917.75	7381.25
 Anthony Bow	Accounting	6627	8543.75	9746.5
