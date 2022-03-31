@@ -69,7 +69,8 @@ class DiagnosticListener(
     try {
       val existing = kvStore.read(classOf[ExecutionDiagnosticData], event.executionId)
       val planDescriptionMode = ExplainMode.fromString(SQLConf.get.uiExplainMode)
-      val physicalPlan = event.qe.explainString(planDescriptionMode, Int.MaxValue)
+      val physicalPlan = event.qe.explainString(
+        planDescriptionMode, SQLConf.get.maxToStringFieldsForDiagnostic)
       val data = new ExecutionDiagnosticData(
         event.executionId,
         physicalPlan,

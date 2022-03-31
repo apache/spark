@@ -612,7 +612,7 @@ can be identified by their `[attempt-id]`. In the API listed below, when running
     </td>
   </tr>
   <tr>
-    <td><code>/applications/[app-id]/diagnostics/[execution-id]</code></td>
+    <td><code>/applications/[app-id]/diagnostics/sql/[execution-id]</code></td>
     <td>Diagnostic for the given query. it includes:
     <br>
     1. plan change history of adaptive execution

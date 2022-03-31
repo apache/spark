@@ -41,7 +41,7 @@ case class Node private[spark](
 
 case class Metric private[spark] (name: String, value: String)
 
-class DiagnosticData private[spark] (
+class SQLDiagnosticData private[spark] (
     val id: Long,
     val physicalPlan: String,
     val submissionTime: Date,

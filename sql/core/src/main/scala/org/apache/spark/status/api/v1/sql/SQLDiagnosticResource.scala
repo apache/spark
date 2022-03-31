@@ -23,40 +23,40 @@ import javax.ws.rs._
 import org.apache.spark.sql.diagnostic._
 import org.apache.spark.status.api.v1.{BaseAppResource, NotFoundException}
 
-private[v1] class DiagnosticResource extends BaseAppResource {
+private[v1] class SQLDiagnosticResource extends BaseAppResource {
 
   @GET
-  def diagnosticList(
+  def sqlDiagnosticList(
       @DefaultValue("0") @QueryParam("offset") offset: Int,
-      @DefaultValue("20") @QueryParam("length") length: Int): Seq[DiagnosticData] = {
+      @DefaultValue("20") @QueryParam("length") length: Int): Seq[SQLDiagnosticData] = {
     withUI { ui =>
       ui.store.diskStore.map { kvStore =>
         val store = new DiagnosticStore(kvStore)
         store.diagnosticsList(offset, length)
           // Do not display the plan changes in the list
-          .map(d => prepareDiagnosticData(d, Seq.empty))
+          .map(d => prepareSqlDiagnosticData(d, Seq.empty))
       }.getOrElse(Seq.empty)
     }
   }
 
   @GET
   @Path("{executionId:\\d+}")
-  def diagnostic(
-      @PathParam("executionId") execId: Long): DiagnosticData = {
+  def sqlDiagnostic(
+      @PathParam("executionId") execId: Long): SQLDiagnosticData = {
     withUI { ui =>
       ui.store.diskStore.flatMap { kvStore =>
         val store = new DiagnosticStore(kvStore)
         val updates = store.adaptiveExecutionUpdates(execId)
         store.diagnostic(execId)
-          .map(d => prepareDiagnosticData(d, updates))
+          .map(d => prepareSqlDiagnosticData(d, updates))
       }.getOrElse(throw new NotFoundException("unknown query execution id: " + execId))
     }
   }
 
-  private def prepareDiagnosticData(
+  private def prepareSqlDiagnosticData(
       diagnostic: ExecutionDiagnosticData,
-      updates: Seq[AdaptiveExecutionUpdate]): DiagnosticData = {
-    new DiagnosticData(
+      updates: Seq[AdaptiveExecutionUpdate]): SQLDiagnosticData = {
+    new SQLDiagnosticData(
       diagnostic.executionId,
       diagnostic.physicalPlan,
       new Date(diagnostic.submissionTime),
