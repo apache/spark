@@ -253,6 +253,19 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
     }
   }
 
+  test("Divide: divide by 0 exception should contain SQL text context") {
+    val query = "1234.5D / 0"
+    val o = Origin(
+      line = Some(1),
+      startPosition = Some(7),
+      startIndex = Some(7),
+      sqlText = Some(s"select $query"))
+    withOrigin(o) {
+      val expr = Divide(Literal(1234.5, DoubleType), Literal(0.0, DoubleType), failOnError = true)
+      checkExceptionInExpression[ArithmeticException](expr, EmptyRow, query)
+    }
+  }
+
   private def testDecimalAndLongType(testFunc: (Int => Any) => Unit): Unit = {
     testFunc(_.toLong)
     testFunc(Decimal(_))
@@ -292,6 +305,23 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
     }
   }
 
+  test("IntegralDivide: exception should contain SQL text context") {
+    Seq(-1L, 0L).foreach { right =>
+      val query = s"${Long.MinValue} div right"
+      val o = Origin(
+        line = Some(1),
+        startPosition = Some(7),
+        startIndex = Some(7),
+        sqlText = Some(s"select $query"))
+      withOrigin(o) {
+        val expr =
+          IntegralDivide(
+            Literal(Long.MinValue, LongType), Literal(right, LongType), failOnError = true)
+        checkExceptionInExpression[ArithmeticException](expr, EmptyRow, query)
+      }
+    }
+  }
+
   test("% (Remainder)") {
     testNumericDataTypes { convert =>
       val left = Literal(convert(1))
@@ -320,6 +350,22 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
           checkConsistencyBetweenInterpretedAndCodegenAllowingException(Remainder(_, _), tpe, tpe)
         }
       }
+    }
+  }
+
+  test("Remainder/Pmod: exception should contain SQL text context") {
+    Seq(
+      Remainder(Literal(1L, LongType), Literal(0L, LongType), failOnError = true),
+      Pmod(Literal(1L, LongType), Literal(0L, LongType), failOnError = true)).foreach { expr =>
+        val query = s"1L ${expr.symbol} 0L"
+        val o = Origin(
+          line = Some(1),
+          startPosition = Some(7),
+          startIndex = Some(7),
+          sqlText = Some(s"select $query"))
+        withOrigin(o) {
+          checkExceptionInExpression[ArithmeticException](expr, EmptyRow, query)
+        }
     }
   }
 
