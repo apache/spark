@@ -70,7 +70,7 @@ class TaskContextSuite extends SparkFunSuite with BeforeAndAfter with LocalSpark
     val func = (c: TaskContext, i: Iterator[String]) => i.next()
     val taskBinary = sc.broadcast(JavaUtils.bufferToArray(closureSerializer.serialize((rdd, func))))
     val task = new ResultTask[String, String](
-      0, 0, taskBinary, rdd.partitions(0), Seq.empty, 0, new Properties,
+      0, 0, taskBinary, rdd.partitions(0), 1, Seq.empty, 0, new Properties,
       closureSerializer.serialize(TaskMetrics.registered).array())
     intercept[RuntimeException] {
       task.run(0, 0, null, 1, null, Option.empty)
@@ -92,7 +92,7 @@ class TaskContextSuite extends SparkFunSuite with BeforeAndAfter with LocalSpark
     val func = (c: TaskContext, i: Iterator[String]) => i.next()
     val taskBinary = sc.broadcast(JavaUtils.bufferToArray(closureSerializer.serialize((rdd, func))))
     val task = new ResultTask[String, String](
-      0, 0, taskBinary, rdd.partitions(0), Seq.empty, 0, new Properties,
+      0, 0, taskBinary, rdd.partitions(0), 1, Seq.empty, 0, new Properties,
       closureSerializer.serialize(TaskMetrics.registered).array())
     intercept[RuntimeException] {
       task.run(0, 0, null, 1, null, Option.empty)
@@ -187,6 +187,28 @@ class TaskContextSuite extends SparkFunSuite with BeforeAndAfter with LocalSpark
     assert(stageAttemptNumbersWithFailedStage.toSet === Set(2))
   }
 
+  test("TaskContext.get.numPartitions getter") {
+    sc = new SparkContext("local[1,2]", "test")
+
+    for (numPartitions <- 1 to 10) {
+      val numPartitionsFromContext = sc.parallelize(1 to 1000, numPartitions)
+        .mapPartitions { _ =>
+          Seq(TaskContext.get.numPartitions()).iterator
+        }.collect()
+      assert(numPartitionsFromContext.toSet === Set(numPartitions),
+        s"numPartitions = $numPartitions")
+    }
+
+    for (numPartitions <- 1 to 10) {
+      val numPartitionsFromContext = sc.parallelize(1 to 1000, 2).repartition(numPartitions)
+        .mapPartitions { _ =>
+          Seq(TaskContext.get.numPartitions()).iterator
+        }.collect()
+      assert(numPartitionsFromContext.toSet === Set(numPartitions),
+        s"numPartitions = $numPartitions")
+    }
+  }
+
   test("accumulators are updated on exception failures") {
     // This means use 1 core and 4 max task failures
     sc = new SparkContext("local[1,4]", "test")
@@ -218,8 +240,8 @@ class TaskContextSuite extends SparkFunSuite with BeforeAndAfter with LocalSpark
     // Create a dummy task. We won't end up running this; we just want to collect
     // accumulator updates from it.
     val taskMetrics = TaskMetrics.empty
-    val task = new Task[Int](0, 0, 0) {
-      context = new TaskContextImpl(0, 0, 0, 0L, 0,
+    val task = new Task[Int](0, 0, 0, 1) {
+      context = new TaskContextImpl(0, 0, 0, 0L, 0, 1,
         new TaskMemoryManager(SparkEnv.get.memoryManager, 0L),
         new Properties,
         SparkEnv.get.metricsSystem,
@@ -241,8 +263,8 @@ class TaskContextSuite extends SparkFunSuite with BeforeAndAfter with LocalSpark
     // Create a dummy task. We won't end up running this; we just want to collect
     // accumulator updates from it.
     val taskMetrics = TaskMetrics.registered
-    val task = new Task[Int](0, 0, 0) {
-      context = new TaskContextImpl(0, 0, 0, 0L, 0,
+    val task = new Task[Int](0, 0, 0, 1) {
+      context = new TaskContextImpl(0, 0, 0, 0L, 0, 1,
         new TaskMemoryManager(SparkEnv.get.memoryManager, 0L),
         new Properties,
         SparkEnv.get.metricsSystem,
