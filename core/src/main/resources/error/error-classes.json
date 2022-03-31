@@ -25,6 +25,10 @@
     "message" : [ "Casting %s to %s causes overflow. To return NULL instead, use 'try_cast'. If necessary set %s to false to bypass this error." ],
     "sqlState" : "22005"
   },
+  "ARITHMETIC_OVERFLOW": {
+    "message": ["%s.%s If necessary set %s to false (except for ANSI interval type) to bypass this error.%s"],
+    "sqlState": "22003"
+  },
   "CONCURRENT_QUERY" : {
     "message" : [ "Another instance of this query was just started by a concurrent session." ]
   },
