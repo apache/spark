@@ -17,34 +17,30 @@
 
 package org.apache.spark.sql.connector.expressions.filter;
 
-import java.util.Objects;
-
 import org.apache.spark.annotation.Evolving;
-import org.apache.spark.sql.connector.expressions.NamedReference;
+import org.apache.spark.sql.connector.expressions.Literal;
+import org.apache.spark.sql.types.DataType;
+import org.apache.spark.sql.types.DataTypes;
 
 /**
- * A filter that always evaluates to {@code false}.
+ * A predicate that always evaluates to {@code false}.
  *
  * @since 3.3.0
  */
 @Evolving
-public final class AlwaysFalse extends Filter {
+public final class AlwaysFalse extends Predicate implements Literal<Boolean> {
 
-  @Override
-  public boolean equals(Object o) {
-    if (this == o) return true;
-    if (o == null || getClass() != o.getClass()) return false;
-    return true;
+  public AlwaysFalse() {
+    super("ALWAYS_FALSE", new Predicate[]{});
   }
 
-  @Override
-  public int hashCode() {
-    return Objects.hash();
+  public Boolean value() {
+    return false;
   }
 
-  @Override
+  public DataType dataType() {
+    return DataTypes.BooleanType;
+  }
+
   public String toString() { return "FALSE"; }
-
-  @Override
-  public NamedReference[] references() { return EMPTY_REFERENCE; }
 }

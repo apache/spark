@@ -22,8 +22,8 @@ import java.time.LocalDateTime
 import org.scalatest.BeforeAndAfterEach
 
 import org.apache.spark.sql.catalyst.encoders.RowEncoder
-import org.apache.spark.sql.catalyst.expressions.AttributeReference
-import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Expand}
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, GreaterThan}
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Expand, Filter, LogicalPlan, Project}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
@@ -493,6 +493,58 @@ class DataFrameSessionWindowingSuite extends QueryTest with SharedSparkSession
         .select(session_window($"time", udf($"id")).as("session"), $"value")
       val schema2 = windowedProject2.queryExecution.optimizedPlan.schema
       validateWindowColumnInSchema(schema2, "session")
+    }
+  }
+
+  test("SPARK-38349: No need to filter events when gapDuration greater than 0") {
+    // negative gap duration
+    check("-5 seconds", true, "Need to filter events when gap duration less than 0")
+
+    // positive gap duration
+    check("5 seconds", false, "No need to filter events when gap duration greater than 0")
+
+    // invalid gap duration
+    check("x seconds", true, "Need to filter events when gap duration invalid")
+
+    // dynamic gap duration
+    check(when(col("time").equalTo("1"), "5 seconds")
+      .when(col("time").equalTo("2"), "10 seconds")
+      .otherwise("10 seconds"), true, "Need to filter events when gap duration dynamically")
+
+    def check(
+        gapDuration: Any,
+        expectTimeRange: Boolean,
+        assertHintMsg: String): Unit = {
+      val data = Seq(
+        ("2016-03-27 19:39:30", 1, "a")).toDF("time", "value", "id")
+      val df = if (gapDuration.isInstanceOf[String]) {
+        data.groupBy(session_window($"time", gapDuration.asInstanceOf[String]))
+      } else {
+        data.groupBy(session_window($"time", gapDuration.asInstanceOf[Column]))
+      }
+      val aggregate = df.agg(count("*").as("counts"))
+        .select($"session_window.start".cast("string"), $"session_window.end".cast("string"),
+          $"counts")
+
+      checkFilterCondition(aggregate.queryExecution.logical, expectTimeRange, assertHintMsg)
+    }
+
+    def checkFilterCondition(
+        logicalPlan: LogicalPlan,
+        expectTimeRange: Boolean,
+        assertHintMsg: String): Unit = {
+      val filter = logicalPlan.find { plan =>
+        plan.isInstanceOf[Filter] && plan.children.head.isInstanceOf[Project]
+      }
+      assert(filter.isDefined)
+      val exist = filter.get.expressions.flatMap { expr =>
+        expr.collect { case gt: GreaterThan => gt }
+      }
+      if (expectTimeRange) {
+        assert(exist.nonEmpty, assertHintMsg)
+      } else {
+        assert(exist.isEmpty, assertHintMsg)
+      }
     }
   }
 }
