@@ -141,9 +141,9 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper wit
                         // Closely follow `Average.evaluateExpression`
                         avg.evaluateExpression transform {
                           case a: Attribute if a.semanticEquals(avg.sum) =>
-                            addCastIfNeeded(sum, avg.sumDataType)
+                            addCastIfNeeded(sum, avg.sum.dataType)
                           case a: Attribute if a.semanticEquals(avg.count) =>
-                            addCastIfNeeded(count, LongType)
+                            addCastIfNeeded(count, avg.count.dataType)
                         }
                     }
                   }.asInstanceOf[Seq[NamedExpression]]
