@@ -68,9 +68,9 @@ object CommandUtils extends Logging {
 
         if (partitionSpec.nonEmpty) {
           AnalyzePartitionCommand(table.identifier, partitionSpec, false).run(sparkSession)
-        } else if (table.partitionColumnNames.nonEmpty) {
-          val partitionSpec = table.partitionColumnNames.map(_ -> None).toMap
-          AnalyzePartitionCommand(table.identifier, partitionSpec, false).run(sparkSession)
+        // } else if (table.partitionColumnNames.nonEmpty) {
+        //   val partitionSpec = table.partitionColumnNames.map(_ -> None).toMap
+        //   AnalyzePartitionCommand(table.identifier, partitionSpec, false).run(sparkSession)
         }
       }
     } else if (table.stats.nonEmpty) {
