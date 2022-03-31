@@ -374,11 +374,20 @@ class IndexesTest(ComparisonTestBase, TestUtils):
         )
 
     def test_dropna(self):
-        pidx = pd.Index([np.nan, 2, 4, 1, np.nan, 3])
+        pidx = pd.Index([np.nan, 2, 4, 1, None, 3])
         psidx = ps.from_pandas(pidx)
 
         self.assert_eq(psidx.dropna(), pidx.dropna())
         self.assert_eq((psidx + 1).dropna(), (pidx + 1).dropna())
+
+        self.assert_eq(psidx.dropna(how="any"), pidx.dropna(how="any"))
+        self.assert_eq(psidx.dropna(how="all"), pidx.dropna(how="all"))
+
+        pmidx = pd.MultiIndex.from_tuples([(np.nan, 1.0), (2.0, 2.0), (np.nan, None), (3.0, np.nan)])
+        psmidx = ps.from_pandas(pmidx)
+        self.assert_eq(psmidx.dropna(), pmidx.dropna())
+        self.assert_eq(psmidx.dropna(how="any"), pmidx.dropna(how="any"))
+        self.assert_eq(psmidx.dropna(how="all"), pmidx.dropna(how="all"))
 
     def test_index_symmetric_difference(self):
         pidx1 = pd.Index([1, 2, 3, 4])
