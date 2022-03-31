@@ -415,9 +415,9 @@ class ComplexTypesSuite extends PlanTest with ExpressionEvalHelper {
       testRelation
         .select(
           namedStruct("col1", $"b", "col2", $"c").as("s1"), $"a", $"b")
-        .select('s1 getField "col2" as Symbol("s1Col2"),
+        .select($"s1" getField "col2" as Symbol("s1Col2"),
           namedStruct("col1", $"a", "col2", $"b").as("s2"))
-        .select($"s1Col2", 's2 getField "col2" as Symbol("s2Col2"))
+        .select($"s1Col2", $"s2" getField "col2" as Symbol("s2Col2"))
     val correctAnswer =
       testRelation
         .select($"c" as Symbol("s1Col2"), $"b" as Symbol("s2Col2"))

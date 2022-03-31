@@ -50,10 +50,10 @@ class ShowCreateTableSuite extends v1.ShowCreateTableSuiteBase with CommandSuite
       )
       val expected = s"CREATE TABLE $fullName ( c1 INT COMMENT 'bla', c2 STRING)" +
         " ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'" +
-        " WITH SERDEPROPERTIES ( 'serialization.format' = $"1"')" +
+        " WITH SERDEPROPERTIES ( 'serialization.format' = '1')" +
         " STORED AS INPUTFORMAT 'org.apache.hadoop.mapred.TextInputFormat'" +
         " OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat'" +
-        " TBLPROPERTIES ( 'prop1' = $"value1"', 'prop2' = $"value2"',"
+        " TBLPROPERTIES ( 'prop1' = 'value1', 'prop2' = 'value2',"
       assert(getShowCreateDDL(t, true).mkString(" ") == expected)
     }
   }
@@ -75,12 +75,12 @@ class ShowCreateTableSuite extends v1.ShowCreateTableSuiteBase with CommandSuite
         )
         val expected = s"CREATE EXTERNAL TABLE $fullName ( c1 INT COMMENT 'bla', c2 STRING)" +
           s" ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'" +
-          s" WITH SERDEPROPERTIES ( 'serialization.format' = $"1"')" +
+          s" WITH SERDEPROPERTIES ( 'serialization.format' = '1')" +
           s" STORED AS INPUTFORMAT 'org.apache.hadoop.mapred.TextInputFormat'" +
           s" OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat'" +
           s" LOCATION" +
           s" '${escapeSingleQuotedString(CatalogUtils.URIToString(dir.toURI)).dropRight(1)}'" +
-          s" TBLPROPERTIES ( 'prop1' = $"value1"', 'prop2' = $"value2"',"
+          s" TBLPROPERTIES ( 'prop1' = 'value1', 'prop2' = 'value2',"
         assert(getShowCreateDDL(t, true).mkString(" ") == expected)
       }
     }
@@ -103,7 +103,7 @@ class ShowCreateTableSuite extends v1.ShowCreateTableSuiteBase with CommandSuite
       val expected = s"CREATE TABLE $fullName ( c1 INT COMMENT 'bla', c2 STRING)" +
         " COMMENT 'bla' PARTITIONED BY (p1 BIGINT COMMENT 'bla', p2 STRING)" +
         " ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'" +
-        " WITH SERDEPROPERTIES ( 'serialization.format' = $"1"')" +
+        " WITH SERDEPROPERTIES ( 'serialization.format' = '1')" +
         " STORED AS INPUTFORMAT 'org.apache.hadoop.mapred.TextInputFormat'" +
         " OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat'" +
         " TBLPROPERTIES ("
@@ -150,7 +150,7 @@ class ShowCreateTableSuite extends v1.ShowCreateTableSuiteBase with CommandSuite
       )
       val expected = s"CREATE TABLE $fullName ( c1 INT COMMENT 'bla', c2 STRING)" +
         " ROW FORMAT SERDE 'org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe'" +
-        " WITH SERDEPROPERTIES ( 'serialization.format' = $"1"')" +
+        " WITH SERDEPROPERTIES ( 'serialization.format' = '1')" +
         " STORED AS INPUTFORMAT 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat'" +
         " OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat'" +
         " TBLPROPERTIES ("
@@ -179,7 +179,7 @@ class ShowCreateTableSuite extends v1.ShowCreateTableSuiteBase with CommandSuite
         " ROW FORMAT SERDE 'org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe'" +
         " WITH SERDEPROPERTIES (" +
         " 'mapkey.delim' = ','," +
-        " 'serialization.format' = $"1"'," +
+        " 'serialization.format' = '1'," +
         " 'field.delim' = ',')" +
         " STORED AS INPUTFORMAT 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat'" +
         " OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat'" +
@@ -200,7 +200,7 @@ class ShowCreateTableSuite extends v1.ShowCreateTableSuiteBase with CommandSuite
       val expected = s"CREATE TABLE $fullName ( a INT, b STRING)" +
         " CLUSTERED BY (a) SORTED BY (b ASC) INTO 2 BUCKETS" +
         " ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'" +
-        " WITH SERDEPROPERTIES ( 'serialization.format' = $"1"')" +
+        " WITH SERDEPROPERTIES ( 'serialization.format' = '1')" +
         " STORED AS INPUTFORMAT 'org.apache.hadoop.mapred.TextInputFormat'" +
         " OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat'" +
         " TBLPROPERTIES ("
@@ -277,8 +277,8 @@ class ShowCreateTableSuite extends v1.ShowCreateTableSuiteBase with CommandSuite
            |  c2 STRING
            |)
            |TBLPROPERTIES (
-           |  'prop1' = $"value1"',
-           |  'prop2' = $"value2"'
+           |  'prop1' = 'value1',
+           |  'prop2' = 'value2'
            |)
            |STORED AS orc
          """.stripMargin
@@ -299,8 +299,8 @@ class ShowCreateTableSuite extends v1.ShowCreateTableSuiteBase with CommandSuite
              |)
              |LOCATION '${dir.toURI}'
              |TBLPROPERTIES (
-             |  'prop1' = $"value1"',
-             |  'prop2' = $"value2"'
+             |  'prop1' = 'value1',
+             |  'prop2' = 'value2'
              |)
              |STORED AS orc
            """.stripMargin
@@ -413,9 +413,9 @@ class ShowCreateTableSuite extends v1.ShowCreateTableSuiteBase with CommandSuite
            |  c2 STRING
            |)
            |TBLPROPERTIES (
-           |  'transactional' = $"true"',
-           |  'prop1' = $"value1"',
-           |  'prop2' = $"value2"'
+           |  'transactional' = 'true',
+           |  'prop1' = 'value1',
+           |  'prop2' = 'value2'
            |)
            |CLUSTERED BY (c1) INTO 10 BUCKETS
            |STORED AS ORC

@@ -42,7 +42,7 @@ class ReplaceNullWithFalseInPredicateSuite extends PlanTest {
   }
 
   private val testRelation =
-    LocalRelation($"i".int, $"b".boolean, $"a".array(IntegerType), $"m".map(IntegerType, IntegerType))
+    LocalRelation($"i".int, $"b".boolean, $"a".array(IntegerType), Symbol("m").map(IntegerType, IntegerType))
   private val anotherTestRelation = LocalRelation($"d".int)
 
   test("replace null inside filter and join conditions") {

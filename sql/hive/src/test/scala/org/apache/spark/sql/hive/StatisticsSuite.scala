@@ -823,7 +823,7 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
       val catalogTable1 = getCatalogTable(table)
       val hiveSize1 = BigInt(catalogTable1.ignoredProperties(StatsSetupConst.TOTAL_SIZE))
 
-      sql(s"ALTER TABLE $table SET TBLPROPERTIES ('prop1' = $"a"')")
+      sql(s"ALTER TABLE $table SET TBLPROPERTIES ('prop1' = 'a')")
 
       sql(s"INSERT INTO TABLE $table SELECT 'c', 'd'")
       val catalogTable2 = getCatalogTable(table)
@@ -860,7 +860,7 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
 
   test("alter table SET TBLPROPERTIES after analyze table") {
     testAlterTableProperties("set_prop_table",
-      "ALTER TABLE set_prop_table SET TBLPROPERTIES ('foo' = $"a"')")
+      "ALTER TABLE set_prop_table SET TBLPROPERTIES ('foo' = 'a')")
   }
 
   test("alter table UNSET TBLPROPERTIES after analyze table") {

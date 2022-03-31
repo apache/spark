@@ -135,7 +135,7 @@ class HiveTableScanSuite extends HiveComparisonTest with SQLTestUtils with TestH
             // qualified partition; Otherwise, it return all the partitions.
             val expectedNumPartitions = if (hivePruning == "true") 1 else 2
             checkNumScannedPartitions(
-              stmt = s"SELECT id, p2 FROM $table WHERE p2 <= $"b"'", expectedNumPartitions)
+              stmt = s"SELECT id, p2 FROM $table WHERE p2 <= 'b'", expectedNumPartitions)
           }
         }
 

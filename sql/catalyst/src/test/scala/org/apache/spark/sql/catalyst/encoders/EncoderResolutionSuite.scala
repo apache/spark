@@ -207,7 +207,7 @@ class EncoderResolutionSuite extends PlanTest {
   test("SPARK-28497: complex type is not compatible with string encoder schema") {
     val encoder = ExpressionEncoder[String]
 
-    Seq($"a".struct($"x".long), $"a".array(StringType), $"a".map(StringType, StringType)).foreach { attr =>
+    Seq($"a".struct($"x".long), $"a".array(StringType), Symbol("a").map(StringType, StringType)).foreach { attr =>
       val attrs = Seq(attr)
       assert(intercept[AnalysisException](encoder.resolveAndBind(attrs)).message ==
         s"""

@@ -47,7 +47,7 @@ class NestedColumnAliasingSuite extends SchemaPruningTest {
     $"name".struct(name),
     $"address".string,
     $"friends".array(name),
-    $"relatives".map(StringType, name),
+    Symbol("relatives").map(StringType, name),
     $"employer".struct(employer))
 
   test("Pushing a single nested field projection") {
@@ -713,7 +713,7 @@ class NestedColumnAliasingSuite extends SchemaPruningTest {
 
   test("SPARK-35636: do not push lambda key out of lambda function") {
     val rel = LocalRelation(
-      $"kvs".map(StringType, new StructType().add("v1", IntegerType)), $"keys".array(StringType))
+      Symbol("kvs").map(StringType, new StructType().add("v1", IntegerType)), $"keys".array(StringType))
     val key = UnresolvedNamedLambdaVariable("key" :: Nil)
     val lambda = LambdaFunction($"kvs".getItem(key).getField("v1"), key :: Nil)
     val query = rel
@@ -728,7 +728,7 @@ class NestedColumnAliasingSuite extends SchemaPruningTest {
 
   test("SPARK-35636: do not push down extract value in higher order " +
     "function that references both sides of a join") {
-    val left = LocalRelation($"kvs".map(StringType, new StructType().add("v1", IntegerType)))
+    val left = LocalRelation(Symbol("kvs").map(StringType, new StructType().add("v1", IntegerType)))
     val right = LocalRelation($"keys".array(StringType))
     val key = UnresolvedNamedLambdaVariable("key" :: Nil)
     val lambda = LambdaFunction($"kvs".getItem(key).getField("v1"), key :: Nil)

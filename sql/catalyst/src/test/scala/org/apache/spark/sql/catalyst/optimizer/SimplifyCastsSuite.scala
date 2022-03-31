@@ -49,7 +49,7 @@ class SimplifyCastsSuite extends PlanTest {
   }
 
   test("non-nullable value map to nullable value map cast") {
-    val input = LocalRelation($"m".map(MapType(StringType, StringType, false)))
+    val input = LocalRelation(Symbol("m").map(MapType(StringType, StringType, false)))
     val plan = input.select($"m".cast(MapType(StringType, StringType, true))
       .as("casted")).analyze
     val optimized = Optimize.execute(plan)
@@ -58,7 +58,7 @@ class SimplifyCastsSuite extends PlanTest {
   }
 
   test("nullable value map to non-nullable value map cast") {
-    val input = LocalRelation($"m".map(MapType(StringType, StringType, true)))
+    val input = LocalRelation(Symbol("m").map(MapType(StringType, StringType, true)))
     val attr = input.output.head
     val plan = input.select(attr.cast(MapType(StringType, StringType, false))
       .as("casted"))

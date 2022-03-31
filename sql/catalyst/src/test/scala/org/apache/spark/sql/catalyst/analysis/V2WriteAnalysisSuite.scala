@@ -720,11 +720,11 @@ abstract class V2WriteAnalysisSuiteBase extends AnalysisTest {
   test("SPARK-36498: reorder inner fields in map of struct with byName mode") {
     val table = TestRelation(Seq(
       $"a".int,
-      $"m".map(
+      Symbol("m").map(
         new StructType().add("x", "int").add("y", "int"),
         new StructType().add("x", "int").add("y", "int"))))
     val query = TestRelation(Seq(
-      $"m".map(
+      Symbol("m").map(
         new StructType().add("y", "int").add("x", "byte"),
         new StructType().add("y", "int").add("x", "byte")),
       $"a".int))

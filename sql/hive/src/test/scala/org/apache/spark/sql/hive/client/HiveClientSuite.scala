@@ -870,7 +870,7 @@ class HiveClientSuite(version: String, allVersions: Seq[String])
 
         // Adds generated Avro data as a new partition to the testing table.
         versionSpark.sql(
-          s"ALTER TABLE $tableName ADD PARTITION (ds = $"foo"') LOCATION '$path/$tempTableName'")
+          s"ALTER TABLE $tableName ADD PARTITION (ds = 'foo') LOCATION '$path/$tempTableName'")
 
         // The following query fails before SPARK-13709 is fixed. This is because when reading
         // data from table partitions, Avro deserializer needs the Avro schema, which is defined
