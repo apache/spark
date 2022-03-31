@@ -27,8 +27,14 @@ import org.apache.spark.internal.Logging
 
 private[kafka010] class CachedKafkaProducer(
     val cacheKey: Seq[(String, Object)],
-    val producer: KafkaProducer[Array[Byte], Array[Byte]]) extends Logging {
-  val id: String = ju.UUID.randomUUID().toString
+    val producer: KafkaProducer[Array[Byte], Array[Byte]],
+    val id: String) extends Logging {
+
+  @deprecated("Please the constructor with 'id' parameter.", "3.0.0")
+  def this(
+    cacheKey: Seq[(String, Object)],
+    producer: KafkaProducer[Array[Byte], Array[Byte]]) =
+    this(cacheKey, producer, ju.UUID.randomUUID().toString)
 
   private[producer] def close(): Unit = {
     try {

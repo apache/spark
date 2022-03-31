@@ -89,4 +89,12 @@ package object kafka010 {   // scalastyle:ignore
       .version("3.0.0")
       .timeConf(TimeUnit.MILLISECONDS)
       .createWithDefaultString("1m")
+
+  private[kafka010] val CLIENT_ID_PREFIX =
+    ConfigBuilder("spark.kafka.clientIdPrefix")
+      .doc("The custom prefix for generated client ID.")
+      .version("3.3.0")
+      .stringConf
+      .createWithDefault("spark-kafka-")
+
 }

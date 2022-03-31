@@ -29,7 +29,7 @@ import org.apache.kafka.clients.producer.KafkaProducer
 import org.apache.spark.{SparkConf, SparkEnv}
 import org.apache.spark.internal.Logging
 import org.apache.spark.kafka010.{KafkaConfigUpdater, KafkaRedactionUtil}
-import org.apache.spark.sql.kafka010.{PRODUCER_CACHE_EVICTOR_THREAD_RUN_INTERVAL, PRODUCER_CACHE_TIMEOUT}
+import org.apache.spark.sql.kafka010.{CLIENT_ID_PREFIX, PRODUCER_CACHE_EVICTOR_THREAD_RUN_INTERVAL, PRODUCER_CACHE_TIMEOUT}
 import org.apache.spark.util.{Clock, ShutdownHookManager, SystemClock, ThreadUtils, Utils}
 
 /**
@@ -80,8 +80,12 @@ private[producer] class InternalKafkaProducerPool(
     val paramsSeq: Seq[(String, Object)] = paramsToSeq(updatedKafkaProducerConfiguration)
     synchronized {
       val entry = cache.getOrElseUpdate(paramsSeq, {
-        val producer = createKafkaProducer(paramsSeq)
-        val cachedProducer = new CachedKafkaProducer(paramsSeq, producer)
+        val clientIdPrefix = conf.get(CLIENT_ID_PREFIX)
+        val id = ju.UUID.randomUUID().toString
+        val clientId = clientIdPrefix + id
+        val producer = createKafkaProducer(("client.id" -> clientId) +: paramsSeq)
+        val cachedProducer = new CachedKafkaProducer(paramsSeq, producer, id)
+
         new CachedProducerEntry(cachedProducer,
           TimeUnit.MILLISECONDS.toNanos(cacheExpireTimeoutMillis))
       })
