@@ -38,20 +38,28 @@ object ResolveDefaultColumns {
   val CURRENT_DEFAULT_COLUMN_METADATA_KEY = "CURRENT_DEFAULT"
   // This column metadata represents the default value for all existing rows in a table after a
   // column has been added. This value is determined at time of CREATE TABLE, REPLACE TABLE, or
-  // ALTER TABLE ADD COLUMN, and never changes thereafter. The intent is for this "exist default"
-  // to be used by any scan when the columns in the source row are missing data. For example,
-  // consider the following sequence:
+  // ALTER TABLE ADD COLUMN, and never changes thereafter. The intent is for this "exist default" to
+  // be used by any scan when the columns in the source row are missing data. For example, consider
+  // the following sequence:
   // CREATE TABLE t (c1 INT)
   // INSERT INTO t VALUES (42)
   // ALTER TABLE t ADD COLUMNS (c2 INT DEFAULT 43)
   // SELECT c1, c2 FROM t
   // In this case, the final query is expected to return 42, 43. The ALTER TABLE ADD COLUMNS command
-  // executed after there was already data in the table, so in order to enforce this invariant,
-  // we need either (1) an expensive backfill of value 43 at column c2 into all previous rows, or
-  // (2) indicate to each data source that selected columns missing data are to generate the
+  // executed after there was already data in the table, so in order to enforce this invariant, we
+  // need either (1) an expensive backfill of value 43 at column c2 into all previous rows, or (2)
+  // indicate to each data source that selected columns missing data are to generate the
   // corresponding DEFAULT value instead. We choose option (2) for efficiency, and represent this
   // value as the text representation of a folded constant in the "EXISTS_DEFAULT" column metadata.
   val EXISTS_DEFAULT_COLUMN_METADATA_KEY = "EXISTS_DEFAULT"
+  // Name of attributes representing explicit references to the value stored in the above
+  // CURRENT_DEFAULT_COLUMN_METADATA.
+  val CURRENT_DEFAULT_COLUMN_NAME = "DEFAULT"
+  // Return a more descriptive error message if the user tries to nest the DEFAULT column reference
+  // inside some other expression, such as DEFAULT + 1 (this is not allowed).
+  val DEFAULTS_IN_EXPRESSIONS_ERROR = "Failed to execute INSERT INTO command because the " +
+    "VALUES list contains a DEFAULT column reference as part of another expression; this is " +
+    "not allowed"
 
   /**
    * Finds "current default" expressions in CREATE/REPLACE TABLE columns and constant-folds them.
@@ -75,8 +83,8 @@ object ResolveDefaultColumns {
    * data source then takes responsibility to provide the constant-folded value in the
    * EXISTS_DEFAULT metadata for such columns where the value is not present in storage.
    *
-   * @param analyzer used for analyzing the result of parsing the column expression stored as text.
-   * @param tableSchema represents the names and types of the columns of the statement to process.
+   * @param analyzer      used for analyzing the result of parsing the expression stored as text.
+   * @param tableSchema   represents the names and types of the columns of the statement to process.
    * @param statementType name of the statement being processed, such as INSERT; useful for errors.
    * @return a copy of `tableSchema` with field metadata updated with the constant-folded values.
    */
@@ -84,26 +92,28 @@ object ResolveDefaultColumns {
       analyzer: Analyzer,
       tableSchema: StructType,
       statementType: String): StructType = {
-    if (!SQLConf.get.enableDefaultColumns) {
-      return tableSchema
-    }
-    val newFields: Seq[StructField] = tableSchema.fields.map { field =>
-      if (field.metadata.contains(CURRENT_DEFAULT_COLUMN_METADATA_KEY)) {
-        val analyzed: Expression = analyze(analyzer, field, statementType)
-        val newMetadata: Metadata = new MetadataBuilder().withMetadata(field.metadata)
-          .putString(EXISTS_DEFAULT_COLUMN_METADATA_KEY, analyzed.sql).build()
-        field.copy(metadata = newMetadata)
-      } else {
-        field
+    if (SQLConf.get.enableDefaultColumns) {
+      val newFields: Seq[StructField] = tableSchema.fields.map { field =>
+        if (field.metadata.contains(CURRENT_DEFAULT_COLUMN_METADATA_KEY)) {
+          val analyzed: Expression = analyze(analyzer, field, statementType)
+          val newMetadata: Metadata = new MetadataBuilder().withMetadata(field.metadata)
+            .putString(EXISTS_DEFAULT_COLUMN_METADATA_KEY, analyzed.sql).build()
+          field.copy(metadata = newMetadata)
+        } else {
+          field
+        }
       }
+      StructType(newFields)
+    } else {
+      tableSchema
     }
-    StructType(newFields)
   }
 
   /**
    * Parses and analyzes the DEFAULT column text in `field`, returning an error upon failure.
    *
-   * @param field represents the DEFAULT column value whose "default" metadata to parse and analyze.
+   * @param field         represents the DEFAULT column value whose "default" metadata to parse
+   *                      and analyze.
    * @param statementType which type of statement we are running, such as INSERT; useful for errors.
    * @return Result of the analysis and constant-folding operation.
    */

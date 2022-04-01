@@ -1195,10 +1195,13 @@ class CodegenContext extends Logging {
         }
         (localSubExprEliminationExprs, exprCodesNeedEvaluate)
       } else {
+        val errMsg = "Failed to split subexpression code into small functions because " +
+          "the parameter length of at least one split function went over the JVM limit: " +
+          MAX_JVM_METHOD_PARAMS_LENGTH
         if (Utils.isTesting) {
-          throw QueryExecutionErrors.failedSplitSubExpressionError(MAX_JVM_METHOD_PARAMS_LENGTH)
+          throw new IllegalStateException(errMsg)
         } else {
-          logInfo(QueryExecutionErrors.failedSplitSubExpressionMsg(MAX_JVM_METHOD_PARAMS_LENGTH))
+          logInfo(errMsg)
           (localSubExprEliminationExprsForNonSplit, Seq.empty)
         }
       }

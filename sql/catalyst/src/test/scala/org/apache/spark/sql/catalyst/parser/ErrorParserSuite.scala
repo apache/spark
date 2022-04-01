@@ -255,4 +255,17 @@ class ErrorParserSuite extends AnalysisTest {
         |SELECT b
       """.stripMargin, 2, 9, 10, msg + " test-table")
   }
+
+  test("datatype not supported") {
+    // general bad types
+    intercept("SELECT cast(1 as badtype)", 1, 17, 17, "DataType badtype is not supported.")
+
+    // special handling on char and varchar
+    intercept("SELECT cast('a' as CHAR)", "PARSE_CHAR_MISSING_LENGTH", 1, 19, 19,
+      "DataType char requires a length parameter")
+    intercept("SELECT cast('a' as Varchar)", "PARSE_CHAR_MISSING_LENGTH", 1, 19, 19,
+      "DataType varchar requires a length parameter")
+    intercept("SELECT cast('a' as Character)", "PARSE_CHAR_MISSING_LENGTH", 1, 19, 19,
+      "DataType character requires a length parameter")
+  }
 }

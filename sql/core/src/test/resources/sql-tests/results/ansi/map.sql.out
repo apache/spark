@@ -9,6 +9,9 @@ struct<>
 -- !query output
 org.apache.spark.SparkNoSuchElementException
 Key 5 does not exist. To return NULL instead, use 'try_element_at'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
+== SQL(line 1, position 7) ==
+select element_at(map(1, 'a', 2, 'b'), 5)
+       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 
 -- !query
@@ -18,6 +21,9 @@ struct<>
 -- !query output
 org.apache.spark.SparkNoSuchElementException
 Key 5 does not exist. If necessary set spark.sql.ansi.strictIndexOperator to false to bypass this error.
+== SQL(line 1, position 7) ==
+select map(1, 'a', 2, 'b')[5]
+       ^^^^^^^^^^^^^^^^^^^^^^
 
 
 -- !query
@@ -109,3 +115,6 @@ struct<>
 -- !query output
 org.apache.spark.SparkNoSuchElementException
 Key 5 does not exist. To return NULL instead, use 'try_element_at'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
+== SQL(line 1, position 7) ==
+select element_at(map(1, 'a', 2, 'b'), 5)
+       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^

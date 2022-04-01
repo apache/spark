@@ -56,6 +56,9 @@ object MimaExcludes {
     // [SPARK-38432][SQL] Reactor framework so as JDBC dialect could compile filter by self way
     ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.sql.sources.Filter.toV2"),
 
+    // [SPARK-37831][CORE] Add task partition id in TaskInfo and Task Metrics
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.status.api.v1.TaskData.this"),
+
     // [SPARK-37600][BUILD] Upgrade to Hadoop 3.3.2
     ProblemFilters.exclude[MissingClassProblem]("org.apache.hadoop.shaded.net.jpountz.lz4.LZ4Compressor"),
     ProblemFilters.exclude[MissingClassProblem]("org.apache.hadoop.shaded.net.jpountz.lz4.LZ4Factory"),
@@ -93,6 +96,9 @@ object MimaExcludes {
 
     // [SPARK-36173][CORE] Support getting CPU number in TaskContext
     ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.TaskContext.cpus"),
+
+    // [SPARK-38679][CORE] Expose the number of partitions in a stage to TaskContext
+    ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.TaskContext.numPartitions"),
 
     // [SPARK-35896] Include more granular metrics for stateful operators in StreamingQueryProgress
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.streaming.StateOperatorProgress.this"),

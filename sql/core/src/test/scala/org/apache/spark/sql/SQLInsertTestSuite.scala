@@ -171,25 +171,36 @@ trait SQLInsertTestSuite extends QueryTest with SQLTestUtils {
   }
 
   test("insert with column list - mismatched column list size") {
-    val msg = "Cannot write to table due to mismatched user specified column size"
-    withTable("t1") {
-      val cols = Seq("c1", "c2", "c3")
-      createTable("t1", cols, Seq("int", "long", "string"))
-      val e1 = intercept[AnalysisException](sql(s"INSERT INTO t1 (c1, c2) values(1, 2, 3)"))
-      assert(e1.getMessage.contains(msg))
-      val e2 = intercept[AnalysisException](sql(s"INSERT INTO t1 (c1, c2, c3) values(1, 2)"))
-      assert(e2.getMessage.contains(msg))
+    val msgs = Seq("Cannot write to table due to mismatched user specified column size",
+      "expected 3 columns but found")
+    def test: Unit = {
+      withTable("t1") {
+        val cols = Seq("c1", "c2", "c3")
+        createTable("t1", cols, Seq("int", "long", "string"))
+        val e1 = intercept[AnalysisException](sql(s"INSERT INTO t1 (c1, c2) values(1, 2, 3)"))
+        assert(e1.getMessage.contains(msgs(0)) || e1.getMessage.contains(msgs(1)))
+        val e2 = intercept[AnalysisException](sql(s"INSERT INTO t1 (c1, c2, c3) values(1, 2)"))
+        assert(e2.getMessage.contains(msgs(0)) || e2.getMessage.contains(msgs(1)))
+      }
+    }
+    withSQLConf(SQLConf.ENABLE_DEFAULT_COLUMNS.key -> "false") {
+      test
+    }
+    withSQLConf(SQLConf.ENABLE_DEFAULT_COLUMNS.key -> "true") {
+      test
     }
   }
 
   test("insert with column list - mismatched target table out size after rewritten query") {
-    val v2Msg = "Cannot write to 'testcat.t1', not enough data columns:"
+    val v2Msg = "expected 2 columns but found"
     val cols = Seq("c1", "c2", "c3", "c4")
 
     withTable("t1") {
       createTable("t1", cols, Seq.fill(4)("int"))
       val e1 = intercept[AnalysisException](sql(s"INSERT INTO t1 (c1) values(1)"))
       assert(e1.getMessage.contains("target table has 4 column(s) but the inserted data has 1") ||
+        e1.getMessage.contains("expected 4 columns but found 1") ||
+        e1.getMessage.contains("not enough data columns") ||
         e1.getMessage.contains(v2Msg))
     }
 
@@ -199,6 +210,7 @@ trait SQLInsertTestSuite extends QueryTest with SQLTestUtils {
         sql(s"INSERT INTO t1 partition(c3=3, c4=4) (c1) values(1)")
       }
       assert(e1.getMessage.contains("target table has 4 column(s) but the inserted data has 3") ||
+        e1.getMessage.contains("not enough data columns") ||
         e1.getMessage.contains(v2Msg))
     }
   }

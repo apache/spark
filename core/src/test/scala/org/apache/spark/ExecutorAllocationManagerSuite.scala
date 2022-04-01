@@ -1756,12 +1756,12 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
   }
 
   private def onExecutorBusy(manager: ExecutorAllocationManager, id: String): Unit = {
-    val info = new TaskInfo(1, 1, 1, 0, id, "foo.example.com", TaskLocality.PROCESS_LOCAL, false)
+    val info = new TaskInfo(1, 1, 1, 1, 0, id, "foo.example.com", TaskLocality.PROCESS_LOCAL, false)
     post(SparkListenerTaskStart(1, 1, info))
   }
 
   private def onExecutorIdle(manager: ExecutorAllocationManager, id: String): Unit = {
-    val info = new TaskInfo(1, 1, 1, 0, id, "foo.example.com", TaskLocality.PROCESS_LOCAL, false)
+    val info = new TaskInfo(1, 1, 1, 1, 0, id, "foo.example.com", TaskLocality.PROCESS_LOCAL, false)
     info.markFinished(TaskState.FINISHED, 1)
     post(SparkListenerTaskEnd(1, 1, "foo", Success, info, new ExecutorMetrics, null))
   }
@@ -1815,7 +1815,8 @@ private object ExecutorAllocationManagerSuite extends PrivateMethodTester {
       taskIndex: Int,
       executorId: String,
       speculative: Boolean = false): TaskInfo = {
-    new TaskInfo(taskId, taskIndex, 0, 0, executorId, "", TaskLocality.ANY, speculative)
+    new TaskInfo(taskId, taskIndex, 0, partitionId = taskIndex,
+      0, executorId, "", TaskLocality.ANY, speculative)
   }
 
   /* ------------------------------------------------------- *
