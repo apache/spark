@@ -24,6 +24,7 @@ import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 import org.apache.commons.lang3.builder.ToStringBuilder;
@@ -118,11 +119,18 @@ public class ExternalShuffleBlockResolver {
             return new ShuffleIndexInformation(filePath);
           }
         };
-    shuffleIndexCache = CacheBuilder.newBuilder()
-      .maximumWeight(JavaUtils.byteStringAsBytes(indexCacheSize))
-      .weigher((Weigher<String, ShuffleIndexInformation>)
-        (filePath, indexInfo) -> indexInfo.getRetainedMemorySize())
-      .build(indexCacheLoader);
+    CacheBuilder cacheBuilder = CacheBuilder.newBuilder()
+        .maximumWeight(JavaUtils.byteStringAsBytes(indexCacheSize))
+        .weigher((Weigher<String, ShuffleIndexInformation>)
+            (filePath, indexInfo) -> indexInfo.getRetainedMemorySize());
+    int expireTimeSeconds = conf.shuffleIndexCacheExpireTimeSeconds();
+    if (expireTimeSeconds > 0) {
+      shuffleIndexCache = cacheBuilder.expireAfterAccess(expireTimeSeconds, TimeUnit.SECONDS)
+          .build(indexCacheLoader);
+    } else {
+      shuffleIndexCache = cacheBuilder.build(indexCacheLoader);
+    }
+
     db = LevelDBProvider.initLevelDB(this.registeredExecutorFile, CURRENT_VERSION, mapper);
     if (db != null) {
       executors = reloadRegisteredExecutors(db);

@@ -45,6 +45,7 @@ public class TransportConf {
   private final String SPARK_NETWORK_IO_LAZYFD_KEY;
   private final String SPARK_NETWORK_VERBOSE_METRICS;
   private final String SPARK_NETWORK_IO_ENABLETCPKEEPALIVE_KEY;
+  private final String SPARK_SHUFFLEINDEXCACHE_EXPIRE_TIME_KEY;
 
   private final ConfigProvider conf;
 
@@ -69,6 +70,7 @@ public class TransportConf {
     SPARK_NETWORK_IO_LAZYFD_KEY = getConfKey("io.lazyFD");
     SPARK_NETWORK_VERBOSE_METRICS = getConfKey("io.enableVerboseMetrics");
     SPARK_NETWORK_IO_ENABLETCPKEEPALIVE_KEY = getConfKey("io.enableTcpKeepAlive");
+    SPARK_SHUFFLEINDEXCACHE_EXPIRE_TIME_KEY = getConfKey("indexCache.expireTimeSeconds");
   }
 
   public int getInt(String name, int defaultValue) {
@@ -331,6 +333,10 @@ public class TransportConf {
    */
   public boolean useOldFetchProtocol() {
     return conf.getBoolean("spark.shuffle.useOldFetchProtocol", false);
+  }
+
+  public int shuffleIndexCacheExpireTimeSeconds() {
+    return (int) JavaUtils.timeStringAsSec(conf.get(SPARK_SHUFFLEINDEXCACHE_EXPIRE_TIME_KEY, "0s"));
   }
 
   /**
