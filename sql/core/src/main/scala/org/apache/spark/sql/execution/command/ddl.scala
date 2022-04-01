@@ -577,7 +577,7 @@ case class AlterTableDropPartitionCommand(
       retainData = retainData)
 
     sparkSession.catalog.refreshTable(table.identifier.quotedString)
-    CommandUtils.updateTableStats(sparkSession, table)
+    CommandUtils.updateTableStats(sparkSession, table, withAutoPartitionStats = false)
 
     Seq.empty[Row]
   }
