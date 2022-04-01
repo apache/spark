@@ -140,11 +140,11 @@ case class EnsureRequirements(
 
       // Check if 1) all children are of `KeyGroupedPartitioning` and 2) they are all compatible
       // with each other. If both are true, skip shuffle.
-      val allCompatible = childrenIndexes.sliding(2).map {
-            case Seq(a, b) =>
-              checkKeyGroupedSpec(specs(a)) && checkKeyGroupedSpec(specs(b)) &&
-                  specs(a).isCompatibleWith(specs(b))
-          }.forall(_ == true)
+      val allCompatible = childrenIndexes.sliding(2).forall {
+        case Seq(a, b) =>
+          checkKeyGroupedSpec(specs(a)) && checkKeyGroupedSpec(specs(b)) &&
+            specs(a).isCompatibleWith(specs(b))
+      }
 
       children = children.zip(requiredChildDistributions).zipWithIndex.map {
         case ((child, _), idx) if allCompatible || !childrenIndexes.contains(idx) =>

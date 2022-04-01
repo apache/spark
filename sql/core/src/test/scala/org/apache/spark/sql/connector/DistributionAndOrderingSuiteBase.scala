@@ -30,7 +30,7 @@ import org.apache.spark.sql.connector.catalog.InMemoryCatalog
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.test.SharedSparkSession
 
-class DistributionAndOrderingSuiteBase
+abstract class DistributionAndOrderingSuiteBase
     extends QueryTest with SharedSparkSession with BeforeAndAfter with AdaptiveSparkPlanHelper {
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 

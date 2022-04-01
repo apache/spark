@@ -36,7 +36,7 @@ object DistributionAndOrderingUtils {
         case d: OrderedDistribution => toCatalystOrdering(d.ordering(), query)
         case d: ClusteredDistribution =>
           sequenceToOption(d.clustering.map(e => toCatalyst(e, query)))
-              .getOrElse(Seq.empty[Expression])
+            .getOrElse(Seq.empty[Expression])
         case _: UnspecifiedDistribution => Seq.empty[Expression]
       }
 

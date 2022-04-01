@@ -20,9 +20,8 @@ import java.util.Collections
 
 import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Ascending, SortOrder => V1SortOrder, TransformExpression}
-import org.apache.spark.sql.catalyst.plans.{physical => v1}
-import org.apache.spark.sql.catalyst.plans.physical.{ClusteredDistribution, KeyGroupedPartitioning}
+import org.apache.spark.sql.catalyst.expressions.{Ascending, SortOrder => catalystSortOrder, TransformExpression}
+import org.apache.spark.sql.catalyst.plans.physical
 import org.apache.spark.sql.connector.catalog.Identifier
 import org.apache.spark.sql.connector.catalog.InMemoryTableCatalog
 import org.apache.spark.sql.connector.catalog.functions._
@@ -92,17 +91,17 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase {
         s"(2, 'ccc', CAST('2020-01-01' AS timestamp))")
 
     var df = sql(s"SELECT count(*) FROM testcat.ns.$table GROUP BY ts")
-    val v1Distribution = v1.ClusteredDistribution(
+    val catalystDistribution = physical.ClusteredDistribution(
       Seq(TransformExpression(YearsFunction, Seq(attr("ts")))))
     val partitionValues = Seq(50, 51, 52).map(v => InternalRow.fromSeq(Seq(v)))
 
-    checkQueryPlan(df, v1Distribution,
-      KeyGroupedPartitioning(v1Distribution.clustering, partitionValues))
+    checkQueryPlan(df, catalystDistribution,
+      physical.KeyGroupedPartitioning(catalystDistribution.clustering, partitionValues))
 
     // multiple group keys should work too as long as partition keys are subset of them
     df = sql(s"SELECT count(*) FROM testcat.ns.$table GROUP BY id, ts")
-    checkQueryPlan(df, v1Distribution,
-      KeyGroupedPartitioning(v1Distribution.clustering, partitionValues))
+    checkQueryPlan(df, catalystDistribution,
+      physical.KeyGroupedPartitioning(catalystDistribution.clustering, partitionValues))
   }
 
   test("non-clustered distribution: fallback to super.partitioning") {
@@ -117,10 +116,10 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase {
         s"(2, 'ccc', CAST('2020-01-01' AS timestamp))")
 
     val df = sql(s"SELECT * FROM testcat.ns.$table")
-    val v1Ordering = Seq(V1SortOrder(attr("ts"), Ascending))
-    val v1Distribution = v1.OrderedDistribution(v1Ordering)
+    val catalystOrdering = Seq(catalystSortOrder(attr("ts"), Ascending))
+    val catalystDistribution = physical.OrderedDistribution(catalystOrdering)
 
-    checkQueryPlan(df, v1Distribution, v1.UnknownPartitioning(0))
+    checkQueryPlan(df, catalystDistribution, physical.UnknownPartitioning(0))
   }
 
   test("non-clustered distribution: no partition") {
@@ -129,10 +128,10 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase {
       Distributions.clustered(partitions.map(_.asInstanceOf[Expression])))
 
     val df = sql(s"SELECT * FROM testcat.ns.$table")
-    val distribution = v1.ClusteredDistribution(
+    val distribution = physical.ClusteredDistribution(
       Seq(TransformExpression(BucketFunction, Seq(attr("ts")), Some(32))))
 
-    checkQueryPlan(df, distribution, v1.UnknownPartitioning(0))
+    checkQueryPlan(df, distribution, physical.UnknownPartitioning(0))
   }
 
   test("non-clustered distribution: single partition") {
@@ -142,10 +141,10 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase {
     sql(s"INSERT INTO testcat.ns.$table VALUES (0, 'aaa', CAST('2020-01-01' AS timestamp))")
 
     val df = sql(s"SELECT * FROM testcat.ns.$table")
-    val distribution = v1.ClusteredDistribution(
+    val distribution = physical.ClusteredDistribution(
       Seq(TransformExpression(BucketFunction, Seq(attr("ts")), Some(32))))
 
-    checkQueryPlan(df, distribution, v1.SinglePartition)
+    checkQueryPlan(df, distribution, physical.SinglePartition)
   }
 
   test("non-clustered distribution: no V2 catalog") {
@@ -162,10 +161,10 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase {
         s"(2, 'ccc', CAST('2020-01-01' AS timestamp))")
 
     val df = sql(s"SELECT * FROM testcat2.ns.$table")
-    val distribution = v1.UnspecifiedDistribution
+    val distribution = physical.UnspecifiedDistribution
 
     try {
-      checkQueryPlan(df, distribution, v1.UnknownPartitioning(0))
+      checkQueryPlan(df, distribution, physical.UnknownPartitioning(0))
     } finally {
       spark.conf.unset("spark.sql.catalog.testcat2")
     }
@@ -183,9 +182,9 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase {
         s"(2, 'ccc', CAST('2020-01-01' AS timestamp))")
 
     val df = sql(s"SELECT * FROM testcat.ns.$table")
-    val distribution = v1.UnspecifiedDistribution
+    val distribution = physical.UnspecifiedDistribution
 
-    checkQueryPlan(df, distribution, v1.UnknownPartitioning(0))
+    checkQueryPlan(df, distribution, physical.UnknownPartitioning(0))
   }
 
   test("non-clustered distribution: V2 bucketing disabled") {
@@ -199,10 +198,10 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase {
           s"(2, 'ccc', CAST('2020-01-01' AS timestamp))")
 
       val df = sql(s"SELECT * FROM testcat.ns.$table")
-      val distribution = v1.ClusteredDistribution(
+      val distribution = physical.ClusteredDistribution(
         Seq(TransformExpression(BucketFunction, Seq(attr("ts")), Some(32))))
 
-      checkQueryPlan(df, distribution, v1.UnknownPartitioning(0))
+      checkQueryPlan(df, distribution, physical.UnknownPartitioning(0))
     }
   }
 
@@ -212,16 +211,17 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase {
    */
   private def checkQueryPlan(
       df: DataFrame,
-      distribution: v1.Distribution,
-      partitioning: v1.Partitioning): Unit = {
+      distribution: physical.Distribution,
+      partitioning: physical.Partitioning): Unit = {
     // check distribution & ordering are correctly populated in logical plan
     val relation = df.queryExecution.optimizedPlan.collect {
       case r: DataSourceV2ScanRelation => r
     }.head
 
     resolveDistribution(distribution, relation) match {
-      case ClusteredDistribution(clustering, _, _) =>
-        assert(relation.keyGroupedPartitioning.isDefined && relation.keyGroupedPartitioning.get == clustering)
+      case physical.ClusteredDistribution(clustering, _, _) =>
+        assert(relation.keyGroupedPartitioning.isDefined &&
+          relation.keyGroupedPartitioning.get == clustering)
       case _ =>
         assert(relation.keyGroupedPartitioning.isEmpty)
     }
@@ -285,11 +285,8 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase {
 
   private def collectShuffles(plan: SparkPlan): Seq[ShuffleExchangeExec] = {
     collect(plan) {
-      case s: SortMergeJoinExec => s
-    }.flatMap(smj =>
-      collect(smj) {
-        case s: ShuffleExchangeExec => s
-      })
+      case s: ShuffleExchangeExec => s
+    }
   }
 
   test("partitioned join: exact distribution (same number of buckets) from both sides") {

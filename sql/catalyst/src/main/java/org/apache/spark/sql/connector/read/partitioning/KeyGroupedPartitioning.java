@@ -22,30 +22,30 @@ import org.apache.spark.sql.connector.expressions.Expression;
 
 /**
  * Represents a partitioning where rows are split across partitions based on the
- * partition transform expressions returned by {@link KeyGroupedPartitioning#clustering}.
+ * partition transform expressions returned by {@link KeyGroupedPartitioning#keys}.
  * <p>
- * Note: Data source implementations should make sure that for a single partition, all of its
- * rows must be evaluated to the same partition value after being applied by
- * {@link KeyGroupedPartitioning#clustering} expressions. Different partitions can share the same
+ * Note: Data source implementations should make sure for a single partition, all of its rows
+ * must be evaluated to the same partition value after being applied by
+ * {@link KeyGroupedPartitioning#keys} expressions. Different partitions can share the same
  * partition value: Spark will group these into a single logical partition during planning phase.
  *
  * @since 3.3.0
  */
 @Evolving
 public class KeyGroupedPartitioning implements Partitioning {
-  private final Expression[] clustering;
+  private final Expression[] keys;
   private final int numPartitions;
 
-  public KeyGroupedPartitioning(Expression[] clustering, int numPartitions) {
-    this.clustering = clustering;
+  public KeyGroupedPartitioning(Expression[] keys, int numPartitions) {
+    this.keys = keys;
     this.numPartitions = numPartitions;
   }
 
   /**
-   * Returns the clustering expressions for this partitioning.
+   * Returns the partition transform expressions for this partitioning.
    */
-  public Expression[] clustering() {
-    return clustering;
+  public Expression[] keys() {
+    return keys;
   }
 
   @Override
