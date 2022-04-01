@@ -10295,8 +10295,10 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         # dtype: bool
         return first_series(DataFrame(internal))
 
-    # TODO: add axis, numeric_only, pct, na_option parameter
-    def rank(self, method: str = "average", ascending: bool = True) -> "DataFrame":
+    # TODO: add axis, pct, na_option parameter
+    def rank(
+        self, method: str = "average", ascending: bool = True, numeric_only: Optional[bool] = None
+    ) -> "DataFrame":
         """
         Compute numerical data ranks (1 through n) along axis. Equal values are
         assigned a rank that is the average of the ranks of those values.
@@ -10316,6 +10318,8 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             * dense: like 'min', but rank always increases by 1 between groups
         ascending : boolean, default True
             False for ranks by high (1) to low (N)
+        numeric_only : bool, optional
+            For DataFrame objects, rank only numeric columns if set to True.
 
         Returns
         -------
@@ -10323,7 +10327,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         Examples
         --------
-        >>> df = ps.DataFrame({'A': [1, 2, 2, 3], 'B': [4, 3, 2, 1]}, columns= ['A', 'B'])
+        >>> df = ps.DataFrame({'A': [1, 2, 2, 3], 'B': [4, 3, 2, 1]}, columns=['A', 'B'])
         >>> df
            A  B
         0  1  4
@@ -10364,8 +10368,32 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         1  2.0  3.0
         2  2.0  2.0
         3  3.0  1.0
+
+        If numeric_only is set to 'True', rank only numeric columns.
+
+        >>> df = ps.DataFrame({'A': [1, 2, 2, 3], 'B': ['a', 'b', 'd', 'c']}, columns= ['A', 'B'])
+        >>> df
+           A  B
+        0  1  a
+        1  2  b
+        2  2  d
+        3  3  c
+        >>> df.rank(numeric_only=True)
+             A
+        0  1.0
+        1  2.5
+        2  2.5
+        3  4.0
         """
-        return self._apply_series_op(
+        if numeric_only:
+            numeric_col_names = []
+            for label in self._internal.column_labels:
+                psser = self._psser_for(label)
+                if isinstance(psser.spark.data_type, (NumericType, BooleanType)):
+                    numeric_col_names.append(psser.name)
+
+        psdf = self[numeric_col_names] if numeric_only else self
+        return psdf._apply_series_op(
             lambda psser: psser._rank(method=method, ascending=ascending), should_resolve=True
         )
 

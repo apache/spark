@@ -3562,8 +3562,10 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
             return self._reduce_for_stat_function(quantile, name="quantile")
 
-    # TODO: add axis, numeric_only, pct, na_option parameter
-    def rank(self, method: str = "average", ascending: bool = True) -> "Series":
+    # TODO: add axis, pct, na_option parameter
+    def rank(
+        self, method: str = "average", ascending: bool = True, numeric_only: Optional[bool] = None
+    ) -> "Series":
         """
         Compute numerical data ranks (1 through n) along axis. Equal values are
         assigned a rank that is the average of the ranks of those values.
@@ -3583,6 +3585,8 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             * dense: like 'min', but rank always increases by 1 between groups
         ascending : boolean, default True
             False for ranks by high (1) to low (N)
+        numeric_only : bool, optional
+            If set to True, rank numeric Series, or return an empty Series for non-numeric Series
 
         Returns
         -------
@@ -3640,8 +3644,25 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         2    2.0
         3    3.0
         Name: A, dtype: float64
+
+        If numeric_only is set to 'True', rank only numeric Series,
+        return an empty Series otherwise.
+
+        >>> s = ps.Series(['a', 'b', 'c'], name='A', index=['x', 'y', 'z'])
+        >>> s
+        x    a
+        y    b
+        z    c
+        Name: A, dtype: object
+
+        >>> s.rank(numeric_only=True)
+        Series([], Name: A, dtype: float64)
         """
-        return self._rank(method, ascending).spark.analyzed
+        is_numeric = isinstance(self.spark.data_type, (NumericType, BooleanType))
+        if numeric_only and not is_numeric:
+            return ps.Series([], dtype="float64", name=self.name)
+        else:
+            return self._rank(method, ascending).spark.analyzed
 
     def _rank(
         self,

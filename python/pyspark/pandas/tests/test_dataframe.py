@@ -3999,6 +3999,26 @@ class DataFrameTest(ComparisonTestBase, SQLTestUtils):
         psdf.columns = columns
         self.assert_eq(pdf.rank().sort_index(), psdf.rank().sort_index())
 
+        # non-numeric columns
+        pdf = pd.DataFrame(
+            data={"col1": [1, 2, 3, 1], "col2": ["a", "b", "c", "d"]},
+            index=np.random.rand(4),
+        )
+        psdf = ps.from_pandas(pdf)
+        self.assert_eq(
+            pdf.rank(numeric_only=True).sort_index(), psdf.rank(numeric_only=True).sort_index()
+        )
+        self.assert_eq(
+            pdf.rank(numeric_only=False).sort_index(), psdf.rank(numeric_only=False).sort_index()
+        )
+        self.assert_eq(
+            pdf.rank(numeric_only=None).sort_index(), psdf.rank(numeric_only=None).sort_index()
+        )
+        self.assert_eq(
+            pdf[["col2"]].rank(numeric_only=True),
+            psdf[["col2"]].rank(numeric_only=True),
+        )
+
     def test_round(self):
         pdf = pd.DataFrame(
             {
