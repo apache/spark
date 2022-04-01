@@ -1789,21 +1789,53 @@ class DataFrameTest(ComparisonTestBase, SQLTestUtils):
 
     def test_nlargest(self):
         pdf = pd.DataFrame(
-            {"a": [1, 2, 3, 4, 5, None, 7], "b": [7, 6, 5, 4, 3, 2, 1]}, index=np.random.rand(7)
+            {"a": [1, 2, 3, 4, 5, None, 7], "b": [7, 6, 5, 4, 3, 2, 1], "c": [1, 1, 2, 2, 3, 3, 3]},
+            index=np.random.rand(7),
         )
         psdf = ps.from_pandas(pdf)
-        self.assert_eq(psdf.nlargest(n=5, columns="a"), pdf.nlargest(5, columns="a"))
-        self.assert_eq(psdf.nlargest(n=5, columns=["a", "b"]), pdf.nlargest(5, columns=["a", "b"]))
+        self.assert_eq(psdf.nlargest(5, columns="a"), pdf.nlargest(5, columns="a"))
+        self.assert_eq(psdf.nlargest(5, columns=["a", "b"]), pdf.nlargest(5, columns=["a", "b"]))
+        self.assert_eq(psdf.nlargest(5, columns=["c"]), pdf.nlargest(5, columns=["c"]))
+        self.assert_eq(
+            psdf.nlargest(5, columns=["c"], keep="first"),
+            pdf.nlargest(5, columns=["c"], keep="first"),
+        )
+        self.assert_eq(
+            psdf.nlargest(5, columns=["c"], keep="last"),
+            pdf.nlargest(5, columns=["c"], keep="last"),
+        )
+        msg = "`keep`=all is not implemented yet."
+        with self.assertRaisesRegex(NotImplementedError, msg):
+            psdf.nlargest(5, columns=["c"], keep="all")
+        msg = 'keep must be either "first", "last" or "all".'
+        with self.assertRaisesRegex(ValueError, msg):
+            psdf.nlargest(5, columns=["c"], keep="xx")
 
     def test_nsmallest(self):
         pdf = pd.DataFrame(
-            {"a": [1, 2, 3, 4, 5, None, 7], "b": [7, 6, 5, 4, 3, 2, 1]}, index=np.random.rand(7)
+            {"a": [1, 2, 3, 4, 5, None, 7], "b": [7, 6, 5, 4, 3, 2, 1], "c": [1, 1, 2, 2, 3, 3, 3]},
+            index=np.random.rand(7),
         )
         psdf = ps.from_pandas(pdf)
         self.assert_eq(psdf.nsmallest(n=5, columns="a"), pdf.nsmallest(5, columns="a"))
         self.assert_eq(
             psdf.nsmallest(n=5, columns=["a", "b"]), pdf.nsmallest(5, columns=["a", "b"])
         )
+        self.assert_eq(psdf.nsmallest(n=5, columns=["c"]), pdf.nsmallest(5, columns=["c"]))
+        self.assert_eq(
+            psdf.nsmallest(n=5, columns=["c"], keep="first"),
+            pdf.nsmallest(5, columns=["c"], keep="first"),
+        )
+        self.assert_eq(
+            psdf.nsmallest(n=5, columns=["c"], keep="last"),
+            pdf.nsmallest(5, columns=["c"], keep="last"),
+        )
+        msg = "`keep`=all is not implemented yet."
+        with self.assertRaisesRegex(NotImplementedError, msg):
+            psdf.nlargest(5, columns=["c"], keep="all")
+        msg = 'keep must be either "first", "last" or "all".'
+        with self.assertRaisesRegex(ValueError, msg):
+            psdf.nlargest(5, columns=["c"], keep="xx")
 
     def test_xs(self):
         d = {
@@ -3877,9 +3909,14 @@ class DataFrameTest(ComparisonTestBase, SQLTestUtils):
             },
             index=np.random.rand(3),
         )
+        pdf.name = "x"
         psdf = ps.from_pandas(pdf)
 
         self.assert_eq(psdf.all(), pdf.all())
+        self.assert_eq(psdf.all(bool_only=True), pdf.all(bool_only=True))
+        self.assert_eq(psdf.all(bool_only=False), pdf.all(bool_only=False))
+        self.assert_eq(psdf[["col5"]].all(bool_only=True), pdf[["col5"]].all(bool_only=True))
+        self.assert_eq(psdf[["col5"]].all(bool_only=False), pdf[["col5"]].all(bool_only=False))
 
         columns = pd.MultiIndex.from_tuples(
             [
@@ -3895,12 +3932,16 @@ class DataFrameTest(ComparisonTestBase, SQLTestUtils):
         psdf.columns = columns
 
         self.assert_eq(psdf.all(), pdf.all())
+        self.assert_eq(psdf.all(bool_only=True), pdf.all(bool_only=True))
+        self.assert_eq(psdf.all(bool_only=False), pdf.all(bool_only=False))
 
         columns.names = ["X", "Y"]
         pdf.columns = columns
         psdf.columns = columns
 
         self.assert_eq(psdf.all(), pdf.all())
+        self.assert_eq(psdf.all(bool_only=True), pdf.all(bool_only=True))
+        self.assert_eq(psdf.all(bool_only=False), pdf.all(bool_only=False))
 
         with self.assertRaisesRegex(
             NotImplementedError, 'axis should be either 0 or "index" currently.'
@@ -3919,9 +3960,14 @@ class DataFrameTest(ComparisonTestBase, SQLTestUtils):
             },
             index=np.random.rand(3),
         )
+        pdf.name = "x"
         psdf = ps.from_pandas(pdf)
 
         self.assert_eq(psdf.any(), pdf.any())
+        self.assert_eq(psdf.any(bool_only=True), pdf.any(bool_only=True))
+        self.assert_eq(psdf.any(bool_only=False), pdf.any(bool_only=False))
+        self.assert_eq(psdf[["col5"]].all(bool_only=True), pdf[["col5"]].all(bool_only=True))
+        self.assert_eq(psdf[["col5"]].all(bool_only=False), pdf[["col5"]].all(bool_only=False))
 
         columns = pd.MultiIndex.from_tuples(
             [
@@ -3937,12 +3983,16 @@ class DataFrameTest(ComparisonTestBase, SQLTestUtils):
         psdf.columns = columns
 
         self.assert_eq(psdf.any(), pdf.any())
+        self.assert_eq(psdf.any(bool_only=True), pdf.any(bool_only=True))
+        self.assert_eq(psdf.any(bool_only=False), pdf.any(bool_only=False))
 
         columns.names = ["X", "Y"]
         pdf.columns = columns
         psdf.columns = columns
 
         self.assert_eq(psdf.any(), pdf.any())
+        self.assert_eq(psdf.any(bool_only=True), pdf.any(bool_only=True))
+        self.assert_eq(psdf.any(bool_only=False), pdf.any(bool_only=False))
 
         with self.assertRaisesRegex(
             NotImplementedError, 'axis should be either 0 or "index" currently.'
@@ -3980,6 +4030,26 @@ class DataFrameTest(ComparisonTestBase, SQLTestUtils):
         pdf.columns = columns
         psdf.columns = columns
         self.assert_eq(pdf.rank().sort_index(), psdf.rank().sort_index())
+
+        # non-numeric columns
+        pdf = pd.DataFrame(
+            data={"col1": [1, 2, 3, 1], "col2": ["a", "b", "c", "d"]},
+            index=np.random.rand(4),
+        )
+        psdf = ps.from_pandas(pdf)
+        self.assert_eq(
+            pdf.rank(numeric_only=True).sort_index(), psdf.rank(numeric_only=True).sort_index()
+        )
+        self.assert_eq(
+            pdf.rank(numeric_only=False).sort_index(), psdf.rank(numeric_only=False).sort_index()
+        )
+        self.assert_eq(
+            pdf.rank(numeric_only=None).sort_index(), psdf.rank(numeric_only=None).sort_index()
+        )
+        self.assert_eq(
+            pdf[["col2"]].rank(numeric_only=True),
+            psdf[["col2"]].rank(numeric_only=True),
+        )
 
     def test_round(self):
         pdf = pd.DataFrame(
