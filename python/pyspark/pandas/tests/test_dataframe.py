@@ -3877,9 +3877,14 @@ class DataFrameTest(ComparisonTestBase, SQLTestUtils):
             },
             index=np.random.rand(3),
         )
+        pdf.name = "x"
         psdf = ps.from_pandas(pdf)
 
         self.assert_eq(psdf.all(), pdf.all())
+        self.assert_eq(psdf.all(bool_only=True), pdf.all(bool_only=True))
+        self.assert_eq(psdf.all(bool_only=False), pdf.all(bool_only=False))
+        self.assert_eq(psdf[["col5"]].all(bool_only=True), pdf[["col5"]].all(bool_only=True))
+        self.assert_eq(psdf[["col5"]].all(bool_only=False), pdf[["col5"]].all(bool_only=False))
 
         columns = pd.MultiIndex.from_tuples(
             [
@@ -3895,12 +3900,16 @@ class DataFrameTest(ComparisonTestBase, SQLTestUtils):
         psdf.columns = columns
 
         self.assert_eq(psdf.all(), pdf.all())
+        self.assert_eq(psdf.all(bool_only=True), pdf.all(bool_only=True))
+        self.assert_eq(psdf.all(bool_only=False), pdf.all(bool_only=False))
 
         columns.names = ["X", "Y"]
         pdf.columns = columns
         psdf.columns = columns
 
         self.assert_eq(psdf.all(), pdf.all())
+        self.assert_eq(psdf.all(bool_only=True), pdf.all(bool_only=True))
+        self.assert_eq(psdf.all(bool_only=False), pdf.all(bool_only=False))
 
         with self.assertRaisesRegex(
             NotImplementedError, 'axis should be either 0 or "index" currently.'
@@ -3919,9 +3928,14 @@ class DataFrameTest(ComparisonTestBase, SQLTestUtils):
             },
             index=np.random.rand(3),
         )
+        pdf.name = "x"
         psdf = ps.from_pandas(pdf)
 
         self.assert_eq(psdf.any(), pdf.any())
+        self.assert_eq(psdf.any(bool_only=True), pdf.any(bool_only=True))
+        self.assert_eq(psdf.any(bool_only=False), pdf.any(bool_only=False))
+        self.assert_eq(psdf[["col5"]].all(bool_only=True), pdf[["col5"]].all(bool_only=True))
+        self.assert_eq(psdf[["col5"]].all(bool_only=False), pdf[["col5"]].all(bool_only=False))
 
         columns = pd.MultiIndex.from_tuples(
             [
@@ -3937,12 +3951,16 @@ class DataFrameTest(ComparisonTestBase, SQLTestUtils):
         psdf.columns = columns
 
         self.assert_eq(psdf.any(), pdf.any())
+        self.assert_eq(psdf.any(bool_only=True), pdf.any(bool_only=True))
+        self.assert_eq(psdf.any(bool_only=False), pdf.any(bool_only=False))
 
         columns.names = ["X", "Y"]
         pdf.columns = columns
         psdf.columns = columns
 
         self.assert_eq(psdf.any(), pdf.any())
+        self.assert_eq(psdf.any(bool_only=True), pdf.any(bool_only=True))
+        self.assert_eq(psdf.any(bool_only=False), pdf.any(bool_only=False))
 
         with self.assertRaisesRegex(
             NotImplementedError, 'axis should be either 0 or "index" currently.'
