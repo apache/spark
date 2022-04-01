@@ -336,8 +336,9 @@ case class StreamingSymmetricHashJoinExec(
         }
 
         // NOTE: we need to make sure `outerOutputIter` is evaluated "after" exhausting all of
-        // elements in `hashJoinOutputIter`, because evaluation of `hashJoinOutputIter` may update
-        // the match flag which the logic for outer join is relying on.
+        // elements in `hashJoinOutputIter`, otherwise it may lead to out of sync according to
+        // the interface contract on StateStore.iterator and end up with correctness issue.
+        // Please refer SPARK-38684 for more details.
         val outerOutputIter = new LazilyInitializingJoinedRowIterator(initIterFn)
 
         hashJoinOutputIter ++ outerOutputIter
@@ -361,8 +362,9 @@ case class StreamingSymmetricHashJoinExec(
         }
 
         // NOTE: we need to make sure `outerOutputIter` is evaluated "after" exhausting all of
-        // elements in `hashJoinOutputIter`, because evaluation of `hashJoinOutputIter` may update
-        // the match flag which the logic for outer join is relying on.
+        // elements in `hashJoinOutputIter`, otherwise it may lead to out of sync according to
+        // the interface contract on StateStore.iterator and end up with correctness issue.
+        // Please refer SPARK-38684 for more details.
         val outerOutputIter = new LazilyInitializingJoinedRowIterator(initIterFn)
 
         hashJoinOutputIter ++ outerOutputIter
@@ -386,9 +388,9 @@ case class StreamingSymmetricHashJoinExec(
         }
 
         // NOTE: we need to make sure both `leftSideOutputIter` and `rightSideOutputIter` are
-        // evaluated "after" exhausting all of elements in `hashJoinOutputIter`, because evaluation
-        // of `hashJoinOutputIter` may update the match flag which the logic for outer join is
-        // relying on.
+        // evaluated "after" exhausting all of elements in `hashJoinOutputIter`, otherwise it may
+        // lead to out of sync according to the interface contract on StateStore.iterator and
+        // end up with correctness issue. Please refer SPARK-38684 for more details.
         val leftSideOutputIter = new LazilyInitializingJoinedRowIterator(leftSideInitIterFn)
         val rightSideOutputIter = new LazilyInitializingJoinedRowIterator(rightSideInitIterFn)
 
