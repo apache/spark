@@ -894,7 +894,6 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
         |  MAX(CASE WHEN NOT(SALARY != 0) OR NOT(SALARY < 8000) THEN SALARY ELSE 0 END),
         |  MAX(CASE WHEN NOT(SALARY > 8000 AND SALARY > 8000) THEN 0 ELSE SALARY END),
         |  MIN(CASE WHEN NOT(SALARY > 8000 OR SALARY IS NULL) THEN SALARY ELSE 0 END),
-        |  SUM(CASE WHEN NOT(SALARY > 8000 AND SALARY IS NOT NULL) THEN SALARY ELSE 0 END),
         |  SUM(CASE WHEN SALARY > 10000 THEN 2 WHEN SALARY > 8000 THEN 1 END),
         |  AVG(CASE WHEN NOT(SALARY > 8000 OR SALARY IS NOT NULL) THEN SALARY ELSE 0 END)
         |FROM h2.test.employee GROUP BY DEPT
@@ -905,9 +904,9 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
       " THEN SALARY ELSE 0.00 END), COUNT(CAS..., " +
       "PushedFilters: [], " +
       "PushedGroupByColumns: [DEPT], ")
-    checkAnswer(df, Seq(Row(1, 1, 1, 1, 1, 0d, 12000d, 0d, 12000d, 12000d, 0d, 0d, 2, 0d),
-      Row(2, 2, 2, 2, 2, 10000d, 10000d, 10000d, 10000d, 10000d, 0d, 0d, 2, 0d),
-      Row(2, 2, 2, 2, 2, 10000d, 12000d, 10000d, 12000d, 12000d, 0d, 0d, 3, 0d)))
+    checkAnswer(df, Seq(Row(1, 1, 1, 1, 1, 0d, 12000d, 0d, 12000d, 12000d, 0d, 2, 0d),
+      Row(2, 2, 2, 2, 2, 10000d, 10000d, 10000d, 10000d, 10000d, 0d, 2, 0d),
+      Row(2, 2, 2, 2, 2, 10000d, 12000d, 10000d, 12000d, 12000d, 0d, 3, 0d)))
   }
 
   test("scan with aggregate push-down: aggregate function with binary arithmetic") {
