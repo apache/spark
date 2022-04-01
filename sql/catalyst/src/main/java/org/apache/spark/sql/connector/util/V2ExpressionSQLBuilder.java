@@ -93,6 +93,13 @@ public class V2ExpressionSQLBuilder {
           return visitNot(build(e.children()[0]));
         case "~":
           return visitUnaryArithmetic(name, inputToSQL(e.children()[0]));
+        case "ABS":
+          return visitAbs(build(e.children()[0]));
+        case "COALESCE": {
+          List<String> children =
+            Arrays.stream(e.children()).map(c -> build(c)).collect(Collectors.toList());
+          return visitCoalesce(children);
+        }
         case "CASE_WHEN": {
           List<String> children =
             Arrays.stream(e.children()).map(c -> build(c)).collect(Collectors.toList());
@@ -186,6 +193,14 @@ public class V2ExpressionSQLBuilder {
 
   protected String visitNot(String v) {
     return "NOT (" + v + ")";
+  }
+
+  protected String visitAbs(String v) {
+    return "ABS(" + v + ")";
+  }
+
+  protected String visitCoalesce(List<String> list) {
+    return "COALESCE(" + list.stream().collect(Collectors.joining(", ")) + ")";
   }
 
   protected String visitUnaryArithmetic(String name, String v) { return name + v; }

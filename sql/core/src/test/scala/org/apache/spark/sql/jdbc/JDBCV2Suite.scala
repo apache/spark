@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.analysis.CannotReplaceMissingTableException
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, Sort}
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2ScanRelation, V1ScanWrapper}
 import org.apache.spark.sql.execution.datasources.v2.jdbc.JDBCTableCatalog
-import org.apache.spark.sql.functions.{avg, count, count_distinct, lit, not, sum, udf, when}
+import org.apache.spark.sql.functions.{abs, avg, coalesce, count, count_distinct, lit, not, sum, udf, when}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.util.Utils
@@ -381,19 +381,13 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
         checkAnswer(df, Seq(Row("fred", 1), Row("mary", 2)))
 
         val df2 = spark.table("h2.test.people").filter($"id" + Int.MaxValue > 1)
-
         checkFiltersRemoved(df2, ansiMode)
-
-        df2.queryExecution.optimizedPlan.collect {
-          case _: DataSourceV2ScanRelation =>
-            val expected_plan_fragment = if (ansiMode) {
-              "PushedFilters: [ID IS NOT NULL, (ID + 2147483647) > 1], "
-            } else {
-              "PushedFilters: [ID IS NOT NULL], "
-            }
-            checkKeywordsExistsInExplain(df2, expected_plan_fragment)
+        val expectedPlanFragment2 = if (ansiMode) {
+          "PushedFilters: [ID IS NOT NULL, (ID + 2147483647) > 1], "
+        } else {
+          "PushedFilters: [ID IS NOT NULL], "
         }
-
+        checkPushedInfo(df2, expectedPlanFragment2)
         if (ansiMode) {
           val e = intercept[SparkException] {
             checkAnswer(df2, Seq.empty)
@@ -422,22 +416,30 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
 
         val df4 = spark.table("h2.test.employee")
           .filter(($"salary" > 1000d).and($"salary" < 12000d))
-
         checkFiltersRemoved(df4, ansiMode)
-
-        df4.queryExecution.optimizedPlan.collect {
-          case _: DataSourceV2ScanRelation =>
-            val expected_plan_fragment = if (ansiMode) {
-              "PushedFilters: [SALARY IS NOT NULL, " +
-                "CAST(SALARY AS double) > 1000.0, CAST(SALARY AS double) < 12000.0], "
-            } else {
-              "PushedFilters: [SALARY IS NOT NULL], "
-            }
-            checkKeywordsExistsInExplain(df4, expected_plan_fragment)
+        val expectedPlanFragment4 = if (ansiMode) {
+          "PushedFilters: [SALARY IS NOT NULL, " +
+            "CAST(SALARY AS double) > 1000.0, CAST(SALARY AS double) < 12000.0], "
+        } else {
+          "PushedFilters: [SALARY IS NOT NULL], "
         }
-
+        checkPushedInfo(df4, expectedPlanFragment4)
         checkAnswer(df4, Seq(Row(1, "amy", 10000, 1000, true),
           Row(1, "cathy", 9000, 1200, false), Row(2, "david", 10000, 1300, true)))
+
+        val df5 = spark.table("h2.test.employee")
+          .filter(abs($"dept" - 3) > 1)
+          .filter(coalesce($"salary", $"bonus") > 2000)
+        checkFiltersRemoved(df5, ansiMode)
+        val expectedPlanFragment5 = if (ansiMode) {
+          "PushedFilters: [DEPT IS NOT NULL, ABS(DEPT - 3) > 1, " +
+            "(COALESCE(CAST(SALARY AS double), BONUS)) > 2000.0]"
+        } else {
+          "PushedFilters: [DEPT IS NOT NULL]"
+        }
+        checkPushedInfo(df5, expectedPlanFragment5)
+        checkAnswer(df5, Seq(Row(1, "amy", 10000, 1000, true),
+          Row(1, "cathy", 9000, 1200, false), Row(6, "jen", 12000, 1200, true)))
       }
     }
   }
