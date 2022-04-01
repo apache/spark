@@ -335,6 +335,8 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
   // The brackets that are used in casting structs and maps to strings
   private val (leftBracket, rightBracket) = if (legacyCastToStr) ("[", "]") else ("{", "}")
 
+  private var codegenContext: Option[CodegenContext] = None
+
   // The class name of `DateTimeUtils`
   protected def dateTimeUtilsCls: String = DateTimeUtils.getClass.getName.stripSuffix("$")
 
@@ -793,7 +795,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
         null
       } else {
         throw QueryExecutionErrors.cannotChangeDecimalPrecisionError(
-          value, decimalType.precision, decimalType.scale)
+          value, decimalType.precision, decimalType.scale, origin.context)
       }
     }
   }
@@ -984,8 +986,14 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
     }
   }
 
+  def errorContextCode: String = {
+    assert(codegenContext.isDefined)
+    codegenContext.get.addReferenceObj("errCtx", origin.context)
+  }
+
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val eval = child.genCode(ctx)
+    codegenContext = Some(ctx)
     val nullSafeCast = nullSafeCastFunction(child.dataType, dataType, ctx)
 
     ev.copy(code = eval.code +
@@ -1333,7 +1341,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
       } else {
         s"""
            |throw QueryExecutionErrors.cannotChangeDecimalPrecisionError(
-           |  $d, ${decimalType.precision}, ${decimalType.scale});
+           |  $d, ${decimalType.precision}, ${decimalType.scale}, $errorContextCode);
          """.stripMargin
       }
       code"""
