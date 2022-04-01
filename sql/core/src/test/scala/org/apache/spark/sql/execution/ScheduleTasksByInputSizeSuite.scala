@@ -28,13 +28,14 @@ import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.util.Utils
 
 abstract class ScheduleTasksByInputSizeSuiteBase extends QueryTest with SharedSparkSession {
-  protected val sortTasksByInputSizeEnabled: Boolean = false
+  protected def sortTasksByInputSizeEnabled: Boolean = false
   private val tempDir = Utils.createTempDir()
 
   protected override def sparkConf = {
     super.sparkConf
       .set("spark.default.parallelism", "1")
-      .set(SQLConf.FILES_OPEN_COST_IN_BYTES.key, "128M")
+      .set(SQLConf.FILES_OPEN_COST_IN_BYTES.key, "1")
+      .set(SQLConf.FILES_MAX_PARTITION_BYTES.key, "1200")
       .set(config.SCHEDULER_SORT_TASKS_BY_INPUT_SIZE.key, sortTasksByInputSizeEnabled.toString)
   }
 
@@ -73,7 +74,7 @@ abstract class ScheduleTasksByInputSizeSuiteBase extends QueryTest with SharedSp
     val listener = new SparkListener {
       override def onTaskStart(taskStart: SparkListenerTaskStart): Unit = {
         // note that, taskInfo.index is not always same with partition index
-        tasks.append(taskStart.taskInfo.index)
+        tasks.append(taskStart.taskInfo.partitionId)
       }
     }
     var fileScanRDD: FileScanRDD = null
@@ -86,18 +87,28 @@ abstract class ScheduleTasksByInputSizeSuiteBase extends QueryTest with SharedSp
       spark.sparkContext.removeSparkListener(listener)
     }
     spark.sparkContext.listenerBus.waitUntilEmpty()
-    assert(tasks.size == 5)
-    assert(fileScanRDD.partitions.length == 4)
+    assert(tasks.size == 7)
+    assert(fileScanRDD.partitions.length == 6)
     assert(fileScanRDD.partitions.forall(_.inputSize.isDefined))
 
-    // SPARK-37831: here should be partition index
+    // 1200
+    // 1200
+    // 1200
+    // 885
+    // 885
+    // 991 (519,472)
     val input = fileScanRDD.partitions.map(_.index)
     // skip the first task which is not related file scan
     val scheduled = tasks.tail
-    assert(input.zip(scheduled).exists { case (l, r) => l != r})
 
-    val expected = fileScanRDD.partitions.sortBy(_.inputSize.get).reverse.map(_.index)
-    assert(expected.zip(scheduled).forall { case (l, r) => l == r} == sortTasksByInputSizeEnabled)
+    if (sortTasksByInputSizeEnabled) {
+      assert(input.zip(scheduled).exists { case (l, r) => l != r})
+      val expected = fileScanRDD.partitions.sortBy(_.inputSize.get)(Ordering[Long].reverse)
+        .map(_.index)
+      assert(expected.zip(scheduled).forall { case (l, r) => l == r})
+    } else {
+      assert(input.zip(scheduled).forall { case (l, r) => l == r})
+    }
   }
 }
 
