@@ -393,6 +393,9 @@ public class YarnShuffleService extends AuxiliaryService {
         secretManager.unregisterApp(appId);
       }
       blockHandler.applicationRemoved(appId, false /* clean up local dirs */);
+      // Set cleanupLocalDirs to false as these merged shuffle files should be deleted
+      // by yarn when the app finishes in Hadoop
+      shuffleMergeManager.applicationRemoved(appId, false);
     } catch (Exception e) {
       logger.error("Exception when stopping application {}", appId, e);
     }
