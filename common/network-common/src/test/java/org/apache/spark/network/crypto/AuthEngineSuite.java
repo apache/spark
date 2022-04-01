@@ -188,19 +188,6 @@ public class AuthEngineSuite {
     }
   }
 
-  @Test(expected = AssertionError.class)
-  public void testBadKeySize() throws Exception {
-    Map<String, String> mconf = ImmutableMap.of("spark.network.crypto.keyLength", "42");
-    TransportConf conf = new TransportConf("rpc", new MapConfigProvider(mconf));
-
-    try (AuthEngine engine = new AuthEngine("appId", "secret", conf)) {
-      engine.challenge();
-      fail("Should have failed to create challenge message.");
-      // Call close explicitly to make sure it's idempotent.
-      engine.close();
-    }
-  }
-
   @Test
   public void testEncryptedMessage() throws Exception {
     try (AuthEngine client = new AuthEngine("appId", "secret", conf);
