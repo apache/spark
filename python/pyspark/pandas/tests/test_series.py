@@ -1082,7 +1082,7 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
     def test_clip(self):
         pser = pd.Series([0, 2, 4], index=np.random.rand(3))
         psser = ps.from_pandas(pser)
-
+        psser.clip(1, 3)
         # Assert list-like values are not accepted for 'lower' and 'upper'
         msg = "List-like value are not supported for 'lower' and 'upper' at the moment"
         with self.assertRaises(TypeError, msg=msg):
@@ -1098,6 +1098,13 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
         self.assert_eq(psser.clip(upper=3), pser.clip(upper=3))
         # Assert lower and upper
         self.assert_eq(psser.clip(1, 3), pser.clip(1, 3))
+        self.assert_eq((psser + 1).clip(1, 3), (pser + 1).clip(1, 3))
+
+        # Assert inplace is True
+        psser = ps.from_pandas(pser)
+        pser.clip(1, 3, inplace=True)
+        psser.clip(1, 3, inplace=True)
+        self.assert_eq(psser, pser)
 
         # Assert behavior on string values
         str_psser = ps.Series(["a", "b", "c"])
