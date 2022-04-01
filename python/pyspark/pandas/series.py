@@ -1655,6 +1655,8 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         Series. Either all duplicates, all except the first or all except the
         last occurrence of duplicates can be indicated.
 
+        .. versionadded:: 3.4.0
+
         Parameters
         ----------
         keep : {'first', 'last', False}, default 'first'
