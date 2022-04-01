@@ -18,6 +18,7 @@ package org.apache.spark.sql.execution.vectorized;
 
 import java.math.BigDecimal;
 import java.math.BigInteger;
+import java.nio.ByteBuffer;
 
 import com.google.common.annotations.VisibleForTesting;
 
@@ -442,6 +443,12 @@ public abstract class WritableColumnVector extends ColumnVector {
       return dictionary.decodeToBinary(dictionaryIds.getDictId(rowId));
     }
   }
+
+  /**
+   * Gets the values of bytes from [rowId, rowId + count), as a ByteBuffer.
+   * This method is similar to {@link ColumnVector#getBytes(int, int)}, but avoids making a copy.
+   */
+  public abstract ByteBuffer getByteBuffer(int rowId, int count);
 
   /**
    * Append APIs. These APIs all behave similarly and will append data to the current vector.  It

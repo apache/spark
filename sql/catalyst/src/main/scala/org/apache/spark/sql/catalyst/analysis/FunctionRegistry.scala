@@ -170,7 +170,7 @@ object FunctionRegistryBase {
     if (df != null) {
       if (df.extended().isEmpty) {
         new ExpressionInfo(
-          clazz.getCanonicalName,
+          clazz.getCanonicalName.stripSuffix("$"),
           null,
           name,
           df.usage(),
@@ -184,10 +184,11 @@ object FunctionRegistryBase {
       } else {
         // This exists for the backward compatibility with old `ExpressionDescription`s defining
         // the extended description in `extended()`.
-        new ExpressionInfo(clazz.getCanonicalName, null, name, df.usage(), df.extended())
+        new ExpressionInfo(
+          clazz.getCanonicalName.stripSuffix("$"), null, name, df.usage(), df.extended())
       }
     } else {
-      new ExpressionInfo(clazz.getCanonicalName, name)
+      new ExpressionInfo(clazz.getCanonicalName.stripSuffix("$"), name)
     }
   }
 }

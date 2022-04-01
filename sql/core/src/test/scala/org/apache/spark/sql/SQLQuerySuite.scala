@@ -2556,17 +2556,17 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
       val originalValue = newSession.sessionState.conf.runSQLonFile
 
       try {
-        newSession.sessionState.conf.setConf(SQLConf.RUN_SQL_ON_FILES, false)
+        newSession.conf.set(SQLConf.RUN_SQL_ON_FILES, false)
         intercept[AnalysisException] {
           newSession.sql(s"SELECT i, j FROM parquet.`${path.getCanonicalPath}`")
         }
 
-        newSession.sessionState.conf.setConf(SQLConf.RUN_SQL_ON_FILES, true)
+        newSession.conf.set(SQLConf.RUN_SQL_ON_FILES, true)
         checkAnswer(
           newSession.sql(s"SELECT i, j FROM parquet.`${path.getCanonicalPath}`"),
           Row(1, "a"))
       } finally {
-        newSession.sessionState.conf.setConf(SQLConf.RUN_SQL_ON_FILES, originalValue)
+        newSession.conf.set(SQLConf.RUN_SQL_ON_FILES, originalValue)
       }
     }
   }

@@ -457,10 +457,10 @@ trait DivModLike extends BinaryArithmetic {
       } else {
         if (isZero(input2)) {
           // when we reach here, failOnError must be true.
-          throw QueryExecutionErrors.divideByZeroError()
+          throw QueryExecutionErrors.divideByZeroError(origin.context)
         }
         if (checkDivideOverflow && input1 == Long.MinValue && input2 == -1) {
-          throw QueryExecutionErrors.overflowInIntegralDivideError()
+          throw QueryExecutionErrors.overflowInIntegralDivideError(origin.context)
         }
         evalOperation(input1, input2)
       }
@@ -487,10 +487,11 @@ trait DivModLike extends BinaryArithmetic {
     } else {
       s"($javaType)(${eval1.value} $symbol ${eval2.value})"
     }
+    lazy val errorContext = ctx.addReferenceObj("errCtx", origin.context)
     val checkIntegralDivideOverflow = if (checkDivideOverflow) {
       s"""
         |if (${eval1.value} == ${Long.MinValue}L && ${eval2.value} == -1)
-        |  throw QueryExecutionErrors.overflowInIntegralDivideError();
+        |  throw QueryExecutionErrors.overflowInIntegralDivideError($errorContext);
         |""".stripMargin
     } else {
       ""
@@ -499,7 +500,7 @@ trait DivModLike extends BinaryArithmetic {
     // evaluate right first as we have a chance to skip left if right is 0
     if (!left.nullable && !right.nullable) {
       val divByZero = if (failOnError) {
-        s"throw QueryExecutionErrors.divideByZeroError();"
+        s"throw QueryExecutionErrors.divideByZeroError($errorContext);"
       } else {
         s"${ev.isNull} = true;"
       }
@@ -517,7 +518,7 @@ trait DivModLike extends BinaryArithmetic {
     } else {
       val nullOnErrorCondition = if (failOnError) "" else s" || $isZero"
       val failOnErrorBranch = if (failOnError) {
-        s"if ($isZero) throw QueryExecutionErrors.divideByZeroError();"
+        s"if ($isZero) throw QueryExecutionErrors.divideByZeroError($errorContext);"
       } else {
         ""
       }
@@ -742,7 +743,7 @@ case class Pmod(
       } else {
         if (isZero(input2)) {
           // when we reach here, failOnError must bet true.
-          throw QueryExecutionErrors.divideByZeroError
+          throw QueryExecutionErrors.divideByZeroError(origin.context)
         }
         input1 match {
           case i: Integer => pmod(i, input2.asInstanceOf[java.lang.Integer])
@@ -767,7 +768,7 @@ case class Pmod(
     }
     val remainder = ctx.freshName("remainder")
     val javaType = CodeGenerator.javaType(dataType)
-
+    lazy val errorContext = ctx.addReferenceObj("errCtx", origin.context)
     val result = dataType match {
       case DecimalType.Fixed(_, _) =>
         val decimalAdd = "$plus"
@@ -803,7 +804,7 @@ case class Pmod(
     // evaluate right first as we have a chance to skip left if right is 0
     if (!left.nullable && !right.nullable) {
       val divByZero = if (failOnError) {
-        s"throw QueryExecutionErrors.divideByZeroError();"
+        s"throw QueryExecutionErrors.divideByZeroError($errorContext);"
       } else {
         s"${ev.isNull} = true;"
       }
@@ -820,7 +821,7 @@ case class Pmod(
     } else {
       val nullOnErrorCondition = if (failOnError) "" else s" || $isZero"
       val failOnErrorBranch = if (failOnError) {
-        s"if ($isZero) throw QueryExecutionErrors.divideByZeroError();"
+        s"if ($isZero) throw QueryExecutionErrors.divideByZeroError($errorContext);"
       } else {
         ""
       }

@@ -221,6 +221,10 @@ object QueryParsingErrors {
     new ParseException(s"DataType $dataType is not supported.", ctx)
   }
 
+  def charTypeMissingLengthError(dataType: String, ctx: PrimitiveDataTypeContext): Throwable = {
+    new ParseException("PARSE_CHAR_MISSING_LENGTH", Array(dataType, dataType), ctx)
+  }
+
   def partitionTransformNotExpectedError(
       name: String, describe: String, ctx: ApplyTransformContext): Throwable = {
     new ParseException(s"Expected a column reference for transform $name: $describe", ctx)
@@ -447,5 +451,10 @@ object QueryParsingErrors {
 
   def defaultColumnNotEnabledError(ctx: ParserRuleContext): Throwable = {
     new ParseException("Support for DEFAULT column values is not allowed", ctx)
+  }
+
+  def defaultColumnReferencesNotAllowedInPartitionSpec(ctx: ParserRuleContext): Throwable = {
+    new ParseException(
+      "References to DEFAULT column values are not allowed within the PARTITION clause", ctx)
   }
 }

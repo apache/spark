@@ -298,7 +298,8 @@ object DecorrelateInnerQuery extends PredicateHelper {
           case _ => Join(domain, newChild, joinType, condition, JoinHint.NONE)
         }
       } else {
-        throw QueryExecutionErrors.cannotRewriteDomainJoinWithConditionsError(conditions, d)
+        throw new IllegalStateException(
+          s"Unable to rewrite domain join with conditions: $conditions\n$d.")
       }
     case p: LogicalPlan =>
       p.mapChildren(rewriteDomainJoins(outerPlan, _, conditions))

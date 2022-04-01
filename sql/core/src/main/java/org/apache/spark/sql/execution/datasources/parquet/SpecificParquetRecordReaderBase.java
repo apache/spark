@@ -29,6 +29,8 @@ import java.util.Map;
 import java.util.Set;
 
 import com.google.common.annotations.VisibleForTesting;
+import org.apache.parquet.VersionParser;
+import org.apache.parquet.VersionParser.ParsedVersion;
 import org.apache.parquet.column.page.PageReadStore;
 import scala.Option;
 
@@ -69,6 +71,9 @@ public abstract class SpecificParquetRecordReaderBase<T> extends RecordReader<Vo
   protected MessageType fileSchema;
   protected MessageType requestedSchema;
   protected StructType sparkSchema;
+  // Keep track of the version of the parquet writer. An older version wrote
+  // corrupt delta byte arrays, and the version check is needed to detect that.
+  protected ParsedVersion writerVersion;
 
   /**
    * The total number of rows this RecordReader will eventually read. The sum of the
@@ -93,6 +98,12 @@ public abstract class SpecificParquetRecordReaderBase<T> extends RecordReader<Vo
         HadoopInputFile.fromPath(file, configuration), options);
     this.reader = new ParquetRowGroupReaderImpl(fileReader);
     this.fileSchema = fileReader.getFileMetaData().getSchema();
+    try {
+      this.writerVersion = VersionParser.parse(fileReader.getFileMetaData().getCreatedBy());
+    } catch (Exception e) {
+      // Swallow any exception, if we cannot parse the version we will revert to a sequential read
+      // if the column is a delta byte array encoding (due to PARQUET-246).
+    }
     Map<String, String> fileMetadata = fileReader.getFileMetaData().getKeyValueMetaData();
     ReadSupport<T> readSupport = getReadSupportInstance(getReadSupportClass(configuration));
     ReadSupport.ReadContext readContext = readSupport.init(new InitContext(

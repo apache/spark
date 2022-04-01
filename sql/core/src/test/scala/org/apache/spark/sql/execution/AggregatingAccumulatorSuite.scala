@@ -103,7 +103,7 @@ class AggregatingAccumulatorSuite
     checkResult(acc_driver.value, InternalRow(null, null, 0), acc_driver.schema, false)
 
     def inPartition(id: Int)(f: => Unit): Unit = {
-      val ctx = new TaskContextImpl(0, 0, 1, 0, 0, null, new Properties, null)
+      val ctx = new TaskContextImpl(0, 0, 1, 0, 0, 1, null, new Properties, null)
       TaskContext.setTaskContext(ctx)
       try {
         f

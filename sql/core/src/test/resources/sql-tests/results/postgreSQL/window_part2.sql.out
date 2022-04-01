@@ -224,7 +224,7 @@ from range(9223372036854775804, 9223372036854775807) x
 -- !query schema
 struct<>
 -- !query output
-java.lang.ArithmeticException
+org.apache.spark.SparkArithmeticException
 long overflow. If necessary set spark.sql.ansi.enabled to false (except for ANSI interval type) to bypass this error.
 
 
@@ -234,7 +234,7 @@ from range(-9223372036854775806, -9223372036854775805) x
 -- !query schema
 struct<>
 -- !query output
-java.lang.ArithmeticException
+org.apache.spark.SparkArithmeticException
 long overflow. If necessary set spark.sql.ansi.enabled to false (except for ANSI interval type) to bypass this error.
 
 

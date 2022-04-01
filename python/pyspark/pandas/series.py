@@ -22,6 +22,7 @@ import datetime
 import re
 import inspect
 import sys
+import warnings
 from collections.abc import Mapping
 from functools import partial, reduce
 from typing import (
@@ -853,7 +854,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         """
         return self.rfloordiv(other), self.rmod(other)
 
-    def between(self, left: Any, right: Any, inclusive: bool = True) -> "Series":
+    def between(self, left: Any, right: Any, inclusive: Union[bool, str] = "both") -> "Series":
         """
         Return boolean Series equivalent to left <= series <= right.
         This function returns a boolean vector containing `True` wherever the
@@ -866,8 +867,9 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             Left boundary.
         right : scalar or list-like
             Right boundary.
-        inclusive : bool, default True
-            Include boundaries.
+        inclusive : {"both", "neither", "left", "right"} or boolean. "both" by default.
+            Include boundaries. Whether to set each bound as closed or open.
+            Booleans are deprecated in favour of `both` or `neither`.
 
         Returns
         -------
@@ -890,7 +892,27 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
         Boundary values are included by default:
 
-        >>> s.between(1, 4)
+        >>> s.between(0, 4)
+        0     True
+        1     True
+        2     True
+        3    False
+        4    False
+        dtype: bool
+
+        With `inclusive` set to "neither" boundary values are excluded:
+
+        >>> s.between(0, 4, inclusive="neither")
+        0     True
+        1    False
+        2    False
+        3    False
+        4    False
+        dtype: bool
+
+        With `inclusive` set to "right" only right boundary value is included:
+
+        >>> s.between(0, 4, inclusive="right")
         0     True
         1    False
         2     True
@@ -898,11 +920,11 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         4    False
         dtype: bool
 
-        With `inclusive` set to ``False`` boundary values are excluded:
+        With `inclusive` set to "left" only left boundary value is included:
 
-        >>> s.between(1, 4, inclusive=False)
+        >>> s.between(0, 4, inclusive="left")
         0     True
-        1    False
+        1     True
         2    False
         3    False
         4    False
@@ -918,12 +940,33 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         3    False
         dtype: bool
         """
-        if inclusive:
+        if inclusive is True or inclusive is False:
+            warnings.warn(
+                "Boolean inputs to the `inclusive` argument are deprecated in "
+                "favour of `both` or `neither`.",
+                FutureWarning,
+            )
+            if inclusive:
+                inclusive = "both"
+            else:
+                inclusive = "neither"
+
+        if inclusive == "both":
             lmask = self >= left
             rmask = self <= right
-        else:
+        elif inclusive == "left":
+            lmask = self >= left
+            rmask = self < right
+        elif inclusive == "right":
+            lmask = self > left
+            rmask = self <= right
+        elif inclusive == "neither":
             lmask = self > left
             rmask = self < right
+        else:
+            raise ValueError(
+                "Inclusive has to be either string of 'both'," "'left', 'right', or 'neither'."
+            )
 
         return lmask & rmask
 
@@ -3562,8 +3605,10 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
             return self._reduce_for_stat_function(quantile, name="quantile")
 
-    # TODO: add axis, numeric_only, pct, na_option parameter
-    def rank(self, method: str = "average", ascending: bool = True) -> "Series":
+    # TODO: add axis, pct, na_option parameter
+    def rank(
+        self, method: str = "average", ascending: bool = True, numeric_only: Optional[bool] = None
+    ) -> "Series":
         """
         Compute numerical data ranks (1 through n) along axis. Equal values are
         assigned a rank that is the average of the ranks of those values.
@@ -3583,6 +3628,8 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             * dense: like 'min', but rank always increases by 1 between groups
         ascending : boolean, default True
             False for ranks by high (1) to low (N)
+        numeric_only : bool, optional
+            If set to True, rank numeric Series, or return an empty Series for non-numeric Series
 
         Returns
         -------
@@ -3640,8 +3687,25 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         2    2.0
         3    3.0
         Name: A, dtype: float64
+
+        If numeric_only is set to 'True', rank only numeric Series,
+        return an empty Series otherwise.
+
+        >>> s = ps.Series(['a', 'b', 'c'], name='A', index=['x', 'y', 'z'])
+        >>> s
+        x    a
+        y    b
+        z    c
+        Name: A, dtype: object
+
+        >>> s.rank(numeric_only=True)
+        Series([], Name: A, dtype: float64)
         """
-        return self._rank(method, ascending).spark.analyzed
+        is_numeric = isinstance(self.spark.data_type, (NumericType, BooleanType))
+        if numeric_only and not is_numeric:
+            return ps.Series([], dtype="float64", name=self.name)
+        else:
+            return self._rank(method, ascending).spark.analyzed
 
     def _rank(
         self,

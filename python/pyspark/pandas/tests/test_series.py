@@ -1345,6 +1345,25 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
         self.assert_eq(pser.rank(method="first"), psser.rank(method="first").sort_index())
         self.assert_eq(pser.rank(method="dense"), psser.rank(method="dense").sort_index())
 
+        non_numeric_pser = pd.Series(["a", "c", "b", "d"], name="x", index=[10, 11, 12, 13])
+        non_numeric_psser = ps.from_pandas(non_numeric_pser)
+        self.assert_eq(
+            non_numeric_pser.rank(numeric_only=True),
+            non_numeric_psser.rank(numeric_only=True),
+        )
+        self.assert_eq(
+            non_numeric_pser.rank(numeric_only=None),
+            non_numeric_psser.rank(numeric_only=None).sort_index(),
+        )
+        self.assert_eq(
+            non_numeric_pser.rank(numeric_only=False),
+            non_numeric_psser.rank(numeric_only=False).sort_index(),
+        )
+        self.assert_eq(
+            (non_numeric_pser + "x").rank(numeric_only=True),
+            (non_numeric_psser + "x").rank(numeric_only=True),
+        )
+
         msg = "method must be one of 'average', 'min', 'max', 'first', 'dense'"
         with self.assertRaisesRegex(ValueError, msg):
             psser.rank(method="nothing")
@@ -2950,6 +2969,30 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
         self.assert_eq(pser ** np.nan, psser ** np.nan)
         self.assert_eq(pser.rpow(np.nan), psser.rpow(np.nan))
         self.assert_eq(1 ** pser, 1 ** psser)
+
+    def test_between(self):
+        pser = pd.Series([np.nan, 1, 2, 3, 4])
+        psser = ps.from_pandas(pser)
+        self.assert_eq(psser.between(1, 4), pser.between(1, 4))
+        self.assert_eq(psser.between(1, 4, inclusive="both"), pser.between(1, 4, inclusive="both"))
+        self.assert_eq(
+            psser.between(1, 4, inclusive="neither"), pser.between(1, 4, inclusive="neither")
+        )
+        self.assert_eq(psser.between(1, 4, inclusive="left"), pser.between(1, 4, inclusive="left"))
+        self.assert_eq(
+            psser.between(1, 4, inclusive="right"), pser.between(1, 4, inclusive="right")
+        )
+        expected_err_msg = (
+            "Inclusive has to be either string of 'both'," "'left', 'right', or 'neither'"
+        )
+        with self.assertRaisesRegex(ValueError, expected_err_msg):
+            psser.between(1, 4, inclusive="middle")
+
+        # Test for backward compatibility
+        self.assert_eq(psser.between(1, 4, inclusive=True), pser.between(1, 4, inclusive=True))
+        self.assert_eq(psser.between(1, 4, inclusive=False), pser.between(1, 4, inclusive=False))
+        with self.assertWarns(FutureWarning):
+            psser.between(1, 4, inclusive=True)
 
     def test_between_time(self):
         idx = pd.date_range("2018-04-09", periods=4, freq="1D20min")

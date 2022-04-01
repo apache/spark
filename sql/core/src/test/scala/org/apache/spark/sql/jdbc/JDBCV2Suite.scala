@@ -95,6 +95,14 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
         """CREATE TABLE "test"."view1" ("|col1" INTEGER, "|col2" INTEGER)""").executeUpdate()
       conn.prepareStatement(
         """CREATE TABLE "test"."view2" ("|col1" INTEGER, "|col3" INTEGER)""").executeUpdate()
+
+      conn.prepareStatement(
+        "CREATE TABLE \"test\".\"item\" (id INTEGER, name TEXT(32), price NUMERIC(23, 3))")
+        .executeUpdate()
+      conn.prepareStatement("INSERT INTO \"test\".\"item\" VALUES " +
+        "(1, 'bottle', 11111111111111111111.123)").executeUpdate()
+      conn.prepareStatement("INSERT INTO \"test\".\"item\" VALUES " +
+        "(1, 'bottle', 99999999999999999999.123)").executeUpdate()
     }
   }
 
@@ -484,8 +492,8 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
   test("show tables") {
     checkAnswer(sql("SHOW TABLES IN h2.test"),
       Seq(Row("test", "people", false), Row("test", "empty_table", false),
-        Row("test", "employee", false), Row("test", "dept", false), Row("test", "person", false),
-        Row("test", "view1", false), Row("test", "view2", false)))
+        Row("test", "employee", false), Row("test", "item", false), Row("test", "dept", false),
+        Row("test", "person", false), Row("test", "view1", false), Row("test", "view2", false)))
   }
 
   test("SQL API: create table as select") {
@@ -880,13 +888,12 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
         |  COUNT(CASE WHEN SALARY > 11000 OR SALARY < 10000 THEN SALARY ELSE 0 END),
         |  COUNT(CASE WHEN SALARY >= 12000 OR SALARY < 9000 THEN SALARY ELSE 0 END),
         |  COUNT(CASE WHEN SALARY >= 12000 OR NOT(SALARY >= 9000) THEN SALARY ELSE 0 END),
-        |  MAX(CASE WHEN NOT(SALARY > 8000) AND SALARY >= 8000 THEN SALARY ELSE 0 END),
-        |  MAX(CASE WHEN NOT(SALARY > 8000) OR SALARY > 8000 THEN SALARY ELSE 0 END),
-        |  MAX(CASE WHEN NOT(SALARY > 8000) AND NOT(SALARY < 8000) THEN SALARY ELSE 0 END),
+        |  MAX(CASE WHEN NOT(SALARY > 10000) AND SALARY >= 8000 THEN SALARY ELSE 0 END),
+        |  MAX(CASE WHEN NOT(SALARY > 10000) OR SALARY > 8000 THEN SALARY ELSE 0 END),
+        |  MAX(CASE WHEN NOT(SALARY > 10000) AND NOT(SALARY < 8000) THEN SALARY ELSE 0 END),
         |  MAX(CASE WHEN NOT(SALARY != 0) OR NOT(SALARY < 8000) THEN SALARY ELSE 0 END),
         |  MAX(CASE WHEN NOT(SALARY > 8000 AND SALARY > 8000) THEN 0 ELSE SALARY END),
         |  MIN(CASE WHEN NOT(SALARY > 8000 OR SALARY IS NULL) THEN SALARY ELSE 0 END),
-        |  SUM(CASE WHEN NOT(SALARY > 8000 AND SALARY IS NOT NULL) THEN SALARY ELSE 0 END),
         |  SUM(CASE WHEN SALARY > 10000 THEN 2 WHEN SALARY > 8000 THEN 1 END),
         |  AVG(CASE WHEN NOT(SALARY > 8000 OR SALARY IS NOT NULL) THEN SALARY ELSE 0 END)
         |FROM h2.test.employee GROUP BY DEPT
@@ -897,9 +904,9 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
       " THEN SALARY ELSE 0.00 END), COUNT(CAS..., " +
       "PushedFilters: [], " +
       "PushedGroupByColumns: [DEPT], ")
-    checkAnswer(df, Seq(Row(1, 1, 1, 1, 1, 0d, 12000d, 0d, 12000d, 12000d, 0d, 0d, 2, 0d),
-      Row(2, 2, 2, 2, 2, 0d, 10000d, 0d, 10000d, 10000d, 0d, 0d, 2, 0d),
-      Row(2, 2, 2, 2, 2, 0d, 12000d, 0d, 12000d, 12000d, 0d, 0d, 3, 0d)))
+    checkAnswer(df, Seq(Row(1, 1, 1, 1, 1, 0d, 12000d, 0d, 12000d, 12000d, 0d, 2, 0d),
+      Row(2, 2, 2, 2, 2, 10000d, 10000d, 10000d, 10000d, 10000d, 0d, 2, 0d),
+      Row(2, 2, 2, 2, 2, 10000d, 12000d, 10000d, 12000d, 12000d, 0d, 3, 0d)))
   }
 
   test("scan with aggregate push-down: aggregate function with binary arithmetic") {
@@ -1105,5 +1112,38 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
       "PushedAggregates: [SUM(SALARY)], PushedFilters: [], PushedGroupByColumns: [NAME]")
     checkAnswer(df2, Seq(Row("alex", 12000.00), Row("amy", 10000.00),
       Row("cathy", 9000.00), Row("david", 10000.00), Row("jen", 12000.00)))
+  }
+
+  test("scan with aggregate push-down: partial push-down AVG with overflow") {
+    def createDataFrame: DataFrame = spark.read
+      .option("partitionColumn", "id")
+      .option("lowerBound", "0")
+      .option("upperBound", "2")
+      .option("numPartitions", "2")
+      .table("h2.test.item")
+      .agg(avg($"PRICE").as("avg"))
+
+    Seq(true, false).foreach { ansiEnabled =>
+      withSQLConf((SQLConf.ANSI_ENABLED.key, ansiEnabled.toString)) {
+        val df = createDataFrame
+        checkAggregateRemoved(df, false)
+        df.queryExecution.optimizedPlan.collect {
+          case _: DataSourceV2ScanRelation =>
+            val expected_plan_fragment =
+              "PushedAggregates: [SUM(PRICE), COUNT(PRICE)]"
+            checkKeywordsExistsInExplain(df, expected_plan_fragment)
+        }
+        if (ansiEnabled) {
+          val e = intercept[SparkException] {
+            df.collect()
+          }
+          assert(e.getCause.isInstanceOf[ArithmeticException])
+          assert(e.getCause.getMessage.contains("cannot be represented as Decimal") ||
+            e.getCause.getMessage.contains("Overflow in sum of decimals"))
+        } else {
+          checkAnswer(df, Seq(Row(null)))
+        }
+      }
+    }
   }
 }
