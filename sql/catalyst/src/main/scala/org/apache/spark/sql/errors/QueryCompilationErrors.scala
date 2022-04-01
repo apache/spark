@@ -334,7 +334,7 @@ object QueryCompilationErrors extends QueryErrorsBase {
       "it cannot be used in aggregate functions")
   }
 
-  def nonBooleanAggregateFilterError(): Throwable = {
+  def nonBooleanFilterInAggregateError(): Throwable = {
     new AnalysisException("FILTER expression is not of type boolean. " +
       "It cannot be used in an aggregate function")
   }
