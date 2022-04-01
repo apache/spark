@@ -22,9 +22,12 @@
 
 import os
 import sys
-from distutils.version import LooseVersion
 import warnings
+from distutils.version import LooseVersion
+from functools import partial
+from typing import Any
 
+from pyspark.pandas.missing.general_functions import _MissingPandasLikeGeneralFunctions
 from pyspark.sql.pandas.utils import require_minimum_pandas_version, require_minimum_pyarrow_version
 
 try:
@@ -151,3 +154,13 @@ _auto_patch_pandas()
 from pyspark.pandas.config import get_option, options, option_context, reset_option, set_option
 from pyspark.pandas.namespace import *  # noqa: F403
 from pyspark.pandas.sql_formatter import sql
+
+
+def __getattr__(key: str) -> Any:
+    if key.startswith("__"):
+        raise AttributeError(key)
+    if hasattr(_MissingPandasLikeGeneralFunctions, key):
+        func = getattr(_MissingPandasLikeGeneralFunctions, key)
+        return partial(func)
+    else:
+        raise AttributeError("module 'pyspark.pandas' has no attribute '%s'" % (key))
