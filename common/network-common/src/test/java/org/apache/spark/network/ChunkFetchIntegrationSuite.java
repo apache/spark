@@ -32,11 +32,11 @@ import java.util.concurrent.TimeUnit;
 
 import com.google.common.collect.Sets;
 import com.google.common.io.Closeables;
-import org.junit.AfterClass;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
-import static org.junit.Assert.*;
+import static org.junit.jupiter.api.Assertions.*;
 
 import org.apache.spark.network.buffer.FileSegmentManagedBuffer;
 import org.apache.spark.network.buffer.ManagedBuffer;
@@ -65,7 +65,7 @@ public class ChunkFetchIntegrationSuite {
   static ManagedBuffer bufferChunk;
   static ManagedBuffer fileChunk;
 
-  @BeforeClass
+  @BeforeAll
   public static void setUp() throws Exception {
     int bufSize = 100000;
     final ByteBuffer buf = ByteBuffer.allocate(bufSize);
@@ -123,7 +123,7 @@ public class ChunkFetchIntegrationSuite {
     clientFactory = context.createClientFactory();
   }
 
-  @AfterClass
+  @AfterAll
   public static void tearDown() {
     bufferChunk.release();
     server.close();

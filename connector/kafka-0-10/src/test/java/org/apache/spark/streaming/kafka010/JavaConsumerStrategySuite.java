@@ -25,8 +25,8 @@ import scala.collection.JavaConverters;
 
 import org.apache.kafka.common.TopicPartition;
 
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 public class JavaConsumerStrategySuite implements Serializable {
 
@@ -62,7 +62,7 @@ public class JavaConsumerStrategySuite implements Serializable {
     final ConsumerStrategy<String, String> sub4 =
       ConsumerStrategies.Subscribe(topics, kafkaParams);
 
-    Assert.assertEquals(
+    Assertions.assertEquals(
       sub1.executorKafkaParams().get("bootstrap.servers"),
       sub3.executorKafkaParams().get("bootstrap.servers"));
 
@@ -75,7 +75,7 @@ public class JavaConsumerStrategySuite implements Serializable {
     final ConsumerStrategy<String, String> psub4 =
       ConsumerStrategies.SubscribePattern(pat, kafkaParams);
 
-    Assert.assertEquals(
+    Assertions.assertEquals(
       psub1.executorKafkaParams().get("bootstrap.servers"),
       psub3.executorKafkaParams().get("bootstrap.servers"));
 
@@ -88,7 +88,7 @@ public class JavaConsumerStrategySuite implements Serializable {
     final ConsumerStrategy<String, String> asn4 =
       ConsumerStrategies.Assign(parts, kafkaParams);
 
-    Assert.assertEquals(
+    Assertions.assertEquals(
       asn1.executorKafkaParams().get("bootstrap.servers"),
       asn3.executorKafkaParams().get("bootstrap.servers"));
   }

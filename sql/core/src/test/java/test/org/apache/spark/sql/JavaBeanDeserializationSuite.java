@@ -26,7 +26,7 @@ import java.util.*;
 
 import org.apache.commons.lang3.builder.ToStringBuilder;
 import org.apache.commons.lang3.builder.ToStringStyle;
-import org.junit.*;
+import org.junit.jupiter.api.*;
 
 import org.apache.spark.sql.*;
 import org.apache.spark.sql.catalyst.expressions.GenericRow;
@@ -42,12 +42,12 @@ public class JavaBeanDeserializationSuite implements Serializable {
 
   private TestSparkSession spark;
 
-  @Before
+  @BeforeEach
   public void setUp() {
     spark = new TestSparkSession();
   }
 
-  @After
+  @AfterEach
   public void tearDown() {
     spark.stop();
     spark = null;
@@ -83,7 +83,7 @@ public class JavaBeanDeserializationSuite implements Serializable {
       .as(encoder);
 
     List<ArrayRecord> records = dataset.collectAsList();
-    Assert.assertEquals(ARRAY_RECORDS, records);
+    Assertions.assertEquals(ARRAY_RECORDS, records);
   }
 
   private static final List<MapRecord> MAP_RECORDS = new ArrayList<>();
@@ -126,7 +126,7 @@ public class JavaBeanDeserializationSuite implements Serializable {
 
     List<MapRecord> records = dataset.collectAsList();
 
-    Assert.assertEquals(MAP_RECORDS, records);
+    Assertions.assertEquals(MAP_RECORDS, records);
   }
 
   @Test
@@ -164,7 +164,7 @@ public class JavaBeanDeserializationSuite implements Serializable {
 
     List<RecordSpark22000> records = dataset.collectAsList();
 
-    Assert.assertEquals(expectedRecords, records);
+    Assertions.assertEquals(expectedRecords, records);
   }
 
   @Test
@@ -183,9 +183,9 @@ public class JavaBeanDeserializationSuite implements Serializable {
 
     Dataset<Row> dataFrame = spark.createDataFrame(inputRows, schema);
 
-    AnalysisException e = Assert.assertThrows(AnalysisException.class,
+    AnalysisException e = Assertions.assertThrows(AnalysisException.class,
       () -> dataFrame.as(encoder).collect());
-    Assert.assertTrue(e.getMessage().contains("Cannot up cast "));
+    Assertions.assertTrue(e.getMessage().contains("Cannot up cast "));
   }
 
   private static Row createRecordSpark22000Row(Long index) {
@@ -547,7 +547,7 @@ public class JavaBeanDeserializationSuite implements Serializable {
 
       List<LocalDateInstantRecord> records = dataset.collectAsList();
 
-      Assert.assertEquals(expectedRecords, records);
+      Assertions.assertEquals(expectedRecords, records);
     } finally {
         spark.conf().set(SQLConf.DATETIME_JAVA8API_ENABLED().key(), originConf);
     }

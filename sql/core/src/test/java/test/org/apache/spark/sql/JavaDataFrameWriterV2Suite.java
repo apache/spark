@@ -26,9 +26,9 @@ import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException;
 import org.apache.spark.sql.connector.catalog.InMemoryTableCatalog;
 import org.apache.spark.sql.test.TestSparkSession;
 import org.apache.spark.sql.types.StructType;
-import org.junit.After;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import static org.apache.spark.sql.functions.*;
 
@@ -40,14 +40,14 @@ public class JavaDataFrameWriterV2Suite {
     return spark.read().schema(schema).text();
   }
 
-  @Before
+  @BeforeEach
   public void createTestTable() {
     this.spark = new TestSparkSession();
     spark.conf().set("spark.sql.catalog.testcat", InMemoryTableCatalog.class.getName());
     spark.sql("CREATE TABLE testcat.t (s string) USING foo");
   }
 
-  @After
+  @AfterEach
   public void dropTestTable() {
     spark.sql("DROP TABLE testcat.t");
     spark.stop();

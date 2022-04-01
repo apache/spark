@@ -30,9 +30,9 @@ import scala.*;
 import scala.collection.Iterator;
 
 import com.google.common.collect.HashMultiset;
-import org.junit.After;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 
@@ -54,7 +54,7 @@ import org.apache.spark.shuffle.sort.io.LocalDiskShuffleExecutorComponents;
 import org.apache.spark.storage.*;
 import org.apache.spark.util.Utils;
 
-import static org.junit.Assert.*;
+import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Answers.RETURNS_SMART_NULLS;
 import static org.mockito.Mockito.*;
 
@@ -79,7 +79,7 @@ public class UnsafeShuffleWriterSuite implements ShuffleChecksumTestHelper {
   @Mock(answer = RETURNS_SMART_NULLS) TaskContext taskContext;
   @Mock(answer = RETURNS_SMART_NULLS) ShuffleDependency<Object, Object, Object> shuffleDep;
 
-  @After
+  @AfterEach
   public void tearDown() {
     Utils.deleteRecursively(tempDir);
     final long leakedMemory = taskMemoryManager.cleanUpAllAllocatedMemory();
@@ -88,7 +88,7 @@ public class UnsafeShuffleWriterSuite implements ShuffleChecksumTestHelper {
     }
   }
 
-  @Before
+  @BeforeEach
   public void setUp() throws Exception {
     MockitoAnnotations.openMocks(this).close();
     tempDir = Utils.createTempDir(null, "test");
@@ -195,8 +195,8 @@ public class UnsafeShuffleWriterSuite implements ShuffleChecksumTestHelper {
 
   private void assertSpillFilesWereCleanedUp() {
     for (File spillFile : spillFilesCreated) {
-      assertFalse("Spill file " + spillFile.getPath() + " was not cleaned up",
-        spillFile.exists());
+      assertFalse(spillFile.exists(),
+        "Spill file " + spillFile.getPath() + " was not cleaned up");
     }
   }
 
@@ -227,20 +227,21 @@ public class UnsafeShuffleWriterSuite implements ShuffleChecksumTestHelper {
     return recordsList;
   }
 
-  @Test(expected=IllegalStateException.class)
-  public void mustCallWriteBeforeSuccessfulStop() throws IOException, SparkException {
-    createWriter(false).stop(true);
+  @Test
+  public void mustCallWriteBeforeSuccessfulStop() {
+    assertThrows(IllegalStateException.class,
+      () -> createWriter(false).stop(true));
   }
 
   @Test
-  public void doNotNeedToCallWriteBeforeUnsuccessfulStop() throws IOException, SparkException {
+  public void doNotNeedToCallWriteBeforeUnsuccessfulStop() throws SparkException {
     createWriter(false).stop(false);
   }
 
   static class PandaException extends RuntimeException {
   }
 
-  @Test(expected=PandaException.class)
+  @Test
   public void writeFailurePropagates() throws Exception {
     class BadRecords extends scala.collection.AbstractIterator<Product2<Object, Object>> {
       @Override public boolean hasNext() {
@@ -251,7 +252,8 @@ public class UnsafeShuffleWriterSuite implements ShuffleChecksumTestHelper {
       }
     }
     final UnsafeShuffleWriter<Object, Object> writer = createWriter(true);
-    writer.write(new BadRecords());
+    assertThrows(PandaException.class,
+      () -> writer.write(new BadRecords()));
   }
 
   @Test

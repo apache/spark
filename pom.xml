@@ -412,13 +412,13 @@
       <scope>test</scope>
     </dependency>
     <dependency>
-      <groupId>junit</groupId>
-      <artifactId>junit</artifactId>
+      <groupId>org.junit.jupiter</groupId>
+      <artifactId>junit-jupiter</artifactId>
       <scope>test</scope>
     </dependency>
     <dependency>
-      <groupId>com.github.sbt</groupId>
-      <artifactId>junit-interface</artifactId>
+      <groupId>net.aichler</groupId>
+      <artifactId>jupiter-interface</artifactId>
       <scope>test</scope>
     </dependency>
   </dependencies>
@@ -1133,7 +1133,7 @@
       </dependency>
       <dependency>
         <groupId>org.jmock</groupId>
-        <artifactId>jmock-junit4</artifactId>
+        <artifactId>jmock-junit5</artifactId>
         <scope>test</scope>
         <version>2.12.0</version>
       </dependency>
@@ -1144,15 +1144,15 @@
         <scope>test</scope>
       </dependency>
       <dependency>
-        <groupId>junit</groupId>
-        <artifactId>junit</artifactId>
-        <version>4.13.2</version>
+        <groupId>org.junit.jupiter</groupId>
+        <artifactId>junit-jupiter</artifactId>
+        <version>5.8.2</version>
         <scope>test</scope>
       </dependency>
       <dependency>
-        <groupId>com.github.sbt</groupId>
-        <artifactId>junit-interface</artifactId>
-        <version>0.13.3</version>
+        <groupId>net.aichler</groupId>
+        <artifactId>jupiter-interface</artifactId>
+        <version>0.9.1</version>
         <scope>test</scope>
       </dependency>
       <dependency>

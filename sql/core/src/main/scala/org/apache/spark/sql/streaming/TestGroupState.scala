@@ -97,7 +97,7 @@ import org.apache.spark.sql.execution.streaming.GroupStateImpl._
  *   Integer[] values = ...;
  *
  *   // Asserts the prevState is in init state without updates.
- *   Assert.assertFalse(prevState.isUpdated());
+ *   Assertions.assertFalse(prevState.isUpdated());
  *
  *   // Calls the state transition function with the test previous state
  *   // with desired configs.
@@ -105,8 +105,8 @@ import org.apache.spark.sql.execution.streaming.GroupStateImpl._
  *
  *   // Asserts the test GroupState object has been updated but not removed
  *   // after calling the state transition function
- *   Assert.assertTrue(prevState.isUpdated());
- *   Assert.assertFalse(prevState.isRemoved());
+ *   Assertions.assertTrue(prevState.isUpdated());
+ *   Assertions.assertFalse(prevState.isRemoved());
  * }
  * }}}
  *

@@ -17,7 +17,7 @@
 
 package org.apache.spark.network.sasl;
 
-import static org.junit.Assert.*;
+import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
 import java.io.File;
@@ -44,7 +44,7 @@ import io.netty.channel.Channel;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelOutboundHandlerAdapter;
 import io.netty.channel.ChannelPromise;
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
 import org.apache.spark.network.TestUtils;
 import org.apache.spark.network.TransportContext;
@@ -209,7 +209,7 @@ public class SparkSaslSuite {
 
       channel.reset();
       count = emsg.transferTo(channel, emsg.transferred());
-      assertTrue("Unexpected count: " + count, count > 1 && count < data.length);
+      assertTrue(count > 1 && count < data.length, "Unexpected count: " + count);
       assertEquals(data.length, emsg.transferred());
     } finally {
       msg.release();
