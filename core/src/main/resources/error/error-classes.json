@@ -121,10 +121,10 @@
     "sqlState" : "42000"
   },
   "MAP_KEY_DOES_NOT_EXIST" : {
-    "message" : [ "Key %s does not exist. If necessary set %s to false to bypass this error." ]
+    "message" : [ "Key %s does not exist. If necessary set %s to false to bypass this error.%s" ]
   },
   "MAP_KEY_DOES_NOT_EXIST_IN_ELEMENT_AT" : {
-    "message" : [ "Key %s does not exist. To return NULL instead, use 'try_element_at'. If necessary set %s to false to bypass this error." ]
+    "message" : [ "Key %s does not exist. To return NULL instead, use 'try_element_at'. If necessary set %s to false to bypass this error.%s" ]
   },
   "MISSING_COLUMN" : {
     "message" : [ "Column '%s' does not exist. Did you mean one of the following? [%s]" ],
