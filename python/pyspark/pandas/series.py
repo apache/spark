@@ -2210,18 +2210,18 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
                 scol = F.when(scol < lower, lower).otherwise(scol)
             if upper is not None:
                 scol = F.when(scol > upper, upper).otherwise(scol)
-            if not inplace:
-                return self._with_new_scol(
-                    scol.alias(self._internal.data_spark_column_names[0]),
-                    field=self._internal.data_fields[0],
-                )
-            else:
+            if inplace:
                 internal = self._internal.copy(
                     data_spark_columns=[scol.alias(self._internal.data_spark_column_names[0])],
                     data_fields=[self._internal.data_fields[0]],
                 )
                 self._psdf._update_internal_frame(internal, requires_same_anchor=False)
                 return None
+            else:
+                return self._with_new_scol(
+                    scol.alias(self._internal.data_spark_column_names[0]),
+                    field=self._internal.data_fields[0],
+                )
         else:
             return self
 
