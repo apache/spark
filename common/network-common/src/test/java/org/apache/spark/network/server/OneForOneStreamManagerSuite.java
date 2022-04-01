@@ -126,4 +126,37 @@ public class OneForOneStreamManagerSuite {
     Mockito.verify(mockManagedBuffer, Mockito.times(1)).release();
     Assert.assertEquals(0, manager.numStreamStates());
   }
+
+  @Test
+  public void streamStatesAreFreeOrNotWhenConnectionIsClosed() {
+    OneForOneStreamManager manager = new OneForOneStreamManager();
+    ManagedBuffer mockManagedBuffer = Mockito.mock(ManagedBuffer.class);
+
+    Iterator<ManagedBuffer> buffers1 = Mockito.mock(Iterator.class);
+    Mockito.when(buffers1.hasNext()).thenReturn(true).thenReturn(false);
+    Mockito.when(buffers1.next()).thenReturn(mockManagedBuffer);
+
+    Iterator<ManagedBuffer> buffers2 = Mockito.mock(Iterator.class);
+    Mockito.when(buffers2.hasNext()).thenReturn(true);
+    Mockito.when(buffers2.next()).thenReturn(mockManagedBuffer);
+
+    Channel dummyChannel = Mockito.mock(Channel.class, Mockito.RETURNS_SMART_NULLS);
+    // should Release,
+    manager.registerStream("appId", buffers1, dummyChannel, false);
+    // should NOT Release
+    manager.registerStream("appId", buffers2, dummyChannel, true);
+    Assert.assertEquals(2, manager.numStreamStates());
+
+    // connectionTerminated
+    manager.connectionTerminated(dummyChannel);
+
+    Mockito.verify(buffers1, Mockito.times(2)).hasNext();
+    Mockito.verify(buffers1, Mockito.times(1)).next();
+
+    Mockito.verify(buffers2, Mockito.times(0)).hasNext();
+    Mockito.verify(buffers2, Mockito.times(0)).next();
+    // only buffers1 has been released
+    Mockito.verify(mockManagedBuffer, Mockito.times(1)).release();
+    Assert.assertEquals(0, manager.numStreamStates());
+  }
 }
