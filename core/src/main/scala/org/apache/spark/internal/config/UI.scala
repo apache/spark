@@ -92,6 +92,11 @@ private[spark] object UI {
     .booleanConf
     .createWithDefault(true)
 
+  val UI_HEAP_DUMPS_ENABLED = ConfigBuilder("spark.ui.threadDumpsEnabled")
+    .version("3.4.0")
+    .booleanConf
+    .createWithDefault(true)
+
   val UI_PROMETHEUS_ENABLED = ConfigBuilder("spark.ui.prometheus.enabled")
     .internal()
     .doc("Expose executor metrics at /metrics/executors/prometheus. " +

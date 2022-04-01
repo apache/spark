@@ -48,6 +48,7 @@ import com.google.common.cache.{CacheBuilder, CacheLoader, LoadingCache}
 import com.google.common.collect.Interners
 import com.google.common.io.{ByteStreams, Files => GFiles}
 import com.google.common.net.InetAddresses
+import com.sun.management.HotSpotDiagnosticMXBean
 import org.apache.commons.codec.binary.Hex
 import org.apache.commons.io.IOUtils
 import org.apache.commons.lang3.SystemUtils
@@ -2270,6 +2271,25 @@ private[spark] object Utils extends Logging {
           v1 > v2
         }
     }.map(threadInfoToThreadStackTrace)
+  }
+
+  /** Return a heap dump */
+  def getHeapDump: InputStream = {
+    try {
+      val clazz = classOf[HotSpotDiagnosticMXBean]
+      val server = ManagementFactory.getPlatformMBeanServer
+      val bean = ManagementFactory.newPlatformMXBeanProxy(server
+        , "com.sun.management:type=HotSpotDiagnostic"
+        , clazz)
+      val tmpDir = createTempDir("heap-dump")
+      tmpDir.deleteOnExit()
+      val absolutePath = s"${tmpDir.getAbsolutePath}/${System.nanoTime()}.hprof"
+      bean.dumpHeap(absolutePath, true)
+      new FileInputStream(absolutePath)
+    } catch {
+      case e: Exception =>
+        throw new SparkException("Failed to dump heap", e)
+    }
   }
 
   def getThreadDumpForThread(threadId: Long): Option[ThreadStackTrace] = {
