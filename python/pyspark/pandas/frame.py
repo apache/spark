@@ -6831,8 +6831,28 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                     )
             return DataFrame(internal)
 
+    def _prepare_sort_by_scols(self, by: Union[Name, List[Name]]) -> List[Column]:
+        if is_name_like_value(by):
+            by = [by]
+        else:
+            assert is_list_like(by), type(by)
+        new_by = []
+        for colname in by:
+            ser = self[colname]
+            if not isinstance(ser, ps.Series):
+                raise ValueError(
+                    "The column %s is not unique. For a multi-index, the label must be a tuple "
+                    "with elements corresponding to each level." % name_like_string(colname)
+                )
+            new_by.append(ser.spark.column)
+        return new_by
+
     def _sort(
-        self, by: List[Column], ascending: Union[bool, List[bool]], na_position: str
+        self,
+        by: List[Column],
+        ascending: Union[bool, List[bool]],
+        na_position: str,
+        keep: str = "first",
     ) -> "DataFrame":
         if isinstance(ascending, bool):
             ascending = [ascending] * len(by)
@@ -6851,7 +6871,16 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             (False, "last"): Column.desc_nulls_last,
         }
         by = [mapper[(asc, na_position)](scol) for scol, asc in zip(by, ascending)]
-        sdf = self._internal.resolved_copy.spark_frame.sort(*by, NATURAL_ORDER_COLUMN_NAME)
+
+        natural_order_scol = F.col(NATURAL_ORDER_COLUMN_NAME)
+
+        if keep == "last":
+            natural_order_scol = Column.desc(natural_order_scol)
+        elif keep == "all":
+            raise NotImplementedError("`keep`=all is not implemented yet.")
+        elif keep != "first":
+            raise ValueError('keep must be either "first", "last" or "all".')
+        sdf = self._internal.resolved_copy.spark_frame.sort(*by, natural_order_scol)
         return DataFrame(self._internal.with_new_sdf(sdf))
 
     def sort_values(
@@ -6948,20 +6977,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         3  None     8     4
         """
         inplace = validate_bool_kwarg(inplace, "inplace")
-        if is_name_like_value(by):
-            by = [by]
-        else:
-            assert is_list_like(by), type(by)
-
-        new_by = []
-        for colname in by:
-            ser = self[colname]
-            if not isinstance(ser, ps.Series):
-                raise ValueError(
-                    "The column %s is not unique. For a multi-index, the label must be a tuple "
-                    "with elements corresponding to each level." % name_like_string(colname)
-                )
-            new_by.append(ser.spark.column)
+        new_by = self._prepare_sort_by_scols(by)
 
         psdf = self._sort(by=new_by, ascending=ascending, na_position=na_position)
 
@@ -7305,8 +7321,9 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         )
         return internal
 
-    # TODO: add keep = First
-    def nlargest(self, n: int, columns: Union[Name, List[Name]]) -> "DataFrame":
+    def nlargest(
+        self, n: int, columns: Union[Name, List[Name]], keep: str = "first"
+    ) -> "DataFrame":
         """
         Return the first `n` rows ordered by `columns` in descending order.
 
@@ -7326,6 +7343,10 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             Number of rows to return.
         columns : label or list of labels
             Column label(s) to order by.
+        keep : {'first', 'last'}, default 'first'. 'all' is not implemented yet.
+            Determines which duplicates (if any) to keep.
+            - ``first`` : Keep the first occurrence.
+            - ``last`` : Keep the last occurrence.
 
         Returns
         -------
@@ -7378,11 +7399,46 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         6  NaN  12
         5  7.0  11
         4  6.0  10
-        """
-        return self.sort_values(by=columns, ascending=False).head(n=n)
 
-    # TODO: add keep = First
-    def nsmallest(self, n: int, columns: Union[Name, List[Name]]) -> "DataFrame":
+        The examples below show how ties are resolved, which is decided by `keep`.
+
+        >>> tied_df = ps.DataFrame({'X': [1, 2, 2, 3, 3]}, index=['a', 'b', 'c', 'd', 'e'])
+        >>> tied_df
+           X
+        a  1
+        b  2
+        c  2
+        d  3
+        e  3
+
+        When using keep='first' (by default), ties are resolved in order:
+
+        >>> tied_df.nlargest(3, 'X')
+           X
+        d  3
+        e  3
+        b  2
+
+        >>> tied_df.nlargest(3, 'X', keep='first')
+           X
+        d  3
+        e  3
+        b  2
+
+        When using keep='last', ties are resolved in reverse order:
+
+        >>> tied_df.nlargest(3, 'X', keep='last')
+           X
+        e  3
+        d  3
+        c  2
+        """
+        by_scols = self._prepare_sort_by_scols(columns)
+        return self._sort(by=by_scols, ascending=False, na_position="last", keep=keep).head(n=n)
+
+    def nsmallest(
+        self, n: int, columns: Union[Name, List[Name]], keep: str = "first"
+    ) -> "DataFrame":
         """
         Return the first `n` rows ordered by `columns` in ascending order.
 
@@ -7400,6 +7456,10 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             Number of items to retrieve.
         columns : list or str
             Column name or names to order by.
+        keep : {'first', 'last'}, default 'first'. 'all' is not implemented yet.
+            Determines which duplicates (if any) to keep.
+            - ``first`` : Keep the first occurrence.
+            - ``last`` : Keep the last occurrence.
 
         Returns
         -------
@@ -7443,8 +7503,42 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         0  1.0   6
         1  2.0   7
         2  3.0   8
+
+        The examples below show how ties are resolved, which is decided by `keep`.
+
+        >>> tied_df = ps.DataFrame({'X': [1, 1, 2, 2, 3]}, index=['a', 'b', 'c', 'd', 'e'])
+        >>> tied_df
+           X
+        a  1
+        b  1
+        c  2
+        d  2
+        e  3
+
+        When using keep='first' (by default), ties are resolved in order:
+
+        >>> tied_df.nsmallest(3, 'X')
+           X
+        a  1
+        b  1
+        c  2
+
+        >>> tied_df.nsmallest(3, 'X', keep='first')
+           X
+        a  1
+        b  1
+        c  2
+
+        When using keep='last', ties are resolved in reverse order:
+
+        >>> tied_df.nsmallest(3, 'X', keep='last')
+           X
+        b  1
+        a  1
+        d  2
         """
-        return self.sort_values(by=columns, ascending=True).head(n=n)
+        by_scols = self._prepare_sort_by_scols(columns)
+        return self._sort(by=by_scols, ascending=True, na_position="last", keep=keep).head(n=n)
 
     def isin(self, values: Union[List, Dict]) -> "DataFrame":
         """
