@@ -20,10 +20,8 @@ package org.apache.spark.network.crypto;
 import java.nio.ByteBuffer;
 import java.nio.channels.WritableByteChannel;
 import java.security.GeneralSecurityException;
-import java.util.Map;
 import java.util.Random;
 
-import com.google.common.collect.ImmutableMap;
 import com.google.crypto.tink.subtle.Hex;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
