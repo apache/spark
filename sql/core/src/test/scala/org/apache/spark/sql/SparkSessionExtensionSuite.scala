@@ -172,7 +172,8 @@ class SparkSessionExtensionSuite extends SparkFunSuite with SQLHelper {
     }
     withSession(extensions) { session =>
       session.conf.set(SQLConf.ADAPTIVE_EXECUTION_ENABLED, true)
-      assert(session.sessionState.queryStagePrepRules.contains(MyQueryStagePrepRule()))
+      assert(session.sessionState.adaptiveRulesHolder.queryStagePrepRules
+        .contains(MyQueryStagePrepRule()))
       assert(session.sessionState.columnarRules.contains(
         MyColumnarRule(MyNewQueryStageRule(), MyNewQueryStageRule())))
       import session.sqlContext.implicits._
@@ -424,7 +425,7 @@ class SparkSessionExtensionSuite extends SparkFunSuite with SQLHelper {
       extensions.injectRuntimeOptimizerRule(_ => AddLimit)
     }
     withSession(extensions) { session =>
-      assert(session.sessionState.runtimeOptimizerRules.contains(AddLimit))
+      assert(session.sessionState.adaptiveRulesHolder.runtimeOptimizerRules.contains(AddLimit))
 
       withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
         checkLimit(session.range(2).repartition(), false)

@@ -45,7 +45,8 @@ class AQEOptimizer(session: SparkSession) extends RuleExecutor[LogicalPlan] {
     Batch("Dynamic Join Selection", Once, DynamicJoinSelection),
     Batch("Eliminate Limits", fixedPoint, EliminateLimits),
     Batch("Optimize One Row Plan", fixedPoint, OptimizeOneRowPlan)) :+
-    Batch("User Provided Optimizers", fixedPoint, session.sessionState.runtimeOptimizerRules: _*)
+    Batch("User Provided Optimizers", fixedPoint,
+      session.sessionState.adaptiveRulesHolder.runtimeOptimizerRules: _*)
 
   final override protected def batches: Seq[Batch] = {
     val excludedRules = conf.getConf(SQLConf.ADAPTIVE_OPTIMIZER_EXCLUDED_RULES)

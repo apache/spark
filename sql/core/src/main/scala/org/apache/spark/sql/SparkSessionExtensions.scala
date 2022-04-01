@@ -304,7 +304,7 @@ class SparkSessionExtensions {
 
   /**
    * Inject a runtime `Rule` builder into the [[SparkSession]].
-   * The injected rules will be executed once after built-in
+   * The injected rules will be executed after built-in
    * [[org.apache.spark.sql.execution.adaptive.AQEOptimizer]] rules are applied.
    * A runtime optimizer rule is used to improve the quality of a logical plan during execution
    * which can leverage accurate statistics from shuffle.
