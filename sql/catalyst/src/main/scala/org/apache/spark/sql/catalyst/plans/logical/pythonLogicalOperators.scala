@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.plans.logical
 
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeSet, Expression, PythonUDF}
+import org.apache.spark.sql.catalyst.util.truncatedString
 
 /**
  * FlatMap groups using a udf: pandas.Dataframe -> pandas.DataFrame.
@@ -146,4 +147,10 @@ case class AttachDistributedSequence(
 
   override protected def withNewChildInternal(newChild: LogicalPlan): AttachDistributedSequence =
     copy(child = newChild)
+
+  override def simpleString(maxFields: Int): String = {
+    val truncatedOutputString = truncatedString(output, "[", ", ", "]", maxFields)
+    val indexColumn = s"Index: $sequenceAttr"
+    s"$nodeName$truncatedOutputString $indexColumn"
+  }
 }

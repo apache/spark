@@ -322,6 +322,7 @@ partitionSpec
 
 partitionVal
     : identifier (EQ constant)?
+    | identifier EQ DEFAULT
     ;
 
 namespace
@@ -845,7 +846,7 @@ primaryExpression
     | OVERLAY LEFT_PAREN input=valueExpression PLACING replace=valueExpression
       FROM position=valueExpression (FOR length=valueExpression)? RIGHT_PAREN                  #overlay
     | PERCENTILE_CONT LEFT_PAREN percentage=valueExpression RIGHT_PAREN
-      WITHIN GROUP LEFT_PAREN ORDER BY sortItem RIGHT_PAREN                                    #percentile
+      WITHIN GROUP LEFT_PAREN ORDER BY sortItem RIGHT_PAREN ( OVER windowSpec)?                #percentile
     ;
 
 constant

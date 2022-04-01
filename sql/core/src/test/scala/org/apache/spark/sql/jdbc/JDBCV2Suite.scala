@@ -95,6 +95,14 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
         """CREATE TABLE "test"."view1" ("|col1" INTEGER, "|col2" INTEGER)""").executeUpdate()
       conn.prepareStatement(
         """CREATE TABLE "test"."view2" ("|col1" INTEGER, "|col3" INTEGER)""").executeUpdate()
+
+      conn.prepareStatement(
+        "CREATE TABLE \"test\".\"item\" (id INTEGER, name TEXT(32), price NUMERIC(23, 3))")
+        .executeUpdate()
+      conn.prepareStatement("INSERT INTO \"test\".\"item\" VALUES " +
+        "(1, 'bottle', 11111111111111111111.123)").executeUpdate()
+      conn.prepareStatement("INSERT INTO \"test\".\"item\" VALUES " +
+        "(1, 'bottle', 99999999999999999999.123)").executeUpdate()
     }
   }
 
@@ -199,8 +207,15 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
       "PushedFilters: [], PushedTopN: ORDER BY [salary ASC NULLS FIRST] LIMIT 1, ")
     checkAnswer(df1, Seq(Row(1, "cathy", 9000.00, 1200.0, false)))
 
-    val df2 = spark.read.table("h2.test.employee")
-      .where($"dept" === 1).orderBy($"salary").limit(1)
+    val df2 = spark.read
+      .option("partitionColumn", "dept")
+      .option("lowerBound", "0")
+      .option("upperBound", "2")
+      .option("numPartitions", "1")
+      .table("h2.test.employee")
+      .where($"dept" === 1)
+      .orderBy($"salary")
+      .limit(1)
     checkSortRemoved(df2)
     checkPushedInfo(df2, "PushedFilters: [DEPT IS NOT NULL, DEPT = 1], " +
       "PushedTopN: ORDER BY [salary ASC NULLS FIRST] LIMIT 1, ")
@@ -215,7 +230,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
       .filter($"dept" > 1)
       .orderBy($"salary".desc)
       .limit(1)
-    checkSortRemoved(df3)
+    checkSortRemoved(df3, false)
     checkPushedInfo(df3, "PushedFilters: [DEPT IS NOT NULL, DEPT > 1], " +
       "PushedTopN: ORDER BY [salary DESC NULLS LAST] LIMIT 1, ")
     checkAnswer(df3, Seq(Row(2, "alex", 12000.00, 1200.0, false)))
@@ -265,6 +280,30 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
     checkSortRemoved(df8, false)
     checkPushedInfo(df8, "PushedFilters: [], ")
     checkAnswer(df8, Seq(Row(2, "alex", 12000.00, 1200.0, false)))
+  }
+
+  test("simple scan with top N: order by with alias") {
+    val df1 = spark.read
+      .table("h2.test.employee")
+      .select($"NAME", $"SALARY".as("mySalary"))
+      .sort("mySalary")
+      .limit(1)
+    checkSortRemoved(df1)
+    checkPushedInfo(df1,
+      "PushedFilters: [], PushedTopN: ORDER BY [SALARY ASC NULLS FIRST] LIMIT 1, ")
+    checkAnswer(df1, Seq(Row("cathy", 9000.00)))
+
+    val df2 = spark.read
+      .table("h2.test.employee")
+      .select($"DEPT", $"NAME", $"SALARY".as("mySalary"))
+      .filter($"DEPT" > 1)
+      .sort("mySalary")
+      .limit(1)
+    checkSortRemoved(df2)
+    checkPushedInfo(df2,
+      "PushedFilters: [DEPT IS NOT NULL, DEPT > 1], " +
+        "PushedTopN: ORDER BY [SALARY ASC NULLS FIRST] LIMIT 1, ")
+    checkAnswer(df2, Seq(Row(2, "david", 10000.00)))
   }
 
   test("scan with filter push-down") {
@@ -319,9 +358,16 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
       "WHEN IS_MANAGER = true THEN FALSE ELSE DEPT > 3 END], ")
     checkAnswer(df9, Seq(Row(2, "alex", 12000, 1200, false),
       Row(2, "david", 10000, 1300, true), Row(6, "jen", 12000, 1200, true)))
+
+    val df10 = spark.table("h2.test.people")
+      .select($"NAME".as("myName"), $"ID".as("myID"))
+      .filter($"myID" > 1)
+    checkFiltersRemoved(df10)
+    checkPushedInfo(df10, "PushedFilters: [ID IS NOT NULL, ID > 1], ")
+    checkAnswer(df10, Row("mary", 2))
   }
 
-  test("scan with complex filter push-down") {
+  test("scan with filter push-down with ansi mode") {
     Seq(false, true).foreach { ansiMode =>
       withSQLConf(SQLConf.ANSI_ENABLED.key -> ansiMode.toString) {
         val df = spark.table("h2.test.people").filter($"id" + 1 > 1)
@@ -373,6 +419,25 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
         checkPushedInfo(df3, expectedPlanFragment3)
         checkAnswer(df3,
           Seq(Row(1, "cathy", 9000, 1200, false), Row(2, "david", 10000, 1300, true)))
+
+        val df4 = spark.table("h2.test.employee")
+          .filter(($"salary" > 1000d).and($"salary" < 12000d))
+
+        checkFiltersRemoved(df4, ansiMode)
+
+        df4.queryExecution.optimizedPlan.collect {
+          case _: DataSourceV2ScanRelation =>
+            val expected_plan_fragment = if (ansiMode) {
+              "PushedFilters: [SALARY IS NOT NULL, " +
+                "CAST(SALARY AS double) > 1000.0, CAST(SALARY AS double) < 12000.0], "
+            } else {
+              "PushedFilters: [SALARY IS NOT NULL], "
+            }
+            checkKeywordsExistsInExplain(df4, expected_plan_fragment)
+        }
+
+        checkAnswer(df4, Seq(Row(1, "amy", 10000, 1000, true),
+          Row(1, "cathy", 9000, 1200, false), Row(2, "david", 10000, 1300, true)))
       }
     }
   }
@@ -427,8 +492,8 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
   test("show tables") {
     checkAnswer(sql("SHOW TABLES IN h2.test"),
       Seq(Row("test", "people", false), Row("test", "empty_table", false),
-        Row("test", "employee", false), Row("test", "dept", false), Row("test", "person", false),
-        Row("test", "view1", false), Row("test", "view2", false)))
+        Row("test", "employee", false), Row("test", "item", false), Row("test", "dept", false),
+        Row("test", "person", false), Row("test", "view1", false), Row("test", "view2", false)))
   }
 
   test("SQL API: create table as select") {
@@ -1048,5 +1113,38 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
       "PushedAggregates: [SUM(SALARY)], PushedFilters: [], PushedGroupByColumns: [NAME]")
     checkAnswer(df2, Seq(Row("alex", 12000.00), Row("amy", 10000.00),
       Row("cathy", 9000.00), Row("david", 10000.00), Row("jen", 12000.00)))
+  }
+
+  test("scan with aggregate push-down: partial push-down AVG with overflow") {
+    def createDataFrame: DataFrame = spark.read
+      .option("partitionColumn", "id")
+      .option("lowerBound", "0")
+      .option("upperBound", "2")
+      .option("numPartitions", "2")
+      .table("h2.test.item")
+      .agg(avg($"PRICE").as("avg"))
+
+    Seq(true, false).foreach { ansiEnabled =>
+      withSQLConf((SQLConf.ANSI_ENABLED.key, ansiEnabled.toString)) {
+        val df = createDataFrame
+        checkAggregateRemoved(df, false)
+        df.queryExecution.optimizedPlan.collect {
+          case _: DataSourceV2ScanRelation =>
+            val expected_plan_fragment =
+              "PushedAggregates: [SUM(PRICE), COUNT(PRICE)]"
+            checkKeywordsExistsInExplain(df, expected_plan_fragment)
+        }
+        if (ansiEnabled) {
+          val e = intercept[SparkException] {
+            df.collect()
+          }
+          assert(e.getCause.isInstanceOf[ArithmeticException])
+          assert(e.getCause.getMessage.contains("cannot be represented as Decimal") ||
+            e.getCause.getMessage.contains("Overflow in sum of decimals"))
+        } else {
+          checkAnswer(df, Seq(Row(null)))
+        }
+      }
+    }
   }
 }

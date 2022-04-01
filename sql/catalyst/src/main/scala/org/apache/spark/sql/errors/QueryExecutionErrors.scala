@@ -45,7 +45,7 @@ import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, CatalogTable}
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Expression}
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.JoinType
-import org.apache.spark.sql.catalyst.plans.logical.{DomainJoin, LogicalPlan}
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.ValueInterval
 import org.apache.spark.sql.catalyst.trees.TreeNode
 import org.apache.spark.sql.catalyst.util.{sideBySide, BadRecordException, DateTimeUtils, FailFastMode}
@@ -137,9 +137,9 @@ object QueryExecutionErrors {
       messageParameters = Array(funcCls, inputTypes, outputType), e)
   }
 
-  def divideByZeroError(): ArithmeticException = {
+  def divideByZeroError(context: String): ArithmeticException = {
     new SparkArithmeticException(
-      errorClass = "DIVIDE_BY_ZERO", messageParameters = Array(SQLConf.ANSI_ENABLED.key))
+      errorClass = "DIVIDE_BY_ZERO", messageParameters = Array(SQLConf.ANSI_ENABLED.key, context))
   }
 
   def invalidArrayIndexError(index: Int, numElements: Int): ArrayIndexOutOfBoundsException = {
@@ -165,18 +165,17 @@ object QueryExecutionErrors {
       messageParameters = Array(index.toString, numElements.toString, SQLConf.ANSI_ENABLED.key))
   }
 
-  def mapKeyNotExistError(key: Any, isElementAtFunction: Boolean): NoSuchElementException = {
+  def mapKeyNotExistError(
+      key: Any,
+      isElementAtFunction: Boolean,
+      context: String): NoSuchElementException = {
     if (isElementAtFunction) {
       new SparkNoSuchElementException(errorClass = "MAP_KEY_DOES_NOT_EXIST_IN_ELEMENT_AT",
-        messageParameters = Array(key.toString, SQLConf.ANSI_ENABLED.key))
+        messageParameters = Array(key.toString, SQLConf.ANSI_ENABLED.key, context))
     } else {
       new SparkNoSuchElementException(errorClass = "MAP_KEY_DOES_NOT_EXIST",
-        messageParameters = Array(key.toString, SQLConf.ANSI_STRICT_INDEX_OPERATOR.key))
+        messageParameters = Array(key.toString, SQLConf.ANSI_STRICT_INDEX_OPERATOR.key, context))
     }
-  }
-
-  def inputTypeUnsupportedError(dataType: DataType): Throwable = {
-    new IllegalArgumentException(s"Unsupported input type ${dataType.catalogString}")
   }
 
   def invalidFractionOfSecondError(): DateTimeException = {
@@ -216,18 +215,14 @@ object QueryExecutionErrors {
     arithmeticOverflowError("Overflow in sum of decimals")
   }
 
-  def overflowInIntegralDivideError(): ArithmeticException = {
-    arithmeticOverflowError("Overflow in integral divide", "try_divide")
+  def overflowInIntegralDivideError(context: String): ArithmeticException = {
+    arithmeticOverflowError("Overflow in integral divide", "try_divide", context)
   }
 
   def mapSizeExceedArraySizeWhenZipMapError(size: Int): RuntimeException = {
     new RuntimeException(s"Unsuccessful try to zip maps with $size " +
       "unique keys due to exceeding the array size limit " +
       s"${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH}.")
-  }
-
-  def copyNullFieldNotAllowedError(): Throwable = {
-    new IllegalStateException("Do not attempt to copy a null field")
   }
 
   def literalTypeUnsupportedError(v: Any): RuntimeException = {
@@ -246,10 +241,6 @@ object QueryExecutionErrors {
 
   def noDefaultForDataTypeError(dataType: DataType): RuntimeException = {
     new RuntimeException(s"no default for type $dataType")
-  }
-
-  def doGenCodeOfAliasShouldNotBeCalledError(): Throwable = {
-    new IllegalStateException("Alias.doGenCode should not be called.")
   }
 
   def orderedOperationUnsupportedByDataTypeError(dataType: DataType): Throwable = {
@@ -432,19 +423,18 @@ object QueryExecutionErrors {
     new UnsupportedOperationException(s"$methodName is not implemented")
   }
 
-  def tableStatsNotSpecifiedError(): Throwable = {
-    new IllegalStateException("table stats must be specified.")
-  }
-
   def arithmeticOverflowError(e: ArithmeticException): ArithmeticException = {
     new ArithmeticException(s"${e.getMessage}. If necessary set ${SQLConf.ANSI_ENABLED.key} " +
       s"to false to bypass this error.")
   }
 
-  def arithmeticOverflowError(message: String, hint: String = ""): ArithmeticException = {
+  def arithmeticOverflowError(
+      message: String,
+      hint: String = "",
+      errorContext: String = ""): ArithmeticException = {
     val alternative = if (hint.nonEmpty) s" To return NULL instead, use '$hint'." else ""
-    new ArithmeticException(s"$message.$alternative If necessary set " +
-      s"${SQLConf.ANSI_ENABLED.key} to false (except for ANSI interval type) to bypass this error.")
+    new SparkArithmeticException("ARITHMETIC_OVERFLOW",
+      Array(message, alternative, SQLConf.ANSI_ENABLED.key, errorContext))
   }
 
   def unaryMinusCauseOverflowError(originValue: AnyVal): ArithmeticException = {
@@ -454,15 +444,6 @@ object QueryExecutionErrors {
   def binaryArithmeticCauseOverflowError(
       eval1: Short, symbol: String, eval2: Short): ArithmeticException = {
     arithmeticOverflowError(s"$eval1 $symbol $eval2 caused overflow")
-  }
-
-  def failedSplitSubExpressionMsg(length: Int): String = {
-    "Failed to split subexpression code into small functions because " +
-      s"the parameter length of at least one split function went over the JVM limit: $length"
-  }
-
-  def failedSplitSubExpressionError(length: Int): Throwable = {
-    new IllegalStateException(failedSplitSubExpressionMsg(length))
   }
 
   def failedToCompileMsg(e: Exception): String = {
@@ -525,10 +506,6 @@ object QueryExecutionErrors {
 
   def incompatibleDataSourceRegisterError(e: Throwable): Throwable = {
     new SparkClassNotFoundException("INCOMPATIBLE_DATASOURCE_REGISTER", Array(e.getMessage), e)
-  }
-
-  def unrecognizedFileFormatError(format: String): Throwable = {
-    new IllegalStateException(s"unrecognized format $format")
   }
 
   def sparkUpgradeInReadingDatesError(
@@ -674,10 +651,6 @@ object QueryExecutionErrors {
 
   def cannotRemoveReservedPropertyError(property: String): Throwable = {
     new UnsupportedOperationException(s"Cannot remove reserved property: $property")
-  }
-
-  def namespaceNotEmptyError(namespace: Array[String]): Throwable = {
-    new IllegalStateException(s"Namespace ${namespace.quoted} is not empty")
   }
 
   def writingJobFailedError(cause: Throwable): Throwable = {
@@ -831,10 +804,6 @@ object QueryExecutionErrors {
 
   def ddlUnsupportedTemporarilyError(ddl: String): Throwable = {
     new UnsupportedOperationException(s"$ddl is not supported temporarily.")
-  }
-
-  def operatingOnCanonicalizationPlanError(): Throwable = {
-    new IllegalStateException("operating on canonicalization plan")
   }
 
   def executeBroadcastTimeoutError(timeout: Long, ex: Option[TimeoutException]): Throwable = {
@@ -1261,12 +1230,6 @@ object QueryExecutionErrors {
          |Parse Mode: ${FailFastMode.name}. Reasons: Failed to infer a common schema.
          |Struct types are expected, but `${dataType.catalogString}` was found.
        """.stripMargin.replaceAll("\n", " "))
-  }
-
-  def cannotRewriteDomainJoinWithConditionsError(
-      conditions: Seq[Expression], d: DomainJoin): Throwable = {
-    new IllegalStateException(
-      s"Unable to rewrite domain join with conditions: $conditions\n$d")
   }
 
   def decorrelateInnerQueryThroughPlanUnsupportedError(plan: LogicalPlan): Throwable = {
