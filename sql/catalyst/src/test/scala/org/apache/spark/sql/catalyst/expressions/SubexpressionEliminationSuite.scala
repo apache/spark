@@ -330,13 +330,13 @@ class SubexpressionEliminationSuite extends SparkFunSuite with ExpressionEvalHel
   test("SPARK-38333: PlanExpression expression should skip addExprTree function in Executor") {
     try {
       // suppose we are in executor
-      val context1 = new TaskContextImpl(0, 0, 0, 0, 0, null, null, null, cpus = 0)
+      val context1 = new TaskContextImpl(0, 0, 0, 0, 0, null, null, null)
       TaskContext.setTaskContext(context1)
 
       val equivalence = new EquivalentExpressions
       val expression = DynamicPruningExpression(Exists(LocalRelation()))
       equivalence.addExprTree(expression)
-      assert(equivalence.getExprState(expression).isEmpty)
+      assert(equivalence.getEquivalentExprs(expression).size == 0)
     } finally {
       TaskContext.unset()
     }
