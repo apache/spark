@@ -200,14 +200,14 @@ object ParquetUtils {
       true
     case at: ArrayType =>
       sqlConf.parquetVectorizedReaderNestedColumnEnabled &&
-          isBatchReadSupported(sqlConf, at.elementType)
+        isBatchReadSupported(sqlConf, at.elementType)
     case mt: MapType =>
       sqlConf.parquetVectorizedReaderNestedColumnEnabled &&
-          isBatchReadSupported(sqlConf, mt.keyType) &&
-          isBatchReadSupported(sqlConf, mt.valueType)
+        isBatchReadSupported(sqlConf, mt.keyType) &&
+        isBatchReadSupported(sqlConf, mt.valueType)
     case st: StructType =>
       sqlConf.parquetVectorizedReaderNestedColumnEnabled &&
-          st.fields.forall(f => isBatchReadSupported(sqlConf, f.dataType))
+        st.fields.forall(f => isBatchReadSupported(sqlConf, f.dataType))
     case _ =>
       false
   }

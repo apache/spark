@@ -229,34 +229,8 @@ public final class VectorizedRleValuesReader extends ValuesReader
 
         // Read the part [start, end]
         n = (int) (end - start + 1);
+        readValuesN(n, state, defLevels, values, nulls, valueReader, updater);
 
-        switch (mode) {
-          case RLE:
-            if (currentValue == state.maxDefinitionLevel) {
-              updater.readValues(n, state.valueOffset, values, valueReader);
-              state.valueOffset += n;
-            } else if (!state.isRequired && currentValue == state.maxDefinitionLevel - 1) {
-              // Only add null if this represents a null element, but not for the case where a
-              // struct itself is null
-              nulls.putNulls(state.valueOffset, n);
-              state.valueOffset += n;
-            }
-            defLevels.putInts(state.levelOffset, n, currentValue);
-            break;
-          case PACKED:
-            for (int i = 0; i < n; ++i) {
-              int value = currentBuffer[currentBufferIdx++];
-              if (value == state.maxDefinitionLevel) {
-                updater.readValue(state.valueOffset++, values, valueReader);
-              } else {
-                // Only add null if this represents a null element, but not for the case where a
-                // struct itself is null
-                nulls.putNull(state.valueOffset++);
-              }
-              defLevels.putInt(state.levelOffset + i, value);
-            }
-            break;
-        }
         state.levelOffset += n;
         leftInBatch -= n;
         rowId += n;
@@ -549,33 +523,7 @@ public final class VectorizedRleValuesReader extends ValuesReader
     while (n > 0) {
       if (currentCount == 0 && !readNextGroup()) break;
       int num = Math.min(n, this.currentCount);
-      switch (mode) {
-        case RLE:
-          if (currentValue == state.maxDefinitionLevel) {
-            updater.readValues(num, state.valueOffset, values, valueReader);
-            state.valueOffset += num;
-          } else {
-            // Only add null if this represents a null element, but not the case when a
-            // collection is null or empty.
-            nulls.putNulls(state.valueOffset, num);
-            state.valueOffset += num;
-          }
-          defLevels.putInts(state.levelOffset, num, currentValue);
-          break;
-        case PACKED:
-          for (int i = 0; i < num; ++i) {
-            int currentValue = currentBuffer[currentBufferIdx++];
-            if (currentValue == state.maxDefinitionLevel) {
-              updater.readValue(state.valueOffset++, values, valueReader);
-            } else {
-              // Only add null if this represents a null element, but not the case when a
-              // collection is null or empty.
-              nulls.putNull(state.valueOffset++);
-            }
-            defLevels.putInt(state.levelOffset + i, currentValue);
-          }
-          break;
-      }
+      readValuesN(num, state, defLevels, values, nulls, valueReader, updater);
       state.levelOffset += num;
       currentCount -= num;
       n -= num;
@@ -587,6 +535,38 @@ public final class VectorizedRleValuesReader extends ValuesReader
     values.addElementsAppended(valuesRead);
     if (!valuesReused) {
       nulls.addElementsAppended(valuesRead);
+    }
+  }
+
+  private void readValuesN(
+      int n,
+      ParquetReadState state,
+      WritableColumnVector defLevels,
+      WritableColumnVector values,
+      WritableColumnVector nulls,
+      VectorizedValuesReader valueReader,
+      ParquetVectorUpdater updater) {
+    switch (mode) {
+      case RLE:
+        if (currentValue == state.maxDefinitionLevel) {
+          updater.readValues(n, state.valueOffset, values, valueReader);
+        } else {
+          nulls.putNulls(state.valueOffset, n);
+        }
+        state.valueOffset += n;
+        defLevels.putInts(state.levelOffset, n, currentValue);
+        break;
+      case PACKED:
+        for (int i = 0; i < n; ++i) {
+          int currentValue = currentBuffer[currentBufferIdx++];
+          if (currentValue == state.maxDefinitionLevel) {
+            updater.readValue(state.valueOffset++, values, valueReader);
+          } else {
+            nulls.putNull(state.valueOffset++);
+          }
+          defLevels.putInt(state.levelOffset + i, currentValue);
+        }
+        break;
     }
   }
 
