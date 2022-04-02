@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.adaptive
 
 import org.apache.spark.sql.execution.SparkPlan
+import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, SortMergeJoinExec}
 
 /**
  * This class provides utility methods related to tree traversal of an [[AdaptiveSparkPlanExec]]
@@ -26,6 +27,18 @@ import org.apache.spark.sql.execution.SparkPlan
  * adaptive plans, i.e., [[AdaptiveSparkPlanExec]] and [[QueryStageExec]].
  */
 trait AdaptiveSparkPlanHelper {
+
+  def findTopLevelBroadcastHashJoin(plan: SparkPlan): Seq[BroadcastHashJoinExec] = {
+    collect(plan) {
+      case j: BroadcastHashJoinExec => j
+    }
+  }
+
+  def findTopLevelSortMergeJoin(plan: SparkPlan): Seq[SortMergeJoinExec] = {
+    collect(plan) {
+      case j: SortMergeJoinExec => j
+    }
+  }
 
   /**
    * Find the first [[SparkPlan]] that satisfies the condition specified by `f`.

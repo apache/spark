@@ -756,6 +756,13 @@ jobs:
         SPARK_TPCDS_JOIN_CONF: |
           spark.sql.autoBroadcastJoinThreshold=-1
           spark.sql.join.forceApplyShuffledHashJoin=true
+    - name: Run TPC-DS queries (Test AdaptiveBloomFilterJoin)
+      run: |
+        SPARK_TPCDS_DATA=`pwd`/tpcds-sf-1 build/sbt "sql/testOnly org.apache.spark.sql.TPCDSQueryTestSuite"
+      env:
+        SPARK_TPCDS_JOIN_CONF: |
+          spark.memory.storageFraction=0.99999999
+          spark.sql.autoBroadcastJoinThreshold=-1
     - name: Upload test results to report
       if: always()
       uses: actions/upload-artifact@v2

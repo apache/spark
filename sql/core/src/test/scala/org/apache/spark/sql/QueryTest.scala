@@ -23,16 +23,63 @@ import scala.collection.JavaConverters._
 
 import org.scalatest.Assertions
 
+import org.apache.spark.scheduler.{SparkListener, SparkListenerEvent}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.util._
-import org.apache.spark.sql.execution.SQLExecution
+import org.apache.spark.sql.execution.{SparkPlan, SQLExecution}
+import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanExec
 import org.apache.spark.sql.execution.columnar.InMemoryRelation
+import org.apache.spark.sql.execution.exchange.Exchange
+import org.apache.spark.sql.execution.ui.SparkListenerSQLAdaptiveExecutionUpdate
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.storage.StorageLevel
 
 
 abstract class QueryTest extends PlanTest {
 
   protected def spark: SparkSession
+
+  protected def runAdaptiveAndVerifyResult(query: String): (SparkPlan, SparkPlan) = {
+    var finalPlanCnt = 0
+    val listener = new SparkListener {
+      override def onOtherEvent(event: SparkListenerEvent): Unit = {
+        event match {
+          case SparkListenerSQLAdaptiveExecutionUpdate(_, _, sparkPlanInfo) =>
+            if (sparkPlanInfo.simpleString.startsWith(
+              "AdaptiveSparkPlan isFinalPlan=true")) {
+              finalPlanCnt += 1
+            }
+          case _ => // ignore other events
+        }
+      }
+    }
+    spark.sparkContext.addSparkListener(listener)
+
+    val dfAdaptive = spark.sql(query)
+    val planBefore = dfAdaptive.queryExecution.executedPlan
+    assert(planBefore.toString.startsWith("AdaptiveSparkPlan isFinalPlan=false"))
+    val result = dfAdaptive.collect()
+    withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+      val df = spark.sql(query)
+      checkAnswer(df, result)
+    }
+    val planAfter = dfAdaptive.queryExecution.executedPlan
+    assert(planAfter.toString.startsWith("AdaptiveSparkPlan isFinalPlan=true"))
+    val adaptivePlan = planAfter.asInstanceOf[AdaptiveSparkPlanExec].executedPlan
+
+    spark.sparkContext.listenerBus.waitUntilEmpty()
+    // AQE will post `SparkListenerSQLAdaptiveExecutionUpdate` twice in case of subqueries that
+    // exist out of query stages.
+    val expectedFinalPlanCnt = adaptivePlan.find(_.subqueries.nonEmpty).map(_ => 2).getOrElse(1)
+    assert(finalPlanCnt == expectedFinalPlanCnt)
+    spark.sparkContext.removeSparkListener(listener)
+
+    val exchanges = adaptivePlan.collect {
+      case e: Exchange => e
+    }
+    assert(exchanges.isEmpty, "The final plan should not contain any Exchange node.")
+    (dfAdaptive.queryExecution.sparkPlan, adaptivePlan)
+  }
 
   /**
    * Runs the plan and makes sure the answer contains all of the keywords.

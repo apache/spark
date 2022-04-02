@@ -32,7 +32,7 @@ import org.apache.spark.sql.execution.aggregate.BaseAggregateExec
 import org.apache.spark.sql.execution.command.DataWritingCommandExec
 import org.apache.spark.sql.execution.datasources.noop.NoopDataSource
 import org.apache.spark.sql.execution.datasources.v2.V2TableWriteExec
-import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, ENSURE_REQUIREMENTS, Exchange, REPARTITION_BY_COL, REPARTITION_BY_NUM, ReusedExchangeExec, ShuffleExchangeExec, ShuffleExchangeLike, ShuffleOrigin}
+import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, ENSURE_REQUIREMENTS, REPARTITION_BY_COL, REPARTITION_BY_NUM, ReusedExchangeExec, ShuffleExchangeExec, ShuffleExchangeLike, ShuffleOrigin}
 import org.apache.spark.sql.execution.joins.{BaseJoinExec, BroadcastHashJoinExec, ShuffledHashJoinExec, ShuffledJoin, SortMergeJoinExec}
 import org.apache.spark.sql.execution.metric.SQLShuffleReadMetricsReporter
 import org.apache.spark.sql.execution.ui.SparkListenerSQLAdaptiveExecutionUpdate
@@ -54,60 +54,6 @@ class AdaptiveQueryExecSuite
   import testImplicits._
 
   setupTestData()
-
-  private def runAdaptiveAndVerifyResult(query: String): (SparkPlan, SparkPlan) = {
-    var finalPlanCnt = 0
-    val listener = new SparkListener {
-      override def onOtherEvent(event: SparkListenerEvent): Unit = {
-        event match {
-          case SparkListenerSQLAdaptiveExecutionUpdate(_, _, sparkPlanInfo) =>
-            if (sparkPlanInfo.simpleString.startsWith(
-              "AdaptiveSparkPlan isFinalPlan=true")) {
-              finalPlanCnt += 1
-            }
-          case _ => // ignore other events
-        }
-      }
-    }
-    spark.sparkContext.addSparkListener(listener)
-
-    val dfAdaptive = sql(query)
-    val planBefore = dfAdaptive.queryExecution.executedPlan
-    assert(planBefore.toString.startsWith("AdaptiveSparkPlan isFinalPlan=false"))
-    val result = dfAdaptive.collect()
-    withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
-      val df = sql(query)
-      checkAnswer(df, result)
-    }
-    val planAfter = dfAdaptive.queryExecution.executedPlan
-    assert(planAfter.toString.startsWith("AdaptiveSparkPlan isFinalPlan=true"))
-    val adaptivePlan = planAfter.asInstanceOf[AdaptiveSparkPlanExec].executedPlan
-
-    spark.sparkContext.listenerBus.waitUntilEmpty()
-    // AQE will post `SparkListenerSQLAdaptiveExecutionUpdate` twice in case of subqueries that
-    // exist out of query stages.
-    val expectedFinalPlanCnt = adaptivePlan.find(_.subqueries.nonEmpty).map(_ => 2).getOrElse(1)
-    assert(finalPlanCnt == expectedFinalPlanCnt)
-    spark.sparkContext.removeSparkListener(listener)
-
-    val exchanges = adaptivePlan.collect {
-      case e: Exchange => e
-    }
-    assert(exchanges.isEmpty, "The final plan should not contain any Exchange node.")
-    (dfAdaptive.queryExecution.sparkPlan, adaptivePlan)
-  }
-
-  private def findTopLevelBroadcastHashJoin(plan: SparkPlan): Seq[BroadcastHashJoinExec] = {
-    collect(plan) {
-      case j: BroadcastHashJoinExec => j
-    }
-  }
-
-  private def findTopLevelSortMergeJoin(plan: SparkPlan): Seq[SortMergeJoinExec] = {
-    collect(plan) {
-      case j: SortMergeJoinExec => j
-    }
-  }
 
   private def findTopLevelShuffledHashJoin(plan: SparkPlan): Seq[ShuffledHashJoinExec] = {
     collect(plan) {
