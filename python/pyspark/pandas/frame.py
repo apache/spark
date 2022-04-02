@@ -10758,7 +10758,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         """
 
         def gen_mapper_fn(
-            mapper: Union[Dict, Callable[[Any], Any]]
+            mapper: Union[Dict, Callable[[Any], Any]], skip_return_type: bool = False
         ) -> Tuple[Callable[[Any], Any], Dtype, DataType]:
             if isinstance(mapper, dict):
                 mapper_dict = mapper
@@ -10776,21 +10776,25 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                             raise KeyError("Index include value which is not in the `mapper`")
                         return x
 
+                return mapper_fn, dtype, spark_return_type
             elif callable(mapper):
                 mapper_callable = cast(Callable, mapper)
-                return_type = cast(ScalarType, infer_return_type(mapper))
-                dtype = return_type.dtype
-                spark_return_type = return_type.spark_type
 
                 def mapper_fn(x: Any) -> Any:
                     return mapper_callable(x)
 
+                if skip_return_type:
+                    return mapper_fn, None, None
+                else:
+                    return_type = cast(ScalarType, infer_return_type(mapper))
+                    dtype = return_type.dtype
+                    spark_return_type = return_type.spark_type
+                    return mapper_fn, dtype, spark_return_type
             else:
                 raise ValueError(
                     "`mapper` or `index` or `columns` should be "
                     "either dict-like or function type."
                 )
-            return mapper_fn, dtype, spark_return_type
 
         index_mapper_fn = None
         index_mapper_ret_stype = None
@@ -10811,7 +10815,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                     index
                 )
             if columns:
-                columns_mapper_fn, _, _ = gen_mapper_fn(columns)
+                columns_mapper_fn, _, _ = gen_mapper_fn(columns, skip_return_type=True)
 
             if not index and not columns:
                 raise ValueError("Either `index` or `columns` should be provided.")
