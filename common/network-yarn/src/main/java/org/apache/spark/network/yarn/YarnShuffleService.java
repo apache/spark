@@ -120,7 +120,8 @@ public class YarnShuffleService extends AuxiliaryService {
 
   private static final String RECOVERY_FILE_NAME = "registeredExecutors.ldb";
   private static final String SECRETS_RECOVERY_FILE_NAME = "sparkShuffleRecovery.ldb";
-  private static final String MERGE_MANAGER_FILE_NAME = "mergeManager.ldb";
+  @VisibleForTesting
+  static final String MERGE_MANAGER_FILE_NAME = "mergeManager.ldb";
 
   // Whether failure during service initialization should stop the NM.
   @VisibleForTesting
@@ -157,7 +158,8 @@ public class YarnShuffleService extends AuxiliaryService {
 
   private TransportContext transportContext = null;
 
-  private Configuration _conf = null;
+  @VisibleForTesting
+  Configuration _conf = null;
 
   // The recovery path used to shuffle service recovery
   @VisibleForTesting
@@ -243,8 +245,10 @@ public class YarnShuffleService extends AuxiliaryService {
       }
 
       TransportConf transportConf = new TransportConf("shuffle",new HadoopConfigProvider(_conf));
-      shuffleMergeManager = newMergedShuffleFileManagerInstance(
-        transportConf, mergeManagerFile);
+      if (shuffleMergeManager == null) {
+        shuffleMergeManager = newMergedShuffleFileManagerInstance(
+          transportConf, mergeManagerFile);
+      }
       blockHandler = new ExternalBlockHandler(
         transportConf, registeredExecutorFile, shuffleMergeManager);
 
@@ -294,6 +298,11 @@ public class YarnShuffleService extends AuxiliaryService {
         noteFailure(e);
       }
     }
+  }
+
+  @VisibleForTesting
+  public void setShuffleMergeManager(MergedShuffleFileManager mergeManager) {
+    this.shuffleMergeManager = mergeManager;
   }
 
   @VisibleForTesting
@@ -393,9 +402,6 @@ public class YarnShuffleService extends AuxiliaryService {
         secretManager.unregisterApp(appId);
       }
       blockHandler.applicationRemoved(appId, false /* clean up local dirs */);
-      // Set cleanupLocalDirs to false as these merged shuffle files should be deleted
-      // by yarn when the app finishes in Hadoop
-      shuffleMergeManager.applicationRemoved(appId, false);
     } catch (Exception e) {
       logger.error("Exception when stopping application {}", appId, e);
     }

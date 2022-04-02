@@ -18,6 +18,7 @@ package org.apache.spark.network.shuffle
 
 import java.io.File
 import java.util.concurrent.ConcurrentMap
+import java.util.concurrent.Semaphore
 
 import org.apache.hadoop.yarn.api.records.ApplicationId
 import org.fusesource.leveldbjni.JniDBFactory
@@ -26,6 +27,7 @@ import org.iq80.leveldb.{DB, Options}
 import org.apache.spark.network.shuffle.ExternalShuffleBlockResolver.AppExecId
 import org.apache.spark.network.shuffle.RemoteBlockPushResolver._
 import org.apache.spark.network.shuffle.protocol.ExecutorShuffleInfo
+import org.apache.spark.network.util.TransportConf
 
 /**
  * just a cheat to get package-visible members in tests
@@ -70,6 +72,20 @@ object ShuffleTestAccessor {
 
   def mergeManagerLevelDB(mergeManager: RemoteBlockPushResolver): DB = {
     mergeManager.db
+  }
+
+  def createMergeShuffleFileManagerForTest(
+      transportConf: TransportConf,
+      file: File,
+      semaphore: Semaphore): MergedShuffleFileManager = {
+    new RemoteBlockPushResolver(transportConf, file) {
+      override private[shuffle] def closeAndDeletePartitionFilesIfNeeded(
+          appShuffleInfo: RemoteBlockPushResolver.AppShuffleInfo,
+          cleanupLocalDirs: Boolean): Unit = {
+        super.closeAndDeletePartitionFilesIfNeeded(appShuffleInfo, cleanupLocalDirs)
+        semaphore.release()
+      }
+    }
   }
 
   def getOrCreateAppShufflePartitionInfo(
