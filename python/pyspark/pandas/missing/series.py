@@ -33,7 +33,6 @@ class MissingPandasLikeSeries:
 
     # Functions
     asfreq = _unsupported_function("asfreq")
-    autocorr = _unsupported_function("autocorr")
     combine = _unsupported_function("combine")
     convert_dtypes = _unsupported_function("convert_dtypes")
     infer_objects = _unsupported_function("infer_objects")
