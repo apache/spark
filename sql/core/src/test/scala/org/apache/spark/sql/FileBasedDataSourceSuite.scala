@@ -968,56 +968,56 @@ class FileBasedDataSourceSuite extends QueryTest
 
           // cases when value == MAX
           var v = Short.MaxValue
-          checkPushedFilters(format, df.where(Symbol("id") > v.toInt), Array(), noScan = true)
-          checkPushedFilters(format, df.where(Symbol("id") >= v.toInt),
+          checkPushedFilters(format, df.where($"id" > v.toInt), Array(), noScan = true)
+          checkPushedFilters(format, df.where($"id" >= v.toInt),
             Array(sources.IsNotNull("id"), sources.EqualTo("id", v)))
-          checkPushedFilters(format, df.where(Symbol("id") === v.toInt),
+          checkPushedFilters(format, df.where($"id" === v.toInt),
             Array(sources.IsNotNull("id"), sources.EqualTo("id", v)))
-          checkPushedFilters(format, df.where(Symbol("id") <=> v.toInt),
+          checkPushedFilters(format, df.where($"id" <=> v.toInt),
             Array(sources.EqualNullSafe("id", v)))
-          checkPushedFilters(format, df.where(Symbol("id") <= v.toInt),
+          checkPushedFilters(format, df.where($"id" <= v.toInt),
             Array(sources.IsNotNull("id")))
-          checkPushedFilters(format, df.where(Symbol("id") < v.toInt),
+          checkPushedFilters(format, df.where($"id" < v.toInt),
             Array(sources.IsNotNull("id"), sources.Not(sources.EqualTo("id", v))))
 
           // cases when value > MAX
           var v1: Int = positiveInt
-          checkPushedFilters(format, df.where(Symbol("id") > v1), Array(), noScan = true)
-          checkPushedFilters(format, df.where(Symbol("id") >= v1), Array(), noScan = true)
-          checkPushedFilters(format, df.where(Symbol("id") === v1), Array(), noScan = true)
-          checkPushedFilters(format, df.where(Symbol("id") <=> v1), Array(), noScan = true)
-          checkPushedFilters(format, df.where(Symbol("id") <= v1), Array(sources.IsNotNull("id")))
-          checkPushedFilters(format, df.where(Symbol("id") < v1), Array(sources.IsNotNull("id")))
+          checkPushedFilters(format, df.where($"id" > v1), Array(), noScan = true)
+          checkPushedFilters(format, df.where($"id" >= v1), Array(), noScan = true)
+          checkPushedFilters(format, df.where($"id" === v1), Array(), noScan = true)
+          checkPushedFilters(format, df.where($"id" <=> v1), Array(), noScan = true)
+          checkPushedFilters(format, df.where($"id" <= v1), Array(sources.IsNotNull("id")))
+          checkPushedFilters(format, df.where($"id" < v1), Array(sources.IsNotNull("id")))
 
           // cases when value = MIN
           v = Short.MinValue
-          checkPushedFilters(format, df.where(lit(v.toInt) < Symbol("id")),
+          checkPushedFilters(format, df.where(lit(v.toInt) < $"id"),
             Array(sources.IsNotNull("id"), sources.Not(sources.EqualTo("id", v))))
-          checkPushedFilters(format, df.where(lit(v.toInt) <= Symbol("id")),
+          checkPushedFilters(format, df.where(lit(v.toInt) <= $"id"),
             Array(sources.IsNotNull("id")))
-          checkPushedFilters(format, df.where(lit(v.toInt) === Symbol("id")),
+          checkPushedFilters(format, df.where(lit(v.toInt) === $"id"),
             Array(sources.IsNotNull("id"),
             sources.EqualTo("id", v)))
-          checkPushedFilters(format, df.where(lit(v.toInt) <=> Symbol("id")),
+          checkPushedFilters(format, df.where(lit(v.toInt) <=> $"id"),
             Array(sources.EqualNullSafe("id", v)))
-          checkPushedFilters(format, df.where(lit(v.toInt) >= Symbol("id")),
+          checkPushedFilters(format, df.where(lit(v.toInt) >= $"id"),
             Array(sources.IsNotNull("id"), sources.EqualTo("id", v)))
-          checkPushedFilters(format, df.where(lit(v.toInt) > Symbol("id")), Array(), noScan = true)
+          checkPushedFilters(format, df.where(lit(v.toInt) > $"id"), Array(), noScan = true)
 
           // cases when value < MIN
           v1 = negativeInt
-          checkPushedFilters(format, df.where(lit(v1) < Symbol("id")),
+          checkPushedFilters(format, df.where(lit(v1) < $"id"),
             Array(sources.IsNotNull("id")))
-          checkPushedFilters(format, df.where(lit(v1) <= Symbol("id")),
+          checkPushedFilters(format, df.where(lit(v1) <= $"id"),
             Array(sources.IsNotNull("id")))
-          checkPushedFilters(format, df.where(lit(v1) === Symbol("id")), Array(), noScan = true)
-          checkPushedFilters(format, df.where(lit(v1) >= Symbol("id")), Array(), noScan = true)
-          checkPushedFilters(format, df.where(lit(v1) > Symbol("id")), Array(), noScan = true)
+          checkPushedFilters(format, df.where(lit(v1) === $"id"), Array(), noScan = true)
+          checkPushedFilters(format, df.where(lit(v1) >= $"id"), Array(), noScan = true)
+          checkPushedFilters(format, df.where(lit(v1) > $"id"), Array(), noScan = true)
 
           // cases when value is within range (MIN, MAX)
-          checkPushedFilters(format, df.where(Symbol("id") > 30), Array(sources.IsNotNull("id"),
+          checkPushedFilters(format, df.where($"id" > 30), Array(sources.IsNotNull("id"),
             sources.GreaterThan("id", 30)))
-          checkPushedFilters(format, df.where(lit(100) >= Symbol("id")),
+          checkPushedFilters(format, df.where(lit(100) >= $"id"),
             Array(sources.IsNotNull("id"), sources.LessThanOrEqual("id", 100)))
         }
       }

@@ -413,17 +413,17 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Matche
     val firstDf = first.toDF()
       .withColumn("eventTime", timestamp_seconds($"value"))
       .withWatermark("eventTime", "10 seconds")
-      .select(Symbol("value"))
+      .select($"value")
 
     val second = MemoryStream[Int]
 
     val secondDf = second.toDF()
       .withColumn("eventTime", timestamp_seconds($"value"))
       .withWatermark("eventTime", "5 seconds")
-      .select(Symbol("value"))
+      .select($"value")
 
     withTempDir { checkpointDir =>
-      val unionWriter = firstDf.union(secondDf).agg(sum(Symbol("value")))
+      val unionWriter = firstDf.union(secondDf).agg(sum($"value"))
         .writeStream
         .option("checkpointLocation", checkpointDir.getCanonicalPath)
         .format("memory")
@@ -612,7 +612,7 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Matche
       _.metadata.contains(EventTimeWatermark.delayKey)))
 
     val windowedAggregation = aliasWindow
-      .groupBy(Symbol("aliasWindow"))
+      .groupBy($"aliasWindow")
       .agg(count("*") as Symbol("count"))
       .select($"aliasWindow".getField("start").cast("long").as[Long], $"count".as[Long])
 

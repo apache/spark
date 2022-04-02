@@ -49,7 +49,7 @@ object RangeBenchmark extends SqlBasedBenchmark {
       }
 
       benchmark.addCase("filter after range", numIters = 4) { _ =>
-        spark.range(N).filter(Symbol("id") % 100 === 0).noop()
+        spark.range(N).filter($"id" % 100 === 0).noop()
       }
 
       benchmark.addCase("count after range", numIters = 4) { _ =>

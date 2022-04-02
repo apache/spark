@@ -40,22 +40,23 @@ class ReplaceOperatorSuite extends PlanTest {
   }
 
   test("replace Intersect with Left-semi Join") {
-    val table1 = LocalRelation('a.int, 'b.int)
-    val table2 = LocalRelation('c.int, 'd.int)
+    val table1 = LocalRelation($"a".int, $"b".int)
+    val table2 = LocalRelation($"c".int, $"d".int)
 
     val query = Intersect(table1, table2, isAll = false)
     val optimized = Optimize.execute(query.analyze)
 
     val correctAnswer =
       Aggregate(table1.output, table1.output,
-        Join(table1, table2, LeftSemi, Option('a <=> 'c && 'b <=> 'd), JoinHint.NONE)).analyze
+        Join(table1, table2, LeftSemi, Option($"a" <=> $"c" && $"b" <=> $"d"), JoinHint.NONE))
+        .analyze
 
     comparePlans(optimized, correctAnswer)
   }
 
   test("replace Except with Filter while both the nodes are of type Filter") {
-    val attributeA = 'a.int
-    val attributeB = 'b.int
+    val attributeA = $"a".int
+    val attributeB = $"b".int
 
     val table1 = LocalRelation.fromExternalRows(Seq(attributeA, attributeB), data = Seq(Row(1, 2)))
     val table2 = Filter(attributeB === 2, Filter(attributeA === 1, table1))
@@ -73,8 +74,8 @@ class ReplaceOperatorSuite extends PlanTest {
   }
 
   test("replace Except with Filter while only right node is of type Filter") {
-    val attributeA = 'a.int
-    val attributeB = 'b.int
+    val attributeA = $"a".int
+    val attributeB = $"b".int
 
     val table1 = LocalRelation.fromExternalRows(Seq(attributeA, attributeB), data = Seq(Row(1, 2)))
     val table2 = Filter(attributeB < 1, Filter(attributeA >= 2, table1))
@@ -91,8 +92,8 @@ class ReplaceOperatorSuite extends PlanTest {
   }
 
   test("replace Except with Filter while both the nodes are of type Project") {
-    val attributeA = 'a.int
-    val attributeB = 'b.int
+    val attributeA = $"a".int
+    val attributeB = $"b".int
 
     val table1 = LocalRelation.fromExternalRows(Seq(attributeA, attributeB), data = Seq(Row(1, 2)))
     val table2 = Project(Seq(attributeA, attributeB), table1)
@@ -111,8 +112,8 @@ class ReplaceOperatorSuite extends PlanTest {
   }
 
   test("replace Except with Filter while only right node is of type Project") {
-    val attributeA = 'a.int
-    val attributeB = 'b.int
+    val attributeA = $"a".int
+    val attributeB = $"b".int
 
     val table1 = LocalRelation.fromExternalRows(Seq(attributeA, attributeB), data = Seq(Row(1, 2)))
     val table2 = Filter(attributeB === 2, Filter(attributeA === 1, table1))
@@ -131,8 +132,8 @@ class ReplaceOperatorSuite extends PlanTest {
   }
 
   test("replace Except with Filter while left node is Project and right node is Filter") {
-    val attributeA = 'a.int
-    val attributeB = 'b.int
+    val attributeA = $"a".int
+    val attributeB = $"b".int
 
     val table1 = LocalRelation.fromExternalRows(Seq(attributeA, attributeB), data = Seq(Row(1, 2)))
     val table2 = Project(Seq(attributeA, attributeB),
@@ -152,23 +153,24 @@ class ReplaceOperatorSuite extends PlanTest {
   }
 
   test("replace Except with Left-anti Join") {
-    val table1 = LocalRelation('a.int, 'b.int)
-    val table2 = LocalRelation('c.int, 'd.int)
+    val table1 = LocalRelation($"a".int, $"b".int)
+    val table2 = LocalRelation($"c".int, $"d".int)
 
     val query = Except(table1, table2, isAll = false)
     val optimized = Optimize.execute(query.analyze)
 
     val correctAnswer =
       Aggregate(table1.output, table1.output,
-        Join(table1, table2, LeftAnti, Option('a <=> 'c && 'b <=> 'd), JoinHint.NONE)).analyze
+        Join(table1, table2, LeftAnti, Option($"a" <=> $"c" && $"b" <=> $"d"), JoinHint.NONE))
+        .analyze
 
     comparePlans(optimized, correctAnswer)
   }
 
   test("replace Except with Filter when only right filter can be applied to the left") {
-    val table = LocalRelation(Seq('a.int, 'b.int))
-    val left = table.where('b < 1).select('a).as("left")
-    val right = table.where('b < 3).select('a).as("right")
+    val table = LocalRelation(Seq($"a".int, $"b".int))
+    val left = table.where($"b" < 1).select($"a").as("left")
+    val right = table.where($"b" < 3).select($"a").as("right")
 
     val query = Except(left, right, isAll = false)
     val optimized = Optimize.execute(query.analyze)
@@ -181,7 +183,7 @@ class ReplaceOperatorSuite extends PlanTest {
   }
 
   test("replace Distinct with Aggregate") {
-    val input = LocalRelation('a.int, 'b.int)
+    val input = LocalRelation($"a".int, $"b".int)
 
     val query = Distinct(input)
     val optimized = Optimize.execute(query.analyze)
@@ -192,7 +194,7 @@ class ReplaceOperatorSuite extends PlanTest {
   }
 
   test("replace batch Deduplicate with Aggregate") {
-    val input = LocalRelation('a.int, 'b.int)
+    val input = LocalRelation($"a".int, $"b".int)
     val attrA = input.output(0)
     val attrB = input.output(1)
     val query = Deduplicate(Seq(attrA), input) // dropDuplicates("a")
@@ -219,7 +221,7 @@ class ReplaceOperatorSuite extends PlanTest {
   }
 
   test("don't replace streaming Deduplicate") {
-    val input = LocalRelation(Seq('a.int, 'b.int), isStreaming = true)
+    val input = LocalRelation(Seq($"a".int, $"b".int), isStreaming = true)
     val attrA = input.output(0)
     val query = Deduplicate(Seq(attrA), input) // dropDuplicates("a")
     val optimized = Optimize.execute(query.analyze)
@@ -228,21 +230,21 @@ class ReplaceOperatorSuite extends PlanTest {
   }
 
   test("SPARK-26366: ReplaceExceptWithFilter should handle properly NULL") {
-    val basePlan = LocalRelation(Seq('a.int, 'b.int))
-    val otherPlan = basePlan.where('a.in(1, 2) || 'b.in())
+    val basePlan = LocalRelation(Seq($"a".int, $"b".int))
+    val otherPlan = basePlan.where($"a".in(1, 2) || $"b".in())
     val except = Except(basePlan, otherPlan, false)
     val result = OptimizeIn(Optimize.execute(except.analyze))
     val correctAnswer = Aggregate(basePlan.output, basePlan.output,
       Filter(!Coalesce(Seq(
-        'a.in(1, 2) || If('b.isNotNull, Literal.FalseLiteral, Literal(null, BooleanType)),
+        $"a".in(1, 2) || If($"b".isNotNull, Literal.FalseLiteral, Literal(null, BooleanType)),
         Literal.FalseLiteral)),
         basePlan)).analyze
     comparePlans(result, correctAnswer)
   }
 
   test("SPARK-26366: ReplaceExceptWithFilter should not transform non-deterministic") {
-    val basePlan = LocalRelation(Seq('a.int, 'b.int))
-    val otherPlan = basePlan.where('a > rand(1L))
+    val basePlan = LocalRelation(Seq($"a".int, $"b".int))
+    val otherPlan = basePlan.where($"a" > rand(1L))
     val except = Except(basePlan, otherPlan, false)
     val result = Optimize.execute(except.analyze)
     val condition = basePlan.output.zip(otherPlan.output).map { case (a1, a2) =>
