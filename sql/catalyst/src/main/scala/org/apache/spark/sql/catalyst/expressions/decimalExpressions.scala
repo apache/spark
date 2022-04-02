@@ -144,7 +144,7 @@ case class CheckOverflow(
     val errorContextCode = if (nullOnOverflow) {
       ctx.addReferenceObj("errCtx", origin.context)
     } else {
-      "null"
+      "\"\""
     }
     nullSafeCodeGen(ctx, ev, eval => {
       // scalastyle:off line.size.limit
@@ -193,7 +193,7 @@ case class CheckOverflowInSum(
     val errorContextCode = if (nullOnOverflow) {
       ctx.addReferenceObj("errCtx", origin.context)
     } else {
-      "null"
+      "\"\""
     }
     val nullHandling = if (nullOnOverflow) {
       ""
