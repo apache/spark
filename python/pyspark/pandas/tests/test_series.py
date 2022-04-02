@@ -1080,7 +1080,7 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
                 getattr(psser, name)
 
     def test_clip(self):
-        pser = pd.Series([0, 2, 4], index=np.random.rand(3), name='x')
+        pser = pd.Series([0, 2, 4], index=np.random.rand(3), name="x")
         psser = ps.from_pandas(pser)
 
         # Assert list-like values are not accepted for 'lower' and 'upper'
