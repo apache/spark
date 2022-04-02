@@ -58,13 +58,11 @@ case class AdaptiveBloomFilterJoin(sparkSession: SparkSession)
     case _ => false
   }
 
-  private def avgShuffleSizePerPartition(logicalPlan: LogicalPlan): Option[Long] = {
-    logicalPlan match {
-      case LogicalQueryStage(_, stage: ShuffleQueryStageExec) =>
-        stage.mapStats.map(s => s.bytesByPartitionId.sum / s.bytesByPartitionId.length)
-      case _ => None
-    }
-  }
+  private def muchSmaller(filterSide: BigInt, pruningSide: BigInt): Boolean =
+    filterSide < maxNumItems && filterSide * 5 < pruningSide
+
+  private def avgSizePerPartition(logicalPlan: LogicalPlan): Float =
+    logicalPlan.stats.sizeInBytes.toFloat / conf.numShufflePartitions
 
   private def nonBroadcastHashJoin(join: Join): Boolean = {
     !canPlanAsBroadcastHashJoin(join, conf) && join.children.forall {
@@ -88,7 +86,6 @@ case class AdaptiveBloomFilterJoin(sparkSession: SparkSession)
     val aggregate = ConstantFolding(Aggregate(Nil, Seq(alias),
       Repartition(coalesceNum, false, filteringPlan)))
 
-    logWarning("Adaptive insert bloom filter join")
     val bloomFilterSubquery = ScalarSubquery(aggregate, Nil)
     Filter(BloomFilterMightContain(bloomFilterSubquery, new XxHash64(pruningKeys)), pruningPlan)
   }
@@ -99,11 +96,11 @@ case class AdaptiveBloomFilterJoin(sparkSession: SparkSession)
       val leftRowCnt = left.stats.rowCount.get
       val rightRowCnt = right.stats.rowCount.get
 
-      if (canPruneLeft(joinType) && rightRowCnt < maxNumItems && rightRowCnt < leftRowCnt &&
-        avgShuffleSizePerPartition(left).exists(_ * factor > memoryPerTask)) {
+      if (canPruneLeft(joinType) && muchSmaller(rightRowCnt, leftRowCnt) &&
+        avgSizePerPartition(left) * factor > memoryPerTask) {
         join.copy(left = insertPredicate(leftKeys, left, rightKeys, right))
-      } else if (canPruneRight(joinType) && leftRowCnt < maxNumItems && leftRowCnt < rightRowCnt &&
-        avgShuffleSizePerPartition(right).exists(_ * factor > memoryPerTask)) {
+      } else if (canPruneRight(joinType) && muchSmaller(leftRowCnt, rightRowCnt) &&
+        avgSizePerPartition(right) * factor > memoryPerTask) {
         join.copy(right = insertPredicate(rightKeys, right, leftKeys, left))
       } else {
         join

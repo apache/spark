@@ -22,8 +22,6 @@ import org.scalatest.PrivateMethodTester
 import org.apache.spark.internal.config
 import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.catalyst.expressions.BloomFilterMightContain
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -39,11 +37,6 @@ class AdaptiveBloomFilterJoinSuite
       .set(config.MEMORY_STORAGE_FRACTION, 0.99999999)
   }
 
-  object Optimize extends RuleExecutor[LogicalPlan] {
-    val batches = Batch("Adaptive Bloom Filter Join", FixedPoint(10),
-      AdaptiveBloomFilterJoin(spark)) :: Nil
-  }
-
   setupTestData()
 
   private def hasBloomFilterJoin(plan: SparkPlan): Seq[FilterExec] = {
@@ -52,12 +45,34 @@ class AdaptiveBloomFilterJoinSuite
     }
   }
 
-  test("Adaptive add Bloom filter") {
+  test("Check pruning side size") {
+    val sc = spark.sparkContext
+    val pruningSideSize = sc.executorMemory * sc.conf.get(config.MEMORY_FRACTION) *
+      (1 - sc.conf.get(config.MEMORY_STORAGE_FRACTION)) * (1L << 20) /
+      sc.conf.get(config.EXECUTOR_CORES) / 2 * spark.sessionState.conf.numShufflePartitions
+    assert(pruningSideSize > 0 && pruningSideSize < 20)
+  }
+
+  test("Left side add Bloom filter") {
     withSQLConf(
       SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
       SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
       val (plan, adaptivePlan) = runAdaptiveAndVerifyResult(
         "SELECT * FROM testData join testData2 ON key = a where value = 1")
+
+      assert(findTopLevelSortMergeJoin(plan).size === 1)
+      assert(hasBloomFilterJoin(plan).size === 0)
+      assert(findTopLevelSortMergeJoin(adaptivePlan).size === 1)
+      assert(hasBloomFilterJoin(adaptivePlan).size === 1)
+    }
+  }
+
+  test("Right side add Bloom filter") {
+    withSQLConf(
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+      val (plan, adaptivePlan) = runAdaptiveAndVerifyResult(
+        "SELECT * FROM testData2 join testData ON key = a where value = 1")
 
       assert(findTopLevelSortMergeJoin(plan).size === 1)
       assert(hasBloomFilterJoin(plan).size === 0)
