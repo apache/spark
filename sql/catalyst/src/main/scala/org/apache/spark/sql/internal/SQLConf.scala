@@ -1009,6 +1009,14 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val PARQUET_VECTORIZED_READER_NESTED_COLUMN_ENABLED =
+    buildConf("spark.sql.parquet.enableNestedColumnVectorizedReader")
+      .doc("Enables vectorized Parquet decoding for nested columns (e.g., struct, list, map). " +
+          s"Requires ${PARQUET_VECTORIZED_READER_ENABLED.key} to be enabled.")
+      .version("3.3.0")
+      .booleanConf
+      .createWithDefault(true)
+
   val PARQUET_RECORD_FILTER_ENABLED = buildConf("spark.sql.parquet.recordLevelFilter.enabled")
     .doc("If true, enables Parquet's native record-level filtering using the pushed down " +
       "filters. " +
@@ -3925,6 +3933,9 @@ class SQLConf extends Serializable with Logging {
   def parquetCompressionCodec: String = getConf(PARQUET_COMPRESSION)
 
   def parquetVectorizedReaderEnabled: Boolean = getConf(PARQUET_VECTORIZED_READER_ENABLED)
+
+  def parquetVectorizedReaderNestedColumnEnabled: Boolean =
+    getConf(PARQUET_VECTORIZED_READER_NESTED_COLUMN_ENABLED)
 
   def parquetVectorizedReaderBatchSize: Int = getConf(PARQUET_VECTORIZED_READER_BATCH_SIZE)
 

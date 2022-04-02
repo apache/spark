@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.datasources.parquet
 
+import java.util.Locale
+
 import org.apache.hadoop.conf.Configuration
 import org.apache.parquet.io.{ColumnIO, ColumnIOFactory, GroupColumnIO, PrimitiveColumnIO}
 import org.apache.parquet.schema._
@@ -92,10 +94,16 @@ class ParquetToSparkSchemaConverter(
   private def convertInternal(
       groupColumn: GroupColumnIO,
       sparkReadSchema: Option[StructType] = None): ParquetColumn = {
+    // First convert the read schema into a map from field name to the field itself, to avoid O(n)
+    // lookup cost below.
+    val schemaMapOpt = sparkReadSchema.map { schema =>
+      schema.map(f => normalizeFieldName(f.name) -> f).toMap
+    }
+
     val converted = (0 until groupColumn.getChildrenCount).map { i =>
       val field = groupColumn.getChild(i)
-      val fieldFromReadSchema = sparkReadSchema.flatMap { schema =>
-        schema.find(f => isSameFieldName(f.name, field.getName, caseSensitive))
+      val fieldFromReadSchema = schemaMapOpt.flatMap { schemaMap =>
+        schemaMap.get(normalizeFieldName(field.getName))
       }
       var fieldReadType = fieldFromReadSchema.map(_.dataType)
 
@@ -146,9 +154,8 @@ class ParquetToSparkSchemaConverter(
     ParquetColumn(StructType(converted.map(_._1)), groupColumn, converted.map(_._2))
   }
 
-  private def isSameFieldName(left: String, right: String, caseSensitive: Boolean): Boolean =
-    if (!caseSensitive) left.equalsIgnoreCase(right)
-    else left == right
+  private def normalizeFieldName(name: String): String =
+    if (caseSensitive) name else name.toLowerCase(Locale.ROOT)
 
   /**
    * Converts a Parquet [[Type]] to a [[ParquetColumn]] which wraps a Spark SQL [[DataType]] with
