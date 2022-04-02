@@ -36,6 +36,8 @@ object MimaExcludes {
 
   // Exclude rules for 3.4.x
   lazy val v34excludes = v33excludes ++ Seq(
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.ml.recommendation.ALS.checkedCast"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.ml.recommendation.ALSModel.checkedCast")
   )
 
   // Exclude rules for 3.3.x from 3.2.0
