@@ -985,6 +985,7 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
               val statsProp = getStatsProperties(table)
               assert(statsProp(STATISTICS_TOTAL_SIZE).toLong == fetched2.get.sizeInBytes)
 
+              // SPARK-38573: Support Partition Level Statistics Collection
               val partStats1 = getPartitionStats(table, Map("ds" -> "2008-04-08", "hr" -> "11"))
               assert(partStats1.sizeInBytes > 0)
               assert(partStats1.rowCount == Some(1))
@@ -1020,6 +1021,7 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
               val statsProp = getStatsProperties(table)
               assert(statsProp(STATISTICS_TOTAL_SIZE).toLong == fetched4.get.sizeInBytes)
 
+              // SPARK-38573: Support Partition Level Statistics Collection
               val partStats3 = getPartitionStats(table, Map("ds" -> "2008-04-09", "hr" -> "11"))
               assert(partStats3.sizeInBytes > 0)
               assert(partStats3.rowCount == Some(1))
