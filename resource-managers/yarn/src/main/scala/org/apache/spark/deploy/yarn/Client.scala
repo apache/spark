@@ -55,6 +55,7 @@ import org.apache.spark.deploy.{SparkApplication, SparkHadoopUtil}
 import org.apache.spark.deploy.security.HadoopDelegationTokenManager
 import org.apache.spark.deploy.yarn.ResourceRequestHelper._
 import org.apache.spark.deploy.yarn.YarnSparkHadoopUtil._
+import org.apache.spark.deploy.yarn.YarnSparkSubmitOperation._
 import org.apache.spark.deploy.yarn.config._
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
@@ -398,13 +399,6 @@ private[spark] class Client(
   /** Get the application report from the ResourceManager for an application we have submitted. */
   def getApplicationReport(): ApplicationReport =
     yarnClient.getApplicationReport(appId)
-
-  /**
-   * Return the security token used by this client to communicate with the ApplicationMaster.
-   * If no security is enabled, the token returned by the report is null.
-   */
-  private def getClientToken(report: ApplicationReport): String =
-    Option(report.getClientToAMToken).map(_.toString).getOrElse("")
 
   /**
    * Fail fast if we have requested more resources per container than is available in the cluster.
@@ -1211,9 +1205,7 @@ private[spark] class Client(
         }
       }
 
-      if (state == YarnApplicationState.FINISHED ||
-          state == YarnApplicationState.FAILED ||
-          state == YarnApplicationState.KILLED) {
+      if (isTerminalState(state)) {
         cleanupStagingDir()
         return createAppReport(report)
       }
@@ -1254,36 +1246,6 @@ private[spark] class Client(
     amService.setDaemon(true)
     amService.start()
     appMaster
-  }
-
-  /**
-   * Format an application report and optionally, links to driver logs, in a human-friendly manner.
-   *
-   * @param report The application report from YARN.
-   * @param driverLogsLinks A map of driver log files and their links. Keys are the file names
-   *                        (e.g. `stdout`), and values are the links. If empty, nothing will be
-   *                        printed.
-   * @return Human-readable version of the input data.
-   */
-  private def formatReportDetails(report: ApplicationReport,
-    driverLogsLinks: IMap[String, String]): String = {
-    val details = Seq[(String, String)](
-      ("client token", getClientToken(report)),
-      ("diagnostics", report.getDiagnostics),
-      ("ApplicationMaster host", report.getHost),
-      ("ApplicationMaster RPC port", report.getRpcPort.toString),
-      ("queue", report.getQueue),
-      ("start time", report.getStartTime.toString),
-      ("final status", report.getFinalApplicationStatus.toString),
-      ("tracking URL", report.getTrackingUrl),
-      ("user", report.getUser)
-    ) ++ driverLogsLinks.map { case (fname, link) => (s"Driver Logs ($fname)", link) }
-
-    // Use more loggable format if value is null or empty
-    details.map { case (k, v) =>
-      val newValue = Option(v).filter(_.nonEmpty).getOrElse("N/A")
-      s"\n\t $k: $newValue"
-    }.mkString("")
   }
 
   /**
