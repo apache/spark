@@ -39,6 +39,7 @@ import org.apache.spark.scheduler.{SparkListener, SparkListenerStageCompleted}
 import org.apache.spark.sql.{DataFrame, Encoder, Row, SparkSession}
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.functions.col
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.StreamingQueryException
 import org.apache.spark.sql.types._
 import org.apache.spark.storage.StorageLevel
@@ -220,7 +221,9 @@ class ALSSuite extends MLTest with DefaultReadWriteTest with Logging {
         (1231L, 12L, 0.5),
         (1112L, 21L, 1.0)
       )).toDF("item", "user", "rating")
-      new ALS().setMaxIter(1).fit(df)
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
+        new ALS().setMaxIter(1).fit(df)
+      }
     }
 
     withClue("Valid Double Ids") {
