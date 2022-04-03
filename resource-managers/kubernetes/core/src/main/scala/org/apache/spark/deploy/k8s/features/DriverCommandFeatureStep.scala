@@ -67,7 +67,7 @@ private[spark] class DriverCommandFeatureStep(conf: KubernetesDriverConf)
     // re-write primary resource, app jar is also added to spark.jars by default in SparkSubmit
     // no uploading takes place here
     val newResName = KubernetesUtils
-      .renameMainAppResource(res, Option(conf.sparkConf), false)
+      .renameMainAppResource(resource = res, shouldUploadLocal = false)
     val driverContainer = baseDriverContainer(pod, newResName).build()
     SparkPod(pod.pod, driverContainer)
   }
