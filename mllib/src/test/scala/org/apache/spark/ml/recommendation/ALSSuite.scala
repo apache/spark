@@ -722,40 +722,42 @@ class ALSSuite extends MLTest with DefaultReadWriteTest with Logging {
       (1, 1L, 1d, 0, 0L, 0d, 5.0)
     ).toDF("user", "user_big", "user_small", "item", "item_big", "item_small", "rating")
     val msg = "ALS only supports non-Null values"
-    withClue("fit should fail when ids exceed integer range. ") {
-      assert(intercept[Exception] {
-        als.fit(df.select(df("user_big").as("user"), df("item"), df("rating")))
-      }.getMessage.contains(msg))
-      assert(intercept[Exception] {
-        als.fit(df.select(df("user_small").as("user"), df("item"), df("rating")))
-      }.getMessage.contains(msg))
-      assert(intercept[Exception] {
-        als.fit(df.select(df("item_big").as("item"), df("user"), df("rating")))
-      }.getMessage.contains(msg))
-      assert(intercept[Exception] {
-        als.fit(df.select(df("item_small").as("item"), df("user"), df("rating")))
-      }.getMessage.contains(msg))
-    }
-    withClue("transform should fail when ids exceed integer range. ") {
-      val model = als.fit(df)
-      def testTransformIdExceedsIntRange[A : Encoder](dataFrame: DataFrame): Unit = {
-        val e1 = intercept[Exception] {
-          model.transform(dataFrame).collect()
-        }
-        TestUtils.assertExceptionMsg(e1, msg)
-        val e2 = intercept[StreamingQueryException] {
-          testTransformer[A](dataFrame, model, "prediction") { _ => }
-        }
-        TestUtils.assertExceptionMsg(e2, msg)
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
+      withClue("fit should fail when ids exceed integer range. ") {
+        assert(intercept[Exception] {
+          als.fit(df.select(df("user_big").as("user"), df("item"), df("rating")))
+        }.getMessage.contains(msg))
+        assert(intercept[Exception] {
+          als.fit(df.select(df("user_small").as("user"), df("item"), df("rating")))
+        }.getMessage.contains(msg))
+        assert(intercept[Exception] {
+          als.fit(df.select(df("item_big").as("item"), df("user"), df("rating")))
+        }.getMessage.contains(msg))
+        assert(intercept[Exception] {
+          als.fit(df.select(df("item_small").as("item"), df("user"), df("rating")))
+        }.getMessage.contains(msg))
       }
-      testTransformIdExceedsIntRange[(Long, Int)](df.select(df("user_big").as("user"),
-        df("item")))
-      testTransformIdExceedsIntRange[(Double, Int)](df.select(df("user_small").as("user"),
-        df("item")))
-      testTransformIdExceedsIntRange[(Long, Int)](df.select(df("item_big").as("item"),
-        df("user")))
-      testTransformIdExceedsIntRange[(Double, Int)](df.select(df("item_small").as("item"),
-        df("user")))
+      withClue("transform should fail when ids exceed integer range. ") {
+        val model = als.fit(df)
+        def testTransformIdExceedsIntRange[A : Encoder](dataFrame: DataFrame): Unit = {
+          val e1 = intercept[Exception] {
+            model.transform(dataFrame).collect()
+          }
+          TestUtils.assertExceptionMsg(e1, msg)
+          val e2 = intercept[StreamingQueryException] {
+            testTransformer[A](dataFrame, model, "prediction") { _ => }
+          }
+          TestUtils.assertExceptionMsg(e2, msg)
+        }
+        testTransformIdExceedsIntRange[(Long, Int)](df.select(df("user_big").as("user"),
+          df("item")))
+        testTransformIdExceedsIntRange[(Double, Int)](df.select(df("user_small").as("user"),
+          df("item")))
+        testTransformIdExceedsIntRange[(Long, Int)](df.select(df("item_big").as("item"),
+          df("user")))
+        testTransformIdExceedsIntRange[(Double, Int)](df.select(df("item_small").as("item"),
+          df("user")))
+      }
     }
   }
 
