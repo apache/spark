@@ -577,7 +577,6 @@ class StreamingContext private[streaming] (
             validate()
 
             registerProgressListener()
-
             registerExtraStreamingListener()
             // Start the streaming scheduler in a new thread, so that thread local properties
             // like call sites and job groups can be reset without affecting those of the
