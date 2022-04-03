@@ -142,25 +142,6 @@
              <message key="ws.notPreceded"
              value="GenericWhitespace ''{0}'' is not preceded with whitespace."/>
         </module>
-        <!-- TODO: 11/09/15 disabled - indentation is currently inconsistent -->
-        <!--
-        <module name="Indentation">
-            <property name="basicOffset" value="4"/>
-            <property name="braceAdjustment" value="0"/>
-            <property name="caseIndent" value="4"/>
-            <property name="throwsIndent" value="4"/>
-            <property name="lineWrappingIndentation" value="4"/>
-            <property name="arrayInitIndent" value="4"/>
-        </module>
-        -->
-        <!-- TODO: 11/09/15 disabled - order is currently wrong in many places -->
-        <!--
-        <module name="ImportOrder">
-            <property name="separated" value="true"/>
-            <property name="ordered" value="true"/>
-            <property name="groups" value="/^javax?\./,scala,*,org.apache.spark"/>
-        </module>
-        -->
         <module name="MethodParamPad"/>
         <module name="AnnotationLocation">
             <property name="tokens" value="CLASS_DEF, INTERFACE_DEF, ENUM_DEF, METHOD_DEF, CTOR_DEF"/>
