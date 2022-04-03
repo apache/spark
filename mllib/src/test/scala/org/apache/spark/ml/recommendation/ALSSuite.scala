@@ -228,18 +228,20 @@ class ALSSuite extends MLTest with DefaultReadWriteTest with Logging {
     }
 
     val msg = "either out of Integer range or contained a fractional part"
-    withClue("Invalid Long: out of range") {
-      val e: SparkException = intercept[SparkException] {
-        df.select(checkedCast(lit(1231000000000L))).collect()
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
+      withClue("Invalid Long: out of range") {
+        val e: SparkException = intercept[SparkException] {
+          df.select(checkedCast(lit(1231000000000L))).collect()
+        }
+        assert(e.getMessage.contains(msg))
       }
-      assert(e.getMessage.contains(msg))
-    }
 
-    withClue("Invalid Decimal: out of range") {
-      val e: SparkException = intercept[SparkException] {
-        df.select(checkedCast(lit(1231000000000.0).cast(DecimalType(15, 2)))).collect()
+      withClue("Invalid Decimal: out of range") {
+        val e: SparkException = intercept[SparkException] {
+          df.select(checkedCast(lit(1231000000000.0).cast(DecimalType(15, 2)))).collect()
+        }
+        assert(e.getMessage.contains(msg))
       }
-      assert(e.getMessage.contains(msg))
     }
 
     withClue("Invalid Decimal: fractional part") {
@@ -249,11 +251,13 @@ class ALSSuite extends MLTest with DefaultReadWriteTest with Logging {
       assert(e.getMessage.contains(msg))
     }
 
-    withClue("Invalid Double: out of range") {
-      val e: SparkException = intercept[SparkException] {
-        df.select(checkedCast(lit(1231000000000.0))).collect()
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
+      withClue("Invalid Double: out of range") {
+        val e: SparkException = intercept[SparkException] {
+          df.select(checkedCast(lit(1231000000000.0))).collect()
+        }
+        assert(e.getMessage.contains(msg))
       }
-      assert(e.getMessage.contains(msg))
     }
 
     withClue("Invalid Double: fractional part") {
