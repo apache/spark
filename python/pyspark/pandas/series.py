@@ -1690,6 +1690,85 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
     tolist = to_list
 
+    def duplicated(self, keep: Union[bool, str] = "first") -> "Series":
+        """
+        Indicate duplicate Series values.
+
+        Duplicated values are indicated as ``True`` values in the resulting
+        Series. Either all duplicates, all except the first or all except the
+        last occurrence of duplicates can be indicated.
+
+        .. versionadded:: 3.4.0
+
+        Parameters
+        ----------
+        keep : {'first', 'last', False}, default 'first'
+            Method to handle marking duplicates:
+            - 'first' : Mark duplicates as ``True`` except for the first
+              occurrence.
+            - 'last' : Mark duplicates as ``True`` except for the last
+              occurrence.
+            - ``False`` : Mark all duplicates as ``True``.
+
+        Returns
+        -------
+        Series
+            Series indicating whether each value has occurred in the
+            preceding values
+
+        See Also
+        --------
+        Index.drop_duplicates : Remove duplicate values from Index.
+        DataFrame.duplicated : Equivalent method on DataFrame.
+        Series.drop_duplicates : Remove duplicate values from Series.
+
+        Examples
+        --------
+        By default, for each set of duplicated values, the first occurrence is
+        set on False and all others on True:
+
+        >>> animals = ps.Series(['lama', 'cow', 'lama', 'beetle', 'lama'])
+        >>> animals.duplicated().sort_index()
+        0    False
+        1    False
+        2     True
+        3    False
+        4     True
+        dtype: bool
+
+        which is equivalent to
+
+        >>> animals.duplicated(keep='first').sort_index()
+        0    False
+        1    False
+        2     True
+        3    False
+        4     True
+        dtype: bool
+
+        By using 'last', the last occurrence of each set of duplicated values
+        is set on False and all others on True:
+
+        >>> animals.duplicated(keep='last').sort_index()
+        0     True
+        1    False
+        2     True
+        3    False
+        4    False
+        dtype: bool
+
+        By setting keep on ``False``, all duplicates are True:
+
+        >>> animals.duplicated(keep=False).sort_index()
+        0     True
+        1    False
+        2     True
+        3    False
+        4     True
+        dtype: bool
+        """
+        return self._psdf[[self.name]].duplicated(keep=keep).rename(self.name)
+
     def drop_duplicates(
         self, keep: Union[bool, str] = "first", inplace: bool = False
     ) -> Optional["Series"]:
