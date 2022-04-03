@@ -578,7 +578,7 @@ class StreamingContext private[streaming] (
 
             registerProgressListener()
 
-            setupExtraStreamingListener()
+            registerExtraStreamingListener()
             // Start the streaming scheduler in a new thread, so that thread local properties
             // like call sites and job groups can be reset without affecting those of the
             // current thread.
@@ -619,7 +619,7 @@ class StreamingContext private[streaming] (
   /**
    * Registers streaming listeners specified in spark.streaming.extraListeners.
    */
-  private def setupExtraStreamingListener(): Unit = {
+  private def registerExtraStreamingListener(): Unit = {
     try {
       conf.get(STREAMING_EXTRA_LISTENERS).foreach { classNames =>
         val listeners = Utils.loadExtensions(classOf[StreamingListener], classNames, conf)

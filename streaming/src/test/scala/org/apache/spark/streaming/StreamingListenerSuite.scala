@@ -236,17 +236,17 @@ class StreamingListenerSuite extends TestSuiteBase with LocalStreamingContext wi
     verifyNoMoreInteractions(streamingListener)
   }
 
-  test("SPARK-38498: Support customized streaming listener") {
+  test("SPARK-38498: Support extra streaming listener") {
     val conf = new SparkConf().setMaster("local").setAppName("customized streaming listener")
       .set(UI.UI_ENABLED, false)
       .set(StreamingConf.STREAMING_EXTRA_LISTENERS.key,
-        classOf[CustomizedStreamingListener].getName)
+        classOf[ExtraStreamingListener].getName)
     val sc = new SparkContext(conf)
     ssc = new StreamingContext(sc, Milliseconds(1000))
     val inputStream = ssc.receiverStream(new StreamingListenerSuiteReceiver)
     inputStream.foreachRDD(_.count)
     startStreamingContextAndCallStop(ssc)
-    assert(CustomizedBatchCounter.COMPLETED_BATCH >= 1)
+    assert(ExtraStreamingListenerBatchCounter.COMPLETED_BATCH >= 1)
   }
 
   private def startStreamingContextAndCallStop(_ssc: StreamingContext): Unit = {
@@ -401,13 +401,13 @@ class StreamingContextStoppingCollector(val ssc: StreamingContext) extends Strea
   }
 }
 
-class CustomizedStreamingListener extends StreamingListener {
-  import CustomizedBatchCounter._
+class ExtraStreamingListener extends StreamingListener {
+  import ExtraStreamingListenerBatchCounter._
   override def onBatchCompleted(batchCompleted: StreamingListenerBatchCompleted): Unit = {
     COMPLETED_BATCH += 1
   }
 }
 
-object CustomizedBatchCounter {
+object ExtraStreamingListenerBatchCounter {
   var COMPLETED_BATCH = 0
 }
