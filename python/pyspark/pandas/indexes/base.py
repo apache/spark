@@ -882,10 +882,17 @@ class Index(IndexOpsMixin):
         )
         return DataFrame(internal).index
 
-    # TODO: ADD keep parameter
-    def drop_duplicates(self) -> "Index":
+    def drop_duplicates(self, keep: Union[bool, str] = "first") -> "Index":
         """
         Return Index with duplicate values removed.
+
+        Parameters
+        ----------
+        keep : {'first', 'last', ``False``}, default 'first'
+            Method to handle dropping duplicates:
+            - 'first' : Drop duplicates except for the first occurrence.
+            - 'last' : Drop duplicates except for the last occurrence.
+            - ``False`` : Drop all duplicates.
 
         Returns
         -------
@@ -898,25 +905,19 @@ class Index(IndexOpsMixin):
 
         Examples
         --------
-        Generate an pandas.Index with duplicate values.
+        Generate an Index with duplicate values.
 
         >>> idx = ps.Index(['lama', 'cow', 'lama', 'beetle', 'lama', 'hippo'])
 
         >>> idx.drop_duplicates().sort_values()
         Index(['beetle', 'cow', 'hippo', 'lama'], dtype='object')
         """
-        sdf = self._internal.spark_frame.select(
-            self._internal.index_spark_columns
-        ).drop_duplicates()
-        internal = InternalFrame(
-            spark_frame=sdf,
-            index_spark_columns=[
-                scol_for(sdf, col) for col in self._internal.index_spark_column_names
-            ],
-            index_names=self._internal.index_names,
-            index_fields=self._internal.index_fields,
-        )
-        return DataFrame(internal).index
+        with ps.option_context("compute.default_index_type", "distributed"):
+            # The attached index caused by `reset_index` below is used for sorting only,
+            # and it will be dropped soon,
+            # so we enforce “distributed” default index type
+            psser = self.to_series().reset_index(drop=True)
+        return Index(psser.drop_duplicates(keep=keep).sort_index())
 
     def to_series(self, name: Optional[Name] = None) -> Series:
         """
