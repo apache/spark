@@ -22,13 +22,11 @@ import org.json4s.JsonDSL._
 
 import org.apache.spark.annotation.Since
 import org.apache.spark.internal.Logging
-import org.apache.spark.ml.feature.Instance
 import org.apache.spark.ml.linalg.{BLAS, Vector}
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.tree._
 import org.apache.spark.ml.tree.impl.GradientBoostedTrees
 import org.apache.spark.ml.util._
-import org.apache.spark.ml.util.DatasetUtils._
 import org.apache.spark.ml.util.DefaultParamsReader.Metadata
 import org.apache.spark.ml.util.Instrumentation.instrumented
 import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo}
@@ -166,15 +164,6 @@ class GBTRegressor @Since("1.4.0") (@Since("1.4.0") override val uid: String)
   def setWeightCol(value: String): this.type = set(weightCol, value)
 
   override protected def train(dataset: Dataset[_]): GBTRegressionModel = instrumented { instr =>
-
-    def extractInstances(df: Dataset[_]) = {
-      df.select(
-        checkRegressionLabels($(labelCol)),
-        checkNonNegativeWeights(get(weightCol)),
-        checkNonNanVectors($(featuresCol))
-      ).rdd.map { case Row(l: Double, w: Double, v: Vector) => Instance(l, w, v) }
-    }
-
     val withValidation = isDefined(validationIndicatorCol) && $(validationIndicatorCol).nonEmpty
     val (trainDataset, validationDataset) = if (withValidation) {
       (extractInstances(dataset.filter(not(col($(validationIndicatorCol))))),

@@ -22,14 +22,12 @@ import org.json4s.JsonDSL._
 
 import org.apache.spark.annotation.Since
 import org.apache.spark.internal.Logging
-import org.apache.spark.ml.feature.Instance
 import org.apache.spark.ml.linalg.{BLAS, DenseVector, SparseVector, Vector, Vectors}
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.regression.DecisionTreeRegressionModel
 import org.apache.spark.ml.tree._
 import org.apache.spark.ml.tree.impl.GradientBoostedTrees
 import org.apache.spark.ml.util._
-import org.apache.spark.ml.util.DatasetUtils._
 import org.apache.spark.ml.util.DefaultParamsReader.Metadata
 import org.apache.spark.ml.util.Instrumentation.instrumented
 import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo}
@@ -169,15 +167,6 @@ class GBTClassifier @Since("1.4.0") (
 
   override protected def train(
       dataset: Dataset[_]): GBTClassificationModel = instrumented { instr =>
-
-    def extractInstances(df: Dataset[_]) = {
-      df.select(
-        checkClassificationLabels($(labelCol), Some(2)),
-        checkNonNegativeWeights(get(weightCol)),
-        checkNonNanVectors($(featuresCol))
-      ).rdd.map { case Row(l: Double, w: Double, v: Vector) => Instance(l, w, v) }
-    }
-
     val withValidation = isDefined(validationIndicatorCol) && $(validationIndicatorCol).nonEmpty
     val (trainDataset, validationDataset) = if (withValidation) {
       (extractInstances(dataset.filter(not(col($(validationIndicatorCol))))),

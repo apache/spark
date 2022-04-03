@@ -24,13 +24,16 @@ import scala.util.Try
 import org.apache.spark.annotation.Since
 import org.apache.spark.ml.PredictorParams
 import org.apache.spark.ml.classification.ProbabilisticClassifierParams
-import org.apache.spark.ml.linalg.VectorUDT
+import org.apache.spark.ml.feature.Instance
+import org.apache.spark.ml.linalg.{Vector, VectorUDT}
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
+import org.apache.spark.ml.util.DatasetUtils._
 import org.apache.spark.ml.util.SchemaUtils
 import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo, BoostingStrategy => OldBoostingStrategy, Strategy => OldStrategy}
 import org.apache.spark.mllib.tree.impurity.{Entropy => OldEntropy, Gini => OldGini, Impurity => OldImpurity, Variance => OldVariance}
 import org.apache.spark.mllib.tree.loss.{AbsoluteError => OldAbsoluteError, ClassificationLoss => OldClassificationLoss, LogLoss => OldLogLoss, Loss => OldLoss, SquaredError => OldSquaredError}
+import org.apache.spark.sql.{Dataset, Row}
 import org.apache.spark.sql.types.{DataType, DoubleType, StructType}
 
 /**
@@ -528,6 +531,14 @@ private[ml] trait GBTParams extends TreeEnsembleParams with HasMaxIter with HasS
 
   /** Get old Gradient Boosting Loss type */
   private[ml] def getOldLossType: OldLoss
+
+  private[ml] def extractInstances(df: Dataset[_]) = {
+    df.select(
+      checkClassificationLabels($(labelCol), Some(2)),
+      checkNonNegativeWeights(get(weightCol)),
+      checkNonNanVectors($(featuresCol))
+    ).rdd.map { case Row(l: Double, w: Double, v: Vector) => Instance(l, w, v) }
+  }
 }
 
 private[ml] object GBTClassifierParams {
