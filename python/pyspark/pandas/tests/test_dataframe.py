@@ -817,11 +817,20 @@ class DataFrameTest(ComparisonTestBase, SQLTestUtils):
             pdf1.rename(columns=str_lower, index={1: 10, 2: 20}),
         )
 
+        self.assert_eq(
+            psdf1.rename(columns=lambda x: str.lower(x)),
+            pdf1.rename(columns=lambda x: str.lower(x)),
+        )
+
         idx = pd.MultiIndex.from_tuples([("X", "A"), ("X", "B"), ("Y", "C"), ("Y", "D")])
         pdf2 = pd.DataFrame([[1, 2, 3, 4], [5, 6, 7, 8]], columns=idx)
         psdf2 = ps.from_pandas(pdf2)
 
         self.assert_eq(psdf2.rename(columns=str_lower), pdf2.rename(columns=str_lower))
+        self.assert_eq(
+            psdf2.rename(columns=lambda x: str.lower(x)),
+            pdf2.rename(columns=lambda x: str.lower(x)),
+        )
 
         self.assert_eq(
             psdf2.rename(columns=str_lower, level=0), pdf2.rename(columns=str_lower, level=0)
