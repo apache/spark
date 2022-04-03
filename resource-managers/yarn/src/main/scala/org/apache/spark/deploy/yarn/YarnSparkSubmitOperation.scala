@@ -25,7 +25,7 @@ import org.apache.hadoop.yarn.conf.YarnConfiguration
 
 import org.apache.spark.SparkConf
 import org.apache.spark.deploy.{SparkHadoopUtil, SparkSubmitOperation}
-import org.apache.spark.deploy.yarn.YarnSparkSubmitOperation.formatReportDetails
+import org.apache.spark.deploy.yarn.YarnSparkSubmitOperation._
 import org.apache.spark.util.CommandLineLoggingUtils
 
 class YarnSparkSubmitOperation
@@ -51,8 +51,16 @@ class YarnSparkSubmitOperation
       try {
         val appId = ApplicationId.fromString(applicationId)
         val report = yarnClient.getApplicationReport(appId)
-        report.getYarnApplicationState
-        yarnClient.killApplication(appId)
+        if (isTerminalState(report.getYarnApplicationState)) {
+          printMessage(s"WARN: Application $appId is already terminated")
+          printMessage(formatReportDetails(report))
+        } else {
+          yarnClient.killApplication(appId)
+          val report = yarnClient.getApplicationReport(appId)
+          printMessage(formatReportDetails(report))
+
+        }
+
       } catch {
         case e: Exception =>
           printErrorAndExit(s"Failed to kill $applicationId due to ${e.getMessage}")
