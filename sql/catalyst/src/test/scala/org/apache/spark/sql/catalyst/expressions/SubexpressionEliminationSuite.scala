@@ -401,7 +401,7 @@ class SubexpressionEliminationSuite extends SparkFunSuite with ExpressionEvalHel
       val equivalence = new EquivalentExpressions
       val expression = DynamicPruningExpression(Exists(LocalRelation()))
       equivalence.addExprTree(expression)
-      assert(equivalence.getEquivalentExprs(expression).size == 0)
+      assert(equivalence.getExprState(expression).isEmpty)
     } finally {
       TaskContext.unset()
     }
