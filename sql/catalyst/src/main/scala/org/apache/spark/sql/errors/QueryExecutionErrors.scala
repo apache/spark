@@ -495,7 +495,7 @@ object QueryExecutionErrors {
     new ClassNotFoundException(
       s"""
          |Failed to find data source: $provider. Please find packages at
-         |http://spark.apache.org/third-party-projects.html
+         |https://spark.apache.org/third-party-projects.html
        """.stripMargin, error)
   }
 
