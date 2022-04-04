@@ -40,7 +40,7 @@ import org.apache.spark.unsafe.types.UTF8String
            that 'expr' may omit these digits. 'expr' must not be larger than the number of digits
            allowed to the left of the decimal point per the format string. Digits in the format
            string to the right of the decimal indicate the most digits 'expr' may have to the right
-           of the decimal point;.
+           of the decimal point.
          '.' or 'D': Specifies the position of the decimal point (optional, only allowed once).
          ',' or 'G': Specifies the position of the grouping (thousands) separator (,). There must be
            a 0 or 9 to the left of the rightmost grouping separator. 'expr' must match the
@@ -134,7 +134,7 @@ case class ToNumber(left: Expression, right: Expression)
            that 'expr' may omit these digits. 'expr' must not be larger than the number of digits
            allowed to the left of the decimal point per the format string. Digits in the format
            string to the right of the decimal indicate the most digits 'expr' may have to the right
-           of the decimal point;.
+           of the decimal point.
          '.' or 'D': Specifies the position of the decimal point (optional, only allowed once).
          ',' or 'G': Specifies the position of the grouping (thousands) separator (,). There must be
            a 0 or 9 to the left of the rightmost grouping separator. 'expr' must match the
