@@ -1766,7 +1766,7 @@ class Analyzer(override val catalogManager: CatalogManager)
       innerResolve(expr, isTopLevel = true)
     } catch {
       case ae: AnalysisException if !throws =>
-        logWarning(ae.message)
+        logDebug(ae.getMessage)
         expr
     }
   }
@@ -2388,7 +2388,7 @@ class Analyzer(override val catalogManager: CatalogManager)
                   }
                 } catch {
                   case ae: AnalysisException =>
-                    logWarning(ae.getMessage)
+                    logDebug(ae.getMessage)
                     u
                 }
               }
@@ -2596,7 +2596,7 @@ class Analyzer(override val catalogManager: CatalogManager)
               }).getOrElse(u)
             } catch {
               case ae: AnalysisException =>
-                logWarning(ae.getMessage)
+                logDebug(ae.getMessage)
                 u
             }
         }
