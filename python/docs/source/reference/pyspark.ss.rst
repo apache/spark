@@ -30,9 +30,7 @@ Core Classes
 
     DataStreamReader
     DataStreamWriter
-    ForeachBatchFunction
     StreamingQuery
-    StreamingQueryException
     StreamingQueryManager
 
 Input and Output
