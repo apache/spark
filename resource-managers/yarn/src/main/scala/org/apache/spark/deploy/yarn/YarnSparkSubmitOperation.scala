@@ -58,7 +58,6 @@ class YarnSparkSubmitOperation
           yarnClient.killApplication(appId)
           val report = yarnClient.getApplicationReport(appId)
           printMessage(formatReportDetails(report))
-
         }
 
       } catch {
