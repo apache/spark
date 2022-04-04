@@ -722,6 +722,7 @@ class RDDTests(ReusedPySparkTestCase):
         # deadlock and kill the Python worker.
         import numpy as np
         import pandas as pd
+
         num_rows = 100000
         num_columns = 134
         data = np.zeros((num_rows, num_columns))
