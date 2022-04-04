@@ -32,7 +32,7 @@
   </properties>
   <packaging>jar</packaging>
   <name>Kafka 0.10+ Token Provider for Streaming</name>
-  <url>http://spark.apache.org/</url>
+  <url>https://spark.apache.org/</url>
 
   <dependencies>
     <dependency>

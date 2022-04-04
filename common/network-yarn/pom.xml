@@ -29,7 +29,7 @@
   <artifactId>spark-network-yarn_2.12</artifactId>
   <packaging>jar</packaging>
   <name>Spark Project YARN Shuffle Service</name>
-  <url>http://spark.apache.org/</url>
+  <url>https://spark.apache.org/</url>
   <properties>
     <sbt.project.name>network-yarn</sbt.project.name>
     <!-- Make sure all Hadoop dependencies are provided to avoid repackaging. -->

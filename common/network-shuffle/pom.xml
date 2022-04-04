@@ -29,7 +29,7 @@
   <artifactId>spark-network-shuffle_2.12</artifactId>
   <packaging>jar</packaging>
   <name>Spark Project Shuffle Streaming Service</name>
-  <url>http://spark.apache.org/</url>
+  <url>https://spark.apache.org/</url>
   <properties>
     <sbt.project.name>network-shuffle</sbt.project.name>
   </properties>

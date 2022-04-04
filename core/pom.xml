@@ -28,7 +28,7 @@
   <artifactId>spark-core_2.12</artifactId>
   <packaging>jar</packaging>
   <name>Spark Project Core</name>
-  <url>http://spark.apache.org/</url>
+  <url>https://spark.apache.org/</url>
 
   <properties>
     <sbt.project.name>core</sbt.project.name>
