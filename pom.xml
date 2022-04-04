@@ -50,7 +50,7 @@
       <email>matei.zaharia@gmail.com</email>
       <url>https://cs.stanford.edu/people/matei</url>
       <organization>Apache Software Foundation</organization>
-      <organizationUrl>http://spark.apache.org</organizationUrl>
+      <organizationUrl>https://spark.apache.org</organizationUrl>
     </developer>
   </developers>
   <issueManagement>
