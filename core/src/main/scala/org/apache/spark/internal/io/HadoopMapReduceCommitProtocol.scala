@@ -236,7 +236,7 @@ class HadoopMapReduceCommitProtocol(
         }
       }
 
-      fs.delete(stagingDir, true)
+      fs.deleteOnExit(stagingDir)
     }
   }
 

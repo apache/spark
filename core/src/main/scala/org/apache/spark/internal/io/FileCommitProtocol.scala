@@ -232,6 +232,10 @@ object FileCommitProtocol extends Logging {
   def getStagingDir(path: String, jobId: String): Path = {
     new Path(path, ".spark-staging-" + jobId)
   }
+
+  def overwriteStagingDir(path: String, jobId: String): Path = {
+    new Path(new Path(path).getParent, s".${new Path(path).getName}-spark-staging-" + jobId)
+  }
 }
 
 /**

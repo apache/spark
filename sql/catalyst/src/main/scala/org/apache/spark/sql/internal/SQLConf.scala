@@ -4157,6 +4157,9 @@ class SQLConf extends Serializable with Logging {
 
   def fileCommitProtocolClass: String = getConf(SQLConf.FILE_COMMIT_PROTOCOL_CLASS)
 
+  def useOverwriteFileCommitProtocol: Boolean = fileCommitProtocolClass ==
+    "org.apache.spark.sql.execution.datasources.SQLOverwriteHadoopMapReduceCommitProtocol"
+
   def parallelPartitionDiscoveryThreshold: Int =
     getConf(SQLConf.PARALLEL_PARTITION_DISCOVERY_THRESHOLD)
 

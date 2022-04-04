@@ -92,6 +92,7 @@ object FileFormatWriter extends Logging {
    *    processing statistics.
    * @return The set of all partition paths that were updated during this write job.
    */
+  // scalastyle:off argcount
   def write(
       sparkSession: SparkSession,
       plan: SparkPlan,
@@ -102,7 +103,8 @@ object FileFormatWriter extends Logging {
       partitionColumns: Seq[Attribute],
       bucketSpec: Option[BucketSpec],
       statsTrackers: Seq[WriteJobStatsTracker],
-      options: Map[String, String])
+      options: Map[String, String],
+      preCommitJob: Option[() => Unit] = None)
     : Set[String] = {
 
     val job = Job.getInstance(hadoopConf)
@@ -263,6 +265,7 @@ object FileFormatWriter extends Logging {
 
       val commitMsgs = ret.map(_.commitMsg)
 
+      preCommitJob.map(_())
       logInfo(s"Start to commit write Job ${description.uuid}.")
       val (_, duration) = Utils.timeTakenMs { committer.commitJob(job, commitMsgs) }
       logInfo(s"Write Job ${description.uuid} committed. Elapsed time: $duration ms.")
@@ -278,6 +281,7 @@ object FileFormatWriter extends Logging {
       throw QueryExecutionErrors.jobAbortedError(cause)
     }
   }
+  // scalastyle:on argcount
 
   /** Writes data out in a single Spark task. */
   private def executeTask(

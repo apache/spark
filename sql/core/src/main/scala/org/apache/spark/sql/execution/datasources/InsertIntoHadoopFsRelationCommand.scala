@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.datasources
 
+import java.io.IOException
+
 import org.apache.hadoop.fs.{FileSystem, Path}
 
 import org.apache.spark.internal.io.FileCommitProtocol
@@ -121,6 +123,9 @@ case class InsertIntoHadoopFsRelationCommand(
         case (SaveMode.Overwrite, true) =>
           if (ifPartitionNotExists && matchingPartitions.nonEmpty) {
             false
+          } else if (sparkSession.sessionState.conf.useOverwriteFileCommitProtocol) {
+            // For new commit protocol, do not delete directories first.
+            true
           } else if (dynamicPartitionOverwrite) {
             // For dynamic partition overwrite, do not delete partition directories ahead.
             true
@@ -164,12 +169,30 @@ case class InsertIntoHadoopFsRelationCommand(
 
       // For dynamic partition overwrite, FileOutputCommitter's output path is staging path, files
       // will be renamed from staging path to final output path during commit job
-      val committerOutputPath = if (dynamicPartitionOverwrite) {
+      val committerOutputPath =
+      if (sparkSession.sessionState.conf.useOverwriteFileCommitProtocol) {
+        if (mode == SaveMode.Overwrite) {
+          FileCommitProtocol.overwriteStagingDir(outputPath.toString, jobId)
+            .makeQualified(fs.getUri, fs.getWorkingDirectory)
+        } else {
+          // Fallback to default behavior
+          qualifiedOutputPath
+        }
+      } else if (dynamicPartitionOverwrite) {
         FileCommitProtocol.getStagingDir(outputPath.toString, jobId)
           .makeQualified(fs.getUri, fs.getWorkingDirectory)
       } else {
         qualifiedOutputPath
       }
+
+      val preCommitJob =
+        if (sparkSession.sessionState.conf.useOverwriteFileCommitProtocol &&
+          mode == SaveMode.Overwrite && !dynamicPartitionOverwrite) {
+          Some(() =>
+            deleteMatchingPartitions(fs, qualifiedOutputPath, customPartitionLocations, committer))
+        } else {
+          None
+        }
 
       val updatedPartitionPaths =
         FileFormatWriter.write(
@@ -183,8 +206,47 @@ case class InsertIntoHadoopFsRelationCommand(
           partitionColumns = partitionColumns,
           bucketSpec = bucketSpec,
           statsTrackers = Seq(basicWriteJobStatsTracker(hadoopConf)),
-          options = options)
+          options = options,
+          preCommitJob = preCommitJob)
 
+      if (mode == SaveMode.Overwrite) {
+        if (sparkSession.sessionState.conf.useOverwriteFileCommitProtocol) {
+          if (partitionColumns.isEmpty) {
+            // Non-partition table overwrite should rename staging dir to output path
+            if (!fs.rename(committerOutputPath, qualifiedOutputPath)) {
+              throw new IOException(s"Failed to rename $committerOutputPath to $outputPath")
+            }
+          } else if (staticPartitions.size == partitionColumns.size) {
+            // Single partition overwrite
+            val (stagingStaticPartitionPath, targetLocation) =
+              customPartitionLocations.get(staticPartitions) match {
+                case Some(customPath) => (committerOutputPath, new Path(customPath))
+                case None => (committerOutputPath.suffix(staticPartitionPrefix),
+                  qualifiedOutputPath.suffix(staticPartitionPrefix))
+              }
+            if (!fs.exists(targetLocation.getParent)) {
+              fs.mkdirs(targetLocation.getParent)
+            }
+            if (!fs.rename(stagingStaticPartitionPath, targetLocation)) {
+              throw new IOException(s"Failed to rename $stagingStaticPartitionPath to " +
+                s"$targetLocation")
+            }
+          } else if (dynamicPartitionOverwrite) {
+            // Same behavior as default, do nothing here.
+          } else {
+            // STATIC mode dynamic partition overwrite
+            val targetLocation = qualifiedOutputPath.suffix(staticPartitionPrefix)
+            if (!fs.exists(targetLocation.getParent)) {
+              fs.mkdirs(targetLocation.getParent)
+            }
+            val stagingStaticPartitionPath = committerOutputPath.suffix(staticPartitionPrefix)
+            if (!fs.rename(stagingStaticPartitionPath, targetLocation)) {
+              throw new IOException(s"Failed to rename $stagingStaticPartitionPath to " +
+                s"$targetLocation")
+            }
+          }
+        }
+      }
 
       // update metastore partition metadata
       if (updatedPartitionPaths.isEmpty && staticPartitions.nonEmpty
@@ -213,6 +275,17 @@ case class InsertIntoHadoopFsRelationCommand(
     Seq.empty[Row]
   }
 
+
+  def staticPartitionPrefix: String = {
+    if (staticPartitions.nonEmpty) {
+      "/" + partitionColumns.flatMap { p =>
+        staticPartitions.get(p.name).map(getPartitionPathString(p.name, _))
+      }.mkString("/")
+    } else {
+      ""
+    }
+  }
+
   /**
    * Deletes all partition files that match the specified static prefix. Partitions with custom
    * locations are also cleared based on the custom locations map given to this class.
@@ -222,13 +295,6 @@ case class InsertIntoHadoopFsRelationCommand(
       qualifiedOutputPath: Path,
       customPartitionLocations: Map[TablePartitionSpec, String],
       committer: FileCommitProtocol): Unit = {
-    val staticPartitionPrefix = if (staticPartitions.nonEmpty) {
-      "/" + partitionColumns.flatMap { p =>
-        staticPartitions.get(p.name).map(getPartitionPathString(p.name, _))
-      }.mkString("/")
-    } else {
-      ""
-    }
     // first clear the path determined by the static partition keys (e.g. /table/foo=1)
     val staticPrefixPath = qualifiedOutputPath.suffix(staticPartitionPrefix)
     if (fs.exists(staticPrefixPath) && !committer.deleteWithJob(fs, staticPrefixPath, true)) {
