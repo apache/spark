@@ -217,19 +217,18 @@ case class InsertIntoHadoopFsRelationCommand(
               throw new IOException(s"Failed to rename $committerOutputPath to $outputPath")
             }
           } else if (staticPartitions.size == partitionColumns.size) {
-            // Single partition overwrite
-            val (stagingStaticPartitionPath, targetLocation) =
-              customPartitionLocations.get(staticPartitions) match {
-                case Some(customPath) => (committerOutputPath, new Path(customPath))
-                case None => (committerOutputPath.suffix(staticPartitionPrefix),
-                  qualifiedOutputPath.suffix(staticPartitionPrefix))
+            // For static partition overwrite, if custom partition path is not empty, result data
+            // haven been written to target custom partition path during commitJob.
+            if (!customPartitionLocations.contains(staticPartitions)) {
+              val stagingStaticPartitionPath = committerOutputPath.suffix(staticPartitionPrefix)
+              val targetLocation = qualifiedOutputPath.suffix(staticPartitionPrefix)
+              if (!fs.exists(targetLocation.getParent)) {
+                fs.mkdirs(targetLocation.getParent)
               }
-            if (!fs.exists(targetLocation.getParent)) {
-              fs.mkdirs(targetLocation.getParent)
-            }
-            if (!fs.rename(stagingStaticPartitionPath, targetLocation)) {
-              throw new IOException(s"Failed to rename $stagingStaticPartitionPath to " +
-                s"$targetLocation")
+              if (!fs.rename(stagingStaticPartitionPath, targetLocation)) {
+                throw new IOException(s"Failed to rename $stagingStaticPartitionPath to " +
+                  s"$targetLocation")
+              }
             }
           } else if (dynamicPartitionOverwrite) {
             // Same behavior as default, do nothing here.
