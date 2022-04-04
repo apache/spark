@@ -3099,17 +3099,19 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         if not isinstance(periods, int):
             raise TypeError("periods should be an int; however, got [%s]" % type(periods).__name__)
 
-        scol = self.spark.column.alias("__tmp_col__")
+        tmp_col = "__tmp_col__"
+        tmp_lag_col = "__tmp_lag_col__"
+        scol = self.spark.column.alias(tmp_col)
         if periods == 0:
-            lag_col = scol.alias("__tmp_lag_col__")
+            lag_col = scol.alias(tmp_lag_col)
         else:
             window = Window.orderBy(NATURAL_ORDER_COLUMN_NAME)
-            lag_col = F.lag(scol, periods).over(window).alias("__tmp_lag_col__")
+            lag_col = F.lag(scol, periods).over(window).alias(tmp_lag_col)
 
         return (
             self._internal.spark_frame.select([scol, lag_col])
             .dropna("any")
-            .corr("__tmp_col__", "__tmp_lag_col__")
+            .corr(tmp_col, tmp_lag_col)
         )
 
     def corr(self, other: "Series", method: str = "pearson") -> float:
