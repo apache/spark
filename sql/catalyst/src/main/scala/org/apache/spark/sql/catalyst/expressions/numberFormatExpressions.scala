@@ -161,7 +161,7 @@ case class ToNumber(left: Expression, right: Expression)
        345.00
       -- The format requires at least three digits.
       > SELECT _FUNC_('$45', 'S$999,099.99');
-       <Error>
+        NULL
       -- The format requires at least three digits.
       > SELECT _FUNC_('$045', 'S$999,099.99');
        45.00
