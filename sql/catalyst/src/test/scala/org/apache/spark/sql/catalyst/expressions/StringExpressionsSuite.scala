@@ -892,55 +892,151 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       Literal.create(null, IntegerType), Literal.create(null, IntegerType)), null)
   }
 
-  test("ToNumber") {
-    // Start with some basic cases.
+  test("ToNumber: positive tests") {
     Seq(
-      // Positive tests.
-      ("$345", "S$999,099.99") -> Some(Decimal(345)),
-      ("454.", "099.99") -> Some(Decimal(454.0)),
-      ("454.6", "099.99") -> Some(Decimal(454.6)),
-      ("454.67", "099.00") -> Some(Decimal(454.67)),
-      ("454", "000") -> Some(Decimal(454)),
-      ("454", "9099") -> Some(Decimal(454)),
-      ("454", "099") -> Some(Decimal(454)),
-      ("454.67", "099.99") -> Some(Decimal(454.67)),
-      ("$454", "$999") -> Some(Decimal(454)),
-      ("454,123", "999,099") -> Some(Decimal(454123)),
-      ("454,123", "999G099") -> Some(Decimal(454123)),
-      ("$454,123", "$999,099") -> Some(Decimal(454123)),
-      ("-454", "S999") -> Some(Decimal(-454)),
-      ("+454", "S999") -> Some(Decimal(454)),
-      ("-$12,345.67", "S$999,099.99") -> Some(Decimal(-12345.67)),
-      ("454-", "999MI") -> Some(Decimal(-454)),
-      ("<454>", "999PR") -> Some(Decimal(-454))
-      /*
-      // Negative tests.
-      // The input string has more digits than the format string allows.
-      ("454", "09") -> None,
-      // The input string has fewer digits than the format string requires.
-      ("454", "0000") -> None,
-      // There is no digit to the left of the rightmost thousands separator.
-      (",123", ",099") -> None,
-      (",123,456", ",999,099") -> None,
-      // The trailing MI does not match against any trailing +.
-      ("454+", "999MI") -> None,
-      // The trailing PR requires exactly one leading < and trailing >.
-      ("<454", "999PR") -> None,
-      ("454>", "999PR") -> None,
-      ("<<454>>", "999PR") -> None,
-      // At least three digits are required.
-      ("45", "S$999,099.99") -> None
-       */
-    ).foreach { case ((str: String, format: String), expected: Option[Decimal]) =>
-      if (expected.isDefined) {
-        val expr = ToNumber(Literal(str), Literal(format))
-        assert(expr.checkInputDataTypes() == TypeCheckResult.TypeCheckSuccess)
-        checkEvaluation(expr, expected.get)
-      } else {
-        checkExceptionInExpression[IllegalArgumentException](
-          ToNumber(Literal(str), Literal(format)),
-          s"The input string '$str' does not match the given number format: '$format'")
+      ("$345", "S$999,099.99") -> Decimal(345),
+      ("454,123", "999,099") -> Decimal(454123),
+      ("$345", "S$999,099.99") -> Decimal(345),
+      ("454", "099") -> Decimal(454),
+      ("454.", "099.99") -> Decimal(454.0),
+      ("454.6", "099.99") -> Decimal(454.6),
+      ("454.67", "099.00") -> Decimal(454.67),
+      ("454", "000") -> Decimal(454),
+      ("  454 ", "9099") -> Decimal(454),
+      ("454", "099") -> Decimal(454),
+      ("454.67", "099.99") -> Decimal(454.67),
+      ("$454", "$999") -> Decimal(454),
+      ("  454,123 ", "999G099") -> Decimal(454123),
+      ("$454,123", "$999,099") -> Decimal(454123),
+      ("-454", "S999") -> Decimal(-454),
+      ("+454", "S999") -> Decimal(454),
+      ("+$89,1,2,3,45.123", "S$999,0,0,0,999.00000") -> Decimal(8912345.123),
+      ("-$12,345.67", "S$999,099.99") -> Decimal(-12345.67),
+      ("$045", "S$999,099.99") -> Decimal(45),
+      ("<454>", "999PR") -> Decimal(-454),
+      ("454-", "999MI") -> Decimal(-454)
+    ).foreach { case ((str: String, format: String), expected: Decimal) =>
+      val toNumberExpr = ToNumber(Literal(str), Literal(format))
+      assert(toNumberExpr.checkInputDataTypes() == TypeCheckResult.TypeCheckSuccess)
+      checkEvaluation(toNumberExpr, expected)
+
+      val tryToNumberExpr = TryToNumber(Literal(str), Literal(format))
+      assert(tryToNumberExpr.checkInputDataTypes() == TypeCheckResult.TypeCheckSuccess)
+      checkEvaluation(tryToNumberExpr, expected)
+    }
+
+    for (i <- 0 to 9) {
+      for (j <- 0 to 9) {
+        for (k <- 0 to 9) {
+          Seq(
+            (s"$i$j$k", "999") -> Decimal(s"$i$j$k".toInt),
+            (s"$i$j$k", "S099.") -> Decimal(s"$i$j$k".toInt),
+            (s"$i$j.$k", "99.9") -> Decimal(s"$i$j.$k".toDouble),
+            (s"$i,$j,$k", "999,999,0") -> Decimal(s"$i$j$k".toInt)
+          ).foreach { case ((str: String, format: String), expected: Decimal) =>
+            val toNumberExpr = ToNumber(Literal(str), Literal(format))
+            assert(toNumberExpr.checkInputDataTypes() == TypeCheckResult.TypeCheckSuccess)
+            checkEvaluation(toNumberExpr, expected)
+
+            val tryToNumberExpr = TryToNumber(Literal(str), Literal(format))
+            assert(tryToNumberExpr.checkInputDataTypes() == TypeCheckResult.TypeCheckSuccess)
+            checkEvaluation(tryToNumberExpr, expected)
+          }
+        }
       }
+    }
+  }
+
+  test("ToNumber: negative tests (the format string is invalid)") {
+    val invalidCharacter = "Encountered invalid character"
+    val thousandsSeparatorDigitsBetween =
+      "Thousands separators (,) must have digits in between them"
+    val mustBeAtEnd = "must be at the end of the number format"
+    Seq(
+      // The format string must not be empty.
+      ("454", "") -> "The format string cannot be empty",
+      // Make sure the format string does not contain any unrecognized characters.
+      ("454", "999@") -> invalidCharacter,
+      ("454", "999M") -> invalidCharacter,
+      ("454", "999P") -> invalidCharacter,
+      // Make sure the format string contains at least one digit.
+      ("454", "$") -> "The format string requires at least one number digit",
+      // Make sure the format string contains at most one decimal point.
+      ("454", "99.99.99") -> "At most one",
+      // Make sure the format string contains at most one dollar sign.
+      ("454", "$$99") -> "At most one",
+      // Make sure the format string contains at most one minus sign at the end.
+      ("--$54", "SS$99") -> "At most one",
+      ("-$54", "MI$99") -> mustBeAtEnd,
+      ("$4-4", "$9MI9") -> mustBeAtEnd,
+      // Make sure the format string contains at most one closing angle bracket at the end.
+      ("<$45>", "PR$99") -> mustBeAtEnd,
+      ("$4<4>", "$9PR9") -> mustBeAtEnd,
+      ("<<454>>", "999PRPR") -> mustBeAtEnd,
+      // Make sure that any dollar sign in the format string occurs before any digits.
+      ("4$54", "9$99") -> "Currency characters must appear before digits",
+      // Make sure that any dollar sign in the format string occurs before any decimal point.
+      (".$99", ".$99") -> "Currency characters must appear before any decimal point",
+      // Thousands separators must have digits in between them.
+      (",123", ",099") -> thousandsSeparatorDigitsBetween,
+      (",123,456", ",999,099") -> thousandsSeparatorDigitsBetween,
+      (",,345", "9,,09.99") -> thousandsSeparatorDigitsBetween,
+      (",,345", "9,99,.99") -> thousandsSeparatorDigitsBetween,
+      (",,345", "9,99,") -> thousandsSeparatorDigitsBetween,
+      (",,345", ",,999,099.99") -> thousandsSeparatorDigitsBetween,
+      // Thousands separators must not appear after the decimal point.
+      ("123.45,6", "099.99,9") -> "Thousands separators (,) may not appear after the decimal point"
+    ).foreach { case ((str: String, format: String), expectedErrMsg: String) =>
+      val toNumberResult = ToNumber(Literal(str), Literal(format)).checkInputDataTypes()
+      assert(toNumberResult != TypeCheckResult.TypeCheckSuccess,
+        s"The format string should have been invalid: $format")
+      toNumberResult match {
+        case TypeCheckResult.TypeCheckFailure(message) =>
+          assert(message.contains(expectedErrMsg))
+      }
+
+      val tryToNumberResult = TryToNumber(Literal(str), Literal(format)).checkInputDataTypes()
+      assert(tryToNumberResult != TypeCheckResult.TypeCheckSuccess,
+        s"The format string should have been invalid: $format")
+      tryToNumberResult match {
+        case TypeCheckResult.TypeCheckFailure(message) =>
+          assert(message.contains(expectedErrMsg))
+      }
+    }
+  }
+
+  test("ToNumber: negative tests (the input string does not match the format string)") {
+    Seq(
+      // The input contains more thousands separators than the format string.
+      ("45", "0,9"),
+      // The input contained more or fewer digits than required.
+      ("4", "09"),
+      ("454", "09"),
+      // The input contained more digits than allowed.
+      ("454", "99"),
+      // The input string did not contain an expected dollar sign.
+      ("45", "$99"),
+      // The input string did not contain an expected opening angle bracket.
+      ("45>", "99PR"),
+      // The input string did not contain an expected closing angle bracket.
+      ("<45", "99PR"),
+      // The trailing MI does not match against any trailing +.
+      ("454+", "999MI"),
+      // The trailing PR requires exactly one leading < and trailing >.
+      ("<454", "999PR"),
+      ("454>", "999PR"),
+      ("<<454>>", "999PR"),
+      // At least three digits are required.
+      ("45", "S$999,099.99")
+    ).foreach { case (str: String, format: String) =>
+      val toNumberExpr = ToNumber(Literal(str), Literal(format))
+      assert(toNumberExpr.checkInputDataTypes() == TypeCheckResult.TypeCheckSuccess)
+      checkExceptionInExpression[IllegalArgumentException](
+        toNumberExpr, "does not match the given number format")
+
+      val tryToNumberExpr = TryToNumber(Literal(str), Literal(format))
+      assert(tryToNumberExpr.checkInputDataTypes() == TypeCheckResult.TypeCheckSuccess)
+      checkEvaluation(tryToNumberExpr, null)
     }
   }
 
