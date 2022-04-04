@@ -1704,10 +1704,8 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         ----------
         keep : {'first', 'last', False}, default 'first'
             Method to handle marking duplicates:
-            - 'first' : Mark duplicates as ``True`` except for the first
-              occurrence.
-            - 'last' : Mark duplicates as ``True`` except for the last
-              occurrence.
+            - 'first' : Mark duplicates as ``True`` except for the first occurrence.
+            - 'last' : Mark duplicates as ``True`` except for the last occurrence.
             - ``False`` : Mark all duplicates as ``True``.
 
         Returns

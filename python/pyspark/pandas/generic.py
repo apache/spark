@@ -952,7 +952,7 @@ class Frame(object, metaclass=ABCMeta):
             This parameter only works when `path` is specified.
 
         Returns
-        --------
+        -------
         str or None
 
         Examples
@@ -2317,7 +2317,7 @@ class Frame(object, metaclass=ABCMeta):
         the object does not have exactly 1 element, or that element is not boolean
 
         Returns
-        --------
+        -------
         bool
 
         Examples
