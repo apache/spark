@@ -273,6 +273,7 @@ class MySum extends UDF1[Int, Int] with UDF2[Int, Int, Int] {
 class MultiIntSum extends
   UDF23Test[Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int,
     Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int] {
+  // scalastyle:off argcount
   override def call(
       t1: Int, t2: Int, t3: Int, t4: Int, t5: Int, t6: Int, t7: Int, t8: Int,
       t9: Int, t10: Int, t11: Int, t12: Int, t13: Int, t14: Int, t15: Int, t16: Int,
@@ -280,4 +281,5 @@ class MultiIntSum extends
     t1 + t2 + t3 + t4 + t5 + t6 + t7 + t8 + t9 + t10 +
       t11 + t12 + t13 + t14 + t15 + t16 + t17 + t18 + t19 + t20 + t21 + t22 + t23
   }
+  // scalastyle:on argcount
 }
