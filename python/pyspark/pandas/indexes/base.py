@@ -1313,7 +1313,7 @@ class Index(IndexOpsMixin):
         """
         Return Index if a valid level is given.
 
-        Examples:
+        Examples
         --------
         >>> psidx = ps.Index(['a', 'b', 'c'], name='ks')
         >>> psidx.get_level_values(0)
