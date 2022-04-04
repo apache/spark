@@ -314,14 +314,12 @@ object NestedColumnAliasing {
 
 object GeneratorUnrequiredChildrenPruning {
   def unapply(plan: LogicalPlan): Option[LogicalPlan] = plan match {
-    case p@Project(_, g: Generate) =>
+    case p @ Project(_, g: Generate) =>
       val requiredAttrs = p.references ++ g.generator.references
       var pruned = false
-      val newChild = if (!g.child.outputSet.subsetOf(requiredAttrs)) {
+      val newChild = ColumnPruning.prunedChild(g.child, requiredAttrs)
+      if (!newChild.fastEquals(g.child)) {
         pruned = true
-        Project(g.child.output.filter(requiredAttrs.contains), g.child)
-      } else {
-        g.child
       }
       val unrequired = g.generator.references -- p.references
       val unrequiredIndices = newChild.output.zipWithIndex.filter(t => unrequired.contains(t._1))
