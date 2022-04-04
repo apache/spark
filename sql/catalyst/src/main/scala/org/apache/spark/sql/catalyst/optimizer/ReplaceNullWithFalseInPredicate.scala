@@ -54,7 +54,7 @@ object ReplaceNullWithFalseInPredicate extends Rule[LogicalPlan] {
     _.containsAnyPattern(NULL_LITERAL, TRUE_OR_FALSE_LITERAL, INSET), ruleId) {
     case f @ Filter(cond, _) => f.copy(condition = replaceNullWithFalse(cond))
     case j @ Join(_, _, _, Some(cond), _) => j.copy(condition = Some(replaceNullWithFalse(cond)))
-    case d @ DeleteFromTable(_, Some(cond)) => d.copy(condition = Some(replaceNullWithFalse(cond)))
+    case d @ DeleteFromTable(_, cond) => d.copy(condition = replaceNullWithFalse(cond))
     case u @ UpdateTable(_, _, Some(cond)) => u.copy(condition = Some(replaceNullWithFalse(cond)))
     case m @ MergeIntoTable(_, _, mergeCond, matchedActions, notMatchedActions) =>
       m.copy(

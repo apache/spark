@@ -148,14 +148,19 @@ case class RowDataSourceScanExec(
         val pushedTopN =
           s"ORDER BY ${seqToString(pushedDownOperators.sortValues.map(_.describe()))}" +
           s" LIMIT ${pushedDownOperators.limit.get}"
-        Some("pushedTopN" -> pushedTopN)
+        Some("PushedTopN" -> pushedTopN)
     } else {
       pushedDownOperators.limit.map(value => "PushedLimit" -> s"LIMIT $value")
     }
 
-    Map(
-      "ReadSchema" -> requiredSchema.catalogString,
-      "PushedFilters" -> seqToString(markedFilters.toSeq)) ++
+    val pushedFilters = if (pushedDownOperators.pushedPredicates.nonEmpty) {
+      seqToString(pushedDownOperators.pushedPredicates.map(_.describe()))
+    } else {
+      seqToString(markedFilters.toSeq)
+    }
+
+    Map("ReadSchema" -> requiredSchema.catalogString,
+      "PushedFilters" -> pushedFilters) ++
       pushedDownOperators.aggregation.fold(Map[String, String]()) { v =>
         Map("PushedAggregates" -> seqToString(v.aggregateExpressions.map(_.describe())),
           "PushedGroupByColumns" -> seqToString(v.groupByColumns.map(_.describe())))} ++
@@ -239,7 +244,7 @@ case class FileSourceScanExec(
   }
 
   private def isDynamicPruningFilter(e: Expression): Boolean =
-    e.find(_.isInstanceOf[PlanExpression[_]]).isDefined
+    e.exists(_.isInstanceOf[PlanExpression[_]])
 
   @transient lazy val selectedPartitions: Array[PartitionDirectory] = {
     val optimizerMetadataTimeNs = relation.location.metadataOpsTimeNs.getOrElse(0L)

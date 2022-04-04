@@ -88,11 +88,11 @@ object SubqueryExpression {
    * and false otherwise.
    */
   def hasInOrCorrelatedExistsSubquery(e: Expression): Boolean = {
-    e.find {
+    e.exists {
       case _: ListQuery => true
       case ex: Exists => ex.isCorrelated
       case _ => false
-    }.isDefined
+    }
   }
 
   /**
@@ -101,20 +101,20 @@ object SubqueryExpression {
    * [[org.apache.spark.sql.catalyst.analysis.Analyzer.ResolveSubquery]]
    */
   def hasCorrelatedSubquery(e: Expression): Boolean = {
-    e.find {
+    e.exists {
       case s: SubqueryExpression => s.isCorrelated
       case _ => false
-    }.isDefined
+    }
   }
 
   /**
    * Returns true when an expression contains a subquery
    */
   def hasSubquery(e: Expression): Boolean = {
-    e.find {
+    e.exists {
       case _: SubqueryExpression => true
       case _ => false
-    }.isDefined
+    }
   }
 }
 
@@ -124,7 +124,7 @@ object SubExprUtils extends PredicateHelper {
    * returns false otherwise.
    */
   def containsOuter(e: Expression): Boolean = {
-    e.find(_.isInstanceOf[OuterReference]).isDefined
+    e.exists(_.isInstanceOf[OuterReference])
   }
 
   /**
@@ -161,7 +161,7 @@ object SubExprUtils extends PredicateHelper {
    * Given a logical plan, returns TRUE if it has an outer reference and false otherwise.
    */
   def hasOuterReferences(plan: LogicalPlan): Boolean = {
-    plan.find(_.expressions.exists(containsOuter)).isDefined
+    plan.exists(_.expressions.exists(containsOuter))
   }
 
   /**
@@ -282,10 +282,10 @@ case class ScalarSubquery(
 
 object ScalarSubquery {
   def hasCorrelatedScalarSubquery(e: Expression): Boolean = {
-    e.find {
+    e.exists {
       case s: ScalarSubquery => s.isCorrelated
       case _ => false
-    }.isDefined
+    }
   }
 }
 

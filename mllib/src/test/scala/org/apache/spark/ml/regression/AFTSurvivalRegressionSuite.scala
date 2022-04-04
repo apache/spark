@@ -93,6 +93,43 @@ class AFTSurvivalRegressionSuite extends MLTest with DefaultReadWriteTest {
     assert(model.hasParent)
   }
 
+  test("AFTSurvivalRegression validate input dataset") {
+    testInvalidRegressionLabels { df: DataFrame =>
+      val dfWithCensors = df.withColumn("censor", lit(1.0))
+      new AFTSurvivalRegression().fit(dfWithCensors)
+    }
+
+    testInvalidVectors { df: DataFrame =>
+      val dfWithCensors = df.withColumn("censor", lit(1.0))
+      new AFTSurvivalRegression().fit(dfWithCensors)
+    }
+
+    // censors contains NULL
+    val df1 = sc.parallelize(Seq(
+      (1.0, null, Vectors.dense(1.0, 2.0)),
+      (1.0, "1.0", Vectors.dense(1.0, 2.0))
+    )).toDF("label", "str_censor", "features")
+      .select(col("label"), col("str_censor").cast("double").as("censor"), col("features"))
+    val e1 = intercept[Exception](new AFTSurvivalRegression().fit(df1))
+    assert(e1.getMessage.contains("Censors MUST NOT be Null or NaN"))
+
+    // censors contains NaN
+    val df2 = sc.parallelize(Seq(
+      (1.0, Double.NaN, Vectors.dense(1.0, 2.0)),
+      (1.0, 1.0, Vectors.dense(1.0, 2.0))
+    )).toDF("label", "censor", "features")
+    val e2 = intercept[Exception](new AFTSurvivalRegression().fit(df2))
+    assert(e2.getMessage.contains("Censors MUST NOT be Null or NaN"))
+
+    // censors contains invalid value: 3
+    val df3 = sc.parallelize(Seq(
+      (1.0, 1.0, Vectors.dense(1.0, 2.0)),
+      (1.0, 3.0, Vectors.dense(1.0, 2.0))
+    )).toDF("label", "censor", "features")
+    val e3 = intercept[Exception](new AFTSurvivalRegression().fit(df3))
+    assert(e3.getMessage.contains("Censors MUST be in {0, 1}"))
+  }
+
   def generateAFTInput(
       numFeatures: Int,
       xMean: Array[Double],

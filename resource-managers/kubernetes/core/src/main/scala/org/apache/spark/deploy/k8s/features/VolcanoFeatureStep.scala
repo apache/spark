@@ -21,18 +21,15 @@ import io.fabric8.volcano.client.DefaultVolcanoClient
 import io.fabric8.volcano.scheduling.v1beta1.{PodGroup, PodGroupSpec}
 
 import org.apache.spark.deploy.k8s.{KubernetesConf, KubernetesDriverConf, KubernetesExecutorConf, SparkPod}
-import org.apache.spark.deploy.k8s.Config._
 
 private[spark] class VolcanoFeatureStep extends KubernetesDriverCustomFeatureConfigStep
   with KubernetesExecutorCustomFeatureConfigStep {
+  import VolcanoFeatureStep._
 
   private var kubernetesConf: KubernetesConf = _
 
-  private val POD_GROUP_ANNOTATION = "scheduling.k8s.io/group-name"
-
   private lazy val podGroupName = s"${kubernetesConf.appId}-podgroup"
   private lazy val namespace = kubernetesConf.namespace
-  private var priorityClassName: Option[String] = None
 
   override def init(config: KubernetesDriverConf): Unit = {
     kubernetesConf = config
@@ -44,12 +41,7 @@ private[spark] class VolcanoFeatureStep extends KubernetesDriverCustomFeatureCon
 
   override def getAdditionalPreKubernetesResources(): Seq[HasMetadata] = {
     val client = new DefaultVolcanoClient
-
-    val template = if (kubernetesConf.isInstanceOf[KubernetesDriverConf]) {
-      kubernetesConf.get(KUBERNETES_DRIVER_PODGROUP_TEMPLATE_FILE)
-    } else {
-      kubernetesConf.get(KUBERNETES_EXECUTOR_PODGROUP_TEMPLATE_FILE)
-    }
+    val template = kubernetesConf.getOption(POD_GROUP_TEMPLATE_FILE_KEY)
     val pg = template.map(client.podGroups.load(_).get).getOrElse(new PodGroup())
     var metadata = pg.getMetadata
     if (metadata == null) metadata = new ObjectMeta
@@ -59,16 +51,12 @@ private[spark] class VolcanoFeatureStep extends KubernetesDriverCustomFeatureCon
 
     var spec = pg.getSpec
     if (spec == null) spec = new PodGroupSpec
-    priorityClassName.foreach(spec.setPriorityClassName(_))
     pg.setSpec(spec)
 
     Seq(pg)
   }
 
   override def configurePod(pod: SparkPod): SparkPod = {
-
-    priorityClassName = Option(pod.pod.getSpec.getPriorityClassName)
-
     val k8sPodBuilder = new PodBuilder(pod.pod)
       .editMetadata()
         .addToAnnotations(POD_GROUP_ANNOTATION, podGroupName)
@@ -76,4 +64,9 @@ private[spark] class VolcanoFeatureStep extends KubernetesDriverCustomFeatureCon
     val k8sPod = k8sPodBuilder.build()
     SparkPod(k8sPod, pod.container)
   }
+}
+
+private[spark] object VolcanoFeatureStep {
+  val POD_GROUP_ANNOTATION = "scheduling.k8s.io/group-name"
+  val POD_GROUP_TEMPLATE_FILE_KEY = "spark.kubernetes.scheduler.volcano.podGroupTemplateFile"
 }

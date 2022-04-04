@@ -308,9 +308,21 @@ You can also specify your specific dockerfile to build JVM/Python/R based image 
 
 # Running the Volcano Integration Tests
 
-Prerequisites
-- Install Volcano according to [link](https://volcano.sh/en/docs/installation/).
+Volcano integration is experimental in Aapche Spark 3.3.0 and the test coverage is limited.
+
+## Requirements
 - A minimum of 6 CPUs and 9G of memory is required to complete all Volcano test cases.
+- Volcano v1.5.1.
+
+## Installation
+
+    # x86_64
+    kubectl apply -f https://raw.githubusercontent.com/volcano-sh/volcano/v1.5.1/installer/volcano-development.yaml
+
+    # arm64:
+    kubectl apply -f https://raw.githubusercontent.com/volcano-sh/volcano/v1.5.1/installer/volcano-development-arm64.yaml
+
+## Run tests
 
 You can specify `-Pvolcano` to enable volcano module to run all Kubernetes and Volcano tests
 
@@ -326,3 +338,16 @@ You can also specify `volcano` tag to only run Volcano test:
         -Dtest.exclude.tags=minikube \
         -Dspark.kubernetes.test.deployMode=docker-desktop \
         'kubernetes-integration-tests/test'
+
+## Cleanup Volcano
+
+    # x86_64
+    kubectl delete -f https://raw.githubusercontent.com/volcano-sh/volcano/v1.5.1/installer/volcano-development.yaml
+
+    # arm64:
+    kubectl delete -f https://raw.githubusercontent.com/volcano-sh/volcano/v1.5.1/installer/volcano-development-arm64.yaml
+    
+    # Cleanup Volcano webhook 
+    kubectl delete validatingwebhookconfigurations volcano-admission-service-jobs-validate volcano-admission-service-pods-validate volcano-admission-service-queues-validate
+    kubectl delete mutatingwebhookconfigurations volcano-admission-service-jobs-mutate volcano-admission-service-podgroups-mutate volcano-admission-service-pods-mutate volcano-admission-service-queues-mutate
+

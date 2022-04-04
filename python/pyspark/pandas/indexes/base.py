@@ -286,12 +286,11 @@ class Index(IndexOpsMixin):
         String with a summarized representation of the index
         """
         head, tail, total_count = tuple(
-            cast(
-                pd.DataFrame,
-                self._internal.spark_frame.select(
-                    F.first(self.spark.column), F.last(self.spark.column), F.count(F.expr("*"))
-                ).toPandas(),
-            ).iloc[0]
+            self._internal.spark_frame.select(
+                F.first(self.spark.column), F.last(self.spark.column), F.count(F.expr("*"))
+            )
+            .toPandas()
+            .iloc[0]
         )
 
         if total_count > 0:
@@ -883,10 +882,17 @@ class Index(IndexOpsMixin):
         )
         return DataFrame(internal).index
 
-    # TODO: ADD keep parameter
-    def drop_duplicates(self) -> "Index":
+    def drop_duplicates(self, keep: Union[bool, str] = "first") -> "Index":
         """
         Return Index with duplicate values removed.
+
+        Parameters
+        ----------
+        keep : {'first', 'last', ``False``}, default 'first'
+            Method to handle dropping duplicates:
+            - 'first' : Drop duplicates except for the first occurrence.
+            - 'last' : Drop duplicates except for the last occurrence.
+            - ``False`` : Drop all duplicates.
 
         Returns
         -------
@@ -899,25 +905,19 @@ class Index(IndexOpsMixin):
 
         Examples
         --------
-        Generate an pandas.Index with duplicate values.
+        Generate an Index with duplicate values.
 
         >>> idx = ps.Index(['lama', 'cow', 'lama', 'beetle', 'lama', 'hippo'])
 
         >>> idx.drop_duplicates().sort_values()
         Index(['beetle', 'cow', 'hippo', 'lama'], dtype='object')
         """
-        sdf = self._internal.spark_frame.select(
-            self._internal.index_spark_columns
-        ).drop_duplicates()
-        internal = InternalFrame(
-            spark_frame=sdf,
-            index_spark_columns=[
-                scol_for(sdf, col) for col in self._internal.index_spark_column_names
-            ],
-            index_names=self._internal.index_names,
-            index_fields=self._internal.index_fields,
-        )
-        return DataFrame(internal).index
+        with ps.option_context("compute.default_index_type", "distributed"):
+            # The attached index caused by `reset_index` below is used for sorting only,
+            # and it will be dropped soon,
+            # so we enforce “distributed” default index type
+            psser = self.to_series().reset_index(drop=True)
+        return Index(psser.drop_duplicates(keep=keep).sort_index())
 
     def to_series(self, name: Optional[Name] = None) -> Series:
         """
@@ -1313,7 +1313,7 @@ class Index(IndexOpsMixin):
         """
         Return Index if a valid level is given.
 
-        Examples:
+        Examples
         --------
         >>> psidx = ps.Index(['a', 'b', 'c'], name='ks')
         >>> psidx.get_level_values(0)
@@ -1652,11 +1652,10 @@ class Index(IndexOpsMixin):
         ('a', 'x', 1)
         """
         sdf = self._internal.spark_frame
-        min_row = cast(
-            pd.DataFrame,
+        min_row = (
             sdf.select(F.min(F.struct(*self._internal.index_spark_columns)).alias("min_row"))
             .select("min_row.*")
-            .toPandas(),
+            .toPandas()
         )
         result = tuple(min_row.iloc[0])
 
@@ -1694,11 +1693,10 @@ class Index(IndexOpsMixin):
         ('b', 'y', 2)
         """
         sdf = self._internal.spark_frame
-        max_row = cast(
-            pd.DataFrame,
+        max_row = (
             sdf.select(F.max(F.struct(*self._internal.index_spark_columns)).alias("max_row"))
             .select("max_row.*")
-            .toPandas(),
+            .toPandas()
         )
         result = tuple(max_row.iloc[0])
 
@@ -2285,7 +2283,7 @@ class Index(IndexOpsMixin):
         else:
             raise ValueError("index must be monotonic increasing or decreasing")
 
-        result = cast(pd.DataFrame, sdf.toPandas()).iloc[0, 0]
+        result = sdf.toPandas().iloc[0, 0]
         return result if result is not None else np.nan
 
     def _index_fields_for_union_like(

@@ -292,20 +292,6 @@ private[spark] object Config extends Logging {
       .stringConf
       .createOptional
 
-  val KUBERNETES_DRIVER_PODGROUP_TEMPLATE_FILE =
-    ConfigBuilder("spark.kubernetes.driver.podGroupTemplateFile")
-      .doc("File containing a template pod group spec for driver")
-      .version("3.3.0")
-      .stringConf
-      .createOptional
-
-  val KUBERNETES_EXECUTOR_PODGROUP_TEMPLATE_FILE =
-    ConfigBuilder("spark.kubernetes.executor.podGroupTemplateFile")
-      .doc("File containing a template pod group spec for executors")
-      .version("3.3.0")
-      .stringConf
-      .createOptional
-
   val KUBERNETES_EXECUTOR_REQUEST_CORES =
     ConfigBuilder("spark.kubernetes.executor.request.cores")
       .doc("Specify the cpu request for each executor pod")

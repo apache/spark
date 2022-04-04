@@ -23,13 +23,13 @@ from typing import Optional, Tuple, TYPE_CHECKING
 from pyspark import since, SparkContext
 from pyspark.ml.common import _java2py, _py2java
 from pyspark.ml.linalg import Matrix, Vector
-from pyspark.ml.wrapper import JavaWrapper, _jvm  # type: ignore[attr-defined]
+from pyspark.ml.wrapper import JavaWrapper, _jvm
 from pyspark.sql.column import Column, _to_seq
 from pyspark.sql.dataframe import DataFrame
 from pyspark.sql.functions import lit
 
 if TYPE_CHECKING:
-    from py4j.java_gateway import JavaObject  # type: ignore[import]
+    from py4j.java_gateway import JavaObject
 
 
 class ChiSquareTest:

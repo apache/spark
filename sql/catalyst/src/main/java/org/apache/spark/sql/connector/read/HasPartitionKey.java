@@ -40,6 +40,7 @@ import org.apache.spark.sql.catalyst.InternalRow;
  *
  * @see org.apache.spark.sql.connector.read.SupportsReportPartitioning
  * @see org.apache.spark.sql.connector.read.partitioning.Partitioning
+ * @since 3.3.0
  */
 public interface HasPartitionKey extends InputPartition {
   /**

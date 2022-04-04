@@ -39,7 +39,7 @@ from pyspark.sql.dataframe import DataFrame
 
 if TYPE_CHECKING:
     from pyspark.ml._typing import ParamMap, PipelineStage
-    from py4j.java_gateway import JavaObject  # type: ignore[import]
+    from py4j.java_gateway import JavaObject
 
 
 @inherit_doc

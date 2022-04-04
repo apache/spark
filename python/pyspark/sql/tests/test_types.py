@@ -48,7 +48,7 @@ from pyspark.sql.types import (
     BooleanType,
     NullType,
 )
-from pyspark.sql.types import (  # type: ignore
+from pyspark.sql.types import (
     _array_signed_int_typecode_ctype_mappings,
     _array_type_mappings,
     _array_unsigned_int_typecode_ctype_mappings,
@@ -948,6 +948,29 @@ class TypesTests(ReusedSQLTestCase):
             with self.assertRaisesRegex(TypeError, "infer the type of the field myarray"):
                 a = array.array(t)
                 self.spark.createDataFrame([Row(myarray=a)]).collect()
+
+    def test_repr(self):
+        instances = [
+            NullType(),
+            StringType(),
+            BinaryType(),
+            BooleanType(),
+            DateType(),
+            TimestampType(),
+            DecimalType(),
+            DoubleType(),
+            FloatType(),
+            ByteType(),
+            IntegerType(),
+            LongType(),
+            ShortType(),
+            ArrayType(StringType()),
+            MapType(StringType(), IntegerType()),
+            StructField("f1", StringType(), True),
+            StructType([StructField("f1", StringType(), True)]),
+        ]
+        for instance in instances:
+            self.assertEqual(eval(repr(instance)), instance)
 
     def test_daytime_interval_type_constructor(self):
         # SPARK-37277: Test constructors in day time interval.

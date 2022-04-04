@@ -18,6 +18,7 @@
 package org.apache.spark.sql.connector.expressions.aggregate;
 
 import org.apache.spark.annotation.Evolving;
+import org.apache.spark.sql.connector.expressions.Expression;
 
 /**
  * An aggregate function that returns the number of rows in a group.
@@ -29,6 +30,9 @@ public final class CountStar implements AggregateFunc {
 
   public CountStar() {
   }
+
+  @Override
+  public Expression[] children() { return EMPTY_EXPRESSION; }
 
   @Override
   public String toString() { return "COUNT(*)"; }

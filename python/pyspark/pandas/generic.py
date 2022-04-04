@@ -952,7 +952,7 @@ class Frame(object, metaclass=ABCMeta):
             This parameter only works when `path` is specified.
 
         Returns
-        --------
+        -------
         str or None
 
         Examples
@@ -2317,7 +2317,7 @@ class Frame(object, metaclass=ABCMeta):
         the object does not have exactly 1 element, or that element is not boolean
 
         Returns
-        --------
+        -------
         bool
 
         Examples
@@ -2441,12 +2441,11 @@ class Frame(object, metaclass=ABCMeta):
 
         with sql_conf({SPARK_CONF_ARROW_ENABLED: False}):
             # Disable Arrow to keep row ordering.
-            first_valid_row = cast(
-                pd.DataFrame,
+            first_valid_row = (
                 self._internal.spark_frame.filter(cond)
                 .select(self._internal.index_spark_columns)
                 .limit(1)
-                .toPandas(),
+                .toPandas()
             )
 
         # For Empty Series or DataFrame, returns None.

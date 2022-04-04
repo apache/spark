@@ -37,7 +37,7 @@ import org.apache.spark.scheduler.cluster._
 import org.apache.spark.status.ListenerEventsTestHelper._
 import org.apache.spark.status.api.v1
 import org.apache.spark.storage._
-import org.apache.spark.tags.{ExtendedLevelDBTest, ExtendedRocksDBTest}
+import org.apache.spark.tags.ExtendedLevelDBTest
 import org.apache.spark.util.Utils
 import org.apache.spark.util.kvstore.{InMemoryStore, KVStore}
 
@@ -1860,7 +1860,8 @@ abstract class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter 
 
   private def newAttempt(orig: TaskInfo, nextId: Long): TaskInfo = {
     // Task reattempts have a different ID, but the same index as the original.
-    new TaskInfo(nextId, orig.index, orig.attemptNumber + 1, time, orig.executorId,
+    new TaskInfo(
+      nextId, orig.index, orig.attemptNumber + 1, orig.partitionId, time, orig.executorId,
       s"${orig.executorId}.example.com", TaskLocality.PROCESS_LOCAL, orig.speculative)
   }
 
@@ -1868,7 +1869,9 @@ abstract class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter 
     (1 to count).map { id =>
       val exec = execs(id.toInt % execs.length)
       val taskId = nextTaskId()
-      new TaskInfo(taskId, taskId.toInt, 1, time, exec, s"$exec.example.com",
+      val taskIndex = id - 1
+      val partitionId = taskIndex
+      new TaskInfo(taskId, taskIndex, 1, partitionId, time, exec, s"$exec.example.com",
         TaskLocality.PROCESS_LOCAL, id % 2 == 0)
     }
   }
@@ -1899,7 +1902,6 @@ class AppStatusListenerWithLevelDBSuite extends AppStatusListenerSuite {
     .set(HYBRID_STORE_DISK_BACKEND, HybridStoreDiskBackend.LEVELDB.toString)
 }
 
-@ExtendedRocksDBTest
 class AppStatusListenerWithRocksDBSuite extends AppStatusListenerSuite {
   override def conf: SparkConf = super.conf
     .set(HYBRID_STORE_DISK_BACKEND, HybridStoreDiskBackend.ROCKSDB.toString)

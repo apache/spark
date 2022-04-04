@@ -76,8 +76,8 @@ case class Average(
     case _ => DoubleType
   }
 
-  private lazy val sum = AttributeReference("sum", sumDataType)()
-  private lazy val count = AttributeReference("count", LongType)()
+  lazy val sum = AttributeReference("sum", sumDataType)()
+  lazy val count = AttributeReference("count", LongType)()
 
   override lazy val aggBufferAttributes = sum :: count :: Nil
 
