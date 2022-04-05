@@ -391,6 +391,10 @@ class IndexesTest(ComparisonTestBase, TestUtils):
         self.assert_eq(psmidx.dropna(how="any"), pmidx.dropna(how="any"))
         self.assert_eq(psmidx.dropna(how="all"), pmidx.dropna(how="all"))
 
+        invalid_how = "none"
+        with self.assertRaisesRegex(ValueError, "invalid how option: %s" % invalid_how):
+            psmidx.dropna(invalid_how)
+
     def test_index_symmetric_difference(self):
         pidx1 = pd.Index([1, 2, 3, 4])
         pidx2 = pd.Index([2, 3, 4, 5])

@@ -1151,7 +1151,6 @@ class Index(IndexOpsMixin):
             If the Index is a MultiIndex, drop the value when any or all levels
             are NaN.
 
-
         Returns
         -------
         Index or MultiIndex
@@ -1176,18 +1175,18 @@ class Index(IndexOpsMixin):
 
         >>> tuples = [(np.nan, 1.0), (2.0, 2.0), (np.nan, np.nan), (3.0, np.nan)]
         >>> midx = ps.MultiIndex.from_tuples(tuples)
-        >>> midx  # doctest: +NORMALIZE_WHITESPACE
+        >>> midx  # doctest: +SKIP
         MultiIndex([(nan, 1.0),
                     (2.0, 2.0),
                     (nan, nan),
                     (3.0, nan)],
                    )
 
-        >>> midx.dropna()  # doctest: +NORMALIZE_WHITESPACE
+        >>> midx.dropna()  # doctest: +SKIP
         MultiIndex([(2.0, 2.0)],
                    )
 
-        >>> midx.dropna(how="all")  # doctest: +NORMALIZE_WHITESPACE
+        >>> midx.dropna(how="all")  # doctest: +SKIP
         MultiIndex([(nan, 1.0),
                     (2.0, 2.0),
                     (3.0, nan)],
