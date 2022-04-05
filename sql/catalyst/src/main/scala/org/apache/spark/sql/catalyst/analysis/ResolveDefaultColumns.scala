@@ -53,6 +53,7 @@ case class ResolveDefaultColumns(
 
   // This field stores the enclosing INSERT INTO command, once we find one.
   var enclosingInsert: Option[InsertIntoStatement] = None
+  // This field stores the schema of the target table of the above command.
   var insertTableSchemaWithoutPartitionColumns: Option[StructType] = None
 
   override def apply(plan: LogicalPlan): LogicalPlan = {
