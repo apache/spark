@@ -460,11 +460,11 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
 
   test("function least") {
     val row = create_row(1, 2, "a", "b", "c")
-    val c1 = 'a.int.at(0)
-    val c2 = 'a.int.at(1)
-    val c3 = 'a.string.at(2)
-    val c4 = 'a.string.at(3)
-    val c5 = 'a.string.at(4)
+    val c1 = $"a".int.at(0)
+    val c2 = $"a".int.at(1)
+    val c3 = $"a".string.at(2)
+    val c4 = $"a".string.at(3)
+    val c5 = $"a".string.at(4)
     checkEvaluation(Least(Seq(c4, c3, c5)), "a", row)
     checkEvaluation(Least(Seq(c1, c2)), 1, row)
     checkEvaluation(Least(Seq(c1, c2, Literal(-1))), -1, row)
@@ -517,11 +517,11 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
 
   test("function greatest") {
     val row = create_row(1, 2, "a", "b", "c")
-    val c1 = 'a.int.at(0)
-    val c2 = 'a.int.at(1)
-    val c3 = 'a.string.at(2)
-    val c4 = 'a.string.at(3)
-    val c5 = 'a.string.at(4)
+    val c1 = $"a".int.at(0)
+    val c2 = $"a".int.at(1)
+    val c3 = $"a".string.at(2)
+    val c4 = $"a".string.at(3)
+    val c5 = $"a".string.at(4)
     checkEvaluation(Greatest(Seq(c4, c5, c3)), "c", row)
     checkEvaluation(Greatest(Seq(c2, c1)), 2, row)
     checkEvaluation(Greatest(Seq(c1, c2, Literal(2))), 2, row)

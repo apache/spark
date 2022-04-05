@@ -31,7 +31,7 @@
   </properties>
   <packaging>jar</packaging>
   <name>Spark Integration for Kafka 0.10</name>
-  <url>http://spark.apache.org/</url>
+  <url>https://spark.apache.org/</url>
 
   <dependencies>
     <dependency>

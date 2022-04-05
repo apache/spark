@@ -55,7 +55,7 @@ import org.apache.spark.unsafe.types.UTF8String
  *  // SQL verbs can be used to construct logical query plans.
  *  scala> import org.apache.spark.sql.catalyst.plans.logical._
  *  scala> import org.apache.spark.sql.catalyst.dsl.plans._
- *  scala> LocalRelation('key.int, 'value.string).where('key === 1).select('value).analyze
+ *  scala> LocalRelation($"key".int, $"value".string).where('key === 1).select('value).analyze
  *  res3: org.apache.spark.sql.catalyst.plans.logical.LogicalPlan =
  *  Project [value#3]
  *   Filter (key#2 = 1)
