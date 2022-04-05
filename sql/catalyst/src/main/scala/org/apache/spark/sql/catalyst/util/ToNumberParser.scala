@@ -154,7 +154,7 @@ class ToNumberParser(originNumberFormat: String, errorOnFail: Boolean) extends S
     var groupedTokens = mutable.Seq.empty[InputToken]
     while (i < tokens.length) {
       val suffix = tokens.drop(i)
-      val gatheredTokens: Seq[InputToken] = suffix.takeWhile {
+      val gatheredTokens = suffix.takeWhile {
         case _: Digits | _: ThousandsSeparator => true
         case _ => false
       }
@@ -233,7 +233,7 @@ class ToNumberParser(originNumberFormat: String, errorOnFail: Boolean) extends S
       s"$message must be at the end of the number format: '$originNumberFormat'"
     }
 
-    def inputTokenCounts: Map[InputToken, Int] = inputTokens.groupBy(identity).mapValues(_.size)
+    def inputTokenCounts = inputTokens.groupBy(identity).mapValues(_.size)
 
     val firstDollarSignIndex: Int = inputTokens.indexOf(DollarSign())
     val firstDigitIndex: Int = inputTokens.indexWhere {
