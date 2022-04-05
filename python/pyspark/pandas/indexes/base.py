@@ -1545,7 +1545,8 @@ class Index(IndexOpsMixin):
                   pandas raises unexpected TypeError, but we support treating NaN
                   as the smallest value.
                   This method returns indexer as a pandas-on-Spark index while
-                  pandas returns it as a list.
+                  pandas returns it as a list. That's because indexer in pandas-on-Spark
+                  may not fit in memory.
 
         Parameters
         ----------
