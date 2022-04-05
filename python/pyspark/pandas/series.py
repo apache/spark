@@ -3052,6 +3052,8 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         This method computes the Pearson correlation between
         the Series and its shifted self.
 
+        .. versionadded:: 3.4.0
+
         Parameters
         ----------
         periods : int, default 1
