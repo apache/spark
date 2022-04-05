@@ -1105,6 +1105,97 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
     }
   }
 
+  test("INSERT INTO with user specified columns and defaults: positive tests") {
+    withTable("t") {
+      sql("create table t(i boolean default true, s bigint default 42) using parquet")
+      sql("insert into t (i, s) values (true, default)")
+      checkAnswer(sql("select s from t where i = true"), Seq(42L).map(i => Row(i)))
+    }
+    withTable("t") {
+      sql("create table t(i boolean default true, s bigint default 42) using parquet")
+      sql("insert into t (s, i) values (default, true)")
+      checkAnswer(sql("select s from t where i = true"), Seq(42L).map(i => Row(i)))
+    }
+    withTable("t") {
+      sql("create table t(i boolean default true, s bigint default 42) using parquet")
+      sql("insert into t (i) values (true)")
+      checkAnswer(sql("select s from t where i = true"), Seq(42L).map(i => Row(i)))
+    }
+    withTable("t") {
+      sql("create table t(i boolean default true, s bigint default 42) using parquet")
+      sql("insert into t (i) values (default)")
+      checkAnswer(sql("select s from t where i = true"), Seq(42L).map(i => Row(i)))
+    }
+    withTable("t") {
+      sql("create table t(i boolean default true, s bigint default 42) using parquet")
+      sql("insert into t (s) values (default)")
+      checkAnswer(sql("select s from t where i = true"), Seq(42L).map(i => Row(i)))
+    }
+    withTable("t") {
+      sql("create table t(i boolean default true, s bigint default 42) using parquet")
+      sql("insert into t (s) select default from (select 1)")
+      checkAnswer(sql("select s from t where i = true"), Seq(42L).map(i => Row(i)))
+    }
+    withTable("t") {
+      sql("create table t(i boolean default true, s bigint default 42) using parquet")
+      sql("insert into t (i) select true from (select 1)")
+      checkAnswer(sql("select s from t where i = true"), Seq(42L).map(i => Row(i)))
+    }
+    withTable("t") {
+      sql("create table t(i boolean, s bigint default 42, q int default 43) using parquet")
+      sql("insert into t (i, q) select true from (select 1)")
+      checkAnswer(sql("select s from t where q = 43"), Seq(42L).map(i => Row(i)))
+    }
+    // When the USE_NULLS_FOR_MISSING_DEFAULT_COLUMN_VALUES configuration is enabled, and no
+    // explicit DEFAULT value is available when the INSERT INTO statement provides fewer
+    // values than expected, NULL values are appended in their place.
+    withSQLConf(SQLConf.USE_NULLS_FOR_MISSING_DEFAULT_COLUMN_VALUES.key -> "true") {
+      withTable("t") {
+        sql("create table t(i boolean, s bigint) using parquet")
+        sql("insert into t (i) values (true)")
+        checkAnswer(sql("select s from t where i = true"), Seq(null).map(i => Row(i)))
+      }
+      withTable("t") {
+        sql("create table t(i boolean default true, s bigint) using parquet")
+        sql("insert into t (i) values (default)")
+        checkAnswer(sql("select s from t where i = true"), Seq(null).map(i => Row(i)))
+      }
+      withTable("t") {
+        sql("create table t(i boolean, s bigint default 42) using parquet")
+        sql("insert into t (s) values (default)")
+        checkAnswer(sql("select s from t where i is null"), Seq(42L).map(i => Row(i)))
+      }
+    }
+  }
+
+  test("INSERT INTO with user specified columns and defaults: negative tests") {
+    // The missing columns in these INSERT INTO commands do not have explicit default values.
+    withTable("t") {
+      sql("create table t(i boolean, s bigint) using parquet")
+      assert(intercept[AnalysisException] {
+        sql("insert into t (i) values (true)")
+      }.getMessage.contains("target table has 2 column(s) but the inserted data has 1 column(s)"))
+  }
+    withTable("t") {
+      sql("create table t(i boolean default true, s bigint) using parquet")
+      assert(intercept[AnalysisException] {
+        sql("insert into t (i) values (default)")
+      }.getMessage.contains("target table has 2 column(s) but the inserted data has 1 column(s)"))
+    }
+    withTable("t") {
+      sql("create table t(i boolean, s bigint default 42) using parquet")
+      assert(intercept[AnalysisException] {
+        sql("insert into t (s) values (default)")
+      }.getMessage.contains("target table has 2 column(s) but the inserted data has 1 column(s)"))
+    }
+    withTable("t") {
+      sql("create table t(i boolean, s bigint, q int default 43) using parquet")
+      assert(intercept[AnalysisException] {
+        sql("insert into t (i, q) select true from (select 1)")
+      }.getMessage.contains("target table has 3 column(s) but the inserted data has 2 column(s)"))
+    }
+  }
+
   test("Stop task set if FileAlreadyExistsException was thrown") {
     Seq(true, false).foreach { fastFail =>
       withSQLConf("fs.file.impl" -> classOf[FileExistingTestFileSystem].getName,
