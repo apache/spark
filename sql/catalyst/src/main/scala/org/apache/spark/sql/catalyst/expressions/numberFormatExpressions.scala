@@ -54,26 +54,16 @@ import org.apache.spark.unsafe.types.UTF8String
   """,
   examples = """
     Examples:
-      -- The format expects:
-      --  * an optional sign at the beginning,
-      --  * followed by a dollar sign,
-      --  * followed by a number between 3 and 6 digits long,
-      --  * thousands separators,
-      --  * up to two digits beyond the decimal point.
-      > SELECT _FUNC_('-$12,345.67', 'S$999,099.99');
-       -12345.67
-      -- The plus sign is optional, and so are fractional digits.
-      > SELECT _FUNC_('$345', 'S$999,099.99');
-       345.00
-      -- The format requires at least three digits.
-      > SELECT _FUNC_('$45', 'S$999,099.99');
-       <Error>
-      -- The format requires at least three digits.
-      > SELECT _FUNC_('$045', 'S$999,099.99');
-       45.00
-      -- Brackets denote negative values.
-      > SELECT _FUNC_('<1234>', '999999PR');
-       -1234
+      > SELECT _FUNC_('454', '999');
+       454
+      > SELECT _FUNC_('454.00', '000.00');
+       454.00
+      > SELECT _FUNC_('12,454', '99,999');
+       12454
+      > SELECT _FUNC_('$78.12', '$99.99');
+       78.12
+      > SELECT _FUNC_('12,454.8-', '99,999.9S');
+       -12454.8
   """,
   since = "3.3.0",
   group = "string_funcs")
@@ -148,26 +138,16 @@ case class ToNumber(left: Expression, right: Expression)
   """,
   examples = """
     Examples:
-      -- The format expects:
-      --  * an optional sign at the beginning,
-      --  * followed by a dollar sign,
-      --  * followed by a number between 3 and 6 digits long,
-      --  * thousands separators,
-      --  * up to two digits beyond the decimal point.
-      > SELECT _FUNC_('-$12,345.67', 'S$999,099.99');
-       -12345.67
-      -- The plus sign is optional, and so are fractional digits.
-      > SELECT _FUNC_('$345', 'S$999,099.99');
-       345.00
-      -- The format requires at least three digits.
-      > SELECT _FUNC_('$45', 'S$999,099.99');
-        NULL
-      -- The format requires at least three digits.
-      > SELECT _FUNC_('$045', 'S$999,099.99');
-       45.00
-      -- Brackets denote negative values.
-      > SELECT _FUNC_('<1234>', '999999PR');
-       -1234
+      > SELECT _FUNC_('454', '999');
+       454
+      > SELECT _FUNC_('454.00', '000.00');
+       454.00
+      > SELECT _FUNC_('12,454', '99,999');
+       12454
+      > SELECT _FUNC_('$78.12', '$99.99');
+       78.12
+      > SELECT _FUNC_('12,454.8-', '99,999.9S');
+       -12454.8
   """,
   since = "3.3.0",
   group = "string_funcs")
