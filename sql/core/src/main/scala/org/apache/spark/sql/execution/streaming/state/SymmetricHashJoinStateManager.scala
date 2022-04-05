@@ -97,15 +97,6 @@ class SymmetricHashJoinStateManager(
   }
 
   /**
-   * Update number of values for a key.
-   * NOTE: this function is only intended for use in unit tests
-   * to simulate null values.
-   */
-  private[state] def updateNumValues(key: UnsafeRow, numValues: Long): Unit = {
-    keyToNumValues.put(key, numValues)
-  }
-
-  /**
    * Get all the matched values for given join condition, with marking matched.
    * This method is designed to mark joined rows properly without exposing internal index of row.
    *
@@ -265,8 +256,10 @@ class SymmetricHashJoinStateManager(
         return null
       }
 
-      // Find the first non-null value index starting from end
-      // and going up-to stopIndex
+      /**
+       * Find the first non-null value index starting from end
+       * and going up-to stopIndex.
+       */
       private def getRightMostNonNullIndex(stopIndex: Long): Option[Long] = {
         (numValues - 1 to stopIndex by -1).find { idx =>
           keyWithIndexToValue.get(currentKey, idx) != null
@@ -289,7 +282,7 @@ class SymmetricHashJoinStateManager(
         if (index != numValues - 1) {
           val valuePairAtMaxIndex = keyWithIndexToValue.get(currentKey, numValues - 1)
           if (valuePairAtMaxIndex != null) {
-            // likely case where last element is non-null and we can simply swap with index
+            // Likely case where last element is non-null and we can simply swap with index.
             keyWithIndexToValue.put(currentKey, index, valuePairAtMaxIndex.value,
               valuePairAtMaxIndex.matched)
           } else {
@@ -363,6 +356,15 @@ class SymmetricHashJoinStateManager(
         case (metric, value) => (metric.withNewDesc(desc = newDesc(metric.desc)), value)
       }
     )
+  }
+
+  /**
+   * Update number of values for a key.
+   * NOTE: this function is only intended for use in unit tests
+   * to simulate null values.
+   */
+  private[state] def updateNumValuesTestOnly(key: UnsafeRow, numValues: Long): Unit = {
+    keyToNumValues.put(key, numValues)
   }
 
   /*

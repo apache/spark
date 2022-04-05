@@ -202,7 +202,7 @@ class SymmetricHashJoinStateManagerSuite extends StreamTest with BeforeAndAfter 
 
   def updateNumValues(key: Int, numValues: Long)
                      (implicit manager: SymmetricHashJoinStateManager): Unit = {
-    manager.updateNumValues(toJoinKeyRow(key), numValues)
+    manager.updateNumValuesTestOnly(toJoinKeyRow(key), numValues)
   }
 
   def get(key: Int)(implicit manager: SymmetricHashJoinStateManager): Seq[Int] = {
