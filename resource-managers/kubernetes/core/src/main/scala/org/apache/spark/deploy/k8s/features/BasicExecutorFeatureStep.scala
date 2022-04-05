@@ -145,11 +145,11 @@ private[spark] class BasicExecutorFeatureStep(
           ++ sparkAuthSecret
           ++ Map(ENV_CLASSPATH-> kubernetesConf.get(EXECUTOR_CLASS_PATH).orNull)
           ++ allOpts) ++
-        KubernetesUtils.buildEnvVarsWithFieldRef(
-          Seq(
-            (ENV_EXECUTOR_POD_IP, "v1", "status.podIP"),
-            (ENV_EXECUTOR_POD_NAME, "v1", "metadata.name")
-          ))
+      KubernetesUtils.buildEnvVarsWithFieldRef(
+        Seq(
+          (ENV_EXECUTOR_POD_IP, "v1", "status.podIP"),
+          (ENV_EXECUTOR_POD_NAME, "v1", "metadata.name")
+        ))
     }
     executorEnv.find(_.getName == ENV_EXECUTOR_DIRS).foreach { e =>
       e.setValue(e.getValue
