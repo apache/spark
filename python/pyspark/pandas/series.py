@@ -2182,6 +2182,8 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         2    3
         dtype: int64
 
+        Clip can be performed in-place.
+
         >>> psser.clip(2, 3, inplace=True)
         >>> psser
         0    2
