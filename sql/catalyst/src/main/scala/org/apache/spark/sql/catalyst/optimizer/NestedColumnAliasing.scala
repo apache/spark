@@ -481,9 +481,10 @@ object GeneratorNestedColumnAliasing {
    * Types of [[Generator]] on which we can prune nested fields.
    */
   def canPruneGenerator(g: Generator): Boolean = g match {
-    case _: ExplodeBase => true
-    case _: Inline => true
+    case _: Explode => true
     case _: Stack => true
+    case _: PosExplode => true
+    case _: Inline => true
     case _ => false
   }
 }
