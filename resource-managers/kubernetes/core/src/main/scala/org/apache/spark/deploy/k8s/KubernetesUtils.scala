@@ -387,17 +387,13 @@ object KubernetesUtils extends Logging {
    */
   @Since("3.4.0")
   def buildEnvVars(env: Map[String, String]): Seq[EnvVar] = {
-    if (env.isEmpty) {
-      Seq.empty
-    } else {
       env.filter( env => env._2 != null)
          .map { env =>
            new EnvVarBuilder()
              .withName(env._1)
              .withValue(env._2)
              .build()
-      }
-    }.toSeq
+      }.toSeq
   }
 
   /**
@@ -405,9 +401,6 @@ object KubernetesUtils extends Logging {
    */
   @Since("3.4.0")
   def buildEnvVarsWithFieldRef(env: Seq[(String, String, String)]): Seq[EnvVar] = {
-    if (env.isEmpty) {
-      Seq.empty
-    } else {
       env.filter( env => env._2 != null && env._3 != null)
          .map { env =>
            new EnvVarBuilder()
@@ -417,6 +410,5 @@ object KubernetesUtils extends Logging {
                .build())
              .build()
       }
-    }
   }
 }
