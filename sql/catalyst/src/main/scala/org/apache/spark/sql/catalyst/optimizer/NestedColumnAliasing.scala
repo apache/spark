@@ -326,6 +326,7 @@ object GeneratorUnrequiredChildrenPruning {
       } else {
         None
       }
+    case _ => None
   }
 }
 
