@@ -16,6 +16,8 @@
  */
 package org.apache.spark.sql.execution.datasources.v2.orc
 
+import scala.collection.JavaConverters.mapAsScalaMapConverter
+
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 
@@ -24,6 +26,7 @@ import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.connector.expressions.aggregate.Aggregation
 import org.apache.spark.sql.connector.read.PartitionReaderFactory
 import org.apache.spark.sql.execution.datasources.{AggregatePushDownUtils, PartitioningAwareFileIndex}
+import org.apache.spark.sql.execution.datasources.orc.OrcOptions
 import org.apache.spark.sql.execution.datasources.v2.FileScan
 import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.types.StructType
@@ -64,7 +67,8 @@ case class OrcScan(
     // The partition values are already truncated in `FileScan.partitions`.
     // We should use `readPartitionSchema` as the partition schema here.
     OrcPartitionReaderFactory(sparkSession.sessionState.conf, broadcastedConf,
-      dataSchema, readDataSchema, readPartitionSchema, pushedFilters, pushedAggregate)
+      dataSchema, readDataSchema, readPartitionSchema, pushedFilters, pushedAggregate,
+      new OrcOptions(options.asScala.toMap, sparkSession.sessionState.conf))
   }
 
   override def equals(obj: Any): Boolean = obj match {

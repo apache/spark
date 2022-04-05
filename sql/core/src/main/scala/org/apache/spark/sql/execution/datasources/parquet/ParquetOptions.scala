@@ -82,6 +82,12 @@ class ParquetOptions(
   def int96RebaseModeInRead: String = parameters
     .get(INT96_REBASE_MODE)
     .getOrElse(sqlConf.getConf(SQLConf.PARQUET_INT96_REBASE_MODE_IN_READ))
+
+  val ignoreCorruptFiles: Boolean = parameters.get("ignoreCorruptFiles").map(_.toBoolean)
+    .getOrElse(SQLConf.get.ignoreCorruptFiles)
+
+  val ignoreMissingFiles: Boolean = parameters.get("ignoreMissingFiles").map(_.toBoolean)
+    .getOrElse(SQLConf.get.ignoreMissingFiles)
 }
 
 

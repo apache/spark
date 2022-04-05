@@ -36,7 +36,8 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.avro.AvroOptions.ignoreExtensionKey
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.execution.datasources.OutputWriterFactory
+import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
+import org.apache.spark.sql.execution.datasources.{OutputWriterFactory, SourceOptions}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
@@ -57,7 +58,9 @@ private[sql] object AvroUtils extends Logging {
     val avroSchema = parsedOptions.schema
       .getOrElse {
         inferAvroSchemaFromFiles(files, conf, parsedOptions.ignoreExtension,
-          spark.sessionState.conf.ignoreCorruptFiles)
+          CaseInsensitiveMap(options)
+            .get(SourceOptions.IGNORE_CORRUPT_FILES).map(_.toBoolean)
+            .getOrElse(spark.sessionState.conf.ignoreCorruptFiles))
       }
 
     SchemaConverters.toSqlType(avroSchema).dataType match {

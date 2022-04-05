@@ -126,6 +126,12 @@ private[sql] class AvroOptions(
   val datetimeRebaseModeInRead: String = parameters
     .get(AvroOptions.DATETIME_REBASE_MODE)
     .getOrElse(SQLConf.get.getConf(SQLConf.AVRO_REBASE_MODE_IN_READ))
+
+  val ignoreCorruptFiles: Boolean = parameters.get("ignoreCorruptFiles").map(_.toBoolean)
+    .getOrElse(SQLConf.get.ignoreCorruptFiles)
+
+  val ignoreMissingFiles: Boolean = parameters.get("ignoreMissingFiles").map(_.toBoolean)
+    .getOrElse(SQLConf.get.ignoreMissingFiles)
 }
 
 private[sql] object AvroOptions {

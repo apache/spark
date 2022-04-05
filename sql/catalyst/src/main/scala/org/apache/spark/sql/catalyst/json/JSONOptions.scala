@@ -154,6 +154,12 @@ private[sql] class JSONOptions(
   val writeNonAsciiCharacterAsCodePoint: Boolean =
     parameters.get("writeNonAsciiCharacterAsCodePoint").map(_.toBoolean).getOrElse(false)
 
+  val ignoreCorruptFiles: Boolean = parameters.get("ignoreCorruptFiles").map(_.toBoolean)
+    .getOrElse(SQLConf.get.ignoreCorruptFiles)
+
+  val ignoreMissingFiles: Boolean = parameters.get("ignoreMissingFiles").map(_.toBoolean)
+    .getOrElse(SQLConf.get.ignoreMissingFiles)
+
   /** Build a Jackson [[JsonFactory]] using JSON options. */
   def buildJsonFactory(): JsonFactory = {
     new JsonFactoryBuilder()

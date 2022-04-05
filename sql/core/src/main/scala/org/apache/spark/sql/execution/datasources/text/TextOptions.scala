@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.datasources.text
 import java.nio.charset.{Charset, StandardCharsets}
 
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, CompressionCodecs}
+import org.apache.spark.sql.internal.SQLConf
 
 /**
  * Options for the Text data source.
@@ -55,6 +56,12 @@ class TextOptions(@transient private val parameters: CaseInsensitiveMap[String])
   }
   val lineSeparatorInWrite: Array[Byte] =
     lineSeparatorInRead.getOrElse("\n".getBytes(StandardCharsets.UTF_8))
+
+  val ignoreCorruptFiles: Boolean = parameters.get("ignoreCorruptFiles").map(_.toBoolean)
+    .getOrElse(SQLConf.get.ignoreCorruptFiles)
+
+  val ignoreMissingFiles: Boolean = parameters.get("ignoreMissingFiles").map(_.toBoolean)
+    .getOrElse(SQLConf.get.ignoreMissingFiles)
 }
 
 private[datasources] object TextOptions {

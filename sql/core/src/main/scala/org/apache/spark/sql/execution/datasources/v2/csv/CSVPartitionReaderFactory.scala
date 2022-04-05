@@ -45,7 +45,10 @@ case class CSVPartitionReaderFactory(
     readDataSchema: StructType,
     partitionSchema: StructType,
     parsedOptions: CSVOptions,
-    filters: Seq[Filter]) extends FilePartitionReaderFactory {
+    filters: Seq[Filter])
+  extends FilePartitionReaderFactory(
+    parsedOptions.ignoreCorruptFiles,
+    parsedOptions.ignoreMissingFiles) {
 
   override def buildReader(file: PartitionedFile): PartitionReader[InternalRow] = {
     val conf = broadcastedConf.value.value

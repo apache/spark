@@ -66,6 +66,12 @@ class OrcOptions(
     .get(MERGE_SCHEMA)
     .map(_.toBoolean)
     .getOrElse(sqlConf.isOrcSchemaMergingEnabled)
+
+  val ignoreCorruptFiles: Boolean = parameters.get("ignoreCorruptFiles").map(_.toBoolean)
+    .getOrElse(SQLConf.get.ignoreCorruptFiles)
+
+  val ignoreMissingFiles: Boolean = parameters.get("ignoreMissingFiles").map(_.toBoolean)
+    .getOrElse(SQLConf.get.ignoreMissingFiles)
 }
 
 object OrcOptions {

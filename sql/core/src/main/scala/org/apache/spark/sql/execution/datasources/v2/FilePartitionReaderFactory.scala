@@ -22,14 +22,17 @@ import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.datasources.{FilePartition, PartitionedFile}
 import org.apache.spark.sql.vectorized.ColumnarBatch
 
-abstract class FilePartitionReaderFactory extends PartitionReaderFactory {
+abstract class FilePartitionReaderFactory(
+    ignoreCorruptFiles: Boolean,
+    ignoreMissingFiles: Boolean)
+  extends PartitionReaderFactory {
   override def createReader(partition: InputPartition): PartitionReader[InternalRow] = {
     assert(partition.isInstanceOf[FilePartition])
     val filePartition = partition.asInstanceOf[FilePartition]
     val iter = filePartition.files.iterator.map { file =>
       PartitionedFileReader(file, buildReader(file))
     }
-    new FilePartitionReader[InternalRow](iter)
+    new FilePartitionReader[InternalRow](iter, ignoreCorruptFiles, ignoreMissingFiles)
   }
 
   override def createColumnarReader(partition: InputPartition): PartitionReader[ColumnarBatch] = {
@@ -38,7 +41,7 @@ abstract class FilePartitionReaderFactory extends PartitionReaderFactory {
     val iter = filePartition.files.iterator.map { file =>
       PartitionedFileReader(file, buildColumnarReader(file))
     }
-    new FilePartitionReader[ColumnarBatch](iter)
+    new FilePartitionReader[ColumnarBatch](iter, ignoreCorruptFiles, ignoreMissingFiles)
   }
 
   def buildReader(partitionedFile: PartitionedFile): PartitionReader[InternalRow]

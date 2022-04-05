@@ -37,11 +37,10 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.caseSensitiveResolution
 import org.apache.spark.sql.catalyst.expressions.JoinedRow
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
-import org.apache.spark.sql.catalyst.util.CharVarcharUtils
-import org.apache.spark.sql.catalyst.util.quoteIdentifier
+import org.apache.spark.sql.catalyst.util.{quoteIdentifier, CaseInsensitiveMap, CharVarcharUtils}
 import org.apache.spark.sql.connector.expressions.aggregate.{Aggregation, Count, CountStar, Max, Min}
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.execution.datasources.{AggregatePushDownUtils, SchemaMergeUtils}
+import org.apache.spark.sql.execution.datasources.{AggregatePushDownUtils, SchemaMergeUtils, SourceOptions}
 import org.apache.spark.sql.execution.datasources.v2.V2ColumnUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.util.{ThreadUtils, Utils}
@@ -143,7 +142,9 @@ object OrcUtils extends Logging {
 
   def readSchema(sparkSession: SparkSession, files: Seq[FileStatus], options: Map[String, String])
       : Option[StructType] = {
-    val ignoreCorruptFiles = sparkSession.sessionState.conf.ignoreCorruptFiles
+    val ignoreCorruptFiles = CaseInsensitiveMap(options)
+      .get(SourceOptions.IGNORE_CORRUPT_FILES).map(_.toBoolean)
+      .getOrElse(sparkSession.sessionState.conf.ignoreCorruptFiles)
     val conf = sparkSession.sessionState.newHadoopConfWithOptions(options)
     files.iterator.map(file => readSchema(file.getPath, conf, ignoreCorruptFiles)).collectFirst {
       case Some(schema) =>

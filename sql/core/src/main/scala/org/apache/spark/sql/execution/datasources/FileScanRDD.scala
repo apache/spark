@@ -29,6 +29,7 @@ import org.apache.spark.rdd.{InputFileBlockHolder, RDD}
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, GenericInternalRow, JoinedRow, UnsafeProjection, UnsafeRow}
+import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.datasources.FileFormat._
 import org.apache.spark.sql.execution.vectorized.ConstantColumnVector
@@ -69,11 +70,14 @@ class FileScanRDD(
     readFunction: (PartitionedFile) => Iterator[InternalRow],
     @transient val filePartitions: Seq[FilePartition],
     val readDataSchema: StructType,
-    val metadataColumns: Seq[AttributeReference] = Seq.empty)
+    val metadataColumns: Seq[AttributeReference] = Seq.empty,
+    options: CaseInsensitiveMap[String] = CaseInsensitiveMap(Map.empty))
   extends RDD[InternalRow](sparkSession.sparkContext, Nil) {
 
-  private val ignoreCorruptFiles = sparkSession.sessionState.conf.ignoreCorruptFiles
-  private val ignoreMissingFiles = sparkSession.sessionState.conf.ignoreMissingFiles
+  private val ignoreCorruptFiles = options.get(SourceOptions.IGNORE_CORRUPT_FILES).map(_.toBoolean)
+    .getOrElse(sparkSession.sessionState.conf.ignoreCorruptFiles)
+  private val ignoreMissingFiles = options.get(SourceOptions.IGNORE_MISSING_FILES).map(_.toBoolean)
+    .getOrElse(sparkSession.sessionState.conf.ignoreMissingFiles)
 
   override def compute(split: RDDPartition, context: TaskContext): Iterator[InternalRow] = {
     val iterator = new Iterator[Object] with AutoCloseable {

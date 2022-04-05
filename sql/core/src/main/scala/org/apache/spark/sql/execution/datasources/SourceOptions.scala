@@ -47,4 +47,6 @@ object SourceOptions {
   val RESPECT_SPARK_SCHEMA = "respectSparkSchema"
   val DEFAULT_RESPECT_SPARK_SCHEMA = false
 
+  val IGNORE_CORRUPT_FILES = "ignoreCorruptFiles"
+  val IGNORE_MISSING_FILES = "ignoreMissingFiles"
 }

@@ -43,7 +43,10 @@ case class TextPartitionReaderFactory(
     broadcastedConf: Broadcast[SerializableConfiguration],
     readDataSchema: StructType,
     partitionSchema: StructType,
-    textOptions: TextOptions) extends FilePartitionReaderFactory {
+    textOptions: TextOptions)
+  extends FilePartitionReaderFactory(
+    textOptions.ignoreCorruptFiles,
+    textOptions.ignoreMissingFiles) {
 
   override def buildReader(file: PartitionedFile): PartitionReader[InternalRow] = {
     val confValue = broadcastedConf.value.value
