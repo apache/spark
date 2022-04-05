@@ -32,6 +32,7 @@ Core Classes
     DataStreamWriter
     StreamingQuery
     StreamingQueryManager
+    StreamingQueryListener
 
 Input and Output
 ----------------
@@ -83,6 +84,7 @@ Query Management
     StreamingQuery.status
     StreamingQuery.stop
     StreamingQueryManager.active
+    StreamingQueryManager.addListener
     StreamingQueryManager.awaitAnyTermination
     StreamingQueryManager.get
     StreamingQueryManager.resetTerminated
