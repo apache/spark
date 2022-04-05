@@ -66,7 +66,7 @@ import org.apache.spark.util.CircularBuffer
  * This does not include exceptions thrown during the eager execution of commands, which are
  * grouped into [[QueryCompilationErrors]].
  */
-object QueryExecutionErrors {
+object QueryExecutionErrors extends QueryErrorsBase {
 
   def logicalHintOperatorNotRemovedDuringAnalysisError(): Throwable = {
     new SparkIllegalStateException(errorClass = "INTERNAL_ERROR",
@@ -1959,6 +1959,7 @@ object QueryExecutionErrors {
   def timestampAddOverflowError(micros: Long, amount: Int, unit: String): ArithmeticException = {
     new SparkArithmeticException(
       errorClass = "DATETIME_OVERFLOW",
-      messageParameters = Array(s"add $amount $unit to '${DateTimeUtils.microsToInstant(micros)}'"))
+      messageParameters = Array(
+        s"add ${toSQLValue(amount)} $unit to ${toSQLValue(DateTimeUtils.microsToInstant(micros))}"))
   }
 }
