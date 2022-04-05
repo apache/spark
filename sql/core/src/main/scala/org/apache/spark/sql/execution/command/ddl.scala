@@ -485,7 +485,7 @@ case class AlterTableAddPartitionCommand(
           val partitionSpec = partition.mapValues {
             case null => Some(ExternalCatalogUtils.DEFAULT_PARTITION_NAME)
             case other => Some(other)
-          }
+          }.toMap
           AnalyzePartitionCommand(table.identifier, partitionSpec, false).run(sparkSession)
         }
       }
