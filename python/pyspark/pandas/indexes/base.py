@@ -1544,6 +1544,8 @@ class Index(IndexOpsMixin):
         .. note:: This method is not supported for pandas when index has NaN value.
                   pandas raises unexpected TypeError, but we support treating NaN
                   as the smallest value.
+                  This method returns indexer as a pandas-on-Spark index while
+                  pandas returns it as a list.
 
         Parameters
         ----------
