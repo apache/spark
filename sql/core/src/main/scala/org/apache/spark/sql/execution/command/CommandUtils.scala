@@ -68,9 +68,7 @@ object CommandUtils extends Logging {
         catalog.alterTableStats(table.identifier, Some(newStats))
 
         if (withAutoPartitionStats) {
-          if (partitionSpec.nonEmpty) {
-            AnalyzePartitionCommand(table.identifier, partitionSpec, false).run(sparkSession)
-          } else if (table.partitionColumnNames.nonEmpty) {
+          if (partitionSpec.nonEmpty || table.partitionColumnNames.nonEmpty) {
             AnalyzePartitionCommand(table.identifier, partitionSpec, false).run(sparkSession)
           }
         }
