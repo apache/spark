@@ -188,7 +188,7 @@ public class AuthEngineSuite {
       assertThrows(GeneralSecurityException.class, () -> server.response(clientChallenge));
     }
   }
-  
+
   @Test
   public void testEncryptedMessage() throws Exception {
     try (AuthEngine client = new AuthEngine("appId", "secret", conf);
