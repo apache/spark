@@ -59,11 +59,16 @@ private[spark] class BasicExecutorFeatureStep(
   private val isDefaultProfile = resourceProfile.id == ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID
   private val isPythonApp = kubernetesConf.get(APP_RESOURCE_TYPE) == Some(APP_RESOURCE_TYPE_PYTHON)
   private val disableConfigMap = kubernetesConf.get(KUBERNETES_EXECUTOR_DISABLE_CONFIGMAP)
+  private val memoryOverheadFactor = if (kubernetesConf.contains(EXECUTOR_MEMORY_OVERHEAD_FACTOR)) {
+    kubernetesConf.get(EXECUTOR_MEMORY_OVERHEAD_FACTOR)
+  } else {
+    kubernetesConf.get(MEMORY_OVERHEAD_FACTOR)
+  }
 
   val execResources = ResourceProfile.getResourcesForClusterManager(
     resourceProfile.id,
     resourceProfile.executorResources,
-    kubernetesConf.get(MEMORY_OVERHEAD_FACTOR),
+    memoryOverheadFactor,
     kubernetesConf.sparkConf,
     isPythonApp,
     Map.empty)

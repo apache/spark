@@ -46,7 +46,7 @@ have_tabulate = tabulate_requirement_message is None
 
 matplotlib_requirement_message = None
 try:
-    import matplotlib  # type: ignore # noqa: F401
+    import matplotlib  # noqa: F401
 except ImportError as e:
     # If matplotlib requirement is not satisfied, skip related tests.
     matplotlib_requirement_message = str(e)
@@ -54,7 +54,7 @@ have_matplotlib = matplotlib_requirement_message is None
 
 plotly_requirement_message = None
 try:
-    import plotly  # type: ignore # noqa: F401
+    import plotly  # noqa: F401
 except ImportError as e:
     # If plotly requirement is not satisfied, skip related tests.
     plotly_requirement_message = str(e)

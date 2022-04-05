@@ -324,17 +324,22 @@ case class StreamingSymmetricHashJoinExec(
           }
         }
 
+        val initIterFn = { () =>
+          val removedRowIter = leftSideJoiner.removeOldState()
+          removedRowIter.filterNot { kv =>
+            stateFormatVersion match {
+              case 1 => matchesWithRightSideState(new UnsafeRowPair(kv.key, kv.value))
+              case 2 => kv.matched
+              case _ => throwBadStateFormatVersionException()
+            }
+          }.map(pair => joinedRow.withLeft(pair.value).withRight(nullRight))
+        }
+
         // NOTE: we need to make sure `outerOutputIter` is evaluated "after" exhausting all of
-        // elements in `innerOutputIter`, because evaluation of `innerOutputIter` may update
-        // the match flag which the logic for outer join is relying on.
-        val removedRowIter = leftSideJoiner.removeOldState()
-        val outerOutputIter = removedRowIter.filterNot { kv =>
-          stateFormatVersion match {
-            case 1 => matchesWithRightSideState(new UnsafeRowPair(kv.key, kv.value))
-            case 2 => kv.matched
-            case _ => throwBadStateFormatVersionException()
-          }
-        }.map(pair => joinedRow.withLeft(pair.value).withRight(nullRight))
+        // elements in `hashJoinOutputIter`, otherwise it may lead to out of sync according to
+        // the interface contract on StateStore.iterator and end up with correctness issue.
+        // Please refer SPARK-38684 for more details.
+        val outerOutputIter = new LazilyInitializingJoinedRowIterator(initIterFn)
 
         hashJoinOutputIter ++ outerOutputIter
       case RightOuter =>
@@ -344,14 +349,23 @@ case class StreamingSymmetricHashJoinExec(
             postJoinFilter(joinedRow.withLeft(leftValue).withRight(rightKeyValue.value))
           }
         }
-        val removedRowIter = rightSideJoiner.removeOldState()
-        val outerOutputIter = removedRowIter.filterNot { kv =>
-          stateFormatVersion match {
-            case 1 => matchesWithLeftSideState(new UnsafeRowPair(kv.key, kv.value))
-            case 2 => kv.matched
-            case _ => throwBadStateFormatVersionException()
-          }
-        }.map(pair => joinedRow.withLeft(nullLeft).withRight(pair.value))
+
+        val initIterFn = { () =>
+          val removedRowIter = rightSideJoiner.removeOldState()
+          removedRowIter.filterNot { kv =>
+            stateFormatVersion match {
+              case 1 => matchesWithLeftSideState(new UnsafeRowPair(kv.key, kv.value))
+              case 2 => kv.matched
+              case _ => throwBadStateFormatVersionException()
+            }
+          }.map(pair => joinedRow.withLeft(nullLeft).withRight(pair.value))
+        }
+
+        // NOTE: we need to make sure `outerOutputIter` is evaluated "after" exhausting all of
+        // elements in `hashJoinOutputIter`, otherwise it may lead to out of sync according to
+        // the interface contract on StateStore.iterator and end up with correctness issue.
+        // Please refer SPARK-38684 for more details.
+        val outerOutputIter = new LazilyInitializingJoinedRowIterator(initIterFn)
 
         hashJoinOutputIter ++ outerOutputIter
       case FullOuter =>
@@ -360,10 +374,25 @@ case class StreamingSymmetricHashJoinExec(
             case 2 => kv.matched
             case _ => throwBadStateFormatVersionException()
           }
-        val leftSideOutputIter = leftSideJoiner.removeOldState().filterNot(
-          isKeyToValuePairMatched).map(pair => joinedRow.withLeft(pair.value).withRight(nullRight))
-        val rightSideOutputIter = rightSideJoiner.removeOldState().filterNot(
-          isKeyToValuePairMatched).map(pair => joinedRow.withLeft(nullLeft).withRight(pair.value))
+
+        val leftSideInitIterFn = { () =>
+          val removedRowIter = leftSideJoiner.removeOldState()
+          removedRowIter.filterNot(isKeyToValuePairMatched)
+            .map(pair => joinedRow.withLeft(pair.value).withRight(nullRight))
+        }
+
+        val rightSideInitIterFn = { () =>
+          val removedRowIter = rightSideJoiner.removeOldState()
+          removedRowIter.filterNot(isKeyToValuePairMatched)
+            .map(pair => joinedRow.withLeft(nullLeft).withRight(pair.value))
+        }
+
+        // NOTE: we need to make sure both `leftSideOutputIter` and `rightSideOutputIter` are
+        // evaluated "after" exhausting all of elements in `hashJoinOutputIter`, otherwise it may
+        // lead to out of sync according to the interface contract on StateStore.iterator and
+        // end up with correctness issue. Please refer SPARK-38684 for more details.
+        val leftSideOutputIter = new LazilyInitializingJoinedRowIterator(leftSideInitIterFn)
+        val rightSideOutputIter = new LazilyInitializingJoinedRowIterator(rightSideInitIterFn)
 
         hashJoinOutputIter ++ leftSideOutputIter ++ rightSideOutputIter
       case _ => throwBadJoinTypeException()
@@ -638,4 +667,12 @@ case class StreamingSymmetricHashJoinExec(
   override protected def withNewChildrenInternal(
       newLeft: SparkPlan, newRight: SparkPlan): StreamingSymmetricHashJoinExec =
     copy(left = newLeft, right = newRight)
+
+  private class LazilyInitializingJoinedRowIterator(
+      initFn: () => Iterator[JoinedRow]) extends Iterator[JoinedRow] {
+    private lazy val iter: Iterator[JoinedRow] = initFn()
+
+    override def hasNext: Boolean = iter.hasNext
+    override def next(): JoinedRow = iter.next()
+  }
 }

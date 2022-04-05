@@ -18,6 +18,7 @@ package org.apache.spark.sql.execution.vectorized;
 
 import java.math.BigDecimal;
 import java.math.BigInteger;
+import java.nio.ByteBuffer;
 
 import com.google.common.annotations.VisibleForTesting;
 
@@ -52,7 +53,7 @@ public abstract class WritableColumnVector extends ColumnVector {
    * Resets this column for writing. The currently stored values are no longer accessible.
    */
   public void reset() {
-    if (isConstant) return;
+    if (isConstant || isAllNull) return;
 
     if (childColumns != null) {
       for (WritableColumnVector c: childColumns) {
@@ -80,6 +81,10 @@ public abstract class WritableColumnVector extends ColumnVector {
       dictionaryIds = null;
     }
     dictionary = null;
+  }
+
+  public void reserveAdditional(int additionalCapacity) {
+    reserve(elementsAppended + additionalCapacity);
   }
 
   public void reserve(int requiredCapacity) {
@@ -116,7 +121,7 @@ public abstract class WritableColumnVector extends ColumnVector {
 
   @Override
   public boolean hasNull() {
-    return numNulls > 0;
+    return isAllNull || numNulls > 0;
   }
 
   @Override
@@ -444,6 +449,12 @@ public abstract class WritableColumnVector extends ColumnVector {
   }
 
   /**
+   * Gets the values of bytes from [rowId, rowId + count), as a ByteBuffer.
+   * This method is similar to {@link ColumnVector#getBytes(int, int)}, but avoids making a copy.
+   */
+  public abstract ByteBuffer getByteBuffer(int rowId, int count);
+
+  /**
    * Append APIs. These APIs all behave similarly and will append data to the current vector.  It
    * is not valid to mix the put and append APIs. The append APIs are slower and should only be
    * used if the sizes are not known up front.
@@ -707,14 +718,46 @@ public abstract class WritableColumnVector extends ColumnVector {
   public WritableColumnVector getChild(int ordinal) { return childColumns[ordinal]; }
 
   /**
-   * Returns the elements appended.
+   * Returns the number of child vectors.
+   */
+  public int getNumChildren() {
+    return childColumns.length;
+  }
+
+  /**
+   * Returns the elements appended. This is useful
    */
   public final int getElementsAppended() { return elementsAppended; }
+
+  /**
+   * Increment number of elements appended by 'num'.
+   *
+   * This is useful when one wants to use the 'putXXX' API to add new elements to the vector, but
+   * still want to keep count of how many elements have been added (since the 'putXXX' APIs don't
+   * increment count).
+   */
+  public final void addElementsAppended(int num) {
+    elementsAppended += num;
+  }
 
   /**
    * Marks this column as being constant.
    */
   public final void setIsConstant() { isConstant = true; }
+
+  /**
+   * Marks this column only contains null values.
+   */
+  public final void setAllNull() {
+    isAllNull = true;
+  }
+
+  /**
+   * Whether this column only contains null values.
+   */
+  public final boolean isAllNull() {
+    return isAllNull;
+  }
 
   /**
    * Maximum number of rows that can be stored in this column.
@@ -737,6 +780,12 @@ public abstract class WritableColumnVector extends ColumnVector {
    * across resets.
    */
   protected boolean isConstant;
+
+  /**
+   * True if this column only contains nulls. This means the column values never change, even
+   * across resets. Comparing to 'isConstant' above, this doesn't require any allocation of space.
+   */
+  protected boolean isAllNull;
 
   /**
    * Default size of each array length value. This grows as necessary.

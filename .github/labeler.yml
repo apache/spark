@@ -84,11 +84,11 @@ SPARK SHELL:
   - "repl/**/*"
   - "bin/spark-shell*"
 SQL:
-#- any: ["**/sql/**/*", "!python/pyspark/sql/avro/**/*", "!python/pyspark/sql/streaming.py", "!python/pyspark/sql/tests/test_streaming.py"]
+#- any: ["**/sql/**/*", "!python/pyspark/sql/avro/**/*", "!python/pyspark/sql/streaming/**/*", "!python/pyspark/sql/tests/test_streaming.py"]
   - "**/sql/**/*"
   - "common/unsafe/**/*"
   #- "!python/pyspark/sql/avro/**/*"
-  #- "!python/pyspark/sql/streaming.py"
+  #- "!python/pyspark/sql/streaming/**/*"
   #- "!python/pyspark/sql/tests/test_streaming.py"
   - "bin/spark-sql*"
   - "bin/beeline*"
@@ -124,7 +124,7 @@ MLLIB:
 STRUCTURED STREAMING:
   - "**/sql/**/streaming/**/*"
   - "external/kafka-0-10-sql/**/*"
-  - "python/pyspark/sql/streaming.py"
+  - "python/pyspark/sql/streaming/**/*"
   - "python/pyspark/sql/tests/test_streaming.py"
   - "**/*streaming.R"
 PYTHON:

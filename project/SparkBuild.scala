@@ -533,7 +533,8 @@ object SparkParallelTestGrouping {
     "org.apache.spark.sql.hive.thriftserver.ui.ThriftServerPageSuite",
     "org.apache.spark.sql.hive.thriftserver.ui.HiveThriftServer2ListenerSuite",
     "org.apache.spark.sql.kafka010.KafkaDelegationTokenSuite",
-    "org.apache.spark.shuffle.KubernetesLocalDiskShuffleDataIOSuite"
+    "org.apache.spark.shuffle.KubernetesLocalDiskShuffleDataIOSuite",
+    "org.apache.spark.sql.hive.HiveScalaReflectionSuite"
   )
 
   private val DEFAULT_TEST_GROUP = "default_test_group"
@@ -708,7 +709,7 @@ object DependencyOverrides {
     dependencyOverrides += "com.google.guava" % "guava" % guavaVersion,
     dependencyOverrides += "xerces" % "xercesImpl" % "2.12.0",
     dependencyOverrides += "jline" % "jline" % "2.14.6",
-    dependencyOverrides += "org.apache.avro" % "avro" % "1.10.2")
+    dependencyOverrides += "org.apache.avro" % "avro" % "1.11.0")
 }
 
 /**
