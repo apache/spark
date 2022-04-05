@@ -380,6 +380,10 @@ object GeneratorNestedColumnAliasing {
         case _ =>
       }
 
+      if (!g.generator.isInstanceOf[ExplodeBase]) {
+        return Some(pushedThrough)
+      }
+
       // Pruning on `Generator`'s output. We only process single field case.
       // For multiple field case, we cannot directly move field extractor into
       // the generator expression. A workaround is to re-construct array of struct
@@ -478,6 +482,8 @@ object GeneratorNestedColumnAliasing {
    */
   def canPruneGenerator(g: Generator): Boolean = g match {
     case _: ExplodeBase => true
+    case _: Inline => true
+    case _: Stack => true
     case _ => false
   }
 }
