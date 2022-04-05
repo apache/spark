@@ -1007,7 +1007,7 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("ToNumber: negative tests (the input string does not match the format string)") {
     Seq(
-      // The input contains more thousands separators than the format string.
+      // The input contained more thousands separators than the format string.
       ("45", "0,9"),
       // The input contained more or fewer digits than required.
       ("4", "09"),
@@ -1020,13 +1020,13 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       ("45>", "99PR"),
       // The input string did not contain an expected closing angle bracket.
       ("<45", "99PR"),
-      // The trailing MI does not match against any trailing +.
+      // The trailing MI did not match against any trailing +.
       ("454+", "999MI"),
-      // The trailing PR requires exactly one leading < and trailing >.
+      // The trailing PR required exactly one leading < and trailing >.
       ("<454", "999PR"),
       ("454>", "999PR"),
       ("<<454>>", "999PR"),
-      // At least three digits are required.
+      // At least three digits were required.
       ("45", "S$999,099.99")
     ).foreach { case (str: String, format: String) =>
       val toNumberExpr = ToNumber(Literal(str), Literal(format))
