@@ -18,10 +18,13 @@
 package org.apache.spark.sql.errors
 
 import org.apache.spark.sql.catalyst.expressions.Literal
+import org.apache.spark.sql.types.StringType
+import org.apache.spark.unsafe.types.UTF8String
 
 trait QueryErrorsBase {
   // Converts an error class parameter to its SQL representation
-  def toSQLValue(v: Any): String = {
-    Literal(v).sql
+  def toSQLValue(v: Any): String = v match {
+    case _: UTF8String => Literal.create(v, StringType).sql
+    case _ => Literal(v).sql
   }
 }

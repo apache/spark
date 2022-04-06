@@ -108,7 +108,7 @@ object QueryExecutionErrors extends QueryErrorsBase {
 
   def invalidInputSyntaxForNumericError(s: UTF8String): NumberFormatException = {
     new SparkNumberFormatException(errorClass = "INVALID_INPUT_SYNTAX_FOR_NUMERIC_TYPE",
-      messageParameters = Array(s.toString, SQLConf.ANSI_ENABLED.key))
+      messageParameters = Array(toSQLValue(s), SQLConf.ANSI_ENABLED.key))
   }
 
   def cannotCastFromNullTypeError(to: DataType): Throwable = {
