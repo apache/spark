@@ -988,16 +988,12 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
               // SPARK-38573: Support Partition Level Statistics Collection
               val partStats1 = getPartitionStats(table, Map("ds" -> "2008-04-08", "hr" -> "11"))
               assert(partStats1.sizeInBytes > 0)
-              assert(partStats1.rowCount.contains(1))
               val partStats2 = getPartitionStats(table, Map("ds" -> "2008-04-08", "hr" -> "12"))
               assert(partStats2.sizeInBytes > 0)
-              assert(partStats2.rowCount.contains(1))
               val partStats3 = getPartitionStats(table, Map("ds" -> "2008-04-09", "hr" -> "11"))
               assert(partStats3.sizeInBytes > 0)
-              assert(partStats3.rowCount.contains(1))
               val partStats4 = getPartitionStats(table, Map("ds" -> "2008-04-09", "hr" -> "12"))
               assert(partStats4.sizeInBytes > 0)
-              assert(partStats4.rowCount.contains(1))
             } else {
               assert(getStatsProperties(table).isEmpty)
             }
@@ -1024,7 +1020,6 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
               // SPARK-38573: Support Partition Level Statistics Collection
               val partStats3 = getPartitionStats(table, Map("ds" -> "2008-04-09", "hr" -> "11"))
               assert(partStats3.sizeInBytes > 0)
-              assert(partStats3.rowCount.contains(1))
             } else {
               assert(getStatsProperties(table).isEmpty)
             }
@@ -1557,7 +1552,6 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
         for (i <- 0 until 5) {
           val partStats = getPartitionStats(table, Map("sp" -> s"0", "dp" -> s"$i"))
           assert(partStats.sizeInBytes > 0)
-          assert(partStats.rowCount.contains(1))
         }
       }
     }
