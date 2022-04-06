@@ -1935,6 +1935,7 @@ class Dataset[T] private[sql](
   * {{{
   *   // Monitor the metrics using a listener.
   *   spark.streams.addListener(new StreamingQueryListener() {
+  *     override def onQueryStarted(event: QueryStartedEvent): Unit = {}
   *     override def onQueryProgress(event: QueryProgressEvent): Unit = {
   *       event.progress.observedMetrics.asScala.get("my_event").foreach { row =>
   *         // Trigger if the number of errors exceeds 5 percent
@@ -1946,8 +1947,7 @@ class Dataset[T] private[sql](
   *         }
   *       }
   *     }
-  *     def onQueryStarted(event: QueryStartedEvent): Unit = {}
-  *     def onQueryTerminated(event: QueryTerminatedEvent): Unit = {}
+  *     override def onQueryTerminated(event: QueryTerminatedEvent): Unit = {}
   *   })
   *   // Observe row count (rc) and error row count (erc) in the streaming Dataset
   *   val observed_ds = ds.observe("my_event", count(lit(1)).as("rc"), count($"error").as("erc"))
@@ -1957,6 +1957,7 @@ class Dataset[T] private[sql](
   * @group typedrel
   * @since 3.0.0
   */
+  @varargs
   def observe(name: String, expr: Column, exprs: Column*): Dataset[T] = withTypedPlan {
     CollectMetrics(name, (expr +: exprs).map(_.named), logicalPlan)
   }
