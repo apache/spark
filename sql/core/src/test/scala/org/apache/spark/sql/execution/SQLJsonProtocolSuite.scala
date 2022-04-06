@@ -85,7 +85,8 @@ class SQLJsonProtocolSuite extends SparkFunSuite with LocalSparkSession {
         |{
         |  "Event" : "org.apache.spark.sql.execution.ui.SparkListenerSQLExecutionEnd",
         |  "executionId" : 1,
-        |  "time" : 10
+        |  "time" : 10,
+        |  "tracker" : ""
         |}
       """.stripMargin))
     val readBack = JsonProtocol.sparkEventFromJson(json)

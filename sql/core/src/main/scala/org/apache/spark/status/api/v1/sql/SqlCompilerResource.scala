@@ -20,11 +20,13 @@ package org.apache.spark.status.api.v1.sql
 import javax.ws.rs._
 import javax.ws.rs.core.MediaType
 
+import scala.collection.mutable.ListBuffer
+
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.catalyst.QueryPlanningTracker
 import org.apache.spark.sql.execution.ui.{SQLAppStatusStore, SQLExecutionUIData}
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.status.api.v1.{BaseAppResource, NotFoundException}
+
+
 
 @Produces(Array(MediaType.APPLICATION_JSON))
 private[v1] class SqlCompilerResource extends BaseAppResource with Logging {
@@ -61,22 +63,34 @@ private[v1] class SqlCompilerResource extends BaseAppResource with Logging {
   }
 
   private def prepareCompileData(
-                                  exec: SQLExecutionUIData,
-                                  compileStats: QueryPlanningTracker,
-                                  appId: String): CompileData = {
+    exec: SQLExecutionUIData,
+    compileStats: String,
+    appId: String): CompileData = {
 
-    val phases = compileStats.phases.map{ case (phaseStr, phaseSummary) => PhaseTime(phaseStr,
-      phaseSummary.durationMs)}
+    val phaseString = compileStats.split("=== Spark Rule Timing Statistics ===")
+    val phaseListStr = phaseString.head.split("=== Spark Phase Timing Statistics ===")(1).
+      split("\\r?\\n")
+    val phaseTimes = new ListBuffer[PhaseTime]()
+    for(i <- 1 until phaseListStr.length by 2) {
+      val phaseStr = phaseListStr(i).split(":")(1).trim
+      val time = phaseListStr(i + 1).split(":")(1).trim
+      phaseTimes += PhaseTime(phaseStr, time.toLong)
+    }
 
-    val rules = compileStats.topRulesByTime(SQLConf.get.uiRulesShow).map{
-      case (strName, summary) => Rule(strName, (summary.totalTimeNs/1000000.0).toLong,
-        summary.numInvocations, summary.numEffectiveInvocations)
+    val rulesListStr = phaseString(1).trim().split("\\r?\\n")
+    val rules = new ListBuffer[Rule]()
+    for (i <- 0 until rulesListStr.length by 4) {
+      val name = rulesListStr(i).split(":")(1).trim
+      val time = rulesListStr(i + 1).split(":")(1).trim
+      val invocation = rulesListStr(i + 2).split(": ")(1).trim
+      val effective = rulesListStr(i + 3).split(": ")(1).trim
+      rules += Rule(name, time.toDouble, invocation.toLong, effective.toLong)
     }
 
     new CompileData(
       exec.executionId,
       appId,
-      phases.toSeq,
-      rules)
+      phaseTimes.toSeq,
+      rules.toSeq)
   }
 }

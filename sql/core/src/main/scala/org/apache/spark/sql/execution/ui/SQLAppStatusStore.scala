@@ -26,7 +26,6 @@ import com.fasterxml.jackson.annotation.JsonIgnore
 import com.fasterxml.jackson.databind.annotation.JsonDeserialize
 
 import org.apache.spark.JobExecutionStatus
-import org.apache.spark.sql.catalyst.QueryPlanningTracker
 import org.apache.spark.status.KVUtils
 import org.apache.spark.status.KVUtils.KVIndexParam
 import org.apache.spark.util.kvstore.{KVIndex, KVStore}
@@ -85,11 +84,11 @@ class SQLAppStatusStore(
     store.read(classOf[SparkPlanGraphWrapper], executionId).toSparkPlanGraph()
   }
 
-  def getCompilerStats(executionId: Long): QueryPlanningTracker = {
+  def getCompilerStats(executionId: Long): String = {
     try {
       store.read(classOf[CompilerStats], executionId).queryStats
     } catch {
-      case _: NoSuchElementException => new QueryPlanningTracker()
+      case _: NoSuchElementException => ""
     }
   }
 }
@@ -164,5 +163,5 @@ case class SQLPlanMetric(
 
 case class CompilerStats(
   @KVIndexParam val executionId: Long,
-  val queryStats: QueryPlanningTracker
+  val queryStats: String
 )

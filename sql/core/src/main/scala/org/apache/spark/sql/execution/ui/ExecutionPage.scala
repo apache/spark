@@ -84,7 +84,7 @@ class ExecutionPage(parent: SQLTab) extends WebUIPage("execution") with Logging 
 
       val metrics = sqlStore.executionMetrics(executionId)
       val graph = sqlStore.planGraph(executionId)
-      val compileStatsStr = sqlStore.getCompilerStats(executionId).compileStatsString()
+      val compileStatsStr = sqlStore.getCompilerStats(executionId)
 
       summary ++
         compileStatsDescription(compileStatsStr) ++
@@ -239,7 +239,7 @@ class ExecutionPage(parent: SQLTab) extends WebUIPage("execution") with Logging 
       </script>
         <br/>
   }
-  
+
   private def propertyHeader = Seq("Name", "Value")
   private def propertyRow(kv: (String, String)) = <tr><td>{kv._1}</td><td>{kv._2}</td></tr>
 }

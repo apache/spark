@@ -56,7 +56,7 @@ case class SparkListenerSQLExecutionStart(
 }
 
 @DeveloperApi
-case class SparkListenerSQLExecutionEnd(executionId: Long, time: Long)
+case class SparkListenerSQLExecutionEnd(executionId: Long, time: Long, tracker: String = "")
   extends SparkListenerEvent {
 
   // The name of the execution, e.g. `df.collect` will trigger a SQL execution with name "collect".

@@ -41,7 +41,7 @@ class CompileData private[spark] (
 
 case class Rule private[spark](
     ruleName: String,
-    timeMs: Long,
+    timeMs: Double,
     numInvocations: Long,
     numEffectiveInvocations: Long)
 
