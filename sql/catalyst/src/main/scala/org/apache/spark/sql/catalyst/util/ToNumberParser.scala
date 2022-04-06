@@ -162,6 +162,9 @@ class ToNumberParser(originNumberFormat: String, errorOnFail: Boolean) extends S
           currentGroup.append(token)
         case other =>
           if (currentGroup.nonEmpty) {
+            // We reverse the expected digit tokens in this new DigitGroups here, and we do the same
+            // for actual groups of 0-9 characters in each input string. In this way, we can safely
+            // ignore any leading optional groups of digits in the format string.
             groupedTokens.append(DigitGroups(currentGroup.reverse, currentDigits.reverse))
             currentGroup = mutable.Buffer.empty[InputToken]
             currentDigits = mutable.Buffer.empty[Digits]
@@ -378,7 +381,7 @@ class ToNumberParser(originNumberFormat: String, errorOnFail: Boolean) extends S
     while (formatIndex < formatTokens.size) {
       val token: InputToken = formatTokens(formatIndex)
       token match {
-        case DigitGroups(_, expectedTokens) =>
+        case DigitGroups(_, expectedDigits) =>
           // Consume characters from the current input index forwards in the input string as long as
           // they are digits (0-9) or the thousands separator (,).
           var numDigits = 0
@@ -414,11 +417,18 @@ class ToNumberParser(originNumberFormat: String, errorOnFail: Boolean) extends S
           }
           // Compare the number of digits encountered in each group (separated by thousands
           // separators) with the expected numbers from the format string.
-          if (actualDigitLengths.length > expectedTokens.length) {
+          if (actualDigitLengths.length > expectedDigits.length) {
             // The input contains more thousands separators than the format string.
             return formatMatchFailure(input, originNumberFormat)
           }
-          for ((actualNumDigits, expectedToken) <- actualDigitLengths.zip(expectedTokens)) {
+          for (i <- 0 until expectedDigits.length) {
+            val expectedToken: Digits = expectedDigits(i)
+            val actualNumDigits: Int =
+              if (i < actualDigitLengths.length) {
+                actualDigitLengths(i)
+              } else {
+                0
+              }
             expectedToken match {
               case ExactlyAsManyDigits(expectedNumDigits)
                 if actualNumDigits != expectedNumDigits =>

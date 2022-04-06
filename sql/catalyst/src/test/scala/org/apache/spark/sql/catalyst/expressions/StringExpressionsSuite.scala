@@ -1026,7 +1026,9 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       ("454>", "999PR"),
       ("<<454>>", "999PR"),
       // At least three digits were required.
-      ("45", "S$999,099.99")
+      ("45", "S$999,099.99"),
+      // Groups of digits with leading zeros are not optional.
+      ("$345", "S$099,099.99")
     ).foreach { case (str: String, format: String) =>
       val toNumberExpr = ToNumber(Literal(str), Literal(format))
       assert(toNumberExpr.checkInputDataTypes() == TypeCheckResult.TypeCheckSuccess)
