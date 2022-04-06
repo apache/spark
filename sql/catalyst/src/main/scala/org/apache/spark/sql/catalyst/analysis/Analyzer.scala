@@ -3410,7 +3410,7 @@ class Analyzer(override val catalogManager: CatalogManager)
         cols: Seq[NamedExpression],
         query: LogicalPlan): LogicalPlan = {
       // No need to check column size when USE_NULLS_FOR_MISSING_DEFAULT_COLUMN_VALUES is enabled,
-      // since all missing default value(s) will be added to query automatically.
+      // since all omitted column(s) will be added back to query automatically during parse.
       if (!conf.useNullsForMissingDefaultColumnValues && cols.size != query.output.size) {
         throw QueryCompilationErrors.writeTableWithMismatchedColumnsError(
           cols.size, query.output.size, query)
