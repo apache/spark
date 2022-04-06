@@ -22,7 +22,6 @@ import scala.collection.mutable.ListBuffer
 
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
-import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, CTERelationDef, CTERelationRef, Filter, Join, LogicalPlan, Project, Subquery, WithCTE}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.{SCALAR_SUBQUERY, SCALAR_SUBQUERY_REFERENCE, TreePattern}
@@ -215,37 +214,31 @@ object MergeScalarSubqueries extends Rule[LogicalPlan] with PredicateHelper {
             }
           }
 
-        // Merging general nodes is complicated. This implementation:
-        // - Supports only a whitelist of nodes (see `supportedMerge()`).
-        // - All children need to be direct fields of the tree node case class. Tree nodes where a
-        //   child is wrapped into a `Seq` or `Option` (e.g. `Union`) is not supported.
-        // - Expressions can be wrapped.
-        // - Children are tried to be merged in the same order.
-        case (np, cp) if supportedMerge(np) && np.getClass == cp.getClass &&
-            np.children.size == cp.children.size &&
-            np.expressions.size == cp.expressions.size &&
-            // Fields that don't contain any children or expressions should match
-            np.productIterator.filterNot(np.children.contains)
-              .filter(QueryPlan.extractExpressions(_).isEmpty).toSeq ==
-              cp.productIterator.filterNot(cp.children.contains)
-                .filter(QueryPlan.extractExpressions(_).isEmpty).toSeq =>
-          val merged = np.children.zip(cp.children).map {
-            case (npChild, cpChild) => tryMergePlans(npChild, cpChild)
-          }
-          if (merged.forall(_.isDefined)) {
-            val (mergedChildren, outputMaps) = merged.map(_.get).unzip
-            val outputMap = AttributeMap(outputMaps.map(_.iterator).reduce(_ ++ _).toSeq)
-            // We know that fields that don't contain any children or expressions do match and
-            // children can be merged so we need to test expressions only
-            if (np.expressions.map(mapAttributes(_, outputMap).canonicalized) ==
-              cp.expressions.map(_.canonicalized)) {
-              val mergedPlan = cp.withNewChildren(mergedChildren)
+        case (np: Filter, cp: Filter) =>
+          tryMergePlans(np.child, cp.child).flatMap { case (mergedChild, outputMap) =>
+            val mappedNewCondition = mapAttributes(np.condition, outputMap)
+            if (mappedNewCondition == cp.condition) {
+              val mergedPlan = cp.withNewChildren(Seq(mergedChild))
               Some(mergedPlan -> outputMap)
             } else {
               None
             }
-          } else {
-            None
+          }
+
+        case (np: Join, cp: Join) if np.joinType == cp.joinType && np.hint == cp.hint =>
+          tryMergePlans(np.left, cp.left).flatMap { case (mergedLeft, leftOutputMap) =>
+            tryMergePlans(np.right, cp.right).flatMap { case (mergedRight, rightOutputMap) =>
+              val outputMap = leftOutputMap ++ rightOutputMap
+              val mappedNewCondition = np.condition.map(mapAttributes(_, outputMap))
+              // Comparing the canonicalized form is required to ignore
+              // `AttributeReference.quailifier`s in `cp.condition`.
+              if (mappedNewCondition.map(_.canonicalized) == cp.condition.map(_.canonicalized)) {
+                val mergedPlan = cp.withNewChildren(Seq(mergedLeft, mergedRight))
+                Some(mergedPlan -> outputMap)
+              } else {
+                None
+              }
+            }
           }
 
         // Otherwise merging is not possible.
@@ -316,15 +309,6 @@ object MergeScalarSubqueries extends Rule[LogicalPlan] with PredicateHelper {
         newPlanSupportsObjectHashAggregate && cachedPlanSupportsObjectHashAggregate ||
           !newPlanSupportsObjectHashAggregate && !cachedPlanSupportsObjectHashAggregate
       }
-  }
-
-  // Whitelist of mergeable general nodes.
-  private def supportedMerge(plan: LogicalPlan) = {
-    plan match {
-      case _: Filter => true
-      case _: Join => true
-      case _ => false
-    }
   }
 
   // Second traversal replaces `ScalarSubqueryReference`s to either
