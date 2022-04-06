@@ -1014,3 +1014,65 @@ case class PercentRank(children: Seq[Expression]) extends RankLike with SizeBase
   override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): PercentRank =
     copy(children = newChildren)
 }
+
+/**
+ * The EWM.
+ */
+// scalastyle:off line.size.limit line.contains.tab
+@ExpressionDescription(
+  usage = """
+    _FUNC_() - Computes the EWM.
+  """,
+  arguments = """
+    Arguments:
+      * input - values to be calculated.
+  """,
+  examples = """
+    Examples:
+      > SELECT a, b, _FUNC_(b) OVER (PARTITION BY a ORDER BY b) FROM VALUES ('A1', 2), ('A1', 1), ('A2', 3), ('A1', 1) tab(a, b);
+       A1	1	0.0
+       A1	1	0.0
+       A1	2	1.0
+       A2	3	0.0
+  """,
+  since = "3.4.0",
+  group = "window_funcs")
+// scalastyle:on line.size.limit line.contains.tab
+private[sql] case class EWM(input: Expression, alpha: Double)
+  extends AggregateWindowFunction with UnaryLike[Expression] {
+
+  override def dataType: DataType = DoubleType
+
+  private val zero = Literal(0.0)
+  private val one = Literal(1.0)
+  private val beta = Literal(1.0 - alpha)
+  private val numerator = AttributeReference("numerator", DoubleType, nullable = false)()
+  private val denominator = AttributeReference("denominator", DoubleType, nullable = false)()
+
+  override def aggBufferAttributes: Seq[AttributeReference] =
+    numerator :: denominator :: Nil
+
+  override val initialValues: Seq[Expression] = Seq(zero, zero)
+
+  override val updateExpressions: Seq[Expression] = {
+    val casted = input.cast(DoubleType)
+    val validated = If(IsNull(casted) || IsNaN(casted),
+      RaiseError(Literal("Input values Must not be Null or NaN")),
+      casted
+    )
+    Seq(
+      /* numerator = */ numerator * beta + validated,
+      /* denominator = */ denominator * beta + one
+    )
+  }
+
+  override val evaluateExpression: Expression = numerator / denominator
+
+  override def prettyName: String = "ewm"
+
+  override def sql: String = s"$prettyName(${input.sql})"
+
+  override def child: Expression = input
+
+  override protected def withNewChildInternal(newChild: Expression): EWM = copy(input = newChild)
+}

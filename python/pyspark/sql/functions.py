@@ -1065,6 +1065,14 @@ def percent_rank() -> Column:
     return _invoke_function("percent_rank")
 
 
+@since(3.4)
+def ewm(col: "ColumnOrName", alpha: float) -> Column:
+    """
+    Window function: returns the ewm.
+    """
+    return _invoke_function("ewm", _to_java_column(col), alpha)
+
+
 @since(1.3)
 def approxCountDistinct(col: "ColumnOrName", rsd: Optional[float] = None) -> Column:
     """

@@ -2619,6 +2619,20 @@ class Frame(object, metaclass=ABCMeta):
 
         return Expanding(self, min_periods=min_periods)
 
+    def ewm(
+        self: FrameLike,
+        min_periods: int = 0,
+        com: Optional[float] = None,
+        span: Optional[float] = None,
+        halflife: Optional[float] = None,
+        alpha: Optional[float] = None,
+    ) -> "ExponentialMoving[FrameLike]":
+        from pyspark.pandas.window import ExponentialMoving
+
+        return ExponentialMoving(
+            self, min_periods=min_periods, com=com, span=span, halflife=halflife, alpha=alpha
+        )
+
     def get(self, key: Any, default: Optional[Any] = None) -> Any:
         """
         Get item from object for given key (DataFrame column, Panel slice,

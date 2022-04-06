@@ -25,9 +25,11 @@ from pyspark.pandas.missing.window import (
     MissingPandasLikeRollingGroupby,
     MissingPandasLikeExpanding,
     MissingPandasLikeExpandingGroupby,
+    MissingPandasLikeExponentialMoving,
 )
 
 # For running doctests and reference resolution in PyCharm.
+import numpy as np
 from pyspark import pandas as ps  # noqa: F401
 from pyspark.pandas._typing import FrameLike
 from pyspark.pandas.groupby import GroupBy, DataFrameGroupBy
@@ -1747,6 +1749,120 @@ class ExpandingGroupby(ExpandingLike[FrameLike]):
         numpy.var : Equivalent method for Numpy array.
         """
         return super().var()
+
+
+class ExponentialMovingLike(Generic[FrameLike], metaclass=ABCMeta):
+    def __init__(
+        self,
+        window: WindowSpec,
+        min_periods: int,
+        com: Optional[float] = None,
+        span: Optional[float] = None,
+        halflife: Optional[float] = None,
+        alpha: Optional[float] = None,
+    ):
+        self._window = window
+        # This unbounded Window is later used to handle 'min_periods' for now.
+        self._unbounded_window = Window.orderBy(NATURAL_ORDER_COLUMN_NAME).rowsBetween(
+            Window.unboundedPreceding, Window.currentRow
+        )
+        self._min_periods = min_periods
+
+        opt_count = 0
+
+        if com is not None:
+            if com < 0:
+                raise ValueError("com must be >= 0")
+            self._alpha = 1.0 / (1 + com)
+            opt_count += 1
+
+        if span is not None:
+            if span < 1:
+                raise ValueError("span must be >= 1")
+            self._alpha = 2.0 / (1 + span)
+            opt_count += 1
+
+        if halflife is not None:
+            if halflife <= 0:
+                raise ValueError("halflife must be > 0")
+            self._alpha = 1.0 - np.exp(-np.log(2) / halflife)
+            opt_count += 1
+
+        if alpha is not None:
+            if alpha <= 0 or alpha > 1:
+                raise ValueError("alpha must be in (0, 1]")
+            self._alpha = alpha
+            opt_count += 1
+
+        if opt_count != 1:
+            raise ValueError("comass, span, halflife, and alpha are mutually exclusive")
+
+    @abstractmethod
+    def _apply_as_series_or_frame(self, func: Callable[[Column], Column]) -> FrameLike:
+        """
+        Wraps a function that handles Spark column in order
+        to support it in both pandas-on-Spark Series and DataFrame.
+        Note that the given `func` name should be same as the API's method name.
+        """
+        pass
+
+    def mean(self) -> FrameLike:
+        def mean(scol: Column) -> Column:
+            return F.when(
+                F.row_number().over(self._unbounded_window) >= self._min_periods,
+                F.ewm(scol, self._alpha).over(self._window),
+            ).otherwise(SF.lit(None))
+
+        return self._apply_as_series_or_frame(mean)
+
+
+class ExponentialMoving(ExponentialMovingLike[FrameLike]):
+    def __init__(
+        self,
+        psdf_or_psser: FrameLike,
+        min_periods: int = 0,
+        com: Optional[float] = None,
+        span: Optional[float] = None,
+        halflife: Optional[float] = None,
+        alpha: Optional[float] = None,
+    ):
+        from pyspark.pandas.frame import DataFrame
+        from pyspark.pandas.series import Series
+
+        window_spec = Window.orderBy(NATURAL_ORDER_COLUMN_NAME).rowsBetween(
+            Window.unboundedPreceding, Window.currentRow
+        )
+
+        super().__init__(window_spec, min_periods, com, span, halflife, alpha)
+
+        if not isinstance(psdf_or_psser, (DataFrame, Series)):
+            raise TypeError(
+                "psdf_or_psser must be a series or dataframe; however, got: %s"
+                % type(psdf_or_psser)
+            )
+        self._psdf_or_psser = psdf_or_psser
+
+    def __getattr__(self, item: str) -> Any:
+        if hasattr(MissingPandasLikeExponentialMoving, item):
+            property_or_func = getattr(MissingPandasLikeExponentialMoving, item)
+            if isinstance(property_or_func, property):
+                return property_or_func.fget(self)
+            else:
+                return partial(property_or_func, self)
+        raise AttributeError(item)
+
+    def _apply_as_series_or_frame(self, func: Callable[[Column], Column]) -> FrameLike:
+        return self._psdf_or_psser._apply_series_op(
+            lambda psser: psser._with_new_scol(func(psser.spark.column)),  # TODO: dtype?
+            should_resolve=True,
+        )
+
+    def mean(self) -> FrameLike:
+        return super().mean()
+
+    # TODO: when add 'adjust' and 'ignore_na' parameter, should add to here too.
+    def __repr__(self) -> str:
+        return "ExponentialMoving [min_periods={}, alpha={}]".format(self._min_periods, self._alpha)
 
 
 def _test() -> None:
