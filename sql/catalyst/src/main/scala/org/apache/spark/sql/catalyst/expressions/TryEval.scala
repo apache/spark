@@ -197,7 +197,6 @@ case class TryMultiply(left: Expression, right: Expression, replacement: Express
   """,
   since = "3.3.0",
   group = "string_funcs")
-// scalastyle:on line.size.limit
 case class TryToBinary(
     expr: Expression,
     format: Option[Expression],
