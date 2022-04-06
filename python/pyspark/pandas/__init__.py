@@ -24,7 +24,6 @@ import os
 import sys
 import warnings
 from distutils.version import LooseVersion
-from functools import partial
 from typing import Any
 
 from pyspark.pandas.missing.general_functions import _MissingPandasLikeGeneralFunctions
@@ -160,7 +159,6 @@ def __getattr__(key: str) -> Any:
     if key.startswith("__"):
         raise AttributeError(key)
     if hasattr(_MissingPandasLikeGeneralFunctions, key):
-        func = getattr(_MissingPandasLikeGeneralFunctions, key)
-        return partial(func)
+        return getattr(_MissingPandasLikeGeneralFunctions, key)
     else:
         raise AttributeError("module 'pyspark.pandas' has no attribute '%s'" % (key))
