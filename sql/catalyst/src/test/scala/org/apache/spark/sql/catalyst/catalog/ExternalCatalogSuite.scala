@@ -1042,7 +1042,7 @@ abstract class CatalogTestUtils {
               ResolveDefaultColumns.CURRENT_DEFAULT_COLUMN_METADATA_KEY, "42").build())
           .add("b", StringType, nullable = false,
             new MetadataBuilder().putString(
-              ResolveDefaultColumns.CURRENT_DEFAULT_COLUMN_METADATA_KEY, "\"abc\"").build())
+              ResolveDefaultColumns.CURRENT_DEFAULT_COLUMN_METADATA_KEY, "'abc'").build())
           // The default value fails to parse.
           .add("c", LongType, nullable = false,
             new MetadataBuilder().putString(
