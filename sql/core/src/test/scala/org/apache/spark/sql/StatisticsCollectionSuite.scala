@@ -406,10 +406,10 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
     withSQLConf(SQLConf.CBO_ENABLED.key -> "true") {
       withTable("TBL1", "TBL") {
         import org.apache.spark.sql.functions._
-        val df = spark.range(1000L).select('id,
-          Symbol("id") * 2 as "FLD1",
-          Symbol("id") * 12 as "FLD2",
-          lit(null).cast(DoubleType) + Symbol("id") as "fld3")
+        val df = spark.range(1000L).select($"id",
+          $"id" * 2 as "FLD1",
+          $"id" * 12 as "FLD2",
+          lit(null).cast(DoubleType) + $"id" as "fld3")
         df.write
           .mode(SaveMode.Overwrite)
           .bucketBy(10, "id", "FLD1", "FLD2")

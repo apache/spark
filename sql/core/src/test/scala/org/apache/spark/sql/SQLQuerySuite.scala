@@ -2556,17 +2556,17 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
       val originalValue = newSession.sessionState.conf.runSQLonFile
 
       try {
-        newSession.sessionState.conf.setConf(SQLConf.RUN_SQL_ON_FILES, false)
+        newSession.conf.set(SQLConf.RUN_SQL_ON_FILES, false)
         intercept[AnalysisException] {
           newSession.sql(s"SELECT i, j FROM parquet.`${path.getCanonicalPath}`")
         }
 
-        newSession.sessionState.conf.setConf(SQLConf.RUN_SQL_ON_FILES, true)
+        newSession.conf.set(SQLConf.RUN_SQL_ON_FILES, true)
         checkAnswer(
           newSession.sql(s"SELECT i, j FROM parquet.`${path.getCanonicalPath}`"),
           Row(1, "a"))
       } finally {
-        newSession.sessionState.conf.setConf(SQLConf.RUN_SQL_ON_FILES, originalValue)
+        newSession.conf.set(SQLConf.RUN_SQL_ON_FILES, originalValue)
       }
     }
   }
@@ -3066,17 +3066,17 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
           val df = spark.read.format(format).load(dir.getCanonicalPath)
           checkPushedFilters(
             format,
-            df.where((Symbol("id") < 2 and Symbol("s").contains("foo")) or
-              (Symbol("id") > 10 and Symbol("s").contains("bar"))),
+            df.where(($"id" < 2 and $"s".contains("foo")) or
+              ($"id" > 10 and $"s".contains("bar"))),
             Array(sources.Or(sources.LessThan("id", 2), sources.GreaterThan("id", 10))))
           checkPushedFilters(
             format,
-            df.where(Symbol("s").contains("foo") or
-              (Symbol("id") > 10 and Symbol("s").contains("bar"))),
+            df.where($"s".contains("foo") or
+              ($"id" > 10 and $"s".contains("bar"))),
             Array.empty)
           checkPushedFilters(
             format,
-            df.where(Symbol("id") < 2 and not(Symbol("id") > 10 and Symbol("s").contains("bar"))),
+            df.where($"id" < 2 and not($"id" > 10 and $"s".contains("bar"))),
             Array(sources.IsNotNull("id"), sources.LessThan("id", 2)))
         }
       }

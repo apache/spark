@@ -358,6 +358,8 @@ private[parquet] class ParquetRowConverter(
       case StringType =>
         new ParquetStringConverter(updater)
 
+      // As long as the parquet type is INT64 timestamp, whether logical annotation
+      // `isAdjustedToUTC` is false or true, it will be read as Spark's TimestampLTZ type
       case TimestampType
         if parquetType.getLogicalTypeAnnotation.isInstanceOf[TimestampLogicalTypeAnnotation] &&
            parquetType.getLogicalTypeAnnotation
@@ -368,6 +370,8 @@ private[parquet] class ParquetRowConverter(
           }
         }
 
+      // As long as the parquet type is INT64 timestamp, whether logical annotation
+      // `isAdjustedToUTC` is false or true, it will be read as Spark's TimestampLTZ type
       case TimestampType
         if parquetType.getLogicalTypeAnnotation.isInstanceOf[TimestampLogicalTypeAnnotation] &&
           parquetType.getLogicalTypeAnnotation

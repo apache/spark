@@ -170,7 +170,7 @@ object FunctionRegistryBase {
     if (df != null) {
       if (df.extended().isEmpty) {
         new ExpressionInfo(
-          clazz.getCanonicalName,
+          clazz.getCanonicalName.stripSuffix("$"),
           null,
           name,
           df.usage(),
@@ -184,10 +184,11 @@ object FunctionRegistryBase {
       } else {
         // This exists for the backward compatibility with old `ExpressionDescription`s defining
         // the extended description in `extended()`.
-        new ExpressionInfo(clazz.getCanonicalName, null, name, df.usage(), df.extended())
+        new ExpressionInfo(
+          clazz.getCanonicalName.stripSuffix("$"), null, name, df.usage(), df.extended())
       }
     } else {
-      new ExpressionInfo(clazz.getCanonicalName, name)
+      new ExpressionInfo(clazz.getCanonicalName.stripSuffix("$"), name)
     }
   }
 }
@@ -452,6 +453,7 @@ object FunctionRegistry {
     expression[TrySubtract]("try_subtract"),
     expression[TryMultiply]("try_multiply"),
     expression[TryElementAt]("try_element_at"),
+    expression[TrySum]("try_sum"),
     expression[TryToBinary]("try_to_binary"),
 
     // aggregate functions
@@ -497,6 +499,7 @@ object FunctionRegistry {
     expression[RegrCount]("regr_count"),
     expression[RegrAvgX]("regr_avgx"),
     expression[RegrAvgY]("regr_avgy"),
+    expression[RegrR2]("regr_r2"),
 
     // string functions
     expression[Ascii]("ascii"),
@@ -549,6 +552,7 @@ object FunctionRegistry {
     expression[SoundEx]("soundex"),
     expression[StringSpace]("space"),
     expression[StringSplit]("split"),
+    expression[SplitPart]("split_part"),
     expression[Substring]("substr", true),
     expression[Substring]("substring"),
     expression[Left]("left"),

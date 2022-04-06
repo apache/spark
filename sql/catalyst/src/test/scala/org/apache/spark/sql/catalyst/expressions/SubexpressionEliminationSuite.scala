@@ -16,8 +16,9 @@
  */
 package org.apache.spark.sql.catalyst.expressions
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkFunSuite, TaskContext, TaskContextImpl}
 import org.apache.spark.sql.catalyst.expressions.codegen._
+import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{BinaryType, DataType, Decimal, IntegerType}
 
@@ -416,6 +417,21 @@ class SubexpressionEliminationSuite extends SparkFunSuite with ExpressionEvalHel
     ctx.evaluateSubExprEliminationState(subExprs.states.values)
     subExprs.states.values.foreach { state =>
       assert(state.eval.code == EmptyBlock)
+    }
+  }
+
+  test("SPARK-38333: PlanExpression expression should skip addExprTree function in Executor") {
+    try {
+      // suppose we are in executor
+      val context1 = new TaskContextImpl(0, 0, 0, 0, 0, 1, null, null, null, cpus = 0)
+      TaskContext.setTaskContext(context1)
+
+      val equivalence = new EquivalentExpressions
+      val expression = DynamicPruningExpression(Exists(LocalRelation()))
+      equivalence.addExprTree(expression)
+      assert(equivalence.getExprState(expression).isEmpty)
+    } finally {
+      TaskContext.unset()
     }
   }
 
