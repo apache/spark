@@ -1054,19 +1054,37 @@ class GroupByTest(PandasOnSparkTestCase, TestUtils):
                     self.assertTrue(sorted(act) == sorted(exp))
 
     def test_value_counts(self):
-        pdf = pd.DataFrame({"A": [1, 2, 2, 3, 3, 3], "B": [1, 1, 2, 3, 3, 3]}, columns=["A", "B"])
+        pdf = pd.DataFrame(
+            {"A": [1, 2, 2, 3, 3, 3], "B": [1, 1, 2, 3, 3, np.nan]}, columns=["A", "B"]
+        )
         psdf = ps.from_pandas(pdf)
         self.assert_eq(
             psdf.groupby("A")["B"].value_counts().sort_index(),
             pdf.groupby("A")["B"].value_counts().sort_index(),
         )
         self.assert_eq(
+            psdf.groupby("A")["B"].value_counts(dropna=False).sort_index(),
+            pdf.groupby("A")["B"].value_counts(dropna=False).sort_index(),
+        )
+        self.assert_eq(
             psdf.groupby("A")["B"].value_counts(sort=True, ascending=False).sort_index(),
             pdf.groupby("A")["B"].value_counts(sort=True, ascending=False).sort_index(),
         )
         self.assert_eq(
-            psdf.groupby("A")["B"].value_counts(sort=True, ascending=True).sort_index(),
-            pdf.groupby("A")["B"].value_counts(sort=True, ascending=True).sort_index(),
+            psdf.groupby("A")["B"]
+            .value_counts(sort=True, ascending=False, dropna=False)
+            .sort_index(),
+            pdf.groupby("A")["B"]
+            .value_counts(sort=True, ascending=False, dropna=False)
+            .sort_index(),
+        )
+        self.assert_eq(
+            psdf.groupby("A")["B"]
+            .value_counts(sort=True, ascending=True, dropna=False)
+            .sort_index(),
+            pdf.groupby("A")["B"]
+            .value_counts(sort=True, ascending=True, dropna=False)
+            .sort_index(),
         )
         self.assert_eq(
             psdf.B.rename().groupby(psdf.A).value_counts().sort_index(),
