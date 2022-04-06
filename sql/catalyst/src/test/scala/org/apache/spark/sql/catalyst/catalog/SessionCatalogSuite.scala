@@ -150,7 +150,7 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
       val defaultValueColumnE: String = columnE.metadata.getString(currentDefault)
 
       assert(defaultValueColumnA == "42")
-      assert(defaultValueColumnB == "\"abc\"")
+      assert(defaultValueColumnB == "'abc'")
       assert(defaultValueColumnC == "_@#$%")
       assert(defaultValueColumnD == "(select min(x) from badtable)")
       assert(defaultValueColumnE == "41 + 1")
