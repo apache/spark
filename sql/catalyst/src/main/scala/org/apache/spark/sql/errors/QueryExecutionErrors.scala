@@ -1005,8 +1005,8 @@ object QueryExecutionErrors extends QueryErrorsBase {
   }
 
   def cannotCastToDateTimeError(value: Any, to: DataType): Throwable = {
-    new DateTimeException(s"Cannot cast $value to $to. To return NULL instead, use 'try_cast'. " +
-      s"If necessary set ${SQLConf.ANSI_ENABLED.key} to false to bypass this error.")
+    new DateTimeException(s"Cannot cast ${toSQLValue(value)} to $to. To return NULL instead, use " +
+      s"'try_cast'. If necessary set ${SQLConf.ANSI_ENABLED.key} to false to bypass this error.")
   }
 
   def registeringStreamingQueryListenerError(e: Exception): Throwable = {
@@ -1032,7 +1032,7 @@ object QueryExecutionErrors extends QueryErrorsBase {
   def cannotParseStringAsDataTypeError(pattern: String, value: String, dataType: DataType)
   : Throwable = {
     new RuntimeException(
-      s"Cannot parse field value ${value} for pattern ${pattern} " +
+      s"Cannot parse field value ${toSQLValue(value)} for pattern ${toSQLValue(pattern)} " +
         s"as target spark data type [$dataType].")
   }
 
@@ -1097,7 +1097,7 @@ object QueryExecutionErrors extends QueryErrorsBase {
   }
 
   def paramIsNotIntegerError(paramName: String, value: String): Throwable = {
-    new RuntimeException(s"$paramName should be an integer. Found $value")
+    new RuntimeException(s"$paramName should be an integer. Found ${toSQLValue(value)}")
   }
 
   def paramIsNotBooleanValueError(paramName: String): Throwable = {
@@ -1297,7 +1297,7 @@ object QueryExecutionErrors extends QueryErrorsBase {
   }
 
   def indexOutOfBoundsOfArrayDataError(idx: Int): Throwable = {
-    new SparkIndexOutOfBoundsException(errorClass = "INDEX_OUT_OF_BOUNDS", Array(idx.toString))
+    new SparkIndexOutOfBoundsException(errorClass = "INDEX_OUT_OF_BOUNDS", Array(toSQLValue(idx)))
   }
 
   def malformedRecordsDetectedInRecordParsingError(e: BadRecordException): Throwable = {
@@ -1334,7 +1334,8 @@ object QueryExecutionErrors extends QueryErrorsBase {
   }
 
   def dynamicPartitionKeyNotAmongWrittenPartitionPathsError(key: String): Throwable = {
-    new SparkException(s"Dynamic partition key $key is not among written partition paths.")
+    new SparkException(
+      s"Dynamic partition key ${toSQLValue(key)} is not among written partition paths.")
   }
 
   def cannotRemovePartitionDirError(partitionPath: Path): Throwable = {
@@ -1617,7 +1618,7 @@ object QueryExecutionErrors extends QueryErrorsBase {
   }
 
   def valueIsNullError(index: Int): Throwable = {
-    new NullPointerException(s"Value at index $index is null")
+    new NullPointerException(s"Value at index ${toSQLValue(index)} is null")
   }
 
   def onlySupportDataSourcesProvidingFileFormatError(providingClass: String): Throwable = {
