@@ -353,4 +353,48 @@ class MergeScalarSubqueriesSuite extends PlanTest {
 
     comparePlans(Optimize.execute(originalQuery.analyze), correctAnswer.analyze)
   }
+
+  test("Merging subqueries from different places") {
+    val subquery1 = ScalarSubquery(testRelation.select(('a + 1).as("a_plus1")))
+    val subquery2 = ScalarSubquery(testRelation.select(('a + 2).as("a_plus2")))
+    val subquery3 = ScalarSubquery(testRelation.select('b))
+    val subquery4 = ScalarSubquery(testRelation.select(('a + 1).as("a_plus1_2")))
+    val subquery5 = ScalarSubquery(testRelation.select(('a + 2).as("a_plus2_2")))
+    val subquery6 = ScalarSubquery(testRelation.select('b.as("b_2")))
+    val originalQuery = testRelation
+      .select(
+        subquery1,
+        subquery2,
+        subquery3)
+      .where(
+        subquery4 +
+        subquery5 +
+        subquery6 === 0)
+
+    val mergedSubquery = testRelation
+      .select(
+        ('a + 1).as("a_plus1_2"),
+        ('a + 2).as("a_plus2_2"),
+        'b.as("b_2"))
+      .select(
+        CreateNamedStruct(Seq(
+          Literal("a_plus1_2"), 'a_plus1_2,
+          Literal("a_plus2_2"), 'a_plus2_2,
+          Literal("b_2"), 'b_2
+        )).as("mergedValue"))
+    val analyzedMergedSubquery = mergedSubquery.analyze
+    val correctAnswer = WithCTE(
+      testRelation
+        .select(
+          extractorExpression(0, analyzedMergedSubquery.output, 0),
+          extractorExpression(0, analyzedMergedSubquery.output, 1),
+          extractorExpression(0, analyzedMergedSubquery.output, 2))
+        .where(
+          extractorExpression(0, analyzedMergedSubquery.output, 0) +
+          extractorExpression(0, analyzedMergedSubquery.output, 1) +
+          extractorExpression(0, analyzedMergedSubquery.output, 2) === 0),
+      Seq(CTERelationDef(analyzedMergedSubquery, 0)))
+
+    comparePlans(Optimize.execute(originalQuery.analyze), correctAnswer.analyze)
+  }
 }
