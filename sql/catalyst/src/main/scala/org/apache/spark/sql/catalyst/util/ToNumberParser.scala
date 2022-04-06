@@ -153,13 +153,13 @@ class ToNumberParser(originNumberFormat: String, errorOnFail: Boolean) extends S
     i = 0
     var groupedTokens = mutable.Seq.empty[InputToken]
     while (i < tokens.length) {
-      val suffix = tokens.drop(i)
-      val gatheredTokens = suffix.takeWhile {
+      val suffix: mutable.Seq[InputToken] = tokens.drop(i)
+      val gatheredTokens: mutable.Seq[InputToken] = suffix.takeWhile {
         case _: Digits | _: ThousandsSeparator => true
         case _ => false
       }
       if (gatheredTokens.nonEmpty) {
-        groupedTokens :+= DigitGroups(gatheredTokens.reverse)
+        groupedTokens ++= mutable.Seq[InputToken](DigitGroups(gatheredTokens.reverse))
         i += gatheredTokens.length
       } else {
         groupedTokens :+= tokens(i)
