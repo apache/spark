@@ -146,14 +146,19 @@ case class ResolveDefaultColumns(
    */
   private def getDefaultExpressions(numQueryOutputs: Int, schema: StructType): Seq[Expression] = {
     val remainingFields: Seq[StructField] = schema.fields.drop(numQueryOutputs)
-    val numDefaultExpressionsToAdd: Int = {
-      if (SQLConf.get.useNullsForMissingDefaultColumnValues) {
-        remainingFields.size
-      } else {
-        remainingFields.takeWhile(_.metadata.contains(CURRENT_DEFAULT_COLUMN_METADATA_KEY)).size
-      }
-    }
+    val numDefaultExpressionsToAdd = getStructFieldsForDefaultExpressions(remainingFields).size
     Seq.fill(numDefaultExpressionsToAdd)(UnresolvedAttribute(CURRENT_DEFAULT_COLUMN_NAME))
+  }
+
+  /**
+   * This is a helper for the getDefaultExpressions methods above.
+   */
+  private def getStructFieldsForDefaultExpressions(fields: Seq[StructField]): Seq[StructField] = {
+    if (SQLConf.get.useNullsForMissingDefaultColumnValues) {
+      fields
+    } else {
+      fields.takeWhile(_.metadata.contains(CURRENT_DEFAULT_COLUMN_METADATA_KEY))
+    }
   }
 
   /**
@@ -282,21 +287,14 @@ case class ResolveDefaultColumns(
       }.toMap
     val userSpecifiedFields: Seq[StructField] =
       userSpecifiedCols.map {
-        name: String => colNamesToFields.getOrElse(name, return Some(schema))
+        name: String => colNamesToFields.getOrElse(name, return None)
       }
     val userSpecifiedColNames: Set[String] = userSpecifiedCols.toSet
     val nonUserSpecifiedFields: Seq[StructField] =
       schema.fields.filter {
         field => !userSpecifiedColNames.contains(field.name)
       }
-    if (SQLConf.get.useNullsForMissingDefaultColumnValues) {
-      Some(StructType(userSpecifiedFields ++ nonUserSpecifiedFields))
-    } else {
-      val nonUserSpecifiedFieldsWithDefaults: Seq[StructField] =
-        nonUserSpecifiedFields.takeWhile {
-          _.metadata.contains(CURRENT_DEFAULT_COLUMN_METADATA_KEY)
-        }
-      Some(StructType(userSpecifiedFields ++ nonUserSpecifiedFieldsWithDefaults))
-    }
+    Some(StructType(userSpecifiedFields ++
+      getStructFieldsForDefaultExpressions(nonUserSpecifiedFields)))
   }
 }
