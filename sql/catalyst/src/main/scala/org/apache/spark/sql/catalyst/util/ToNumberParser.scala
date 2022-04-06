@@ -366,7 +366,7 @@ class ToNumberParser(originNumberFormat: String, errorOnFail: Boolean) extends S
    */
   def parse(input: UTF8String): Decimal = {
     // Get a reference to the underlying input byte array without copying memory.
-    def inputBuffer = input.getBaseObject.asInstanceOf[Array[Byte]]
+    def inputBuffer: Array[Byte] = input.getBaseObject.asInstanceOf[Array[Byte]]
     val inputLength = inputBuffer.length
     // Build strings representing all digits before and after the decimal point, respectively.
     beforeDecimalPoint.clear()
@@ -383,65 +383,9 @@ class ToNumberParser(originNumberFormat: String, errorOnFail: Boolean) extends S
     while (formatIndex < formatTokens.size) {
       val token: InputToken = formatTokens(formatIndex)
       token match {
-        case DigitGroups(_, expectedDigits) =>
-          // Consume characters from the current input index forwards in the input string as long as
-          // they are digits (0-9) or the thousands separator (,).
-          var numDigits = 0
-          actualDigitLengths.clear()
-          while (inputIndex < inputLength &&
-            (inputBuffer(inputIndex).toChar match {
-              case char@_ if char.isWhitespace =>
-                // Ignore whitespace and keep advancing through the input string.
-                true
-              case char@_ if char >= ZERO_DIGIT && char <= NINE_DIGIT =>
-                numDigits += 1
-                // Append each group of input digits to the appropriate before/afterDecimalPoint
-                // string for later use in constructing the result Decimal value.
-                if (reachedDecimalPoint) {
-                  afterDecimalPoint.append(char)
-                } else {
-                  beforeDecimalPoint.append(char)
-                }
-                true
-              case COMMA_SIGN =>
-                actualDigitLengths.prepend(numDigits)
-                numDigits = 0
-                true
-              case _ =>
-                actualDigitLengths.prepend(numDigits)
-                false
-            })) {
-            inputIndex += 1
-          }
-          if (inputIndex == inputLength) {
-            actualDigitLengths.prepend(numDigits)
-          }
-          // Compare the number of digits encountered in each group (separated by thousands
-          // separators) with the expected numbers from the format string.
-          if (actualDigitLengths.length > expectedDigits.length) {
-            // The input contains more thousands separators than the format string.
-            return formatMatchFailure(input, originNumberFormat)
-          }
-          for (i <- 0 until expectedDigits.length) {
-            val expectedToken: Digits = expectedDigits(i)
-            val actualNumDigits: Int =
-              if (i < actualDigitLengths.length) {
-                actualDigitLengths(i)
-              } else {
-                0
-              }
-            expectedToken match {
-              case ExactlyAsManyDigits(expectedNumDigits)
-                if actualNumDigits != expectedNumDigits =>
-                // The input contained more or fewer digits than required.
-                return formatMatchFailure(input, originNumberFormat)
-              case AtMostAsManyDigits(expectedMaxDigits)
-                if actualNumDigits > expectedMaxDigits =>
-                // The input contained more digits than allowed.
-                return formatMatchFailure(input, originNumberFormat)
-              case _ =>
-            }
-          }
+        case d@(_: DigitGroups) =>
+          inputIndex = parseDigitGroups(d, inputBuffer, inputIndex, reachedDecimalPoint).getOrElse(
+            return formatMatchFailure(input, originNumberFormat))
         case DecimalPoint() =>
           if (inputIndex < inputLength &&
             (inputBuffer(inputIndex) == POINT_SIGN ||
@@ -506,6 +450,84 @@ class ToNumberParser(originNumberFormat: String, errorOnFail: Boolean) extends S
     } else {
       getDecimal(negateResult)
     }
+  }
+
+  /**
+   * Handle parsing the input string for the given expected DigitGroups from the format string.
+   *
+   * @param digitGroups the expected DigitGroups from the format string
+   * @param inputBuffer the input string provided to the original parsing method
+   * @param startingInputIndex the input index within the input string to begin parsing here
+   * @param reachedDecimalPoint true if we have already parsed past the decimal point
+   * @return the new updated index within the input string to resume parsing, or None on error
+   */
+  private def parseDigitGroups(
+      digitGroups: DigitGroups,
+      inputBuffer: Array[Byte],
+      startingInputIndex: Int,
+      reachedDecimalPoint: Boolean): Option[Int] = {
+    val expectedDigits: Seq[Digits] = digitGroups.digits
+    val inputLength = inputBuffer.length
+    // Consume characters from the current input index forwards in the input string as long as
+    // they are digits (0-9) or the thousands separator (,).
+    var numDigits = 0
+    var inputIndex = startingInputIndex
+    actualDigitLengths.clear()
+    while (inputIndex < inputLength &&
+      (inputBuffer(inputIndex).toChar match {
+        case char@_ if char.isWhitespace =>
+          // Ignore whitespace and keep advancing through the input string.
+          true
+        case char@_ if char >= ZERO_DIGIT && char <= NINE_DIGIT =>
+          numDigits += 1
+          // Append each group of input digits to the appropriate before/afterDecimalPoint
+          // string for later use in constructing the result Decimal value.
+          if (reachedDecimalPoint) {
+            afterDecimalPoint.append(char)
+          } else {
+            beforeDecimalPoint.append(char)
+          }
+          true
+        case COMMA_SIGN =>
+          actualDigitLengths.prepend(numDigits)
+          numDigits = 0
+          true
+        case _ =>
+          actualDigitLengths.prepend(numDigits)
+          false
+      })) {
+      inputIndex += 1
+    }
+    if (inputIndex == inputLength) {
+      actualDigitLengths.prepend(numDigits)
+    }
+    // Compare the number of digits encountered in each group (separated by thousands
+    // separators) with the expected numbers from the format string.
+    if (actualDigitLengths.length > expectedDigits.length) {
+      // The input contains more thousands separators than the format string.
+      return None
+    }
+    for (i <- 0 until expectedDigits.length) {
+      val expectedToken: Digits = expectedDigits(i)
+      val actualNumDigits: Int =
+        if (i < actualDigitLengths.length) {
+          actualDigitLengths(i)
+        } else {
+          0
+        }
+      expectedToken match {
+        case ExactlyAsManyDigits(expectedNumDigits)
+          if actualNumDigits != expectedNumDigits =>
+          // The input contained more or fewer digits than required.
+          return None
+        case AtMostAsManyDigits(expectedMaxDigits)
+          if actualNumDigits > expectedMaxDigits =>
+          // The input contained more digits than allowed.
+          return None
+        case _ =>
+      }
+    }
+    Some(inputIndex)
   }
 
   /**
