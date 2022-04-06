@@ -37,19 +37,22 @@ import org.apache.spark.unsafe.types.UTF8String
        characters, case insensitive:
          '0' or '9':  Specifies an expected digit between 0 and 9. A 0 to the left of the decimal
            point indicates that 'expr' must have at least as many digits. A leading 9 indicates
-           that 'expr' may omit these digits. 'expr' must not be larger than the number of digits
+           that 'expr' may omit these digits. For any combination of digits 0 and/or 9, the behavior
+           is decided by the left-most digit. 'expr' must not be larger than the number of digits
            allowed to the left of the decimal point per the format string. Digits in the format
            string to the right of the decimal indicate the most digits 'expr' may have to the right
            of the decimal point.
          '.' or 'D': Specifies the position of the decimal point (optional, only allowed once).
          ',' or 'G': Specifies the position of the grouping (thousands) separator (,). There must be
-           a 0 or 9 to the left of the rightmost grouping separator. 'expr' must match the
+           one or more 0 or 9 to the left of the rightmost grouping separator. 'expr' must match the
            grouping separator relevant for the size of the number.
          '$': Specifies the location of the $ currency sign. This character may only be specified
            once.
          'S': Specifies the position of a '+' or '-' sign (optional, only allowed once).
-         'MI': Specifies that 'expr' has an optional '-' sign at the end, but no '+'.
-         'PR':   Specifies that 'expr' indicates a negative number with wrapping angled brackets
+         'MI': Only allowed at the end of the format string; specifies that 'expr' has an optional
+           '-' sign at the end, but no '+'.
+         'PR': Only allowed at the end of the format string; specifies that 'expr' indicates a
+           negative number with wrapping angled brackets.
            ('<1>').
   """,
   examples = """
@@ -117,24 +120,8 @@ case class ToNumber(left: Expression, right: Expression)
 @ExpressionDescription(
   usage = """
      _FUNC_(expr, fmt) - Convert string 'expr' to a number based on the string format `fmt`.
-       Returns NULL if the string 'expr' does not match the expected format. The format can consist
-       of the following characters, case insensitive:
-         '0' or '9':  Specifies an expected digit between 0 and 9. A 0 to the left of the decimal
-           point indicates that 'expr' must have at least as many digits. A leading 9 indicates
-           that 'expr' may omit these digits. 'expr' must not be larger than the number of digits
-           allowed to the left of the decimal point per the format string. Digits in the format
-           string to the right of the decimal indicate the most digits 'expr' may have to the right
-           of the decimal point.
-         '.' or 'D': Specifies the position of the decimal point (optional, only allowed once).
-         ',' or 'G': Specifies the position of the grouping (thousands) separator (,). There must be
-           a 0 or 9 to the left of the rightmost grouping separator. 'expr' must match the
-           grouping separator relevant for the size of the number.
-         '$': Specifies the location of the $ currency sign. This character may only be specified
-           once.
-         'S': Specifies the position of a '+' or '-' sign (optional, only allowed once).
-         'MI': Specifies that 'expr' has an optional '-' sign at the end, but no '+'.
-         'PR':   Specifies that 'expr' indicates a negative number with wrapping angled brackets
-           ('<1>').
+       Returns NULL if the string 'expr' does not match the expected format. The format follows the
+       same semantics as the to_number function.
   """,
   examples = """
     Examples:

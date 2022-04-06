@@ -894,9 +894,10 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("ToNumber: positive tests") {
     Seq(
-      ("$345", "S$999,099.99") -> Decimal(345),
+      ("-$12,345.67", "S$999,099.99") -> Decimal(-12345.67),
       ("454,123", "999,099") -> Decimal(454123),
       ("$345", "S$999,099.99") -> Decimal(345),
+      ("$045", "S$999,099.99") -> Decimal(45),
       ("454", "099") -> Decimal(454),
       ("454.", "099.99") -> Decimal(454.0),
       ("454.6", "099.99") -> Decimal(454.6),
@@ -908,11 +909,9 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       ("$454", "$999") -> Decimal(454),
       ("  454,123 ", "999G099") -> Decimal(454123),
       ("$454,123", "$999,099") -> Decimal(454123),
+      ("+$89,1,2,3,45.123", "S$999,0,0,0,999.00000") -> Decimal(8912345.123),
       ("-454", "S999") -> Decimal(-454),
       ("+454", "S999") -> Decimal(454),
-      ("+$89,1,2,3,45.123", "S$999,0,0,0,999.00000") -> Decimal(8912345.123),
-      ("-$12,345.67", "S$999,099.99") -> Decimal(-12345.67),
-      ("$045", "S$999,099.99") -> Decimal(45),
       ("<454>", "999PR") -> Decimal(-454),
       ("454-", "999MI") -> Decimal(-454)
     ).foreach { case ((str: String, format: String), expected: Decimal) =>
