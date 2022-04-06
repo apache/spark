@@ -236,7 +236,7 @@ class MergeScalarSubqueriesSuite extends PlanTest {
     comparePlans(Optimize.execute(originalQuery.analyze), correctAnswer.analyze)
   }
 
-  test("Merging subqueries with joins but different join types") {
+  test("Do not merge subqueries with different join types") {
     val subquery1 = ScalarSubquery(testRelation.as("t1")
       .join(
         testRelation.as("t2"),
@@ -249,6 +249,27 @@ class MergeScalarSubqueriesSuite extends PlanTest {
         testRelation.as("t2").select('a.as("a_2"), 'b.as("b_2"), 'c.as("c_2")),
         LeftOuter,
         Some('b_1 === 'b_2))
+      .select('c_2))
+    val originalQuery = testRelation.select(
+      subquery1,
+      subquery2)
+
+    comparePlans(Optimize.execute(originalQuery.analyze), originalQuery.analyze)
+  }
+
+  test("Do not merge subqueries with different join conditions") {
+    val subquery1 = ScalarSubquery(testRelation.as("t1")
+      .join(
+        testRelation.as("t2"),
+        Inner,
+        Some($"t1.b" < $"t2.b"))
+      .select($"t1.a"))
+    val subquery2 = ScalarSubquery(testRelation.as("t1")
+      .select('a.as("a_1"), 'b.as("b_1"), 'c.as("c_1"))
+      .join(
+        testRelation.as("t2").select('a.as("a_2"), 'b.as("b_2"), 'c.as("c_2")),
+        Inner,
+        Some('b_1 > 'b_2))
       .select('c_2))
     val originalQuery = testRelation.select(
       subquery1,
