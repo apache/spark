@@ -298,11 +298,9 @@ class SymmetricHashJoinStateManager(
             // If nulls were found at the end, get the projected key and log a warning
             // for the range of null indices.
             if (nonNullIndex != numValues - 1) {
-              val projectedKey = getInternalRowOfKeyWithIndex(currentKey)
               logWarning(s"`keyWithIndexToValue` returns a null value for indices " +
                 s"with range from startIndex=${nonNullIndex + 1} " +
-                s"and endIndex=${numValues - 1} " +
-                s"at currentKey=$projectedKey.")
+                s"and endIndex=${numValues - 1}.")
             }
 
             // Remove all null values from nonNullIndex + 1 onwards
