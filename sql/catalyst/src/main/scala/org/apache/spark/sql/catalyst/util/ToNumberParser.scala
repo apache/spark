@@ -395,7 +395,6 @@ class ToNumberParser(originNumberFormat: String, errorOnFail: Boolean) extends S
                 true
               case char@_ if char >= ZERO_DIGIT && char <= NINE_DIGIT =>
                 numDigits += 1
-                //  curDigitToken
                 // Append each group of input digits to the appropriate before/afterDecimalPoint
                 // string for later use in constructing the result Decimal value.
                 if (reachedDecimalPoint) {
