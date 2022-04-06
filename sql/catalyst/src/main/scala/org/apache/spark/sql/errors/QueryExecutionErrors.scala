@@ -173,10 +173,10 @@ object QueryExecutionErrors extends QueryErrorsBase {
       context: String): NoSuchElementException = {
     if (isElementAtFunction) {
       new SparkNoSuchElementException(errorClass = "MAP_KEY_DOES_NOT_EXIST_IN_ELEMENT_AT",
-        messageParameters = Array(key.toString, SQLConf.ANSI_ENABLED.key, context))
+        messageParameters = Array(toSQLValue(key), SQLConf.ANSI_ENABLED.key, context))
     } else {
       new SparkNoSuchElementException(errorClass = "MAP_KEY_DOES_NOT_EXIST",
-        messageParameters = Array(key.toString, SQLConf.ANSI_STRICT_INDEX_OPERATOR.key, context))
+        messageParameters = Array(toSQLValue(key), SQLConf.ANSI_STRICT_INDEX_OPERATOR.key, context))
     }
   }
 
