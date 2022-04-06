@@ -1539,7 +1539,8 @@ class Index(IndexOpsMixin):
 
     def sort_values(self, return_indexer: bool = False, ascending: bool = True) -> "Index":
         """
-        Return a sorted copy of the index, and optionally return the indices that sorted the index itself.
+        Return a sorted copy of the index, and optionally return the indices that
+        sorted the index itself.
 
         .. note:: This method is not supported for pandas when index has NaN value.
                   pandas raises unexpected TypeError, but we support treating NaN
