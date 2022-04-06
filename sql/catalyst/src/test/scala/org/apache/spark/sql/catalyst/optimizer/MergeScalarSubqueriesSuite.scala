@@ -256,12 +256,11 @@ class MergeScalarSubqueriesSuite extends PlanTest {
         Some($"t1.b" === $"t2.b"))
       .select($"t1.a"))
     val subquery2 = ScalarSubquery(testRelation.as("t1")
-      .select('a.as("a_1"), 'b.as("b_1"), 'c.as("c_1"))
       .join(
-        testRelation.as("t2").select('a.as("a_2"), 'b.as("b_2"), 'c.as("c_2")),
+        testRelation.as("t2"),
         LeftOuter,
-        Some('b_1 === 'b_2))
-      .select('c_2))
+        Some($"t1.b" === $"t2.b"))
+      .select($"t1.a"))
     val originalQuery = testRelation.select(
       subquery1,
       subquery2)
@@ -277,12 +276,11 @@ class MergeScalarSubqueriesSuite extends PlanTest {
         Some($"t1.b" < $"t2.b"))
       .select($"t1.a"))
     val subquery2 = ScalarSubquery(testRelation.as("t1")
-      .select('a.as("a_1"), 'b.as("b_1"), 'c.as("c_1"))
       .join(
-        testRelation.as("t2").select('a.as("a_2"), 'b.as("b_2"), 'c.as("c_2")),
+        testRelation.as("t2"),
         Inner,
-        Some('b_1 > 'b_2))
-      .select('c_2))
+        Some($"t1.b" > $"t2.b"))
+      .select($"t1.a"))
     val originalQuery = testRelation.select(
       subquery1,
       subquery2)
