@@ -190,8 +190,7 @@ class SymmetricHashJoinStateManagerSuite extends StreamTest with BeforeAndAfter 
         removeByValue(50)
       }
       assert(ex.isInstanceOf[NullPointerException])
-      assert(getNumValues(40) === 7)        // we should still get 7 with no
-                                                  // null skipping
+      assert(getNumValues(40) === 7)        // we should get 7 with no nulls skipped
 
       removeByValue(300)
       assert(getNumValues(40) === 1)         // only 400 should remain
@@ -213,8 +212,7 @@ class SymmetricHashJoinStateManagerSuite extends StreamTest with BeforeAndAfter 
       updateNumValues(40, 7) // create nulls in between and end
 
       removeByValue(50)
-      assert(getNumValues(40) === 3)       // we should now get 400, 200, 300
-                                                 // with nulls skipped
+      assert(getNumValues(40) === 3)       // we should now get (400, 200, 300) with nulls skipped
 
       removeByValue(300)
       assert(getNumValues(40) === 1)         // only 400 should remain
