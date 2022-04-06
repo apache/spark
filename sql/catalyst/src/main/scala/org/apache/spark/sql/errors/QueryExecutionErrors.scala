@@ -91,7 +91,7 @@ object QueryExecutionErrors extends QueryErrorsBase {
 
   def castingCauseOverflowError(t: Any, dataType: DataType): ArithmeticException = {
     new SparkArithmeticException(errorClass = "CAST_CAUSES_OVERFLOW",
-      messageParameters = Array(toSQLValue(t), dataType.catalogString, SQLConf.ANSI_ENABLED.key))
+      messageParameters = Array(t.toString, dataType.catalogString, SQLConf.ANSI_ENABLED.key))
   }
 
   def cannotChangeDecimalPrecisionError(
@@ -108,7 +108,7 @@ object QueryExecutionErrors extends QueryErrorsBase {
 
   def invalidInputSyntaxForNumericError(s: UTF8String): NumberFormatException = {
     new SparkNumberFormatException(errorClass = "INVALID_INPUT_SYNTAX_FOR_NUMERIC_TYPE",
-      messageParameters = Array(toSQLValue(s), SQLConf.ANSI_ENABLED.key))
+      messageParameters = Array(s.toString, SQLConf.ANSI_ENABLED.key))
   }
 
   def cannotCastFromNullTypeError(to: DataType): Throwable = {
@@ -1005,8 +1005,8 @@ object QueryExecutionErrors extends QueryErrorsBase {
   }
 
   def cannotCastToDateTimeError(value: Any, to: DataType): Throwable = {
-    new DateTimeException(s"Cannot cast ${toSQLValue(value)} to $to. To return NULL instead, use " +
-      s"'try_cast'. If necessary set ${SQLConf.ANSI_ENABLED.key} to false to bypass this error.")
+    new DateTimeException(s"Cannot cast $value to $to. To return NULL instead, use 'try_cast'. " +
+      s"If necessary set ${SQLConf.ANSI_ENABLED.key} to false to bypass this error.")
   }
 
   def registeringStreamingQueryListenerError(e: Exception): Throwable = {
