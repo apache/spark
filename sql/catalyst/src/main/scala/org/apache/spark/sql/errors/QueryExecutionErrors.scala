@@ -155,14 +155,16 @@ object QueryExecutionErrors extends QueryErrorsBase {
       numElements: Int,
       key: String): ArrayIndexOutOfBoundsException = {
     new SparkArrayIndexOutOfBoundsException(errorClass = "INVALID_ARRAY_INDEX",
-      messageParameters = Array(index.toString, numElements.toString, key))
+      messageParameters = Array(toSQLValue(index), toSQLValue(numElements), key))
   }
 
   def invalidElementAtIndexError(
        index: Int,
        numElements: Int): ArrayIndexOutOfBoundsException = {
-    new SparkArrayIndexOutOfBoundsException(errorClass = "INVALID_ARRAY_INDEX_IN_ELEMENT_AT",
-      messageParameters = Array(index.toString, numElements.toString, SQLConf.ANSI_ENABLED.key))
+    new SparkArrayIndexOutOfBoundsException(
+      errorClass = "INVALID_ARRAY_INDEX_IN_ELEMENT_AT",
+      messageParameters =
+        Array(toSQLValue(index), toSQLValue(numElements), SQLConf.ANSI_ENABLED.key))
   }
 
   def mapKeyNotExistError(
