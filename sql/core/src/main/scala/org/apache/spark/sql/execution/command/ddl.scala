@@ -864,7 +864,8 @@ case class AlterTableSetLocationCommand(
         catalog.alterTable(table.withNewStorage(locationUri = Some(locUri)))
     }
     sparkSession.catalog.refreshTable(table.identifier.quotedString)
-    CommandUtils.updateTableStats(sparkSession, table)
+    val partSpecs = partitionSpec.map(_.mapValues(Some(_)).toMap)
+    CommandUtils.updateTableStats(sparkSession, table, partSpecs)
     Seq.empty[Row]
   }
 }

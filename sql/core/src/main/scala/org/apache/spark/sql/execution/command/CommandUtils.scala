@@ -27,7 +27,7 @@ import org.apache.hadoop.fs.{FileSystem, Path, PathFilter}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{SparkSession}
 import org.apache.spark.sql.catalyst.{InternalRow, TableIdentifier}
-import org.apache.spark.sql.catalyst.catalog.{CatalogStatistics, CatalogTable, CatalogTableType}
+import org.apache.spark.sql.catalyst.catalog.{CatalogStatistics, CatalogTable, CatalogTableType, ExternalCatalogUtils}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -56,7 +56,7 @@ object CommandUtils extends Logging {
   def updateTableStats(
       sparkSession: SparkSession,
       table: CatalogTable,
-      partitionSpec: Map[String, Option[String]] = Map.empty,
+      partitionSpecs: Iterable[Map[String, Option[String]]] = Iterable.empty,
       isDropPartition: Boolean = false): Unit = {
     val catalog = sparkSession.sessionState.catalog
     if (sparkSession.sessionState.conf.autoSizeUpdateEnabled) {
@@ -67,8 +67,18 @@ object CommandUtils extends Logging {
         val newStats = CatalogStatistics(sizeInBytes = newSize)
         catalog.alterTableStats(table.identifier, Some(newStats))
 
-        if (!isDropPartition && (partitionSpec.nonEmpty || table.partitionColumnNames.nonEmpty)) {
-          AnalyzePartitionCommand(table.identifier, partitionSpec).run(sparkSession)
+        if (!isDropPartition) {
+          if (partitionSpecs.nonEmpty) {
+            partitionSpecs.foreach { partitionSpec =>
+              val partSpec = partitionSpec.map {
+                case (key, Some(null)) => key -> Some(ExternalCatalogUtils.DEFAULT_PARTITION_NAME)
+                case other => other
+              }
+              AnalyzePartitionCommand(table.identifier, partSpec).run(sparkSession)
+            }
+          } else if (table.partitionColumnNames.nonEmpty) {
+            AnalyzePartitionCommand(table.identifier, Map()).run(sparkSession)
+          }
         }
       }
     } else if (table.stats.nonEmpty) {

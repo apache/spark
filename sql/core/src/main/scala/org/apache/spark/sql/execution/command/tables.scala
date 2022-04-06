@@ -383,7 +383,8 @@ case class LoadDataCommand(
     // Refresh the data and metadata cache to ensure the data visible to the users
     sparkSession.catalog.refreshTable(tableIdentWithDB)
 
-    CommandUtils.updateTableStats(sparkSession, targetTable)
+    val partSpecs = partition.map(_.mapValues(Some(_)).toMap)
+    CommandUtils.updateTableStats(sparkSession, targetTable, partSpecs)
     Seq.empty[Row]
   }
 }
@@ -551,7 +552,8 @@ case class TruncateTableCommand(
     // file relation in the metastore cache and cached table data in the cache manager.
     spark.catalog.refreshTable(tableIdentWithDB)
 
-    CommandUtils.updateTableStats(spark, table)
+    val partSpecs = partitionSpec.map(_.mapValues(Some(_)).toMap)
+    CommandUtils.updateTableStats(spark, table, partSpecs)
     Seq.empty[Row]
   }
 
