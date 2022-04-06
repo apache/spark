@@ -295,8 +295,7 @@ class SymmetricHashJoinStateManager(
                 valuePair.matched)
             }
 
-            // If nulls were found at the end, get the projected key and log a warning
-            // for the range of null indices.
+            // If nulls were found at the end, log a warning for the range of null indices.
             if (nonNullIndex != numValues - 1) {
               logWarning(s"`keyWithIndexToValue` returns a null value for indices " +
                 s"with range from startIndex=${nonNullIndex + 1} " +
