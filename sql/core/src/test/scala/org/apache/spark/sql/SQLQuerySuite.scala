@@ -62,9 +62,6 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
 
   setupTestData()
 
-  test("foo") {
-    sql("select try_to_binary('abc', 'utf-8')").show()
-  }
   test("SPARK-8010: promote numeric to string") {
     withTempView("src") {
       val df = Seq((1, 1)).toDF("key", "value")
