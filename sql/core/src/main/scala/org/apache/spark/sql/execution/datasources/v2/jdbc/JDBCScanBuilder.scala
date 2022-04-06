@@ -146,6 +146,8 @@ case class JDBCScanBuilder(
     false
   }
 
+  override def isPartiallyPushed(): Boolean = jdbcOptions.numPartitions.map(_ > 1).getOrElse(false)
+
   override def pruneColumns(requiredSchema: StructType): Unit = {
     // JDBC doesn't support nested column pruning.
     // TODO (SPARK-32593): JDBC support nested column and nested column pruning.

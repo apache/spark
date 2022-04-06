@@ -244,6 +244,12 @@ SELECT regr_count(y, x) FROM testRegression WHERE x IS NOT NULL;
 SELECT k, count(*), regr_count(y, x) FROM testRegression GROUP BY k;
 SELECT k, count(*) FILTER (WHERE x IS NOT NULL), regr_count(y, x) FROM testRegression GROUP BY k;
 
+-- SPARK-37613: Support ANSI Aggregate Function: regr_r2
+SELECT regr_r2(y, x) FROM testRegression;
+SELECT regr_r2(y, x) FROM testRegression WHERE x IS NOT NULL;
+SELECT k, corr(y, x), regr_r2(y, x) FROM testRegression GROUP BY k;
+SELECT k, corr(y, x) FILTER (WHERE x IS NOT NULL), regr_r2(y, x) FROM testRegression GROUP BY k;
+
 -- SPARK-27974: Support ANSI Aggregate Function: array_agg
 SELECT
   collect_list(col),

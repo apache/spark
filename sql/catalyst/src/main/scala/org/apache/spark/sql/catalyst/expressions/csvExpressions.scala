@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.csv._
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.catalyst.util._
-import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -247,7 +247,7 @@ case class StructsToCsv(
   lazy val inputSchema: StructType = child.dataType match {
     case st: StructType => st
     case other =>
-      throw QueryExecutionErrors.inputTypeUnsupportedError(other)
+      throw new IllegalArgumentException(s"Unsupported input type ${other.catalogString}")
   }
 
   @transient

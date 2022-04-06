@@ -268,19 +268,16 @@ abstract class BinaryArithmetic extends BinaryOperator with NullIntolerant {
            |${ev.value} = (${CodeGenerator.javaType(dataType)})($tmpResult);
          """.stripMargin
       })
-    case IntegerType | LongType =>
+    case IntegerType | LongType if failOnError && exactMathMethod.isDefined =>
       nullSafeCodeGen(ctx, ev, (eval1, eval2) => {
-        val operation = if (failOnError && exactMathMethod.isDefined) {
-          val mathUtils = MathUtils.getClass.getCanonicalName.stripSuffix("$")
-          s"$mathUtils.${exactMathMethod.get}($eval1, $eval2)"
-        } else {
-          s"$eval1 $symbol $eval2"
-        }
+        val errorContext = ctx.addReferenceObj("errCtx", origin.context)
+        val mathUtils = MathUtils.getClass.getCanonicalName.stripSuffix("$")
         s"""
-           |${ev.value} = $operation;
+           |${ev.value} = $mathUtils.${exactMathMethod.get}($eval1, $eval2, $errorContext);
          """.stripMargin
       })
-    case DoubleType | FloatType =>
+
+    case IntegerType | LongType | DoubleType | FloatType =>
       // When Double/Float overflows, there can be 2 cases:
       // - precision loss: according to SQL standard, the number is truncated;
       // - returns (+/-)Infinite: same behavior also other DBs have (e.g. Postgres)
@@ -333,6 +330,10 @@ case class Add(
       MathUtils.addExact(input1.asInstanceOf[Long], input2.asInstanceOf[Long])
     case _: YearMonthIntervalType =>
       MathUtils.addExact(input1.asInstanceOf[Int], input2.asInstanceOf[Int])
+    case _: IntegerType if failOnError =>
+      MathUtils.addExact(input1.asInstanceOf[Int], input2.asInstanceOf[Int], origin.context)
+    case _: LongType if failOnError =>
+      MathUtils.addExact(input1.asInstanceOf[Long], input2.asInstanceOf[Long], origin.context)
     case _ => numeric.plus(input1, input2)
   }
 
@@ -379,6 +380,10 @@ case class Subtract(
       MathUtils.subtractExact(input1.asInstanceOf[Long], input2.asInstanceOf[Long])
     case _: YearMonthIntervalType =>
       MathUtils.subtractExact(input1.asInstanceOf[Int], input2.asInstanceOf[Int])
+    case _: IntegerType if failOnError =>
+      MathUtils.subtractExact(input1.asInstanceOf[Int], input2.asInstanceOf[Int], origin.context)
+    case _: LongType if failOnError =>
+      MathUtils.subtractExact(input1.asInstanceOf[Long], input2.asInstanceOf[Long], origin.context)
     case _ => numeric.minus(input1, input2)
   }
 
@@ -411,7 +416,13 @@ case class Multiply(
 
   private lazy val numeric = TypeUtils.getNumeric(dataType, failOnError)
 
-  protected override def nullSafeEval(input1: Any, input2: Any): Any = numeric.times(input1, input2)
+  protected override def nullSafeEval(input1: Any, input2: Any): Any = dataType match {
+    case _: IntegerType if failOnError =>
+      MathUtils.multiplyExact(input1.asInstanceOf[Int], input2.asInstanceOf[Int], origin.context)
+    case _: LongType if failOnError =>
+      MathUtils.multiplyExact(input1.asInstanceOf[Long], input2.asInstanceOf[Long], origin.context)
+    case _ => numeric.times(input1, input2)
+  }
 
   override def exactMathMethod: Option[String] = Some("multiplyExact")
 

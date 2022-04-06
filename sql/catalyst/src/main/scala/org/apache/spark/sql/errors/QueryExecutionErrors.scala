@@ -175,10 +175,6 @@ object QueryExecutionErrors {
     }
   }
 
-  def inputTypeUnsupportedError(dataType: DataType): Throwable = {
-    new IllegalArgumentException(s"Unsupported input type ${dataType.catalogString}")
-  }
-
   def invalidFractionOfSecondError(): DateTimeException = {
     new SparkDateTimeException(errorClass = "INVALID_FRACTION_OF_SECOND",
       Array(SQLConf.ANSI_ENABLED.key))
@@ -441,10 +437,14 @@ object QueryExecutionErrors {
       s"to false to bypass this error.")
   }
 
-  def arithmeticOverflowError(message: String, hint: String = ""): ArithmeticException = {
+  def arithmeticOverflowError(
+      message: String,
+      hint: String = "",
+      errorContext: String = ""): ArithmeticException = {
     val alternative = if (hint.nonEmpty) s" To return NULL instead, use '$hint'." else ""
     new ArithmeticException(s"$message.$alternative If necessary set " +
-      s"${SQLConf.ANSI_ENABLED.key} to false (except for ANSI interval type) to bypass this error.")
+      s"${SQLConf.ANSI_ENABLED.key} to false (except for ANSI interval type) to bypass this " +
+      "error." + errorContext)
   }
 
   def unaryMinusCauseOverflowError(originValue: AnyVal): ArithmeticException = {
