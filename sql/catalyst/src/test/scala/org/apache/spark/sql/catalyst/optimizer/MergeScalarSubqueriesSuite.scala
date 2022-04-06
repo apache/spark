@@ -257,7 +257,7 @@ class MergeScalarSubqueriesSuite extends PlanTest {
     comparePlans(Optimize.execute(originalQuery.analyze), originalQuery.analyze)
   }
 
-  test("Merging subqueries with nondeterministic elements") {
+  test("Do not merge subqueries with nondeterministic elements") {
     val subquery1 = ScalarSubquery(testRelation.select(('a + rand(0)).as("rand_a")))
     val subquery2 = ScalarSubquery(testRelation.select(('b + rand(0)).as("rand_b")))
     val originalQuery = testRelation
