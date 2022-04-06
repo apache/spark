@@ -382,6 +382,10 @@ org.eclipse.jetty:jetty-servlets
 org.eclipse.jetty:jetty-util
 org.eclipse.jetty:jetty-webapp
 org.eclipse.jetty:jetty-xml
+org.scala-lang:scala-compiler
+org.scala-lang:scala-library
+org.scala-lang:scala-reflect
+org.scala-lang.modules:scala-parser-combinators_2.12
 org.scala-lang.modules:scala-xml_2.12
 com.github.joshelser:dropwizard-metrics-hadoop-metrics2-reporter
 com.zaxxer.HikariCP
@@ -445,10 +449,6 @@ org.antlr:stringtemplate
 org.antlr:antlr4-runtime
 antlr:antlr
 com.thoughtworks.paranamer:paranamer
-org.scala-lang:scala-compiler
-org.scala-lang:scala-library
-org.scala-lang:scala-reflect
-org.scala-lang.modules:scala-parser-combinators_2.12
 org.fusesource.leveldbjni:leveldbjni-all
 net.sourceforge.f2j:arpack_combined_all
 xmlenc:xmlenc
