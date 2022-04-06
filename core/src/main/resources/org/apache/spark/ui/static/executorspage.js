@@ -568,7 +568,7 @@ $(document).ready(function () {
               name: 'heapDumpCol',
               data: 'id',
               render: function (data, type, row) {
-                return type === 'display' && row.isActive ? ("<a href='/api/v1/applications/" + appId + "/executors/" + data + "/heaps'>Heap Dump</a>" ) : '';
+                return type === 'display' && row.isActive ? ("<a href='/api/v1/applications/" + appId + "/executors/" + data + "/heapdump'>Heap Dump</a>" ) : '';
               }
             },
             {

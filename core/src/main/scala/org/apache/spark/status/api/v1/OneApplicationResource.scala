@@ -76,7 +76,7 @@ private[v1] class AbstractApplicationResource extends BaseAppResource {
   }
 
   @GET
-  @Path("executors/{executorId}/heaps")
+  @Path("executors/{executorId}/heapdump")
   @Produces(Array(MediaType.APPLICATION_OCTET_STREAM))
   def heapDump(@PathParam("executorId") execId: String): Response = withUI { ui =>
     if (execId != SparkContext.DRIVER_IDENTIFIER && !execId.forall(Character.isDigit)) {
