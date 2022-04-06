@@ -440,12 +440,12 @@ object QueryExecutionErrors extends QueryErrorsBase {
   }
 
   def unaryMinusCauseOverflowError(originValue: AnyVal): ArithmeticException = {
-    arithmeticOverflowError(s"- $originValue caused overflow")
+    arithmeticOverflowError(s"- ${toSQLValue(originValue)} caused overflow")
   }
 
   def binaryArithmeticCauseOverflowError(
       eval1: Short, symbol: String, eval2: Short): ArithmeticException = {
-    arithmeticOverflowError(s"$eval1 $symbol $eval2 caused overflow")
+    arithmeticOverflowError(s"${toSQLValue(eval1)} $symbol ${toSQLValue(eval2)} caused overflow")
   }
 
   def failedToCompileMsg(e: Exception): String = {
