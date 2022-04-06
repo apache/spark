@@ -486,7 +486,7 @@ case class AlterTableAddPartitionCommand(
             case null => Some(ExternalCatalogUtils.DEFAULT_PARTITION_NAME)
             case other => Some(other)
           }.toMap
-          AnalyzePartitionCommand(table.identifier, partitionSpec, false).run(sparkSession)
+          AnalyzePartitionCommand(table.identifier, partitionSpec).run(sparkSession)
         }
       }
     } else {
@@ -577,7 +577,7 @@ case class AlterTableDropPartitionCommand(
       retainData = retainData)
 
     sparkSession.catalog.refreshTable(table.identifier.quotedString)
-    CommandUtils.updateTableStats(sparkSession, table, withAutoPartitionStats = false)
+    CommandUtils.updateTableStats(sparkSession, table, isDropPartition = true)
 
     Seq.empty[Row]
   }

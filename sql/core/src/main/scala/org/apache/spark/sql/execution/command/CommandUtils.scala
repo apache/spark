@@ -57,7 +57,7 @@ object CommandUtils extends Logging {
       sparkSession: SparkSession,
       table: CatalogTable,
       partitionSpec: Map[String, Option[String]] = Map.empty,
-      withAutoPartitionStats: Boolean = true): Unit = {
+      isDropPartition: Boolean = false): Unit = {
     val catalog = sparkSession.sessionState.catalog
     if (sparkSession.sessionState.conf.autoSizeUpdateEnabled) {
       val newTable = catalog.getTableMetadata(table.identifier)
@@ -67,10 +67,8 @@ object CommandUtils extends Logging {
         val newStats = CatalogStatistics(sizeInBytes = newSize)
         catalog.alterTableStats(table.identifier, Some(newStats))
 
-        if (withAutoPartitionStats) {
-          if (partitionSpec.nonEmpty || table.partitionColumnNames.nonEmpty) {
-            AnalyzePartitionCommand(table.identifier, partitionSpec, false).run(sparkSession)
-          }
+        if (!isDropPartition && (partitionSpec.nonEmpty || table.partitionColumnNames.nonEmpty)) {
+          AnalyzePartitionCommand(table.identifier, partitionSpec).run(sparkSession)
         }
       }
     } else if (table.stats.nonEmpty) {
