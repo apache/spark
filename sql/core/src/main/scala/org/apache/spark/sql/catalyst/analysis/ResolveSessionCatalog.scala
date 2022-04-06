@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.catalyst.util.{quoteIfNeeded, toPrettySQL}
+import org.apache.spark.sql.catalyst.util.{quoteIfNeeded, toPrettySQL, ResolveDefaultColumns => DefaultCols}
 import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogPlugin, CatalogV2Util, Identifier, LookupCatalog, SupportsNamespaces, V1Table}
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -592,7 +592,18 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
   private def convertToStructField(col: QualifiedColType): StructField = {
     val builder = new MetadataBuilder
     col.comment.foreach(builder.putString("comment", _))
-    StructField(col.name.head, col.dataType, nullable = true, builder.build())
+    col.default.foreach{ value: String =>
+      builder.putString(DefaultCols.CURRENT_DEFAULT_COLUMN_METADATA_KEY, value)
+    }
+    val result = StructField(col.name.head, col.dataType, nullable = true, builder.build())
+    if (col.default.isDefined) {
+      lazy val analyzer = new Analyzer(catalogManager)
+      val foldedStructType = DefaultCols.constantFoldCurrentDefaultsToExistDefaults(
+        analyzer, StructType(Seq(result)), "ALTER TABLE ADD COLUMNS")
+      foldedStructType.fields(0)
+    } else {
+      result
+    }
   }
 
   private def isV2Provider(provider: String): Boolean = {
