@@ -2082,4 +2082,31 @@ class SubquerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
       }
     }
   }
+
+  test("Merge non-correlated scalar subqueries with conflicting names") {
+    Seq(false, true).foreach { enableAQE =>
+      withSQLConf(
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> enableAQE.toString) {
+        val df = sql(
+          """
+            |SELECT
+            |  (SELECT avg(key) AS key FROM testData),
+            |  (SELECT sum(key) AS key FROM testData),
+            |  (SELECT count(distinct key) AS key FROM testData)
+          """.stripMargin)
+
+        checkAnswer(df, Row(50.5, 5050, 100) :: Nil)
+
+        val plan = df.queryExecution.executedPlan
+        val subqueryIds = collectWithSubqueries(plan) { case s: SubqueryExec => s.id }
+        val reusedSubqueryIds = collectWithSubqueries(plan) {
+          case rs: ReusedSubqueryExec => rs.child.id
+        }
+
+        assert(subqueryIds.size == 1, "Missing or unexpected SubqueryExec in the plan")
+        assert(reusedSubqueryIds.size == 2,
+          "Missing or unexpected reused ReusedSubqueryExec in the plan")
+      }
+    }
+  }
 }
