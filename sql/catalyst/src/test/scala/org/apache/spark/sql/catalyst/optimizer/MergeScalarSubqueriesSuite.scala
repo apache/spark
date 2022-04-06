@@ -165,6 +165,18 @@ class MergeScalarSubqueriesSuite extends PlanTest {
     comparePlans(Optimize.execute(originalQuery.analyze), correctAnswer.analyze)
   }
 
+  test("Do not merge subqueries with different filter conditions") {
+    val subquery1 = ScalarSubquery(testRelation.where('a > 1).select('a))
+    val subquery2 = ScalarSubquery(testRelation.where('a < 1).select('a))
+
+    val originalQuery = testRelation
+      .select(
+        subquery1,
+        subquery2)
+
+    comparePlans(Optimize.execute(originalQuery.analyze), originalQuery.analyze)
+  }
+
   test("Merging subqueries with aggregate filters") {
     val subquery1 = ScalarSubquery(
       testRelation.having('b)(max('a).as("max_a"))(max('a) > 1))
