@@ -95,7 +95,7 @@ private[spark] object UI {
   val UI_HEAP_DUMPS_ENABLED = ConfigBuilder("spark.ui.threadDumpsEnabled")
     .version("3.4.0")
     .booleanConf
-    .createWithDefault(true)
+    .createWithDefault(false)
 
   val UI_PROMETHEUS_ENABLED = ConfigBuilder("spark.ui.prometheus.enabled")
     .internal()
