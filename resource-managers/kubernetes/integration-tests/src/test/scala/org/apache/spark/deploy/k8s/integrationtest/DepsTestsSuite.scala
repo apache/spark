@@ -32,7 +32,7 @@ import org.scalatest.time.{Minutes, Span}
 
 import org.apache.spark.SparkException
 import org.apache.spark.deploy.k8s.integrationtest.DepsTestsSuite.{DEPS_TIMEOUT, FILE_CONTENTS, HOST_PATH}
-import org.apache.spark.deploy.k8s.integrationtest.KubernetesSuite.{INTERVAL, MinikubeTag, TIMEOUT}
+import org.apache.spark.deploy.k8s.integrationtest.KubernetesSuite.{INTERVAL, MinikubeTag, MinioTag, TIMEOUT}
 import org.apache.spark.deploy.k8s.integrationtest.Utils.getExamplesJarName
 import org.apache.spark.deploy.k8s.integrationtest.backend.minikube.Minikube
 import org.apache.spark.internal.config.{ARCHIVES, PYSPARK_DRIVER_PYTHON, PYSPARK_PYTHON}
@@ -156,7 +156,7 @@ private[spark] trait DepsTestsSuite { k8sSuite: KubernetesSuite =>
       .delete()
   }
 
-  test("Launcher client dependencies", k8sTestTag, MinikubeTag) {
+  test("Launcher client dependencies", k8sTestTag, MinikubeTag, MinioTag) {
     tryDepsTest({
       val fileName = Utils.createTempFile(FILE_CONTENTS, HOST_PATH)
       sparkAppConf.set("spark.files", s"$HOST_PATH/$fileName")
@@ -167,7 +167,7 @@ private[spark] trait DepsTestsSuite { k8sSuite: KubernetesSuite =>
     })
   }
 
-  test("SPARK-33615: Launcher client archives", k8sTestTag, MinikubeTag) {
+  test("SPARK-33615: Launcher client archives", k8sTestTag, MinikubeTag, MinioTag) {
     tryDepsTest {
       val fileName = Utils.createTempFile(FILE_CONTENTS, HOST_PATH)
       Utils.createTarGzFile(s"$HOST_PATH/$fileName", s"$HOST_PATH/$fileName.tar.gz")
@@ -179,8 +179,8 @@ private[spark] trait DepsTestsSuite { k8sSuite: KubernetesSuite =>
     }
   }
 
-  test(
-    "SPARK-33748: Launcher python client respecting PYSPARK_PYTHON", k8sTestTag, MinikubeTag) {
+  test("SPARK-33748: Launcher python client respecting PYSPARK_PYTHON",
+    k8sTestTag, MinikubeTag, MinioTag) {
     val fileName = Utils.createTempFile(
       """
         |#!/usr/bin/env bash
@@ -201,7 +201,8 @@ private[spark] trait DepsTestsSuite { k8sSuite: KubernetesSuite =>
 
   test(
     "SPARK-33748: Launcher python client respecting " +
-      s"${PYSPARK_PYTHON.key} and ${PYSPARK_DRIVER_PYTHON.key}", k8sTestTag, MinikubeTag) {
+      s"${PYSPARK_PYTHON.key} and ${PYSPARK_DRIVER_PYTHON.key}",
+    k8sTestTag, MinikubeTag, MinioTag) {
     val fileName = Utils.createTempFile(
       """
         |#!/usr/bin/env bash
@@ -221,7 +222,8 @@ private[spark] trait DepsTestsSuite { k8sSuite: KubernetesSuite =>
         "Custom Python used on driver: False"))
   }
 
-  test("Launcher python client dependencies using a zip file", k8sTestTag, MinikubeTag) {
+  test("Launcher python client dependencies using a zip file",
+    k8sTestTag, MinikubeTag, MinioTag) {
     val pySparkFiles = Utils.getTestFileAbsolutePath("pyfiles.py", sparkHomeDir)
     val inDepsFile = Utils.getTestFileAbsolutePath("py_container_checks.py", sparkHomeDir)
     val outDepsFile = s"${inDepsFile.substring(0, inDepsFile.lastIndexOf("."))}.zip"
