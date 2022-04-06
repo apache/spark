@@ -93,7 +93,7 @@ private[hive] object OrcFileOperator extends Logging {
       : Option[StructType] = {
     // Take the first file where we can open a valid reader if we can find one.  Otherwise just
     // return None to indicate we can't infer the schema.
-    paths.toIterator.map(getFileReader(_, conf, ignoreCorruptFiles)).collectFirst {
+    paths.iterator.map(getFileReader(_, conf, ignoreCorruptFiles)).collectFirst {
       case Some(reader) =>
         val readerInspector = reader.getObjectInspector.asInstanceOf[StructObjectInspector]
         val schema = readerInspector.getTypeName

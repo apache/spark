@@ -21,7 +21,7 @@ import os
 import sys
 from io import StringIO
 
-from pyspark import SparkConf, SparkContext
+from pyspark import SparkConf
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import udf
 from pyspark.profiler import UDFBasicProfiler
@@ -32,8 +32,13 @@ class UDFProfilerTests(unittest.TestCase):
         self._old_sys_path = list(sys.path)
         class_name = self.__class__.__name__
         conf = SparkConf().set("spark.python.profile", "true")
-        self.sc = SparkContext("local[4]", class_name, conf=conf)
-        self.spark = SparkSession.builder._sparkContext(self.sc).getOrCreate()
+        self.spark = (
+            SparkSession.builder.master("local[4]")
+            .config(conf=conf)
+            .appName(class_name)
+            .getOrCreate()
+        )
+        self.sc = self.spark.sparkContext
 
     def tearDown(self):
         self.spark.stop()

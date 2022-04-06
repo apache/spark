@@ -24,7 +24,7 @@ from pyspark.ml.param import Param, Params, TypeConverters
 from pyspark.ml.param.shared import HasMaxIter, HasRegParam
 from pyspark.ml.classification import Classifier, ClassificationModel
 from pyspark.ml.util import DefaultParamsReadable, DefaultParamsWritable
-from pyspark.ml.wrapper import _java2py  # type: ignore
+from pyspark.ml.wrapper import _java2py
 from pyspark.sql import DataFrame, SparkSession
 from pyspark.sql.types import DoubleType
 from pyspark.testing.utils import ReusedPySparkTestCase as PySparkTestCase
@@ -126,7 +126,7 @@ class MockTransformer(Transformer, HasFake):
 class MockUnaryTransformer(UnaryTransformer, DefaultParamsReadable, DefaultParamsWritable):
 
     shift = Param(
-        Params._dummy(),  # type: ignore
+        Params._dummy(),
         "shift",
         "The amount by which to shift " + "data in a DataFrame",
         typeConverter=TypeConverters.toFloat,

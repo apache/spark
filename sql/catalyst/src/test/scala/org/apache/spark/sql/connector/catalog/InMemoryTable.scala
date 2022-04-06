@@ -29,12 +29,14 @@ import org.scalatest.Assertions._
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, JoinedRow}
 import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, DateTimeUtils}
-import org.apache.spark.sql.connector.distributions.{Distribution, Distributions}
+import org.apache.spark.sql.connector.distributions.{ClusteredDistribution, Distribution, Distributions}
 import org.apache.spark.sql.connector.expressions._
 import org.apache.spark.sql.connector.metric.{CustomMetric, CustomTaskMetric}
 import org.apache.spark.sql.connector.read._
+import org.apache.spark.sql.connector.read.partitioning.{KeyGroupedPartitioning, Partitioning, UnknownPartitioning}
 import org.apache.spark.sql.connector.write._
 import org.apache.spark.sql.connector.write.streaming.{StreamingDataWriterFactory, StreamingWrite}
+import org.apache.spark.sql.internal.connector.SupportsStreamingUpdateAsAppend
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -259,7 +261,8 @@ class InMemoryTable(
       var data: Seq[InputPartition],
       readSchema: StructType,
       tableSchema: StructType)
-    extends Scan with Batch with SupportsRuntimeFiltering with SupportsReportStatistics {
+    extends Scan with Batch with SupportsRuntimeFiltering with SupportsReportStatistics
+        with SupportsReportPartitioning {
 
     override def toBatch: Batch = this
 
@@ -277,6 +280,13 @@ class InMemoryTable(
       InMemoryStats(OptionalLong.of(sizeInBytes), OptionalLong.of(numRows))
     }
 
+    override def outputPartitioning(): Partitioning = {
+      InMemoryTable.this.distribution match {
+        case cd: ClusteredDistribution => new KeyGroupedPartitioning(cd.clustering(), data.size)
+        case _ => new UnknownPartitioning(data.size)
+      }
+    }
+
     override def planInputPartitions(): Array[InputPartition] = data.toArray
 
     override def createReaderFactory(): PartitionReaderFactory = {
@@ -292,9 +302,10 @@ class InMemoryTable(
     }
 
     override def filter(filters: Array[Filter]): Unit = {
-      if (partitioning.length == 1) {
+      if (partitioning.length == 1 && partitioning.head.references().length == 1) {
+        val ref = partitioning.head.references().head
         filters.foreach {
-          case In(attrName, values) if attrName == partitioning.head.name =>
+          case In(attrName, values) if attrName == ref.toString =>
             val matchingKeys = values.map(_.toString).toSet
             data = data.filter(partition => {
               val key = partition.asInstanceOf[BufferedRows].keyString
@@ -311,7 +322,9 @@ class InMemoryTable(
     InMemoryTable.maybeSimulateFailedTableWrite(new CaseInsensitiveStringMap(properties))
     InMemoryTable.maybeSimulateFailedTableWrite(info.options)
 
-    new WriteBuilder with SupportsTruncate with SupportsOverwrite with SupportsDynamicOverwrite {
+    new WriteBuilder with SupportsTruncate with SupportsOverwrite
+      with SupportsDynamicOverwrite with SupportsStreamingUpdateAsAppend {
+
       private var writer: BatchWrite = Append
       private var streamingWriter: StreamingWrite = StreamingAppend
 

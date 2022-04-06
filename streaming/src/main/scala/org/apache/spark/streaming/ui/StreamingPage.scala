@@ -64,7 +64,7 @@ private[ui] class RecordRateUIData(val data: Seq[(Long, Double)]) {
 
   val avg: Option[Double] = if (data.isEmpty) None else Some(data.map(_._2).sum / data.size)
 
-  val formattedAvg: String = avg.map(_.formatted("%.2f")).getOrElse("-")
+  val formattedAvg: String = avg.map("%.2f".format(_)).getOrElse("-")
 
   val max: Option[Double] = if (data.isEmpty) None else Some(data.map(_._2).max)
 }
@@ -294,7 +294,7 @@ private[ui] class StreamingPage(parent: StreamingTab)
       {if (hasStream) {
         <tr id="inputs-table" style="display: none;" >
           <td colspan="3">
-            {generateInputDStreamsTable(jsCollector, minBatchTime, maxBatchTime, minRecordRate, maxRecordRate)}
+            {generateInputDStreamsTable(jsCollector, minBatchTime, maxBatchTime, minRecordRate)}
           </td>
         </tr>
       }}
@@ -340,8 +340,7 @@ private[ui] class StreamingPage(parent: StreamingTab)
       jsCollector: JsCollector,
       minX: Long,
       maxX: Long,
-      minY: Double,
-      maxY: Double): Seq[Node] = {
+      minY: Double): Seq[Node] = {
     val maxYCalculated = listener.receivedRecordRateWithBatchTime.values
       .flatMap { case streamAndRates => streamAndRates.map { case (_, recordRate) => recordRate } }
       .reduceOption[Double](math.max)

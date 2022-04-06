@@ -464,7 +464,7 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
 
   test("get iterator size") {
     val empty = Seq[Int]()
-    assert(Utils.getIteratorSize(empty.toIterator) === 0L)
+    assert(Utils.getIteratorSize(empty.iterator) === 0L)
     val iterator = Iterator.range(0, 5)
     assert(Utils.getIteratorSize(iterator) === 5L)
   }

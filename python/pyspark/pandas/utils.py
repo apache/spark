@@ -467,11 +467,22 @@ def is_testing() -> bool:
 
 def default_session() -> SparkSession:
     spark = SparkSession.getActiveSession()
-    if spark is not None:
-        return spark
+    if spark is None:
+        spark = SparkSession.builder.appName("pandas-on-Spark").getOrCreate()
 
-    builder = SparkSession.builder.appName("pandas-on-Spark")
-    return builder.getOrCreate()
+    # Turn ANSI off when testing the pandas API on Spark since
+    # the behavior of pandas API on Spark follows pandas, not SQL.
+    if is_testing():
+        spark.conf.set("spark.sql.ansi.enabled", False)  # type: ignore[arg-type]
+    if spark.conf.get("spark.sql.ansi.enabled") == "true":
+        log_advice(
+            "The config 'spark.sql.ansi.enabled' is set to True. "
+            "This can cause unexpected behavior "
+            "from pandas API on Spark since pandas API on Spark follows "
+            "the behavior of pandas, not SQL."
+        )
+
+    return spark
 
 
 @contextmanager
@@ -916,7 +927,7 @@ def spark_column_equals(left: Column, right: Column) -> bool:
     >>> spark_column_equals(sdf1["x"] + 1, sdf2["x"] + 1)
     False
     """
-    return left._jc.equals(right._jc)  # type: ignore[operator]
+    return left._jc.equals(right._jc)
 
 
 def compare_null_first(

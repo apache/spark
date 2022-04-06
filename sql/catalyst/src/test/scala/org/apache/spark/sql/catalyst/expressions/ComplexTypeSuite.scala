@@ -386,16 +386,16 @@ class ComplexTypeSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("CreateStruct") {
     val row = create_row(1, 2, 3)
-    val c1 = 'a.int.at(0)
-    val c3 = 'c.int.at(2)
+    val c1 = $"a".int.at(0)
+    val c3 = $"c".int.at(2)
     checkEvaluation(CreateStruct(Seq(c1, c3)), create_row(1, 3), row)
     checkEvaluation(CreateStruct(Literal.create(null, LongType) :: Nil), create_row(null))
   }
 
   test("CreateNamedStruct") {
     val row = create_row(1, 2, 3)
-    val c1 = 'a.int.at(0)
-    val c3 = 'c.int.at(2)
+    val c1 = $"a".int.at(0)
+    val c3 = $"c".int.at(2)
     checkEvaluation(CreateNamedStruct(Seq("a", c1, "b", c3)), create_row(1, 3), row)
     checkEvaluation(CreateNamedStruct(Seq("a", c1, "b", "y")),
       create_row(1, UTF8String.fromString("y")), row)
@@ -410,11 +410,12 @@ class ComplexTypeSuite extends SparkFunSuite with ExpressionEvalHelper {
       ExtractValue(u.child, u.extraction, _ == _)
     }
 
-    checkEvaluation(quickResolve('c.map(MapType(StringType, StringType)).at(0).getItem("a")),
+    checkEvaluation(quickResolve(Symbol("c")
+      .map(MapType(StringType, StringType)).at(0).getItem("a")),
       "b", create_row(Map("a" -> "b")))
-    checkEvaluation(quickResolve('c.array(StringType).at(0).getItem(1)),
+    checkEvaluation(quickResolve($"c".array(StringType).at(0).getItem(1)),
       "b", create_row(Seq("a", "b")))
-    checkEvaluation(quickResolve('c.struct('a.int).at(0).getField("a")),
+    checkEvaluation(quickResolve($"c".struct($"a".int).at(0).getField("a")),
       1, create_row(create_row(1)))
   }
 

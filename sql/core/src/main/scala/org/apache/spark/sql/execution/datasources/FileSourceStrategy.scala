@@ -214,12 +214,12 @@ object FileSourceStrategy extends Strategy with PredicateHelper with Logging {
       logInfo(s"Output Data Schema: ${outputSchema.simpleString(5)}")
 
       val metadataStructOpt = l.output.collectFirst {
-        case MetadataAttribute(attr) => attr
+        case FileSourceMetadataAttribute(attr) => attr
       }
 
       val metadataColumns = metadataStructOpt.map { metadataStruct =>
         metadataStruct.dataType.asInstanceOf[StructType].fields.map { field =>
-          MetadataAttribute(field.name, field.dataType)
+          FileSourceMetadataAttribute(field.name, field.dataType)
         }.toSeq
       }.getOrElse(Seq.empty)
 

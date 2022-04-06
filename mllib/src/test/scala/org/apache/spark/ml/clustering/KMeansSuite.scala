@@ -69,6 +69,11 @@ class KMeansSuite extends MLTest with DefaultReadWriteTest with PMMLReadWriteTes
     assert(copiedModel.hasSummary)
   }
 
+  test("KMeans validate input dataset") {
+    testInvalidWeights(new KMeans().setWeightCol("weight").fit(_))
+    testInvalidVectors(new KMeans().fit(_))
+  }
+
   test("set parameters") {
     val kmeans = new KMeans()
       .setK(9)

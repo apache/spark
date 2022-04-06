@@ -20,20 +20,25 @@ package org.apache.spark.sql.api.python
 import java.io.InputStream
 import java.nio.channels.Channels
 
+import net.razorvine.pickle.Pickler
+
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.api.python.PythonRDDServer
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{Column, DataFrame, SQLContext}
+import org.apache.spark.sql.{Column, DataFrame, Row, SparkSession}
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
-import org.apache.spark.sql.catalyst.expressions.{CastTimestampNTZToLong, ExpressionInfo}
+import org.apache.spark.sql.catalyst.expressions.{CastTimestampNTZToLong, ExpressionInfo, GenericRowWithSchema}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.execution.{ExplainMode, QueryExecution}
 import org.apache.spark.sql.execution.arrow.ArrowConverters
+import org.apache.spark.sql.execution.python.EvaluatePython
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.DataType
 
 private[sql] object PythonSQLUtils extends Logging {
+  private lazy val rowPickler = new Pickler(true, false)
+
   def parseDataType(typeText: String): DataType = CatalystSqlParser.parseDataType(typeText)
 
   // This is needed when generating SQL documentation for built-in functions.
@@ -59,8 +64,8 @@ private[sql] object PythonSQLUtils extends Logging {
    * Python callable function to read a file in Arrow stream format and create a [[RDD]]
    * using each serialized ArrowRecordBatch as a partition.
    */
-  def readArrowStreamFromFile(sqlContext: SQLContext, filename: String): JavaRDD[Array[Byte]] = {
-    ArrowConverters.readArrowStreamFromFile(sqlContext, filename)
+  def readArrowStreamFromFile(session: SparkSession, filename: String): JavaRDD[Array[Byte]] = {
+    ArrowConverters.readArrowStreamFromFile(session, filename)
   }
 
   /**
@@ -70,12 +75,17 @@ private[sql] object PythonSQLUtils extends Logging {
   def toDataFrame(
       arrowBatchRDD: JavaRDD[Array[Byte]],
       schemaString: String,
-      sqlContext: SQLContext): DataFrame = {
-    ArrowConverters.toDataFrame(arrowBatchRDD, schemaString, sqlContext)
+      session: SparkSession): DataFrame = {
+    ArrowConverters.toDataFrame(arrowBatchRDD, schemaString, session)
   }
 
   def explainString(queryExecution: QueryExecution, mode: String): String = {
     queryExecution.explainString(ExplainMode.fromString(mode))
+  }
+
+  def toPyRow(row: Row): Array[Byte] = {
+    assert(row.isInstanceOf[GenericRowWithSchema])
+    rowPickler.dumps(EvaluatePython.toJava(row, row.schema))
   }
 
   def castTimestampNTZToLong(c: Column): Column = Column(CastTimestampNTZToLong(c.expr))
@@ -85,13 +95,13 @@ private[sql] object PythonSQLUtils extends Logging {
  * Helper for making a dataframe from arrow data from data sent from python over a socket.  This is
  * used when encryption is enabled, and we don't want to write data to a file.
  */
-private[sql] class ArrowRDDServer(sqlContext: SQLContext) extends PythonRDDServer {
+private[sql] class ArrowRDDServer(session: SparkSession) extends PythonRDDServer {
 
   override protected def streamToRDD(input: InputStream): RDD[Array[Byte]] = {
     // Create array to consume iterator so that we can safely close the inputStream
     val batches = ArrowConverters.getBatchesFromStream(Channels.newChannel(input)).toArray
     // Parallelize the record batches to create an RDD
-    JavaRDD.fromRDD(sqlContext.sparkContext.parallelize(batches, batches.length))
+    JavaRDD.fromRDD(session.sparkContext.parallelize(batches, batches.length))
   }
 
 }

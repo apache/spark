@@ -211,6 +211,9 @@ struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
 divide by zero. To return NULL instead, use 'try_divide'. If necessary set spark.sql.ansi.enabled to false (except for ANSI interval type) to bypass this error.
+== SQL(line 1, position 7) ==
+select interval '2 seconds' / 0
+       ^^^^^^^^^^^^^^^^^^^^^^^^
 
 
 -- !query
@@ -244,6 +247,9 @@ struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
 divide by zero. To return NULL instead, use 'try_divide'. If necessary set spark.sql.ansi.enabled to false (except for ANSI interval type) to bypass this error.
+== SQL(line 1, position 7) ==
+select interval '2' year / 0
+       ^^^^^^^^^^^^^^^^^^^^^
 
 
 -- !query
@@ -1343,7 +1349,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 
-extraneous input 'day' expecting {<EOF>, ';'}(line 1, pos 27)
+Syntax error at or near 'day': extra input 'day'(line 1, pos 27)
 
 == SQL ==
 select interval 30 day day day
@@ -1375,7 +1381,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 
-extraneous input 'days' expecting {<EOF>, ';'}(line 1, pos 29)
+Syntax error at or near 'days': extra input 'days'(line 1, pos 29)
 
 == SQL ==
 select interval 30 days days days
@@ -1532,9 +1538,8 @@ select str - interval '4 22:12' day to minute from interval_view
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-cannot resolve 'interval_view.str + (- INTERVAL '4 22:12' DAY TO MINUTE)' due to data type mismatch: argument 1 requires (timestamp or timestamp without time zone) type, however, 'interval_view.str' is of string type.
-To fix the error, you might need to add explicit type casts. If necessary set spark.sql.ansi.enabled to false to bypass this error.; line 1 pos 7
+java.time.DateTimeException
+Cannot cast 1 to TimestampType. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
 
 
 -- !query
@@ -1542,9 +1547,8 @@ select str + interval '4 22:12' day to minute from interval_view
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-cannot resolve 'interval_view.str + INTERVAL '4 22:12' DAY TO MINUTE' due to data type mismatch: argument 1 requires (timestamp or timestamp without time zone) type, however, 'interval_view.str' is of string type.
-To fix the error, you might need to add explicit type casts. If necessary set spark.sql.ansi.enabled to false to bypass this error.; line 1 pos 7
+java.time.DateTimeException
+Cannot cast 1 to TimestampType. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
 
 
 -- !query
@@ -1751,7 +1755,7 @@ select -(a) from values (interval '-2147483648 months', interval '2147483647 mon
 -- !query schema
 struct<>
 -- !query output
-java.lang.ArithmeticException
+org.apache.spark.SparkArithmeticException
 integer overflow. If necessary set spark.sql.ansi.enabled to false (except for ANSI interval type) to bypass this error.
 
 
@@ -1760,7 +1764,7 @@ select a - b from values (interval '-2147483648 months', interval '2147483647 mo
 -- !query schema
 struct<>
 -- !query output
-java.lang.ArithmeticException
+org.apache.spark.SparkArithmeticException
 integer overflow. If necessary set spark.sql.ansi.enabled to false (except for ANSI interval type) to bypass this error.
 
 
@@ -1769,7 +1773,7 @@ select b + interval '1 month' from values (interval '-2147483648 months', interv
 -- !query schema
 struct<>
 -- !query output
-java.lang.ArithmeticException
+org.apache.spark.SparkArithmeticException
 integer overflow. If necessary set spark.sql.ansi.enabled to false (except for ANSI interval type) to bypass this error.
 
 
@@ -1998,8 +2002,11 @@ SELECT (INTERVAL '-178956970-8' YEAR TO MONTH) / -1
 -- !query schema
 struct<>
 -- !query output
-java.lang.ArithmeticException
+org.apache.spark.SparkArithmeticException
 Overflow in integral divide. To return NULL instead, use 'try_divide'. If necessary set spark.sql.ansi.enabled to false (except for ANSI interval type) to bypass this error.
+== SQL(line 1, position 7) ==
+SELECT (INTERVAL '-178956970-8' YEAR TO MONTH) / -1
+       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 
 -- !query
@@ -2007,8 +2014,11 @@ SELECT (INTERVAL '-178956970-8' YEAR TO MONTH) / -1L
 -- !query schema
 struct<>
 -- !query output
-java.lang.ArithmeticException
+org.apache.spark.SparkArithmeticException
 Overflow in integral divide. To return NULL instead, use 'try_divide'. If necessary set spark.sql.ansi.enabled to false (except for ANSI interval type) to bypass this error.
+== SQL(line 1, position 7) ==
+SELECT (INTERVAL '-178956970-8' YEAR TO MONTH) / -1L
+       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 
 -- !query
@@ -2050,8 +2060,11 @@ SELECT (INTERVAL '-106751991 04:00:54.775808' DAY TO SECOND) / -1
 -- !query schema
 struct<>
 -- !query output
-java.lang.ArithmeticException
+org.apache.spark.SparkArithmeticException
 Overflow in integral divide. To return NULL instead, use 'try_divide'. If necessary set spark.sql.ansi.enabled to false (except for ANSI interval type) to bypass this error.
+== SQL(line 1, position 7) ==
+SELECT (INTERVAL '-106751991 04:00:54.775808' DAY TO SECOND) / -1
+       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 
 -- !query
@@ -2059,8 +2072,11 @@ SELECT (INTERVAL '-106751991 04:00:54.775808' DAY TO SECOND) / -1L
 -- !query schema
 struct<>
 -- !query output
-java.lang.ArithmeticException
+org.apache.spark.SparkArithmeticException
 Overflow in integral divide. To return NULL instead, use 'try_divide'. If necessary set spark.sql.ansi.enabled to false (except for ANSI interval type) to bypass this error.
+== SQL(line 1, position 7) ==
+SELECT (INTERVAL '-106751991 04:00:54.775808' DAY TO SECOND) / -1L
+       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 
 -- !query

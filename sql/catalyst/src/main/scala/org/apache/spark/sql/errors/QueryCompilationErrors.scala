@@ -170,14 +170,6 @@ object QueryCompilationErrors {
     )
   }
 
-  def unsupportedAbstractDataTypeForUpCastError(gotType: AbstractDataType): Throwable = {
-    new AnalysisException(
-      errorClass = "UNSUPPORTED_FEATURE",
-      messageParameters =
-        Array(s"UpCast only support DecimalType as AbstractDataType yet, but got: $gotType")
-    )
-  }
-
   def outerScopeFailureForNewInstanceError(className: String): Throwable = {
     new AnalysisException(
       s"Unable to generate an encoder for inner class `$className` without " +
@@ -200,11 +192,15 @@ object QueryCompilationErrors {
   }
 
   def groupingMustWithGroupingSetsOrCubeOrRollupError(): Throwable = {
-    new AnalysisException("grouping()/grouping_id() can only be used with GroupingSets/Cube/Rollup")
+    new AnalysisException(
+      errorClass = "UNSUPPORTED_GROUPING_EXPRESSION",
+      messageParameters = Array.empty)
   }
 
   def pandasUDFAggregateNotSupportedInPivotError(): Throwable = {
-    new AnalysisException("Pandas UDF aggregate expressions are currently not supported in pivot.")
+    new AnalysisException(
+      errorClass = "UNSUPPORTED_FEATURE",
+      messageParameters = Array("Pandas UDF aggregate expressions don't support pivot."))
   }
 
   def aggregateExpressionRequiredForPivotError(sql: String): Throwable = {
@@ -727,8 +723,20 @@ object QueryCompilationErrors {
       s"Acceptable modes are ${PermissiveMode.name} and ${FailFastMode.name}.")
   }
 
-  def unfoldableFieldUnsupportedError(): Throwable = {
-    new AnalysisException("The field parameter needs to be a foldable string value.")
+  def requireLiteralParameter(
+      funcName: String, argName: String, requiredType: String): Throwable = {
+    new AnalysisException(
+      s"The '$argName' parameter of function '$funcName' needs to be a $requiredType literal.")
+  }
+
+  def invalidStringLiteralParameter(
+      funcName: String,
+      argName: String,
+      invalidValue: String,
+      allowedValues: Option[String] = None): Throwable = {
+    val endingMsg = allowedValues.map(" " + _).getOrElse("")
+    new AnalysisException(s"Invalid value for the '$argName' parameter of function '$funcName': " +
+      s"$invalidValue.$endingMsg")
   }
 
   def literalTypeUnsupportedForSourceTypeError(field: String, source: Expression): Throwable = {
@@ -767,7 +775,7 @@ object QueryCompilationErrors {
         s"$v2WriteClassName is not an instance of $v1WriteClassName")
   }
 
-  def unsupportedDeleteByConditionWithSubqueryError(condition: Option[Expression]): Throwable = {
+  def unsupportedDeleteByConditionWithSubqueryError(condition: Expression): Throwable = {
     new AnalysisException(
       s"Delete by condition with subquery is not supported: $condition")
   }
@@ -1324,10 +1332,6 @@ object QueryCompilationErrors {
       s"Expected: ${dataType.typeName}; Found: ${expression.dataType.typeName}")
   }
 
-  def groupAggPandasUDFUnsupportedByStreamingAggError(): Throwable = {
-    new AnalysisException("Streaming aggregation doesn't support group aggregate pandas UDF")
-  }
-
   def streamJoinStreamWithoutEqualityPredicateUnsupportedError(plan: LogicalPlan): Throwable = {
     new AnalysisException(
       "Stream-stream join without equality predicate is not supported", plan = Some(plan))
@@ -1335,7 +1339,8 @@ object QueryCompilationErrors {
 
   def cannotUseMixtureOfAggFunctionAndGroupAggPandasUDFError(): Throwable = {
     new AnalysisException(
-      "Cannot use a mixture of aggregate function and group aggregate pandas UDF")
+      errorClass = "CANNOT_USE_MIXTURE",
+      messageParameters = Array.empty)
   }
 
   def ambiguousAttributesInSelfJoinError(
@@ -1564,8 +1569,10 @@ object QueryCompilationErrors {
   }
 
   def usePythonUDFInJoinConditionUnsupportedError(joinType: JoinType): Throwable = {
-    new AnalysisException("Using PythonUDF in join condition of join type" +
-      s" $joinType is not supported.")
+    new AnalysisException(
+      errorClass = "UNSUPPORTED_FEATURE",
+      messageParameters = Array(
+        s"Using PythonUDF in join condition of join type $joinType is not supported"))
   }
 
   def conflictingAttributesInJoinConditionError(
@@ -2375,5 +2382,10 @@ object QueryCompilationErrors {
 
   def tableNotSupportTimeTravelError(tableName: Identifier): UnsupportedOperationException = {
     new UnsupportedOperationException(s"Table $tableName does not support time travel.")
+  }
+
+  def writeDistributionAndOrderingNotSupportedInContinuousExecution(): Throwable = {
+    new AnalysisException(
+      "Sinks cannot request distribution and ordering in continuous execution mode")
   }
 }

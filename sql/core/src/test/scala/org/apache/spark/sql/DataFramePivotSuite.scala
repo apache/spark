@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql
 
+import java.time.LocalDateTime
 import java.util.Locale
 
 import org.apache.spark.sql.catalyst.expressions.aggregate.PivotFirst
@@ -340,5 +341,17 @@ class DataFramePivotSuite extends QueryTest with SharedSparkSession {
       .groupBy().pivot("type", Seq("a", "b")).agg(
         percentile_approx(col("value"), array(lit(0.5)), lit(10000)))
     checkAnswer(actual, Row(Array(2.5), Array(3.0)))
+  }
+
+  test("SPARK-38133: Grouping by TIMESTAMP_NTZ should not corrupt results") {
+    checkAnswer(
+      courseSales.withColumn("ts", $"year".cast("string").cast("timestamp_ntz"))
+        .groupBy("ts")
+        .pivot("course", Seq("dotNET", "Java"))
+        .agg(sum($"earnings"))
+        .select("ts", "dotNET", "Java"),
+      Row(LocalDateTime.of(2012, 1, 1, 0, 0, 0, 0), 15000.0, 20000.0) ::
+        Row(LocalDateTime.of(2013, 1, 1, 0, 0, 0, 0), 48000.0, 30000.0) :: Nil
+    )
   }
 }

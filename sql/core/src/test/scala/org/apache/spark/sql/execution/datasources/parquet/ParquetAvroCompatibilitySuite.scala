@@ -268,7 +268,7 @@ class ParquetAvroCompatibilitySuite extends ParquetCompatibilityTest with Shared
         }
       }
 
-      checkAnswer(spark.read.parquet(path).filter('suit === "SPADES"), Row("SPADES"))
+      checkAnswer(spark.read.parquet(path).filter($"suit" === "SPADES"), Row("SPADES"))
     }
   }
 }

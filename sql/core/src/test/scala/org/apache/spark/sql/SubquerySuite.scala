@@ -1956,4 +1956,66 @@ class SubquerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     assert(!nonDeterministicQueryPlan.deterministic)
   }
 
+  test("SPARK-38132: Not IN subquery correctness checks") {
+    val t = "test_table"
+    withTable(t) {
+      Seq[(Integer, Integer)](
+        (1, 1),
+        (2, 2),
+        (3, 3),
+        (4, null),
+        (null, 0))
+        .toDF("c1", "c2").write.saveAsTable(t)
+      val df = spark.table(t)
+
+      checkAnswer(df.where(s"(c1 NOT IN (SELECT c2 FROM $t)) = true"), Seq.empty)
+      checkAnswer(df.where(s"(c1 NOT IN (SELECT c2 FROM $t WHERE c2 IS NOT NULL)) = true"),
+        Row(4, null) :: Nil)
+      checkAnswer(df.where(s"(c1 NOT IN (SELECT c2 FROM $t)) <=> true"), Seq.empty)
+      checkAnswer(df.where(s"(c1 NOT IN (SELECT c2 FROM $t WHERE c2 IS NOT NULL)) <=> true"),
+        Row(4, null) :: Nil)
+      checkAnswer(df.where(s"(c1 NOT IN (SELECT c2 FROM $t)) != false"), Seq.empty)
+      checkAnswer(df.where(s"(c1 NOT IN (SELECT c2 FROM $t WHERE c2 IS NOT NULL)) != false"),
+        Row(4, null) :: Nil)
+      checkAnswer(df.where(s"NOT((c1 NOT IN (SELECT c2 FROM $t)) <=> false)"), Seq.empty)
+      checkAnswer(df.where(s"NOT((c1 NOT IN (SELECT c2 FROM $t WHERE c2 IS NOT NULL)) <=> false)"),
+        Row(4, null) :: Nil)
+    }
+  }
+
+  test("SPARK-38155: disallow distinct aggregate in lateral subqueries") {
+    withTempView("t1", "t2") {
+      Seq((0, 1)).toDF("c1", "c2").createOrReplaceTempView("t1")
+      Seq((1, 2), (2, 2)).toDF("c1", "c2").createOrReplaceTempView("t2")
+      assert(intercept[AnalysisException] {
+        sql("SELECT * FROM t1 JOIN LATERAL (SELECT DISTINCT c2 FROM t2 WHERE c1 > t1.c1)")
+      }.getMessage.contains("Correlated column is not allowed in predicate"))
+    }
+  }
+
+  test("SPARK-38180: allow safe cast expressions in correlated equality conditions") {
+    withTempView("t1", "t2") {
+      Seq((0, 1), (1, 2)).toDF("c1", "c2").createOrReplaceTempView("t1")
+      Seq((0, 2), (0, 3)).toDF("c1", "c2").createOrReplaceTempView("t2")
+      checkAnswer(sql(
+        """
+          |SELECT (SELECT SUM(c2) FROM t2 WHERE c1 = a)
+          |FROM (SELECT CAST(c1 AS DOUBLE) a FROM t1)
+          |""".stripMargin),
+        Row(5) :: Row(null) :: Nil)
+      checkAnswer(sql(
+        """
+          |SELECT (SELECT SUM(c2) FROM t2 WHERE CAST(c1 AS STRING) = a)
+          |FROM (SELECT CAST(c1 AS STRING) a FROM t1)
+          |""".stripMargin),
+        Row(5) :: Row(null) :: Nil)
+      assert(intercept[AnalysisException] {
+        sql(
+          """
+            |SELECT (SELECT SUM(c2) FROM t2 WHERE CAST(c1 AS SHORT) = a)
+            |FROM (SELECT CAST(c1 AS SHORT) a FROM t1)
+            |""".stripMargin)
+      }.getMessage.contains("Correlated column is not allowed in predicate"))
+    }
+  }
 }

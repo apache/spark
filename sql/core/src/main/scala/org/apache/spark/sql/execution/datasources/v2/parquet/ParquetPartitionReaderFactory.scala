@@ -70,8 +70,8 @@ case class ParquetPartitionReaderFactory(
   private val isCaseSensitive = sqlConf.caseSensitiveAnalysis
   private val resultSchema = StructType(partitionSchema.fields ++ readDataSchema.fields)
   private val enableOffHeapColumnVector = sqlConf.offHeapColumnVectorEnabled
-  private val enableVectorizedReader: Boolean = sqlConf.parquetVectorizedReaderEnabled &&
-    resultSchema.forall(_.dataType.isInstanceOf[AtomicType])
+  private val enableVectorizedReader: Boolean =
+    ParquetUtils.isBatchReadSupportedForSchema(sqlConf, resultSchema)
   private val enableRecordFilter: Boolean = sqlConf.parquetRecordFilterEnabled
   private val timestampConversion: Boolean = sqlConf.isParquetINT96TimestampConversion
   private val capacity = sqlConf.parquetVectorizedReaderBatchSize
@@ -202,7 +202,7 @@ case class ParquetPartitionReaderFactory(
   private def buildReaderBase[T](
       file: PartitionedFile,
       buildReaderFunc: (
-        FileSplit, InternalRow, TaskAttemptContextImpl,
+        InternalRow,
           Option[FilterPredicate], Option[ZoneId],
           RebaseSpec,
           RebaseSpec) => RecordReader[Void, T]): RecordReader[Void, T] = {
@@ -261,9 +261,7 @@ case class ParquetPartitionReaderFactory(
       footerFileMetaData.getKeyValueMetaData.get,
       int96RebaseModeInRead)
     val reader = buildReaderFunc(
-      split,
       file.partitionValues,
-      hadoopAttemptContext,
       pushed,
       convertTz,
       datetimeRebaseSpec,
@@ -277,9 +275,7 @@ case class ParquetPartitionReaderFactory(
   }
 
   private def createRowBaseParquetReader(
-      split: FileSplit,
       partitionValues: InternalRow,
-      hadoopAttemptContext: TaskAttemptContextImpl,
       pushed: Option[FilterPredicate],
       convertTz: Option[ZoneId],
       datetimeRebaseSpec: RebaseSpec,
@@ -312,9 +308,7 @@ case class ParquetPartitionReaderFactory(
   }
 
   private def createParquetVectorizedReader(
-      split: FileSplit,
       partitionValues: InternalRow,
-      hadoopAttemptContext: TaskAttemptContextImpl,
       pushed: Option[FilterPredicate],
       convertTz: Option[ZoneId],
       datetimeRebaseSpec: RebaseSpec,

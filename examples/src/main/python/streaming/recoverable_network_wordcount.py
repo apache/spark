@@ -35,28 +35,33 @@
  checkpoint data exists in ~/checkpoint/, then it will create StreamingContext from
  the checkpoint data.
 """
+import datetime
 import os
 import sys
+from typing import List, Tuple
 
 from pyspark import SparkContext
+from pyspark.accumulators import Accumulator
+from pyspark.broadcast import Broadcast
+from pyspark.rdd import RDD
 from pyspark.streaming import StreamingContext
 
 
 # Get or register a Broadcast variable
-def getWordExcludeList(sparkContext):
+def getWordExcludeList(sparkContext: SparkContext) -> Broadcast[List[str]]:
     if ('wordExcludeList' not in globals()):
         globals()['wordExcludeList'] = sparkContext.broadcast(["a", "b", "c"])
     return globals()['wordExcludeList']
 
 
 # Get or register an Accumulator
-def getDroppedWordsCounter(sparkContext):
+def getDroppedWordsCounter(sparkContext: SparkContext) -> Accumulator[int]:
     if ('droppedWordsCounter' not in globals()):
         globals()['droppedWordsCounter'] = sparkContext.accumulator(0)
     return globals()['droppedWordsCounter']
 
 
-def createContext(host, port, outputPath):
+def createContext(host: str, port: int, outputPath: str) -> StreamingContext:
     # If you do not see this printed, that means the StreamingContext has been loaded
     # from the new checkpoint
     print("Creating new context")
@@ -71,14 +76,14 @@ def createContext(host, port, outputPath):
     words = lines.flatMap(lambda line: line.split(" "))
     wordCounts = words.map(lambda x: (x, 1)).reduceByKey(lambda x, y: x + y)
 
-    def echo(time, rdd):
+    def echo(time: datetime.datetime, rdd: RDD[Tuple[str, int]]) -> None:
         # Get or register the excludeList Broadcast
         excludeList = getWordExcludeList(rdd.context)
         # Get or register the droppedWordsCounter Accumulator
         droppedWordsCounter = getDroppedWordsCounter(rdd.context)
 
         # Use excludeList to drop words and use droppedWordsCounter to count them
-        def filterFunc(wordCount):
+        def filterFunc(wordCount: Tuple[str, int]) -> bool:
             if wordCount[0] in excludeList.value:
                 droppedWordsCounter.add(wordCount[1])
                 return False

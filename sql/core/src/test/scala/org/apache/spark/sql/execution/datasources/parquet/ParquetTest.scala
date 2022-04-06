@@ -51,6 +51,8 @@ private[sql] trait ParquetTest extends FileBasedDataSourceTest {
   override protected val dataSourceName: String = "parquet"
   override protected val vectorizedReaderEnabledKey: String =
     SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key
+  override protected val vectorizedReaderNestedEnabledKey: String =
+    SQLConf.PARQUET_VECTORIZED_READER_NESTED_COLUMN_ENABLED.key
 
   /**
    * Reads the parquet file at `path`
@@ -165,9 +167,17 @@ private[sql] trait ParquetTest extends FileBasedDataSourceTest {
 
   def withAllParquetReaders(code: => Unit): Unit = {
     // test the row-based reader
-    withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "false")(code)
+    withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "false") {
+      withClue("Parquet-mr reader") {
+        code
+      }
+    }
     // test the vectorized reader
-    withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "true")(code)
+    withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "true") {
+      withClue("Vectorized reader") {
+        code
+      }
+    }
   }
 
   def withAllParquetWriters(code: => Unit): Unit = {

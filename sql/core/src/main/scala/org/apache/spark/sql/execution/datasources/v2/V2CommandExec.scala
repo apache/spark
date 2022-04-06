@@ -48,7 +48,7 @@ abstract class V2CommandExec extends SparkPlan {
    */
   override def executeCollect(): Array[InternalRow] = result.toArray
 
-  override def executeToIterator(): Iterator[InternalRow] = result.toIterator
+  override def executeToIterator(): Iterator[InternalRow] = result.iterator
 
   override def executeTake(limit: Int): Array[InternalRow] = result.take(limit).toArray
 

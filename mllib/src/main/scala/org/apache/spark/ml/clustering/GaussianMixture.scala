@@ -22,18 +22,18 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.annotation.Since
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.ml.{Estimator, Model}
-import org.apache.spark.ml.functions.checkNonNegativeWeight
 import org.apache.spark.ml.impl.Utils.{unpackUpperTriangular, EPSILON}
 import org.apache.spark.ml.linalg._
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.stat.distribution.MultivariateGaussian
 import org.apache.spark.ml.util._
+import org.apache.spark.ml.util.DatasetUtils._
 import org.apache.spark.ml.util.Instrumentation.instrumented
 import org.apache.spark.mllib.linalg.{Matrices => OldMatrices, Matrix => OldMatrix,
   Vector => OldVector, Vectors => OldVectors}
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{DataFrame, Dataset, SparkSession}
+import org.apache.spark.sql._
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
 import org.apache.spark.storage.StorageLevel
@@ -117,7 +117,7 @@ class GaussianMixtureModel private[ml] (
   override def transform(dataset: Dataset[_]): DataFrame = {
     val outputSchema = transformSchema(dataset.schema, logging = true)
 
-    val vectorCol = DatasetUtils.columnToVector(dataset, $(featuresCol))
+    val vectorCol = columnToVector(dataset, $(featuresCol))
     var outputData = dataset
     var numColsOutput = 0
 
@@ -392,15 +392,11 @@ class GaussianMixture @Since("2.0.0") (
       seed, tol, aggregationDepth)
     instr.logNumFeatures(numFeatures)
 
-    val w = if (isDefined(weightCol) && $(weightCol).nonEmpty) {
-      checkNonNegativeWeight(col($(weightCol)).cast(DoubleType))
-    } else {
-      lit(1.0)
-    }
-
-    val instances = dataset.select(DatasetUtils.columnToVector(dataset, $(featuresCol)), w)
-      .as[(Vector, Double)].rdd
-      .setName("training instances")
+    val instances = dataset.select(
+      checkNonNanVectors(columnToVector(dataset, $(featuresCol))),
+      checkNonNegativeWeights(get(weightCol))
+    ).as[(Vector, Double)].rdd
+     .setName("training instances")
 
     val handlePersistence = dataset.storageLevel == StorageLevel.NONE
     if (handlePersistence) { instances.persist(StorageLevel.MEMORY_AND_DISK) }

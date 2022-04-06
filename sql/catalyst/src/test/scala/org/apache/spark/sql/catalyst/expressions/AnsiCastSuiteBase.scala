@@ -21,6 +21,7 @@ import java.sql.Timestamp
 import java.time.DateTimeException
 
 import org.apache.spark.SparkArithmeticException
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.util.DateTimeConstants.MILLIS_PER_SECOND
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils
@@ -315,6 +316,28 @@ abstract class AnsiCastSuiteBase extends CastSuiteBase {
       assert(ret.resolved)
       checkCastToBooleanError(array_notNull, to, Seq(null, true, false))
     }
+
+    {
+      val ret = cast(array_notNull, ArrayType(BooleanType, containsNull = false))
+      assert(ret.resolved == !isTryCast)
+      if (!isTryCast) {
+        checkExceptionInExpression[UnsupportedOperationException](
+          ret, "invalid input syntax for type boolean")
+      }
+    }
+  }
+
+  test("cast from array III") {
+    if (!isTryCast) {
+      val from: DataType = ArrayType(DoubleType, containsNull = false)
+      val array = Literal.create(Seq(1.0, 2.0), from)
+      val to: DataType = ArrayType(IntegerType, containsNull = false)
+      val answer = Literal.create(Seq(1, 2), to).value
+      checkEvaluation(cast(array, to), answer)
+
+      val overflowArray = Literal.create(Seq(Int.MaxValue + 1.0D), from)
+      checkExceptionInExpression[ArithmeticException](cast(overflowArray, to), "overflow")
+    }
   }
 
   test("cast from map II") {
@@ -339,6 +362,49 @@ abstract class AnsiCastSuiteBase extends CastSuiteBase {
       val ret = cast(map_notNull, to)
       assert(ret.resolved)
       checkCastToBooleanError(map_notNull, to, Map("a" -> null, "b" -> true, "c" -> false))
+    }
+
+    {
+      val ret = cast(map, MapType(IntegerType, StringType, valueContainsNull = true))
+      assert(ret.resolved == !isTryCast)
+      if (!isTryCast) {
+        checkExceptionInExpression[NumberFormatException](
+          ret, "invalid input syntax for type numeric")
+      }
+    }
+
+    {
+      val ret = cast(map_notNull, MapType(StringType, BooleanType, valueContainsNull = false))
+      assert(ret.resolved == !isTryCast)
+      if (!isTryCast) {
+        checkExceptionInExpression[UnsupportedOperationException](
+          ret, "invalid input syntax for type boolean")
+      }
+    }
+
+    {
+      val ret = cast(map_notNull, MapType(IntegerType, StringType, valueContainsNull = true))
+      assert(ret.resolved == !isTryCast)
+      if (!isTryCast) {
+        checkExceptionInExpression[NumberFormatException](
+          ret, "invalid input syntax for type numeric")
+      }
+    }
+  }
+
+  test("cast from map III") {
+    if (!isTryCast) {
+      val from: DataType = MapType(DoubleType, DoubleType, valueContainsNull = false)
+      val map = Literal.create(Map(1.0 -> 2.0), from)
+      val to: DataType = MapType(IntegerType, IntegerType, valueContainsNull = false)
+      val answer = Literal.create(Map(1 -> 2), to).value
+      checkEvaluation(cast(map, to), answer)
+
+      Seq(
+        Literal.create(Map((Int.MaxValue + 1.0) -> 2.0), from),
+        Literal.create(Map(1.0 -> (Int.MinValue - 1.0)), from)).foreach { overflowMap =>
+        checkExceptionInExpression[ArithmeticException](cast(overflowMap, to), "overflow")
+      }
     }
   }
 
@@ -391,6 +457,62 @@ abstract class AnsiCastSuiteBase extends CastSuiteBase {
       val ret = cast(struct_notNull, to)
       assert(ret.resolved)
       checkCastToBooleanError(struct_notNull, to, InternalRow(null, true, false))
+    }
+
+    {
+      val ret = cast(struct_notNull, StructType(Seq(
+        StructField("a", BooleanType, nullable = true),
+        StructField("b", BooleanType, nullable = true),
+        StructField("c", BooleanType, nullable = false))))
+      assert(ret.resolved == !isTryCast)
+      if (!isTryCast) {
+        checkExceptionInExpression[UnsupportedOperationException](
+          ret, "invalid input syntax for type boolean")
+      }
+    }
+  }
+
+  test("cast from struct III") {
+    if (!isTryCast) {
+      val from: DataType = StructType(Seq(StructField("a", DoubleType, nullable = false)))
+      val struct = Literal.create(InternalRow(1.0), from)
+      val to: DataType = StructType(Seq(StructField("a", IntegerType, nullable = false)))
+      val answer = Literal.create(InternalRow(1), to).value
+      checkEvaluation(cast(struct, to), answer)
+
+      val overflowStruct = Literal.create(InternalRow(Int.MaxValue + 1.0), from)
+      checkExceptionInExpression[ArithmeticException](cast(overflowStruct, to), "overflow")
+    }
+  }
+
+  test("complex casting") {
+    val complex = Literal.create(
+      Row(
+        Seq("123", "true", "f"),
+        Map("a" -> "123", "b" -> "true", "c" -> "f"),
+        Row(0)),
+      StructType(Seq(
+        StructField("a",
+          ArrayType(StringType, containsNull = false), nullable = true),
+        StructField("m",
+          MapType(StringType, StringType, valueContainsNull = false), nullable = true),
+        StructField("s",
+          StructType(Seq(
+            StructField("i", IntegerType, nullable = true)))))))
+
+    val ret = cast(complex, StructType(Seq(
+      StructField("a",
+        ArrayType(IntegerType, containsNull = true), nullable = true),
+      StructField("m",
+        MapType(StringType, BooleanType, valueContainsNull = false), nullable = true),
+      StructField("s",
+        StructType(Seq(
+          StructField("l", LongType, nullable = true)))))))
+
+    assert(ret.resolved === !isTryCast)
+    if (!isTryCast) {
+      checkExceptionInExpression[NumberFormatException](
+        ret, "invalid input syntax for type numeric")
     }
   }
 

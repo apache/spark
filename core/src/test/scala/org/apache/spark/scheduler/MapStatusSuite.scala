@@ -262,7 +262,7 @@ class MapStatusSuite extends SparkFunSuite {
       smallBlockSizes ++: untrackedSkewedBlocksSizes ++: trackedSkewedBlocksSizes
     val allBlocks = emptyBlocks ++: nonEmptyBlocks
 
-    val skewThreshold = Utils.median(allBlocks.sorted) * accurateBlockSkewedFactor
+    val skewThreshold = Utils.median(allBlocks, false) * accurateBlockSkewedFactor
     assert(nonEmptyBlocks.filter(_ > skewThreshold).size ==
       untrackedSkewedBlocksLength + trackedSkewedBlocksLength,
       "number of skewed block sizes")
