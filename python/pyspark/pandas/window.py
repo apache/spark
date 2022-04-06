@@ -18,6 +18,7 @@ from abc import ABCMeta, abstractmethod
 from functools import partial
 from typing import Any, Callable, Generic, List, Optional
 
+from pyspark import SparkContext
 from pyspark.sql import Window
 from pyspark.sql import functions as F
 from pyspark.pandas.missing.window import (
@@ -1808,9 +1809,10 @@ class ExponentialMovingLike(Generic[FrameLike], metaclass=ABCMeta):
 
     def mean(self) -> FrameLike:
         def mean(scol: Column) -> Column:
+            jf = SparkContext._active_spark_context._jvm.PythonSQLUtils.ewm
             return F.when(
                 F.row_number().over(self._unbounded_window) >= self._min_periods,
-                F.ewm(scol, self._alpha).over(self._window),
+                Column(jf(scol._jc, self._alpha)).over(self._window),
             ).otherwise(SF.lit(None))
 
         return self._apply_as_series_or_frame(mean)

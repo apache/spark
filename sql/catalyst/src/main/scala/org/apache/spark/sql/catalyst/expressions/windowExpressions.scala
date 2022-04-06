@@ -1056,7 +1056,7 @@ private[sql] case class EWM(input: Expression, alpha: Double)
 
   override val updateExpressions: Seq[Expression] = {
     val casted = input.cast(DoubleType)
-    // TODO: after add param ignore_na, we can remove this check
+    // TODO: after adding param ignore_na, we can remove this check
     val error = RaiseError(Literal("Input values Must not be Null or NaN")).cast(DoubleType)
     val validated = If(IsNull(casted) || IsNaN(casted), error, casted)
     Seq(
