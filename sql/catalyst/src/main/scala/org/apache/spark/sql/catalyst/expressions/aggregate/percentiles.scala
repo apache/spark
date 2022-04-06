@@ -367,24 +367,6 @@ case class PercentileCont(left: Expression, right: Expression)
  * Therefore we have to store all the elements in memory, and so notice that too many elements can
  * cause GC paused and eventually OutOfMemory Errors.
  */
-// scalastyle:off line.size.limit
-@ExpressionDescription(
-  usage =
-    """
-      _FUNC_(percentage) WITHIN GROUP (ORDER BY col) - Returns the percentile(s) based on a
-       discrete distribution of numeric column `col` at the given percentage(s) with value range
-       in [0.0, 1.0].
-      """,
-  examples = """
-    Examples:
-      > SELECT _FUNC_(0.3) WITHIN GROUP (ORDER BY col) FROM VALUES (0), (10) AS tab(col);
-       0
-      > SELECT _FUNC_(0.5) FROM VALUES (INTERVAL '0' MONTH), (INTERVAL '10' MONTH) AS tab(col);
-       0
-  """,
-  group = "agg_funcs",
-  since = "3.3.0")
-// scalastyle:on line.size.limit
 case class PercentileDisc(
     child: Expression,
     percentageExpression: Expression,
