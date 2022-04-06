@@ -380,13 +380,11 @@ object PreprocessTableInsertion extends Rule[LogicalPlan] {
 
     val staticPartCols = normalizedPartSpec.filter(_._2.isDefined).keySet
     val expectedColumns = insert.table.output.filterNot(a => staticPartCols.contains(a.name))
-    // We're not actually expecting all columns of the table if user has specified columns in INSERT
-    // INTO, filter the column list here so that it won't break the column number check.
-    val realExpectedColumns = if (insert.userSpecifiedCols.length > 0) {
-      expectedColumns.filter(c => insert.userSpecifiedCols.contains(c.name))
-    } else expectedColumns
 
-    if (realExpectedColumns.length != insert.query.schema.length) {
+    // No need to check column size when USE_NULLS_FOR_MISSING_DEFAULT_COLUMN_VALUES is enabled,
+    // since all missing default value(s) will be added to query automatically.
+    if (!conf.useNullsForMissingDefaultColumnValues &&
+      expectedColumns.length != insert.query.schema.length) {
       throw QueryCompilationErrors.mismatchedInsertedDataColumnNumberError(
         tblName, insert, staticPartCols)
     }
@@ -404,7 +402,7 @@ object PreprocessTableInsertion extends Rule[LogicalPlan] {
     }
 
     val newQuery = TableOutputResolver.resolveOutputColumns(
-      tblName, realExpectedColumns, insert.query, byName = false, conf)
+      tblName, expectedColumns, insert.query, byName = false, conf)
     if (normalizedPartSpec.nonEmpty) {
       if (normalizedPartSpec.size != partColNames.length) {
         throw QueryCompilationErrors.requestedPartitionsMismatchTablePartitionsError(

@@ -36,7 +36,9 @@ object TableOutputResolver {
       byName: Boolean,
       conf: SQLConf): LogicalPlan = {
 
-    if (expected.size < query.output.size) {
+    // No need to check column size when USE_NULLS_FOR_MISSING_DEFAULT_COLUMN_VALUES is enabled,
+    // since all missing default value(s) will be added to query automatically.
+    if (!conf.useNullsForMissingDefaultColumnValues && expected.size < query.output.size) {
       throw QueryCompilationErrors.cannotWriteTooManyColumnsToTableError(tableName, expected, query)
     }
 
@@ -44,7 +46,7 @@ object TableOutputResolver {
     val resolved: Seq[NamedExpression] = if (byName) {
       reorderColumnsByName(query.output, expected, conf, errors += _)
     } else {
-      if (expected.size > query.output.size) {
+      if (!conf.useNullsForMissingDefaultColumnValues && expected.size > query.output.size) {
         throw QueryCompilationErrors.cannotWriteNotEnoughColumnsToTableError(
           tableName, expected, query)
       }

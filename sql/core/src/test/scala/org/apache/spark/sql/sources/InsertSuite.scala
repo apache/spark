@@ -102,25 +102,23 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
   }
 
   test("SPARK-38707 Allow user to insert into only certain columns of a table") {
-    sql(
-      s"""
-         |INSERT OVERWRITE TABLE jsonTable(a) SELECT a FROM jt
-      """.stripMargin)
+    withSQLConf(SQLConf.USE_NULLS_FOR_MISSING_DEFAULT_COLUMN_VALUES.key -> "true") {
+      withTable("t") {
+        sql("create table t(i boolean, s bigint) using parquet")
+        sql("insert into t(i) values(true)")
+        checkAnswer(sql("select i, s from t"), Seq(Row(true, null)))
+      }
+    }
 
-    checkAnswer(
-      sql("SELECT a, b FROM jsonTable"),
-      (1 to 10).map(i => Row(i, null))
-    )
-
-    sql(
-      s"""
-         |INSERT OVERWRITE TABLE jsonTable(b) SELECT b FROM jt
-      """.stripMargin)
-
-    checkAnswer(
-      sql("SELECT a, b FROM jsonTable"),
-      (1 to 10).map(i => Row(null, s"str$i"))
-    )
+    withSQLConf(SQLConf.USE_NULLS_FOR_MISSING_DEFAULT_COLUMN_VALUES.key -> "false") {
+      withTable("t") {
+        sql("create table t(i boolean, s bigint) using parquet")
+        assert(intercept[AnalysisException] {
+          sql("insert into t(i) values(true)")
+        }.getMessage.contains("requires that the data to be inserted have the same number of " +
+          "columns as the target"))
+      }
+    }
   }
 
   test("insert into a temp view that does not point to an insertable data source") {

@@ -3391,7 +3391,7 @@ class Analyzer(override val catalogManager: CatalogManager)
           i.userSpecifiedCols.nonEmpty =>
         val resolved = resolveUserSpecifiedColumns(i)
         val projection = addColumnListOnQuery(i.table.output, resolved, i.query)
-        i.copy(query = projection)
+        i.copy(userSpecifiedCols = Nil, query = projection)
     }
 
     private def resolveUserSpecifiedColumns(i: InsertIntoStatement): Seq[NamedExpression] = {
@@ -3409,7 +3409,9 @@ class Analyzer(override val catalogManager: CatalogManager)
         tableOutput: Seq[Attribute],
         cols: Seq[NamedExpression],
         query: LogicalPlan): LogicalPlan = {
-      if (cols.size != query.output.size) {
+      // No need to check column size when USE_NULLS_FOR_MISSING_DEFAULT_COLUMN_VALUES is enabled,
+      // since all missing default value(s) will be added to query automatically.
+      if (!conf.useNullsForMissingDefaultColumnValues && cols.size != query.output.size) {
         throw QueryCompilationErrors.writeTableWithMismatchedColumnsError(
           cols.size, query.output.size, query)
       }
