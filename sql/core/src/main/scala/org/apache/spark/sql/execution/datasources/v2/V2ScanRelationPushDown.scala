@@ -366,7 +366,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper wit
       if (isPushed) {
         sHolder.pushedLimit = Some(limit)
       }
-      (operation, isPartiallyPushed)
+      (operation, isPushed && !isPartiallyPushed)
     case s @ Sort(order, _, operation @ ScanOperation(project, filter, sHolder: ScanBuilderHolder))
         if filter.isEmpty && CollapseProject.canCollapseExpressions(
           order, project, alwaysInline = true) =>
@@ -380,31 +380,31 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper wit
           sHolder.pushedLimit = Some(limit)
           sHolder.sortOrders = orders
           if (isPartiallyPushed) {
-            (s, isPartiallyPushed)
+            (s, false)
           } else {
-            (operation, isPartiallyPushed)
+            (operation, true)
           }
         } else {
-          (s, true)
+          (s, false)
         }
       } else {
-        (s, true)
+        (s, false)
       }
     case p: Project =>
       val (newChild, isPartiallyPushed) = pushDownLimit(p.child, limit)
       (p.withNewChildren(Seq(newChild)), isPartiallyPushed)
-    case other => (other, true)
+    case other => (other, false)
   }
 
   def pushDownLimits(plan: LogicalPlan): LogicalPlan = plan.transform {
     case globalLimit @ Limit(IntegerLiteral(limitValue), child) =>
-      val (newChild, isPartiallyPushed) = pushDownLimit(child, limitValue)
-      if (isPartiallyPushed) {
+      val (newChild, canRemoveLimit) = pushDownLimit(child, limitValue)
+      if (canRemoveLimit) {
+        newChild
+      } else {
         val newLocalLimit =
           globalLimit.child.asInstanceOf[LocalLimit].withNewChildren(Seq(newChild))
         globalLimit.withNewChildren(Seq(newLocalLimit))
-      } else {
-        newChild
       }
   }
 
