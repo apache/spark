@@ -182,11 +182,10 @@ case class TryMultiply(left: Expression, right: Expression, replacement: Express
     this.copy(replacement = newChild)
 }
 
-// scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = """
-    _FUNC_(str[, fmt]) - This is a special version of `to_binary` that performs the same operation, but returns a NULL value instead of raising an error if the conversion cannot be performed
-  """,
+  usage = "_FUNC_(str[, fmt]) - This is a special version of `to_binary` that performs the same " +
+    "operation, but returns a NULL value instead of raising an error if the conversion cannot be " +
+    "performed.",
   examples = """
     Examples:
       > SELECT _FUNC_('abc', 'utf-8');
