@@ -183,15 +183,16 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
     }
 
     writerThread.start()
+    new WriterMonitorThread(SparkEnv.get, worker, writerThread, context).start()
     if (reuseWorker) {
       val key = (worker, context.taskAttemptId)
       // SPARK-35009: avoid creating multiple monitor threads for the same python worker
       // and task context
       if (PythonRunner.runningMonitorThreads.add(key)) {
-        new MonitorThread(SparkEnv.get, worker, writerThread, context).start()
+        new MonitorThread(SparkEnv.get, worker, context).start()
       }
     } else {
-      new MonitorThread(SparkEnv.get, worker, writerThread, context).start()
+      new MonitorThread(SparkEnv.get, worker, context).start()
     }
 
     // Return an iterator that read lines from the process's stdout
@@ -600,18 +601,11 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
   }
 
   /**
-   * It is necessary to have a monitor thread for python workers to handle the following scenarios:
-   *
-   * 1. The task is canceled, and task interruption is disabled. In that case we will need to
-   *    explicitly kill the worker, otherwise the threads can block indefinitely.
-   *
-   * 2. The task completes while the writer thread is sending input to the Python process (e.g. due
-   *    to the use of `take()`), and the Python process is still producing output. When the inputs
-   *    are sufficiently large, this can result in a deadlock due to the use of blocking I/O
-   *    (SPARK-38677). To resolve the deadlock, we need to close the socket.
+   * It is necessary to have a monitor thread for python workers if the user cancels with
+   * interrupts disabled. In that case we will need to explicitly kill the worker, otherwise the
+   * threads can block indefinitely.
    */
-  class MonitorThread(
-      env: SparkEnv, worker: Socket, writerThread: WriterThread, context: TaskContext)
+  class MonitorThread(env: SparkEnv, worker: Socket, context: TaskContext)
     extends Thread(s"Worker Monitor for $pythonExec") {
 
     /** How long to wait before killing the python worker if a task cannot be interrupted. */
@@ -620,16 +614,14 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
     setDaemon(true)
 
     private def monitorWorker(): Unit = {
-      // Wait until the task is either canceled or completed.
+      // Kill the worker if it is interrupted, checking until task completion.
       // TODO: This has a race condition if interruption occurs, as completed may still become true.
       while (!context.isInterrupted && !context.isCompleted) {
         Thread.sleep(2000)
       }
-      if (!context.isCompleted || writerThread.isAlive) {
+      if (!context.isCompleted) {
         Thread.sleep(taskKillTimeout)
-        // If the task fails to complete (scenario 1) or the writer thread continues running
-        // (scenario 2), kill the worker.
-        if (!context.isCompleted || writerThread.isAlive) {
+        if (!context.isCompleted) {
           try {
             // Mimic the task name used in `Executor` to help the user find out the task to blame.
             val taskName = s"${context.partitionId}.${context.attemptNumber} " +
@@ -651,6 +643,54 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
         if (reuseWorker) {
           val key = (worker, context.taskAttemptId)
           PythonRunner.runningMonitorThreads.remove(key)
+        }
+      }
+    }
+  }
+
+  /**
+   * This thread monitors the WriterThread and kills it in case of deadlock.
+   *
+   * A deadlock can arise if the task completes while the writer thread is sending input to the
+   * Python process (e.g. due to the use of `take()`), and the Python process is still producing
+   * output. When the inputs are sufficiently large, this can result in a deadlock due to the use of
+   * blocking I/O (SPARK-38677). To resolve the deadlock, we need to close the socket.
+   */
+  class WriterMonitorThread(
+      env: SparkEnv, worker: Socket, writerThread: WriterThread, context: TaskContext)
+    extends Thread(s"Writer Monitor for $pythonExec (writer thread id ${writerThread.getId})") {
+
+    /**
+     * How long to wait before closing the socket if the writer thread has not exited after the task
+     * ends.
+     */
+    private val taskKillTimeout = env.conf.get(PYTHON_TASK_KILL_TIMEOUT)
+
+    setDaemon(true)
+
+    override def run(): Unit = {
+      // Wait until the task is completed (or the writer thread exits, in which case this thread has
+      // nothing to do).
+      while (!context.isCompleted && writerThread.isAlive) {
+        Thread.sleep(2000)
+      }
+      if (writerThread.isAlive) {
+        Thread.sleep(taskKillTimeout)
+        // If the writer thread continues running, this indicates a deadlock. Kill the worker to
+        // resolve the deadlock.
+        if (writerThread.isAlive) {
+          try {
+            // Mimic the task name used in `Executor` to help the user find out the task to blame.
+            val taskName = s"${context.partitionId}.${context.attemptNumber} " +
+              s"in stage ${context.stageId} (TID ${context.taskAttemptId})"
+            logWarning(
+              s"Detected deadlock while completing task $taskName: " +
+                "Attempting to kill Python Worker")
+            env.destroyPythonWorker(pythonExec, envVars.asScala.toMap, worker)
+          } catch {
+            case e: Exception =>
+              logError("Exception when trying to kill worker", e)
+          }
         }
       }
     }
