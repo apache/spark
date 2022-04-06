@@ -252,20 +252,22 @@ class ToNumberParser(originNumberFormat: String, errorOnFail: Boolean) extends S
       case _ => false
     }
     val firstDecimalPointIndex: Int = formatTokens.indexOf(DecimalPoint())
-    val digitGroupsBeforeDecimalPoint: Seq[DigitGroups] = formatTokens.zipWithIndex.flatMap {
-      case (d@DigitGroups(_, _), i)
-        if firstDecimalPointIndex == -1 ||
-          i < firstDecimalPointIndex =>
-        Seq(d)
-      case _ => Seq()
-    }
-    val digitGroupsAfterDecimalPoint: Seq[DigitGroups] = formatTokens.zipWithIndex.flatMap {
-      case (d@DigitGroups(_, _), i)
-        if firstDecimalPointIndex != -1 &&
-          i > firstDecimalPointIndex =>
-        Seq(d)
-      case _ => Seq()
-    }
+    val digitGroupsBeforeDecimalPoint: Seq[DigitGroups] =
+      formatTokens.zipWithIndex.flatMap {
+        case (d@DigitGroups(_, _), i)
+          if firstDecimalPointIndex == -1 ||
+            i < firstDecimalPointIndex =>
+          Seq(d)
+        case _ => Seq()
+      }
+    val digitGroupsAfterDecimalPoint: Seq[DigitGroups] =
+      formatTokens.zipWithIndex.flatMap {
+        case (d@DigitGroups(_, _), i)
+          if firstDecimalPointIndex != -1 &&
+            i > firstDecimalPointIndex =>
+          Seq(d)
+        case _ => Seq()
+      }
 
     // Make sure the format string contains at least one token.
     if (originNumberFormat.isEmpty) {
