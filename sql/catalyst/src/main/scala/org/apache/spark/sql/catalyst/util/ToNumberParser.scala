@@ -442,7 +442,6 @@ class ToNumberParser(originNumberFormat: String, errorOnFail: Boolean) extends S
               case _ =>
             }
           }
-        // Note that the input may contain more digit sequences than allowed here; this is OK.
         case DecimalPoint() =>
           if (inputIndex < inputLength &&
             (inputBuffer(inputIndex) == POINT_SIGN ||
