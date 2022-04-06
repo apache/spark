@@ -727,7 +727,7 @@ class SparkContext(config: SparkConf) extends Logging {
   private[spark] def getExecutorHeapDump(executorId: String): Option[InputStream] = {
     try {
       if (executorId == SparkContext.DRIVER_IDENTIFIER) {
-        Some(Utils.getHeapDump)
+        Some(Utils.getHeapDump())
       } else {
         val endpointRef = env.blockManager.master.getExecutorEndpointRef(executorId).get
         Some(endpointRef.askSync[InputStream](TriggerHeapDump))

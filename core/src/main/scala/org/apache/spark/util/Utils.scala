@@ -2274,7 +2274,7 @@ private[spark] object Utils extends Logging {
   }
 
   /** Return a heap dump */
-  def getHeapDump: InputStream = {
+  def getHeapDump(): InputStream = {
     try {
       val clazz = classOf[HotSpotDiagnosticMXBean]
       val server = ManagementFactory.getPlatformMBeanServer
