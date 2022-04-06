@@ -47,6 +47,12 @@ class SymmetricHashJoinStateManagerSuite extends StreamTest with BeforeAndAfter 
   }
 
   SymmetricHashJoinStateManager.supportedVersions.foreach { version =>
+    test(s"StreamingJoinStateManager V${version} - all operations with nulls") {
+      testAllOperationsWithNulls(version)
+    }
+  }
+
+  SymmetricHashJoinStateManager.supportedVersions.foreach { version =>
     test(s"SPARK-35689: StreamingJoinStateManager V${version} - " +
         "printable key of keyWithIndexToValue") {
 
@@ -67,7 +73,6 @@ class SymmetricHashJoinStateManagerSuite extends StreamTest with BeforeAndAfter 
       }
     }
   }
-
 
   private def testAllOperations(stateFormatVersion: Int): Unit = {
     withJoinStateManager(inputValueAttribs, joinKeyExprs, stateFormatVersion) { manager =>
@@ -99,11 +104,6 @@ class SymmetricHashJoinStateManagerSuite extends StreamTest with BeforeAndAfter 
       assert(get(30) === Seq.empty)     // should remove 30
       assert(numRows === 0)
 
-      def appendAndTest(key: Int, values: Int*): Unit = {
-        values.foreach { value => append(key, value)}
-        require(get(key) === values)
-      }
-
       appendAndTest(40, 100, 200, 300)
       appendAndTest(50, 125)
       appendAndTest(60, 275)              // prepare for testing removeByValue
@@ -130,6 +130,43 @@ class SymmetricHashJoinStateManagerSuite extends StreamTest with BeforeAndAfter 
       assert(numRows === 0)
     }
   }
+
+  /* Test removeByValue with nulls simulated by updating numValues on the state manager */
+  private def testAllOperationsWithNulls(stateFormatVersion: Int): Unit = {
+    withJoinStateManager(inputValueAttribs, joinKeyExprs, stateFormatVersion) { manager =>
+      implicit val mgr = manager
+
+      appendAndTest(40, 100, 200, 300)
+      appendAndTest(50, 125)
+      appendAndTest(60, 275)              // prepare for testing removeByValue
+      assert(numRows === 5)
+
+      updateNumValues(40, 5)   // update total values to 5 to create 2 nulls
+      removeByValue(125)
+      assert(get(40) === Seq(200, 300))
+      assert(get(50) === Seq.empty)
+      assert(get(60) === Seq(275))        // should remove only some values, not all and nulls
+      assert(numRows === 3)
+
+      append(40, 50)
+      assert(get(40) === Seq(50, 200, 300))
+      assert(numRows === 4)
+      updateNumValues(40, 4)   // update total values to 4 to create 1 null
+
+      removeByValue(200)
+      assert(get(40) === Seq(300))
+      assert(get(60) === Seq(275))        // should remove only some values, not all and nulls
+      assert(numRows === 2)
+      updateNumValues(40, 2)   // update total values to simulate nulls
+      updateNumValues(60, 4)
+
+      removeByValue(300)
+      assert(get(40) === Seq.empty)
+      assert(get(60) === Seq.empty)       // should remove all values now including nulls
+      assert(numRows === 0)
+    }
+  }
+
   val watermarkMetadata = new MetadataBuilder().putLong(EventTimeWatermark.delayKey, 10).build()
   val inputValueSchema = new StructType()
     .add(StructField("time", IntegerType, metadata = watermarkMetadata))
@@ -155,6 +192,17 @@ class SymmetricHashJoinStateManagerSuite extends StreamTest with BeforeAndAfter 
   def append(key: Int, value: Int)(implicit manager: SymmetricHashJoinStateManager): Unit = {
     // we only put matched = false for simplicity - StreamingJoinSuite will test the functionality
     manager.append(toJoinKeyRow(key), toInputValue(value), matched = false)
+  }
+
+  def appendAndTest(key: Int, values: Int*)
+                   (implicit manager: SymmetricHashJoinStateManager): Unit = {
+    values.foreach { value => append(key, value)}
+    require(get(key) === values)
+  }
+
+  def updateNumValues(key: Int, numValues: Long)
+                     (implicit manager: SymmetricHashJoinStateManager): Unit = {
+    manager.updateNumValuesTestOnly(toJoinKeyRow(key), numValues)
   }
 
   def get(key: Int)(implicit manager: SymmetricHashJoinStateManager): Seq[Int] = {
