@@ -693,7 +693,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           Alias(srcAttr, tgtAttr.name)(exprId = tgtAttr.exprId)
         }
         val newPlan = planLater(Project(projectList, ctePlan))
-        (if (r.subquery) {
+        (if (r.mergedScalarSubquery) {
           newPlan
         } else {
           // Plan CTE ref as a repartition shuffle so that all refs of the same CTE def will share

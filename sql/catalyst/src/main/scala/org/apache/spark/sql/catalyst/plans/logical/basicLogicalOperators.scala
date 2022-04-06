@@ -677,18 +677,21 @@ object CTERelationDef {
 
 /**
  * Represents the relation of a CTE reference.
- * @param cteId     The ID of the corresponding CTE definition.
- * @param _resolved Whether this reference is resolved.
- * @param output    The output attributes of this CTE reference, which can be different from
- *                  the output of its corresponding CTE definition after attribute de-duplication.
- * @param statsOpt  The optional statistics inferred from the corresponding CTE definition.
+ * @param cteId                The ID of the corresponding CTE definition.
+ * @param _resolved            Whether this reference is resolved.
+ * @param output               The output attributes of this CTE reference, which can be different
+ *                             from the output of its corresponding CTE definition after attribute
+ *                             de-duplication.
+ * @param statsOpt             The optional statistics inferred from the corresponding CTE
+ *                             definition.
+ * @param mergedScalarSubquery If this reference points to a merged scalar subquery.
  */
 case class CTERelationRef(
     cteId: Long,
     _resolved: Boolean,
     override val output: Seq[Attribute],
     statsOpt: Option[Statistics] = None,
-    subquery: Boolean = false) extends LeafNode with MultiInstanceRelation {
+    mergedScalarSubquery: Boolean = false) extends LeafNode with MultiInstanceRelation {
 
   final override val nodePatterns: Seq[TreePattern] = Seq(CTE)
 

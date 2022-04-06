@@ -39,7 +39,8 @@ class MergeScalarSubqueriesSuite extends PlanTest {
 
   private def extractorExpression(cteIndex: Int, output: Seq[Attribute], fieldIndex: Int) = {
     GetStructField(
-      ScalarSubquery(CTERelationRef(cteIndex, _resolved = true, output, subquery = true)),
+      ScalarSubquery(
+        CTERelationRef(cteIndex, _resolved = true, output, mergedScalarSubquery = true)),
       fieldIndex).as("scalarsubquery()")
   }
 

@@ -344,7 +344,7 @@ object MergeScalarSubqueries extends Rule[LogicalPlan] with PredicateHelper {
             GetStructField(
               ScalarSubquery(
                 CTERelationRef(subqueryCTE.id, _resolved = true, subqueryCTE.output,
-                  subquery = true),
+                  mergedScalarSubquery = true),
                 exprId = ssr.exprId),
               ssr.headerIndex)
           } else {
