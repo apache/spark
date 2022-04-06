@@ -19,7 +19,6 @@ package org.apache.spark.sql.execution.datasources.parquet;
 
 import java.io.IOException;
 import java.time.ZoneId;
-import java.util.PrimitiveIterator;
 
 import org.apache.parquet.CorruptDeltaByteArrays;
 import org.apache.parquet.VersionParser.ParsedVersion;
@@ -41,7 +40,6 @@ import org.apache.parquet.schema.PrimitiveType;
 import org.apache.spark.sql.execution.vectorized.WritableColumnVector;
 import org.apache.spark.sql.types.Decimal;
 
-import static org.apache.parquet.column.ValuesType.REPETITION_LEVEL;
 import static org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName.BOOLEAN;
 import static org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName.INT64;
 
@@ -70,6 +68,11 @@ public class VectorizedColumnReader {
   private VectorizedRleValuesReader defColumn;
 
   /**
+   * Vectorized RLE decoder for repetition levels
+   */
+  private VectorizedRleValuesReader repColumn;
+
+  /**
    * Factory to get type-specific vector updater.
    */
   private final ParquetVectorUpdaterFactory updaterFactory;
@@ -93,9 +96,8 @@ public class VectorizedColumnReader {
 
   public VectorizedColumnReader(
       ColumnDescriptor descriptor,
-      LogicalTypeAnnotation logicalTypeAnnotation,
-      PageReader pageReader,
-      PrimitiveIterator.OfLong rowIndexes,
+      boolean isRequired,
+      PageReadStore pageReadStore,
       ZoneId convertTz,
       String datetimeRebaseMode,
       String datetimeRebaseTz,
@@ -103,9 +105,10 @@ public class VectorizedColumnReader {
       String int96RebaseTz,
       ParsedVersion writerVersion) throws IOException {
     this.descriptor = descriptor;
-    this.pageReader = pageReader;
-    this.readState = new ParquetReadState(descriptor.getMaxDefinitionLevel(), rowIndexes);
-    this.logicalTypeAnnotation = logicalTypeAnnotation;
+    this.pageReader = pageReadStore.getPageReader(descriptor);
+    this.readState = new ParquetReadState(descriptor, isRequired,
+      pageReadStore.getRowIndexes().orElse(null));
+    this.logicalTypeAnnotation = descriptor.getPrimitiveType().getLogicalTypeAnnotation();
     this.updaterFactory = new ParquetVectorUpdaterFactory(
       logicalTypeAnnotation,
       convertTz,
@@ -161,9 +164,13 @@ public class VectorizedColumnReader {
   }
 
   /**
-   * Reads `total` values from this columnReader into column.
+   * Reads `total` rows from this columnReader into column.
    */
-  void readBatch(int total, WritableColumnVector column) throws IOException {
+  void readBatch(
+      int total,
+      WritableColumnVector column,
+      WritableColumnVector repetitionLevels,
+      WritableColumnVector definitionLevels) throws IOException {
     WritableColumnVector dictionaryIds = null;
     ParquetVectorUpdater updater = updaterFactory.getUpdater(descriptor, column.dataType());
 
@@ -174,22 +181,32 @@ public class VectorizedColumnReader {
       dictionaryIds = column.reserveDictionaryIds(total);
     }
     readState.resetForNewBatch(total);
-    while (readState.valuesToReadInBatch > 0) {
+    while (readState.rowsToReadInBatch > 0 || !readState.lastListCompleted) {
       if (readState.valuesToReadInPage == 0) {
         int pageValueCount = readPage();
+        if (pageValueCount < 0) {
+          // we've read all the pages; this could happen when we're reading a repeated list and we
+          // don't know where the list will end until we've seen all the pages.
+          break;
+        }
         readState.resetForNewPage(pageValueCount, pageFirstRowIndex);
       }
       PrimitiveType.PrimitiveTypeName typeName =
           descriptor.getPrimitiveType().getPrimitiveTypeName();
       if (isCurrentPageDictionaryEncoded) {
         // Save starting offset in case we need to decode dictionary IDs.
-        int startOffset = readState.offset;
+        int startOffset = readState.valueOffset;
         // Save starting row index so we can check if we need to eagerly decode dict ids later
         long startRowId = readState.rowId;
 
         // Read and decode dictionary ids.
-        defColumn.readIntegers(readState, dictionaryIds, column,
-          (VectorizedValuesReader) dataColumn);
+        if (readState.maxRepetitionLevel == 0) {
+          defColumn.readIntegers(readState, dictionaryIds, column, definitionLevels,
+            (VectorizedValuesReader) dataColumn);
+        } else {
+          repColumn.readIntegersRepeated(readState, repetitionLevels, defColumn, definitionLevels,
+            dictionaryIds, column, (VectorizedValuesReader) dataColumn);
+        }
 
         // TIMESTAMP_MILLIS encoded as INT64 can't be lazily decoded as we need to post process
         // the values to add microseconds precision.
@@ -220,24 +237,32 @@ public class VectorizedColumnReader {
           boolean needTransform = castLongToInt || isUnsignedInt32 || isUnsignedInt64;
           column.setDictionary(new ParquetDictionary(dictionary, needTransform));
         } else {
-          updater.decodeDictionaryIds(readState.offset - startOffset, startOffset, column,
+          updater.decodeDictionaryIds(readState.valueOffset - startOffset, startOffset, column,
             dictionaryIds, dictionary);
         }
       } else {
-        if (column.hasDictionary() && readState.offset != 0) {
+        if (column.hasDictionary() && readState.valueOffset != 0) {
           // This batch already has dictionary encoded values but this new page is not. The batch
           // does not support a mix of dictionary and not so we will decode the dictionary.
-          updater.decodeDictionaryIds(readState.offset, 0, column, dictionaryIds, dictionary);
+          updater.decodeDictionaryIds(readState.valueOffset, 0, column, dictionaryIds, dictionary);
         }
         column.setDictionary(null);
         VectorizedValuesReader valuesReader = (VectorizedValuesReader) dataColumn;
-        defColumn.readBatch(readState, column, valuesReader, updater);
+        if (readState.maxRepetitionLevel == 0) {
+          defColumn.readBatch(readState, column, definitionLevels, valuesReader, updater);
+        } else {
+          repColumn.readBatchRepeated(readState, repetitionLevels, defColumn, definitionLevels,
+            column, valuesReader, updater);
+        }
       }
     }
   }
 
   private int readPage() {
     DataPage page = pageReader.readPage();
+    if (page == null) {
+      return -1;
+    }
     this.pageFirstRowIndex = page.getFirstRowIndex().orElse(0L);
 
     return page.accept(new DataPage.Visitor<Integer>() {
@@ -328,18 +353,18 @@ public class VectorizedColumnReader {
     }
 
     int pageValueCount = page.getValueCount();
-    int bitWidth = BytesUtils.getWidthFromMaxInt(descriptor.getMaxDefinitionLevel());
 
-    this.defColumn = new VectorizedRleValuesReader(bitWidth);
+    int rlBitWidth = BytesUtils.getWidthFromMaxInt(descriptor.getMaxRepetitionLevel());
+    this.repColumn = new VectorizedRleValuesReader(rlBitWidth);
+
+    int dlBitWidth = BytesUtils.getWidthFromMaxInt(descriptor.getMaxDefinitionLevel());
+    this.defColumn = new VectorizedRleValuesReader(dlBitWidth);
+
     try {
       BytesInput bytes = page.getBytes();
       ByteBufferInputStream in = bytes.toInputStream();
 
-      // only used now to consume the repetition level data
-      page.getRlEncoding()
-          .getValuesReader(descriptor, REPETITION_LEVEL)
-          .initFromPage(pageValueCount, in);
-
+      repColumn.initFromPage(pageValueCount, in);
       defColumn.initFromPage(pageValueCount, in);
       initDataReader(pageValueCount, page.getValueEncoding(), in);
       return pageValueCount;
@@ -350,11 +375,16 @@ public class VectorizedColumnReader {
 
   private int readPageV2(DataPageV2 page) throws IOException {
     int pageValueCount = page.getValueCount();
-    int bitWidth = BytesUtils.getWidthFromMaxInt(descriptor.getMaxDefinitionLevel());
 
     // do not read the length from the stream. v2 pages handle dividing the page bytes.
-    defColumn = new VectorizedRleValuesReader(bitWidth, false);
+    int rlBitWidth = BytesUtils.getWidthFromMaxInt(descriptor.getMaxRepetitionLevel());
+    repColumn = new VectorizedRleValuesReader(rlBitWidth, false);
+    repColumn.initFromPage(pageValueCount, page.getRepetitionLevels().toInputStream());
+
+    int dlBitWidth = BytesUtils.getWidthFromMaxInt(descriptor.getMaxDefinitionLevel());
+    defColumn = new VectorizedRleValuesReader(dlBitWidth, false);
     defColumn.initFromPage(pageValueCount, page.getDefinitionLevels().toInputStream());
+
     try {
       initDataReader(pageValueCount, page.getDataEncoding(), page.getData().toInputStream());
       return pageValueCount;

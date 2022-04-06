@@ -83,7 +83,7 @@ class RateStreamProviderSuite extends StreamTest {
       .format("rate")
       .option("rowsPerSecond", "10")
       .load()
-      .select(Symbol("value"))
+      .select($"value")
 
     var streamDuration = 0
 

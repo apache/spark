@@ -1009,6 +1009,14 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val PARQUET_VECTORIZED_READER_NESTED_COLUMN_ENABLED =
+    buildConf("spark.sql.parquet.enableNestedColumnVectorizedReader")
+      .doc("Enables vectorized Parquet decoding for nested columns (e.g., struct, list, map). " +
+          s"Requires ${PARQUET_VECTORIZED_READER_ENABLED.key} to be enabled.")
+      .version("3.3.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val PARQUET_RECORD_FILTER_ENABLED = buildConf("spark.sql.parquet.recordLevelFilter.enabled")
     .doc("If true, enables Parquet's native record-level filtering using the pushed down " +
       "filters. " +
@@ -1325,6 +1333,15 @@ object SQLConf {
     .version("2.0.0")
     .booleanConf
     .createWithDefault(true)
+
+  val V2_BUCKETING_ENABLED = buildConf("spark.sql.sources.v2.bucketing.enabled")
+      .doc(s"Similar to ${BUCKETING_ENABLED.key}, this config is used to enable bucketing for V2 " +
+        "data sources. When turned on, Spark will recognize the specific distribution " +
+        "reported by a V2 data source through SupportsReportPartitioning, and will try to " +
+        "avoid shuffle if necessary.")
+      .version("3.3.0")
+      .booleanConf
+      .createWithDefault(false)
 
   val BUCKETING_MAX_BUCKETS = buildConf("spark.sql.sources.bucketing.maxBuckets")
     .doc("The maximum number of buckets allowed.")
@@ -3926,6 +3943,9 @@ class SQLConf extends Serializable with Logging {
 
   def parquetVectorizedReaderEnabled: Boolean = getConf(PARQUET_VECTORIZED_READER_ENABLED)
 
+  def parquetVectorizedReaderNestedColumnEnabled: Boolean =
+    getConf(PARQUET_VECTORIZED_READER_NESTED_COLUMN_ENABLED)
+
   def parquetVectorizedReaderBatchSize: Int = getConf(PARQUET_VECTORIZED_READER_BATCH_SIZE)
 
   def columnBatchSize: Int = getConf(COLUMN_BATCH_SIZE)
@@ -4157,6 +4177,8 @@ class SQLConf extends Serializable with Logging {
   def bucketingMaxBuckets: Int = getConf(SQLConf.BUCKETING_MAX_BUCKETS)
 
   def autoBucketedScanEnabled: Boolean = getConf(SQLConf.AUTO_BUCKETED_SCAN_ENABLED)
+
+  def v2BucketingEnabled: Boolean = getConf(SQLConf.V2_BUCKETING_ENABLED)
 
   def dataFrameSelfJoinAutoResolveAmbiguity: Boolean =
     getConf(DATAFRAME_SELF_JOIN_AUTO_RESOLVE_AMBIGUITY)
