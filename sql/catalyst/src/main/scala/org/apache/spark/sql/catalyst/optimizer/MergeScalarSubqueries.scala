@@ -95,8 +95,9 @@ object MergeScalarSubqueries extends Rule[LogicalPlan] with PredicateHelper {
   /**
    * An item in the cache of merged scalar subqueries.
    *
-   * @param elements  List of attributes that form the scalar return value of a merged subquery
-   * @param plan      The plan of a merged scalar subquery
+   * @param elements  List of member names and attributes that form the struct scalar return value
+   *                  of a merged subquery.
+   * @param plan      The plan of a merged scalar subquery.
    * @param merged    A flag to identify if this item is the result of merging subqueries.
    *                  Please note that `elements.size == 1` doesn't always mean that the plan is not
    *                  merged as there can be subqueries that are different ([[checkIdenticalPlans]]
