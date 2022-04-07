@@ -47,6 +47,8 @@ With this package, you can:
 * Have a single codebase that works both with pandas (tests, smaller datasets) and with Spark (distributed datasets).
 * Switch to pandas API and PySpark API contexts easily without any overhead.
 
+Note that pandas has different behavior per its version, and pandas API on Spark tries to match the behavior of pandas 1.4.
+
 **Streaming**
 
 Running on top of Spark, the streaming feature in Apache Spark enables powerful
