@@ -4342,7 +4342,6 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
       checkAnswer(df.repartitionByRange(2, col("v")).selectExpr("try_sum(v)"), Row(null))
     }
   }
-
 }
 
 case class Foo(bar: Option[String])
