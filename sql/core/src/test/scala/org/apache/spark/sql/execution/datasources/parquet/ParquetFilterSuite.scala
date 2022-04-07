@@ -1902,7 +1902,7 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
     }
   }
 
-  test("in and notIn filters") {
+  test("SPARK-38825: in and notIn filters") {
     import testImplicits._
     withTempPath { file =>
       Seq(1, 2, 0, -1, 99, 1000, 3, 7, 2).toDF("id").coalesce(1).write.mode("overwrite")
