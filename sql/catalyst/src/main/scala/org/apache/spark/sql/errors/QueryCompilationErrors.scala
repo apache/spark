@@ -764,8 +764,9 @@ object QueryCompilationErrors {
   }
 
   def noHandlerForUDAFError(name: String): Throwable = {
-    new InvalidUDFClassException(s"No handler for UDAF '$name'. " +
-      "Use sparkSession.udf.register(...) instead.")
+    new InvalidUDFClassException(
+      errorClass = "NO_HANDLER_FOR_UDAF",
+      messageParameters = Array(name))
   }
 
   def batchWriteCapabilityError(
@@ -2259,19 +2260,8 @@ object QueryCompilationErrors {
 
   def usingUntypedScalaUDFError(): Throwable = {
     new AnalysisException(
-      errorClass = "INVALID_UDF",
-      messageParameters = Array(
-        "You're using untyped Scala UDF, which does not have the input type " +
-        "information. Spark may blindly pass null to the Scala closure with primitive-type " +
-        "argument, and the closure will see the default value of the Java type for the null " +
-        "argument, e.g. `udf((x: Int) => x, IntegerType)`, the result is 0 for null input. " +
-        "To get rid of this error, you could:\n" +
-        "1. use typed Scala UDF APIs(without return type parameter), e.g. `udf((x: Int) => x)`\n" +
-        "2. use Java UDF APIs, e.g. `udf(new UDF1[String, Integer] { " +
-        "override def call(s: String): Integer = s.length() }, IntegerType)`, " +
-        "if input types are all non primitive\n" +
-        s"3. set ${SQLConf.LEGACY_ALLOW_UNTYPED_SCALA_UDF.key} to true and " +
-        s"use this API with caution"))
+      errorClass = "UNTYPED_SCALA_UDF",
+      messageParameters = Array.empty)
   }
 
   def aggregationFunctionAppliedOnNonNumericColumnError(colName: String): Throwable = {
@@ -2308,15 +2298,14 @@ object QueryCompilationErrors {
 
   def udfClassDoesNotImplementAnyUDFInterfaceError(className: String): Throwable = {
     new AnalysisException(
-      errorClass = "INVALID_UDF",
-      messageParameters = Array(s"UDF class $className doesn't implement any UDF interface"))
+      errorClass = "UDF_CLASS_NOT_IMPLEMENT_ANY_UDF_INTERFACE",
+      messageParameters = Array(className))
   }
 
   def udfClassNotAllowedToImplementMultiUDFInterfacesError(className: String): Throwable = {
     new AnalysisException(
-      errorClass = "INVALID_UDF",
-      messageParameters = Array(
-        s"It is invalid to implement multiple UDF interfaces, UDF class $className"))
+      errorClass = "UDF_CLASS_IMPLEMENT_MULTI_UDF_INTERFACE",
+      messageParameters = Array(className))
   }
 
   def udfClassWithTooManyTypeArgumentsError(n: Int): Throwable = {
