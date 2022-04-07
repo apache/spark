@@ -829,7 +829,7 @@ class NestedColumnAliasingSuite extends SchemaPruningTest {
       .select(
         UnresolvedExtractValue(
           UnresolvedExtractValue(
-            CaseWhen(Seq(('col.getField("a").===(1),
+            CaseWhen(Seq(('col.getField("a") === 1,
               Literal.default(simpleStruct)))),
             Literal("b")),
           Literal("c")).as("result"))
