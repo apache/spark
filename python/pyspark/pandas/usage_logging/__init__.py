@@ -124,4 +124,4 @@ def attach(logger_module: Union[str, ModuleType]) -> None:
         (pd.core.window.RollingGroupby, MissingPandasLikeRollingGroupby),
     ]
 
-    _attach(logger_module, modules, classes, missings)
+    _attach(logger_module, modules, classes, missings)  # type: ignore[arg-type]
