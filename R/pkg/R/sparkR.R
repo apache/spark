@@ -344,10 +344,10 @@ sparkRHive.init <- function(jsc = NULL) {
 #' the warehouse, an accompanied metastore may also be automatically created in the current
 #' directory when a new SparkSession is initialized with \code{enableHiveSupport} set to
 #' \code{TRUE}, which is the default. For more details, refer to Hive configuration at
-#' \url{http://spark.apache.org/docs/latest/sql-programming-guide.html#hive-tables}.
+#' \url{https://spark.apache.org/docs/latest/sql-programming-guide.html#hive-tables}.
 #'
 #' For details on how to initialize and use SparkR, refer to SparkR programming guide at
-#' \url{http://spark.apache.org/docs/latest/sparkr.html#starting-up-sparksession}.
+#' \url{https://spark.apache.org/docs/latest/sparkr.html#starting-up-sparksession}.
 #'
 #' @param master the Spark master URL.
 #' @param appName application name to register with cluster manager.
@@ -598,7 +598,7 @@ sparkConfToSubmitOps[["spark.kerberos.principal"]] <- "--principal"
 #
 # A few Spark Application and Runtime environment properties cannot take effect after driver
 # JVM has started, as documented in:
-# http://spark.apache.org/docs/latest/configuration.html#application-properties
+# https://spark.apache.org/docs/latest/configuration.html#application-properties
 # When starting SparkR without using spark-submit, for example, from Rstudio, add them to
 # spark-submit commandline if not already set in SPARKR_SUBMIT_ARGS so that they can be effective.
 getClientModeSparkSubmitOpts <- function(submitOps, sparkEnvirMap) {

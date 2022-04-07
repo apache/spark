@@ -51,7 +51,7 @@ abstract class RemoveRedundantSortsSuiteBase
 
   test("remove redundant sorts with limit") {
     withTempView("t") {
-      spark.range(100).select(Symbol("id") as "key").createOrReplaceTempView("t")
+      spark.range(100).select($"id" as "key").createOrReplaceTempView("t")
       val query =
         """
           |SELECT key FROM
@@ -64,8 +64,8 @@ abstract class RemoveRedundantSortsSuiteBase
 
   test("remove redundant sorts with broadcast hash join") {
     withTempView("t1", "t2") {
-      spark.range(1000).select(Symbol("id") as "key").createOrReplaceTempView("t1")
-      spark.range(1000).select(Symbol("id") as "key").createOrReplaceTempView("t2")
+      spark.range(1000).select($"id" as "key").createOrReplaceTempView("t1")
+      spark.range(1000).select($"id" as "key").createOrReplaceTempView("t2")
 
       val queryTemplate = """
         |SELECT /*+ BROADCAST(%s) */ t1.key FROM
@@ -100,8 +100,8 @@ abstract class RemoveRedundantSortsSuiteBase
 
   test("remove redundant sorts with sort merge join") {
     withTempView("t1", "t2") {
-      spark.range(1000).select(Symbol("id") as "key").createOrReplaceTempView("t1")
-      spark.range(1000).select(Symbol("id") as "key").createOrReplaceTempView("t2")
+      spark.range(1000).select($"id" as "key").createOrReplaceTempView("t1")
+      spark.range(1000).select($"id" as "key").createOrReplaceTempView("t2")
       val query = """
         |SELECT /*+ MERGE(t1) */ t1.key FROM
         | (SELECT key FROM t1 WHERE key > 10 ORDER BY key DESC LIMIT 10) t1
@@ -123,15 +123,15 @@ abstract class RemoveRedundantSortsSuiteBase
 
   test("cached sorted data doesn't need to be re-sorted") {
     withSQLConf(SQLConf.REMOVE_REDUNDANT_SORTS_ENABLED.key -> "true") {
-      val df = spark.range(1000).select(Symbol("id") as "key").sort(Symbol("key").desc).cache()
-      val resorted = df.sort(Symbol("key").desc)
-      val sortedAsc = df.sort('key.asc)
+      val df = spark.range(1000).select($"id" as "key").sort($"key".desc).cache()
+      val resorted = df.sort($"key".desc)
+      val sortedAsc = df.sort($"key".asc)
       checkNumSorts(df, 0)
       checkNumSorts(resorted, 0)
       checkNumSorts(sortedAsc, 1)
       val result = resorted.collect()
       withSQLConf(SQLConf.REMOVE_REDUNDANT_SORTS_ENABLED.key -> "false") {
-        val resorted = df.sort('key.desc)
+        val resorted = df.sort($"key".desc)
         checkNumSorts(resorted, 1)
         checkAnswer(resorted, result)
       }
@@ -140,7 +140,7 @@ abstract class RemoveRedundantSortsSuiteBase
 
   test("SPARK-33472: shuffled join with different left and right side partition numbers") {
     withTempView("t1", "t2") {
-      spark.range(0, 100, 1, 2).select(Symbol("id") as "key").createOrReplaceTempView("t1")
+      spark.range(0, 100, 1, 2).select($"id" as "key").createOrReplaceTempView("t1")
       (0 to 100).toDF("key").createOrReplaceTempView("t2")
 
       val queryTemplate = """

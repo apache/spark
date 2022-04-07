@@ -743,7 +743,8 @@ private[spark] class AppStatusStore(
       })
 
       new v1.TaskData(taskDataOld.taskId, taskDataOld.index,
-        taskDataOld.attempt, taskDataOld.launchTime, taskDataOld.resultFetchStart,
+        taskDataOld.attempt, taskDataOld.partitionId,
+        taskDataOld.launchTime, taskDataOld.resultFetchStart,
         taskDataOld.duration, taskDataOld.executorId, taskDataOld.host, taskDataOld.status,
         taskDataOld.taskLocality, taskDataOld.speculative, taskDataOld.accumulatorUpdates,
         taskDataOld.errorMessage, taskDataOld.taskMetrics,

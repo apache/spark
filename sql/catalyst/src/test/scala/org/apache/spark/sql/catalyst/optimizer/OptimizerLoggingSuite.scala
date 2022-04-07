@@ -42,9 +42,9 @@ class OptimizerLoggingSuite extends PlanTest {
     withLogAppender(logAppender,
       loggerNames = Seq("org.apache.spark.sql.catalyst.rules.PlanChangeLogger"),
       level = Some(Level.TRACE)) {
-      val input = LocalRelation('a.int, 'b.string, 'c.double)
-      val query = input.select('a, 'b).select('a).where('a > 1).analyze
-      val expected = input.where('a > 1).select('a).analyze
+      val input = LocalRelation($"a".int, $"b".string, $"c".double)
+      val query = input.select($"a", $"b").select($"a").where($"a" > 1).analyze
+      val expected = input.where($"a" > 1).select($"a").analyze
       comparePlans(Optimize.execute(query), expected)
     }
     val events = logAppender.loggingEvents.filter {
