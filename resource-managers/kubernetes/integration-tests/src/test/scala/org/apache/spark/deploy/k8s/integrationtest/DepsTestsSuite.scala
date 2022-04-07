@@ -33,6 +33,7 @@ import org.scalatest.time.{Minutes, Span}
 import org.apache.spark.SparkException
 import org.apache.spark.deploy.k8s.integrationtest.DepsTestsSuite.{DEPS_TIMEOUT, FILE_CONTENTS, HOST_PATH}
 import org.apache.spark.deploy.k8s.integrationtest.KubernetesSuite.{INTERVAL, MinikubeTag, TIMEOUT}
+import org.apache.spark.deploy.k8s.integrationtest.TestConstants.CONFIG_MINIO_REQUEST_CORES
 import org.apache.spark.deploy.k8s.integrationtest.Utils.getExamplesJarName
 import org.apache.spark.deploy.k8s.integrationtest.backend.minikube.Minikube
 import org.apache.spark.internal.config.{ARCHIVES, PYSPARK_DRIVER_PYTHON, PYSPARK_PYTHON}
@@ -58,7 +59,7 @@ private[spark] trait DepsTestsSuite { k8sSuite: KubernetesSuite =>
     ).toArray
 
     val resources = Map(
-      "cpu" -> new Quantity("1"),
+      "cpu" -> new Quantity(sys.props.get(CONFIG_MINIO_REQUEST_CORES).getOrElse("1")),
       "memory" -> new Quantity("512M")
     ).asJava
 
