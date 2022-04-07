@@ -210,9 +210,13 @@ class ToNumberParser(numberFormat: String, errorOnFail: Boolean) extends Seriali
     }
   }
 
+  // Holds all digits (0-9) before the decimal point (.) while parsing each input string.
   private lazy val beforeDecimalPoint = new StringBuilder(precision)
+  // Holds all digits (0-9) after the decimal point (.) while parsing each input string.
   private lazy val afterDecimalPoint = new StringBuilder(scale)
-  private lazy val actualDigitLengths = mutable.Buffer.empty[Int]
+  // Number of digits (0-9) in each group of the input string, split by thousands separators.
+  private lazy val parsedDigitGroupSizes = mutable.Buffer.empty[Int]
+  // Increments to count the number of digits (0-9) in the current group within the input string.
   private var numDigitsInCurrentGroup: Int = 0
 
   /**
@@ -467,26 +471,26 @@ class ToNumberParser(numberFormat: String, errorOnFail: Boolean) extends Seriali
     // they are digits (0-9) or the thousands separator (,).
     numDigitsInCurrentGroup = 0
     var inputIndex = startingInputIndex
-    actualDigitLengths.clear()
+    parsedDigitGroupSizes.clear()
 
     while (inputIndex < inputLength &&
       matchesDigitOrComma(inputString(inputIndex), reachedDecimalPoint)) {
       inputIndex += 1
     }
     if (inputIndex == inputLength) {
-      actualDigitLengths.prepend(numDigitsInCurrentGroup)
+      parsedDigitGroupSizes.prepend(numDigitsInCurrentGroup)
     }
     // Compare the number of digits encountered in each group (separated by thousands
     // separators) with the expected numbers from the format string.
-    if (actualDigitLengths.length > expectedDigits.length) {
+    if (parsedDigitGroupSizes.length > expectedDigits.length) {
       // The input contains more thousands separators than the format string.
       return None
     }
     for (i <- 0 until expectedDigits.length) {
       val expectedToken: Digits = expectedDigits(i)
       val actualNumDigits: Int =
-        if (i < actualDigitLengths.length) {
-          actualDigitLengths(i)
+        if (i < parsedDigitGroupSizes.length) {
+          parsedDigitGroupSizes(i)
         } else {
           0
         }
@@ -525,11 +529,11 @@ class ToNumberParser(numberFormat: String, errorOnFail: Boolean) extends Seriali
         }
         true
       case COMMA_SIGN =>
-        actualDigitLengths.prepend(numDigitsInCurrentGroup)
+        parsedDigitGroupSizes.prepend(numDigitsInCurrentGroup)
         numDigitsInCurrentGroup = 0
         true
       case _ =>
-        actualDigitLengths.prepend(numDigitsInCurrentGroup)
+        parsedDigitGroupSizes.prepend(numDigitsInCurrentGroup)
         false
     }
   }
