@@ -2245,13 +2245,13 @@ class DDLParserSuite extends AnalysisTest {
   }
 
   test("SPARK-38335: Implement parser support for DEFAULT values for columns in tables") {
-    // The following ALTER TABLE commands will support DEFAULT columns, but this has not been
-    // implemented yet.
-    val unsupportedError = "Support for DEFAULT column values is not implemented yet"
     comparePlans(
       parsePlan("ALTER TABLE t1 ADD COLUMN x int NOT NULL DEFAULT 42"),
       AddColumns(UnresolvedTable(Seq("t1"), "ALTER TABLE ... ADD COLUMN", None),
         Seq(QualifiedColType(None, "x", IntegerType, false, None, None, Some("42")))))
+    // The following ALTER TABLE commands will support DEFAULT columns, but this has not been
+    // implemented yet.
+    val unsupportedError = "Support for DEFAULT column values is not implemented yet"
     assert(intercept[ParseException] {
       parsePlan("ALTER TABLE t1 ALTER COLUMN a.b.c SET DEFAULT 42")
     }.getMessage.contains(unsupportedError))
