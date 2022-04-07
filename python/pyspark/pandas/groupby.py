@@ -3240,12 +3240,13 @@ class SeriesGroupBy(GroupBy[Series]):
         groupkey_cols = [s.spark.column.alias(name) for s, name in zip(groupkeys, groupkey_names)]
 
         sdf = self._psdf._internal.spark_frame
-        if dropna:
-            sdf = sdf.dropna()
 
         agg_column = self._agg_columns[0]._internal.data_spark_column_names[0]
         sdf = sdf.groupby(*groupkey_cols).count().withColumnRenamed("count", agg_column)
 
+        if dropna:
+            _agg_columns_names = groupkey_names[len(self._groupkeys) :]
+            sdf = sdf.dropna(subset=_agg_columns_names)
         if sort:
             if ascending:
                 sdf = sdf.orderBy(scol_for(sdf, agg_column).asc())
