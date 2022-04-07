@@ -46,4 +46,5 @@ object SourceOptions {
 
   val RESPECT_SPARK_SCHEMA = "respectSparkSchema"
   val DEFAULT_RESPECT_SPARK_SCHEMA = false
+
 }

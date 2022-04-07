@@ -16,6 +16,7 @@
  */
 package org.apache.spark.sql.catalyst
 
+import org.apache.spark.sql.catalyst.FileSourceOptions.{IGNORE_CORRUPT_FILES, IGNORE_MISSING_FILES}
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.internal.SQLConf
 
@@ -28,10 +29,10 @@ class FileSourceOptions(
 
   def this(parameters: Map[String, String]) = this(CaseInsensitiveMap(parameters))
 
-  val ignoreCorruptFiles: Boolean = parameters.get("ignoreCorruptFiles").map(_.toBoolean)
+  val ignoreCorruptFiles: Boolean = parameters.get(IGNORE_CORRUPT_FILES).map(_.toBoolean)
     .getOrElse(SQLConf.get.ignoreCorruptFiles)
 
-  val ignoreMissingFiles: Boolean = parameters.get("ignoreMissingFiles").map(_.toBoolean)
+  val ignoreMissingFiles: Boolean = parameters.get(IGNORE_MISSING_FILES).map(_.toBoolean)
     .getOrElse(SQLConf.get.ignoreMissingFiles)
 }
 

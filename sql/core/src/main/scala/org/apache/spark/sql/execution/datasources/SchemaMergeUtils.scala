@@ -62,9 +62,8 @@ object SchemaMergeUtils extends Logging {
     val numParallelism = Math.min(Math.max(partialFileStatusInfo.size, 1),
       sparkSession.sparkContext.defaultParallelism)
 
-    val ignoreCorruptFiles = CaseInsensitiveMap(parameters)
-      .get(FileSourceOptions.IGNORE_CORRUPT_FILES).map(_.toBoolean)
-      .getOrElse(sparkSession.sessionState.conf.ignoreCorruptFiles)
+    val ignoreCorruptFiles =
+      new FileSourceOptions(CaseInsensitiveMap(parameters)).ignoreCorruptFiles
 
     // Issues a Spark job to read Parquet/ORC schema in parallel.
     val partiallyMergedSchemas =

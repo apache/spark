@@ -58,9 +58,7 @@ private[sql] object AvroUtils extends Logging {
     val avroSchema = parsedOptions.schema
       .getOrElse {
         inferAvroSchemaFromFiles(files, conf, parsedOptions.ignoreExtension,
-          CaseInsensitiveMap(options)
-            .get(FileSourceOptions.IGNORE_CORRUPT_FILES).map(_.toBoolean)
-            .getOrElse(spark.sessionState.conf.ignoreCorruptFiles))
+          new FileSourceOptions(CaseInsensitiveMap(options)).ignoreCorruptFiles)
       }
 
     SchemaConverters.toSqlType(avroSchema).dataType match {

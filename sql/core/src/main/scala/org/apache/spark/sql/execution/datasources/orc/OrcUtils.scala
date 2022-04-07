@@ -142,9 +142,7 @@ object OrcUtils extends Logging {
 
   def readSchema(sparkSession: SparkSession, files: Seq[FileStatus], options: Map[String, String])
       : Option[StructType] = {
-    val ignoreCorruptFiles = CaseInsensitiveMap(options)
-      .get(FileSourceOptions.IGNORE_CORRUPT_FILES).map(_.toBoolean)
-      .getOrElse(sparkSession.sessionState.conf.ignoreCorruptFiles)
+    val ignoreCorruptFiles = new FileSourceOptions(CaseInsensitiveMap(options)).ignoreCorruptFiles
     val conf = sparkSession.sessionState.newHadoopConfWithOptions(options)
     files.iterator.map(file => readSchema(file.getPath, conf, ignoreCorruptFiles)).collectFirst {
       case Some(schema) =>

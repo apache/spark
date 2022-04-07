@@ -134,9 +134,7 @@ class OrcFileFormat
       sparkSession.sparkContext.broadcast(new SerializableConfiguration(hadoopConf))
     val isCaseSensitive = sparkSession.sessionState.conf.caseSensitiveAnalysis
     val orcFilterPushDown = sparkSession.sessionState.conf.orcFilterPushDown
-    val ignoreCorruptFiles = CaseInsensitiveMap(options)
-      .get(FileSourceOptions.IGNORE_CORRUPT_FILES).map(_.toBoolean)
-      .getOrElse(sparkSession.sessionState.conf.ignoreCorruptFiles)
+    val ignoreCorruptFiles = new FileSourceOptions(CaseInsensitiveMap(options)).ignoreCorruptFiles
 
     (file: PartitionedFile) => {
       val conf = broadcastedConf.value.value

@@ -71,15 +71,11 @@ class FileScanRDD(
     @transient val filePartitions: Seq[FilePartition],
     val readDataSchema: StructType,
     val metadataColumns: Seq[AttributeReference] = Seq.empty,
-    options: CaseInsensitiveMap[String] = CaseInsensitiveMap(Map.empty))
+    options: FileSourceOptions = new FileSourceOptions(CaseInsensitiveMap(Map.empty)))
   extends RDD[InternalRow](sparkSession.sparkContext, Nil) {
 
-  private val ignoreCorruptFiles = options.get(FileSourceOptions.IGNORE_CORRUPT_FILES)
-    .map(_.toBoolean)
-    .getOrElse(sparkSession.sessionState.conf.ignoreCorruptFiles)
-  private val ignoreMissingFiles = options.get(FileSourceOptions.IGNORE_MISSING_FILES)
-    .map(_.toBoolean)
-    .getOrElse(sparkSession.sessionState.conf.ignoreMissingFiles)
+  private val ignoreCorruptFiles = options.ignoreCorruptFiles
+  private val ignoreMissingFiles = options.ignoreMissingFiles
 
   override def compute(split: RDDPartition, context: TaskContext): Iterator[InternalRow] = {
     val iterator = new Iterator[Object] with AutoCloseable {
