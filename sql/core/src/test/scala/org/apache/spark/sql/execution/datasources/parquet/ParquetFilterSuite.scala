@@ -1901,6 +1901,27 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
       }
     }
   }
+
+  test("SPARK-38825: in and notIn filters") {
+    import testImplicits._
+    withTempPath { file =>
+      Seq(1, 2, 0, -1, 99, 1000, 3, 7, 2).toDF("id").coalesce(1).write.mode("overwrite")
+        .parquet(file.getCanonicalPath)
+      var df = spark.read.parquet(file.getCanonicalPath)
+      var in = df.filter(col("id").isin(100, 3, 11, 12, 13))
+      var notIn = df.filter(!col("id").isin(100, 3, 11, 12, 13))
+      checkAnswer(in, Seq(Row(3)))
+      checkAnswer(notIn, Seq(Row(1), Row(2), Row(0), Row(-1), Row(99), Row(1000), Row(7), Row(2)))
+
+      Seq("mary", "martin", "lucy", "alex", "mary", "dan").toDF("name").coalesce(1)
+        .write.mode("overwrite").parquet(file.getCanonicalPath)
+      df = spark.read.parquet(file.getCanonicalPath)
+      in = df.filter(col("name").isin("mary", "victor", "leo", "alex"))
+      notIn = df.filter(!col("name").isin("mary", "victor", "leo", "alex"))
+      checkAnswer(in, Seq(Row("mary"), Row("alex"), Row("mary")))
+      checkAnswer(notIn, Seq(Row("martin"), Row("lucy"), Row("dan")))
+    }
+  }
 }
 
 @ExtendedSQLTest
