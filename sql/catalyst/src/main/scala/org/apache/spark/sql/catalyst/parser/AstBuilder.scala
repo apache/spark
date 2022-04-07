@@ -2659,7 +2659,7 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
       case ("double", Nil) => DoubleType
       case ("date", Nil) => DateType
       case ("timestamp", Nil) => SQLConf.get.timestampType
-      // SPARK-36227: Remove TimestampNTZ type support in Spark 3.2 with minimal code changes.
+      // SPARK-38813: Remove TimestampNTZ type support in Spark 3.3 with minimal code changes.
       case ("timestamp_ntz", Nil) if isTesting => TimestampNTZType
       case ("timestamp_ltz", Nil) if isTesting => TimestampType
       case ("string", Nil) => StringType

@@ -359,14 +359,16 @@ object FunctionRegistry {
   // then create a `RuntimeReplaceable` expression to call the Java method with `Invoke` or
   // `StaticInvoke` expression. By doing so we don't need to implement codegen for new functions
   // anymore. See `AesEncrypt`/`AesDecrypt` as an example.
-=======
   val expressionsForTimestampNTZSupport: Map[String, (ExpressionInfo, FunctionBuilder)] =
-    // SPARK-36227: Remove TimestampNTZ type support in Spark 3.2 with minimal code changes.
+    // SPARK-38813: Remove TimestampNTZ type support in Spark 3.3 with minimal code changes.
     if (Utils.isTesting) {
       Map(
+        expression[LocalTimestamp]("localtimestamp"),
         // We keep the 2 expression builders below to have different function docs.
-        expressionBuilder("to_timestamp_ntz", ParseToTimestampNTZExpressionBuilder, setAlias = true),
-        expressionBuilder("to_timestamp_ltz", ParseToTimestampLTZExpressionBuilder, setAlias = true),
+        expressionBuilder(
+          "to_timestamp_ntz", ParseToTimestampNTZExpressionBuilder, setAlias = true),
+        expressionBuilder(
+          "to_timestamp_ltz", ParseToTimestampLTZExpressionBuilder, setAlias = true),
         // We keep the 2 expression builders below to have different function docs.
         expressionBuilder("make_timestamp_ntz", MakeTimestampNTZExpressionBuilder, setAlias = true),
         expressionBuilder("make_timestamp_ltz", MakeTimestampLTZExpressionBuilder, setAlias = true)
@@ -376,7 +378,6 @@ object FunctionRegistry {
     }
 
   // Note: Whenever we add a new entry here, make sure we also update ExpressionToSQLSuite
->>>>>>> 99eb3ff226 ([SPARK-36227][SQL][3.2] Remove TimestampNTZ type support in Spark 3.2)
   val expressions: Map[String, (ExpressionInfo, FunctionBuilder)] = Map(
     // misc non-aggregate functions
     expression[Abs]("abs"),

@@ -4333,8 +4333,8 @@ class SQLConf extends Serializable with Logging {
   def strictIndexOperator: Boolean = ansiEnabled && getConf(ANSI_STRICT_INDEX_OPERATOR)
 
   def timestampType: AtomicType = getConf(TIMESTAMP_TYPE) match {
-    // SPARK-36227: Remove TimestampNTZ type support in Spark 3.2 with minimal code changes.
-    //              The configuration `TIMESTAMP_TYPE` is only effective for testing in Spark 3.2.
+    // SPARK-38813: Remove TimestampNTZ type support in Spark 3.3 with minimal code changes.
+    //              The configuration `TIMESTAMP_TYPE` is only effective for testing in Spark 3.3.
     case "TIMESTAMP_NTZ" if Utils.isTesting =>
       TimestampNTZType
 

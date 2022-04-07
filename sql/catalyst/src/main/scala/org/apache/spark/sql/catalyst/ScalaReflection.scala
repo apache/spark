@@ -753,7 +753,7 @@ object ScalaReflection extends ScalaReflection {
         Schema(TimestampType, nullable = true)
       case t if isSubtype(t, localTypeOf[java.sql.Timestamp]) =>
         Schema(TimestampType, nullable = true)
-      // SPARK-36227: Remove TimestampNTZ type support in Spark 3.2 with minimal code changes.
+      // SPARK-38813: Remove TimestampNTZ type support in Spark 3.3 with minimal code changes.
       case t if isSubtype(t, localTypeOf[java.time.LocalDateTime]) && Utils.isTesting =>
         Schema(TimestampNTZType, nullable = true)
       case t if isSubtype(t, localTypeOf[java.time.LocalDate]) => Schema(DateType, nullable = true)
@@ -860,7 +860,7 @@ object ScalaReflection extends ScalaReflection {
     StringType -> classOf[UTF8String],
     DateType -> classOf[DateType.InternalType],
     TimestampType -> classOf[TimestampType.InternalType],
-    // SPARK-36227: Remove TimestampNTZ type support in Spark 3.2 with minimal code changes.
+    // SPARK-38813: Remove TimestampNTZ type support in Spark 3.3 with minimal code changes.
     TimestampNTZType ->
       (if (Utils.isTesting) classOf[TimestampNTZType.InternalType] else classOf[java.lang.Object]),
     BinaryType -> classOf[BinaryType.InternalType],
@@ -877,7 +877,7 @@ object ScalaReflection extends ScalaReflection {
     DoubleType -> classOf[java.lang.Double],
     DateType -> classOf[java.lang.Integer],
     TimestampType -> classOf[java.lang.Long],
-    // SPARK-36227: Remove TimestampNTZ type support in Spark 3.2 with minimal code changes.
+    // SPARK-38813: Remove TimestampNTZ type support in Spark 3.3 with minimal code changes.
     TimestampNTZType ->
       (if (Utils.isTesting) classOf[java.lang.Long] else classOf[java.lang.Object])
   )

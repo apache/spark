@@ -80,7 +80,7 @@ object Literal {
     case d: Decimal => Literal(d, DecimalType(Math.max(d.precision, d.scale), d.scale))
     case i: Instant => Literal(instantToMicros(i), TimestampType)
     case t: Timestamp => Literal(DateTimeUtils.fromJavaTimestamp(t), TimestampType)
-    // SPARK-36227: Remove TimestampNTZ type support in Spark 3.2 with minimal code changes.
+    // SPARK-38813: Remove TimestampNTZ type support in Spark 3.3 with minimal code changes.
     case l: LocalDateTime if Utils.isTesting =>
       Literal(DateTimeUtils.localDateTimeToMicros(l), TimestampNTZType)
     case ld: LocalDate => Literal(ld.toEpochDay.toInt, DateType)
@@ -122,7 +122,7 @@ object Literal {
     case _ if clz == classOf[Date] => DateType
     case _ if clz == classOf[Instant] => TimestampType
     case _ if clz == classOf[Timestamp] => TimestampType
-    // SPARK-36227: Remove TimestampNTZ type support in Spark 3.2 with minimal code changes.
+    // SPARK-38813: Remove TimestampNTZ type support in Spark 3.3 with minimal code changes.
     case _ if clz == classOf[LocalDateTime] && Utils.isTesting => TimestampNTZType
     case _ if clz == classOf[Duration] => DayTimeIntervalType()
     case _ if clz == classOf[Period] => YearMonthIntervalType()
@@ -189,7 +189,7 @@ object Literal {
     case dt: DecimalType => Literal(Decimal(0, dt.precision, dt.scale))
     case DateType => create(0, DateType)
     case TimestampType => create(0L, TimestampType)
-    // SPARK-36227: Remove TimestampNTZ type support in Spark 3.2 with minimal code changes.
+    // SPARK-38813: Remove TimestampNTZ type support in Spark 3.3 with minimal code changes.
     case TimestampNTZType if Utils.isTesting => create(0L, TimestampNTZType)
     case it: DayTimeIntervalType => create(0L, it)
     case it: YearMonthIntervalType => create(0, it)
@@ -212,7 +212,7 @@ object Literal {
       case ByteType => v.isInstanceOf[Byte]
       case ShortType => v.isInstanceOf[Short]
       case IntegerType | DateType | _: YearMonthIntervalType => v.isInstanceOf[Int]
-      // SPARK-36227: Remove TimestampNTZ type support in Spark 3.2 with minimal code changes.
+      // SPARK-38813: Remove TimestampNTZ type support in Spark 3.3 with minimal code changes.
       case TimestampNTZType if Utils.isTesting => v.isInstanceOf[Long]
       case LongType | TimestampType | _: DayTimeIntervalType =>
         v.isInstanceOf[Long]

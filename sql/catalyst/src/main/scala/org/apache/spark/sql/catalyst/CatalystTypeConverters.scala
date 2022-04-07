@@ -504,7 +504,7 @@ object CatalystTypeConverters {
     case ld: LocalDate => LocalDateConverter.toCatalyst(ld)
     case t: Timestamp => TimestampConverter.toCatalyst(t)
     case i: Instant => InstantConverter.toCatalyst(i)
-    // SPARK-36227: Remove TimestampNTZ type support in Spark 3.2 with minimal code changes.
+    // SPARK-38813: Remove TimestampNTZ type support in Spark 3.3 with minimal code changes.
     case l: LocalDateTime if Utils.isTesting => TimestampNTZConverter.toCatalyst(l)
     case d: BigDecimal => new DecimalConverter(DecimalType(d.precision, d.scale)).toCatalyst(d)
     case d: JavaBigDecimal => new DecimalConverter(DecimalType(d.precision, d.scale)).toCatalyst(d)

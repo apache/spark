@@ -113,7 +113,7 @@ object RowEncoder {
         createSerializerForSqlTimestamp(inputObject)
       }
 
-    // SPARK-36227: Remove TimestampNTZ type support in Spark 3.2 with minimal code changes.
+    // SPARK-38813: Remove TimestampNTZ type support in Spark 3.3 with minimal code changes.
     case TimestampNTZType if Utils.isTesting => createSerializerForLocalDateTime(inputObject)
 
     case DateType =>
@@ -245,7 +245,7 @@ object RowEncoder {
       } else {
         ObjectType(classOf[java.sql.Timestamp])
       }
-    // SPARK-36227: Remove TimestampNTZ type support in Spark 3.2 with minimal code changes.
+    // SPARK-38813: Remove TimestampNTZ type support in Spark 3.3 with minimal code changes.
     case TimestampNTZType if Utils.isTesting =>
       ObjectType(classOf[java.time.LocalDateTime])
     case DateType =>
@@ -304,7 +304,7 @@ object RowEncoder {
         createDeserializerForSqlTimestamp(input)
       }
 
-    // SPARK-36227: Remove TimestampNTZ type support in Spark 3.2 with minimal code changes.
+    // SPARK-38813: Remove TimestampNTZ type support in Spark 3.3 with minimal code changes.
     case TimestampNTZType if Utils.isTesting =>
       createDeserializerForLocalDateTime(input)
 
