@@ -1897,7 +1897,11 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
-  // SPARK-38809 - Config option to allow skipping null values for hash based stream-stream joins.
+  /**
+   * SPARK-38809 - Config option to allow skipping null values for hash based stream-stream joins.
+   * Its possible for us to see nulls if state was written with an older version of Spark,
+   * the state was corrupted on disk or if we had an issue with the state iterators.
+   */
   val STATE_STORE_SKIP_NULLS_FOR_STREAM_STREAM_JOINS =
   buildConf("spark.sql.streaming.stateStore.skipNullsForStreamStreamJoins.enabled")
     .internal()
