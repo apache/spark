@@ -4355,7 +4355,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     assertDataStructuresEmpty()
   }
 
-  test("SPARK-37528: Support reorder tasks during scheduling by shuffle partition size in AQE") {
+  test("SPARK-37528: Schedule Tasks By Input Size") {
     scheduler = new MyDAGScheduler(
       sc,
       taskScheduler,
