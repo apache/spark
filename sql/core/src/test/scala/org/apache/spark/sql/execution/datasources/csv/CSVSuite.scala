@@ -807,12 +807,20 @@ abstract class CSVSuite
 
   test("SPARK-37575: null values should be saved as nothing rather than " +
     "quoted empty Strings \"\" with default settings") {
-    withTempPath { path =>
-      Seq(("Tesla", null: String, ""))
-        .toDF("make", "comment", "blank")
-        .write
-        .csv(path.getCanonicalPath)
-      checkAnswer(spark.read.text(path.getCanonicalPath), Row("Tesla,,\"\""))
+    Seq("true", "false").foreach { bcEnabled =>
+      withSQLConf(SQLConf.LEGACY_NULL_VALUE_WRITTEN_AS_UNQUOTED_EMPTY_STRING_CSV.key -> bcEnabled) {
+        withTempPath { path =>
+          Seq(("Tesla", null: String, ""))
+            .toDF("make", "comment", "blank")
+            .write
+            .csv(path.getCanonicalPath)
+          if (bcEnabled == "true") {
+            checkAnswer(spark.read.text(path.getCanonicalPath), Row("Tesla,,\"\""))
+          } else {
+            checkAnswer(spark.read.text(path.getCanonicalPath), Row("Tesla,\"\",\"\""))
+          }
+        }
+      }
     }
   }
 
