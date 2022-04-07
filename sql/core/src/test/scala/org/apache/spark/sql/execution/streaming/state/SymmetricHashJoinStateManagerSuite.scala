@@ -29,6 +29,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen.GeneratePredicate
 import org.apache.spark.sql.catalyst.plans.logical.EventTimeWatermark
 import org.apache.spark.sql.execution.streaming.StatefulOperatorStateInfo
 import org.apache.spark.sql.execution.streaming.StreamingSymmetricHashJoinHelper.LeftSide
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.StreamTest
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -300,7 +301,7 @@ class SymmetricHashJoinStateManagerSuite extends StreamTest with BeforeAndAfter 
       (f: SymmetricHashJoinStateManager => Unit): Unit = {
 
     withTempDir { file =>
-      withSQLConf("spark.sql.streaming.stateStore.skipNullsForStreamStreamJoins.enabled" ->
+      withSQLConf(SQLConf.STATE_STORE_SKIP_NULLS_FOR_STREAM_STREAM_JOINS.key ->
         skipNullsForStreamStreamJoins.toString) {
         val storeConf = new StateStoreConf(spark.sqlContext.conf)
         val stateInfo = StatefulOperatorStateInfo(file.getAbsolutePath, UUID.randomUUID, 0, 0, 5)
