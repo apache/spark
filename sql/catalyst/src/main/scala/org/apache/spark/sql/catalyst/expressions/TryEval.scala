@@ -123,7 +123,7 @@ case class TryDivide(left: Expression, right: Expression, replacement: Expressio
 }
 
 @ExpressionDescription(
-  usage = "expr1 _FUNC_ expr2 - Returns `expr1`-`expr2` and the result is null on overflow. " +
+  usage = "_FUNC_(expr1, expr2) - Returns `expr1`-`expr2` and the result is null on overflow. " +
     "The acceptable input types are the same with the `-` operator.",
   examples = """
     Examples:
@@ -156,7 +156,7 @@ case class TrySubtract(left: Expression, right: Expression, replacement: Express
 }
 
 @ExpressionDescription(
-  usage = "expr1 _FUNC_ expr2 - Returns `expr1`*`expr2` and the result is null on overflow. " +
+  usage = "_FUNC_(expr1, expr2) - Returns `expr1`*`expr2` and the result is null on overflow. " +
     "The acceptable input types are the same with the `*` operator.",
   examples = """
     Examples:
