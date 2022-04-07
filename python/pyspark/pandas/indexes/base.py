@@ -2167,7 +2167,7 @@ class Index(IndexOpsMixin):
         elif isinstance(self, type(other)) and not isinstance(self, MultiIndex):
             if self.name == other.name:
                 result.name = self.name
-        return result if sort is None else result.sort_values()
+        return result if sort is None else cast(Index, result.sort_values())
 
     @property
     def is_all_dates(self) -> bool:
