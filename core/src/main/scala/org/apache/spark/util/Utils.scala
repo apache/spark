@@ -19,7 +19,7 @@ package org.apache.spark.util
 
 import java.io._
 import java.lang.{Byte => JByte}
-import java.lang.management.{LockInfo, ManagementFactory, MonitorInfo, ThreadInfo}
+import java.lang.management.{LockInfo, ManagementFactory, MonitorInfo, PlatformManagedObject, ThreadInfo}
 import java.lang.reflect.InvocationTargetException
 import java.math.{MathContext, RoundingMode}
 import java.net._
@@ -48,7 +48,6 @@ import com.google.common.cache.{CacheBuilder, CacheLoader, LoadingCache}
 import com.google.common.collect.Interners
 import com.google.common.io.{ByteStreams, Files => GFiles}
 import com.google.common.net.InetAddresses
-import com.sun.management.HotSpotDiagnosticMXBean
 import org.apache.commons.codec.binary.Hex
 import org.apache.commons.io.IOUtils
 import org.apache.commons.lang3.SystemUtils
@@ -2276,16 +2275,18 @@ private[spark] object Utils extends Logging {
   /** Return a heap dump */
   def getHeapDump(): InputStream = {
     try {
-      val clazz = classOf[HotSpotDiagnosticMXBean]
-      val server = ManagementFactory.getPlatformMBeanServer
-      val bean = ManagementFactory.newPlatformMXBeanProxy(server
-        , "com.sun.management:type=HotSpotDiagnostic"
-        , clazz)
-      val tmpDir = createTempDir("heap-dump")
-      tmpDir.deleteOnExit()
-      val absolutePath = s"${tmpDir.getAbsolutePath}/${System.nanoTime()}.hprof"
-      bean.dumpHeap(absolutePath, true)
-      new FileInputStream(absolutePath)
+      val diagnosticMXBeanClass = classForName("com.sun.management.HotSpotDiagnosticMXBean")
+        .asInstanceOf[Class[PlatformManagedObject]]
+      val diagnosticMXBean = ManagementFactory.getPlatformMXBean(diagnosticMXBeanClass)
+      val dumpHeapMethod = diagnosticMXBeanClass
+        .getMethod("dumpHeap", classOf[String], classOf[Boolean])
+      val path = Files.createTempFile("heap", ".hprof")
+      Files.delete(path)
+      val absolutePath = path.toAbsolutePath.toString
+      dumpHeapMethod.invoke(diagnosticMXBean, absolutePath, Boolean.box(true))
+      val stream = Files.newInputStream(path)
+      Files.delete(path)
+      stream
     } catch {
       case e: Exception =>
         throw new SparkException("Failed to dump heap", e)
