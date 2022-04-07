@@ -181,3 +181,38 @@ case class TryMultiply(left: Expression, right: Expression, replacement: Express
   override protected def withNewChildInternal(newChild: Expression): Expression =
     this.copy(replacement = newChild)
 }
+
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = "_FUNC_(str[, fmt]) - This is a special version of `to_binary` that performs the same operation, but returns a NULL value instead of raising an error if the conversion cannot be performed.",
+  examples = """
+    Examples:
+      > SELECT _FUNC_('abc', 'utf-8');
+       abc
+      > select _FUNC_('a!', 'base64');
+       NULL
+      > select _FUNC_('abc', 'invalidFormat');
+       NULL
+  """,
+  since = "3.3.0",
+  group = "string_funcs")
+// scalastyle:on line.size.limit
+case class TryToBinary(
+    expr: Expression,
+    format: Option[Expression],
+    replacement: Expression) extends RuntimeReplaceable
+  with InheritAnalysisRules {
+  def this(expr: Expression) =
+    this(expr, None, TryEval(ToBinary(expr, None, nullOnInvalidFormat = true)))
+
+  def this(expr: Expression, formatExpression: Expression) =
+    this(expr, Some(formatExpression),
+      TryEval(ToBinary(expr, Some(formatExpression), nullOnInvalidFormat = true)))
+
+  override def prettyName: String = "try_to_binary"
+
+  override def parameters: Seq[Expression] = expr +: format.toSeq
+
+  override protected def withNewChildInternal(newChild: Expression): Expression =
+    this.copy(replacement = newChild)
+}
