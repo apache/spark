@@ -3248,7 +3248,7 @@ class SeriesGroupBy(GroupBy[Series]):
         sdf = sdf.groupby(*groupkey_cols).count().withColumnRenamed("count", agg_column)
 
         if dropna:
-            _agg_columns_names = groupkey_names[len(self._groupkeys):]
+            _agg_columns_names = groupkey_names[len(self._groupkeys) :]
             sdf = sdf.dropna(subset=_agg_columns_names)
         if sort:
             if ascending:
