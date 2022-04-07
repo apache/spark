@@ -76,9 +76,9 @@ abstract class SumBase(child: Expression) extends DeclarativeAggregate
     }
 
   protected def getUpdateExpressions: Seq[Expression] = if (shouldTrackIsEmpty) {
-    // If shouldTrackIsEmpty is true, the initial value of `sum` is 0. We need to keep `sum` unchanged if
-    // the input is null, as SUM function ignores null input. The `sum` can only be null if
-    // overflow happens under non-ansi mode.
+    // If shouldTrackIsEmpty is true, the initial value of `sum` is 0. We need to keep `sum`
+    // unchanged if the input is null, as SUM function ignores null input. The `sum` can only be
+    // null if overflow happens under non-ansi mode.
     val sumExpr = if (child.nullable) {
       If(child.isNull, sum,
         Add(sum, KnownNotNull(child).cast(resultType), failOnError = failOnError))
@@ -106,7 +106,7 @@ abstract class SumBase(child: Expression) extends DeclarativeAggregate
   }
 
   /**
-   * For decimal type:
+   * When shouldTrackIsEmpty is true:
    * If isEmpty is false and if sum is null, then it means we have had an overflow.
    *
    * update of the sum is as follows:
@@ -115,7 +115,7 @@ abstract class SumBase(child: Expression) extends DeclarativeAggregate
    * If it did not have overflow, then add the sum.left and sum.right
    *
    * isEmpty:  Set to false if either one of the left or right is set to false. This
-   * means we have seen atleast a value that was not null.
+   * means we have seen at least a value that was not null.
    */
   protected def getMergeExpressions: Seq[Expression] = if (shouldTrackIsEmpty) {
     val bufferOverflow = !isEmpty.left && sum.left.isNull
