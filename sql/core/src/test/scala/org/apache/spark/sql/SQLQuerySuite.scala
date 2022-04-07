@@ -4332,12 +4332,11 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
   test("SPARK-38548: try_sum should return null if overflow happens before merging") {
     val longDf = Seq(Long.MaxValue, Long.MaxValue, 2).toDF("v")
     val yearMonthDf = Seq(Int.MaxValue, Int.MaxValue, 2)
+      .map(Period.ofMonths)
       .toDF("v")
-      .select(col("v").cast("year to month interval").as("v"))
-
-    val dayTimeDf = Seq(Long.MaxValue, Long.MaxValue, 2)
+    val dayTimeDf = Seq(106751991L, 106751991L, 2L)
+      .map(Duration.ofDays)
       .toDF("v")
-      .select(col("v").cast("day time interval").as("v"))
     Seq(longDf, yearMonthDf, dayTimeDf).foreach { df =>
       checkAnswer(df.repartitionByRange(2, col("v")).selectExpr("try_sum(v)"), Row(null))
     }
