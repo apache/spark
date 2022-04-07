@@ -1537,7 +1537,9 @@ class Index(IndexOpsMixin):
 
         return result
 
-    def sort_values(self, return_indexer: bool = False, ascending: bool = True) -> "Index":
+    def sort_values(
+        self, return_indexer: bool = False, ascending: bool = True
+    ) -> Union["Index", Tuple["Index", "Index"]]:
         """
         Return a sorted copy of the index, and optionally return the indices that
         sorted the index itself.
