@@ -127,6 +127,38 @@ class MergeScalarSubqueriesSuite extends PlanTest {
     comparePlans(Optimize.execute(originalQuery.analyze), correctAnswer.analyze)
   }
 
+  test("Merging subqueries with aggregates with complex grouping expressions") {
+    val subquery1 = ScalarSubquery(testRelation.groupBy('b > 1 && 'a === 2)(max('a).as("max_a")))
+    val subquery2 = ScalarSubquery(
+      testRelation
+        .select('a, 'b.as("b_2"))
+        .groupBy(Literal(2) === 'a && Literal(1) < 'b_2)(sum('a).as("sum_a")))
+
+    val originalQuery = testRelation
+      .select(
+        subquery1,
+        subquery2)
+
+    val mergedSubquery = testRelation
+      .select('a, 'b, 'c)
+      .groupBy('b > 1 && 'a === 2)(
+        max('a).as("max_a"),
+        sum('a).as("sum_a"))
+      .select(CreateNamedStruct(Seq(
+        Literal("max_a"), 'max_a,
+        Literal("sum_a"), 'sum_a
+      )).as("mergedValue"))
+    val analyzedMergedSubquery = mergedSubquery.analyze
+    val correctAnswer = WithCTE(
+      testRelation
+        .select(
+          extractorExpression(0, analyzedMergedSubquery.output, 0),
+          extractorExpression(0, analyzedMergedSubquery.output, 1)),
+      Seq(CTERelationDef(analyzedMergedSubquery, 0)))
+
+    comparePlans(Optimize.execute(originalQuery.analyze), correctAnswer.analyze)
+  }
+
   test("Merging subqueries with filters") {
     val subquery1 = ScalarSubquery(testRelation.where('a > 1).select('a))
     // Despite having an extra Project node, `subquery2` is mergeable with `subquery1`
@@ -158,6 +190,37 @@ class MergeScalarSubqueriesSuite extends PlanTest {
         .select(
           extractorExpression(0, analyzedMergedSubquery.output, 0),
           extractorExpression(0, analyzedMergedSubquery.output, 1),
+          extractorExpression(0, analyzedMergedSubquery.output, 0),
+          extractorExpression(0, analyzedMergedSubquery.output, 1)),
+      Seq(CTERelationDef(analyzedMergedSubquery, 0)))
+
+    comparePlans(Optimize.execute(originalQuery.analyze), correctAnswer.analyze)
+  }
+
+  test("Merging subqueries with complex filter conditions") {
+    val subquery1 = ScalarSubquery(testRelation.where('a > 1 && 'b === 2).select('a))
+    val subquery2 = ScalarSubquery(
+      testRelation
+        .select('a.as("a_2"), 'b)
+        .where(Literal(2) === 'b && Literal(1) < 'a_2)
+        .select('b.as("b_2")))
+    val originalQuery = testRelation
+      .select(
+        subquery1,
+        subquery2)
+
+    val mergedSubquery = testRelation
+      .select('a, 'b, 'c)
+      .where('a > 1 && 'b === 2)
+      .select('a, 'b.as("b_2"))
+      .select(CreateNamedStruct(Seq(
+        Literal("a"), 'a,
+        Literal("b_2"), 'b_2
+      )).as("mergedValue"))
+    val analyzedMergedSubquery = mergedSubquery.analyze
+    val correctAnswer = WithCTE(
+      testRelation
+        .select(
           extractorExpression(0, analyzedMergedSubquery.output, 0),
           extractorExpression(0, analyzedMergedSubquery.output, 1)),
       Seq(CTERelationDef(analyzedMergedSubquery, 0)))
@@ -232,6 +295,46 @@ class MergeScalarSubqueriesSuite extends PlanTest {
         testRelation.as("t2").select('a, 'b, 'c),
         Inner,
         Some($"t1.b" === $"t2.b"))
+      .select($"t1.a", $"t2.c")
+      .select(CreateNamedStruct(Seq(
+        Literal("a"), 'a,
+        Literal("c_2"), 'c
+      )).as("mergedValue"))
+    val analyzedMergedSubquery = mergedSubquery.analyze
+    val correctAnswer = WithCTE(
+      testRelation
+        .select(
+          extractorExpression(0, analyzedMergedSubquery.output, 0),
+          extractorExpression(0, analyzedMergedSubquery.output, 1)),
+      Seq(CTERelationDef(analyzedMergedSubquery, 0)))
+
+    comparePlans(Optimize.execute(originalQuery.analyze), correctAnswer.analyze)
+  }
+
+  test("Merge subqueries with complex join conditions") {
+    val subquery1 = ScalarSubquery(testRelation.as("t1")
+      .join(
+        testRelation.as("t2"),
+        Inner,
+        Some($"t1.b" < $"t2.b" && $"t1.a" === $"t2.c"))
+      .select($"t1.a").analyze)
+    val subquery2 = ScalarSubquery(testRelation.as("t1")
+      .select('a.as("a_1"), 'b.as("b_1"), 'c.as("c_1"))
+      .join(
+        testRelation.as("t2").select('a.as("a_2"), 'b.as("b_2"), 'c.as("c_2")),
+        Inner,
+        Some('c_2 === 'a_1 && 'b_1 < 'b_2))
+      .select('c_2).analyze)
+    val originalQuery = testRelation.select(
+      subquery1,
+      subquery2)
+
+    val mergedSubquery = testRelation.as("t1")
+      .select('a, 'b, 'c)
+      .join(
+        testRelation.as("t2").select('a, 'b, 'c),
+        Inner,
+        Some($"t1.b" < $"t2.b" && $"t1.a" === $"t2.c"))
       .select($"t1.a", $"t2.c")
       .select(CreateNamedStruct(Seq(
         Literal("a"), 'a,

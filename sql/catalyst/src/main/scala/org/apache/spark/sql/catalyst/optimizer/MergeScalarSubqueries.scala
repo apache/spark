@@ -217,7 +217,9 @@ object MergeScalarSubqueries extends Rule[LogicalPlan] with PredicateHelper {
         case (np: Filter, cp: Filter) =>
           tryMergePlans(np.child, cp.child).flatMap { case (mergedChild, outputMap) =>
             val mappedNewCondition = mapAttributes(np.condition, outputMap)
-            if (mappedNewCondition == cp.condition) {
+            // Comparing the canonicalized form is required to ignore different forms of the same
+            // expression.
+            if (mappedNewCondition.canonicalized == cp.condition.canonicalized) {
               val mergedPlan = cp.withNewChildren(Seq(mergedChild))
               Some(mergedPlan -> outputMap)
             } else {
@@ -230,8 +232,8 @@ object MergeScalarSubqueries extends Rule[LogicalPlan] with PredicateHelper {
             tryMergePlans(np.right, cp.right).flatMap { case (mergedRight, rightOutputMap) =>
               val outputMap = leftOutputMap ++ rightOutputMap
               val mappedNewCondition = np.condition.map(mapAttributes(_, outputMap))
-              // Comparing the canonicalized form is required to ignore
-              // `AttributeReference.quailifier`s in `cp.condition`.
+              // Comparing the canonicalized form is required to ignore different forms of the same
+              // expression and `AttributeReference.quailifier`s in `cp.condition`.
               if (mappedNewCondition.map(_.canonicalized) == cp.condition.map(_.canonicalized)) {
                 val mergedPlan = cp.withNewChildren(Seq(mergedLeft, mergedRight))
                 Some(mergedPlan -> outputMap)
