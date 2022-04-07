@@ -1808,7 +1808,9 @@ case class ParseUrl(children: Seq[Expression], failOnError: Boolean = SQLConf.ge
 case class FormatString(children: Expression*) extends Expression with ImplicitCastInputTypes {
 
   require(children.nonEmpty, s"$prettyName() should take at least 1 argument")
-  checkArgumentIndexNotZero(children(0))
+  if (!SQLConf.get.getConf(SQLConf.ALLOW_ZERO_INDEX_IN_FORMAT_STRING)) {
+    checkArgumentIndexNotZero(children(0))
+  }
 
 
   override def foldable: Boolean = children.forall(_.foldable)
