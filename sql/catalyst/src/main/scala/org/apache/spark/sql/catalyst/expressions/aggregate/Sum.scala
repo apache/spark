@@ -76,7 +76,7 @@ abstract class SumBase(child: Expression) extends DeclarativeAggregate
     }
 
   protected def getUpdateExpressions: Seq[Expression] = if (shouldTrackIsEmpty) {
-    // For decimal type, the initial value of `sum` is 0. We need to keep `sum` unchanged if
+    // If shouldTrackIsEmpty is true, the initial value of `sum` is 0. We need to keep `sum` unchanged if
     // the input is null, as SUM function ignores null input. The `sum` can only be null if
     // overflow happens under non-ansi mode.
     val sumExpr = if (child.nullable) {
@@ -93,7 +93,7 @@ abstract class SumBase(child: Expression) extends DeclarativeAggregate
     }
     Seq(sumExpr, isEmptyExpr)
   } else {
-    // For non-decimal type, the initial value of `sum` is null, which indicates no value.
+    // If shouldTrackIsEmpty is false, the initial value of `sum` is null, which indicates no value.
     // We need `coalesce(sum, zero)` to start summing values. And we need an outer `coalesce`
     // in case the input is nullable. The `sum` can only be null if there is no value, as
     // non-decimal type can produce overflowed value under non-ansi mode.
