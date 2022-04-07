@@ -10221,6 +10221,13 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         col6    False
         dtype: bool
 
+        Include NA values when set `skipna=False`.
+
+        >>> df[['col5', 'col6']].all(skipna=False)
+        col5    False
+        col6    False
+        dtype: bool
+
         Include only boolean columns when set `bool_only=True`.
 
         >>> df.all(bool_only=True)
