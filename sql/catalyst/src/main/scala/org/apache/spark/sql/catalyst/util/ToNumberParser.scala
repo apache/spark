@@ -30,7 +30,6 @@ object ToNumberParser {
   final val ANGLE_BRACKET_OPEN = '<'
   final val COMMA_LETTER = 'G'
   final val COMMA_SIGN = ','
-  final val DOLLAR_LETTER = 'L'
   final val DOLLAR_SIGN = '$'
   final val MINUS_SIGN = '-'
   final val NINE_DIGIT = '9'
@@ -45,6 +44,7 @@ object ToNumberParser {
 
   final val OPTIONAL_MINUS_STRING_START = 'M'
   final val OPTIONAL_MINUS_STRING_END = 'I'
+
   final val WRAPPING_ANGLE_BRACKETS_TO_NEGATIVE_NUMBER_START = 'P'
   final val WRAPPING_ANGLE_BRACKETS_TO_NEGATIVE_NUMBER_END = 'R'
 
@@ -79,7 +79,7 @@ object ToNumberParser {
 }
 
 /**
- * This class represents a parser to implement the to_number SQL function.
+ * This class represents a parser to implement the to_number or try_to_number SQL functions.
  *
  * It works by consuming an input string and a format string. This class accepts the format string
  * as a field, and proceeds to iterate through the format string to generate a sequence of tokens
@@ -87,11 +87,11 @@ object ToNumberParser {
  * input string, this class steps through the sequence of tokens and compares them against the input
  * string, returning a Spark Decimal object if they match (or throwing an exception otherwise).
  *
- * @param originNumberFormat the format string describing the expected inputs.
+ * @param numberFormat the format string describing the expected inputs.
  * @param errorOnFail true if evaluation should throw an exception if the input string fails to
  *                    match the format string. Otherwise, returns NULL instead.
  */
-class ToNumberParser(originNumberFormat: String, errorOnFail: Boolean) extends Serializable {
+class ToNumberParser(numberFormat: String, errorOnFail: Boolean) extends Serializable {
   import ToNumberParser._
 
   // Consumes the format string and produce a sequence of input tokens expected from each input
@@ -100,16 +100,15 @@ class ToNumberParser(originNumberFormat: String, errorOnFail: Boolean) extends S
     val tokens = mutable.Buffer.empty[InputToken]
     var i = 0
     var reachedDecimalPoint = false
-    val format = originNumberFormat
-    val len = originNumberFormat.length
+    val len = numberFormat.length
     while (i < len) {
-      val char: Char = originNumberFormat(i)
+      val char: Char = numberFormat(i)
       char match {
         case ZERO_DIGIT =>
           val prevI = i
           do {
             i += 1
-          } while (i < len && (format(i) == ZERO_DIGIT || format(i) == NINE_DIGIT))
+          } while (i < len && (numberFormat(i) == ZERO_DIGIT || numberFormat(i) == NINE_DIGIT))
           if (reachedDecimalPoint) {
             tokens.append(AtMostAsManyDigits(i - prevI))
           } else {
@@ -119,7 +118,7 @@ class ToNumberParser(originNumberFormat: String, errorOnFail: Boolean) extends S
           val prevI = i
           do {
             i += 1
-          } while (i < len && (format(i) == ZERO_DIGIT || format(i) == NINE_DIGIT))
+          } while (i < len && (numberFormat(i) == ZERO_DIGIT || numberFormat(i) == NINE_DIGIT))
           tokens.append(AtMostAsManyDigits(i - prevI))
         case POINT_SIGN | POINT_LETTER =>
           tokens.append(DecimalPoint())
@@ -128,18 +127,18 @@ class ToNumberParser(originNumberFormat: String, errorOnFail: Boolean) extends S
         case COMMA_SIGN | COMMA_LETTER =>
           tokens.append(ThousandsSeparator())
           i += 1
-        case DOLLAR_LETTER | DOLLAR_SIGN =>
+        case DOLLAR_SIGN =>
           tokens.append(DollarSign())
           i += 1
         case OPTIONAL_PLUS_OR_MINUS_LETTER =>
           tokens.append(OptionalPlusOrMinusSign())
           i += 1
         case OPTIONAL_MINUS_STRING_START if i < len - 1 &&
-          OPTIONAL_MINUS_STRING_END == originNumberFormat(i + 1) =>
+          OPTIONAL_MINUS_STRING_END == numberFormat(i + 1) =>
           tokens.append(OptionalMinusSign())
           i += 2
         case WRAPPING_ANGLE_BRACKETS_TO_NEGATIVE_NUMBER_START if i < len - 1 &&
-          WRAPPING_ANGLE_BRACKETS_TO_NEGATIVE_NUMBER_END == originNumberFormat(i + 1) =>
+          WRAPPING_ANGLE_BRACKETS_TO_NEGATIVE_NUMBER_END == numberFormat(i + 1) =>
           tokens.prepend(OpeningAngleBracket())
           tokens.append(ClosingAngleBracket())
           i += 2
@@ -155,7 +154,7 @@ class ToNumberParser(originNumberFormat: String, errorOnFail: Boolean) extends S
     var currentDigits = mutable.Buffer.empty[Digits]
     for (token <- tokens) {
       token match {
-        case digits@(_: Digits) =>
+        case digits: Digits =>
           currentGroup.append(token)
           currentDigits.append(digits)
         case _: ThousandsSeparator =>
@@ -214,6 +213,7 @@ class ToNumberParser(originNumberFormat: String, errorOnFail: Boolean) extends S
   private lazy val beforeDecimalPoint = new StringBuilder(precision)
   private lazy val afterDecimalPoint = new StringBuilder(scale)
   private lazy val actualDigitLengths = mutable.Buffer.empty[Int]
+  private var numDigitsInCurrentGroup: Int = 0
 
   /**
    * The result type of this parsing is a Decimal value with the appropriate precision and scale.
@@ -237,11 +237,11 @@ class ToNumberParser(originNumberFormat: String, errorOnFail: Boolean) extends S
    */
   private def validateFormatString: String = {
     def multipleSignInNumberFormatError(message: String) = {
-      s"At most one $message is allowed in the number format: '$originNumberFormat'"
+      s"At most one $message is allowed in the number format: '$numberFormat'"
     }
 
     def notAtEndOfNumberFormatError(message: String) = {
-      s"$message must be at the end of the number format: '$originNumberFormat'"
+      s"$message must be at the end of the number format: '$numberFormat'"
     }
 
     val inputTokenCounts = formatTokens.groupBy(identity).mapValues(_.size)
@@ -270,7 +270,7 @@ class ToNumberParser(originNumberFormat: String, errorOnFail: Boolean) extends S
       }
 
     // Make sure the format string contains at least one token.
-    if (originNumberFormat.isEmpty) {
+    if (numberFormat.isEmpty) {
       "The format string cannot be empty"
     }
     // Make sure the format string does not contain any unrecognized characters.
@@ -282,7 +282,7 @@ class ToNumberParser(originNumberFormat: String, errorOnFail: Boolean) extends S
           case i: InvalidUnrecognizedCharacter => i.char
         }
       val char: Char = unrecognizedChars.head
-      s"Encountered invalid character $char in the number format: '$originNumberFormat'"
+      s"Encountered invalid character $char in the number format: '$numberFormat'"
     }
     // Make sure the format string contains at least one digit.
     else if (!formatTokens.exists(
@@ -301,11 +301,9 @@ class ToNumberParser(originNumberFormat: String, errorOnFail: Boolean) extends S
     else if (inputTokenCounts.getOrElse(DollarSign(), 0) > 1) {
       multipleSignInNumberFormatError(s"'$DOLLAR_SIGN'")
     }
-    // Make sure the format string contains at most one minus sign at the end.
-    else if (inputTokenCounts.getOrElse(OptionalMinusSign(), 0) > 1 ||
-      (inputTokenCounts.getOrElse(OptionalMinusSign(), 0) == 1 &&
-        formatTokens.last != OptionalMinusSign())) {
-      notAtEndOfNumberFormatError(s"'$OPTIONAL_MINUS_STRING'")
+    // Make sure the format string contains at most one "MI" sequence.
+    else if (inputTokenCounts.getOrElse(OptionalMinusSign(), 0) > 1) {
+      multipleSignInNumberFormatError(s"'$OPTIONAL_MINUS_STRING'")
     }
     // Make sure the format string contains at most one closing angle bracket at the end.
     else if (inputTokenCounts.getOrElse(ClosingAngleBracket(), 0) > 1 ||
@@ -315,13 +313,13 @@ class ToNumberParser(originNumberFormat: String, errorOnFail: Boolean) extends S
     }
     // Make sure that any dollar sign in the format string occurs before any digits.
     else if (firstDigitIndex < firstDollarSignIndex) {
-      s"Currency characters must appear before digits in the number format: '$originNumberFormat'"
+      s"Currency characters must appear before digits in the number format: '$numberFormat'"
     }
     // Make sure that any dollar sign in the format string occurs before any decimal point.
     else if (firstDecimalPointIndex != -1 &&
       firstDecimalPointIndex < firstDollarSignIndex) {
       "Currency characters must appear before any decimal point in the " +
-        s"number format: '$originNumberFormat'"
+        s"number format: '$numberFormat'"
     }
     // Make sure that any thousands separators in the format string have digits before and after.
     else if (digitGroupsBeforeDecimalPoint.exists {
@@ -338,7 +336,7 @@ class ToNumberParser(originNumberFormat: String, errorOnFail: Boolean) extends S
         })
     }) {
       "Thousands separators (,) must have digits in between them " +
-        s"in the number format: '$originNumberFormat'"
+        s"in the number format: '$numberFormat'"
     }
     // Thousands separators are not allowed after the decimal point, if any.
     else if (digitGroupsAfterDecimalPoint.exists {
@@ -346,7 +344,7 @@ class ToNumberParser(originNumberFormat: String, errorOnFail: Boolean) extends S
         tokens.length > digits.length
     }) {
       "Thousands separators (,) may not appear after the decimal point " +
-        s"in the number format: '$originNumberFormat'"
+        s"in the number format: '$numberFormat'"
     }
     // Validation of the format string finished successfully.
     else {
@@ -365,9 +363,8 @@ class ToNumberParser(originNumberFormat: String, errorOnFail: Boolean) extends S
    * @return the result Decimal value obtained from string parsing
    */
   def parse(input: UTF8String): Decimal = {
-    // Get a reference to the underlying input byte array without copying memory.
-    def inputBuffer: Array[Byte] = input.getBaseObject.asInstanceOf[Array[Byte]]
-    val inputLength = inputBuffer.length
+    val inputString = input.toString
+    val inputLength = inputString.length
     // Build strings representing all digits before and after the decimal point, respectively.
     beforeDecimalPoint.clear()
     afterDecimalPoint.clear()
@@ -383,13 +380,12 @@ class ToNumberParser(originNumberFormat: String, errorOnFail: Boolean) extends S
     while (formatIndex < formatTokens.size) {
       val token: InputToken = formatTokens(formatIndex)
       token match {
-        case d@(_: DigitGroups) =>
-          inputIndex = parseDigitGroups(d, inputBuffer, inputIndex, reachedDecimalPoint).getOrElse(
-            return formatMatchFailure(input, originNumberFormat))
+        case d: DigitGroups =>
+          inputIndex = parseDigitGroups(d, inputString, inputIndex, reachedDecimalPoint).getOrElse(
+            return formatMatchFailure(input, numberFormat))
         case DecimalPoint() =>
           if (inputIndex < inputLength &&
-            (inputBuffer(inputIndex) == POINT_SIGN ||
-              inputBuffer(inputIndex) == POINT_LETTER)) {
+            inputString(inputIndex) == POINT_SIGN) {
             reachedDecimalPoint = true
             inputIndex += 1
           } else {
@@ -398,18 +394,17 @@ class ToNumberParser(originNumberFormat: String, errorOnFail: Boolean) extends S
           }
         case DollarSign() =>
           if (inputIndex >= inputLength ||
-            (inputBuffer(inputIndex) != DOLLAR_LETTER &&
-              inputBuffer(inputIndex) != DOLLAR_SIGN)) {
+            inputString(inputIndex) != DOLLAR_SIGN) {
             // The input string did not contain an expected dollar sign.
-            return formatMatchFailure(input, originNumberFormat)
+            return formatMatchFailure(input, numberFormat)
           }
           inputIndex += 1
         case OptionalPlusOrMinusSign() =>
           if (inputIndex < inputLength &&
-            inputBuffer(inputIndex) == PLUS_SIGN) {
+            inputString(inputIndex) == PLUS_SIGN) {
             inputIndex += 1
           } else if (inputIndex < inputLength &&
-            inputBuffer(inputIndex) == MINUS_SIGN) {
+            inputString(inputIndex) == MINUS_SIGN) {
             negateResult = !negateResult
             inputIndex += 1
           } else {
@@ -418,7 +413,7 @@ class ToNumberParser(originNumberFormat: String, errorOnFail: Boolean) extends S
           }
         case OptionalMinusSign() =>
           if (inputIndex < inputLength &&
-            inputBuffer(inputIndex) == MINUS_SIGN) {
+            inputString(inputIndex) == MINUS_SIGN) {
             negateResult = !negateResult
             inputIndex += 1
           } else {
@@ -427,16 +422,16 @@ class ToNumberParser(originNumberFormat: String, errorOnFail: Boolean) extends S
           }
         case OpeningAngleBracket() =>
           if (inputIndex >= inputLength ||
-            inputBuffer(inputIndex) != ANGLE_BRACKET_OPEN) {
+            inputString(inputIndex) != ANGLE_BRACKET_OPEN) {
             // The input string did not contain an expected opening angle bracket.
-            return formatMatchFailure(input, originNumberFormat)
+            return formatMatchFailure(input, numberFormat)
           }
           inputIndex += 1
         case ClosingAngleBracket() =>
           if (inputIndex >= inputLength ||
-            inputBuffer(inputIndex) != ANGLE_BRACKET_CLOSE) {
+            inputString(inputIndex) != ANGLE_BRACKET_CLOSE) {
             // The input string did not contain an expected closing angle bracket.
-            return formatMatchFailure(input, originNumberFormat)
+            return formatMatchFailure(input, numberFormat)
           }
           negateResult = !negateResult
           inputIndex += 1
@@ -446,7 +441,7 @@ class ToNumberParser(originNumberFormat: String, errorOnFail: Boolean) extends S
     if (inputIndex < inputLength) {
       // If we have consumed all the tokens in the format string, but characters remain unconsumed
       // in the input string, then the input string does not match the format string.
-      formatMatchFailure(input, originNumberFormat)
+      formatMatchFailure(input, numberFormat)
     } else {
       getDecimal(negateResult)
     }
@@ -456,50 +451,30 @@ class ToNumberParser(originNumberFormat: String, errorOnFail: Boolean) extends S
    * Handle parsing the input string for the given expected DigitGroups from the format string.
    *
    * @param digitGroups the expected DigitGroups from the format string
-   * @param inputBuffer the input string provided to the original parsing method
+   * @param inputString the input string provided to the original parsing method
    * @param startingInputIndex the input index within the input string to begin parsing here
    * @param reachedDecimalPoint true if we have already parsed past the decimal point
    * @return the new updated index within the input string to resume parsing, or None on error
    */
   private def parseDigitGroups(
       digitGroups: DigitGroups,
-      inputBuffer: Array[Byte],
+      inputString: String,
       startingInputIndex: Int,
       reachedDecimalPoint: Boolean): Option[Int] = {
     val expectedDigits: Seq[Digits] = digitGroups.digits
-    val inputLength = inputBuffer.length
+    val inputLength = inputString.length
     // Consume characters from the current input index forwards in the input string as long as
     // they are digits (0-9) or the thousands separator (,).
-    var numDigits = 0
+    numDigitsInCurrentGroup = 0
     var inputIndex = startingInputIndex
     actualDigitLengths.clear()
+
     while (inputIndex < inputLength &&
-      (inputBuffer(inputIndex).toChar match {
-        case char@_ if char.isWhitespace =>
-          // Ignore whitespace and keep advancing through the input string.
-          true
-        case char@_ if char >= ZERO_DIGIT && char <= NINE_DIGIT =>
-          numDigits += 1
-          // Append each group of input digits to the appropriate before/afterDecimalPoint
-          // string for later use in constructing the result Decimal value.
-          if (reachedDecimalPoint) {
-            afterDecimalPoint.append(char)
-          } else {
-            beforeDecimalPoint.append(char)
-          }
-          true
-        case COMMA_SIGN =>
-          actualDigitLengths.prepend(numDigits)
-          numDigits = 0
-          true
-        case _ =>
-          actualDigitLengths.prepend(numDigits)
-          false
-      })) {
+      matchesDigitOrComma(inputString(inputIndex), reachedDecimalPoint)) {
       inputIndex += 1
     }
     if (inputIndex == inputLength) {
-      actualDigitLengths.prepend(numDigits)
+      actualDigitLengths.prepend(numDigitsInCurrentGroup)
     }
     // Compare the number of digits encountered in each group (separated by thousands
     // separators) with the expected numbers from the format string.
@@ -531,6 +506,35 @@ class ToNumberParser(originNumberFormat: String, errorOnFail: Boolean) extends S
   }
 
   /**
+   * Returns true if the given character matches a digit (0-9) or a comma, updating fields of
+   * this class related to parsing during the process.
+   */
+  private def matchesDigitOrComma(char: Char, reachedDecimalPoint: Boolean): Boolean = {
+    char match {
+      case char if char.isWhitespace =>
+        // Ignore whitespace and keep advancing through the input string.
+        true
+      case char if char >= ZERO_DIGIT && char <= NINE_DIGIT =>
+        numDigitsInCurrentGroup += 1
+        // Append each group of input digits to the appropriate before/afterDecimalPoint
+        // string for later use in constructing the result Decimal value.
+        if (reachedDecimalPoint) {
+          afterDecimalPoint.append(char)
+        } else {
+          beforeDecimalPoint.append(char)
+        }
+        true
+      case COMMA_SIGN =>
+        actualDigitLengths.prepend(numDigitsInCurrentGroup)
+        numDigitsInCurrentGroup = 0
+        true
+      case _ =>
+        actualDigitLengths.prepend(numDigitsInCurrentGroup)
+        false
+    }
+  }
+
+  /**
    * This method executes when the input string fails to match the format string. It throws an
    * exception if indicated on construction of this class, or returns NULL otherwise.
    */
@@ -550,28 +554,21 @@ class ToNumberParser(originNumberFormat: String, errorOnFail: Boolean) extends S
    *         scale indicated by the format string
    */
   private def getDecimal(negateResult: Boolean): Decimal = {
-    // Consume all digits before the decimal point into the unscaled value.
-    var unscaled: Long = 0
-    if (beforeDecimalPoint.length > 0) {
-      unscaled += beforeDecimalPoint.toString.toLong
-    }
     // Append zeros to the afterDecimalPoint until it comprises the same number of digits as the
     // scale. This is necessary because we must determine the scale from the format string alone but
     // each input string may include a variable number of digits after the decimal point.
     val extraZeros = "0" * (scale - afterDecimalPoint.length)
     val afterDecimalPadded = afterDecimalPoint.toString + extraZeros
-    // For all digits after the decimal point, multiply the unscaled value by ten and then add the
-    // new digits in.
-    if (afterDecimalPadded.nonEmpty) {
-      for (i <- 0 until afterDecimalPadded.length) {
-        unscaled *= 10
-      }
-      unscaled += afterDecimalPadded.toLong
+    val prefix = if (negateResult) "-" else ""
+    val suffix = if (afterDecimalPadded.nonEmpty) "." + afterDecimalPadded else ""
+    val numStr = s"$prefix$beforeDecimalPoint$suffix"
+    val javaDecimal = new java.math.BigDecimal(numStr)
+    if (precision <= Decimal.MAX_LONG_DIGITS) {
+      // Constructs a `Decimal` with an unscaled `Long` value if possible.
+      Decimal(javaDecimal.unscaledValue().longValue(), precision, scale)
+    } else {
+      // Otherwise, resorts to an unscaled `BigInteger` instead.
+      Decimal(javaDecimal, precision, scale)
     }
-    // Negate the result if the input contained relevant patterns such as a negative sign.
-    if (negateResult) {
-      unscaled *= -1
-    }
-    Decimal(unscaled, precision, scale)
   }
 }

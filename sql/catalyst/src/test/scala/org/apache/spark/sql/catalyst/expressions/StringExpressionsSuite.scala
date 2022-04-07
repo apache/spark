@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import java.math.{BigDecimal => JavaBigDecimal}
+
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.dsl.expressions._
@@ -894,13 +896,13 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("ToNumber: positive tests") {
     Seq(
+      ("$345", "S$999,099.99") -> Decimal(345),
       ("-$12,345.67", "S$999,099.99") -> Decimal(-12345.67),
       ("454,123", "999,099") -> Decimal(454123),
-      ("$345", "S$999,099.99") -> Decimal(345),
       ("$045", "S$999,099.99") -> Decimal(45),
       ("454", "099") -> Decimal(454),
       ("454.", "099.99") -> Decimal(454.0),
-      ("454.6", "099.99") -> Decimal(454.6),
+      ("454.6", "099D99") -> Decimal(454.6),
       ("454.67", "099.00") -> Decimal(454.67),
       ("454", "000") -> Decimal(454),
       ("  454 ", "9099") -> Decimal(454),
@@ -908,12 +910,17 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       ("454.67", "099.99") -> Decimal(454.67),
       ("$454", "$999") -> Decimal(454),
       ("  454,123 ", "999G099") -> Decimal(454123),
-      ("$454,123", "$999,099") -> Decimal(454123),
+      ("$454,123", "$999G099") -> Decimal(454123),
       ("+$89,1,2,3,45.123", "S$999,0,0,0,999.00000") -> Decimal(8912345.123),
       ("-454", "S999") -> Decimal(-454),
       ("+454", "S999") -> Decimal(454),
       ("<454>", "999PR") -> Decimal(-454),
-      ("454-", "999MI") -> Decimal(-454)
+      ("454-", "999MI") -> Decimal(-454),
+      ("-$54", "MI$99") -> Decimal(-54),
+      ("$4-4", "$9MI9") -> Decimal(-44),
+      // The input string contains more digits than fit in a long integer.
+      ("123,456,789,123,456,789,123", "999,999,999,999,999,999,999") ->
+        Decimal(new JavaBigDecimal("123456789123456789123"))
     ).foreach { case ((str: String, format: String), expected: Decimal) =>
       val toNumberExpr = ToNumber(Literal(str), Literal(format))
       assert(toNumberExpr.checkInputDataTypes() == TypeCheckResult.TypeCheckSuccess)
@@ -924,9 +931,9 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       checkEvaluation(tryToNumberExpr, expected)
     }
 
-    for (i <- 0 to 9) {
-      for (j <- 0 to 9) {
-        for (k <- 0 to 9) {
+    for (i <- 0 to 2) {
+      for (j <- 3 to 5) {
+        for (k <- 6 to 9) {
           Seq(
             (s"$i$j$k", "999") -> Decimal(s"$i$j$k".toInt),
             (s"$i$j$k", "S099.") -> Decimal(s"$i$j$k".toInt),
@@ -951,6 +958,7 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     val thousandsSeparatorDigitsBetween =
       "Thousands separators (,) must have digits in between them"
     val mustBeAtEnd = "must be at the end of the number format"
+    val atMostOne = "At most one"
     Seq(
       // The format string must not be empty.
       ("454", "") -> "The format string cannot be empty",
@@ -961,13 +969,13 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       // Make sure the format string contains at least one digit.
       ("454", "$") -> "The format string requires at least one number digit",
       // Make sure the format string contains at most one decimal point.
-      ("454", "99.99.99") -> "At most one",
+      ("454", "99.99.99") -> atMostOne,
       // Make sure the format string contains at most one dollar sign.
-      ("454", "$$99") -> "At most one",
+      ("454", "$$99") -> atMostOne,
       // Make sure the format string contains at most one minus sign at the end.
-      ("--$54", "SS$99") -> "At most one",
-      ("-$54", "MI$99") -> mustBeAtEnd,
-      ("$4-4", "$9MI9") -> mustBeAtEnd,
+      ("--$54", "SS$99") -> atMostOne,
+      ("-$54", "MI$99MI") -> atMostOne,
+      ("$4-4", "$9MI9MI") -> atMostOne,
       // Make sure the format string contains at most one closing angle bracket at the end.
       ("<$45>", "PR$99") -> mustBeAtEnd,
       ("$4<4>", "$9PR9") -> mustBeAtEnd,
@@ -1028,7 +1036,9 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       // At least three digits were required.
       ("45", "S$999,099.99"),
       // Groups of digits with leading zeros are not optional.
-      ("$345", "S$099,099.99")
+      ("$345", "S$099,099.99"),
+      // The letter 'D' is allowed in the format string, but not the input string.
+      ("4D5", "0D9")
     ).foreach { case (str: String, format: String) =>
       val toNumberExpr = ToNumber(Literal(str), Literal(format))
       assert(toNumberExpr.checkInputDataTypes() == TypeCheckResult.TypeCheckSuccess)

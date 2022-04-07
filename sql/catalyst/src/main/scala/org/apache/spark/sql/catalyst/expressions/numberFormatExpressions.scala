@@ -35,13 +35,11 @@ import org.apache.spark.unsafe.types.UTF8String
      _FUNC_(expr, fmt) - Convert string 'expr' to a number based on the string format 'fmt'.
        Throws an exception if the conversion fails. The format can consist of the following
        characters, case insensitive:
-         '0' or '9':  Specifies an expected digit between 0 and 9. A 0 to the left of the decimal
-           point indicates that 'expr' must have at least as many digits. A leading 9 indicates
-           that 'expr' may omit these digits. For any combination of digits 0 and/or 9, the behavior
-           is decided by the left-most digit. 'expr' must not be larger than the number of digits
-           allowed to the left of the decimal point per the format string. Digits in the format
-           string to the right of the decimal indicate the most digits 'expr' may have to the right
-           of the decimal point.
+         '0' or '9': Specifies an expected digit between 0 and 9. A sequence of 0 or 9 in the format
+           string matches a sequence of digits in the input string. If the 0/9 sequence starts with
+           0 and is before the decimal point, it can only match a digit sequence of the same size.
+           Otherwise, if the sequence starts with 9 or is after the decimal poin, it can match a
+           digit sequence that has the same or smaller size.
          '.' or 'D': Specifies the position of the decimal point (optional, only allowed once).
          ',' or 'G': Specifies the position of the grouping (thousands) separator (,). There must be
            one or more 0 or 9 to the left of the rightmost grouping separator. 'expr' must match the
