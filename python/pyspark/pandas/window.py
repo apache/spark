@@ -1756,12 +1756,17 @@ class ExponentialMovingLike(Generic[FrameLike], metaclass=ABCMeta):
     def __init__(
         self,
         window: WindowSpec,
-        min_periods: int,
         com: Optional[float] = None,
         span: Optional[float] = None,
         halflife: Optional[float] = None,
         alpha: Optional[float] = None,
+        min_periods: Optional[int] = None,
     ):
+        if (min_periods is not None) and (min_periods < 0):
+            raise ValueError("min_periods must be >= 0")
+        if min_periods is None:
+            min_periods = 0
+
         self._window = window
         # This unbounded Window is later used to handle 'min_periods' for now.
         self._unbounded_window = Window.orderBy(NATURAL_ORDER_COLUMN_NAME).rowsBetween(
@@ -1795,6 +1800,9 @@ class ExponentialMovingLike(Generic[FrameLike], metaclass=ABCMeta):
             self._alpha = alpha
             opt_count += 1
 
+        if opt_count == 0:
+            raise ValueError("Must pass one of comass, span, halflife, or alpha")
+
         if opt_count != 1:
             raise ValueError("comass, span, halflife, and alpha are mutually exclusive")
 
@@ -1822,20 +1830,14 @@ class ExponentialMoving(ExponentialMovingLike[FrameLike]):
     def __init__(
         self,
         psdf_or_psser: FrameLike,
-        min_periods: int = 0,
         com: Optional[float] = None,
         span: Optional[float] = None,
         halflife: Optional[float] = None,
         alpha: Optional[float] = None,
+        min_periods: Optional[int] = None,
     ):
         from pyspark.pandas.frame import DataFrame
         from pyspark.pandas.series import Series
-
-        window_spec = Window.orderBy(NATURAL_ORDER_COLUMN_NAME).rowsBetween(
-            Window.unboundedPreceding, Window.currentRow
-        )
-
-        super().__init__(window_spec, min_periods, com, span, halflife, alpha)
 
         if not isinstance(psdf_or_psser, (DataFrame, Series)):
             raise TypeError(
@@ -1843,6 +1845,12 @@ class ExponentialMoving(ExponentialMovingLike[FrameLike]):
                 % type(psdf_or_psser)
             )
         self._psdf_or_psser = psdf_or_psser
+
+        window_spec = Window.orderBy(NATURAL_ORDER_COLUMN_NAME).rowsBetween(
+            Window.unboundedPreceding, Window.currentRow
+        )
+
+        super().__init__(window_spec, com, span, halflife, alpha, min_periods)
 
     def __getattr__(self, item: str) -> Any:
         if hasattr(MissingPandasLikeExponentialMoving, item):
@@ -1860,6 +1868,58 @@ class ExponentialMoving(ExponentialMovingLike[FrameLike]):
         )
 
     def mean(self) -> FrameLike:
+        """
+        Calculate an online exponentially weighted mean.
+
+        Notes
+        -----
+        There are behavior differences between pandas-on-Spark and pandas.
+
+        * the data should not contain NaNs. pandas-on-Spark will return an error.
+        * the current implementation of this API uses Spark's Window without
+          specifying partition specification. This leads to move all data into
+          single partition in single machine and could cause serious
+          performance degradation. Avoid this method against very large dataset.
+
+        Returns
+        -------
+        Series or DataFrame
+            Returned object type is determined by the caller of the exponentially
+            calculation.
+
+        See Also
+        --------
+        Series.expanding : Calling object with Series data.
+        DataFrame.expanding : Calling object with DataFrames.
+        Series.mean : Equivalent method for Series.
+        DataFrame.mean : Equivalent method for DataFrame.
+
+        Examples
+        --------
+        The below examples will show expanding mean calculations with window sizes of
+        two and three, respectively.
+
+        >>> df = ps.DataFrame({'s1': [.2, .0, .6, .2, .4, .5, .6], 's2': [2, 1, 3, 1, 0, 0, 0]})
+        >>> df.ewm(com=0.1).mean()
+                 s1        s2
+        0  0.200000  2.000000
+        1  0.016667  1.083333
+        2  0.547368  2.827068
+        3  0.231557  1.165984
+        4  0.384688  0.105992
+        5  0.489517  0.009636
+        6  0.589956  0.000876
+
+        >>> df.s2.ewm(halflife=1.5, min_periods=3).mean()
+        0         NaN
+        1         NaN
+        2    2.182572
+        3    1.663174
+        4    0.979949
+        5    0.593155
+        6    0.364668
+        Name: s2, dtype: float64
+        """
         return super().mean()
 
     # TODO: when add 'adjust' and 'ignore_na' parameter, should add to here too.

@@ -1016,30 +1016,20 @@ case class PercentRank(children: Seq[Expression]) extends RankLike with SizeBase
 }
 
 /**
- * The EWM.
+ * The Exponentially Weighted Window, MUST only be used in the Pandas API on Pyspark.
+ * An exponentially weighted window is similar to an expanding window but with each prior point
+ * being exponentially weighted down relative to the current point.
+ * In general, a weighted moving average is calculated as
+ *    y_t = \frac{\sum_{i=0}^t w_i x_{t-i}}{\sum_{i=0}^t w_i},
+ * where x_t is the input, y_t is the result and the w_i are the weights.
+ * See https://pandas.pydata.org/docs/user_guide/window.html#exponentially-weighted-window
+ * for details.
+ * For now, only function mean is supported. Other functions like sum/var will be added
+ * in the future.
  */
-// scalastyle:off line.size.limit line.contains.tab
-@ExpressionDescription(
-  usage = """
-    _FUNC_() - Computes the EWM.
-  """,
-  arguments = """
-    Arguments:
-      * input - values to be calculated.
-  """,
-  examples = """
-    Examples:
-      > SELECT a, b, _FUNC_(b) OVER (PARTITION BY a ORDER BY b) FROM VALUES ('A1', 2), ('A1', 1), ('A2', 3), ('A1', 1) tab(a, b);
-       A1	1	0.0
-       A1	1	0.0
-       A1	2	1.0
-       A2	3	0.0
-  """,
-  since = "3.4.0",
-  group = "window_funcs")
-// scalastyle:on line.size.limit line.contains.tab
 private[sql] case class EWM(input: Expression, alpha: Double)
   extends AggregateWindowFunction with UnaryLike[Expression] {
+  assert(0 < alpha && alpha <= 1)
 
   override def dataType: DataType = DoubleType
 
