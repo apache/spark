@@ -23,6 +23,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.optimizer.ConstantFolding
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException}
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
@@ -60,6 +61,9 @@ object ResolveDefaultColumns {
   val DEFAULTS_IN_EXPRESSIONS_ERROR = "Failed to execute INSERT INTO command because the " +
     "VALUES list contains a DEFAULT column reference as part of another expression; this is " +
     "not allowed"
+  // This is a TreeNodeTag indicating that the ResolveUserSpecifiedColumns rule has applied on a
+  // particular InsertIntoStatement of interest.
+  val USER_SPECIFIED_COLUMNS_RESOLVED = TreeNodeTag[Boolean]("UserSpecifiedColumnsResolved")
 
   /**
    * Finds "current default" expressions in CREATE/REPLACE TABLE columns and constant-folds them.

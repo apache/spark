@@ -64,25 +64,31 @@ case class ResolveDefaultColumns(
     plan.resolveOperatorsWithPruning(
       (_ => SQLConf.get.enableDefaultColumns), ruleId) {
       case i@InsertIntoStatement(_, _, _, _, _, _)
-        if i.query.collectFirst { case u: UnresolvedInlineTable => u }.isDefined =>
+        if i.query.collectFirst { case u: UnresolvedInlineTable => u }.isDefined &&
+          !i.getTagValue(USER_SPECIFIED_COLUMNS_RESOLVED).getOrElse(false) =>
         enclosingInsert = Some(i)
         insertTableSchemaWithoutPartitionColumns = getInsertTableSchemaWithoutPartitionColumns
-        regenerateUserSpecifiedCols(i)
+        val regenerated: InsertIntoStatement = regenerateUserSpecifiedCols(i)
+        regenerated
 
       case table: UnresolvedInlineTable
         if enclosingInsert.isDefined &&
           table.rows.nonEmpty && table.rows.forall(_.size == table.rows(0).size) =>
         val expanded: UnresolvedInlineTable = addMissingDefaultColumnValues(table).getOrElse(table)
-        replaceExplicitDefaultColumnValues(analyzer, expanded).getOrElse(table)
+        val replaced: LogicalPlan =
+          replaceExplicitDefaultColumnValues(analyzer, expanded).getOrElse(table)
+        replaced
 
-      case i@InsertIntoStatement(_, _, _, project: Project, _, _) =>
+      case i@InsertIntoStatement(_, _, _, project: Project, _, _)
+        if !i.getTagValue(USER_SPECIFIED_COLUMNS_RESOLVED).getOrElse(false) =>
         enclosingInsert = Some(i)
         insertTableSchemaWithoutPartitionColumns = getInsertTableSchemaWithoutPartitionColumns
         val expanded: Project = addMissingDefaultColumnValues(project).getOrElse(project)
         val replaced: Option[LogicalPlan] = replaceExplicitDefaultColumnValues(analyzer, expanded)
         val updated: InsertIntoStatement =
           if (replaced.isDefined) i.copy(query = replaced.get) else i
-        regenerateUserSpecifiedCols(updated)
+        val regenerated: InsertIntoStatement = regenerateUserSpecifiedCols(updated)
+        regenerated
     }
   }
 
@@ -259,21 +265,24 @@ case class ResolveDefaultColumns(
    */
   private def getInsertTableSchemaWithoutPartitionColumns: Option[StructType] = {
     assert(enclosingInsert.isDefined)
-    val schema: StructType = try {
-      val tableName = enclosingInsert.get.table match {
-        case r: UnresolvedRelation => TableIdentifier(r.name)
-        case r: UnresolvedCatalogRelation => r.tableMeta.identifier
-        case _ => return None
-      }
-      val lookup = catalog.lookupRelation(tableName)
-      lookup match {
-        case SubqueryAlias(_, r: UnresolvedCatalogRelation) =>
-          StructType(r.tableMeta.schema.fields.dropRight(
-            enclosingInsert.get.partitionSpec.size))
-        case _ => return None
-      }
+    val tableName = enclosingInsert.get.table match {
+      case r: UnresolvedRelation => TableIdentifier(r.name)
+      case r: UnresolvedCatalogRelation => r.tableMeta.identifier
+      case _ => return None
+    }
+    // Lookup the relation from the catalog by name. This either succeeds or returns some "not
+    // found" error. In the latter cases, return out of this rule without changing anything and let
+    // the analyzer return a proper error message elsewhere.
+    val lookup: LogicalPlan = try {
+      catalog.lookupRelation(tableName)
     } catch {
       case _: AnalysisException => return None
+    }
+    val schema: StructType = lookup match {
+      case SubqueryAlias(_, r: UnresolvedCatalogRelation) =>
+        StructType(r.tableMeta.schema.fields.dropRight(
+          enclosingInsert.get.partitionSpec.size))
+      case _ => return None
     }
     // Rearrange the columns in the result schema to match the order of the explicit column list,
     // if any.
@@ -281,13 +290,16 @@ case class ResolveDefaultColumns(
     if (userSpecifiedCols.isEmpty) {
       return Some(schema)
     }
+    def normalize(str: String) = {
+      if (SQLConf.get.caseSensitiveAnalysis) str else str.toLowerCase()
+    }
     val colNamesToFields: Map[String, StructField] =
       schema.fields.map {
-        field: StructField => field.name -> field
+        field: StructField => normalize(field.name) -> field
       }.toMap
     val userSpecifiedFields: Seq[StructField] =
       userSpecifiedCols.map {
-        name: String => colNamesToFields.getOrElse(name, return None)
+        name: String => colNamesToFields.getOrElse(normalize(name), return None)
       }
     val userSpecifiedColNames: Set[String] = userSpecifiedCols.toSet
     val nonUserSpecifiedFields: Seq[StructField] =

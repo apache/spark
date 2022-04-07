@@ -865,26 +865,26 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
       withTable("t") {
         sql("create table t(i boolean, s bigint) using parquet")
         sql("insert into t values(true)")
-        checkAnswer(sql("select s from t where i = true"), Seq(Row(null)))
+        checkAnswer(spark.table("t"), Row(true, null))
       }
     }
     // The default value for the DEFAULT keyword is the NULL literal.
     withTable("t") {
       sql("create table t(i boolean, s bigint) using parquet")
       sql("insert into t values(true, default)")
-      checkAnswer(sql("select s from t where i = true"), Seq(null).map(i => Row(i)))
+      checkAnswer(spark.table("t"), Row(true, null))
     }
     // There is a complex expression in the default value.
     withTable("t") {
       sql("create table t(i boolean, s string default concat('abc', 'def')) using parquet")
       sql("insert into t values(true, default)")
-      checkAnswer(sql("select s from t where i = true"), Seq("abcdef").map(i => Row(i)))
+      checkAnswer(spark.table("t"), Row(true, "abcdef"))
     }
     // The default value parses correctly and the provided value type is different but coercible.
     withTable("t") {
       sql("create table t(i boolean, s bigint default 42) using parquet")
       sql("insert into t values(false)")
-      checkAnswer(sql("select s from t where i = false"), Seq(42L).map(i => Row(i)))
+      checkAnswer(spark.table("t"), Row(false, 42L))
     }
     // There are two trailing default values referenced implicitly by the INSERT INTO statement.
     withTable("t") {
@@ -896,72 +896,72 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
     withTable("t") {
       sql("create table t(i boolean, s bigint, q int default 42 ) using parquet partitioned by (i)")
       sql("insert into t partition(i='true') values(5, default)")
-      checkAnswer(sql("select s from t where i = true"), Seq(5).map(i => Row(i)))
+      checkAnswer(spark.table("t"), Row(5, 42, true))
     }
     // The table has a partitioning column and a default value is added per an explicit reference.
     withTable("t") {
       sql("create table t(i boolean, s bigint default 42) using parquet partitioned by (i)")
       sql("insert into t partition(i='true') values(default)")
-      checkAnswer(sql("select s from t where i = true"), Seq(42L).map(i => Row(i)))
+      checkAnswer(spark.table("t"), Row(42L, true))
     }
     // The default value parses correctly as a constant but non-literal expression.
     withTable("t") {
       sql("create table t(i boolean, s bigint default 41 + 1) using parquet")
       sql("insert into t values(false, default)")
-      checkAnswer(sql("select s from t where i = false"), Seq(42L).map(i => Row(i)))
+      checkAnswer(spark.table("t"), Row(false, 42L))
     }
     // Explicit defaults may appear in different positions within the inline table provided as input
     // to the INSERT INTO statement.
     withTable("t") {
       sql("create table t(i boolean default false, s bigint default 42) using parquet")
       sql("insert into t values(false, default), (default, 42)")
-      checkAnswer(sql("select s from t where i = false"), Seq(42L, 42L).map(i => Row(i)))
+      checkAnswer(spark.table("t"), Seq(Row(false, 42L), Row(false, 42L)))
     }
     // There is an explicit default value provided in the INSERT INTO statement in the VALUES,
     // with an alias over the VALUES.
     withTable("t") {
       sql("create table t(i boolean, s bigint default 42) using parquet")
       sql("insert into t select * from values (false, default) as tab(col, other)")
-      checkAnswer(sql("select s from t where i = false"), Seq(42L).map(i => Row(i)))
+      checkAnswer(spark.table("t"), Row(false, 42L))
     }
     // The explicit default value arrives first before the other value.
     withTable("t") {
       sql("create table t(i boolean default false, s bigint) using parquet")
       sql("insert into t values (default, 43)")
-      checkAnswer(sql("select s from t where i = false"), Seq(43L).map(i => Row(i)))
+      checkAnswer(spark.table("t"), Row(false, 43L))
     }
     // The 'create table' statement provides the default parameter first.
     withTable("t") {
       sql("create table t(i boolean default false, s bigint) using parquet")
       sql("insert into t values (default, 43)")
-      checkAnswer(sql("select s from t where i = false"), Seq(43L).map(i => Row(i)))
+      checkAnswer(spark.table("t"), Row(false, 43L))
     }
     // The explicit default value is provided in the wrong order (first instead of second), but
     // this is OK because the provided default value evaluates to literal NULL.
     withTable("t") {
       sql("create table t(i boolean, s bigint default 42) using parquet")
       sql("insert into t values (default, 43)")
-      checkAnswer(sql("select s from t where i is null"), Seq(43L).map(i => Row(i)))
+      checkAnswer(spark.table("t"), Row(null, 43L))
     }
     // There is an explicit default value provided in the INSERT INTO statement as a SELECT.
     // This is supported.
     withTable("t") {
       sql("create table t(i boolean, s bigint default 42) using parquet")
       sql("insert into t select false, default")
-      checkAnswer(sql("select s from t where i = false"), Seq(42L).map(i => Row(i)))
+      checkAnswer(spark.table("t"), Row(false, 42L))
     }
     // There is a complex query plan in the SELECT query in the INSERT INTO statement.
     withTable("t") {
       sql("create table t(i boolean default false, s bigint default 42) using parquet")
       sql("insert into t select col, count(*) from values (default, default) " +
         "as tab(col, other) group by 1")
-      checkAnswer(sql("select s from t where i = false"), Seq(1).map(i => Row(i)))
+      checkAnswer(spark.table("t"), Row(false, 1))
     }
     // The explicit default reference resolves successfully with nested table subqueries.
     withTable("t") {
       sql("create table t(i boolean default false, s bigint) using parquet")
       sql("insert into t select * from (select * from values(default, 42))")
-      checkAnswer(sql("select s from t where i = false"), Seq(42L).map(i => Row(i)))
+      checkAnswer(spark.table("t"), Row(false, 42L))
     }
     // There are three column types exercising various combinations of implicit and explicit
     // default column value references in the 'insert into' statements. Note these tests depend on
@@ -1106,45 +1106,29 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
   }
 
   test("INSERT INTO with user specified columns and defaults: positive tests") {
-    withTable("t") {
-      sql("create table t(i boolean default true, s bigint default 42) using parquet")
-      sql("insert into t (i, s) values (true, default)")
-      checkAnswer(sql("select s from t where i = true"), Seq(42L).map(i => Row(i)))
+    Seq(
+      "insert into t (i, s) values (true, default)",
+      "insert into t (s, i) values (default, true)",
+      "insert into t (i) values (true)",
+      "insert into t (i) values (default)",
+      "insert into t (s) values (default)",
+      "insert into t (s) select default from (select 1)",
+      "insert into t (i) select true from (select 1)"
+    ).foreach { insert =>
+      withTable("t") {
+        sql("create table t(i boolean default true, s bigint default 42) using parquet")
+        sql(insert)
+        checkAnswer(spark.table("t"), Row(true, 42L))
+      }
     }
-    withTable("t") {
-      sql("create table t(i boolean default true, s bigint default 42) using parquet")
-      sql("insert into t (s, i) values (default, true)")
-      checkAnswer(sql("select s from t where i = true"), Seq(42L).map(i => Row(i)))
-    }
-    withTable("t") {
-      sql("create table t(i boolean default true, s bigint default 42) using parquet")
-      sql("insert into t (i) values (true)")
-      checkAnswer(sql("select s from t where i = true"), Seq(42L).map(i => Row(i)))
-    }
-    withTable("t") {
-      sql("create table t(i boolean default true, s bigint default 42) using parquet")
-      sql("insert into t (i) values (default)")
-      checkAnswer(sql("select s from t where i = true"), Seq(42L).map(i => Row(i)))
-    }
-    withTable("t") {
-      sql("create table t(i boolean default true, s bigint default 42) using parquet")
-      sql("insert into t (s) values (default)")
-      checkAnswer(sql("select s from t where i = true"), Seq(42L).map(i => Row(i)))
-    }
-    withTable("t") {
-      sql("create table t(i boolean default true, s bigint default 42) using parquet")
-      sql("insert into t (s) select default from (select 1)")
-      checkAnswer(sql("select s from t where i = true"), Seq(42L).map(i => Row(i)))
-    }
-    withTable("t") {
-      sql("create table t(i boolean default true, s bigint default 42) using parquet")
-      sql("insert into t (i) select true from (select 1)")
-      checkAnswer(sql("select s from t where i = true"), Seq(42L).map(i => Row(i)))
-    }
-    withTable("t") {
-      sql("create table t(i boolean, s bigint default 42, q int default 43) using parquet")
-      sql("insert into t (i, q) select true from (select 1)")
-      checkAnswer(sql("select s from t where q = 43"), Seq(42L).map(i => Row(i)))
+    // When the CASE_SENSITIVE configuration is disabled, then using different cases for the
+    // required and provided column names is successful.
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
+      withTable("t") {
+        sql("create table t(i boolean, s bigint default 42, q int default 43) using parquet")
+        sql("insert into t (I, Q) select true from (select 1)")
+        checkAnswer(spark.table("t"), Row(true, 42L, 43))
+      }
     }
     // When the USE_NULLS_FOR_MISSING_DEFAULT_COLUMN_VALUES configuration is enabled, and no
     // explicit DEFAULT value is available when the INSERT INTO statement provides fewer
@@ -1153,46 +1137,79 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
       withTable("t") {
         sql("create table t(i boolean, s bigint) using parquet")
         sql("insert into t (i) values (true)")
-        checkAnswer(sql("select s from t where i = true"), Seq(null).map(i => Row(i)))
+        checkAnswer(spark.table("t"), Row(true, null))
       }
       withTable("t") {
         sql("create table t(i boolean default true, s bigint) using parquet")
         sql("insert into t (i) values (default)")
-        checkAnswer(sql("select s from t where i = true"), Seq(null).map(i => Row(i)))
+        checkAnswer(spark.table("t"), Row(true, null))
       }
       withTable("t") {
         sql("create table t(i boolean, s bigint default 42) using parquet")
         sql("insert into t (s) values (default)")
-        checkAnswer(sql("select s from t where i is null"), Seq(42L).map(i => Row(i)))
+        checkAnswer(spark.table("t"), Row(null, 42L))
       }
     }
   }
 
   test("INSERT INTO with user specified columns and defaults: negative tests") {
+    val addOneColButExpectedTwo = "target table has 2 column(s) but the inserted data has 1 col"
+    val addTwoColButExpectedThree = "target table has 3 column(s) but the inserted data has 2 col"
     // The missing columns in these INSERT INTO commands do not have explicit default values.
     withTable("t") {
       sql("create table t(i boolean, s bigint) using parquet")
       assert(intercept[AnalysisException] {
         sql("insert into t (i) values (true)")
-      }.getMessage.contains("target table has 2 column(s) but the inserted data has 1 column(s)"))
-  }
+      }.getMessage.contains(addOneColButExpectedTwo))
+    }
     withTable("t") {
       sql("create table t(i boolean default true, s bigint) using parquet")
       assert(intercept[AnalysisException] {
         sql("insert into t (i) values (default)")
-      }.getMessage.contains("target table has 2 column(s) but the inserted data has 1 column(s)"))
+      }.getMessage.contains(addOneColButExpectedTwo))
     }
     withTable("t") {
       sql("create table t(i boolean, s bigint default 42) using parquet")
       assert(intercept[AnalysisException] {
         sql("insert into t (s) values (default)")
-      }.getMessage.contains("target table has 2 column(s) but the inserted data has 1 column(s)"))
+      }.getMessage.contains(addOneColButExpectedTwo))
     }
     withTable("t") {
       sql("create table t(i boolean, s bigint, q int default 43) using parquet")
       assert(intercept[AnalysisException] {
         sql("insert into t (i, q) select true from (select 1)")
-      }.getMessage.contains("target table has 3 column(s) but the inserted data has 2 column(s)"))
+      }.getMessage.contains(addTwoColButExpectedThree))
+    }
+    // When the USE_NULLS_FOR_MISSING_DEFAULT_COLUMN_VALUES configuration is disabled, and no
+    // explicit DEFAULT value is available when the INSERT INTO statement provides fewer
+    // values than expected, the INSERT INTO command fails to execute.
+    withSQLConf(SQLConf.USE_NULLS_FOR_MISSING_DEFAULT_COLUMN_VALUES.key -> "false") {
+      withTable("t") {
+        sql("create table t(i boolean, s bigint) using parquet")
+        assert(intercept[AnalysisException] {
+          sql("insert into t (i) values (true)")
+        }.getMessage.contains(addOneColButExpectedTwo))
+      }
+      withTable("t") {
+        sql("create table t(i boolean default true, s bigint) using parquet")
+        assert(intercept[AnalysisException] {
+          sql("insert into t (i) values (default)")
+        }.getMessage.contains(addOneColButExpectedTwo))
+      }
+      withTable("t") {
+        sql("create table t(i boolean, s bigint default 42) using parquet")
+        assert(intercept[AnalysisException] {
+          sql("insert into t (s) values (default)")
+        }.getMessage.contains(addOneColButExpectedTwo))
+      }
+    }
+    // When the CASE_SENSITIVE configuration is enabled, then using different cases for the required
+    // and provided column names results in an analysis error.
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+      sql("create table t(i boolean default true, s bigint default 42) using parquet")
+      assert(intercept[AnalysisException] {
+        sql("insert into t (I) select true from (select 1)")
+      }.getMessage.contains("Cannot resolve column name I"))
     }
   }
 

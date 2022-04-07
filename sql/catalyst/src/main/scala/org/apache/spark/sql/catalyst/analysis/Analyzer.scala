@@ -44,6 +44,7 @@ import org.apache.spark.sql.catalyst.trees.{AlwaysProcess, CurrentOrigin}
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin.withOrigin
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.util.{toPrettySQL, CharVarcharUtils}
+import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns._
 import org.apache.spark.sql.connector.catalog._
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.connector.catalog.TableChange.{After, ColumnPosition}
@@ -3397,6 +3398,8 @@ class Analyzer(override val catalogManager: CatalogManager)
     private def resolveUserSpecifiedColumns(i: InsertIntoStatement): Seq[NamedExpression] = {
       SchemaUtils.checkColumnNameDuplication(
         i.userSpecifiedCols, "in the column list", resolver)
+
+      i.setTagValue(USER_SPECIFIED_COLUMNS_RESOLVED, true)
 
       i.userSpecifiedCols.map { col =>
           i.table.resolve(Seq(col), resolver)
