@@ -841,7 +841,7 @@ class NestedColumnAliasingSuite extends SchemaPruningTest {
       .select('col1)
       .generate(Explode('col1.getField("a")), unrequiredChildIndex = Seq(0))
       .select(UnresolvedExtractValue(UnresolvedExtractValue(
-        CaseWhen(Seq(('col.===(1),
+        CaseWhen(Seq(('col === 1,
           Literal.default(simpleStruct)))), Literal("b")), Literal("c")).as("result"))
       .analyze
 
