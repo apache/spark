@@ -122,7 +122,7 @@ select interval 2 second * 'a'
 struct<>
 -- !query output
 org.apache.spark.SparkNumberFormatException
-invalid input syntax for type numeric: a. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
+invalid input syntax for type numeric: 'a'. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
 
 
 -- !query
@@ -131,7 +131,7 @@ select interval 2 second / 'a'
 struct<>
 -- !query output
 org.apache.spark.SparkNumberFormatException
-invalid input syntax for type numeric: a. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
+invalid input syntax for type numeric: 'a'. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
 
 
 -- !query
@@ -140,7 +140,7 @@ select interval 2 year * 'a'
 struct<>
 -- !query output
 org.apache.spark.SparkNumberFormatException
-invalid input syntax for type numeric: a. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
+invalid input syntax for type numeric: 'a'. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
 
 
 -- !query
@@ -149,7 +149,7 @@ select interval 2 year / 'a'
 struct<>
 -- !query output
 org.apache.spark.SparkNumberFormatException
-invalid input syntax for type numeric: a. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
+invalid input syntax for type numeric: 'a'. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
 
 
 -- !query
@@ -174,7 +174,7 @@ select 'a' * interval 2 second
 struct<>
 -- !query output
 org.apache.spark.SparkNumberFormatException
-invalid input syntax for type numeric: a. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
+invalid input syntax for type numeric: 'a'. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
 
 
 -- !query
@@ -183,7 +183,7 @@ select 'a' * interval 2 year
 struct<>
 -- !query output
 org.apache.spark.SparkNumberFormatException
-invalid input syntax for type numeric: a. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
+invalid input syntax for type numeric: 'a'. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
 
 
 -- !query
