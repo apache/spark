@@ -364,6 +364,7 @@ object FunctionRegistry {
     if (Utils.isTesting) {
       Map(
         expression[LocalTimestamp]("localtimestamp"),
+        expression[ConvertTimezone]("convert_timezone"),
         // We keep the 2 expression builders below to have different function docs.
         expressionBuilder(
           "to_timestamp_ntz", ParseToTimestampNTZExpressionBuilder, setAlias = true),
@@ -647,7 +648,6 @@ object FunctionRegistry {
     expression[UnixSeconds]("unix_seconds"),
     expression[UnixMillis]("unix_millis"),
     expression[UnixMicros]("unix_micros"),
-    expression[ConvertTimezone]("convert_timezone"),
 
     // collection functions
     expression[CreateArray]("array"),
