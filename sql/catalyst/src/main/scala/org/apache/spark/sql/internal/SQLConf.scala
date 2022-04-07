@@ -3709,6 +3709,17 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val LPAD_RPAD_FOR_BINARY_TYPE =
+    buildConf("spark.sql.legacy.lpadRpadForBinaryType.enabled")
+      .internal()
+      .doc("When set to true, the functions `lpad` and `rpad` have been overloaded to support " +
+        "byte sequences. When the first argument is a byte sequence, the optional padding " +
+        "pattern must also be a byte sequence and the result is a BINARY value. The default " +
+        "padding pattern in this case is the zero byte.")
+      .version("3.3.0")
+      .booleanConf
+      .createWithDefault(true)
+
   /**
    * Holds information about keys that have been deprecated.
    *
