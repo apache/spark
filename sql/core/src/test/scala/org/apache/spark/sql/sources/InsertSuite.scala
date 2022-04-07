@@ -894,7 +894,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
     }
     // The table has a partitioning column and a default value is injected.
     withTable("t") {
-      sql("create table t(i boolean, s bigint, q int default 42 ) using parquet partitioned by (i)")
+      sql("create table t(i boolean, s bigint, q int default 42) using parquet partitioned by (i)")
       sql("insert into t partition(i='true') values(5, default)")
       checkAnswer(spark.table("t"), Row(5, 42, true))
     }
@@ -1086,7 +1086,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
     }
     // The table has a partitioning column with a default value; this is not allowed.
     withTable("t") {
-      sql("create table t(i boolean default true, s bigint, q int default 42 ) " +
+      sql("create table t(i boolean default true, s bigint, q int default 42) " +
         "using parquet partitioned by (i)")
       assert(intercept[ParseException] {
         sql("insert into t partition(i=default) values(5, default)")
@@ -1121,6 +1121,18 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
         checkAnswer(spark.table("t"), Row(true, 42L))
       }
     }
+    // The table is partitioned and we insert default values with explicit column names.
+    withTable("t") {
+      sql("create table t(i boolean, s bigint default 4, q int default 42) using parquet " +
+        "partitioned by (i)")
+      sql("insert into t partition(i='true') (s) values(5)")
+      sql("insert into t partition(i='false') (q) select 43")
+      sql("insert into t partition(i='false') (q) select default")
+      checkAnswer(spark.table("t"),
+        Seq(Row(5, 42, true),
+            Row(4, 43, false),
+            Row(4, 42, false)))
+    }
     // When the CASE_SENSITIVE configuration is disabled, then using different cases for the
     // required and provided column names is successful.
     withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
@@ -1148,6 +1160,16 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
         sql("create table t(i boolean, s bigint default 42) using parquet")
         sql("insert into t (s) values (default)")
         checkAnswer(spark.table("t"), Row(null, 42L))
+      }
+      withTable("t") {
+        sql("create table t(i boolean, s bigint, q int) using parquet partitioned by (i)")
+        sql("insert into t partition(i='true') (s) values(5)")
+        sql("insert into t partition(i='false') (q) select 43")
+        sql("insert into t partition(i='false') (q) select default")
+        checkAnswer(spark.table("t"),
+          Seq(Row(5, null, true),
+            Row(null, 43, false),
+            Row(null, null, false)))
       }
     }
   }
@@ -1201,6 +1223,24 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
         assert(intercept[AnalysisException] {
           sql("insert into t (s) values (default)")
         }.getMessage.contains(addOneColButExpectedTwo))
+      }
+      withTable("t") {
+        sql("create table t(i boolean, s bigint, q int) using parquet partitioned by (i)")
+        assert(intercept[AnalysisException] {
+          sql("insert into t partition(i='true') (s) values(5)")
+        }.getMessage.contains(addTwoColButExpectedThree))
+      }
+      withTable("t") {
+        sql("create table t(i boolean, s bigint, q int) using parquet partitioned by (i)")
+        assert(intercept[AnalysisException] {
+          sql("insert into t partition(i='false') (q) select 43")
+        }.getMessage.contains(addTwoColButExpectedThree))
+      }
+      withTable("t") {
+        sql("create table t(i boolean, s bigint, q int) using parquet partitioned by (i)")
+        assert(intercept[AnalysisException] {
+          sql("insert into t partition(i='false') (q) select default")
+        }.getMessage.contains(addTwoColButExpectedThree))
       }
     }
     // When the CASE_SENSITIVE configuration is enabled, then using different cases for the required
