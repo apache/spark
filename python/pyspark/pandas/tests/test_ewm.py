@@ -61,6 +61,26 @@ class EWMTest(PandasOnSparkTestCase, TestUtils):
         self.assert_eq(
             getattr(psser.ewm(com=0.2), f)().sum(), getattr(pser.ewm(com=0.2), f)().sum()
         )
+        self.assert_eq(getattr(psser.ewm(span=1.7), f)(), getattr(pser.ewm(span=1.7), f)())
+        self.assert_eq(
+            getattr(psser.ewm(span=1.7), f)().sum(), getattr(pser.ewm(span=1.7), f)().sum()
+        )
+        self.assert_eq(getattr(psser.ewm(halflife=0.5), f)(), getattr(pser.ewm(halflife=0.5), f)())
+        self.assert_eq(
+            getattr(psser.ewm(halflife=0.5), f)().sum(), getattr(pser.ewm(halflife=0.5), f)().sum()
+        )
+        self.assert_eq(getattr(psser.ewm(alpha=0.7), f)(), getattr(pser.ewm(alpha=0.7), f)())
+        self.assert_eq(
+            getattr(psser.ewm(alpha=0.7), f)().sum(), getattr(pser.ewm(alpha=0.7), f)().sum()
+        )
+        self.assert_eq(
+            getattr(psser.ewm(alpha=0.7, min_periods=2), f)(),
+            getattr(pser.ewm(alpha=0.7, min_periods=2), f)(),
+        )
+        self.assert_eq(
+            getattr(psser.ewm(alpha=0.7, min_periods=2), f)().sum(),
+            getattr(pser.ewm(alpha=0.7, min_periods=2), f)().sum(),
+        )
 
         pdf = pd.DataFrame(
             {"a": [1.0, 2.0, 3.0, 2.0], "b": [4.0, 2.0, 3.0, 1.0]}, index=np.random.rand(4)
@@ -68,6 +88,26 @@ class EWMTest(PandasOnSparkTestCase, TestUtils):
         psdf = ps.from_pandas(pdf)
         self.assert_eq(getattr(psdf.ewm(com=0.2), f)(), getattr(pdf.ewm(com=0.2), f)())
         self.assert_eq(getattr(psdf.ewm(com=0.2), f)().sum(), getattr(pdf.ewm(com=0.2), f)().sum())
+        self.assert_eq(getattr(psdf.ewm(span=1.7), f)(), getattr(pdf.ewm(span=1.7), f)())
+        self.assert_eq(
+            getattr(psdf.ewm(span=1.7), f)().sum(), getattr(pdf.ewm(span=1.7), f)().sum()
+        )
+        self.assert_eq(getattr(psdf.ewm(halflife=0.5), f)(), getattr(pdf.ewm(halflife=0.5), f)())
+        self.assert_eq(
+            getattr(psdf.ewm(halflife=0.5), f)().sum(), getattr(pdf.ewm(halflife=0.5), f)().sum()
+        )
+        self.assert_eq(getattr(psdf.ewm(alpha=0.7), f)(), getattr(pdf.ewm(alpha=0.7), f)())
+        self.assert_eq(
+            getattr(psdf.ewm(alpha=0.7), f)().sum(), getattr(pdf.ewm(alpha=0.7), f)().sum()
+        )
+        self.assert_eq(
+            getattr(psdf.ewm(alpha=0.7, min_periods=2), f)(),
+            getattr(pdf.ewm(alpha=0.7, min_periods=2), f)(),
+        )
+        self.assert_eq(
+            getattr(psdf.ewm(alpha=0.7, min_periods=2), f)().sum(),
+            getattr(pdf.ewm(alpha=0.7, min_periods=2), f)().sum(),
+        )
 
     def test_ewm_mean(self):
         self._test_ewm_func("mean")
