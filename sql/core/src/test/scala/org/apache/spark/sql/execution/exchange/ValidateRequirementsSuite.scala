@@ -36,11 +36,11 @@ class ValidateRequirementsSuite extends PlanTest with SharedSparkSession {
       rightPartitionNum: Int,
       success: Boolean): Unit = {
     val table1 =
-      spark.range(10).select(Symbol("id") + 1 as Symbol("a1"), Symbol("id") + 2 as Symbol("b1"),
-        Symbol("id") + 3 as Symbol("c1")).queryExecution.executedPlan
+      spark.range(10).select($"id" + 1 as Symbol("a1"), $"id" + 2 as Symbol("b1"),
+        $"id" + 3 as Symbol("c1")).queryExecution.executedPlan
     val table2 =
-      spark.range(10).select(Symbol("id") + 1 as Symbol("a2"), Symbol("id") + 2 as Symbol("b2"),
-        Symbol("id") + 3 as Symbol("c2")).queryExecution.executedPlan
+      spark.range(10).select($"id" + 1 as Symbol("a2"), $"id" + 2 as Symbol("b2"),
+        $"id" + 3 as Symbol("c2")).queryExecution.executedPlan
 
     val leftKeys = joinKeyIndices.map(table1.output)
     val rightKeys = joinKeyIndices.map(table2.output)
@@ -105,14 +105,14 @@ class ValidateRequirementsSuite extends PlanTest with SharedSparkSession {
       partNums: Seq[Int],
       success: Boolean): Unit = {
     val table1 =
-      spark.range(10).select(Symbol("id") + 1 as Symbol("a1"), Symbol("id") + 2 as Symbol("b1"),
-        Symbol("id") + 3 as Symbol("c1")).queryExecution.executedPlan
+      spark.range(10).select($"id" + 1 as Symbol("a1"), $"id" + 2 as Symbol("b1"),
+        $"id" + 3 as Symbol("c1")).queryExecution.executedPlan
     val table2 =
-      spark.range(10).select(Symbol("id") + 1 as Symbol("a2"), Symbol("id") + 2 as Symbol("b2"),
-        Symbol("id") + 3 as Symbol("c2")).queryExecution.executedPlan
+      spark.range(10).select($"id" + 1 as Symbol("a2"), $"id" + 2 as Symbol("b2"),
+        $"id" + 3 as Symbol("c2")).queryExecution.executedPlan
     val table3 =
-      spark.range(10).select(Symbol("id") + 1 as Symbol("a3"), Symbol("id") + 2 as Symbol("b3"),
-        Symbol("id") + 3 as Symbol("c3")).queryExecution.executedPlan
+      spark.range(10).select($"id" + 1 as Symbol("a3"), $"id" + 2 as Symbol("b3"),
+        $"id" + 3 as Symbol("c3")).queryExecution.executedPlan
 
     val key1 = joinKeyIndices1.map(_._1).map(table1.output)
     val key2 = joinKeyIndices1.map(_._2).map(table2.output)

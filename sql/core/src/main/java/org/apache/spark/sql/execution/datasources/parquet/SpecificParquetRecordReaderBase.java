@@ -74,6 +74,7 @@ public abstract class SpecificParquetRecordReaderBase<T> extends RecordReader<Vo
   // Keep track of the version of the parquet writer. An older version wrote
   // corrupt delta byte arrays, and the version check is needed to detect that.
   protected ParsedVersion writerVersion;
+  protected ParquetColumn parquetColumn;
 
   /**
    * The total number of rows this RecordReader will eventually read. The sum of the
@@ -112,7 +113,11 @@ public abstract class SpecificParquetRecordReaderBase<T> extends RecordReader<Vo
     fileReader.setRequestedSchema(requestedSchema);
     String sparkRequestedSchemaString =
         configuration.get(ParquetReadSupport$.MODULE$.SPARK_ROW_REQUESTED_SCHEMA());
-    this.sparkSchema = StructType$.MODULE$.fromString(sparkRequestedSchemaString);
+    StructType sparkRequestedSchema = StructType$.MODULE$.fromString(sparkRequestedSchemaString);
+    ParquetToSparkSchemaConverter converter = new ParquetToSparkSchemaConverter(configuration);
+    this.parquetColumn = converter.convertParquetColumn(requestedSchema,
+      Option.apply(sparkRequestedSchema));
+    this.sparkSchema = (StructType) parquetColumn.sparkType();
     this.totalRowCount = fileReader.getFilteredRecordCount();
 
     // For test purpose.
@@ -174,7 +179,9 @@ public abstract class SpecificParquetRecordReaderBase<T> extends RecordReader<Vo
       }
     }
     fileReader.setRequestedSchema(requestedSchema);
-    this.sparkSchema = new ParquetToSparkSchemaConverter(config).convert(requestedSchema);
+    this.parquetColumn = new ParquetToSparkSchemaConverter(config)
+      .convertParquetColumn(requestedSchema, Option.empty());
+    this.sparkSchema = (StructType) parquetColumn.sparkType();
     this.totalRowCount = fileReader.getFilteredRecordCount();
   }
 
@@ -191,7 +198,9 @@ public abstract class SpecificParquetRecordReaderBase<T> extends RecordReader<Vo
     config.setBoolean(SQLConf.PARQUET_BINARY_AS_STRING().key() , false);
     config.setBoolean(SQLConf.PARQUET_INT96_AS_TIMESTAMP().key(), false);
     config.setBoolean(SQLConf.CASE_SENSITIVE().key(), false);
-    this.sparkSchema = new ParquetToSparkSchemaConverter(config).convert(requestedSchema);
+    this.parquetColumn = new ParquetToSparkSchemaConverter(config)
+      .convertParquetColumn(requestedSchema, Option.empty());
+    this.sparkSchema = (StructType) parquetColumn.sparkType();
     this.totalRowCount = totalRowCount;
   }
 

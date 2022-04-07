@@ -454,6 +454,7 @@ object FunctionRegistry {
     expression[TryMultiply]("try_multiply"),
     expression[TryElementAt]("try_element_at"),
     expression[TrySum]("try_sum"),
+    expression[TryToBinary]("try_to_binary"),
 
     // aggregate functions
     expression[HyperLogLogPlusPlus]("approx_count_distinct"),

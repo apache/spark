@@ -31,3 +31,8 @@ github:
     merge: false
     squash: true
     rebase: true
+
+notifications:
+  pullrequests: reviews@spark.apache.org
+  issues: reviews@spark.apache.org
+  commits: commits@spark.apache.org

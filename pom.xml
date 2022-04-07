@@ -29,7 +29,7 @@
   <version>3.4.0-SNAPSHOT</version>
   <packaging>pom</packaging>
   <name>Spark Project Parent POM</name>
-  <url>http://spark.apache.org/</url>
+  <url>https://spark.apache.org/</url>
   <licenses>
     <license>
       <name>Apache 2.0 License</name>
@@ -50,7 +50,7 @@
       <email>matei.zaharia@gmail.com</email>
       <url>https://cs.stanford.edu/people/matei</url>
       <organization>Apache Software Foundation</organization>
-      <organizationUrl>http://spark.apache.org</organizationUrl>
+      <organizationUrl>https://spark.apache.org</organizationUrl>
     </developer>
   </developers>
   <issueManagement>

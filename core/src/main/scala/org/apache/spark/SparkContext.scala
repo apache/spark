@@ -2023,7 +2023,7 @@ class SparkContext(config: SparkConf) extends Logging {
         }
         if (existed.nonEmpty) {
           val jarMessage = if (scheme != "ivy") "JAR" else "dependency jars of Ivy URI"
-          logInfo(s"The $jarMessage $path at ${existed.mkString(",")} has been added already." +
+          logWarning(s"The $jarMessage $path at ${existed.mkString(",")} has been added already." +
             " Overwriting of added jar is not supported in the current version.")
         }
       }

@@ -59,7 +59,6 @@ class MissingPandasLikeSeries:
 
     # Properties we won't support.
     array = common.array(_unsupported_property)
-    duplicated = common.duplicated(_unsupported_property)
     nbytes = _unsupported_property(
         "nbytes",
         reason="'nbytes' requires to compute whole dataset. You can calculate manually it, "

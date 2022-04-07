@@ -779,7 +779,7 @@ jobs:
       HIVE_PROFILE: hive2.3
       GITHUB_PREV_SHA: ${{ github.event.before }}
       SPARK_LOCAL_IP: localhost
-      ORACLE_DOCKER_IMAGE_NAME: gvenzl/oracle-xe:18.4.0
+      ORACLE_DOCKER_IMAGE_NAME: gvenzl/oracle-xe:21.3.0
       SKIP_MIMA: true
     steps:
     - name: Checkout Spark repository
