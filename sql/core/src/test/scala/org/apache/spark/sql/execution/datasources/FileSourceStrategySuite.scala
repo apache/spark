@@ -601,16 +601,6 @@ class FileSourceStrategySuite extends QueryTest with SharedSparkSession with Pre
     checkDataFilters(Set.empty)
   }
 
-  test("SPARK-37528: Support input size in FilePartition") {
-    val partition = FilePartition(0, Array(
-      PartitionedFile(InternalRow.empty, "p1", 0, 1, Array.empty),
-      PartitionedFile(InternalRow.empty, "p2", 1, 3, Array.empty),
-      PartitionedFile(InternalRow.empty, "p2", 4, 6, Array.empty)
-    ))
-
-    assert(partition.inputSize.get == 10)
-  }
-
   // Helpers for checking the arguments passed to the FileFormat.
 
   protected val checkPartitionSchema =

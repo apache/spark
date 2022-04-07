@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution
 
 import scala.collection.mutable.ArrayBuffer
 
+import org.apache.spark.Partition
 import org.apache.spark.internal.config
 import org.apache.spark.scheduler.{SparkListener, SparkListenerTaskStart}
 import org.apache.spark.sql.{DataFrame, QueryTest}
@@ -28,6 +29,7 @@ import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.util.Utils
 
 abstract class ScheduleTasksByInputSizeSuiteBase extends QueryTest with SharedSparkSession {
+
   protected def sortTasksByInputSizeEnabled: Boolean = false
   private val tempDir = Utils.createTempDir()
 
@@ -69,27 +71,49 @@ abstract class ScheduleTasksByInputSizeSuiteBase extends QueryTest with SharedSp
     rdd.asInstanceOf[FileScanRDD]
   }
 
-  test("Support datasource v1 file scan") {
-    val tasks = new ArrayBuffer[Int]
+  private def findShuffledRowRDD(df: DataFrame): ShuffledRowRDD = {
+    var rdd = df.rdd
+    while (!rdd.isInstanceOf[ShuffledRowRDD]) {
+      rdd = rdd.firstParent
+    }
+    assert(rdd.isInstanceOf[ShuffledRowRDD])
+    rdd.asInstanceOf[ShuffledRowRDD]
+  }
+
+  private def doWithCollectTasks(df: DataFrame) : Array[Int] = {
+    val scheduled = new ArrayBuffer[Int]
     val listener = new SparkListener {
       override def onTaskStart(taskStart: SparkListenerTaskStart): Unit = {
-        // note that, taskInfo.index is not always same with partition index
-        tasks.append(taskStart.taskInfo.partitionId)
+        scheduled.append(taskStart.taskInfo.partitionId)
       }
     }
-    var fileScanRDD: FileScanRDD = null
     spark.sparkContext.addSparkListener(listener)
     try {
-      val df = spark.read.parquet(tempDir.getCanonicalPath)
       df.collect()
-      fileScanRDD = findFileScanRDD(df)
+      spark.sparkContext.listenerBus.waitUntilEmpty()
     } finally {
       spark.sparkContext.removeSparkListener(listener)
     }
-    spark.sparkContext.listenerBus.waitUntilEmpty()
-    assert(tasks.size == 7)
-    assert(fileScanRDD.partitions.length == 6)
-    assert(fileScanRDD.partitions.forall(_.inputSize.isDefined))
+    scheduled.toArray
+  }
+
+  private def checkTasksStarOrdering(
+      scheduled: Array[Int], parts: Array[Partition]): Unit = {
+    val input = parts.map(_.index)
+    if (sortTasksByInputSizeEnabled) {
+      assert(input.zip(scheduled).exists { case (l, r) => l != r})
+      val expected = parts.sortBy(_.inputSize.get)(Ordering[Long].reverse)
+        .map(_.index)
+      assert(expected.zip(scheduled).forall { case (l, r) => l == r})
+    } else {
+      assert(input.zip(scheduled).forall { case (l, r) => l == r})
+    }
+  }
+
+  test("Support datasource v1 file scan") {
+    val df = spark.read.parquet(tempDir.getCanonicalPath)
+    val scheduled = doWithCollectTasks(df)
+    val fileScanRDDParts = findFileScanRDD(df).partitions
 
     // 1200
     // 1200
@@ -97,17 +121,29 @@ abstract class ScheduleTasksByInputSizeSuiteBase extends QueryTest with SharedSp
     // 885
     // 885
     // 991 (519,472)
-    val input = fileScanRDD.partitions.map(_.index)
-    // skip the first task which is not related file scan
-    val scheduled = tasks.tail
+    assert(scheduled.length == 6)
+    assert(fileScanRDDParts.length == 6)
+    assert(fileScanRDDParts.forall(_.inputSize.isDefined))
+    checkTasksStarOrdering(scheduled, fileScanRDDParts)
+  }
 
-    if (sortTasksByInputSizeEnabled) {
-      assert(input.zip(scheduled).exists { case (l, r) => l != r})
-      val expected = fileScanRDD.partitions.sortBy(_.inputSize.get)(Ordering[Long].reverse)
-        .map(_.index)
-      assert(expected.zip(scheduled).forall { case (l, r) => l == r})
-    } else {
-      assert(input.zip(scheduled).forall { case (l, r) => l == r})
+  test("Support coalesce partition spec") {
+    withSQLConf(
+        SQLConf.SHUFFLE_PARTITIONS.key -> "5",
+        SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.key -> "3300") {
+      val df = spark.read.parquet(tempDir.getCanonicalPath).distinct()
+      val totalScheduled = doWithCollectTasks(df)
+      // skip file scan stage
+      val scheduled = totalScheduled.slice(6, totalScheduled.length)
+      val shuffledRowRDDParts = findShuffledRowRDD(df).partitions
+
+      // 1914
+      // 3108
+      // 1716
+      // 1716
+      assert(shuffledRowRDDParts.length == 4)
+      assert(scheduled.length == shuffledRowRDDParts.length)
+      checkTasksStarOrdering(scheduled, shuffledRowRDDParts)
     }
   }
 }
@@ -115,7 +151,6 @@ abstract class ScheduleTasksByInputSizeSuiteBase extends QueryTest with SharedSp
 class ScheduleTasksByInputSizeSuiteEnabled extends ScheduleTasksByInputSizeSuiteBase {
   override protected val sortTasksByInputSizeEnabled: Boolean = true
 }
-
 
 class ScheduleTasksByInputSizeSuiteDisabled extends ScheduleTasksByInputSizeSuiteBase {
   override protected val sortTasksByInputSizeEnabled: Boolean = false
