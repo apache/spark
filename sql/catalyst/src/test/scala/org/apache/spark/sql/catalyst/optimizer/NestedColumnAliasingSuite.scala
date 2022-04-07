@@ -313,25 +313,6 @@ class NestedColumnAliasingSuite extends SchemaPruningTest {
     comparePlans(optimized, expected)
   }
 
-  test("SPARK-38531: Nested field pruning for Project and PosExplode") {
-    val query = contact
-      .generate(PosExplode('friends))
-      .select('col.getField("middle"))
-      .analyze
-    val optimized = Optimize.execute(query)
-
-    val aliases = collectGeneratedAliases(optimized)
-
-    val expected = contact
-      .select(
-        'friends.getField("middle").as(aliases(0)))
-      .generate(PosExplode($"${aliases(0)}"),
-        unrequiredChildIndex = Seq(0))
-      .select('col.as("col.middle"))
-      .analyze
-    comparePlans(optimized, expected)
-  }
-
   test("Nested field pruning for Generate") {
     val query = contact
       .generate(Explode($"friends".getField("first")), outputNames = Seq("explode"))
