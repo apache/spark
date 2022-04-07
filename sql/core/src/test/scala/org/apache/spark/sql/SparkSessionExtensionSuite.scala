@@ -410,28 +410,23 @@ class SparkSessionExtensionSuite extends SparkFunSuite with SQLHelper {
   }
 
   test("SPARK-38697: Extend SparkSessionExtensions to inject rules into AQE Optimizer") {
-    def checkLimit(df: Dataset[java.lang.Long], hasLimit: Boolean): Unit = {
-      def executedPlan: SparkPlan = df.queryExecution.executedPlan match {
+    def executedPlan(df: Dataset[java.lang.Long]): SparkPlan = {
+      df.queryExecution.executedPlan match {
         case aqe: AdaptiveSparkPlanExec => aqe.executedPlan
-        case other => other
+        case _ => throw new IllegalStateException("Must be AdaptiveSparkPlanExec")
       }
-
-      assert(!executedPlan.isInstanceOf[CollectLimitExec])
-      df.collect()
-      assert(executedPlan.isInstanceOf[CollectLimitExec] == hasLimit)
     }
-
     val extensions = create { extensions =>
       extensions.injectRuntimeOptimizerRule(_ => AddLimit)
     }
     withSession(extensions) { session =>
       assert(session.sessionState.adaptiveRulesHolder.runtimeOptimizerRules.contains(AddLimit))
 
-      withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
-        checkLimit(session.range(2).repartition(), false)
-      }
       withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true") {
-        checkLimit(session.range(2).repartition(), true)
+        val df = session.range(2).repartition()
+        assert(!executedPlan(df).isInstanceOf[CollectLimitExec])
+        df.collect()
+        assert(executedPlan(df).isInstanceOf[CollectLimitExec])
       }
     }
   }

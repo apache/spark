@@ -28,7 +28,7 @@ import org.apache.spark.util.Utils
 /**
  * The optimizer for re-optimizing the logical plan used by AdaptiveSparkPlanExec.
  */
-class AQEOptimizer(conf: SQLConf, extendedRuntimeOptimizationRules: Seq[Rule[LogicalPlan]])
+class AQEOptimizer(conf: SQLConf, extendedRuntimeOptimizerRules: Seq[Rule[LogicalPlan]])
   extends RuleExecutor[LogicalPlan] {
 
   private def fixedPoint =
@@ -44,7 +44,7 @@ class AQEOptimizer(conf: SQLConf, extendedRuntimeOptimizationRules: Seq[Rule[Log
     Batch("Dynamic Join Selection", Once, DynamicJoinSelection),
     Batch("Eliminate Limits", fixedPoint, EliminateLimits),
     Batch("Optimize One Row Plan", fixedPoint, OptimizeOneRowPlan)) :+
-    Batch("User Provided Runtime Optimizers", fixedPoint, extendedRuntimeOptimizationRules: _*)
+    Batch("User Provided Runtime Optimizers", fixedPoint, extendedRuntimeOptimizerRules: _*)
 
   final override protected def batches: Seq[Batch] = {
     val excludedRules = conf.getConf(SQLConf.ADAPTIVE_OPTIMIZER_EXCLUDED_RULES)
