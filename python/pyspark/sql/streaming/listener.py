@@ -14,7 +14,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-import pickle
 import uuid
 from typing import Optional, Dict, List
 from abc import ABC, abstractmethod
@@ -22,7 +21,7 @@ from abc import ABC, abstractmethod
 from py4j.java_gateway import JavaObject
 
 from pyspark.sql import Row
-
+from pyspark import cloudpickle
 
 __all__ = ["StreamingQueryListener"]
 
@@ -270,9 +269,8 @@ class StreamingQueryProgress:
         self._sources: List[SourceProgress] = [SourceProgress(js) for js in jprogress.sources()]
         self._sink: SinkProgress = SinkProgress(jprogress.sink())
 
-        # TODO(SPARK-38760): Write a test with DataFrame.observe API implementation.
         self._observedMetrics: Dict[str, Row] = {
-            k: pickle.loads(
+            k: cloudpickle.loads(
                 SparkContext._jvm.PythonSQLUtils.toPyRow(jr)  # type: ignore[union-attr]
             )
             for k, jr in dict(jprogress.observedMetrics()).items()
