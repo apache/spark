@@ -18,7 +18,6 @@
 package org.apache.spark.sql.connector.read;
 
 import java.io.Serializable;
-import java.util.OptionalLong;
 
 import org.apache.spark.annotation.Evolving;
 
@@ -37,17 +36,6 @@ import org.apache.spark.annotation.Evolving;
  */
 @Evolving
 public interface InputPartition extends Serializable {
-
-  /**
-   * Get the partition's input size before actually executing, return negative value means the
-   * input size is unknown. During scheduling tasks, the big input size task can take precedence.
-   * <p>
-   * Note that, the actually priority of task who can be offered resource depend on data locality.
-   * <p>
-   */
-  default OptionalLong getLength() {
-    return OptionalLong.empty();
-  }
 
   /**
    * The preferred locations where the input partition reader returned by this partition can run
