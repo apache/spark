@@ -22,6 +22,8 @@ API Reference
 
 This page lists an overview of all public PySpark modules, classes, functions and methods.
 
+Note that pandas has different behavior per its version, and pandas API on Spark tries to match the behavior of latest pandas release.
+
 .. toctree::
    :maxdepth: 2
 
