@@ -29,7 +29,6 @@ import org.apache.spark.sql.catalyst.expressions.codegen.GeneratePredicate
 import org.apache.spark.sql.catalyst.plans.logical.EventTimeWatermark
 import org.apache.spark.sql.execution.streaming.StatefulOperatorStateInfo
 import org.apache.spark.sql.execution.streaming.StreamingSymmetricHashJoinHelper.LeftSide
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.StreamTest
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -293,28 +292,26 @@ class SymmetricHashJoinStateManagerSuite extends StreamTest with BeforeAndAfter 
     manager.metrics.numKeys
   }
 
-
   def withJoinStateManager(
-    inputValueAttribs: Seq[Attribute],
-    joinKeyExprs: Seq[Expression],
-    stateFormatVersion: Int,
-    skipNullsForStreamStreamJoins: Boolean = false)
-                          (f: SymmetricHashJoinStateManager => Unit): Unit = {
+      inputValueAttribs: Seq[Attribute],
+      joinKeyExprs: Seq[Expression],
+      stateFormatVersion: Int,
+      skipNullsForStreamStreamJoins: Boolean = false)
+      (f: SymmetricHashJoinStateManager => Unit): Unit = {
 
     withTempDir { file =>
-      val sqlConf = new SQLConf
-      if (skipNullsForStreamStreamJoins) {
-        sqlConf.setConf(SQLConf.STATE_STORE_SKIP_NULLS_FOR_STREAM_STREAM_JOINS, true)
-      }
-      val storeConf = new StateStoreConf(sqlConf)
-      val stateInfo = StatefulOperatorStateInfo(file.getAbsolutePath, UUID.randomUUID, 0, 0, 5)
-      val manager = new SymmetricHashJoinStateManager(
-        LeftSide, inputValueAttribs, joinKeyExprs, Some(stateInfo), storeConf, new Configuration,
-        partitionId = 0, stateFormatVersion)
-      try {
-        f(manager)
-      } finally {
-        manager.abortIfNeeded()
+      withSQLConf("spark.sql.streaming.stateStore.skipNullsForStreamStreamJoins.enabled" ->
+        skipNullsForStreamStreamJoins.toString) {
+        val storeConf = new StateStoreConf(spark.sqlContext.conf)
+        val stateInfo = StatefulOperatorStateInfo(file.getAbsolutePath, UUID.randomUUID, 0, 0, 5)
+        val manager = new SymmetricHashJoinStateManager(
+          LeftSide, inputValueAttribs, joinKeyExprs, Some(stateInfo), storeConf, new Configuration,
+          partitionId = 0, stateFormatVersion)
+        try {
+          f(manager)
+        } finally {
+          manager.abortIfNeeded()
+        }
       }
     }
     StateStore.stop()
