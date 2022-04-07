@@ -196,29 +196,29 @@ class HadoopMapReduceCommitProtocol(
     if (hasValidPath) {
       val (allAbsPathFiles, allPartitionPaths) =
         taskCommits.map(_.obj.asInstanceOf[(Map[String, String], Set[String])]).unzip
-      val hadoopConfiguration = jobContext.getConfiguration
-      val fs = stagingDir.getFileSystem(hadoopConfiguration)
+      val hadoopConf = jobContext.getConfiguration
+      val fs = stagingDir.getFileSystem(hadoopConf)
 
       val filesToMove = allAbsPathFiles.foldLeft(Map[String, String]())(_ ++ _)
       logDebug(s"Committing files staged for absolute locations $filesToMove")
       val absParentPaths = filesToMove.values.map(new Path(_).getParent).toSet
       if (dynamicPartitionOverwrite) {
         logDebug(s"Clean up absolute partition directories for overwriting: $absParentPaths")
-        absParentPaths.foreach(path => path.getFileSystem(hadoopConfiguration)
+        absParentPaths.foreach(path => path.getFileSystem(hadoopConf)
           .delete(path, true))
       }
       logDebug(s"Create absolute parent directories: $absParentPaths")
-      absParentPaths.foreach(path => path.getFileSystem(hadoopConfiguration).mkdirs(path))
+      absParentPaths.foreach(path => path.getFileSystem(hadoopConf).mkdirs(path))
       for ((src, dst) <- filesToMove) {
         val srcPath = new Path(src)
         val dstPath = new Path(dst)
-        val srcFs = srcPath.getFileSystem(hadoopConfiguration)
-        val dstFs = dstPath.getFileSystem(hadoopConfiguration)
+        val srcFs = srcPath.getFileSystem(hadoopConf)
+        val dstFs = dstPath.getFileSystem(hadoopConf)
         // Copying files across different file systems
         if (needCopy(srcPath, dstPath, srcFs, dstFs)) {
           if (!FileUtil.copy(srcFs, srcFs.listStatus(srcPath).map(_.getPath), dstFs, dstPath,
             true, false, /* We've cleared the target path up ahead */
-            hadoopConfiguration)) {
+            hadoopConf)) {
             throw new IOException(s"Failed to copy $src to $dst with different file system" +
               s" when committing files staged for absolute locations")
           }
