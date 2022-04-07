@@ -1246,10 +1246,12 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
     // When the CASE_SENSITIVE configuration is enabled, then using different cases for the required
     // and provided column names results in an analysis error.
     withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
-      sql("create table t(i boolean default true, s bigint default 42) using parquet")
-      assert(intercept[AnalysisException] {
-        sql("insert into t (I) select true from (select 1)")
-      }.getMessage.contains("Cannot resolve column name I"))
+      withTable("t") {
+        sql("create table t(i boolean default true, s bigint default 42) using parquet")
+        assert(intercept[AnalysisException] {
+          sql("insert into t (I) select true from (select 1)")
+        }.getMessage.contains("Cannot resolve column name I"))
+      }
     }
   }
 
