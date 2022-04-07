@@ -35,9 +35,9 @@ import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.avro.AvroOptions.ignoreExtensionKey
-import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.{FileSourceOptions, InternalRow}
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
-import org.apache.spark.sql.execution.datasources.{OutputWriterFactory, SourceOptions}
+import org.apache.spark.sql.execution.datasources.OutputWriterFactory
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
@@ -59,7 +59,7 @@ private[sql] object AvroUtils extends Logging {
       .getOrElse {
         inferAvroSchemaFromFiles(files, conf, parsedOptions.ignoreExtension,
           CaseInsensitiveMap(options)
-            .get(SourceOptions.IGNORE_CORRUPT_FILES).map(_.toBoolean)
+            .get(FileSourceOptions.IGNORE_CORRUPT_FILES).map(_.toBoolean)
             .getOrElse(spark.sessionState.conf.ignoreCorruptFiles))
       }
 

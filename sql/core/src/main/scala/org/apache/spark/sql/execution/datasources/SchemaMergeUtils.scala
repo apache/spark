@@ -23,6 +23,7 @@ import org.apache.hadoop.fs.{FileStatus, Path}
 import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.catalyst.FileSourceOptions
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types.StructType
@@ -62,7 +63,7 @@ object SchemaMergeUtils extends Logging {
       sparkSession.sparkContext.defaultParallelism)
 
     val ignoreCorruptFiles = CaseInsensitiveMap(parameters)
-      .get(SourceOptions.IGNORE_CORRUPT_FILES).map(_.toBoolean)
+      .get(FileSourceOptions.IGNORE_CORRUPT_FILES).map(_.toBoolean)
       .getOrElse(sparkSession.sessionState.conf.ignoreCorruptFiles)
 
     // Issues a Spark job to read Parquet/ORC schema in parallel.

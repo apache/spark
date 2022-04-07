@@ -27,7 +27,7 @@ import org.apache.spark.{Partition => RDDPartition, SparkUpgradeException, TaskC
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.rdd.{InputFileBlockHolder, RDD}
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.{FileSourceOptions, InternalRow}
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, GenericInternalRow, JoinedRow, UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.errors.QueryExecutionErrors
@@ -74,9 +74,11 @@ class FileScanRDD(
     options: CaseInsensitiveMap[String] = CaseInsensitiveMap(Map.empty))
   extends RDD[InternalRow](sparkSession.sparkContext, Nil) {
 
-  private val ignoreCorruptFiles = options.get(SourceOptions.IGNORE_CORRUPT_FILES).map(_.toBoolean)
+  private val ignoreCorruptFiles = options.get(FileSourceOptions.IGNORE_CORRUPT_FILES)
+    .map(_.toBoolean)
     .getOrElse(sparkSession.sessionState.conf.ignoreCorruptFiles)
-  private val ignoreMissingFiles = options.get(SourceOptions.IGNORE_MISSING_FILES).map(_.toBoolean)
+  private val ignoreMissingFiles = options.get(FileSourceOptions.IGNORE_MISSING_FILES)
+    .map(_.toBoolean)
     .getOrElse(sparkSession.sessionState.conf.ignoreMissingFiles)
 
   override def compute(split: RDDPartition, context: TaskContext): Iterator[InternalRow] = {

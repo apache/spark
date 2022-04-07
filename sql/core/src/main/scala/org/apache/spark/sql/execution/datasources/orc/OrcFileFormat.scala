@@ -33,7 +33,7 @@ import org.apache.orc.mapreduce._
 
 import org.apache.spark.TaskContext
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.{FileSourceOptions, InternalRow}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
@@ -135,7 +135,7 @@ class OrcFileFormat
     val isCaseSensitive = sparkSession.sessionState.conf.caseSensitiveAnalysis
     val orcFilterPushDown = sparkSession.sessionState.conf.orcFilterPushDown
     val ignoreCorruptFiles = CaseInsensitiveMap(options)
-      .get(SourceOptions.IGNORE_CORRUPT_FILES).map(_.toBoolean)
+      .get(FileSourceOptions.IGNORE_CORRUPT_FILES).map(_.toBoolean)
       .getOrElse(sparkSession.sessionState.conf.ignoreCorruptFiles)
 
     (file: PartitionedFile) => {

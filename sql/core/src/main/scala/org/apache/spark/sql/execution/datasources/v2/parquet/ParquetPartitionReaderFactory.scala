@@ -67,9 +67,7 @@ case class ParquetPartitionReaderFactory(
     filters: Array[Filter],
     aggregation: Option[Aggregation],
     parquetOptions: ParquetOptions) extends
-  FilePartitionReaderFactory(
-    parquetOptions.ignoreCorruptFiles,
-    parquetOptions.ignoreMissingFiles) with Logging {
+  FilePartitionReaderFactory(parquetOptions) with Logging {
   private val isCaseSensitive = sqlConf.caseSensitiveAnalysis
   private val resultSchema = StructType(partitionSchema.fields ++ readDataSchema.fields)
   private val enableOffHeapColumnVector = sqlConf.offHeapColumnVectorEnabled

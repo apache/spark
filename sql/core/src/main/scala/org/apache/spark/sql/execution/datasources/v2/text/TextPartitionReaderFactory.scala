@@ -44,9 +44,7 @@ case class TextPartitionReaderFactory(
     readDataSchema: StructType,
     partitionSchema: StructType,
     textOptions: TextOptions)
-  extends FilePartitionReaderFactory(
-    textOptions.ignoreCorruptFiles,
-    textOptions.ignoreMissingFiles) {
+  extends FilePartitionReaderFactory(textOptions) {
 
   override def buildReader(file: PartitionedFile): PartitionReader[InternalRow] = {
     val confValue = broadcastedConf.value.value
