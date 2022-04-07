@@ -244,7 +244,7 @@ class SQLAppStatusListener(
       .format(nodeNameToAccumulatorIds.mkString("\n ")))
 
     // Gets each stage and its list of distinct accumulatorIDs
-    // which is retrived upon completion of a stage.
+    // which is retrieved upon completion of a stage.
     val stageIdToAccumulatorIDs = stageAccumulators.asScala
     logDebug("each Stage's Metrics represented by AccumulatorIds are: \n %s\n"
       .format(stageIdToAccumulatorIDs.mkString("\n ")))
@@ -253,13 +253,15 @@ class SQLAppStatusListener(
     // between nodeMetrics and stageAccumulateIDs
     val operatorToStage = nodeNameToAccumulatorIds.map { case (nodeName, accumulatorIds1) =>
       val mappedStages = stageIdToAccumulatorIDs.flatMap { case (stageId, accumulatorIds2) =>
-        if (accumulatorIds1.intersect(accumulatorIds2).nonEmpty) Some(stageId)
-        else None
+        if (accumulatorIds1.intersect(accumulatorIds2).nonEmpty) {
+          Some(stageId)
+        } else {
+          None
+        }
       }.toList.sorted
       (nodeName, accumulatorIds1, mappedStages)
     }
-    val operatorToStageString = operatorToStage.mkString("\n")
-    logDebug(s"Each Operator's AccumulatorIds and Stages are:\n $operatorToStageString")
+    logDebug(s"Each Operator's AccumulatorIds and Stages are:\n ${operatorToStage.mkString("\n")}")
 
     // Connect SparkGraphNode IDs to StageIDs for rendering in SQL UI in
     // SparkPlanGraph's makeDotFile.
