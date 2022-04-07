@@ -131,7 +131,7 @@ object PushDownUtils extends PredicateHelper {
   }
 
   /**
-   * Pushes down top N to the data source Scan
+   * Pushes down top N to the data source Scan.
    *
    * @return the tuple of Boolean. The first Boolean value represents whether to push down, and
    *         the second Boolean value represents whether to push down partially which means to
