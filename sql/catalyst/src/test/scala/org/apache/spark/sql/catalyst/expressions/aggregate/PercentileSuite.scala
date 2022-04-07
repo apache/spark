@@ -343,22 +343,22 @@ class PercentileSuite extends SparkFunSuite {
       AttributeReference("a", DoubleType)(),
       percentageExpression = Literal(0.5, DoubleType),
       frequencyExpression = Literal(2L, LongType)).checkInputDataTypes() ===
-      TypeCheckFailure("Frequency value must not be 1 for PercentileDisc"))
+      TypeCheckFailure("Frequency value must be 1 for PercentileDisc"))
     assert(PercentileDisc(
       AttributeReference("a", DoubleType)(),
       percentageExpression = Literal(0.5, DoubleType),
       frequencyExpression = Literal(2, IntegerType)).checkInputDataTypes() ===
-      TypeCheckFailure("Frequency value must not be 1 for PercentileDisc"))
+      TypeCheckFailure("Frequency value must be 1 for PercentileDisc"))
     assert(PercentileDisc(
       AttributeReference("a", DoubleType)(),
       percentageExpression = Literal(0.5, DoubleType),
       frequencyExpression = Literal(2.toShort, ShortType)).checkInputDataTypes() ===
-      TypeCheckFailure("Frequency value must not be 1 for PercentileDisc"))
+      TypeCheckFailure("Frequency value must be 1 for PercentileDisc"))
     assert(PercentileDisc(
       AttributeReference("a", DoubleType)(),
       percentageExpression = Literal(0.5, DoubleType),
       frequencyExpression = Literal(2.toByte, ByteType)).checkInputDataTypes() ===
-      TypeCheckFailure("Frequency value must not be 1 for PercentileDisc"))
+      TypeCheckFailure("Frequency value must be 1 for PercentileDisc"))
   }
 
   test("null handling") {

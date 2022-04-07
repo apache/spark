@@ -367,7 +367,7 @@ case class PercentileCont(left: Expression, right: Expression)
  * Therefore we have to store all the elements in memory, and so notice that too many elements can
  * cause GC paused and eventually OutOfMemory Errors.
  */
-case class PercentileDisc(
+private[sql] case class PercentileDisc private(
     child: Expression,
     percentageExpression: Expression,
     frequencyExpression: Expression,
@@ -376,14 +376,14 @@ case class PercentileDisc(
     inputAggBufferOffset: Int = 0) extends PercentileBase {
 
   def this(child: Expression, percentageExpression: Expression) = {
-    this(child, percentageExpression, Literal(1L), false, 0, 0)
+    this(child, percentageExpression, Literal(1L))
   }
 
   def this(child: Expression, percentageExpression: Expression, reverse: Boolean) = {
-    this(child, percentageExpression, Literal(1L), reverse, 0, 0)
+    this(child, percentageExpression, Literal(1L), reverse)
   }
 
-  protected lazy val frequency = frequencyExpression.eval()
+  private lazy val frequency = frequencyExpression.eval()
 
   override def checkInputDataTypes(): TypeCheckResult = {
     val defaultCheck = super.checkInputDataTypes()
@@ -394,7 +394,7 @@ case class PercentileDisc(
       TypeCheckFailure("The frequency of PercentileDisc must be a constant literal, " +
         s"but got $frequencyExpression")
     } else if (frequency != 1) {
-      TypeCheckFailure("Frequency value must not be 1 for PercentileDisc")
+      TypeCheckFailure("Frequency value must be 1 for PercentileDisc")
     } else {
       TypeCheckSuccess
     }

@@ -1245,7 +1245,7 @@ ORDER BY salary
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Cannot specify order by or frame for 'PERCENTILE_CONT' or 'PERCENTILE_DISC'.
+Cannot specify order by or frame for 'percentile_cont'.
 
 
 -- !query
@@ -1261,7 +1261,7 @@ ORDER BY salary
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Cannot specify order by or frame for 'PERCENTILE_CONT' or 'PERCENTILE_DISC'.
+Cannot specify order by or frame for 'percentile_disc'.
 
 
 -- !query
@@ -1277,7 +1277,7 @@ ORDER BY salary
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Cannot specify order by or frame for 'PERCENTILE_CONT' or 'PERCENTILE_DISC'.
+Cannot specify order by or frame for 'percentile_cont'.
 
 
 -- !query
@@ -1293,7 +1293,7 @@ ORDER BY salary
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Cannot specify order by or frame for 'PERCENTILE_CONT' or 'PERCENTILE_DISC'.
+Cannot specify order by or frame for 'percentile_disc'.
 
 
 -- !query
@@ -1344,7 +1344,7 @@ ORDER BY salary
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Cannot specify order by or frame for 'PERCENTILE_CONT' or 'PERCENTILE_DISC'.
+Cannot specify order by or frame for 'percentile_cont'.
 
 
 -- !query
@@ -1361,7 +1361,7 @@ ORDER BY salary
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Cannot specify order by or frame for 'PERCENTILE_CONT' or 'PERCENTILE_DISC'.
+Cannot specify order by or frame for 'percentile_disc'.
 
 
 -- !query
@@ -1378,7 +1378,7 @@ ORDER BY salary
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Cannot specify order by or frame for 'PERCENTILE_CONT' or 'PERCENTILE_DISC'.
+Cannot specify order by or frame for 'percentile_cont'.
 
 
 -- !query
@@ -1395,4 +1395,4 @@ ORDER BY salary
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Cannot specify order by or frame for 'PERCENTILE_CONT' or 'PERCENTILE_DISC'.
+Cannot specify order by or frame for 'percentile_disc'.

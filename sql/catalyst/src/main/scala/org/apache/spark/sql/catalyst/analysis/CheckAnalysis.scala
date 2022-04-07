@@ -228,11 +228,11 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
             // Only allow window functions with an aggregate expression or an offset window
             // function or a Pandas window UDF.
             w.windowFunction match {
-              case AggregateExpression(_: PercentileCont | _: PercentileDisc, _, _, _, _)
+              case agg @ AggregateExpression(_: PercentileCont | _: PercentileDisc, _, _, _, _)
                 if w.windowSpec.orderSpec.nonEmpty || w.windowSpec.frameSpecification !=
                     SpecifiedWindowFrame(RowFrame, UnboundedPreceding, UnboundedFollowing) =>
                 failAnalysis(
-                  "Cannot specify order by or frame for 'PERCENTILE_CONT' or 'PERCENTILE_DISC'.")
+                  s"Cannot specify order by or frame for '${agg.aggregateFunction.prettyName}'.")
               case _: AggregateExpression | _: FrameLessOffsetWindowFunction |
                   _: AggregateWindowFunction => // OK
               case f: PythonUDF if PythonUDF.isWindowPandasUDF(f) => // OK
