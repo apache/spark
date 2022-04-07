@@ -10164,7 +10164,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             )
         )
 
-    # TODO: axis, skipna, level and **kwargs should be implemented.
+    # TODO: axis, level and **kwargs should be implemented.
     def all(
         self, axis: Axis = 0, bool_only: Optional[bool] = None, skipna: bool = True
     ) -> "Series":
