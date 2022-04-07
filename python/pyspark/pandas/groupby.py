@@ -3229,7 +3229,8 @@ class SeriesGroupBy(GroupBy[Series]):
 
         Don't include counts of NaN when dropna is False.
 
-        >>> df.groupby('A')['B'].value_counts(dropna=False).sort_index()  # doctest: +NORMALIZE_WHITESPACE
+        >>> df.groupby('A')['B'].value_counts(
+        ...   dropna=False).sort_index()  # doctest: +NORMALIZE_WHITESPACE
         A  B
         1  1.0    1
         2  1.0    1
