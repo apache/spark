@@ -38,7 +38,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.DataType
 
 private[sql] object PythonSQLUtils extends Logging {
-  private lazy val internalrowPickler = {
+  private lazy val internalRowPickler = {
     EvaluatePython.registerPicklers()
     new Pickler(true, false)
   }
@@ -89,7 +89,7 @@ private[sql] object PythonSQLUtils extends Logging {
 
   def toPyRow(row: Row): Array[Byte] = {
     assert(row.isInstanceOf[GenericRowWithSchema])
-    internalrowPickler.dumps(EvaluatePython.toJava(
+    internalRowPickler.dumps(EvaluatePython.toJava(
       CatalystTypeConverters.convertToCatalyst(row), row.schema))
   }
 
