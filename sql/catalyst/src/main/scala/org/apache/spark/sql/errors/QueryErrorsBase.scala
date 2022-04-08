@@ -23,12 +23,16 @@ import org.apache.spark.sql.types.{DataType, DoubleType, FloatType}
 trait QueryErrorsBase {
   private def litToErrorValue(l: Literal): String = l match {
     case Literal(null, _) => "NULL"
-    case Literal(v: Float, FloatType) if v.isNaN => "NaN"
-    case Literal(v: Float, FloatType) if v.isPosInfinity => "Infinity"
-    case Literal(v: Float, FloatType) if v.isNegInfinity => "-Infinity"
-    case Literal(v: Double, DoubleType) if v.isNaN => "NaN"
-    case Literal(v: Double, DoubleType) if v.isPosInfinity => "Infinity"
-    case Literal(v: Double, DoubleType) if v.isNegInfinity => "-Infinity"
+    case Literal(v: Float, FloatType) =>
+      if (v.isNaN) "NaN"
+      else if (v.isPosInfinity) "Infinity"
+      else if (v.isNegInfinity) "-Infinity"
+      else v.toString
+    case Literal(v: Double, DoubleType) =>
+      if (v.isNaN) "NaN"
+      else if (v.isPosInfinity) "Infinity"
+      else if (v.isNegInfinity) "-Infinity"
+      else l.sql
     case l => l.sql
   }
 
