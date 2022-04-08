@@ -2015,6 +2015,17 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val ALLOW_ZERO_INDEX_IN_FORMAT_STRING =
+    buildConf("spark.sql.legacy.allowZeroIndexInFormatString")
+      .internal()
+      .doc("When false, the `strfmt` in `format_string(strfmt, obj, ...)` and " +
+        "`printf(strfmt, obj, ...)` will no longer support to use \"0$\" to specify the first " +
+        "argument, the first argument should always reference by \"1$\" when use argument index " +
+        "to indicating the position of the argument in the argument list.")
+      .version("3.3")
+      .booleanConf
+      .createWithDefault(false)
+
   val USE_CURRENT_SQL_CONFIGS_FOR_VIEW =
     buildConf("spark.sql.legacy.useCurrentConfigsForView")
       .internal()
