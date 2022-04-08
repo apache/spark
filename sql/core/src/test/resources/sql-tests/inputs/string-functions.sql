@@ -184,5 +184,7 @@ select to_binary(null, cast(null as string));
 -- 'format' parameter must be string type or void type.
 select to_binary(null, cast(null as int));
 select to_binary('abc', 1);
--- invalid inputs.
+-- invalid format
 select to_binary('abc', 'invalidFormat');
+-- invalid string input
+select to_binary('a!', 'base64');
