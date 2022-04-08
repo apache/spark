@@ -16,13 +16,16 @@
 #
 
 import itertools
+import inspect
 
 import pandas as pd
 import numpy as np
 
 from pyspark import pandas as ps
+from pyspark.pandas.exceptions import PandasNotImplementedError
 from pyspark.pandas.namespace import _get_index_map, read_delta
 from pyspark.pandas.utils import spark_column_equals
+from pyspark.pandas.missing.general_functions import _MissingPandasLikeGeneralFunctions
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
 from pyspark.testing.sqlutils import SQLTestUtils
 
@@ -553,6 +556,20 @@ class NamespaceTest(PandasOnSparkTestCase, SQLTestUtils):
             "'ignore' is not implemented yet, when the `arg` is Series.",
             lambda: ps.to_numeric(psser, errors="ignore"),
         )
+
+    def test_missing(self):
+        missing_functions = inspect.getmembers(
+            _MissingPandasLikeGeneralFunctions, inspect.isfunction
+        )
+        unsupported_functions = [
+            name for (name, type_) in missing_functions if type_.__name__ == "unsupported_function"
+        ]
+        for name in unsupported_functions:
+            with self.assertRaisesRegex(
+                PandasNotImplementedError,
+                "The method.*pd.*{}.*not implemented yet.".format(name),
+            ):
+                getattr(ps, name)()
 
 
 if __name__ == "__main__":
