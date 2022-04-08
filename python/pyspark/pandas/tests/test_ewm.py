@@ -29,30 +29,30 @@ class EWMTest(PandasOnSparkTestCase, TestUtils):
         ):
             ExponentialMoving(1, 2)
 
+        psdf = ps.range(10)
+
         with self.assertRaisesRegex(ValueError, "min_periods must be >= 0"):
-            ps.range(10).ewm(min_periods=-1, alpha=0.5)
+            psdf.ewm(min_periods=-1, alpha=0.5).mean()
 
         with self.assertRaisesRegex(ValueError, "com must be >= 0"):
-            ps.range(10).ewm(com=-0.1)
+            psdf.ewm(com=-0.1).mean()
 
         with self.assertRaisesRegex(ValueError, "span must be >= 1"):
-            ps.range(10).ewm(span=0.7)
+            psdf.ewm(span=0.7).mean()
 
         with self.assertRaisesRegex(ValueError, "halflife must be > 0"):
-            ps.range(10).ewm(halflife=0)
+            psdf.ewm(halflife=0).mean()
 
         with self.assertRaisesRegex(ValueError, "alpha must be in"):
-            ps.range(10).ewm(alpha=1.7)
+            psdf.ewm(alpha=1.7).mean()
+
+        with self.assertRaisesRegex(ValueError, "Must pass one of com, span, halflife, or alpha"):
+            psdf.ewm().mean()
 
         with self.assertRaisesRegex(
-            ValueError, "Must pass one of comass, span, halflife, or alpha"
+            ValueError, "com, span, halflife, and alpha are mutually exclusive"
         ):
-            ps.range(10).ewm(min_periods=0)
-
-        with self.assertRaisesRegex(
-            ValueError, "comass, span, halflife, and alpha are mutually exclusive"
-        ):
-            ps.range(10).ewm(com=0.5, alpha=0.7)
+            psdf.ewm(com=0.5, alpha=0.7).mean()
 
     def _test_ewm_func(self, f):
         pser = pd.Series([1, 2, 3], index=np.random.rand(3), name="a")

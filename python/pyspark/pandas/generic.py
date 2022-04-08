@@ -2655,7 +2655,7 @@ class Frame(object, metaclass=ABCMeta):
             Specify smoothing factor alpha directly.
             0 < alpha <= 1.
 
-        min_periods : int, default 0
+        min_periods : int, default None
             Minimum number of observations in window required to have a value
             (otherwise result is NA).
 

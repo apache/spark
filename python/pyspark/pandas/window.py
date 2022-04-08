@@ -1766,45 +1766,53 @@ class ExponentialMovingLike(Generic[FrameLike], metaclass=ABCMeta):
             raise ValueError("min_periods must be >= 0")
         if min_periods is None:
             min_periods = 0
+        self._min_periods = min_periods
 
         self._window = window
         # This unbounded Window is later used to handle 'min_periods' for now.
         self._unbounded_window = Window.orderBy(NATURAL_ORDER_COLUMN_NAME).rowsBetween(
             Window.unboundedPreceding, Window.currentRow
         )
-        self._min_periods = min_periods
 
+        if (com is not None) and (not com >= 0):
+            raise ValueError("com must be >= 0")
+        self._com = com
+
+        if (span is not None) and (not span >= 1):
+            raise ValueError("span must be >= 1")
+        self._span = span
+
+        if (halflife is not None) and (not halflife > 0):
+            raise ValueError("halflife must be > 0")
+        self._halflife = halflife
+
+        if (alpha is not None) and (not 0 < alpha <= 1):
+            raise ValueError("alpha must be in (0, 1]")
+        self._alpha = alpha
+
+    def _compute_unified_alpha(self) -> float:
+        unified_alpha = np.nan
         opt_count = 0
 
-        if com is not None:
-            if com < 0:
-                raise ValueError("com must be >= 0")
-            self._alpha = 1.0 / (1 + com)
+        if self._com is not None:
+            unified_alpha = 1.0 / (1 + self._com)
             opt_count += 1
-
-        if span is not None:
-            if span < 1:
-                raise ValueError("span must be >= 1")
-            self._alpha = 2.0 / (1 + span)
+        if self._span is not None:
+            unified_alpha = 2.0 / (1 + self._span)
             opt_count += 1
-
-        if halflife is not None:
-            if halflife <= 0:
-                raise ValueError("halflife must be > 0")
-            self._alpha = 1.0 - np.exp(-np.log(2) / halflife)
+        if self._halflife is not None:
+            unified_alpha = 1.0 - np.exp(-np.log(2) / self._halflife)
             opt_count += 1
-
-        if alpha is not None:
-            if alpha <= 0 or alpha > 1:
-                raise ValueError("alpha must be in (0, 1]")
-            self._alpha = alpha
+        if self._alpha is not None:
+            unified_alpha = self._alpha
             opt_count += 1
 
         if opt_count == 0:
-            raise ValueError("Must pass one of comass, span, halflife, or alpha")
-
+            raise ValueError("Must pass one of com, span, halflife, or alpha")
         if opt_count != 1:
-            raise ValueError("comass, span, halflife, and alpha are mutually exclusive")
+            raise ValueError("com, span, halflife, and alpha are mutually exclusive")
+
+        return unified_alpha
 
     @abstractmethod
     def _apply_as_series_or_frame(self, func: Callable[[Column], Column]) -> FrameLike:
@@ -1816,11 +1824,13 @@ class ExponentialMovingLike(Generic[FrameLike], metaclass=ABCMeta):
         pass
 
     def mean(self) -> FrameLike:
+        unified_alpha = self._compute_unified_alpha()
+
         def mean(scol: Column) -> Column:
             jf = SparkContext._active_spark_context._jvm.PythonSQLUtils.ewm
             return F.when(
                 F.row_number().over(self._unbounded_window) >= self._min_periods,
-                Column(jf(scol._jc, self._alpha)).over(self._window),
+                Column(jf(scol._jc, unified_alpha)).over(self._window),
             ).otherwise(SF.lit(None))
 
         return self._apply_as_series_or_frame(mean)
@@ -1892,8 +1902,7 @@ class ExponentialMoving(ExponentialMovingLike[FrameLike]):
 
         Examples
         --------
-        The below examples will show expanding mean calculations with window sizes of
-        two and three, respectively.
+        The below examples will show computing exponentially weighted moving average.
 
         >>> df = ps.DataFrame({'s1': [.2, .0, .6, .2, .4, .5, .6], 's2': [2, 1, 3, 1, 0, 0, 0]})
         >>> df.ewm(com=0.1).mean()
@@ -1920,7 +1929,9 @@ class ExponentialMoving(ExponentialMovingLike[FrameLike]):
 
     # TODO: when add 'adjust' and 'ignore_na' parameter, should add to here too.
     def __repr__(self) -> str:
-        return "ExponentialMoving [min_periods={}, alpha={}]".format(self._min_periods, self._alpha)
+        return "ExponentialMoving [com={}, span={}, halflife={}, alpha={}, min_periods={}]".format(
+            self._com, self._span, self._halflife, self._alpha, self._min_periods
+        )
 
 
 def _test() -> None:
