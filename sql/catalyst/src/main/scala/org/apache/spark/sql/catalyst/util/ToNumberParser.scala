@@ -164,7 +164,8 @@ class ToNumberParser(numberFormat: String, errorOnFail: Boolean) extends Seriali
             // We reverse the expected digit tokens in this new DigitGroups here, and we do the same
             // for actual groups of 0-9 characters in each input string. In this way, we can safely
             // ignore any leading optional groups of digits in the format string.
-            groupedTokens.append(DigitGroups(currentGroup.reverse, currentDigits.reverse))
+            groupedTokens.append(
+              DigitGroups(currentGroup.reverse.toSeq, currentDigits.reverse.toSeq))
             currentGroup = mutable.Buffer.empty[InputToken]
             currentDigits = mutable.Buffer.empty[Digits]
           }
@@ -174,7 +175,7 @@ class ToNumberParser(numberFormat: String, errorOnFail: Boolean) extends Seriali
     if (currentGroup.nonEmpty) {
       groupedTokens.append(DigitGroups(currentGroup.reverse, currentDigits.reverse))
     }
-    groupedTokens
+    groupedTokens.toSeq
   }
 
   /**
@@ -515,10 +516,10 @@ class ToNumberParser(numberFormat: String, errorOnFail: Boolean) extends Seriali
    */
   private def matchesDigitOrComma(char: Char, reachedDecimalPoint: Boolean): Boolean = {
     char match {
-      case char if char.isWhitespace =>
+      case _ if char.isWhitespace =>
         // Ignore whitespace and keep advancing through the input string.
         true
-      case char if char >= ZERO_DIGIT && char <= NINE_DIGIT =>
+      case _ if char >= ZERO_DIGIT && char <= NINE_DIGIT =>
         numDigitsInCurrentGroup += 1
         // Append each group of input digits to the appropriate before/afterDecimalPoint
         // string for later use in constructing the result Decimal value.
