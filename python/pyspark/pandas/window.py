@@ -1861,11 +1861,7 @@ class ExponentialMoving(ExponentialMovingLike[FrameLike]):
                 return partial(property_or_func, self)
         raise AttributeError(item)
 
-    def _apply_as_series_or_frame(self, func: Callable[[Column], Column]) -> FrameLike:
-        return self._psdf_or_psser._apply_series_op(
-            lambda psser: psser._with_new_scol(func(psser.spark.column)),  # TODO: dtype?
-            should_resolve=True,
-        )
+    _apply_as_series_or_frame = Rolling._apply_as_series_or_frame
 
     def mean(self) -> FrameLike:
         """
