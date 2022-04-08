@@ -2622,11 +2622,11 @@ class Frame(object, metaclass=ABCMeta):
     # TODO: 'adjust', 'ignore_na', 'axis', 'method' parameter should be implemented.
     def ewm(
         self: FrameLike,
-        min_periods: int = 0,
         com: Optional[float] = None,
         span: Optional[float] = None,
         halflife: Optional[float] = None,
         alpha: Optional[float] = None,
+        min_periods: Optional[int] = None,
     ) -> "ExponentialMoving[FrameLike]":
         """
         Provide exponentially weighted window transformations.
@@ -2666,7 +2666,7 @@ class Frame(object, metaclass=ABCMeta):
         from pyspark.pandas.window import ExponentialMoving
 
         return ExponentialMoving(
-            self, min_periods=min_periods, com=com, span=span, halflife=halflife, alpha=alpha
+            self, com=com, span=span, halflife=halflife, alpha=alpha, min_periods=min_periods
         )
 
     def get(self, key: Any, default: Optional[Any] = None) -> Any:
