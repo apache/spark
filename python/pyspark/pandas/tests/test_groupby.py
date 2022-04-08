@@ -1055,7 +1055,7 @@ class GroupByTest(PandasOnSparkTestCase, TestUtils):
 
     def test_value_counts(self):
         pdf = pd.DataFrame(
-            {"A": [1, 2, 2, 3, 3, 3], "B": [1, 1, 2, 3, 3, np.nan]}, columns=["A", "B"]
+            {"A": [np.nan, 2, 2, 3, 3, 3], "B": [1, 1, 2, 3, 3, np.nan]}, columns=["A", "B"]
         )
         psdf = ps.from_pandas(pdf)
         self.assert_eq(
@@ -1065,6 +1065,13 @@ class GroupByTest(PandasOnSparkTestCase, TestUtils):
         self.assert_eq(
             psdf.groupby("A")["B"].value_counts(dropna=False).sort_index(),
             pdf.groupby("A")["B"].value_counts(dropna=False).sort_index(),
+        )
+        self.assert_eq(
+            psdf.groupby("A", dropna=False)["B"].value_counts(dropna=False).sort_index(),
+            pdf.groupby("A", dropna=False)["B"].value_counts(dropna=False).sort_index(),
+            # Returns are the same considering values and types,
+            # disable check_exact to pass the assert_eq
+            check_exact=False,
         )
         self.assert_eq(
             psdf.groupby("A")["B"].value_counts(sort=True, ascending=False).sort_index(),

@@ -3248,9 +3248,14 @@ class SeriesGroupBy(GroupBy[Series]):
         agg_column = self._agg_columns[0]._internal.data_spark_column_names[0]
         sdf = sdf.groupby(*groupkey_cols).count().withColumnRenamed("count", agg_column)
 
+        if self._dropna:
+            _groupkey_column_names = groupkey_names[: len(self._groupkeys)]
+            sdf = sdf.dropna(subset=_groupkey_column_names)
+
         if dropna:
             _agg_columns_names = groupkey_names[len(self._groupkeys) :]
             sdf = sdf.dropna(subset=_agg_columns_names)
+
         if sort:
             if ascending:
                 sdf = sdf.orderBy(scol_for(sdf, agg_column).asc())
