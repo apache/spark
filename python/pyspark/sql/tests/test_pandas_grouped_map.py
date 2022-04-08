@@ -283,7 +283,7 @@ class GroupedMapInPandasTests(ReusedSQLTestCase):
             ):
                 df.groupby("id").applyInPandas(stats, schema="id integer, m double").collect()
 
-    def test_groupby_returning_different_number_of_columns(self):
+    def test_apply_in_pandas_returning_wrong_number_of_columns(self):
         df = self.data
 
         def stats(key, pdf):
@@ -326,7 +326,7 @@ class GroupedMapInPandasTests(ReusedSQLTestCase):
         for row in result:
             self.assertEqual(24.5, row[1])
 
-    def test_apply_in_pandas_returning_empty_dataframe_and_different_number_of_columns(self):
+    def test_apply_in_pandas_returning_empty_dataframe_and_wrong_number_of_columns(self):
         df = self.data
 
         def odd_means(key, pdf):
