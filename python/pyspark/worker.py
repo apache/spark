@@ -164,8 +164,9 @@ def wrap_cogrouped_map_pandas_udf(f, return_type, argspec):
             )
         # the number of columns of result have to match the return type
         # but it is fine for result to have no columns at all if it is empty
-        if not (len(result.columns) == len(return_type) or
-                len(result.columns) == 0 and result.empty):
+        if not (
+            len(result.columns) == len(return_type) or len(result.columns) == 0 and result.empty
+        ):
             raise RuntimeError(
                 "Number of columns of the returned pandas.DataFrame "
                 "doesn't match specified schema. "
@@ -193,8 +194,9 @@ def wrap_grouped_map_pandas_udf(f, return_type, argspec):
             )
         # the number of columns of result have to match the return type
         # but it is fine for result to have no columns at all if it is empty
-        if not (len(result.columns) == len(return_type) or
-                len(result.columns) == 0 and result.empty):
+        if not (
+            len(result.columns) == len(return_type) or len(result.columns) == 0 and result.empty
+        ):
             raise RuntimeError(
                 "Number of columns of the returned pandas.DataFrame "
                 "doesn't match specified schema. "

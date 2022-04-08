@@ -277,9 +277,10 @@ class GroupedMapInPandasTests(ReusedSQLTestCase):
 
         with QuietTest(self.sc):
             with self.assertRaisesRegex(
-                    PythonException,
-                    "Return type of the user-defined function should be pandas.DataFrame, "
-                    "but is <class 'tuple'>"):
+                PythonException,
+                "Return type of the user-defined function should be pandas.DataFrame, "
+                "but is <class 'tuple'>",
+            ):
                 df.groupby("id").applyInPandas(stats, schema="id integer, m double").collect()
 
     def test_groupby_returning_different_number_of_columns(self):
@@ -293,9 +294,10 @@ class GroupedMapInPandasTests(ReusedSQLTestCase):
 
         with QuietTest(self.sc):
             with self.assertRaisesRegex(
-                    PythonException,
-                    "Number of columns of the returned pandas.DataFrame doesn't match "
-                    "specified schema. Expected: 2 Actual: 3"):
+                PythonException,
+                "Number of columns of the returned pandas.DataFrame doesn't match "
+                "specified schema. Expected: 2 Actual: 3",
+            ):
                 # stats returns three columns while here we set schema with two columns
                 df.groupby("id").applyInPandas(stats, schema="id integer, m double").collect()
 
@@ -329,15 +331,16 @@ class GroupedMapInPandasTests(ReusedSQLTestCase):
 
         def odd_means(key, pdf):
             if key[0] % 2 == 0:
-                return pd.DataFrame([], columns=['id'])
+                return pd.DataFrame([], columns=["id"])
             else:
                 return pd.DataFrame([key + (pdf.v.mean(),)])
 
         with QuietTest(self.sc):
             with self.assertRaisesRegex(
-                    PythonException,
-                    "Number of columns of the returned pandas.DataFrame doesn't match "
-                    "specified schema. Expected: 2 Actual: 1"):
+                PythonException,
+                "Number of columns of the returned pandas.DataFrame doesn't match "
+                "specified schema. Expected: 2 Actual: 1",
+            ):
                 # stats returns one columns for even keys while here we set schema with two columns
                 df.groupby("id").applyInPandas(odd_means, schema="id integer, m double").collect()
 
