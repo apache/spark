@@ -3399,8 +3399,6 @@ class Analyzer(override val catalogManager: CatalogManager)
       SchemaUtils.checkColumnNameDuplication(
         i.userSpecifiedCols, "in the column list", resolver)
 
-      i.setTagValue(USER_SPECIFIED_COLUMNS_RESOLVED, true)
-
       i.userSpecifiedCols.map { col =>
           i.table.resolve(Seq(col), resolver)
             .getOrElse(throw QueryCompilationErrors.cannotResolveUserSpecifiedColumnsError(

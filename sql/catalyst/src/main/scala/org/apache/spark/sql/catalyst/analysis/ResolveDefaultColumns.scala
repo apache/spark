@@ -64,8 +64,7 @@ case class ResolveDefaultColumns(
     plan.resolveOperatorsWithPruning(
       (_ => SQLConf.get.enableDefaultColumns), ruleId) {
       case i@InsertIntoStatement(_, _, _, _, _, _)
-        if i.query.collectFirst { case u: UnresolvedInlineTable => u }.isDefined &&
-          !i.getTagValue(USER_SPECIFIED_COLUMNS_RESOLVED).getOrElse(false) =>
+        if i.query.collectFirst { case u: UnresolvedInlineTable => u }.isDefined =>
         enclosingInsert = Some(i)
         insertTableSchemaWithoutPartitionColumns = getInsertTableSchemaWithoutPartitionColumns
         val regenerated: InsertIntoStatement = regenerateUserSpecifiedCols(i)
@@ -79,8 +78,7 @@ case class ResolveDefaultColumns(
           replaceExplicitDefaultColumnValues(analyzer, expanded).getOrElse(table)
         replaced
 
-      case i@InsertIntoStatement(_, _, _, project: Project, _, _)
-        if !i.getTagValue(USER_SPECIFIED_COLUMNS_RESOLVED).getOrElse(false) =>
+      case i@InsertIntoStatement(_, _, _, project: Project, _, _) =>
         enclosingInsert = Some(i)
         insertTableSchemaWithoutPartitionColumns = getInsertTableSchemaWithoutPartitionColumns
         val expanded: Project = addMissingDefaultColumnValues(project).getOrElse(project)
@@ -95,7 +93,6 @@ case class ResolveDefaultColumns(
   // Helper method to regenerate user-specified columns of an InsertIntoStatement based on the names
   // in the insertTableSchemaWithoutPartitionColumns field of this class.
   private def regenerateUserSpecifiedCols(i: InsertIntoStatement): InsertIntoStatement = {
-    insertTableSchemaWithoutPartitionColumns = getInsertTableSchemaWithoutPartitionColumns
     if (i.userSpecifiedCols.nonEmpty && insertTableSchemaWithoutPartitionColumns.isDefined) {
       i.copy(
         userSpecifiedCols = insertTableSchemaWithoutPartitionColumns.get.fields.map(_.name))
