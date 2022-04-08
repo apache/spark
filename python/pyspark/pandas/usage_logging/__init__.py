@@ -31,6 +31,7 @@ from pyspark.pandas.indexes.datetimes import DatetimeIndex
 from pyspark.pandas.indexes.multi import MultiIndex
 from pyspark.pandas.indexes.numeric import Float64Index, Int64Index
 from pyspark.pandas.missing.frame import _MissingPandasLikeDataFrame
+from pyspark.pandas.missing.general_functions import _MissingPandasLikeGeneralFunctions
 from pyspark.pandas.missing.groupby import (
     MissingPandasLikeDataFrameGroupBy,
     MissingPandasLikeSeriesGroupBy,
@@ -109,6 +110,7 @@ def attach(logger_module: Union[str, ModuleType]) -> None:
     modules.append(sql_formatter)
 
     missings = [
+        (pd, _MissingPandasLikeGeneralFunctions),
         (pd.DataFrame, _MissingPandasLikeDataFrame),
         (pd.Series, MissingPandasLikeSeries),
         (pd.Index, MissingPandasLikeIndex),
@@ -122,4 +124,4 @@ def attach(logger_module: Union[str, ModuleType]) -> None:
         (pd.core.window.RollingGroupby, MissingPandasLikeRollingGroupby),
     ]
 
-    _attach(logger_module, modules, classes, missings)
+    _attach(logger_module, modules, classes, missings)  # type: ignore[arg-type]
