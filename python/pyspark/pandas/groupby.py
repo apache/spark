@@ -3188,9 +3188,6 @@ class SeriesGroupBy(GroupBy[Series]):
         """
         Compute group sizes.
 
-        .. note:: Unlike pandas, the method doesn't drop NaNs of groupby column.
-          See more https://github.com/pandas-dev/pandas/issues/46676.
-
         Parameters
         ----------
         sort : boolean, default None
