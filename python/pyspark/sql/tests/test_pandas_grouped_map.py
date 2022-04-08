@@ -269,7 +269,7 @@ class GroupedMapInPandasTests(ReusedSQLTestCase):
         expected = expected.assign(norm=expected.norm.astype("float64"))
         assert_frame_equal(expected, result)
 
-    def test_groupby_not_returning_pandas_dataframe(self):
+    def test_apply_in_pandas_not_returning_pandas_dataframe(self):
         df = self.data
 
         def stats(key, pdf):
@@ -301,7 +301,7 @@ class GroupedMapInPandasTests(ReusedSQLTestCase):
                 # stats returns three columns while here we set schema with two columns
                 df.groupby("id").applyInPandas(stats, schema="id integer, m double").collect()
 
-    def test_groupby_returning_empty_dataframe(self):
+    def test_apply_in_pandas_returning_empty_dataframe(self):
         df = self.data
 
         def odd_means(key, pdf):
@@ -326,7 +326,7 @@ class GroupedMapInPandasTests(ReusedSQLTestCase):
         for row in result:
             self.assertEqual(24.5, row[1])
 
-    def test_groupby_returning_empty_dataframe_and_different_number_of_columns(self):
+    def test_apply_in_pandas_returning_empty_dataframe_and_different_number_of_columns(self):
         df = self.data
 
         def odd_means(key, pdf):
@@ -341,7 +341,7 @@ class GroupedMapInPandasTests(ReusedSQLTestCase):
                 "Number of columns of the returned pandas.DataFrame doesn't match "
                 "specified schema. Expected: 2 Actual: 1",
             ):
-                # stats returns one columns for even keys while here we set schema with two columns
+                # stats returns one column for even keys while here we set schema with two columns
                 df.groupby("id").applyInPandas(odd_means, schema="id integer, m double").collect()
 
     def test_datatype_string(self):
