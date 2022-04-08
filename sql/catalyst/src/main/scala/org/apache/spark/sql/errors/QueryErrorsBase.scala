@@ -18,13 +18,26 @@
 package org.apache.spark.sql.errors
 
 import org.apache.spark.sql.catalyst.expressions.Literal
-import org.apache.spark.sql.types.StringType
-import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.sql.types.{DataType, DoubleType, FloatType}
 
 trait QueryErrorsBase {
+  private def litToErrorValue(l: Literal): String = l match {
+    case Literal(null, _) => "NULL"
+    case Literal(v: Float, FloatType) if v.isNaN => "NaN"
+    case Literal(v: Float, FloatType) if v.isPosInfinity => "Infinity"
+    case Literal(v: Float, FloatType) if v.isNegInfinity => "-Infinity"
+    case Literal(v: Double, DoubleType) if v.isNaN => "NaN"
+    case Literal(v: Double, DoubleType) if v.isPosInfinity => "Infinity"
+    case Literal(v: Double, DoubleType) if v.isNegInfinity => "-Infinity"
+    case l => l.sql
+  }
+
   // Converts an error class parameter to its SQL representation
-  def toSQLValue(v: Any): String = v match {
-    case _: UTF8String => Literal.create(v, StringType).sql
-    case _ => Literal(v).sql
+  def toSQLValue(v: Any): String = {
+    litToErrorValue(Literal(v))
+  }
+
+  def toSQLValue(v: Any, t: DataType): String = {
+    litToErrorValue(Literal.create(v, t))
   }
 }
