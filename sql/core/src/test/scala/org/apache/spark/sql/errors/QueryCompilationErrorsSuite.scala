@@ -19,6 +19,7 @@ package org.apache.spark.sql.errors
 
 import org.apache.spark.sql.{AnalysisException, IntegratedUDFTestUtils, QueryTest}
 import org.apache.spark.sql.functions.{grouping, grouping_id, sum}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
 case class StringLongClass(a: String, b: Long)
@@ -94,12 +95,14 @@ class QueryCompilationErrorsSuite extends QueryTest with SharedSparkSession {
   }
 
   test("ILLEGAL_SUBSTRING: the argument_index of string format is invalid") {
-    val e = intercept[AnalysisException] {
-      sql("select format_string('%0$s', 'Hello')")
+    withSQLConf(SQLConf.ALLOW_ZERO_INDEX_IN_FORMAT_STRING.key -> "false") {
+      val e = intercept[AnalysisException] {
+        sql("select format_string('%0$s', 'Hello')")
+      }
+      assert(e.errorClass === Some("ILLEGAL_SUBSTRING"))
+      assert(e.message ===
+        "The argument_index of string format cannot contain position 0$.")
     }
-    assert(e.errorClass === Some("ILLEGAL_SUBSTRING"))
-    assert(e.message ===
-      "The argument_index of string format cannot contain position 0$.")
   }
 
   test("CANNOT_USE_MIXTURE: Using aggregate function with grouped aggregate pandas UDF") {
