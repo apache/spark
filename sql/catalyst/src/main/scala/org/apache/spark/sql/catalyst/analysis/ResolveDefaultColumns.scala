@@ -64,15 +64,16 @@ case class ResolveDefaultColumns(
     plan.resolveOperatorsWithPruning(
       (_ => SQLConf.get.enableDefaultColumns), ruleId) {
       case i@InsertIntoStatement(_, _, _, _, _, _)
-        if i.query.collectFirst { case u: UnresolvedInlineTable => u }.isDefined =>
+        if i.query.collectFirst { case u: UnresolvedInlineTable
+          if u.rows.nonEmpty && u.rows.forall(_.size == u.rows(0).size) => u
+        }.isDefined =>
         enclosingInsert = Some(i)
         insertTableSchemaWithoutPartitionColumns = getInsertTableSchemaWithoutPartitionColumns
         val regenerated: InsertIntoStatement = regenerateUserSpecifiedCols(i)
         regenerated
 
       case table: UnresolvedInlineTable
-        if enclosingInsert.isDefined &&
-          table.rows.nonEmpty && table.rows.forall(_.size == table.rows(0).size) =>
+        if enclosingInsert.isDefined =>
         val expanded: UnresolvedInlineTable = addMissingDefaultColumnValues(table).getOrElse(table)
         val replaced: LogicalPlan =
           replaceExplicitDefaultColumnValues(analyzer, expanded).getOrElse(table)
