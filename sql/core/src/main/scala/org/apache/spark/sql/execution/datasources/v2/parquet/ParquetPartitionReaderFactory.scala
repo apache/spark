@@ -66,8 +66,7 @@ case class ParquetPartitionReaderFactory(
     partitionSchema: StructType,
     filters: Array[Filter],
     aggregation: Option[Aggregation],
-    parquetOptions: ParquetOptions) extends
-  FilePartitionReaderFactory(parquetOptions) with Logging {
+    parsedOptions: ParquetOptions) extends FilePartitionReaderFactory with Logging {
   private val isCaseSensitive = sqlConf.caseSensitiveAnalysis
   private val resultSchema = StructType(partitionSchema.fields ++ readDataSchema.fields)
   private val enableOffHeapColumnVector = sqlConf.offHeapColumnVectorEnabled
@@ -82,8 +81,8 @@ case class ParquetPartitionReaderFactory(
   private val pushDownDecimal = sqlConf.parquetFilterPushDownDecimal
   private val pushDownStringStartWith = sqlConf.parquetFilterPushDownStringStartWith
   private val pushDownInFilterThreshold = sqlConf.parquetFilterPushDownInFilterThreshold
-  private val datetimeRebaseModeInRead = parquetOptions.datetimeRebaseModeInRead
-  private val int96RebaseModeInRead = parquetOptions.int96RebaseModeInRead
+  private val datetimeRebaseModeInRead = parsedOptions.datetimeRebaseModeInRead
+  private val int96RebaseModeInRead = parsedOptions.int96RebaseModeInRead
 
   private def getFooter(file: PartitionedFile): ParquetMetadata = {
     val conf = broadcastedConf.value.value

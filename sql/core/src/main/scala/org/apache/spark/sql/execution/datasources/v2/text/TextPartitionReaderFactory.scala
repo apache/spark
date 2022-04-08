@@ -43,13 +43,12 @@ case class TextPartitionReaderFactory(
     broadcastedConf: Broadcast[SerializableConfiguration],
     readDataSchema: StructType,
     partitionSchema: StructType,
-    textOptions: TextOptions)
-  extends FilePartitionReaderFactory(textOptions) {
+    parsedOptions: TextOptions) extends FilePartitionReaderFactory {
 
   override def buildReader(file: PartitionedFile): PartitionReader[InternalRow] = {
     val confValue = broadcastedConf.value.value
-    val reader = if (!textOptions.wholeText) {
-      new HadoopFileLinesReader(file, textOptions.lineSeparatorInRead, confValue)
+    val reader = if (!parsedOptions.wholeText) {
+      new HadoopFileLinesReader(file, parsedOptions.lineSeparatorInRead, confValue)
     } else {
       new HadoopFileWholeTextReader(file, confValue)
     }

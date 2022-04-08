@@ -55,8 +55,7 @@ case class AvroPartitionReaderFactory(
     readDataSchema: StructType,
     partitionSchema: StructType,
     parsedOptions: AvroOptions,
-    filters: Seq[Filter])
-  extends FilePartitionReaderFactory(parsedOptions) with Logging {
+    filters: Seq[Filter]) extends FilePartitionReaderFactory with Logging {
   private val datetimeRebaseModeInRead = parsedOptions.datetimeRebaseModeInRead
 
   override def buildReader(partitionedFile: PartitionedFile): PartitionReader[InternalRow] = {

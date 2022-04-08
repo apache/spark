@@ -46,8 +46,7 @@ case class JsonPartitionReaderFactory(
     readDataSchema: StructType,
     partitionSchema: StructType,
     parsedOptions: JSONOptionsInRead,
-    filters: Seq[Filter])
-  extends FilePartitionReaderFactory(parsedOptions) {
+    filters: Seq[Filter]) extends FilePartitionReaderFactory {
 
   override def buildReader(partitionedFile: PartitionedFile): PartitionReader[InternalRow] = {
     val actualSchema =

@@ -58,8 +58,7 @@ case class OrcPartitionReaderFactory(
     partitionSchema: StructType,
     filters: Array[Filter],
     aggregation: Option[Aggregation],
-    parsedOptions: OrcOptions)
-  extends FilePartitionReaderFactory(parsedOptions) {
+    parsedOptions: OrcOptions) extends FilePartitionReaderFactory {
   private val resultSchema = StructType(readDataSchema.fields ++ partitionSchema.fields)
   private val isCaseSensitive = sqlConf.caseSensitiveAnalysis
   private val capacity = sqlConf.orcVectorizedReaderBatchSize
