@@ -223,11 +223,7 @@ case class AlterColumn(
         "FieldPosition should be resolved before it's converted to TableChange.")
       TableChange.updateColumnPosition(colName, newPosition.position)
     }
-    val setDefaultExpressionChange = setDefaultExpression.map { newSetDefaultExpression =>
-      TableChange.updateSetDefaultExpression(colName, newSetDefaultExpression)
-    }
-    typeChange.toSeq ++ nullabilityChange ++ commentChange ++ positionChange ++
-      setDefaultExpressionChange
+    typeChange.toSeq ++ nullabilityChange ++ commentChange ++ positionChange
   }
 
   override protected def withNewChildInternal(newChild: LogicalPlan): LogicalPlan =

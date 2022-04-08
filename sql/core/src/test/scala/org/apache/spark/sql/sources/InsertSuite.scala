@@ -1107,21 +1107,42 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
 
   test("INSERT INTO columns with defaults set by ALTER TABLE ALTER COLUMN: positive tests") {
     withTable("t") {
-      sql("create table t(i boolean, s string) using parquet")
+      sql("create table t(i boolean, s string, k bigint) using parquet")
       // The default value for the DEFAULT keyword is the NULL literal.
-      sql("insert into t values(true, default)")
+      sql("insert into t values(true, default, default)")
       // There is a complex expression in the default value.
       sql("alter table t alter column s set default concat('abc', 'def')")
-      sql("insert into t values(true, default)")
+      sql("insert into t values(true, default, default)")
+      // The default value parses correctly and the provided value type is different but coercible.
+      sql("alter table t alter column k set default 42")
+      sql("insert into t values(true, default, default)")
+      // After dropping the default, inserting more values should add NULLs.
+      sql("alter table t alter column k drop default")
+      sql("insert into t values(true, default, default)")
       checkAnswer(spark.table("t"),
         Seq(
-          Row(true, null),
-          Row(true, "abcdef")
+          Row(true, null, null),
+          Row(true, "abcdef", null),
+          Row(true, "abcdef", 42),
+          Row(true, null, null)
         ))
     }
   }
 
   test("INSERT INTO columns with defaults set by ALTER TABLE ALTER COLUMN: negative tests") {
+    // The default value fails to analyze.
+    object Errors {
+      val COMMON_SUBSTRING = " has a DEFAULT value"
+    }
+    val createTable = "create table t(i boolean, s bigint) using parquet"
+    val insertDefaults = "insert into t values (default, default)"
+    withTable("t") {
+      sql(createTable)
+      sql("alter table t alter column s set default badvalue")
+      assert(intercept[AnalysisException] {
+        sql(insertDefaults)
+      }.getMessage.contains(Errors.COMMON_SUBSTRING))
+    }
   }
 
   test("Stop task set if FileAlreadyExistsException was thrown") {

@@ -24,7 +24,6 @@ import scala.collection.JavaConverters._
 
 import org.apache.spark.sql.catalyst.analysis.{AsOfTimestamp, AsOfVersion, NamedRelation, NoSuchDatabaseException, NoSuchFunctionException, NoSuchNamespaceException, NoSuchTableException, TimeTravelSpec}
 import org.apache.spark.sql.catalyst.plans.logical.{SerdeInfo, TableSpec}
-import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns.DefaultType
 import org.apache.spark.sql.connector.catalog.TableChange._
 import org.apache.spark.sql.connector.catalog.functions.UnboundFunction
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
@@ -190,11 +189,6 @@ private[sql] object CatalogV2Util {
                   throw new IllegalArgumentException(s"Not a struct: ${names.init.last}")
               })
           }
-
-        case setDefault: UpdateSetDefaultExpression =>
-          replace(schema, setDefault.fieldNames, field =>
-            Some(field.withDefaultValue(
-              DefaultType.CURRENT_DEFAULT, setDefault.defaultExpression())))
 
         case delete: DeleteColumn =>
           replace(schema, delete.fieldNames, _ => None)
