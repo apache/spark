@@ -173,7 +173,7 @@ class ToNumberParser(numberFormat: String, errorOnFail: Boolean) extends Seriali
       }
     }
     if (currentGroup.nonEmpty) {
-      groupedTokens.append(DigitGroups(currentGroup.reverse, currentDigits.reverse))
+      groupedTokens.append(DigitGroups(currentGroup.reverse.toSeq, currentDigits.reverse.toSeq))
     }
     groupedTokens.toSeq
   }
