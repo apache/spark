@@ -1124,24 +1124,53 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
           Row(true, null, null),
           Row(true, "abcdef", null),
           Row(true, "abcdef", 42),
-          Row(true, null, null)
+          Row(true, "abcdef", null)
         ))
     }
   }
 
   test("INSERT INTO columns with defaults set by ALTER TABLE ALTER COLUMN: negative tests") {
-    // The default value fails to analyze.
     object Errors {
       val COMMON_SUBSTRING = " has a DEFAULT value"
+      val BAD_SUBQUERY =
+        "cannot evaluate expression CAST(scalarsubquery() AS BIGINT) in inline table definition"
     }
     val createTable = "create table t(i boolean, s bigint) using parquet"
     val insertDefaults = "insert into t values (default, default)"
     withTable("t") {
       sql(createTable)
+      // The default value fails to analyze.
       sql("alter table t alter column s set default badvalue")
       assert(intercept[AnalysisException] {
         sql(insertDefaults)
       }.getMessage.contains(Errors.COMMON_SUBSTRING))
+      // The default value analyzes to a table not in the catalog.
+      sql("alter table t alter column s set default (select min(x) from badtable)")
+      assert(intercept[AnalysisException] {
+        sql(insertDefaults)
+      }.getMessage.contains(Errors.COMMON_SUBSTRING))
+      // The default value has an explicit alias. It fails to evaluate when inlined into the VALUES
+      // list at the INSERT INTO time.
+      sql("alter table t alter column s set default (select 42 as alias)")
+      assert(intercept[AnalysisException] {
+        sql(insertDefaults)
+      }.getMessage.contains(Errors.BAD_SUBQUERY))
+      // The default value parses but the type is not coercible.
+      sql("alter table t alter column s set default false")
+      assert(intercept[AnalysisException] {
+        sql(insertDefaults)
+      }.getMessage.contains("provided a value of incompatible type"))
+      // The default value is disabled per configuration.
+      withSQLConf(SQLConf.ENABLE_DEFAULT_COLUMNS.key -> "false") {
+        sql("alter table t alter column s set default 41 + 1")
+      }
+    }
+    // Attempting to set a default value for a partitioning column is not allowed.
+    withTable("t") {
+      sql("create table t(i boolean, s bigint, q int default 42) using parquet partitioned by (i)")
+      assert(intercept[AnalysisException] {
+        sql("alter table t alter column i set default false")
+      }.getMessage.contains("Can't find column `i` given table data columns [`s`, `q`]"))
     }
   }
 
