@@ -222,8 +222,12 @@ class SymmetricHashJoinStateManager(
         valueRemoved = false
       }
 
-      // Find the next value satisfying the condition, updating `currentKey` and `numValues` if
-      // needed. Returns null when no value can be found.
+      /**
+       * Find the next value satisfying the condition, updating `currentKey` and `numValues` if
+       * needed. Returns null when no value can be found.
+       * Note that we will skip nulls explicitly if config setting for the same is
+       * set to true via STATE_STORE_SKIP_NULLS_FOR_STREAM_STREAM_JOINS.
+       */
       private def findNextValueForIndex(): ValueAndMatchPair = {
         // Loop across all values for the current key, and then all other keys, until we find a
         // value satisfying the removal condition.
@@ -233,7 +237,9 @@ class SymmetricHashJoinStateManager(
           if (hasMoreValuesForCurrentKey) {
             // First search the values for the current key.
             val valuePair = keyWithIndexToValue.get(currentKey, index)
-            if (removalCondition(valuePair.value)) {
+            if (valuePair == null && storeConf.skipNullsForStreamStreamJoins) {
+              index += 1
+            } else if (removalCondition(valuePair.value)) {
               return valuePair
             } else {
               index += 1
@@ -597,22 +603,30 @@ class SymmetricHashJoinStateManager(
     /**
      * Get all values and indices for the provided key.
      * Should not return null.
+     * Note that we will skip nulls explicitly if config setting for the same is
+     * set to true via STATE_STORE_SKIP_NULLS_FOR_STREAM_STREAM_JOINS.
      */
     def getAll(key: UnsafeRow, numValues: Long): Iterator[KeyWithIndexAndValue] = {
-      val keyWithIndexAndValue = new KeyWithIndexAndValue()
-      var index = 0
       new NextIterator[KeyWithIndexAndValue] {
+        private val keyWithIndexAndValue = new KeyWithIndexAndValue()
+        private var index: Long = 0L
+
+        private def hasMoreValues = index < numValues
         override protected def getNext(): KeyWithIndexAndValue = {
-          if (index >= numValues) {
-            finished = true
-            null
-          } else {
+          while (hasMoreValues) {
             val keyWithIndex = keyWithIndexRow(key, index)
             val valuePair = valueRowConverter.convertValue(stateStore.get(keyWithIndex))
-            keyWithIndexAndValue.withNew(key, index, valuePair)
-            index += 1
-            keyWithIndexAndValue
+            if (valuePair == null && storeConf.skipNullsForStreamStreamJoins) {
+              index += 1
+            } else {
+              keyWithIndexAndValue.withNew(key, index, valuePair)
+              index += 1
+              return keyWithIndexAndValue
+            }
           }
+
+          finished = true
+          return null
         }
 
         override protected def close(): Unit = {}
