@@ -1906,6 +1906,7 @@ object SQLConf {
   buildConf("spark.sql.streaming.stateStore.skipNullsForStreamStreamJoins.enabled")
     .internal()
     .doc("When true, this config will skip null values in hash based stream-stream joins.")
+    .version("3.3.0")
     .booleanConf
     .createWithDefault(false)
 
