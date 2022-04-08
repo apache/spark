@@ -18,27 +18,22 @@
 package org.apache.spark.sql.connector.read.partitioning;
 
 import org.apache.spark.annotation.Evolving;
-import org.apache.spark.sql.connector.read.PartitionReader;
 
 /**
- * An interface to represent data distribution requirement, which specifies how the records should
- * be distributed among the data partitions (one {@link PartitionReader} outputs data for one
- * partition).
- * <p>
- * Note that this interface has nothing to do with the data ordering inside one
- * partition(the output records of a single {@link PartitionReader}).
- * <p>
- * The instance of this interface is created and provided by Spark, then consumed by
- * {@link Partitioning#satisfy(Distribution)}. This means data source developers don't need to
- * implement this interface, but need to catch as more concrete implementations of this interface
- * as possible in {@link Partitioning#satisfy(Distribution)}.
- * <p>
- * Concrete implementations until now:
- * <ul>
- *   <li>{@link ClusteredDistribution}</li>
- * </ul>
+ * Represents a partitioning where rows are split across partitions in an unknown pattern.
  *
- * @since 3.0.0
+ * @since 3.3.0
  */
 @Evolving
-public interface Distribution {}
+public class UnknownPartitioning implements Partitioning {
+  private final int numPartitions;
+
+  public UnknownPartitioning(int numPartitions) {
+    this.numPartitions = numPartitions;
+  }
+
+  @Override
+  public int numPartitions() {
+    return numPartitions;
+  }
+}

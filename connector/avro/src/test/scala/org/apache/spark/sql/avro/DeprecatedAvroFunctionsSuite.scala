@@ -34,9 +34,9 @@ class DeprecatedAvroFunctionsSuite extends QueryTest with SharedSparkSession {
   import testImplicits._
 
   test("roundtrip in to_avro and from_avro - int and string") {
-    val df = spark.range(10).select('id, 'id.cast("string").as("str"))
+    val df = spark.range(10).select($"id", $"id".cast("string").as("str"))
 
-    val avroDF = df.select(to_avro('id).as("a"), to_avro('str).as("b"))
+    val avroDF = df.select(to_avro($"id").as("a"), to_avro($"str").as("b"))
     val avroTypeLong = s"""
       |{
       |  "type": "int",
@@ -49,12 +49,12 @@ class DeprecatedAvroFunctionsSuite extends QueryTest with SharedSparkSession {
       |  "name": "str"
       |}
     """.stripMargin
-    checkAnswer(avroDF.select(from_avro('a, avroTypeLong), from_avro('b, avroTypeStr)), df)
+    checkAnswer(avroDF.select(from_avro($"a", avroTypeLong), from_avro($"b", avroTypeStr)), df)
   }
 
   test("roundtrip in to_avro and from_avro - struct") {
-    val df = spark.range(10).select(struct('id, 'id.cast("string").as("str")).as("struct"))
-    val avroStructDF = df.select(to_avro('struct).as("avro"))
+    val df = spark.range(10).select(struct($"id", $"id".cast("string").as("str")).as("struct"))
+    val avroStructDF = df.select(to_avro($"struct").as("avro"))
     val avroTypeStruct = s"""
       |{
       |  "type": "record",
@@ -65,7 +65,7 @@ class DeprecatedAvroFunctionsSuite extends QueryTest with SharedSparkSession {
       |  ]
       |}
     """.stripMargin
-    checkAnswer(avroStructDF.select(from_avro('avro, avroTypeStruct)), df)
+    checkAnswer(avroStructDF.select(from_avro($"avro", avroTypeStruct)), df)
   }
 
   test("roundtrip in to_avro and from_avro - array with null") {

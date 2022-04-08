@@ -255,6 +255,7 @@ class InjectRuntimeFilterSuite extends QueryTest with SQLTestUtils with SharedSp
         planEnabled = sql(query).queryExecution.optimizedPlan
         checkAnswer(sql(query), expectedAnswer)
         if (shouldReplace) {
+          assert(!columnPruningTakesEffect(planEnabled))
           assert(getNumBloomFilters(planEnabled) > getNumBloomFilters(planDisabled))
         } else {
           assert(getNumBloomFilters(planEnabled) == getNumBloomFilters(planDisabled))
@@ -286,6 +287,20 @@ class InjectRuntimeFilterSuite extends QueryTest with SQLTestUtils with SharedSp
     }.sum
     assert(numBloomFilterAggs == numMightContains)
     numMightContains
+  }
+
+  def columnPruningTakesEffect(plan: LogicalPlan): Boolean = {
+    def takesEffect(plan: LogicalPlan): Boolean = {
+      val result = org.apache.spark.sql.catalyst.optimizer.ColumnPruning.apply(plan)
+      !result.fastEquals(plan)
+    }
+
+    plan.collectFirst {
+      case Filter(condition, _) if condition.collectFirst {
+        case subquery: org.apache.spark.sql.catalyst.expressions.ScalarSubquery
+          if takesEffect(subquery.plan) => true
+      }.nonEmpty => true
+    }.nonEmpty
   }
 
   def assertRewroteSemiJoin(query: String): Unit = {

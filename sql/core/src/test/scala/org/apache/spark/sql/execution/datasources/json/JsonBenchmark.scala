@@ -263,7 +263,7 @@ object JsonBenchmark extends SqlBasedBenchmark {
 
     benchmark.addCase("from_json", iters) { _ =>
       val schema = new StructType().add("a", IntegerType)
-      val from_json_ds = in.select(from_json(Symbol("value"), schema))
+      val from_json_ds = in.select(from_json($"value", schema))
       from_json_ds.noop()
     }
 

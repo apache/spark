@@ -36,8 +36,9 @@ import org.apache.spark.sql.catalyst.util.RebaseDateTime.RebaseSpec
 import org.apache.spark.sql.connector.expressions.aggregate.{Aggregation, Count, CountStar, Max, Min}
 import org.apache.spark.sql.execution.datasources.AggregatePushDownUtils
 import org.apache.spark.sql.execution.datasources.v2.V2ColumnUtils
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.{LegacyBehaviorPolicy, PARQUET_AGGREGATE_PUSHDOWN_ENABLED}
-import org.apache.spark.sql.types.{ArrayType, DataType, MapType, StructField, StructType}
+import org.apache.spark.sql.types.{ArrayType, AtomicType, DataType, MapType, StructField, StructType}
 
 object ParquetUtils {
   def inferSchema(
@@ -185,6 +186,30 @@ object ParquetUtils {
         throw new IllegalArgumentException(
           s"The key `$FIELD_ID_METADATA_KEY` must be a 32-bit integer")
     }
+  }
+
+  /**
+   * Whether columnar read is supported for the input `schema`.
+   */
+  def isBatchReadSupportedForSchema(sqlConf: SQLConf, schema: StructType): Boolean =
+    sqlConf.parquetVectorizedReaderEnabled &&
+      schema.forall(f => isBatchReadSupported(sqlConf, f.dataType))
+
+  def isBatchReadSupported(sqlConf: SQLConf, dt: DataType): Boolean = dt match {
+    case _: AtomicType =>
+      true
+    case at: ArrayType =>
+      sqlConf.parquetVectorizedReaderNestedColumnEnabled &&
+        isBatchReadSupported(sqlConf, at.elementType)
+    case mt: MapType =>
+      sqlConf.parquetVectorizedReaderNestedColumnEnabled &&
+        isBatchReadSupported(sqlConf, mt.keyType) &&
+        isBatchReadSupported(sqlConf, mt.valueType)
+    case st: StructType =>
+      sqlConf.parquetVectorizedReaderNestedColumnEnabled &&
+        st.fields.forall(f => isBatchReadSupported(sqlConf, f.dataType))
+    case _ =>
+      false
   }
 
   /**

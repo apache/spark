@@ -98,8 +98,6 @@ class Observation:
         :class:`DataFrame`
             the observed :class:`DataFrame`.
         """
-        assert exprs, "exprs should not be empty"
-        assert all(isinstance(c, Column) for c in exprs), "all exprs should be Column"
         assert self._jo is None, "an Observation can be used with a DataFrame only once"
 
         self._jvm = df._sc._jvm

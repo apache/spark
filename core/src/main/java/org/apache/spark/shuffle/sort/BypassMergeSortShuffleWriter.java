@@ -118,7 +118,7 @@ final class BypassMergeSortShuffleWriter<K, V>
       ShuffleExecutorComponents shuffleExecutorComponents) throws SparkException {
     // Use getSizeAsKb (not bytes) to maintain backwards compatibility if no units are provided
     this.fileBufferSize = (int) (long) conf.get(package$.MODULE$.SHUFFLE_FILE_BUFFER_SIZE()) * 1024;
-    this.transferToEnabled = conf.getBoolean("spark.file.transferTo", true);
+    this.transferToEnabled = (boolean) conf.get(package$.MODULE$.SHUFFLE_MERGE_PREFER_NIO());
     this.blockManager = blockManager;
     final ShuffleDependency<K, V, V> dep = handle.dependency();
     this.mapId = mapId;

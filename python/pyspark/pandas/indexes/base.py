@@ -882,10 +882,17 @@ class Index(IndexOpsMixin):
         )
         return DataFrame(internal).index
 
-    # TODO: ADD keep parameter
-    def drop_duplicates(self) -> "Index":
+    def drop_duplicates(self, keep: Union[bool, str] = "first") -> "Index":
         """
         Return Index with duplicate values removed.
+
+        Parameters
+        ----------
+        keep : {'first', 'last', ``False``}, default 'first'
+            Method to handle dropping duplicates:
+            - 'first' : Drop duplicates except for the first occurrence.
+            - 'last' : Drop duplicates except for the last occurrence.
+            - ``False`` : Drop all duplicates.
 
         Returns
         -------
@@ -898,25 +905,19 @@ class Index(IndexOpsMixin):
 
         Examples
         --------
-        Generate an pandas.Index with duplicate values.
+        Generate an Index with duplicate values.
 
         >>> idx = ps.Index(['lama', 'cow', 'lama', 'beetle', 'lama', 'hippo'])
 
         >>> idx.drop_duplicates().sort_values()
         Index(['beetle', 'cow', 'hippo', 'lama'], dtype='object')
         """
-        sdf = self._internal.spark_frame.select(
-            self._internal.index_spark_columns
-        ).drop_duplicates()
-        internal = InternalFrame(
-            spark_frame=sdf,
-            index_spark_columns=[
-                scol_for(sdf, col) for col in self._internal.index_spark_column_names
-            ],
-            index_names=self._internal.index_names,
-            index_fields=self._internal.index_fields,
-        )
-        return DataFrame(internal).index
+        with ps.option_context("compute.default_index_type", "distributed"):
+            # The attached index caused by `reset_index` below is used for sorting only,
+            # and it will be dropped soon,
+            # so we enforce “distributed” default index type
+            psser = self.to_series().reset_index(drop=True)
+        return Index(psser.drop_duplicates(keep=keep).sort_index())
 
     def to_series(self, name: Optional[Name] = None) -> Series:
         """
@@ -1141,9 +1142,19 @@ class Index(IndexOpsMixin):
         """
         return kind == self.inferred_type
 
-    def dropna(self) -> "Index":
+    def dropna(self, how: str = "any") -> "Index":
         """
         Return Index or MultiIndex without NA/NaN values
+
+        Parameters
+        ----------
+        how : {'any', 'all'}, default 'any'
+            If the Index is a MultiIndex, drop the value when any or all levels
+            are NaN.
+
+        Returns
+        -------
+        Index or MultiIndex
 
         Examples
         --------
@@ -1162,35 +1173,30 @@ class Index(IndexOpsMixin):
 
         Also support for MultiIndex
 
-        >>> midx = pd.MultiIndex([['lama', 'cow', 'falcon'],
-        ...                       [None, 'weight', 'length']],
-        ...                      [[0, 1, 1, 1, 1, 1, 2, 2, 2],
-        ...                       [0, 1, 1, 0, 1, 2, 1, 1, 2]])
-        >>> s = ps.Series([45, 200, 1.2, 30, 250, 1.5, 320, 1, None],
-        ...               index=midx)
-        >>> s
-        lama    NaN        45.0
-        cow     weight    200.0
-                weight      1.2
-                NaN        30.0
-                weight    250.0
-                length      1.5
-        falcon  weight    320.0
-                weight      1.0
-                length      NaN
-        dtype: float64
 
-        >>> s.index.dropna()  # doctest: +SKIP
-        MultiIndex([(   'cow', 'weight'),
-                    (   'cow', 'weight'),
-                    (   'cow', 'weight'),
-                    (   'cow', 'length'),
-                    ('falcon', 'weight'),
-                    ('falcon', 'weight'),
-                    ('falcon', 'length')],
+        >>> tuples = [(np.nan, 1.0), (2.0, 2.0), (np.nan, np.nan), (3.0, np.nan)]
+        >>> midx = ps.MultiIndex.from_tuples(tuples)
+        >>> midx  # doctest: +SKIP
+        MultiIndex([(nan, 1.0),
+                    (2.0, 2.0),
+                    (nan, nan),
+                    (3.0, nan)],
+                   )
+
+        >>> midx.dropna()  # doctest: +SKIP
+        MultiIndex([(2.0, 2.0)],
+                   )
+
+        >>> midx.dropna(how="all")  # doctest: +SKIP
+        MultiIndex([(nan, 1.0),
+                    (2.0, 2.0),
+                    (3.0, nan)],
                    )
         """
-        sdf = self._internal.spark_frame.select(self._internal.index_spark_columns).dropna()
+        if how not in ("any", "all"):
+            raise ValueError("invalid how option: %s" % how)
+
+        sdf = self._internal.spark_frame.select(self._internal.index_spark_columns).dropna(how=how)
         internal = InternalFrame(
             spark_frame=sdf,
             index_spark_columns=[
@@ -1312,7 +1318,7 @@ class Index(IndexOpsMixin):
         """
         Return Index if a valid level is given.
 
-        Examples:
+        Examples
         --------
         >>> psidx = ps.Index(['a', 'b', 'c'], name='ks')
         >>> psidx.get_level_values(0)

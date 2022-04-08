@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.SaveMode
-import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType, CatalogUtils}
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute}
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -402,7 +402,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
     case DropFunction(ResolvedPersistentFunc(catalog, identifier, _), ifExists) =>
       if (isSessionCatalog(catalog)) {
         val funcIdentifier = identifier.asFunctionIdentifier
-        DropFunctionCommand(funcIdentifier.database, funcIdentifier.funcName, ifExists, false)
+        DropFunctionCommand(funcIdentifier, ifExists, false)
       } else {
         throw QueryCompilationErrors.missingCatalogAbilityError(catalog, "DROP FUNCTION")
       }
@@ -425,9 +425,9 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
         } else {
           None
         }
+        val identifier = FunctionIdentifier(nameParts.last, database)
         CreateFunctionCommand(
-          database,
-          nameParts.last,
+          identifier,
           className,
           resources,
           false,

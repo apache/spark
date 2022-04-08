@@ -169,7 +169,8 @@ class BypassMergeSortShuffleWriterSuite
 
   Seq(true, false).foreach { transferTo =>
     test(s"write with some empty partitions - transferTo $transferTo") {
-      val transferConf = conf.clone.set("spark.file.transferTo", transferTo.toString)
+      val transferConf =
+        conf.clone.set(config.SHUFFLE_MERGE_PREFER_NIO.key, transferTo.toString)
       def records: Iterator[(Int, Int)] =
         Iterator((1, 1), (5, 5)) ++ (0 until 100000).iterator.map(x => (2, 2))
       val writer = new BypassMergeSortShuffleWriter[Int, Int](
