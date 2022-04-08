@@ -140,7 +140,7 @@ public class ParquetVectorUpdaterFactory {
         }
         break;
       case INT96:
-        if (sparkType == DataTypes.TimestampNTZType) {
+        if (sparkType == TimestampNTZType$.MODULE$) {
           convertErrorForTimestampNTZ(typeName.name());
         } else if (sparkType == DataTypes.TimestampType) {
           final boolean failIfRebase = "EXCEPTION".equals(int96RebaseMode);
@@ -197,14 +197,14 @@ public class ParquetVectorUpdaterFactory {
     // Throw an exception if the Parquet type is TimestampLTZ and the Catalyst type is TimestampNTZ.
     // This is to avoid mistakes in reading the timestamp values.
     if (((TimestampLogicalTypeAnnotation) logicalTypeAnnotation).isAdjustedToUTC() &&
-      sparkType == DataTypes.TimestampNTZType) {
+      sparkType == TimestampNTZType$.MODULE$) {
       convertErrorForTimestampNTZ("int64 time(" + logicalTypeAnnotation + ")");
     }
   }
 
   void convertErrorForTimestampNTZ(String parquetType) {
     throw new RuntimeException("Unable to create Parquet converter for data type " +
-      DataTypes.TimestampNTZType.json() + " whose Parquet type is " + parquetType);
+      TimestampNTZType$.MODULE$.json() + " whose Parquet type is " + parquetType);
   }
 
   boolean isUnsignedIntTypeMatched(int bitWidth) {

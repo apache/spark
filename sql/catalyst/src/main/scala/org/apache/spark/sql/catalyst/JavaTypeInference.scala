@@ -35,6 +35,7 @@ import org.apache.spark.sql.catalyst.expressions.objects._
 import org.apache.spark.sql.catalyst.util.ArrayBasedMapData
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types._
+import org.apache.spark.util.Utils
 
 /**
  * Type-inference utilities for POJOs and Java collections.
@@ -119,7 +120,9 @@ object JavaTypeInference {
       case c: Class[_] if c == classOf[java.sql.Date] => (DateType, true)
       case c: Class[_] if c == classOf[java.time.Instant] => (TimestampType, true)
       case c: Class[_] if c == classOf[java.sql.Timestamp] => (TimestampType, true)
-      case c: Class[_] if c == classOf[java.time.LocalDateTime] => (TimestampNTZType, true)
+      // SPARK-38813: Remove TimestampNTZ type support in Spark 3.3 with minimal code changes.
+      case c: Class[_] if c == classOf[java.time.LocalDateTime] && Utils.isTesting =>
+        (TimestampNTZType, true)
       case c: Class[_] if c == classOf[java.time.Duration] => (DayTimeIntervalType(), true)
       case c: Class[_] if c == classOf[java.time.Period] => (YearMonthIntervalType(), true)
 
@@ -251,7 +254,8 @@ object JavaTypeInference {
       case c if c == classOf[java.sql.Timestamp] =>
         createDeserializerForSqlTimestamp(path)
 
-      case c if c == classOf[java.time.LocalDateTime] =>
+      // SPARK-38813: Remove TimestampNTZ type support in Spark 3.3 with minimal code changes.
+      case c if c == classOf[java.time.LocalDateTime] && Utils.isTesting =>
         createDeserializerForLocalDateTime(path)
 
       case c if c == classOf[java.time.Duration] =>
@@ -413,7 +417,8 @@ object JavaTypeInference {
 
         case c if c == classOf[java.sql.Timestamp] => createSerializerForSqlTimestamp(inputObject)
 
-        case c if c == classOf[java.time.LocalDateTime] =>
+        // SPARK-38813: Remove TimestampNTZ type support in Spark 3.3 with minimal code changes.
+        case c if c == classOf[java.time.LocalDateTime] && Utils.isTesting =>
           createSerializerForLocalDateTime(inputObject)
 
         case c if c == classOf[java.time.LocalDate] => createSerializerForJavaLocalDate(inputObject)

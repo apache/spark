@@ -34,6 +34,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Range}
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types._
+import org.apache.spark.util.Utils
 
 
 /**
@@ -358,6 +359,26 @@ object FunctionRegistry {
   // then create a `RuntimeReplaceable` expression to call the Java method with `Invoke` or
   // `StaticInvoke` expression. By doing so we don't need to implement codegen for new functions
   // anymore. See `AesEncrypt`/`AesDecrypt` as an example.
+  val expressionsForTimestampNTZSupport: Map[String, (ExpressionInfo, FunctionBuilder)] =
+    // SPARK-38813: Remove TimestampNTZ type support in Spark 3.3 with minimal code changes.
+    if (Utils.isTesting) {
+      Map(
+        expression[LocalTimestamp]("localtimestamp"),
+        expression[ConvertTimezone]("convert_timezone"),
+        // We keep the 2 expression builders below to have different function docs.
+        expressionBuilder(
+          "to_timestamp_ntz", ParseToTimestampNTZExpressionBuilder, setAlias = true),
+        expressionBuilder(
+          "to_timestamp_ltz", ParseToTimestampLTZExpressionBuilder, setAlias = true),
+        // We keep the 2 expression builders below to have different function docs.
+        expressionBuilder("make_timestamp_ntz", MakeTimestampNTZExpressionBuilder, setAlias = true),
+        expressionBuilder("make_timestamp_ltz", MakeTimestampLTZExpressionBuilder, setAlias = true)
+      )
+    } else {
+      Map.empty
+    }
+
+  // Note: Whenever we add a new entry here, make sure we also update ExpressionToSQLSuite
   val expressions: Map[String, (ExpressionInfo, FunctionBuilder)] = Map(
     // misc non-aggregate functions
     expression[Abs]("abs"),
@@ -580,7 +601,6 @@ object FunctionRegistry {
     expression[CurrentDate]("current_date"),
     expression[CurrentTimestamp]("current_timestamp"),
     expression[CurrentTimeZone]("current_timezone"),
-    expression[LocalTimestamp]("localtimestamp"),
     expression[DateDiff]("datediff"),
     expression[DateAdd]("date_add"),
     expression[DateFormatClass]("date_format"),
@@ -604,9 +624,6 @@ object FunctionRegistry {
     expression[ToBinary]("to_binary"),
     expression[ToUnixTimestamp]("to_unix_timestamp"),
     expression[ToUTCTimestamp]("to_utc_timestamp"),
-    // We keep the 2 expression builders below to have different function docs.
-    expressionBuilder("to_timestamp_ntz", ParseToTimestampNTZExpressionBuilder, setAlias = true),
-    expressionBuilder("to_timestamp_ltz", ParseToTimestampLTZExpressionBuilder, setAlias = true),
     expression[TruncDate]("trunc"),
     expression[TruncTimestamp]("date_trunc"),
     expression[UnixTimestamp]("unix_timestamp"),
@@ -618,9 +635,6 @@ object FunctionRegistry {
     expression[SessionWindow]("session_window"),
     expression[MakeDate]("make_date"),
     expression[MakeTimestamp]("make_timestamp"),
-    // We keep the 2 expression builders below to have different function docs.
-    expressionBuilder("make_timestamp_ntz", MakeTimestampNTZExpressionBuilder, setAlias = true),
-    expressionBuilder("make_timestamp_ltz", MakeTimestampLTZExpressionBuilder, setAlias = true),
     expression[MakeInterval]("make_interval"),
     expression[MakeDTInterval]("make_dt_interval"),
     expression[MakeYMInterval]("make_ym_interval"),
@@ -635,7 +649,6 @@ object FunctionRegistry {
     expression[UnixSeconds]("unix_seconds"),
     expression[UnixMillis]("unix_millis"),
     expression[UnixMicros]("unix_micros"),
-    expression[ConvertTimezone]("convert_timezone"),
 
     // collection functions
     expression[CreateArray]("array"),
@@ -782,7 +795,7 @@ object FunctionRegistry {
     expression[CsvToStructs]("from_csv"),
     expression[SchemaOfCsv]("schema_of_csv"),
     expression[StructsToCsv]("to_csv")
-  )
+  ) ++ expressionsForTimestampNTZSupport
 
   val builtin: SimpleFunctionRegistry = {
     val fr = new SimpleFunctionRegistry

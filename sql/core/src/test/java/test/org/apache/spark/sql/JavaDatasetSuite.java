@@ -608,14 +608,6 @@ public class JavaDatasetSuite implements Serializable {
   }
 
   @Test
-  public void testLocalDateTimeEncoder() {
-    Encoder<LocalDateTime> encoder = Encoders.LOCALDATETIME();
-    List<LocalDateTime> data = Arrays.asList(LocalDateTime.of(1, 1, 1, 1, 1));
-    Dataset<LocalDateTime> ds = spark.createDataset(data, encoder);
-    Assert.assertEquals(data, ds.collectAsList());
-  }
-
-  @Test
   public void testDurationEncoder() {
     Encoder<Duration> encoder = Encoders.DURATION();
     List<Duration> data = Arrays.asList(Duration.ofDays(0));

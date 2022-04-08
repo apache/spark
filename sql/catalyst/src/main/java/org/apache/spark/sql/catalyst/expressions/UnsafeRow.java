@@ -91,7 +91,7 @@ public final class UnsafeRow extends InternalRow implements Externalizable, Kryo
           DoubleType,
           DateType,
           TimestampType,
-          TimestampNTZType
+          TimestampNTZType$.MODULE$
         )));
   }
 
