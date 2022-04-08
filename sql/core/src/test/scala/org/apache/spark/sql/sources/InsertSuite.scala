@@ -1105,6 +1105,25 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
     }
   }
 
+  test("INSERT INTO columns with defaults set by ALTER TABLE ALTER COLUMN: positive tests") {
+    withTable("t") {
+      sql("create table t(i boolean, s string) using parquet")
+      // The default value for the DEFAULT keyword is the NULL literal.
+      sql("insert into t values(true, default)")
+      // There is a complex expression in the default value.
+      sql("alter table t alter column s set default concat('abc', 'def')")
+      sql("insert into t values(true, default)")
+      checkAnswer(spark.table("t"),
+        Seq(
+          Row(true, null),
+          Row(true, "abcdef")
+        ))
+    }
+  }
+
+  test("INSERT INTO columns with defaults set by ALTER TABLE ALTER COLUMN: negative tests") {
+  }
+
   test("Stop task set if FileAlreadyExistsException was thrown") {
     Seq(true, false).foreach { fastFail =>
       withSQLConf("fs.file.impl" -> classOf[FileExistingTestFileSystem].getName,

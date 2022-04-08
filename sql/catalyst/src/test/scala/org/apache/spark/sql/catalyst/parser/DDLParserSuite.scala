@@ -931,6 +931,7 @@ class DDLParserSuite extends AnalysisTest {
         Some(LongType),
         None,
         None,
+        None,
         None))
   }
 
@@ -950,6 +951,7 @@ class DDLParserSuite extends AnalysisTest {
         Some(LongType),
         None,
         None,
+        None,
         None))
   }
 
@@ -962,6 +964,7 @@ class DDLParserSuite extends AnalysisTest {
         None,
         None,
         Some("new comment"),
+        None,
         None))
   }
 
@@ -974,7 +977,8 @@ class DDLParserSuite extends AnalysisTest {
         None,
         None,
         None,
-        Some(UnresolvedFieldPosition(first()))))
+        Some(UnresolvedFieldPosition(first())),
+        None))
   }
 
   test("alter table: multiple property changes are not allowed") {
@@ -1000,6 +1004,7 @@ class DDLParserSuite extends AnalysisTest {
         None,
         Some(false),
         None,
+        None,
         None))
 
     comparePlans(
@@ -1009,6 +1014,7 @@ class DDLParserSuite extends AnalysisTest {
         UnresolvedFieldName(Seq("a", "b", "c")),
         None,
         Some(true),
+        None,
         None,
         None))
   }
@@ -1047,6 +1053,7 @@ class DDLParserSuite extends AnalysisTest {
         Some(IntegerType),
         None,
         None,
+        None,
         None))
 
     comparePlans(
@@ -1057,6 +1064,7 @@ class DDLParserSuite extends AnalysisTest {
         Some(IntegerType),
         None,
         Some("new_comment"),
+        None,
         None))
 
     comparePlans(
@@ -1067,7 +1075,8 @@ class DDLParserSuite extends AnalysisTest {
         Some(IntegerType),
         None,
         None,
-        Some(UnresolvedFieldPosition(after("other_col")))))
+        Some(UnresolvedFieldPosition(after("other_col"))),
+        None))
 
     // renaming column not supported in hive style ALTER COLUMN.
     intercept("ALTER TABLE table_name CHANGE COLUMN a.b.c new_name INT",
@@ -2241,17 +2250,31 @@ class DDLParserSuite extends AnalysisTest {
   }
 
   test("SPARK-38335: Implement parser support for DEFAULT values for columns in tables") {
+    comparePlans(
+      parsePlan("ALTER TABLE t1 ALTER COLUMN a.b.c SET DEFAULT 42"),
+      AlterColumn(
+        UnresolvedTable(Seq("t1"), "ALTER TABLE ... ALTER COLUMN", None),
+        UnresolvedFieldName(Seq("a", "b", "c")),
+        None,
+        None,
+        None,
+        None,
+        Some("42")))
+    comparePlans(
+      parsePlan("ALTER TABLE t1 ALTER COLUMN a.b.c DROP DEFAULT"),
+      AlterColumn(
+        UnresolvedTable(Seq("t1"), "ALTER TABLE ... ALTER COLUMN", None),
+        UnresolvedFieldName(Seq("a", "b", "c")),
+        None,
+        None,
+        None,
+        None,
+        Some("")))
     // The following ALTER TABLE commands will support DEFAULT columns, but this has not been
     // implemented yet.
     val unsupportedError = "Support for DEFAULT column values is not implemented yet"
     assert(intercept[ParseException] {
       parsePlan("ALTER TABLE t1 ADD COLUMN x int NOT NULL DEFAULT 42")
-    }.getMessage.contains(unsupportedError))
-    assert(intercept[ParseException] {
-      parsePlan("ALTER TABLE t1 ALTER COLUMN a.b.c SET DEFAULT 42")
-    }.getMessage.contains(unsupportedError))
-    assert(intercept[ParseException] {
-      parsePlan("ALTER TABLE t1 ALTER COLUMN a.b.c DROP DEFAULT")
     }.getMessage.contains(unsupportedError))
     assert(intercept[ParseException] {
       parsePlan("ALTER TABLE t1 REPLACE COLUMNS (x STRING DEFAULT 42)")

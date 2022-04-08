@@ -1108,6 +1108,7 @@ class PlanResolutionSuite extends AnalysisTest {
                 Some(LongType),
                 None,
                 None,
+                None,
                 None) =>
               assert(column.name == Seq("i"))
             case _ => fail("expect AlterTableAlterColumn")
@@ -1120,6 +1121,7 @@ class PlanResolutionSuite extends AnalysisTest {
                 None,
                 None,
                 Some("new comment"),
+                None,
                 None) =>
               assert(column.name == Seq("i"))
             case _ => fail("expect AlterTableAlterColumn")
@@ -1169,14 +1171,15 @@ class PlanResolutionSuite extends AnalysisTest {
     Seq("v2Table", "testcat.tab").foreach { tblName =>
       parseAndResolve(s"ALTER TABLE $tblName CHANGE COLUMN i i int COMMENT 'an index'") match {
         case AlterColumn(
-            _: ResolvedTable, _: ResolvedFieldName, None, None, Some(comment), None) =>
+            _: ResolvedTable, _: ResolvedFieldName, None, None, Some(comment), None, None) =>
           assert(comment == "an index")
         case _ => fail("expect AlterTableAlterColumn with comment change only")
       }
 
       parseAndResolve(s"ALTER TABLE $tblName CHANGE COLUMN i i long COMMENT 'an index'") match {
         case AlterColumn(
-            _: ResolvedTable, _: ResolvedFieldName, Some(dataType), None, Some(comment), None) =>
+            _: ResolvedTable, _: ResolvedFieldName, Some(dataType), None, Some(comment), None,
+            None) =>
           assert(comment == "an index")
           assert(dataType == LongType)
         case _ => fail("expect AlterTableAlterColumn with type and comment changes")
@@ -1211,7 +1214,7 @@ class PlanResolutionSuite extends AnalysisTest {
       val catalog = if (isSessionCatalog) v2SessionCatalog else testCat
       val tableIdent = if (isSessionCatalog) "v2Table" else "tab"
       parsed match {
-        case AlterColumn(r: ResolvedTable, _, _, _, _, _) =>
+        case AlterColumn(r: ResolvedTable, _, _, _, _, _, _) =>
           assert(r.catalog == catalog)
           assert(r.identifier.name() == tableIdent)
         case Project(_, AsDataSourceV2Relation(r)) =>

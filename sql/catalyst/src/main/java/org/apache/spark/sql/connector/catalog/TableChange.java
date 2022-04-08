@@ -219,6 +219,21 @@ public interface TableChange {
   }
 
   /**
+   * Create a TableChange for updating or removing the default expression string of a field.
+   * <p>
+   * The name is used to find the field to update.
+   * <p>
+   * If the field does not exist, the change will result in an {@link IllegalArgumentException}.
+   *
+   * @param fieldNames field names of the column to update
+   * @param expression the new default expression as a string, or empty to drop the default value.
+   * @return a TableChange for the update
+   */
+  static TableChange updateSetDefaultExpression(String[] fieldNames, String expression) {
+    return new UpdateSetDefaultExpression(fieldNames, expression);
+  }
+
+  /**
    * Create a TableChange for deleting a field.
    * <p>
    * If the field does not exist, the change will result in an {@link IllegalArgumentException}.
@@ -639,6 +654,47 @@ public interface TableChange {
     @Override
     public int hashCode() {
       int result = Objects.hash(position);
+      result = 31 * result + Arrays.hashCode(fieldNames);
+      return result;
+    }
+  }
+
+  /**
+   * A TableChange for updating or removing the default expression string of a field.
+   * <p>
+   * The field names are used to find the field to update.
+   * <p>
+   * If the field does not exist, the change must result in an {@link IllegalArgumentException}.
+   * <p>
+   * An empty expression string represents a change to remove the default expression entirely.
+   */
+  final class UpdateSetDefaultExpression implements ColumnChange {
+    private final String[] fieldNames;
+    private final String expression;
+
+    private UpdateSetDefaultExpression(String[] fieldNames, String expression) {
+      this.fieldNames = fieldNames;
+      this.expression = expression;
+    }
+
+    @Override
+    public String[] fieldNames() {
+      return fieldNames;
+    }
+
+    public String defaultExpression() { return expression; }
+
+    @Override
+    public boolean equals(Object o) {
+      if (this == o) return true;
+      if (o == null || getClass() != o.getClass()) return false;
+      UpdateSetDefaultExpression that = (UpdateSetDefaultExpression) o;
+      return Arrays.equals(fieldNames, that.fieldNames) && expression.equals(that.expression);
+    }
+
+    @Override
+    public int hashCode() {
+      int result = Objects.hash(expression);
       result = 31 * result + Arrays.hashCode(fieldNames);
       return result;
     }
