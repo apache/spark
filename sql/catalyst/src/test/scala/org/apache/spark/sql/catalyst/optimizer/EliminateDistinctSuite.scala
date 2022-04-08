@@ -33,6 +33,7 @@ class EliminateDistinctSuite extends PlanTest {
   }
 
   val testRelation = LocalRelation($"a".int)
+  val testRelation2 = LocalRelation($"a".int, $"b".string, $"c".double)
 
   Seq(
     Max(_),
@@ -70,5 +71,27 @@ class EliminateDistinctSuite extends PlanTest {
         assert(query != answer)
         comparePlans(Optimize.execute(query), answer)
       }
+  }
+
+  test("SPARK-38832: Remove unnecessary distinct in aggregate expression by distinctKeys") {
+    val q1 = testRelation2.groupBy($"a")($"a")
+      .rebalance().groupBy()(countDistinct($"a") as "x", sumDistinct($"a") as "y").analyze
+    val r1 = testRelation2.groupBy($"a")($"a")
+      .rebalance().groupBy()(count($"a") as "x", sum($"a") as "y").analyze
+    comparePlans(Optimize.execute(q1), r1)
+
+    // not a subset of distinct attr
+    val q2 = testRelation2.groupBy($"a", $"b")($"a", $"b")
+      .rebalance().groupBy()(countDistinct($"a") as "x", sumDistinct($"a") as "y").analyze
+    comparePlans(Optimize.execute(q2), q2)
+
+    // avoid remove double data type attr
+    val q3 = testRelation2.groupBy($"c")($"c")
+      .rebalance().groupBy()(sumDistinct($"c") as "x").analyze
+    comparePlans(Optimize.execute(q3), q3)
+
+    // child distinct key is empty
+    val q4 = testRelation2.groupBy($"a")(countDistinct($"a") as "x").analyze
+    comparePlans(Optimize.execute(q4), q4)
   }
 }
