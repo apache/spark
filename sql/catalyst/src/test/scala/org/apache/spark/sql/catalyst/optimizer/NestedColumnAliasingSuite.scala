@@ -836,10 +836,12 @@ class NestedColumnAliasingSuite extends SchemaPruningTest {
       .analyze
     val optimized = Optimize.execute(query)
 
+    val aliases = collectGeneratedAliases(optimized)
+
     // Only the inner-most col.a should be pushed down.
     val expected = input
-      .select('col1)
-      .generate(Explode('col1.getField("a")), unrequiredChildIndex = Seq(0))
+      .select('col1.getField("a").as(aliases(0)))
+      .generate(Explode($"${aliases(0)}"), unrequiredChildIndex = Seq(0))
       .select(UnresolvedExtractValue(UnresolvedExtractValue(
         CaseWhen(Seq(('col === 1,
           Literal.default(simpleStruct)))), Literal("b")), Literal("c")).as("result"))
