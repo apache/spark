@@ -1098,6 +1098,13 @@ class GroupByTest(PandasOnSparkTestCase, TestUtils):
             pdf.B.rename().groupby(pdf.A).value_counts().sort_index(),
         )
         self.assert_eq(
+            psdf.B.rename().groupby(psdf.A, dropna=False).value_counts().sort_index(),
+            pdf.B.rename().groupby(pdf.A, dropna=False).value_counts().sort_index(),
+            # Returns are the same considering values and types,
+            # disable check_exact to pass the assert_eq
+            check_exact=False,
+        )
+        self.assert_eq(
             psdf.B.groupby(psdf.A.rename()).value_counts().sort_index(),
             pdf.B.groupby(pdf.A.rename()).value_counts().sort_index(),
         )
