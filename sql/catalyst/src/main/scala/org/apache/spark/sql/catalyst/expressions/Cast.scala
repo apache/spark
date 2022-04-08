@@ -793,7 +793,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
         null
       } else {
         throw QueryExecutionErrors.cannotChangeDecimalPrecisionError(
-          value, decimalType.precision, decimalType.scale)
+          value, decimalType.precision, decimalType.scale, origin.context)
       }
     }
   }
@@ -982,6 +982,10 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
     } else {
       super.genCode(ctx)
     }
+  }
+
+  def errorContextCode(codegenContext: CodegenContext): String = {
+    codegenContext.addReferenceObj("errCtx", origin.context)
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
@@ -1320,8 +1324,13 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
     }
   }
 
-  private[this] def changePrecision(d: ExprValue, decimalType: DecimalType,
-      evPrim: ExprValue, evNull: ExprValue, canNullSafeCast: Boolean): Block = {
+  private[this] def changePrecision(
+      d: ExprValue,
+      decimalType: DecimalType,
+      evPrim: ExprValue,
+      evNull: ExprValue,
+      canNullSafeCast: Boolean,
+      ctx: CodegenContext): Block = {
     if (canNullSafeCast) {
       code"""
          |$d.changePrecision(${decimalType.precision}, ${decimalType.scale});
@@ -1333,7 +1342,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
       } else {
         s"""
            |throw QueryExecutionErrors.cannotChangeDecimalPrecisionError(
-           |  $d, ${decimalType.precision}, ${decimalType.scale});
+           |  $d, ${decimalType.precision}, ${decimalType.scale}, ${errorContextCode(ctx)});
          """.stripMargin
       }
       code"""
@@ -1360,20 +1369,20 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
               if ($tmp == null) {
                 $evNull = true;
               } else {
-                ${changePrecision(tmp, target, evPrim, evNull, canNullSafeCast)}
+                ${changePrecision(tmp, target, evPrim, evNull, canNullSafeCast, ctx)}
               }
           """
       case StringType if ansiEnabled =>
         (c, evPrim, evNull) =>
           code"""
               Decimal $tmp = Decimal.fromStringANSI($c);
-              ${changePrecision(tmp, target, evPrim, evNull, canNullSafeCast)}
+              ${changePrecision(tmp, target, evPrim, evNull, canNullSafeCast, ctx)}
           """
       case BooleanType =>
         (c, evPrim, evNull) =>
           code"""
             Decimal $tmp = $c ? Decimal.apply(1) : Decimal.apply(0);
-            ${changePrecision(tmp, target, evPrim, evNull, canNullSafeCast)}
+            ${changePrecision(tmp, target, evPrim, evNull, canNullSafeCast, ctx)}
           """
       case DateType =>
         // date can't cast to decimal in Hive
@@ -1384,19 +1393,19 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
           code"""
             Decimal $tmp = Decimal.apply(
               scala.math.BigDecimal.valueOf(${timestampToDoubleCode(c)}));
-            ${changePrecision(tmp, target, evPrim, evNull, canNullSafeCast)}
+            ${changePrecision(tmp, target, evPrim, evNull, canNullSafeCast, ctx)}
           """
       case DecimalType() =>
         (c, evPrim, evNull) =>
           code"""
             Decimal $tmp = $c.clone();
-            ${changePrecision(tmp, target, evPrim, evNull, canNullSafeCast)}
+            ${changePrecision(tmp, target, evPrim, evNull, canNullSafeCast, ctx)}
           """
       case x: IntegralType =>
         (c, evPrim, evNull) =>
           code"""
             Decimal $tmp = Decimal.apply((long) $c);
-            ${changePrecision(tmp, target, evPrim, evNull, canNullSafeCast)}
+            ${changePrecision(tmp, target, evPrim, evNull, canNullSafeCast, ctx)}
           """
       case x: FractionalType =>
         // All other numeric types can be represented precisely as Doubles
@@ -1404,7 +1413,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
           code"""
             try {
               Decimal $tmp = Decimal.apply(scala.math.BigDecimal.valueOf((double) $c));
-              ${changePrecision(tmp, target, evPrim, evNull, canNullSafeCast)}
+              ${changePrecision(tmp, target, evPrim, evNull, canNullSafeCast, ctx)}
             } catch (java.lang.NumberFormatException e) {
               $evNull = true;
             }

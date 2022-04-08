@@ -84,3 +84,6 @@ select cast('1中文' as bigint);
 select cast('\t\t true \n\r ' as boolean);
 select cast('\t\n false \t\r' as boolean);
 select cast('\t\n xyz \t\r' as boolean);
+
+select cast('23.45' as decimal(4, 2));
+select cast('123.45' as decimal(4, 2));

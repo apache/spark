@@ -40,7 +40,7 @@ class PushFoldableIntoBranchesSuite
       BooleanSimplification, ConstantFolding, SimplifyConditionals, PushFoldableIntoBranches) :: Nil
   }
 
-  private val relation = LocalRelation('a.int, 'b.int, 'c.boolean)
+  private val relation = LocalRelation($"a".int, $"b".int, $"c".boolean)
   private val a = EqualTo(UnresolvedAttribute("a"), Literal(100))
   private val b = UnresolvedAttribute("b")
   private val c = EqualTo(UnresolvedAttribute("c"), Literal(true))
@@ -352,33 +352,33 @@ class PushFoldableIntoBranchesSuite
 
   test("SPARK-33884: simplify CaseWhen clauses with (true and false) and (false and true)") {
     assertEquivalent(
-      EqualTo(CaseWhen(Seq(('a > 10, Literal(0))), Literal(1)), Literal(0)),
-      'a > 10 <=> TrueLiteral)
+      EqualTo(CaseWhen(Seq(($"a" > 10, Literal(0))), Literal(1)), Literal(0)),
+      $"a" > 10 <=> TrueLiteral)
     assertEquivalent(
-      EqualTo(CaseWhen(Seq(('a > 10, Literal(0))), Literal(1)), Literal(1)),
-      Not('a > 10 <=> TrueLiteral))
+      EqualTo(CaseWhen(Seq(($"a" > 10, Literal(0))), Literal(1)), Literal(1)),
+      Not($"a" > 10 <=> TrueLiteral))
   }
 
   test("SPARK-37270: Fix push foldable into CaseWhen branches if elseValue is empty") {
     assertEquivalent(
-      IsNull(CaseWhen(Seq(('a > 10, Literal(0))), Literal(1))),
+      IsNull(CaseWhen(Seq(($"a" > 10, Literal(0))), Literal(1))),
       FalseLiteral)
     assertEquivalent(
-      IsNull(CaseWhen(Seq(('a > 10, Literal(0))))),
-      !('a > 10 <=> true))
+      IsNull(CaseWhen(Seq(($"a" > 10, Literal(0))))),
+      !($"a" > 10 <=> true))
 
     assertEquivalent(
-      CaseWhen(Seq(('a > 10, Literal(0))), Literal(1)) <=> Literal(null, IntegerType),
+      CaseWhen(Seq(($"a" > 10, Literal(0))), Literal(1)) <=> Literal(null, IntegerType),
       FalseLiteral)
     assertEquivalent(
-      CaseWhen(Seq(('a > 10, Literal(0)))) <=> Literal(null, IntegerType),
-      !('a > 10 <=> true))
+      CaseWhen(Seq(($"a" > 10, Literal(0)))) <=> Literal(null, IntegerType),
+      !($"a" > 10 <=> true))
 
     assertEquivalent(
-      Literal(null, IntegerType) <=> CaseWhen(Seq(('a > 10, Literal(0))), Literal(1)),
+      Literal(null, IntegerType) <=> CaseWhen(Seq(($"a" > 10, Literal(0))), Literal(1)),
       FalseLiteral)
     assertEquivalent(
-      Literal(null, IntegerType) <=> CaseWhen(Seq(('a > 10, Literal(0)))),
-      !('a > 10 <=> true))
+      Literal(null, IntegerType) <=> CaseWhen(Seq(($"a" > 10, Literal(0)))),
+      !($"a" > 10 <=> true))
   }
 }

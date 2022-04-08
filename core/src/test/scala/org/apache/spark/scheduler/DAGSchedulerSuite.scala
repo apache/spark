@@ -2082,7 +2082,8 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     // result task 0.0 succeed
     runEvent(makeCompletionEvent(taskSets(1).tasks(0), Success, 42))
     // speculative result task 1.1 fetch failed
-    val info = new TaskInfo(4, index = 1, attemptNumber = 1, 0L, "", "", TaskLocality.ANY, true)
+    val info = new TaskInfo(
+      4, index = 1, attemptNumber = 1, partitionId = 1, 0L, "", "", TaskLocality.ANY, true)
     runEvent(makeCompletionEvent(
         taskSets(1).tasks(1),
         FetchFailed(makeBlockManagerId("hostA"), shuffleDep.shuffleId, 0L, 0, 1, "ignored"),
@@ -4371,13 +4372,13 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
   // Nothing in this test should break if the task info's fields are null, but
   // OutputCommitCoordinator requires the task info itself to not be null.
   private def createFakeTaskInfo(): TaskInfo = {
-    val info = new TaskInfo(0, 0, 0, 0L, "", "", TaskLocality.ANY, false)
+    val info = new TaskInfo(0, 0, 0, 0, 0L, "", "", TaskLocality.ANY, false)
     info.finishTime = 1
     info
   }
 
   private def createFakeTaskInfoWithId(taskId: Long): TaskInfo = {
-    val info = new TaskInfo(taskId, 0, 0, 0L, "", "", TaskLocality.ANY, false)
+    val info = new TaskInfo(taskId, 0, 0, 0, 0L, "", "", TaskLocality.ANY, false)
     info.finishTime = 1
     info
   }

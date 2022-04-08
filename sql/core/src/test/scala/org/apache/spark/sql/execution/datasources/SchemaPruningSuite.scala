@@ -573,7 +573,7 @@ abstract class SchemaPruningSuite
         Seq(Concat(Seq($"name.first", $"name.last")),
           Concat(Seq($"name.last", $"name.first")))
       ),
-      Seq(Symbol("a").string, Symbol("b").string),
+      Seq($"a".string, $"b".string),
       sql("select * from contacts").logicalPlan
     ).toDF()
     checkScan(query1, "struct<name:struct<first:string,last:string>>")
@@ -590,7 +590,7 @@ abstract class SchemaPruningSuite
     val name = StructType.fromDDL("first string, middle string, last string")
     val query2 = Expand(
       Seq(Seq($"name", $"name.last")),
-      Seq(Symbol("a").struct(name), Symbol("b").string),
+      Seq($"a".struct(name), $"b".string),
       sql("select * from contacts").logicalPlan
     ).toDF()
     checkScan(query2, "struct<name:struct<first:string,middle:string,last:string>>")

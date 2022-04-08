@@ -312,7 +312,7 @@ class SparkSqlParserSuite extends AnalysisTest {
         Seq(AttributeReference("a", StringType)(),
           AttributeReference("b", StringType)(),
           AttributeReference("c", StringType)()),
-        Project(Seq(Symbol("a"), Symbol("b"), Symbol("c")),
+        Project(Seq($"a", $"b", $"c"),
           UnresolvedRelation(TableIdentifier("testData"))),
         ioSchema))
 
@@ -336,9 +336,9 @@ class SparkSqlParserSuite extends AnalysisTest {
             UnresolvedFunction("sum", Seq(UnresolvedAttribute("b")), isDistinct = false),
             Literal(10)),
           Aggregate(
-            Seq(Symbol("a")),
+            Seq($"a"),
             Seq(
-              Symbol("a"),
+              $"a",
               UnresolvedAlias(
                 UnresolvedFunction("sum", Seq(UnresolvedAttribute("b")), isDistinct = false), None),
               UnresolvedAlias(
@@ -363,12 +363,12 @@ class SparkSqlParserSuite extends AnalysisTest {
           AttributeReference("c", StringType)()),
         WithWindowDefinition(
           Map("w" -> WindowSpecDefinition(
-            Seq(Symbol("a")),
-            Seq(SortOrder(Symbol("b"), Ascending, NullsFirst, Seq.empty)),
+            Seq($"a"),
+            Seq(SortOrder($"b", Ascending, NullsFirst, Seq.empty)),
             UnspecifiedFrame)),
           Project(
             Seq(
-              Symbol("a"),
+              $"a",
               UnresolvedAlias(
                 UnresolvedWindowExpression(
                   UnresolvedFunction("sum", Seq(UnresolvedAttribute("b")), isDistinct = false),
@@ -403,9 +403,9 @@ class SparkSqlParserSuite extends AnalysisTest {
             UnresolvedFunction("sum", Seq(UnresolvedAttribute("b")), isDistinct = false),
             Literal(10)),
           Aggregate(
-            Seq(Symbol("a"), Symbol("myCol"), Symbol("myCol2")),
+            Seq($"a", $"myCol", $"myCol2"),
             Seq(
-              Symbol("a"),
+              $"a",
               UnresolvedAlias(
                 UnresolvedFunction("sum", Seq(UnresolvedAttribute("b")), isDistinct = false), None),
               UnresolvedAlias(
@@ -415,7 +415,7 @@ class SparkSqlParserSuite extends AnalysisTest {
               UnresolvedGenerator(
                 FunctionIdentifier("explode"),
                 Seq(UnresolvedAttribute("myTable.myCol"))),
-              Nil, false, Option("mytable2"), Seq(Symbol("myCol2")),
+              Nil, false, Option("mytable2"), Seq($"myCol2"),
               Generate(
                 UnresolvedGenerator(
                   FunctionIdentifier("explode"),
@@ -423,7 +423,7 @@ class SparkSqlParserSuite extends AnalysisTest {
                     Seq(
                       UnresolvedFunction("array", Seq(Literal(1), Literal(2), Literal(3)), false)),
                     false))),
-                Nil, false, Option("mytable"), Seq(Symbol("myCol")),
+                Nil, false, Option("mytable"), Seq($"myCol"),
                 UnresolvedRelation(TableIdentifier("testData")))))),
         ioSchema))
   }

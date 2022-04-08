@@ -268,6 +268,22 @@ to the wrapper scripts and using the wrapper scripts will simply set these appro
     </td>
     <td></td>
   </tr>
+  <tr>
+    <td><code>spark.kubernetes.test.driverRequestCores</code></td>
+    <td>
+      Set cpu resource for each driver pod in test, this is currently only for test on cpu resource limited cluster,
+      it's not recommended for other scenarios.
+    </td>
+    <td></td>
+  </tr>
+  <tr>
+    <td><code>spark.kubernetes.test.executorRequestCores</code></td>
+    <td>
+      Set cpu resource for each executor pod in test, this is currently only for test on cpu resource limited cluster,
+      it's not recommended for other scenarios.
+    </td>
+    <td></td>
+  </tr>
 </table>
 
 # Running the Kubernetes Integration Tests with SBT

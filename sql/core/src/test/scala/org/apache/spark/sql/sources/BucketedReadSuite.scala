@@ -53,7 +53,7 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils with Adapti
 
   protected override def beforeAll(): Unit = {
     super.beforeAll()
-    spark.sessionState.conf.setConf(SQLConf.LEGACY_BUCKETED_TABLE_SCAN_OUTPUT_ORDERING, true)
+    spark.conf.set(SQLConf.LEGACY_BUCKETED_TABLE_SCAN_OUTPUT_ORDERING, true)
   }
 
   protected override def afterAll(): Unit = {

@@ -1828,7 +1828,7 @@ abstract class CSVSuite
       val idf = spark.read
         .schema(schema)
         .csv(path.getCanonicalPath)
-        .select(Symbol("f15"), Symbol("f10"), Symbol("f5"))
+        .select($"f15", $"f10", $"f5")
 
       assert(idf.count() == 2)
       checkAnswer(idf, List(Row(15, 10, 5), Row(-15, -10, -5)))

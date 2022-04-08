@@ -893,6 +893,70 @@ class MultiIndex(Index):
         )
         return cast(MultiIndex, DataFrame(internal).index)
 
+    def drop_duplicates(self, keep: Union[bool, str] = "first") -> "MultiIndex":
+        """
+        Return MultiIndex with duplicate values removed.
+
+        Parameters
+        ----------
+        keep : {'first', 'last', ``False``}, default 'first'
+            Method to handle dropping duplicates:
+            - 'first' : Drop duplicates except for the first occurrence.
+            - 'last' : Drop duplicates except for the last occurrence.
+            - ``False`` : Drop all duplicates.
+
+        Returns
+        -------
+        deduplicated : MultiIndex
+
+        See Also
+        --------
+        Series.drop_duplicates : Equivalent method on Series.
+        DataFrame.drop_duplicates : Equivalent method on DataFrame.
+
+        Examples
+        --------
+        Generate a MultiIndex with duplicate values.
+
+        >>> arrays = [[1, 2, 3, 1, 2], ["red", "blue", "black", "red", "blue"]]
+        >>> midx = ps.MultiIndex.from_arrays(arrays, names=("number", "color"))
+        >>> midx
+        MultiIndex([(1,   'red'),
+                    (2,  'blue'),
+                    (3, 'black'),
+                    (1,   'red'),
+                    (2,  'blue')],
+                   names=['number', 'color'])
+
+        >>> midx.drop_duplicates()
+        MultiIndex([(1,   'red'),
+                    (2,  'blue'),
+                    (3, 'black')],
+                   names=['number', 'color'])
+
+        >>> midx.drop_duplicates(keep='first')
+        MultiIndex([(1,   'red'),
+                    (2,  'blue'),
+                    (3, 'black')],
+                   names=['number', 'color'])
+
+        >>> midx.drop_duplicates(keep='last')
+        MultiIndex([(3, 'black'),
+                    (1,   'red'),
+                    (2,  'blue')],
+                   names=['number', 'color'])
+
+        >>> midx.drop_duplicates(keep=False)
+        MultiIndex([(3, 'black')],
+                   names=['number', 'color'])
+        """
+        with ps.option_context("compute.default_index_type", "distributed"):
+            # The attached index caused by `reset_index` below is used for sorting only,
+            # and it will be dropped soon,
+            # so we enforce “distributed” default index type
+            psdf = self.to_frame().reset_index(drop=True)
+        return ps.MultiIndex.from_frame(psdf.drop_duplicates(keep=keep).sort_index())
+
     def argmax(self) -> None:
         raise TypeError("reduction operation 'argmax' not allowed for this dtype")
 
