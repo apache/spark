@@ -138,9 +138,12 @@ class CogroupedMapInPandasTests(ReusedSQLTestCase):
                 "Return type of the user-defined function should be pandas.DataFrame, "
                 "but is <class 'numpy.int64'>",
             ):
-                left.groupby("id").cogroup(right.groupby("id")).applyInPandas(
-                    merge_pandas, "id long, k int, v int, v2 int"
-                ).collect()
+                (
+                    left.groupby("id")
+                    .cogroup(right.groupby("id"))
+                    .applyInPandas(merge_pandas, "id long, k int, v int, v2 int")
+                    .collect()
+                )
 
     def test_apply_in_pandas_returning_wrong_number_of_columns(self):
         left = self.data1
@@ -155,14 +158,17 @@ class CogroupedMapInPandasTests(ReusedSQLTestCase):
 
         with QuietTest(self.sc):
             with self.assertRaisesRegex(
-                    PythonException,
-                    "Number of columns of the returned pandas.DataFrame "
-                    "doesn't match specified schema. Expected: 4 Actual: 6",
+                PythonException,
+                "Number of columns of the returned pandas.DataFrame "
+                "doesn't match specified schema. Expected: 4 Actual: 6",
             ):
-                # merge_pandas returns two columns for even keys while we set schema to four
-                left.groupby("id").cogroup(right.groupby("id")).applyInPandas(
-                    merge_pandas, "id long, k int, v int, v2 int"
-                ).collect()
+                (
+                    # merge_pandas returns two columns for even keys while we set schema to four
+                    left.groupby("id")
+                    .cogroup(right.groupby("id"))
+                    .applyInPandas(merge_pandas, "id long, k int, v int, v2 int")
+                    .collect()
+                )
 
     def test_apply_in_pandas_returning_empty_dataframe(self):
         left = self.data1
@@ -207,10 +213,13 @@ class CogroupedMapInPandasTests(ReusedSQLTestCase):
                 "Number of columns of the returned pandas.DataFrame doesn't "
                 "match specified schema. Expected: 4 Actual: 2",
             ):
-                # merge_pandas returns two columns for even keys while we set schema to four
-                left.groupby("id").cogroup(right.groupby("id")).applyInPandas(
-                    merge_pandas, "id long, k int, v int, v2 int"
-                ).collect()
+                (
+                    # merge_pandas returns two columns for even keys while we set schema to four
+                    left.groupby("id")
+                    .cogroup(right.groupby("id"))
+                    .applyInPandas(merge_pandas, "id long, k int, v int, v2 int")
+                    .collect()
+                )
 
     def test_mixed_scalar_udfs_followed_by_cogrouby_apply(self):
         df = self.spark.range(0, 10).toDF("v1")

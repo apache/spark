@@ -108,9 +108,11 @@ class MapInPandasTests(ReusedSQLTestCase):
                 "Return type of the user-defined function should be Pandas.DataFrame, "
                 "but is <class 'int'>",
             ):
-                self.spark.range(10, numPartitions=3).mapInPandas(
-                    bad_iter, "a int, b string"
-                ).count()
+                (
+                    self.spark.range(10, numPartitions=3)
+                    .mapInPandas(bad_iter, "a int, b string")
+                    .count()
+                )
 
     def test_empty_iterator(self):
         def empty_iter(_):
@@ -133,26 +135,32 @@ class MapInPandasTests(ReusedSQLTestCase):
             # after yielding all elements of the iterator, also yield one dataframe without columns
             yield pd.DataFrame([])
 
-        mapped = self.spark.range(10, numPartitions=3).toDF("id").mapInPandas(empty_dataframes_wo_columns, "id int")
+        mapped = (
+            self.spark.range(10, numPartitions=3)
+            .toDF("id")
+            .mapInPandas(empty_dataframes_wo_columns, "id int")
+        )
         self.assertEqual(mapped.count(), 10)
 
     def test_empty_dataframes_with_less_columns(self):
         def empty_dataframes_with_less_columns(iterator):
             for pdf in iterator:
                 yield pdf
-            # after yielding all elements of the iterator, also yield one dataframe with less columns
+            # after yielding all elements of the iterator, also yield a dataframe with less columns
             yield pd.DataFrame([(1,)], columns=["id"])
 
         with QuietTest(self.sc):
             with self.assertRaisesRegex(
-                    PythonException,
-                    "KeyError: 'value'",
+                PythonException,
+                "KeyError: 'value'",
             ):
-                self.spark.range(10, numPartitions=3) \
-                    .withColumn("value", lit(0)) \
-                    .toDF("id", "value") \
-                    .mapInPandas(empty_dataframes_with_less_columns, "id int, value int") \
+                (
+                    self.spark.range(10, numPartitions=3)
+                    .withColumn("value", lit(0))
+                    .toDF("id", "value")
+                    .mapInPandas(empty_dataframes_with_less_columns, "id int, value int")
                     .collect()
+                )
 
     def test_chain_map_partitions_in_pandas(self):
         def func(iterator):

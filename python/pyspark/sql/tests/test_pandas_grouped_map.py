@@ -272,7 +272,7 @@ class GroupedMapInPandasTests(ReusedSQLTestCase):
     def test_apply_in_pandas_not_returning_pandas_dataframe(self):
         df = self.data
 
-        def stats(key, pdf):
+        def stats(key, _):
             return key
 
         with QuietTest(self.sc):
