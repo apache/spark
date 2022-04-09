@@ -2219,7 +2219,12 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         else:
             return first_series(psdf)
 
-    def clip(self, lower: Union[float, int] = None, upper: Union[float, int] = None) -> "Series":
+    def clip(
+        self,
+        lower: Union[float, int] = None,
+        upper: Union[float, int] = None,
+        inplace: bool = False,
+    ) -> "Series":
         """
         Trim values at input threshold(s).
 
@@ -2231,6 +2236,8 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             Minimum threshold value. All values below this threshold will be set to it.
         upper : float or int, default None
             Maximum threshold value. All values above this threshold will be set to it.
+        inplace : bool, default False
+             if True, perform operation in-place
 
         Returns
         -------
@@ -2239,8 +2246,24 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
         Examples
         --------
-        >>> ps.Series([0, 2, 4]).clip(1, 3)
+        >>> psser = ps.Series([0, 2, 4])
+        >>> psser
+        0    0
+        1    2
+        2    4
+        dtype: int64
+
+        >>> psser.clip(1, 3)
         0    1
+        1    2
+        2    3
+        dtype: int64
+
+        Clip can be performed in-place.
+
+        >>> psser.clip(2, 3, inplace=True)
+        >>> psser
+        0    2
         1    2
         2    3
         dtype: int64
@@ -2266,10 +2289,18 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
                 scol = F.when(scol < lower, lower).otherwise(scol)
             if upper is not None:
                 scol = F.when(scol > upper, upper).otherwise(scol)
-            return self._with_new_scol(
-                scol.alias(self._internal.data_spark_column_names[0]),
-                field=self._internal.data_fields[0],
-            )
+            if inplace:
+                internal = self._internal.copy(
+                    data_spark_columns=[scol.alias(self._internal.data_spark_column_names[0])],
+                    data_fields=[self._internal.data_fields[0]],
+                )
+                self._psdf._update_internal_frame(internal, requires_same_anchor=False)
+                return None
+            else:
+                return self._with_new_scol(
+                    scol.alias(self._internal.data_spark_column_names[0]),
+                    field=self._internal.data_fields[0],
+                )
         else:
             return self
 

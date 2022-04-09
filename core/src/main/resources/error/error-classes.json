@@ -12,7 +12,7 @@
     "sqlState" : "22005"
   },
   "CANNOT_CHANGE_DECIMAL_PRECISION" : {
-    "message" : [ "%s cannot be represented as Decimal(%s, %s). If necessary set %s to false to bypass this error." ],
+    "message" : [ "%s cannot be represented as Decimal(%s, %s). If necessary set %s to false to bypass this error.%s" ],
     "sqlState" : "22005"
   },
   "CANNOT_PARSE_DECIMAL" : {
