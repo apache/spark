@@ -18,7 +18,9 @@ package org.apache.spark.deploy.k8s.features
 
 import scala.collection.JavaConverters._
 
-import org.apache.spark.deploy.k8s.{KubernetesConf, KubernetesUtils, SparkPod}
+import io.fabric8.kubernetes.api.model.{ConfigMapBuilder, ContainerBuilder, HasMetadata, KeyToPathBuilder, PodBuilder, VolumeBuilder}
+
+import org.apache.spark.deploy.k8s.{Config, KubernetesConf, KubernetesUtils, SparkPod}
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.submit.KubernetesClientUtils
@@ -53,7 +55,7 @@ private[spark] class HadoopConfDriverFeatureStep(conf: KubernetesConf)
     original.transform { case pod if hasHadoopConf =>
       val confVolume = if (confDir.isDefined) {
         val keyPaths = confFilesMap.map {
-          case (fileName: String, _:String) =>
+          case (fileName: String, _: String) =>
             new KeyToPathBuilder()
               .withKey(fileName)
               .withPath(fileName)

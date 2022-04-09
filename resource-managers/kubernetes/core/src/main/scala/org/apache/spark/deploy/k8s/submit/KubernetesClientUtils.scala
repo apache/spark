@@ -126,7 +126,7 @@ private[spark] object KubernetesClientUtils extends Logging {
     }
   }
 
-  private[submit] def loadHadoopConfDirFiles(
+  def loadHadoopConfDirFiles(
       confDir: Option[String],
       maxSize: Long): Map[String, String] = {
     if (confDir.isDefined) {
