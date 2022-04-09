@@ -3231,6 +3231,14 @@ class Frame(object, metaclass=ABCMeta):
 
     pad = ffill
 
+    # TODO: add 'axis', 'inplace', 'limit_direction', 'limit_area', 'downcast'
+    def interpolate(
+        self: FrameLike,
+        method: Optional[str] = None,
+        limit: Optional[int] = None,
+    ) -> FrameLike:
+        return self.interpolate(method=method, limit=limit)
+
     @property
     def at(self) -> AtIndexer:
         return AtIndexer(self)
