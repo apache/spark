@@ -1545,13 +1545,16 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
 
   test("SPARK-38573: partition stats auto update for dynamic partitions") {
     val table = "partition_stats_dynamic_partition"
-    withSQLConf(SQLConf.AUTO_SIZE_UPDATE_ENABLED.key -> "true") {
-      withTable(table) {
-        sql(s"CREATE TABLE $table (id INT, sp INT, dp INT) USING hive PARTITIONED BY (sp, dp)")
-        sql(s"INSERT OVERWRITE TABLE $table PARTITION (sp=0, dp) SELECT id, id FROM range(5)")
-        for (i <- 0 until 5) {
-          val partStats = getPartitionStats(table, Map("sp" -> s"0", "dp" -> s"$i"))
-          assert(partStats.sizeInBytes > 0)
+    Seq("hive", "parquet").foreach { source =>
+      withSQLConf(SQLConf.AUTO_SIZE_UPDATE_ENABLED.key -> "true") {
+        withTable(table) {
+          sql(s"CREATE TABLE $table (id INT, sp INT, dp INT) USING $source PARTITIONED BY (sp, dp)")
+          sql(s"INSERT INTO $table PARTITION (sp=0, dp) VALUES (0, 0)")
+          sql(s"INSERT OVERWRITE TABLE $table PARTITION (sp=0, dp) SELECT id, id FROM range(5)")
+          for (i <- 0 until 5) {
+            val partStats = getPartitionStats(table, Map("sp" -> s"0", "dp" -> s"$i"))
+            assert(partStats.sizeInBytes > 0)
+          }
         }
       }
     }

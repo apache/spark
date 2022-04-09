@@ -67,7 +67,7 @@ object CommandUtils extends Logging {
         val newStats = CatalogStatistics(sizeInBytes = newSize)
         catalog.alterTableStats(table.identifier, Some(newStats))
 
-        if (!isDropPartition) {
+        if (!isDropPartition && table.partitionColumnNames.nonEmpty) {
           if (partitionSpecs.nonEmpty) {
             partitionSpecs.foreach { partitionSpec =>
               val partSpec = partitionSpec.map {
@@ -76,7 +76,7 @@ object CommandUtils extends Logging {
               }
               AnalyzePartitionCommand(table.identifier, partSpec).run(sparkSession)
             }
-          } else if (table.partitionColumnNames.nonEmpty) {
+          } else {
             AnalyzePartitionCommand(table.identifier, Map()).run(sparkSession)
           }
         }
