@@ -369,16 +369,7 @@ case class FileSourceScanExec(
   }
 
   @transient
-  private lazy val pushedDownFilters = {
-    val supportNestedPredicatePushdown = DataSourceUtils.supportNestedPredicatePushdown(relation)
-    // `dataFilters` should not include any metadata col filters
-    // because the metadata struct has been flatted in FileSourceStrategy
-    // and thus metadata col filters are invalid to be pushed down
-    dataFilters.filterNot(_.references.exists {
-      case FileSourceMetadataAttribute(_) => true
-      case _ => false
-    }).flatMap(DataSourceStrategy.translateFilter(_, supportNestedPredicatePushdown))
-  }
+  private lazy val pushedDownFilters = DataSourceStrategy.pushedDownFilters(dataFilters, relation)
 
   override lazy val metadata: Map[String, String] = {
     def seqToString(seq: Seq[Any]) = seq.mkString("[", ", ", "]")

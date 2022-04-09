@@ -192,10 +192,7 @@ object FileSourceStrategy extends Strategy with PredicateHelper with Logging {
           Some(f)
         }
       }
-      val supportNestedPredicatePushdown =
-        DataSourceUtils.supportNestedPredicatePushdown(fsRelation)
-      val pushedFilters = dataFilters
-        .flatMap(DataSourceStrategy.translateFilter(_, supportNestedPredicatePushdown))
+      val pushedFilters = DataSourceStrategy.pushedDownFilters(dataFilters, fsRelation)
       logInfo(s"Pushed Filters: ${pushedFilters.mkString(",")}")
 
       // Predicates with both partition keys and attributes need to be evaluated after the scan.
