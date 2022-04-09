@@ -1634,11 +1634,11 @@ abstract class FsHistoryProviderSuite extends SparkFunSuite with Matchers with L
       // For completed files, lastUpdated would be lastModified time.
       list(0) should be (makeAppInfo("new-app-complete", newAppComplete.getName(), 1L, 5L,
         newAppComplete.lastModified(), "test", true))
-      list(1) should be (makeAppInfo("new-complete-lzf", newAppCompressedComplete.getName,
+      list(1) should be (makeAppInfo("new-complete-lzf", newAppCompressedComplete.getName(),
         1L, 4L, newAppCompressedComplete.lastModified(), "test", true))
 
       // For Inprogress files, lastUpdated would be current loading time.
-      list(2) should be (makeAppInfo("new-incomplete", newAppIncomplete.getName, 1L, -1L,
+      list(2) should be (makeAppInfo("new-incomplete", newAppIncomplete.getName(), 1L, -1L,
         clock.getTimeMillis(), "test", false))
 
       // Make sure the UI can be rendered.
