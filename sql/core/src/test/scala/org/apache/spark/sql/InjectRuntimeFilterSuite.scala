@@ -526,4 +526,60 @@ class InjectRuntimeFilterSuite extends QueryTest with SQLTestUtils with SharedSp
         "bf1.c1 = square(bf2.c2) where bf2.a2 = 62" )
     }
   }
+
+  test("Runtime Filter supports pruning side has Aggregate") {
+    withSQLConf(SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "3000") {
+      assertRewroteWithBloomFilter(
+        """
+          |SELECT *
+          |FROM   (SELECT c1 AS aliased_c1, d1 FROM bf1 GROUP BY c1, d1) bf1
+          |       JOIN bf2 ON bf1.aliased_c1 = bf2.c2
+          |WHERE  bf2.a2 = 62
+        """.stripMargin)
+    }
+  }
+
+  test("Runtime Filter supports pruning side has Window") {
+    withSQLConf(SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "3000") {
+      assertRewroteWithBloomFilter(
+        """
+          |SELECT *
+          |FROM   (SELECT *,
+          |               Row_number() OVER (PARTITION BY c1 ORDER BY f1) rn
+          |        FROM   bf1) bf1
+          |       JOIN bf2 ON bf1.c1 = bf2.c2
+          |WHERE  bf2.a2 = 62
+        """.stripMargin)
+    }
+  }
+
+  test("Make sure injected filters could push through Shuffle") {
+    withSQLConf(SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "3000") {
+      assertDidNotRewriteWithBloomFilter(
+        """
+          |SELECT *
+          |FROM   (SELECT max(c1) AS c1, min(d1) AS d1 FROM bf1) bf1
+          |       JOIN bf2 ON bf1.c1 = bf2.c2
+          |WHERE  bf2.a2 = 62
+        """.stripMargin)
+
+      assertDidNotRewriteWithBloomFilter(
+        """
+          |SELECT *
+          |FROM   (SELECT max(c1) AS c1, d1 FROM bf1 GROUP BY d1) bf1
+          |       JOIN bf2 ON bf1.c1 = bf2.c2
+          |WHERE  bf2.a2 = 62
+        """.stripMargin)
+
+      assertDidNotRewriteWithBloomFilter(
+        """
+          |SELECT *
+          |FROM   (SELECT *,
+          |               Row_number() OVER (PARTITION BY d1 ORDER BY f1) rn
+          |        FROM   bf1) bf1
+          |       JOIN bf2 ON bf1.c1 = bf2.c2
+          |WHERE  bf2.a2 = 62
+        """.stripMargin)
+    }
+  }
 }
