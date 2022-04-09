@@ -1556,4 +1556,54 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
       }
     }
   }
+
+  test("SPARK-38573: change partition stats after load/set/truncate data command") {
+    val table = "partition_stats_load_set_truncate"
+    withSQLConf(SQLConf.AUTO_SIZE_UPDATE_ENABLED.key -> "true") {
+      withTable(table) {
+        sql(s"CREATE TABLE $table (i INT, j STRING) USING hive " +
+          "PARTITIONED BY (ds STRING, hr STRING)")
+
+        withTempPaths(numPaths = 2) { case Seq(dir1, dir2) =>
+          val partDir1 = new File(new File(dir1, "ds=2008-04-09"), "hr=11")
+          val file1 = new File(partDir1, "data")
+          file1.getParentFile.mkdirs()
+          Utils.tryWithResource(new PrintWriter(file1)) { writer =>
+            writer.write("1,a")
+          }
+
+          val partDir2 = new File(new File(dir2, "ds=2008-04-09"), "hr=12")
+          val file2 = new File(partDir2, "data")
+          file2.getParentFile.mkdirs()
+          Utils.tryWithResource(new PrintWriter(file2)) { writer =>
+            writer.write("1,a")
+          }
+
+          sql(s"""
+            |LOAD DATA INPATH '${file1.toURI.toString}' INTO TABLE $table
+            |PARTITION (ds='2008-04-09', hr='11')
+            """.stripMargin)
+          sql(s"ALTER TABLE $table ADD PARTITION (ds='2008-04-09', hr='12')")
+          sql(s"""
+            |ALTER TABLE $table PARTITION (ds='2008-04-09', hr='12')
+            |SET LOCATION '${partDir2.toURI.toString}'
+            |""".stripMargin)
+          val partStats1 = getPartitionStats(table, Map("ds" -> "2008-04-09", "hr" -> "11"))
+          assert(partStats1.sizeInBytes > 0)
+          val partStats2 = getPartitionStats(table, Map("ds" -> "2008-04-09", "hr" -> "12"))
+          assert(partStats2.sizeInBytes > 0)
+
+
+          sql(s"TRUNCATE TABLE $table PARTITION (ds='2008-04-09', hr='11')")
+          val partStats3 = getPartitionStats(table, Map("ds" -> "2008-04-09", "hr" -> "11"))
+          assert(partStats3.sizeInBytes == 0)
+          val partStats4 = getPartitionStats(table, Map("ds" -> "2008-04-09", "hr" -> "12"))
+          assert(partStats4.sizeInBytes > 0)
+          sql(s"TRUNCATE TABLE $table")
+          val partStats5 = getPartitionStats(table, Map("ds" -> "2008-04-09", "hr" -> "12"))
+          assert(partStats5.sizeInBytes == 0)
+        }
+      }
+    }
+  }
 }
