@@ -59,7 +59,7 @@ import org.apache.spark.util.kvstore.InMemoryStore
 import org.apache.spark.util.logging.DriverLogger
 
 class NoDiskBackendFsHistoryProviderSuite extends FsHistoryProviderSuite {
-  test(s"Parse application logs (inMemory = true)") {
+  test("Parse application logs (Parse application logs (inMemory = true)") {
     testAppLogParsing(inMemory = true)
   }
 
@@ -222,7 +222,7 @@ class RocksDBBackendFsHistoryProviderSuite extends DiskBackendFsHistoryProviderS
 }
 
 abstract class DiskBackendFsHistoryProviderSuite extends FsHistoryProviderSuite {
-  test(s"Parse application logs (inMemory = false)") {
+  test("Parse application logs (inMemory = false)") {
     testAppLogParsing(inMemory = false)
   }
 
