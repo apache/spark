@@ -120,9 +120,6 @@
     "message" : [ "Invalid SQL syntax: %s" ],
     "sqlState" : "42000"
   },
-  "INVALID_UDF" : {
-    "message" : [ "Invalid UDF: %s" ]
-  },
   "MAP_KEY_DOES_NOT_EXIST" : {
     "message" : [ "Key %s does not exist. If necessary set %s to false to bypass this error.%s" ]
   },
@@ -137,6 +134,9 @@
     "message" : [ "Unknown static partition column: %s" ],
     "sqlState" : "42000"
   },
+  "MULTI_UDF_INTERFACE_ERROR" : {
+    "message" : [ "Not allowed to implement multiple UDF interfaces, UDF class %s" ]
+  },
   "NON_LITERAL_PIVOT_VALUES" : {
     "message" : [ "Literal expressions required for pivot values, found '%s'" ],
     "sqlState" : "42000"
@@ -147,6 +147,9 @@
   },
   "NO_HANDLER_FOR_UDAF" : {
     "message" : [ "No handler for UDAF '%s'. Use sparkSession.udf.register(...) instead." ]
+  },
+  "NO_UDF_INTERFACE_ERROR" : {
+    "message" : [ "UDF class %s doesn't implement any UDF interface" ]
   },
   "PARSE_CHAR_MISSING_LENGTH" : {
     "message" : [ "DataType %s requires a length parameter, for example %s(10). Please specify the length." ],
@@ -172,11 +175,8 @@
     "message" : [ "The second argument of '%s' function needs to be an integer." ],
     "sqlState" : "22023"
   },
-  "UDF_CLASS_IMPLEMENT_MULTI_UDF_INTERFACE" : {
-    "message" : [ "It is invalid to implement multiple UDF interfaces, UDF class %s" ]
-  },
-  "UDF_CLASS_NOT_IMPLEMENT_ANY_UDF_INTERFACE" : {
-    "message" : [ "UDF class %s doesn't implement any UDF interface" ]
+  "UDF_WITH_TOO_MANY_TYPE_ARGUMENT_ERROR" : {
+    "message" : [ "UDF class with %s type arguments is not supported" ]
   },
   "UNABLE_TO_ACQUIRE_MEMORY" : {
     "message" : [ "Unable to acquire %s bytes of memory, got %s" ]

@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.catalog
 
+import org.apache.spark.SparkThrowableHelper
 import org.apache.spark.sql.AnalysisException
 
 /**
@@ -24,9 +25,10 @@ import org.apache.spark.sql.AnalysisException
  * function's class does not follow the rules of the UDF/UDAF/UDTF class definition.
  */
 class InvalidUDFClassException private[sql](
-    errorClass: String,
-    messageParameters: Array[String])
-  extends AnalysisException(errorClass, messageParameters) {
+    message: String,
+    errorClass: Option[String] = None)
+  extends AnalysisException(message = message, errorClass = errorClass) {
 
-  def this(message: String) = this("INVALID_UDF", Array(message))
+  def this(errorClass: String, messageParameters: Array[String]) =
+    this(SparkThrowableHelper.getMessage(errorClass, messageParameters), Some(errorClass))
 }

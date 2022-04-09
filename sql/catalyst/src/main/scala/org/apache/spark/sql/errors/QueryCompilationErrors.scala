@@ -2298,21 +2298,20 @@ object QueryCompilationErrors {
 
   def udfClassDoesNotImplementAnyUDFInterfaceError(className: String): Throwable = {
     new AnalysisException(
-      errorClass = "UDF_CLASS_NOT_IMPLEMENT_ANY_UDF_INTERFACE",
+      errorClass = "NO_UDF_INTERFACE_ERROR",
       messageParameters = Array(className))
   }
 
-  def udfClassNotAllowedToImplementMultiUDFInterfacesError(className: String): Throwable = {
+  def udfClassImplementMultiUDFInterfacesError(className: String): Throwable = {
     new AnalysisException(
-      errorClass = "UDF_CLASS_IMPLEMENT_MULTI_UDF_INTERFACE",
+      errorClass = "MULTI_UDF_INTERFACE_ERROR",
       messageParameters = Array(className))
   }
 
   def udfClassWithTooManyTypeArgumentsError(n: Int): Throwable = {
     new AnalysisException(
-      errorClass = "UNSUPPORTED_FEATURE",
-      messageParameters = Array(
-        s"UDF class with $n type arguments is not supported."))
+      errorClass = "UDF_WITH_TOO_MANY_TYPE_ARGUMENT_ERROR",
+      messageParameters = Array(n.toString))
   }
 
   def classWithoutPublicNonArgumentConstructorError(className: String): Throwable = {

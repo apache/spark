@@ -183,13 +183,13 @@ class QueryCompilationErrorsSuite extends QueryTest with SharedSparkSession {
           |""".stripMargin)
 
       val e = intercept[AnalysisException] (
-        sql("SELECT myCast(123) as value")
+        sql(s"SELECT $functionName(123) as value")
       )
 
       assert(e.errorClass === Some("NO_HANDLER_FOR_UDAF"))
       assert(e.message ===
-        s"No handler for UDAF 'org.apache.spark.sql.errors.MyCastToString'. " +
-          s"Use sparkSession.udf.register(...) instead.")
+        "No handler for UDAF 'org.apache.spark.sql.errors.MyCastToString'. " +
+        "Use sparkSession.udf.register(...) instead.")
     }
   }
 
@@ -211,8 +211,7 @@ class QueryCompilationErrorsSuite extends QueryTest with SharedSparkSession {
       s"use this API with caution")
   }
 
-  test("UDF_CLASS_NOT_IMPLEMENT_ANY_UDF_INTERFACE: " +
-    "java udf class does not implement any udf interface") {
+  test("NO_UDF_INTERFACE_ERROR: java udf class does not implement any udf interface") {
     val className = "org.apache.spark.sql.errors.MyCastToString"
     val e = intercept[AnalysisException](
       spark.udf.registerJava(
@@ -221,12 +220,12 @@ class QueryCompilationErrorsSuite extends QueryTest with SharedSparkSession {
         StringType)
     )
 
-    assert(e.errorClass === Some("UDF_CLASS_NOT_IMPLEMENT_ANY_UDF_INTERFACE"))
+    assert(e.errorClass === Some("NO_UDF_INTERFACE_ERROR"))
     assert(e.message ===
       s"UDF class $className doesn't implement any UDF interface")
   }
 
-  test("UDF_CLASS_IMPLEMENT_MULTI_UDF_INTERFACE: java udf implement multi UDF interface") {
+  test("MULTI_UDF_INTERFACE_ERROR: java udf implement multi UDF interface") {
     val className = "org.apache.spark.sql.errors.MySum"
     val e = intercept[AnalysisException](
       spark.udf.registerJava(
@@ -235,12 +234,12 @@ class QueryCompilationErrorsSuite extends QueryTest with SharedSparkSession {
         StringType)
     )
 
-    assert(e.errorClass === Some("UDF_CLASS_IMPLEMENT_MULTI_UDF_INTERFACE"))
+    assert(e.errorClass === Some("MULTI_UDF_INTERFACE_ERROR"))
     assert(e.message ===
-      s"It is invalid to implement multiple UDF interfaces, UDF class $className")
+      s"Not allowed to implement multiple UDF interfaces, UDF class $className")
   }
 
-  test("UNSUPPORTED_FEATURE: java udf with too many type arguments") {
+  test("UDF_WITH_TOO_MANY_TYPE_ARGUMENT_ERROR: java udf with too many type arguments") {
     val className = "org.apache.spark.sql.errors.MultiIntSum"
     val e = intercept[AnalysisException](
       spark.udf.registerJava(
@@ -249,10 +248,9 @@ class QueryCompilationErrorsSuite extends QueryTest with SharedSparkSession {
         StringType)
     )
 
-    assert(e.errorClass === Some("UNSUPPORTED_FEATURE"))
-    assert(e.getSqlState === "0A000")
+    assert(e.errorClass === Some("UDF_WITH_TOO_MANY_TYPE_ARGUMENT_ERROR"))
     assert(e.message ===
-      s"The feature is not supported: UDF class with 24 type arguments is not supported.")
+      s"UDF class with 24 type arguments is not supported.")
   }
 }
 
