@@ -2311,7 +2311,7 @@ object QueryCompilationErrors {
   def udfClassWithTooManyTypeArgumentsError(n: Int): Throwable = {
     new AnalysisException(
       errorClass = "UNSUPPORTED_FEATURE",
-      messageParameters = Array(s"UDF class with $n arguments"))
+      messageParameters = Array(s"UDF class with $n type arguments"))
   }
 
   def classWithoutPublicNonArgumentConstructorError(className: String): Throwable = {

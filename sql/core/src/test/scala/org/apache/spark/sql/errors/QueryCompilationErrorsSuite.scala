@@ -252,7 +252,7 @@ class QueryCompilationErrorsSuite extends QueryTest with SharedSparkSession {
 
     assert(e.errorClass === Some("UNSUPPORTED_FEATURE"))
     assert(e.getSqlState === "0A000")
-    assert(e.message === "The feature is not supported: UDF class with 23 arguments")
+    assert(e.message === "The feature is not supported: UDF class with 24 type arguments")
   }
 }
 
