@@ -16,13 +16,19 @@
 #
 
 import sys
+from typing import cast, overload, List, Optional, TYPE_CHECKING, Union
+
+from numpy import ndarray
+from py4j.java_gateway import JavaObject
 
 from pyspark.rdd import RDD
 from pyspark.mllib.common import callMLlibFunc, JavaModelWrapper
-from pyspark.mllib.linalg import Matrix, _convert_to_vector
+from pyspark.mllib.linalg import Matrix, Vector, _convert_to_vector
 from pyspark.mllib.regression import LabeledPoint
 from pyspark.mllib.stat.test import ChiSqTestResult, KolmogorovSmirnovTestResult
 
+if TYPE_CHECKING:
+    from pyspark.mllib._typing import CorrelationMethod, DistName
 
 __all__ = ["MultivariateStatisticalSummary", "Statistics"]
 
@@ -33,34 +39,34 @@ class MultivariateStatisticalSummary(JavaModelWrapper):
     Trait for multivariate statistical summary of a data matrix.
     """
 
-    def mean(self):
-        return self.call("mean").toArray()
+    def mean(self) -> ndarray:
+        return cast(JavaObject, self.call("mean")).toArray()
 
-    def variance(self):
-        return self.call("variance").toArray()
+    def variance(self) -> ndarray:
+        return cast(JavaObject, self.call("variance")).toArray()
 
-    def count(self):
+    def count(self) -> int:
         return int(self.call("count"))
 
-    def numNonzeros(self):
-        return self.call("numNonzeros").toArray()
+    def numNonzeros(self) -> ndarray:
+        return cast(JavaObject, self.call("numNonzeros")).toArray()
 
-    def max(self):
-        return self.call("max").toArray()
+    def max(self) -> ndarray:
+        return cast(JavaObject, self.call("max")).toArray()
 
-    def min(self):
-        return self.call("min").toArray()
+    def min(self) -> ndarray:
+        return cast(JavaObject, self.call("min")).toArray()
 
-    def normL1(self):
-        return self.call("normL1").toArray()
+    def normL1(self) -> ndarray:
+        return cast(JavaObject, self.call("normL1")).toArray()
 
-    def normL2(self):
-        return self.call("normL2").toArray()
+    def normL2(self) -> ndarray:
+        return cast(JavaObject, self.call("normL2")).toArray()
 
 
 class Statistics:
     @staticmethod
-    def colStats(rdd):
+    def colStats(rdd: RDD[Vector]) -> MultivariateStatisticalSummary:
         """
         Computes column-wise summary statistics for the input RDD[Vector].
 
@@ -98,8 +104,22 @@ class Statistics:
         cStats = callMLlibFunc("colStats", rdd.map(_convert_to_vector))
         return MultivariateStatisticalSummary(cStats)
 
+    @overload
     @staticmethod
-    def corr(x, y=None, method=None):
+    def corr(x: RDD[Vector], *, method: Optional["CorrelationMethod"] = ...) -> Matrix:
+        ...
+
+    @overload
+    @staticmethod
+    def corr(x: RDD[float], y: RDD[float], method: Optional["CorrelationMethod"] = ...) -> float:
+        ...
+
+    @staticmethod
+    def corr(
+        x: Union[RDD[Vector], RDD[float]],
+        y: Optional[RDD[float]] = None,
+        method: Optional["CorrelationMethod"] = None,
+    ) -> Union[float, Matrix]:
         """
         Compute the correlation (matrix) for the input RDD(s) using the
         specified method.
@@ -168,12 +188,34 @@ class Statistics:
             raise TypeError("Use 'method=' to specify method name.")
 
         if not y:
-            return callMLlibFunc("corr", x.map(_convert_to_vector), method).toArray()
+            return cast(
+                JavaObject, callMLlibFunc("corr", x.map(_convert_to_vector), method)
+            ).toArray()
         else:
-            return callMLlibFunc("corr", x.map(float), y.map(float), method)
+            return cast(
+                float,
+                callMLlibFunc("corr", cast(RDD[float], x).map(float), y.map(float), method),
+            )
+
+    @overload
+    @staticmethod
+    def chiSqTest(observed: Matrix) -> ChiSqTestResult:
+        ...
+
+    @overload
+    @staticmethod
+    def chiSqTest(observed: Vector, expected: Optional[Vector] = ...) -> ChiSqTestResult:
+        ...
+
+    @overload
+    @staticmethod
+    def chiSqTest(observed: RDD[LabeledPoint]) -> List[ChiSqTestResult]:
+        ...
 
     @staticmethod
-    def chiSqTest(observed, expected=None):
+    def chiSqTest(
+        observed: Union[Matrix, RDD[LabeledPoint], Vector], expected: Optional[Vector] = None
+    ) -> Union[ChiSqTestResult, List[ChiSqTestResult]]:
         """
         If `observed` is Vector, conduct Pearson's chi-squared goodness
         of fit test of the observed data against the expected distribution,
@@ -270,7 +312,9 @@ class Statistics:
         return ChiSqTestResult(jmodel)
 
     @staticmethod
-    def kolmogorovSmirnovTest(data, distName="norm", *params):
+    def kolmogorovSmirnovTest(
+        data: RDD[float], distName: "DistName" = "norm", *params: float
+    ) -> KolmogorovSmirnovTestResult:
         """
         Performs the Kolmogorov-Smirnov (KS) test for data sampled from
         a continuous distribution. It tests the null hypothesis that
@@ -334,13 +378,13 @@ class Statistics:
         if not isinstance(distName, str):
             raise TypeError("distName should be a string, got %s." % type(distName))
 
-        params = [float(param) for param in params]
+        param_list = [float(param) for param in params]
         return KolmogorovSmirnovTestResult(
-            callMLlibFunc("kolmogorovSmirnovTest", data, distName, params)
+            callMLlibFunc("kolmogorovSmirnovTest", data, distName, param_list)
         )
 
 
-def _test():
+def _test() -> None:
     import doctest
     import numpy
     from pyspark.sql import SparkSession
