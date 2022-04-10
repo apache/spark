@@ -954,6 +954,8 @@ object SparkSession extends Logging {
           // Do not update `SparkConf` for existing `SparkContext`, as it's shared by all sessions.
         }
 
+        options.foreach { case (k, v) => sparkContext.conf.set(k, v) }
+
         loadExtensions(extensions)
         applyExtensions(
           sparkContext.getConf.get(StaticSQLConf.SPARK_SESSION_EXTENSIONS).getOrElse(Seq.empty),
