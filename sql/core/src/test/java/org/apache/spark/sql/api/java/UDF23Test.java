@@ -15,20 +15,21 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.catalyst.catalog
+package org.apache.spark.sql.api.java;
 
-import org.apache.spark.SparkThrowableHelper
-import org.apache.spark.sql.AnalysisException
+import java.io.Serializable;
+
+import org.apache.spark.annotation.Stable;
 
 /**
- * Thrown when a query failed for invalid function class, usually because a SQL
- * function's class does not follow the rules of the UDF/UDAF/UDTF class definition.
+ * A Spark SQL UDF that has 23 arguments for test.
  */
-class InvalidUDFClassException private[sql](
-    message: String,
-    errorClass: Option[String] = None)
-  extends AnalysisException(message = message, errorClass = errorClass) {
+@Stable
+public interface UDF23Test<T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12,
+    T13, T14, T15, T16, T17, T18, T19, T20, T21, T22, T23, R> extends Serializable {
 
-  def this(errorClass: String, messageParameters: Array[String]) =
-    this(SparkThrowableHelper.getMessage(errorClass, messageParameters), Some(errorClass))
+  R call(
+      T1 t1, T2 t2, T3 t3, T4 t4, T5 t5, T6 t6, T7 t7, T8 t8, T9 t9, T10 t10,
+      T11 t11, T12 t12, T13 t13, T14 t14, T15 t15, T16 t16, T17 t17, T18 t18,
+      T19 t19, T20 t20, T21 t21, T22 t22, T23 t23) throws Exception;
 }
