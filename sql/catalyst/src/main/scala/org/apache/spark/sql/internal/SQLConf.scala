@@ -364,7 +364,7 @@ object SQLConf {
         "to insert a bloom filter in the other side to reduce the amount of shuffle data.")
       .version("3.3.0")
       .booleanConf
-      .createWithDefault(false)
+      .createWithDefault(true)
 
   val RUNTIME_BLOOM_FILTER_CREATION_SIDE_THRESHOLD =
     buildConf("spark.sql.optimizer.runtime.bloomFilter.creationSideThreshold")
@@ -1015,7 +1015,7 @@ object SQLConf {
           s"Requires ${PARQUET_VECTORIZED_READER_ENABLED.key} to be enabled.")
       .version("3.3.0")
       .booleanConf
-      .createWithDefault(false)
+      .createWithDefault(true)
 
   val PARQUET_RECORD_FILTER_ENABLED = buildConf("spark.sql.parquet.recordLevelFilter.enabled")
     .doc("If true, enables Parquet's native record-level filtering using the pushed down " +
@@ -3237,9 +3237,9 @@ object SQLConf {
         s"and type literal. Setting the configuration as ${TimestampTypes.TIMESTAMP_NTZ} will " +
         "use TIMESTAMP WITHOUT TIME ZONE as the default type while putting it as " +
         s"${TimestampTypes.TIMESTAMP_LTZ} will use TIMESTAMP WITH LOCAL TIME ZONE. " +
-        "Before the 3.3.0 release, Spark only supports the TIMESTAMP WITH " +
+        "Before the 3.4.0 release, Spark only supports the TIMESTAMP WITH " +
         "LOCAL TIME ZONE type.")
-      .version("3.3.0")
+      .version("3.4.0")
       .stringConf
       .transform(_.toUpperCase(Locale.ROOT))
       .checkValues(TimestampTypes.values.map(_.toString))

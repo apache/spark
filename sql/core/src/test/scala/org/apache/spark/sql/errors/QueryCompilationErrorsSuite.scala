@@ -18,9 +18,12 @@
 package org.apache.spark.sql.errors
 
 import org.apache.spark.sql.{AnalysisException, IntegratedUDFTestUtils, QueryTest}
-import org.apache.spark.sql.functions.{grouping, grouping_id, sum}
+import org.apache.spark.sql.api.java.{UDF1, UDF2, UDF23Test}
+import org.apache.spark.sql.expressions.SparkUserDefinedFunction
+import org.apache.spark.sql.functions.{grouping, grouping_id, sum, udf}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.types.{IntegerType, StringType}
 
 case class StringLongClass(a: String, b: Long)
 
@@ -171,4 +174,113 @@ class QueryCompilationErrorsSuite extends QueryTest with SharedSparkSession {
       "The feature is not supported: " +
       "Pandas UDF aggregate expressions don't support pivot.")
   }
+
+  test("NO_HANDLER_FOR_UDAF: No handler for UDAF error") {
+    val functionName = "myCast"
+    withUserDefinedFunction(functionName -> true) {
+      sql(
+        s"""
+          |CREATE TEMPORARY FUNCTION $functionName
+          |AS 'org.apache.spark.sql.errors.MyCastToString'
+          |""".stripMargin)
+
+      val e = intercept[AnalysisException] (
+        sql(s"SELECT $functionName(123) as value")
+      )
+
+      assert(e.errorClass === Some("NO_HANDLER_FOR_UDAF"))
+      assert(e.message ===
+        "No handler for UDAF 'org.apache.spark.sql.errors.MyCastToString'. " +
+        "Use sparkSession.udf.register(...) instead.")
+    }
+  }
+
+  test("UNTYPED_SCALA_UDF: use untyped Scala UDF should fail by default") {
+    val e = intercept[AnalysisException](udf((x: Int) => x, IntegerType))
+
+    assert(e.errorClass === Some("UNTYPED_SCALA_UDF"))
+    assert(e.message ===
+      "You're using untyped Scala UDF, which does not have the input type " +
+      "information. Spark may blindly pass null to the Scala closure with primitive-type " +
+      "argument, and the closure will see the default value of the Java type for the null " +
+      "argument, e.g. `udf((x: Int) => x, IntegerType)`, the result is 0 for null input. " +
+      "To get rid of this error, you could:\n" +
+      "1. use typed Scala UDF APIs(without return type parameter), e.g. `udf((x: Int) => x)`\n" +
+      "2. use Java UDF APIs, e.g. `udf(new UDF1[String, Integer] { " +
+      "override def call(s: String): Integer = s.length() }, IntegerType)`, " +
+      "if input types are all non primitive\n" +
+      s"3. set ${SQLConf.LEGACY_ALLOW_UNTYPED_SCALA_UDF.key} to true and " +
+      s"use this API with caution")
+  }
+
+  test("NO_UDF_INTERFACE_ERROR: java udf class does not implement any udf interface") {
+    val className = "org.apache.spark.sql.errors.MyCastToString"
+    val e = intercept[AnalysisException](
+      spark.udf.registerJava(
+        "myCast",
+        className,
+        StringType)
+    )
+
+    assert(e.errorClass === Some("NO_UDF_INTERFACE_ERROR"))
+    assert(e.message ===
+      s"UDF class $className doesn't implement any UDF interface")
+  }
+
+  test("MULTI_UDF_INTERFACE_ERROR: java udf implement multi UDF interface") {
+    val className = "org.apache.spark.sql.errors.MySum"
+    val e = intercept[AnalysisException](
+      spark.udf.registerJava(
+        "mySum",
+        className,
+        StringType)
+    )
+
+    assert(e.errorClass === Some("MULTI_UDF_INTERFACE_ERROR"))
+    assert(e.message ===
+      s"Not allowed to implement multiple UDF interfaces, UDF class $className")
+  }
+
+  test("UNSUPPORTED_FEATURE: java udf with too many type arguments") {
+    val className = "org.apache.spark.sql.errors.MultiIntSum"
+    val e = intercept[AnalysisException](
+      spark.udf.registerJava(
+        "mySum",
+        className,
+        StringType)
+    )
+
+    assert(e.errorClass === Some("UNSUPPORTED_FEATURE"))
+    assert(e.getSqlState === "0A000")
+    assert(e.message === "The feature is not supported: UDF class with 24 type arguments")
+  }
+}
+
+class MyCastToString extends SparkUserDefinedFunction(
+  (input: Any) => if (input == null) {
+    null
+  } else {
+    input.toString
+  },
+  StringType,
+  inputEncoders = Seq.fill(1)(None))
+
+class MySum extends UDF1[Int, Int] with UDF2[Int, Int, Int] {
+  override def call(t1: Int): Int = t1
+
+  override def call(t1: Int, t2: Int): Int = t1 + t2
+}
+
+class MultiIntSum extends
+  UDF23Test[Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int,
+    Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int] {
+  // scalastyle:off argcount
+  override def call(
+      t1: Int, t2: Int, t3: Int, t4: Int, t5: Int, t6: Int, t7: Int, t8: Int,
+      t9: Int, t10: Int, t11: Int, t12: Int, t13: Int, t14: Int, t15: Int, t16: Int,
+      t17: Int, t18: Int, t19: Int, t20: Int, t21: Int, t22: Int, t23: Int): Int = {
+    t1 + t2 + t3 + t4 + t5 + t6 + t7 + t8 + t9 + t10 +
+      t11 + t12 + t13 + t14 + t15 + t16 + t17 + t18 + t19 + t20 + t21 + t22 + t23
+  }
+  // scalastyle:on argcount
 }
