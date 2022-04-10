@@ -241,7 +241,7 @@ class QueryCompilationErrorsSuite extends QueryTest with SharedSparkSession {
       s"Not allowed to implement multiple UDF interfaces, UDF class $className")
   }
 
-  test("UDF_WITH_TOO_MANY_TYPE_ARGUMENT_ERROR: java udf with too many type arguments") {
+  test("UNSUPPORTED_FEATURE: java udf with too many type arguments") {
     val className = "org.apache.spark.sql.errors.MultiIntSum"
     val e = intercept[AnalysisException](
       spark.udf.registerJava(
