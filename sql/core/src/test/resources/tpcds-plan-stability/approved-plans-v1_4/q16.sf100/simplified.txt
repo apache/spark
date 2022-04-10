@@ -25,39 +25,42 @@ WholeStageCodegen (12)
                                                 WholeStageCodegen (1)
                                                   Project [cs_ship_date_sk,cs_ship_addr_sk,cs_call_center_sk,cs_warehouse_sk,cs_order_number,cs_ext_ship_cost,cs_net_profit]
                                                     Filter [cs_ship_date_sk,cs_ship_addr_sk,cs_call_center_sk]
-                                                      Subquery #1
-                                                        ObjectHashAggregate [buf] [bloom_filter_agg(xxhash64(ca_address_sk, 42), 17961, 143688, 0, 0),bloomFilter,buf]
-                                                          Exchange #3
-                                                            ObjectHashAggregate [ca_address_sk] [buf,buf]
-                                                              WholeStageCodegen (1)
-                                                                Project [ca_address_sk]
-                                                                  Filter [ca_state,ca_address_sk]
-                                                                    ColumnarToRow
-                                                                      InputAdapter
-                                                                        Scan parquet default.customer_address [ca_address_sk,ca_state]
-                                                      Subquery #2
-                                                        ObjectHashAggregate [buf] [bloom_filter_agg(xxhash64(cc_call_center_sk, 42), 4, 32, 0, 0),bloomFilter,buf]
-                                                          Exchange #4
-                                                            ObjectHashAggregate [cc_call_center_sk] [buf,buf]
-                                                              WholeStageCodegen (1)
-                                                                Project [cc_call_center_sk]
-                                                                  Filter [cc_county,cc_call_center_sk]
-                                                                    ColumnarToRow
-                                                                      InputAdapter
-                                                                        Scan parquet default.call_center [cc_call_center_sk,cc_county]
-                                                      Subquery #3
-                                                        ObjectHashAggregate [buf] [bloom_filter_agg(xxhash64(d_date_sk, 42), 73049, 584392, 0, 0),bloomFilter,buf]
-                                                          Exchange #5
-                                                            ObjectHashAggregate [d_date_sk] [buf,buf]
-                                                              WholeStageCodegen (1)
-                                                                Project [d_date_sk]
-                                                                  Filter [d_date,d_date_sk]
-                                                                    ColumnarToRow
-                                                                      InputAdapter
-                                                                        Scan parquet default.date_dim [d_date_sk,d_date]
+                                                      ReusedSubquery [bloomFilter] #1
+                                                      ReusedSubquery [bloomFilter] #2
+                                                      ReusedSubquery [bloomFilter] #3
                                                       ColumnarToRow
                                                         InputAdapter
                                                           Scan parquet default.catalog_sales [cs_ship_date_sk,cs_ship_addr_sk,cs_call_center_sk,cs_warehouse_sk,cs_order_number,cs_ext_ship_cost,cs_net_profit,cs_sold_date_sk]
+                                                            Subquery #1
+                                                              ObjectHashAggregate [buf] [bloom_filter_agg(xxhash64(ca_address_sk, 42), 17961, 143688, 0, 0),bloomFilter,buf]
+                                                                Exchange #3
+                                                                  ObjectHashAggregate [ca_address_sk] [buf,buf]
+                                                                    WholeStageCodegen (1)
+                                                                      Project [ca_address_sk]
+                                                                        Filter [ca_state,ca_address_sk]
+                                                                          ColumnarToRow
+                                                                            InputAdapter
+                                                                              Scan parquet default.customer_address [ca_address_sk,ca_state]
+                                                            Subquery #2
+                                                              ObjectHashAggregate [buf] [bloom_filter_agg(xxhash64(cc_call_center_sk, 42), 4, 32, 0, 0),bloomFilter,buf]
+                                                                Exchange #4
+                                                                  ObjectHashAggregate [cc_call_center_sk] [buf,buf]
+                                                                    WholeStageCodegen (1)
+                                                                      Project [cc_call_center_sk]
+                                                                        Filter [cc_county,cc_call_center_sk]
+                                                                          ColumnarToRow
+                                                                            InputAdapter
+                                                                              Scan parquet default.call_center [cc_call_center_sk,cc_county]
+                                                            Subquery #3
+                                                              ObjectHashAggregate [buf] [bloom_filter_agg(xxhash64(d_date_sk, 42), 73049, 584392, 0, 0),bloomFilter,buf]
+                                                                Exchange #5
+                                                                  ObjectHashAggregate [d_date_sk] [buf,buf]
+                                                                    WholeStageCodegen (1)
+                                                                      Project [d_date_sk]
+                                                                        Filter [d_date,d_date_sk]
+                                                                          ColumnarToRow
+                                                                            InputAdapter
+                                                                              Scan parquet default.date_dim [d_date_sk,d_date]
                                       InputAdapter
                                         WholeStageCodegen (4)
                                           Sort [cs_order_number]

@@ -41,7 +41,9 @@ import org.apache.spark.sql.catalyst.optimizer.InferFiltersFromConstraints
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.util.RebaseDateTime.RebaseSpec
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.parseColumnPath
-import org.apache.spark.sql.execution.ExplainMode
+import org.apache.spark.sql.execution.{ExplainMode, FileSourceScanExec}
+import org.apache.spark.sql.execution.ScalarSubquery
+import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, HadoopFsRelation, LogicalRelation, PushableColumnAndNestedColumn}
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2ScanRelation
 import org.apache.spark.sql.execution.datasources.v2.parquet.ParquetScan
@@ -50,6 +52,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy
 import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy.{CORRECTED, LEGACY}
 import org.apache.spark.sql.internal.SQLConf.ParquetOutputTimestampType.{INT96, TIMESTAMP_MICROS, TIMESTAMP_MILLIS}
+import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 import org.apache.spark.tags.ExtendedSQLTest
@@ -73,7 +76,10 @@ import org.apache.spark.util.{AccumulatorContext, AccumulatorV2, Utils}
  * dependent on this configuration, don't forget you better explicitly set this configuration
  * within the test.
  */
-abstract class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSparkSession {
+abstract class ParquetFilterSuite extends QueryTest
+  with ParquetTest
+  with SharedSparkSession
+  with AdaptiveSparkPlanHelper {
 
   protected def createParquetFilters(
       schema: MessageType,
@@ -1998,6 +2004,59 @@ class ParquetV1FilterSuite extends ParquetFilterSuite {
           checker(stripSparkFilter(query), expected)
         } else {
           assert(selectedFilters.isEmpty, "There is filter pushed down")
+        }
+      }
+    }
+  }
+
+  test("SPARK-34444: pushdown scalar-subquery filter to ParquetFileFormat") {
+    val nums = 900
+    withTempPath { path =>
+      spark.range(0, nums, 1, 1)
+        .write
+        .option(ParquetOutputFormat.PAGE_SIZE, 500)
+        .option(ParquetOutputFormat.BLOCK_SIZE, 2000)
+        .parquet(path.getCanonicalPath)
+      withTempView("t1") {
+        spark.read.parquet(path.getCanonicalPath).createTempView("t1")
+        Seq(true, false).foreach { pushdown =>
+          withSQLConf(SQLConf.PARQUET_FILTER_PUSHDOWN_ENABLED.key -> s"$pushdown") {
+            val df = spark.sql(
+              """
+                |SELECT *
+                |FROM   t1
+                |WHERE  id BETWEEN (SELECT MIN(id) FROM range(1, 20))
+                |          AND (SELECT MAX(id) FROM range(1, 4))
+              """.stripMargin)
+            checkAnswer(df, Row(1) :: Row(2) :: Row(3) :: Nil)
+
+            val fileSourceScans = collect(df.queryExecution.executedPlan) {
+              case r: FileSourceScanExec => r
+            }
+            assert(fileSourceScans.size === 1)
+            val fileSourceScan = fileSourceScans.head
+
+            // Check ScalarSubquery pushdown to FileSourceScanExec
+            val expressions = fileSourceScan.dataFilters.flatMap(_.children)
+            assert(expressions.exists(_.isInstanceOf[ScalarSubquery]))
+
+            // Check pushed runtime Filters
+            val runtimeFilters =
+              fileSourceScan.getClass.getDeclaredField("pushedDownRuntimeFilters")
+            runtimeFilters.setAccessible(true)
+            val filters = runtimeFilters.get(fileSourceScan).asInstanceOf[Seq[Filter]]
+            val expectedFilters =
+              Seq(sources.GreaterThanOrEqual("id", 1L), sources.LessThanOrEqual("id", 3L))
+            assert(filters.equals(expectedFilters))
+
+            // Check numOutputRows
+            val numOutputRows = fileSourceScan.metrics("numOutputRows").value
+            if (pushdown) {
+              assert(numOutputRows < nums)
+            } else {
+              assert(numOutputRows === nums)
+            }
+          }
         }
       }
     }

@@ -117,7 +117,7 @@ Input [9]: [wr_item_sk#12, wr_refunded_cdemo_sk#13, wr_refunded_addr_sk#14, wr_r
 
 (14) Filter [codegen id : 4]
 Input [9]: [wr_item_sk#12, wr_refunded_cdemo_sk#13, wr_refunded_addr_sk#14, wr_returning_cdemo_sk#15, wr_reason_sk#16, wr_order_number#17, wr_fee#18, wr_refunded_cash#19, wr_returned_date_sk#20]
-Condition : (((((((isnotnull(wr_item_sk#12) AND isnotnull(wr_order_number#17)) AND isnotnull(wr_refunded_cdemo_sk#13)) AND isnotnull(wr_returning_cdemo_sk#15)) AND isnotnull(wr_refunded_addr_sk#14)) AND isnotnull(wr_reason_sk#16)) AND might_contain(Subquery scalar-subquery#21, [id=#22], xxhash64(wr_refunded_cdemo_sk#13, 42))) AND might_contain(Subquery scalar-subquery#23, [id=#24], xxhash64(wr_refunded_addr_sk#14, 42)))
+Condition : (((((((isnotnull(wr_item_sk#12) AND isnotnull(wr_order_number#17)) AND isnotnull(wr_refunded_cdemo_sk#13)) AND isnotnull(wr_returning_cdemo_sk#15)) AND isnotnull(wr_refunded_addr_sk#14)) AND isnotnull(wr_reason_sk#16)) AND might_contain(ReusedSubquery Subquery scalar-subquery#21, [id=#22], xxhash64(wr_refunded_cdemo_sk#13, 42))) AND might_contain(ReusedSubquery Subquery scalar-subquery#23, [id=#24], xxhash64(wr_refunded_addr_sk#14, 42)))
 
 (15) Project [codegen id : 4]
 Output [8]: [wr_item_sk#12, wr_refunded_cdemo_sk#13, wr_refunded_addr_sk#14, wr_returning_cdemo_sk#15, wr_reason_sk#16, wr_order_number#17, wr_fee#18, wr_refunded_cash#19]
@@ -330,7 +330,11 @@ Input [2]: [d_date_sk#39, d_year#63]
 Input [1]: [d_date_sk#39]
 Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#64]
 
-Subquery:2 Hosting operator id = 14 Hosting Expression = Subquery scalar-subquery#21, [id=#22]
+Subquery:2 Hosting operator id = 14 Hosting Expression = ReusedSubquery Subquery scalar-subquery#21, [id=#22]
+
+Subquery:3 Hosting operator id = 14 Hosting Expression = ReusedSubquery Subquery scalar-subquery#23, [id=#24]
+
+Subquery:4 Hosting operator id = 12 Hosting Expression = Subquery scalar-subquery#21, [id=#22]
 ObjectHashAggregate (66)
 +- Exchange (65)
    +- ObjectHashAggregate (64)
@@ -376,7 +380,7 @@ Functions [1]: [bloom_filter_agg(xxhash64(cd_demo_sk#26, 42), 159981, 1279848, 0
 Aggregate Attributes [1]: [bloom_filter_agg(xxhash64(cd_demo_sk#26, 42), 159981, 1279848, 0, 0)#68]
 Results [1]: [bloom_filter_agg(xxhash64(cd_demo_sk#26, 42), 159981, 1279848, 0, 0)#68 AS bloomFilter#69]
 
-Subquery:3 Hosting operator id = 14 Hosting Expression = Subquery scalar-subquery#23, [id=#24]
+Subquery:5 Hosting operator id = 12 Hosting Expression = Subquery scalar-subquery#23, [id=#24]
 ObjectHashAggregate (73)
 +- Exchange (72)
    +- ObjectHashAggregate (71)

@@ -82,7 +82,7 @@ Input [3]: [d_date_sk#4, d_week_seq#5, d_day_name#6]
 
 (6) Filter [codegen id : 1]
 Input [3]: [d_date_sk#4, d_week_seq#5, d_day_name#6]
-Condition : ((isnotnull(d_date_sk#4) AND isnotnull(d_week_seq#5)) AND might_contain(Subquery scalar-subquery#7, [id=#8], xxhash64(d_week_seq#5, 42)))
+Condition : ((isnotnull(d_date_sk#4) AND isnotnull(d_week_seq#5)) AND might_contain(ReusedSubquery Subquery scalar-subquery#7, [id=#8], xxhash64(d_week_seq#5, 42)))
 
 (7) BroadcastExchange
 Input [3]: [d_date_sk#4, d_week_seq#5, d_day_name#6]
@@ -200,7 +200,7 @@ Input [3]: [d_date_sk#4, d_week_seq#5, d_day_name#6]
 
 (31) Filter [codegen id : 5]
 Input [3]: [d_date_sk#4, d_week_seq#5, d_day_name#6]
-Condition : ((isnotnull(d_date_sk#4) AND isnotnull(d_week_seq#5)) AND might_contain(Subquery scalar-subquery#56, [id=#57], xxhash64(d_week_seq#5, 42)))
+Condition : ((isnotnull(d_date_sk#4) AND isnotnull(d_week_seq#5)) AND might_contain(ReusedSubquery Subquery scalar-subquery#56, [id=#57], xxhash64(d_week_seq#5, 42)))
 
 (32) BroadcastExchange
 Input [3]: [d_date_sk#4, d_week_seq#5, d_day_name#6]
@@ -310,7 +310,9 @@ Arguments: 100, [s_store_name1#46 ASC NULLS FIRST, s_store_id1#48 ASC NULLS FIRS
 
 ===== Subqueries =====
 
-Subquery:1 Hosting operator id = 6 Hosting Expression = Subquery scalar-subquery#7, [id=#8]
+Subquery:1 Hosting operator id = 6 Hosting Expression = ReusedSubquery Subquery scalar-subquery#7, [id=#8]
+
+Subquery:2 Hosting operator id = 4 Hosting Expression = Subquery scalar-subquery#7, [id=#8]
 ObjectHashAggregate (61)
 +- Exchange (60)
    +- ObjectHashAggregate (59)
@@ -356,7 +358,9 @@ Functions [1]: [bloom_filter_agg(xxhash64(d_week_seq#44, 42), 335, 2680, 0, 0)]
 Aggregate Attributes [1]: [bloom_filter_agg(xxhash64(d_week_seq#44, 42), 335, 2680, 0, 0)#97]
 Results [1]: [bloom_filter_agg(xxhash64(d_week_seq#44, 42), 335, 2680, 0, 0)#97 AS bloomFilter#98]
 
-Subquery:2 Hosting operator id = 31 Hosting Expression = Subquery scalar-subquery#56, [id=#57]
+Subquery:3 Hosting operator id = 31 Hosting Expression = ReusedSubquery Subquery scalar-subquery#56, [id=#57]
+
+Subquery:4 Hosting operator id = 29 Hosting Expression = Subquery scalar-subquery#56, [id=#57]
 ObjectHashAggregate (68)
 +- Exchange (67)
    +- ObjectHashAggregate (66)

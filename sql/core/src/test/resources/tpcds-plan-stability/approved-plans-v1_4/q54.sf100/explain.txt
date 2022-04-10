@@ -388,7 +388,7 @@ Input [2]: [d_date_sk#34, d_month_seq#49]
 
 (67) Filter [codegen id : 1]
 Input [2]: [d_date_sk#34, d_month_seq#49]
-Condition : (((isnotnull(d_month_seq#49) AND (d_month_seq#49 >= Subquery scalar-subquery#50, [id=#51])) AND (d_month_seq#49 <= Subquery scalar-subquery#52, [id=#53])) AND isnotnull(d_date_sk#34))
+Condition : (((isnotnull(d_month_seq#49) AND (d_month_seq#49 >= ReusedSubquery Subquery scalar-subquery#50, [id=#51])) AND (d_month_seq#49 <= ReusedSubquery Subquery scalar-subquery#52, [id=#53])) AND isnotnull(d_date_sk#34))
 
 (68) Project [codegen id : 1]
 Output [1]: [d_date_sk#34]
@@ -398,7 +398,11 @@ Input [2]: [d_date_sk#34, d_month_seq#49]
 Input [1]: [d_date_sk#34]
 Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#54]
 
-Subquery:4 Hosting operator id = 67 Hosting Expression = Subquery scalar-subquery#50, [id=#51]
+Subquery:4 Hosting operator id = 67 Hosting Expression = ReusedSubquery Subquery scalar-subquery#50, [id=#51]
+
+Subquery:5 Hosting operator id = 67 Hosting Expression = ReusedSubquery Subquery scalar-subquery#52, [id=#53]
+
+Subquery:6 Hosting operator id = 65 Hosting Expression = Subquery scalar-subquery#50, [id=#51]
 * HashAggregate (76)
 +- Exchange (75)
    +- * HashAggregate (74)
@@ -444,7 +448,7 @@ Functions: []
 Aggregate Attributes: []
 Results [1]: [(d_month_seq + 1)#58]
 
-Subquery:5 Hosting operator id = 67 Hosting Expression = Subquery scalar-subquery#52, [id=#53]
+Subquery:7 Hosting operator id = 65 Hosting Expression = Subquery scalar-subquery#52, [id=#53]
 * HashAggregate (83)
 +- Exchange (82)
    +- * HashAggregate (81)

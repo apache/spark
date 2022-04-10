@@ -47,7 +47,7 @@ Input [5]: [cs_warehouse_sk#1, cs_item_sk#2, cs_order_number#3, cs_sales_price#4
 
 (3) Filter [codegen id : 1]
 Input [5]: [cs_warehouse_sk#1, cs_item_sk#2, cs_order_number#3, cs_sales_price#4, cs_sold_date_sk#5]
-Condition : ((isnotnull(cs_warehouse_sk#1) AND isnotnull(cs_item_sk#2)) AND might_contain(Subquery scalar-subquery#7, [id=#8], xxhash64(cs_item_sk#2, 42)))
+Condition : ((isnotnull(cs_warehouse_sk#1) AND isnotnull(cs_item_sk#2)) AND might_contain(ReusedSubquery Subquery scalar-subquery#7, [id=#8], xxhash64(cs_item_sk#2, 42)))
 
 (4) Exchange
 Input [5]: [cs_warehouse_sk#1, cs_item_sk#2, cs_order_number#3, cs_sales_price#4, cs_sold_date_sk#5]
@@ -123,7 +123,7 @@ Join condition: None
 Output [5]: [cs_warehouse_sk#1, cs_sales_price#4, cs_sold_date_sk#5, cr_refunded_cash#12, i_item_id#16]
 Input [7]: [cs_warehouse_sk#1, cs_item_sk#2, cs_sales_price#4, cs_sold_date_sk#5, cr_refunded_cash#12, i_item_sk#15, i_item_id#16]
 
-(21) ReusedExchange [Reuses operator id: 44]
+(21) ReusedExchange [Reuses operator id: 37]
 Output [2]: [d_date_sk#19, d_date#20]
 
 (22) BroadcastHashJoin [codegen id : 8]
@@ -186,75 +186,77 @@ Arguments: 100, [w_state#22 ASC NULLS FIRST, i_item_id#16 ASC NULLS FIRST], [w_s
 
 ===== Subqueries =====
 
-Subquery:1 Hosting operator id = 3 Hosting Expression = Subquery scalar-subquery#7, [id=#8]
-ObjectHashAggregate (40)
-+- Exchange (39)
-   +- ObjectHashAggregate (38)
-      +- * Project (37)
-         +- * Filter (36)
-            +- * ColumnarToRow (35)
-               +- Scan parquet default.item (34)
-
-
-(34) Scan parquet default.item
-Output [2]: [i_item_sk#15, i_current_price#17]
-Batched: true
-Location [not included in comparison]/{warehouse_dir}/item]
-PushedFilters: [IsNotNull(i_current_price), GreaterThanOrEqual(i_current_price,0.99), LessThanOrEqual(i_current_price,1.49), IsNotNull(i_item_sk)]
-ReadSchema: struct<i_item_sk:int,i_current_price:decimal(7,2)>
-
-(35) ColumnarToRow [codegen id : 1]
-Input [2]: [i_item_sk#15, i_current_price#17]
-
-(36) Filter [codegen id : 1]
-Input [2]: [i_item_sk#15, i_current_price#17]
-Condition : (((isnotnull(i_current_price#17) AND (i_current_price#17 >= 0.99)) AND (i_current_price#17 <= 1.49)) AND isnotnull(i_item_sk#15))
-
-(37) Project [codegen id : 1]
-Output [1]: [i_item_sk#15]
-Input [2]: [i_item_sk#15, i_current_price#17]
-
-(38) ObjectHashAggregate
-Input [1]: [i_item_sk#15]
-Keys: []
-Functions [1]: [partial_bloom_filter_agg(xxhash64(i_item_sk#15, 42), 1019, 8152, 0, 0)]
-Aggregate Attributes [1]: [buf#37]
-Results [1]: [buf#38]
-
-(39) Exchange
-Input [1]: [buf#38]
-Arguments: SinglePartition, ENSURE_REQUIREMENTS, [id=#39]
-
-(40) ObjectHashAggregate
-Input [1]: [buf#38]
-Keys: []
-Functions [1]: [bloom_filter_agg(xxhash64(i_item_sk#15, 42), 1019, 8152, 0, 0)]
-Aggregate Attributes [1]: [bloom_filter_agg(xxhash64(i_item_sk#15, 42), 1019, 8152, 0, 0)#40]
-Results [1]: [bloom_filter_agg(xxhash64(i_item_sk#15, 42), 1019, 8152, 0, 0)#40 AS bloomFilter#41]
+Subquery:1 Hosting operator id = 3 Hosting Expression = ReusedSubquery Subquery scalar-subquery#7, [id=#8]
 
 Subquery:2 Hosting operator id = 1 Hosting Expression = cs_sold_date_sk#5 IN dynamicpruning#6
-BroadcastExchange (44)
-+- * Filter (43)
-   +- * ColumnarToRow (42)
-      +- Scan parquet default.date_dim (41)
+BroadcastExchange (37)
++- * Filter (36)
+   +- * ColumnarToRow (35)
+      +- Scan parquet default.date_dim (34)
 
 
-(41) Scan parquet default.date_dim
+(34) Scan parquet default.date_dim
 Output [2]: [d_date_sk#19, d_date#20]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/date_dim]
 PushedFilters: [IsNotNull(d_date), GreaterThanOrEqual(d_date,2000-02-10), LessThanOrEqual(d_date,2000-04-10), IsNotNull(d_date_sk)]
 ReadSchema: struct<d_date_sk:int,d_date:date>
 
-(42) ColumnarToRow [codegen id : 1]
+(35) ColumnarToRow [codegen id : 1]
 Input [2]: [d_date_sk#19, d_date#20]
 
-(43) Filter [codegen id : 1]
+(36) Filter [codegen id : 1]
 Input [2]: [d_date_sk#19, d_date#20]
 Condition : (((isnotnull(d_date#20) AND (d_date#20 >= 2000-02-10)) AND (d_date#20 <= 2000-04-10)) AND isnotnull(d_date_sk#19))
 
-(44) BroadcastExchange
+(37) BroadcastExchange
 Input [2]: [d_date_sk#19, d_date#20]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [id=#42]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [id=#37]
+
+Subquery:3 Hosting operator id = 1 Hosting Expression = Subquery scalar-subquery#7, [id=#8]
+ObjectHashAggregate (44)
++- Exchange (43)
+   +- ObjectHashAggregate (42)
+      +- * Project (41)
+         +- * Filter (40)
+            +- * ColumnarToRow (39)
+               +- Scan parquet default.item (38)
+
+
+(38) Scan parquet default.item
+Output [2]: [i_item_sk#15, i_current_price#17]
+Batched: true
+Location [not included in comparison]/{warehouse_dir}/item]
+PushedFilters: [IsNotNull(i_current_price), GreaterThanOrEqual(i_current_price,0.99), LessThanOrEqual(i_current_price,1.49), IsNotNull(i_item_sk)]
+ReadSchema: struct<i_item_sk:int,i_current_price:decimal(7,2)>
+
+(39) ColumnarToRow [codegen id : 1]
+Input [2]: [i_item_sk#15, i_current_price#17]
+
+(40) Filter [codegen id : 1]
+Input [2]: [i_item_sk#15, i_current_price#17]
+Condition : (((isnotnull(i_current_price#17) AND (i_current_price#17 >= 0.99)) AND (i_current_price#17 <= 1.49)) AND isnotnull(i_item_sk#15))
+
+(41) Project [codegen id : 1]
+Output [1]: [i_item_sk#15]
+Input [2]: [i_item_sk#15, i_current_price#17]
+
+(42) ObjectHashAggregate
+Input [1]: [i_item_sk#15]
+Keys: []
+Functions [1]: [partial_bloom_filter_agg(xxhash64(i_item_sk#15, 42), 1019, 8152, 0, 0)]
+Aggregate Attributes [1]: [buf#38]
+Results [1]: [buf#39]
+
+(43) Exchange
+Input [1]: [buf#39]
+Arguments: SinglePartition, ENSURE_REQUIREMENTS, [id=#40]
+
+(44) ObjectHashAggregate
+Input [1]: [buf#39]
+Keys: []
+Functions [1]: [bloom_filter_agg(xxhash64(i_item_sk#15, 42), 1019, 8152, 0, 0)]
+Aggregate Attributes [1]: [bloom_filter_agg(xxhash64(i_item_sk#15, 42), 1019, 8152, 0, 0)#41]
+Results [1]: [bloom_filter_agg(xxhash64(i_item_sk#15, 42), 1019, 8152, 0, 0)#41 AS bloomFilter#42]
 
 

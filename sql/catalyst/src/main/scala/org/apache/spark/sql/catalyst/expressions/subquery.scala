@@ -116,6 +116,21 @@ object SubqueryExpression {
       case _ => false
     }
   }
+
+  /**
+   * Returns true when an expression contains a scalar-subquery
+   */
+  def hasScalarSubquery(e: Expression): Boolean = {
+    e.exists {
+      case _: ScalarSubquery => true
+      case _ => false
+    }
+  }
+
+  /**
+   * Returns true when an expression contains a subquery but not a scalar-subquery
+   */
+  def hasNonScalarSubquery(e: Expression): Boolean = hasSubquery(e) && !hasScalarSubquery(e)
 }
 
 object SubExprUtils extends PredicateHelper {

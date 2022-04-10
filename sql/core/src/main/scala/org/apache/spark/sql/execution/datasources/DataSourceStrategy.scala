@@ -564,13 +564,29 @@ object DataSourceStrategy
   }
 
   /**
-   * Tries to translate a Catalyst [[Expression]] into data source [[Filter]].
+   * Tries to translate a pushable Catalyst [[Expression]] into data source [[Filter]].
    *
    * @return a `Some[Filter]` if the input [[Expression]] is convertible, otherwise a `None`.
    */
   protected[sql] def translateFilter(
       predicate: Expression, supportNestedPredicatePushdown: Boolean): Option[Filter] = {
-    translateFilterWithMapping(predicate, None, supportNestedPredicatePushdown)
+    // `predicate` should not include any metadata col filters
+    // because the metadata struct has been flatted in FileSourceStrategy
+    Option(predicate).filterNot(SubqueryExpression.hasSubquery).filterNot(_.references.exists {
+      case FileSourceMetadataAttribute(_) => true
+      case _ => false
+    }).flatMap(translateFilterWithMapping(_, None, supportNestedPredicatePushdown))
+  }
+
+  /**
+   * Translate a Seq of pushable Catalyst [[Expression]]s into data source [[Filter]]s.
+   *
+   * @return a Seq of pushed down `Filter`s.
+   */
+  protected[sql] def getPushedDownDataFilters(
+      dataFilters: Seq[Expression], relation: HadoopFsRelation): Seq[Filter] = {
+    val supportNestedPredicatePushdown = DataSourceUtils.supportNestedPredicatePushdown(relation)
+    dataFilters.flatMap(translateFilter(_, supportNestedPredicatePushdown))
   }
 
   /**

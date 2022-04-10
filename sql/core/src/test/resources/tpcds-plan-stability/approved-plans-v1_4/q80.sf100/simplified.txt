@@ -31,26 +31,8 @@ TakeOrderedAndProject [channel,id,sales,returns,profit]
                                                             Exchange [ss_item_sk,ss_ticket_number] #3
                                                               WholeStageCodegen (1)
                                                                 Filter [ss_store_sk,ss_item_sk,ss_promo_sk]
-                                                                  Subquery #2
-                                                                    ObjectHashAggregate [buf] [bloom_filter_agg(xxhash64(i_item_sk, 42), 101823, 814584, 0, 0),bloomFilter,buf]
-                                                                      Exchange #5
-                                                                        ObjectHashAggregate [i_item_sk] [buf,buf]
-                                                                          WholeStageCodegen (1)
-                                                                            Project [i_item_sk]
-                                                                              Filter [i_current_price,i_item_sk]
-                                                                                ColumnarToRow
-                                                                                  InputAdapter
-                                                                                    Scan parquet default.item [i_item_sk,i_current_price]
-                                                                  Subquery #3
-                                                                    ObjectHashAggregate [buf] [bloom_filter_agg(xxhash64(p_promo_sk, 42), 986, 7888, 0, 0),bloomFilter,buf]
-                                                                      Exchange #6
-                                                                        ObjectHashAggregate [p_promo_sk] [buf,buf]
-                                                                          WholeStageCodegen (1)
-                                                                            Project [p_promo_sk]
-                                                                              Filter [p_channel_tv,p_promo_sk]
-                                                                                ColumnarToRow
-                                                                                  InputAdapter
-                                                                                    Scan parquet default.promotion [p_promo_sk,p_channel_tv]
+                                                                  ReusedSubquery [bloomFilter] #2
+                                                                  ReusedSubquery [bloomFilter] #3
                                                                   ColumnarToRow
                                                                     InputAdapter
                                                                       Scan parquet default.store_sales [ss_item_sk,ss_store_sk,ss_promo_sk,ss_ticket_number,ss_ext_sales_price,ss_net_profit,ss_sold_date_sk]
@@ -62,6 +44,26 @@ TakeOrderedAndProject [channel,id,sales,returns,profit]
                                                                                   ColumnarToRow
                                                                                     InputAdapter
                                                                                       Scan parquet default.date_dim [d_date_sk,d_date]
+                                                                        Subquery #2
+                                                                          ObjectHashAggregate [buf] [bloom_filter_agg(xxhash64(i_item_sk, 42), 101823, 814584, 0, 0),bloomFilter,buf]
+                                                                            Exchange #5
+                                                                              ObjectHashAggregate [i_item_sk] [buf,buf]
+                                                                                WholeStageCodegen (1)
+                                                                                  Project [i_item_sk]
+                                                                                    Filter [i_current_price,i_item_sk]
+                                                                                      ColumnarToRow
+                                                                                        InputAdapter
+                                                                                          Scan parquet default.item [i_item_sk,i_current_price]
+                                                                        Subquery #3
+                                                                          ObjectHashAggregate [buf] [bloom_filter_agg(xxhash64(p_promo_sk, 42), 986, 7888, 0, 0),bloomFilter,buf]
+                                                                            Exchange #6
+                                                                              ObjectHashAggregate [p_promo_sk] [buf,buf]
+                                                                                WholeStageCodegen (1)
+                                                                                  Project [p_promo_sk]
+                                                                                    Filter [p_channel_tv,p_promo_sk]
+                                                                                      ColumnarToRow
+                                                                                        InputAdapter
+                                                                                          Scan parquet default.promotion [p_promo_sk,p_channel_tv]
                                                     InputAdapter
                                                       WholeStageCodegen (4)
                                                         Sort [sr_item_sk,sr_ticket_number]
@@ -127,6 +129,8 @@ TakeOrderedAndProject [channel,id,sales,returns,profit]
                                                                     InputAdapter
                                                                       Scan parquet default.catalog_sales [cs_catalog_page_sk,cs_item_sk,cs_promo_sk,cs_order_number,cs_ext_sales_price,cs_net_profit,cs_sold_date_sk]
                                                                         ReusedSubquery [d_date_sk] #1
+                                                                        ReusedSubquery [bloomFilter] #2
+                                                                        ReusedSubquery [bloomFilter] #3
                                                     InputAdapter
                                                       WholeStageCodegen (14)
                                                         Sort [cr_item_sk,cr_order_number]
@@ -180,6 +184,8 @@ TakeOrderedAndProject [channel,id,sales,returns,profit]
                                                                     InputAdapter
                                                                       Scan parquet default.web_sales [ws_item_sk,ws_web_site_sk,ws_promo_sk,ws_order_number,ws_ext_sales_price,ws_net_profit,ws_sold_date_sk]
                                                                         ReusedSubquery [d_date_sk] #1
+                                                                        ReusedSubquery [bloomFilter] #2
+                                                                        ReusedSubquery [bloomFilter] #3
                                                     InputAdapter
                                                       WholeStageCodegen (24)
                                                         Sort [wr_item_sk,wr_order_number]

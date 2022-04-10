@@ -61,7 +61,7 @@ Input [3]: [c_customer_sk#1, c_current_cdemo_sk#2, c_current_addr_sk#3]
 
 (3) Filter [codegen id : 1]
 Input [3]: [c_customer_sk#1, c_current_cdemo_sk#2, c_current_addr_sk#3]
-Condition : (((isnotnull(c_customer_sk#1) AND isnotnull(c_current_addr_sk#3)) AND isnotnull(c_current_cdemo_sk#2)) AND might_contain(Subquery scalar-subquery#4, [id=#5], xxhash64(c_current_addr_sk#3, 42)))
+Condition : (((isnotnull(c_customer_sk#1) AND isnotnull(c_current_addr_sk#3)) AND isnotnull(c_current_cdemo_sk#2)) AND might_contain(ReusedSubquery Subquery scalar-subquery#4, [id=#5], xxhash64(c_current_addr_sk#3, 42)))
 
 (4) Exchange
 Input [3]: [c_customer_sk#1, c_current_cdemo_sk#2, c_current_addr_sk#3]
@@ -266,7 +266,9 @@ Arguments: 100, [cd_gender#27 ASC NULLS FIRST, cd_marital_status#28 ASC NULLS FI
 
 ===== Subqueries =====
 
-Subquery:1 Hosting operator id = 3 Hosting Expression = Subquery scalar-subquery#4, [id=#5]
+Subquery:1 Hosting operator id = 3 Hosting Expression = ReusedSubquery Subquery scalar-subquery#4, [id=#5]
+
+Subquery:2 Hosting operator id = 1 Hosting Expression = Subquery scalar-subquery#4, [id=#5]
 ObjectHashAggregate (55)
 +- Exchange (54)
    +- ObjectHashAggregate (53)
@@ -312,7 +314,7 @@ Functions [1]: [bloom_filter_agg(xxhash64(ca_address_sk#22, 42), 2555, 20440, 0,
 Aggregate Attributes [1]: [bloom_filter_agg(xxhash64(ca_address_sk#22, 42), 2555, 20440, 0, 0)#48]
 Results [1]: [bloom_filter_agg(xxhash64(ca_address_sk#22, 42), 2555, 20440, 0, 0)#48 AS bloomFilter#49]
 
-Subquery:2 Hosting operator id = 6 Hosting Expression = ws_sold_date_sk#8 IN dynamicpruning#9
+Subquery:3 Hosting operator id = 6 Hosting Expression = ws_sold_date_sk#8 IN dynamicpruning#9
 BroadcastExchange (60)
 +- * Project (59)
    +- * Filter (58)
@@ -342,8 +344,8 @@ Input [3]: [d_date_sk#10, d_year#50, d_moy#51]
 Input [1]: [d_date_sk#10]
 Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#52]
 
-Subquery:3 Hosting operator id = 12 Hosting Expression = cs_sold_date_sk#13 IN dynamicpruning#9
+Subquery:4 Hosting operator id = 12 Hosting Expression = cs_sold_date_sk#13 IN dynamicpruning#9
 
-Subquery:4 Hosting operator id = 22 Hosting Expression = ss_sold_date_sk#18 IN dynamicpruning#9
+Subquery:5 Hosting operator id = 22 Hosting Expression = ss_sold_date_sk#18 IN dynamicpruning#9
 
 

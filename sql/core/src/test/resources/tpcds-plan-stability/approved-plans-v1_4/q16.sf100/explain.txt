@@ -58,7 +58,7 @@ Input [8]: [cs_ship_date_sk#1, cs_ship_addr_sk#2, cs_call_center_sk#3, cs_wareho
 
 (3) Filter [codegen id : 1]
 Input [8]: [cs_ship_date_sk#1, cs_ship_addr_sk#2, cs_call_center_sk#3, cs_warehouse_sk#4, cs_order_number#5, cs_ext_ship_cost#6, cs_net_profit#7, cs_sold_date_sk#8]
-Condition : (((((isnotnull(cs_ship_date_sk#1) AND isnotnull(cs_ship_addr_sk#2)) AND isnotnull(cs_call_center_sk#3)) AND might_contain(Subquery scalar-subquery#9, [id=#10], xxhash64(cs_ship_addr_sk#2, 42))) AND might_contain(Subquery scalar-subquery#11, [id=#12], xxhash64(cs_call_center_sk#3, 42))) AND might_contain(Subquery scalar-subquery#13, [id=#14], xxhash64(cs_ship_date_sk#1, 42)))
+Condition : (((((isnotnull(cs_ship_date_sk#1) AND isnotnull(cs_ship_addr_sk#2)) AND isnotnull(cs_call_center_sk#3)) AND might_contain(ReusedSubquery Subquery scalar-subquery#9, [id=#10], xxhash64(cs_ship_addr_sk#2, 42))) AND might_contain(ReusedSubquery Subquery scalar-subquery#11, [id=#12], xxhash64(cs_call_center_sk#3, 42))) AND might_contain(ReusedSubquery Subquery scalar-subquery#13, [id=#14], xxhash64(cs_ship_date_sk#1, 42)))
 
 (4) Project [codegen id : 1]
 Output [7]: [cs_ship_date_sk#1, cs_ship_addr_sk#2, cs_call_center_sk#3, cs_warehouse_sk#4, cs_order_number#5, cs_ext_ship_cost#6, cs_net_profit#7]
@@ -255,7 +255,13 @@ Results [3]: [count(cs_order_number#5)#36 AS order count #39, MakeDecimal(sum(Un
 
 ===== Subqueries =====
 
-Subquery:1 Hosting operator id = 3 Hosting Expression = Subquery scalar-subquery#9, [id=#10]
+Subquery:1 Hosting operator id = 3 Hosting Expression = ReusedSubquery Subquery scalar-subquery#9, [id=#10]
+
+Subquery:2 Hosting operator id = 3 Hosting Expression = ReusedSubquery Subquery scalar-subquery#11, [id=#12]
+
+Subquery:3 Hosting operator id = 3 Hosting Expression = ReusedSubquery Subquery scalar-subquery#13, [id=#14]
+
+Subquery:4 Hosting operator id = 1 Hosting Expression = Subquery scalar-subquery#9, [id=#10]
 ObjectHashAggregate (52)
 +- Exchange (51)
    +- ObjectHashAggregate (50)
@@ -301,7 +307,7 @@ Functions [1]: [bloom_filter_agg(xxhash64(ca_address_sk#23, 42), 17961, 143688, 
 Aggregate Attributes [1]: [bloom_filter_agg(xxhash64(ca_address_sk#23, 42), 17961, 143688, 0, 0)#45]
 Results [1]: [bloom_filter_agg(xxhash64(ca_address_sk#23, 42), 17961, 143688, 0, 0)#45 AS bloomFilter#46]
 
-Subquery:2 Hosting operator id = 3 Hosting Expression = Subquery scalar-subquery#11, [id=#12]
+Subquery:5 Hosting operator id = 1 Hosting Expression = Subquery scalar-subquery#11, [id=#12]
 ObjectHashAggregate (59)
 +- Exchange (58)
    +- ObjectHashAggregate (57)
@@ -347,7 +353,7 @@ Functions [1]: [bloom_filter_agg(xxhash64(cc_call_center_sk#26, 42), 4, 32, 0, 0
 Aggregate Attributes [1]: [bloom_filter_agg(xxhash64(cc_call_center_sk#26, 42), 4, 32, 0, 0)#50]
 Results [1]: [bloom_filter_agg(xxhash64(cc_call_center_sk#26, 42), 4, 32, 0, 0)#50 AS bloomFilter#51]
 
-Subquery:3 Hosting operator id = 3 Hosting Expression = Subquery scalar-subquery#13, [id=#14]
+Subquery:6 Hosting operator id = 1 Hosting Expression = Subquery scalar-subquery#13, [id=#14]
 ObjectHashAggregate (66)
 +- Exchange (65)
    +- ObjectHashAggregate (64)

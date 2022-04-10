@@ -31,6 +31,8 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning, UnknownPartitioning}
 import org.apache.spark.sql.catalyst.util.truncatedString
+import org.apache.spark.sql.execution.{ScalarSubquery => ExecScalarSubquery}
+import org.apache.spark.sql.execution.ExecSubqueryExpression.hasScalarSubquery
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.datasources.parquet.{ParquetFileFormat => ParquetSource}
 import org.apache.spark.sql.execution.datasources.v2.PushedDownOperators
@@ -369,16 +371,14 @@ case class FileSourceScanExec(
   }
 
   @transient
-  private lazy val pushedDownFilters = {
-    val supportNestedPredicatePushdown = DataSourceUtils.supportNestedPredicatePushdown(relation)
-    // `dataFilters` should not include any metadata col filters
-    // because the metadata struct has been flatted in FileSourceStrategy
-    // and thus metadata col filters are invalid to be pushed down
-    dataFilters.filterNot(_.references.exists {
-      case FileSourceMetadataAttribute(_) => true
-      case _ => false
-    }).flatMap(DataSourceStrategy.translateFilter(_, supportNestedPredicatePushdown))
-  }
+  private lazy val pushedDownFilters = DataSourceStrategy.getPushedDownDataFilters(
+    dataFilters, relation)
+
+  @transient
+  private lazy val pushedDownRuntimeFilters = DataSourceStrategy.getPushedDownDataFilters(
+    dataFilters.filter(hasScalarSubquery)
+      // Replace ScalarSubquery at runtime, then the filter may be able to push down.
+      .map(_.transform { case s: ExecScalarSubquery => s.value }), relation)
 
   override lazy val metadata: Map[String, String] = {
     def seqToString(seq: Seq[Any]) = seq.mkString("[", ", ", "]")
@@ -452,7 +452,7 @@ case class FileSourceScanExec(
         dataSchema = relation.dataSchema,
         partitionSchema = relation.partitionSchema,
         requiredSchema = requiredSchema,
-        filters = pushedDownFilters,
+        filters = pushedDownFilters ++ pushedDownRuntimeFilters,
         options = relation.options,
         hadoopConf = relation.sparkSession.sessionState.newHadoopConfWithOptions(relation.options))
 

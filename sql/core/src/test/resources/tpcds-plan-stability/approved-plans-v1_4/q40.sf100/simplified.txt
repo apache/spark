@@ -20,16 +20,7 @@ TakeOrderedAndProject [w_state,i_item_id,sales_before,sales_after]
                                       Exchange [cs_order_number,cs_item_sk] #2
                                         WholeStageCodegen (1)
                                           Filter [cs_warehouse_sk,cs_item_sk]
-                                            Subquery #2
-                                              ObjectHashAggregate [buf] [bloom_filter_agg(xxhash64(i_item_sk, 42), 1019, 8152, 0, 0),bloomFilter,buf]
-                                                Exchange #4
-                                                  ObjectHashAggregate [i_item_sk] [buf,buf]
-                                                    WholeStageCodegen (1)
-                                                      Project [i_item_sk]
-                                                        Filter [i_current_price,i_item_sk]
-                                                          ColumnarToRow
-                                                            InputAdapter
-                                                              Scan parquet default.item [i_item_sk,i_current_price]
+                                            ReusedSubquery [bloomFilter] #2
                                             ColumnarToRow
                                               InputAdapter
                                                 Scan parquet default.catalog_sales [cs_warehouse_sk,cs_item_sk,cs_order_number,cs_sales_price,cs_sold_date_sk]
@@ -40,6 +31,16 @@ TakeOrderedAndProject [w_state,i_item_id,sales_before,sales_after]
                                                           ColumnarToRow
                                                             InputAdapter
                                                               Scan parquet default.date_dim [d_date_sk,d_date]
+                                                  Subquery #2
+                                                    ObjectHashAggregate [buf] [bloom_filter_agg(xxhash64(i_item_sk, 42), 1019, 8152, 0, 0),bloomFilter,buf]
+                                                      Exchange #4
+                                                        ObjectHashAggregate [i_item_sk] [buf,buf]
+                                                          WholeStageCodegen (1)
+                                                            Project [i_item_sk]
+                                                              Filter [i_current_price,i_item_sk]
+                                                                ColumnarToRow
+                                                                  InputAdapter
+                                                                    Scan parquet default.item [i_item_sk,i_current_price]
                               InputAdapter
                                 WholeStageCodegen (4)
                                   Sort [cr_order_number,cr_item_sk]
