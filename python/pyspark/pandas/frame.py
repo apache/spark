@@ -5500,7 +5500,9 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         else:
             return psdf
 
-    def interpolate(self, method: Optional[str] = None, limit: Optional[int] = None):
+    def interpolate(
+        self, method: Optional[str] = None, limit: Optional[int] = None
+    ) -> Optional["DataFrame"]:
         if (method is not None) and (method not in ["linear"]):
             raise ValueError("Expecting 'linear'.")
         if (limit is not None) and (not limit > 0):

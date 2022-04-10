@@ -92,7 +92,7 @@ class InterpolateTest(PandasOnSparkTestCase, TestUtils):
                 (4, np.nan, 4.0),
                 (5, np.nan, 1.0),
             ],
-            columns=list("abcd"),
+            columns=list("abc"),
         )
         self._test_dataframe_interpolate(pdf)
 

@@ -2169,7 +2169,9 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             )
         )._psser_for(self._column_label)
 
-    def interpolate(self, method: Optional[str] = None, limit: Optional[int] = None):
+    def interpolate(
+        self, method: Optional[str] = None, limit: Optional[int] = None
+    ) -> Optional["Series"]:
         return self._interpolate(method=method, limit=limit)
 
     def _interpolate(
