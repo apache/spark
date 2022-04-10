@@ -17,7 +17,6 @@
 
 package org.apache.spark.network.netty
 
-import java.lang.IndexOutOfBoundsException
 import java.nio.ByteBuffer
 
 import scala.collection.JavaConverters._
@@ -54,9 +53,15 @@ class NettyBlockRpcServer(
     val message = try {
       BlockTransferMessage.Decoder.fromByteBuffer(rpcMessage)
     } catch {
-      case _: IndexOutOfBoundsException =>
-        // Netty throws IndexOutOfBoundsException for corrupted buffers. In this case, we ignore
-        // the entire message with warnings because we cannot trust any contents.
+      case e: IllegalArgumentException if e.getMessage.startsWith("Unknown message type") =>
+        logWarning(s"This could be a corrupted RPC message (capacity: ${rpcMessage.capacity()}) " +
+          s"from ${client.getSocketAddress}. Please use `spark.authenticate.*` configurations " +
+          "in case of security incidents.")
+        throw e
+
+      case _: IndexOutOfBoundsException | _: NegativeArraySizeException =>
+        // Netty may throw non-'IOException's for corrupted buffers. In this case,
+        // we ignore the entire message with warnings because we cannot trust any contents.
         logWarning(s"Ignored a corrupted RPC message (capacity: ${rpcMessage.capacity()}) " +
           s"from ${client.getSocketAddress}. Please use `spark.authenticate.*` configurations " +
           "in case of security incidents.")

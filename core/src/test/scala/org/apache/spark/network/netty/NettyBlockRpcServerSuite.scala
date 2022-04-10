@@ -27,7 +27,28 @@ import org.apache.spark.serializer.JavaSerializer
 
 class NettyBlockRpcServerSuite extends SparkFunSuite {
 
-  test("SPARK-38830: Warn corrupted Netty messages") {
+  test("SPARK-38830: Rethrow IllegalArgumentException due to `Unknown message type`") {
+    val serializer = new JavaSerializer(new SparkConf)
+    val server = new NettyBlockRpcServer("enhanced-rpc-server", serializer, null)
+    val bytes = Array[Byte](100.toByte)
+    val message = ByteBuffer.wrap(bytes)
+    val client = mock(classOf[TransportClient])
+    val m = intercept[IllegalArgumentException] {
+      server.receive(client, message)
+    }.getMessage
+    assert(m.startsWith("Unknown message type: 100"))
+  }
+
+  test("SPARK-38830: Warn and ignore NegativeArraySizeException due to the corruption") {
+    val serializer = new JavaSerializer(new SparkConf)
+    val server = new NettyBlockRpcServer("enhanced-rpc-server", serializer, null)
+    val bytes = Array[Byte](0.toByte, 0xFF.toByte, 0xFF.toByte, 0xFF.toByte, 0xFF.toByte)
+    val message = ByteBuffer.wrap(bytes)
+    val client = mock(classOf[TransportClient])
+    server.receive(client, message)
+  }
+
+  test("SPARK-38830: Warn and ignore IndexOutOfBoundsException due to the corruption") {
     val serializer = new JavaSerializer(new SparkConf)
     val server = new NettyBlockRpcServer("enhanced-rpc-server", serializer, null)
     val bytes = Array[Byte](1.toByte)
