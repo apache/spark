@@ -118,11 +118,11 @@ object PushDownUtils extends PredicateHelper {
   /**
    * Pushes down LIMIT to the data source Scan
    */
-  def pushLimit(scanBuilder: ScanBuilder, limit: Int): Boolean = {
+  def pushLimit(scanBuilder: ScanBuilder, limit: Int): (Boolean, Boolean) = {
     scanBuilder match {
-      case s: SupportsPushDownLimit =>
-        s.pushLimit(limit)
-      case _ => false
+      case s: SupportsPushDownLimit if s.pushLimit(limit) =>
+        (true, s.isPartiallyPushed)
+      case _ => (false, false)
     }
   }
 

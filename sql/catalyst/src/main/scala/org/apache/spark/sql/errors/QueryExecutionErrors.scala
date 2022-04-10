@@ -95,10 +95,13 @@ object QueryExecutionErrors {
   }
 
   def cannotChangeDecimalPrecisionError(
-      value: Decimal, decimalPrecision: Int, decimalScale: Int): ArithmeticException = {
+      value: Decimal,
+      decimalPrecision: Int,
+      decimalScale: Int,
+      context: String): ArithmeticException = {
     new SparkArithmeticException(errorClass = "CANNOT_CHANGE_DECIMAL_PRECISION",
       messageParameters = Array(value.toDebugString,
-        decimalPrecision.toString, decimalScale.toString, SQLConf.ANSI_ENABLED.key))
+        decimalPrecision.toString, decimalScale.toString, SQLConf.ANSI_ENABLED.key, context))
   }
 
   def invalidInputSyntaxForNumericError(e: NumberFormatException): NumberFormatException = {
@@ -211,8 +214,8 @@ object QueryExecutionErrors {
     ansiIllegalArgumentError(e.getMessage)
   }
 
-  def overflowInSumOfDecimalError(): ArithmeticException = {
-    arithmeticOverflowError("Overflow in sum of decimals")
+  def overflowInSumOfDecimalError(context: String): ArithmeticException = {
+    arithmeticOverflowError("Overflow in sum of decimals", errorContext = context)
   }
 
   def overflowInIntegralDivideError(context: String): ArithmeticException = {
