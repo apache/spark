@@ -175,9 +175,6 @@
     "message" : [ "The second argument of '%s' function needs to be an integer." ],
     "sqlState" : "22023"
   },
-  "UDF_WITH_TOO_MANY_TYPE_ARGUMENT_ERROR" : {
-    "message" : [ "UDF class with %s type arguments is not supported" ]
-  },
   "UNABLE_TO_ACQUIRE_MEMORY" : {
     "message" : [ "Unable to acquire %s bytes of memory, got %s" ]
   },

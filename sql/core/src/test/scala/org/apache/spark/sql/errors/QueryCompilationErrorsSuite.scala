@@ -250,9 +250,9 @@ class QueryCompilationErrorsSuite extends QueryTest with SharedSparkSession {
         StringType)
     )
 
-    assert(e.errorClass === Some("UDF_WITH_TOO_MANY_TYPE_ARGUMENT_ERROR"))
-    assert(e.message ===
-      s"UDF class with 24 type arguments is not supported")
+    assert(e.errorClass === Some("UNSUPPORTED_FEATURE"))
+    assert(e.getSqlState === "0A000")
+    assert(e.message === "The feature is not supported: UDF class with 23 arguments")
   }
 }
 
