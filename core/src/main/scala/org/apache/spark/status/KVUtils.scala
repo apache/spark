@@ -31,6 +31,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.History.HYBRID_STORE_DISK_BACKEND
 import org.apache.spark.internal.config.History.HybridStoreDiskBackend
 import org.apache.spark.internal.config.History.HybridStoreDiskBackend._
+import org.apache.spark.util.Utils
 import org.apache.spark.util.kvstore._
 
 private[spark] object KVUtils extends Logging {
@@ -94,11 +95,8 @@ private[spark] object KVUtils extends Logging {
 
   /** Turns a KVStoreView into a Scala sequence. */
   def viewToSeq[T](view: KVStoreView[T]): Seq[T] = {
-    val iter = view.closeableIterator()
-    try {
+    Utils.tryWithResource(view.closeableIterator()) { iter =>
       iter.asScala.toList
-    } finally {
-      iter.close()
     }
   }
 
