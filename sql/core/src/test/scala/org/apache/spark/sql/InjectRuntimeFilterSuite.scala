@@ -565,34 +565,4 @@ class InjectRuntimeFilterSuite extends QueryTest with SQLTestUtils with SharedSp
         """.stripMargin)
     }
   }
-
-  test("Make sure injected filters could push through Shuffle") {
-    withSQLConf(SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "3000") {
-      assertDidNotRewriteWithBloomFilter(
-        """
-          |SELECT *
-          |FROM   (SELECT max(c1) AS c1, min(d1) AS d1 FROM bf1) bf1
-          |       JOIN bf2 ON bf1.c1 = bf2.c2
-          |WHERE  bf2.a2 = 62
-        """.stripMargin)
-
-      assertDidNotRewriteWithBloomFilter(
-        """
-          |SELECT *
-          |FROM   (SELECT max(c1) AS c1, d1 FROM bf1 GROUP BY d1) bf1
-          |       JOIN bf2 ON bf1.c1 = bf2.c2
-          |WHERE  bf2.a2 = 62
-        """.stripMargin)
-
-      assertDidNotRewriteWithBloomFilter(
-        """
-          |SELECT *
-          |FROM   (SELECT *,
-          |               Row_number() OVER (PARTITION BY d1 ORDER BY f1) rn
-          |        FROM   bf1) bf1
-          |       JOIN bf2 ON bf1.c1 = bf2.c2
-          |WHERE  bf2.a2 = 62
-        """.stripMargin)
-    }
-  }
 }
