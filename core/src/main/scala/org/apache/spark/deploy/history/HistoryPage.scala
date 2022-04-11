@@ -17,6 +17,7 @@
 
 package org.apache.spark.deploy.history
 
+import java.io.Closeable
 import javax.servlet.http.HttpServletRequest
 
 import scala.xml.Node
@@ -30,8 +31,17 @@ private[history] class HistoryPage(parent: HistoryServer) extends WebUIPage("") 
     val requestedIncomplete = Option(request.getParameter("showIncomplete"))
       .getOrElse("false").toBoolean
 
-    val displayApplications = parent.getApplicationList()
-      .exists(isApplicationCompleted(_) != requestedIncomplete)
+    val displayApplications = {
+      val applicationList = parent.getApplicationList()
+      try {
+        applicationList.exists(isApplicationCompleted(_) != requestedIncomplete)
+      } finally {
+        applicationList match {
+          case closeable: Closeable => closeable.close()
+          case _ => // do nothing
+        }
+      }
+    }
     val eventLogsUnderProcessCount = parent.getEventLogsUnderProcess()
     val lastUpdatedTime = parent.getLastUpdatedTime()
     val providerConfig = parent.getProviderConfig()

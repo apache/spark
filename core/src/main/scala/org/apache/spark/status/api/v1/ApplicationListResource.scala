@@ -16,6 +16,7 @@
  */
 package org.apache.spark.status.api.v1
 
+import java.io.Closeable
 import java.util.{List => JList}
 import javax.ws.rs.{DefaultValue, GET, Produces, QueryParam}
 import javax.ws.rs.core.MediaType
@@ -37,15 +38,23 @@ private[v1] class ApplicationListResource extends ApiRequestContext {
     val includeCompleted = status.isEmpty || status.contains(ApplicationStatus.COMPLETED)
     val includeRunning = status.isEmpty || status.contains(ApplicationStatus.RUNNING)
 
-    uiRoot.getApplicationInfoList.filter { app =>
-      val anyRunning = app.attempts.exists(!_.completed)
-      // if any attempt is still running, we consider the app to also still be running;
-      // keep the app if *any* attempts fall in the right time window
-      ((!anyRunning && includeCompleted) || (anyRunning && includeRunning)) &&
-      app.attempts.exists { attempt =>
-        isAttemptInRange(attempt, minDate, maxDate, minEndDate, maxEndDate, anyRunning)
+    val applicationInfoList = uiRoot.getApplicationInfoList
+    try {
+      applicationInfoList.filter { app =>
+        val anyRunning = app.attempts.exists(!_.completed)
+        // if any attempt is still running, we consider the app to also still be running;
+        // keep the app if *any* attempts fall in the right time window
+        ((!anyRunning && includeCompleted) || (anyRunning && includeRunning)) &&
+          app.attempts.exists { attempt =>
+            isAttemptInRange(attempt, minDate, maxDate, minEndDate, maxEndDate, anyRunning)
+          }
+      }.take(numApps).toList.toIterator
+    } finally {
+      applicationInfoList match {
+        case closeable: Closeable => closeable.close()
+        case _ => // do nothing
       }
-    }.take(numApps)
+    }
   }
 
   private def isAttemptInRange(

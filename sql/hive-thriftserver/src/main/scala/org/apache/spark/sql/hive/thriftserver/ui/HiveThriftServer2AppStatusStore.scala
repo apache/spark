@@ -17,12 +17,14 @@
 
 package org.apache.spark.sql.hive.thriftserver.ui
 
-import com.fasterxml.jackson.annotation.JsonIgnore
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
 
+import com.fasterxml.jackson.annotation.JsonIgnore
+
 import org.apache.spark.sql.hive.thriftserver.HiveThriftServer2.ExecutionState
 import org.apache.spark.status.KVUtils.KVIndexParam
+import org.apache.spark.util.Utils
 import org.apache.spark.util.kvstore.{KVIndex, KVStore}
 
 /**
@@ -32,15 +34,24 @@ import org.apache.spark.util.kvstore.{KVIndex, KVStore}
 class HiveThriftServer2AppStatusStore(store: KVStore) {
 
   def getSessionList: Seq[SessionInfo] = {
-    store.view(classOf[SessionInfo]).asScala.toSeq
+    Utils.tryWithResource(
+      store.view(classOf[SessionInfo]).closeableIterator()) { iterator =>
+      iterator.asScala.toList
+    }
   }
 
   def getExecutionList: Seq[ExecutionInfo] = {
-    store.view(classOf[ExecutionInfo]).asScala.toSeq
+    Utils.tryWithResource(
+      store.view(classOf[ExecutionInfo]).closeableIterator()) { iterator =>
+      iterator.asScala.toList
+    }
   }
 
   def getOnlineSessionNum: Int = {
-    store.view(classOf[SessionInfo]).asScala.count(_.finishTimestamp == 0)
+    Utils.tryWithResource(
+      store.view(classOf[SessionInfo]).closeableIterator()) { iterator =>
+      iterator.asScala.count(_.finishTimestamp == 0)
+    }
   }
 
   def getSession(sessionId: String): Option[SessionInfo] = {
@@ -65,7 +76,10 @@ class HiveThriftServer2AppStatusStore(store: KVStore) {
    * cancellations and count all statements that have not been closed so far.
    */
   def getTotalRunning: Int = {
-    store.view(classOf[ExecutionInfo]).asScala.count(_.isExecutionActive)
+    Utils.tryWithResource(
+      store.view(classOf[ExecutionInfo]).closeableIterator()) { iterator =>
+      iterator.asScala.count(_.isExecutionActive)
+    }
   }
 
   def getSessionCount: Long = {

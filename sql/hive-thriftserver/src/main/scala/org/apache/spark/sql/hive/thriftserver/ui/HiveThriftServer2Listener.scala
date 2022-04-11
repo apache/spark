@@ -31,6 +31,7 @@ import org.apache.spark.scheduler._
 import org.apache.spark.sql.hive.thriftserver.HiveThriftServer2.ExecutionState
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.status.{ElementTrackingStore, KVUtils, LiveEntity}
+import org.apache.spark.util.Utils
 
 /**
  * An inner sparkListener called in sc.stop to clean up the HiveThriftServer2
@@ -101,7 +102,10 @@ private[thriftserver] class HiveThriftServer2Listener(
       // Execution end event (Refer SPARK-27019). To handle that situation, if occurs in
       // Thriftserver, following code will take care. Here will come only if JobStart event comes
       // after Execution End event.
-      val storeExecInfo = kvstore.view(classOf[ExecutionInfo]).asScala.filter(_.groupId == groupId)
+      val storeExecInfo = Utils.tryWithResource(
+        kvstore.view(classOf[ExecutionInfo]).closeableIterator()) { iterator =>
+        iterator.asScala.filter(_.groupId == groupId)
+      }
       storeExecInfo.foreach { exec =>
         val liveExec = getOrCreateExecution(exec.execId, exec.statement, exec.sessionId,
           exec.startTimestamp, exec.userName)

@@ -494,7 +494,9 @@ public abstract class DBIteratorSuite {
   }
 
   private List<CustomType1> collect(KVStoreView<CustomType1> view) throws Exception {
-    return Arrays.asList(Iterables.toArray(view, CustomType1.class));
+    try (KVStoreIterator<CustomType1> iterator = view.closeableIterator()) {
+      return Lists.newArrayList(iterator);
+    }
   }
 
   private List<CustomType1> sortBy(Comparator<CustomType1> comp) {

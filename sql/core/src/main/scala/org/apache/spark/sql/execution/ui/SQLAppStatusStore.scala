@@ -28,7 +28,9 @@ import com.fasterxml.jackson.databind.annotation.JsonDeserialize
 
 import org.apache.spark.JobExecutionStatus
 import org.apache.spark.status.KVUtils.KVIndexParam
+import org.apache.spark.util.Utils
 import org.apache.spark.util.kvstore.{KVIndex, KVStore}
+
 
 /**
  * Provides a view of a KVStore with methods that make it easy to query SQL-specific state. There's
@@ -39,11 +41,18 @@ class SQLAppStatusStore(
     val listener: Option[SQLAppStatusListener] = None) {
 
   def executionsList(): Seq[SQLExecutionUIData] = {
-    store.view(classOf[SQLExecutionUIData]).asScala.toSeq
+    Utils.tryWithResource(
+      store.view(classOf[SQLExecutionUIData]).closeableIterator()) { iterator =>
+      iterator.asScala.toList
+    }
   }
 
   def executionsList(offset: Int, length: Int): Seq[SQLExecutionUIData] = {
-    store.view(classOf[SQLExecutionUIData]).skip(offset).max(length).asScala.toSeq
+    Utils.tryWithResource(
+      store.view(classOf[SQLExecutionUIData]).skip(offset).max(length)
+        .closeableIterator()) { iterator =>
+      iterator.asScala.toList
+    }
   }
 
   def execution(executionId: Long): Option[SQLExecutionUIData] = {

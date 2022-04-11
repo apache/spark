@@ -29,6 +29,7 @@ import org.scalatest.time.SpanSugar._
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.status.KVUtils._
 import org.apache.spark.tags.ExtendedLevelDBTest
+import org.apache.spark.util.Utils
 import org.apache.spark.util.kvstore._
 
 abstract class HybridStoreSuite extends SparkFunSuite with BeforeAndAfter with TimeLimits {
@@ -112,11 +113,21 @@ abstract class HybridStoreSuite extends SparkFunSuite with BeforeAndAfter with T
 
     Seq(false, true).foreach { switch =>
       if (switch) switchHybridStore(store)
-
-      assert(store.view(t1.getClass()).iterator().next().id === t1.id)
-      assert(store.view(t1.getClass()).skip(1).iterator().next().id === t2.id)
-      assert(store.view(t1.getClass()).skip(1).max(1).iterator().next().id === t2.id)
-      assert(store.view(t1.getClass()).first(t1.key).max(1).iterator().next().id === t1.id)
+      Utils.tryWithResource(store.view(t1.getClass).closeableIterator()) { iterator =>
+        assert(iterator.next().id === t1.id)
+      }
+      Utils.tryWithResource(
+        store.view(t1.getClass).skip(1).closeableIterator()) { iterator =>
+        assert(iterator.next().id === t2.id)
+      }
+      Utils.tryWithResource(
+        store.view(t1.getClass).skip(1).max(1).closeableIterator()) { iterator =>
+        assert(iterator.next().id === t2.id)
+      }
+      Utils.tryWithResource(
+        store.view(t1.getClass).first(t1.key).max(1).closeableIterator()) { iterator =>
+        assert(iterator.next().id === t1.id)
+      }
       assert(store.view(t1.getClass()).first(t2.key).max(1).iterator().next().id === t2.id)
     }
   }

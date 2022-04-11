@@ -254,8 +254,11 @@ abstract class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter 
         assert(stage.info.memoryBytesSpilled === s1Tasks.size * value)
       }
 
-      val execs = store.view(classOf[ExecutorStageSummaryWrapper]).index("stage")
-        .first(key(stages.head)).last(key(stages.head)).asScala.toSeq
+      val execs = Utils.tryWithResource(
+        store.view(classOf[ExecutorStageSummaryWrapper]).index("stage")
+          .first(key(stages.head)).last(key(stages.head)).closeableIterator()) { iterator =>
+        iterator.asScala.toList
+      }
       assert(execs.size > 0)
       execs.foreach { exec =>
         assert(exec.info.memoryBytesSpilled === s1Tasks.size * value / 2)
@@ -272,11 +275,12 @@ abstract class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter 
       stageAttemptId = stages.head.attemptNumber))
 
     val executorStageSummaryWrappers =
-      store.view(classOf[ExecutorStageSummaryWrapper]).index("stage")
+      Utils.tryWithResource(store.view(classOf[ExecutorStageSummaryWrapper]).index("stage")
         .first(key(stages.head))
         .last(key(stages.head))
-        .asScala.toSeq
-
+        .closeableIterator()) { iterator =>
+        iterator.asScala.toList
+      }
     assert(executorStageSummaryWrappers.nonEmpty)
     executorStageSummaryWrappers.foreach { exec =>
       // only the first executor is expected to be excluded
@@ -301,11 +305,12 @@ abstract class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter 
       stageAttemptId = stages.head.attemptNumber))
 
     val executorStageSummaryWrappersForNode =
-      store.view(classOf[ExecutorStageSummaryWrapper]).index("stage")
+      Utils.tryWithResource(store.view(classOf[ExecutorStageSummaryWrapper]).index("stage")
         .first(key(stages.head))
         .last(key(stages.head))
-        .asScala.toSeq
-
+        .closeableIterator()) { iterator =>
+        iterator.asScala.toList
+      }
     assert(executorStageSummaryWrappersForNode.nonEmpty)
     executorStageSummaryWrappersForNode.foreach { exec =>
       // both executor is expected to be excluded
@@ -1364,13 +1369,19 @@ abstract class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter 
         TaskKilled(reason = "Killed"), tasks(1), new ExecutorMetrics, null))
 
     // Ensure killed task metrics are updated
-    val allStages = store.view(classOf[StageDataWrapper]).reverse().asScala.map(_.info)
+    val allStages = Utils.tryWithResource(
+      store.view(classOf[StageDataWrapper]).reverse().closeableIterator()) { iterator =>
+      iterator.asScala.map(_.info).toList
+    }
     val failedStages = allStages.filter(_.status == v1.StageStatus.FAILED)
     assert(failedStages.size == 1)
     assert(failedStages.head.numKilledTasks == 1)
     assert(failedStages.head.numCompleteTasks == 1)
 
-    val allJobs = store.view(classOf[JobDataWrapper]).reverse().asScala.map(_.info)
+    val allJobs = Utils.tryWithResource(
+      store.view(classOf[JobDataWrapper]).reverse().closeableIterator()) { iterator =>
+      iterator.asScala.map(_.info).toList
+    }
     assert(allJobs.size == 1)
     assert(allJobs.head.numKilledTasks == 1)
     assert(allJobs.head.numCompletedTasks == 1)
@@ -1427,14 +1438,20 @@ abstract class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter 
         ExecutorLostFailure("2", true, Some("Lost executor")), tasks(3), new ExecutorMetrics,
         null))
 
-      val esummary = store.view(classOf[ExecutorStageSummaryWrapper]).asScala.map(_.info)
+      val esummary = Utils.tryWithResource(
+        store.view(classOf[ExecutorStageSummaryWrapper]).closeableIterator()) { iterator =>
+        iterator.asScala.map(_.info).toList
+      }
       esummary.foreach { execSummary =>
         assert(execSummary.failedTasks === 1)
         assert(execSummary.succeededTasks === 1)
         assert(execSummary.killedTasks === 0)
       }
 
-      val allExecutorSummary = store.view(classOf[ExecutorSummaryWrapper]).asScala.map(_.info)
+      val allExecutorSummary = Utils.tryWithResource(
+        store.view(classOf[ExecutorSummaryWrapper]).closeableIterator()) { iterator =>
+        iterator.asScala.map(_.info).toList
+      }
       assert(allExecutorSummary.size === 2)
       allExecutorSummary.foreach { allExecSummary =>
         assert(allExecSummary.failedTasks === 1)
@@ -1672,7 +1689,10 @@ abstract class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter 
     }
 
     // check peak executor metric values for each stage and executor
-    val stageExecSummaries = store.view(classOf[ExecutorStageSummaryWrapper]).asScala.toSeq
+    val stageExecSummaries = Utils.tryWithResource(
+      store.view(classOf[ExecutorStageSummaryWrapper]).closeableIterator()) { iterator =>
+      iterator.asScala.toList
+    }
     stageExecSummaries.foreach { exec =>
       expectedStageValues.get(exec.stageId) match {
         case Some(stageValue) =>

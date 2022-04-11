@@ -684,12 +684,18 @@ class FsHistoryProviderSuite extends SparkFunSuite with Matchers with Logging {
     log3.setLastModified(clock.getTimeMillis())
     // This should not trigger any cleanup
     provider.cleanDriverLogs()
-    provider.listing.view(classOf[LogInfo]).iterator().asScala.toSeq.size should be(3)
+    Utils.tryWithResource(
+      provider.listing.view(classOf[LogInfo]).closeableIterator()) { iterator =>
+      iterator.asScala.toList.size should be(3)
+    }
 
     // Should trigger cleanup for first file but not second one
     clock.setTime(firstFileModifiedTime + TimeUnit.SECONDS.toMillis(maxAge) + 1)
     provider.cleanDriverLogs()
-    provider.listing.view(classOf[LogInfo]).iterator().asScala.toSeq.size should be(2)
+    Utils.tryWithResource(
+      provider.listing.view(classOf[LogInfo]).closeableIterator()) { iterator =>
+      iterator.asScala.toList.size should be(2)
+    }
     assert(!log1.exists())
     assert(log2.exists())
     assert(log3.exists())
@@ -700,7 +706,10 @@ class FsHistoryProviderSuite extends SparkFunSuite with Matchers with Logging {
     // Should cleanup the second file but not the third file, as filelength changed.
     clock.setTime(secondFileModifiedTime + TimeUnit.SECONDS.toMillis(maxAge) + 1)
     provider.cleanDriverLogs()
-    provider.listing.view(classOf[LogInfo]).iterator().asScala.toSeq.size should be(1)
+    Utils.tryWithResource(
+      provider.listing.view(classOf[LogInfo]).closeableIterator()) { iterator =>
+      iterator.asScala.toList.size should be(1)
+    }
     assert(!log1.exists())
     assert(!log2.exists())
     assert(log3.exists())
@@ -708,7 +717,10 @@ class FsHistoryProviderSuite extends SparkFunSuite with Matchers with Logging {
     // Should cleanup the third file as well.
     clock.setTime(secondFileModifiedTime + 2 * TimeUnit.SECONDS.toMillis(maxAge) + 2)
     provider.cleanDriverLogs()
-    provider.listing.view(classOf[LogInfo]).iterator().asScala.toSeq.size should be(0)
+    Utils.tryWithResource(
+      provider.listing.view(classOf[LogInfo]).closeableIterator()) { iterator =>
+      iterator.asScala.toList.size should be(0)
+    }
     assert(!log3.exists())
   }
 

@@ -78,13 +78,15 @@ private class HistoryServerDiskManager(
 
     // Go through the recorded store directories and remove any that may have been removed by
     // external code.
-    val (existences, orphans) = listing
-      .view(classOf[ApplicationStoreInfo])
-      .asScala
-      .toSeq
-      .partition { info =>
-        new File(info.path).exists()
-      }
+    val (existences, orphans) = Utils.tryWithResource(listing
+      .view(classOf[ApplicationStoreInfo]).closeableIterator()) { iterator =>
+      iterator
+        .asScala
+        .toSeq
+        .partition { info =>
+          new File(info.path).exists()
+        }
+    }
 
     orphans.foreach { info =>
       listing.delete(info.getClass(), info.path)

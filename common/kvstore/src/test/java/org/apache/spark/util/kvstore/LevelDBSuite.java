@@ -19,9 +19,9 @@ package org.apache.spark.util.kvstore;
 
 import java.io.File;
 import java.util.Arrays;
-import java.util.Iterator;
 import java.util.List;
 import java.util.NoSuchElementException;
+import java.util.Spliterators;
 import java.util.stream.Collectors;
 import java.util.stream.StreamSupport;
 
@@ -236,13 +236,14 @@ public class LevelDBSuite {
       db.write(createCustomType1(i));
     }
 
-    KVStoreIterator<CustomType1> it = db.view(CustomType1.class).closeableIterator();
-    assertTrue(it.hasNext());
-    assertTrue(it.skip(5));
-    assertEquals("key5", it.next().key);
-    assertTrue(it.skip(3));
-    assertEquals("key9", it.next().key);
-    assertFalse(it.hasNext());
+    try (KVStoreIterator<CustomType1> it = db.view(CustomType1.class).closeableIterator()) {
+      assertTrue(it.hasNext());
+      assertTrue(it.skip(5));
+      assertEquals("key5", it.next().key);
+      assertTrue(it.skip(3));
+      assertEquals("key9", it.next().key);
+      assertFalse(it.hasNext());
+    }
   }
 
   @Test
@@ -257,12 +258,15 @@ public class LevelDBSuite {
       }
     });
 
-    List<Integer> results = StreamSupport
-      .stream(db.view(CustomType1.class).index("int").spliterator(), false)
-      .map(e -> e.num)
-      .collect(Collectors.toList());
+    try (KVStoreIterator<CustomType1> iterator =
+      db.view(CustomType1.class).index("int").closeableIterator()) {
+      List<Integer> results = StreamSupport
+        .stream(Spliterators.spliteratorUnknownSize(iterator, 0), false)
+        .map(e -> e.num)
+        .collect(Collectors.toList());
 
-    assertEquals(expected, results);
+      assertEquals(expected, results);
+    }
   }
 
   @Test
@@ -278,18 +282,22 @@ public class LevelDBSuite {
     for (int i = 0; i < 8192; i++) {
       dbForCloseTest.write(createCustomType1(i));
     }
-    String key = dbForCloseTest
-      .view(CustomType1.class).iterator().next().key;
-    assertEquals("key0", key);
-    Iterator<CustomType1> it0 = dbForCloseTest
-      .view(CustomType1.class).max(1).iterator();
-    while (it0.hasNext()) {
-      it0.next();
+    try (KVStoreIterator<CustomType1> iterator =
+      dbForCloseTest.view(CustomType1.class).closeableIterator()) {
+      String key = iterator.next().key;
+      assertEquals("key0", key);
+    }
+    try (KVStoreIterator<CustomType1> it0 =
+      dbForCloseTest.view(CustomType1.class).max(1).closeableIterator()) {
+      while (it0.hasNext()) {
+        it0.next();
+      }
     }
     System.gc();
-    Iterator<CustomType1> it1 = dbForCloseTest
-      .view(CustomType1.class).iterator();
-    assertEquals("key0", it1.next().key);
+    try (KVStoreIterator<CustomType1> it1 =
+      dbForCloseTest.view(CustomType1.class).closeableIterator()) {
+      assertEquals("key0", it1.next().key);
+    }
     try (KVStoreIterator<CustomType1> it2 = dbForCloseTest
       .view(CustomType1.class).closeableIterator()) {
       assertEquals("key0", it2.next().key);
