@@ -102,22 +102,22 @@ class AppStatusStoreSuite extends SparkFunSuite {
     new AppStatusStore(store)
   }
 
-  private val testContent = {
-    val baseTests = Seq(
+  private val cases = {
+    val baseCases = Seq(
       "disk rocksdb" -> createAppStore(disk = true, HybridStoreDiskBackend.ROCKSDB, live = false),
       "in memory" -> createAppStore(disk = false, live = false),
       "in memory live" -> createAppStore(disk = false, live = true)
     )
     if(Utils.isMacOnAppleSilicon) {
-      baseTests
+      baseCases
     } else {
       Seq(
         "disk leveldb" -> createAppStore(disk = true, HybridStoreDiskBackend.LEVELDB, live = false)
-      ) ++ baseTests
+      ) ++ baseCases
     }
   }
 
-  testContent.foreach { case (hint, appStore) =>
+  cases.foreach { case (hint, appStore) =>
     test(s"SPARK-26260: summary should contain only successful tasks' metrics (store = $hint)") {
       assume(appStore != null)
       val store = appStore.store
