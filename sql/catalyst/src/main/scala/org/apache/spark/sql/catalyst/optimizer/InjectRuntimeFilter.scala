@@ -137,11 +137,22 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
       !canBroadcastBySize(left, conf) && !canBroadcastBySize(right, conf)
   }
 
-  private def probablyHasShuffle(plan: LogicalPlan): Boolean = {
-    plan.exists {
-      case Join(left, right, _, _, hint) => isProbablyShuffleJoin(left, right, hint)
-      case _: Aggregate => true
-      case _ => false
+  // Make sure injected filters could push through Shuffle, see PushPredicateThroughNonJoin
+  private def probablyPushThroughShuffle(exp: Expression, plan: LogicalPlan): Boolean = {
+    plan match {
+      case Join(left, right, _, _, hint) if isProbablyShuffleJoin(left, right, hint) => true
+      case a @ Aggregate(groupingExps, aggExps, child)
+          if aggExps.forall(_.deterministic) && groupingExps.nonEmpty &&
+        replaceAlias(exp, getAliasMap(a)).references.subsetOf(child.outputSet) => true
+      case w: Window
+          if w.partitionSpec.forall(_.isInstanceOf[AttributeReference]) &&
+        exp.references.subsetOf(AttributeSet(w.partitionSpec.flatMap(_.references))) => true
+      case p: Project =>
+        probablyPushThroughShuffle(replaceAlias(exp, getAliasMap(p)), p.child)
+      case other =>
+        other.children.exists { p =>
+          if (exp.references.subsetOf(p.outputSet)) probablyPushThroughShuffle(exp, p) else false
+        }
     }
   }
 
@@ -172,10 +183,11 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
 
   /**
    * Check that:
-   * - The filterApplicationSideJoinExp can be pushed down through joins and aggregates (ie the
-   *   expression references originate from a single leaf node)
+   * - The filterApplicationSideJoinExp can be pushed down through joins, aggregates and windows
+   *   (ie the expression references originate from a single leaf node)
    * - The filter creation side has a selective predicate
-   * - The current join is a shuffle join or a broadcast join that has a shuffle below it
+   * - The current join is a shuffle join or a broadcast join that has a shuffle below it and we
+   *   can push down injected filters through shuffle
    * - The max filterApplicationSide scan size is greater than a configurable threshold
    */
   private def filteringHasBenefit(
@@ -186,7 +198,7 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
     findExpressionAndTrackLineageDown(filterApplicationSideExp,
       filterApplicationSide).isDefined && isSelectiveFilterOverScan(filterCreationSide) &&
       (isProbablyShuffleJoin(filterApplicationSide, filterCreationSide, hint) ||
-        probablyHasShuffle(filterApplicationSide)) &&
+        probablyPushThroughShuffle(filterApplicationSideExp, filterApplicationSide)) &&
       satisfyByteSizeRequirement(filterApplicationSide)
   }
 
