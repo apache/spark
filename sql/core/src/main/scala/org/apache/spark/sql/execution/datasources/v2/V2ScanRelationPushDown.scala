@@ -360,13 +360,13 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper wit
     }
   }
 
-  private def pushDownLimit(plan: LogicalPlan, limit: Int): LogicalPlan = plan match {
+  private def pushDownLimit(plan: LogicalPlan, limit: Int): (LogicalPlan, Boolean) = plan match {
     case operation @ ScanOperation(_, filter, sHolder: ScanBuilderHolder) if filter.isEmpty =>
-      val limitPushed = PushDownUtils.pushLimit(sHolder.builder, limit)
-      if (limitPushed) {
+      val (isPushed, isPartiallyPushed) = PushDownUtils.pushLimit(sHolder.builder, limit)
+      if (isPushed) {
         sHolder.pushedLimit = Some(limit)
       }
-      operation
+      (operation, isPushed && !isPartiallyPushed)
     case s @ Sort(order, _, operation @ ScanOperation(project, filter, sHolder: ScanBuilderHolder))
         if filter.isEmpty && CollapseProject.canCollapseExpressions(
           order, project, alwaysInline = true) =>
@@ -380,27 +380,32 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper wit
           sHolder.pushedLimit = Some(limit)
           sHolder.sortOrders = orders
           if (isPartiallyPushed) {
-            s
+            (s, false)
           } else {
-            operation
+            (operation, true)
           }
         } else {
-          s
+          (s, false)
         }
       } else {
-        s
+        (s, false)
       }
     case p: Project =>
-      val newChild = pushDownLimit(p.child, limit)
-      p.withNewChildren(Seq(newChild))
-    case other => other
+      val (newChild, isPartiallyPushed) = pushDownLimit(p.child, limit)
+      (p.withNewChildren(Seq(newChild)), isPartiallyPushed)
+    case other => (other, false)
   }
 
   def pushDownLimits(plan: LogicalPlan): LogicalPlan = plan.transform {
     case globalLimit @ Limit(IntegerLiteral(limitValue), child) =>
-      val newChild = pushDownLimit(child, limitValue)
-      val newLocalLimit = globalLimit.child.asInstanceOf[LocalLimit].withNewChildren(Seq(newChild))
-      globalLimit.withNewChildren(Seq(newLocalLimit))
+      val (newChild, canRemoveLimit) = pushDownLimit(child, limitValue)
+      if (canRemoveLimit) {
+        newChild
+      } else {
+        val newLocalLimit =
+          globalLimit.child.asInstanceOf[LocalLimit].withNewChildren(Seq(newChild))
+        globalLimit.withNewChildren(Seq(newLocalLimit))
+      }
   }
 
   private def getWrappedScan(
