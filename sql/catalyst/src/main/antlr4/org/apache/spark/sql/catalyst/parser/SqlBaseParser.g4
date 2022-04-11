@@ -70,7 +70,7 @@ statement
     | ctes? dmlStatementNoWith                                         #dmlStatement
     | USE multipartIdentifier                                          #use
     | USE namespace multipartIdentifier                                #useNamespace
-    | SET CATALOG (identifier | SINGLE_QUOTED_STRING)                  #setCatalog
+    | SET CATALOG (identifier | SINGLE_QUOTED_STRING | DOUBLE_QUOTED_STRING) #setCatalog
     | CREATE namespace (IF NOT EXISTS)? multipartIdentifier
         (commentSpec |
          locationSpec |
@@ -385,6 +385,7 @@ property
 propertyKey
     : identifier (DOT identifier)*
     | SINGLE_QUOTED_STRING
+    | DOUBLE_QUOTED_STRING
     ;
 
 propertyValue
