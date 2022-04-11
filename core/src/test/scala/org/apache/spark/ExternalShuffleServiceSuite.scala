@@ -256,21 +256,25 @@ class ExternalShuffleServiceSuite extends ShuffleSuite with BeforeAndAfterAll wi
     }
   }
 
-  test("SPARK-38640: using external shuffle service fetching disk persisted blocks") {
-    val confWithRddFetchEnabled = conf.clone.set(config.SHUFFLE_SERVICE_FETCH_RDD_ENABLED, true)
-    sc = new SparkContext("local-cluster[1,1,1024]", "test", confWithRddFetchEnabled)
-    sc.env.blockManager.externalShuffleServiceEnabled should equal(true)
-    sc.env.blockManager.blockStoreClient.getClass should equal(classOf[ExternalBlockStoreClient])
-    try {
-      val rdd = sc.parallelize(0 until 100, 2)
-        .map { i => (i, 1) }
-        .persist(StorageLevel.MEMORY_ONLY)
+  test("SPARK-38640: memory only blocks can unpersist using shuffle service cache fetching") {
+    for (enabled <- Seq(true, false)) {
+      val confWithRddFetch =
+        conf.clone.set(config.SHUFFLE_SERVICE_FETCH_RDD_ENABLED, enabled)
+      sc = new SparkContext("local-cluster[1,1,1024]", "test", confWithRddFetch)
+      sc.env.blockManager.externalShuffleServiceEnabled should equal(true)
+      sc.env.blockManager.blockStoreClient.getClass should equal(classOf[ExternalBlockStoreClient])
+      try {
+        val rdd = sc.parallelize(0 until 100, 2)
+          .map { i => (i, 1) }
+          .persist(StorageLevel.MEMORY_ONLY)
 
-      rdd.count()
-      rdd.unpersist(true)
-      assert(sc.persistentRdds.isEmpty)
-    } finally {
-      rpcHandler.applicationRemoved(sc.conf.getAppId, true)
+        rdd.count()
+        rdd.unpersist(true)
+        assert(sc.persistentRdds.isEmpty)
+      } finally {
+        rpcHandler.applicationRemoved(sc.conf.getAppId, true)
+        sc.stop()
+      }
     }
   }
 }
