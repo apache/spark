@@ -27,7 +27,7 @@ import org.apache.hadoop.fs.{FileSystem, Path, PathFilter}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{SparkSession}
 import org.apache.spark.sql.catalyst.{InternalRow, TableIdentifier}
-import org.apache.spark.sql.catalyst.catalog.{CatalogStatistics, CatalogTable, CatalogTableType, ExternalCatalogUtils}
+import org.apache.spark.sql.catalyst.catalog.{CatalogStatistics, CatalogTable, CatalogTableType}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -52,7 +52,13 @@ class PathFilterIgnoreNonData(stagingDir: String) extends PathFilter with Serial
 
 object CommandUtils extends Logging {
 
-  /** Change statistics after changing data by commands. */
+  /**
+   * Change statistics after changing data by commands.
+   *
+   * @param partitionSpecs Iterable of partition specs to select which partition stats to update
+   * @param isDropPartition Set true for drop partition commands to skip updating partition stats.
+   *                        Updated partition stats will be dropped anyway.
+   */
   def updateTableStats(
       sparkSession: SparkSession,
       table: CatalogTable,
