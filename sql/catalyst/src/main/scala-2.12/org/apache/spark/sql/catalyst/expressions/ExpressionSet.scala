@@ -64,8 +64,8 @@ object ExpressionSet {
  *    accessed.
  */
 class ExpressionSet protected(
-  private val baseSet: mutable.Set[Expression] = new mutable.HashSet,
-  private var originals: mutable.Buffer[Expression] = new ArrayBuffer)
+    private val baseSet: mutable.Set[Expression] = new mutable.HashSet,
+    private var originals: mutable.Buffer[Expression] = new ArrayBuffer)
   extends scala.collection.Set[Expression]
     with scala.collection.SetLike[Expression, ExpressionSet]  {
 
