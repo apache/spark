@@ -135,6 +135,21 @@ case class Average(
   override lazy val evaluateExpression: Expression = getEvaluateExpression
 }
 
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = "_FUNC_(expr) - Returns the mean calculated from values of a group and the result is null on overflow.",
+  examples = """
+    Examples:
+      > SELECT _FUNC_(col) FROM VALUES (1), (2), (3) AS tab(col);
+       2.0
+      > SELECT _FUNC_(col) FROM VALUES (1), (2), (NULL) AS tab(col);
+       1.5
+      > SELECT _FUNC_(col) FROM VALUES (interval '2147483647 months'), (interval '1 months') AS tab(col);
+       null
+  """,
+  group = "agg_funcs",
+  since = "3.3.0")
+// scalastyle:on line.size.limit
 case class TryAverage(child: Expression) extends AverageBase {
   override def failOnError: Boolean = resultType match {
     // Double type won't fail, thus the failOnError is always false
@@ -144,17 +159,18 @@ case class TryAverage(child: Expression) extends AverageBase {
     case _ => true
   }
 
-  private def addTryEvalIfNeeded(expressions: Seq[Expression]): Seq[Expression] = {
+  private def addTryEvalIfNeeded(expression: Expression): Expression = {
     if (failOnError) {
       // The tail expressions are for counting, which doesn't need `TryEval` execution.
-      Seq(TryEval(expressions.head)) ++ expressions.tail
+      TryEval(expression)
     } else {
-      expressions
+      expression
     }
   }
 
   override lazy val updateExpressions: Seq[Expression] = {
-    addTryEvalIfNeeded(getUpdateExpressions)
+    val expressions = getUpdateExpressions
+    addTryEvalIfNeeded(expressions.head) +: expressions.tail
   }
 
   override lazy val mergeExpressions: Seq[Expression] = {
@@ -176,7 +192,7 @@ case class TryAverage(child: Expression) extends AverageBase {
   }
 
   override lazy val evaluateExpression: Expression = {
-    addTryEvalIfNeeded(Seq(getEvaluateExpression)).head
+    addTryEvalIfNeeded(getEvaluateExpression)
   }
 
   override protected def withNewChildInternal(newChild: Expression): Expression =
