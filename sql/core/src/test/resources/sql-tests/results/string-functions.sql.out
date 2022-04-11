@@ -1000,11 +1000,11 @@ struct<to_number($78.12, $00.00):decimal(4,2)>
 
 
 -- !query
-select to_number('-454', '-000')
+select to_number('+454', 'S000')
 -- !query schema
-struct<to_number(-454, -000):decimal(3,0)>
+struct<to_number(+454, S000):decimal(3,0)>
 -- !query output
--454
+454
 
 
 -- !query
@@ -1016,17 +1016,25 @@ struct<to_number(-454, S000):decimal(3,0)>
 
 
 -- !query
-select to_number('12,454.8-', '00,000.9-')
+select to_number('12,454.8-', '00,000.9MI')
 -- !query schema
-struct<to_number(12,454.8-, 00,000.9-):decimal(6,1)>
+struct<to_number(12,454.8-, 00,000.9MI):decimal(6,1)>
 -- !query output
 -12454.8
 
 
 -- !query
-select to_number('00,454.8-', '00,000.9-')
+select to_number('00,454.8-', '00,000.9MI')
 -- !query schema
-struct<to_number(00,454.8-, 00,000.9-):decimal(6,1)>
+struct<to_number(00,454.8-, 00,000.9MI):decimal(6,1)>
+-- !query output
+-454.8
+
+
+-- !query
+select to_number('<00,454.8>', '00,000.9PR')
+-- !query schema
+struct<to_number(<00,454.8>, 00,000.9PR):decimal(6,1)>
 -- !query output
 -454.8
 
