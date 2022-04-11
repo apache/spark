@@ -254,6 +254,16 @@ class QueryCompilationErrorsSuite extends QueryTest with SharedSparkSession {
     assert(e.getSqlState === "0A000")
     assert(e.message === "The feature is not supported: UDF class with 24 type arguments")
   }
+
+  test("GROUPING_COLUMN_MISMATCH: not found the grouping column") {
+    val groupingColMismatchEx = intercept[AnalysisException] {
+      courseSales.cube("course", "year").agg(grouping("earnings")).explain()
+    }
+    assert(groupingColMismatchEx.getErrorClass === "GROUPING_COLUMN_MISMATCH")
+    assert(groupingColMismatchEx.getSqlState === "42000")
+    assert(groupingColMismatchEx.getMessage.matches(
+      "Column of grouping \\(earnings.*\\) can't be found in grouping columns course.*,year.*"))
+  }
 }
 
 class MyCastToString extends SparkUserDefinedFunction(

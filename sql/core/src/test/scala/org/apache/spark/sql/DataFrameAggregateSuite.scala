@@ -198,14 +198,6 @@ class DataFrameAggregateSuite extends QueryTest
       courseSales.groupBy().agg(grouping_id("course")).explain()
     }
 
-    val groupingColMismatchEx = intercept[AnalysisException] {
-      courseSales.cube("course", "year").agg(grouping("earnings")).explain()
-    }
-    assert(groupingColMismatchEx.getErrorClass == "GROUPING_COLUMN_MISMATCH")
-    assert(groupingColMismatchEx.getMessage.matches(
-      "Column of grouping \\(earnings.*\\) can't be found in grouping columns course.*,year.*"))
-
-
     val groupingIdColMismatchEx = intercept[AnalysisException] {
       courseSales.cube("course", "year").agg(grouping_id("earnings")).explain()
     }
