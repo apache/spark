@@ -592,18 +592,10 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
   private def convertToStructField(col: QualifiedColType): StructField = {
     val builder = new MetadataBuilder
     col.comment.foreach(builder.putString("comment", _))
-    col.default.foreach{ value: String =>
-      builder.putString(DefaultCols.CURRENT_DEFAULT_COLUMN_METADATA_KEY, value)
+    col.default.map {
+      value: String => builder.putString(DefaultCols.CURRENT_DEFAULT_COLUMN_METADATA_KEY, value)
     }
-    val result = StructField(col.name.head, col.dataType, nullable = true, builder.build())
-    if (col.default.isDefined) {
-      lazy val analyzer = new Analyzer(catalogManager)
-      val foldedStructType = DefaultCols.constantFoldCurrentDefaultsToExistDefaults(
-        analyzer, StructType(Seq(result)), "ALTER TABLE ADD COLUMNS")
-      foldedStructType.fields(0)
-    } else {
-      result
-    }
+    StructField(col.name.head, col.dataType, nullable = true, builder.build())
   }
 
   private def isV2Provider(provider: String): Boolean = {
