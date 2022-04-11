@@ -1315,7 +1315,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     if (toLong(result, false)) {
       return result.value;
     }
-    throw new NumberFormatException("invalid input syntax for type numeric: " + this);
+    throw new NumberFormatException("invalid input syntax for type numeric: '" + this + "'");
   }
 
   /**
@@ -1329,7 +1329,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     if (toInt(result, false)) {
       return result.value;
     }
-    throw new NumberFormatException("invalid input syntax for type numeric: " + this);
+    throw new NumberFormatException("invalid input syntax for type numeric: '" + this + "'");
   }
 
   public short toShortExact() {
@@ -1338,7 +1338,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     if (result == value) {
       return result;
     }
-    throw new NumberFormatException("invalid input syntax for type numeric: " + this);
+    throw new NumberFormatException("invalid input syntax for type numeric: '" + this + "'");
   }
 
   public byte toByteExact() {
@@ -1347,7 +1347,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     if (result == value) {
       return result;
     }
-    throw new NumberFormatException("invalid input syntax for type numeric: " + this);
+    throw new NumberFormatException("invalid input syntax for type numeric: '" + this + "'");
   }
 
   @Override
