@@ -39,6 +39,7 @@ import org.apache.spark.sql.execution.datasources.DataSourceUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy
 import org.apache.spark.sql.types._
+import org.apache.spark.util.Utils
 
 /**
  * A Parquet [[WriteSupport]] implementation that writes Catalyst [[InternalRow]]s as Parquet
@@ -227,7 +228,7 @@ class ParquetWriteSupport extends WriteSupport[InternalRow] with Logging {
               recordConsumer.addLong(millis)
         }
 
-      case TimestampNTZType =>
+      case TimestampNTZType if Utils.isTesting =>
         // For TimestampNTZType column, Spark always output as INT64 with Timestamp annotation in
         // MICROS time unit.
         (row: SpecializedGetters, ordinal: Int) => recordConsumer.addLong(row.getLong(ordinal))
