@@ -48,7 +48,7 @@ abstract class AverageBase
 
   final override val nodePatterns: Seq[TreePattern] = Seq(AVERAGE)
 
-  private lazy val resultType = child.dataType match {
+  protected lazy val resultType = child.dataType match {
     case DecimalType.Fixed(p, s) =>
       DecimalType.bounded(p + 4, s + 4)
     case _: YearMonthIntervalType => YearMonthIntervalType()
@@ -74,7 +74,7 @@ abstract class AverageBase
   )
 
   protected def getMergeExpressions = Seq(
-    /* sum = */ sum.left + sum.right,
+    /* sum = */ Add(sum.left, sum.right, failOnError),
     /* count = */ count.left + count.right
   )
 
@@ -100,7 +100,8 @@ abstract class AverageBase
     /* sum = */
     Add(
       sum,
-      coalesce(child.cast(sumDataType), Literal.default(sumDataType))),
+      coalesce(child.cast(sumDataType), Literal.default(sumDataType)),
+      failOnError = failOnError),
     /* count = */ If(child.isNull, count, count + 1L)
   )
 
@@ -135,7 +136,7 @@ case class Average(
 }
 
 case class TryAverage(child: Expression) extends AverageBase {
-  override def failOnError: Boolean = dataType match {
+  override def failOnError: Boolean = resultType match {
     // Double type won't fail, thus the failOnError is always false
     // For decimal type, it returns NULL on overflow. It behaves the same as TrySum when
     // `failOnError` is false.
@@ -143,29 +144,40 @@ case class TryAverage(child: Expression) extends AverageBase {
     case _ => true
   }
 
-  override lazy val updateExpressions: Seq[Expression] =
+  private def addTryEvalIfNeeded(expressions: Seq[Expression]): Seq[Expression] = {
     if (failOnError) {
-      val expressions = getUpdateExpressions
-      // If the length of updateExpressions is larger than 1, the tail expressions are for
-      // tracking whether the input is empty, which doesn't need `TryEval` execution.
+      // The tail expressions are for counting, which doesn't need `TryEval` execution.
       Seq(TryEval(expressions.head)) ++ expressions.tail
     } else {
-      getUpdateExpressions
+      expressions
     }
+  }
 
-  override lazy val mergeExpressions: Seq[Expression] =
-    if (failOnError) {
-      getMergeExpressions.map(TryEval)
-    } else {
-      getMergeExpressions
-    }
+  override lazy val updateExpressions: Seq[Expression] = {
+    addTryEvalIfNeeded(getUpdateExpressions)
+  }
 
-  override lazy val evaluateExpression: Expression =
+  override lazy val mergeExpressions: Seq[Expression] = {
+    val expressions = getMergeExpressions
     if (failOnError) {
-      TryEval(getEvaluateExpression)
+      val bufferOverflow = sum.left.isNull && count.left > 0L
+      val inputOverflow = sum.right.isNull && count.right > 0L
+      Seq(
+        If(
+          bufferOverflow || inputOverflow,
+          Literal.create(null, resultType),
+          // If both the buffer and the input do not overflow, just add them, as they can't be
+          // null.
+          TryEval(Add(KnownNotNull(sum.left), KnownNotNull(sum.right), failOnError))),
+          expressions(1))
     } else {
-      getEvaluateExpression
+      expressions
     }
+  }
+
+  override lazy val evaluateExpression: Expression = {
+    addTryEvalIfNeeded(Seq(getEvaluateExpression)).head
+  }
 
   override protected def withNewChildInternal(newChild: Expression): Expression =
     copy(child = newChild)
