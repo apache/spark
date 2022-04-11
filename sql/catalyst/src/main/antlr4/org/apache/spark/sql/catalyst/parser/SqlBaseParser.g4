@@ -70,7 +70,7 @@ statement
     | ctes? dmlStatementNoWith                                         #dmlStatement
     | USE multipartIdentifier                                          #use
     | USE namespace multipartIdentifier                                #useNamespace
-    | SET CATALOG (identifier | STRING)                                #setCatalog
+    | SET CATALOG (identifier | SINGLE_QUOTED_STRING)                  #setCatalog
     | CREATE namespace (IF NOT EXISTS)? multipartIdentifier
         (commentSpec |
          locationSpec |
@@ -82,7 +82,7 @@ statement
     | DROP namespace (IF EXISTS)? multipartIdentifier
         (RESTRICT | CASCADE)?                                          #dropNamespace
     | SHOW namespaces ((FROM | IN) multipartIdentifier)?
-        (LIKE? pattern=STRING)?                                        #showNamespaces
+        (LIKE? pattern=(SINGLE_QUOTED_STRING | DOUBLE_QUOTED_STRING))?                                        #showNamespaces
     | createTableHeader (LEFT_PAREN createOrReplaceTableColTypeList RIGHT_PAREN)? tableProvider?
         createTableClauses
         (AS? query)?                                                   #createTable
@@ -131,7 +131,7 @@ statement
         LEFT_PAREN columns=qualifiedColTypeWithPositionList
         RIGHT_PAREN                                                    #hiveReplaceColumns
     | ALTER TABLE multipartIdentifier (partitionSpec)?
-        SET SERDE STRING (WITH SERDEPROPERTIES propertyList)?          #setTableSerDe
+        SET SERDE (SINGLE_QUOTED_STRING | DOUBLE_QUOTED_STRING) (WITH SERDEPROPERTIES propertyList)?          #setTableSerDe
     | ALTER TABLE multipartIdentifier (partitionSpec)?
         SET SERDEPROPERTIES propertyList                               #setTableSerDe
     | ALTER (TABLE | VIEW) multipartIdentifier ADD (IF NOT EXISTS)?
@@ -157,27 +157,27 @@ statement
         (OPTIONS propertyList)?                                        #createTempViewUsing
     | ALTER VIEW multipartIdentifier AS? query                         #alterViewQuery
     | CREATE (OR REPLACE)? TEMPORARY? FUNCTION (IF NOT EXISTS)?
-        multipartIdentifier AS className=STRING
+        multipartIdentifier AS className=(SINGLE_QUOTED_STRING | DOUBLE_QUOTED_STRING)
         (USING resource (COMMA resource)*)?                            #createFunction
     | DROP TEMPORARY? FUNCTION (IF EXISTS)? multipartIdentifier        #dropFunction
     | EXPLAIN (LOGICAL | FORMATTED | EXTENDED | CODEGEN | COST)?
         statement                                                      #explain
     | SHOW TABLES ((FROM | IN) multipartIdentifier)?
-        (LIKE? pattern=STRING)?                                        #showTables
+        (LIKE? pattern=(SINGLE_QUOTED_STRING | DOUBLE_QUOTED_STRING))?                                        #showTables
     | SHOW TABLE EXTENDED ((FROM | IN) ns=multipartIdentifier)?
-        LIKE pattern=STRING partitionSpec?                             #showTableExtended
+        LIKE pattern=(SINGLE_QUOTED_STRING | DOUBLE_QUOTED_STRING) partitionSpec?                             #showTableExtended
     | SHOW TBLPROPERTIES table=multipartIdentifier
         (LEFT_PAREN key=propertyKey RIGHT_PAREN)?                      #showTblProperties
     | SHOW COLUMNS (FROM | IN) table=multipartIdentifier
         ((FROM | IN) ns=multipartIdentifier)?                          #showColumns
     | SHOW VIEWS ((FROM | IN) multipartIdentifier)?
-        (LIKE? pattern=STRING)?                                        #showViews
+        (LIKE? pattern=(SINGLE_QUOTED_STRING | DOUBLE_QUOTED_STRING))?                                        #showViews
     | SHOW PARTITIONS multipartIdentifier partitionSpec?               #showPartitions
     | SHOW identifier? FUNCTIONS ((FROM | IN) ns=multipartIdentifier)?
-        (LIKE? (legacy=multipartIdentifier | pattern=STRING))?         #showFunctions
+        (LIKE? (legacy=multipartIdentifier | pattern=(SINGLE_QUOTED_STRING | DOUBLE_QUOTED_STRING)))?         #showFunctions
     | SHOW CREATE TABLE multipartIdentifier (AS SERDE)?                #showCreateTable
     | SHOW CURRENT namespace                                           #showCurrentNamespace
-    | SHOW CATALOGS (LIKE? pattern=STRING)?                            #showCatalogs
+    | SHOW CATALOGS (LIKE? pattern=(SINGLE_QUOTED_STRING | DOUBLE_QUOTED_STRING))?                            #showCatalogs
     | (DESC | DESCRIBE) FUNCTION EXTENDED? describeFuncName            #describeFunction
     | (DESC | DESCRIBE) namespace EXTENDED?
         multipartIdentifier                                            #describeNamespace
@@ -185,16 +185,16 @@ statement
         multipartIdentifier partitionSpec? describeColName?            #describeRelation
     | (DESC | DESCRIBE) QUERY? query                                   #describeQuery
     | COMMENT ON namespace multipartIdentifier IS
-        comment=(STRING | NULL)                                        #commentNamespace
-    | COMMENT ON TABLE multipartIdentifier IS comment=(STRING | NULL)  #commentTable
+        comment=(SINGLE_QUOTED_STRING | DOUBLE_QUOTED_STRING | NULL)                                        #commentNamespace
+    | COMMENT ON TABLE multipartIdentifier IS comment=(SINGLE_QUOTED_STRING | DOUBLE_QUOTED_STRING | NULL)  #commentTable
     | REFRESH TABLE multipartIdentifier                                #refreshTable
     | REFRESH FUNCTION multipartIdentifier                             #refreshFunction
-    | REFRESH (STRING | .*?)                                           #refreshResource
+    | REFRESH (SINGLE_QUOTED_STRING | DOUBLE_QUOTED_STRING | .*?)                                           #refreshResource
     | CACHE LAZY? TABLE multipartIdentifier
         (OPTIONS options=propertyList)? (AS? query)?                   #cacheTable
     | UNCACHE TABLE (IF EXISTS)? multipartIdentifier                   #uncacheTable
     | CLEAR CACHE                                                      #clearCache
-    | LOAD DATA LOCAL? INPATH path=STRING OVERWRITE? INTO TABLE
+    | LOAD DATA LOCAL? INPATH path=(SINGLE_QUOTED_STRING | DOUBLE_QUOTED_STRING) OVERWRITE? INTO TABLE
         multipartIdentifier partitionSpec?                             #loadData
     | TRUNCATE TABLE multipartIdentifier partitionSpec?                #truncateTable
     | MSCK REPAIR TABLE multipartIdentifier
@@ -202,7 +202,7 @@ statement
     | op=(ADD | LIST) identifier .*?                                   #manageResource
     | SET ROLE .*?                                                     #failNativeCommand
     | SET TIME ZONE interval                                           #setTimeZone
-    | SET TIME ZONE timezone=(STRING | LOCAL)                          #setTimeZone
+    | SET TIME ZONE timezone=(SINGLE_QUOTED_STRING | DOUBLE_QUOTED_STRING | LOCAL)                          #setTimeZone
     | SET TIME ZONE .*?                                                #setTimeZone
     | SET configKey EQ configValue                                     #setQuotedConfiguration
     | SET configKey (EQ .*?)?                                          #setConfiguration
@@ -294,11 +294,11 @@ skewSpec
     ;
 
 locationSpec
-    : LOCATION STRING
+    : LOCATION (SINGLE_QUOTED_STRING | DOUBLE_QUOTED_STRING)
     ;
 
 commentSpec
-    : COMMENT STRING
+    : COMMENT (SINGLE_QUOTED_STRING | DOUBLE_QUOTED_STRING)
     ;
 
 query
@@ -308,8 +308,8 @@ query
 insertInto
     : INSERT OVERWRITE TABLE? multipartIdentifier (partitionSpec (IF NOT EXISTS)?)?  identifierList?        #insertOverwriteTable
     | INSERT INTO TABLE? multipartIdentifier partitionSpec? (IF NOT EXISTS)? identifierList?                #insertIntoTable
-    | INSERT OVERWRITE LOCAL? DIRECTORY path=STRING rowFormat? createFileFormat?                            #insertOverwriteHiveDir
-    | INSERT OVERWRITE LOCAL? DIRECTORY (path=STRING)? tableProvider (OPTIONS options=propertyList)?        #insertOverwriteDir
+    | INSERT OVERWRITE LOCAL? DIRECTORY path=(SINGLE_QUOTED_STRING | DOUBLE_QUOTED_STRING) rowFormat? createFileFormat?                            #insertOverwriteHiveDir
+    | INSERT OVERWRITE LOCAL? DIRECTORY (path=(SINGLE_QUOTED_STRING | DOUBLE_QUOTED_STRING))? tableProvider (OPTIONS options=propertyList)?        #insertOverwriteDir
     ;
 
 partitionSpecLocation
@@ -339,7 +339,8 @@ namespaces
 
 describeFuncName
     : qualifiedName
-    | STRING
+    | SINGLE_QUOTED_STRING
+    | DOUBLE_QUOTED_STRING
     | comparisonOperator
     | arithmeticOperator
     | predicateOperator
@@ -383,14 +384,15 @@ property
 
 propertyKey
     : identifier (DOT identifier)*
-    | STRING
+    | SINGLE_QUOTED_STRING
     ;
 
 propertyValue
     : INTEGER_VALUE
     | DECIMAL_VALUE
     | booleanValue
-    | STRING
+    | SINGLE_QUOTED_STRING
+    | DOUBLE_QUOTED_STRING
     ;
 
 constantList
@@ -407,16 +409,16 @@ createFileFormat
     ;
 
 fileFormat
-    : INPUTFORMAT inFmt=STRING OUTPUTFORMAT outFmt=STRING    #tableFileFormat
+    : INPUTFORMAT inFmt=(SINGLE_QUOTED_STRING | DOUBLE_QUOTED_STRING) OUTPUTFORMAT outFmt=(SINGLE_QUOTED_STRING | DOUBLE_QUOTED_STRING)    #tableFileFormat
     | identifier                                             #genericFileFormat
     ;
 
 storageHandler
-    : STRING (WITH SERDEPROPERTIES propertyList)?
+    : (SINGLE_QUOTED_STRING | DOUBLE_QUOTED_STRING) (WITH SERDEPROPERTIES propertyList)?
     ;
 
 resource
-    : identifier STRING
+    : identifier (SINGLE_QUOTED_STRING | DOUBLE_QUOTED_STRING)
     ;
 
 dmlStatementNoWith
@@ -506,11 +508,11 @@ transformClause
             | kind=MAP setQuantifier? expressionSeq
             | kind=REDUCE setQuantifier? expressionSeq)
       inRowFormat=rowFormat?
-      (RECORDWRITER recordWriter=STRING)?
-      USING script=STRING
+      (RECORDWRITER recordWriter=(SINGLE_QUOTED_STRING | DOUBLE_QUOTED_STRING))?
+      USING script=(SINGLE_QUOTED_STRING | DOUBLE_QUOTED_STRING)
       (AS (identifierSeq | colTypeList | (LEFT_PAREN (identifierSeq | colTypeList) RIGHT_PAREN)))?
       outRowFormat=rowFormat?
-      (RECORDREADER recordReader=STRING)?
+      (RECORDREADER recordReader=(SINGLE_QUOTED_STRING | DOUBLE_QUOTED_STRING))?
     ;
 
 selectClause
@@ -570,7 +572,7 @@ fromClause
     ;
 
 temporalClause
-    : FOR? (SYSTEM_VERSION | VERSION) AS OF version=(INTEGER_VALUE | STRING)
+    : FOR? (SYSTEM_VERSION | VERSION) AS OF version=(INTEGER_VALUE | SINGLE_QUOTED_STRING | DOUBLE_QUOTED_STRING)
     | FOR? (SYSTEM_TIME | TIMESTAMP) AS OF timestamp=valueExpression
     ;
 
@@ -707,13 +709,13 @@ tableAlias
     ;
 
 rowFormat
-    : ROW FORMAT SERDE name=STRING (WITH SERDEPROPERTIES props=propertyList)?       #rowFormatSerde
+    : ROW FORMAT SERDE name=(SINGLE_QUOTED_STRING | DOUBLE_QUOTED_STRING) (WITH SERDEPROPERTIES props=propertyList)?       #rowFormatSerde
     | ROW FORMAT DELIMITED
-      (FIELDS TERMINATED BY fieldsTerminatedBy=STRING (ESCAPED BY escapedBy=STRING)?)?
-      (COLLECTION ITEMS TERMINATED BY collectionItemsTerminatedBy=STRING)?
-      (MAP KEYS TERMINATED BY keysTerminatedBy=STRING)?
-      (LINES TERMINATED BY linesSeparatedBy=STRING)?
-      (NULL DEFINED AS nullDefinedAs=STRING)?                                       #rowFormatDelimited
+      (FIELDS TERMINATED BY fieldsTerminatedBy=(SINGLE_QUOTED_STRING | DOUBLE_QUOTED_STRING) (ESCAPED BY escapedBy=(SINGLE_QUOTED_STRING | DOUBLE_QUOTED_STRING))?)?
+      (COLLECTION ITEMS TERMINATED BY collectionItemsTerminatedBy=(SINGLE_QUOTED_STRING | DOUBLE_QUOTED_STRING))?
+      (MAP KEYS TERMINATED BY keysTerminatedBy=(SINGLE_QUOTED_STRING | DOUBLE_QUOTED_STRING))?
+      (LINES TERMINATED BY linesSeparatedBy=(SINGLE_QUOTED_STRING | DOUBLE_QUOTED_STRING))?
+      (NULL DEFINED AS nullDefinedAs=(SINGLE_QUOTED_STRING | DOUBLE_QUOTED_STRING))?                                       #rowFormatDelimited
     ;
 
 multipartIdentifierList
@@ -741,7 +743,13 @@ functionIdentifier
     ;
 
 namedExpression
-    : expression (AS? (name=errorCapturingIdentifier | identifierList))?
+    : expression (AS? (name=aliasIdentifier | identifierList))?
+    ;
+
+aliasIdentifier
+    : errorCapturingIdentifier
+    | identifierList
+    | DOUBLE_QUOTED_STRING
     ;
 
 namedExpressionSeq
@@ -790,7 +798,7 @@ predicate
     | NOT? kind=IN LEFT_PAREN query RIGHT_PAREN
     | NOT? kind=RLIKE pattern=valueExpression
     | NOT? kind=(LIKE | ILIKE) quantifier=(ANY | SOME | ALL) (LEFT_PAREN RIGHT_PAREN | LEFT_PAREN expression (COMMA expression)* RIGHT_PAREN)
-    | NOT? kind=(LIKE | ILIKE) pattern=valueExpression (ESCAPE escapeChar=STRING)?
+    | NOT? kind=(LIKE | ILIKE) pattern=valueExpression (ESCAPE escapeChar=(SINGLE_QUOTED_STRING | DOUBLE_QUOTED_STRING))?
     | IS NOT? kind=NULL
     | IS NOT? kind=(TRUE | FALSE | UNKNOWN)
     | IS NOT? kind=DISTINCT FROM right=valueExpression
@@ -852,10 +860,15 @@ primaryExpression
 constant
     : NULL                                                                                     #nullLiteral
     | interval                                                                                 #intervalLiteral
-    | identifier STRING                                                                        #typeConstructor
+    | identifier (SINGLE_QUOTED_STRING | DOUBLE_QUOTED_STRING)                                 #typeConstructor
     | number                                                                                   #numericLiteral
     | booleanValue                                                                             #booleanLiteral
-    | STRING+                                                                                  #stringLiteral
+    | stringValue+                                                                             #stringLiteral
+    ;
+
+stringValue
+    : SINGLE_QUOTED_STRING
+    | DOUBLE_QUOTED_STRING
     ;
 
 comparisonOperator
@@ -895,7 +908,7 @@ unitToUnitInterval
     ;
 
 intervalValue
-    : (PLUS | MINUS)? (INTEGER_VALUE | DECIMAL_VALUE | STRING)
+    : (PLUS | MINUS)? (INTEGER_VALUE | DECIMAL_VALUE | SINGLE_QUOTED_STRING | DOUBLE_QUOTED_STRING)
     ;
 
 colPosition

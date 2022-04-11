@@ -78,6 +78,10 @@ class ExpressionParserSuite extends AnalysisTest {
     assertEqual("a.b.*", UnresolvedStar(Option(Seq("a", "b"))))
   }
 
+  test("double-quoted identifier as alias") {
+    assertEqual("1 + r.r As \"q\"", (Literal(1) + UnresolvedAttribute("r.r")).as("\"q\""))
+  }
+
   // NamedExpression (Alias/Multialias)
   test("named expressions") {
     // No Alias
@@ -285,7 +289,7 @@ class ExpressionParserSuite extends AnalysisTest {
     assertEqual("foo(distinct a, b)", $"foo".distinctFunction($"a", $"b"))
     assertEqual("grouping(distinct a, b)", $"grouping".distinctFunction($"a", $"b"))
     assertEqual("`select`(all a, b)", $"select".function($"a", $"b"))
-    intercept("foo(a x)", "Syntax error at or near 'x': extra input 'x'")
+    intercept("foo(a x)", "Syntax error at or near 'x'")
   }
 
   private def lv(s: Symbol) = UnresolvedNamedLambdaVariable(Seq(s.name))
