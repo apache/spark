@@ -66,6 +66,10 @@ class DistinctKeyVisitorSuite extends PlanTest {
       Set(ExpressionSet(Seq(a)), ExpressionSet(Seq(d.toAttribute))))
     checkDistinctAttributes(t1.groupBy(f.child, $"b")(f, $"b", sum($"c")),
       Set(ExpressionSet(Seq(f.toAttribute, b))))
+
+    // Aggregate should also propagate distinct keys from child
+    checkDistinctAttributes(t1.limit(1).groupBy($"a", $"b")($"a", $"b"),
+      Set(ExpressionSet(Seq(a)), ExpressionSet(Seq(b))))
   }
 
   test("Distinct's distinct attributes") {
@@ -86,7 +90,8 @@ class DistinctKeyVisitorSuite extends PlanTest {
   test("Limit's distinct attributes") {
     checkDistinctAttributes(Distinct(t1).limit(10), Set(ExpressionSet(Seq(a, b, c))))
     checkDistinctAttributes(LocalLimit(10, Distinct(t1)), Set(ExpressionSet(Seq(a, b, c))))
-    checkDistinctAttributes(t1.limit(1), Set(ExpressionSet(Seq(a, b, c))))
+    checkDistinctAttributes(t1.limit(1),
+      Set(ExpressionSet(Seq(a)), ExpressionSet(Seq(b)), ExpressionSet(Seq(c))))
   }
 
   test("Intersect's distinct attributes") {

@@ -81,7 +81,7 @@ Besides, the ANSI SQL mode disallows the following type conversions which are al
 
 | Source\Target | Numeric | String | Date | Timestamp | Interval | Boolean | Binary | Array | Map | Struct |
 |-----------|---------|--------|------|-----------|----------|---------|--------|-------|-----|--------|
-| Numeric   | <span style="color:red">**Y**</span> | Y      | N    | N         | <span style="color:red">**Y**</span> | Y       | N      | N     | N   | N      |
+| Numeric   | <span style="color:red">**Y**</span> | Y      | N    | <span style="color:red">**Y**</span>         | N      | Y       | N      | N     | N   | N      |
 | String    | <span style="color:red">**Y**</span> | Y | <span style="color:red">**Y**</span> | <span style="color:red">**Y**</span> | <span style="color:red">**Y**</span> | <span style="color:red">**Y**</span> | Y | N     | N   | N      |
 | Date      | N       | Y      | Y    | Y         | N        | N       | N      | N     | N   | N      |
 | Timestamp | <span style="color:red">**Y**</span> | Y      | Y    | Y         | N        | N       | N      | N     | N   | N      |
