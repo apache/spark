@@ -66,7 +66,7 @@ import org.apache.spark.util.CircularBuffer
  * This does not include exceptions thrown during the eager execution of commands, which are
  * grouped into [[QueryCompilationErrors]].
  */
-object QueryExecutionErrors {
+object QueryExecutionErrors extends QueryErrorsBase {
 
   def logicalHintOperatorNotRemovedDuringAnalysisError(): Throwable = {
     new SparkIllegalStateException(errorClass = "INTERNAL_ERROR",
@@ -91,7 +91,7 @@ object QueryExecutionErrors {
 
   def castingCauseOverflowError(t: Any, dataType: DataType): ArithmeticException = {
     new SparkArithmeticException(errorClass = "CAST_CAUSES_OVERFLOW",
-      messageParameters = Array(t.toString, dataType.catalogString, SQLConf.ANSI_ENABLED.key))
+      messageParameters = Array(toSQLValue(t), dataType.catalogString, SQLConf.ANSI_ENABLED.key))
   }
 
   def cannotChangeDecimalPrecisionError(
@@ -111,7 +111,7 @@ object QueryExecutionErrors {
 
   def invalidInputSyntaxForNumericError(s: UTF8String): NumberFormatException = {
     new SparkNumberFormatException(errorClass = "INVALID_INPUT_SYNTAX_FOR_NUMERIC_TYPE",
-      messageParameters = Array(s.toString, SQLConf.ANSI_ENABLED.key))
+      messageParameters = Array(toSQLValue(s, StringType), SQLConf.ANSI_ENABLED.key))
   }
 
   def cannotCastFromNullTypeError(to: DataType): Throwable = {
@@ -158,14 +158,16 @@ object QueryExecutionErrors {
       numElements: Int,
       key: String): ArrayIndexOutOfBoundsException = {
     new SparkArrayIndexOutOfBoundsException(errorClass = "INVALID_ARRAY_INDEX",
-      messageParameters = Array(index.toString, numElements.toString, key))
+      messageParameters = Array(toSQLValue(index), toSQLValue(numElements), key))
   }
 
   def invalidElementAtIndexError(
        index: Int,
        numElements: Int): ArrayIndexOutOfBoundsException = {
-    new SparkArrayIndexOutOfBoundsException(errorClass = "INVALID_ARRAY_INDEX_IN_ELEMENT_AT",
-      messageParameters = Array(index.toString, numElements.toString, SQLConf.ANSI_ENABLED.key))
+    new SparkArrayIndexOutOfBoundsException(
+      errorClass = "INVALID_ARRAY_INDEX_IN_ELEMENT_AT",
+      messageParameters =
+        Array(toSQLValue(index), toSQLValue(numElements), SQLConf.ANSI_ENABLED.key))
   }
 
   def mapKeyNotExistError(
@@ -174,10 +176,10 @@ object QueryExecutionErrors {
       context: String): NoSuchElementException = {
     if (isElementAtFunction) {
       new SparkNoSuchElementException(errorClass = "MAP_KEY_DOES_NOT_EXIST_IN_ELEMENT_AT",
-        messageParameters = Array(key.toString, SQLConf.ANSI_ENABLED.key, context))
+        messageParameters = Array(toSQLValue(key), SQLConf.ANSI_ENABLED.key, context))
     } else {
       new SparkNoSuchElementException(errorClass = "MAP_KEY_DOES_NOT_EXIST",
-        messageParameters = Array(key.toString, SQLConf.ANSI_STRICT_INDEX_OPERATOR.key, context))
+        messageParameters = Array(toSQLValue(key), SQLConf.ANSI_STRICT_INDEX_OPERATOR.key, context))
     }
   }
 
@@ -457,12 +459,12 @@ object QueryExecutionErrors {
   }
 
   def unaryMinusCauseOverflowError(originValue: AnyVal): ArithmeticException = {
-    arithmeticOverflowError(s"- $originValue caused overflow")
+    arithmeticOverflowError(s"- ${toSQLValue(originValue)} caused overflow")
   }
 
   def binaryArithmeticCauseOverflowError(
       eval1: Short, symbol: String, eval2: Short): ArithmeticException = {
-    arithmeticOverflowError(s"$eval1 $symbol $eval2 caused overflow")
+    arithmeticOverflowError(s"${toSQLValue(eval1)} $symbol ${toSQLValue(eval2)} caused overflow")
   }
 
   def failedSplitSubExpressionMsg(length: Int): String = {
@@ -1070,7 +1072,7 @@ object QueryExecutionErrors {
   def cannotParseStringAsDataTypeError(pattern: String, value: String, dataType: DataType)
   : Throwable = {
     new RuntimeException(
-      s"Cannot parse field value ${value} for pattern ${pattern} " +
+      s"Cannot parse field value ${toSQLValue(value)} for pattern ${toSQLValue(pattern)} " +
         s"as target spark data type [$dataType].")
   }
 
@@ -1135,7 +1137,7 @@ object QueryExecutionErrors {
   }
 
   def paramIsNotIntegerError(paramName: String, value: String): Throwable = {
-    new RuntimeException(s"$paramName should be an integer. Found $value")
+    new RuntimeException(s"$paramName should be an integer. Found ${toSQLValue(value)}")
   }
 
   def paramIsNotBooleanValueError(paramName: String): Throwable = {
@@ -1341,7 +1343,7 @@ object QueryExecutionErrors {
   }
 
   def indexOutOfBoundsOfArrayDataError(idx: Int): Throwable = {
-    new SparkIndexOutOfBoundsException(errorClass = "INDEX_OUT_OF_BOUNDS", Array(idx.toString))
+    new SparkIndexOutOfBoundsException(errorClass = "INDEX_OUT_OF_BOUNDS", Array(toSQLValue(idx)))
   }
 
   def malformedRecordsDetectedInRecordParsingError(e: BadRecordException): Throwable = {
@@ -1378,7 +1380,8 @@ object QueryExecutionErrors {
   }
 
   def dynamicPartitionKeyNotAmongWrittenPartitionPathsError(key: String): Throwable = {
-    new SparkException(s"Dynamic partition key $key is not among written partition paths.")
+    new SparkException(
+      s"Dynamic partition key ${toSQLValue(key)} is not among written partition paths.")
   }
 
   def cannotRemovePartitionDirError(partitionPath: Path): Throwable = {
@@ -1661,7 +1664,7 @@ object QueryExecutionErrors {
   }
 
   def valueIsNullError(index: Int): Throwable = {
-    new NullPointerException(s"Value at index $index is null")
+    new NullPointerException(s"Value at index ${toSQLValue(index)} is null")
   }
 
   def onlySupportDataSourcesProvidingFileFormatError(providingClass: String): Throwable = {
@@ -2005,6 +2008,7 @@ object QueryExecutionErrors {
   def timestampAddOverflowError(micros: Long, amount: Int, unit: String): ArithmeticException = {
     new SparkArithmeticException(
       errorClass = "DATETIME_OVERFLOW",
-      messageParameters = Array(s"add $amount $unit to '${DateTimeUtils.microsToInstant(micros)}'"))
+      messageParameters = Array(
+        s"add ${toSQLValue(amount)} $unit to ${toSQLValue(DateTimeUtils.microsToInstant(micros))}"))
   }
 }
