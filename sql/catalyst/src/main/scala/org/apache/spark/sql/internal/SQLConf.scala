@@ -364,7 +364,7 @@ object SQLConf {
         "to insert a bloom filter in the other side to reduce the amount of shuffle data.")
       .version("3.3.0")
       .booleanConf
-      .createWithDefault(false)
+      .createWithDefault(true)
 
   val RUNTIME_BLOOM_FILTER_CREATION_SIDE_THRESHOLD =
     buildConf("spark.sql.optimizer.runtime.bloomFilter.creationSideThreshold")
@@ -375,7 +375,7 @@ object SQLConf {
       .createWithDefaultString("10MB")
 
   val RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD =
-    buildConf("spark.sql.optimizer.runtime.bloomFilter.applicationSideScanSizethreshold")
+    buildConf("spark.sql.optimizer.runtime.bloomFilter.applicationSideScanSizeThreshold")
       .doc("Byte size threshold of the Bloom filter application side plan's aggregated scan " +
         "size. Aggregated scan byte size of the Bloom filter application side needs to be over " +
         "this value to inject a bloom filter.")
@@ -1015,7 +1015,7 @@ object SQLConf {
           s"Requires ${PARQUET_VECTORIZED_READER_ENABLED.key} to be enabled.")
       .version("3.3.0")
       .booleanConf
-      .createWithDefault(false)
+      .createWithDefault(true)
 
   val PARQUET_RECORD_FILTER_ENABLED = buildConf("spark.sql.parquet.recordLevelFilter.enabled")
     .doc("If true, enables Parquet's native record-level filtering using the pushed down " +
@@ -1897,6 +1897,19 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  /**
+   * SPARK-38809 - Config option to allow skipping null values for hash based stream-stream joins.
+   * Its possible for us to see nulls if state was written with an older version of Spark,
+   * the state was corrupted on disk or if we had an issue with the state iterators.
+   */
+  val STATE_STORE_SKIP_NULLS_FOR_STREAM_STREAM_JOINS =
+  buildConf("spark.sql.streaming.stateStore.skipNullsForStreamStreamJoins.enabled")
+    .internal()
+    .doc("When true, this config will skip null values in hash based stream-stream joins.")
+    .version("3.3.0")
+    .booleanConf
+    .createWithDefault(false)
+
   val VARIABLE_SUBSTITUTE_ENABLED =
     buildConf("spark.sql.variable.substitute")
       .doc("This enables substitution using syntax like `${var}`, `${system:var}`, " +
@@ -2012,6 +2025,17 @@ object SQLConf {
       .internal()
       .doc("When true, the SQL function 'count' is allowed to take single 'tblName.*' as parameter")
       .version("3.2")
+      .booleanConf
+      .createWithDefault(false)
+
+  val ALLOW_ZERO_INDEX_IN_FORMAT_STRING =
+    buildConf("spark.sql.legacy.allowZeroIndexInFormatString")
+      .internal()
+      .doc("When false, the `strfmt` in `format_string(strfmt, obj, ...)` and " +
+        "`printf(strfmt, obj, ...)` will no longer support to use \"0$\" to specify the first " +
+        "argument, the first argument should always reference by \"1$\" when use argument index " +
+        "to indicating the position of the argument in the argument list.")
+      .version("3.3")
       .booleanConf
       .createWithDefault(false)
 
@@ -3213,9 +3237,9 @@ object SQLConf {
         s"and type literal. Setting the configuration as ${TimestampTypes.TIMESTAMP_NTZ} will " +
         "use TIMESTAMP WITHOUT TIME ZONE as the default type while putting it as " +
         s"${TimestampTypes.TIMESTAMP_LTZ} will use TIMESTAMP WITH LOCAL TIME ZONE. " +
-        "Before the 3.3.0 release, Spark only supports the TIMESTAMP WITH " +
+        "Before the 3.4.0 release, Spark only supports the TIMESTAMP WITH " +
         "LOCAL TIME ZONE type.")
-      .version("3.3.0")
+      .version("3.4.0")
       .stringConf
       .transform(_.toUpperCase(Locale.ROOT))
       .checkValues(TimestampTypes.values.map(_.toString))
@@ -3876,6 +3900,9 @@ class SQLConf extends Serializable with Logging {
   def stateStoreMinDeltasForSnapshot: Int = getConf(STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT)
 
   def stateStoreFormatValidationEnabled: Boolean = getConf(STATE_STORE_FORMAT_VALIDATION_ENABLED)
+
+  def stateStoreSkipNullsForStreamStreamJoins: Boolean =
+    getConf(STATE_STORE_SKIP_NULLS_FOR_STREAM_STREAM_JOINS)
 
   def checkpointLocation: Option[String] = getConf(CHECKPOINT_LOCATION)
 

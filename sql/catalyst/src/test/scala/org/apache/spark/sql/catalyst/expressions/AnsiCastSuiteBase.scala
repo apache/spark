@@ -175,28 +175,28 @@ abstract class AnsiCastSuiteBase extends CastSuiteBase {
     // cast to IntegerType
     Seq(IntegerType, ShortType, ByteType, LongType).foreach { dataType =>
       checkExceptionInExpression[NumberFormatException](
-        cast("string", dataType), "invalid input syntax for type numeric: string")
+        cast("string", dataType), "invalid input syntax for type numeric: 'string'")
       checkExceptionInExpression[NumberFormatException](
-        cast("123-string", dataType), "invalid input syntax for type numeric: 123-string")
+        cast("123-string", dataType), "invalid input syntax for type numeric: '123-string'")
       checkExceptionInExpression[NumberFormatException](
-        cast("2020-07-19", dataType), "invalid input syntax for type numeric: 2020-07-19")
+        cast("2020-07-19", dataType), "invalid input syntax for type numeric: '2020-07-19'")
       checkExceptionInExpression[NumberFormatException](
-        cast("1.23", dataType), "invalid input syntax for type numeric: 1.23")
+        cast("1.23", dataType), "invalid input syntax for type numeric: '1.23'")
     }
 
     Seq(DoubleType, FloatType, DecimalType.USER_DEFAULT).foreach { dataType =>
       checkExceptionInExpression[NumberFormatException](
-        cast("string", dataType), "invalid input syntax for type numeric: string")
+        cast("string", dataType), "invalid input syntax for type numeric: 'string'")
       checkExceptionInExpression[NumberFormatException](
-        cast("123.000.00", dataType), "invalid input syntax for type numeric: 123.000.00")
+        cast("123.000.00", dataType), "invalid input syntax for type numeric: '123.000.00'")
       checkExceptionInExpression[NumberFormatException](
-        cast("abc.com", dataType), "invalid input syntax for type numeric: abc.com")
+        cast("abc.com", dataType), "invalid input syntax for type numeric: 'abc.com'")
     }
   }
 
   protected def checkCastToNumericError(l: Literal, to: DataType, tryCastResult: Any): Unit = {
     checkExceptionInExpression[NumberFormatException](
-      cast(l, to), "invalid input syntax for type numeric: true")
+      cast(l, to), "invalid input syntax for type numeric: 'true'")
   }
 
   test("cast from invalid string array to numeric array should throw NumberFormatException") {

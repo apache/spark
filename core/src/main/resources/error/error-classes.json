@@ -134,6 +134,9 @@
     "message" : [ "Unknown static partition column: %s" ],
     "sqlState" : "42000"
   },
+  "MULTI_UDF_INTERFACE_ERROR" : {
+    "message" : [ "Not allowed to implement multiple UDF interfaces, UDF class %s" ]
+  },
   "NON_LITERAL_PIVOT_VALUES" : {
     "message" : [ "Literal expressions required for pivot values, found '%s'" ],
     "sqlState" : "42000"
@@ -141,6 +144,12 @@
   "NON_PARTITION_COLUMN" : {
     "message" : [ "PARTITION clause cannot contain a non-partition column name: %s" ],
     "sqlState" : "42000"
+  },
+  "NO_HANDLER_FOR_UDAF" : {
+    "message" : [ "No handler for UDAF '%s'. Use sparkSession.udf.register(...) instead." ]
+  },
+  "NO_UDF_INTERFACE_ERROR" : {
+    "message" : [ "UDF class %s doesn't implement any UDF interface" ]
   },
   "PARSE_CHAR_MISSING_LENGTH" : {
     "message" : [ "DataType %s requires a length parameter, for example %s(10). Please specify the length." ],
@@ -186,6 +195,9 @@
   },
   "UNSUPPORTED_OPERATION" : {
     "message" : [ "The operation is not supported: %s" ]
+  },
+  "UNTYPED_SCALA_UDF" : {
+    "message" : [ "You're using untyped Scala UDF, which does not have the input type information. Spark may blindly pass null to the Scala closure with primitive-type argument, and the closure will see the default value of the Java type for the null argument, e.g. `udf((x: Int) => x, IntegerType)`, the result is 0 for null input. To get rid of this error, you could:\n1. use typed Scala UDF APIs(without return type parameter), e.g. `udf((x: Int) => x)`\n2. use Java UDF APIs, e.g. `udf(new UDF1[String, Integer] { override def call(s: String): Integer = s.length() }, IntegerType)`, if input types are all non primitive\n3. set spark.sql.legacy.allowUntypedScalaUDF to true and use this API with caution" ]
   },
   "WRITING_JOB_ABORTED" : {
     "message" : [ "Writing job aborted" ],
