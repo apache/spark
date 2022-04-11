@@ -482,10 +482,7 @@ case class AlterTableAddPartitionCommand(
         catalog.alterTableStats(table.identifier, Some(newStats))
 
         partitionSpecsAndLocs.foreach { case (partition, _) =>
-          val partitionSpec = partition.mapValues {
-            case null => Some(ExternalCatalogUtils.DEFAULT_PARTITION_NAME)
-            case other => Some(other)
-          }.toMap
+          val partitionSpec = partition.mapValues(Some(_)).toMap
           AnalyzePartitionCommand(table.identifier, partitionSpec).run(sparkSession)
         }
       }

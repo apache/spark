@@ -70,11 +70,7 @@ object CommandUtils extends Logging {
         if (!isDropPartition && table.partitionColumnNames.nonEmpty) {
           if (partitionSpecs.nonEmpty) {
             partitionSpecs.foreach { partitionSpec =>
-              val partSpec = partitionSpec.map {
-                case (key, Some(null)) => key -> Some(ExternalCatalogUtils.DEFAULT_PARTITION_NAME)
-                case other => other
-              }
-              AnalyzePartitionCommand(table.identifier, partSpec).run(sparkSession)
+              AnalyzePartitionCommand(table.identifier, partitionSpec).run(sparkSession)
             }
           } else {
             AnalyzePartitionCommand(table.identifier, Map()).run(sparkSession)
