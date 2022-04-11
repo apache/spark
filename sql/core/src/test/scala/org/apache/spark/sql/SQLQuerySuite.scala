@@ -4342,7 +4342,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     }
   }
 
-  test("SPARK-38548: try_avg should return null if overflow happens before merging") {
+  test("SPARK-38589: try_avg should return null if overflow happens before merging") {
     val yearMonthDf = Seq(Int.MaxValue, Int.MaxValue, 2)
       .map(Period.ofMonths)
       .toDF("v")
