@@ -88,7 +88,7 @@ class StatCounterTests(ReusedPySparkTestCase):
             self.assertAlmostEqual(stats.sampleVariance(), 7621.539691095905)
 
     def test_variance_when_size_zero(self):
-        # SPARK-38854 : Test case to improve test coverage when
+        # SPARK-38854: Test case to improve test coverage when
         # StatCounter argument is empty list or None
         arguments = [[], None]
         import math
