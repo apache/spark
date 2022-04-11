@@ -19,15 +19,15 @@ package org.apache.spark.status
 
 import scala.util.Random
 
-import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.internal.config.History.{HYBRID_STORE_DISK_BACKEND, HybridStoreDiskBackend}
 import org.apache.spark.internal.config.Status.LIVE_ENTITY_UPDATE_PERIOD
 import org.apache.spark.resource.ResourceProfile
-import org.apache.spark.scheduler.{SparkListenerStageSubmitted, SparkListenerTaskStart, StageInfo, TaskInfo, TaskLocality}
+import org.apache.spark.scheduler._
 import org.apache.spark.status.api.v1.SpeculationStageSummary
-import org.apache.spark.util.{Distribution, Utils}
 import org.apache.spark.util.kvstore._
+import org.apache.spark.util.{Distribution, Utils}
+import org.apache.spark.{SparkConf, SparkFunSuite}
 
 class AppStatusStoreSuite extends SparkFunSuite {
 
@@ -108,7 +108,7 @@ class AppStatusStoreSuite extends SparkFunSuite {
       "in memory" -> createAppStore(disk = false, live = false),
       "in memory live" -> createAppStore(disk = false, live = true)
     )
-    if(Utils.isMacOnAppleSilicon) {
+    if (Utils.isMacOnAppleSilicon) {
       baseCases
     } else {
       Seq(
