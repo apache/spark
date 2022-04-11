@@ -32,7 +32,7 @@ def generic_file_source_options_example(spark: SparkSession) -> None:
     # dir1/file3.json is corrupt from parquet's view
     test_corrupt_df0 = spark.read.option("ignoreCorruptFiles", "true")\
         .parquet("examples/src/main/resources/dir1/",
-                "examples/src/main/resources/dir1/dir2/")
+                 "examples/src/main/resources/dir1/dir2/")
     test_corrupt_df0.show()
     # +-------------+
     # |         file|
@@ -45,7 +45,7 @@ def generic_file_source_options_example(spark: SparkSession) -> None:
     spark.sql("set spark.sql.files.ignoreCorruptFiles=true")
     # dir1/file3.json is corrupt from parquet's view
     test_corrupt_df1 = spark.read.parquet("examples/src/main/resources/dir1/",
-                                         "examples/src/main/resources/dir1/dir2/")
+                                          "examples/src/main/resources/dir1/dir2/")
     test_corrupt_df1.show()
     # +-------------+
     # |         file|
