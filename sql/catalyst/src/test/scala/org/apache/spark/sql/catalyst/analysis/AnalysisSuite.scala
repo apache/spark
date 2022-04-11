@@ -52,7 +52,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
   test("fail for unresolved plan") {
     intercept[AnalysisException] {
       // `testRelation` does not have column `b`.
-      testRelation.select('b).analyze
+      testRelation.select($"b").analyze
     }
   }
 
@@ -287,7 +287,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
         CreateNamedStruct(Seq(
           Literal(att1.name), att1,
           Literal("a_plus_1"), (att1 + 1))),
-          Symbol("col").struct(prevPlan.output(0).dataType.asInstanceOf[StructType]).notNull
+          $"col".struct(prevPlan.output(0).dataType.asInstanceOf[StructType]).notNull
       )).as("arr")
     )
 
@@ -427,15 +427,15 @@ class AnalysisSuite extends AnalysisTest with Matchers {
   }
 
   test("SPARK-12102: Ignore nullability when comparing two sides of case") {
-    val relation = LocalRelation(Symbol("a").struct(Symbol("x").int),
-      Symbol("b").struct(Symbol("x").int.withNullability(false)))
+    val relation = LocalRelation($"a".struct($"x".int),
+      $"b".struct($"x".int.withNullability(false)))
     val plan = relation.select(
-      CaseWhen(Seq((Literal(true), Symbol("a").attr)), Symbol("b")).as("val"))
+      CaseWhen(Seq((Literal(true), $"a".attr)), $"b").as("val"))
     assertAnalysisSuccess(plan)
   }
 
   test("Keep attribute qualifiers after dedup") {
-    val input = LocalRelation(Symbol("key").int, Symbol("value").string)
+    val input = LocalRelation($"key".int, $"value".string)
 
     val query =
       Project(Seq($"x.key", $"y.key"),
@@ -562,13 +562,13 @@ class AnalysisSuite extends AnalysisTest with Matchers {
 
   test("SPARK-20963 Support aliases for join relations in FROM clause") {
     def joinRelationWithAliases(outputNames: Seq[String]): LogicalPlan = {
-      val src1 = LocalRelation(Symbol("id").int, Symbol("v1").string).as("s1")
-      val src2 = LocalRelation(Symbol("id").int, Symbol("v2").string).as("s2")
+      val src1 = LocalRelation($"id".int, $"v1".string).as("s1")
+      val src2 = LocalRelation($"id".int, $"v2".string).as("s2")
       UnresolvedSubqueryColumnAliases(
         outputNames,
         SubqueryAlias(
           "dst",
-          src1.join(src2, Inner, Option(Symbol("s1.id") === Symbol("s2.id"))))
+          src1.join(src2, Inner, Option($"s1.id" === $"s2.id")))
       ).select(star())
     }
     assertAnalysisSuccess(joinRelationWithAliases("col1" :: "col2" :: "col3" :: "col4" :: Nil))
@@ -592,12 +592,12 @@ class AnalysisSuite extends AnalysisTest with Matchers {
 
     checkPartitioning[HashPartitioning](numPartitions = 10, exprs = Literal(20))
     checkPartitioning[HashPartitioning](numPartitions = 10,
-      exprs = Symbol("a").attr, Symbol("b").attr)
+      exprs = $"a".attr, $"b".attr)
 
     checkPartitioning[RangePartitioning](numPartitions = 10,
       exprs = SortOrder(Literal(10), Ascending))
     checkPartitioning[RangePartitioning](numPartitions = 10,
-      exprs = SortOrder(Symbol("a").attr, Ascending), SortOrder(Symbol("b").attr, Descending))
+      exprs = SortOrder($"a".attr, Ascending), SortOrder($"b".attr, Descending))
 
     checkPartitioning[RoundRobinPartitioning](numPartitions = 10, exprs = Seq.empty: _*)
 
@@ -609,7 +609,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     }
     intercept[IllegalArgumentException] {
       checkPartitioning(numPartitions = 10, exprs =
-        SortOrder(Symbol("a").attr, Ascending), Symbol("b").attr)
+        SortOrder($"a".attr, Ascending), $"b".attr)
     }
   }
 
@@ -673,13 +673,13 @@ class AnalysisSuite extends AnalysisTest with Matchers {
   }
 
   test("SPARK-34741: Avoid ambiguous reference in MergeIntoTable") {
-    val cond = 'a > 1
+    val cond = $"a" > 1
     assertAnalysisError(
       MergeIntoTable(
         testRelation,
         testRelation,
         cond,
-        UpdateAction(Some(cond), Assignment('a, 'a) :: Nil) :: Nil,
+        UpdateAction(Some(cond), Assignment($"a", $"a") :: Nil) :: Nil,
         Nil
       ),
       "Reference 'a' is ambiguous" :: Nil)
@@ -794,7 +794,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
       "Multiple definitions of observed metrics" :: "evt1" :: Nil)
 
     // Different children, same metrics - fail
-    val b = Symbol("b").string
+    val b = $"b".string
     val tblB = LocalRelation(b)
     assertAnalysisError(Union(
       CollectMetrics("evt1", count :: Nil, testRelation) ::

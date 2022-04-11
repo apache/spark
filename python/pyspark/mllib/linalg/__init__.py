@@ -161,7 +161,7 @@ def _format_float_list(xs: Iterable[float]) -> List[str]:
 
 def _double_to_long_bits(value: float) -> int:
     if np.isnan(value):
-        value = float("nan")  # type: ignore[assignment]
+        value = float("nan")
     # pack double into 64 bits, then unpack as long int
     return struct.unpack("Q", struct.pack("d", value))[0]
 

@@ -23,18 +23,18 @@ import org.apache.hadoop.fs.Path
 
 import org.apache.spark.annotation.Since
 import org.apache.spark.ml.{Estimator, Model, PipelineStage}
-import org.apache.spark.ml.functions.checkNonNegativeWeight
 import org.apache.spark.ml.linalg.Vector
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util._
+import org.apache.spark.ml.util.DatasetUtils._
 import org.apache.spark.ml.util.Instrumentation.instrumented
 import org.apache.spark.mllib.clustering.{DistanceMeasure, KMeans => MLlibKMeans, KMeansModel => MLlibKMeansModel}
 import org.apache.spark.mllib.linalg.{Vector => OldVector, Vectors => OldVectors}
 import org.apache.spark.mllib.linalg.VectorImplicits._
 import org.apache.spark.sql.{DataFrame, Dataset, Row, SparkSession}
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.types.{DoubleType, IntegerType, StructType}
+import org.apache.spark.sql.types.{IntegerType, StructType}
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.VersionUtils.majorVersion
 
@@ -136,7 +136,7 @@ class KMeansModel private[ml] (
     val predictUDF = udf((vector: Vector) => predict(vector))
 
     dataset.withColumn($(predictionCol),
-      predictUDF(DatasetUtils.columnToVector(dataset, getFeaturesCol)),
+      predictUDF(columnToVector(dataset, getFeaturesCol)),
       outputSchema($(predictionCol)).metadata)
   }
 
@@ -342,13 +342,11 @@ class KMeans @Since("1.5.0") (
       .setEpsilon($(tol))
       .setDistanceMeasure($(distanceMeasure))
 
-    val w = if (isDefined(weightCol) && $(weightCol).nonEmpty) {
-      checkNonNegativeWeight(col($(weightCol)).cast(DoubleType))
-    } else {
-      lit(1.0)
-    }
-    val instances = dataset.select(DatasetUtils.columnToVector(dataset, getFeaturesCol), w)
-      .rdd.map { case Row(point: Vector, weight: Double) => (OldVectors.fromML(point), weight) }
+    val instances = dataset.select(
+      checkNonNanVectors(columnToVector(dataset, $(featuresCol))),
+      checkNonNegativeWeights(get(weightCol))
+    ).rdd.map { case Row(f: Vector, w: Double) => (OldVectors.fromML(f), w)
+    }.setName("training instances")
 
     val handlePersistence = dataset.storageLevel == StorageLevel.NONE
     val parentModel = algo.runWithWeight(instances, handlePersistence, Some(instr))

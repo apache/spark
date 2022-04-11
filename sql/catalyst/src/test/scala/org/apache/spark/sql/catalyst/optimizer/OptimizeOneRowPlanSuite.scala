@@ -38,11 +38,11 @@ class OptimizeOneRowPlanSuite extends PlanTest {
 
   test("SPARK-35906: Remove order by if the maximum number of rows less than or equal to 1") {
     comparePlans(
-      Optimize.execute(t2.groupBy()(count(1).as("cnt")).orderBy('cnt.asc)).analyze,
+      Optimize.execute(t2.groupBy()(count(1).as("cnt")).orderBy($"cnt".asc)).analyze,
       t2.groupBy()(count(1).as("cnt")).analyze)
 
     comparePlans(
-      Optimize.execute(t2.limit(Literal(1)).orderBy('a.asc).orderBy('a.asc)).analyze,
+      Optimize.execute(t2.limit(Literal(1)).orderBy($"a".asc).orderBy($"a".asc)).analyze,
       t2.limit(Literal(1)).analyze)
   }
 

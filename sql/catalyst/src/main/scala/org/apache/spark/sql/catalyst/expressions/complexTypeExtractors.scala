@@ -146,6 +146,8 @@ case class GetStructField(child: Expression, ordinal: Int, name: Option[String] 
 
   override protected def withNewChildInternal(newChild: Expression): GetStructField =
     copy(child = newChild)
+
+  def metadata: Metadata = childSchema(ordinal).metadata
 }
 
 /**
@@ -365,7 +367,7 @@ trait GetMapValueUtil extends BinaryExpression with ImplicitCastInputTypes {
 
     if (!found) {
       if (failOnError) {
-        throw QueryExecutionErrors.mapKeyNotExistError(ordinal, isElementAtFunction)
+        throw QueryExecutionErrors.mapKeyNotExistError(ordinal, isElementAtFunction, origin.context)
       } else {
         null
       }
@@ -398,9 +400,11 @@ trait GetMapValueUtil extends BinaryExpression with ImplicitCastInputTypes {
     }
 
     val keyJavaType = CodeGenerator.javaType(keyType)
+    lazy val errorContext = ctx.addReferenceObj("errCtx", origin.context)
     nullSafeCodeGen(ctx, ev, (eval1, eval2) => {
       val keyNotFoundBranch = if (failOnError) {
-        s"throw QueryExecutionErrors.mapKeyNotExistError($eval2, $isElementAtFunction);"
+        s"throw QueryExecutionErrors.mapKeyNotExistError(" +
+          s"$eval2, $isElementAtFunction, $errorContext);"
       } else {
         s"${ev.isNull} = true;"
       }

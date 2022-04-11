@@ -367,8 +367,8 @@ class NaiveBayes private (
     val dataset = data.map { case LabeledPoint(label, features) => (label, features.asML) }
       .toDF("label", "features")
 
-    // mllib NaiveBayes allows input labels like {-1, +1}, so set `positiveLabel` as false.
-    val newModel = nb.trainWithLabelCheck(dataset, positiveLabel = false)
+    // mllib NaiveBayes allows input labels like {-1, +1}, so set `nonNegativeLabel` as false.
+    val newModel = nb.trainWithLabelCheck(dataset, nonNegativeLabel = false)
 
     val pi = newModel.pi.toArray
     val theta = Array.ofDim[Double](newModel.numClasses, newModel.numFeatures)

@@ -600,7 +600,7 @@ class CastSuite extends CastSuiteBase {
       val e3 = intercept[ArithmeticException] {
         Cast(Literal(Int.MaxValue + 1L), IntegerType).eval()
       }.getMessage
-      assert(e3.contains("Casting 2147483648 to int causes overflow"))
+      assert(e3.contains("Casting 2147483648L to int causes overflow"))
     }
   }
 
@@ -773,7 +773,14 @@ class CastSuite extends CastSuiteBase {
 
     Seq(
       (Int.MaxValue, DayTimeIntervalType(DAY)),
-      (Int.MinValue, DayTimeIntervalType(DAY)),
+      (Int.MinValue, DayTimeIntervalType(DAY))
+    ).foreach {
+      case (v, toType) =>
+        checkExceptionInExpression[ArithmeticException](cast(v, toType),
+          s"Casting $v to ${toType.catalogString} causes overflow")
+    }
+
+    Seq(
       (Long.MaxValue, DayTimeIntervalType(DAY)),
       (Long.MinValue, DayTimeIntervalType(DAY)),
       (Long.MaxValue, DayTimeIntervalType(HOUR)),
@@ -785,7 +792,7 @@ class CastSuite extends CastSuiteBase {
     ).foreach {
       case (v, toType) =>
         checkExceptionInExpression[ArithmeticException](cast(v, toType),
-          s"Casting $v to ${toType.catalogString} causes overflow")
+          s"Casting ${v}L to ${toType.catalogString} causes overflow")
     }
   }
 
@@ -876,7 +883,14 @@ class CastSuite extends CastSuiteBase {
 
     Seq(
       (Int.MaxValue, YearMonthIntervalType(YEAR)),
-      (Int.MinValue, YearMonthIntervalType(YEAR)),
+      (Int.MinValue, YearMonthIntervalType(YEAR))
+    ).foreach {
+      case (v, toType) =>
+        checkExceptionInExpression[ArithmeticException](cast(v, toType),
+          s"Casting $v to ${toType.catalogString} causes overflow")
+    }
+
+    Seq(
       (Long.MaxValue, YearMonthIntervalType(YEAR)),
       (Long.MinValue, YearMonthIntervalType(YEAR)),
       (Long.MaxValue, YearMonthIntervalType(MONTH)),
@@ -884,7 +898,7 @@ class CastSuite extends CastSuiteBase {
     ).foreach {
       case (v, toType) =>
         checkExceptionInExpression[ArithmeticException](cast(v, toType),
-          s"Casting $v to ${toType.catalogString} causes overflow")
+          s"Casting ${v}L to ${toType.catalogString} causes overflow")
     }
   }
 }

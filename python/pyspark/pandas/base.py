@@ -148,7 +148,7 @@ def align_diff_index_ops(
                     ],
                 ).rename(this_index_ops.name)
             else:
-                this = cast(Index, this_index_ops).to_frame().reset_index(drop=True)
+                this = this_index_ops.to_frame().reset_index(drop=True)
 
                 that_series = next(col for col in cols if isinstance(col, Series))
                 that_frame = that_series._psdf[

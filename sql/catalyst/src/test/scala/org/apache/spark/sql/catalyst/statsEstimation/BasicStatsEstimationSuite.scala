@@ -177,7 +177,7 @@ class BasicStatsEstimationSuite extends PlanTest with StatsEstimationTestBase {
   }
 
   test("windows") {
-    val windows = plan.window(Seq(min(attribute).as('sum_attr)), Seq(attribute), Nil)
+    val windows = plan.window(Seq(min(attribute).as(Symbol("sum_attr"))), Seq(attribute), Nil)
     val windowsStats = Statistics(sizeInBytes = plan.size.get * (4 + 4 + 8) / (4 + 8))
     checkStats(
       windows,

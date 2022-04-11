@@ -64,7 +64,7 @@ class BlockInfoManagerSuite extends SparkFunSuite with BeforeAndAfterEach {
     try {
       TaskContext.setTaskContext(
         new TaskContextImpl(0, 0, 0, taskAttemptId, 0,
-          null, new Properties, null, TaskMetrics.empty, 1))
+          1, null, new Properties, null, TaskMetrics.empty, 1))
       block
     } finally {
       TaskContext.unset()

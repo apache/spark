@@ -60,7 +60,7 @@ from pyspark.sql.pandas.serializers import (
 )
 from pyspark.sql.pandas.types import to_arrow_type
 from pyspark.sql.types import StructType
-from pyspark.util import fail_on_stopiteration, try_simplify_traceback  # type: ignore
+from pyspark.util import fail_on_stopiteration, try_simplify_traceback
 from pyspark import shuffle
 
 pickleSer = CPickleSerializer()

@@ -39,12 +39,12 @@ from typing import (
     TYPE_CHECKING,
 )
 
-from py4j.java_gateway import JavaObject  # type: ignore[import]
+from py4j.java_gateway import JavaObject
 
-from pyspark import copy_func, since, _NoValue  # type: ignore[attr-defined]
+from pyspark import copy_func, since, _NoValue
 from pyspark._globals import _NoValueType
 from pyspark.context import SparkContext
-from pyspark.rdd import (  # type: ignore[attr-defined]
+from pyspark.rdd import (
     RDD,
     _load_from_socket,
     _local_iterator_from_socket,
@@ -364,7 +364,8 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         Examples
         --------
         >>> df.schema
-        StructType(List(StructField(age,IntegerType,true),StructField(name,StringType,true)))
+        StructType([StructField('age', IntegerType(), True),
+                    StructField('name', StringType(), True)])
         """
         if self._schema is None:
             try:
@@ -614,16 +615,13 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
             print(self._jdf.showString(n, int_truncate, vertical))
 
     def __repr__(self) -> str:
-        if (
-            not self._support_repr_html
-            and self.sparkSession._jconf.isReplEagerEvalEnabled()  # type: ignore[attr-defined]
-        ):
+        if not self._support_repr_html and self.sparkSession._jconf.isReplEagerEvalEnabled():
             vertical = False
             return self._jdf.showString(
-                self.sparkSession._jconf.replEagerEvalMaxNumRows(),  # type: ignore[attr-defined]
-                self.sparkSession._jconf.replEagerEvalTruncate(),  # type: ignore[attr-defined]
+                self.sparkSession._jconf.replEagerEvalMaxNumRows(),
+                self.sparkSession._jconf.replEagerEvalTruncate(),
                 vertical,
-            )  # type: ignore[attr-defined]
+            )
         else:
             return "DataFrame[%s]" % (", ".join("%s: %s" % c for c in self.dtypes))
 
@@ -634,13 +632,11 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         """
         if not self._support_repr_html:
             self._support_repr_html = True
-        if self.sparkSession._jconf.isReplEagerEvalEnabled():  # type: ignore[attr-defined]
-            max_num_rows = max(
-                self.sparkSession._jconf.replEagerEvalMaxNumRows(), 0  # type: ignore[attr-defined]
-            )
+        if self.sparkSession._jconf.isReplEagerEvalEnabled():
+            max_num_rows = max(self.sparkSession._jconf.replEagerEvalMaxNumRows(), 0)
             sock_info = self._jdf.getRowsToPython(
                 max_num_rows,
-                self.sparkSession._jconf.replEagerEvalTruncate(),  # type: ignore[attr-defined]
+                self.sparkSession._jconf.replEagerEvalTruncate(),
             )
             rows = list(_load_from_socket(sock_info, BatchedSerializer(CPickleSerializer())))
             head = rows[0]
@@ -935,9 +931,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
     def persist(
         self,
-        storageLevel: StorageLevel = (
-            StorageLevel.MEMORY_AND_DISK_DESER  # type: ignore[attr-defined]
-        ),
+        storageLevel: StorageLevel = (StorageLevel.MEMORY_AND_DISK_DESER),
     ) -> "DataFrame":
         """Sets the storage level to persist the contents of the :class:`DataFrame` across
         operations after the first time it is computed. This can only be used to assign
@@ -951,7 +945,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         The default storage level has changed to `MEMORY_AND_DISK_DESER` to match Scala in 3.0.
         """
         self.is_cached = True
-        javaStorageLevel = self._sc._getJavaStorageLevel(storageLevel)  # type: ignore[attr-defined]
+        javaStorageLevel = self._sc._getJavaStorageLevel(storageLevel)
         self._jdf.persist(javaStorageLevel)
         return self
 
@@ -1630,10 +1624,10 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         """
         if isinstance(leftAsOfColumn, str):
             leftAsOfColumn = self[leftAsOfColumn]
-        left_as_of_jcol = cast(Column, leftAsOfColumn)._jc
+        left_as_of_jcol = leftAsOfColumn._jc
         if isinstance(rightAsOfColumn, str):
             rightAsOfColumn = other[rightAsOfColumn]
-        right_as_of_jcol = cast(Column, rightAsOfColumn)._jc
+        right_as_of_jcol = rightAsOfColumn._jc
 
         if on is not None and not isinstance(on, list):
             on = [on]  # type: ignore[assignment]
@@ -2210,19 +2204,42 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         """
         return self.groupBy().agg(*exprs)  # type: ignore[arg-type]
 
-    @since(3.3)
-    def observe(self, observation: "Observation", *exprs: Column) -> "DataFrame":
-        """Observe (named) metrics through an :class:`Observation` instance.
+    def observe(
+        self,
+        observation: Union["Observation", str],
+        *exprs: Column,
+    ) -> "DataFrame":
+        """Define (named) metrics to observe on the DataFrame. This method returns an 'observed'
+        DataFrame that returns the same result as the input, with the following guarantees:
 
-        A user can retrieve the metrics by accessing `Observation.get`.
+        * It will compute the defined aggregates (metrics) on all the data that is flowing through
+            the Dataset at that point.
+
+        * It will report the value of the defined aggregate columns as soon as we reach a completion
+            point. A completion point is either the end of a query (batch mode) or the end of a
+            streaming epoch. The value of the aggregates only reflects the data processed since
+            the previous completion point.
+
+        The metrics columns must either contain a literal (e.g. lit(42)), or should contain one or
+        more aggregate functions (e.g. sum(a) or sum(a + b) + avg(c) - lit(1)). Expressions that
+        contain references to the input Dataset's columns must always be wrapped in an aggregate
+        function.
+
+        A user can observe these metrics by adding
+        Python's :class:`~pyspark.sql.streaming.StreamingQueryListener`,
+        Scala/Java's ``org.apache.spark.sql.streaming.StreamingQueryListener`` or Scala/Java's
+        ``org.apache.spark.sql.util.QueryExecutionListener`` to the spark session.
 
         .. versionadded:: 3.3.0
 
         Parameters
         ----------
-        observation : :class:`Observation`
-            an :class:`Observation` instance to obtain the metric.
-        exprs : list of :class:`Column`
+        observation : :class:`Observation` or str
+            `str` to specify the name, or an :class:`Observation` instance to obtain the metric.
+
+            .. versionchanged:: 3.4.0
+               Added support for `str` in this parameter.
+        exprs : :class:`Column`
             column expressions (:class:`Column`).
 
         Returns
@@ -2232,10 +2249,14 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         Notes
         -----
-        This method does not support streaming datasets.
+        When ``observation`` is :class:`Observation`, this method only supports batch queries.
+        When ``observation`` is a string, this method works for both batch and streaming queries.
+        Continuous execution is currently not supported yet.
 
         Examples
         --------
+        When ``observation`` is :class:`Observation`, only batch queries works as below.
+
         >>> from pyspark.sql.functions import col, count, lit, max
         >>> from pyspark.sql import Observation
         >>> observation = Observation("my metrics")
@@ -2244,11 +2265,53 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         2
         >>> observation.get
         {'count': 2, 'max(age)': 5}
+
+        When ``observation`` is a string, streaming queries also work as below.
+
+        >>> from pyspark.sql.streaming import StreamingQueryListener
+        >>> class MyErrorListener(StreamingQueryListener):
+        ...    def onQueryStarted(self, event):
+        ...        pass
+        ...
+        ...    def onQueryProgress(self, event):
+        ...        row = event.progress.observedMetrics.get("my_event")
+        ...        # Trigger if the number of errors exceeds 5 percent
+        ...        num_rows = row.rc
+        ...        num_error_rows = row.erc
+        ...        ratio = num_error_rows / num_rows
+        ...        if ratio > 0.05:
+        ...            # Trigger alert
+        ...            pass
+        ...
+        ...    def onQueryTerminated(self, event):
+        ...        pass
+        ...
+        >>> spark.streams.addListener(MyErrorListener())
+        >>> # Observe row count (rc) and error row count (erc) in the streaming Dataset
+        ... observed_ds = df.observe(
+        ...     "my_event",
+        ...     count(lit(1)).alias("rc"),
+        ...     count(col("error")).alias("erc"))  # doctest: +SKIP
+        >>> observed_ds.writeStream.format("console").start()  # doctest: +SKIP
         """
         from pyspark.sql import Observation
 
-        assert isinstance(observation, Observation), "observation should be Observation"
-        return observation._on(self, *exprs)
+        if len(exprs) == 0:
+            raise ValueError("'exprs' should not be empty")
+        if not all(isinstance(c, Column) for c in exprs):
+            raise ValueError("all 'exprs' should be Column")
+
+        if isinstance(observation, Observation):
+            return observation._on(self, *exprs)
+        elif isinstance(observation, str):
+            return DataFrame(
+                self._jdf.observe(
+                    observation, exprs[0]._jc, _to_seq(self._sc, [c._jc for c in exprs[1:]])
+                ),
+                self.sparkSession,
+            )
+        else:
+            raise ValueError("'observation' should be either `Observation` or `str`.")
 
     @since(2.0)
     def union(self, other: "DataFrame") -> "DataFrame":
@@ -3498,7 +3561,7 @@ class DataFrameStatFunctions:
     ) -> List[List[float]]:
         ...
 
-    def approxQuantile(  # type: ignore[misc]
+    def approxQuantile(
         self,
         col: Union[str, List[str], Tuple[str]],
         probabilities: Union[List[float], Tuple[float]],

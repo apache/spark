@@ -87,6 +87,10 @@ class LDASuite extends MLTest with DefaultReadWriteTest {
     assert(lda.getTopicDistributionCol === "topicDistribution")
   }
 
+  test("LDA validate input dataset") {
+    testInvalidVectors(new LDA().fit(_))
+  }
+
   test("set parameters") {
     val lda = new LDA()
       .setFeaturesCol("test_feature")
