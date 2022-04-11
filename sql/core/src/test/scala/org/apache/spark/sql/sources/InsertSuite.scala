@@ -27,7 +27,6 @@ import org.apache.spark.SparkException
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType}
-import org.apache.spark.sql.catalyst.expressions.GenericRowWithSchema
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns
 import org.apache.spark.sql.execution.datasources.DataSourceUtils
@@ -980,17 +979,13 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
         sql("insert into t2 select j, default, default from t1 where j = 3")
         sql("insert into t2 select j, s from t1 where j = 4")
         sql("insert into t2 select j, s, default from t1 where j = 5")
-        val resultSchema = new StructType()
-          .add("s", LongType, false)
-          .add("x", LongType, false)
         checkAnswer(
-          sql("select j, s, x from t2 order by j, s, x"),
-          Seq(
-            new GenericRowWithSchema(Array(1, 42L, 43L), resultSchema),
-            new GenericRowWithSchema(Array(2, 42L, 43L), resultSchema),
-            new GenericRowWithSchema(Array(3, 42L, 43L), resultSchema),
-            new GenericRowWithSchema(Array(4, 44L, 43L), resultSchema),
-            new GenericRowWithSchema(Array(5, 44L, 43L), resultSchema)))
+          spark.table("t2"),
+          Row(1, 42L, 43L) ::
+          Row(2, 42L, 43L) ::
+          Row(3, 42L, 43L) ::
+          Row(4, 44L, 43L) ::
+          Row(5, 44L, 43L) :: Nil)
       }
     }
   }
@@ -1257,40 +1252,42 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
 
   test("SPARK-38811 INSERT INTO on columns added with ALTER TABLE ADD COLUMNS: Positive tests") {
     // There is a complex expression in the default value.
+    val createTableBooleanCol = "create table t(i boolean) using parquet"
+    val createTableIntCol = "create table t(i int) using parquet"
     withTable("t") {
-      sql("create table t(i boolean) using parquet")
+      sql(createTableBooleanCol)
       sql("alter table t add column s string default concat('abc', 'def')")
       sql("insert into t values(true, default)")
-      checkAnswer(sql("select s from t where i = true"), Seq("abcdef").map(i => Row(i)))
+      checkAnswer(spark.table("t"), Row(true, "abcdef"))
     }
     // There are two trailing default values referenced implicitly by the INSERT INTO statement.
     withTable("t") {
-      sql("create table t(i int) using parquet")
+      sql(createTableIntCol)
       sql("alter table t add column s bigint default 42")
       sql("alter table t add column x bigint default 43")
       sql("insert into t values(1)")
-      checkAnswer(sql("select s + x from t where i = 1"), Seq(85L).map(i => Row(i)))
+      checkAnswer(spark.table("t"), Row(1, 42, 43))
     }
     // There are two trailing default values referenced implicitly by the INSERT INTO statement.
     withTable("t") {
-      sql("create table t(i int) using parquet")
+      sql(createTableIntCol)
       sql("alter table t add columns s bigint default 42, x bigint default 43")
       sql("insert into t values(1)")
-      checkAnswer(sql("select s + x from t where i = 1"), Seq(85L).map(i => Row(i)))
+      checkAnswer(spark.table("t"), Row(1, 42, 43))
     }
     // The table has a partitioning column and a default value is injected.
     withTable("t") {
       sql("create table t(i boolean, s bigint) using parquet partitioned by (i)")
       sql("alter table t add column q int default 42")
       sql("insert into t partition(i='true') values(5, default)")
-      checkAnswer(sql("select s from t where i = true"), Seq(5).map(i => Row(i)))
+      checkAnswer(spark.table("t"), Row(5, 42, true))
     }
     // The default value parses correctly as a constant but non-literal expression.
     withTable("t") {
-      sql("create table t(i boolean) using parquet")
+      sql(createTableBooleanCol)
       sql("alter table t add column s bigint default 41 + 1")
       sql("insert into t values(false, default)")
-      checkAnswer(sql("select s from t where i = false"), Seq(42L).map(i => Row(i)))
+      checkAnswer(spark.table("t"), Row(false, 42))
     }
     // Explicit defaults may appear in different positions within the inline table provided as input
     // to the INSERT INTO statement.
@@ -1298,31 +1295,31 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
       sql("create table t(i boolean default false) using parquet")
       sql("alter table t add column s bigint default 42")
       sql("insert into t values(false, default), (default, 42)")
-      checkAnswer(sql("select s from t where i = false"), Seq(42L, 42L).map(i => Row(i)))
+      checkAnswer(spark.table("t"), Seq(Row(false, 42), Row(false, 42)))
     }
     // There is an explicit default value provided in the INSERT INTO statement in the VALUES,
     // with an alias over the VALUES.
     withTable("t") {
-      sql("create table t(i boolean) using parquet")
+      sql(createTableBooleanCol)
       sql("alter table t add column s bigint default 42")
       sql("insert into t select * from values (false, default) as tab(col, other)")
-      checkAnswer(sql("select s from t where i = false"), Seq(42L).map(i => Row(i)))
+      checkAnswer(spark.table("t"), Row(false, 42))
     }
     // The explicit default value is provided in the wrong order (first instead of second), but
     // this is OK because the provided default value evaluates to literal NULL.
     withTable("t") {
-      sql("create table t(i boolean) using parquet")
+      sql(createTableBooleanCol)
       sql("alter table t add column s bigint default 42")
       sql("insert into t values (default, 43)")
-      checkAnswer(sql("select s from t where i is null"), Seq(43L).map(i => Row(i)))
+      checkAnswer(spark.table("t"), Row(null, 43))
     }
     // There is an explicit default value provided in the INSERT INTO statement as a SELECT.
     // This is supported.
     withTable("t") {
-      sql("create table t(i boolean) using parquet")
+      sql(createTableBooleanCol)
       sql("alter table t add column s bigint default 42")
       sql("insert into t select false, default")
-      checkAnswer(sql("select s from t where i = false"), Seq(42L).map(i => Row(i)))
+      checkAnswer(spark.table("t"), Row(false, 42))
     }
     // There is a complex query plan in the SELECT query in the INSERT INTO statement.
     withTable("t") {
@@ -1330,7 +1327,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
       sql("alter table t add column s bigint default 42")
       sql("insert into t select col, count(*) from values (default, default) " +
         "as tab(col, other) group by 1")
-      checkAnswer(sql("select s from t where i = false"), Seq(1).map(i => Row(i)))
+      checkAnswer(spark.table("t"), Row(false, 1))
     }
     // There are three column types exercising various combinations of implicit and explicit
     // default column value references in the 'insert into' statements. Note these tests depend on
@@ -1352,17 +1349,13 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
         sql("insert into t2 select j, default, default from t1 where j = 3")
         sql("insert into t2 select j, s from t1 where j = 4")
         sql("insert into t2 select j, s, default from t1 where j = 5")
-        val resultSchema = new StructType()
-          .add("s", LongType, false)
-          .add("x", LongType, false)
         checkAnswer(
-          sql("select j, s, x from t2 order by j, s, x"),
-          Seq(
-            new GenericRowWithSchema(Array(1, 42L, 43L), resultSchema),
-            new GenericRowWithSchema(Array(2, 42L, 43L), resultSchema),
-            new GenericRowWithSchema(Array(3, 42L, 43L), resultSchema),
-            new GenericRowWithSchema(Array(4, 44L, 43L), resultSchema),
-            new GenericRowWithSchema(Array(5, 44L, 43L), resultSchema)))
+          spark.table("t2"),
+          Row(1, 42L, 43L) ::
+          Row(2, 42L, 43L) ::
+          Row(3, 42L, 43L) ::
+          Row(4, 44L, 43L) ::
+          Row(5, 44L, 43L) :: Nil)
       }
     }
   }
