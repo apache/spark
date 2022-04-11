@@ -1015,7 +1015,7 @@ object SQLConf {
           s"Requires ${PARQUET_VECTORIZED_READER_ENABLED.key} to be enabled.")
       .version("3.3.0")
       .booleanConf
-      .createWithDefault(false)
+      .createWithDefault(true)
 
   val PARQUET_RECORD_FILTER_ENABLED = buildConf("spark.sql.parquet.recordLevelFilter.enabled")
     .doc("If true, enables Parquet's native record-level filtering using the pushed down " +

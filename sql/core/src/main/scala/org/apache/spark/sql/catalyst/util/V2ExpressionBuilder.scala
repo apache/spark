@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.util
 
-import org.apache.spark.sql.catalyst.expressions.{Add, And, BinaryComparison, BinaryOperator, BitwiseAnd, BitwiseNot, BitwiseOr, BitwiseXor, CaseWhen, Cast, Contains, Divide, EndsWith, EqualTo, Expression, In, InSet, IsNotNull, IsNull, Literal, Multiply, Not, Or, Predicate, Remainder, StartsWith, StringPredicate, Subtract, UnaryMinus}
+import org.apache.spark.sql.catalyst.expressions.{Abs, Add, And, BinaryComparison, BinaryOperator, BitwiseAnd, BitwiseNot, BitwiseOr, BitwiseXor, CaseWhen, Cast, Coalesce, Contains, Divide, EndsWith, EqualTo, Expression, In, InSet, IsNotNull, IsNull, Literal, Multiply, Not, Or, Predicate, Remainder, StartsWith, StringPredicate, Subtract, UnaryMinus}
 import org.apache.spark.sql.connector.expressions.{Cast => V2Cast, Expression => V2Expression, FieldReference, GeneralScalarExpression, LiteralValue}
 import org.apache.spark.sql.connector.expressions.filter.{AlwaysFalse, AlwaysTrue, And => V2And, Not => V2Not, Or => V2Or, Predicate => V2Predicate}
 import org.apache.spark.sql.execution.datasources.PushableColumn
@@ -95,6 +95,15 @@ class V2ExpressionBuilder(
       }
     case Cast(child, dataType, _, true) =>
       generateExpression(child).map(v => new V2Cast(v, dataType))
+    case Abs(child, true) => generateExpression(child)
+      .map(v => new GeneralScalarExpression("ABS", Array[V2Expression](v)))
+    case Coalesce(children) =>
+      val childrenExpressions = children.flatMap(generateExpression(_))
+      if (children.length == childrenExpressions.length) {
+        Some(new GeneralScalarExpression("COALESCE", childrenExpressions.toArray[V2Expression]))
+      } else {
+        None
+      }
     case and: And =>
       // AND expects predicate
       val l = generateExpression(and.left, true)

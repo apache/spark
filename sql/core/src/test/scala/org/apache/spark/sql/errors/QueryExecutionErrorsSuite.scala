@@ -276,6 +276,6 @@ class QueryExecutionErrorsSuite extends QueryTest
     assert(e.getErrorClass === "DATETIME_OVERFLOW")
     assert(e.getSqlState === "22008")
     assert(e.getMessage ===
-      "Datetime operation overflow: add 1000000 YEAR to '2022-03-09T09:02:03Z'.")
+      "Datetime operation overflow: add 1000000 YEAR to TIMESTAMP '2022-03-09 01:02:03'.")
   }
 }
