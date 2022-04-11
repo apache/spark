@@ -142,7 +142,7 @@ private[spark] class ShuffleBlockPusher(conf: SparkConf) extends Logging {
    * VisibleForTesting
    */
   protected def submitTask(task: Runnable): Unit = {
-    if (BLOCK_PUSHER_POOL != null) {
+    if (BLOCK_PUSHER_POOL != null && !BLOCK_PUSHER_POOL.isShutdown) {
       BLOCK_PUSHER_POOL.execute(task)
     }
   }
