@@ -49,6 +49,7 @@ import org.apache.spark.util.{SerializableConfiguration, Utils}
  * @param dataSchema Schema of orc files.
  * @param readDataSchema Required data schema in the batch scan.
  * @param partitionSchema Schema of partitions.
+ * @param options Options for parsing ORC files.
  */
 case class OrcPartitionReaderFactory(
     sqlConf: SQLConf,
@@ -58,12 +59,12 @@ case class OrcPartitionReaderFactory(
     partitionSchema: StructType,
     filters: Array[Filter],
     aggregation: Option[Aggregation],
-    parsedOptions: OrcOptions) extends FilePartitionReaderFactory {
+    options: OrcOptions) extends FilePartitionReaderFactory {
   private val resultSchema = StructType(readDataSchema.fields ++ partitionSchema.fields)
   private val isCaseSensitive = sqlConf.caseSensitiveAnalysis
   private val capacity = sqlConf.orcVectorizedReaderBatchSize
   private val orcFilterPushDown = sqlConf.orcFilterPushDown
-  private val ignoreCorruptFiles = parsedOptions.ignoreCorruptFiles
+  private val ignoreCorruptFiles = options.ignoreCorruptFiles
 
   override def supportColumnarReads(partition: InputPartition): Boolean = {
     sqlConf.orcVectorizedReaderEnabled && sqlConf.wholeStageEnabled &&

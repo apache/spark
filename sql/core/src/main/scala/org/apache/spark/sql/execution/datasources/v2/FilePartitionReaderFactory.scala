@@ -24,7 +24,7 @@ import org.apache.spark.sql.vectorized.ColumnarBatch
 
 abstract class FilePartitionReaderFactory extends PartitionReaderFactory {
 
-  protected def parsedOptions: FileSourceOptions
+  protected def options: FileSourceOptions
 
   override def createReader(partition: InputPartition): PartitionReader[InternalRow] = {
     assert(partition.isInstanceOf[FilePartition])
@@ -32,7 +32,7 @@ abstract class FilePartitionReaderFactory extends PartitionReaderFactory {
     val iter = filePartition.files.iterator.map { file =>
       PartitionedFileReader(file, buildReader(file))
     }
-    new FilePartitionReader[InternalRow](iter, parsedOptions)
+    new FilePartitionReader[InternalRow](iter, options)
   }
 
   override def createColumnarReader(partition: InputPartition): PartitionReader[ColumnarBatch] = {
@@ -41,7 +41,7 @@ abstract class FilePartitionReaderFactory extends PartitionReaderFactory {
     val iter = filePartition.files.iterator.map { file =>
       PartitionedFileReader(file, buildColumnarReader(file))
     }
-    new FilePartitionReader[ColumnarBatch](iter, parsedOptions)
+    new FilePartitionReader[ColumnarBatch](iter, options)
   }
 
   def buildReader(partitionedFile: PartitionedFile): PartitionReader[InternalRow]
