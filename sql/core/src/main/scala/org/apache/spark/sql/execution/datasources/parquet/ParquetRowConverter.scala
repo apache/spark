@@ -41,6 +41,7 @@ import org.apache.spark.sql.execution.datasources.DataSourceUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.util.Utils
 
 /**
  * A [[ParentContainerUpdater]] is used by a Parquet converter to set converted values to some
@@ -487,7 +488,8 @@ private[parquet] class ParquetRowConverter(
     parquetType.asPrimitiveType().getPrimitiveTypeName == INT64 &&
       parquetType.getLogicalTypeAnnotation.isInstanceOf[TimestampLogicalTypeAnnotation] &&
       !parquetType.getLogicalTypeAnnotation
-        .asInstanceOf[TimestampLogicalTypeAnnotation].isAdjustedToUTC
+        .asInstanceOf[TimestampLogicalTypeAnnotation].isAdjustedToUTC &&
+      Utils.isTesting
 
   /**
    * Parquet converter for strings. A dictionary is used to minimize string decoding cost.
