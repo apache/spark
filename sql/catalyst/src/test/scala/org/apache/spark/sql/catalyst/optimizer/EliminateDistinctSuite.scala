@@ -33,7 +33,7 @@ class EliminateDistinctSuite extends PlanTest {
   }
 
   val testRelation = LocalRelation($"a".int)
-  val testRelation2 = LocalRelation($"a".int, $"b".string, $"c".double)
+  val testRelation2 = LocalRelation($"a".int, $"b".string)
 
   Seq(
     Max(_),
@@ -85,13 +85,8 @@ class EliminateDistinctSuite extends PlanTest {
       .rebalance().groupBy()(countDistinct($"a") as "x", sumDistinct($"a") as "y").analyze
     comparePlans(Optimize.execute(q2), q2)
 
-    // avoid remove double data type attr
-    val q3 = testRelation2.groupBy($"c")($"c")
-      .rebalance().groupBy()(sumDistinct($"c") as "x").analyze
-    comparePlans(Optimize.execute(q3), q3)
-
     // child distinct key is empty
-    val q4 = testRelation2.groupBy($"a")(countDistinct($"a") as "x").analyze
-    comparePlans(Optimize.execute(q4), q4)
+    val q3 = testRelation2.groupBy($"a")(countDistinct($"a") as "x").analyze
+    comparePlans(Optimize.execute(q3), q3)
   }
 }

@@ -428,8 +428,7 @@ object EliminateDistinct extends Rule[LogicalPlan] {
 
         case ae: AggregateExpression if ae.isDistinct &&
           agg.child.distinctKeys.exists(
-            _.subsetOf(ExpressionSet(ae.aggregateFunction.children.filterNot(_.foldable)))) &&
-          NormalizeFloatingNumbers.normalize(ae).eq(ae) =>
+            _.subsetOf(ExpressionSet(ae.aggregateFunction.children.filterNot(_.foldable)))) =>
           ae.copy(isDistinct = false)
       }
   }
