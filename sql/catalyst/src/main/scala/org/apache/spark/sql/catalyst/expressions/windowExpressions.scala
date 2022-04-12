@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.util.Locale
 
+import org.apache.spark.annotation.{DeveloperApi, Experimental, Unstable}
 import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, UnresolvedException}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{TypeCheckFailure, TypeCheckSuccess}
 import org.apache.spark.sql.catalyst.dsl.expressions._
@@ -1016,42 +1017,39 @@ case class PercentRank(children: Seq[Expression]) extends RankLike with SizeBase
 }
 
 /**
- * The Exponentially Weighted Window, MUST only be used in the Pandas API on Pyspark.
+ * Exponential Weighted Moment. This expression is dedicated only for Pandas API on Spark.
  * An exponentially weighted window is similar to an expanding window but with each prior point
  * being exponentially weighted down relative to the current point.
- * In general, a weighted moving average is calculated as
- *    y_t = \frac{\sum_{i=0}^t w_i x_{t-i}}{\sum_{i=0}^t w_i},
- * where x_t is the input, y_t is the result and the w_i are the weights.
  * See https://pandas.pydata.org/docs/user_guide/window.html#exponentially-weighted-window
  * for details.
- * For now, only function mean is supported. Other functions like sum/var will be added
- * in the future.
+ * Currently, only weighted moving average is supported. In general, it is calculated as
+ *    y_t = \frac{\sum_{i=0}^t w_i x_{t-i}}{\sum_{i=0}^t w_i},
+ * where x_t is the input, y_t is the result and the w_i are the weights.
  */
-private[sql] case class EWM(input: Expression, alpha: Double)
+@DeveloperApi
+@Experimental
+@Unstable
+case class EWM(input: Expression, alpha: Double)
   extends AggregateWindowFunction with UnaryLike[Expression] {
   assert(0 < alpha && alpha <= 1)
 
   override def dataType: DataType = DoubleType
 
-  private val zero = Literal(0.0)
-  private val one = Literal(1.0)
-  private val beta = Literal(1.0 - alpha)
   private val numerator = AttributeReference("numerator", DoubleType, nullable = false)()
   private val denominator = AttributeReference("denominator", DoubleType, nullable = false)()
+  override def aggBufferAttributes: Seq[AttributeReference] = numerator :: denominator :: Nil
 
-  override def aggBufferAttributes: Seq[AttributeReference] =
-    numerator :: denominator :: Nil
-
-  override val initialValues: Seq[Expression] = Seq(zero, zero)
+  override val initialValues: Seq[Expression] = Seq(Literal(0.0), Literal(0.0))
 
   override val updateExpressions: Seq[Expression] = {
+    val beta = Literal(1.0 - alpha)
     val casted = input.cast(DoubleType)
     // TODO: after adding param ignore_na, we can remove this check
     val error = RaiseError(Literal("Input values Must not be Null or NaN")).cast(DoubleType)
     val validated = If(IsNull(casted) || IsNaN(casted), error, casted)
     Seq(
       /* numerator = */ numerator * beta + validated,
-      /* denominator = */ denominator * beta + one
+      /* denominator = */ denominator * beta + Literal(1.0)
     )
   }
 

@@ -145,7 +145,7 @@ class MissingPandasLikeRollingGroupby:
 
 
 class MissingPandasLikeExponentialMoving:
-    sum = _unsupported_function_exponential_moving("var")
+    sum = _unsupported_function_exponential_moving("sum")
     var = _unsupported_function_exponential_moving("var")
     std = _unsupported_function_exponential_moving("std")
     cov = _unsupported_function_exponential_moving("cov")

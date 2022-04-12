@@ -18,6 +18,8 @@ from abc import ABCMeta, abstractmethod
 from functools import partial
 from typing import Any, Callable, Generic, List, Optional
 
+import numpy as np
+
 from pyspark import SparkContext
 from pyspark.sql import Window
 from pyspark.sql import functions as F
@@ -30,7 +32,6 @@ from pyspark.pandas.missing.window import (
 )
 
 # For running doctests and reference resolution in PyCharm.
-import numpy as np
 from pyspark import pandas as ps  # noqa: F401
 from pyspark.pandas._typing import FrameLike
 from pyspark.pandas.groupby import GroupBy, DataFrameGroupBy
