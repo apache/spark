@@ -31,7 +31,8 @@ abstract class AverageBase
   with ImplicitCastInputTypes
   with UnaryLike[Expression] {
 
-  def failOnError: Boolean
+  // Whether to use ANSI add or not during the execution.
+  def useAnsiAdd: Boolean
 
   override def prettyName: String = getTagValue(FunctionRegistry.FUNC_ALIAS).getOrElse("avg")
 
@@ -74,7 +75,7 @@ abstract class AverageBase
   )
 
   protected def getMergeExpressions = Seq(
-    /* sum = */ Add(sum.left, sum.right, failOnError),
+    /* sum = */ Add(sum.left, sum.right, useAnsiAdd),
     /* count = */ count.left + count.right
   )
 
@@ -84,7 +85,7 @@ abstract class AverageBase
     case _: DecimalType =>
       DecimalPrecision.decimalAndDecimal()(
         Divide(
-          CheckOverflowInSum(sum, sumDataType.asInstanceOf[DecimalType], !failOnError),
+          CheckOverflowInSum(sum, sumDataType.asInstanceOf[DecimalType], !useAnsiAdd),
           count.cast(DecimalType.LongDecimal), failOnError = false)).cast(resultType)
     case _: YearMonthIntervalType =>
       If(EqualTo(count, Literal(0L)),
@@ -101,7 +102,7 @@ abstract class AverageBase
     Add(
       sum,
       coalesce(child.cast(sumDataType), Literal.default(sumDataType)),
-      failOnError = failOnError),
+      failOnError = useAnsiAdd),
     /* count = */ If(child.isNull, count, count + 1L)
   )
 
@@ -122,8 +123,8 @@ abstract class AverageBase
   since = "1.0.0")
 case class Average(
     child: Expression,
-    failOnError: Boolean = SQLConf.get.ansiEnabled) extends AverageBase {
-  def this(child: Expression) = this(child, failOnError = SQLConf.get.ansiEnabled)
+    useAnsiAdd: Boolean = SQLConf.get.ansiEnabled) extends AverageBase {
+  def this(child: Expression) = this(child, useAnsiAdd = SQLConf.get.ansiEnabled)
 
   override protected def withNewChildInternal(newChild: Expression): Average =
     copy(child = newChild)
@@ -151,7 +152,7 @@ case class Average(
   since = "3.3.0")
 // scalastyle:on line.size.limit
 case class TryAverage(child: Expression) extends AverageBase {
-  override def failOnError: Boolean = resultType match {
+  override def useAnsiAdd: Boolean = resultType match {
     // Double type won't fail, thus the failOnError is always false
     // For decimal type, it returns NULL on overflow. It behaves the same as TrySum when
     // `failOnError` is false.
@@ -160,8 +161,7 @@ case class TryAverage(child: Expression) extends AverageBase {
   }
 
   private def addTryEvalIfNeeded(expression: Expression): Expression = {
-    if (failOnError) {
-      // The tail expressions are for counting, which doesn't need `TryEval` execution.
+    if (useAnsiAdd) {
       TryEval(expression)
     } else {
       expression
@@ -175,7 +175,7 @@ case class TryAverage(child: Expression) extends AverageBase {
 
   override lazy val mergeExpressions: Seq[Expression] = {
     val expressions = getMergeExpressions
-    if (failOnError) {
+    if (useAnsiAdd) {
       val bufferOverflow = sum.left.isNull && count.left > 0L
       val inputOverflow = sum.right.isNull && count.right > 0L
       Seq(
@@ -184,7 +184,7 @@ case class TryAverage(child: Expression) extends AverageBase {
           Literal.create(null, resultType),
           // If both the buffer and the input do not overflow, just add them, as they can't be
           // null.
-          TryEval(Add(KnownNotNull(sum.left), KnownNotNull(sum.right), failOnError))),
+          TryEval(Add(KnownNotNull(sum.left), KnownNotNull(sum.right), useAnsiAdd))),
           expressions(1))
     } else {
       expressions
