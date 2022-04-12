@@ -104,8 +104,14 @@ def _monkey_patch_RDD(sparkSession: "SparkSession") -> None:
     RDD.toDF = toDF  # type: ignore[assignment]
 
 
+# TODO(SPARK-38912): This method can be dropped once support for Python 3.8 is dropped
+# In Python 3.9, the @property decorator has been made compatible with the @classmethod decorator.
+# https://docs.python.org/3.9/library/functions.html#classmethod
+#
+# @classmethod + @property is also affected by a bug in Python's docstring which was backported
+# to Python 3.9.6 (https://github.com/python/cpython/pull/28838)
 class classproperty(property):
-    """Same as Python's @property annotation, but for class attributes.
+    """Same as Python's @property decorator, but for class attributes.
 
     Example:
 
@@ -129,6 +135,7 @@ class classproperty(property):
     >>> isinstance(c1.build(), MyClass)
     True
     """
+
     def __get__(self, cls, owner):
         return classmethod(self.fget).__get__(None, owner)()
 
@@ -312,6 +319,14 @@ class SparkSession(SparkConversionMixin):
                     ).applyModifiableSettings(session._jsparkSession, self._options)
                 return session
 
+    # TODO(SPARK-38912): Replace @classproperty with @classmethod + @property once support for
+    # Python 3.8 is dropped.
+    #
+    # In Python 3.9, the @property decorator has been made compatible with the @classmethod decorator.
+    # https://docs.python.org/3.9/library/functions.html#classmethod
+    #
+    # @classmethod + @property is also affected by a bug in Python's docstring which was backported
+    # to Python 3.9.6 (https://github.com/python/cpython/pull/28838)
     @classproperty
     def builder(cls):
         """A class attribute having a :class:`Builder` to construct :class:`SparkSession` instances."""
