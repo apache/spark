@@ -20,7 +20,7 @@ from pyspark.serializers import NoOpSerializer
 from pyspark.storagelevel import StorageLevel
 from pyspark.streaming import DStream
 from pyspark.streaming.context import StreamingContext
-from pyspark.util import _print_missing_jar  # type: ignore[attr-defined]
+from pyspark.util import _print_missing_jar
 
 
 __all__ = ["KinesisUtils", "InitialPositionInStream", "utf8_decoder"]
@@ -153,8 +153,8 @@ class KinesisUtils:
         The given AWS credentials will get saved in DStream checkpoints if checkpointing
         is enabled. Make sure that your checkpoint directory is secure.
         """
-        jlevel = ssc._sc._getJavaStorageLevel(storageLevel)  # type: ignore[attr-defined]
-        jduration = ssc._jduration(checkpointInterval)  # type: ignore[attr-defined]
+        jlevel = ssc._sc._getJavaStorageLevel(storageLevel)
+        jduration = ssc._jduration(checkpointInterval)
 
         jvm = ssc._jvm
         assert jvm is not None
@@ -171,7 +171,7 @@ class KinesisUtils:
                 )
             raise
         jstream = helper.createStream(
-            ssc._jssc,  # type: ignore[attr-defined]
+            ssc._jssc,
             kinesisAppName,
             streamName,
             endpointUrl,

@@ -46,7 +46,7 @@ class RegexpExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     (implicit inputToExpression: A => Expression): Unit = {
     checkEvaluation(mkExpr(input), expected) // check literal input
 
-    val regex = 'a.string.at(0)
+    val regex = $"a".string.at(0)
     checkEvaluation(mkExpr(regex), expected, create_row(input)) // check row input
   }
 
@@ -281,7 +281,7 @@ class RegexpExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       evaluateWithoutCodegen("abbbbc" rlike "**")
     }
     intercept[java.util.regex.PatternSyntaxException] {
-      val regex = 'a.string.at(0)
+      val regex = $"a".string.at(0)
       evaluateWithoutCodegen("abbbbc" rlike regex, create_row("**"))
     }
   }
@@ -294,9 +294,9 @@ class RegexpExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     val row5 = create_row("100-200", null, "###")
     val row6 = create_row("100-200", "(-)", null)
 
-    val s = 's.string.at(0)
-    val p = 'p.string.at(1)
-    val r = 'r.string.at(2)
+    val s = $"s".string.at(0)
+    val p = $"p".string.at(1)
+    val r = $"r".string.at(2)
 
     val expr = RegExpReplace(s, p, r)
     checkEvaluation(expr, "num-num", row1)
@@ -346,9 +346,9 @@ class RegexpExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     val row6 = create_row("100-200", null, 1)
     val row7 = create_row("100-200", "([a-z])", null)
 
-    val s = 's.string.at(0)
-    val p = 'p.string.at(1)
-    val r = 'r.int.at(2)
+    val s = $"s".string.at(0)
+    val p = $"p".string.at(1)
+    val r = $"r".int.at(2)
 
     val expr = RegExpExtract(s, p, r)
     checkEvaluation(expr, "100", row1)
@@ -398,9 +398,9 @@ class RegexpExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     val row7 = create_row("100-200,300-400,500-600", null, 1)
     val row8 = create_row("100-200,300-400,500-600", "([a-z])", null)
 
-    val s = 's.string.at(0)
-    val p = 'p.string.at(1)
-    val r = 'r.int.at(2)
+    val s = $"s".string.at(0)
+    val p = $"p".string.at(1)
+    val r = $"r".int.at(2)
 
     val expr = RegExpExtractAll(s, p, r)
     checkEvaluation(expr, Seq("100-200", "300-400", "500-600"), row1)
@@ -439,8 +439,8 @@ class RegexpExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("SPLIT") {
-    val s1 = 'a.string.at(0)
-    val s2 = 'b.string.at(1)
+    val s1 = $"a".string.at(0)
+    val s2 = $"b".string.at(1)
     val row1 = create_row("aa2bb3cc", "[1-9]+")
     val row2 = create_row(null, "[1-9]+")
     val row3 = create_row("aa2bb3cc", null)

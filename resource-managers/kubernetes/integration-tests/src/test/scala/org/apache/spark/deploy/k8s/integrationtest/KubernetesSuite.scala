@@ -26,6 +26,7 @@ import com.google.common.base.Charsets
 import com.google.common.io.Files
 import io.fabric8.kubernetes.api.model.Pod
 import io.fabric8.kubernetes.client.{Watcher, WatcherException}
+import io.fabric8.kubernetes.client.KubernetesClientException
 import io.fabric8.kubernetes.client.Watcher.Action
 import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll, Tag}
 import org.scalatest.concurrent.{Eventually, PatienceConfiguration}
@@ -106,11 +107,10 @@ class KubernetesSuite extends SparkFunSuite
             .withName(execPod.getMetadata.getName)
             .getLog
         } catch {
-          case e: io.fabric8.kubernetes.client.KubernetesClientException =>
-            "Error fetching log (pod is likely not ready) ${e}"
+          case e: KubernetesClientException =>
+            s"Error fetching log (pod is likely not ready) $e"
         }
-        logInfo(s"\nBEGIN executor (${execPod.getMetadata.getName}) POD log:\n" +
-        podLog)
+        logInfo(s"\nBEGIN executor (${execPod.getMetadata.getName}) POD log:\n$podLog")
         logInfo(s"END executor (${execPod.getMetadata.getName}) POD log")
       }
   }
@@ -192,6 +192,12 @@ class KubernetesSuite extends SparkFunSuite
       .set("spark.kubernetes.driver.label.spark-app-locator", appLocator)
       .set("spark.kubernetes.executor.label.spark-app-locator", appLocator)
       .set(NETWORK_AUTH_ENABLED.key, "true")
+    sys.props.get(CONFIG_DRIVER_REQUEST_CORES).map { cpu =>
+      sparkAppConf.set("spark.kubernetes.driver.request.cores", cpu)
+    }
+    sys.props.get(CONFIG_EXECUTOR_REQUEST_CORES).map { cpu =>
+      sparkAppConf.set("spark.kubernetes.executor.request.cores", cpu)
+    }
     if (!kubernetesTestComponents.hasUserSpecifiedNamespace) {
       kubernetesTestComponents.createNamespace()
     }

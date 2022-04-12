@@ -247,7 +247,7 @@ object NestedColumnAliasing {
     exprList.foreach { e =>
       collectRootReferenceAndExtractValue(e).foreach {
         // we can not alias the attr from lambda variable whose expr id is not available
-        case ev: ExtractValue if ev.find(_.isInstanceOf[NamedLambdaVariable]).isEmpty =>
+        case ev: ExtractValue if !ev.exists(_.isInstanceOf[NamedLambdaVariable]) =>
           if (ev.references.size == 1) {
             nestedFieldReferences.append(ev)
           }
@@ -267,7 +267,7 @@ object NestedColumnAliasing {
         // that do should not have an alias generated as it can lead to pushing the aggregate down
         // into a projection.
         def containsAggregateFunction(ev: ExtractValue): Boolean =
-          ev.find(_.isInstanceOf[AggregateFunction]).isDefined
+          ev.exists(_.isInstanceOf[AggregateFunction])
 
         // Remove redundant [[ExtractValue]]s if they share the same parent nest field.
         // For example, when `a.b` and `a.b.c` are in project list, we only need to alias `a.b`.
@@ -277,7 +277,7 @@ object NestedColumnAliasing {
           // [[GetStructField]]
           case e @ (_: GetStructField | _: GetArrayStructFields) =>
             val child = e.children.head
-            nestedFields.forall(f => child.find(_.semanticEquals(f)).isEmpty)
+            nestedFields.forall(f => !child.exists(_.semanticEquals(f)))
           case _ => true
         }
           .distinct
@@ -311,6 +311,25 @@ object NestedColumnAliasing {
     case _ => 1 // UDT and others
   }
 }
+
+object GeneratorUnrequiredChildrenPruning {
+  def unapply(plan: LogicalPlan): Option[LogicalPlan] = plan match {
+    case p @ Project(_, g: Generate) =>
+      val requiredAttrs = p.references ++ g.generator.references
+      val newChild = ColumnPruning.prunedChild(g.child, requiredAttrs)
+      val unrequired = g.generator.references -- p.references
+      val unrequiredIndices = newChild.output.zipWithIndex.filter(t => unrequired.contains(t._1))
+        .map(_._2)
+      if (!newChild.fastEquals(g.child) ||
+        unrequiredIndices.toSet != g.unrequiredChildIndex.toSet) {
+        Some(p.copy(child = g.copy(child = newChild, unrequiredChildIndex = unrequiredIndices)))
+      } else {
+        None
+      }
+    case _ => None
+  }
+}
+
 
 /**
  * This prunes unnecessary nested columns from [[Generate]], or [[Project]] -> [[Generate]]

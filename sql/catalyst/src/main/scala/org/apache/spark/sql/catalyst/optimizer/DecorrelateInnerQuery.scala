@@ -87,7 +87,7 @@ object DecorrelateInnerQuery extends PredicateHelper {
    * leaf node and will not be found here.
    */
   private def containsAttribute(expression: Expression): Boolean = {
-    expression.find(_.isInstanceOf[Attribute]).isDefined
+    expression.exists(_.isInstanceOf[Attribute])
   }
 
   /**
@@ -268,7 +268,7 @@ object DecorrelateInnerQuery extends PredicateHelper {
           // The decorrelation framework adds domain inner joins by traversing down the plan tree
           // recursively until it reaches a node that is not correlated with the outer query.
           // So the child node of a domain inner join shouldn't contain another domain join.
-          assert(child.find(_.isInstanceOf[DomainJoin]).isEmpty,
+          assert(!child.exists(_.isInstanceOf[DomainJoin]),
             s"Child of a domain inner join shouldn't contain another domain join.\n$child")
           child
         case o =>
@@ -298,7 +298,8 @@ object DecorrelateInnerQuery extends PredicateHelper {
           case _ => Join(domain, newChild, joinType, condition, JoinHint.NONE)
         }
       } else {
-        throw QueryExecutionErrors.cannotRewriteDomainJoinWithConditionsError(conditions, d)
+        throw new IllegalStateException(
+          s"Unable to rewrite domain join with conditions: $conditions\n$d.")
       }
     case p: LogicalPlan =>
       p.mapChildren(rewriteDomainJoins(outerPlan, _, conditions))

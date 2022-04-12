@@ -120,12 +120,6 @@ private[spark] class DriverCommandFeatureStep(conf: KubernetesDriverConf)
   }
 
   private def baseDriverContainer(pod: SparkPod, resource: String): ContainerBuilder = {
-    // re-write primary resource, app jar is also added to spark.jars by default in SparkSubmit
-    val resolvedResource = if (conf.mainAppResource.isInstanceOf[JavaMainAppResource]) {
-      KubernetesUtils.renameMainAppResource(resource, Option(conf.sparkConf), false)
-    } else {
-      resource
-    }
     var proxyUserArgs = Seq[String]()
     if (!conf.proxyUser.isEmpty) {
       proxyUserArgs = proxyUserArgs :+ "--proxy-user"
@@ -136,7 +130,7 @@ private[spark] class DriverCommandFeatureStep(conf: KubernetesDriverConf)
       .addToArgs(proxyUserArgs: _*)
       .addToArgs("--properties-file", SPARK_CONF_PATH)
       .addToArgs("--class", conf.mainClass)
-      .addToArgs(resolvedResource)
+      .addToArgs(resource)
       .addToArgs(conf.appArgs: _*)
   }
 }

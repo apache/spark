@@ -340,10 +340,10 @@ class StreamingContext:
 
     def _check_serializers(self, rdds: List[RDD[T]]) -> None:
         # make sure they have same serializer
-        if len(set(rdd._jrdd_deserializer for rdd in rdds)) > 1:  # type: ignore[attr-defined]
+        if len(set(rdd._jrdd_deserializer for rdd in rdds)) > 1:
             for i in range(len(rdds)):
                 # reset them to sc.serializer
-                rdds[i] = rdds[i]._reserialize()  # type: ignore[attr-defined]
+                rdds[i] = rdds[i]._reserialize()
 
     def queueStream(
         self,
@@ -380,17 +380,17 @@ class StreamingContext:
 
         assert self._jvm is not None
         queue = self._jvm.PythonDStream.toRDDQueue(
-            [r._jrdd for r in rdds]  # type: ignore[attr-defined]
+            [r._jrdd for r in rdds]
         )
         if default:
-            default = default._reserialize(rdds[0]._jrdd_deserializer)  # type: ignore[attr-defined]
+            default = default._reserialize(rdds[0]._jrdd_deserializer)
             assert default is not None
             jdstream = self._jssc.queueStream(
-                queue, oneAtATime, default._jrdd  # type: ignore[attr-defined]
+                queue, oneAtATime, default._jrdd
             )
         else:
             jdstream = self._jssc.queueStream(queue, oneAtATime)
-        return DStream(jdstream, self, rdds[0]._jrdd_deserializer)  # type: ignore[attr-defined]
+        return DStream(jdstream, self, rdds[0]._jrdd_deserializer)
 
     def transform(
         self, dstreams: List["DStream[Any]"], transformFunc: Callable[..., RDD[T]]

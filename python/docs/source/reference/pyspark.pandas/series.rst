@@ -183,6 +183,7 @@ Reindexing / Selection / Label manipulation
    Series.drop
    Series.droplevel
    Series.drop_duplicates
+   Series.duplicated
    Series.equals
    Series.add_prefix
    Series.add_suffix

@@ -17,26 +17,29 @@
 
 package org.apache.spark.sql.jdbc
 
-import java.sql.{Connection, Date, Statement, Timestamp}
+import java.sql.{Connection, Date, Driver, Statement, Timestamp}
 import java.time.{Instant, LocalDate}
 import java.util
 
 import scala.collection.mutable.ArrayBuilder
+import scala.util.control.NonFatal
 
 import org.apache.commons.lang3.StringUtils
 
 import org.apache.spark.annotation.{DeveloperApi, Since}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.CatalystTypeConverters
 import org.apache.spark.sql.catalyst.util.{DateFormatter, DateTimeUtils, TimestampFormatter}
 import org.apache.spark.sql.connector.catalog.TableChange
 import org.apache.spark.sql.connector.catalog.TableChange._
 import org.apache.spark.sql.connector.catalog.index.TableIndex
-import org.apache.spark.sql.connector.expressions.{Expression, FieldReference, NamedReference}
+import org.apache.spark.sql.connector.expressions.{Expression, Literal, NamedReference}
 import org.apache.spark.sql.connector.expressions.aggregate.{AggregateFunc, Avg, Count, CountStar, Max, Min, Sum}
 import org.apache.spark.sql.connector.util.V2ExpressionSQLBuilder
 import org.apache.spark.sql.errors.QueryCompilationErrors
-import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JdbcUtils}
+import org.apache.spark.sql.execution.datasources.jdbc.{DriverRegistry, JDBCOptions, JdbcUtils}
+import org.apache.spark.sql.execution.datasources.jdbc.connection.ConnectionProvider
 import org.apache.spark.sql.execution.datasources.v2.TableSampleInfo
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -99,6 +102,29 @@ abstract class JdbcDialect extends Serializable with Logging{
    * @return The new JdbcType if there is an override for this DataType
    */
   def getJDBCType(dt: DataType): Option[JdbcType] = None
+
+  /**
+   * Returns a factory for creating connections to the given JDBC URL.
+   * In general, creating a connection has nothing to do with JDBC partition id.
+   * But sometimes it is needed, such as a database with multiple shard nodes.
+   * @param options - JDBC options that contains url, table and other information.
+   * @return The factory method for creating JDBC connections with the RDD partition ID. -1 means
+             the connection is being created at the driver side.
+   * @throws IllegalArgumentException if the driver could not open a JDBC connection.
+   */
+  @Since("3.3.0")
+  def createConnectionFactory(options: JDBCOptions): Int => Connection = {
+    val driverClass: String = options.driverClass
+    (partitionId: Int) => {
+      DriverRegistry.register(driverClass)
+      val driver: Driver = DriverRegistry.get(driverClass)
+      val connection =
+        ConnectionProvider.create(driver, options.parameters, options.connectionProviderName)
+      require(connection != null,
+        s"The driver could not open a JDBC connection. Check the URL: ${options.url}")
+      connection
+    }
+  }
 
   /**
    * Quotes the identifier. This is used to put quotes around the identifier in case the column
@@ -196,12 +222,23 @@ abstract class JdbcDialect extends Serializable with Logging{
   }
 
   class JDBCSQLBuilder extends V2ExpressionSQLBuilder {
-    override def visitFieldReference(fieldRef: FieldReference): String = {
-      if (fieldRef.fieldNames().length != 1) {
-        throw new IllegalArgumentException(
-          "FieldReference with field name has multiple or zero parts unsupported: " + fieldRef);
+    override def visitLiteral(literal: Literal[_]): String = {
+      compileValue(
+        CatalystTypeConverters.convertToScala(literal.value(), literal.dataType())).toString
+    }
+
+    override def visitNamedReference(namedRef: NamedReference): String = {
+      if (namedRef.fieldNames().length > 1) {
+        throw QueryCompilationErrors.commandNotSupportNestedColumnError(
+          "Filter push down", namedRef.toString)
       }
-      quoteIdentifier(fieldRef.fieldNames.head)
+      quoteIdentifier(namedRef.fieldNames.head)
+    }
+
+    override def visitCast(l: String, dataType: DataType): String = {
+      val databaseTypeDefinition =
+        getJDBCType(dataType).map(_.databaseTypeDefinition).getOrElse(dataType.typeName)
+      s"CAST($l AS $databaseTypeDefinition)"
     }
   }
 
@@ -216,7 +253,9 @@ abstract class JdbcDialect extends Serializable with Logging{
     try {
       Some(jdbcSQLBuilder.build(expr))
     } catch {
-      case _: IllegalArgumentException => None
+      case NonFatal(e) =>
+        logWarning("Error occurs while compiling V2 expression", e)
+        None
     }
   }
 

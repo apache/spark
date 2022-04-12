@@ -599,7 +599,8 @@ class EventLoggingListenerSuite extends SparkFunSuite with LocalSparkContext wit
       stageId: Int,
       taskType: String,
       executorMetrics: ExecutorMetrics): SparkListenerTaskEnd = {
-    val taskInfo = new TaskInfo(taskId, taskIndex, 0, 1553291556000L, executorId, "executor",
+    val taskInfo = new TaskInfo(
+      taskId, taskIndex, 0, partitionId = taskIndex, 1553291556000L, executorId, "executor",
       TaskLocality.NODE_LOCAL, false)
     val taskMetrics = TaskMetrics.empty
     SparkListenerTaskEnd(stageId, 0, taskType, Success, taskInfo, executorMetrics, taskMetrics)

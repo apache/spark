@@ -42,7 +42,7 @@ abstract class CTEInlineSuiteBase
          """.stripMargin)
       checkAnswer(df, Nil)
       assert(
-        df.queryExecution.optimizedPlan.find(_.isInstanceOf[WithCTE]).nonEmpty,
+        df.queryExecution.optimizedPlan.exists(_.isInstanceOf[WithCTE]),
         "Non-deterministic With-CTE with multiple references should be not inlined.")
     }
   }
@@ -59,7 +59,7 @@ abstract class CTEInlineSuiteBase
          """.stripMargin)
       checkAnswer(df, Nil)
       assert(
-        df.queryExecution.optimizedPlan.find(_.isInstanceOf[WithCTE]).nonEmpty,
+        df.queryExecution.optimizedPlan.exists(_.isInstanceOf[WithCTE]),
         "Non-deterministic With-CTE with multiple references should be not inlined.")
     }
   }
@@ -76,10 +76,10 @@ abstract class CTEInlineSuiteBase
          """.stripMargin)
       checkAnswer(df, Row(0, 1) :: Row(1, 2) :: Nil)
       assert(
-        df.queryExecution.analyzed.find(_.isInstanceOf[WithCTE]).nonEmpty,
+        df.queryExecution.analyzed.exists(_.isInstanceOf[WithCTE]),
         "With-CTE should not be inlined in analyzed plan.")
       assert(
-        df.queryExecution.optimizedPlan.find(_.isInstanceOf[WithCTE]).isEmpty,
+        !df.queryExecution.optimizedPlan.exists(_.isInstanceOf[WithCTE]),
         "With-CTE with one reference should be inlined in optimized plan.")
     }
   }
