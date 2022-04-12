@@ -69,13 +69,13 @@ object CTESubstitution extends Rule[LogicalPlan] {
     if (cteDefs.isEmpty) {
       substituted
     } else if (substituted eq lastSubstituted.get) {
-      WithCTE(substituted, cteDefs.toSeq)
+      WithCTE(substituted, cteDefs.sortBy(_.id).toSeq)
     } else {
       var done = false
       substituted.resolveOperatorsWithPruning(_ => !done) {
         case p if p eq lastSubstituted.get =>
           done = true
-          WithCTE(p, cteDefs.toSeq)
+          WithCTE(p, cteDefs.sortBy(_.id).toSeq)
       }
     }
   }

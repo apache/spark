@@ -377,7 +377,7 @@ abstract class CTEInlineSuiteBase
     }
   }
 
-  test("CTE ID conflict between main query and view query - 1 temp view") {
+  test("Views with CTEs - 1 temp view") {
     withView("t", "t2") {
       Seq((0, 1), (1, 2)).toDF("c1", "c2").createOrReplaceTempView("t")
       sql(
@@ -398,7 +398,7 @@ abstract class CTEInlineSuiteBase
     }
   }
 
-  test("CTE ID conflict between main query and view query - 2 temp views") {
+  test("Views with CTEs - 2 temp views") {
     withView("t", "t2", "t3") {
       Seq((0, 1), (1, 2)).toDF("c1", "c2").createOrReplaceTempView("t")
       sql(
@@ -420,7 +420,7 @@ abstract class CTEInlineSuiteBase
     }
   }
 
-  test("CTE ID conflict between main query and view query - temp view + sql view") {
+  test("Views with CTEs - temp view + sql view") {
     withTable("t") {
       withView ("t2", "t3") {
         Seq((0, 1), (1, 2)).toDF("c1", "c2").write.saveAsTable("t")
@@ -445,11 +445,41 @@ abstract class CTEInlineSuiteBase
     }
   }
 
-  test("SC-92587: CTE ID conflict in union of Dataframes leads to wrong results ") {
+  test("Union of Dataframes with CTEs") {
     val a = spark.sql("with t as (select 1 as n) select * from t ")
     val b = spark.sql("with t as (select 2 as n) select * from t ")
     val df = a.union(b)
     checkAnswer(df, Row(1) :: Row(2) :: Nil)
+  }
+
+  test("CTE definitions out of original order when not inlined") {
+    withView("t1", "t2") {
+      Seq((1, 2, 10, 100), (2, 3, 20, 200)).toDF("workspace_id", "issue_id", "shard_id", "field_id")
+        .createOrReplaceTempView("issue_current")
+      withSQLConf(SQLConf.OPTIMIZER_EXCLUDED_RULES.key ->
+          "org.apache.spark.sql.catalyst.optimizer.InlineCTE") {
+        val df = sql(
+          """
+            |WITH cte_0 AS (
+            |  SELECT workspace_id, issue_id, shard_id, field_id FROM issue_current
+            |),
+            |cte_1 AS (
+            |  WITH filtered_source_table AS (
+            |    SELECT * FROM cte_0 WHERE shard_id in ( 10 )
+            |  )
+            |  SELECT source_table.workspace_id, field_id FROM cte_0 source_table
+            |  INNER JOIN (
+            |    SELECT workspace_id, issue_id FROM filtered_source_table GROUP BY 1, 2
+            |  ) target_table
+            |  ON source_table.issue_id = target_table.issue_id
+            |  AND source_table.workspace_id = target_table.workspace_id
+            |  WHERE source_table.shard_id IN ( 10 )
+            |)
+            |SELECT * FROM cte_1
+        """.stripMargin)
+        checkAnswer(df, Row(1, 100) :: Nil)
+      }
+    }
   }
 }
 
