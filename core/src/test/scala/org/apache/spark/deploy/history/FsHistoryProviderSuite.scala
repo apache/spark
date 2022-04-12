@@ -57,18 +57,6 @@ import org.apache.spark.util.{Clock, JsonProtocol, ManualClock, Utils}
 import org.apache.spark.util.kvstore.InMemoryStore
 import org.apache.spark.util.logging.DriverLogger
 
-
-@ExtendedLevelDBTest
-class LevelDBBackendFsHistoryProviderSuite extends FsHistoryProviderSuite {
-  override protected def diskBackend: HybridStoreDiskBackend.Value =
-    HybridStoreDiskBackend.LEVELDB
-}
-
-class RocksDBBackendFsHistoryProviderSuite extends FsHistoryProviderSuite {
-  override protected def diskBackend: HybridStoreDiskBackend.Value =
-    HybridStoreDiskBackend.ROCKSDB
-}
-
 abstract class FsHistoryProviderSuite extends SparkFunSuite with Matchers with Logging {
   private var testDir: File = null
 
@@ -1717,4 +1705,15 @@ class TestGroupsMappingProvider extends GroupMappingServiceProvider {
   override def getGroups(username: String): Set[String] = {
     mappings.get(username).map(Set(_)).getOrElse(Set.empty)
   }
+}
+
+@ExtendedLevelDBTest
+class LevelDBBackendFsHistoryProviderSuite extends FsHistoryProviderSuite {
+  override protected def diskBackend: HybridStoreDiskBackend.Value =
+    HybridStoreDiskBackend.LEVELDB
+}
+
+class RocksDBBackendFsHistoryProviderSuite extends FsHistoryProviderSuite {
+  override protected def diskBackend: HybridStoreDiskBackend.Value =
+    HybridStoreDiskBackend.ROCKSDB
 }
