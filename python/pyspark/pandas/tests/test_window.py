@@ -200,7 +200,7 @@ class ExpandingRollingTest(PandasOnSparkTestCase, TestUtils):
             ):
                 getattr(psdf.a.rolling(1), name)()  # Series
 
-        # Rolling properties
+        # ExponentialMoving properties
         missing_properties = inspect.getmembers(
             MissingPandasLikeExponentialMoving, lambda o: isinstance(o, property)
         )
