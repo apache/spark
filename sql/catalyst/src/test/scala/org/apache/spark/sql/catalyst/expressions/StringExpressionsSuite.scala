@@ -953,7 +953,7 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("ToNumber: negative tests (the format string is invalid)") {
-    val invalidCharacter = "Encountered invalid character"
+    val unexpectedCharacter = "found in the format string"
     val thousandsSeparatorDigitsBetween =
       "Thousands separators (,) must have digits in between them"
     val mustBeAtEnd = "must be at the end of the number format"
@@ -962,9 +962,9 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       // The format string must not be empty.
       ("454", "") -> "The format string cannot be empty",
       // Make sure the format string does not contain any unrecognized characters.
-      ("454", "999@") -> invalidCharacter,
-      ("454", "999M") -> invalidCharacter,
-      ("454", "999P") -> invalidCharacter,
+      ("454", "999@") -> unexpectedCharacter,
+      ("454", "999M") -> unexpectedCharacter,
+      ("454", "999P") -> unexpectedCharacter,
       // Make sure the format string contains at least one digit.
       ("454", "$") -> "The format string requires at least one number digit",
       // Make sure the format string contains at most one decimal point.
@@ -972,14 +972,14 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       // Make sure the format string contains at most one dollar sign.
       ("454", "$$99") -> atMostOne,
       // Make sure the format string contains at most one minus sign at the beginning or end.
-      ("$4-4", "$9MI9") -> "must be at the beginning or end of the number format",
+      ("$4-4", "$9MI9") -> unexpectedCharacter,
       ("--$54", "SS$99") -> atMostOne,
       ("-$54", "MI$99MI") -> atMostOne,
       ("$4-4", "$9MI9MI") -> atMostOne,
       // Make sure the format string contains at most one closing angle bracket at the end.
-      ("<$45>", "PR$99") -> mustBeAtEnd,
-      ("$4<4>", "$9PR9") -> mustBeAtEnd,
-      ("<<454>>", "999PRPR") -> mustBeAtEnd,
+      ("<$45>", "PR$99") -> unexpectedCharacter,
+      ("$4<4>", "$9PR9") -> unexpectedCharacter,
+      ("<<454>>", "999PRPR") -> atMostOne,
       // Make sure that any dollar sign in the format string occurs before any digits.
       ("4$54", "9$99") -> "Currency characters must appear before digits",
       // Make sure that any dollar sign in the format string occurs before any decimal point.
