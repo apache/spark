@@ -453,6 +453,7 @@ object FunctionRegistry {
     expression[TrySubtract]("try_subtract"),
     expression[TryMultiply]("try_multiply"),
     expression[TryElementAt]("try_element_at"),
+    expression[TryAverage]("try_avg"),
     expression[TrySum]("try_sum"),
     expression[TryToBinary]("try_to_binary"),
 

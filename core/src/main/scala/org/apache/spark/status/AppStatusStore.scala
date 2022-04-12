@@ -691,7 +691,7 @@ private[spark] class AppStatusStore(
   }
 
   def streamBlocksList(): Seq[StreamBlockData] = {
-    store.view(classOf[StreamBlockData]).asScala.toSeq
+    KVUtils.viewToSeq(store.view(classOf[StreamBlockData]))
   }
 
   def operationGraphForStage(stageId: Int): RDDOperationGraph = {
