@@ -157,12 +157,12 @@
           <groupId>com.amazonaws</groupId>
           <artifactId>aws-java-sdk-core</artifactId>
           <version>${aws.java.sdk.version}</version>
-          <exclusions>
+          <!--exclusions>
             <exclusion>
               <groupId>*</groupId>
               <artifactId>*</artifactId>
             </exclusion>
-          </exclusions>
+          </exclusions-->
         </dependency>
         <dependency>
           <groupId>com.amazonaws</groupId>
