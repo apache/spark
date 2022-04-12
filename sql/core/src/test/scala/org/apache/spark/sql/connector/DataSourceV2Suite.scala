@@ -282,41 +282,44 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
   test("ordering and partitioning reporting") {
     import org.apache.spark.sql.execution.SortExec
     import org.apache.spark.sql.expressions.Window
-    Seq(
-      classOf[OrderAndPartitionAwareDataSource],
-      classOf[JavaOrderAndPartitionAwareDataSource]
-    ).foreach { cls =>
-      withClue(cls.getName) {
-        val df = spark.read.format(cls.getName).load()
-        checkAnswer(df, Seq(Row(1, 4), Row(1, 5), Row(2, 6), Row(3, 6), Row(4, 1), Row(4, 2)))
+    withSQLConf(SQLConf.V2_BUCKETING_ENABLED.key -> "true") {
+      Seq(
+        classOf[OrderAndPartitionAwareDataSource],
+        classOf[JavaOrderAndPartitionAwareDataSource]
+      ).foreach { cls =>
+        withClue(cls.getName) {
+          val df = spark.read.format(cls.getName).load()
+          checkAnswer(df, Seq(Row(1, 4), Row(1, 5), Row(2, 6), Row(3, 6), Row(4, 1), Row(4, 2)))
 
-        val windowPartByColIOrderByColJ = df.withColumn("no",
-          row_number() over Window.partitionBy(Symbol("i")).orderBy(Symbol("j"))
-        )
-        checkAnswer(
-          windowPartByColIOrderByColJ,
-          Seq(Row(1, 4, 1), Row(1, 5, 2), Row(2, 6, 1), Row(3, 6, 1), Row(4, 1, 1), Row(4, 2, 2))
-        )
-        assert(collectFirst(windowPartByColIOrderByColJ.queryExecution.executedPlan) {
-          case e: ShuffleExchangeExec => e
-        }.isEmpty)
-        assert(collectFirst(windowPartByColIOrderByColJ.queryExecution.executedPlan) {
-          case e: SortExec => e
-        }.isEmpty)
+          val windowPartByColIOrderByColJ = df.withColumn("no",
+            row_number() over Window.partitionBy(Symbol("i")).orderBy(Symbol("j"))
+          )
+          checkAnswer(
+            windowPartByColIOrderByColJ,
+            Seq(Row(1, 4, 1), Row(1, 5, 2), Row(2, 6, 1), Row(3, 6, 1), Row(4, 1, 1), Row(4, 2, 2))
+          )
+          val plan = windowPartByColIOrderByColJ.queryExecution.executedPlan
+          assert(collectFirst(windowPartByColIOrderByColJ.queryExecution.executedPlan) {
+            case e: ShuffleExchangeExec => e
+          }.isEmpty)
+          assert(collectFirst(windowPartByColIOrderByColJ.queryExecution.executedPlan) {
+            case e: SortExec => e
+          }.isEmpty)
 
-        val windowPartByColJOrderByColI = df.withColumn("no",
-          row_number() over Window.partitionBy(Symbol("j")).orderBy(Symbol("i"))
-        )
-        checkAnswer(
-          windowPartByColJOrderByColI,
-          Seq(Row(1, 4, 1), Row(1, 5, 1), Row(2, 6, 1), Row(3, 6, 2), Row(4, 1, 1), Row(4, 2, 1))
-        )
-        assert(collectFirst(windowPartByColJOrderByColI.queryExecution.executedPlan) {
-          case e: ShuffleExchangeExec => e
-        }.isDefined)
-        assert(collectFirst(windowPartByColJOrderByColI.queryExecution.executedPlan) {
-          case e: SortExec => e
-        }.isDefined)
+          val windowPartByColJOrderByColI = df.withColumn("no",
+            row_number() over Window.partitionBy(Symbol("j")).orderBy(Symbol("i"))
+          )
+          checkAnswer(
+            windowPartByColJOrderByColI,
+            Seq(Row(1, 4, 1), Row(1, 5, 1), Row(2, 6, 1), Row(3, 6, 2), Row(4, 1, 1), Row(4, 2, 1))
+          )
+          assert(collectFirst(windowPartByColJOrderByColI.queryExecution.executedPlan) {
+            case e: ShuffleExchangeExec => e
+          }.isDefined)
+          assert(collectFirst(windowPartByColJOrderByColI.queryExecution.executedPlan) {
+            case e: SortExec => e
+          }.isDefined)
+        }
       }
     }
   }
