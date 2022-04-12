@@ -21,7 +21,7 @@ import org.apache.spark.sql.{sources, AnalysisException}
 import org.apache.spark.sql.catalyst.analysis.{AnalysisContext, EliminateSubqueryAliases, FieldName, NamedRelation, PartitionSpec, ResolvedDBObjectName, UnresolvedException}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.catalog.FunctionResource
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, AttributeSet, Expression, Unevaluable}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, AttributeSet, Expression, MetadataAttribute, Unevaluable}
 import org.apache.spark.sql.catalyst.plans.DescribeCommandSchema
 import org.apache.spark.sql.catalyst.trees.BinaryLike
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
@@ -203,9 +203,10 @@ case class ReplaceData(
     originalTable: NamedRelation,
     write: Option[Write] = None) extends RowLevelWrite {
 
-  override lazy val isByName: Boolean = false
+  override val isByName: Boolean = false
+  override val stringArgs: Iterator[Any] = Iterator(table, query, write)
+
   override lazy val references: AttributeSet = query.outputSet
-  override lazy val stringArgs: Iterator[Any] = Iterator(table, query, write)
 
   lazy val operation: RowLevelOperation = {
     EliminateSubqueryAliases(table) match {
@@ -218,8 +219,10 @@ case class ReplaceData(
 
   // the incoming query may include metadata columns
   lazy val dataInput: Seq[Attribute] = {
-    val tableAttrNames = table.output.map(_.name)
-    query.output.filter(attr => tableAttrNames.exists(conf.resolver(_, attr.name)))
+    query.output.filter {
+      case MetadataAttribute(_) => false
+      case _ => true
+    }
   }
 
   override def outputResolved: Boolean = {

@@ -292,7 +292,7 @@ case class ReplaceDataExec(
     refreshCache: () => Unit,
     write: Write) extends V2ExistingTableWriteExec {
 
-  override lazy val stringArgs: Iterator[Any] = Iterator(query, write)
+  override val stringArgs: Iterator[Any] = Iterator(query, write)
 
   override protected def withNewChildInternal(newChild: SparkPlan): ReplaceDataExec = {
     copy(query = newChild)

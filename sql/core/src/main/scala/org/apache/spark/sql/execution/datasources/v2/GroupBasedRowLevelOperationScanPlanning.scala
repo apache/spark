@@ -62,7 +62,7 @@ object GroupBasedRowLevelOperationScanPlanning extends Rule[LogicalPlan] with Pr
 
       // replace DataSourceV2Relation with DataSourceV2ScanRelation for the row operation table
       rd transform {
-        case r: DataSourceV2Relation if r == relation =>
+        case r: DataSourceV2Relation if r eq relation =>
           DataSourceV2ScanRelation(r, scan, PushDownUtils.toOutputAttrs(scan.readSchema(), r))
       }
   }
