@@ -489,6 +489,7 @@ private[parquet] class ParquetRowConverter(
       parquetType.getLogicalTypeAnnotation.isInstanceOf[TimestampLogicalTypeAnnotation] &&
       !parquetType.getLogicalTypeAnnotation
         .asInstanceOf[TimestampLogicalTypeAnnotation].isAdjustedToUTC &&
+      // SPARK-38829: Remove TimestampNTZ type support in Parquet for Spark 3.3
       Utils.isTesting
 
   /**

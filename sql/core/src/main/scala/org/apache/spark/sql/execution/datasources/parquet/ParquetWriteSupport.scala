@@ -228,6 +228,7 @@ class ParquetWriteSupport extends WriteSupport[InternalRow] with Logging {
               recordConsumer.addLong(millis)
         }
 
+      // SPARK-38829: Remove TimestampNTZ type support in Parquet for Spark 3.3
       case TimestampNTZType if Utils.isTesting =>
         // For TimestampNTZType column, Spark always output as INT64 with Timestamp annotation in
         // MICROS time unit.

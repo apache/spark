@@ -254,6 +254,7 @@ class ParquetToSparkSchemaConverter(
             if (timestamp.isAdjustedToUTC) {
               TimestampType
             } else {
+              // SPARK-38829: Remove TimestampNTZ type support in Parquet for Spark 3.3
               if (Utils.isTesting) TimestampNTZType else TimestampType
             }
           case _ => illegalType()
@@ -548,6 +549,7 @@ class SparkToParquetSchemaConverter(
               .as(LogicalTypeAnnotation.timestampType(true, TimeUnit.MILLIS)).named(field.name)
         }
 
+      // SPARK-38829: Remove TimestampNTZ type support in Parquet for Spark 3.3
       case TimestampNTZType if Utils.isTesting =>
         Types.primitive(INT64, repetition)
           .as(LogicalTypeAnnotation.timestampType(false, TimeUnit.MICROS)).named(field.name)
