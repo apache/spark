@@ -64,7 +64,6 @@ import org.apache.spark.util.{ResetSystemProperties, ShutdownHookManager, Utils}
  * expectations.  However, in general this should be done with extreme caution, as the metrics
  * are considered part of Spark's public api.
  */
-
 abstract class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
   with MockitoSugar with JsonTestUtils with Eventually with WebBrowser with LocalSparkContext
   with ResetSystemProperties {
