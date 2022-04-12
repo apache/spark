@@ -2164,14 +2164,12 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             scol = F.when(cond, func(scol, True).over(window)).otherwise(scol)
 
         return DataFrame(
-            self._psdf._internal.with_new_spark_column(
-                self._column_label, scol.alias(name_like_string(self.name))  # TODO: dtype?
-            )
+            self._psdf._internal.with_new_spark_column(self._column_label, scol)  # TODO: dtype?
         )._psser_for(self._column_label)
 
     def interpolate(
         self, method: Optional[str] = None, limit: Optional[int] = None
-    ) -> Optional["Series"]:
+    ) -> "Series":
         return self._interpolate(method=method, limit=limit)
 
     def _interpolate(
@@ -2180,7 +2178,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         limit: Optional[int] = None,
     ) -> "Series":
         if (method is not None) and (method not in ["linear"]):
-            raise ValueError("Expecting 'linear'.")
+            raise NotImplementedError("interpolate currently works only for method='linear'")
         if (limit is not None) and (not limit > 0):
             raise ValueError("limit must be > 0.")
 

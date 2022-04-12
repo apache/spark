@@ -21,11 +21,13 @@ import pyspark.pandas as ps
 from pyspark.testing.pandasutils import PandasOnSparkTestCase, TestUtils
 
 
-class InterpolateTest(PandasOnSparkTestCase, TestUtils):
+class GenericFunctionsTest(PandasOnSparkTestCase, TestUtils):
     def test_interpolate_error(self):
         psdf = ps.range(10)
 
-        with self.assertRaisesRegex(ValueError, "Expecting 'linear'"):
+        with self.assertRaisesRegex(
+            NotImplementedError, "interpolate currently works only for method='linear'"
+        ):
             psdf.interpolate(method="quadratic")
 
         with self.assertRaisesRegex(ValueError, "limit must be > 0"):
@@ -111,7 +113,7 @@ class InterpolateTest(PandasOnSparkTestCase, TestUtils):
 
 if __name__ == "__main__":
     import unittest
-    from pyspark.pandas.tests.test_interpolate import *  # noqa: F401
+    from pyspark.pandas.tests.test_generic_functions import *  # noqa: F401
 
     try:
         import xmlrunner  # type: ignore[import]

@@ -3240,6 +3240,13 @@ class Frame(object, metaclass=ABCMeta):
         """
         Fill NaN values using an interpolation method.
 
+        .. note:: the current implementation of rank uses Spark's Window without
+            specifying partition specification. This leads to move all data into
+            single partition in single machine and could cause serious
+            performance degradation. Avoid this method against very large dataset.
+
+        .. versionadded:: 3.4.0
+
         Parameters
         ----------
         method : str, default 'linear'
