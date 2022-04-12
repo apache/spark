@@ -153,7 +153,7 @@ case class Average(
 // scalastyle:on line.size.limit
 case class TryAverage(child: Expression) extends AverageBase {
   override def useAnsiAdd: Boolean = resultType match {
-    // Double type won't fail, thus the failOnError is always false
+    // Double type won't fail, thus we can always use non-Ansi Add.
     // For decimal type, it returns NULL on overflow. It behaves the same as TrySum when
     // `failOnError` is false.
     case _: DoubleType | _: DecimalType => false
