@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.BindReferences.bindReferences
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
+import org.apache.spark.sql.catalyst.expressions.codegen.CodeGenerator.JAVA_BOOLEAN
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
@@ -108,6 +109,8 @@ case class SortMergeJoinExec(
   private def getSpillThreshold: Int = {
     conf.sortMergeJoinExecBufferSpillThreshold
   }
+
+  private lazy val maxRecordPerCycle = conf.sortMergeJoinExecMaxRecordPerCycle
 
   // Flag to only buffer first matched row, to avoid buffering unnecessary rows.
   private val onlyBufferFirstMatchedRow = (joinType, condition) match {
@@ -676,6 +679,16 @@ case class SortMergeJoinExec(
       v => s"$v = inputs[0];", forceInline = true)
     val bufferedInput = ctx.addMutableState("scala.collection.Iterator", "bufferedInput",
       v => s"$v = inputs[1];", forceInline = true)
+    val matchesIter = joinType match {
+      case Inner | LeftOuter | RightOuter =>
+        ctx.addMutableState("scala.collection.Iterator<UnsafeRow>", "matchesIter",
+          v => s"$v = scala.collection.Iterator.empty;", forceInline = true)
+      case LeftExistence(_) =>
+        ctx.freshName("iterator")
+      case x =>
+        throw new IllegalArgumentException(
+          s"SortMergeJoin.doProduce should not take $x as the JoinType")
+    }
 
     val (findNextJoinRowsFuncName, streamedRow, matches) = genScanner(ctx)
 
@@ -691,7 +704,6 @@ case class SortMergeJoinExec(
       case _ => None
     }
 
-    val iterator = ctx.freshName("iterator")
     val numOutput = metricTerm(ctx, "numOutputRows")
     val resultVars = joinType match {
       case _: InnerLike | LeftOuter =>
@@ -767,11 +779,27 @@ case class SortMergeJoinExec(
       (evaluateVariables(streamedVars), "", "")
     }
 
+    val initMatchesIter = joinType match {
+      case Inner | LeftOuter | RightOuter =>
+        s"""
+           |if ($matchesIter.isEmpty()) {
+           |  $matchesIter = $matches.generateIterator();
+           |}
+           |""".stripMargin
+      case LeftExistence(_) =>
+        s"""
+           |scala.collection.Iterator<UnsafeRow> $matchesIter = $matches.generateIterator();
+           |""".stripMargin
+      case x =>
+        throw new IllegalArgumentException(
+          s"SortMergeJoin.doProduce should not take $x as the JoinType")
+    }
+
     val beforeLoop =
       s"""
          |${streamedVarDecl.mkString("\n")}
          |${streamedBeforeLoop.trim}
-         |scala.collection.Iterator<UnsafeRow> $iterator = $matches.generateIterator();
+         |$initMatchesIter
        """.stripMargin
     val outputRow =
       s"""
@@ -784,19 +812,20 @@ case class SortMergeJoinExec(
 
     val doJoin = joinType match {
       case _: InnerLike =>
-        codegenInner(findNextJoinRows, beforeLoop, iterator, bufferedRow, condCheck, outputRow,
+        codegenInner(findNextJoinRows, beforeLoop, matchesIter, bufferedRow, condCheck, outputRow,
           eagerCleanup)
       case LeftOuter | RightOuter =>
-        codegenOuter(streamedInput, findNextJoinRows, beforeLoop, iterator, bufferedRow, condCheck,
-          ctx.freshName("hasOutputRow"), outputRow, eagerCleanup)
+        codegenOuter(streamedInput, findNextJoinRows, beforeLoop, matchesIter, bufferedRow,
+          condCheck, ctx.addMutableState(JAVA_BOOLEAN, "hasOutputRow",
+            v => s"$v = false;", forceInline = true), outputRow, eagerCleanup)
       case LeftSemi =>
-        codegenSemi(findNextJoinRows, beforeLoop, iterator, bufferedRow, condCheck,
+        codegenSemi(findNextJoinRows, beforeLoop, matchesIter, bufferedRow, condCheck,
           ctx.freshName("hasOutputRow"), outputRow, eagerCleanup)
       case LeftAnti =>
-        codegenAnti(streamedInput, findNextJoinRows, beforeLoop, iterator, bufferedRow, condCheck,
-          loadStreamed, ctx.freshName("hasMatchedRow"), outputRow, eagerCleanup)
+        codegenAnti(streamedInput, findNextJoinRows, beforeLoop, matchesIter, bufferedRow,
+          condCheck, loadStreamed, ctx.freshName("hasMatchedRow"), outputRow, eagerCleanup)
       case ExistenceJoin(_) =>
-        codegenExistence(streamedInput, findNextJoinRows, beforeLoop, iterator, bufferedRow,
+        codegenExistence(streamedInput, findNextJoinRows, beforeLoop, matchesIter, bufferedRow,
           condCheck, loadStreamed, existsVar.get, outputRow, eagerCleanup)
       case x =>
         throw new IllegalArgumentException(
@@ -836,12 +865,16 @@ case class SortMergeJoinExec(
       outputRow: String,
       eagerCleanup: String): String = {
     s"""
-       |while ($findNextJoinRows) {
+       |while ($matchIterator.hasNext() && $findNextJoinRows) {
        |  $beforeLoop
+       |  int outputCount = 0;
        |  while ($matchIterator.hasNext()) {
        |    InternalRow $bufferedRow = (InternalRow) $matchIterator.next();
        |    $conditionCheck
        |    $outputRow
+       |    if (++outputCount % $maxRecordPerCycle == 0 && shouldStop()) {
+       |      return
+       |    }
        |  }
        |  if (shouldStop()) return;
        |}
@@ -863,10 +896,14 @@ case class SortMergeJoinExec(
       outputRow: String,
       eagerCleanup: String): String = {
     s"""
-       |while ($streamedInput.hasNext()) {
-       |  $findNextJoinRows;
+       |while ($matchIterator.hasNext() && $streamedInput.hasNext()) {
+       |  if ($matchIterator.isEmpty()) {
+       |    $findNextJoinRows;
+       |    $hasOutputRow = false;
+       |  }
        |  $beforeLoop
        |  boolean $hasOutputRow = false;
+       |  int outputCount = 0;
        |
        |  // the last iteration of this loop is to emit an empty row if there is no matched rows.
        |  while ($matchIterator.hasNext() || !$hasOutputRow) {
@@ -875,6 +912,9 @@ case class SortMergeJoinExec(
        |    $conditionCheck
        |    $hasOutputRow = true;
        |    $outputRow
+       |    if (++outputCount % $maxRecordPerCycle == 0 && shouldStop()) {
+       |      return
+       |    }
        |  }
        |  if (shouldStop()) return;
        |}
