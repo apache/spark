@@ -82,24 +82,24 @@ public class TaskMemoryManagerSuite {
     Assert.assertEquals(MemoryBlock.FREED_IN_ALLOCATOR_PAGE_NUMBER, dataPage.pageNumber);
   }
 
-  @Test(expected = AssertionError.class)
+  @Test
   public void freeingPageDirectlyInAllocatorTriggersAssertionError() {
     final TaskMemoryManager manager = new TaskMemoryManager(
       new TestMemoryManager(
         new SparkConf().set(package$.MODULE$.MEMORY_OFFHEAP_ENABLED(), false)), 0);
     final MemoryConsumer c = new TestMemoryConsumer(manager, MemoryMode.ON_HEAP);
     final MemoryBlock dataPage = manager.allocatePage(256, c);
-    MemoryAllocator.HEAP.free(dataPage);
+    Assert.assertThrows(AssertionError.class, () -> MemoryAllocator.HEAP.free(dataPage));
   }
 
-  @Test(expected = AssertionError.class)
+  @Test
   public void callingFreePageOnDirectlyAllocatedPageTriggersAssertionError() {
     final TaskMemoryManager manager = new TaskMemoryManager(
       new TestMemoryManager(
         new SparkConf().set(package$.MODULE$.MEMORY_OFFHEAP_ENABLED(), false)), 0);
     final MemoryConsumer c = new TestMemoryConsumer(manager, MemoryMode.ON_HEAP);
     final MemoryBlock dataPage = MemoryAllocator.HEAP.allocate(256);
-    manager.freePage(dataPage, c);
+    Assert.assertThrows(AssertionError.class, () -> manager.freePage(dataPage, c));
   }
 
   @Test
