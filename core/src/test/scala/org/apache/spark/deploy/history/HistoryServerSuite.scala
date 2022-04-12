@@ -65,17 +65,6 @@ import org.apache.spark.util.{ResetSystemProperties, ShutdownHookManager, Utils}
  * are considered part of Spark's public api.
  */
 
-@ExtendedLevelDBTest
-class LevelDBBackendHistoryServerSuite extends HistoryServerSuite {
-  override protected def diskBackend: History.HybridStoreDiskBackend.Value =
-    HybridStoreDiskBackend.LEVELDB
-}
-
-class RocksDBBackendHistoryServerSuite extends HistoryServerSuite {
-  override protected def diskBackend: History.HybridStoreDiskBackend.Value =
-    HybridStoreDiskBackend.ROCKSDB
-}
-
 abstract class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
   with MockitoSugar with JsonTestUtils with Eventually with WebBrowser with LocalSparkContext
   with ResetSystemProperties {
@@ -727,7 +716,7 @@ object HistoryServerSuite {
     // current behavior is correct, and write out the returned json to the test/resource files
 
     // SPARK-38851: Use RocksDB backend because it supports more platforms.
-    val suite = new RocksDBBackendHistoryServerSuite
+    val suite = new LevelDBBackendHistoryServerSuite
     FileUtils.deleteDirectory(suite.getExpRoot)
     suite.getExpRoot.mkdirs()
     try {
@@ -803,4 +792,15 @@ class FakeAuthFilter extends Filter {
 
 object FakeAuthFilter {
   val FAKE_HTTP_USER = "HTTP_USER"
+}
+
+@ExtendedLevelDBTest
+class LevelDBBackendHistoryServerSuite extends HistoryServerSuite {
+  override protected def diskBackend: History.HybridStoreDiskBackend.Value =
+    HybridStoreDiskBackend.LEVELDB
+}
+
+class RocksDBBackendHistoryServerSuite extends HistoryServerSuite {
+  override protected def diskBackend: History.HybridStoreDiskBackend.Value =
+    HybridStoreDiskBackend.ROCKSDB
 }
