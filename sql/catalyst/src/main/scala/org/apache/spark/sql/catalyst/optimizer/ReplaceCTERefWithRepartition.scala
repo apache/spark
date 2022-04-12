@@ -47,8 +47,7 @@ object ReplaceCTERefWithRepartition extends Rule[LogicalPlan] {
     case WithCTE(child, cteDefs) =>
       cteDefs.foreach { cteDef =>
         val inlined = replaceWithRepartition(cteDef.child, cteMap)
-        val originalPlan = cteDef.originalPlanWithPredicates.map(_._1).getOrElse(cteDef.child)
-        val withRepartition = if (originalPlan.isInstanceOf[RepartitionOperation]) {
+        val withRepartition = if (inlined.isInstanceOf[RepartitionOperation]) {
           // If the CTE definition plan itself is a repartition operation, we do not need to add an
           // extra repartition shuffle.
           inlined

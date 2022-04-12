@@ -32,11 +32,11 @@ import org.apache.spark.sql.catalyst.trees.TreePattern.CTE
 object PushdownPredicatesAndPruneColumnsForCTEDef extends Rule[LogicalPlan] {
 
   // CTE_id - (CTE_definition, precedence, predicates_to_push_down, attributes_to_prune)
-  private type CteMap = mutable.HashMap[Long, (CTERelationDef, Int, Seq[Expression], AttributeSet)]
+  private type CTEMap = mutable.HashMap[Long, (CTERelationDef, Int, Seq[Expression], AttributeSet)]
 
   override def apply(plan: LogicalPlan): LogicalPlan = {
     if (!plan.isInstanceOf[Subquery] && plan.containsPattern(CTE)) {
-      val cteMap = new CteMap
+      val cteMap = new CTEMap
       gatherPredicatesAndAttributes(plan, cteMap)
       pushdownPredicatesAndAttributes(plan, cteMap)
     } else {
@@ -44,7 +44,7 @@ object PushdownPredicatesAndPruneColumnsForCTEDef extends Rule[LogicalPlan] {
     }
   }
 
-  private def reverseMapExpressions(
+  private def restoreCTEDefAttrs(
       input: Seq[Expression],
       mapping: Map[Attribute, Expression]): Seq[Expression] = {
     input.map(e => e.transform {
@@ -60,7 +60,7 @@ object PushdownPredicatesAndPruneColumnsForCTEDef extends Rule[LogicalPlan] {
    * For the same CTE definition, if any of its references does not have predicates, the combined
    * predicate will be a TRUE literal, which means there will be no predicate push-down.
    */
-  private def gatherPredicatesAndAttributes(plan: LogicalPlan, cteMap: CteMap): Unit = {
+  private def gatherPredicatesAndAttributes(plan: LogicalPlan, cteMap: CTEMap): Unit = {
     plan match {
       case WithCTE(child, cteDefs) =>
         cteDefs.zipWithIndex.foreach { case (cteDef, precedence) =>
@@ -71,18 +71,22 @@ object PushdownPredicatesAndPruneColumnsForCTEDef extends Rule[LogicalPlan] {
 
       case ScanOperation(projects, predicates, ref: CTERelationRef) =>
         val (cteDef, precedence, preds, attrs) = cteMap(ref.cteId)
-        val mapping = ref.output.zip(cteDef.output).map{ case (r, d) => r -> d }.toMap
+        val attrMapping = ref.output.zip(cteDef.output).map{ case (r, d) => r -> d }.toMap
         val newPredicates = if (isTruePredicate(preds)) {
           preds
         } else {
-          val filteredPredicates = reverseMapExpressions(predicates.filter(_.find {
+          // Make sure we only push down predicates that do not contain forward CTE references.
+          val filteredPredicates = restoreCTEDefAttrs(predicates.filter(_.find {
             case s: SubqueryExpression => s.plan.find {
               case r: CTERelationRef =>
+                // If the ref's ID does not exist in the map or if ref's corresponding precedence
+                // is bigger than that of the current CTE we are pushing predicates for, it
+                // indicates a forward reference and we should exclude this predicate.
                 !cteMap.contains(r.cteId) || cteMap(r.cteId)._2 >= precedence
               case _ => false
             }.nonEmpty
             case _ => false
-          }.isEmpty), mapping).filter(_.references.forall(cteDef.outputSet.contains))
+          }.isEmpty), attrMapping).filter(_.references.forall(cteDef.outputSet.contains))
           if (filteredPredicates.isEmpty) {
             Seq(Literal.TrueLiteral)
           } else {
@@ -90,8 +94,8 @@ object PushdownPredicatesAndPruneColumnsForCTEDef extends Rule[LogicalPlan] {
           }
         }
         val newAttributes = attrs ++
-          AttributeSet(reverseMapExpressions(projects.flatMap(_.references), mapping)) ++
-          AttributeSet(reverseMapExpressions(predicates.flatMap(_.references), mapping))
+          AttributeSet(restoreCTEDefAttrs(projects.flatMap(_.references), attrMapping)) ++
+          AttributeSet(restoreCTEDefAttrs(predicates.flatMap(_.references), attrMapping))
 
         cteMap.update(ref.cteId, (cteDef, precedence, newPredicates, newAttributes))
         plan.subqueriesAll.foreach(s => gatherPredicatesAndAttributes(s, cteMap))
@@ -116,7 +120,7 @@ object PushdownPredicatesAndPruneColumnsForCTEDef extends Rule[LogicalPlan] {
    */
   private def pushdownPredicatesAndAttributes(
       plan: LogicalPlan,
-      cteMap: CteMap): LogicalPlan = plan.transformWithSubqueries {
+      cteMap: CTEMap): LogicalPlan = plan.transformWithSubqueries {
     case cteDef @ CTERelationDef(child, id, originalPlanWithPredicates) =>
       val (_, _, newPreds, newAttrSet) = cteMap(id)
       val originalPlan = originalPlanWithPredicates.map(_._1).getOrElse(child)
