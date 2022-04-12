@@ -16,6 +16,7 @@
 #
 from pyspark.statcounter import StatCounter
 from pyspark.testing.utils import ReusedPySparkTestCase
+import math
 
 
 class StatCounterTests(ReusedPySparkTestCase):
@@ -92,7 +93,6 @@ class StatCounterTests(ReusedPySparkTestCase):
         # SPARK-38854: Test case to improve test coverage when
         # StatCounter argument is empty list or None
         arguments = [[], None]
-        import math
 
         for arg in arguments:
             stats = StatCounter(arg)
