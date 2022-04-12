@@ -244,6 +244,7 @@ class ToNumberParser(numberFormat: String, errorOnFail: Boolean) extends Seriali
     def multipleSignInNumberFormatError(message: String) = {
       s"At most one $message is allowed in the number format: '$numberFormat'"
     }
+
     def notAtEndOfNumberFormatError(message: String) = {
       s"$message must be at the end of the number format: '$numberFormat'"
     }
