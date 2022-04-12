@@ -417,7 +417,8 @@ object ParquetFileFormat extends Logging {
 
     val converter = new ParquetToSparkSchemaConverter(
       sparkSession.sessionState.conf.isParquetBinaryAsString,
-      sparkSession.sessionState.conf.isParquetINT96AsTimestamp)
+      sparkSession.sessionState.conf.isParquetINT96AsTimestamp,
+      timestampNTZEnabled = sparkSession.sessionState.conf.timestampNTZSupportEnabled)
 
     val seen = mutable.HashSet[String]()
     val finalSchemas: Seq[StructType] = footers.flatMap { footer =>
@@ -513,12 +514,14 @@ object ParquetFileFormat extends Logging {
       sparkSession: SparkSession): Option[StructType] = {
     val assumeBinaryIsString = sparkSession.sessionState.conf.isParquetBinaryAsString
     val assumeInt96IsTimestamp = sparkSession.sessionState.conf.isParquetINT96AsTimestamp
+    val timestampNTZEnabled = sparkSession.sessionState.conf.timestampNTZSupportEnabled
 
     val reader = (files: Seq[FileStatus], conf: Configuration, ignoreCorruptFiles: Boolean) => {
       // Converter used to convert Parquet `MessageType` to Spark SQL `StructType`
       val converter = new ParquetToSparkSchemaConverter(
         assumeBinaryIsString = assumeBinaryIsString,
-        assumeInt96IsTimestamp = assumeInt96IsTimestamp)
+        assumeInt96IsTimestamp = assumeInt96IsTimestamp,
+        timestampNTZEnabled = timestampNTZEnabled)
 
       readParquetFootersInParallel(conf, files, ignoreCorruptFiles)
         .map(ParquetFileFormat.readSchemaFromFooter(_, converter))

@@ -64,12 +64,14 @@ abstract class ParquetSchemaTest extends ParquetTest with SharedSparkSession {
       binaryAsString: Boolean,
       int96AsTimestamp: Boolean,
       caseSensitive: Boolean = false,
+      timestampNTZEnabled: Boolean = true,
       sparkReadSchema: Option[StructType] = None,
       expectedParquetColumn: Option[ParquetColumn] = None): Unit = {
     val converter = new ParquetToSparkSchemaConverter(
       assumeBinaryIsString = binaryAsString,
       assumeInt96IsTimestamp = int96AsTimestamp,
-      caseSensitive = caseSensitive)
+      caseSensitive = caseSensitive,
+      timestampNTZEnabled = timestampNTZEnabled)
 
     test(s"sql <= parquet: $testName") {
       val actualParquetColumn = converter.convertParquetColumn(
@@ -2237,7 +2239,20 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
         |}
         """.stripMargin,
       binaryAsString = true,
-      int96AsTimestamp = int96AsTimestamp)
+      int96AsTimestamp = int96AsTimestamp,
+      timestampNTZEnabled = true)
+
+    testParquetToCatalyst(
+      s"TimestampNTZ read as INT64 with TIMESTAMP_MILLIS - " +
+        s"int96AsTimestamp as $int96AsTimestamp, TimestampNTZ is disabled",
+      StructType(Seq(StructField("f1", TimestampType))),
+      """message root {
+        |  optional INT64 f1 (TIMESTAMP(MILLIS,false));
+        |}
+        """.stripMargin,
+      binaryAsString = true,
+      int96AsTimestamp = int96AsTimestamp,
+      timestampNTZEnabled = false)
   }
 
   private def testSchemaClipping(

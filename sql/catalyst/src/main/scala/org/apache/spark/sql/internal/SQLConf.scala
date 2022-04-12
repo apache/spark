@@ -1052,6 +1052,15 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val PARQUET_TIMESTAMP_NTZ_SUPPORT_ENABLED =
+    buildConf("spark.sql.parquet.timestampNTZ.enabled")
+      .doc("Enables TIMESTAMP_NTZ support for Parquet schema inference and writes. " +
+        "When disabled, TIMESTAMP_NTZ values are inferred as TIMESTAMP_LTZ and have to be " +
+        "converted to TIMESTAMP_LTZ for writes.")
+      .version("3.3.0")
+      .booleanConf
+      .createWithDefault(true)
+
   val IGNORE_MISSING_PARQUET_FIELD_ID =
     buildConf("spark.sql.parquet.fieldId.read.ignoreMissing")
       .doc("When the Parquet file doesn't have any field IDs but the " +
@@ -4490,6 +4499,8 @@ class SQLConf extends Serializable with Logging {
   def parquetFieldIdWriteEnabled: Boolean = getConf(SQLConf.PARQUET_FIELD_ID_WRITE_ENABLED)
 
   def ignoreMissingParquetFieldId: Boolean = getConf(SQLConf.IGNORE_MISSING_PARQUET_FIELD_ID)
+
+  def timestampNTZSupportEnabled: Boolean = getConf(PARQUET_TIMESTAMP_NTZ_SUPPORT_ENABLED)
 
   def useV1Command: Boolean = getConf(SQLConf.LEGACY_USE_V1_COMMAND)
 

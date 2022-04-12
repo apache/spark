@@ -47,22 +47,26 @@ import org.apache.spark.sql.types._
  * @param assumeInt96IsTimestamp Whether unannotated INT96 fields should be assumed to be Spark SQL
  *        [[TimestampType]] fields.
  * @param caseSensitive Whether use case sensitive analysis when comparing Spark catalyst read
- *                      schema with Parquet schema
+ *                      schema with Parquet schema.
+ * @param timestampNTZEnabled Whether TimestampNTZType type is enabled.
  */
 class ParquetToSparkSchemaConverter(
     assumeBinaryIsString: Boolean = SQLConf.PARQUET_BINARY_AS_STRING.defaultValue.get,
     assumeInt96IsTimestamp: Boolean = SQLConf.PARQUET_INT96_AS_TIMESTAMP.defaultValue.get,
-    caseSensitive: Boolean = SQLConf.CASE_SENSITIVE.defaultValue.get) {
+    caseSensitive: Boolean = SQLConf.CASE_SENSITIVE.defaultValue.get,
+    timestampNTZEnabled: Boolean = SQLConf.PARQUET_TIMESTAMP_NTZ_SUPPORT_ENABLED.defaultValue.get) {
 
   def this(conf: SQLConf) = this(
     assumeBinaryIsString = conf.isParquetBinaryAsString,
     assumeInt96IsTimestamp = conf.isParquetINT96AsTimestamp,
-    caseSensitive = conf.caseSensitiveAnalysis)
+    caseSensitive = conf.caseSensitiveAnalysis,
+    timestampNTZEnabled = conf.timestampNTZSupportEnabled)
 
   def this(conf: Configuration) = this(
     assumeBinaryIsString = conf.get(SQLConf.PARQUET_BINARY_AS_STRING.key).toBoolean,
     assumeInt96IsTimestamp = conf.get(SQLConf.PARQUET_INT96_AS_TIMESTAMP.key).toBoolean,
-    caseSensitive = conf.get(SQLConf.CASE_SENSITIVE.key).toBoolean)
+    caseSensitive = conf.get(SQLConf.CASE_SENSITIVE.key).toBoolean,
+    timestampNTZEnabled = conf.get(SQLConf.PARQUET_TIMESTAMP_NTZ_SUPPORT_ENABLED.key).toBoolean)
 
 
   /**
@@ -250,7 +254,7 @@ class ParquetToSparkSchemaConverter(
             }
           case timestamp: TimestampLogicalTypeAnnotation
             if timestamp.getUnit == TimeUnit.MICROS || timestamp.getUnit == TimeUnit.MILLIS =>
-            if (timestamp.isAdjustedToUTC) {
+            if (timestamp.isAdjustedToUTC || !timestampNTZEnabled) {
               TimestampType
             } else {
               TimestampNTZType
@@ -547,7 +551,7 @@ class SparkToParquetSchemaConverter(
               .as(LogicalTypeAnnotation.timestampType(true, TimeUnit.MILLIS)).named(field.name)
         }
 
-      case TimestampNTZType =>
+      case TimestampNTZType if SQLConf.get.timestampNTZSupportEnabled =>
         Types.primitive(INT64, repetition)
           .as(LogicalTypeAnnotation.timestampType(false, TimeUnit.MICROS)).named(field.name)
       case BinaryType =>
