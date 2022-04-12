@@ -422,8 +422,9 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
                   failAnalysis(
                     s"""
                        |The sum of the LIMIT clause and the OFFSET clause must not be greater than
-                       | the maximum 32-bit integer value (2,147,483,647),
-                       | but found limit = $limit, offset = $offset.""".stripMargin)
+                       |the maximum 32-bit integer value (2,147,483,647),
+                       |but found limit = $limit, offset = $offset.
+                       |""".stripMargin.replace("\n", " "))
                 }
               case _ =>
             }
@@ -437,7 +438,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
             failAnalysis(
               s"""
                  |The OFFSET clause is only allowed in the LIMIT clause, but the OFFSET
-                 | clause found in: ${o.nodeName}.""".stripMargin)
+                 |clause found in: ${o.nodeName}.""".stripMargin.replace("\n", " "))
 
           case _: Union | _: SetOperation if operator.children.length > 1 =>
             def dataTypes(plan: LogicalPlan): Seq[DataType] = plan.output.map(_.dataType)
@@ -865,7 +866,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
         failAnalysis(
           s"""
              |The OFFSET clause is only allowed in the LIMIT clause, but the OFFSET
-             | clause is found to be the outermost node.""".stripMargin)
+             |clause is found to be the outermost node.""".stripMargin.replace("\n", " "))
       case _ =>
     }
   }
