@@ -170,8 +170,8 @@ abstract class SumBase(child: Expression) extends DeclarativeAggregate
   group = "agg_funcs",
   since = "1.0.0")
 case class Sum(
-                  child: Expression,
-                  useAnsiAdd: Boolean = SQLConf.get.ansiEnabled)
+    child: Expression,
+    useAnsiAdd: Boolean = SQLConf.get.ansiEnabled)
   extends SumBase(child) {
   def this(child: Expression) = this(child, useAnsiAdd = SQLConf.get.ansiEnabled)
 
