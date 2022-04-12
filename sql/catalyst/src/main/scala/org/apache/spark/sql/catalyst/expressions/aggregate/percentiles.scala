@@ -367,7 +367,7 @@ case class PercentileCont(left: Expression, right: Expression)
  * Therefore we have to store all the elements in memory, and so notice that too many elements can
  * cause GC paused and eventually OutOfMemory Errors.
  */
-private[sql] case class PercentileDisc private(
+case class PercentileDisc private(
     child: Expression,
     percentageExpression: Expression,
     frequencyExpression: Expression,
