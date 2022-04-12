@@ -415,7 +415,6 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
             checkLimitLikeClause("limit", limitExpr)
             child match {
               case Offset(offsetExpr, _) =>
-                checkLimitLikeClause("offset", offsetExpr)
                 val limit = limitExpr.eval().asInstanceOf[Int]
                 val offset = offsetExpr.eval().asInstanceOf[Int]
                 if (Int.MaxValue - limit < offset) {
