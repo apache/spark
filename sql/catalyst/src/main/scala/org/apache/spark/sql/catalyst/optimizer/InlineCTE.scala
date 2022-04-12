@@ -35,8 +35,11 @@ import org.apache.spark.sql.catalyst.trees.TreePattern.{CTE, PLAN_EXPRESSION}
  *
  * CTE definitions that appear in subqueries and are not inlined will be pulled up to the main
  * query level.
+ *
+ * @param alwaysInline if true, inline all CTEs in the query plan.
  */
-object InlineCTE extends Rule[LogicalPlan] {
+case class InlineCTE(alwaysInline: Boolean = false) extends Rule[LogicalPlan] {
+
   override def apply(plan: LogicalPlan): LogicalPlan = {
     if (!plan.isInstanceOf[Subquery] && plan.containsPattern(CTE)) {
       val cteMap = mutable.HashMap.empty[Long, (CTERelationDef, Int)]
@@ -55,7 +58,7 @@ object InlineCTE extends Rule[LogicalPlan] {
     }
   }
 
-  private def shouldInline(cteDef: CTERelationDef, refCount: Int): Boolean = {
+  private def shouldInline(cteDef: CTERelationDef, refCount: Int): Boolean = alwaysInline || {
     // We do not need to check enclosed `CTERelationRef`s for `deterministic` or `OuterReference`,
     // because:
     // 1) It is fine to inline a CTE if it references another CTE that is non-deterministic;

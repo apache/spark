@@ -300,7 +300,7 @@ abstract class CTEInlineSuiteBase
       }
       assert(cteRepartitions.length == 6,
         "CTE should not be inlined after optimization.")
-      val distinctCteRepartitions = cteRepartitions.distinct
+      val distinctCteRepartitions = cteRepartitions.map(_.canonicalized).distinct
       // Check column pruning and predicate push-down.
       assert(distinctCteRepartitions.length == 2)
       assert(distinctCteRepartitions(1).collectFirst {
@@ -350,7 +350,7 @@ abstract class CTEInlineSuiteBase
       }
       assert(cteRepartitions.length == 6,
         "CTE should not be inlined after optimization.")
-      val distinctCteRepartitions = cteRepartitions.distinct
+      val distinctCteRepartitions = cteRepartitions.map(_.canonicalized).distinct
       // Check column pruning and predicate push-down.
       assert(distinctCteRepartitions.length == 2)
       assert(distinctCteRepartitions(1).collectFirst {

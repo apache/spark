@@ -22,7 +22,7 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.SubExprUtils._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, PercentileCont}
-import org.apache.spark.sql.catalyst.optimizer.{BooleanSimplification, DecorrelateInnerQuery}
+import org.apache.spark.sql.catalyst.optimizer.{BooleanSimplification, DecorrelateInnerQuery, InlineCTE}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
@@ -93,8 +93,10 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
 
   def checkAnalysis(plan: LogicalPlan): Unit = {
     // We transform up and order the rules so as to catch the first possible failure instead
-    // of the result of cascading resolution failures.
-    plan.foreachUp {
+    // of the result of cascading resolution failures. Inline all CTEs in the plan to help check
+    // query plan structures in subqueries.
+    val inlineCTE = InlineCTE(alwaysInline = true)
+    inlineCTE(plan).foreachUp {
 
       case p if p.analyzed => // Skip already analyzed sub-plans
 
