@@ -74,9 +74,6 @@ SELECT btrim(encode('xxxbarxxx', 'utf-8'), encode('x', 'utf-8'));
 SELECT lpad('hi', 'invalid_length');
 SELECT rpad('hi', 'invalid_length');
 
--- Enable the lpad rpad function for binary input type
-SET spark.sql.legacy.lpadRpadAlwaysReturnString=false;
-
 -- lpad for BINARY inputs
 SELECT hex(lpad(unhex(''), 5));
 SELECT hex(lpad(unhex('aabb'), 5));
@@ -110,9 +107,6 @@ SELECT lpad('abc', 5, x'57');
 SELECT lpad(x'57', 5, 'abc');
 SELECT rpad('abc', 5, x'57');
 SELECT rpad(x'57', 5, 'abc');
-
--- Reset the lpad rpad binary breaking change
-RESET spark.sql.legacy.lpadRpadAlwaysReturnString;
 
 -- decode
 select decode();
