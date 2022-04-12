@@ -347,6 +347,16 @@ trait JoinSelectionHelper {
         join.hint, hintOnly = false, conf).isDefined
   }
 
+  def canPruneLeft(joinType: JoinType): Boolean = joinType match {
+    case Inner | LeftSemi | RightOuter => true
+    case _ => false
+  }
+
+  def canPruneRight(joinType: JoinType): Boolean = joinType match {
+    case Inner | LeftSemi | LeftOuter => true
+    case _ => false
+  }
+
   def hintToBroadcastLeft(hint: JoinHint): Boolean = {
     hint.leftHint.exists(_.strategy.contains(BROADCAST))
   }
