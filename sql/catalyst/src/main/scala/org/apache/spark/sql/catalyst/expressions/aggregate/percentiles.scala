@@ -389,13 +389,8 @@ private[sql] case class PercentileDisc private(
     val defaultCheck = super.checkInputDataTypes()
     if (defaultCheck.isFailure) {
       defaultCheck
-    } else if (!frequencyExpression.foldable) {
-      // percentageExpression must be foldable
-      TypeCheckFailure("The frequency of PercentileDisc must be a constant literal, " +
-        s"but got $frequencyExpression")
-    } else if (frequency != 1) {
-      TypeCheckFailure("Frequency value must be 1 for PercentileDisc")
     } else {
+      assert(frequencyExpression == Literal(1L))
       TypeCheckSuccess
     }
   }
