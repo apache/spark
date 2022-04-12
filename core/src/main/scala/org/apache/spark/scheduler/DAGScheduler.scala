@@ -1400,30 +1400,35 @@ private[spark] class DAGScheduler(
   }
 
   private def getAndSetShufflePushMergerLocations(stage: ShuffleMapStage): Seq[BlockManagerId] = {
-    val coPartitionedSiblingStages = if (reuseMergerLocations) {
-      // Reuse merger locations for sibling stages (for eg: join cases) so that
-      // both the RDD's output will be collocated giving better locality. Since this
-      // method is invoked only within the event loop thread, it's safe to find sibling
-      // stages and set the merger locations accordingly in this way.
-      findCoPartitionedSiblingMapStages(stage)
-    } else {
-      Set.empty[ShuffleMapStage]
-    }
-    val mergerLocs = if (reuseMergerLocations) {
-      coPartitionedSiblingStages.collectFirst({
-        case s if s.shuffleDep.getMergerLocs.nonEmpty => s.shuffleDep.getMergerLocs})
-        .getOrElse(sc.schedulerBackend.getShufflePushMergerLocations(
-          stage.shuffleDep.partitioner.numPartitions, stage.resourceProfileId))
-    } else {
-      sc.schedulerBackend.getShufflePushMergerLocations(
+    val mergerLocs = {
+      def findMergerLocs() = sc.schedulerBackend.getShufflePushMergerLocations(
         stage.shuffleDep.partitioner.numPartitions, stage.resourceProfileId)
+      if (reuseMergerLocations) {
+        // Reuse merger locations for sibling stages (for eg: join cases) so that
+        // both the RDD's output will be collocated giving better locality. Since this
+        // method is invoked only within the event loop thread, it's safe to find sibling
+        // stages and set the merger locations accordingly in this way.
+        val coPartitionedSiblingStages = findCoPartitionedSiblingMapStages(stage)
+        val siblingMergerLocs = coPartitionedSiblingStages.collectFirst({
+          case s if s.shuffleDep.getMergerLocs.nonEmpty => s.shuffleDep.getMergerLocs}).get
+        if (siblingMergerLocs.isEmpty) {
+          val mergerLocs = findMergerLocs()
+          if (mergerLocs.nonEmpty) {
+            // set merger locations for sibling stages
+            coPartitionedSiblingStages.filter(_.shuffleDep.getMergerLocs.isEmpty)
+              .foreach(_.shuffleDep.setMergerLocs(mergerLocs))
+          }
+          mergerLocs
+        } else {
+          siblingMergerLocs
+        }
+      } else {
+        findMergerLocs()
+      }
     }
+
     if (mergerLocs.nonEmpty) {
       stage.shuffleDep.setMergerLocs(mergerLocs)
-      if (reuseMergerLocations) {
-        coPartitionedSiblingStages.filter(_.shuffleDep.getMergerLocs.isEmpty)
-          .foreach(_.shuffleDep.setMergerLocs(mergerLocs))
-      }
     }
 
     logDebug(s"Shuffle merge locations for shuffle ${stage.shuffleDep.shuffleId} with" +
@@ -1443,18 +1448,17 @@ private[spark] class DAGScheduler(
    */
   private def findCoPartitionedSiblingMapStages(
       stage: ShuffleMapStage): Set[ShuffleMapStage] = {
-    val numShufflePartitions = stage.shuffleDep.partitioner.numPartitions
     val siblingStages = new HashSet[ShuffleMapStage]
     siblingStages += stage
     var prevSize = 0
     val allStagesSoFar = waitingStages ++ runningStages ++ failedStages ++ succeededStages
     do {
       prevSize = siblingStages.size
-      siblingStages ++= allStagesSoFar.filter(_.parents.intersect(siblingStages.toSeq).nonEmpty)
+      siblingStages ++= allStagesSoFar
+        .filter(_.parents.toSet.intersect(siblingStages.toSet[Stage]).nonEmpty)
         .flatMap(_.parents).filter{ parentStage =>
-          parentStage.isInstanceOf[ShuffleMapStage] &&
-            parentStage.asInstanceOf[ShuffleMapStage]
-              .shuffleDep.partitioner.numPartitions == numShufflePartitions
+          parentStage.asInstanceOf[ShuffleMapStage]
+            .shuffleDep.partitioner == stage.shuffleDep.partitioner
         }.map(_.asInstanceOf[ShuffleMapStage])
     } while (siblingStages.size > prevSize)
     // This filter will select only shuffle map stages that are/were push enabled. Notice that
@@ -2645,7 +2649,7 @@ private[spark] class DAGScheduler(
     }
     listenerBus.post(SparkListenerStageCompleted(stage.latestInfo))
     runningStages -= stage
-    if (errorMessage.isEmpty) {
+    if (errorMessage.isEmpty && stage.isInstanceOf[ShuffleMapStage]) {
       // Add succeeded stage into the succeeded set
       succeededStages += stage
       // Remove all parent stages with no pending child stages from the succeeded set
