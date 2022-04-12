@@ -33,6 +33,8 @@ import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.internal.config._
 import org.apache.spark.resource.ResourceInformation
 import org.apache.spark.scheduler.SchedulingMode._
+import org.apache.spark.status.AppStatusStore
+import org.apache.spark.status.api.v1.TaskData
 import org.apache.spark.util.{AccumulatorV2, Clock, LongAccumulator, SystemClock, Utils}
 import org.apache.spark.util.collection.MedianHeap
 
@@ -80,12 +82,22 @@ private[spark] class TaskSetManager(
   val copiesRunning = new Array[Int](numTasks)
 
   val speculationEnabled = conf.get(SPECULATION_ENABLED)
+  val speculationTaskMinDuration = conf.get(SPECULATION_TASK_MIN_DURATION)
+  val speculationTaskProgressMultiplier = conf.get(SPECULATION_TASK_PROGRESS_MULTIPLIER)
+  val speculationTaskDurationFactor = conf.get(SPECULATION_TASK_DURATION_FACTOR)
+  val speculationSingleTaskDurationThreshold = conf.get(SPECULATION_SINGLE_TASK_DURATION_THRESHOLD)
+
+  val speculationTaskStatsCacheInterval = math.min(3600000, max(100,
+    conf.get(SPECULATION_TASK_STATS_CACHE_DURATION)))
+
   // Quantile of tasks at which to start speculation
   val speculationQuantile = conf.get(SPECULATION_QUANTILE)
   val speculationMultiplier = conf.get(SPECULATION_MULTIPLIER)
   val minFinishedForSpeculation = math.max((speculationQuantile * numTasks).floor.toInt, 1)
   // User provided threshold for speculation regardless of whether the quantile has been reached
   val speculationTaskDurationThresOpt = conf.get(SPECULATION_TASK_DURATION_THRESHOLD)
+  val isThresholdSpecified = speculationTaskDurationThresOpt.isDefined &&
+    speculationTaskDurationThresOpt.get > 0
   // SPARK-29976: Only when the total number of tasks in the stage is less than or equal to the
   // number of slots on a single executor, would the task manager speculative run the tasks if
   // their duration is longer than the given threshold. In this way, we wouldn't speculate too
@@ -108,6 +120,10 @@ private[spark] class TaskSetManager(
 
   private val executorDecommissionKillInterval =
     conf.get(EXECUTOR_DECOMMISSION_KILL_INTERVAL).map(TimeUnit.SECONDS.toMillis)
+
+  private[scheduler] val inefficientTask = new InefficientTask(
+    recomputeIntervalMs = speculationTaskStatsCacheInterval,
+    maxTasksToCheck = max(4096, minFinishedForSpeculation))
 
   // For each task, tracks whether a copy of the task has succeeded. A task will also be
   // marked as "succeeded" if it failed with a fetch failure, in which case it should not
@@ -1070,24 +1086,63 @@ private[spark] class TaskSetManager(
    * speculative run.
    */
   private def checkAndSubmitSpeculatableTask(
-      tid: Long,
       currentTimeMillis: Long,
-      threshold: Double): Boolean = {
-    val info = taskInfos(tid)
-    val index = info.index
-    if (!successful(index) && copiesRunning(index) == 1 &&
-        info.timeRunning(currentTimeMillis) > threshold && !speculatableTasks.contains(index)) {
-      addPendingTask(index, speculatable = true)
-      logInfo(
-        ("Marking task %d in stage %s (on %s) as speculatable because it ran more" +
-          " than %.0f ms(%d speculatable tasks in this taskset now)")
-          .format(index, taskSet.id, info.host, threshold, speculatableTasks.size + 1))
-      speculatableTasks += index
-      sched.dagScheduler.speculativeTaskSubmitted(tasks(index))
-      true
-    } else {
-      false
+      threshold: Double,
+      numSuccessfulTasks: Int,
+      customizedThreshold: Boolean = false): Boolean = {
+    var foundTasksResult = false
+    var recomputeInefficientTasks = true
+    for (tid <- runningTasksSet) {
+      val info = taskInfos(tid)
+      val index = info.index
+      val runtimeMs = info.timeRunning(currentTimeMillis)
+      if (!successful(index) && copiesRunning(index) == 1 && !speculatableTasks.contains(index)) {
+
+        def checkMaySpeculate: Boolean = if (customizedThreshold) {
+          true
+        } else {
+          if (recomputeInefficientTasks && numSuccessfulTasks > 0 && sched.sc != null) {
+            this.maybeRecompute(currentTimeMillis)
+            recomputeInefficientTasks = false
+          }
+          val longTimeTask = (numTasks <= 1) ||
+            (runtimeMs > speculationTaskDurationFactor *
+              max(speculationTaskMinDuration, threshold))
+          longTimeTask || inefficientTask.maySpeculateTask(tid, runtimeMs, info)
+        }
+
+        val maySpeculate = (runtimeMs > threshold) && checkMaySpeculate
+        val executorDecommissionSpeculate =
+          (!maySpeculate &&
+            executorDecommissionKillInterval.isDefined && !successfulTaskDurations.isEmpty()) && {
+            val taskInfo = taskInfos(tid)
+            val decomState = sched.getExecutorDecommissionState(taskInfo.executorId)
+            decomState.isDefined && {
+              // Check if this task might finish after this executor is decommissioned.
+              // We estimate the task's finish time by using the median task duration.
+              // Whereas the time when the executor might be decommissioned is estimated using the
+              // config executorDecommissionKillInterval. If the task is going to finish after
+              // decommissioning, then we will eagerly speculate the task.
+              val taskEndTimeBasedOnMedianDuration = taskInfos(tid).launchTime + successfulTaskDurations.median
+              val executorDecomTime =
+                decomState.get.startTime + executorDecommissionKillInterval.get
+              executorDecomTime < taskEndTimeBasedOnMedianDuration
+            }
+          }
+
+        if (maySpeculate || executorDecommissionSpeculate) {
+          addPendingTask(index, speculatable = true)
+          logInfo(
+            ("Marking task %d in stage %s (on %s) as speculatable because it ran more" +
+              " than %.0f ms(%d speculatable tasks in this taskset now)")
+              .format(index, taskSet.id, info.host, threshold, speculatableTasks.size + 1))
+          speculatableTasks += index
+          sched.dagScheduler.speculativeTaskSubmitted(tasks(index))
+        }
+        foundTasksResult |= (maySpeculate || executorDecommissionSpeculate)
+      }
     }
+    foundTasksResult
   }
 
   /**
@@ -1099,7 +1154,7 @@ private[spark] class TaskSetManager(
     // No need to speculate if the task set is zombie or is from a barrier stage. If there is only
     // one task we don't speculate since we don't have metrics to decide whether it's taking too
     // long or not, unless a task duration threshold is explicitly provided.
-    if (isZombie || isBarrier || (numTasks == 1 && !speculationTaskDurationThresOpt.isDefined)) {
+    if (isZombie || isBarrier || (numTasks == 1 && !isThresholdSpecified)) {
       return false
     }
     var foundTasks = false
@@ -1109,43 +1164,46 @@ private[spark] class TaskSetManager(
     // `successfulTaskDurations` may not equal to `tasksSuccessful`. Here we should only count the
     // tasks that are submitted by this `TaskSetManager` and are completed successfully.
     val numSuccessfulTasks = successfulTaskDurations.size()
-    if (numSuccessfulTasks >= minFinishedForSpeculation) {
-      val time = clock.getTimeMillis()
-      val medianDuration = successfulTaskDurations.median
-      val threshold = max(speculationMultiplier * medianDuration, minTimeToSpeculation)
-      // TODO: Threshold should also look at standard deviation of task durations and have a lower
+    val timeMs = clock.getTimeMillis()
+    if (numSuccessfulTasks >= minFinishedForSpeculation || numTasks == 1) {
+      val threshold = if (numSuccessfulTasks <= 0) {
+        if (isThresholdSpecified) {
+          max(speculationTaskDurationThresOpt.get, speculationSingleTaskDurationThreshold)
+        } else {
+          speculationSingleTaskDurationThreshold
+        }
+      } else {
+        val medianDuration = successfulTaskDurations.median
+        max(speculationMultiplier * medianDuration, minTimeToSpeculation)
+      }
       // bound based on that.
       logDebug("Task length threshold for speculation: " + threshold)
-      for (tid <- runningTasksSet) {
-        var speculated = checkAndSubmitSpeculatableTask(tid, time, threshold)
-        if (!speculated && executorDecommissionKillInterval.isDefined) {
-          val taskInfo = taskInfos(tid)
-          val decomState = sched.getExecutorDecommissionState(taskInfo.executorId)
-          if (decomState.isDefined) {
-            // Check if this task might finish after this executor is decommissioned.
-            // We estimate the task's finish time by using the median task duration.
-            // Whereas the time when the executor might be decommissioned is estimated using the
-            // config executorDecommissionKillInterval. If the task is going to finish after
-            // decommissioning, then we will eagerly speculate the task.
-            val taskEndTimeBasedOnMedianDuration = taskInfos(tid).launchTime + medianDuration
-            val executorDecomTime = decomState.get.startTime + executorDecommissionKillInterval.get
-            val canExceedDeadline = executorDecomTime < taskEndTimeBasedOnMedianDuration
-            if (canExceedDeadline) {
-              speculated = checkAndSubmitSpeculatableTask(tid, time, 0)
-            }
-          }
-        }
-        foundTasks |= speculated
-      }
-    } else if (speculationTaskDurationThresOpt.isDefined && speculationTasksLessEqToSlots) {
-      val time = clock.getTimeMillis()
+      foundTasks = checkAndSubmitSpeculatableTask(timeMs, threshold, numSuccessfulTasks)
+    } else if (isThresholdSpecified && speculationTasksLessEqToSlots) {
       val threshold = speculationTaskDurationThresOpt.get
       logDebug(s"Tasks taking longer time than provided speculation threshold: $threshold")
-      for (tid <- runningTasksSet) {
-        foundTasks |= checkAndSubmitSpeculatableTask(tid, time, threshold)
+      foundTasks = checkAndSubmitSpeculatableTask(timeMs, threshold, numSuccessfulTasks,
+        customizedThreshold = true)
+    }
+    // avoid more warning logs.
+    if (foundTasks) {
+      val elapsedMs = clock.getTimeMillis() - timeMs
+      if (elapsedMs > minTimeToSpeculation) {
+        logWarning(s"Time to checkSpeculatableTasks ${elapsedMs}ms > ${minTimeToSpeculation}ms")
       }
     }
     foundTasks
+  }
+
+  private def maybeRecompute(currentTimeMillis: Long): Unit = {
+    val statusTracker = sched.sc.statusTracker
+    val appStatusStore = if (statusTracker != null) {
+      statusTracker.getAppStatusStore
+    } else {
+      null
+    }
+    inefficientTask.maybeRecompute(appStatusStore, currentTimeMillis,
+      taskSet.stageId, taskSet.stageAttemptId)
   }
 
   private def getLocalityWait(level: TaskLocality.TaskLocality): Long = {
@@ -1217,6 +1275,118 @@ private[spark] class TaskSetManager(
 
   def executorAdded(): Unit = {
     recomputeLocality()
+  }
+
+  /**
+   * A class for checking inefficient tasks to be speculated, the inefficient tasks come from
+   * the tasks which may be speculated by the previous strategy.
+   */
+  private[scheduler] class InefficientTask(
+    val recomputeIntervalMs: Long, val maxTasksToCheck: Int) {
+    var taskData: Map[Long, TaskData] = null
+    var taskProgressThreshold = 0.0
+    private var lastComputeMs = -1L
+    var updateSealed = false
+    private val checkInefficientTask = speculationTaskMinDuration > 0
+
+    def maybeRecompute(appStatusStore: AppStatusStore, nowMs: Long,
+      stageId: Int, stageAttemptId: Int): Unit = {
+      if (!checkInefficientTask || appStatusStore == null) {
+        return
+      }
+      try {
+        this.synchronized {
+          if (!updateSealed &&
+            (lastComputeMs <= 0 || nowMs > lastComputeMs + recomputeIntervalMs)) {
+            val (progressRate, numSuccessTasks): (Double, Int) = computeSuccessTaskProgress(
+              stageId, stageAttemptId, appStatusStore)
+            if (progressRate > 0.0) {
+              setTaskData(stageId, stageAttemptId, appStatusStore)
+              taskProgressThreshold = progressRate * speculationTaskProgressMultiplier
+              if (numSuccessTasks > maxTasksToCheck) {
+                updateSealed = true
+              }
+              lastComputeMs = nowMs
+            }
+          }
+        }
+      } catch {
+        case e: InterruptedException => throw e
+        case t: Throwable => logWarning("Failed to recompute InefficientTask state", t)
+      }
+    }
+
+    private def setTaskData(stageId: Int, stageAttemptId: Int, appStatusStore: AppStatusStore) {
+      try {
+        // The stage entity will be writen into appStatusStore by
+        // 'listener.onStageSubmitted' and updated by 'listener.onExecutorMetricsUpdate',
+        // it's not going to be in appStatusStore when 'TaskSetManager.checkSpeculatableTasks'
+        // comes before 'listener.onStageSubmitted' to write it, so we should catch that and
+        // fallback.
+        val stageData = appStatusStore.stageAttempt(stageId, stageAttemptId, true)
+        if (stageData != null) {
+          taskData = stageData._1.tasks.orNull
+        }
+      } catch {
+        case e: RuntimeException => logWarning("Failed to set taskData", e)
+      }
+    }
+
+    private def computeSuccessTaskProgress(stageId: Int, stageAttemptId: Int,
+      appStatusStore: AppStatusStore) = {
+      var sumInputRecords, sumShuffleReadRecords, sumExecutorRunTime = 0.0
+      var progressRate = 0.0
+      var numSuccessTasks = 0
+      try {
+        appStatusStore.taskList(stageId, stageAttemptId, maxTasksToCheck).filter {
+          _.status == "SUCCESS"
+        }.map(_.taskMetrics).filter(_.isDefined).map(_.get).foreach { task =>
+          if (task.inputMetrics != null) {
+            sumInputRecords += task.inputMetrics.recordsRead
+          }
+          if (task.shuffleReadMetrics != null) {
+            sumShuffleReadRecords += task.shuffleReadMetrics.recordsRead
+          }
+          numSuccessTasks += 1
+          sumExecutorRunTime += task.executorRunTime
+        }
+        if (sumExecutorRunTime > 0) {
+          progressRate = (sumInputRecords + sumShuffleReadRecords) /
+            (sumExecutorRunTime / 1000.0)
+        }
+      } catch {
+        case e: RuntimeException =>
+          logWarning("Failed to computeAndSetSuccessTaskProgress", e)
+      }
+      (progressRate, numSuccessTasks)
+    }
+
+    def maySpeculateTask(tid: Long, runtimeMs: Long, taskInfo: TaskInfo): Boolean = {
+      // note: 1) only check inefficient tasks when 'SPECULATION_TASK_DURATION_THRESHOLD' > 0.
+      // 2) some tasks may have neither input records nor shuffleRead records, so
+      // the 'successTaskProgress' may be zero all the time, this case we should not consider,
+      // eg: some spark-sql like that 'msck repair table' or 'drop table' and so on.
+      if (!checkInefficientTask || taskProgressThreshold <= 0.0) {
+        true
+      } else if (runtimeMs < speculationTaskMinDuration) {
+        false
+      } else if (taskData != null && taskData.contains(tid) && taskData(tid) != null &&
+        taskData(tid).taskMetrics.isDefined) {
+        val taskMetrics = taskData(tid).taskMetrics.get
+        val currentTaskProgressRate = (taskMetrics.inputMetrics.recordsRead +
+          taskMetrics.shuffleReadMetrics.recordsRead) / (runtimeMs / 1000.0)
+        val isInefficientTask = currentTaskProgressRate < taskProgressThreshold
+        if (isInefficientTask) {
+          logInfo(s"Marking task ${taskInfo.index} in stage ${taskSet.id} " +
+            s"(on ${taskInfo.host}) as speculatable because it ran more than " +
+            s"${speculationTaskMinDuration}ms and it's progress " +
+            s"($currentTaskProgressRate) is less than ($taskProgressThreshold).")
+        }
+        isInefficientTask
+      } else {
+        true
+      }
+    }
   }
 }
 

@@ -2051,6 +2051,39 @@ package object config {
       .doubleConf
       .createWithDefault(0.75)
 
+  private[spark] val SPECULATION_TASK_MIN_DURATION =
+    ConfigBuilder("spark.speculation.task.min.duration")
+      .doc("The minimum duration of a task can be speculative.")
+      .version("3.4.0")
+      .timeConf(TimeUnit.MILLISECONDS)
+      .createWithDefaultString("0s")
+
+  private[spark] val SPECULATION_TASK_PROGRESS_MULTIPLIER =
+    ConfigBuilder("spark.speculation.task.progress.multiplier")
+      .version("3.4.0")
+      .doubleConf
+      .createWithDefault(1.0)
+
+  private[spark] val SPECULATION_TASK_DURATION_FACTOR =
+    ConfigBuilder("spark.speculation.task.duration.factor")
+      .version("3.4.0")
+      .doubleConf
+      .createWithDefault(2.0)
+
+  private[spark] val SPECULATION_TASK_STATS_CACHE_DURATION =
+    ConfigBuilder("spark.speculation.task.stats.cache.duration")
+      .version("3.4.0")
+      .timeConf(TimeUnit.MILLISECONDS)
+      .createWithDefaultString("1000ms")
+
+  private[spark] val SPECULATION_SINGLE_TASK_DURATION_THRESHOLD =
+    ConfigBuilder("spark.speculation.singleTask.duration.threshold")
+      .doc("Only one task in a TasksSet should speculative if it is taking longer time than the " +
+        "threshold.")
+      .version("3.4.0")
+      .timeConf(TimeUnit.SECONDS)
+      .createWithDefaultString("10min")
+
   private[spark] val SPECULATION_MIN_THRESHOLD =
     ConfigBuilder("spark.speculation.minTaskRuntime")
       .doc("Minimum amount of time a task runs before being considered for speculation. " +

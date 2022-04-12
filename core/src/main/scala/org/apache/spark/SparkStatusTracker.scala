@@ -120,4 +120,8 @@ class SparkStatusTracker private[spark] (sc: SparkContext, store: AppStatusStore
         exec.memoryMetrics.map(_.totalOnHeapStorageMemory).getOrElse(0L))
     }.toArray
   }
+
+  def getAppStatusStore: AppStatusStore = {
+    store
+  }
 }
