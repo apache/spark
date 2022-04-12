@@ -146,7 +146,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
         PushDownPredicates) :: Nil
     }
 
-    val batches = (Batch("Eliminate Distinct", Once, EliminateDistinct) ::
+    val batches = (
     // Technically some of the rules in Finish Analysis are not optimizer rules and belong more
     // in the analyzer, because they are needed for correctness (e.g. ComputeCurrentTime).
     // However, because we also use the analyzer to canonicalized queries (for view definition),
@@ -166,6 +166,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
     //////////////////////////////////////////////////////////////////////////////////////////
     // Optimizer rules start here
     //////////////////////////////////////////////////////////////////////////////////////////
+    Batch("Eliminate Distinct", Once, EliminateDistinct) ::
     // - Do the first call of CombineUnions before starting the major Optimizer rules,
     //   since it can reduce the number of iteration and the other rules could add/move
     //   extra operators between two adjacent Union operators.
