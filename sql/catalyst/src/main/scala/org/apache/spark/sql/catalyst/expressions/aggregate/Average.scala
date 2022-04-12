@@ -106,7 +106,7 @@ abstract class AverageBase
     /* count = */ If(child.isNull, count, count + 1L)
   )
 
-  // The flag `failOnError` won't be shown in the `toString` or `toAggString` methods
+  // The flag `useAnsiAdd` won't be shown in the `toString` or `toAggString` methods
   override def flatArguments: Iterator[Any] = Iterator(child)
 }
 

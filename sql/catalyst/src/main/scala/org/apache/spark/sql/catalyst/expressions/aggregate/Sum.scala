@@ -152,7 +152,7 @@ abstract class SumBase(child: Expression) extends DeclarativeAggregate
     case _ => sum
   }
 
-  // The flag `failOnError` won't be shown in the `toString` or `toAggString` methods
+  // The flag `useAnsiAdd` won't be shown in the `toString` or `toAggString` methods
   override def flatArguments: Iterator[Any] = Iterator(child)
 }
 
@@ -209,9 +209,9 @@ case class Sum(
 case class TrySum(child: Expression) extends SumBase(child) {
 
   override def useAnsiAdd: Boolean = dataType match {
-    // Double type won't fail, thus the failOnError is always false
+    // Double type won't fail, thus useAnsiAdd is always false
     // For decimal type, it returns NULL on overflow. It behaves the same as TrySum when
-    // `failOnError` is false.
+    // `useAnsiAdd` is false.
     case _: DoubleType | _: DecimalType => false
     case _ => true
   }
