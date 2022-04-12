@@ -313,7 +313,7 @@ class ToNumberParser(numberFormat: String, errorOnFail: Boolean) extends Seriali
       multipleSignInNumberFormatError(s"'$OPTIONAL_MINUS_STRING'")
     }
     // Make sure that any "MI" sequence is at the start or end of the format string only.
-    else if (inputTokenCounts.getOrElse(OptionalMinusSign(), 1) == 1 &&
+    else if (inputTokenCounts.getOrElse(OptionalMinusSign(), 0) == 1 &&
       formatTokens.head != OptionalMinusSign() &&
       formatTokens.last != OptionalMinusSign()) {
       notAtBeginningOrEndOfNumberFormatError(s"'$OPTIONAL_MINUS_STRING'")
