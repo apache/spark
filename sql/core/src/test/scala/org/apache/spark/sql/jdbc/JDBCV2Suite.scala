@@ -482,27 +482,14 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
         checkPushedInfo(df6, expectedPlanFragment6)
         checkAnswer(df6, Seq(Row(6, "jen", 12000, 1200, true)))
 
+        // H2 does not support width_bucket
         val df7 = sql("""
                         |SELECT * FROM h2.test.employee
                         |WHERE width_bucket(dept, 1, 6, 3) > 1
                         |""".stripMargin)
-        checkFiltersRemoved(df7, ansiMode)
-        val expectedPlanFragment7 = if (ansiMode) {
-          "PushedFilters: [DEPT IS NOT NULL, " +
-            "(WIDTH_BUCKET(CAST(DEPT AS double), 1.0, 6.0, 3)) > 1]"
-        } else {
-          "PushedFilters: [DEPT IS NOT NULL]"
-        }
-        checkPushedInfo(df7, expectedPlanFragment7)
-        if (ansiMode) {
-          val e = intercept[SparkException] {
-            checkAnswer(df7, Seq.empty)
-          }
-          assert(e.getMessage.contains(
-            "org.h2.jdbc.JdbcSQLSyntaxErrorException: Function \"WIDTH_BUCKET\" not found;"))
-        } else {
-          checkAnswer(df7, Seq(Row(6, "jen", 12000, 1200, true)))
-        }
+        checkFiltersRemoved(df7, false)
+        checkPushedInfo(df7, "PushedFilters: [DEPT IS NOT NULL]")
+        checkAnswer(df7, Seq(Row(6, "jen", 12000, 1200, true)))
       }
     }
   }
