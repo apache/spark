@@ -139,7 +139,7 @@ case class InsertIntoHadoopFsRelationCommand(
 
     if (doInsertion) {
 
-      def refreshUpdatedPartitions(updatedPartitionPaths: Set[String]): Set[TablePartitionSpec] = {
+      def refreshUpdatedPartitions(updatedPartitionPaths: Set[String]): Unit = {
         val updatedPartitions = updatedPartitionPaths.map(PartitioningUtils.parsePathFragment)
         if (partitionsTrackedByCatalog) {
           val newPartitions = updatedPartitions -- initialMatchingPartitions
@@ -160,7 +160,6 @@ case class InsertIntoHadoopFsRelationCommand(
             }
           }
         }
-        updatedPartitions
       }
 
       // For dynamic partition overwrite, FileOutputCommitter's output path is staging path, files
@@ -188,7 +187,7 @@ case class InsertIntoHadoopFsRelationCommand(
 
 
       // update metastore partition metadata
-      val partitions = if (updatedPartitionPaths.isEmpty && staticPartitions.nonEmpty
+      if (updatedPartitionPaths.isEmpty && staticPartitions.nonEmpty
         && partitionColumns.length == staticPartitions.size) {
         // Avoid empty static partition can't loaded to datasource table.
         val staticPathFragment =
@@ -204,8 +203,7 @@ case class InsertIntoHadoopFsRelationCommand(
       sparkSession.sharedState.cacheManager.recacheByPath(sparkSession, outputPath, fs)
 
       if (catalogTable.nonEmpty) {
-        val partSpecs = partitions.map(_.mapValues(Some(_)).toMap)
-        CommandUtils.updateTableStats(sparkSession, catalogTable.get, partSpecs)
+        CommandUtils.updateTableStats(sparkSession, catalogTable.get)
       }
 
     } else {

@@ -27,7 +27,7 @@ import org.apache.hadoop.fs.{FileSystem, Path, PathFilter}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{SparkSession}
 import org.apache.spark.sql.catalyst.{InternalRow, TableIdentifier}
-import org.apache.spark.sql.catalyst.catalog.{CatalogStatistics, CatalogTable, CatalogTableType}
+import org.apache.spark.sql.catalyst.catalog.{CatalogStatistics, CatalogTable, CatalogTablePartition, CatalogTableType}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -52,36 +52,19 @@ class PathFilterIgnoreNonData(stagingDir: String) extends PathFilter with Serial
 
 object CommandUtils extends Logging {
 
-  /**
-   * Change statistics after changing data by commands.
-   *
-   * @param partitionSpecs Iterable of partition specs to select which partition stats to update
-   * @param isDropPartition Set true for drop partition commands to skip updating partition stats.
-   *                        Updated partition stats will be dropped anyway.
-   */
-  def updateTableStats(
-      sparkSession: SparkSession,
-      table: CatalogTable,
-      partitionSpecs: Iterable[Map[String, Option[String]]] = Iterable.empty,
-      isDropPartition: Boolean = false): Unit = {
+  /** Change statistics after changing data by commands. */
+  def updateTableStats(sparkSession: SparkSession, table: CatalogTable): Unit = {
     val catalog = sparkSession.sessionState.catalog
     if (sparkSession.sessionState.conf.autoSizeUpdateEnabled) {
       val newTable = catalog.getTableMetadata(table.identifier)
-      val newSize = CommandUtils.calculateTotalSize(sparkSession, newTable)
+      val (newSize, newPartitions) = CommandUtils.calculateTotalSize(sparkSession, newTable)
       val isNewStats = newTable.stats.map(newSize != _.sizeInBytes).getOrElse(true)
       if (isNewStats) {
         val newStats = CatalogStatistics(sizeInBytes = newSize)
         catalog.alterTableStats(table.identifier, Some(newStats))
-
-        if (!isDropPartition && table.partitionColumnNames.nonEmpty) {
-          if (partitionSpecs.nonEmpty) {
-            partitionSpecs.foreach { partitionSpec =>
-              AnalyzePartitionCommand(table.identifier, partitionSpec).run(sparkSession)
-            }
-          } else {
-            AnalyzePartitionCommand(table.identifier, Map()).run(sparkSession)
-          }
-        }
+      }
+      if (newPartitions.nonEmpty) {
+        catalog.alterPartitions(table.identifier, newPartitions)
       }
     } else if (table.stats.nonEmpty) {
       catalog.alterTableStats(table.identifier, None)
@@ -91,22 +74,29 @@ object CommandUtils extends Logging {
     }
   }
 
-  def calculateTotalSize(spark: SparkSession, catalogTable: CatalogTable): BigInt = {
+  def calculateTotalSize(
+      spark: SparkSession,
+      catalogTable: CatalogTable): (BigInt, Seq[CatalogTablePartition]) = {
     val sessionState = spark.sessionState
     val startTime = System.nanoTime()
-    val totalSize = if (catalogTable.partitionColumnNames.isEmpty) {
-      calculateSingleLocationSize(sessionState, catalogTable.identifier,
-        catalogTable.storage.locationUri)
+    val (totalSize, newPartitions) = if (catalogTable.partitionColumnNames.isEmpty) {
+      (calculateSingleLocationSize(sessionState, catalogTable.identifier,
+        catalogTable.storage.locationUri), Seq())
     } else {
       // Calculate table size as a sum of the visible partitions. See SPARK-21079
       val partitions = sessionState.catalog.listPartitions(catalogTable.identifier)
       logInfo(s"Starting to calculate sizes for ${partitions.length} partitions.")
       val paths = partitions.map(_.storage.locationUri)
-      calculateMultipleLocationSizes(spark, catalogTable.identifier, paths).sum
+      val sizes = calculateMultipleLocationSizes(spark, catalogTable.identifier, paths)
+      val newPartitions = partitions.zipWithIndex.flatMap { case (p, idx) =>
+        val newStats = CommandUtils.compareAndGetNewStats(p.stats, sizes(idx), None)
+        newStats.map(_ => p.copy(stats = newStats))
+      }
+      (sizes.sum, newPartitions)
     }
     logInfo(s"It took ${(System.nanoTime() - startTime) / (1000 * 1000)} ms to calculate" +
       s" the total size for table ${catalogTable.identifier}.")
-    totalSize
+    (totalSize, newPartitions)
   }
 
   def calculateSingleLocationSize(
@@ -242,7 +232,7 @@ object CommandUtils extends Logging {
       }
     } else {
       // Compute stats for the whole table
-      val newTotalSize = CommandUtils.calculateTotalSize(sparkSession, tableMeta)
+      val (newTotalSize, _) = CommandUtils.calculateTotalSize(sparkSession, tableMeta)
       val newRowCount =
         if (noScan) None else Some(BigInt(sparkSession.table(tableIdentWithDB).count()))
 

@@ -574,7 +574,7 @@ case class AlterTableDropPartitionCommand(
       retainData = retainData)
 
     sparkSession.catalog.refreshTable(table.identifier.quotedString)
-    CommandUtils.updateTableStats(sparkSession, table, isDropPartition = true)
+    CommandUtils.updateTableStats(sparkSession, table)
 
     Seq.empty[Row]
   }
@@ -861,8 +861,7 @@ case class AlterTableSetLocationCommand(
         catalog.alterTable(table.withNewStorage(locationUri = Some(locUri)))
     }
     sparkSession.catalog.refreshTable(table.identifier.quotedString)
-    val partSpecs = partitionSpec.map(_.mapValues(Some(_)).toMap)
-    CommandUtils.updateTableStats(sparkSession, table, partSpecs)
+    CommandUtils.updateTableStats(sparkSession, table)
     Seq.empty[Row]
   }
 }
