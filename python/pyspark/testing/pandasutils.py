@@ -24,7 +24,7 @@ from contextlib import contextmanager
 from distutils.version import LooseVersion
 
 import pandas as pd
-from pandas.api.types import is_list_like
+from pandas.api.types import is_list_like  # type: ignore[attr-defined]
 from pandas.core.dtypes.common import is_numeric_dtype
 from pandas.testing import assert_frame_equal, assert_index_equal, assert_series_equal
 
@@ -46,7 +46,7 @@ have_tabulate = tabulate_requirement_message is None
 
 matplotlib_requirement_message = None
 try:
-    import matplotlib  # type: ignore # noqa: F401
+    import matplotlib  # noqa: F401
 except ImportError as e:
     # If matplotlib requirement is not satisfied, skip related tests.
     matplotlib_requirement_message = str(e)
@@ -54,7 +54,7 @@ have_matplotlib = matplotlib_requirement_message is None
 
 plotly_requirement_message = None
 try:
-    import plotly  # type: ignore # noqa: F401
+    import plotly  # noqa: F401
 except ImportError as e:
     # If plotly requirement is not satisfied, skip related tests.
     plotly_requirement_message = str(e)
@@ -247,7 +247,7 @@ class PandasOnSparkTestCase(unittest.TestCase, SQLTestUtils):
             return obj
 
 
-class TestUtils(object):
+class TestUtils:
     @contextmanager
     def temp_dir(self):
         tmp = tempfile.mkdtemp()
@@ -259,7 +259,7 @@ class TestUtils(object):
     @contextmanager
     def temp_file(self):
         with self.temp_dir() as tmp:
-            yield tempfile.mktemp(dir=tmp)
+            yield tempfile.mkstemp(dir=tmp)[1]
 
 
 class ComparisonTestBase(PandasOnSparkTestCase):

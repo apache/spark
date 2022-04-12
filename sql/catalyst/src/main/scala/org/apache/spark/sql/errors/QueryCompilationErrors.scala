@@ -23,7 +23,7 @@ import org.apache.hadoop.fs.Path
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, QualifiedTableName, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, NamespaceAlreadyExistsException, NoSuchFunctionException, NoSuchNamespaceException, NoSuchPartitionException, NoSuchTableException, ResolvedNamespace, ResolvedTable, ResolvedView, Star, TableAlreadyExistsException, UnresolvedRegex}
+import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, NamespaceAlreadyExistsException, NoSuchFunctionException, NoSuchNamespaceException, NoSuchPartitionException, NoSuchTableException, ResolvedTable, ResolvedView, Star, TableAlreadyExistsException, UnresolvedRegex}
 import org.apache.spark.sql.catalyst.catalog.{CatalogTable, InvalidUDFClassException}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, AttributeSet, CreateMap, Expression, GroupingID, NamedExpression, SpecifiedWindowFrame, WindowFrame, WindowFunction, WindowSpecDefinition}
@@ -34,7 +34,7 @@ import org.apache.spark.sql.catalyst.util.{toPrettySQL, FailFastMode, ParseMode,
 import org.apache.spark.sql.connector.catalog._
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.connector.catalog.functions.{BoundFunction, UnboundFunction}
-import org.apache.spark.sql.connector.expressions.{NamedReference, Transform}
+import org.apache.spark.sql.connector.expressions.NamedReference
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.{LEGACY_ALLOW_NEGATIVE_SCALE_OF_DECIMAL_ENABLED, LEGACY_CTE_PRECEDENCE_POLICY}
 import org.apache.spark.sql.sources.Filter
@@ -93,8 +93,8 @@ object QueryCompilationErrors {
 
   def unsupportedIfNotExistsError(tableName: String): Throwable = {
     new AnalysisException(
-      errorClass = "IF_PARTITION_NOT_EXISTS_UNSUPPORTED",
-      messageParameters = Array(tableName))
+      errorClass = "UNSUPPORTED_FEATURE",
+      messageParameters = Array(s"IF NOT EXISTS for the table '$tableName' by INSERT INTO."))
   }
 
   def nonPartitionColError(partitionName: String): Throwable = {
@@ -158,16 +158,16 @@ object QueryCompilationErrors {
   def upCastFailureError(
       fromStr: String, from: Expression, to: DataType, walkedTypePath: Seq[String]): Throwable = {
     new AnalysisException(
-      s"Cannot up cast $fromStr from " +
-        s"${from.dataType.catalogString} to ${to.catalogString}.\n" +
+      errorClass = "CANNOT_UP_CAST_DATATYPE",
+      messageParameters = Array(
+        fromStr,
+        from.dataType.catalogString,
+        to.catalogString,
         s"The type path of the target object is:\n" + walkedTypePath.mkString("", "\n", "\n") +
-        "You can either add an explicit cast to the input data or choose a higher precision " +
-        "type of the field in the target object")
-  }
-
-  def unsupportedAbstractDataTypeForUpCastError(gotType: AbstractDataType): Throwable = {
-    new AnalysisException(
-      s"UpCast only support DecimalType as AbstractDataType yet, but got: $gotType")
+          "You can either add an explicit cast to the input data or choose a higher precision " +
+          "type of the field in the target object"
+      )
+    )
   }
 
   def outerScopeFailureForNewInstanceError(className: String): Throwable = {
@@ -192,11 +192,15 @@ object QueryCompilationErrors {
   }
 
   def groupingMustWithGroupingSetsOrCubeOrRollupError(): Throwable = {
-    new AnalysisException("grouping()/grouping_id() can only be used with GroupingSets/Cube/Rollup")
+    new AnalysisException(
+      errorClass = "UNSUPPORTED_GROUPING_EXPRESSION",
+      messageParameters = Array.empty)
   }
 
   def pandasUDFAggregateNotSupportedInPivotError(): Throwable = {
-    new AnalysisException("Pandas UDF aggregate expressions are currently not supported in pivot.")
+    new AnalysisException(
+      errorClass = "UNSUPPORTED_FEATURE",
+      messageParameters = Array("Pandas UDF aggregate expressions don't support pivot."))
   }
 
   def aggregateExpressionRequiredForPivotError(sql: String): Throwable = {
@@ -255,6 +259,14 @@ object QueryCompilationErrors {
       v: ResolvedTable, cmd: String, mismatchHint: Option[String], t: TreeNode[_]): Throwable = {
     val hintStr = mismatchHint.map(" " + _).getOrElse("")
     new AnalysisException(s"${v.identifier.quoted} is a table. '$cmd' expects a view.$hintStr",
+      t.origin.line, t.origin.startPosition)
+  }
+
+  def expectPersistentFuncError(
+      name: String, cmd: String, mismatchHint: Option[String], t: TreeNode[_]): Throwable = {
+    val hintStr = mismatchHint.map(" " + _).getOrElse("")
+    new AnalysisException(
+      s"$name is a built-in/temporary function. '$cmd' expects a persistent function.$hintStr",
       t.origin.line, t.origin.startPosition)
   }
 
@@ -407,13 +419,6 @@ object QueryCompilationErrors {
         s"'${child.output.map(_.name).mkString("(", ",", ")")}'")
   }
 
-  def cannotUpCastAsAttributeError(
-      fromAttr: Attribute, toAttr: Attribute): Throwable = {
-    new AnalysisException(s"Cannot up cast ${fromAttr.sql} from " +
-      s"${fromAttr.dataType.catalogString} to ${toAttr.dataType.catalogString} " +
-      "as it may truncate")
-  }
-
   def functionUndefinedError(name: FunctionIdentifier): Throwable = {
     new AnalysisException(s"undefined function $name")
   }
@@ -507,11 +512,6 @@ object QueryCompilationErrors {
         s"'${db.head}' != '${v1TableName.database.get}'")
   }
 
-  def externalCatalogNotSupportShowViewsError(resolved: ResolvedNamespace): Throwable = {
-    new AnalysisException(s"Catalog ${resolved.catalog.name} doesn't support " +
-      "SHOW VIEWS, only SessionCatalog supports this command.")
-  }
-
   def sqlOnlySupportedWithV1TablesError(sql: String): Throwable = {
     new AnalysisException(s"$sql is only supported with v1 tables.")
   }
@@ -540,8 +540,14 @@ object QueryCompilationErrors {
       s"rename temporary view from '$oldName' to '$newName': destination view already exists")
   }
 
-  def databaseNotEmptyError(db: String, details: String): Throwable = {
-    new AnalysisException(s"Database $db is not empty. One or more $details exist.")
+  def cannotDropNonemptyDatabaseError(db: String): Throwable = {
+    new AnalysisException(s"Cannot drop a non-empty database: $db. " +
+      "Use CASCADE option to drop a non-empty database.")
+  }
+
+  def cannotDropNonemptyNamespaceError(namespace: Seq[String]): Throwable = {
+    new AnalysisException(s"Cannot drop a non-empty namespace: ${namespace.quoted}. " +
+      "Use CASCADE option to drop a non-empty namespace.")
   }
 
   def invalidNameForTableOrDatabaseError(name: String): Throwable = {
@@ -717,8 +723,20 @@ object QueryCompilationErrors {
       s"Acceptable modes are ${PermissiveMode.name} and ${FailFastMode.name}.")
   }
 
-  def unfoldableFieldUnsupportedError(): Throwable = {
-    new AnalysisException("The field parameter needs to be a foldable string value.")
+  def requireLiteralParameter(
+      funcName: String, argName: String, requiredType: String): Throwable = {
+    new AnalysisException(
+      s"The '$argName' parameter of function '$funcName' needs to be a $requiredType literal.")
+  }
+
+  def invalidStringLiteralParameter(
+      funcName: String,
+      argName: String,
+      invalidValue: String,
+      allowedValues: Option[String] = None): Throwable = {
+    val endingMsg = allowedValues.map(" " + _).getOrElse("")
+    new AnalysisException(s"Invalid value for the '$argName' parameter of function '$funcName': " +
+      s"$invalidValue.$endingMsg")
   }
 
   def literalTypeUnsupportedForSourceTypeError(field: String, source: Expression): Throwable = {
@@ -746,8 +764,9 @@ object QueryCompilationErrors {
   }
 
   def noHandlerForUDAFError(name: String): Throwable = {
-    new InvalidUDFClassException(s"No handler for UDAF '$name'. " +
-      "Use sparkSession.udf.register(...) instead.")
+    new InvalidUDFClassException(
+      errorClass = "NO_HANDLER_FOR_UDAF",
+      messageParameters = Array(name))
   }
 
   def batchWriteCapabilityError(
@@ -757,7 +776,7 @@ object QueryCompilationErrors {
         s"$v2WriteClassName is not an instance of $v1WriteClassName")
   }
 
-  def unsupportedDeleteByConditionWithSubqueryError(condition: Option[Expression]): Throwable = {
+  def unsupportedDeleteByConditionWithSubqueryError(condition: Expression): Throwable = {
     new AnalysisException(
       s"Delete by condition with subquery is not supported: $condition")
   }
@@ -1314,10 +1333,6 @@ object QueryCompilationErrors {
       s"Expected: ${dataType.typeName}; Found: ${expression.dataType.typeName}")
   }
 
-  def groupAggPandasUDFUnsupportedByStreamingAggError(): Throwable = {
-    new AnalysisException("Streaming aggregation doesn't support group aggregate pandas UDF")
-  }
-
   def streamJoinStreamWithoutEqualityPredicateUnsupportedError(plan: LogicalPlan): Throwable = {
     new AnalysisException(
       "Stream-stream join without equality predicate is not supported", plan = Some(plan))
@@ -1325,7 +1340,8 @@ object QueryCompilationErrors {
 
   def cannotUseMixtureOfAggFunctionAndGroupAggPandasUDFError(): Throwable = {
     new AnalysisException(
-      "Cannot use a mixture of aggregate function and group aggregate pandas UDF")
+      errorClass = "CANNOT_USE_MIXTURE",
+      messageParameters = Array.empty)
   }
 
   def ambiguousAttributesInSelfJoinError(
@@ -1342,12 +1358,6 @@ object QueryCompilationErrors {
        """.stripMargin.replaceAll("\n", " "))
   }
 
-  def unexpectedEvalTypesForUDFsError(evalTypes: Set[Int]): Throwable = {
-    new AnalysisException(
-      s"Expected udfs have the same evalType but got different evalTypes: " +
-        s"${evalTypes.mkString(",")}")
-  }
-
   def ambiguousFieldNameError(
       fieldName: Seq[String], numMatches: Int, context: Origin): Throwable = {
     new AnalysisException(
@@ -1360,17 +1370,12 @@ object QueryCompilationErrors {
     new AnalysisException("Cannot use interval type in the table schema.")
   }
 
-  def cannotConvertTransformsToPartitionColumnsError(nonIdTransforms: Seq[Transform]): Throwable = {
-    new AnalysisException("Transforms cannot be converted to partition columns: " +
-      nonIdTransforms.map(_.describe).mkString(", "))
-  }
-
   def cannotPartitionByNestedColumnError(reference: NamedReference): Throwable = {
     new AnalysisException(s"Cannot partition by nested column: $reference")
   }
 
-  def cannotUseCatalogError(plugin: CatalogPlugin, msg: String): Throwable = {
-    new AnalysisException(s"Cannot use catalog ${plugin.name}: $msg")
+  def missingCatalogAbilityError(plugin: CatalogPlugin, ability: String): Throwable = {
+    new AnalysisException(s"Catalog ${plugin.name} does not support $ability")
   }
 
   def identifierHavingMoreThanTwoNamePartsError(
@@ -1380,10 +1385,6 @@ object QueryCompilationErrors {
 
   def emptyMultipartIdentifierError(): Throwable = {
     new AnalysisException("multi-part identifier cannot be empty.")
-  }
-
-  def functionUnsupportedInV2CatalogError(): Throwable = {
-    new AnalysisException("function is only supported in v1 catalog")
   }
 
   def cannotOperateOnHiveDataSourceFilesError(operation: String): Throwable = {
@@ -1563,8 +1564,10 @@ object QueryCompilationErrors {
   }
 
   def usePythonUDFInJoinConditionUnsupportedError(joinType: JoinType): Throwable = {
-    new AnalysisException("Using PythonUDF in join condition of join type" +
-      s" $joinType is not supported.")
+    new AnalysisException(
+      errorClass = "UNSUPPORTED_FEATURE",
+      messageParameters = Array(
+        s"Using PythonUDF in join condition of join type $joinType is not supported"))
   }
 
   def conflictingAttributesInJoinConditionError(
@@ -1753,6 +1756,21 @@ object QueryCompilationErrors {
     new AnalysisException(s"Table or view not found: $table")
   }
 
+  def noSuchFunctionError(
+      rawName: Seq[String],
+      t: TreeNode[_],
+      fullName: Option[Seq[String]] = None): Throwable = {
+    if (rawName.length == 1 && fullName.isDefined) {
+      new AnalysisException(s"Undefined function: ${rawName.head}. " +
+        "This function is neither a built-in/temporary function, nor a persistent " +
+        s"function that is qualified as ${fullName.get.quoted}.",
+        t.origin.line, t.origin.startPosition)
+    } else {
+      new AnalysisException(s"Undefined function: ${rawName.quoted}",
+        t.origin.line, t.origin.startPosition)
+    }
+  }
+
   def unsetNonExistentPropertyError(property: String, table: TableIdentifier): Throwable = {
     new AnalysisException(s"Attempted to unset non-existent property '$property' in table '$table'")
   }
@@ -1822,13 +1840,8 @@ object QueryCompilationErrors {
     new AnalysisException("Cannot overwrite a path that is also being read from.")
   }
 
-  def specifyingDBInDropTempFuncError(databaseName: String): Throwable = {
-    new AnalysisException(
-      s"Specifying a database in DROP TEMPORARY FUNCTION is not allowed: '$databaseName'")
-  }
-
-  def cannotDropNativeFuncError(functionName: String): Throwable = {
-    new AnalysisException(s"Cannot drop native function '$functionName'")
+  def cannotDropBuiltinFuncError(functionName: String): Throwable = {
+    new AnalysisException(s"Cannot drop built-in function '$functionName'")
   }
 
   def cannotRefreshBuiltInFuncError(functionName: String): Throwable = {
@@ -2246,17 +2259,9 @@ object QueryCompilationErrors {
   }
 
   def usingUntypedScalaUDFError(): Throwable = {
-    new AnalysisException("You're using untyped Scala UDF, which does not have the input type " +
-      "information. Spark may blindly pass null to the Scala closure with primitive-type " +
-      "argument, and the closure will see the default value of the Java type for the null " +
-      "argument, e.g. `udf((x: Int) => x, IntegerType)`, the result is 0 for null input. " +
-      "To get rid of this error, you could:\n" +
-      "1. use typed Scala UDF APIs(without return type parameter), e.g. `udf((x: Int) => x)`\n" +
-      "2. use Java UDF APIs, e.g. `udf(new UDF1[String, Integer] { " +
-      "override def call(s: String): Integer = s.length() }, IntegerType)`, " +
-      "if input types are all non primitive\n" +
-      s"3. set ${SQLConf.LEGACY_ALLOW_UNTYPED_SCALA_UDF.key} to true and " +
-      s"use this API with caution")
+    new AnalysisException(
+      errorClass = "UNTYPED_SCALA_UDF",
+      messageParameters = Array.empty)
   }
 
   def aggregationFunctionAppliedOnNonNumericColumnError(colName: String): Throwable = {
@@ -2292,16 +2297,21 @@ object QueryCompilationErrors {
   }
 
   def udfClassDoesNotImplementAnyUDFInterfaceError(className: String): Throwable = {
-    new AnalysisException(s"UDF class $className doesn't implement any UDF interface")
+    new AnalysisException(
+      errorClass = "NO_UDF_INTERFACE_ERROR",
+      messageParameters = Array(className))
   }
 
-  def udfClassNotAllowedToImplementMultiUDFInterfacesError(className: String): Throwable = {
+  def udfClassImplementMultiUDFInterfacesError(className: String): Throwable = {
     new AnalysisException(
-      s"It is invalid to implement multiple UDF interfaces, UDF class $className")
+      errorClass = "MULTI_UDF_INTERFACE_ERROR",
+      messageParameters = Array(className))
   }
 
   def udfClassWithTooManyTypeArgumentsError(n: Int): Throwable = {
-    new AnalysisException(s"UDF class with $n type arguments is not supported.")
+    new AnalysisException(
+      errorClass = "UNSUPPORTED_FEATURE",
+      messageParameters = Array(s"UDF class with $n type arguments"))
   }
 
   def classWithoutPublicNonArgumentConstructorError(className: String): Throwable = {
@@ -2364,5 +2374,10 @@ object QueryCompilationErrors {
 
   def tableNotSupportTimeTravelError(tableName: Identifier): UnsupportedOperationException = {
     new UnsupportedOperationException(s"Table $tableName does not support time travel.")
+  }
+
+  def writeDistributionAndOrderingNotSupportedInContinuousExecution(): Throwable = {
+    new AnalysisException(
+      "Sinks cannot request distribution and ordering in continuous execution mode")
   }
 }

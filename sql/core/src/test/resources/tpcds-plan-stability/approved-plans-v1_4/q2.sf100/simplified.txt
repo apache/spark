@@ -30,11 +30,21 @@ WholeStageCodegen (13)
                                   BroadcastExchange #3
                                     WholeStageCodegen (3)
                                       Filter [d_date_sk,d_week_seq]
+                                        Subquery #1
+                                          ObjectHashAggregate [buf] [bloom_filter_agg(xxhash64(d_week_seq, 42), 362, 2896, 0, 0),bloomFilter,buf]
+                                            Exchange #4
+                                              ObjectHashAggregate [d_week_seq] [buf,buf]
+                                                WholeStageCodegen (1)
+                                                  Project [d_week_seq]
+                                                    Filter [d_year,d_week_seq]
+                                                      ColumnarToRow
+                                                        InputAdapter
+                                                          Scan parquet default.date_dim [d_week_seq,d_year]
                                         ColumnarToRow
                                           InputAdapter
                                             Scan parquet default.date_dim [d_date_sk,d_week_seq,d_day_name]
                   InputAdapter
-                    BroadcastExchange #4
+                    BroadcastExchange #5
                       WholeStageCodegen (5)
                         Project [d_week_seq]
                           Filter [d_year,d_week_seq]
@@ -42,15 +52,48 @@ WholeStageCodegen (13)
                               InputAdapter
                                 Scan parquet default.date_dim [d_week_seq,d_year]
               InputAdapter
-                BroadcastExchange #5
+                BroadcastExchange #6
                   WholeStageCodegen (11)
                     Project [d_week_seq,sun_sales,mon_sales,tue_sales,wed_sales,thu_sales,fri_sales,sat_sales]
                       BroadcastHashJoin [d_week_seq,d_week_seq]
                         HashAggregate [d_week_seq,sum,sum,sum,sum,sum,sum,sum] [sum(UnscaledValue(CASE WHEN (d_day_name = Sunday   ) THEN sales_price END)),sum(UnscaledValue(CASE WHEN (d_day_name = Monday   ) THEN sales_price END)),sum(UnscaledValue(CASE WHEN (d_day_name = Tuesday  ) THEN sales_price END)),sum(UnscaledValue(CASE WHEN (d_day_name = Wednesday) THEN sales_price END)),sum(UnscaledValue(CASE WHEN (d_day_name = Thursday ) THEN sales_price END)),sum(UnscaledValue(CASE WHEN (d_day_name = Friday   ) THEN sales_price END)),sum(UnscaledValue(CASE WHEN (d_day_name = Saturday ) THEN sales_price END)),sun_sales,mon_sales,tue_sales,wed_sales,thu_sales,fri_sales,sat_sales,sum,sum,sum,sum,sum,sum,sum]
                           InputAdapter
-                            ReusedExchange [d_week_seq,sum,sum,sum,sum,sum,sum,sum] #2
+                            Exchange [d_week_seq] #7
+                              WholeStageCodegen (9)
+                                HashAggregate [d_week_seq,d_day_name,sales_price] [sum,sum,sum,sum,sum,sum,sum,sum,sum,sum,sum,sum,sum,sum]
+                                  Project [sales_price,d_week_seq,d_day_name]
+                                    BroadcastHashJoin [sold_date_sk,d_date_sk]
+                                      InputAdapter
+                                        Union
+                                          WholeStageCodegen (6)
+                                            Project [ws_sold_date_sk,ws_ext_sales_price]
+                                              ColumnarToRow
+                                                InputAdapter
+                                                  Scan parquet default.web_sales [ws_ext_sales_price,ws_sold_date_sk]
+                                          WholeStageCodegen (7)
+                                            Project [cs_sold_date_sk,cs_ext_sales_price]
+                                              ColumnarToRow
+                                                InputAdapter
+                                                  Scan parquet default.catalog_sales [cs_ext_sales_price,cs_sold_date_sk]
+                                      InputAdapter
+                                        BroadcastExchange #8
+                                          WholeStageCodegen (8)
+                                            Filter [d_date_sk,d_week_seq]
+                                              Subquery #2
+                                                ObjectHashAggregate [buf] [bloom_filter_agg(xxhash64(d_week_seq, 42), 362, 2896, 0, 0),bloomFilter,buf]
+                                                  Exchange #9
+                                                    ObjectHashAggregate [d_week_seq] [buf,buf]
+                                                      WholeStageCodegen (1)
+                                                        Project [d_week_seq]
+                                                          Filter [d_year,d_week_seq]
+                                                            ColumnarToRow
+                                                              InputAdapter
+                                                                Scan parquet default.date_dim [d_week_seq,d_year]
+                                              ColumnarToRow
+                                                InputAdapter
+                                                  Scan parquet default.date_dim [d_date_sk,d_week_seq,d_day_name]
                         InputAdapter
-                          BroadcastExchange #6
+                          BroadcastExchange #10
                             WholeStageCodegen (10)
                               Project [d_week_seq]
                                 Filter [d_year,d_week_seq]

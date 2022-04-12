@@ -17,7 +17,7 @@
 from typing import Any, Callable, List, Optional, Union, cast, no_type_check
 
 import pandas as pd
-from pandas.api.types import is_hashable, CategoricalDtype
+from pandas.api.types import is_hashable, CategoricalDtype  # type: ignore[attr-defined]
 
 from pyspark import pandas as ps
 from pyspark.pandas.indexes.base import Index
@@ -704,6 +704,10 @@ class CategoricalIndex(Index):
         Index(['first', 'second', None], dtype='object')
         """
         return super().map(mapper)
+
+    @no_type_check
+    def all(self, *args, **kwargs) -> None:
+        raise TypeError("Cannot perform 'all' with this index type: %s" % type(self).__name__)
 
 
 def _test() -> None:

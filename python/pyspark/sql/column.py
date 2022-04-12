@@ -31,7 +31,7 @@ from typing import (
     Union,
 )
 
-from py4j.java_gateway import JavaObject  # type: ignore[import]
+from py4j.java_gateway import JavaObject
 
 from pyspark import copy_func
 from pyspark.context import SparkContext
@@ -45,12 +45,14 @@ __all__ = ["Column"]
 
 
 def _create_column_from_literal(literal: Union["LiteralType", "DecimalLiteral"]) -> "Column":
-    sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
+    sc = SparkContext._active_spark_context
+    assert sc is not None and sc._jvm is not None
     return sc._jvm.functions.lit(literal)
 
 
 def _create_column_from_name(name: str) -> "Column":
-    sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
+    sc = SparkContext._active_spark_context
+    assert sc is not None and sc._jvm is not None
     return sc._jvm.functions.col(name)
 
 
@@ -82,7 +84,8 @@ def _to_seq(
     """
     if converter:
         cols = [converter(c) for c in cols]
-    return sc._jvm.PythonUtils.toSeq(cols)  # type: ignore[attr-defined]
+    assert sc._jvm is not None
+    return sc._jvm.PythonUtils.toSeq(cols)
 
 
 def _to_list(
@@ -98,7 +101,8 @@ def _to_list(
     """
     if converter:
         cols = [converter(c) for c in cols]
-    return sc._jvm.PythonUtils.toList(cols)  # type: ignore[attr-defined]
+    assert sc._jvm is not None
+    return sc._jvm.PythonUtils.toList(cols)
 
 
 def _unary_op(
@@ -117,7 +121,8 @@ def _unary_op(
 
 def _func_op(name: str, doc: str = "") -> Callable[["Column"], "Column"]:
     def _(self: "Column") -> "Column":
-        sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
+        sc = SparkContext._active_spark_context
+        assert sc is not None and sc._jvm is not None
         jc = getattr(sc._jvm.functions, name)(self._jc)
         return Column(jc)
 
@@ -131,7 +136,8 @@ def _bin_func_op(
     doc: str = "binary function",
 ) -> Callable[["Column", Union["Column", "LiteralType", "DecimalLiteral"]], "Column"]:
     def _(self: "Column", other: Union["Column", "LiteralType", "DecimalLiteral"]) -> "Column":
-        sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
+        sc = SparkContext._active_spark_context
+        assert sc is not None and sc._jvm is not None
         fn = getattr(sc._jvm.functions, name)
         jc = other._jc if isinstance(other, Column) else _create_column_from_literal(other)
         njc = fn(self._jc, jc) if not reverse else fn(jc, self._jc)
@@ -176,7 +182,7 @@ def _reverse_op(
     return _
 
 
-class Column(object):
+class Column:
 
     """
     A column in a DataFrame.
@@ -227,23 +233,13 @@ class Column(object):
     __radd__ = cast(
         Callable[["Column", Union["LiteralType", "DecimalLiteral"]], "Column"], _bin_op("plus")
     )
-    __rsub__ = cast(
-        Callable[["Column", Union["LiteralType", "DecimalLiteral"]], "Column"], _reverse_op("minus")
-    )
+    __rsub__ = _reverse_op("minus")
     __rmul__ = cast(
         Callable[["Column", Union["LiteralType", "DecimalLiteral"]], "Column"], _bin_op("multiply")
     )
-    __rdiv__ = cast(
-        Callable[["Column", Union["LiteralType", "DecimalLiteral"]], "Column"],
-        _reverse_op("divide"),
-    )
-    __rtruediv__ = cast(
-        Callable[["Column", Union["LiteralType", "DecimalLiteral"]], "Column"],
-        _reverse_op("divide"),
-    )
-    __rmod__ = cast(
-        Callable[["Column", Union["LiteralType", "DecimalLiteral"]], "Column"], _reverse_op("mod")
-    )
+    __rdiv__ = _reverse_op("divide")
+    __rtruediv__ = _reverse_op("divide")
+    __rmod__ = _reverse_op("mod")
 
     __pow__ = _bin_func_op("pow")
     __rpow__ = cast(
@@ -542,8 +538,8 @@ class Column(object):
         +--------------+
 
         """
-        sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
-
+        sc = SparkContext._active_spark_context
+        assert sc is not None
         jc = self._jc.dropFields(_to_seq(sc, fieldNames))
         return Column(jc)
 
@@ -703,7 +699,7 @@ class Column(object):
         if isinstance(startPos, int):
             jc = self._jc.substr(startPos, length)
         elif isinstance(startPos, Column):
-            jc = self._jc.substr(cast("Column", startPos)._jc, cast("Column", length)._jc)
+            jc = self._jc.substr(startPos._jc, cast("Column", length)._jc)
         else:
             raise TypeError("Unexpected type: %s" % type(startPos))
         return Column(jc)
@@ -728,7 +724,8 @@ class Column(object):
             Tuple,
             [c._jc if isinstance(c, Column) else _create_column_from_literal(c) for c in cols],
         )
-        sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
+        sc = SparkContext._active_spark_context
+        assert sc is not None
         jc = getattr(self._jc, "isin")(_to_seq(sc, cols))
         return Column(jc)
 
@@ -875,9 +872,11 @@ class Column(object):
         metadata = kwargs.pop("metadata", None)
         assert not kwargs, "Unexpected kwargs where passed: %s" % kwargs
 
-        sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
+        sc = SparkContext._active_spark_context
+        assert sc is not None
         if len(alias) == 1:
             if metadata:
+                assert sc._jvm is not None
                 jmeta = sc._jvm.org.apache.spark.sql.types.Metadata.fromJson(json.dumps(metadata))
                 return Column(getattr(self._jc, "as")(alias[0], jmeta))
             else:
@@ -907,7 +906,7 @@ class Column(object):
         elif isinstance(dataType, DataType):
             from pyspark.sql import SparkSession
 
-            spark = SparkSession.builder.getOrCreate()
+            spark = SparkSession._getActiveSessionOrCreate()
             jdt = spark._jsparkSession.parseDataType(dataType.json())
             jc = self._jc.cast(jdt)
         else:

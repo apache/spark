@@ -102,4 +102,17 @@ class ParquetColumnIndexSuite extends QueryTest with ParquetTest with SharedSpar
     }.toDF()
     checkUnalignedPages(df)(actions: _*)
   }
+
+  test("reading unaligned pages - struct type") {
+    val df = (0 until 2000).map(i => Tuple1((i.toLong, i + ":" + "o" * (i / 100)))).toDF("s")
+    checkUnalignedPages(df)(
+      df => df.filter("s._1 = 500"),
+      df => df.filter("s._1 = 500 or s._1 = 1500"),
+      df => df.filter("s._1 = 500 or s._1 = 501 or s._1 = 1500"),
+      df => df.filter("s._1 = 500 or s._1 = 501 or s._1 = 1000 or s._1 = 1500"),
+      // range filter
+      df => df.filter("s._1 >= 500 and s._1 < 1000"),
+      df => df.filter("(s._1 >= 500 and s._1 < 1000) or (s._1 >= 1500 and s._1 < 1600)")
+    )
+  }
 }

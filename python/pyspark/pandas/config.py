@@ -112,7 +112,8 @@ class Option:
 # Available options.
 #
 # NOTE: if you are fixing or adding an option here, make sure you execute `show_options()` and
-#     copy & paste the results into show_options 'docs/source/user_guide/options.rst' as well.
+#     copy & paste the results into show_options
+#     'docs/source/user_guide/pandas_on_spark/options.rst' as well.
 #     See the examples below:
 #     >>> from pyspark.pandas.config import show_options
 #     >>> show_options()
@@ -175,7 +176,7 @@ _options: List[Option] = [
     Option(
         key="compute.default_index_type",
         doc=("This sets the default index type: sequence, distributed and distributed-sequence."),
-        default="sequence",
+        default="distributed-sequence",
         types=str,
         check_func=(
             lambda v: v in ("sequence", "distributed", "distributed-sequence"),
@@ -290,18 +291,18 @@ def show_options() -> None:
     import textwrap
 
     header = ["Option", "Default", "Description"]
-    row_format = "{:<31} {:<14} {:<53}"
+    row_format = "{:<31} {:<23} {:<53}"
 
-    print(row_format.format("=" * 31, "=" * 14, "=" * 53))
+    print(row_format.format("=" * 31, "=" * 23, "=" * 53))
     print(row_format.format(*header))
-    print(row_format.format("=" * 31, "=" * 14, "=" * 53))
+    print(row_format.format("=" * 31, "=" * 23, "=" * 53))
 
     for option in _options:
         doc = textwrap.fill(option.doc, 53)
-        formatted = "".join([line + "\n" + (" " * 47) for line in doc.split("\n")]).rstrip()
+        formatted = "".join([line + "\n" + (" " * 56) for line in doc.split("\n")]).rstrip()
         print(row_format.format(option.key, repr(option.default), formatted))
 
-    print(row_format.format("=" * 31, "=" * 14, "=" * 53))
+    print(row_format.format("=" * 31, "=" * 23, "=" * 53))
 
 
 def get_option(key: str, default: Union[Any, _NoValueType] = _NoValue) -> Any:

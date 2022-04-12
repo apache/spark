@@ -240,7 +240,6 @@ public class RetryingBlockTransferorSuite {
    * retries -- the first interaction may include an IOException, which causes a retry of some
    * subset of the original blocks in a second interaction.
    */
-  @SuppressWarnings("unchecked")
   private static void performInteractions(List<? extends Map<String, Object>> interactions,
                                           BlockFetchingListener listener)
     throws IOException, InterruptedException {

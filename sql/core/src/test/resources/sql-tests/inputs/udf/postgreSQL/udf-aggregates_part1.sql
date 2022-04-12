@@ -80,12 +80,12 @@ SELECT avg(udf(CAST(x AS DOUBLE))), udf(var_pop(CAST(x AS DOUBLE)))
 FROM (VALUES (7000000000005), (7000000000007)) v(x);
 
 -- SQL2003 binary aggregates [SPARK-23907]
--- SELECT regr_count(b, a) FROM aggtest;
+SELECT regr_count(b, a) FROM aggtest;
 -- SELECT regr_sxx(b, a) FROM aggtest;
 -- SELECT regr_syy(b, a) FROM aggtest;
 -- SELECT regr_sxy(b, a) FROM aggtest;
--- SELECT regr_avgx(b, a), regr_avgy(b, a) FROM aggtest;
--- SELECT regr_r2(b, a) FROM aggtest;
+SELECT regr_avgx(b, a), regr_avgy(b, a) FROM aggtest;
+SELECT regr_r2(b, a) FROM aggtest;
 -- SELECT regr_slope(b, a), regr_intercept(b, a) FROM aggtest;
 SELECT udf(covar_pop(b, udf(a))), covar_samp(udf(b), a) FROM aggtest;
 SELECT corr(b, udf(a)) FROM aggtest;

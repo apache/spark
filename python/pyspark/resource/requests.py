@@ -18,10 +18,10 @@ from typing import overload, Optional, Dict
 
 from py4j.java_gateway import JavaObject, JVMView
 
-from pyspark.util import _parse_memory  # type: ignore[attr-defined]
+from pyspark.util import _parse_memory
 
 
-class ExecutorResourceRequest(object):
+class ExecutorResourceRequest:
     """
     An Executor resource request. This is used in conjunction with the ResourceProfile to
     programmatically specify the resources needed for an RDD that will be applied at the
@@ -94,7 +94,7 @@ class ExecutorResourceRequest(object):
         return self._vendor
 
 
-class ExecutorResourceRequests(object):
+class ExecutorResourceRequests:
 
     """
     A set of Executor resource requests. This is used in conjunction with the
@@ -133,7 +133,7 @@ class ExecutorResourceRequests(object):
     ):
         from pyspark import SparkContext
 
-        _jvm = _jvm or SparkContext._jvm  # type: ignore[attr-defined]
+        _jvm = _jvm or SparkContext._jvm
         if _jvm is not None:
             self._java_executor_resource_requests = (
                 _jvm.org.apache.spark.resource.ExecutorResourceRequests()
@@ -230,7 +230,7 @@ class ExecutorResourceRequests(object):
             return self._executor_resources
 
 
-class TaskResourceRequest(object):
+class TaskResourceRequest:
     """
     A task resource request. This is used in conjunction with the
     :class:`pyspark.resource.ResourceProfile` to programmatically specify the resources
@@ -267,7 +267,7 @@ class TaskResourceRequest(object):
         return self._amount
 
 
-class TaskResourceRequests(object):
+class TaskResourceRequests:
 
     """
     A set of task resource requests. This is used in conjunction with the
@@ -302,13 +302,11 @@ class TaskResourceRequests(object):
     ):
         from pyspark import SparkContext
 
-        _jvm = _jvm or SparkContext._jvm  # type: ignore[attr-defined]
+        _jvm = _jvm or SparkContext._jvm
         if _jvm is not None:
             self._java_task_resource_requests: Optional[
                 JavaObject
-            ] = (
-                SparkContext._jvm.org.apache.spark.resource.TaskResourceRequests()  # type: ignore[attr-defined]
-            )
+            ] = _jvm.org.apache.spark.resource.TaskResourceRequests()
             if _requests is not None:
                 for k, v in _requests.items():
                     if k == self._CPUS:

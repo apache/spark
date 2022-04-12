@@ -127,7 +127,6 @@ Created Time [not included in comparison]
 Last Access [not included in comparison]
 Created By [not included in comparison]
 Type: VIEW
-Table Properties: []
 Schema: root
  |-- e: integer (nullable = true)
 
@@ -169,7 +168,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 
-mismatched input '<EOF>' expecting {'FROM', 'IN', 'LIKE'}(line 1, pos 19)
+Syntax error at or near end of input(line 1, pos 19)
 
 == SQL ==
 SHOW TABLE EXTENDED
@@ -194,7 +193,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 
-mismatched input 'PARTITION' expecting {'FROM', 'IN', 'LIKE'}(line 1, pos 20)
+Syntax error at or near 'PARTITION'(line 1, pos 20)
 
 == SQL ==
 SHOW TABLE EXTENDED PARTITION(c='Us', d=1)

@@ -54,7 +54,7 @@ object InlineCTE extends Rule[LogicalPlan] {
     // 2) Any `CTERelationRef` that contains `OuterReference` would have been inlined first.
     refCount == 1 ||
       cteDef.deterministic ||
-      cteDef.child.find(_.expressions.exists(_.isInstanceOf[OuterReference])).isDefined
+      cteDef.child.exists(_.expressions.exists(_.isInstanceOf[OuterReference]))
   }
 
   private def buildCTEMap(

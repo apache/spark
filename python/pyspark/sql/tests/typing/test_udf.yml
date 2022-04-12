@@ -18,39 +18,39 @@
 - case: scalarUDF
   main: |
     from pyspark.sql.pandas.functions import pandas_udf, PandasUDFType
-    import pandas.core.series  # type: ignore[import]
-    import pandas.core.frame  # type: ignore[import]
+    import pandas.core.series
+    import pandas.core.frame
 
-    @pandas_udf("str", PandasUDFType.SCALAR)
+    @pandas_udf("string", PandasUDFType.SCALAR)
     def f(x: pandas.core.series.Series) -> pandas.core.series.Series:
         return x
 
-    @pandas_udf("str", PandasUDFType.SCALAR)
+    @pandas_udf("string", PandasUDFType.SCALAR)
     def g(x: pandas.core.series.Series, y: pandas.core.series.Series) -> pandas.core.series.Series:
         return x
 
-    @pandas_udf("str", PandasUDFType.SCALAR)
+    @pandas_udf("string", PandasUDFType.SCALAR)
     def h(*xs: pandas.core.series.Series) -> pandas.core.series.Series:
         return xs[0]
 
-    @pandas_udf("str", PandasUDFType.SCALAR)
-    def k(x: pandas.core.frame.DataFrame, y: pandas.core.series.Series) -> pandas.core.series.Series:
+    @pandas_udf("x string, y string", PandasUDFType.SCALAR)
+    def k(x: pandas.core.frame.DataFrame, y: pandas.core.series.Series) -> pandas.core.frame.DataFrame:
         return x
 
-    pandas_udf(lambda x: x, "str", PandasUDFType.SCALAR)
-    pandas_udf(lambda x, y: x, "str", PandasUDFType.SCALAR)
-    pandas_udf(lambda *xs: xs[0], "str", PandasUDFType.SCALAR)
+    pandas_udf(lambda x: x, "string", PandasUDFType.SCALAR)
+    pandas_udf(lambda x, y: x, "string", PandasUDFType.SCALAR)
+    pandas_udf(lambda *xs: xs[0], "string", PandasUDFType.SCALAR)
 
 
 - case: scalarIterUDF
   main: |
     from pyspark.sql.pandas.functions import pandas_udf, PandasUDFType
     from pyspark.sql.types import IntegerType
-    import pandas.core.series  # type: ignore[import]
+    import pandas.core.series
     from typing import Iterable
 
     @pandas_udf(IntegerType(), PandasUDFType.SCALAR_ITER)
-    def f(xs: pandas.core.series.Series) -> Iterable[pandas.core.series.Series]:
+    def f(xs: Iterable[pandas.core.series.Series]) -> Iterable[pandas.core.series.Series]:
         for x in xs:
             yield x + 1
 
@@ -62,7 +62,7 @@
     from pyspark.sql.session import SparkSession
     from pyspark.sql.types import StructField, StructType, LongType
     from pyspark.sql.pandas.functions import pandas_udf, PandasUDFType
-    import pandas.core.frame  # type: ignore[import]
+    import pandas.core.frame
 
     @pandas_udf("id long", PandasUDFType.GROUPED_MAP)
     def f(pdf: pandas.core.frame.DataFrame) -> pandas.core.frame.DataFrame:
@@ -92,7 +92,7 @@
     # Let's keep this one to make sure compatibility imports work
     from pyspark.sql.functions import pandas_udf, PandasUDFType
     from pyspark.sql.types import IntegerType
-    import pandas.core.series  # type: ignore[import]
+    import pandas.core.series
 
     @pandas_udf(IntegerType(), PandasUDFType.GROUPED_AGG)
     def f(x: pandas.core.series.Series) -> int:
@@ -115,7 +115,7 @@
   main: |
     from pyspark.sql.session import SparkSession
     from typing import Iterable
-    import pandas.core.frame  # type: ignore[import]
+    import pandas.core.frame
 
     spark = SparkSession.builder.getOrCreate()
 
@@ -155,7 +155,7 @@
 - case: cogroupedAggUdf
   main: |
     from pyspark.sql.session import SparkSession
-    import pandas.core.frame  # type: ignore[import]
+    import pandas.core.frame
     from  pyspark.sql.types import StructType, StructField, LongType
 
     spark = SparkSession.builder.getOrCreate()

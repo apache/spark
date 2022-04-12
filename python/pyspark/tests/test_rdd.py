@@ -34,10 +34,11 @@ from pyspark.serializers import (
     UTF8Deserializer,
     NoOpSerializer,
 )
+from pyspark.sql import SparkSession
 from pyspark.testing.utils import ReusedPySparkTestCase, SPARK_HOME, QuietTest
 
 
-global_func = lambda: "Hi"
+global_func = lambda: "Hi"  # noqa: E731
 
 
 class RDDTests(ReusedPySparkTestCase):
@@ -116,7 +117,7 @@ class RDDTests(ReusedPySparkTestCase):
         rdd1 = self.sc.parallelize([1, 2])
         rdd2 = self.sc.parallelize([3, 4])
         cart = rdd1.cartesian(rdd2)
-        result = cart.map(lambda x_y3: x_y3[0] + x_y3[1]).collect()
+        cart.map(lambda x_y3: x_y3[0] + x_y3[1]).collect()
 
     def test_transforming_pickle_file(self):
         # Regression test for SPARK-2601
@@ -615,11 +616,11 @@ class RDDTests(ReusedPySparkTestCase):
     def test_repartition_no_skewed(self):
         num_partitions = 20
         a = self.sc.parallelize(range(int(1000)), 2)
-        l = a.repartition(num_partitions).glom().map(len).collect()
-        zeros = len([x for x in l if x == 0])
+        xs = a.repartition(num_partitions).glom().map(len).collect()
+        zeros = len([x for x in xs if x == 0])
         self.assertTrue(zeros == 0)
-        l = a.coalesce(num_partitions, True).glom().map(len).collect()
-        zeros = len([x for x in l if x == 0])
+        xs = a.coalesce(num_partitions, True).glom().map(len).collect()
+        zeros = len([x for x in xs if x == 0])
         self.assertTrue(zeros == 0)
 
     def test_repartition_on_textfile(self):
@@ -697,6 +698,40 @@ class RDDTests(ReusedPySparkTestCase):
         rdd = self.sc.parallelize(range(1 << 20)).map(lambda x: str(x))
         rdd._jrdd.first()
 
+    def test_take_on_jrdd_with_large_rows_should_not_cause_deadlock(self):
+        # Regression test for SPARK-38677.
+        #
+        # Create a DataFrame with many columns, call a Python function on each row, and take only
+        # the first result row.
+        #
+        # This produces large rows that trigger a deadlock involving the following three threads:
+        #
+        # 1. The Scala task executor thread. During task execution, this is responsible for reading
+        #    output produced by the Python process. However, in this case the task has finished
+        #    early, and this thread is no longer reading output produced by the Python process.
+        #    Instead, it is waiting for the Scala WriterThread to exit so that it can finish the
+        #    task.
+        #
+        # 2. The Scala WriterThread. This is trying to send a large row to the Python process, and
+        #    is waiting for the Python process to read that row.
+        #
+        # 3. The Python process. This is trying to send a large output to the Scala task executor
+        #    thread, and is waiting for that thread to read that output.
+        #
+        # For this test to succeed rather than hanging, the Scala MonitorThread must detect this
+        # deadlock and kill the Python worker.
+        import numpy as np
+        import pandas as pd
+
+        num_rows = 100000
+        num_columns = 134
+        data = np.zeros((num_rows, num_columns))
+        columns = map(str, range(num_columns))
+        df = SparkSession(self.sc).createDataFrame(pd.DataFrame(data, columns=columns))
+        actual = CPickleSerializer().loads(df.rdd.map(list)._jrdd.first())
+        expected = [list(data[0])]
+        self.assertEqual(expected, actual)
+
     def test_sortByKey_uses_all_partitions_not_only_first_and_last(self):
         # Regression test for SPARK-5969
         seq = [(i * 59 % 101, i) for i in range(101)]  # unsorted sequence
@@ -764,7 +799,7 @@ class RDDTests(ReusedPySparkTestCase):
         # Regression test for SPARK-27000
         global global_func
         self.assertEqual(self.sc.parallelize([1]).map(lambda _: global_func()).first(), "Hi")
-        global_func = lambda: "Yeah"
+        global_func = lambda: "Yeah"  # noqa: E731
         self.assertEqual(self.sc.parallelize([1]).map(lambda _: global_func()).first(), "Yeah")
 
     def test_to_local_iterator_failure(self):

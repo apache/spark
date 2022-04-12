@@ -916,14 +916,23 @@ support the ability to run shuffle services within an isolated classloader
 can coexist within a single NodeManager. The
 `yarn.nodemanager.aux-services.<service-name>.classpath` and, starting from YARN 2.10.2/3.1.1/3.2.0,
 `yarn.nodemanager.aux-services.<service-name>.remote-classpath` options can be used to configure
-this. In addition to setting up separate classpaths, it's necessary to ensure the two versions
-advertise to different ports. This can be achieved using the `spark-shuffle-site.xml` file described
-above. For example, you may have configuration like:
+this. Note that YARN 3.3.0/3.3.1 have an issue which requires setting
+`yarn.nodemanager.aux-services.<service-name>.system-classes` as a workaround. See
+[YARN-11053](https://issues.apache.org/jira/browse/YARN-11053) for details. In addition to setting
+up separate classpaths, it's necessary to ensure the two versions advertise to different ports.
+This can be achieved using the `spark-shuffle-site.xml` file described above. For example, you may
+have configuration like:
 
 ```properties
   yarn.nodemanager.aux-services = spark_shuffle_x,spark_shuffle_y
-  yarn.nodemanager.aux-services.spark_shuffle_x.classpath = /path/to/spark-x-yarn-shuffle.jar,/path/to/spark-x-config
-  yarn.nodemanager.aux-services.spark_shuffle_y.classpath = /path/to/spark-y-yarn-shuffle.jar,/path/to/spark-y-config
+  yarn.nodemanager.aux-services.spark_shuffle_x.classpath = /path/to/spark-x-path/fat.jar:/path/to/spark-x-config
+  yarn.nodemanager.aux-services.spark_shuffle_y.classpath = /path/to/spark-y-path/fat.jar:/path/to/spark-y-config
+```
+Or
+```properties
+  yarn.nodemanager.aux-services = spark_shuffle_x,spark_shuffle_y
+  yarn.nodemanager.aux-services.spark_shuffle_x.classpath = /path/to/spark-x-path/*:/path/to/spark-x-config
+  yarn.nodemanager.aux-services.spark_shuffle_y.classpath = /path/to/spark-y-path/*:/path/to/spark-y-config
 ```
 
 The two `spark-*-config` directories each contain one file, `spark-shuffle-site.xml`. These are XML

@@ -303,7 +303,6 @@ class StreamingLogisticRegressionWithSGDTests(MLLibStreamingTestCase):
             true, predicted = zip(*rdd.collect())
             errors.append(self.calculate_accuracy_error(true, predicted))
 
-        true_predicted = []
         input_stream = self.ssc.queueStream(input_batches)
         predict_stream = self.ssc.queueStream(predict_batches)
         slr.trainOn(input_stream)

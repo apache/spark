@@ -2,45 +2,45 @@
 Dataset Benchmark
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 1.8.0_282-b08 on Linux 5.4.0-1043-azure
-Intel(R) Xeon(R) CPU E5-2673 v3 @ 2.40GHz
+OpenJDK 64-Bit Server VM 1.8.0_312-b07 on Linux 5.11.0-1022-azure
+Intel(R) Xeon(R) CPU E5-2673 v4 @ 2.30GHz
 back-to-back map long:                    Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-RDD                                               12276          12399         175          8.1         122.8       1.0X
-DataFrame                                          2017           2094         110         49.6          20.2       6.1X
-Dataset                                            3034           3044          15         33.0          30.3       4.0X
+RDD                                               12376          12666         410          8.1         123.8       1.0X
+DataFrame                                          1678           2477        1130         59.6          16.8       7.4X
+Dataset                                            2731           2753          30         36.6          27.3       4.5X
 
-OpenJDK 64-Bit Server VM 1.8.0_282-b08 on Linux 5.4.0-1043-azure
-Intel(R) Xeon(R) CPU E5-2673 v3 @ 2.40GHz
+OpenJDK 64-Bit Server VM 1.8.0_312-b07 on Linux 5.11.0-1022-azure
+Intel(R) Xeon(R) CPU E5-2673 v4 @ 2.30GHz
 back-to-back map:                         Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-RDD                                               16325          16361          50          6.1         163.2       1.0X
-DataFrame                                          8463           8468           6         11.8          84.6       1.9X
-Dataset                                           22525          23091         801          4.4         225.2       0.7X
+RDD                                               15449          15551         145          6.5         154.5       1.0X
+DataFrame                                          8036           8118         117         12.4          80.4       1.9X
+Dataset                                           17865          18621        1069          5.6         178.7       0.9X
 
-OpenJDK 64-Bit Server VM 1.8.0_282-b08 on Linux 5.4.0-1043-azure
-Intel(R) Xeon(R) CPU E5-2673 v3 @ 2.40GHz
+OpenJDK 64-Bit Server VM 1.8.0_312-b07 on Linux 5.11.0-1022-azure
+Intel(R) Xeon(R) CPU E5-2673 v4 @ 2.30GHz
 back-to-back filter Long:                 Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-RDD                                                3133           3136           3         31.9          31.3       1.0X
-DataFrame                                          1194           1535         482         83.8          11.9       2.6X
-Dataset                                            3146           3156          13         31.8          31.5       1.0X
+RDD                                                2977           2992          22         33.6          29.8       1.0X
+DataFrame                                          1229           1299          99         81.4          12.3       2.4X
+Dataset                                            3163           3173          14         31.6          31.6       0.9X
 
-OpenJDK 64-Bit Server VM 1.8.0_282-b08 on Linux 5.4.0-1043-azure
-Intel(R) Xeon(R) CPU E5-2673 v3 @ 2.40GHz
+OpenJDK 64-Bit Server VM 1.8.0_312-b07 on Linux 5.11.0-1022-azure
+Intel(R) Xeon(R) CPU E5-2673 v4 @ 2.30GHz
 back-to-back filter:                      Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-RDD                                                5334           5352          25         18.7          53.3       1.0X
-DataFrame                                           190            221          21        527.1           1.9      28.1X
-Dataset                                           10536          10630         133          9.5         105.4       0.5X
+RDD                                                5155           5847         979         19.4          51.5       1.0X
+DataFrame                                           173            201          20        577.2           1.7      29.8X
+Dataset                                            9841          10104         372         10.2          98.4       0.5X
 
-OpenJDK 64-Bit Server VM 1.8.0_282-b08 on Linux 5.4.0-1043-azure
-Intel(R) Xeon(R) CPU E5-2673 v3 @ 2.40GHz
+OpenJDK 64-Bit Server VM 1.8.0_312-b07 on Linux 5.11.0-1022-azure
+Intel(R) Xeon(R) CPU E5-2673 v4 @ 2.30GHz
 aggregate:                                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-RDD sum                                            4970           5099         181         20.1          49.7       1.0X
-DataFrame sum                                        67             81           9       1483.8           0.7      73.8X
-Dataset sum using Aggregator                       9474           9771         420         10.6          94.7       0.5X
-Dataset complex Aggregator                        13975          14701        1028          7.2         139.7       0.4X
+RDD sum                                            4195           4196           1         23.8          42.0       1.0X
+DataFrame sum                                        69             94          17       1440.4           0.7      60.4X
+Dataset sum using Aggregator                       9932          10292         509         10.1          99.3       0.4X
+Dataset complex Aggregator                        13773          14414         906          7.3         137.7       0.3X
 
 

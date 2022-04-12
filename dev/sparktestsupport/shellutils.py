@@ -25,9 +25,9 @@ subprocess_check_output = subprocess.check_output
 
 def exit_from_command_with_retcode(cmd, retcode):
     if retcode < 0:
-        print("[error] running", ' '.join(cmd), "; process was terminated by signal", -retcode)
+        print("[error] running", " ".join(cmd), "; process was terminated by signal", -retcode)
     else:
-        print("[error] running", ' '.join(cmd), "; received return code", retcode)
+        print("[error] running", " ".join(cmd), "; received return code", retcode)
     sys.exit(int(os.environ.get("CURRENT_BLOCK", 255)))
 
 
@@ -53,7 +53,7 @@ def run_cmd(cmd, return_output=False):
         cmd = cmd.split()
     try:
         if return_output:
-            return subprocess_check_output(cmd).decode('utf-8')
+            return subprocess_check_output(cmd).decode("utf-8")
         else:
             return subprocess.run(cmd, universal_newlines=True, check=True)
     except subprocess.CalledProcessError as e:

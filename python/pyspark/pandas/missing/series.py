@@ -29,7 +29,7 @@ def _unsupported_property(property_name, deprecated=False, reason=""):
     )
 
 
-class MissingPandasLikeSeries(object):
+class MissingPandasLikeSeries:
 
     # Functions
     asfreq = _unsupported_function("asfreq")
@@ -59,7 +59,6 @@ class MissingPandasLikeSeries(object):
 
     # Properties we won't support.
     array = common.array(_unsupported_property)
-    duplicated = common.duplicated(_unsupported_property)
     nbytes = _unsupported_property(
         "nbytes",
         reason="'nbytes' requires to compute whole dataset. You can calculate manually it, "

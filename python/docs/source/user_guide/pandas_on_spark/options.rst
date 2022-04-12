@@ -160,7 +160,7 @@ There are several types of the default index that can be configured by `compute.
 
 **sequence**: It implements a sequence that increases one by one, by PySpark's Window function without
 specifying partition. Therefore, it can end up with whole partition in single node.
-This index type should be avoided when the data is large. This is default. See the example below:
+This index type should be avoided when the data is large. See the example below:
 
 .. code-block:: python
 
@@ -183,7 +183,7 @@ This is conceptually equivalent to the PySpark example as below:
     >>> spark_df.select(sequential_index).rdd.map(lambda r: r[0]).collect()
     [0, 1, 2]
 
-**distributed-sequence**: It implements a sequence that increases one by one, by group-by and
+**distributed-sequence** (default): It implements a sequence that increases one by one, by group-by and
 group-map approach in a distributed manner. It still generates the sequential index globally.
 If the default index must be the sequence in a large dataset, this
 index has to be used.
@@ -245,65 +245,65 @@ This is conceptually equivalent to the PySpark example as below:
 Available options
 -----------------
 
-=============================== ============== =====================================================
-Option                          Default        Description
-=============================== ============== =====================================================
-display.max_rows                1000           This sets the maximum number of rows pandas-on-Spark
-                                               should output when printing out various output. For
-                                               example, this value determines the number of rows to
-                                               be shown at the repr() in a dataframe. Set `None` to
-                                               unlimit the input length. Default is 1000.
-compute.max_rows                1000           'compute.max_rows' sets the limit of the current
-                                               pandas-on-Spark DataFrame. Set `None` to unlimit the
-                                               input length. When the limit is set, it is executed
-                                               by the shortcut by collecting the data into the
-                                               driver, and then using the pandas API. If the limit
-                                               is unset, the operation is executed by PySpark.
-                                               Default is 1000.
-compute.shortcut_limit          1000           'compute.shortcut_limit' sets the limit for a
-                                               shortcut. It computes specified number of rows and
-                                               use its schema. When the dataframe length is larger
-                                               than this limit, pandas-on-Spark uses PySpark to
-                                               compute.
-compute.ops_on_diff_frames      False          This determines whether or not to operate between two
-                                               different dataframes. For example, 'combine_frames'
-                                               function internally performs a join operation which
-                                               can be expensive in general. So, if
-                                               `compute.ops_on_diff_frames` variable is not True,
-                                               that method throws an exception.
-compute.default_index_type      'sequence'     This sets the default index type: sequence,
-                                               distributed and distributed-sequence.
-compute.ordered_head            False          'compute.ordered_head' sets whether or not to operate
-                                               head with natural ordering. pandas-on-Spark does not
-                                               guarantee the row ordering so `head` could return
-                                               some rows from distributed partitions. If
-                                               'compute.ordered_head' is set to True, pandas-on-
-                                               Spark performs natural ordering beforehand, but it
-                                               will cause a performance overhead.
-compute.eager_check             True           'compute.eager_check' sets whether or not to launch
-                                               some Spark jobs just for the sake of validation. If
-                                               'compute.eager_check' is set to True, pandas-on-Spark
-                                               performs the validation beforehand, but it will cause
-                                               a performance overhead. Otherwise, pandas-on-Spark
-                                               skip the validation and will be slightly different
-                                               from pandas. Affected APIs: `Series.dot`,
-                                               `Series.asof`, `Series.compare`,
-                                               `FractionalExtensionOps.astype`,
-                                               `IntegralExtensionOps.astype`,
-                                               `FractionalOps.astype`, `DecimalOps.astype`.
-compute.isin_limit              80             'compute.isin_limit' sets the limit for filtering by
-                                               'Column.isin(list)'. If the length of the ‘list’ is
-                                               above the limit, broadcast join is used instead for
-                                               better performance.
-plotting.max_rows               1000           'plotting.max_rows' sets the visual limit on top-n-
-                                               based plots such as `plot.bar` and `plot.pie`. If it
-                                               is set to 1000, the first 1000 data points will be
-                                               used for plotting. Default is 1000.
-plotting.sample_ratio           None           'plotting.sample_ratio' sets the proportion of data
-                                               that will be plotted for sample-based plots such as
-                                               `plot.line` and `plot.area`. This option defaults to
-                                               'plotting.max_rows' option.
-plotting.backend                'plotly'       Backend to use for plotting. Default is plotly.
-                                               Supports any package that has a top-level `.plot`
-                                               method. Known options are: [matplotlib, plotly].
-=============================== ============== =====================================================
+=============================== ======================= =====================================================
+Option                          Default                 Description
+=============================== ======================= =====================================================
+display.max_rows                1000                    This sets the maximum number of rows pandas-on-Spark
+                                                        should output when printing out various output. For
+                                                        example, this value determines the number of rows to
+                                                        be shown at the repr() in a dataframe. Set `None` to
+                                                        unlimit the input length. Default is 1000.
+compute.max_rows                1000                    'compute.max_rows' sets the limit of the current
+                                                        pandas-on-Spark DataFrame. Set `None` to unlimit the
+                                                        input length. When the limit is set, it is executed
+                                                        by the shortcut by collecting the data into the
+                                                        driver, and then using the pandas API. If the limit
+                                                        is unset, the operation is executed by PySpark.
+                                                        Default is 1000.
+compute.shortcut_limit          1000                    'compute.shortcut_limit' sets the limit for a
+                                                        shortcut. It computes specified number of rows and
+                                                        use its schema. When the dataframe length is larger
+                                                        than this limit, pandas-on-Spark uses PySpark to
+                                                        compute.
+compute.ops_on_diff_frames      False                   This determines whether or not to operate between two
+                                                        different dataframes. For example, 'combine_frames'
+                                                        function internally performs a join operation which
+                                                        can be expensive in general. So, if
+                                                        `compute.ops_on_diff_frames` variable is not True,
+                                                        that method throws an exception.
+compute.default_index_type      'distributed-sequence'  This sets the default index type: sequence,
+                                                        distributed and distributed-sequence.
+compute.ordered_head            False                   'compute.ordered_head' sets whether or not to operate
+                                                        head with natural ordering. pandas-on-Spark does not
+                                                        guarantee the row ordering so `head` could return
+                                                        some rows from distributed partitions. If
+                                                        'compute.ordered_head' is set to True, pandas-on-
+                                                        Spark performs natural ordering beforehand, but it
+                                                        will cause a performance overhead.
+compute.eager_check             True                    'compute.eager_check' sets whether or not to launch
+                                                        some Spark jobs just for the sake of validation. If
+                                                        'compute.eager_check' is set to True, pandas-on-Spark
+                                                        performs the validation beforehand, but it will cause
+                                                        a performance overhead. Otherwise, pandas-on-Spark
+                                                        skip the validation and will be slightly different
+                                                        from pandas. Affected APIs: `Series.dot`,
+                                                        `Series.asof`, `Series.compare`,
+                                                        `FractionalExtensionOps.astype`,
+                                                        `IntegralExtensionOps.astype`,
+                                                        `FractionalOps.astype`, `DecimalOps.astype`.
+compute.isin_limit              80                      'compute.isin_limit' sets the limit for filtering by
+                                                        'Column.isin(list)'. If the length of the ‘list’ is
+                                                        above the limit, broadcast join is used instead for
+                                                        better performance.
+plotting.max_rows               1000                    'plotting.max_rows' sets the visual limit on top-n-
+                                                        based plots such as `plot.bar` and `plot.pie`. If it
+                                                        is set to 1000, the first 1000 data points will be
+                                                        used for plotting. Default is 1000.
+plotting.sample_ratio           None                    'plotting.sample_ratio' sets the proportion of data
+                                                        that will be plotted for sample-based plots such as
+                                                        `plot.line` and `plot.area`. This option defaults to
+                                                        'plotting.max_rows' option.
+plotting.backend                'plotly'                Backend to use for plotting. Default is plotly.
+                                                        Supports any package that has a top-level `.plot`
+                                                        method. Known options are: [matplotlib, plotly].
+=============================== ======================= =====================================================

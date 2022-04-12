@@ -18,13 +18,26 @@ from typing import cast, no_type_check, Any
 from functools import partial
 
 import pandas as pd
-from pandas.api.types import is_hashable
+from pandas.api.types import is_hashable  # type: ignore[attr-defined]
 
 from pyspark import pandas as ps
 from pyspark._globals import _NoValue
 from pyspark.pandas.indexes.base import Index
 from pyspark.pandas.missing.indexes import MissingPandasLikeTimedeltaIndex
 from pyspark.pandas.series import Series
+from pyspark.pandas.spark import functions as SF
+from pyspark.sql import functions as F
+
+
+HOURS_PER_DAY = 24
+MINUTES_PER_HOUR = 60
+SECONDS_PER_MINUTE = 60
+MILLIS_PER_SECOND = 1000
+MICROS_PER_MILLIS = 1000
+
+SECONDS_PER_HOUR = MINUTES_PER_HOUR * SECONDS_PER_MINUTE
+SECONDS_PER_DAY = HOURS_PER_DAY * SECONDS_PER_HOUR
+MICROS_PER_SECOND = MILLIS_PER_SECOND * MICROS_PER_MILLIS
 
 
 class TimedeltaIndex(Index):
@@ -55,19 +68,25 @@ class TimedeltaIndex(Index):
     --------
     >>> from datetime import timedelta
     >>> ps.TimedeltaIndex([timedelta(1), timedelta(microseconds=2)])
-    TimedeltaIndex(['1 days 00:00:00', '0 days 00:00:00.000002'], dtype='timedelta64[ns]', freq=None)
+    ... # doctest: +NORMALIZE_WHITESPACE
+    TimedeltaIndex(['1 days 00:00:00', '0 days 00:00:00.000002'],
+    dtype='timedelta64[ns]', freq=None)
 
     From an Series:
 
     >>> s = ps.Series([timedelta(1), timedelta(microseconds=2)], index=[10, 20])
     >>> ps.TimedeltaIndex(s)
-    TimedeltaIndex(['1 days 00:00:00', '0 days 00:00:00.000002'], dtype='timedelta64[ns]', freq=None)
+    ... # doctest: +NORMALIZE_WHITESPACE
+    TimedeltaIndex(['1 days 00:00:00', '0 days 00:00:00.000002'],
+    dtype='timedelta64[ns]', freq=None)
 
     From an Index:
 
     >>> idx = ps.TimedeltaIndex([timedelta(1), timedelta(microseconds=2)])
     >>> ps.TimedeltaIndex(idx)
-    TimedeltaIndex(['1 days 00:00:00', '0 days 00:00:00.000002'], dtype='timedelta64[ns]', freq=None)
+    ... # doctest: +NORMALIZE_WHITESPACE
+    TimedeltaIndex(['1 days 00:00:00', '0 days 00:00:00.000002'],
+    dtype='timedelta64[ns]', freq=None)
     """
 
     @no_type_check
@@ -111,3 +130,69 @@ class TimedeltaIndex(Index):
                 return partial(property_or_func, self)
 
         raise AttributeError("'TimedeltaIndex' object has no attribute '{}'".format(item))
+
+    @property
+    def days(self) -> Index:
+        """
+        Number of days for each element.
+        """
+
+        def pandas_days(x) -> int:  # type: ignore[no-untyped-def]
+            return x.days
+
+        return Index(self.to_series().transform(pandas_days))
+
+    @property
+    def seconds(self) -> Index:
+        """
+        Number of seconds (>= 0 and less than 1 day) for each element.
+        """
+
+        @no_type_check
+        def get_seconds(scol):
+            hour_scol = SF.date_part("HOUR", scol)
+            minute_scol = SF.date_part("MINUTE", scol)
+            second_scol = SF.date_part("SECOND", scol)
+            return (
+                F.when(
+                    hour_scol < 0,
+                    SECONDS_PER_DAY + hour_scol * SECONDS_PER_HOUR,
+                ).otherwise(hour_scol * SECONDS_PER_HOUR)
+                + F.when(
+                    minute_scol < 0,
+                    SECONDS_PER_DAY + minute_scol * SECONDS_PER_MINUTE,
+                ).otherwise(minute_scol * SECONDS_PER_MINUTE)
+                + F.when(
+                    second_scol < 0,
+                    SECONDS_PER_DAY + second_scol,
+                ).otherwise(second_scol)
+            ).cast("int")
+
+        return Index(self.to_series().spark.transform(get_seconds))
+
+    @property
+    def microseconds(self) -> Index:
+        """
+        Number of microseconds (>= 0 and less than 1 second) for each element.
+        """
+
+        @no_type_check
+        def get_microseconds(scol):
+            second_scol = SF.date_part("SECOND", scol)
+            return (
+                (
+                    F.when(
+                        (second_scol >= 0) & (second_scol < 1),
+                        second_scol,
+                    )
+                    .when(second_scol < 0, 1 + second_scol)
+                    .otherwise(0)
+                )
+                * MICROS_PER_SECOND
+            ).cast("int")
+
+        return Index(self.to_series().spark.transform(get_microseconds))
+
+    @no_type_check
+    def all(self, *args, **kwargs) -> None:
+        raise TypeError("Cannot perform 'all' with this index type: %s" % type(self).__name__)

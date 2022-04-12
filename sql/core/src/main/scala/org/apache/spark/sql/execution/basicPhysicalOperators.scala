@@ -700,6 +700,8 @@ case class UnionExec(children: Seq[SparkPlan]) extends SparkPlan {
 
   override def supportsColumnar: Boolean = children.forall(_.supportsColumnar)
 
+  override def supportsRowBased: Boolean = children.forall(_.supportsRowBased)
+
   protected override def doExecuteColumnar(): RDD[ColumnarBatch] = {
     sparkContext.union(children.map(_.executeColumnar()))
   }

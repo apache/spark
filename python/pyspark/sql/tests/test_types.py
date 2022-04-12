@@ -48,7 +48,7 @@ from pyspark.sql.types import (
     BooleanType,
     NullType,
 )
-from pyspark.sql.types import (  # type: ignore
+from pyspark.sql.types import (
     _array_signed_int_typecode_ctype_mappings,
     _array_type_mappings,
     _array_unsigned_int_typecode_ctype_mappings,
@@ -118,8 +118,14 @@ class TypesTests(ReusedSQLTestCase):
 
         with self.tempView("test"):
             df.createOrReplaceTempView("test")
-            result = self.spark.sql("SELECT l[0].a from test where d['key'].d = '2'")
-            self.assertEqual(1, result.head()[0])
+            result = self.spark.sql("SELECT l from test")
+            self.assertEqual([], result.head()[0])
+            # We set `spark.sql.ansi.enabled` to False for this case
+            # since it occurs an error in ANSI mode if there is a list index
+            # or key that does not exist.
+            with self.sql_conf({"spark.sql.ansi.enabled": False}):
+                result = self.spark.sql("SELECT l[0].a from test where d['key'].d = '2'")
+                self.assertEqual(1, result.head()[0])
 
         df2 = self.spark.createDataFrame(rdd, samplingRatio=1.0)
         self.assertEqual(df.schema, df2.schema)
@@ -128,13 +134,19 @@ class TypesTests(ReusedSQLTestCase):
 
         with self.tempView("test2"):
             df2.createOrReplaceTempView("test2")
-            result = self.spark.sql("SELECT l[0].a from test2 where d['key'].d = '2'")
-            self.assertEqual(1, result.head()[0])
+            result = self.spark.sql("SELECT l from test2")
+            self.assertEqual([], result.head()[0])
+            # We set `spark.sql.ansi.enabled` to False for this case
+            # since it occurs an error in ANSI mode if there is a list index
+            # or key that does not exist.
+            with self.sql_conf({"spark.sql.ansi.enabled": False}):
+                result = self.spark.sql("SELECT l[0].a from test2 where d['key'].d = '2'")
+                self.assertEqual(1, result.head()[0])
 
     def test_infer_schema_specification(self):
         from decimal import Decimal
 
-        class A(object):
+        class A:
             def __init__(self):
                 self.a = 1
 
@@ -936,6 +948,29 @@ class TypesTests(ReusedSQLTestCase):
             with self.assertRaisesRegex(TypeError, "infer the type of the field myarray"):
                 a = array.array(t)
                 self.spark.createDataFrame([Row(myarray=a)]).collect()
+
+    def test_repr(self):
+        instances = [
+            NullType(),
+            StringType(),
+            BinaryType(),
+            BooleanType(),
+            DateType(),
+            TimestampType(),
+            DecimalType(),
+            DoubleType(),
+            FloatType(),
+            ByteType(),
+            IntegerType(),
+            LongType(),
+            ShortType(),
+            ArrayType(StringType()),
+            MapType(StringType(), IntegerType()),
+            StructField("f1", StringType(), True),
+            StructType([StructField("f1", StringType(), True)]),
+        ]
+        for instance in instances:
+            self.assertEqual(eval(repr(instance)), instance)
 
     def test_daytime_interval_type_constructor(self):
         # SPARK-37277: Test constructors in day time interval.
