@@ -76,10 +76,11 @@ class StatCounterTests(ReusedPySparkTestCase):
         self.assertEqual(stats.sum(), 20.0)
         self.assertAlmostEqual(stats.variance(), 1.25)
         self.assertAlmostEqual(stats.sampleVariance(), 1.4285714285714286)
-        for idx in range(2):
-            stats1 = StatCounter([1.0, 2.0])
-            stats2 = StatCounter(range(1, 301))
-            stats = stats1.mergeStats(stats2) if idx == 1 else stats2.mergeStats(stats1)
+        execution_statements = [
+            StatCounter([1.0, 2.0]).mergeStats(StatCounter(range(1, 301))),
+            StatCounter(range(1, 301)).mergeStats(StatCounter([1.0, 2.0])),
+        ]
+        for stats in execution_statements:
             self.assertEqual(stats.count(), 302)
             self.assertEqual(stats.max(), 300.0)
             self.assertEqual(stats.min(), 1.0)
