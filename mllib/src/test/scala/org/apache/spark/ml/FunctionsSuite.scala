@@ -34,7 +34,7 @@ class FunctionsSuite extends MLTest {
       (Vectors.sparse(3, Seq((0, 2.0), (2, 3.0))), OldVectors.sparse(3, Seq((0, 20.0), (2, 30.0))))
     ).toDF("vec", "oldVec")
 
-    val result = df.select(vector_to_array('vec), vector_to_array('oldVec))
+    val result = df.select(vector_to_array($"vec"), vector_to_array($"oldVec"))
                    .as[(Seq[Double], Seq[Double])].collect().toSeq
 
     val expected = Seq(
@@ -65,7 +65,7 @@ class FunctionsSuite extends MLTest {
       (Vectors.sparse(3, Seq((0, 2.0), (2, 3.0))), OldVectors.sparse(3, Seq((0, 20.0), (2, 30.0))))
     ).toDF("vec", "oldVec")
     val dfArrayFloat = df3.select(
-      vector_to_array('vec, dtype = "float32"), vector_to_array('oldVec, dtype = "float32"))
+      vector_to_array($"vec", dtype = "float32"), vector_to_array($"oldVec", dtype = "float32"))
 
     // Check values are correct
     val result3 = dfArrayFloat.as[(Seq[Float], Seq[Float])].collect().toSeq
@@ -82,7 +82,7 @@ class FunctionsSuite extends MLTest {
 
     val thrown2 = intercept[IllegalArgumentException] {
       df3.select(
-        vector_to_array('vec, dtype = "float16"), vector_to_array('oldVec, dtype = "float16"))
+        vector_to_array($"vec", dtype = "float16"), vector_to_array($"oldVec", dtype = "float16"))
     }
     assert(thrown2.getMessage.contains(
       s"Unsupported dtype: float16. Valid values: float64, float32."))

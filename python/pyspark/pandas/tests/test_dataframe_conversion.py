@@ -25,11 +25,11 @@ import numpy as np
 import pandas as pd
 
 from pyspark import pandas as ps
-from pyspark.testing.pandasutils import PandasOnSparkTestCase, TestUtils
+from pyspark.testing.pandasutils import ComparisonTestBase, TestUtils
 from pyspark.testing.sqlutils import SQLTestUtils
 
 
-class DataFrameConversionTest(PandasOnSparkTestCase, SQLTestUtils, TestUtils):
+class DataFrameConversionTest(ComparisonTestBase, SQLTestUtils, TestUtils):
     """Test cases for "small data" conversion and I/O."""
 
     def setUp(self):
@@ -41,10 +41,6 @@ class DataFrameConversionTest(PandasOnSparkTestCase, SQLTestUtils, TestUtils):
     @property
     def pdf(self):
         return pd.DataFrame({"a": [1, 2, 3], "b": [4, 5, 6]}, index=[0, 1, 3])
-
-    @property
-    def psdf(self):
-        return ps.from_pandas(self.pdf)
 
     @staticmethod
     def strip_all_whitespace(str):
@@ -189,8 +185,7 @@ class DataFrameConversionTest(PandasOnSparkTestCase, SQLTestUtils, TestUtils):
             ]
             assert len(output_paths) > 0
             output_path = "%s/%s/%s" % (self.tmp_dir, partition_path, output_paths[0])
-            with open(output_path) as f:
-                self.assertEqual("[%s]" % open(output_path).read().strip(), expected)
+            self.assertEqual("[%s]" % open(output_path).read().strip(), expected)
 
     @unittest.skip("Pyperclip could not find a copy/paste mechanism for Linux.")
     def test_to_clipboard(self):

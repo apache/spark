@@ -51,10 +51,10 @@ object CTESubstitution extends Rule[LogicalPlan] {
     if (!plan.containsPattern(UNRESOLVED_WITH)) {
       return plan
     }
-    val isCommand = plan.find {
+    val isCommand = plan.exists {
       case _: Command | _: ParsedStatement | _: InsertIntoDir => true
       case _ => false
-    }.isDefined
+    }
     val cteDefs = mutable.ArrayBuffer.empty[CTERelationDef]
     val (substituted, lastSubstituted) =
       LegacyBehaviorPolicy.withName(conf.getConf(LEGACY_CTE_PRECEDENCE_POLICY)) match {

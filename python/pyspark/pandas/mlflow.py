@@ -145,8 +145,8 @@ def load_model(
     >>> d = mkdtemp("pandas_on_spark_mlflow")
     >>> set_tracking_uri("file:%s"%d)
     >>> client = MlflowClient()
-    >>> exp = mlflow.create_experiment("my_experiment")
-    >>> mlflow.set_experiment("my_experiment")
+    >>> exp_id = mlflow.create_experiment("my_experiment")
+    >>> exp = mlflow.set_experiment("my_experiment")
 
     We aim at learning this numerical function using a simple linear regressor.
 
@@ -165,7 +165,7 @@ def load_model(
     dataframe:
 
     >>> from pyspark.pandas.mlflow import load_model
-    >>> run_info = client.list_run_infos(exp)[-1]
+    >>> run_info = client.list_run_infos(exp_id)[-1]
     >>> model = load_model("runs:/{run_id}/model".format(run_id=run_info.run_uuid))
     >>> prediction_df = ps.DataFrame({"x1": [2.0], "x2": [4.0]})
     >>> prediction_df["prediction"] = model.predict(prediction_df)

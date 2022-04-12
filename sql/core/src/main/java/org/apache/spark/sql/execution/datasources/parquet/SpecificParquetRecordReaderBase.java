@@ -19,10 +19,8 @@
 package org.apache.spark.sql.execution.datasources.parquet;
 
 import java.io.Closeable;
-import java.io.File;
 import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
-import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -31,6 +29,8 @@ import java.util.Map;
 import java.util.Set;
 
 import com.google.common.annotations.VisibleForTesting;
+import org.apache.parquet.VersionParser;
+import org.apache.parquet.VersionParser.ParsedVersion;
 import org.apache.parquet.column.page.PageReadStore;
 import scala.Option;
 
@@ -71,6 +71,10 @@ public abstract class SpecificParquetRecordReaderBase<T> extends RecordReader<Vo
   protected MessageType fileSchema;
   protected MessageType requestedSchema;
   protected StructType sparkSchema;
+  // Keep track of the version of the parquet writer. An older version wrote
+  // corrupt delta byte arrays, and the version check is needed to detect that.
+  protected ParsedVersion writerVersion;
+  protected ParquetColumn parquetColumn;
 
   /**
    * The total number of rows this RecordReader will eventually read. The sum of the
@@ -95,6 +99,12 @@ public abstract class SpecificParquetRecordReaderBase<T> extends RecordReader<Vo
         HadoopInputFile.fromPath(file, configuration), options);
     this.reader = new ParquetRowGroupReaderImpl(fileReader);
     this.fileSchema = fileReader.getFileMetaData().getSchema();
+    try {
+      this.writerVersion = VersionParser.parse(fileReader.getFileMetaData().getCreatedBy());
+    } catch (Exception e) {
+      // Swallow any exception, if we cannot parse the version we will revert to a sequential read
+      // if the column is a delta byte array encoding (due to PARQUET-246).
+    }
     Map<String, String> fileMetadata = fileReader.getFileMetaData().getKeyValueMetaData();
     ReadSupport<T> readSupport = getReadSupportInstance(getReadSupportClass(configuration));
     ReadSupport.ReadContext readContext = readSupport.init(new InitContext(
@@ -103,7 +113,11 @@ public abstract class SpecificParquetRecordReaderBase<T> extends RecordReader<Vo
     fileReader.setRequestedSchema(requestedSchema);
     String sparkRequestedSchemaString =
         configuration.get(ParquetReadSupport$.MODULE$.SPARK_ROW_REQUESTED_SCHEMA());
-    this.sparkSchema = StructType$.MODULE$.fromString(sparkRequestedSchemaString);
+    StructType sparkRequestedSchema = StructType$.MODULE$.fromString(sparkRequestedSchemaString);
+    ParquetToSparkSchemaConverter converter = new ParquetToSparkSchemaConverter(configuration);
+    this.parquetColumn = converter.convertParquetColumn(requestedSchema,
+      Option.apply(sparkRequestedSchema));
+    this.sparkSchema = (StructType) parquetColumn.sparkType();
     this.totalRowCount = fileReader.getFilteredRecordCount();
 
     // For test purpose.
@@ -119,25 +133,6 @@ public abstract class SpecificParquetRecordReaderBase<T> extends RecordReader<Vo
         intAccum.add(fileReader.getRowGroups().size());
       }
     }
-  }
-
-  /**
-   * Returns the list of files at 'path' recursively. This skips files that are ignored normally
-   * by MapReduce.
-   */
-  public static List<String> listDirectory(File path) {
-    List<String> result = new ArrayList<>();
-    if (path.isDirectory()) {
-      for (File f: path.listFiles()) {
-        result.addAll(listDirectory(f));
-      }
-    } else {
-      char c = path.getName().charAt(0);
-      if (c != '.' && c != '_') {
-        result.add(path.getAbsolutePath());
-      }
-    }
-    return result;
   }
 
   /**
@@ -184,7 +179,9 @@ public abstract class SpecificParquetRecordReaderBase<T> extends RecordReader<Vo
       }
     }
     fileReader.setRequestedSchema(requestedSchema);
-    this.sparkSchema = new ParquetToSparkSchemaConverter(config).convert(requestedSchema);
+    this.parquetColumn = new ParquetToSparkSchemaConverter(config)
+      .convertParquetColumn(requestedSchema, Option.empty());
+    this.sparkSchema = (StructType) parquetColumn.sparkType();
     this.totalRowCount = fileReader.getFilteredRecordCount();
   }
 
@@ -201,7 +198,9 @@ public abstract class SpecificParquetRecordReaderBase<T> extends RecordReader<Vo
     config.setBoolean(SQLConf.PARQUET_BINARY_AS_STRING().key() , false);
     config.setBoolean(SQLConf.PARQUET_INT96_AS_TIMESTAMP().key(), false);
     config.setBoolean(SQLConf.CASE_SENSITIVE().key(), false);
-    this.sparkSchema = new ParquetToSparkSchemaConverter(config).convert(requestedSchema);
+    this.parquetColumn = new ParquetToSparkSchemaConverter(config)
+      .convertParquetColumn(requestedSchema, Option.empty());
+    this.sparkSchema = (StructType) parquetColumn.sparkType();
     this.totalRowCount = totalRowCount;
   }
 

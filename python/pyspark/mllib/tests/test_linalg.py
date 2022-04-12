@@ -22,7 +22,7 @@ from numpy import array, array_equal, zeros, arange, tile, ones, inf
 
 import pyspark.ml.linalg as newlinalg
 from pyspark.serializers import CPickleSerializer
-from pyspark.mllib.linalg import (  # type: ignore[attr-defined]
+from pyspark.mllib.linalg import (
     Vector,
     SparseVector,
     DenseVector,
@@ -523,8 +523,8 @@ class SciPyTests(MLlibTestCase):
         self.assertEqual(sv, _convert_to_vector(lil.tocsr()))
         self.assertEqual(sv, _convert_to_vector(lil.todok()))
 
-        def serialize(l):
-            return ser.loads(ser.dumps(_convert_to_vector(l)))
+        def serialize(d):
+            return ser.loads(ser.dumps(_convert_to_vector(d)))
 
         self.assertEqual(sv, serialize(lil))
         self.assertEqual(sv, serialize(lil.tocsc()))

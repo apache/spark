@@ -267,8 +267,7 @@ case class DataSource(
             checkAndGlobPathIfNecessary(checkEmptyGlobPath = false, checkFilesExist = false)
           createInMemoryFileIndex(globbedPaths)
         })
-        val forceNullable =
-          sparkSession.sessionState.conf.getConf(SQLConf.FILE_SOURCE_SCHEMA_FORCE_NULLABLE)
+        val forceNullable = sparkSession.conf.get(SQLConf.FILE_SOURCE_SCHEMA_FORCE_NULLABLE)
         val sourceDataSchema = if (forceNullable) dataSchema.asNullable else dataSchema
         SourceInfo(
           s"FileSource[$path]",
@@ -353,7 +352,7 @@ case class DataSource(
       case (dataSource: RelationProvider, Some(schema)) =>
         val baseRelation =
           dataSource.createRelation(sparkSession.sqlContext, caseInsensitiveOptions)
-        if (baseRelation.schema != schema) {
+        if (!DataType.equalsIgnoreCompatibleNullability(baseRelation.schema, schema)) {
           throw QueryCompilationErrors.userSpecifiedSchemaMismatchActualSchemaError(
             schema, baseRelation.schema)
         }

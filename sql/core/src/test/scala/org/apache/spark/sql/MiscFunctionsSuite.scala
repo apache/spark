@@ -50,7 +50,8 @@ class MiscFunctionsSuite extends QueryTest with SharedSparkSession {
       val df = sql("select current_user(), current_user")
       checkAnswer(df, Row(user, user))
     }
-    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true",
+      SQLConf.ENFORCE_RESERVED_KEYWORDS.key -> "true") {
       val df = sql("select current_user")
       checkAnswer(df, Row(spark.sparkContext.sparkUser))
       val e = intercept[ParseException](sql("select current_user()"))

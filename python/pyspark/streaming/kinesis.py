@@ -20,7 +20,7 @@ from pyspark.serializers import NoOpSerializer
 from pyspark.storagelevel import StorageLevel
 from pyspark.streaming import DStream
 from pyspark.streaming.context import StreamingContext
-from pyspark.util import _print_missing_jar  # type: ignore[attr-defined]
+from pyspark.util import _print_missing_jar
 
 
 __all__ = ["KinesisUtils", "InitialPositionInStream", "utf8_decoder"]
@@ -156,10 +156,10 @@ class KinesisUtils:
         jlevel = ssc._sc._getJavaStorageLevel(storageLevel)  # type: ignore[attr-defined]
         jduration = ssc._jduration(checkpointInterval)  # type: ignore[attr-defined]
 
+        jvm = ssc._jvm  # type: ignore[attr-defined]
+
         try:
-            helper = (
-                ssc._jvm.org.apache.spark.streaming.kinesis.KinesisUtilsPythonHelper()  # type: ignore[attr-defined]
-            )
+            helper = jvm.org.apache.spark.streaming.kinesis.KinesisUtilsPythonHelper()
         except TypeError as e:
             if str(e) == "'JavaPackage' object is not callable":
                 _print_missing_jar(

@@ -218,7 +218,7 @@ class Dataset[T] private[sql](
 
   @transient private[sql] val logicalPlan: LogicalPlan = {
     val plan = queryExecution.commandExecuted
-    if (sparkSession.sessionState.conf.getConf(SQLConf.FAIL_AMBIGUOUS_SELF_JOIN_ENABLED)) {
+    if (sparkSession.conf.get(SQLConf.FAIL_AMBIGUOUS_SELF_JOIN_ENABLED)) {
       val dsIds = plan.getTagValue(Dataset.DATASET_ID_TAG).getOrElse(new HashSet[Long])
       dsIds.add(id)
       plan.setTagValue(Dataset.DATASET_ID_TAG, dsIds)
@@ -684,12 +684,13 @@ class Dataset[T] private[sql](
       }
 
       if (eager) {
-        internalRdd.count()
+        internalRdd.doCheckpoint()
       }
 
       // Takes the first leaf partitioning whenever we see a `PartitioningCollection`. Otherwise the
       // size of `PartitioningCollection` may grow exponentially for queries involving deep inner
       // joins.
+      @scala.annotation.tailrec
       def firstLeafPartitioning(partitioning: Partitioning): Partitioning = {
         partitioning match {
           case p: PartitioningCollection => firstLeafPartitioning(p.partitionings.head)
@@ -1425,7 +1426,7 @@ class Dataset[T] private[sql](
   private def addDataFrameIdToCol(expr: NamedExpression): NamedExpression = {
     val newExpr = expr transform {
       case a: AttributeReference
-        if sparkSession.sessionState.conf.getConf(SQLConf.FAIL_AMBIGUOUS_SELF_JOIN_ENABLED) =>
+        if sparkSession.conf.get(SQLConf.FAIL_AMBIGUOUS_SELF_JOIN_ENABLED) =>
         val metadata = new MetadataBuilder()
           .withMetadata(a.metadata)
           .putLong(Dataset.DATASET_ID_KEY, id)
@@ -1502,10 +1503,10 @@ class Dataset[T] private[sql](
       case typedCol: TypedColumn[_, _] =>
         // Checks if a `TypedColumn` has been inserted with
         // specific input type and schema by `withInputType`.
-        val needInputType = typedCol.expr.find {
+        val needInputType = typedCol.expr.exists {
           case ta: TypedAggregateExpression if ta.inputDeserializer.isEmpty => true
           case _ => false
-        }.isDefined
+        }
 
         if (!needInputType) {
           typedCol
@@ -1978,6 +1979,7 @@ class Dataset[T] private[sql](
   * {{{
   *   // Monitor the metrics using a listener.
   *   spark.streams.addListener(new StreamingQueryListener() {
+  *     override def onQueryStarted(event: QueryStartedEvent): Unit = {}
   *     override def onQueryProgress(event: QueryProgressEvent): Unit = {
   *       event.progress.observedMetrics.asScala.get("my_event").foreach { row =>
   *         // Trigger if the number of errors exceeds 5 percent
@@ -1989,8 +1991,7 @@ class Dataset[T] private[sql](
   *         }
   *       }
   *     }
-  *     def onQueryStarted(event: QueryStartedEvent): Unit = {}
-  *     def onQueryTerminated(event: QueryTerminatedEvent): Unit = {}
+  *     override def onQueryTerminated(event: QueryTerminatedEvent): Unit = {}
   *   })
   *   // Observe row count (rc) and error row count (erc) in the streaming Dataset
   *   val observed_ds = ds.observe("my_event", count(lit(1)).as("rc"), count($"error").as("erc"))
@@ -2000,6 +2001,7 @@ class Dataset[T] private[sql](
   * @group typedrel
   * @since 3.0.0
   */
+  @varargs
   def observe(name: String, expr: Column, exprs: Column*): Dataset[T] = withTypedPlan {
     CollectMetrics(name, (expr +: exprs).map(_.named), logicalPlan)
   }
@@ -2476,6 +2478,35 @@ class Dataset[T] private[sql](
    * @since 2.0.0
    */
   def withColumn(colName: String, col: Column): DataFrame = withColumns(Seq(colName), Seq(col))
+
+  /**
+   * (Scala-specific) Returns a new Dataset by adding columns or replacing the existing columns
+   * that has the same names.
+   *
+   * `colsMap` is a map of column name and column, the column must only refer to attributes
+   * supplied by this Dataset. It is an error to add columns that refers to some other Dataset.
+   *
+   * @group untypedrel
+   * @since 3.3.0
+   */
+  def withColumns(colsMap: Map[String, Column]): DataFrame = {
+    val (colNames, newCols) = colsMap.toSeq.unzip
+    withColumns(colNames, newCols)
+  }
+
+  /**
+   * (Java-specific) Returns a new Dataset by adding columns or replacing the existing columns
+   * that has the same names.
+   *
+   * `colsMap` is a map of column name and column, the column must only refer to attribute
+   * supplied by this Dataset. It is an error to add columns that refers to some other Dataset.
+   *
+   * @group untypedrel
+   * @since 3.3.0
+   */
+  def withColumns(colsMap: java.util.Map[String, Column]): DataFrame = withColumns(
+    colsMap.asScala.toMap
+  )
 
   /**
    * Returns a new Dataset by adding columns or replacing the existing columns that has
@@ -3589,7 +3620,8 @@ class Dataset[T] private[sql](
         fr.inputFiles
       case r: HiveTableRelation =>
         r.tableMeta.storage.locationUri.map(_.toString).toArray
-      case DataSourceV2ScanRelation(DataSourceV2Relation(table: FileTable, _, _, _, _), _, _) =>
+      case DataSourceV2ScanRelation(DataSourceV2Relation(table: FileTable, _, _, _, _),
+          _, _, _) =>
         table.fileIndex.inputFiles
     }.flatten
     files.toSet.toArray

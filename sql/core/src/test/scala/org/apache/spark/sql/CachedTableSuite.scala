@@ -604,9 +604,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
       uncacheTable("t2")
     }
 
-    // One side of join is not partitioned in the desired way. Since the number of partitions of
-    // the side that has already partitioned is smaller than the side that is not partitioned,
-    // we shuffle both side.
+    // One side of join is not partitioned in the desired way. We'll only shuffle this side.
     withTempView("t1", "t2") {
       testData.repartition(6, $"value").createOrReplaceTempView("t1")
       testData2.repartition(3, $"a").createOrReplaceTempView("t2")
@@ -614,7 +612,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
       spark.catalog.cacheTable("t2")
 
       val query = sql("SELECT key, value, a, b FROM t1 t1 JOIN t2 t2 ON t1.key = t2.a")
-      verifyNumExchanges(query, 2)
+      verifyNumExchanges(query, 1)
       checkAnswer(
         query,
         testData.join(testData2, $"key" === $"a").select($"key", $"value", $"a", $"b"))

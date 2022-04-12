@@ -22,6 +22,7 @@ import datetime
 import re
 import inspect
 import sys
+import warnings
 from collections.abc import Mapping
 from functools import partial, reduce
 from typing import (
@@ -47,7 +48,11 @@ import numpy as np
 import pandas as pd
 from pandas.core.accessor import CachedAccessor
 from pandas.io.formats.printing import pprint_thing
-from pandas.api.types import is_list_like, is_hashable, CategoricalDtype
+from pandas.api.types import (  # type: ignore[attr-defined]
+    is_list_like,
+    is_hashable,
+    CategoricalDtype,
+)
 from pandas.tseries.frequencies import DateOffset
 from pyspark.sql import functions as F, Column, DataFrame as SparkDataFrame
 from pyspark.sql.types import (
@@ -62,6 +67,7 @@ from pyspark.sql.types import (
     NumericType,
     Row,
     StructType,
+    TimestampType,
 )
 from pyspark.sql.window import Window
 
@@ -117,6 +123,7 @@ if TYPE_CHECKING:
 
     from pyspark.pandas.groupby import SeriesGroupBy
     from pyspark.pandas.indexes import Index
+    from pyspark.pandas.spark.accessors import SparkIndexOpsMethods
 
 # This regular expression pattern is complied and defined here to avoid to compile the same
 # pattern every time it is used in _repr_ in Series.
@@ -443,7 +450,9 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         )
         return first_series(DataFrame(internal))
 
-    spark = CachedAccessor("spark", SparkSeriesMethods)
+    spark: "SparkIndexOpsMethods" = CachedAccessor(  # type: ignore[assignment]
+        "spark", SparkSeriesMethods
+    )
 
     @property
     def dtypes(self) -> Dtype:
@@ -845,7 +854,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         """
         return self.rfloordiv(other), self.rmod(other)
 
-    def between(self, left: Any, right: Any, inclusive: bool = True) -> "Series":
+    def between(self, left: Any, right: Any, inclusive: Union[bool, str] = "both") -> "Series":
         """
         Return boolean Series equivalent to left <= series <= right.
         This function returns a boolean vector containing `True` wherever the
@@ -858,8 +867,9 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             Left boundary.
         right : scalar or list-like
             Right boundary.
-        inclusive : bool, default True
-            Include boundaries.
+        inclusive : {"both", "neither", "left", "right"} or boolean. "both" by default.
+            Include boundaries. Whether to set each bound as closed or open.
+            Booleans are deprecated in favour of `both` or `neither`.
 
         Returns
         -------
@@ -882,7 +892,27 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
         Boundary values are included by default:
 
-        >>> s.between(1, 4)
+        >>> s.between(0, 4)
+        0     True
+        1     True
+        2     True
+        3    False
+        4    False
+        dtype: bool
+
+        With `inclusive` set to "neither" boundary values are excluded:
+
+        >>> s.between(0, 4, inclusive="neither")
+        0     True
+        1    False
+        2    False
+        3    False
+        4    False
+        dtype: bool
+
+        With `inclusive` set to "right" only right boundary value is included:
+
+        >>> s.between(0, 4, inclusive="right")
         0     True
         1    False
         2     True
@@ -890,11 +920,11 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         4    False
         dtype: bool
 
-        With `inclusive` set to ``False`` boundary values are excluded:
+        With `inclusive` set to "left" only left boundary value is included:
 
-        >>> s.between(1, 4, inclusive=False)
+        >>> s.between(0, 4, inclusive="left")
         0     True
-        1    False
+        1     True
         2    False
         3    False
         4    False
@@ -910,12 +940,33 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         3    False
         dtype: bool
         """
-        if inclusive:
+        if inclusive is True or inclusive is False:
+            warnings.warn(
+                "Boolean inputs to the `inclusive` argument are deprecated in "
+                "favour of `both` or `neither`.",
+                FutureWarning,
+            )
+            if inclusive:
+                inclusive = "both"
+            else:
+                inclusive = "neither"
+
+        if inclusive == "both":
             lmask = self >= left
             rmask = self <= right
-        else:
+        elif inclusive == "left":
+            lmask = self >= left
+            rmask = self < right
+        elif inclusive == "right":
+            lmask = self > left
+            rmask = self <= right
+        elif inclusive == "neither":
             lmask = self > left
             rmask = self < right
+        else:
+            raise ValueError(
+                "Inclusive has to be either string of 'both'," "'left', 'right', or 'neither'."
+            )
 
         return lmask & rmask
 
@@ -949,9 +1000,9 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         """
         if not isinstance(other, Series):
             raise TypeError("unsupported type: %s" % type(other))
-        if not np.issubdtype(self.dtype, np.number):
+        if not np.issubdtype(self.dtype, np.number):  # type: ignore[arg-type]
             raise TypeError("unsupported dtype: %s" % self.dtype)
-        if not np.issubdtype(other.dtype, np.number):
+        if not np.issubdtype(other.dtype, np.number):  # type: ignore[arg-type]
             raise TypeError("unsupported dtype: %s" % other.dtype)
 
         min_periods = 1 if min_periods is None else min_periods
@@ -969,9 +1020,11 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         else:
             return sdf.select(F.covar_samp(*sdf.columns)).head(1)[0][0]
 
-    # TODO: arg should support Series
-    # TODO: NaN and None
-    def map(self, arg: Union[Dict, Callable]) -> "Series":
+    # TODO: NaN and None when ``arg`` is an empty dict
+    # TODO: Support ps.Series ``arg``
+    def map(
+        self, arg: Union[Dict, Callable[[Any], Any], pd.Series], na_action: Optional[str] = None
+    ) -> "Series":
         """
         Map values of Series according to input correspondence.
 
@@ -985,8 +1038,10 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
         Parameters
         ----------
-        arg : function or dict
+        arg : function, dict or pd.Series
             Mapping correspondence.
+        na_action :
+            If `ignore`, propagate NA values, without passing them to the mapping correspondence.
 
         Returns
         -------
@@ -1027,6 +1082,16 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         3      None
         dtype: object
 
+        It also accepts a pandas Series:
+
+        >>> pser = pd.Series(['kitten', 'puppy'], index=['cat', 'dog'])
+        >>> s.map(pser)
+        0    kitten
+        1     puppy
+        2      None
+        3      None
+        dtype: object
+
         It also accepts a function:
 
         >>> def format(x) -> str:
@@ -1038,8 +1103,18 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         2      I am a None
         3    I am a rabbit
         dtype: object
+
+        To avoid applying the function to missing values (and keep them as NaN)
+        na_action='ignore' can be used:
+
+        >>> s.map('I am a {}'.format, na_action='ignore')
+        0       I am a cat
+        1       I am a dog
+        2             None
+        3    I am a rabbit
+        dtype: object
         """
-        if isinstance(arg, dict):
+        if isinstance(arg, (dict, pd.Series)):
             is_start = True
             # In case dictionary is empty.
             current = F.when(SF.lit(False), SF.lit(None).cast(self.spark.data_type))
@@ -1060,7 +1135,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
                 current = current.otherwise(SF.lit(None).cast(self.spark.data_type))
             return self._with_new_scol(current)
         else:
-            return self.apply(arg)
+            return self.pandas_on_spark.transform_batch(lambda pser: pser.map(arg, na_action))
 
     @property
     def shape(self) -> Tuple[int]:
@@ -1080,16 +1155,18 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
     def name(self, name: Name) -> None:
         self.rename(name, inplace=True)
 
-    # TODO: Functionality and documentation should be matched. Currently, changing index labels
-    # taking dictionary and function to change index are not supported.
-    def rename(self, index: Optional[Name] = None, **kwargs: Any) -> "Series":
+    # TODO: Currently, changing index labels taking dictionary/Series is not supported.
+    def rename(
+        self, index: Optional[Union[Name, Callable[[Any], Any]]] = None, **kwargs: Any
+    ) -> "Series":
         """
-        Alter Series name.
+        Alter Series index labels or name.
 
         Parameters
         ----------
-        index : scalar
-            Scalar will alter the ``Series.name`` attribute.
+        index : scalar or function, optional
+            Functions are transformations to apply to the index.
+            Scalar will alter the Series.name attribute.
 
         inplace : bool, default False
             Whether to return a new Series. If True then value of copy is
@@ -1098,7 +1175,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         Returns
         -------
         Series
-            Series with name altered.
+            Series with index labels or name altered.
 
         Examples
         --------
@@ -1115,9 +1192,26 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         1    2
         2    3
         Name: my_name, dtype: int64
+
+        >>> s.rename(lambda x: x ** 2)  # function, changes labels
+        0    1
+        1    2
+        4    3
+        dtype: int64
         """
         if index is None:
             pass
+        if callable(index):
+            if kwargs.get("inplace", False):
+                raise ValueError("inplace True is not supported yet for a function 'index'")
+            frame = self.to_frame()
+            new_index_name = verify_temp_column_name(frame, "__index_name__")
+            frame[new_index_name] = self.index.map(index)
+            frame.set_index(new_index_name, inplace=True)
+            frame.index.name = self.index.name
+            return first_series(frame).rename(self.name)
+        elif isinstance(index, (pd.Series, dict)):
+            raise ValueError("'index' of %s type is not supported yet" % type(index).__name__)
         elif not is_hashable(index):
             raise TypeError("Series.name must be a hashable type")
         elif not isinstance(index, tuple):
@@ -1596,7 +1690,86 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
     tolist = to_list
 
-    def drop_duplicates(self, keep: str = "first", inplace: bool = False) -> Optional["Series"]:
+    def duplicated(self, keep: Union[bool, str] = "first") -> "Series":
+        """
+        Indicate duplicate Series values.
+
+        Duplicated values are indicated as ``True`` values in the resulting
+        Series. Either all duplicates, all except the first or all except the
+        last occurrence of duplicates can be indicated.
+
+        .. versionadded:: 3.4.0
+
+        Parameters
+        ----------
+        keep : {'first', 'last', False}, default 'first'
+            Method to handle marking duplicates:
+            - 'first' : Mark duplicates as ``True`` except for the first occurrence.
+            - 'last' : Mark duplicates as ``True`` except for the last occurrence.
+            - ``False`` : Mark all duplicates as ``True``.
+
+        Returns
+        -------
+        Series
+            Series indicating whether each value has occurred in the
+            preceding values
+
+        See Also
+        --------
+        Index.drop_duplicates : Remove duplicate values from Index.
+        DataFrame.duplicated : Equivalent method on DataFrame.
+        Series.drop_duplicates : Remove duplicate values from Series.
+
+        Examples
+        --------
+        By default, for each set of duplicated values, the first occurrence is
+        set on False and all others on True:
+
+        >>> animals = ps.Series(['lama', 'cow', 'lama', 'beetle', 'lama'])
+        >>> animals.duplicated().sort_index()
+        0    False
+        1    False
+        2     True
+        3    False
+        4     True
+        dtype: bool
+
+        which is equivalent to
+
+        >>> animals.duplicated(keep='first').sort_index()
+        0    False
+        1    False
+        2     True
+        3    False
+        4     True
+        dtype: bool
+
+        By using 'last', the last occurrence of each set of duplicated values
+        is set on False and all others on True:
+
+        >>> animals.duplicated(keep='last').sort_index()
+        0     True
+        1    False
+        2     True
+        3    False
+        4    False
+        dtype: bool
+
+        By setting keep on ``False``, all duplicates are True:
+
+        >>> animals.duplicated(keep=False).sort_index()
+        0     True
+        1    False
+        2     True
+        3    False
+        4     True
+        dtype: bool
+        """
+        return self._psdf[[self.name]].duplicated(keep=keep).rename(self.name)
+
+    def drop_duplicates(
+        self, keep: Union[bool, str] = "first", inplace: bool = False
+    ) -> Optional["Series"]:
         """
         Return Series with duplicate values removed.
 
@@ -2046,7 +2219,12 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         else:
             return first_series(psdf)
 
-    def clip(self, lower: Union[float, int] = None, upper: Union[float, int] = None) -> "Series":
+    def clip(
+        self,
+        lower: Union[float, int] = None,
+        upper: Union[float, int] = None,
+        inplace: bool = False,
+    ) -> "Series":
         """
         Trim values at input threshold(s).
 
@@ -2058,6 +2236,8 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             Minimum threshold value. All values below this threshold will be set to it.
         upper : float or int, default None
             Maximum threshold value. All values above this threshold will be set to it.
+        inplace : bool, default False
+             if True, perform operation in-place
 
         Returns
         -------
@@ -2066,8 +2246,24 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
         Examples
         --------
-        >>> ps.Series([0, 2, 4]).clip(1, 3)
+        >>> psser = ps.Series([0, 2, 4])
+        >>> psser
+        0    0
+        1    2
+        2    4
+        dtype: int64
+
+        >>> psser.clip(1, 3)
         0    1
+        1    2
+        2    3
+        dtype: int64
+
+        Clip can be performed in-place.
+
+        >>> psser.clip(2, 3, inplace=True)
+        >>> psser
+        0    2
         1    2
         2    3
         dtype: int64
@@ -2093,10 +2289,18 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
                 scol = F.when(scol < lower, lower).otherwise(scol)
             if upper is not None:
                 scol = F.when(scol > upper, upper).otherwise(scol)
-            return self._with_new_scol(
-                scol.alias(self._internal.data_spark_column_names[0]),
-                field=self._internal.data_fields[0],
-            )
+            if inplace:
+                internal = self._internal.copy(
+                    data_spark_columns=[scol.alias(self._internal.data_spark_column_names[0])],
+                    data_fields=[self._internal.data_fields[0]],
+                )
+                self._psdf._update_internal_frame(internal, requires_same_anchor=False)
+                return None
+            else:
+                return self._with_new_scol(
+                    scol.alias(self._internal.data_spark_column_names[0]),
+                    field=self._internal.data_fields[0],
+                )
         else:
             return self
 
@@ -3203,7 +3407,8 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             # Falls back to schema inference if it fails to get signature.
             should_infer_schema = True
 
-        apply_each = lambda s: s.apply(func, args=args, **kwds)
+        def apply_each(s: Any) -> pd.Series:
+            return s.apply(func, args=args, **kwds)
 
         if should_infer_schema:
             return self.pandas_on_spark._transform_batch(apply_each, None)
@@ -3214,7 +3419,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
                     "Expected the return type of this function to be of scalar type, "
                     "but found type {}".format(sig_return)
                 )
-            return_type = cast(ScalarType, sig_return)
+            return_type = sig_return
             return self.pandas_on_spark._transform_batch(apply_each, return_type)
 
     # TODO: not all arguments are implemented comparing to pandas' for now.
@@ -3475,7 +3680,10 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         """
         if isinstance(q, Iterable):
             return first_series(
-                self.to_frame().quantile(q=q, axis=0, numeric_only=False, accuracy=accuracy)
+                cast(
+                    "ps.DataFrame",
+                    self.to_frame().quantile(q=q, axis=0, numeric_only=False, accuracy=accuracy),
+                )
             ).rename(self.name)
         else:
             if not isinstance(accuracy, int):
@@ -3487,7 +3695,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
                 raise TypeError(
                     "q must be a float or an array of floats; however, [%s] found." % type(q)
                 )
-            q_float = cast(float, q)
+            q_float = q
             if q_float < 0.0 or q_float > 1.0:
                 raise ValueError("percentiles should all be in the interval [0, 1].")
 
@@ -3505,8 +3713,10 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
             return self._reduce_for_stat_function(quantile, name="quantile")
 
-    # TODO: add axis, numeric_only, pct, na_option parameter
-    def rank(self, method: str = "average", ascending: bool = True) -> "Series":
+    # TODO: add axis, pct, na_option parameter
+    def rank(
+        self, method: str = "average", ascending: bool = True, numeric_only: Optional[bool] = None
+    ) -> "Series":
         """
         Compute numerical data ranks (1 through n) along axis. Equal values are
         assigned a rank that is the average of the ranks of those values.
@@ -3526,6 +3736,8 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             * dense: like 'min', but rank always increases by 1 between groups
         ascending : boolean, default True
             False for ranks by high (1) to low (N)
+        numeric_only : bool, optional
+            If set to True, rank numeric Series, or return an empty Series for non-numeric Series
 
         Returns
         -------
@@ -3583,8 +3795,25 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         2    2.0
         3    3.0
         Name: A, dtype: float64
+
+        If numeric_only is set to 'True', rank only numeric Series,
+        return an empty Series otherwise.
+
+        >>> s = ps.Series(['a', 'b', 'c'], name='A', index=['x', 'y', 'z'])
+        >>> s
+        x    a
+        y    b
+        z    c
+        Name: A, dtype: object
+
+        >>> s.rank(numeric_only=True)
+        Series([], Name: A, dtype: float64)
         """
-        return self._rank(method, ascending).spark.analyzed
+        is_numeric = isinstance(self.spark.data_type, (NumericType, BooleanType))
+        if numeric_only and not is_numeric:
+            return ps.Series([], dtype="float64", name=self.name)
+        else:
+            return self._rank(method, ascending).spark.analyzed
 
     def _rank(
         self,
@@ -3601,9 +3830,9 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             raise NotImplementedError("rank do not support MultiIndex now")
 
         if ascending:
-            asc_func = lambda scol: scol.asc()
+            asc_func = Column.asc
         else:
-            asc_func = lambda scol: scol.desc()
+            asc_func = Column.desc
 
         if method == "first":
             window = (
@@ -3634,9 +3863,10 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
                 .partitionBy(*part_cols)
                 .rowsBetween(Window.unboundedPreceding, Window.currentRow)
             )
-            window2 = Window.partitionBy([self.spark.column] + list(part_cols)).rowsBetween(
-                Window.unboundedPreceding, Window.unboundedFollowing
-            )
+
+            window2 = Window.partitionBy(
+                cast("List[ColumnOrName]", [self.spark.column]) + list(part_cols)
+            ).rowsBetween(Window.unboundedPreceding, Window.unboundedFollowing)
             scol = stat_func(F.row_number().over(window1)).over(window2)
         return self._with_new_scol(scol.cast(DoubleType()))
 
@@ -3651,7 +3881,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         if axis == 1:
             raise ValueError("Series does not support columns axis.")
         return first_series(
-            self.to_frame().filter(items=items, like=like, regex=regex, axis=axis)
+            self.to_frame().filter(items=items, like=like, regex=regex, axis=axis),
         ).rename(self.name)
 
     filter.__doc__ = DataFrame.filter.__doc__
@@ -4268,16 +4498,19 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         """
         return self.index
 
-    # TODO: 'regex', 'method' parameter
+    # TODO: introduce 'method', 'limit', 'in_place'; fully support 'regex'
     def replace(
         self,
         to_replace: Optional[Union[Any, List, Tuple, Dict]] = None,
         value: Optional[Union[List, Tuple]] = None,
-        regex: bool = False,
+        regex: Union[str, bool] = False,
     ) -> "Series":
         """
         Replace values given in to_replace with value.
         Values of the Series are replaced with other values dynamically.
+
+        .. note:: For partial pattern matching, the replacement is against the whole string,
+            which is different from pandas'. That's by the nature of underlying Spark API.
 
         Parameters
         ----------
@@ -4314,6 +4547,12 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             For a DataFrame a dict of values can be used to specify which value to use
             for each column (columns not in the dict will not be filled).
             Regular expressions, strings and lists or dicts of such objects are also allowed.
+
+        regex: bool or str, default False
+            Whether to interpret to_replace and/or value as regular expressions.
+            If this is True then to_replace must be a string.
+            Alternatively, this could be a regular expression in which case to_replace must be None.
+
 
         Returns
         -------
@@ -4425,13 +4664,56 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
                 weight      1.0
                 length      0.3
         dtype: float64
+
+        Regular expression `to_replace`
+
+        >>> psser = ps.Series(['bat', 'foo', 'bait', 'abc', 'bar', 'zoo'])
+        >>> psser.replace(to_replace=r'^ba.$', value='new', regex=True)
+        0     new
+        1     foo
+        2    bait
+        3     abc
+        4     new
+        5     zoo
+        dtype: object
+
+        >>> psser.replace(value='new', regex=r'^.oo$')
+        0     bat
+        1     new
+        2    bait
+        3     abc
+        4     bar
+        5     new
+        dtype: object
+
+        For partial pattern matching, the replacement is against the whole string
+
+        >>> psser.replace('ba', 'xx', regex=True)
+        0     xx
+        1    foo
+        2     xx
+        3    abc
+        4     xx
+        5    zoo
+        dtype: object
         """
+        if isinstance(regex, str):
+            if to_replace is not None:
+                raise ValueError("'to_replace' must be 'None' if 'regex' is not a bool")
+            to_replace = regex
+            regex = True
+        elif not isinstance(regex, bool):
+            raise NotImplementedError("'regex' of %s type is not supported" % type(regex).__name__)
+        elif regex is True:
+            assert isinstance(
+                to_replace, str
+            ), "If 'regex' is True then 'to_replace' must be a string"
+
         if to_replace is None:
             return self.fillna(method="ffill")
         if not isinstance(to_replace, (str, list, tuple, dict, int, float)):
             raise TypeError("'to_replace' should be one of str, list, tuple, dict, int, float")
-        if regex:
-            raise NotImplementedError("replace currently not support for regex")
+
         to_replace = list(to_replace) if isinstance(to_replace, tuple) else to_replace
         value = list(value) if isinstance(value, tuple) else value
         if isinstance(to_replace, list) and isinstance(value, list):
@@ -4460,10 +4742,14 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
                         current = current.when(cond, value)
                 current = current.otherwise(self.spark.column)
         else:
-            cond = self.spark.column.isin(to_replace)
-            # to_replace may be a scalar
-            if np.array(pd.isna(to_replace)).any():
-                cond = cond | F.isnan(self.spark.column) | self.spark.column.isNull()
+            if regex:
+                # to_replace must be a string
+                cond = self.spark.column.rlike(to_replace)
+            else:
+                cond = self.spark.column.isin(to_replace)
+                # to_replace may be a scalar
+                if np.array(pd.isna(to_replace)).any():
+                    cond = cond | F.isnan(self.spark.column) | self.spark.column.isNull()
             current = F.when(cond, value).otherwise(self.spark.column)
 
         return self._with_new_scol(current)  # TODO: dtype?
@@ -4732,7 +5018,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
         >>> reset_option("compute.ops_on_diff_frames")
         """
-        return self.where(cast(Series, ~cond), other)
+        return self.where(~cond, other)
 
     def xs(self, key: Name, level: Optional[int] = None) -> "Series":
         """
@@ -5131,7 +5417,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             if repeats == 0:
                 return first_series(DataFrame(psdf._internal.with_filter(SF.lit(False))))
             else:
-                return first_series(ps.concat([psdf] * repeats))
+                return first_series(cast("ps.DataFrame", ps.concat([psdf] * repeats)))
 
     def asof(self, where: Union[Any, List]) -> Union[Scalar, "Series"]:
         """
@@ -5212,24 +5498,51 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         if not is_list_like(where):
             should_return_series = False
             where = [where]
-        index_scol = self._internal.index_spark_columns[0]
-        index_type = self._internal.spark_type_for(index_scol)
+        internal = self._internal.resolved_copy
+        index_scol = internal.index_spark_columns[0]
+        index_type = internal.spark_type_for(index_scol)
+        spark_column = internal.data_spark_columns[0]
+        monotonically_increasing_id_column = verify_temp_column_name(
+            internal.spark_frame, "__monotonically_increasing_id__"
+        )
         cond = [
-            F.max(F.when(index_scol <= SF.lit(index).cast(index_type), self.spark.column))
+            F.max_by(
+                spark_column,
+                F.when(
+                    (index_scol <= SF.lit(index).cast(index_type)) & spark_column.isNotNull()
+                    if pd.notna(index)
+                    # If index is nan and the value of the col is not null
+                    # then return monotonically_increasing_id .This will let max by
+                    # to return last index value , which is the behaviour of pandas
+                    else spark_column.isNotNull(),
+                    monotonically_increasing_id_column,
+                ),
+            )
             for index in where
         ]
-        sdf = self._internal.spark_frame.select(cond)
+
+        sdf = internal.spark_frame.withColumn(
+            monotonically_increasing_id_column, F.monotonically_increasing_id()
+        ).select(cond)
+
         if not should_return_series:
             with sql_conf({SPARK_CONF_ARROW_ENABLED: False}):
                 # Disable Arrow to keep row ordering.
-                result = cast(pd.DataFrame, sdf.limit(1).toPandas()).iloc[0, 0]
+                result = sdf.limit(1).toPandas().iloc[0, 0]
             return result if result is not None else np.nan
 
         # The data is expected to be small so it's fine to transpose/use default index.
         with ps.option_context("compute.default_index_type", "distributed", "compute.max_rows", 1):
-            psdf: DataFrame = DataFrame(sdf)
-            psdf.columns = pd.Index(where)
-            return first_series(psdf.transpose()).rename(self.name)
+            if len(where) == len(set(where)) and not isinstance(index_type, TimestampType):
+                psdf: DataFrame = DataFrame(sdf)
+                psdf.columns = pd.Index(where)
+                return first_series(psdf.transpose()).rename(self.name)
+            else:
+                # If `where` has duplicate items, leverage the pandas directly
+                # since pandas API on Spark doesn't support the duplicate column name.
+                pdf: pd.DataFrame = sdf.limit(1).toPandas()
+                pdf.columns = pd.Index(where)
+                return first_series(DataFrame(pdf.transpose())).rename(self.name)
 
     def mad(self) -> float:
         """
@@ -6263,7 +6576,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         if isinstance(psser_or_scol, Series):
             psser = psser_or_scol
         else:
-            psser = self._with_new_scol(cast(Column, psser_or_scol))
+            psser = self._with_new_scol(psser_or_scol)
         if should_resolve:
             internal = psser._internal.resolved_copy
             return first_series(DataFrame(internal))
@@ -6361,7 +6674,9 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
     def __repr__(self) -> str_type:
         max_display_count = get_option("display.max_rows")
         if max_display_count is None:
-            return self._to_internal_pandas().to_string(name=self.name, dtype=self.dtype)
+            return self._to_internal_pandas().to_string(
+                name=bool(self.name), dtype=bool(self.dtype)
+            )
 
         pser = self._psdf._get_or_create_repr_pandas_cache(max_display_count)[self.name]
         pser_length = len(pser)
@@ -6413,12 +6728,12 @@ def unpack_scalar(sdf: SparkDataFrame) -> Any:
     Takes a dataframe that is supposed to contain a single row with a single scalar value,
     and returns this value.
     """
-    l = cast(pd.DataFrame, sdf.limit(2).toPandas())
-    assert len(l) == 1, (sdf, l)
-    row = l.iloc[0]
-    l2 = list(row)
-    assert len(l2) == 1, (row, l2)
-    return l2[0]
+    lst = sdf.limit(2).toPandas()
+    assert len(lst) == 1, (sdf, lst)
+    row = lst.iloc[0]
+    lst2 = list(row)
+    assert len(lst2) == 1, (row, lst2)
+    return lst2[0]
 
 
 @overload

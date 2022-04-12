@@ -45,17 +45,23 @@ public class ParquetVectorUpdaterFactory {
   // The timezone conversion to apply to int96 timestamps. Null if no conversion.
   private final ZoneId convertTz;
   private final String datetimeRebaseMode;
+  private final String datetimeRebaseTz;
   private final String int96RebaseMode;
+  private final String int96RebaseTz;
 
   ParquetVectorUpdaterFactory(
       LogicalTypeAnnotation logicalTypeAnnotation,
       ZoneId convertTz,
       String datetimeRebaseMode,
-      String int96RebaseMode) {
+      String datetimeRebaseTz,
+      String int96RebaseMode,
+      String int96RebaseTz) {
     this.logicalTypeAnnotation = logicalTypeAnnotation;
     this.convertTz = convertTz;
     this.datetimeRebaseMode = datetimeRebaseMode;
+    this.datetimeRebaseTz = datetimeRebaseTz;
     this.int96RebaseMode = int96RebaseMode;
+    this.int96RebaseTz = int96RebaseTz;
   }
 
   public ParquetVectorUpdater getUpdater(ColumnDescriptor descriptor, DataType sparkType) {
@@ -109,7 +115,7 @@ public class ParquetVectorUpdaterFactory {
             return new LongUpdater();
           } else {
             boolean failIfRebase = "EXCEPTION".equals(datetimeRebaseMode);
-            return new LongWithRebaseUpdater(failIfRebase);
+            return new LongWithRebaseUpdater(failIfRebase, datetimeRebaseTz);
           }
         } else if (isTimestampTypeMatched(LogicalTypeAnnotation.TimeUnit.MILLIS)) {
           validateTimestampType(sparkType);
@@ -117,7 +123,7 @@ public class ParquetVectorUpdaterFactory {
             return new LongAsMicrosUpdater();
           } else {
             final boolean failIfRebase = "EXCEPTION".equals(datetimeRebaseMode);
-            return new LongAsMicrosRebaseUpdater(failIfRebase);
+            return new LongAsMicrosRebaseUpdater(failIfRebase, datetimeRebaseTz);
           }
         } else if (sparkType instanceof DayTimeIntervalType) {
           return new LongUpdater();
@@ -142,13 +148,16 @@ public class ParquetVectorUpdaterFactory {
             if ("CORRECTED".equals(int96RebaseMode)) {
               return new BinaryToSQLTimestampUpdater();
             } else {
-              return new BinaryToSQLTimestampRebaseUpdater(failIfRebase);
+              return new BinaryToSQLTimestampRebaseUpdater(failIfRebase, int96RebaseTz);
             }
           } else {
             if ("CORRECTED".equals(int96RebaseMode)) {
               return new BinaryToSQLTimestampConvertTzUpdater(convertTz);
             } else {
-              return new BinaryToSQLTimestampConvertTzRebaseUpdater(failIfRebase, convertTz);
+              return new BinaryToSQLTimestampConvertTzRebaseUpdater(
+                failIfRebase,
+                convertTz,
+                int96RebaseTz);
             }
           }
         }
@@ -517,9 +526,11 @@ public class ParquetVectorUpdaterFactory {
 
   private static class LongWithRebaseUpdater implements ParquetVectorUpdater {
     private final boolean failIfRebase;
+    private final String timeZone;
 
-    LongWithRebaseUpdater(boolean failIfRebase) {
+    LongWithRebaseUpdater(boolean failIfRebase, String timeZone) {
       this.failIfRebase = failIfRebase;
+      this.timeZone = timeZone;
     }
 
     @Override
@@ -528,7 +539,7 @@ public class ParquetVectorUpdaterFactory {
         int offset,
         WritableColumnVector values,
         VectorizedValuesReader valuesReader) {
-      valuesReader.readLongsWithRebase(total, values, offset, failIfRebase);
+      valuesReader.readLongsWithRebase(total, values, offset, failIfRebase, timeZone);
     }
 
     @Override
@@ -542,7 +553,7 @@ public class ParquetVectorUpdaterFactory {
         WritableColumnVector values,
         VectorizedValuesReader valuesReader) {
       long julianMicros = valuesReader.readLong();
-      values.putLong(offset, rebaseMicros(julianMicros, failIfRebase));
+      values.putLong(offset, rebaseMicros(julianMicros, failIfRebase, timeZone));
     }
 
     @Override
@@ -552,7 +563,7 @@ public class ParquetVectorUpdaterFactory {
         WritableColumnVector dictionaryIds,
         Dictionary dictionary) {
       long julianMicros = dictionary.decodeToLong(dictionaryIds.getDictId(offset));
-      values.putLong(offset, rebaseMicros(julianMicros, failIfRebase));
+      values.putLong(offset, rebaseMicros(julianMicros, failIfRebase, timeZone));
     }
   }
 
@@ -594,9 +605,11 @@ public class ParquetVectorUpdaterFactory {
 
   private static class LongAsMicrosRebaseUpdater implements ParquetVectorUpdater {
     private final boolean failIfRebase;
+    private final String timeZone;
 
-    LongAsMicrosRebaseUpdater(boolean failIfRebase) {
+    LongAsMicrosRebaseUpdater(boolean failIfRebase, String timeZone) {
       this.failIfRebase = failIfRebase;
+      this.timeZone = timeZone;
     }
 
     @Override
@@ -621,7 +634,7 @@ public class ParquetVectorUpdaterFactory {
         WritableColumnVector values,
         VectorizedValuesReader valuesReader) {
       long julianMicros = DateTimeUtils.millisToMicros(valuesReader.readLong());
-      values.putLong(offset, rebaseMicros(julianMicros, failIfRebase));
+      values.putLong(offset, rebaseMicros(julianMicros, failIfRebase, timeZone));
     }
 
     @Override
@@ -632,7 +645,7 @@ public class ParquetVectorUpdaterFactory {
         Dictionary dictionary) {
       long julianMillis = dictionary.decodeToLong(dictionaryIds.getDictId(offset));
       long julianMicros = DateTimeUtils.millisToMicros(julianMillis);
-      values.putLong(offset, rebaseMicros(julianMicros, failIfRebase));
+      values.putLong(offset, rebaseMicros(julianMicros, failIfRebase, timeZone));
     }
   }
 
@@ -823,9 +836,11 @@ public class ParquetVectorUpdaterFactory {
 
   private static class BinaryToSQLTimestampRebaseUpdater implements ParquetVectorUpdater {
     private final boolean failIfRebase;
+    private final String timeZone;
 
-    BinaryToSQLTimestampRebaseUpdater(boolean failIfRebase) {
+    BinaryToSQLTimestampRebaseUpdater(boolean failIfRebase, String timeZone) {
       this.failIfRebase = failIfRebase;
+      this.timeZone = timeZone;
     }
 
     @Override
@@ -851,7 +866,7 @@ public class ParquetVectorUpdaterFactory {
         VectorizedValuesReader valuesReader) {
       // Read 12 bytes for INT96
       long julianMicros = ParquetRowConverter.binaryToSQLTimestamp(valuesReader.readBinary(12));
-      long gregorianMicros = rebaseInt96(julianMicros, failIfRebase);
+      long gregorianMicros = rebaseInt96(julianMicros, failIfRebase, timeZone);
       values.putLong(offset, gregorianMicros);
     }
 
@@ -863,7 +878,7 @@ public class ParquetVectorUpdaterFactory {
         Dictionary dictionary) {
       Binary v = dictionary.decodeToBinary(dictionaryIds.getDictId(offset));
       long julianMicros = ParquetRowConverter.binaryToSQLTimestamp(v);
-      long gregorianMicros = rebaseInt96(julianMicros, failIfRebase);
+      long gregorianMicros = rebaseInt96(julianMicros, failIfRebase, timeZone);
       values.putLong(offset, gregorianMicros);
     }
   }
@@ -871,10 +886,15 @@ public class ParquetVectorUpdaterFactory {
   private static class BinaryToSQLTimestampConvertTzRebaseUpdater implements ParquetVectorUpdater {
     private final boolean failIfRebase;
     private final ZoneId convertTz;
+    private final String timeZone;
 
-    BinaryToSQLTimestampConvertTzRebaseUpdater(boolean failIfRebase, ZoneId convertTz) {
+    BinaryToSQLTimestampConvertTzRebaseUpdater(
+        boolean failIfRebase,
+        ZoneId convertTz,
+        String timeZone) {
       this.failIfRebase = failIfRebase;
       this.convertTz = convertTz;
+      this.timeZone = timeZone;
     }
 
     @Override
@@ -900,7 +920,7 @@ public class ParquetVectorUpdaterFactory {
         VectorizedValuesReader valuesReader) {
       // Read 12 bytes for INT96
       long julianMicros = ParquetRowConverter.binaryToSQLTimestamp(valuesReader.readBinary(12));
-      long gregorianMicros = rebaseInt96(julianMicros, failIfRebase);
+      long gregorianMicros = rebaseInt96(julianMicros, failIfRebase, timeZone);
       long adjTime = DateTimeUtils.convertTz(gregorianMicros, convertTz, UTC);
       values.putLong(offset, adjTime);
     }
@@ -913,7 +933,7 @@ public class ParquetVectorUpdaterFactory {
         Dictionary dictionary) {
       Binary v = dictionary.decodeToBinary(dictionaryIds.getDictId(offset));
       long julianMicros = ParquetRowConverter.binaryToSQLTimestamp(v);
-      long gregorianMicros = rebaseInt96(julianMicros, failIfRebase);
+      long gregorianMicros = rebaseInt96(julianMicros, failIfRebase, timeZone);
       long adjTime = DateTimeUtils.convertTz(gregorianMicros, convertTz, UTC);
       values.putLong(offset, adjTime);
     }
@@ -1062,7 +1082,8 @@ public class ParquetVectorUpdaterFactory {
   private static long rebaseTimestamp(
       long julianMicros,
       final boolean failIfRebase,
-      final String format) {
+      final String format,
+      final String timeZone) {
     if (failIfRebase) {
       if (julianMicros < RebaseDateTime.lastSwitchJulianTs()) {
         throw DataSourceUtils.newRebaseExceptionInRead(format);
@@ -1070,16 +1091,22 @@ public class ParquetVectorUpdaterFactory {
         return julianMicros;
       }
     } else {
-      return RebaseDateTime.rebaseJulianToGregorianMicros(julianMicros);
+      return RebaseDateTime.rebaseJulianToGregorianMicros(timeZone, julianMicros);
     }
   }
 
-  private static long rebaseMicros(long julianMicros, final boolean failIfRebase) {
-    return rebaseTimestamp(julianMicros, failIfRebase, "Parquet");
+  private static long rebaseMicros(
+      long julianMicros,
+      final boolean failIfRebase,
+      final String timeZone) {
+    return rebaseTimestamp(julianMicros, failIfRebase, "Parquet", timeZone);
   }
 
-  private static long rebaseInt96(long julianMicros, final boolean failIfRebase) {
-    return rebaseTimestamp(julianMicros, failIfRebase, "Parquet INT96");
+  private static long rebaseInt96(
+      long julianMicros,
+      final boolean failIfRebase,
+      final String timeZone) {
+    return rebaseTimestamp(julianMicros, failIfRebase, "Parquet INT96", timeZone);
   }
 
   private boolean shouldConvertTimestamps() {

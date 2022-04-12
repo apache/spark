@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.command
 import java.util.Locale
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, GlobalTempView, LocalTempView, UnresolvedAttribute, UnresolvedDBObjectName}
+import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, GlobalTempView, LocalTempView, UnresolvedAttribute, UnresolvedDBObjectName, UnresolvedFunc}
 import org.apache.spark.sql.catalyst.catalog.{ArchiveResource, FileResource, FunctionResource, JarResource}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans
@@ -46,7 +46,7 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
   }
 
   private def intercept(sqlCommand: String, messages: String*): Unit =
-    interceptParseException(parser.parsePlan)(sqlCommand, messages: _*)
+    interceptParseException(parser.parsePlan)(sqlCommand, messages: _*)()
 
   private def compareTransformQuery(sql: String, expected: LogicalPlan): Unit = {
     val plan = parser.parsePlan(sql).asInstanceOf[ScriptTransformation].copy(ioschema = null)
@@ -288,12 +288,12 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
     val s = ScriptTransformation("func", Seq.empty, p, null)
 
     compareTransformQuery("select transform(a, b) using 'func' from e where f < 10",
-      s.copy(child = p.copy(child = p.child.where('f < 10)),
-        output = Seq('key.string, 'value.string)))
+      s.copy(child = p.copy(child = p.child.where($"f" < 10)),
+        output = Seq($"key".string, $"value".string)))
     compareTransformQuery("map a, b using 'func' as c, d from e",
-      s.copy(output = Seq('c.string, 'd.string)))
+      s.copy(output = Seq($"c".string, $"d".string)))
     compareTransformQuery("reduce a, b using 'func' as (c int, d decimal(10, 0)) from e",
-      s.copy(output = Seq('c.int, 'd.decimal(10, 0))))
+      s.copy(output = Seq($"c".int, $"d".decimal(10, 0))))
   }
 
   test("use backticks in output of Script Transform") {
@@ -354,9 +354,8 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
       LocalTempView)
     comparePlans(parsed2, expected2)
 
-    // TODO(SPARK-37367): Reenable exception test in DDLParserSuite.create view -- basic
-    // val v3 = "CREATE TEMPORARY VIEW a.b AS SELECT 1"
-    // intercept(v3, "It is not allowed to add database prefix")
+    val v3 = "CREATE TEMPORARY VIEW a.b AS SELECT 1"
+    intercept(v3, "It is not allowed to add database prefix")
   }
 
   test("create temp view - full") {
@@ -435,7 +434,7 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
       CreateFunction(UnresolvedDBObjectName(Seq("a", "b", "c"), false), "fun", Seq(), false, true))
 
     comparePlans(parser.parsePlan("CREATE TEMPORARY FUNCTION a as 'fun'"),
-      CreateFunctionCommand(None, "a", "fun", Seq(), true, false, false))
+      CreateFunctionCommand(Seq("a").asFunctionIdentifier, "fun", Seq(), true, false, false))
 
     comparePlans(parser.parsePlan("CREATE FUNCTION IF NOT EXISTS a.b.c as 'fun'"),
       CreateFunction(UnresolvedDBObjectName(Seq("a", "b", "c"), false), "fun", Seq(), true, false))
@@ -461,6 +460,33 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
 
     intercept("CREATE FUNCTION a as 'fun' USING OTHER 'o'",
       "Operation not allowed: CREATE FUNCTION with resource type 'other'")
+  }
+
+  test("DROP FUNCTION") {
+    def createFuncPlan(name: Seq[String]): UnresolvedFunc = {
+      UnresolvedFunc(name, "DROP FUNCTION", true,
+        Some("Please use fully qualified identifier to drop the persistent function."))
+    }
+    comparePlans(
+      parser.parsePlan("DROP FUNCTION a"),
+      DropFunction(createFuncPlan(Seq("a")), false))
+    comparePlans(
+      parser.parsePlan("DROP FUNCTION a.b.c"),
+      DropFunction(createFuncPlan(Seq("a", "b", "c")), false))
+    comparePlans(
+      parser.parsePlan("DROP TEMPORARY FUNCTION a"),
+      DropFunctionCommand(Seq("a").asFunctionIdentifier, false, true))
+    comparePlans(
+      parser.parsePlan("DROP FUNCTION IF EXISTS a.b.c"),
+      DropFunction(createFuncPlan(Seq("a", "b", "c")), true))
+    comparePlans(
+      parser.parsePlan("DROP TEMPORARY FUNCTION IF EXISTS a"),
+      DropFunctionCommand(Seq("a").asFunctionIdentifier, true, true))
+
+    intercept("DROP TEMPORARY FUNCTION a.b",
+      "DROP TEMPORARY FUNCTION requires a single part name")
+    intercept("DROP TEMPORARY FUNCTION IF EXISTS a.b",
+      "DROP TEMPORARY FUNCTION requires a single part name")
   }
 
   test("SPARK-32374: create temporary view with properties not allowed") {

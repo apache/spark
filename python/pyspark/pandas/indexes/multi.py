@@ -19,7 +19,7 @@ from functools import partial, reduce
 from typing import Any, Callable, Iterator, List, Optional, Tuple, Union, cast, no_type_check
 
 import pandas as pd
-from pandas.api.types import is_hashable, is_list_like
+from pandas.api.types import is_hashable, is_list_like  # type: ignore[attr-defined]
 
 from pyspark.sql import functions as F, Column, Window
 from pyspark.sql.types import DataType
@@ -681,13 +681,13 @@ class MultiIndex(Index):
         # TODO: We might need to handle internal state change.
         # So far, we don't have any functions to change the internal state of MultiIndex except for
         # series-like operations. In that case, it creates new Index object instead of MultiIndex.
-        return super().to_pandas()
+        return cast(pd.MultiIndex, super().to_pandas())
 
     def _to_pandas(self) -> pd.MultiIndex:
         """
-        Same as `to_pandas()`, without issueing the advice log for internal usage.
+        Same as `to_pandas()`, without issuing the advice log for internal usage.
         """
-        return super()._to_pandas()
+        return cast(pd.MultiIndex, super()._to_pandas())
 
     def nunique(self, dropna: bool = True, approx: bool = False, rsd: float = 0.05) -> int:
         raise NotImplementedError("nunique is not defined for MultiIndex")
@@ -892,6 +892,70 @@ class MultiIndex(Index):
             data_fields=[],
         )
         return cast(MultiIndex, DataFrame(internal).index)
+
+    def drop_duplicates(self, keep: Union[bool, str] = "first") -> "MultiIndex":
+        """
+        Return MultiIndex with duplicate values removed.
+
+        Parameters
+        ----------
+        keep : {'first', 'last', ``False``}, default 'first'
+            Method to handle dropping duplicates:
+            - 'first' : Drop duplicates except for the first occurrence.
+            - 'last' : Drop duplicates except for the last occurrence.
+            - ``False`` : Drop all duplicates.
+
+        Returns
+        -------
+        deduplicated : MultiIndex
+
+        See Also
+        --------
+        Series.drop_duplicates : Equivalent method on Series.
+        DataFrame.drop_duplicates : Equivalent method on DataFrame.
+
+        Examples
+        --------
+        Generate a MultiIndex with duplicate values.
+
+        >>> arrays = [[1, 2, 3, 1, 2], ["red", "blue", "black", "red", "blue"]]
+        >>> midx = ps.MultiIndex.from_arrays(arrays, names=("number", "color"))
+        >>> midx
+        MultiIndex([(1,   'red'),
+                    (2,  'blue'),
+                    (3, 'black'),
+                    (1,   'red'),
+                    (2,  'blue')],
+                   names=['number', 'color'])
+
+        >>> midx.drop_duplicates()
+        MultiIndex([(1,   'red'),
+                    (2,  'blue'),
+                    (3, 'black')],
+                   names=['number', 'color'])
+
+        >>> midx.drop_duplicates(keep='first')
+        MultiIndex([(1,   'red'),
+                    (2,  'blue'),
+                    (3, 'black')],
+                   names=['number', 'color'])
+
+        >>> midx.drop_duplicates(keep='last')
+        MultiIndex([(3, 'black'),
+                    (1,   'red'),
+                    (2,  'blue')],
+                   names=['number', 'color'])
+
+        >>> midx.drop_duplicates(keep=False)
+        MultiIndex([(3, 'black')],
+                   names=['number', 'color'])
+        """
+        with ps.option_context("compute.default_index_type", "distributed"):
+            # The attached index caused by `reset_index` below is used for sorting only,
+            # and it will be dropped soon,
+            # so we enforce “distributed” default index type
+            psdf = self.to_frame().reset_index(drop=True)
+        return ps.MultiIndex.from_frame(psdf.drop_duplicates(keep=keep).sort_index())
 
     def argmax(self) -> None:
         raise TypeError("reduction operation 'argmax' not allowed for this dtype")

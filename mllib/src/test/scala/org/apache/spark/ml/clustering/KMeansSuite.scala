@@ -69,6 +69,11 @@ class KMeansSuite extends MLTest with DefaultReadWriteTest with PMMLReadWriteTes
     assert(copiedModel.hasSummary)
   }
 
+  test("KMeans validate input dataset") {
+    testInvalidWeights(new KMeans().setWeightCol("weight").fit(_))
+    testInvalidVectors(new KMeans().fit(_))
+  }
+
   test("set parameters") {
     val kmeans = new KMeans()
       .setK(9)
@@ -186,7 +191,7 @@ class KMeansSuite extends MLTest with DefaultReadWriteTest with PMMLReadWriteTes
     assert(predictionsMap(Vectors.dense(-1.0, 1.0)) ==
       predictionsMap(Vectors.dense(-100.0, 90.0)))
 
-    model.clusterCenters.forall(Vectors.norm(_, 2) == 1.0)
+    assert(model.clusterCenters.forall(Vectors.norm(_, 2) ~== 1.0 absTol 1e-6))
   }
 
   test("KMeans with cosine distance is not supported for 0-length vectors") {
@@ -283,7 +288,7 @@ class KMeansSuite extends MLTest with DefaultReadWriteTest with PMMLReadWriteTes
     assert(predictionsMap1(Vectors.dense(-1.0, 1.0)) ==
       predictionsMap1(Vectors.dense(-100.0, 90.0)))
 
-    model1.clusterCenters.forall(Vectors.norm(_, 2) == 1.0)
+    assert(model1.clusterCenters.forall(Vectors.norm(_, 2) ~== 1.0 absTol 1e-6))
 
     val df2 = spark.createDataFrame(spark.sparkContext.parallelize(Seq(
       (Vectors.dense(1.0, 1.0), 1.0),
@@ -313,7 +318,7 @@ class KMeansSuite extends MLTest with DefaultReadWriteTest with PMMLReadWriteTes
     assert(predictionsMap2(Vectors.dense(-1.0, 1.0)) ==
       predictionsMap2(Vectors.dense(-100.0, 90.0)))
 
-    model2.clusterCenters.forall(Vectors.norm(_, 2) == 1.0)
+    assert(model2.clusterCenters.forall(Vectors.norm(_, 2) ~== 1.0 absTol 1e-6))
 
     // compare if model1 and model2 have the same cluster centers
     assert(model1.clusterCenters.length === model2.clusterCenters.length)
@@ -349,8 +354,6 @@ class KMeansSuite extends MLTest with DefaultReadWriteTest with PMMLReadWriteTes
       predictionsMap1(Vectors.dense(9.0, 0.2)))
     assert(predictionsMap1(Vectors.dense(9.0, 0.2)) ==
       predictionsMap1(Vectors.dense(9.2, 0.0)))
-
-    model1.clusterCenters.forall(Vectors.norm(_, 2) == 1.0)
 
     // center 1:
     // total weights in cluster 1: 2.0 + 2.0 + 2.0 = 6.0
@@ -393,8 +396,6 @@ class KMeansSuite extends MLTest with DefaultReadWriteTest with PMMLReadWriteTes
       predictionsMap2(Vectors.dense(9.0, 0.2)))
     assert(predictionsMap2(Vectors.dense(9.0, 0.2)) ==
       predictionsMap2(Vectors.dense(9.2, 0.0)))
-
-    model2.clusterCenters.forall(Vectors.norm(_, 2) == 1.0)
 
     // center 1:
     // total weights in cluster 1: 2.5 + 1.0 + 2.0 = 5.5
@@ -441,8 +442,6 @@ class KMeansSuite extends MLTest with DefaultReadWriteTest with PMMLReadWriteTes
     assert(predictionsMap1(Vectors.dense(-6.0, -6.0)) ==
       predictionsMap1(Vectors.dense(-10.0, -10.0)))
 
-    model1.clusterCenters.forall(Vectors.norm(_, 2) == 1.0)
-
     // use same weight, should have the same result as no weight
     val df2 = spark.createDataFrame(spark.sparkContext.parallelize(Seq(
       (Vectors.dense(0.1, 0.1), 2.0),
@@ -473,8 +472,6 @@ class KMeansSuite extends MLTest with DefaultReadWriteTest with PMMLReadWriteTes
       predictionsMap2(Vectors.dense(30.1, 20.0)))
     assert(predictionsMap2(Vectors.dense(-6.0, -6.0)) ==
       predictionsMap2(Vectors.dense(-10.0, -10.0)))
-
-    model2.clusterCenters.forall(Vectors.norm(_, 2) == 1.0)
 
     assert(model1.clusterCenters === model2.clusterCenters)
   }

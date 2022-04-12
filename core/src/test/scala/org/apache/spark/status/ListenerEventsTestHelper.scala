@@ -73,7 +73,7 @@ object ListenerEventsTestHelper {
   def createTasks(ids: Seq[Long], execs: Array[String], time: Long): Seq[TaskInfo] = {
     ids.zipWithIndex.map { case (id, idx) =>
       val exec = execs(idx % execs.length)
-      new TaskInfo(id, idx, 1, time, exec, s"$exec.example.com",
+      new TaskInfo(id, idx, 1, idx, time, exec, s"$exec.example.com",
         TaskLocality.PROCESS_LOCAL, idx % 2 == 0)
     }
   }
@@ -84,7 +84,8 @@ object ListenerEventsTestHelper {
 
   def createTaskWithNewAttempt(orig: TaskInfo, time: Long): TaskInfo = {
     // Task reattempts have a different ID, but the same index as the original.
-    new TaskInfo(nextTaskId(), orig.index, orig.attemptNumber + 1, time, orig.executorId,
+    new TaskInfo(
+      nextTaskId(), orig.index, orig.attemptNumber + 1, orig.partitionId, time, orig.executorId,
       s"${orig.executorId}.example.com", TaskLocality.PROCESS_LOCAL, orig.speculative)
   }
 

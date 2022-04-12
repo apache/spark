@@ -66,7 +66,7 @@ import pickle
 pickle_protocol = pickle.HIGHEST_PROTOCOL
 
 from pyspark import cloudpickle
-from pyspark.util import print_exec  # type: ignore
+from pyspark.util import print_exec
 
 
 __all__ = [
@@ -97,6 +97,13 @@ class Serializer:
     def load_stream(self, stream):
         """
         Return an iterator of deserialized objects from the input stream.
+        """
+        raise NotImplementedError
+
+    def dumps(self, obj):
+        """
+        Serialize an object into a byte array.
+        When batching is used, this will be called with an array of objects.
         """
         raise NotImplementedError
 
@@ -357,7 +364,7 @@ if sys.version_info < (3, 8):
     # requires namedtuple hack.
     # The whole hack here should be removed once we drop Python 3.7.
 
-    __cls = {}  # type: ignore
+    __cls = {}
 
     def _restore(name, fields, value):
         """Restore an object of namedtuple"""

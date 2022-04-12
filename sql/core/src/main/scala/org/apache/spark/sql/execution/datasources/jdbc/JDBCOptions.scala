@@ -216,7 +216,7 @@ class JDBCOptions(
   // The principal name of user's keytab file
   val principal = parameters.getOrElse(JDBC_PRINCIPAL, null)
 
-  val tableComment = parameters.getOrElse(JDBC_TABLE_COMMENT, "").toString
+  val tableComment = parameters.getOrElse(JDBC_TABLE_COMMENT, "")
 
   val refreshKrb5Config = parameters.getOrElse(JDBC_REFRESH_KRB5_CONFIG, "false").toBoolean
 

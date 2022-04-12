@@ -22,11 +22,11 @@ import inspect
 import sys
 from typing import Callable, Any, TYPE_CHECKING, Optional, cast, Union
 
-from py4j.java_gateway import JavaObject  # type: ignore[import]
+from py4j.java_gateway import JavaObject
 
 from pyspark import SparkContext
 from pyspark.profiler import Profiler
-from pyspark.rdd import _prepare_for_python_RDD, PythonEvalType  # type: ignore[attr-defined]
+from pyspark.rdd import _prepare_for_python_RDD, PythonEvalType
 from pyspark.sql.column import Column, _to_java_column, _to_seq
 from pyspark.sql.types import (
     StringType,
@@ -48,14 +48,15 @@ def _wrap_function(
 ) -> JavaObject:
     command = (func, returnType)
     pickled_command, broadcast_vars, env, includes = _prepare_for_python_RDD(sc, command)
-    return sc._jvm.PythonFunction(  # type: ignore[attr-defined]
+    assert sc._jvm is not None
+    return sc._jvm.SimplePythonFunction(
         bytearray(pickled_command),
         env,
         includes,
-        sc.pythonExec,  # type: ignore[attr-defined]
-        sc.pythonVer,  # type: ignore[attr-defined]
+        sc.pythonExec,
+        sc.pythonVer,
         broadcast_vars,
-        sc._javaAccumulator,  # type: ignore[attr-defined]
+        sc._javaAccumulator,
     )
 
 
@@ -222,14 +223,15 @@ class UserDefinedFunction:
 
         wrapped_func = _wrap_function(sc, func, self.returnType)
         jdt = spark._jsparkSession.parseDataType(self.returnType.json())
-        judf = sc._jvm.org.apache.spark.sql.execution.python.UserDefinedPythonFunction(  # type: ignore[attr-defined]
+        assert sc._jvm is not None
+        judf = sc._jvm.org.apache.spark.sql.execution.python.UserDefinedPythonFunction(
             self._name, wrapped_func, jdt, self.evalType, self.deterministic
         )
         return judf
 
     def __call__(self, *cols: "ColumnOrName") -> Column:
-        sc = SparkContext._active_spark_context  # type: ignore[attr-defined]
-
+        sc = SparkContext._active_spark_context
+        assert sc is not None
         profiler: Optional[Profiler] = None
         if sc.profiler_collector:
             f = self.func
@@ -503,7 +505,6 @@ class UDFRegistration:
         if returnType is not None:
             if not isinstance(returnType, DataType):
                 returnType = _parse_datatype_string(returnType)
-            returnType = cast(DataType, returnType)
             jdt = self.sparkSession._jsparkSession.parseDataType(returnType.json())
         self.sparkSession._jsparkSession.udf().registerJava(name, javaClassName, jdt)
 

@@ -90,7 +90,7 @@ public class ExpressionImplUtils {
         throw QueryExecutionErrors.aesModeUnsupportedError(mode, padding);
       }
     } catch (GeneralSecurityException e) {
-        throw new RuntimeException(e);
+      throw QueryExecutionErrors.aesCryptoError(e.getMessage());
     }
   }
 }

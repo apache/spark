@@ -23,7 +23,7 @@ import java.nio.charset.StandardCharsets
 import java.nio.file.{Files, Paths}
 
 import scala.collection.mutable.ArrayBuffer
-import scala.io.Source
+import scala.io.{Codec, Source}
 
 import com.google.common.io.ByteStreams
 import org.apache.commons.io.FileUtils
@@ -647,7 +647,7 @@ class SparkSubmitSuite
       runSparkSubmit(args)
       val listStatus = fileSystem.listStatus(testDirPath)
       val logData = EventLogFileReader.openEventLog(listStatus.last.getPath, fileSystem)
-      Source.fromInputStream(logData).getLines().foreach { line =>
+      Source.fromInputStream(logData)(Codec.UTF8).getLines().foreach { line =>
         assert(!line.contains("secret_password"))
       }
     }
@@ -1520,7 +1520,7 @@ class SparkSubmitSuite
 
 object JarCreationTest extends Logging {
   def main(args: Array[String]): Unit = {
-    TestUtils.configTestLog4j("INFO")
+    TestUtils.configTestLog4j2("INFO")
     val conf = new SparkConf()
     val sc = new SparkContext(conf)
     val result = sc.makeRDD(1 to 100, 10).mapPartitions { x =>
@@ -1544,7 +1544,7 @@ object JarCreationTest extends Logging {
 
 object SimpleApplicationTest {
   def main(args: Array[String]): Unit = {
-    TestUtils.configTestLog4j("INFO")
+    TestUtils.configTestLog4j2("INFO")
     val conf = new SparkConf()
     val sc = new SparkContext(conf)
     val configs = Seq("spark.master", "spark.app.name")

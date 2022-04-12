@@ -44,8 +44,8 @@ class OptimizeJsonExprsSuite extends PlanTest with ExpressionEvalHelper {
 
   val schema = StructType.fromDDL("a int, b int")
 
-  private val structAtt = 'struct.struct(schema).notNull
-  private val jsonAttr = 'json.string
+  private val structAtt = $"struct".struct(schema).notNull
+  private val jsonAttr = $"json".string
 
   private val testRelation = LocalRelation(structAtt)
   private val testRelation2 = LocalRelation(jsonAttr)
@@ -54,10 +54,10 @@ class OptimizeJsonExprsSuite extends PlanTest with ExpressionEvalHelper {
     val options = Map.empty[String, String]
 
     val query1 = testRelation
-      .select(JsonToStructs(schema, options, StructsToJson(options, 'struct)).as("struct"))
+      .select(JsonToStructs(schema, options, StructsToJson(options, $"struct")).as("struct"))
     val optimized1 = Optimizer.execute(query1.analyze)
 
-    val expected = testRelation.select('struct.as("struct")).analyze
+    val expected = testRelation.select($"struct".as("struct")).analyze
     comparePlans(optimized1, expected)
 
     val query2 = testRelation
@@ -65,7 +65,7 @@ class OptimizeJsonExprsSuite extends PlanTest with ExpressionEvalHelper {
         JsonToStructs(schema, options,
           StructsToJson(options,
             JsonToStructs(schema, options,
-              StructsToJson(options, 'struct)))).as("struct"))
+              StructsToJson(options, $"struct")))).as("struct"))
     val optimized2 = Optimizer.execute(query2.analyze)
 
     comparePlans(optimized2, expected)
@@ -76,11 +76,11 @@ class OptimizeJsonExprsSuite extends PlanTest with ExpressionEvalHelper {
     val schema = StructType.fromDDL("a int")
 
     val query = testRelation
-      .select(JsonToStructs(schema, options, StructsToJson(options, 'struct)).as("struct"))
+      .select(JsonToStructs(schema, options, StructsToJson(options, $"struct")).as("struct"))
     val optimized = Optimizer.execute(query.analyze)
 
     val expected = testRelation.select(
-      JsonToStructs(schema, options, StructsToJson(options, 'struct)).as("struct")).analyze
+      JsonToStructs(schema, options, StructsToJson(options, $"struct")).as("struct")).analyze
     comparePlans(optimized, expected)
   }
 
@@ -90,11 +90,11 @@ class OptimizeJsonExprsSuite extends PlanTest with ExpressionEvalHelper {
       val schema = StructType.fromDDL("a int, B int")
 
       val query = testRelation
-        .select(JsonToStructs(schema, options, StructsToJson(options, 'struct)).as("struct"))
+        .select(JsonToStructs(schema, options, StructsToJson(options, $"struct")).as("struct"))
       val optimized = Optimizer.execute(query.analyze)
 
       val expected = testRelation.select(
-        JsonToStructs(schema, options, StructsToJson(options, 'struct)).as("struct")).analyze
+        JsonToStructs(schema, options, StructsToJson(options, $"struct")).as("struct")).analyze
       comparePlans(optimized, expected)
     }
   }
@@ -104,17 +104,17 @@ class OptimizeJsonExprsSuite extends PlanTest with ExpressionEvalHelper {
     val nonNullSchema = StructType(
       StructField("a", IntegerType, false) :: StructField("b", IntegerType, false) :: Nil)
 
-    val structAtt = 'struct.struct(nonNullSchema).notNull
+    val structAtt = $"struct".struct(nonNullSchema).notNull
     val testRelationWithNonNullAttr = LocalRelation(structAtt)
 
     val schema = StructType.fromDDL("a int, b int")
 
     val query = testRelationWithNonNullAttr
-      .select(JsonToStructs(schema, options, StructsToJson(options, 'struct)).as("struct"))
+      .select(JsonToStructs(schema, options, StructsToJson(options, $"struct")).as("struct"))
     val optimized = Optimizer.execute(query.analyze)
 
     val expected = testRelationWithNonNullAttr.select(
-      JsonToStructs(schema, options, StructsToJson(options, 'struct)).as("struct")).analyze
+      JsonToStructs(schema, options, StructsToJson(options, $"struct")).as("struct")).analyze
     comparePlans(optimized, expected)
   }
 
@@ -122,11 +122,11 @@ class OptimizeJsonExprsSuite extends PlanTest with ExpressionEvalHelper {
     val options = Map("testOption" -> "test")
 
     val query = testRelation
-      .select(JsonToStructs(schema, options, StructsToJson(options, 'struct)).as("struct"))
+      .select(JsonToStructs(schema, options, StructsToJson(options, $"struct")).as("struct"))
     val optimized = Optimizer.execute(query.analyze)
 
     val expected = testRelation.select(
-      JsonToStructs(schema, options, StructsToJson(options, 'struct)).as("struct")).analyze
+      JsonToStructs(schema, options, StructsToJson(options, $"struct")).as("struct")).analyze
     comparePlans(optimized, expected)
   }
 
@@ -137,19 +137,19 @@ class OptimizeJsonExprsSuite extends PlanTest with ExpressionEvalHelper {
 
     val query1 = testRelation
       .select(JsonToStructs(schema, options,
-        StructsToJson(options, 'struct, Option(PST.getId)), UTC_OPT).as("struct"))
+        StructsToJson(options, $"struct", Option(PST.getId)), UTC_OPT).as("struct"))
     val optimized1 = Optimizer.execute(query1.analyze)
 
     val expected1 = testRelation.select(
       JsonToStructs(schema, options,
-        StructsToJson(options, 'struct, Option(PST.getId)), UTC_OPT).as("struct")).analyze
+        StructsToJson(options, $"struct", Option(PST.getId)), UTC_OPT).as("struct")).analyze
     comparePlans(optimized1, expected1)
 
     val query2 = testRelation
       .select(JsonToStructs(schema, options,
-        StructsToJson(options, 'struct, UTC_OPT), UTC_OPT).as("struct"))
+        StructsToJson(options, $"struct", UTC_OPT), UTC_OPT).as("struct"))
     val optimized2 = Optimizer.execute(query2.analyze)
-    val expected2 = testRelation.select('struct.as("struct")).analyze
+    val expected2 = testRelation.select($"struct".as("struct")).analyze
     comparePlans(optimized2, expected2)
   }
 
@@ -157,21 +157,21 @@ class OptimizeJsonExprsSuite extends PlanTest with ExpressionEvalHelper {
     val options = Map.empty[String, String]
 
     val query1 = testRelation2
-      .select(GetStructField(JsonToStructs(schema, options, 'json), 0))
+      .select(GetStructField(JsonToStructs(schema, options, $"json"), 0))
     val optimized1 = Optimizer.execute(query1.analyze)
 
     val prunedSchema1 = StructType.fromDDL("a int")
     val expected1 = testRelation2
-      .select(GetStructField(JsonToStructs(prunedSchema1, options, 'json), 0)).analyze
+      .select(GetStructField(JsonToStructs(prunedSchema1, options, $"json"), 0)).analyze
     comparePlans(optimized1, expected1)
 
     val query2 = testRelation2
-      .select(GetStructField(JsonToStructs(schema, options, 'json), 1))
+      .select(GetStructField(JsonToStructs(schema, options, $"json"), 1))
     val optimized2 = Optimizer.execute(query2.analyze)
 
     val prunedSchema2 = StructType.fromDDL("b int")
     val expected2 = testRelation2
-      .select(GetStructField(JsonToStructs(prunedSchema2, options, 'json), 0)).analyze
+      .select(GetStructField(JsonToStructs(prunedSchema2, options, $"json"), 0)).analyze
     comparePlans(optimized2, expected2)
   }
 
@@ -182,13 +182,13 @@ class OptimizeJsonExprsSuite extends PlanTest with ExpressionEvalHelper {
 
     val query1 = testRelation2
       .select(GetArrayStructFields(
-        JsonToStructs(schema1, options, 'json), field1, 0, 2, true).as("a"))
+        JsonToStructs(schema1, options, $"json"), field1, 0, 2, true).as("a"))
     val optimized1 = Optimizer.execute(query1.analyze)
 
     val prunedSchema1 = ArrayType(StructType.fromDDL("a int"), containsNull = true)
     val expected1 = testRelation2
       .select(GetArrayStructFields(
-        JsonToStructs(prunedSchema1, options, 'json), field1, 0, 1, true).as("a")).analyze
+        JsonToStructs(prunedSchema1, options, $"json"), field1, 0, 1, true).as("a")).analyze
     comparePlans(optimized1, expected1)
 
     val schema2 = ArrayType(
@@ -198,14 +198,14 @@ class OptimizeJsonExprsSuite extends PlanTest with ExpressionEvalHelper {
     val field2 = schema2.elementType.asInstanceOf[StructType](1)
     val query2 = testRelation2
       .select(GetArrayStructFields(
-        JsonToStructs(schema2, options, 'json), field2, 1, 2, false).as("b"))
+        JsonToStructs(schema2, options, $"json"), field2, 1, 2, false).as("b"))
     val optimized2 = Optimizer.execute(query2.analyze)
 
     val prunedSchema2 = ArrayType(
       StructType(StructField("b", IntegerType, false) :: Nil), containsNull = false)
     val expected2 = testRelation2
       .select(GetArrayStructFields(
-        JsonToStructs(prunedSchema2, options, 'json), field2, 0, 1, false).as("b")).analyze
+        JsonToStructs(prunedSchema2, options, $"json"), field2, 0, 1, false).as("b")).analyze
     comparePlans(optimized2, expected2)
   }
 
@@ -213,7 +213,7 @@ class OptimizeJsonExprsSuite extends PlanTest with ExpressionEvalHelper {
     val options = Map("mode" -> "failfast")
 
     val query1 = testRelation2
-      .select(GetStructField(JsonToStructs(schema, options, 'json), 0))
+      .select(GetStructField(JsonToStructs(schema, options, $"json"), 0))
     val optimized1 = Optimizer.execute(query1.analyze)
 
     comparePlans(optimized1, query1.analyze)
@@ -223,7 +223,7 @@ class OptimizeJsonExprsSuite extends PlanTest with ExpressionEvalHelper {
 
     val query2 = testRelation2
       .select(GetArrayStructFields(
-        JsonToStructs(schema1, options, 'json), field1, 0, 2, true).as("a"))
+        JsonToStructs(schema1, options, $"json"), field1, 0, 2, true).as("a"))
     val optimized2 = Optimizer.execute(query2.analyze)
 
     comparePlans(optimized2, query2.analyze)
@@ -237,7 +237,7 @@ class OptimizeJsonExprsSuite extends PlanTest with ExpressionEvalHelper {
     val nullStruct = namedStruct("a", Literal(null, IntegerType), "b", Literal(null, IntegerType))
 
     val UTC_OPT = Option("UTC")
-    val json: BoundReference = 'json.string.canBeNull.at(0)
+    val json: BoundReference = $"json".string.canBeNull.at(0)
 
     assertEquivalent(
       testRelation2,
@@ -301,7 +301,7 @@ class OptimizeJsonExprsSuite extends PlanTest with ExpressionEvalHelper {
       val options = Map.empty[String, String]
 
       val query = testRelation
-        .select(JsonToStructs(schema, options, StructsToJson(options, 'struct)).as("struct"))
+        .select(JsonToStructs(schema, options, StructsToJson(options, $"struct")).as("struct"))
       val optimized = Optimizer.execute(query.analyze)
 
       comparePlans(optimized, query.analyze)

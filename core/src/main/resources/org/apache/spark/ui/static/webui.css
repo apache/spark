@@ -88,12 +88,14 @@ a:not([href]):hover {
   height: 50px;
   padding: 10px 15px 10px;
   line-height: 2;
+  white-space: nowrap;
 }
 
 .navbar .navbar-nav .nav-item.active .nav-link {
   background-color: #e5e5e5;
   box-shadow: inset 0 3px 8px rgba(0, 0, 0, 0.125);
   color: #555555;
+  white-space: nowrap;
 }
 
 table.sortable thead {

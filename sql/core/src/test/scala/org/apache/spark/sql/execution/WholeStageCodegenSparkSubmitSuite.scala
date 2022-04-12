@@ -71,7 +71,7 @@ object WholeStageCodegenSparkSubmitSuite extends Assertions with Logging {
   var spark: SparkSession = _
 
   def main(args: Array[String]): Unit = {
-    TestUtils.configTestLog4j("INFO")
+    TestUtils.configTestLog4j2("INFO")
 
     spark = SparkSession.builder().getOrCreate()
 
@@ -84,7 +84,7 @@ object WholeStageCodegenSparkSubmitSuite extends Assertions with Logging {
     val df = spark.range(71773).select((col("id") % lit(10)).cast(IntegerType) as "v")
       .groupBy(array(col("v"))).agg(count(col("*")))
     val plan = df.queryExecution.executedPlan
-    assert(plan.find(_.isInstanceOf[WholeStageCodegenExec]).isDefined)
+    assert(plan.exists(_.isInstanceOf[WholeStageCodegenExec]))
 
     val expectedAnswer =
       Row(Array(0), 7178) ::

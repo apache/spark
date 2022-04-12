@@ -60,7 +60,7 @@ from pyspark.sql.pandas.serializers import (
 )
 from pyspark.sql.pandas.types import to_arrow_type
 from pyspark.sql.types import StructType
-from pyspark.util import fail_on_stopiteration, try_simplify_traceback  # type: ignore
+from pyspark.util import fail_on_stopiteration, try_simplify_traceback
 from pyspark import shuffle
 
 pickleSer = CPickleSerializer()
@@ -507,7 +507,8 @@ def read_udfs(pickleSer, infile, eval_type):
             else:
                 return result
 
-    func = lambda _, it: map(mapper, it)
+    def func(_, it):
+        return map(mapper, it)
 
     # profiling is not supported for UDF
     return func, None, ser, ser

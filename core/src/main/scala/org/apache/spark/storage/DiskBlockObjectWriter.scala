@@ -19,6 +19,7 @@ package org.apache.spark.storage
 
 import java.io.{BufferedOutputStream, File, FileOutputStream, IOException, OutputStream}
 import java.nio.channels.{ClosedByInterruptException, FileChannel}
+import java.nio.file.Files
 import java.util.zip.Checksum
 
 import org.apache.spark.errors.SparkCoreErrors
@@ -117,6 +118,11 @@ private[spark] class DiskBlockObjectWriter(
    * And we reset it after every commitAndGet called.
    */
   private var numRecordsWritten = 0
+
+  /**
+   * Keep track the number of written records committed.
+   */
+  private var numRecordsCommitted = 0L
 
   /**
    * Set the checksum that the checksumOutputStream should use
@@ -223,6 +229,7 @@ private[spark] class DiskBlockObjectWriter(
       // In certain compression codecs, more bytes are written after streams are closed
       writeMetrics.incBytesWritten(committedPosition - reportedPosition)
       reportedPosition = committedPosition
+      numRecordsCommitted += numRecordsWritten
       numRecordsWritten = 0
       fileSegment
     } else {
@@ -270,6 +277,25 @@ private[spark] class DiskBlockObjectWriter(
       }
     }
     file
+  }
+
+  /**
+   * Reverts write metrics and delete the file held by current `DiskBlockObjectWriter`.
+   * Callers should invoke this function when there are runtime exceptions in file
+   * writing process and the file is no longer needed.
+   */
+  def closeAndDelete(): Unit = {
+    Utils.tryWithSafeFinally {
+      if (initialized) {
+        writeMetrics.decBytesWritten(reportedPosition)
+        writeMetrics.decRecordsWritten(numRecordsCommitted + numRecordsWritten)
+        closeResources()
+      }
+    } {
+      if (!Files.deleteIfExists(file.toPath)) {
+        logWarning(s"Error deleting $file")
+      }
+    }
   }
 
   /**

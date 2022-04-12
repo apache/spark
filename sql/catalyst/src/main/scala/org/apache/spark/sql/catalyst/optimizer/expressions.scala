@@ -21,7 +21,7 @@ import scala.collection.immutable.HashSet
 import scala.collection.mutable.{ArrayBuffer, Stack}
 
 import org.apache.spark.sql.catalyst.analysis._
-import org.apache.spark.sql.catalyst.expressions.{BinaryExpression, MultiLikeBase, _}
+import org.apache.spark.sql.catalyst.expressions.{MultiLikeBase, _}
 import org.apache.spark.sql.catalyst.expressions.Literal.{FalseLiteral, TrueLiteral}
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.expressions.objects.AssertNotNull
@@ -448,53 +448,6 @@ object BooleanSimplification extends Rule[LogicalPlan] with PredicateHelper {
 
 
 /**
- * Move/Push `Not` operator if it's beneficial.
- */
-object NotPropagation extends Rule[LogicalPlan] {
-  // Given argument x, return true if expression Not(x) can be simplified
-  // E.g. let x == Not(y), then canSimplifyNot(x) == true because Not(x) == Not(Not(y)) == y
-  // For the case of x = EqualTo(a, b), recursively check each child expression
-  // Extra nullable check is required for EqualNullSafe because
-  // Not(EqualNullSafe(e, null)) is different from EqualNullSafe(e, Not(null))
-  private def canSimplifyNot(x: Expression): Boolean = x match {
-    case Literal(_, BooleanType) | Literal(_, NullType) => true
-    case _: Not | _: IsNull | _: IsNotNull | _: And | _: Or => true
-    case _: GreaterThan | _: GreaterThanOrEqual | _: LessThan | _: LessThanOrEqual => true
-    case EqualTo(a, b) if canSimplifyNot(a) || canSimplifyNot(b) => true
-    case EqualNullSafe(a, b)
-      if !a.nullable && !b.nullable && (canSimplifyNot(a) || canSimplifyNot(b)) => true
-    case _ => false
-  }
-
-  def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
-    _.containsPattern(NOT), ruleId) {
-    case q: LogicalPlan => q.transformExpressionsDownWithPruning(_.containsPattern(NOT), ruleId) {
-      // Move `Not` from one side of `EqualTo`/`EqualNullSafe` to the other side if it's beneficial.
-      // E.g. `EqualTo(Not(a), b)` where `b = Not(c)`, it will become
-      // `EqualTo(a, Not(b))` => `EqualTo(a, Not(Not(c)))` => `EqualTo(a, c)`
-      // In addition, `if canSimplifyNot(b)` checks if the optimization can converge
-      // that avoids the situation two conditions are returning to each other.
-      case EqualTo(Not(a), b) if !canSimplifyNot(a) && canSimplifyNot(b) => EqualTo(a, Not(b))
-      case EqualTo(a, Not(b)) if canSimplifyNot(a) && !canSimplifyNot(b) => EqualTo(Not(a), b)
-      case EqualNullSafe(Not(a), b) if !canSimplifyNot(a) && canSimplifyNot(b) =>
-        EqualNullSafe(a, Not(b))
-      case EqualNullSafe(a, Not(b)) if canSimplifyNot(a) && !canSimplifyNot(b) =>
-        EqualNullSafe(Not(a), b)
-
-      // Push `Not` to one side of `EqualTo`/`EqualNullSafe` if it's beneficial.
-      // E.g. Not(EqualTo(x, false)) => EqualTo(x, true)
-      case Not(EqualTo(a, b)) if canSimplifyNot(b) => EqualTo(a, Not(b))
-      case Not(EqualTo(a, b)) if canSimplifyNot(a) => EqualTo(Not(a), b)
-      case Not(EqualNullSafe(a, b)) if !a.nullable && !b.nullable && canSimplifyNot(b) =>
-        EqualNullSafe(a, Not(b))
-      case Not(EqualNullSafe(a, b)) if !a.nullable && !b.nullable && canSimplifyNot(a) =>
-        EqualNullSafe(Not(a), b)
-    }
-  }
-}
-
-
-/**
  * Simplifies binary comparisons with semantically-equal expressions:
  * 1) Replace '<=>' with 'true' literal.
  * 2) Replace '=', '<=', and '>=' with 'true' literal if both operands are non-nullable.
@@ -662,17 +615,6 @@ object PushFoldableIntoBranches extends Rule[LogicalPlan] with PredicateHelper {
     case _ => false
   }
 
-  // Not all BinaryExpression can be pushed into (if / case) branches.
-  private def supportedBinaryExpression(e: BinaryExpression): Boolean = e match {
-    case _: BinaryComparison | _: StringPredicate | _: StringRegexExpression => true
-    case _: BinaryArithmetic => true
-    case _: BinaryMathExpression => true
-    case _: AddMonths | _: DateAdd | _: DateAddInterval | _: DateDiff | _: DateSub |
-         _: DateAddYMInterval | _: TimestampAddYMInterval | _: TimeAdd => true
-    case _: FindInSet | _: RoundBase => true
-    case _ => false
-  }
-
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
     _.containsAnyPattern(CASE_WHEN, IF), ruleId) {
     case q: LogicalPlan => q.transformExpressionsUpWithPruning(
@@ -689,30 +631,26 @@ object PushFoldableIntoBranches extends Rule[LogicalPlan] with PredicateHelper {
           branches.map(e => e.copy(_2 = u.withNewChildren(Array(e._2)))),
           Some(u.withNewChildren(Array(elseValue.getOrElse(Literal(null, c.dataType))))))
 
-      case b @ BinaryExpression(i @ If(_, trueValue, falseValue), right)
-          if supportedBinaryExpression(b) && right.foldable &&
-            atMostOneUnfoldable(Seq(trueValue, falseValue)) =>
+      case SupportedBinaryExpr(b, i @ If(_, trueValue, falseValue), right)
+          if right.foldable && atMostOneUnfoldable(Seq(trueValue, falseValue)) =>
         i.copy(
           trueValue = b.withNewChildren(Array(trueValue, right)),
           falseValue = b.withNewChildren(Array(falseValue, right)))
 
-      case b @ BinaryExpression(left, i @ If(_, trueValue, falseValue))
-          if supportedBinaryExpression(b) && left.foldable &&
-            atMostOneUnfoldable(Seq(trueValue, falseValue)) =>
+      case SupportedBinaryExpr(b, left, i @ If(_, trueValue, falseValue))
+          if left.foldable && atMostOneUnfoldable(Seq(trueValue, falseValue)) =>
         i.copy(
           trueValue = b.withNewChildren(Array(left, trueValue)),
           falseValue = b.withNewChildren(Array(left, falseValue)))
 
-      case b @ BinaryExpression(c @ CaseWhen(branches, elseValue), right)
-          if supportedBinaryExpression(b) && right.foldable &&
-            atMostOneUnfoldable(branches.map(_._2) ++ elseValue) =>
+      case SupportedBinaryExpr(b, c @ CaseWhen(branches, elseValue), right)
+          if right.foldable && atMostOneUnfoldable(branches.map(_._2) ++ elseValue) =>
         c.copy(
           branches.map(e => e.copy(_2 = b.withNewChildren(Array(e._2, right)))),
           Some(b.withNewChildren(Array(elseValue.getOrElse(Literal(null, c.dataType)), right))))
 
-      case b @ BinaryExpression(left, c @ CaseWhen(branches, elseValue))
-          if supportedBinaryExpression(b) && left.foldable &&
-            atMostOneUnfoldable(branches.map(_._2) ++ elseValue) =>
+      case SupportedBinaryExpr(b, left, c @ CaseWhen(branches, elseValue))
+          if left.foldable && atMostOneUnfoldable(branches.map(_._2) ++ elseValue) =>
         c.copy(
           branches.map(e => e.copy(_2 = b.withNewChildren(Array(left, e._2)))),
           Some(b.withNewChildren(Array(left, elseValue.getOrElse(Literal(null, c.dataType))))))
@@ -720,6 +658,21 @@ object PushFoldableIntoBranches extends Rule[LogicalPlan] with PredicateHelper {
   }
 }
 
+object SupportedBinaryExpr {
+  def unapply(expr: Expression): Option[(Expression, Expression, Expression)] = expr match {
+    case _: BinaryComparison | _: StringPredicate | _: StringRegexExpression =>
+      Some(expr, expr.children.head, expr.children.last)
+    case _: BinaryArithmetic => Some(expr, expr.children.head, expr.children.last)
+    case _: BinaryMathExpression => Some(expr, expr.children.head, expr.children.last)
+    case _: AddMonths | _: DateAdd | _: DateAddInterval | _: DateDiff | _: DateSub |
+         _: DateAddYMInterval | _: TimestampAddYMInterval | _: TimeAdd =>
+      Some(expr, expr.children.head, expr.children.last)
+    case _: FindInSet | _: RoundBase => Some(expr, expr.children.head, expr.children.last)
+    case BinaryPredicate(expr) =>
+      Some(expr, expr.arguments.head, expr.arguments.last)
+    case _ => None
+  }
+}
 
 /**
  * Simplifies LIKE expressions that do not need full regular expressions to evaluate the condition.
@@ -1023,6 +976,7 @@ object FoldablePropagation extends Rule[LogicalPlan] {
     case _: AppendColumnsWithObject => true
     case _: RepartitionByExpression => true
     case _: Repartition => true
+    case _: RebalancePartitions => true
     case _: Sort => true
     case _: TypedFilter => true
     case _ => false
@@ -1037,12 +991,24 @@ object SimplifyCasts extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformAllExpressionsWithPruning(
     _.containsPattern(CAST), ruleId) {
     case Cast(e, dataType, _, _) if e.dataType == dataType => e
+    case c @ Cast(Cast(e, dt1: NumericType, _, _), dt2: NumericType, _, _)
+        if isWiderCast(e.dataType, dt1) && isWiderCast(dt1, dt2) =>
+      c.copy(child = e)
     case c @ Cast(e, dataType, _, _) => (e.dataType, dataType) match {
       case (ArrayType(from, false), ArrayType(to, true)) if from == to => e
       case (MapType(fromKey, fromValue, false), MapType(toKey, toValue, true))
         if fromKey == toKey && fromValue == toValue => e
       case _ => c
       }
+  }
+
+  // Returns whether the from DataType can be safely casted to the to DataType without losing
+  // any precision or range.
+  private def isWiderCast(from: DataType, to: NumericType): Boolean = (from, to) match {
+    case (from: NumericType, to: DecimalType) if to.isWiderThan(from) => true
+    case (from: DecimalType, to: NumericType) if from.isTighterThan(to) => true
+    case (from: IntegralType, to: IntegralType) => Cast.canUpCast(from, to)
+    case _ => from == to
   }
 }
 

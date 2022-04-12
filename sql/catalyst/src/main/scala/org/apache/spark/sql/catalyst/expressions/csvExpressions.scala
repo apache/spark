@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.csv._
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.catalyst.util._
-import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -91,7 +91,7 @@ case class CsvToStructs(
       assert(!rows.hasNext)
       result
     } else {
-      throw QueryExecutionErrors.rowFromCSVParserNotExpectedError
+      throw new IllegalStateException("Expected one row from CSV parser.")
     }
   }
 
@@ -153,7 +153,7 @@ case class CsvToStructs(
   examples = """
     Examples:
       > SELECT _FUNC_('1,abc');
-       STRUCT<`_c0`: INT, `_c1`: STRING>
+       STRUCT<_c0: INT, _c1: STRING>
   """,
   since = "3.0.0",
   group = "csv_funcs")
@@ -247,7 +247,7 @@ case class StructsToCsv(
   lazy val inputSchema: StructType = child.dataType match {
     case st: StructType => st
     case other =>
-      throw QueryExecutionErrors.inputTypeUnsupportedError(other)
+      throw new IllegalArgumentException(s"Unsupported input type ${other.catalogString}")
   }
 
   @transient

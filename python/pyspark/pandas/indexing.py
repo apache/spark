@@ -24,9 +24,9 @@ from functools import reduce
 from typing import Any, Optional, List, Tuple, TYPE_CHECKING, Union, cast, Sized
 
 import pandas as pd
-from pandas.api.types import is_list_like
+from pandas.api.types import is_list_like  # type: ignore[attr-defined]
 from pyspark.sql import functions as F, Column
-from pyspark.sql.types import BooleanType, LongType
+from pyspark.sql.types import BooleanType, LongType, DataType
 from pyspark.sql.utils import AnalysisException
 import numpy as np
 
@@ -172,7 +172,7 @@ class AtIndexer(IndexerLike):
         if len(pdf) < 1:
             raise KeyError(name_like_string(row_sel))
 
-        values = cast(pd.DataFrame, pdf).iloc[:, 0].values
+        values = pdf.iloc[:, 0].values
         return (
             values if (len(row_sel) < self._internal.index_level or len(values) > 1) else values[0]
         )
@@ -535,7 +535,7 @@ class LocIndexerLike(IndexerLike, metaclass=ABCMeta):
         except AnalysisException:
             raise KeyError(
                 "[{}] don't exist in columns".format(
-                    [col._jc.toString() for col in data_spark_columns]  # type: ignore[operator]
+                    [col._jc.toString() for col in data_spark_columns]
                 )
             )
 
@@ -1077,8 +1077,12 @@ class LocIndexer(LocIndexerLike):
 
             return reduce(lambda x, y: x & y, conds), None, None
         else:
+            from pyspark.sql.types import StructType
+
             index = self._psdf_or_psser.index
-            index_data_type = [f.dataType for f in index.to_series().spark.data_type]
+            index_data_type = [  # type: ignore[assignment]
+                f.dataType for f in cast(StructType, index.to_series().spark.data_type)
+            ]
 
             start = rows_sel.start
             if start is not None:
@@ -1110,7 +1114,11 @@ class LocIndexer(LocIndexerLike):
             if start is not None:
                 cond = SF.lit(True)
                 for scol, value, dt in list(
-                    zip(self._internal.index_spark_columns, start, index_data_type)
+                    zip(
+                        self._internal.index_spark_columns,
+                        cast(Tuple[int, ...], start),
+                        cast(List[DataType], index_data_type),
+                    )
                 )[::-1]:
                     compare = MultiIndex._comparator_for_monotonic_increasing(dt)
                     cond = F.when(scol.eqNullSafe(SF.lit(value).cast(dt)), cond).otherwise(
@@ -1120,7 +1128,11 @@ class LocIndexer(LocIndexerLike):
             if stop is not None:
                 cond = SF.lit(True)
                 for scol, value, dt in list(
-                    zip(self._internal.index_spark_columns, stop, index_data_type)
+                    zip(
+                        self._internal.index_spark_columns,
+                        cast(Tuple[int, ...], stop),
+                        cast(List[DataType], index_data_type),
+                    )
                 )[::-1]:
                     compare = MultiIndex._comparator_for_monotonic_increasing(dt)
                     cond = F.when(scol.eqNullSafe(SF.lit(value).cast(dt)), cond).otherwise(
@@ -1783,7 +1795,7 @@ class iLocIndexer(LocIndexerLike):
             )
 
     def __setitem__(self, key: Any, value: Any) -> None:
-        if is_list_like(value) and not isinstance(value, Column):
+        if not isinstance(value, Column) and is_list_like(value):
             iloc_item = self[key]
             if not is_list_like(key) or not is_list_like(iloc_item):
                 raise ValueError("setting an array element with a sequence.")

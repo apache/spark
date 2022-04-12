@@ -509,7 +509,8 @@ private[spark] class TaskSetManager(
     // Do various bookkeeping
     copiesRunning(index) += 1
     val attemptNum = taskAttempts(index).size
-    val info = new TaskInfo(taskId, index, attemptNum, launchTime,
+    val info = new TaskInfo(
+      taskId, index, attemptNum, task.partitionId, launchTime,
       execId, host, taskLocality, speculative)
     taskInfos(taskId) = info
     taskAttempts(index) = info :: taskAttempts(index)
@@ -820,6 +821,7 @@ private[spark] class TaskSetManager(
         s"on ${info.host} (executor ${info.executorId}) ($tasksSuccessful/$numTasks)")
       // Mark successful and stop if all the tasks have succeeded.
       successful(index) = true
+      numFailures(index) = 0
       if (tasksSuccessful == numTasks) {
         isZombie = true
       }
@@ -843,6 +845,7 @@ private[spark] class TaskSetManager(
       if (!successful(index)) {
         tasksSuccessful += 1
         successful(index) = true
+        numFailures(index) = 0
         if (tasksSuccessful == numTasks) {
           isZombie = true
         }

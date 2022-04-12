@@ -170,7 +170,7 @@ class SparkSessionExtensionSuite extends SparkFunSuite {
         MyColumnarRule(MyNewQueryStageRule(), MyNewQueryStageRule()))
     }
     withSession(extensions) { session =>
-      session.sessionState.conf.setConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED, true)
+      session.conf.set(SQLConf.ADAPTIVE_EXECUTION_ENABLED, true)
       assert(session.sessionState.queryStagePrepRules.contains(MyQueryStagePrepRule()))
       assert(session.sessionState.columnarRules.contains(
         MyColumnarRule(MyNewQueryStageRule(), MyNewQueryStageRule())))
@@ -209,7 +209,7 @@ class SparkSessionExtensionSuite extends SparkFunSuite {
         MyColumnarRule(PreRuleReplaceAddWithBrokenVersion(), MyPostRule()))
     }
     withSession(extensions) { session =>
-      session.sessionState.conf.setConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED, enableAQE)
+      session.conf.set(SQLConf.ADAPTIVE_EXECUTION_ENABLED, enableAQE)
       assert(session.sessionState.columnarRules.contains(
         MyColumnarRule(PreRuleReplaceAddWithBrokenVersion(), MyPostRule())))
       import session.sqlContext.implicits._
@@ -725,37 +725,32 @@ class BrokenColumnarAdd(
       lhs = left.columnarEval(batch)
       rhs = right.columnarEval(batch)
 
-      if (lhs == null || rhs == null) {
-        ret = null
-      } else if (lhs.isInstanceOf[ColumnVector] && rhs.isInstanceOf[ColumnVector]) {
-        val l = lhs.asInstanceOf[ColumnVector]
-        val r = rhs.asInstanceOf[ColumnVector]
-        val result = new OnHeapColumnVector(batch.numRows(), dataType)
-        ret = result
+      (lhs, rhs) match {
+        case (null, null) =>
+          ret = null
+        case (l: ColumnVector, r: ColumnVector) =>
+          val result = new OnHeapColumnVector(batch.numRows(), dataType)
+          ret = result
 
-        for (i <- 0 until batch.numRows()) {
-          result.appendLong(l.getLong(i) + r.getLong(i) + 1) // BUG to show we replaced Add
-        }
-      } else if (rhs.isInstanceOf[ColumnVector]) {
-        val l = lhs.asInstanceOf[Long]
-        val r = rhs.asInstanceOf[ColumnVector]
-        val result = new OnHeapColumnVector(batch.numRows(), dataType)
-        ret = result
+          for (i <- 0 until batch.numRows()) {
+            result.appendLong(l.getLong(i) + r.getLong(i) + 1) // BUG to show we replaced Add
+          }
+        case (l: Long, r: ColumnVector) =>
+          val result = new OnHeapColumnVector(batch.numRows(), dataType)
+          ret = result
 
-        for (i <- 0 until batch.numRows()) {
-          result.appendLong(l + r.getLong(i) + 1) // BUG to show we replaced Add
-        }
-      } else if (lhs.isInstanceOf[ColumnVector]) {
-        val l = lhs.asInstanceOf[ColumnVector]
-        val r = rhs.asInstanceOf[Long]
-        val result = new OnHeapColumnVector(batch.numRows(), dataType)
-        ret = result
+          for (i <- 0 until batch.numRows()) {
+            result.appendLong(l + r.getLong(i) + 1) // BUG to show we replaced Add
+          }
+        case (l: ColumnVector, r: Long) =>
+          val result = new OnHeapColumnVector(batch.numRows(), dataType)
+          ret = result
 
-        for (i <- 0 until batch.numRows()) {
-          result.appendLong(l.getLong(i) + r + 1) // BUG to show we replaced Add
-        }
-      } else {
-        ret = nullSafeEval(lhs, rhs)
+          for (i <- 0 until batch.numRows()) {
+            result.appendLong(l.getLong(i) + r + 1) // BUG to show we replaced Add
+          }
+        case  (l, r) =>
+          ret = nullSafeEval(l, r)
       }
     } finally {
       if (lhs != null && lhs.isInstanceOf[ColumnVector]) {

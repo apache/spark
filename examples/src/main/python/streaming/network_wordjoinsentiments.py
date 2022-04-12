@@ -34,14 +34,16 @@ import sys
 from typing import Tuple
 
 from pyspark import SparkContext
+from pyspark.rdd import RDD
 from pyspark.streaming import DStream, StreamingContext
 
 
-def print_happiest_words(rdd):
+def print_happiest_words(rdd: RDD[Tuple[float, str]]) -> None:
     top_list = rdd.take(5)
     print("Happiest topics in the last 5 seconds (%d total):" % rdd.count())
     for tuple in top_list:
         print("%s (%d happiness)" % (tuple[1], tuple[0]))
+
 
 if __name__ == "__main__":
     if len(sys.argv) != 3:

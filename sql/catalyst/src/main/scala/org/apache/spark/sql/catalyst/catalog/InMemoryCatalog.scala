@@ -52,7 +52,7 @@ class InMemoryCatalog(
   import CatalogTypes.TablePartitionSpec
 
   private class TableDesc(var table: CatalogTable) {
-    val partitions = new mutable.HashMap[TablePartitionSpec, CatalogTablePartition]
+    var partitions = new mutable.HashMap[TablePartitionSpec, CatalogTablePartition]
   }
 
   private class DatabaseDesc(var db: CatalogDatabase) {
@@ -139,11 +139,8 @@ class InMemoryCatalog(
     if (catalog.contains(db)) {
       if (!cascade) {
         // If cascade is false, make sure the database is empty.
-        if (catalog(db).tables.nonEmpty) {
-          throw QueryCompilationErrors.databaseNotEmptyError(db, "tables")
-        }
-        if (catalog(db).functions.nonEmpty) {
-          throw QueryCompilationErrors.databaseNotEmptyError(db, "functions")
+        if (catalog(db).tables.nonEmpty || catalog(db).functions.nonEmpty) {
+          throw QueryCompilationErrors.cannotDropNonemptyDatabaseError(db)
         }
       }
       // Remove the database.
@@ -301,8 +298,17 @@ class InMemoryCatalog(
             oldName, newName, oldDir, e)
       }
       oldDesc.table = oldDesc.table.withNewStorage(locationUri = Some(newDir.toUri))
-    }
 
+      val newPartitions = oldDesc.partitions.map { case (spec, partition) =>
+        val storage = partition.storage
+        val newLocationUri = storage.locationUri.map { uri =>
+          new Path(uri.toString.replace(oldDir.toString, newDir.toString)).toUri
+        }
+        val newPartition = partition.copy(storage = storage.copy(locationUri = newLocationUri))
+        (spec, newPartition)
+      }
+      oldDesc.partitions = newPartitions
+    }
     catalog(db).tables.put(newName, oldDesc)
     catalog(db).tables.remove(oldName)
   }

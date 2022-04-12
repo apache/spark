@@ -30,7 +30,7 @@ import scala.collection.mutable
 import com.fasterxml.jackson.annotation.JsonInclude.Include
 import com.fasterxml.jackson.databind.{DeserializationFeature, ObjectMapper}
 import com.fasterxml.jackson.databind.annotation.JsonDeserialize
-import com.fasterxml.jackson.module.scala.{DefaultScalaModule, ScalaObjectMapper}
+import com.fasterxml.jackson.module.scala.{ClassTagExtensions, DefaultScalaModule}
 import org.apache.commons.io.{FilenameUtils, IOUtils}
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{Path, PathFilter}
@@ -572,7 +572,7 @@ object RocksDBCheckpointMetadata {
 
   /** Used to convert between classes and JSON. */
   lazy val mapper = {
-    val _mapper = new ObjectMapper with ScalaObjectMapper
+    val _mapper = new ObjectMapper with ClassTagExtensions
     _mapper.setSerializationInclusion(Include.NON_ABSENT)
     _mapper.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false)
     _mapper.registerModule(DefaultScalaModule)

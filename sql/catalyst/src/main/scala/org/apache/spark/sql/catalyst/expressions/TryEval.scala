@@ -75,19 +75,17 @@ case class TryEval(child: Expression) extends UnaryExpression with NullIntoleran
   since = "3.2.0",
   group = "math_funcs")
 // scalastyle:on line.size.limit
-case class TryAdd(left: Expression, right: Expression, child: Expression)
-    extends RuntimeReplaceable {
+case class TryAdd(left: Expression, right: Expression, replacement: Expression)
+    extends RuntimeReplaceable with InheritAnalysisRules {
   def this(left: Expression, right: Expression) =
     this(left, right, TryEval(Add(left, right, failOnError = true)))
 
-  override def flatArguments: Iterator[Any] = Iterator(left, right)
-
-  override def exprsReplaced: Seq[Expression] = Seq(left, right)
-
   override def prettyName: String = "try_add"
 
+  override def parameters: Seq[Expression] = Seq(left, right)
+
   override protected def withNewChildInternal(newChild: Expression): Expression =
-    this.copy(child = newChild)
+    this.copy(replacement = newChild)
 }
 
 // scalastyle:off line.size.limit
@@ -110,17 +108,111 @@ case class TryAdd(left: Expression, right: Expression, child: Expression)
   since = "3.2.0",
   group = "math_funcs")
 // scalastyle:on line.size.limit
-case class TryDivide(left: Expression, right: Expression, child: Expression)
-    extends RuntimeReplaceable {
+case class TryDivide(left: Expression, right: Expression, replacement: Expression)
+  extends RuntimeReplaceable with InheritAnalysisRules {
   def this(left: Expression, right: Expression) =
     this(left, right, TryEval(Divide(left, right, failOnError = true)))
 
-  override def flatArguments: Iterator[Any] = Iterator(left, right)
-
-  override def exprsReplaced: Seq[Expression] = Seq(left, right)
-
   override def prettyName: String = "try_divide"
 
+  override def parameters: Seq[Expression] = Seq(left, right)
+
+  override protected def withNewChildInternal(newChild: Expression): Expression = {
+    copy(replacement = newChild)
+  }
+}
+
+@ExpressionDescription(
+  usage = "_FUNC_(expr1, expr2) - Returns `expr1`-`expr2` and the result is null on overflow. " +
+    "The acceptable input types are the same with the `-` operator.",
+  examples = """
+    Examples:
+      > SELECT _FUNC_(2, 1);
+       1
+      > SELECT _FUNC_(-2147483648, 1);
+       NULL
+      > SELECT _FUNC_(date'2021-01-02', 1);
+       2021-01-01
+      > SELECT _FUNC_(date'2021-01-01', interval 1 year);
+       2020-01-01
+      > SELECT _FUNC_(timestamp'2021-01-02 00:00:00', interval 1 day);
+       2021-01-01 00:00:00
+      > SELECT _FUNC_(interval 2 year, interval 1 year);
+       1-0
+  """,
+  since = "3.3.0",
+  group = "math_funcs")
+case class TrySubtract(left: Expression, right: Expression, replacement: Expression)
+  extends RuntimeReplaceable with InheritAnalysisRules {
+  def this(left: Expression, right: Expression) =
+    this(left, right, TryEval(Subtract(left, right, failOnError = true)))
+
+  override def prettyName: String = "try_subtract"
+
+  override def parameters: Seq[Expression] = Seq(left, right)
+
   override protected def withNewChildInternal(newChild: Expression): Expression =
-    this.copy(child = newChild)
+    this.copy(replacement = newChild)
+}
+
+@ExpressionDescription(
+  usage = "_FUNC_(expr1, expr2) - Returns `expr1`*`expr2` and the result is null on overflow. " +
+    "The acceptable input types are the same with the `*` operator.",
+  examples = """
+    Examples:
+      > SELECT _FUNC_(2, 3);
+       6
+      > SELECT _FUNC_(-2147483648, 10);
+       NULL
+      > SELECT _FUNC_(interval 2 year, 3);
+       6-0
+  """,
+  since = "3.3.0",
+  group = "math_funcs")
+case class TryMultiply(left: Expression, right: Expression, replacement: Expression)
+  extends RuntimeReplaceable with InheritAnalysisRules {
+  def this(left: Expression, right: Expression) =
+    this(left, right, TryEval(Multiply(left, right, failOnError = true)))
+
+  override def prettyName: String = "try_multiply"
+
+  override def parameters: Seq[Expression] = Seq(left, right)
+
+  override protected def withNewChildInternal(newChild: Expression): Expression =
+    this.copy(replacement = newChild)
+}
+
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = "_FUNC_(str[, fmt]) - This is a special version of `to_binary` that performs the same operation, but returns a NULL value instead of raising an error if the conversion cannot be performed.",
+  examples = """
+    Examples:
+      > SELECT _FUNC_('abc', 'utf-8');
+       abc
+      > select _FUNC_('a!', 'base64');
+       NULL
+      > select _FUNC_('abc', 'invalidFormat');
+       NULL
+  """,
+  since = "3.3.0",
+  group = "string_funcs")
+// scalastyle:on line.size.limit
+case class TryToBinary(
+    expr: Expression,
+    format: Option[Expression],
+    replacement: Expression) extends RuntimeReplaceable
+  with InheritAnalysisRules {
+  def this(expr: Expression) =
+    this(expr, None, TryEval(ToBinary(expr, None, nullOnInvalidFormat = true)))
+
+  def this(expr: Expression, formatExpression: Expression) =
+    this(expr, Some(formatExpression),
+      TryEval(ToBinary(expr, Some(formatExpression), nullOnInvalidFormat = true)))
+
+  override def prettyName: String = "try_to_binary"
+
+  override def parameters: Seq[Expression] = expr +: format.toSeq
+
+  override protected def withNewChildInternal(newChild: Expression): Expression =
+    this.copy(replacement = newChild)
 }

@@ -105,7 +105,7 @@ class OrcDeserializer(
       case IntegerType | _: YearMonthIntervalType => (ordinal, value) =>
         updater.setInt(ordinal, value.asInstanceOf[IntWritable].get)
 
-      case LongType | _: DayTimeIntervalType => (ordinal, value) =>
+      case LongType | _: DayTimeIntervalType | _: TimestampNTZType => (ordinal, value) =>
         updater.setLong(ordinal, value.asInstanceOf[LongWritable].get)
 
       case FloatType => (ordinal, value) =>
@@ -129,34 +129,43 @@ class OrcDeserializer(
       case TimestampType => (ordinal, value) =>
         updater.setLong(ordinal, DateTimeUtils.fromJavaTimestamp(value.asInstanceOf[OrcTimestamp]))
 
-      case TimestampNTZType => (ordinal, value) =>
-        updater.setLong(ordinal, OrcUtils.fromOrcNTZ(value.asInstanceOf[OrcTimestamp]))
-
       case DecimalType.Fixed(precision, scale) => (ordinal, value) =>
         val v = OrcShimUtils.getDecimal(value)
         v.changePrecision(precision, scale)
         updater.set(ordinal, v)
 
-      case st: StructType => (ordinal, value) =>
+      case st: StructType =>
         val result = new SpecificInternalRow(st)
         val fieldUpdater = new RowUpdater(result)
         val fieldConverters = st.map(_.dataType).map { dt =>
           newWriter(dt, fieldUpdater)
         }.toArray
-        val orcStruct = value.asInstanceOf[OrcStruct]
 
-        var i = 0
-        while (i < st.length) {
-          val value = orcStruct.getFieldValue(i)
-          if (value == null) {
-            result.setNullAt(i)
-          } else {
-            fieldConverters(i)(i, value)
-          }
-          i += 1
+        val containerUpdater = updater match {
+          case r: RowUpdater => r
+          case _ =>
+            // If the struct is contained by an array or map, we cannot reuse the same result row.
+            // We must copy the result row before setting it into the array or map
+            new CatalystDataUpdater {
+              override def set(ordinal: Int, value: Any) = {
+                updater.set(ordinal, value.asInstanceOf[SpecificInternalRow].copy())
+              }
+            }
         }
 
-        updater.set(ordinal, result)
+        (ordinal, value) =>
+          val orcStruct = value.asInstanceOf[OrcStruct]
+          var i = 0
+          while (i < st.length) {
+            val value = orcStruct.getFieldValue(i)
+            if (value == null) {
+              result.setNullAt(i)
+            } else {
+              fieldConverters(i)(i, value)
+            }
+            i += 1
+          }
+          containerUpdater.set(ordinal, result)
 
       case ArrayType(elementType, _) => (ordinal, value) =>
         val orcArray = value.asInstanceOf[OrcList[WritableComparable[_]]]

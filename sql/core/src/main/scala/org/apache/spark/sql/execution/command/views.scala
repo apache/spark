@@ -123,7 +123,7 @@ case class CreateViewCommand(
         referredTempFunctions)
       catalog.createTempView(name.table, tableDefinition, overrideIfExists = replace)
     } else if (viewType == GlobalTempView) {
-      val db = sparkSession.sessionState.conf.getConf(StaticSQLConf.GLOBAL_TEMP_DATABASE)
+      val db = sparkSession.conf.get(StaticSQLConf.GLOBAL_TEMP_DATABASE)
       val viewIdent = TableIdentifier(name.table, Option(db))
       val aliasedPlan = aliasPlan(sparkSession, analyzedPlan)
       val tableDefinition = createTemporaryViewRelation(
@@ -612,12 +612,17 @@ object ViewHelper extends SQLConfHelper with Logging {
     val uncache = getRawTempView(name.table).map { r =>
       needsToUncache(r, aliasedPlan)
     }.getOrElse(false)
+    val storeAnalyzedPlanForView = conf.storeAnalyzedPlanForView || originalText.isEmpty
     if (replace && uncache) {
       logDebug(s"Try to uncache ${name.quotedString} before replacing.")
-      checkCyclicViewReference(analyzedPlan, Seq(name), name)
+      if (!storeAnalyzedPlanForView) {
+        // Skip cyclic check because when stored analyzed plan for view, the depended
+        // view is already converted to the underlying tables. So no cyclic views.
+        checkCyclicViewReference(analyzedPlan, Seq(name), name)
+      }
       CommandUtils.uncacheTableOrView(session, name.quotedString)
     }
-    if (!conf.storeAnalyzedPlanForView && originalText.nonEmpty) {
+    if (!storeAnalyzedPlanForView) {
       TemporaryViewRelation(
         prepareTemporaryView(
           name,

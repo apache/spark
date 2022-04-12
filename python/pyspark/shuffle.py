@@ -33,7 +33,7 @@ from pyspark.serializers import (
     CompressedSerializer,
     AutoBatchedSerializer,
 )
-from pyspark.util import fail_on_stopiteration  # type: ignore
+from pyspark.util import fail_on_stopiteration
 
 
 try:
@@ -51,7 +51,6 @@ try:
         else:
             info = process.get_memory_info()
         return info.rss >> 20
-
 
 except ImportError:
 
