@@ -493,7 +493,8 @@ class ExecutorMonitorSuite extends SparkFunSuite {
       speculative: Boolean = false,
       duration: Long = -1L): TaskInfo = {
     val start = if (duration > 0) clock.getTimeMillis() - duration else clock.getTimeMillis()
-    val task = new TaskInfo(id, id, 1, start, execId, "foo.example.com",
+    val task = new TaskInfo(
+      id, id, 1, id, start, execId, "foo.example.com",
       TaskLocality.PROCESS_LOCAL, speculative)
     if (duration > 0) {
       task.markFinished(TaskState.FINISHED, math.max(1, clock.getTimeMillis()))

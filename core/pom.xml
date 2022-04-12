@@ -28,7 +28,7 @@
   <artifactId>spark-core_2.12</artifactId>
   <packaging>jar</packaging>
   <name>Spark Project Core</name>
-  <url>http://spark.apache.org/</url>
+  <url>https://spark.apache.org/</url>
 
   <properties>
     <sbt.project.name>core</sbt.project.name>
@@ -191,6 +191,10 @@
     <dependency>
       <groupId>commons-io</groupId>
       <artifactId>commons-io</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>commons-collections</groupId>
+      <artifactId>commons-collections</artifactId>
     </dependency>
     <dependency>
       <groupId>org.apache.commons</groupId>

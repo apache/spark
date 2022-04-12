@@ -1808,7 +1808,9 @@ case class ParseUrl(children: Seq[Expression], failOnError: Boolean = SQLConf.ge
 case class FormatString(children: Expression*) extends Expression with ImplicitCastInputTypes {
 
   require(children.nonEmpty, s"$prettyName() should take at least 1 argument")
-  checkArgumentIndexNotZero(children(0))
+  if (!SQLConf.get.getConf(SQLConf.ALLOW_ZERO_INDEX_IN_FORMAT_STRING)) {
+    checkArgumentIndexNotZero(children(0))
+  }
 
 
   override def foldable: Boolean = children.forall(_.foldable)
@@ -2638,7 +2640,10 @@ case class Encode(value: Expression, charset: Expression)
   since = "3.3.0",
   group = "string_funcs")
 // scalastyle:on line.size.limit
-case class ToBinary(expr: Expression, format: Option[Expression]) extends RuntimeReplaceable
+case class ToBinary(
+    expr: Expression,
+    format: Option[Expression],
+    nullOnInvalidFormat: Boolean = false) extends RuntimeReplaceable
   with ImplicitCastInputTypes {
 
   override lazy val replacement: Expression = format.map { f =>
@@ -2651,6 +2656,7 @@ case class ToBinary(expr: Expression, format: Option[Expression]) extends Runtim
         case "hex" => Unhex(expr)
         case "utf-8" => Encode(expr, Literal("UTF-8"))
         case "base64" => UnBase64(expr)
+        case _ if nullOnInvalidFormat => Literal(null, BinaryType)
         case other => throw QueryCompilationErrors.invalidStringLiteralParameter(
           "to_binary", "format", other,
           Some("The value has to be a case-insensitive string literal of " +
@@ -2659,16 +2665,18 @@ case class ToBinary(expr: Expression, format: Option[Expression]) extends Runtim
     }
   }.getOrElse(Unhex(expr))
 
-  def this(expr: Expression) = this(expr, None)
+  def this(expr: Expression) = this(expr, None, false)
 
   def this(expr: Expression, format: Expression) = this(expr, Some({
-    // We perform this check in the constructor to make it eager and not go through type coercion.
-    if (format.foldable && (format.dataType == StringType || format.dataType == NullType)) {
-      format
-    } else {
-      throw QueryCompilationErrors.requireLiteralParameter("to_binary", "format", "string")
-    }
-  }))
+      // We perform this check in the constructor to make it eager and not go through type coercion.
+      if (format.foldable && (format.dataType == StringType || format.dataType == NullType)) {
+        format
+      } else {
+        throw QueryCompilationErrors.requireLiteralParameter("to_binary", "format", "string")
+      }
+    }),
+    false
+    )
 
   override def prettyName: String = "to_binary"
 

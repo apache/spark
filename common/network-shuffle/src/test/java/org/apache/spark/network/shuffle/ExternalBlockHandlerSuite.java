@@ -302,7 +302,7 @@ public class ExternalBlockHandlerSuite {
     ArgumentCaptor<Iterator<ManagedBuffer>> stream = (ArgumentCaptor<Iterator<ManagedBuffer>>)
         (ArgumentCaptor<?>) ArgumentCaptor.forClass(Iterator.class);
     verify(streamManager, times(1)).registerStream(anyString(), stream.capture(),
-      any());
+      any(), anyBoolean());
     Iterator<ManagedBuffer> buffers = stream.getValue();
     for (ManagedBuffer blockMarker : blockMarkers) {
       assertEquals(blockMarker, buffers.next());
@@ -332,21 +332,11 @@ public class ExternalBlockHandlerSuite {
     RpcResponseCallback callback = mock(RpcResponseCallback.class);
 
     ByteBuffer unserializableMsg = ByteBuffer.wrap(new byte[] { 0x12, 0x34, 0x56 });
-    try {
-      handler.receive(client, unserializableMsg, callback);
-      fail("Should have thrown");
-    } catch (Exception e) {
-      // pass
-    }
+    assertThrows(Exception.class, () -> handler.receive(client, unserializableMsg, callback));
 
     ByteBuffer unexpectedMsg = new UploadBlock("a", "e", "b", new byte[1],
       new byte[2]).toByteBuffer();
-    try {
-      handler.receive(client, unexpectedMsg, callback);
-      fail("Should have thrown");
-    } catch (UnsupportedOperationException e) {
-      // pass
-    }
+    assertThrows(Exception.class, () -> handler.receive(client, unexpectedMsg, callback));
 
     verify(callback, never()).onSuccess(any(ByteBuffer.class));
     verify(callback, never()).onFailure(any(Throwable.class));
@@ -461,7 +451,8 @@ public class ExternalBlockHandlerSuite {
     @SuppressWarnings("unchecked")
     ArgumentCaptor<Iterator<ManagedBuffer>> stream = (ArgumentCaptor<Iterator<ManagedBuffer>>)
       (ArgumentCaptor<?>) ArgumentCaptor.forClass(Iterator.class);
-    verify(streamManager, times(1)).registerStream(any(), stream.capture(), any());
+    verify(streamManager, times(1)).registerStream(any(), stream.capture(),
+        any(), anyBoolean());
     Iterator<ManagedBuffer> bufferIter = stream.getValue();
     for (int reduceId = 0; reduceId < 2; reduceId++) {
       for (int chunkId = 0; chunkId < 2; chunkId++) {

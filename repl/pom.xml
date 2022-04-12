@@ -28,7 +28,7 @@
   <artifactId>spark-repl_2.12</artifactId>
   <packaging>jar</packaging>
   <name>Spark Project REPL</name>
-  <url>http://spark.apache.org/</url>
+  <url>https://spark.apache.org/</url>
 
   <properties>
     <sbt.project.name>repl</sbt.project.name>

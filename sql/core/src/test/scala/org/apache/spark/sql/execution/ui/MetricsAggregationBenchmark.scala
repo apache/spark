@@ -110,6 +110,7 @@ object MetricsAggregationBenchmark extends BenchmarkBase {
           taskId = taskOffset + i.toLong,
           index = i,
           attemptNumber = 0,
+          partitionId = i,
           // The following fields are not used.
           launchTime = 0,
           executorId = "",

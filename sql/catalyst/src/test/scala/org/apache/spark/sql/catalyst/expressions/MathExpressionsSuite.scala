@@ -448,11 +448,11 @@ class MathExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     testUnary(Bin, java.lang.Long.toBinaryString, (-20 to 20).map(_.toLong), evalType = LongType)
 
     val row = create_row(null, 12L, 123L, 1234L, -123L)
-    val l1 = 'a.long.at(0)
-    val l2 = 'a.long.at(1)
-    val l3 = 'a.long.at(2)
-    val l4 = 'a.long.at(3)
-    val l5 = 'a.long.at(4)
+    val l1 = $"a".long.at(0)
+    val l2 = $"a".long.at(1)
+    val l3 = $"a".long.at(2)
+    val l4 = $"a".long.at(3)
+    val l5 = $"a".long.at(4)
 
     checkEvaluation(Bin(l1), null, row)
     checkEvaluation(Bin(l2), java.lang.Long.toBinaryString(12), row)
