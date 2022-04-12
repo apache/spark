@@ -112,6 +112,7 @@ RDD APIs
     RDD.cache
     RDD.cartesian
     RDD.checkpoint
+    RDD.cleanShuffleDependencies
     RDD.coalesce
     RDD.cogroup
     RDD.collect

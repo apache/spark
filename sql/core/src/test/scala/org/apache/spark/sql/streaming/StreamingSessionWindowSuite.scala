@@ -28,7 +28,6 @@ import org.apache.spark.sql.execution.streaming.MemoryStream
 import org.apache.spark.sql.execution.streaming.state.{HDFSBackedStateStoreProvider, RocksDBStateStoreProvider}
 import org.apache.spark.sql.functions.{count, session_window, sum}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.util.Utils
 
 class StreamingSessionWindowSuite extends StreamTest
   with BeforeAndAfter with Matchers with Logging {
@@ -44,16 +43,11 @@ class StreamingSessionWindowSuite extends StreamTest
     val mergingSessionOptions = Seq(true, false).map { value =>
       (SQLConf.STREAMING_SESSION_WINDOW_MERGE_SESSIONS_IN_LOCAL_PARTITION.key, value)
     }
-    var providerOptions = Seq(
+    val providerOptions = Seq(
       classOf[HDFSBackedStateStoreProvider].getCanonicalName,
       classOf[RocksDBStateStoreProvider].getCanonicalName
     ).map { value =>
       (SQLConf.STATE_STORE_PROVIDER_CLASS.key, value.stripSuffix("$"))
-    }
-    // RocksDB doesn't support Apple Silicon yet
-    if (Utils.isMacOnAppleSilicon) {
-      providerOptions = providerOptions
-        .filterNot(_._2.contains(classOf[RocksDBStateStoreProvider].getSimpleName))
     }
 
     val availableOptions = for (
@@ -216,6 +210,7 @@ class StreamingSessionWindowSuite extends StreamTest
       // ("structured", 41, 51, 10, 1)
       CheckNewAnswer(
       ),
+      assertNumRowsDroppedByWatermark(2),
 
       // concatenating multiple previous sessions into one
       AddData(inputData, ("spark streaming", 30L)),
@@ -319,6 +314,7 @@ class StreamingSessionWindowSuite extends StreamTest
       // ("spark", 40, 50, 10, 1),
       CheckNewAnswer(
       ),
+      assertNumRowsDroppedByWatermark(2),
 
       // concatenating multiple previous sessions into one
       AddData(inputData, ("spark streaming", 30L)),
@@ -406,6 +402,21 @@ class StreamingSessionWindowSuite extends StreamTest
     }
   }
 
+  private def assertNumRowsDroppedByWatermark(
+      numRowsDroppedByWatermark: Long): AssertOnQuery = AssertOnQuery { q =>
+    q.processAllAvailable()
+    val progressWithData = q.recentProgress.filterNot { p =>
+      // filter out batches which are falling into one of types:
+      // 1) doesn't execute the batch run
+      // 2) empty input batch
+      p.inputRowsPerSecond == 0
+    }.lastOption.get
+    assert(progressWithData.stateOperators(0).numRowsDroppedByWatermark
+      === numRowsDroppedByWatermark)
+    true
+  }
+
+
   private def sessionWindowQuery(
       input: MemoryStream[(String, Long)],
       sessionWindow: Column = session_window($"eventTime", "10 seconds")): DataFrame = {
@@ -417,7 +428,7 @@ class StreamingSessionWindowSuite extends StreamTest
       .selectExpr("explode(split(value, ' ')) AS sessionId", "eventTime")
 
     events
-      .groupBy(sessionWindow as 'session, 'sessionId)
+      .groupBy(sessionWindow as Symbol("session"), $"sessionId")
       .agg(count("*").as("numEvents"))
       .selectExpr("sessionId", "CAST(session.start AS LONG)", "CAST(session.end AS LONG)",
         "CAST(session.end AS LONG) - CAST(session.start AS LONG) AS durationMs",
@@ -429,8 +440,8 @@ class StreamingSessionWindowSuite extends StreamTest
       .selectExpr("*")
       .withColumn("eventTime", $"value".cast("timestamp"))
       .withWatermark("eventTime", "10 seconds")
-      .groupBy(session_window($"eventTime", "5 seconds") as 'session)
-      .agg(count("*") as 'count, sum("value") as 'sum)
+      .groupBy(session_window($"eventTime", "5 seconds") as Symbol("session"))
+      .agg(count("*") as Symbol("count"), sum("value") as Symbol("sum"))
       .select($"session".getField("start").cast("long").as[Long],
         $"session".getField("end").cast("long").as[Long], $"count".as[Long], $"sum".as[Long])
   }

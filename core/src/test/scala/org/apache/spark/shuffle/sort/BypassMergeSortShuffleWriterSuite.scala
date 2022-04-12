@@ -111,6 +111,12 @@ class BypassMergeSortShuffleWriterSuite
           blockId = args(0).asInstanceOf[BlockId])
       }
 
+    when(blockResolver.createTempFile(any(classOf[File])))
+      .thenAnswer { invocationOnMock =>
+        val file = invocationOnMock.getArguments()(0).asInstanceOf[File]
+        Utils.tempFileWith(file)
+      }
+
     when(diskBlockManager.createTempShuffleBlock())
       .thenAnswer { _ =>
         val blockId = new TempShuffleBlockId(UUID.randomUUID)
@@ -163,7 +169,8 @@ class BypassMergeSortShuffleWriterSuite
 
   Seq(true, false).foreach { transferTo =>
     test(s"write with some empty partitions - transferTo $transferTo") {
-      val transferConf = conf.clone.set("spark.file.transferTo", transferTo.toString)
+      val transferConf =
+        conf.clone.set(config.SHUFFLE_MERGE_PREFER_NIO.key, transferTo.toString)
       def records: Iterator[(Int, Int)] =
         Iterator((1, 1), (5, 5)) ++ (0 until 100000).iterator.map(x => (2, 2))
       val writer = new BypassMergeSortShuffleWriter[Int, Int](
@@ -265,6 +272,11 @@ class BypassMergeSortShuffleWriterSuite
         val file = new File(tempDir, blockId.name)
         temporaryFilesCreated += file
         (blockId, file)
+      }
+    when(diskBlockManager.createTempFileWith(any(classOf[File])))
+      .thenAnswer { invocationOnMock =>
+        val file = invocationOnMock.getArguments()(0).asInstanceOf[File]
+        Utils.tempFileWith(file)
       }
 
     val numPartition = shuffleHandle.dependency.partitioner.numPartitions

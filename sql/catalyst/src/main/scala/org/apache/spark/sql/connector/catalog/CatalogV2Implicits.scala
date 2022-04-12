@@ -60,7 +60,7 @@ private[sql] object CatalogV2Implicits {
           identityCols += col
 
         case BucketTransform(numBuckets, col, sortCol) =>
-          if (bucketSpec.nonEmpty) throw QueryExecutionErrors.MultipleBucketTransformsError
+          if (bucketSpec.nonEmpty) throw QueryExecutionErrors.multipleBucketTransformsError
           if (sortCol.isEmpty) {
             bucketSpec = Some(BucketSpec(numBuckets, col.map(_.fieldNames.mkString(".")), Nil))
           } else {
@@ -186,6 +186,10 @@ private[sql] object CatalogV2Implicits {
   }
 
   def parseColumnPath(name: String): Seq[String] = {
+    CatalystSqlParser.parseMultipartIdentifier(name)
+  }
+
+  def parseFunctionName(name: String): Seq[String] = {
     CatalystSqlParser.parseMultipartIdentifier(name)
   }
 }

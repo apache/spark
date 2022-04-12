@@ -220,7 +220,7 @@ object PrefixSpan extends Logging {
     data.flatMap { itemsets =>
       val uniqItems = mutable.Set.empty[Item]
       itemsets.foreach(set => uniqItems ++= set)
-      uniqItems.toIterator.map((_, 1L))
+      uniqItems.iterator.map((_, 1L))
     }.reduceByKey(_ + _).filter { case (_, count) =>
       count >= minCount
     }.sortBy(-_._2).map(_._1).collect()
@@ -478,7 +478,7 @@ object PrefixSpan extends Logging {
         }
         i += 1
       }
-      prefixes.toIterator
+      prefixes.iterator
     }
 
     /** Tests whether this postfix is non-empty. */

@@ -34,4 +34,6 @@ object TestConstants {
   val CONFIG_KEY_IMAGE_TAG_FILE = "spark.kubernetes.test.imageTagFile"
   val CONFIG_KEY_IMAGE_REPO = "spark.kubernetes.test.imageRepo"
   val CONFIG_KEY_UNPACK_DIR = "spark.kubernetes.test.unpackSparkDir"
+  val CONFIG_DRIVER_REQUEST_CORES = "spark.kubernetes.test.driverRequestCores"
+  val CONFIG_EXECUTOR_REQUEST_CORES = "spark.kubernetes.test.executorRequestCores"
 }

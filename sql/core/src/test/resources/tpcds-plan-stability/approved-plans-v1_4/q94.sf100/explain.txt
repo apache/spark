@@ -58,7 +58,7 @@ Input [8]: [ws_ship_date_sk#1, ws_ship_addr_sk#2, ws_web_site_sk#3, ws_warehouse
 
 (3) Filter [codegen id : 1]
 Input [8]: [ws_ship_date_sk#1, ws_ship_addr_sk#2, ws_web_site_sk#3, ws_warehouse_sk#4, ws_order_number#5, ws_ext_ship_cost#6, ws_net_profit#7, ws_sold_date_sk#8]
-Condition : ((isnotnull(ws_ship_date_sk#1) AND isnotnull(ws_ship_addr_sk#2)) AND isnotnull(ws_web_site_sk#3))
+Condition : (((((isnotnull(ws_ship_date_sk#1) AND isnotnull(ws_ship_addr_sk#2)) AND isnotnull(ws_web_site_sk#3)) AND might_contain(Subquery scalar-subquery#9, [id=#10], xxhash64(ws_ship_addr_sk#2, 42))) AND might_contain(Subquery scalar-subquery#11, [id=#12], xxhash64(ws_web_site_sk#3, 42))) AND might_contain(Subquery scalar-subquery#13, [id=#14], xxhash64(ws_ship_date_sk#1, 42)))
 
 (4) Project [codegen id : 1]
 Output [7]: [ws_ship_date_sk#1, ws_ship_addr_sk#2, ws_web_site_sk#3, ws_warehouse_sk#4, ws_order_number#5, ws_ext_ship_cost#6, ws_net_profit#7]
@@ -66,190 +66,331 @@ Input [8]: [ws_ship_date_sk#1, ws_ship_addr_sk#2, ws_web_site_sk#3, ws_warehouse
 
 (5) Exchange
 Input [7]: [ws_ship_date_sk#1, ws_ship_addr_sk#2, ws_web_site_sk#3, ws_warehouse_sk#4, ws_order_number#5, ws_ext_ship_cost#6, ws_net_profit#7]
-Arguments: hashpartitioning(ws_order_number#5, 5), ENSURE_REQUIREMENTS, [id=#9]
+Arguments: hashpartitioning(ws_order_number#5, 5), ENSURE_REQUIREMENTS, [id=#15]
 
 (6) Sort [codegen id : 2]
 Input [7]: [ws_ship_date_sk#1, ws_ship_addr_sk#2, ws_web_site_sk#3, ws_warehouse_sk#4, ws_order_number#5, ws_ext_ship_cost#6, ws_net_profit#7]
 Arguments: [ws_order_number#5 ASC NULLS FIRST], false, 0
 
 (7) Scan parquet default.web_sales
-Output [3]: [ws_warehouse_sk#10, ws_order_number#11, ws_sold_date_sk#12]
+Output [3]: [ws_warehouse_sk#16, ws_order_number#17, ws_sold_date_sk#18]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/web_sales]
 ReadSchema: struct<ws_warehouse_sk:int,ws_order_number:int>
 
 (8) ColumnarToRow [codegen id : 3]
-Input [3]: [ws_warehouse_sk#10, ws_order_number#11, ws_sold_date_sk#12]
+Input [3]: [ws_warehouse_sk#16, ws_order_number#17, ws_sold_date_sk#18]
 
 (9) Project [codegen id : 3]
-Output [2]: [ws_warehouse_sk#10, ws_order_number#11]
-Input [3]: [ws_warehouse_sk#10, ws_order_number#11, ws_sold_date_sk#12]
+Output [2]: [ws_warehouse_sk#16, ws_order_number#17]
+Input [3]: [ws_warehouse_sk#16, ws_order_number#17, ws_sold_date_sk#18]
 
 (10) Exchange
-Input [2]: [ws_warehouse_sk#10, ws_order_number#11]
-Arguments: hashpartitioning(ws_order_number#11, 5), ENSURE_REQUIREMENTS, [id=#13]
+Input [2]: [ws_warehouse_sk#16, ws_order_number#17]
+Arguments: hashpartitioning(ws_order_number#17, 5), ENSURE_REQUIREMENTS, [id=#19]
 
 (11) Sort [codegen id : 4]
-Input [2]: [ws_warehouse_sk#10, ws_order_number#11]
-Arguments: [ws_order_number#11 ASC NULLS FIRST], false, 0
+Input [2]: [ws_warehouse_sk#16, ws_order_number#17]
+Arguments: [ws_order_number#17 ASC NULLS FIRST], false, 0
 
 (12) SortMergeJoin [codegen id : 5]
 Left keys [1]: [ws_order_number#5]
-Right keys [1]: [ws_order_number#11]
-Join condition: NOT (ws_warehouse_sk#4 = ws_warehouse_sk#10)
+Right keys [1]: [ws_order_number#17]
+Join condition: NOT (ws_warehouse_sk#4 = ws_warehouse_sk#16)
 
 (13) Project [codegen id : 5]
 Output [6]: [ws_ship_date_sk#1, ws_ship_addr_sk#2, ws_web_site_sk#3, ws_order_number#5, ws_ext_ship_cost#6, ws_net_profit#7]
 Input [7]: [ws_ship_date_sk#1, ws_ship_addr_sk#2, ws_web_site_sk#3, ws_warehouse_sk#4, ws_order_number#5, ws_ext_ship_cost#6, ws_net_profit#7]
 
 (14) Scan parquet default.web_returns
-Output [2]: [wr_order_number#14, wr_returned_date_sk#15]
+Output [2]: [wr_order_number#20, wr_returned_date_sk#21]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/web_returns]
 ReadSchema: struct<wr_order_number:int>
 
 (15) ColumnarToRow [codegen id : 6]
-Input [2]: [wr_order_number#14, wr_returned_date_sk#15]
+Input [2]: [wr_order_number#20, wr_returned_date_sk#21]
 
 (16) Project [codegen id : 6]
-Output [1]: [wr_order_number#14]
-Input [2]: [wr_order_number#14, wr_returned_date_sk#15]
+Output [1]: [wr_order_number#20]
+Input [2]: [wr_order_number#20, wr_returned_date_sk#21]
 
 (17) Exchange
-Input [1]: [wr_order_number#14]
-Arguments: hashpartitioning(wr_order_number#14, 5), ENSURE_REQUIREMENTS, [id=#16]
+Input [1]: [wr_order_number#20]
+Arguments: hashpartitioning(wr_order_number#20, 5), ENSURE_REQUIREMENTS, [id=#22]
 
 (18) Sort [codegen id : 7]
-Input [1]: [wr_order_number#14]
-Arguments: [wr_order_number#14 ASC NULLS FIRST], false, 0
+Input [1]: [wr_order_number#20]
+Arguments: [wr_order_number#20 ASC NULLS FIRST], false, 0
 
 (19) SortMergeJoin [codegen id : 11]
 Left keys [1]: [ws_order_number#5]
-Right keys [1]: [wr_order_number#14]
+Right keys [1]: [wr_order_number#20]
 Join condition: None
 
 (20) Scan parquet default.customer_address
-Output [2]: [ca_address_sk#17, ca_state#18]
+Output [2]: [ca_address_sk#23, ca_state#24]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/customer_address]
 PushedFilters: [IsNotNull(ca_state), EqualTo(ca_state,IL), IsNotNull(ca_address_sk)]
 ReadSchema: struct<ca_address_sk:int,ca_state:string>
 
 (21) ColumnarToRow [codegen id : 8]
-Input [2]: [ca_address_sk#17, ca_state#18]
+Input [2]: [ca_address_sk#23, ca_state#24]
 
 (22) Filter [codegen id : 8]
-Input [2]: [ca_address_sk#17, ca_state#18]
-Condition : ((isnotnull(ca_state#18) AND (ca_state#18 = IL)) AND isnotnull(ca_address_sk#17))
+Input [2]: [ca_address_sk#23, ca_state#24]
+Condition : ((isnotnull(ca_state#24) AND (ca_state#24 = IL)) AND isnotnull(ca_address_sk#23))
 
 (23) Project [codegen id : 8]
-Output [1]: [ca_address_sk#17]
-Input [2]: [ca_address_sk#17, ca_state#18]
+Output [1]: [ca_address_sk#23]
+Input [2]: [ca_address_sk#23, ca_state#24]
 
 (24) BroadcastExchange
-Input [1]: [ca_address_sk#17]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#19]
+Input [1]: [ca_address_sk#23]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#25]
 
 (25) BroadcastHashJoin [codegen id : 11]
 Left keys [1]: [ws_ship_addr_sk#2]
-Right keys [1]: [ca_address_sk#17]
+Right keys [1]: [ca_address_sk#23]
 Join condition: None
 
 (26) Project [codegen id : 11]
 Output [5]: [ws_ship_date_sk#1, ws_web_site_sk#3, ws_order_number#5, ws_ext_ship_cost#6, ws_net_profit#7]
-Input [7]: [ws_ship_date_sk#1, ws_ship_addr_sk#2, ws_web_site_sk#3, ws_order_number#5, ws_ext_ship_cost#6, ws_net_profit#7, ca_address_sk#17]
+Input [7]: [ws_ship_date_sk#1, ws_ship_addr_sk#2, ws_web_site_sk#3, ws_order_number#5, ws_ext_ship_cost#6, ws_net_profit#7, ca_address_sk#23]
 
 (27) Scan parquet default.web_site
-Output [2]: [web_site_sk#20, web_company_name#21]
+Output [2]: [web_site_sk#26, web_company_name#27]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/web_site]
 PushedFilters: [IsNotNull(web_company_name), EqualTo(web_company_name,pri                                               ), IsNotNull(web_site_sk)]
 ReadSchema: struct<web_site_sk:int,web_company_name:string>
 
 (28) ColumnarToRow [codegen id : 9]
-Input [2]: [web_site_sk#20, web_company_name#21]
+Input [2]: [web_site_sk#26, web_company_name#27]
 
 (29) Filter [codegen id : 9]
-Input [2]: [web_site_sk#20, web_company_name#21]
-Condition : ((isnotnull(web_company_name#21) AND (web_company_name#21 = pri                                               )) AND isnotnull(web_site_sk#20))
+Input [2]: [web_site_sk#26, web_company_name#27]
+Condition : ((isnotnull(web_company_name#27) AND (web_company_name#27 = pri                                               )) AND isnotnull(web_site_sk#26))
 
 (30) Project [codegen id : 9]
-Output [1]: [web_site_sk#20]
-Input [2]: [web_site_sk#20, web_company_name#21]
+Output [1]: [web_site_sk#26]
+Input [2]: [web_site_sk#26, web_company_name#27]
 
 (31) BroadcastExchange
-Input [1]: [web_site_sk#20]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#22]
+Input [1]: [web_site_sk#26]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#28]
 
 (32) BroadcastHashJoin [codegen id : 11]
 Left keys [1]: [ws_web_site_sk#3]
-Right keys [1]: [web_site_sk#20]
+Right keys [1]: [web_site_sk#26]
 Join condition: None
 
 (33) Project [codegen id : 11]
 Output [4]: [ws_ship_date_sk#1, ws_order_number#5, ws_ext_ship_cost#6, ws_net_profit#7]
-Input [6]: [ws_ship_date_sk#1, ws_web_site_sk#3, ws_order_number#5, ws_ext_ship_cost#6, ws_net_profit#7, web_site_sk#20]
+Input [6]: [ws_ship_date_sk#1, ws_web_site_sk#3, ws_order_number#5, ws_ext_ship_cost#6, ws_net_profit#7, web_site_sk#26]
 
 (34) Scan parquet default.date_dim
-Output [2]: [d_date_sk#23, d_date#24]
+Output [2]: [d_date_sk#29, d_date#30]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/date_dim]
 PushedFilters: [IsNotNull(d_date), GreaterThanOrEqual(d_date,1999-02-01), LessThanOrEqual(d_date,1999-04-02), IsNotNull(d_date_sk)]
 ReadSchema: struct<d_date_sk:int,d_date:date>
 
 (35) ColumnarToRow [codegen id : 10]
-Input [2]: [d_date_sk#23, d_date#24]
+Input [2]: [d_date_sk#29, d_date#30]
 
 (36) Filter [codegen id : 10]
-Input [2]: [d_date_sk#23, d_date#24]
-Condition : (((isnotnull(d_date#24) AND (d_date#24 >= 1999-02-01)) AND (d_date#24 <= 1999-04-02)) AND isnotnull(d_date_sk#23))
+Input [2]: [d_date_sk#29, d_date#30]
+Condition : (((isnotnull(d_date#30) AND (d_date#30 >= 1999-02-01)) AND (d_date#30 <= 1999-04-02)) AND isnotnull(d_date_sk#29))
 
 (37) Project [codegen id : 10]
-Output [1]: [d_date_sk#23]
-Input [2]: [d_date_sk#23, d_date#24]
+Output [1]: [d_date_sk#29]
+Input [2]: [d_date_sk#29, d_date#30]
 
 (38) BroadcastExchange
-Input [1]: [d_date_sk#23]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#25]
+Input [1]: [d_date_sk#29]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#31]
 
 (39) BroadcastHashJoin [codegen id : 11]
 Left keys [1]: [ws_ship_date_sk#1]
-Right keys [1]: [d_date_sk#23]
+Right keys [1]: [d_date_sk#29]
 Join condition: None
 
 (40) Project [codegen id : 11]
 Output [3]: [ws_order_number#5, ws_ext_ship_cost#6, ws_net_profit#7]
-Input [5]: [ws_ship_date_sk#1, ws_order_number#5, ws_ext_ship_cost#6, ws_net_profit#7, d_date_sk#23]
+Input [5]: [ws_ship_date_sk#1, ws_order_number#5, ws_ext_ship_cost#6, ws_net_profit#7, d_date_sk#29]
 
 (41) HashAggregate [codegen id : 11]
 Input [3]: [ws_order_number#5, ws_ext_ship_cost#6, ws_net_profit#7]
 Keys [1]: [ws_order_number#5]
 Functions [2]: [partial_sum(UnscaledValue(ws_ext_ship_cost#6)), partial_sum(UnscaledValue(ws_net_profit#7))]
-Aggregate Attributes [2]: [sum(UnscaledValue(ws_ext_ship_cost#6))#26, sum(UnscaledValue(ws_net_profit#7))#27]
-Results [3]: [ws_order_number#5, sum#28, sum#29]
+Aggregate Attributes [2]: [sum(UnscaledValue(ws_ext_ship_cost#6))#32, sum(UnscaledValue(ws_net_profit#7))#33]
+Results [3]: [ws_order_number#5, sum#34, sum#35]
 
 (42) HashAggregate [codegen id : 11]
-Input [3]: [ws_order_number#5, sum#28, sum#29]
+Input [3]: [ws_order_number#5, sum#34, sum#35]
 Keys [1]: [ws_order_number#5]
 Functions [2]: [merge_sum(UnscaledValue(ws_ext_ship_cost#6)), merge_sum(UnscaledValue(ws_net_profit#7))]
-Aggregate Attributes [2]: [sum(UnscaledValue(ws_ext_ship_cost#6))#26, sum(UnscaledValue(ws_net_profit#7))#27]
-Results [3]: [ws_order_number#5, sum#28, sum#29]
+Aggregate Attributes [2]: [sum(UnscaledValue(ws_ext_ship_cost#6))#32, sum(UnscaledValue(ws_net_profit#7))#33]
+Results [3]: [ws_order_number#5, sum#34, sum#35]
 
 (43) HashAggregate [codegen id : 11]
-Input [3]: [ws_order_number#5, sum#28, sum#29]
+Input [3]: [ws_order_number#5, sum#34, sum#35]
 Keys: []
 Functions [3]: [merge_sum(UnscaledValue(ws_ext_ship_cost#6)), merge_sum(UnscaledValue(ws_net_profit#7)), partial_count(distinct ws_order_number#5)]
-Aggregate Attributes [3]: [sum(UnscaledValue(ws_ext_ship_cost#6))#26, sum(UnscaledValue(ws_net_profit#7))#27, count(ws_order_number#5)#30]
-Results [3]: [sum#28, sum#29, count#31]
+Aggregate Attributes [3]: [sum(UnscaledValue(ws_ext_ship_cost#6))#32, sum(UnscaledValue(ws_net_profit#7))#33, count(ws_order_number#5)#36]
+Results [3]: [sum#34, sum#35, count#37]
 
 (44) Exchange
-Input [3]: [sum#28, sum#29, count#31]
-Arguments: SinglePartition, ENSURE_REQUIREMENTS, [id=#32]
+Input [3]: [sum#34, sum#35, count#37]
+Arguments: SinglePartition, ENSURE_REQUIREMENTS, [id=#38]
 
 (45) HashAggregate [codegen id : 12]
-Input [3]: [sum#28, sum#29, count#31]
+Input [3]: [sum#34, sum#35, count#37]
 Keys: []
 Functions [3]: [sum(UnscaledValue(ws_ext_ship_cost#6)), sum(UnscaledValue(ws_net_profit#7)), count(distinct ws_order_number#5)]
-Aggregate Attributes [3]: [sum(UnscaledValue(ws_ext_ship_cost#6))#26, sum(UnscaledValue(ws_net_profit#7))#27, count(ws_order_number#5)#30]
-Results [3]: [count(ws_order_number#5)#30 AS order count #33, MakeDecimal(sum(UnscaledValue(ws_ext_ship_cost#6))#26,17,2) AS total shipping cost #34, MakeDecimal(sum(UnscaledValue(ws_net_profit#7))#27,17,2) AS total net profit #35]
+Aggregate Attributes [3]: [sum(UnscaledValue(ws_ext_ship_cost#6))#32, sum(UnscaledValue(ws_net_profit#7))#33, count(ws_order_number#5)#36]
+Results [3]: [count(ws_order_number#5)#36 AS order count #39, MakeDecimal(sum(UnscaledValue(ws_ext_ship_cost#6))#32,17,2) AS total shipping cost #40, MakeDecimal(sum(UnscaledValue(ws_net_profit#7))#33,17,2) AS total net profit #41]
+
+===== Subqueries =====
+
+Subquery:1 Hosting operator id = 3 Hosting Expression = Subquery scalar-subquery#9, [id=#10]
+ObjectHashAggregate (52)
++- Exchange (51)
+   +- ObjectHashAggregate (50)
+      +- * Project (49)
+         +- * Filter (48)
+            +- * ColumnarToRow (47)
+               +- Scan parquet default.customer_address (46)
+
+
+(46) Scan parquet default.customer_address
+Output [2]: [ca_address_sk#23, ca_state#24]
+Batched: true
+Location [not included in comparison]/{warehouse_dir}/customer_address]
+PushedFilters: [IsNotNull(ca_state), EqualTo(ca_state,IL), IsNotNull(ca_address_sk)]
+ReadSchema: struct<ca_address_sk:int,ca_state:string>
+
+(47) ColumnarToRow [codegen id : 1]
+Input [2]: [ca_address_sk#23, ca_state#24]
+
+(48) Filter [codegen id : 1]
+Input [2]: [ca_address_sk#23, ca_state#24]
+Condition : ((isnotnull(ca_state#24) AND (ca_state#24 = IL)) AND isnotnull(ca_address_sk#23))
+
+(49) Project [codegen id : 1]
+Output [1]: [ca_address_sk#23]
+Input [2]: [ca_address_sk#23, ca_state#24]
+
+(50) ObjectHashAggregate
+Input [1]: [ca_address_sk#23]
+Keys: []
+Functions [1]: [partial_bloom_filter_agg(xxhash64(ca_address_sk#23, 42), 17961, 143688, 0, 0)]
+Aggregate Attributes [1]: [buf#42]
+Results [1]: [buf#43]
+
+(51) Exchange
+Input [1]: [buf#43]
+Arguments: SinglePartition, ENSURE_REQUIREMENTS, [id=#44]
+
+(52) ObjectHashAggregate
+Input [1]: [buf#43]
+Keys: []
+Functions [1]: [bloom_filter_agg(xxhash64(ca_address_sk#23, 42), 17961, 143688, 0, 0)]
+Aggregate Attributes [1]: [bloom_filter_agg(xxhash64(ca_address_sk#23, 42), 17961, 143688, 0, 0)#45]
+Results [1]: [bloom_filter_agg(xxhash64(ca_address_sk#23, 42), 17961, 143688, 0, 0)#45 AS bloomFilter#46]
+
+Subquery:2 Hosting operator id = 3 Hosting Expression = Subquery scalar-subquery#11, [id=#12]
+ObjectHashAggregate (59)
++- Exchange (58)
+   +- ObjectHashAggregate (57)
+      +- * Project (56)
+         +- * Filter (55)
+            +- * ColumnarToRow (54)
+               +- Scan parquet default.web_site (53)
+
+
+(53) Scan parquet default.web_site
+Output [2]: [web_site_sk#26, web_company_name#27]
+Batched: true
+Location [not included in comparison]/{warehouse_dir}/web_site]
+PushedFilters: [IsNotNull(web_company_name), EqualTo(web_company_name,pri                                               ), IsNotNull(web_site_sk)]
+ReadSchema: struct<web_site_sk:int,web_company_name:string>
+
+(54) ColumnarToRow [codegen id : 1]
+Input [2]: [web_site_sk#26, web_company_name#27]
+
+(55) Filter [codegen id : 1]
+Input [2]: [web_site_sk#26, web_company_name#27]
+Condition : ((isnotnull(web_company_name#27) AND (web_company_name#27 = pri                                               )) AND isnotnull(web_site_sk#26))
+
+(56) Project [codegen id : 1]
+Output [1]: [web_site_sk#26]
+Input [2]: [web_site_sk#26, web_company_name#27]
+
+(57) ObjectHashAggregate
+Input [1]: [web_site_sk#26]
+Keys: []
+Functions [1]: [partial_bloom_filter_agg(xxhash64(web_site_sk#26, 42), 4, 32, 0, 0)]
+Aggregate Attributes [1]: [buf#47]
+Results [1]: [buf#48]
+
+(58) Exchange
+Input [1]: [buf#48]
+Arguments: SinglePartition, ENSURE_REQUIREMENTS, [id=#49]
+
+(59) ObjectHashAggregate
+Input [1]: [buf#48]
+Keys: []
+Functions [1]: [bloom_filter_agg(xxhash64(web_site_sk#26, 42), 4, 32, 0, 0)]
+Aggregate Attributes [1]: [bloom_filter_agg(xxhash64(web_site_sk#26, 42), 4, 32, 0, 0)#50]
+Results [1]: [bloom_filter_agg(xxhash64(web_site_sk#26, 42), 4, 32, 0, 0)#50 AS bloomFilter#51]
+
+Subquery:3 Hosting operator id = 3 Hosting Expression = Subquery scalar-subquery#13, [id=#14]
+ObjectHashAggregate (66)
++- Exchange (65)
+   +- ObjectHashAggregate (64)
+      +- * Project (63)
+         +- * Filter (62)
+            +- * ColumnarToRow (61)
+               +- Scan parquet default.date_dim (60)
+
+
+(60) Scan parquet default.date_dim
+Output [2]: [d_date_sk#29, d_date#30]
+Batched: true
+Location [not included in comparison]/{warehouse_dir}/date_dim]
+PushedFilters: [IsNotNull(d_date), GreaterThanOrEqual(d_date,1999-02-01), LessThanOrEqual(d_date,1999-04-02), IsNotNull(d_date_sk)]
+ReadSchema: struct<d_date_sk:int,d_date:date>
+
+(61) ColumnarToRow [codegen id : 1]
+Input [2]: [d_date_sk#29, d_date#30]
+
+(62) Filter [codegen id : 1]
+Input [2]: [d_date_sk#29, d_date#30]
+Condition : (((isnotnull(d_date#30) AND (d_date#30 >= 1999-02-01)) AND (d_date#30 <= 1999-04-02)) AND isnotnull(d_date_sk#29))
+
+(63) Project [codegen id : 1]
+Output [1]: [d_date_sk#29]
+Input [2]: [d_date_sk#29, d_date#30]
+
+(64) ObjectHashAggregate
+Input [1]: [d_date_sk#29]
+Keys: []
+Functions [1]: [partial_bloom_filter_agg(xxhash64(d_date_sk#29, 42), 73049, 584392, 0, 0)]
+Aggregate Attributes [1]: [buf#52]
+Results [1]: [buf#53]
+
+(65) Exchange
+Input [1]: [buf#53]
+Arguments: SinglePartition, ENSURE_REQUIREMENTS, [id=#54]
+
+(66) ObjectHashAggregate
+Input [1]: [buf#53]
+Keys: []
+Functions [1]: [bloom_filter_agg(xxhash64(d_date_sk#29, 42), 73049, 584392, 0, 0)]
+Aggregate Attributes [1]: [bloom_filter_agg(xxhash64(d_date_sk#29, 42), 73049, 584392, 0, 0)#55]
+Results [1]: [bloom_filter_agg(xxhash64(d_date_sk#29, 42), 73049, 584392, 0, 0)#55 AS bloomFilter#56]
+
 

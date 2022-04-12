@@ -105,12 +105,7 @@ public class CommandBuilderUtilsSuite {
   }
 
   private static void testInvalidOpt(String opts) {
-    try {
-      parseOptionString(opts);
-      fail("Expected exception for invalid option string.");
-    } catch (IllegalArgumentException e) {
-      // pass.
-    }
+    assertThrows(IllegalArgumentException.class, () -> parseOptionString(opts));
   }
 
 }

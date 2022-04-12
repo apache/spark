@@ -48,6 +48,11 @@ class FMRegressorSuite extends MLTest with DefaultReadWriteTest {
     ParamsSuite.checkParams(model)
   }
 
+  test("FMRegressor validate input dataset") {
+    testInvalidRegressionLabels(new FMRegressor().fit(_))
+    testInvalidVectors(new FMRegressor().fit(_))
+  }
+
   test("combineCoefficients") {
     val numFeatures = 2
     val factorSize = 4

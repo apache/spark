@@ -21,7 +21,6 @@ import java.util.TimeZone
 
 import scala.collection.JavaConverters._
 
-import org.junit.Assert
 import org.scalatest.Assertions
 
 import org.apache.spark.sql.catalyst.plans._
@@ -207,11 +206,12 @@ abstract class QueryTest extends PlanTest {
    */
   def assertCached(query: Dataset[_], cachedName: String, storageLevel: StorageLevel): Unit = {
     val planWithCaching = query.queryExecution.withCachedData
-    val matched = planWithCaching.collectFirst { case cached: InMemoryRelation =>
-      val cacheBuilder = cached.cacheBuilder
-      cachedName == cacheBuilder.tableName.get &&
-        (storageLevel == cacheBuilder.storageLevel)
-    }.getOrElse(false)
+    val matched = planWithCaching.exists {
+      case cached: InMemoryRelation =>
+        val cacheBuilder = cached.cacheBuilder
+        cachedName == cacheBuilder.tableName.get && (storageLevel == cacheBuilder.storageLevel)
+      case _ => false
+    }
 
     assert(matched, s"Expected query plan to hit cache $cachedName with storage " +
       s"level $storageLevel, but it doesn't.")
@@ -419,7 +419,7 @@ object QueryTest extends Assertions {
 
   def checkAnswer(df: DataFrame, expectedAnswer: java.util.List[Row]): Unit = {
     getErrorMessageInCheckAnswer(df, expectedAnswer.asScala.toSeq) match {
-      case Some(errorMessage) => Assert.fail(errorMessage)
+      case Some(errorMessage) => fail(errorMessage)
       case None =>
     }
   }

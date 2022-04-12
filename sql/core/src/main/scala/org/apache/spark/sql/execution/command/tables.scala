@@ -1125,7 +1125,7 @@ case class ShowCreateTableCommand(
         }
       }
 
-      val builder = StringBuilder.newBuilder
+      val builder = new StringBuilder
 
       val stmt = if (tableMetadata.tableType == VIEW) {
         builder ++= s"CREATE VIEW ${table.quoted} "
@@ -1153,7 +1153,7 @@ case class ShowCreateTableCommand(
     // TODO: some Hive fileformat + row serde might be mapped to Spark data source, e.g. CSV.
     val source = HiveSerDe.serdeToSource(hiveSerde)
     if (source.isEmpty) {
-      val builder = StringBuilder.newBuilder
+      val builder = new StringBuilder
       hiveSerde.serde.foreach { serde =>
         builder ++= s" SERDE: $serde"
       }
@@ -1260,7 +1260,7 @@ case class ShowCreateTableAsSerdeCommand(
       reportUnsupportedError(metadata.unsupportedFeatures)
     }
 
-    val builder = StringBuilder.newBuilder
+    val builder = new StringBuilder
 
     val tableTypeString = metadata.tableType match {
       case EXTERNAL => " EXTERNAL TABLE"
