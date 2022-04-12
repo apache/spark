@@ -444,6 +444,13 @@ abstract class CTEInlineSuiteBase
       }
     }
   }
+
+  test("SC-92587: CTE ID conflict in union of Dataframes leads to wrong results ") {
+    val a = spark.sql("with t as (select 1 as n) select * from t ")
+    val b = spark.sql("with t as (select 2 as n) select * from t ")
+    val df = a.union(b)
+    checkAnswer(df, Row(1) :: Row(2) :: Nil)
+  }
 }
 
 class CTEInlineSuiteAEOff extends CTEInlineSuiteBase with DisableAdaptiveExecutionSuite

@@ -666,7 +666,7 @@ case class UnresolvedWith(
  */
 case class CTERelationDef(
     child: LogicalPlan,
-    id: Long,
+    id: Long = CTERelationDef.newId,
     originalPlanWithPredicates: Option[(LogicalPlan, Seq[Expression])] = None) extends UnaryNode {
 
   final override val nodePatterns: Seq[TreePattern] = Seq(CTE)
@@ -675,6 +675,11 @@ case class CTERelationDef(
     copy(child = newChild)
 
   override def output: Seq[Attribute] = if (resolved) child.output else Nil
+}
+
+object CTERelationDef {
+  private val curId = new java.util.concurrent.atomic.AtomicLong()
+  def newId: Long = curId.getAndIncrement()
 }
 
 /**

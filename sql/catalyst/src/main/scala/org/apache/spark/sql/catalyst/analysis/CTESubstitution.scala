@@ -216,8 +216,7 @@ object CTESubstitution extends Rule[LogicalPlan] {
       // CTE definition can reference a previous one
       val substituted =
         substituteCTE(innerCTEResolved, isLegacy || isCommand, resolvedCTERelations.toSeq)
-      val cteRelation = CTERelationDef(
-        substituted, AnalysisContext.get.currentCteId.getAndIncrement())
+      val cteRelation = CTERelationDef(substituted)
       resolvedCTERelations += (name -> cteRelation)
     }
     resolvedCTERelations.toSeq
