@@ -145,7 +145,7 @@ case class Average(
       > SELECT _FUNC_(col) FROM VALUES (1), (2), (NULL) AS tab(col);
        1.5
       > SELECT _FUNC_(col) FROM VALUES (interval '2147483647 months'), (interval '1 months') AS tab(col);
-       null
+       NULL
   """,
   group = "agg_funcs",
   since = "3.3.0")
