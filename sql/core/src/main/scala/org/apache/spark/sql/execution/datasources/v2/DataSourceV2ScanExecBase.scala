@@ -141,7 +141,8 @@ trait DataSourceV2ScanExecBase extends LeafExecNode {
   override def outputOrdering: Seq[SortOrder] = scan match {
     case s: SupportsReportOrdering if this.logicalLink.isDefined =>
       s.outputOrdering().map(
-        order => V2ExpressionUtils.toCatalyst(order, this.logicalLink.get).asInstanceOf[SortOrder]
+        order => V2ExpressionUtils.toCatalyst(order, this.logicalLink.get).get
+          .asInstanceOf[SortOrder]
       )
     case _ => super.outputOrdering
   }
