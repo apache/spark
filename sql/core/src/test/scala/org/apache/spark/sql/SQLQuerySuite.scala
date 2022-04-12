@@ -3417,20 +3417,10 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
 
       withSQLConf(SQLConf.LEGACY_INTEGER_GROUPING_ID.key -> "true") {
         testGroupingIDs(32, Seq(0, 1))
-        val ex = intercept[AnalysisException] {
-          testGroupingIDs(33)
-        }
-        assert(ex.getMessage.contains("Grouping sets size cannot be greater than 32"))
-        assert(ex.getErrorClass == "GROUPING_SIZE_LIMIT_EXCEEDED")
       }
 
       withSQLConf(SQLConf.LEGACY_INTEGER_GROUPING_ID.key -> "false") {
         testGroupingIDs(64, Seq(0L, 1L))
-        val ex = intercept[AnalysisException] {
-          testGroupingIDs(65)
-        }
-        assert(ex.getMessage.contains("Grouping sets size cannot be greater than 64"))
-        assert(ex.getErrorClass == "GROUPING_SIZE_LIMIT_EXCEEDED")
       }
     }
   }
