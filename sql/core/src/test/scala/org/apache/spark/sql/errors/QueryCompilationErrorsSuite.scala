@@ -254,6 +254,56 @@ class QueryCompilationErrorsSuite extends QueryTest with SharedSparkSession {
     assert(e.getSqlState === "0A000")
     assert(e.message === "The feature is not supported: UDF class with 24 type arguments")
   }
+
+  test("INVALID_OPERATION_ON_TEMP_VIEW: desc partition on a temporary view") {
+    val tableName: String = "t"
+    val tempViewName: String = "tempView"
+
+    withTable(tableName) {
+      sql(
+        s"""
+          |CREATE TABLE $tableName (a STRING, b INT, c STRING, d STRING)
+          |USING parquet
+          |PARTITIONED BY (c, d)
+          |""".stripMargin)
+
+      withTempView(tempViewName) {
+        sql(s"CREATE TEMPORARY VIEW $tempViewName as SELECT * FROM $tableName")
+
+        val e = intercept[AnalysisException](
+          sql(s"DESC TABLE $tempViewName PARTITION (c='Us', d=1)")
+        )
+        assert(e.errorClass === Some("INVALID_OPERATION_ON_TEMP_VIEW"))
+        assert(e.message ===
+          s"Operation 'DESC PARTITION' is not allowed on a temporary view: '$tempViewName'")
+      }
+    }
+  }
+
+  test("INVALID_OPERATION_ON_VIEW: desc partition on a view") {
+    val tableName: String = "t"
+    val viewName: String = "view"
+
+    withTable(tableName) {
+      sql(
+        s"""
+           |CREATE TABLE $tableName (a STRING, b INT, c STRING, d STRING)
+           |USING parquet
+           |PARTITIONED BY (c, d)
+           |""".stripMargin)
+
+      withView(viewName) {
+        sql(s"CREATE VIEW $viewName as SELECT * FROM $tableName")
+
+        val e = intercept[AnalysisException](
+          sql(s"DESC TABLE $viewName PARTITION (c='Us', d=1)")
+        )
+        assert(e.errorClass === Some("INVALID_OPERATION_ON_VIEW"))
+        assert(e.message ===
+          s"Operation 'DESC PARTITION' is not allowed on a view: '$viewName'")
+      }
+    }
+  }
 }
 
 class MyCastToString extends SparkUserDefinedFunction(

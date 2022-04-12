@@ -46,7 +46,7 @@ import org.apache.spark.sql.types._
  * As commands are executed eagerly, this also includes errors thrown during the execution of
  * commands, which users can see immediately.
  */
-object QueryCompilationErrors {
+object QueryCompilationErrors extends QueryErrorsBase {
 
   def groupingIDMismatchError(groupingID: GroupingID, groupByExprs: Seq[Expression]): Throwable = {
     new AnalysisException(
@@ -1925,11 +1925,15 @@ object QueryCompilationErrors {
   }
 
   def descPartitionNotAllowedOnTempView(table: String): Throwable = {
-    new AnalysisException(s"DESC PARTITION is not allowed on a temporary view: $table")
+    new AnalysisException(
+      errorClass = "INVALID_OPERATION_ON_TEMP_VIEW",
+      messageParameters = Array(toSQLValue("DESC PARTITION"), toSQLValue(table)))
   }
 
   def descPartitionNotAllowedOnView(table: String): Throwable = {
-    new AnalysisException(s"DESC PARTITION is not allowed on a view: $table")
+    new AnalysisException(
+      errorClass = "INVALID_OPERATION_ON_VIEW",
+      messageParameters = Array(toSQLValue("DESC PARTITION"), toSQLValue(table)))
   }
 
   def showPartitionNotAllowedOnTableNotPartitionedError(tableIdentWithDB: String): Throwable = {
@@ -1963,10 +1967,6 @@ object QueryCompilationErrors {
         "following unsupported serde configuration\n" +
         builder.toString()
     )
-  }
-
-  def descPartitionNotAllowedOnViewError(table: String): Throwable = {
-    new AnalysisException(s"DESC PARTITION is not allowed on a view: $table")
   }
 
   def showCreateTableAsSerdeNotAllowedOnSparkDataSourceTableError(
