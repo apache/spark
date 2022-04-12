@@ -480,11 +480,7 @@ case class AlterTableAddPartitionCommand(
       if (addedSize > 0) {
         val newStats = CatalogStatistics(sizeInBytes = table.stats.get.sizeInBytes + addedSize)
         catalog.alterTableStats(table.identifier, Some(newStats))
-
-        partitionSpecsAndLocs.foreach { case (partition, _) =>
-          val partitionSpec = partition.mapValues(Some(_)).toMap
-          AnalyzePartitionCommand(table.identifier, partitionSpec).run(sparkSession)
-        }
+        catalog.alterPartitions(table.identifier, parts)
       }
     } else {
       // Re-calculating of table size including all partitions
