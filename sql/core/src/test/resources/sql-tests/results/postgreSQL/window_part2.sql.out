@@ -462,7 +462,7 @@ window w as (order by f_numeric range between
 struct<>
 -- !query output
 java.lang.NumberFormatException
-invalid input syntax for type numeric: NaN. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
+invalid input syntax for type numeric: 'NaN'. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
 
 
 -- !query

@@ -8,7 +8,7 @@ SELECT CAST('1.23' AS int)
 struct<>
 -- !query output
 java.lang.NumberFormatException
-invalid input syntax for type numeric: 1.23. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
+invalid input syntax for type numeric: '1.23'. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
 
 
 -- !query
@@ -17,7 +17,7 @@ SELECT CAST('1.23' AS long)
 struct<>
 -- !query output
 java.lang.NumberFormatException
-invalid input syntax for type numeric: 1.23. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
+invalid input syntax for type numeric: '1.23'. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
 
 
 -- !query
@@ -26,7 +26,7 @@ SELECT CAST('-4.56' AS int)
 struct<>
 -- !query output
 java.lang.NumberFormatException
-invalid input syntax for type numeric: -4.56. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
+invalid input syntax for type numeric: '-4.56'. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
 
 
 -- !query
@@ -35,7 +35,7 @@ SELECT CAST('-4.56' AS long)
 struct<>
 -- !query output
 java.lang.NumberFormatException
-invalid input syntax for type numeric: -4.56. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
+invalid input syntax for type numeric: '-4.56'. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
 
 
 -- !query
@@ -44,7 +44,7 @@ SELECT CAST('abc' AS int)
 struct<>
 -- !query output
 java.lang.NumberFormatException
-invalid input syntax for type numeric: abc. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
+invalid input syntax for type numeric: 'abc'. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
 
 
 -- !query
@@ -53,7 +53,7 @@ SELECT CAST('abc' AS long)
 struct<>
 -- !query output
 java.lang.NumberFormatException
-invalid input syntax for type numeric: abc. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
+invalid input syntax for type numeric: 'abc'. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
 
 
 -- !query
@@ -62,7 +62,7 @@ SELECT CAST('1234567890123' AS int)
 struct<>
 -- !query output
 java.lang.NumberFormatException
-invalid input syntax for type numeric: 1234567890123. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
+invalid input syntax for type numeric: '1234567890123'. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
 
 
 -- !query
@@ -71,7 +71,7 @@ SELECT CAST('12345678901234567890123' AS long)
 struct<>
 -- !query output
 java.lang.NumberFormatException
-invalid input syntax for type numeric: 12345678901234567890123. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
+invalid input syntax for type numeric: '12345678901234567890123'. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
 
 
 -- !query
@@ -80,7 +80,7 @@ SELECT CAST('' AS int)
 struct<>
 -- !query output
 java.lang.NumberFormatException
-invalid input syntax for type numeric: . To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
+invalid input syntax for type numeric: ''. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
 
 
 -- !query
@@ -89,7 +89,7 @@ SELECT CAST('' AS long)
 struct<>
 -- !query output
 java.lang.NumberFormatException
-invalid input syntax for type numeric: . To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
+invalid input syntax for type numeric: ''. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
 
 
 -- !query
@@ -114,7 +114,7 @@ SELECT CAST('123.a' AS int)
 struct<>
 -- !query output
 java.lang.NumberFormatException
-invalid input syntax for type numeric: 123.a. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
+invalid input syntax for type numeric: '123.a'. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
 
 
 -- !query
@@ -123,7 +123,7 @@ SELECT CAST('123.a' AS long)
 struct<>
 -- !query output
 java.lang.NumberFormatException
-invalid input syntax for type numeric: 123.a. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
+invalid input syntax for type numeric: '123.a'. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
 
 
 -- !query
@@ -140,7 +140,7 @@ SELECT CAST('-2147483649' AS int)
 struct<>
 -- !query output
 java.lang.NumberFormatException
-invalid input syntax for type numeric: -2147483649. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
+invalid input syntax for type numeric: '-2147483649'. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
 
 
 -- !query
@@ -157,7 +157,7 @@ SELECT CAST('2147483648' AS int)
 struct<>
 -- !query output
 java.lang.NumberFormatException
-invalid input syntax for type numeric: 2147483648. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
+invalid input syntax for type numeric: '2147483648'. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
 
 
 -- !query
@@ -174,7 +174,7 @@ SELECT CAST('-9223372036854775809' AS long)
 struct<>
 -- !query output
 java.lang.NumberFormatException
-invalid input syntax for type numeric: -9223372036854775809. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
+invalid input syntax for type numeric: '-9223372036854775809'. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
 
 
 -- !query
@@ -191,7 +191,7 @@ SELECT CAST('9223372036854775808' AS long)
 struct<>
 -- !query output
 java.lang.NumberFormatException
-invalid input syntax for type numeric: 9223372036854775808. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
+invalid input syntax for type numeric: '9223372036854775808'. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
 
 
 -- !query
@@ -447,7 +447,7 @@ select cast('1中文' as tinyint)
 struct<>
 -- !query output
 java.lang.NumberFormatException
-invalid input syntax for type numeric: 1中文. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
+invalid input syntax for type numeric: '1中文'. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
 
 
 -- !query
@@ -456,7 +456,7 @@ select cast('1中文' as smallint)
 struct<>
 -- !query output
 java.lang.NumberFormatException
-invalid input syntax for type numeric: 1中文. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
+invalid input syntax for type numeric: '1中文'. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
 
 
 -- !query
@@ -465,7 +465,7 @@ select cast('1中文' as INT)
 struct<>
 -- !query output
 java.lang.NumberFormatException
-invalid input syntax for type numeric: 1中文. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
+invalid input syntax for type numeric: '1中文'. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
 
 
 -- !query
@@ -474,7 +474,7 @@ select cast('中文1' as bigint)
 struct<>
 -- !query output
 java.lang.NumberFormatException
-invalid input syntax for type numeric: 中文1. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
+invalid input syntax for type numeric: '中文1'. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
 
 
 -- !query
@@ -483,7 +483,7 @@ select cast('1中文' as bigint)
 struct<>
 -- !query output
 java.lang.NumberFormatException
-invalid input syntax for type numeric: 1中文. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
+invalid input syntax for type numeric: '1中文'. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
 
 
 -- !query

@@ -20,7 +20,6 @@ package org.apache.spark.sql.catalyst.optimizer
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, BloomFilterAggregate, Complete}
 import org.apache.spark.sql.catalyst.planning.{ExtractEquiJoinKeys, PhysicalOperation}
-import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.{INVOKE, JSON_TO_STRUCT, LIKE_FAMLIY, PYTHON_UDF, REGEXP_EXTRACT_FAMILY, REGEXP_REPLACE, SCALA_UDF}
@@ -132,16 +131,6 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
       REGEXP_EXTRACT_FAMILY, REGEXP_REPLACE)
   }
 
-  private def canFilterLeft(joinType: JoinType): Boolean = joinType match {
-    case Inner | RightOuter => true
-    case _ => false
-  }
-
-  private def canFilterRight(joinType: JoinType): Boolean = joinType match {
-    case Inner | LeftOuter => true
-    case _ => false
-  }
-
   private def isProbablyShuffleJoin(left: LogicalPlan,
       right: LogicalPlan, hint: JoinHint): Boolean = {
     !hintToBroadcastLeft(hint) && !hintToBroadcastRight(hint) &&
@@ -149,11 +138,11 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
   }
 
   private def probablyHasShuffle(plan: LogicalPlan): Boolean = {
-    plan.collectFirst {
-      case j@Join(left, right, _, _, hint)
-        if isProbablyShuffleJoin(left, right, hint) => j
-      case a: Aggregate => a
-    }.nonEmpty
+    plan.exists {
+      case Join(left, right, _, _, hint) => isProbablyShuffleJoin(left, right, hint)
+      case _: Aggregate => true
+      case _ => false
+    }
   }
 
   // Returns the max scan byte size in the subtree rooted at `filterApplicationSide`.
@@ -235,7 +224,7 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
   }
 
   private def findBloomFilterWithExp(plan: LogicalPlan, key: Expression): Boolean = {
-    plan.find {
+    plan.exists {
       case Filter(condition, _) =>
         splitConjunctivePredicates(condition).exists {
           case BloomFilterMightContain(_, XxHash64(Seq(valueExpression), _))
@@ -243,7 +232,7 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
           case _ => false
         }
       case _ => false
-    }.isDefined
+    }
   }
 
   def hasInSubquery(left: LogicalPlan, right: LogicalPlan, leftKey: Expression,
@@ -277,11 +266,11 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
             isSimpleExpression(l) && isSimpleExpression(r)) {
             val oldLeft = newLeft
             val oldRight = newRight
-            if (canFilterLeft(joinType) && filteringHasBenefit(left, right, l, hint)) {
+            if (canPruneLeft(joinType) && filteringHasBenefit(left, right, l, hint)) {
               newLeft = injectFilter(l, newLeft, r, right)
             }
             // Did we actually inject on the left? If not, try on the right
-            if (newLeft.fastEquals(oldLeft) && canFilterRight(joinType) &&
+            if (newLeft.fastEquals(oldLeft) && canPruneRight(joinType) &&
               filteringHasBenefit(right, left, r, hint)) {
               newRight = injectFilter(r, newRight, l, left)
             }

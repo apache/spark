@@ -28,7 +28,7 @@ from pyspark.mllib.regression import LabeledPoint
 from pyspark.mllib.stat.test import ChiSqTestResult, KolmogorovSmirnovTestResult
 
 if TYPE_CHECKING:
-    from pyspark.mllib._typing import CorrelationMethod, DistName
+    from pyspark.mllib._typing import CorrMethodType, KolmogorovSmirnovTestDistNameType
 
 __all__ = ["MultivariateStatisticalSummary", "Statistics"]
 
@@ -106,19 +106,19 @@ class Statistics:
 
     @overload
     @staticmethod
-    def corr(x: RDD[Vector], *, method: Optional["CorrelationMethod"] = ...) -> Matrix:
+    def corr(x: RDD[Vector], *, method: Optional["CorrMethodType"] = ...) -> Matrix:
         ...
 
     @overload
     @staticmethod
-    def corr(x: RDD[float], y: RDD[float], method: Optional["CorrelationMethod"] = ...) -> float:
+    def corr(x: RDD[float], y: RDD[float], method: Optional["CorrMethodType"] = ...) -> float:
         ...
 
     @staticmethod
     def corr(
         x: Union[RDD[Vector], RDD[float]],
         y: Optional[RDD[float]] = None,
-        method: Optional["CorrelationMethod"] = None,
+        method: Optional["CorrMethodType"] = None,
     ) -> Union[float, Matrix]:
         """
         Compute the correlation (matrix) for the input RDD(s) using the
@@ -313,7 +313,7 @@ class Statistics:
 
     @staticmethod
     def kolmogorovSmirnovTest(
-        data: RDD[float], distName: "DistName" = "norm", *params: float
+        data: RDD[float], distName: "KolmogorovSmirnovTestDistNameType" = "norm", *params: float
     ) -> KolmogorovSmirnovTestResult:
         """
         Performs the Kolmogorov-Smirnov (KS) test for data sampled from

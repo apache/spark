@@ -93,6 +93,10 @@ public class V2ExpressionSQLBuilder {
           return visitNot(build(e.children()[0]));
         case "~":
           return visitUnaryArithmetic(name, inputToSQL(e.children()[0]));
+        case "ABS":
+        case "COALESCE":
+          return visitSQLFunction(name,
+            Arrays.stream(e.children()).map(c -> build(c)).toArray(String[]::new));
         case "CASE_WHEN": {
           List<String> children =
             Arrays.stream(e.children()).map(c -> build(c)).collect(Collectors.toList());
@@ -208,6 +212,10 @@ public class V2ExpressionSQLBuilder {
     }
     sb.append(" END");
     return sb.toString();
+  }
+
+  protected String visitSQLFunction(String funcName, String[] inputs) {
+    return funcName + "(" + Arrays.stream(inputs).collect(Collectors.joining(", ")) + ")";
   }
 
   protected String visitUnexpectedExpr(Expression expr) throws IllegalArgumentException {
