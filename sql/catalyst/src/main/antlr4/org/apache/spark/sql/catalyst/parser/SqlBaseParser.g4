@@ -384,16 +384,14 @@ property
 
 propertyKey
     : identifier (DOT identifier)*
-    | SINGLE_QUOTED_STRING
-    | DOUBLE_QUOTED_STRING
+    | stringValue
     ;
 
 propertyValue
     : INTEGER_VALUE
     | DECIMAL_VALUE
     | booleanValue
-    | SINGLE_QUOTED_STRING
-    | DOUBLE_QUOTED_STRING
+    | stringValue
     ;
 
 constantList

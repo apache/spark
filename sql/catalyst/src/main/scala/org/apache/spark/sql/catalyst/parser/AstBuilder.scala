@@ -2984,14 +2984,26 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
     props.keys.toSeq
   }
 
+  def parseString(value: StringValueContext): String = {
+    if (value.SINGLE_QUOTED_STRING() != null) {
+      string(value.SINGLE_QUOTED_STRING())
+    } else if (value.DOUBLE_QUOTED_STRING() != null) {
+      string(value.DOUBLE_QUOTED_STRING())
+    } else {
+      null
+    }
+  }
+
   /**
    * A property key can either be String or a collection of dot separated elements. This
    * function extracts the property key based on whether its a string literal or a property
    * identifier.
    */
   override def visitPropertyKey(key: PropertyKeyContext): String = {
-    if (key.SINGLE_QUOTED_STRING() != null) {
-      string(key.SINGLE_QUOTED_STRING())
+    if (key == null) {
+      null
+    } else if (key.stringValue() != null) {
+      parseString(key.stringValue())
     } else {
       key.getText
     }
@@ -3004,10 +3016,8 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
   override def visitPropertyValue(value: PropertyValueContext): String = {
     if (value == null) {
       null
-    } else if (value.SINGLE_QUOTED_STRING() != null) {
-      string(value.SINGLE_QUOTED_STRING())
-    } else if (value.DOUBLE_QUOTED_STRING() != null) {
-      string(value.DOUBLE_QUOTED_STRING())
+    } else if (value.stringValue() != null) {
+      parseString(value.stringValue())
     } else if (value.booleanValue != null) {
       value.getText.toLowerCase(Locale.ROOT)
     } else {
