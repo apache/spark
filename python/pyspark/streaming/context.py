@@ -379,15 +379,11 @@ class StreamingContext:
         self._check_serializers(rdds)
 
         assert self._jvm is not None
-        queue = self._jvm.PythonDStream.toRDDQueue(
-            [r._jrdd for r in rdds]
-        )
+        queue = self._jvm.PythonDStream.toRDDQueue([r._jrdd for r in rdds])
         if default:
             default = default._reserialize(rdds[0]._jrdd_deserializer)
             assert default is not None
-            jdstream = self._jssc.queueStream(
-                queue, oneAtATime, default._jrdd
-            )
+            jdstream = self._jssc.queueStream(queue, oneAtATime, default._jrdd)
         else:
             jdstream = self._jssc.queueStream(queue, oneAtATime)
         return DStream(jdstream, self, rdds[0]._jrdd_deserializer)
