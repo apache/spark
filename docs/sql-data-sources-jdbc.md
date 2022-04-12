@@ -250,7 +250,7 @@ logging into the data sources.
     <td><code>pushDownLimit</code></td>
     <td><code>false</code></td>
     <td>
-     The option to enable or disable LIMIT push-down into V2 JDBC data source. If LIMIT with SORT, the option to enable or disable LIMIT with SORT push-down into V2 JDBC data source. The default value is false, in which case Spark does not push down LIMIT or LIMIT with SORT to the JDBC data source. Otherwise, if sets to true, LIMIT or LIMIT with SORT is pushed down to the JDBC data source. If <code>numPartitions</code> greater than 1, SPARK still applies LIMIT or LIMIT with SORT on the result from data source even if LIMIT or LIMIT with SORT is pushed down. Otherwise, if LIMIT or LIMIT with SORT is pushed down and <code>numPartitions</code> equals to 1, SPARK will not apply LIMIT or LIMIT with SORT on the result from data source.
+      The option to enable or disable LIMIT push-down into V2 JDBC data source. If LIMIT with SORT, the option to enable or disable LIMIT with SORT push-down into V2 JDBC data source. The default value is false, in which case Spark does not push down LIMIT or LIMIT with SORT to the JDBC data source. Otherwise, if sets to true, LIMIT or LIMIT with SORT is pushed down to the JDBC data source. If <code>numPartitions</code> greater than 1, SPARK still applies LIMIT or LIMIT with SORT on the result from data source even if LIMIT or LIMIT with SORT is pushed down. Otherwise, if LIMIT or LIMIT with SORT is pushed down and <code>numPartitions</code> equals to 1, SPARK will not apply LIMIT or LIMIT with SORT on the result from data source.
     </td>
     <td>read</td>
   </tr>
