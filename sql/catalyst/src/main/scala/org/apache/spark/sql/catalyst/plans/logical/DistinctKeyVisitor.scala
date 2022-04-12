@@ -93,7 +93,7 @@ object DistinctKeyVisitor extends LogicalPlanVisitor[Set[ExpressionSet]] {
 
   override def visitOffset(p: Offset): Set[ExpressionSet] = {
     p.maxRows match {
-      case Some(value) if value <= 1 => Set(ExpressionSet(p.output))
+      case Some(value) if value <= 1 => p.output.map(attr => ExpressionSet(Seq(attr))).toSet
       case _ => p.child.distinctKeys
     }
   }

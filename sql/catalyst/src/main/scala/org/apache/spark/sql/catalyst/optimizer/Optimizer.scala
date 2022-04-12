@@ -1848,7 +1848,7 @@ object EliminateLimits extends Rule[LogicalPlan] {
 
 /**
  * Rewrite [[Offset]] as [[Limit]] or combines two adjacent [[Offset]] operators into one,
- *  merging the expressions into one single expression.
+ * merging the expressions into one single expression.
  */
 object RewriteOffsets extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {

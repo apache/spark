@@ -1275,7 +1275,8 @@ case class LocalLimit(limitExpr: Expression, child: LogicalPlan) extends OrderPr
 
 /**
  * A global (coordinated) limit with offset. This operator can skip at most `offsetExpr` number and
- * emit at most `limitExpr` number in total.
+ * emit at most `limitExpr` number in total. For example, if we have LIMIT 10 OFFSET 5, we impose a
+ * total limit of 10 + 5 = 15 rows and then discard the first 5, leaving 10 rows remaining.
  */
 case class GlobalLimitAndOffset(
     limitExpr: Expression,

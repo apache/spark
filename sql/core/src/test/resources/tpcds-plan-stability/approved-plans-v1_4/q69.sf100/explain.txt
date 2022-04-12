@@ -257,7 +257,7 @@ Results [8]: [cd_gender#25, cd_marital_status#26, cd_education_status#27, count(
 
 (47) TakeOrderedAndProject
 Input [8]: [cd_gender#25, cd_marital_status#26, cd_education_status#27, cnt1#34, cd_purchase_estimate#28, cnt2#35, cd_credit_rating#29, cnt3#36]
-Arguments: 100, [cd_gender#25 ASC NULLS FIRST, cd_marital_status#26 ASC NULLS FIRST, cd_education_status#27 ASC NULLS FIRST, cd_purchase_estimate#28 ASC NULLS FIRST, cd_credit_rating#29 ASC NULLS FIRST], [cd_gender#25, cd_marital_status#26, cd_education_status#27, cnt1#34, cd_purchase_estimate#28, cnt2#35, cd_credit_rating#29, cnt3#36]
+Arguments: 100, 0, [cd_gender#25 ASC NULLS FIRST, cd_marital_status#26 ASC NULLS FIRST, cd_education_status#27 ASC NULLS FIRST, cd_purchase_estimate#28 ASC NULLS FIRST, cd_credit_rating#29 ASC NULLS FIRST], [cd_gender#25, cd_marital_status#26, cd_education_status#27, cnt1#34, cd_purchase_estimate#28, cnt2#35, cd_credit_rating#29, cnt3#36]
 
 ===== Subqueries =====
 

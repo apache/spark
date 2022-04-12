@@ -411,16 +411,18 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
 
           case GlobalLimit(limitExpr, _) => checkLimitLikeClause("limit", limitExpr)
 
-//          case LocalLimit(limitExpr, _) => checkLimitLikeClause("limit", limitExpr)
           case LocalLimit(limitExpr, child) =>
             checkLimitLikeClause("limit", limitExpr)
             child match {
               case Offset(offsetExpr, _) =>
+                checkLimitLikeClause("offset", offsetExpr)
                 val limit = limitExpr.eval().asInstanceOf[Int]
                 val offset = offsetExpr.eval().asInstanceOf[Int]
                 if (Int.MaxValue - limit < offset) {
                   failAnalysis(
-                    s"""The sum of limit and offset must not be greater than Int.MaxValue,
+                    s"""
+                       |The sum of the LIMIT clause and the OFFSET clause must not be greater than
+                       | the maximum 32-bit integer value (2,147,483,647),
                        | but found limit = $limit, offset = $offset.""".stripMargin)
                 }
               case _ =>
@@ -433,7 +435,8 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
           case o if !o.isInstanceOf[GlobalLimit] && !o.isInstanceOf[LocalLimit]
             && o.children.exists(_.isInstanceOf[Offset]) =>
             failAnalysis(
-              s"""Only the OFFSET clause is allowed in the LIMIT clause, but the OFFSET
+              s"""
+                 |The OFFSET clause is only allowed in the LIMIT clause, but the OFFSET
                  | clause found in: ${o.nodeName}.""".stripMargin)
 
           case _: Union | _: SetOperation if operator.children.length > 1 =>
@@ -860,7 +863,8 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
       case Offset(offsetExpr, _) =>
         checkLimitLikeClause("offset", offsetExpr)
         failAnalysis(
-          s"""Only the OFFSET clause is allowed in the LIMIT clause, but the OFFSET
+          s"""
+             |The OFFSET clause is only allowed in the LIMIT clause, but the OFFSET
              | clause is found to be the outermost node.""".stripMargin)
       case _ =>
     }

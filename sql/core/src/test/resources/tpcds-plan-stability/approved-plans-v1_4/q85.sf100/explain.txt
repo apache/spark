@@ -296,7 +296,7 @@ Results [4]: [substr(r_reason_desc#41, 1, 20) AS substr(r_reason_desc, 1, 20)#59
 
 (54) TakeOrderedAndProject
 Input [4]: [substr(r_reason_desc, 1, 20)#59, avg(ws_quantity)#60, avg(wr_refunded_cash)#61, avg(wr_fee)#62]
-Arguments: 100, [substr(r_reason_desc, 1, 20)#59 ASC NULLS FIRST, avg(ws_quantity)#60 ASC NULLS FIRST, avg(wr_refunded_cash)#61 ASC NULLS FIRST, avg(wr_fee)#62 ASC NULLS FIRST], [substr(r_reason_desc, 1, 20)#59, avg(ws_quantity)#60, avg(wr_refunded_cash)#61, avg(wr_fee)#62]
+Arguments: 100, 0, [substr(r_reason_desc, 1, 20)#59 ASC NULLS FIRST, avg(ws_quantity)#60 ASC NULLS FIRST, avg(wr_refunded_cash)#61 ASC NULLS FIRST, avg(wr_fee)#62 ASC NULLS FIRST], [substr(r_reason_desc, 1, 20)#59, avg(ws_quantity)#60, avg(wr_refunded_cash)#61, avg(wr_fee)#62]
 
 ===== Subqueries =====
 

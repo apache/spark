@@ -37,7 +37,8 @@ trait LimitExec extends UnaryExecNode {
 }
 
 /**
- * Take the first `limit` elements and collect them to a single partition.
+ * Take the first `limit` + `offset` elements and collect them to a single partition and then to
+ * drop the first `offset` elements.
  *
  * This operator will be used when a logical `Limit` operation is the final operator in an
  * logical plan, which happens when the user is collecting results back to the driver.
@@ -46,6 +47,11 @@ case class CollectLimitExec(limit: Int, offset: Int, child: SparkPlan) extends L
   override def output: Seq[Attribute] = child.output
   override def outputPartitioning: Partitioning = SinglePartition
   override def executeCollect(): Array[InternalRow] = {
+    // Because CollectLimitExec collect all the output of child to a single partition, so we need
+    // collect the first `limit` + `offset` elements and then to drop the first `offset` elements.
+    // For example: limit is 1 and offset is 2 and the child output two partition.
+    // The first partition output [1, 2, 3] and the Second partition output [4, 5].
+    // Then [1, 2, 3] or [4, 5, 1] will be taken and output [3] or [1].
     child.executeTake(limit + offset).drop(offset)
   }
   private val serializer: Serializer = new UnsafeRowSerializer(child.output.size)
@@ -186,7 +192,7 @@ case class GlobalLimitExec(limit: Int, child: SparkPlan) extends BaseLimitExec {
 
 /**
  * Skip the first `offset` elements then take the first `limit` of the following elements in
- *  the child's single output partition.
+ * the child's single output partition.
  */
 case class GlobalLimitAndOffsetExec(
     limit: Int,

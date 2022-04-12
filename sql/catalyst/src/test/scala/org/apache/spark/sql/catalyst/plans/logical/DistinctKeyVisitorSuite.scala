@@ -94,6 +94,15 @@ class DistinctKeyVisitorSuite extends PlanTest {
       Set(ExpressionSet(Seq(a)), ExpressionSet(Seq(b)), ExpressionSet(Seq(c))))
   }
 
+  test("Offset's distinct attributes") {
+    checkDistinctAttributes(Distinct(t1).limit(12).offset(10).limit(10),
+      Set(ExpressionSet(Seq(a, b, c))))
+    checkDistinctAttributes(LocalLimit(10, Offset(10, LocalLimit(12, Distinct(t1)))),
+      Set(ExpressionSet(Seq(a, b, c))))
+    checkDistinctAttributes(t1.offset(1).limit(1),
+      Set(ExpressionSet(Seq(a)), ExpressionSet(Seq(b)), ExpressionSet(Seq(c))))
+  }
+
   test("Intersect's distinct attributes") {
     checkDistinctAttributes(Intersect(t1, t2, false), Set(ExpressionSet(Seq(a, b, c))))
     checkDistinctAttributes(Intersect(t1, t2, true), Set.empty)
