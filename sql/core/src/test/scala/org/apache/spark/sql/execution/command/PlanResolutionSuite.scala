@@ -34,7 +34,7 @@ import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException}
 import org.apache.spark.sql.catalyst.plans.logical.{AlterColumn, AnalysisOnlyCommand, AppendData, Assignment, CreateTable, CreateTableAsSelect, DeleteAction, DeleteFromTable, DescribeRelation, DropTable, InsertAction, LocalRelation, LogicalPlan, MergeIntoTable, OneRowRelation, Project, SetTableLocation, SetTableProperties, ShowTableProperties, SubqueryAlias, UnsetTableProperties, UpdateAction, UpdateTable}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.connector.FakeV2Provider
-import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogNotFoundException, Identifier, Table, TableCapability, TableCatalog, V1Table}
+import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogNotFoundException, Identifier, SupportsDelete, Table, TableCapability, TableCatalog, V1Table}
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.execution.datasources.{CreateTable => CreateTableV1}
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
@@ -49,7 +49,7 @@ class PlanResolutionSuite extends AnalysisTest {
   private val v2Format = classOf[FakeV2Provider].getName
 
   private val table: Table = {
-    val t = mock(classOf[Table])
+    val t = mock(classOf[SupportsDelete])
     when(t.schema()).thenReturn(new StructType().add("i", "int").add("s", "string"))
     when(t.partitioning()).thenReturn(Array.empty[Transform])
     t
