@@ -2776,7 +2776,7 @@ object functions {
    * @since 3.3.0
    */
   def lpad(str: Column, len: Int, pad: Array[Byte]): Column = withExpr {
-    if (SQLConf.get.getConf(SQLConf.LPAD_RPAD_FOR_BINARY_TYPE)) {
+    if (!SQLConf.get.getConf(SQLConf.LEGACY_LPAD_RPAD_BINARY_TYPE_AS_STRING)) {
       BinaryPad("lpad", str.expr, lit(len).expr, lit(pad).expr)
     } else {
       StringLPad(str.expr, lit(len).expr, lit(pad).expr)
@@ -2869,7 +2869,7 @@ object functions {
    * @since 3.3.0
    */
   def rpad(str: Column, len: Int, pad: Array[Byte]): Column = withExpr {
-    if (SQLConf.get.getConf(SQLConf.LPAD_RPAD_FOR_BINARY_TYPE)) {
+    if (!SQLConf.get.getConf(SQLConf.LEGACY_LPAD_RPAD_BINARY_TYPE_AS_STRING)) {
       BinaryPad("rpad", str.expr, lit(len).expr, lit(pad).expr)
     } else {
       StringRPad(str.expr, lit(len).expr, lit(pad).expr)

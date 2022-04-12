@@ -773,71 +773,55 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("PadExpressionBuilderBase") {
     // test if the correct lpad/rpad expression is created given different parameter types
-    Seq(true, false).foreach { bcEnabled =>
-      SQLConf.get.setConf(SQLConf.LPAD_RPAD_FOR_BINARY_TYPE, bcEnabled)
+    Seq(true, false).foreach { confVal =>
+      SQLConf.get.setConf(SQLConf.LEGACY_LPAD_RPAD_BINARY_TYPE_AS_STRING, confVal)
 
-      val lpadExp1 = LPadExpressionBuilder.build("lpad", Seq(Literal(Array[Byte]()), Literal(5)))
-      val lpadExp2 = LPadExpressionBuilder.build("lpad", Seq(Literal("hi"), Literal(5)))
+      val lpadExp1 = LPadExpressionBuilder.build("lpad", Seq(Literal("hi"), Literal(5)))
+      val lpadExp2 = LPadExpressionBuilder.build("lpad", Seq(Literal(Array[Byte]()), Literal(5)))
       val lpadExp3 = LPadExpressionBuilder.build("lpad",
-        Seq(Literal(Array[Byte](1, 2)), Literal(5), Literal(Array[Byte](1))))
+        Seq(Literal("hi"), Literal(5), Literal("somepadding")))
       val lpadExp4 = LPadExpressionBuilder.build("lpad",
         Seq(Literal(Array[Byte](1, 2)), Literal(5), Literal("somepadding")))
       val lpadExp5 = LPadExpressionBuilder.build("lpad",
-        Seq(Literal("hi"), Literal(5), Literal("somepadding")))
-
-      val rpadExp1 = RPadExpressionBuilder.build("rpad", Seq(Literal(Array[Byte]()), Literal(5)))
-      val rpadExp2 = RPadExpressionBuilder.build("rpad", Seq(Literal("hi"), Literal(5)))
-      val rpadExp3 = RPadExpressionBuilder.build("rpad",
         Seq(Literal(Array[Byte](1, 2)), Literal(5), Literal(Array[Byte](1))))
+
+      val rpadExp1 = RPadExpressionBuilder.build("rpad", Seq(Literal("hi"), Literal(5)))
+      val rpadExp2 = RPadExpressionBuilder.build("rpad", Seq(Literal(Array[Byte]()), Literal(5)))
+      val rpadExp3 = RPadExpressionBuilder.build("rpad",
+        Seq(Literal("hi"), Literal(5), Literal("somepadding")))
       val rpadExp4 = RPadExpressionBuilder.build("rpad",
         Seq(Literal(Array[Byte](1, 2)), Literal(5), Literal("somepadding")))
       val rpadExp5 = RPadExpressionBuilder.build("rpad",
-        Seq(Literal("hi"), Literal(5), Literal("somepadding")))
+        Seq(Literal(Array[Byte](1, 2)), Literal(5), Literal(Array[Byte](1))))
 
-      if (SQLConf.get.getConf(SQLConf.LPAD_RPAD_FOR_BINARY_TYPE)) {
-        assert(lpadExp1.asInstanceOf[BinaryPad] ==
+      assert(lpadExp1 == StringLPad(Literal("hi"), Literal(5), Literal(" ")))
+      assert(lpadExp3 == StringLPad(Literal("hi"), Literal(5), Literal("somepadding")))
+      assert(lpadExp4 == StringLPad(Literal(Array[Byte](1, 2)), Literal(5), Literal("somepadding")))
+
+      assert(rpadExp1 == StringRPad(Literal("hi"), Literal(5), Literal(" ")))
+      assert(rpadExp3 == StringRPad(Literal("hi"), Literal(5), Literal("somepadding")))
+      assert(rpadExp4 == StringRPad(Literal(Array[Byte](1, 2)), Literal(5), Literal("somepadding")))
+
+      if (!SQLConf.get.getConf(SQLConf.LEGACY_LPAD_RPAD_BINARY_TYPE_AS_STRING)) {
+        assert(lpadExp2 ==
           BinaryPad("lpad", Literal(Array[Byte]()), Literal(5), Literal(Array[Byte](0))))
-        assert(lpadExp2.asInstanceOf[StringLPad] ==
-          StringLPad(Literal("hi"), Literal(5), Literal(" ")))
-        assert(lpadExp3.asInstanceOf[BinaryPad] ==
+        assert(lpadExp5 ==
           BinaryPad("lpad", Literal(Array[Byte](1, 2)), Literal(5), Literal(Array[Byte](1))))
-        assert(lpadExp4.asInstanceOf[StringLPad] ==
-          StringLPad(Literal(Array[Byte](1, 2)), Literal(5), Literal("somepadding")))
-        assert(lpadExp5.asInstanceOf[StringLPad] ==
-          StringLPad(Literal("hi"), Literal(5), Literal("somepadding")))
 
-        assert(rpadExp1.asInstanceOf[BinaryPad] ==
+        assert(rpadExp2 ==
           BinaryPad("rpad", Literal(Array[Byte]()), Literal(5), Literal(Array[Byte](0))))
-        assert(rpadExp2.asInstanceOf[StringRPad] ==
-          StringRPad(Literal("hi"), Literal(5), Literal(" ")))
-        assert(rpadExp3.asInstanceOf[BinaryPad] ==
+        assert(rpadExp5 ==
           BinaryPad("rpad", Literal(Array[Byte](1, 2)), Literal(5), Literal(Array[Byte](1))))
-        assert(rpadExp4.asInstanceOf[StringRPad] ==
-          StringRPad(Literal(Array[Byte](1, 2)), Literal(5), Literal("somepadding")))
-        assert(rpadExp5.asInstanceOf[StringRPad] ==
-          StringRPad(Literal("hi"), Literal(5), Literal("somepadding")))
       } else {
-        assert(lpadExp1.asInstanceOf[StringLPad] ==
+        assert(lpadExp2 ==
           StringLPad(Literal(Array[Byte]()), Literal(5), Literal(" ")))
-        assert(lpadExp2.asInstanceOf[StringLPad] ==
-          StringLPad(Literal("hi"), Literal(5), Literal(" ")))
-        assert(lpadExp3.asInstanceOf[StringLPad] ==
+        assert(lpadExp5 ==
           StringLPad(Literal(Array[Byte](1, 2)), Literal(5), Literal(Array[Byte](1))))
-        assert(lpadExp4.asInstanceOf[StringLPad] ==
-          StringLPad(Literal(Array[Byte](1, 2)), Literal(5), Literal("somepadding")))
-        assert(lpadExp5.asInstanceOf[StringLPad] ==
-          StringLPad(Literal("hi"), Literal(5), Literal("somepadding")))
 
-        assert(rpadExp1.asInstanceOf[StringRPad] ==
+        assert(rpadExp2 ==
           StringRPad(Literal(Array[Byte]()), Literal(5), Literal(" ")))
-        assert(rpadExp2.asInstanceOf[StringRPad] ==
-          StringRPad(Literal("hi"), Literal(5), Literal(" ")))
-        assert(rpadExp3.asInstanceOf[StringRPad] ==
+        assert(rpadExp5 ==
           StringRPad(Literal(Array[Byte](1, 2)), Literal(5), Literal(Array[Byte](1))))
-        assert(rpadExp4.asInstanceOf[StringRPad] ==
-          StringRPad(Literal(Array[Byte](1, 2)), Literal(5), Literal("somepadding")))
-        assert(rpadExp5.asInstanceOf[StringRPad] ==
-          StringRPad(Literal("hi"), Literal(5), Literal("somepadding")))
       }
     }
   }

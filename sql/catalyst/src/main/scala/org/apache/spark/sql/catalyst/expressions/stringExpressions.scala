@@ -1461,7 +1461,7 @@ case class StringLocate(substr: Expression, str: Expression, start: Expression)
 
 trait PadExpressionBuilderBase extends ExpressionBuilder {
   override def build(funcName: String, expressions: Seq[Expression]): Expression = {
-    val behaviorChangeEnabled = SQLConf.get.getConf(SQLConf.LPAD_RPAD_FOR_BINARY_TYPE)
+    val behaviorChangeEnabled = !SQLConf.get.getConf(SQLConf.LEGACY_LPAD_RPAD_BINARY_TYPE_AS_STRING)
     val numArgs = expressions.length
     if (numArgs == 2) {
       if (expressions(0).dataType == BinaryType && behaviorChangeEnabled) {
