@@ -3710,13 +3710,13 @@ object SQLConf {
       .createWithDefault(true)
 
   val LEGACY_LPAD_RPAD_BINARY_TYPE_AS_STRING =
-    buildConf("spark.sql.legacy.lpadRpadBinaryTypeAsString")
+    buildConf("spark.sql.legacy.lpadRpadAlwaysReturnString")
       .internal()
-      .doc("When set to false, the functions `lpad` and `rpad` have been overloaded to support " +
-        "byte sequences. When the first argument is a byte sequence, the optional padding " +
-        "pattern must also be a byte sequence and the result is a BINARY value. The default " +
-        "padding pattern in this case is the zero byte. When set to true, it restores the legacy " +
-        "behavior.")
+      .doc("When set to false, when the first argument and the optional padding pattern is a " +
+        "byte sequence, the result is a BINARY value. The default padding pattern in this case " +
+        "is the zero byte. " +
+        "When set to true, it restores the legacy behavior of always returning string types " +
+        "even for binary inputs.")
       .version("3.3.0")
       .booleanConf
       .createWithDefault(false)

@@ -422,11 +422,11 @@ NULL
 
 
 -- !query
-SET spark.sql.legacy.lpadRpadBinaryTypeAsString=false
+SET spark.sql.legacy.lpadRpadAlwaysReturnString=false
 -- !query schema
 struct<key:string,value:string>
 -- !query output
-spark.sql.legacy.lpadRpadBinaryTypeAsString	false
+spark.sql.legacy.lpadRpadAlwaysReturnString	false
 
 
 -- !query
@@ -654,7 +654,7 @@ Wabca
 
 
 -- !query
-RESET spark.sql.legacy.lpadRpadBinaryTypeAsString
+RESET spark.sql.legacy.lpadRpadAlwaysReturnString
 -- !query schema
 struct<>
 -- !query output
