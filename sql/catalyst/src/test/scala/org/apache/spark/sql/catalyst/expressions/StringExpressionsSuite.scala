@@ -917,7 +917,6 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       ("<454>", "999PR") -> Decimal(-454),
       ("454-", "999MI") -> Decimal(-454),
       ("-$54", "MI$99") -> Decimal(-54),
-      ("$4-4", "$9MI9") -> Decimal(-44),
       // The input string contains more digits than fit in a long integer.
       ("123,456,789,123,456,789,123", "999,999,999,999,999,999,999") ->
         Decimal(new JavaBigDecimal("123456789123456789123"))
@@ -972,7 +971,8 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       ("454", "99.99.99") -> atMostOne,
       // Make sure the format string contains at most one dollar sign.
       ("454", "$$99") -> atMostOne,
-      // Make sure the format string contains at most one minus sign at the end.
+      // Make sure the format string contains at most one minus sign at the beginning or end.
+      ("$4-4", "$9MI9") -> "must be at the beginning or end of the number format",
       ("--$54", "SS$99") -> atMostOne,
       ("-$54", "MI$99MI") -> atMostOne,
       ("$4-4", "$9MI9MI") -> atMostOne,

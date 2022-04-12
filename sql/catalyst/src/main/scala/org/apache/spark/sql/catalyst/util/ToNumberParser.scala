@@ -244,9 +244,11 @@ class ToNumberParser(numberFormat: String, errorOnFail: Boolean) extends Seriali
     def multipleSignInNumberFormatError(message: String) = {
       s"At most one $message is allowed in the number format: '$numberFormat'"
     }
-
     def notAtEndOfNumberFormatError(message: String) = {
       s"$message must be at the end of the number format: '$numberFormat'"
+    }
+    def notAtBeginningOrEndOfNumberFormatError(message: String) = {
+      s"$message must be at the beginning or end of the number format: '$numberFormat'"
     }
 
     val inputTokenCounts = formatTokens.groupBy(identity).mapValues(_.size)
@@ -309,6 +311,12 @@ class ToNumberParser(numberFormat: String, errorOnFail: Boolean) extends Seriali
     // Make sure the format string contains at most one "MI" sequence.
     else if (inputTokenCounts.getOrElse(OptionalMinusSign(), 0) > 1) {
       multipleSignInNumberFormatError(s"'$OPTIONAL_MINUS_STRING'")
+    }
+    // Make sure that any "MI" sequence is at the start or end of the format string only.
+    else if (inputTokenCounts.getOrElse(OptionalMinusSign(), 0) == 1 &&
+      formatTokens.head != OptionalMinusSign() &&
+      formatTokens.last != OptionalMinusSign()) {
+      notAtBeginningOrEndOfNumberFormatError(s"'$OPTIONAL_MINUS_STRING'")
     }
     // Make sure the format string contains at most one closing angle bracket at the end.
     else if (inputTokenCounts.getOrElse(ClosingAngleBracket(), 0) > 1 ||
