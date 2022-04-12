@@ -437,6 +437,8 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
             Include only float, int, boolean columns. If None, will attempt to use
             everything, then use only numeric data.
 
+            .. versionadded:: 3.4.0
+
         See Also
         --------
         pyspark.pandas.Series.groupby
@@ -506,6 +508,8 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         numeric_only : bool, default False
             Include only float, int, boolean columns. If None, will attempt to use
             everything, then use only numeric data.
+
+            .. versionadded:: 3.4.0
 
         See Also
         --------
