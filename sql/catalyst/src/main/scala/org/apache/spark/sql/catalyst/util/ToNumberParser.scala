@@ -314,10 +314,10 @@ class ToNumberParser(numberFormat: String, errorOnFail: Boolean) extends Seriali
     }
     // Make sure that any "MI" sequence is at the start or end of the format string only.
     else if (inputTokenCounts.getOrElse(OptionalMinusSign(), 1) == 1 &&
-      (formatTokens.head != OptionalMinusSign() &&
-        formatTokens.last != OptionalMinusSign())) {
+      formatTokens.head != OptionalMinusSign() &&
+      formatTokens.last != OptionalMinusSign()) {
       notAtBeginningOrEndOfNumberFormatError(s"'$OPTIONAL_MINUS_STRING'")
-      }
+    }
     // Make sure the format string contains at most one closing angle bracket at the end.
     else if (inputTokenCounts.getOrElse(ClosingAngleBracket(), 0) > 1 ||
       (inputTokenCounts.getOrElse(ClosingAngleBracket(), 0) == 1 &&
