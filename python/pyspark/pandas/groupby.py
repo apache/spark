@@ -441,6 +441,25 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         --------
         pyspark.pandas.Series.groupby
         pyspark.pandas.DataFrame.groupby
+
+        Examples
+        --------
+        >>> df = ps.DataFrame({"A": [1, 2, 1, 2], "B": [True, False, False, True],
+        ...                    "C": [3, 4, 3, 4], "D": ["a", "b", "b", "a"]})
+
+        >>> df.groupby("A").max().sort_index()
+              B  C  D
+        A
+        1  True  3  b
+        2  True  4  b
+
+        Include only float, int, boolean columns when set numeric_only True.
+
+        >>> df.groupby("A").max(numeric_only=True).sort_index()
+              B  C
+        A
+        1  True  3
+        2  True  4
         """
         return self._reduce_for_stat_function(
             F.max, only_numeric=numeric_only, bool_as_numeric=True
@@ -492,6 +511,24 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         --------
         pyspark.pandas.Series.groupby
         pyspark.pandas.DataFrame.groupby
+
+        Examples
+        --------
+        >>> df = ps.DataFrame({"A": [1, 2, 1, 2], "B": [True, False, False, True],
+        ...                    "C": [3, 4, 3, 4], "D": ["a", "b", "b", "a"]})
+        >>> df.groupby("A").min().sort_index()
+               B  C  D
+        A
+        1  False  3  a
+        2  False  4  a
+
+        Include only float, int, boolean columns when set numeric_only True.
+
+        >>> df.groupby("A").min(numeric_only=True).sort_index()
+               B  C
+        A
+        1  False  3
+        2  False  4
         """
         return self._reduce_for_stat_function(
             F.min, only_numeric=numeric_only, bool_as_numeric=True
