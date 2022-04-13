@@ -21,14 +21,15 @@ import java.io.File
 
 import scala.annotation.meta.getter
 import scala.collection.JavaConverters._
-import scala.reflect.{ClassTag, classTag}
+import scala.reflect.{classTag, ClassTag}
 
 import com.fasterxml.jackson.annotation.JsonInclude
 import com.fasterxml.jackson.module.scala.DefaultScalaModule
 
 import org.apache.spark.SparkConf
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.config.History.{HYBRID_STORE_DISK_BACKEND, HybridStoreDiskBackend}
+import org.apache.spark.internal.config.History.HYBRID_STORE_DISK_BACKEND
+import org.apache.spark.internal.config.History.HybridStoreDiskBackend
 import org.apache.spark.internal.config.History.HybridStoreDiskBackend._
 import org.apache.spark.util.Utils
 import org.apache.spark.util.kvstore._
