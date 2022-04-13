@@ -104,6 +104,13 @@ abstract class HybridStoreSuite extends SparkFunSuite with BeforeAndAfter with T
   }
 
   test("test basic iteration") {
+
+    def firstInView[T](view: KVStoreView[T]): T = {
+      Utils.tryWithResource(view.closeableIterator()) { iter =>
+        assert(iter.hasNext)
+        iter.next()
+      }
+    }
     val store = createHybridStore()
 
     val t1 = createCustomType1(1)
@@ -113,22 +120,12 @@ abstract class HybridStoreSuite extends SparkFunSuite with BeforeAndAfter with T
 
     Seq(false, true).foreach { switch =>
       if (switch) switchHybridStore(store)
-      Utils.tryWithResource(store.view(t1.getClass).closeableIterator()) { iterator =>
-        assert(iterator.next().id === t1.id)
-      }
-      Utils.tryWithResource(
-        store.view(t1.getClass).skip(1).closeableIterator()) { iterator =>
-        assert(iterator.next().id === t2.id)
-      }
-      Utils.tryWithResource(
-        store.view(t1.getClass).skip(1).max(1).closeableIterator()) { iterator =>
-        assert(iterator.next().id === t2.id)
-      }
-      Utils.tryWithResource(
-        store.view(t1.getClass).first(t1.key).max(1).closeableIterator()) { iterator =>
-        assert(iterator.next().id === t1.id)
-      }
-      assert(store.view(t1.getClass()).first(t2.key).max(1).iterator().next().id === t2.id)
+
+      assert(firstInView(store.view(t1.getClass)).id === t1.id)
+      assert(firstInView(store.view(t1.getClass()).skip(1)).id === t2.id)
+      assert(firstInView(store.view(t1.getClass()).skip(1).max(1)).id === t2.id)
+      assert(firstInView(store.view(t1.getClass()).first(t1.key).max(1)).id === t1.id)
+      assert(firstInView(store.view(t1.getClass()).first(t2.key).max(1)).id === t2.id)
     }
   }
 

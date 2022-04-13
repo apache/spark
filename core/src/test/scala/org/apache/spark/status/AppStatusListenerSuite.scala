@@ -20,7 +20,6 @@ package org.apache.spark.status
 import java.io.File
 import java.util.{Date, Properties}
 
-import scala.collection.JavaConverters._
 import scala.collection.immutable.Map
 import scala.reflect.{classTag, ClassTag}
 
