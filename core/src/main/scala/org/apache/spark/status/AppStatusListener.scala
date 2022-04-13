@@ -1415,7 +1415,7 @@ private[spark] class AppStatusListener(
       .first(stageKey)
       .last(stageKey))
     cachedQuantiles.foreach { q =>
-      kvstore.delete(q.getClass, q.id)
+      kvstore.delete(q.getClass(), q.id)
     }
   }
 

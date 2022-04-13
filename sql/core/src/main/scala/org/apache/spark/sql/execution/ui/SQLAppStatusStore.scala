@@ -30,7 +30,6 @@ import org.apache.spark.status.KVUtils
 import org.apache.spark.status.KVUtils.KVIndexParam
 import org.apache.spark.util.kvstore.{KVIndex, KVStore}
 
-
 /**
  * Provides a view of a KVStore with methods that make it easy to query SQL-specific state. There's
  * no state kept in this class, so it's ok to have multiple instances of it in an application.
