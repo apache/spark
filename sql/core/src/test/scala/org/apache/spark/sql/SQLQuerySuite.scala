@@ -4331,6 +4331,18 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
       checkAnswer(df.repartitionByRange(2, col("v")).selectExpr("try_sum(v)"), Row(null))
     }
   }
+
+  test("SPARK-38589: try_avg should return null if overflow happens before merging") {
+    val yearMonthDf = Seq(Int.MaxValue, Int.MaxValue, 2)
+      .map(Period.ofMonths)
+      .toDF("v")
+    val dayTimeDf = Seq(106751991L, 106751991L, 2L)
+      .map(Duration.ofDays)
+      .toDF("v")
+    Seq(yearMonthDf, dayTimeDf).foreach { df =>
+      checkAnswer(df.repartitionByRange(2, col("v")).selectExpr("try_avg(v)"), Row(null))
+    }
+  }
 }
 
 case class Foo(bar: Option[String])

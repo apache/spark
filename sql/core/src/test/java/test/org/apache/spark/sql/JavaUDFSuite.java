@@ -107,10 +107,11 @@ public class JavaUDFSuite implements Serializable {
     Assert.assertEquals(55, sum);
   }
 
-  @Test(expected = AnalysisException.class)
+  @Test
   public void udf5Test() {
     spark.udf().register("inc", (Long i) -> i + 1, DataTypes.LongType);
-    List<Row> results = spark.sql("SELECT inc(1, 5)").collectAsList();
+    Assert.assertThrows(AnalysisException.class,
+      () -> spark.sql("SELECT inc(1, 5)").collectAsList());
   }
 
   @Test

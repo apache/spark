@@ -115,13 +115,26 @@ public class JavaSQLDataSourceExample {
 
   private static void runGenericFileSourceOptionsExample(SparkSession spark) {
     // $example on:ignore_corrupt_files$
-    // enable ignore corrupt files
+    // enable ignore corrupt files via the data source option
+    // dir1/file3.json is corrupt from parquet's view
+    Dataset<Row> testCorruptDF0 = spark.read().option("ignoreCorruptFiles", "true").parquet(
+        "examples/src/main/resources/dir1/",
+        "examples/src/main/resources/dir1/dir2/");
+    testCorruptDF0.show();
+    // +-------------+
+    // |         file|
+    // +-------------+
+    // |file1.parquet|
+    // |file2.parquet|
+    // +-------------+
+
+    // enable ignore corrupt files via the configuration
     spark.sql("set spark.sql.files.ignoreCorruptFiles=true");
     // dir1/file3.json is corrupt from parquet's view
-    Dataset<Row> testCorruptDF = spark.read().parquet(
+    Dataset<Row> testCorruptDF1 = spark.read().parquet(
             "examples/src/main/resources/dir1/",
             "examples/src/main/resources/dir1/dir2/");
-    testCorruptDF.show();
+    testCorruptDF1.show();
     // +-------------+
     // |         file|
     // +-------------+

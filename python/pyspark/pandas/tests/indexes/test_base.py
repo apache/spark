@@ -2191,32 +2191,48 @@ class IndexesTest(ComparisonTestBase, TestUtils):
         psidx = ps.from_pandas(pidx)
         self.assert_eq(pidx.insert(1, 100), psidx.insert(1, 100))
         self.assert_eq(pidx.insert(-1, 100), psidx.insert(-1, 100))
-        self.assert_eq(pidx.insert(100, 100), psidx.insert(100, 100))
-        self.assert_eq(pidx.insert(-100, 100), psidx.insert(-100, 100))
+        err_msg = "index 100 is out of bounds for axis 0 with size 3"
+        with self.assertRaisesRegex(IndexError, err_msg):
+            psidx.insert(100, 100)
+        err_msg = "index -100 is out of bounds for axis 0 with size 3"
+        with self.assertRaisesRegex(IndexError, err_msg):
+            psidx.insert(-100, 100)
 
         # Floating
         pidx = pd.Index([1.0, 2.0, 3.0], name="Koalas")
         psidx = ps.from_pandas(pidx)
         self.assert_eq(pidx.insert(1, 100.0), psidx.insert(1, 100.0))
         self.assert_eq(pidx.insert(-1, 100.0), psidx.insert(-1, 100.0))
-        self.assert_eq(pidx.insert(100, 100.0), psidx.insert(100, 100.0))
-        self.assert_eq(pidx.insert(-100, 100.0), psidx.insert(-100, 100.0))
+        err_msg = "index 100 is out of bounds for axis 0 with size 3"
+        with self.assertRaisesRegex(IndexError, err_msg):
+            psidx.insert(100, 100)
+        err_msg = "index -100 is out of bounds for axis 0 with size 3"
+        with self.assertRaisesRegex(IndexError, err_msg):
+            psidx.insert(-100, 100)
 
         # String
         pidx = pd.Index(["a", "b", "c"], name="Koalas")
         psidx = ps.from_pandas(pidx)
         self.assert_eq(pidx.insert(1, "x"), psidx.insert(1, "x"))
         self.assert_eq(pidx.insert(-1, "x"), psidx.insert(-1, "x"))
-        self.assert_eq(pidx.insert(100, "x"), psidx.insert(100, "x"))
-        self.assert_eq(pidx.insert(-100, "x"), psidx.insert(-100, "x"))
+        err_msg = "index 100 is out of bounds for axis 0 with size 3"
+        with self.assertRaisesRegex(IndexError, err_msg):
+            psidx.insert(100, "x")
+        err_msg = "index -100 is out of bounds for axis 0 with size 3"
+        with self.assertRaisesRegex(IndexError, err_msg):
+            psidx.insert(-100, "x")
 
         # Boolean
         pidx = pd.Index([True, False, True, False], name="Koalas")
         psidx = ps.from_pandas(pidx)
         self.assert_eq(pidx.insert(1, True), psidx.insert(1, True))
         self.assert_eq(pidx.insert(-1, True), psidx.insert(-1, True))
-        self.assert_eq(pidx.insert(100, True), psidx.insert(100, True))
-        self.assert_eq(pidx.insert(-100, True), psidx.insert(-100, True))
+        err_msg = "index 100 is out of bounds for axis 0 with size 4"
+        with self.assertRaisesRegex(IndexError, err_msg):
+            psidx.insert(100, True)
+        err_msg = "index -100 is out of bounds for axis 0 with size 4"
+        with self.assertRaisesRegex(IndexError, err_msg):
+            psidx.insert(-100, True)
 
         # MultiIndex
         pmidx = pd.MultiIndex.from_tuples(
