@@ -17,8 +17,11 @@
 
 package org.apache.spark.sql.errors
 
-import org.apache.spark.{SparkArithmeticException, SparkException, SparkRuntimeException, SparkUnsupportedOperationException, SparkUpgradeException}
+import java.util.Locale
+
+import org.apache.spark.{SparkArithmeticException, SparkException, SparkIllegalStateException, SparkRuntimeException, SparkUnsupportedOperationException, SparkUpgradeException}
 import org.apache.spark.sql.{DataFrame, QueryTest}
+import org.apache.spark.sql.catalyst.expressions.ExprUtils
 import org.apache.spark.sql.execution.datasources.orc.OrcTest
 import org.apache.spark.sql.execution.datasources.parquet.ParquetTest
 import org.apache.spark.sql.functions.{lit, lower, struct, sum}
@@ -277,5 +280,15 @@ class QueryExecutionErrorsSuite extends QueryTest
     assert(e.getSqlState === "22008")
     assert(e.getMessage ===
       "Datetime operation overflow: add 1000000 YEAR to TIMESTAMP '2022-03-09 01:02:03'.")
+  }
+
+  test("CANNOT_PARSE_DECIMAL: unparseable decimal") {
+    val e = intercept[SparkIllegalStateException] {
+      val decimalParser = ExprUtils.getDecimalParser(Locale.ROOT)
+      decimalParser("$92,807.99")
+    }
+    assert(e.getErrorClass === "CANNOT_PARSE_DECIMAL")
+    assert(e.getSqlState === "42000")
+    assert(e.getMessage === "Cannot parse decimal")
   }
 }
