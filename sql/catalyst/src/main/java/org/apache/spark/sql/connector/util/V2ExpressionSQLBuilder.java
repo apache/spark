@@ -95,6 +95,13 @@ public class V2ExpressionSQLBuilder {
           return visitUnaryArithmetic(name, inputToSQL(e.children()[0]));
         case "ABS":
         case "COALESCE":
+        case "LN":
+        case "EXP":
+        case "POWER":
+        case "SQRT":
+        case "FLOOR":
+        case "CEIL":
+        case "WIDTH_BUCKET":
           return visitSQLFunction(name,
             Arrays.stream(e.children()).map(c -> build(c)).toArray(String[]::new));
         case "CASE_WHEN": {
