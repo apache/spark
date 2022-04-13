@@ -7037,6 +7037,8 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         ignore_index : bool, default False
             If True, the resulting axis will be labeled 0, 1, …, n - 1.
 
+            .. versionadded:: 3.4.0
+
         Returns
         -------
         sorted_obj : DataFrame
