@@ -122,14 +122,11 @@ class V2ExpressionBuilder(
       .map(v => new GeneralScalarExpression("FLOOR", Array[V2Expression](v)))
     case Ceil(child) => generateExpression(child)
       .map(v => new GeneralScalarExpression("CEIL", Array[V2Expression](v)))
-    case WidthBucket(value, minValue, maxValue, numBucket) =>
-      val v = generateExpression(value)
-      val min = generateExpression(minValue)
-      val max = generateExpression(maxValue)
-      val n = generateExpression(numBucket)
-      if (v.isDefined && min.isDefined && max.isDefined && n.isDefined) {
+    case wb: WidthBucket =>
+      val childrenExpressions = wb.children.flatMap(generateExpression(_))
+      if (childrenExpressions.length == wb.children.length) {
         Some(new GeneralScalarExpression("WIDTH_BUCKET",
-          Array[V2Expression](v.get, min.get, max.get, n.get)))
+          childrenExpressions.toArray[V2Expression]))
       } else {
         None
       }
