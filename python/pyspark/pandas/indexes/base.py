@@ -2524,6 +2524,9 @@ class Index(IndexOpsMixin):
 
         Follows Python list.append semantics for negative values.
 
+        .. versionchanged:: 3.4.0
+           Raise IndexError when loc is out of bounds to follow Pandas 1.4+ behavior
+
         Parameters
         ----------
         loc : int
