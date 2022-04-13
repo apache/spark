@@ -516,6 +516,7 @@ case class NewInstance(
 
   override def nullable: Boolean = needNullCheck
 
+  override def foldable: Boolean = false
   override def children: Seq[Expression] = arguments
 
   final override val nodePatterns: Seq[TreePattern] = Seq(NEW_INSTANCE)
