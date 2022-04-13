@@ -187,7 +187,7 @@ object PushDownUtils extends PredicateHelper {
     }
   }
 
-  private def toOutputAttrs(
+  def toOutputAttrs(
       schema: StructType,
       relation: DataSourceV2Relation): Seq[AttributeReference] = {
     val nameToAttr = relation.output.map(_.name).zip(relation.output).toMap
