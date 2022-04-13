@@ -2164,7 +2164,9 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             scol = F.when(cond, func(scol, True).over(window)).otherwise(scol)
 
         return DataFrame(
-            self._psdf._internal.with_new_spark_column(self._column_label, scol)  # TODO: dtype?
+            self._psdf._internal.with_new_spark_column(
+                self._column_label, scol.alias(name_like_string(self.name))  # TODO: dtype?
+            )
         )._psser_for(self._column_label)
 
     def interpolate(self, method: Optional[str] = None, limit: Optional[int] = None) -> "Series":
