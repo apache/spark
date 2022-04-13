@@ -819,7 +819,7 @@
       <dependency>
         <groupId>io.netty</groupId>
         <artifactId>netty-all</artifactId>
-        <version>4.1.75.Final</version>
+        <version>4.1.76.Final</version>
         <exclusions>
           <exclusion>
             <groupId>io.netty</groupId>
@@ -903,7 +903,7 @@
       <dependency>
         <groupId>io.netty</groupId>
         <artifactId>netty-tcnative-classes</artifactId>
-        <version>2.0.50.Final</version>
+        <version>2.0.51.Final</version>
       </dependency>
       <dependency>
         <groupId>org.apache.derby</groupId>
