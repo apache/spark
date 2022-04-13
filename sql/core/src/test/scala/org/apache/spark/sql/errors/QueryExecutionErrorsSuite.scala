@@ -21,20 +21,23 @@ import java.util.Locale
 
 import org.apache.spark.{SparkArithmeticException, SparkException, SparkIllegalStateException, SparkRuntimeException, SparkUnsupportedOperationException, SparkUpgradeException}
 import org.apache.spark.sql.{DataFrame, QueryTest}
-import org.apache.spark.sql.catalyst.expressions.ExprUtils
+import org.apache.spark.sql.catalyst.util.BadRecordException
+import org.apache.spark.sql.execution.QueryExecutionException
 import org.apache.spark.sql.execution.datasources.orc.OrcTest
 import org.apache.spark.sql.execution.datasources.parquet.ParquetTest
 import org.apache.spark.sql.functions.{lit, lower, struct, sum}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy.EXCEPTION
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{StructType, TimestampType}
+import org.apache.spark.sql.types.{DecimalType, StructType, TimestampType}
 import org.apache.spark.sql.util.ArrowUtils
 
 class QueryExecutionErrorsSuite extends QueryTest
   with ParquetTest with OrcTest with SharedSparkSession {
 
   import testImplicits._
+
+  private val unparseableDecimalCsvFile = "test-data/unparseable_decimal.csv"
 
   private def getAesInputs(): (DataFrame, DataFrame) = {
     val encryptedText16 = "4Hv0UKCx6nfUeAoPZo1z+w=="
@@ -283,12 +286,33 @@ class QueryExecutionErrorsSuite extends QueryTest
   }
 
   test("CANNOT_PARSE_DECIMAL: unparseable decimal") {
-    val e = intercept[SparkIllegalStateException] {
-      val decimalParser = ExprUtils.getDecimalParser(Locale.ROOT)
-      decimalParser("$92,807.99")
+    val e1 = intercept[SparkException] {
+      val schema = new StructType().add("money", DecimalType.DoubleDecimal)
+      spark
+        .read
+        .schema(schema)
+        .format("csv")
+        .option("header", "true")
+        .option("locale", Locale.ROOT.toLanguageTag)
+        .option("multiLine", "true")
+        .option("inferSchema", "false")
+        .option("mode", "FAILFAST")
+        .load(testFile(unparseableDecimalCsvFile)).select($"money").collect()
     }
-    assert(e.getErrorClass === "CANNOT_PARSE_DECIMAL")
-    assert(e.getSqlState === "42000")
-    assert(e.getMessage === "Cannot parse decimal")
+    assert(e1.getCause.isInstanceOf[QueryExecutionException])
+
+    val e2 = e1.getCause.asInstanceOf[QueryExecutionException]
+    assert(e2.getCause.isInstanceOf[SparkException])
+
+    val e3 = e2.getCause.asInstanceOf[SparkException]
+    assert(e3.getCause.isInstanceOf[BadRecordException])
+
+    val e4 = e3.getCause.asInstanceOf[BadRecordException]
+    assert(e4.getCause.isInstanceOf[SparkIllegalStateException])
+
+    val e5 = e4.getCause.asInstanceOf[SparkIllegalStateException]
+    assert(e5.getErrorClass === "CANNOT_PARSE_DECIMAL")
+    assert(e5.getSqlState === "42000")
+    assert(e5.getMessage === "Cannot parse decimal")
   }
 }
