@@ -2384,4 +2384,8 @@ object QueryCompilationErrors {
     new AnalysisException(
       "Sinks cannot request distribution and ordering in continuous execution mode")
   }
+
+  def noSuchFunctionError(database: String, funcInfo: String): Throwable = {
+    new AnalysisException(s"$database does not support function: $funcInfo")
+  }
 }
