@@ -395,6 +395,10 @@ case class PercentileDisc private(
 
   override def prettyName: String = "percentile_disc"
 
+  /**
+   * This function has been based upon similar function from H2
+   * `org.h2.expression.aggregate.Percentile.getValue`.
+   */
   override protected def getPercentiles(sortedCounts: Seq[(AnyRef, Long)]): Seq[Double] = {
     val passedSortedCounts = if (reverse) {
       sortedCounts.reverse
