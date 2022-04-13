@@ -395,7 +395,7 @@ class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkCo
           "Exec request times don't make sense")
         assert(t >= testStartTime,
           "Exec allocation and request times don't make sense")
-        assert(t >= info.requestTime.get,
+        assert(t <= info.registrationTime.get,
           "Exec allocation and request times don't make sense")
       }
     }

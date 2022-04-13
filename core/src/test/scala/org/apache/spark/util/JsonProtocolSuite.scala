@@ -98,7 +98,7 @@ class JsonProtocolSuite extends SparkFunSuite {
       new ExecutorInfo("Hostee.awesome.com", 11, logUrlMap, attributes, resources.toMap, 4))
     val executorAddedWithTime = SparkListenerExecutorAdded(executorAddedTime, "exec1",
       new ExecutorInfo("Hostee.awesome.com", 11, logUrlMap, attributes, resources.toMap, 4,
-        Some(0), Some(1)))
+        Some(1), Some(0)))
     val executorRemoved = SparkListenerExecutorRemoved(executorRemovedTime, "exec2", "test reason")
     val executorBlacklisted = SparkListenerExecutorBlacklisted(executorExcludedTime, "exec1", 22)
     val executorUnblacklisted =
@@ -186,7 +186,7 @@ class JsonProtocolSuite extends SparkFunSuite {
     testBlockManagerId(BlockManagerId("Hong", "Kong", 500))
     testExecutorInfo(new ExecutorInfo("host", 43, logUrlMap, attributes))
     testExecutorInfo(new ExecutorInfo("host", 43, logUrlMap, attributes,
-      rinfo, 1, Some(0), Some(1)))
+      rinfo, 1, Some(1), Some(0)))
 
     // StorageLevel
     testStorageLevel(StorageLevel.NONE)
@@ -2177,8 +2177,8 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |      }
       |    },
       |    "Resource Profile Id": 4,
-      |    "Registration Time" : 0,
-      |    "Request Time" : 1
+      |    "Registration Time" : 1,
+      |    "Request Time" : 0
       |  }
       |
       |}
