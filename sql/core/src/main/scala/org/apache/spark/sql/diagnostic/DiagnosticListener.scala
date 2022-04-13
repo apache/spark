@@ -24,6 +24,12 @@ import org.apache.spark.sql.execution.ui.{SparkListenerSQLAdaptiveExecutionUpdat
 import org.apache.spark.sql.internal.StaticSQLConf.UI_RETAINED_EXECUTIONS
 import org.apache.spark.status.{ElementTrackingStore, KVUtils}
 
+/**
+ * A Spark listener that writes diagnostic information to a data store. The information can be
+ * accessed by the public REST API.
+ *
+ * @param kvStore used to store the diagnostic information
+ */
 class DiagnosticListener(
     conf: SparkConf,
     kvStore: ElementTrackingStore) extends SparkListener {
