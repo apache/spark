@@ -707,14 +707,16 @@ public class JavaDatasetSuite implements Serializable {
    */
   private static class PrivateClassTest { }
 
-  @Test(expected = UnsupportedOperationException.class)
+  @Test
   public void testJavaEncoderErrorMessageForPrivateClass() {
-    Encoders.javaSerialization(PrivateClassTest.class);
+    Assert.assertThrows(UnsupportedOperationException.class,
+      () -> Encoders.javaSerialization(PrivateClassTest.class));
   }
 
-  @Test(expected = UnsupportedOperationException.class)
+  @Test
   public void testKryoEncoderErrorMessageForPrivateClass() {
-    Encoders.kryo(PrivateClassTest.class);
+    Assert.assertThrows(UnsupportedOperationException.class,
+      () -> Encoders.kryo(PrivateClassTest.class));
   }
 
   public static class SimpleJavaBean implements Serializable {
@@ -1747,29 +1749,33 @@ public class JavaDatasetSuite implements Serializable {
     }
   }
 
-  @Test(expected = UnsupportedOperationException.class)
+  @Test
   public void testCircularReferenceBean1() {
     CircularReference1Bean bean = new CircularReference1Bean();
-    spark.createDataset(Arrays.asList(bean), Encoders.bean(CircularReference1Bean.class));
+    Assert.assertThrows(UnsupportedOperationException.class,
+      () -> spark.createDataset(Arrays.asList(bean), Encoders.bean(CircularReference1Bean.class)));
   }
 
-  @Test(expected = UnsupportedOperationException.class)
+  @Test
   public void testCircularReferenceBean2() {
     CircularReference3Bean bean = new CircularReference3Bean();
-    spark.createDataset(Arrays.asList(bean), Encoders.bean(CircularReference3Bean.class));
+    Assert.assertThrows(UnsupportedOperationException.class,
+      () -> spark.createDataset(Arrays.asList(bean), Encoders.bean(CircularReference3Bean.class)));
   }
 
-  @Test(expected = UnsupportedOperationException.class)
+  @Test
   public void testCircularReferenceBean3() {
     CircularReference4Bean bean = new CircularReference4Bean();
-    spark.createDataset(Arrays.asList(bean), Encoders.bean(CircularReference4Bean.class));
+    Assert.assertThrows(UnsupportedOperationException.class,
+      () -> spark.createDataset(Arrays.asList(bean), Encoders.bean(CircularReference4Bean.class)));
   }
 
-  @Test(expected = RuntimeException.class)
+  @Test
   public void testNullInTopLevelBean() {
     NestedSmallBean bean = new NestedSmallBean();
     // We cannot set null in top-level bean
-    spark.createDataset(Arrays.asList(bean, null), Encoders.bean(NestedSmallBean.class));
+    Assert.assertThrows(RuntimeException.class,
+      () -> spark.createDataset(Arrays.asList(bean, null), Encoders.bean(NestedSmallBean.class)));
   }
 
   @Test

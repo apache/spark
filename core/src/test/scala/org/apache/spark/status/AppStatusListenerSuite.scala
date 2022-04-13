@@ -254,11 +254,8 @@ abstract class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter 
         assert(stage.info.memoryBytesSpilled === s1Tasks.size * value)
       }
 
-      val execs = Utils.tryWithResource(
-        store.view(classOf[ExecutorStageSummaryWrapper]).index("stage")
-          .first(key(stages.head)).last(key(stages.head)).closeableIterator()) { iterator =>
-        iterator.asScala.toList
-      }
+      val execs = KVUtils.viewToSeq(store.view(classOf[ExecutorStageSummaryWrapper]).index("stage")
+        .first(key(stages.head)).last(key(stages.head)))
       assert(execs.size > 0)
       execs.foreach { exec =>
         assert(exec.info.memoryBytesSpilled === s1Tasks.size * value / 2)
@@ -275,12 +272,10 @@ abstract class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter 
       stageAttemptId = stages.head.attemptNumber))
 
     val executorStageSummaryWrappers =
-      Utils.tryWithResource(store.view(classOf[ExecutorStageSummaryWrapper]).index("stage")
+      KVUtils.viewToSeq(store.view(classOf[ExecutorStageSummaryWrapper]).index("stage")
         .first(key(stages.head))
-        .last(key(stages.head))
-        .closeableIterator()) { iterator =>
-        iterator.asScala.toList
-      }
+        .last(key(stages.head)))
+
     assert(executorStageSummaryWrappers.nonEmpty)
     executorStageSummaryWrappers.foreach { exec =>
       // only the first executor is expected to be excluded
@@ -305,12 +300,10 @@ abstract class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter 
       stageAttemptId = stages.head.attemptNumber))
 
     val executorStageSummaryWrappersForNode =
-      Utils.tryWithResource(store.view(classOf[ExecutorStageSummaryWrapper]).index("stage")
+      KVUtils.viewToSeq(store.view(classOf[ExecutorStageSummaryWrapper]).index("stage")
         .first(key(stages.head))
-        .last(key(stages.head))
-        .closeableIterator()) { iterator =>
-        iterator.asScala.toList
-      }
+        .last(key(stages.head)))
+
     assert(executorStageSummaryWrappersForNode.nonEmpty)
     executorStageSummaryWrappersForNode.foreach { exec =>
       // both executor is expected to be excluded
@@ -1369,19 +1362,13 @@ abstract class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter 
         TaskKilled(reason = "Killed"), tasks(1), new ExecutorMetrics, null))
 
     // Ensure killed task metrics are updated
-    val allStages = Utils.tryWithResource(
-      store.view(classOf[StageDataWrapper]).reverse().closeableIterator()) { iterator =>
-      iterator.asScala.map(_.info).toList
-    }
+    val allStages = KVUtils.viewToSeq(store.view(classOf[StageDataWrapper]).reverse()).map(_.info)
     val failedStages = allStages.filter(_.status == v1.StageStatus.FAILED)
     assert(failedStages.size == 1)
     assert(failedStages.head.numKilledTasks == 1)
     assert(failedStages.head.numCompleteTasks == 1)
 
-    val allJobs = Utils.tryWithResource(
-      store.view(classOf[JobDataWrapper]).reverse().closeableIterator()) { iterator =>
-      iterator.asScala.map(_.info).toList
-    }
+    val allJobs = KVUtils.viewToSeq(store.view(classOf[JobDataWrapper]).reverse()).map(_.info)
     assert(allJobs.size == 1)
     assert(allJobs.head.numKilledTasks == 1)
     assert(allJobs.head.numCompletedTasks == 1)
@@ -1438,20 +1425,15 @@ abstract class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter 
         ExecutorLostFailure("2", true, Some("Lost executor")), tasks(3), new ExecutorMetrics,
         null))
 
-      val esummary = Utils.tryWithResource(
-        store.view(classOf[ExecutorStageSummaryWrapper]).closeableIterator()) { iterator =>
-        iterator.asScala.map(_.info).toList
-      }
+      val esummary = KVUtils.viewToSeq(store.view(classOf[ExecutorStageSummaryWrapper])).map(_.info)
       esummary.foreach { execSummary =>
         assert(execSummary.failedTasks === 1)
         assert(execSummary.succeededTasks === 1)
         assert(execSummary.killedTasks === 0)
       }
 
-      val allExecutorSummary = Utils.tryWithResource(
-        store.view(classOf[ExecutorSummaryWrapper]).closeableIterator()) { iterator =>
-        iterator.asScala.map(_.info).toList
-      }
+      val allExecutorSummary =
+        KVUtils.viewToSeq(store.view(classOf[ExecutorSummaryWrapper])).map(_.info)
       assert(allExecutorSummary.size === 2)
       allExecutorSummary.foreach { allExecSummary =>
         assert(allExecSummary.failedTasks === 1)

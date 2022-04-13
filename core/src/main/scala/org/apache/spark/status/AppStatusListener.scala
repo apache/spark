@@ -1250,12 +1250,9 @@ private[spark] class AppStatusListener(
 
     if (dead > threshold) {
       val countToDelete = calculateNumberToRemove(dead, threshold)
-      val toDelete =
-        Utils.tryWithResource(kvstore.view(classOf[ExecutorSummaryWrapper]).index("active")
-          .max(countToDelete).first(false).last(false).closeableIterator()) { iterator =>
-          iterator.asScala.toList
-        }
-      toDelete.foreach { e => kvstore.delete(e.getClass, e.info.id) }
+      val toDelete = KVUtils.viewToSeq(kvstore.view(classOf[ExecutorSummaryWrapper]).index("active")
+        .max(countToDelete).first(false).last(false))
+      toDelete.foreach { e => kvstore.delete(e.getClass(), e.info.id) }
     }
   }
 
@@ -1413,12 +1410,10 @@ private[spark] class AppStatusListener(
   }
 
   private def cleanupCachedQuantiles(stageKey: Array[Int]): Unit = {
-    val cachedQuantiles = Utils.tryWithResource(kvstore.view(classOf[CachedQuantile])
+    val cachedQuantiles = KVUtils.viewToSeq(kvstore.view(classOf[CachedQuantile])
       .index("stage")
       .first(stageKey)
-      .last(stageKey).closeableIterator()) { iterator =>
-      iterator.asScala.toList
-    }
+      .last(stageKey))
     cachedQuantiles.foreach { q =>
       kvstore.delete(q.getClass, q.id)
     }

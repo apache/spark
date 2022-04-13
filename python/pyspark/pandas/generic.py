@@ -82,7 +82,7 @@ if TYPE_CHECKING:
     from pyspark.pandas.indexes.base import Index
     from pyspark.pandas.groupby import GroupBy
     from pyspark.pandas.series import Series
-    from pyspark.pandas.window import Rolling, Expanding
+    from pyspark.pandas.window import Rolling, Expanding, ExponentialMoving
 
 
 bool_type = bool
@@ -2618,6 +2618,56 @@ class Frame(object, metaclass=ABCMeta):
         from pyspark.pandas.window import Expanding
 
         return Expanding(self, min_periods=min_periods)
+
+    # TODO: 'adjust', 'ignore_na', 'axis', 'method' parameter should be implemented.
+    def ewm(
+        self: FrameLike,
+        com: Optional[float] = None,
+        span: Optional[float] = None,
+        halflife: Optional[float] = None,
+        alpha: Optional[float] = None,
+        min_periods: Optional[int] = None,
+    ) -> "ExponentialMoving[FrameLike]":
+        """
+        Provide exponentially weighted window transformations.
+
+        .. note:: 'min_periods' in pandas-on-Spark works as a fixed window size unlike pandas.
+            Unlike pandas, NA is also counted as the period. This might be changed
+            in the near future.
+
+        .. versionadded:: 3.4.0
+
+        Parameters
+        ----------
+        com : float, optional
+            Specify decay in terms of center of mass.
+            alpha = 1 / (1 + com), for com >= 0.
+
+        span : float, optional
+            Specify decay in terms of span.
+            alpha = 2 / (span + 1), for span >= 1.
+
+        halflife : float, optional
+            Specify decay in terms of half-life.
+            alpha = 1 - exp(-ln(2) / halflife), for halflife > 0.
+
+        alpha : float, optional
+            Specify smoothing factor alpha directly.
+            0 < alpha <= 1.
+
+        min_periods : int, default None
+            Minimum number of observations in window required to have a value
+            (otherwise result is NA).
+
+        Returns
+        -------
+        a Window sub-classed for the particular operation
+        """
+        from pyspark.pandas.window import ExponentialMoving
+
+        return ExponentialMoving(
+            self, com=com, span=span, halflife=halflife, alpha=alpha, min_periods=min_periods
+        )
 
     def get(self, key: Any, default: Optional[Any] = None) -> Any:
         """

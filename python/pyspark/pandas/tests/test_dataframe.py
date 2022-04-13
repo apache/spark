@@ -3957,6 +3957,21 @@ class DataFrameTest(ComparisonTestBase, SQLTestUtils):
         ):
             psdf.all(axis=1)
 
+        # Test skipna
+        pdf = pd.DataFrame({"A": [True, True], "B": [1, np.nan], "C": [True, None]})
+        pdf.name = "x"
+        psdf = ps.from_pandas(pdf)
+        self.assert_eq(psdf[["A", "B"]].all(skipna=False), pdf[["A", "B"]].all(skipna=False))
+        self.assert_eq(psdf[["A", "C"]].all(skipna=False), pdf[["A", "C"]].all(skipna=False))
+        self.assert_eq(psdf[["B", "C"]].all(skipna=False), pdf[["B", "C"]].all(skipna=False))
+        self.assert_eq(psdf.all(skipna=False), pdf.all(skipna=False))
+        self.assert_eq(psdf.all(skipna=True), pdf.all(skipna=True))
+        self.assert_eq(psdf.all(), pdf.all())
+        self.assert_eq(
+            ps.DataFrame([np.nan]).all(skipna=False), pd.DataFrame([np.nan]).all(skipna=False)
+        )
+        self.assert_eq(ps.DataFrame([None]).all(skipna=True), pd.DataFrame([None]).all(skipna=True))
+
     def test_any(self):
         pdf = pd.DataFrame(
             {

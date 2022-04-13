@@ -30,7 +30,8 @@ abstract class SumBase(child: Expression) extends DeclarativeAggregate
   with ImplicitCastInputTypes
   with UnaryLike[Expression] {
 
-  def failOnError: Boolean
+  // Whether to use ANSI add or not during the execution.
+  def useAnsiAdd: Boolean
 
   protected def shouldTrackIsEmpty: Boolean
 
@@ -81,9 +82,9 @@ abstract class SumBase(child: Expression) extends DeclarativeAggregate
     // null if overflow happens under non-ansi mode.
     val sumExpr = if (child.nullable) {
       If(child.isNull, sum,
-        Add(sum, KnownNotNull(child).cast(resultType), failOnError = failOnError))
+        Add(sum, KnownNotNull(child).cast(resultType), failOnError = useAnsiAdd))
     } else {
-      Add(sum, child.cast(resultType), failOnError = failOnError)
+      Add(sum, child.cast(resultType), failOnError = useAnsiAdd)
     }
     // The buffer becomes non-empty after seeing the first not-null input.
     val isEmptyExpr = if (child.nullable) {
@@ -98,10 +99,10 @@ abstract class SumBase(child: Expression) extends DeclarativeAggregate
     // in case the input is nullable. The `sum` can only be null if there is no value, as
     // non-decimal type can produce overflowed value under non-ansi mode.
     if (child.nullable) {
-      Seq(coalesce(Add(coalesce(sum, zero), child.cast(resultType), failOnError = failOnError),
+      Seq(coalesce(Add(coalesce(sum, zero), child.cast(resultType), failOnError = useAnsiAdd),
         sum))
     } else {
-      Seq(Add(coalesce(sum, zero), child.cast(resultType), failOnError = failOnError))
+      Seq(Add(coalesce(sum, zero), child.cast(resultType), failOnError = useAnsiAdd))
     }
   }
 
@@ -127,11 +128,11 @@ abstract class SumBase(child: Expression) extends DeclarativeAggregate
         // If both the buffer and the input do not overflow, just add them, as they can't be
         // null. See the comments inside `updateExpressions`: `sum` can only be null if
         // overflow happens.
-        Add(KnownNotNull(sum.left), KnownNotNull(sum.right), failOnError)),
+        Add(KnownNotNull(sum.left), KnownNotNull(sum.right), useAnsiAdd)),
       isEmpty.left && isEmpty.right)
   } else {
     Seq(coalesce(
-      Add(coalesce(sum.left, zero), sum.right, failOnError = failOnError),
+      Add(coalesce(sum.left, zero), sum.right, failOnError = useAnsiAdd),
       sum.left))
   }
 
@@ -145,13 +146,13 @@ abstract class SumBase(child: Expression) extends DeclarativeAggregate
   protected def getEvaluateExpression: Expression = resultType match {
     case d: DecimalType =>
       If(isEmpty, Literal.create(null, resultType),
-        CheckOverflowInSum(sum, d, !failOnError))
+        CheckOverflowInSum(sum, d, !useAnsiAdd))
     case _ if shouldTrackIsEmpty =>
       If(isEmpty, Literal.create(null, resultType), sum)
     case _ => sum
   }
 
-  // The flag `failOnError` won't be shown in the `toString` or `toAggString` methods
+  // The flag `useAnsiAdd` won't be shown in the `toString` or `toAggString` methods
   override def flatArguments: Iterator[Any] = Iterator(child)
 }
 
@@ -170,9 +171,9 @@ abstract class SumBase(child: Expression) extends DeclarativeAggregate
   since = "1.0.0")
 case class Sum(
     child: Expression,
-    failOnError: Boolean = SQLConf.get.ansiEnabled)
+    useAnsiAdd: Boolean = SQLConf.get.ansiEnabled)
   extends SumBase(child) {
-  def this(child: Expression) = this(child, failOnError = SQLConf.get.ansiEnabled)
+  def this(child: Expression) = this(child, useAnsiAdd = SQLConf.get.ansiEnabled)
 
   override def shouldTrackIsEmpty: Boolean = resultType match {
     case _: DecimalType => true
@@ -207,10 +208,10 @@ case class Sum(
 // scalastyle:on line.size.limit
 case class TrySum(child: Expression) extends SumBase(child) {
 
-  override def failOnError: Boolean = dataType match {
-    // Double type won't fail, thus the failOnError is always false
+  override def useAnsiAdd: Boolean = dataType match {
+    // Double type won't fail, thus useAnsiAdd is always false
     // For decimal type, it returns NULL on overflow. It behaves the same as TrySum when
-    // `failOnError` is false.
+    // `useAnsiAdd` is false.
     case _: DoubleType | _: DecimalType => false
     case _ => true
   }
@@ -224,7 +225,7 @@ case class TrySum(child: Expression) extends SumBase(child) {
   }
 
   override lazy val updateExpressions: Seq[Expression] =
-    if (failOnError) {
+    if (useAnsiAdd) {
       val expressions = getUpdateExpressions
       // If the length of updateExpressions is larger than 1, the tail expressions are for
       // tracking whether the input is empty, which doesn't need `TryEval` execution.
@@ -234,14 +235,14 @@ case class TrySum(child: Expression) extends SumBase(child) {
     }
 
   override lazy val mergeExpressions: Seq[Expression] =
-    if (failOnError) {
+    if (useAnsiAdd) {
       getMergeExpressions.map(TryEval)
     } else {
       getMergeExpressions
     }
 
   override lazy val evaluateExpression: Expression =
-    if (failOnError) {
+    if (useAnsiAdd) {
       TryEval(getEvaluateExpression)
     } else {
       getEvaluateExpression

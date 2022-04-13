@@ -723,10 +723,7 @@ private[spark] class AppStatusStore(
   }
 
   def streamBlocksList(): Seq[StreamBlockData] = {
-    Utils.tryWithResource(
-      store.view(classOf[StreamBlockData]).closeableIterator()) {iterator =>
-      iterator.asScala.toList
-    }
+    KVUtils.viewToSeq(store.view(classOf[StreamBlockData]))
   }
 
   def operationGraphForStage(stageId: Int): RDDOperationGraph = {
