@@ -19,6 +19,7 @@
 /* eslint-disable no-unused-vars */
 var uiRoot = "";
 var appBasePath = "";
+var reverseProxyURL = "";
 
 function setUIRoot(val) {
   uiRoot = val;
@@ -27,6 +28,11 @@ function setUIRoot(val) {
 function setAppBasePath(path) {
   appBasePath = path;
 }
+
+function setReverseProxyURL(base) {
+  reverseProxyURL = base;
+}
+
 /* eslint-enable no-unused-vars */
 
 function collapseTablePageLoad(name, table){

@@ -592,9 +592,10 @@ class SparkContext(config: SparkConf) extends Logging {
       _env.blockManager.blockStoreClient.setAppAttemptId(attemptId)
     }
     if (_conf.get(UI_REVERSE_PROXY)) {
-      val proxyUrl = _conf.get(UI_REVERSE_PROXY_URL.key, "").stripSuffix("/") +
-        "/proxy/" + _applicationId
+      val reverseProxyURL = _conf.get(UI_REVERSE_PROXY_URL.key, "").stripSuffix("/")
+      val proxyUrl = reverseProxyURL + "/proxy/" + _applicationId
       System.setProperty("spark.ui.proxyBase", proxyUrl)
+      System.setProperty("spark.ui.reverseProxyURL", reverseProxyURL)
     }
     _ui.foreach(_.setAppId(_applicationId))
     _env.blockManager.initialize(_applicationId)

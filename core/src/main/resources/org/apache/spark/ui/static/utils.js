@@ -96,19 +96,24 @@ function formatLogsCells(execLogs, type) {
 }
 
 function getStandAloneAppId(cb) {
-  var words = getBaseURI().split('/');
-  var ind = words.indexOf("proxy");
-  var appId;
-  if (ind > 0) {
-    appId = words[ind + 1];
-    cb(appId);
-    return;
-  }
-  ind = words.indexOf("history");
-  if (ind > 0) {
-    appId = words[ind + 1];
-    cb(appId);
-    return;
+  let proxyWords = reverseProxyURL.split('/');
+  // If the configured proxy base URL doesn't contain "proxy" or "history", we can get the APP id
+  // from the current base URI.
+  if (proxyWords.indexOf("proxy") < 0 && proxyWords.indexOf("history") < 0) {
+    var words = getBaseURI().split('/');
+    var ind = words.indexOf("proxy");
+    var appId;
+    if (ind > 0) {
+      appId = words[ind + 1];
+      cb(appId);
+      return;
+    }
+    ind = words.indexOf("history");
+    if (ind > 0) {
+      appId = words[ind + 1];
+      cb(appId);
+      return;
+    }
   }
   // Looks like Web UI is running in standalone mode
   // Let's get application-id using REST End Point
@@ -149,13 +154,7 @@ function ConvertDurationString(data) {
 
 function createTemplateURI(appId, templateName) {
   var words = getBaseURI().split('/');
-  var ind = words.indexOf("proxy");
-  var baseURI;
-  if (ind > 0) {
-    baseURI = words.slice(0, ind + 1).join('/') + '/' + appId + '/static/' + templateName + '-template.html';
-    return baseURI;
-  }
-  ind = words.indexOf("history");
+  ind = words.lastIndexOf("history");
   if(ind > 0) {
     baseURI = words.slice(0, ind).join('/') + '/static/' + templateName + '-template.html';
     return baseURI;
@@ -184,14 +183,7 @@ function formatDate(date) {
 
 function createRESTEndPointForExecutorsPage(appId) {
   var words = getBaseURI().split('/');
-  var ind = words.indexOf("proxy");
-  var newBaseURI;
-  if (ind > 0) {
-    appId = words[ind + 1];
-    newBaseURI = words.slice(0, ind + 2).join('/');
-    return newBaseURI + "/api/v1/applications/" + appId + "/allexecutors";
-  }
-  ind = words.indexOf("history");
+  ind = words.lastIndexOf("history");
   if (ind > 0) {
     appId = words[ind + 1];
     var attemptId = words[ind + 2];

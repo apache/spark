@@ -240,6 +240,7 @@ private[spark] object UIUtils extends Logging {
     <script src={prependBaseUri(request, "/static/log-view.js")}></script>
     <script src={prependBaseUri(request, "/static/webui.js")}></script>
     <script>setUIRoot('{UIUtils.uiRoot(request)}')</script>
+    <script>setReverseProxyURL('{sys.props.getOrElse("spark.ui.reverseProxyURL", "")}')</script>
   }
 
   def vizHeaderNodes(request: HttpServletRequest): Seq[Node] = {
