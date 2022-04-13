@@ -397,7 +397,7 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession {
       errorClass = "DUPLICATE_KEY",
       sqlState = "23000",
       message =
-        s"""
+        """
            |Found duplicate keys 'p1'(line 1, pos 29)
            |
            |== SQL ==
