@@ -64,13 +64,13 @@ class QueryCompilationErrorsDSv2Suite
     withTableAndData(t1) { view =>
       sql(s"CREATE TABLE $t1 (id bigint, data string) USING $v2Format PARTITIONED BY (data)")
 
-      val exc = intercept[AnalysisException] {
+      val e = intercept[AnalysisException] {
         sql(s"INSERT INTO TABLE $t1 PARTITION (id=1) SELECT data FROM $view")
       }
 
       verifyTable(t1, spark.emptyDataFrame)
-      assert(exc.getMessage === "PARTITION clause cannot contain a non-partition column name: id")
-      assert(exc.getErrorClass == "NON_PARTITION_COLUMN")
+      assert(e.getMessage === "PARTITION clause cannot contain a non-partition column name: id")
+      assert(e.getErrorClass === "NON_PARTITION_COLUMN")
     }
   }
 
@@ -79,13 +79,13 @@ class QueryCompilationErrorsDSv2Suite
     withTableAndData(t1) { view =>
       sql(s"CREATE TABLE $t1 (id bigint, data string) USING $v2Format PARTITIONED BY (id)")
 
-      val exc = intercept[AnalysisException] {
+      val e = intercept[AnalysisException] {
         sql(s"INSERT INTO TABLE $t1 PARTITION (data) SELECT * FROM $view")
       }
 
       verifyTable(t1, spark.emptyDataFrame)
-      assert(exc.getMessage === "PARTITION clause cannot contain a non-partition column name: data")
-      assert(exc.getErrorClass == "NON_PARTITION_COLUMN")
+      assert(e.getMessage === "PARTITION clause cannot contain a non-partition column name: data")
+      assert(e.getErrorClass === "NON_PARTITION_COLUMN")
     }
   }
 }
