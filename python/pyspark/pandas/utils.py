@@ -49,6 +49,7 @@ from pyspark.pandas.spark import functions as SF
 from pyspark.pandas.typedef.typehints import as_spark_type
 
 if TYPE_CHECKING:
+    from pyspark.pandas.indexes.base import Index
     from pyspark.pandas.base import IndexOpsMixin
     from pyspark.pandas.frame import DataFrame
     from pyspark.pandas.internal import InternalFrame
@@ -973,6 +974,24 @@ def log_advice(message: str) -> None:
     or the behavior of pandas.
     """
     warnings.warn(message, PandasAPIOnSparkAdviceWarning)
+
+
+def validate_index_loc(index: "Index", loc: int) -> None:
+    """
+    Raises IndexError if index is out of bounds
+    """
+    length = len(index)
+    if loc < 0:
+        loc = loc + length
+        if loc < 0:
+            raise IndexError(
+                "index {} is out of bounds for axis 0 with size {}".format((loc - length), length)
+            )
+    else:
+        if loc > length:
+            raise IndexError(
+                "index {} is out of bounds for axis 0 with size {}".format(loc, length)
+            )
 
 
 def _test() -> None:

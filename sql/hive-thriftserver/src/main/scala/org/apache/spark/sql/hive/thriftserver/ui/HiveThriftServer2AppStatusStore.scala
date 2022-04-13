@@ -22,6 +22,7 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.sql.hive.thriftserver.HiveThriftServer2.ExecutionState
+import org.apache.spark.status.KVUtils
 import org.apache.spark.status.KVUtils.KVIndexParam
 import org.apache.spark.util.kvstore.{KVIndex, KVStore}
 
@@ -32,11 +33,11 @@ import org.apache.spark.util.kvstore.{KVIndex, KVStore}
 class HiveThriftServer2AppStatusStore(store: KVStore) {
 
   def getSessionList: Seq[SessionInfo] = {
-    store.view(classOf[SessionInfo]).asScala.toSeq
+    KVUtils.viewToSeq(store.view(classOf[SessionInfo]))
   }
 
   def getExecutionList: Seq[ExecutionInfo] = {
-    store.view(classOf[ExecutionInfo]).asScala.toSeq
+    KVUtils.viewToSeq(store.view(classOf[ExecutionInfo]))
   }
 
   def getOnlineSessionNum: Int = {

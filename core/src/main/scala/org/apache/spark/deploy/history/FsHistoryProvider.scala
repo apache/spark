@@ -592,11 +592,9 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
       // Only entries with valid applications are cleaned up here. Cleaning up invalid log
       // files is done by the periodic cleaner task.
       val stale = listing.synchronized {
-        listing.view(classOf[LogInfo])
+        KVUtils.viewToSeq(listing.view(classOf[LogInfo])
           .index("lastProcessed")
-          .last(newLastScanTime - 1)
-          .asScala
-          .toList
+          .last(newLastScanTime - 1))
       }
       stale.filterNot(isProcessing)
         .filterNot(info => notStale.contains(info.logPath))
@@ -957,12 +955,10 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     val maxTime = clock.getTimeMillis() - conf.get(MAX_LOG_AGE_S) * 1000
     val maxNum = conf.get(MAX_LOG_NUM)
 
-    val expired = listing.view(classOf[ApplicationInfoWrapper])
+    val expired = KVUtils.viewToSeq(listing.view(classOf[ApplicationInfoWrapper])
       .index("oldestAttempt")
       .reverse()
-      .first(maxTime)
-      .asScala
-      .toList
+      .first(maxTime))
     expired.foreach { app =>
       // Applications may have multiple attempts, some of which may not need to be deleted yet.
       val (remaining, toDelete) = app.attempts.partition { attempt =>
@@ -972,13 +968,10 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     }
 
     // Delete log files that don't have a valid application and exceed the configured max age.
-    val stale = listing.view(classOf[LogInfo])
+    val stale = KVUtils.viewToSeq(listing.view(classOf[LogInfo])
       .index("lastProcessed")
       .reverse()
-      .first(maxTime)
-      .asScala
-      .filter { l => l.logType == null || l.logType == LogType.EventLogs }
-      .toList
+      .first(maxTime), Int.MaxValue) { l => l.logType == null || l.logType == LogType.EventLogs }
     stale.filterNot(isProcessing).foreach { log =>
       if (log.appId.isEmpty) {
         logInfo(s"Deleting invalid / corrupt event log ${log.logPath}")
@@ -1080,13 +1073,10 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
 
     // Delete driver log file entries that exceed the configured max age and
     // may have been deleted on filesystem externally.
-    val stale = listing.view(classOf[LogInfo])
+    val stale = KVUtils.viewToSeq(listing.view(classOf[LogInfo])
       .index("lastProcessed")
       .reverse()
-      .first(maxTime)
-      .asScala
-      .filter { l => l.logType != null && l.logType == LogType.DriverLogs }
-      .toList
+      .first(maxTime), Int.MaxValue) { l => l.logType != null && l.logType == LogType.DriverLogs }
     stale.filterNot(isProcessing).foreach { log =>
       logInfo(s"Deleting invalid driver log ${log.logPath}")
       listing.delete(classOf[LogInfo], log.logPath)
