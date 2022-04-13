@@ -21,15 +21,14 @@ import java.io.File
 
 import scala.annotation.meta.getter
 import scala.collection.JavaConverters._
-import scala.reflect.{classTag, ClassTag}
+import scala.reflect.{ClassTag, classTag}
 
 import com.fasterxml.jackson.annotation.JsonInclude
 import com.fasterxml.jackson.module.scala.DefaultScalaModule
 
 import org.apache.spark.SparkConf
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.config.History.HYBRID_STORE_DISK_BACKEND
-import org.apache.spark.internal.config.History.HybridStoreDiskBackend
+import org.apache.spark.internal.config.History.{HYBRID_STORE_DISK_BACKEND, HybridStoreDiskBackend}
 import org.apache.spark.internal.config.History.HybridStoreDiskBackend._
 import org.apache.spark.util.Utils
 import org.apache.spark.util.kvstore._
@@ -97,6 +96,13 @@ private[spark] object KVUtils extends Logging {
   def viewToSeq[T](view: KVStoreView[T]): Seq[T] = {
     Utils.tryWithResource(view.closeableIterator()) { iter =>
       iter.asScala.toList
+    }
+  }
+
+  /** Counts the number of elements in the KVStoreView which satisfy a predicate. */
+  def count[T](view: KVStoreView[T])(countFunc: T => Boolean): Int = {
+    Utils.tryWithResource(view.closeableIterator()) { iter =>
+      iter.asScala.count(countFunc)
     }
   }
 
