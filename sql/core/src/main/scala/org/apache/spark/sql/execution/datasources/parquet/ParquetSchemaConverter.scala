@@ -30,6 +30,7 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
+import org.apache.spark.util.Utils
 
 /**
  * This converter class is used to convert Parquet [[MessageType]] to Spark SQL [[StructType]]
@@ -253,7 +254,8 @@ class ParquetToSparkSchemaConverter(
             if (timestamp.isAdjustedToUTC) {
               TimestampType
             } else {
-              TimestampNTZType
+              // SPARK-38829: Remove TimestampNTZ type support in Parquet for Spark 3.3
+              if (Utils.isTesting) TimestampNTZType else TimestampType
             }
           case _ => illegalType()
         }
@@ -547,7 +549,8 @@ class SparkToParquetSchemaConverter(
               .as(LogicalTypeAnnotation.timestampType(true, TimeUnit.MILLIS)).named(field.name)
         }
 
-      case TimestampNTZType =>
+      // SPARK-38829: Remove TimestampNTZ type support in Parquet for Spark 3.3
+      case TimestampNTZType if Utils.isTesting =>
         Types.primitive(INT64, repetition)
           .as(LogicalTypeAnnotation.timestampType(false, TimeUnit.MICROS)).named(field.name)
       case BinaryType =>
