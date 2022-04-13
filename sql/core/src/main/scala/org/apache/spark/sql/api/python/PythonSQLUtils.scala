@@ -27,6 +27,7 @@ import org.apache.spark.api.python.PythonRDDServer
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{Column, DataFrame, Row, SparkSession}
+import org.apache.spark.sql.catalyst.CatalystTypeConverters
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
 import org.apache.spark.sql.catalyst.expressions.{CastTimestampNTZToLong, ExpressionInfo, GenericRowWithSchema}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
@@ -37,7 +38,10 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.DataType
 
 private[sql] object PythonSQLUtils extends Logging {
-  private lazy val rowPickler = new Pickler(true, false)
+  private lazy val internalRowPickler = {
+    EvaluatePython.registerPicklers()
+    new Pickler(true, false)
+  }
 
   def parseDataType(typeText: String): DataType = CatalystSqlParser.parseDataType(typeText)
 
@@ -85,7 +89,8 @@ private[sql] object PythonSQLUtils extends Logging {
 
   def toPyRow(row: Row): Array[Byte] = {
     assert(row.isInstanceOf[GenericRowWithSchema])
-    rowPickler.dumps(EvaluatePython.toJava(row, row.schema))
+    internalRowPickler.dumps(EvaluatePython.toJava(
+      CatalystTypeConverters.convertToCatalyst(row), row.schema))
   }
 
   def castTimestampNTZToLong(c: Column): Column = Column(CastTimestampNTZToLong(c.expr))

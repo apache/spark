@@ -979,7 +979,7 @@ public class RemoteBlockPushResolverSuite {
         ATTEMPT_ID_1, ATTEMPT_ID_2, testApp));
   }
 
-  @Test(expected = ClosedChannelException.class)
+  @Test
   public void testOngoingMergeOfBlockFromPreviousAttemptIsAborted()
       throws IOException, InterruptedException {
     Semaphore closed = new Semaphore(0);
@@ -1016,7 +1016,8 @@ public class RemoteBlockPushResolverSuite {
       MERGE_DIRECTORY_META_2);
     closed.acquire();
     // Should throw ClosedChannelException here.
-    stream1.onData(stream1.getID(), blocks[3]);
+    assertThrows(ClosedChannelException.class,
+      () -> stream1.onData(stream1.getID(), blocks[3]));
   }
 
   @Test
