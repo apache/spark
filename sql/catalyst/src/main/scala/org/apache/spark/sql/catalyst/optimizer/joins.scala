@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.optimizer
 import scala.annotation.tailrec
 
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateFunction
 import org.apache.spark.sql.catalyst.planning.ExtractFiltersAndInnerJoins
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -127,8 +128,17 @@ object ReorderJoin extends Rule[LogicalPlan] with PredicateHelper {
  * - full outer -> right outer if only the right side has such predicates
  *
  * 2. Removes outer join if it only has distinct on streamed side
+ *
  * {{{
  *   SELECT DISTINCT f1 FROM t1 LEFT JOIN t2 ON t1.id = t2.id  ==>  SELECT DISTINCT f1 FROM t1
+ * }}}
+ *
+ * 3. Remove outer join if aggregate references are coming from streamed side and
+ * aggregate functions are duplicate agnostic
+ *
+ * {{{
+ *   SELECT t1.c1, max(t1.c2) FROM t1 LEFT JOIN t2 ON t1.c1 = t2.c1 GROUP BY t1.c1  ==>
+ *   SELECT t1.c1, max(t1.c2) FROM t1 GROUP BY t1.c1
  * }}}
  *
  * This rule should be executed before pushing down the Filter
@@ -166,6 +176,14 @@ object EliminateOuterJoin extends Rule[LogicalPlan] with PredicateHelper {
     }
   }
 
+  private def hasNotDuplicateAgnosticAggregateFunction(
+      aggregateExpressions: Seq[NamedExpression]): Boolean = {
+    aggregateExpressions.exists(_.exists {
+      case agg: AggregateFunction => !EliminateDistinct.isDuplicateAgnostic(agg)
+      case _ => false
+    })
+  }
+
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
     _.containsPattern(OUTER_JOIN), ruleId) {
     case f @ Filter(condition, j @ Join(_, _, RightOuter | LeftOuter | FullOuter, _, _)) =>
@@ -183,6 +201,23 @@ object EliminateOuterJoin extends Rule[LogicalPlan] with PredicateHelper {
       a.copy(child = p.copy(child = left))
     case a @ Aggregate(_, _, p @ Project(_, Join(_, right, RightOuter, _, _)))
         if a.groupOnly && p.references.subsetOf(right.outputSet) =>
+      a.copy(child = p.copy(child = right))
+
+    case a @ Aggregate(_, aggExprs, Join(left, _, LeftOuter, _, _))
+        if a.references.subsetOf(left.outputSet) &&
+          !hasNotDuplicateAgnosticAggregateFunction(aggExprs) =>
+      a.copy(child = left)
+    case a @ Aggregate(_, aggExprs, Join(_, right, RightOuter, _, _))
+        if a.references.subsetOf(right.outputSet) &&
+          !hasNotDuplicateAgnosticAggregateFunction(aggExprs) =>
+      a.copy(child = right)
+    case a @ Aggregate(_, aggExprs, p @ Project(_, Join(left, _, LeftOuter, _, _)))
+        if p.references.subsetOf(left.outputSet) &&
+          !hasNotDuplicateAgnosticAggregateFunction(aggExprs) =>
+      a.copy(child = p.copy(child = left))
+    case a @ Aggregate(_, aggExprs, p @ Project(_, Join(_, right, RightOuter, _, _)))
+        if p.references.subsetOf(right.outputSet) &&
+          !hasNotDuplicateAgnosticAggregateFunction(aggExprs) =>
       a.copy(child = p.copy(child = right))
   }
 }
