@@ -1042,7 +1042,7 @@ case class EWM(input: Expression, alpha: Double)
     val beta = Literal(1.0 - alpha)
     val casted = input.cast(DoubleType)
     // TODO: after adding param ignore_na, we can remove this check
-    val error = RaiseError(Literal("Input values Must not be Null or NaN")).cast(DoubleType)
+    val error = RaiseError(Literal("Input values must not be null or NaN")).cast(DoubleType)
     val validated = If(IsNull(casted) || IsNaN(casted), error, casted)
     Seq(
       /* numerator = */ numerator * beta + validated,
