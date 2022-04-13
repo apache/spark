@@ -1671,10 +1671,7 @@ abstract class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter 
     }
 
     // check peak executor metric values for each stage and executor
-    val stageExecSummaries = Utils.tryWithResource(
-      store.view(classOf[ExecutorStageSummaryWrapper]).closeableIterator()) { iterator =>
-      iterator.asScala.toList
-    }
+    val stageExecSummaries = KVUtils.viewToSeq(store.view(classOf[ExecutorStageSummaryWrapper]))
     stageExecSummaries.foreach { exec =>
       expectedStageValues.get(exec.stageId) match {
         case Some(stageValue) =>
