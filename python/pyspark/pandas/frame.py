@@ -7063,6 +7063,12 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         a    1.0
         b    2.0
 
+        >>> df.sort_index(ignore_index=True)
+             A
+        0  1.0
+        1  2.0
+        2  NaN
+
         >>> df.sort_index(inplace=True)
         >>> df
                A
@@ -7094,6 +7100,13 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         b 0  1  2
         a 1  2  1
         b 1  0  3
+
+        >>> df.sort_index(ignore_index=True)
+           A  B
+        0  3  0
+        1  2  1
+        2  1  2
+        3  0  3
         """
         inplace = validate_bool_kwarg(inplace, "inplace")
         axis = validate_axis(axis)
