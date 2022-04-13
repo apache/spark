@@ -383,8 +383,6 @@ case class PercentileDisc private(
     this(child, percentageExpression, Literal(1L), reverse)
   }
 
-  private lazy val frequency = frequencyExpression.eval()
-
   override def checkInputDataTypes(): TypeCheckResult = {
     val defaultCheck = super.checkInputDataTypes()
     if (defaultCheck.isFailure) {

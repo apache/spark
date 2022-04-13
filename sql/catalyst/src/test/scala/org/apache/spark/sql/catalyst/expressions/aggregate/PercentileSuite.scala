@@ -195,10 +195,6 @@ class PercentileSuite extends SparkFunSuite {
       val frq = AttributeReference("frq", frequencyType)()
       val percentile = new Percentile(child, percentage, frq)
       assertEqual(percentile.checkInputDataTypes(), TypeCheckSuccess)
-      val percentileDisc = PercentileDisc(child, percentage, frq)
-      val checkResult = percentileDisc.checkInputDataTypes()
-      assert(checkResult.isFailure && checkResult.asInstanceOf[TypeCheckFailure].message
-        .contains("The frequency of PercentileDisc must be a constant literal, but got frq"))
     }
 
     val invalidDataTypes = Seq(BooleanType, StringType, DateType, TimestampType,
@@ -332,33 +328,6 @@ class PercentileSuite extends SparkFunSuite {
           })
       }
     }
-  }
-
-  test("frequency expression of PercentileDisc is not equals to 1") {
-    assert(PercentileDisc(
-      AttributeReference("a", DoubleType)(),
-      percentageExpression = Literal(0.5, DoubleType),
-      frequencyExpression = Literal(1, IntegerType)).checkInputDataTypes().isSuccess)
-    assert(PercentileDisc(
-      AttributeReference("a", DoubleType)(),
-      percentageExpression = Literal(0.5, DoubleType),
-      frequencyExpression = Literal(2L, LongType)).checkInputDataTypes() ===
-      TypeCheckFailure("Frequency value must be 1 for PercentileDisc"))
-    assert(PercentileDisc(
-      AttributeReference("a", DoubleType)(),
-      percentageExpression = Literal(0.5, DoubleType),
-      frequencyExpression = Literal(2, IntegerType)).checkInputDataTypes() ===
-      TypeCheckFailure("Frequency value must be 1 for PercentileDisc"))
-    assert(PercentileDisc(
-      AttributeReference("a", DoubleType)(),
-      percentageExpression = Literal(0.5, DoubleType),
-      frequencyExpression = Literal(2.toShort, ShortType)).checkInputDataTypes() ===
-      TypeCheckFailure("Frequency value must be 1 for PercentileDisc"))
-    assert(PercentileDisc(
-      AttributeReference("a", DoubleType)(),
-      percentageExpression = Literal(0.5, DoubleType),
-      frequencyExpression = Literal(2.toByte, ByteType)).checkInputDataTypes() ===
-      TypeCheckFailure("Frequency value must be 1 for PercentileDisc"))
   }
 
   test("null handling") {
