@@ -24,6 +24,7 @@ from pyspark.pandas.missing.window import (
     MissingPandasLikeRolling,
     MissingPandasLikeExpandingGroupby,
     MissingPandasLikeRollingGroupby,
+    MissingPandasLikeExponentialMoving,
 )
 from pyspark.testing.pandasutils import PandasOnSparkTestCase, TestUtils
 
@@ -93,6 +94,40 @@ class ExpandingRollingTest(PandasOnSparkTestCase, TestUtils):
                 PandasNotImplementedError, "method.*Rolling.*{}.*is deprecated".format(name)
             ):
                 getattr(psdf.a.rolling(1), name)()  # Series
+
+        # ExponentialMoving functions
+        missing_functions = inspect.getmembers(
+            MissingPandasLikeExponentialMoving, inspect.isfunction
+        )
+        unsupported_functions = [
+            name for (name, type_) in missing_functions if type_.__name__ == "unsupported_function"
+        ]
+        for name in unsupported_functions:
+            with self.assertRaisesRegex(
+                PandasNotImplementedError,
+                "method.*ExponentialMoving.*{}.*not implemented( yet\\.|\\. .+)".format(name),
+            ):
+                getattr(psdf.ewm(com=0.5), name)()  # Frame
+            with self.assertRaisesRegex(
+                PandasNotImplementedError,
+                "method.*ExponentialMoving.*{}.*not implemented( yet\\.|\\. .+)".format(name),
+            ):
+                getattr(psdf.a.ewm(com=0.5), name)()  # Series
+
+        deprecated_functions = [
+            name for (name, type_) in missing_functions if type_.__name__ == "deprecated_function"
+        ]
+        for name in deprecated_functions:
+            with self.assertRaisesRegex(
+                PandasNotImplementedError,
+                "method.*ExponentialMoving.*{}.*is deprecated".format(name),
+            ):
+                getattr(psdf.ewm(com=0.5), name)()  # Frame
+            with self.assertRaisesRegex(
+                PandasNotImplementedError,
+                "method.*ExponentialMoving.*{}.*is deprecated".format(name),
+            ):
+                getattr(psdf.a.ewm(com=0.5), name)()  # Series
 
         # Expanding properties
         missing_properties = inspect.getmembers(
@@ -164,6 +199,43 @@ class ExpandingRollingTest(PandasOnSparkTestCase, TestUtils):
                 PandasNotImplementedError, "property.*Rolling.*{}.*is deprecated".format(name)
             ):
                 getattr(psdf.a.rolling(1), name)()  # Series
+
+        # ExponentialMoving properties
+        missing_properties = inspect.getmembers(
+            MissingPandasLikeExponentialMoving, lambda o: isinstance(o, property)
+        )
+        unsupported_properties = [
+            name
+            for (name, type_) in missing_properties
+            if type_.fget.__name__ == "unsupported_property"
+        ]
+        for name in unsupported_properties:
+            with self.assertRaisesRegex(
+                PandasNotImplementedError,
+                "property.*ExponentialMoving.*{}.*not implemented( yet\\.|\\. .+)".format(name),
+            ):
+                getattr(psdf.ewm(com=0.5), name)()  # Frame
+            with self.assertRaisesRegex(
+                PandasNotImplementedError,
+                "property.*ExponentialMoving.*{}.*not implemented( yet\\.|\\. .+)".format(name),
+            ):
+                getattr(psdf.a.ewm(com=0.5), name)()  # Series
+        deprecated_properties = [
+            name
+            for (name, type_) in missing_properties
+            if type_.fget.__name__ == "deprecated_property"
+        ]
+        for name in deprecated_properties:
+            with self.assertRaisesRegex(
+                PandasNotImplementedError,
+                "property.*ExponentialMoving.*{}.*is deprecated".format(name),
+            ):
+                getattr(psdf.ewm(com=0.5), name)()  # Frame
+            with self.assertRaisesRegex(
+                PandasNotImplementedError,
+                "property.*ExponentialMoving.*{}.*is deprecated".format(name),
+            ):
+                getattr(psdf.a.ewm(com=0.5), name)()  # Series
 
     def test_missing_groupby(self):
         psdf = ps.DataFrame({"a": [1, 2, 3, 4, 5, 6, 7, 8, 9]})

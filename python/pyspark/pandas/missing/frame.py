@@ -39,7 +39,6 @@ class _MissingPandasLikeDataFrame:
     compare = _unsupported_function("compare")
     convert_dtypes = _unsupported_function("convert_dtypes")
     corrwith = _unsupported_function("corrwith")
-    ewm = _unsupported_function("ewm")
     infer_objects = _unsupported_function("infer_objects")
     interpolate = _unsupported_function("interpolate")
     mode = _unsupported_function("mode")

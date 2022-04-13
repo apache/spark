@@ -927,6 +927,10 @@ object QueryCompilationErrors {
     tableDoesNotSupportError("atomic partition management", table)
   }
 
+  def tableIsNotRowLevelOperationTableError(table: Table): Throwable = {
+    throw new AnalysisException(s"Table ${table.name} is not a row-level operation table")
+  }
+
   def cannotRenameTableWithAlterViewError(): Throwable = {
     new AnalysisException(
       "Cannot rename a table with ALTER VIEW. Please use ALTER TABLE instead.")
@@ -2379,5 +2383,9 @@ object QueryCompilationErrors {
   def writeDistributionAndOrderingNotSupportedInContinuousExecution(): Throwable = {
     new AnalysisException(
       "Sinks cannot request distribution and ordering in continuous execution mode")
+  }
+
+  def noSuchFunctionError(database: String, funcInfo: String): Throwable = {
+    new AnalysisException(s"$database does not support function: $funcInfo")
   }
 }
