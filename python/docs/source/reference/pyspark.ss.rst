@@ -87,4 +87,5 @@ Query Management
     StreamingQueryManager.addListener
     StreamingQueryManager.awaitAnyTermination
     StreamingQueryManager.get
+    StreamingQueryManager.removeListener
     StreamingQueryManager.resetTerminated
