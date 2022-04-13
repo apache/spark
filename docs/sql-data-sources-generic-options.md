@@ -38,7 +38,7 @@ dir1/
 
 ### Ignore Corrupt Files
 
-Spark allows you to use `spark.sql.files.ignoreCorruptFiles` to ignore corrupt files while reading data
+Spark allows you to use the configuration `spark.sql.files.ignoreCorruptFiles` or the data source option `ignoreCorruptFiles` to ignore corrupt files while reading data
 from files. When set to true, the Spark jobs will continue to run when encountering corrupted files and
 the contents that have been read will still be returned.
 
@@ -64,7 +64,7 @@ To ignore corrupt files while reading data files, you can use:
 
 ### Ignore Missing Files
 
-Spark allows you to use `spark.sql.files.ignoreMissingFiles` to ignore missing files while reading data
+Spark allows you to use the configuration `spark.sql.files.ignoreMissingFiles` or the data source option `ignoreMissingFiles` to ignore missing files while reading data
 from files. Here, missing file really means the deleted file under directory after you construct the
 `DataFrame`. When set to true, the Spark jobs will continue to run when encountering missing files and
 the contents that have been read will still be returned.

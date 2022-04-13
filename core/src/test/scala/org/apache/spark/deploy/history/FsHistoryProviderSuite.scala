@@ -23,7 +23,6 @@ import java.util.{Date, Locale}
 import java.util.concurrent.TimeUnit
 import java.util.zip.{ZipInputStream, ZipOutputStream}
 
-import scala.collection.JavaConverters._
 import scala.concurrent.duration._
 
 import com.google.common.io.{ByteStreams, Files}
@@ -50,6 +49,7 @@ import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.cluster.ExecutorInfo
 import org.apache.spark.security.GroupMappingServiceProvider
 import org.apache.spark.status.AppStatusStore
+import org.apache.spark.status.KVUtils
 import org.apache.spark.status.KVUtils.KVStoreScalaSerializer
 import org.apache.spark.status.api.v1.{ApplicationAttemptInfo, ApplicationInfo}
 import org.apache.spark.tags.ExtendedLevelDBTest
@@ -687,12 +687,12 @@ abstract class FsHistoryProviderSuite extends SparkFunSuite with Matchers with L
     log3.setLastModified(clock.getTimeMillis())
     // This should not trigger any cleanup
     provider.cleanDriverLogs()
-    provider.listing.view(classOf[LogInfo]).iterator().asScala.toSeq.size should be(3)
+    KVUtils.viewToSeq(provider.listing.view(classOf[LogInfo])).size should be(3)
 
     // Should trigger cleanup for first file but not second one
     clock.setTime(firstFileModifiedTime + TimeUnit.SECONDS.toMillis(maxAge) + 1)
     provider.cleanDriverLogs()
-    provider.listing.view(classOf[LogInfo]).iterator().asScala.toSeq.size should be(2)
+    KVUtils.viewToSeq(provider.listing.view(classOf[LogInfo])).size should be(2)
     assert(!log1.exists())
     assert(log2.exists())
     assert(log3.exists())
@@ -703,7 +703,7 @@ abstract class FsHistoryProviderSuite extends SparkFunSuite with Matchers with L
     // Should cleanup the second file but not the third file, as filelength changed.
     clock.setTime(secondFileModifiedTime + TimeUnit.SECONDS.toMillis(maxAge) + 1)
     provider.cleanDriverLogs()
-    provider.listing.view(classOf[LogInfo]).iterator().asScala.toSeq.size should be(1)
+    KVUtils.viewToSeq(provider.listing.view(classOf[LogInfo])).size should be(1)
     assert(!log1.exists())
     assert(!log2.exists())
     assert(log3.exists())
@@ -711,7 +711,7 @@ abstract class FsHistoryProviderSuite extends SparkFunSuite with Matchers with L
     // Should cleanup the third file as well.
     clock.setTime(secondFileModifiedTime + 2 * TimeUnit.SECONDS.toMillis(maxAge) + 2)
     provider.cleanDriverLogs()
-    provider.listing.view(classOf[LogInfo]).iterator().asScala.toSeq.size should be(0)
+    KVUtils.viewToSeq(provider.listing.view(classOf[LogInfo])).size should be(0)
     assert(!log3.exists())
   }
 
