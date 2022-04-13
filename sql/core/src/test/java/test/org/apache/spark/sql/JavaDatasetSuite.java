@@ -1750,7 +1750,7 @@ public class JavaDatasetSuite implements Serializable {
   public void testCircularReferenceBean1() {
     CircularReference1Bean bean = new CircularReference1Bean();
     Assertions.assertThrows(UnsupportedOperationException.class,
-      () ->  spark.createDataset(Arrays.asList(bean), Encoders.bean(CircularReference1Bean.class)));
+      () -> spark.createDataset(Arrays.asList(bean), Encoders.bean(CircularReference1Bean.class)));
   }
 
   @Test

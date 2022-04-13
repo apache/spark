@@ -1016,7 +1016,12 @@ public class RemoteBlockPushResolverSuite {
       MERGE_DIRECTORY_META_2);
     closed.acquire();
     // Should throw ClosedChannelException here.
+<<<<<<< HEAD
     assertThrows(ClosedChannelException.class, () -> stream1.onData(stream1.getID(), blocks[3]));
+=======
+    assertThrows(ClosedChannelException.class,
+      () -> stream1.onData(stream1.getID(), blocks[3]));
+>>>>>>> upmaster
   }
 
   @Test

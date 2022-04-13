@@ -65,7 +65,7 @@ public class OptionalSuite {
   @Test
   public void testOfWithNull() {
     Assertions.assertThrows(NullPointerException.class,
-      () ->  Optional.of(null));
+      () -> Optional.of(null));
   }
 
   @Test

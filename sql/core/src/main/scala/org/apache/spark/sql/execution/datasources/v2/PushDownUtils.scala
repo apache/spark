@@ -116,7 +116,11 @@ object PushDownUtils extends PredicateHelper {
   }
 
   /**
-   * Pushes down LIMIT to the data source Scan
+   * Pushes down LIMIT to the data source Scan.
+   *
+   * @return the tuple of Boolean. The first Boolean value represents whether to push down, and
+   *         the second Boolean value represents whether to push down partially, which means
+   *         Spark will keep the Limit and do it again.
    */
   def pushLimit(scanBuilder: ScanBuilder, limit: Int): (Boolean, Boolean) = {
     scanBuilder match {
@@ -127,7 +131,11 @@ object PushDownUtils extends PredicateHelper {
   }
 
   /**
-   * Pushes down top N to the data source Scan
+   * Pushes down top N to the data source Scan.
+   *
+   * @return the tuple of Boolean. The first Boolean value represents whether to push down, and
+   *         the second Boolean value represents whether to push down partially, which means
+   *         Spark will keep the Sort and Limit and do it again.
    */
   def pushTopN(
       scanBuilder: ScanBuilder,

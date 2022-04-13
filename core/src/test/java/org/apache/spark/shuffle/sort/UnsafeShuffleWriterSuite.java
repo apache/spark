@@ -229,9 +229,8 @@ public class UnsafeShuffleWriterSuite implements ShuffleChecksumTestHelper {
   }
 
   @Test
-  public void mustCallWriteBeforeSuccessfulStop() {
-    assertThrows(IllegalStateException.class,
-      () -> createWriter(false).stop(true));
+  public void mustCallWriteBeforeSuccessfulStop() throws IOException, SparkException {
+    assertThrows(IllegalStateException.class, () -> createWriter(false).stop(true));
   }
 
   @Test
@@ -253,8 +252,7 @@ public class UnsafeShuffleWriterSuite implements ShuffleChecksumTestHelper {
       }
     }
     final UnsafeShuffleWriter<Object, Object> writer = createWriter(true);
-    assertThrows(PandaException.class,
-      () -> writer.write(new BadRecords()));
+    assertThrows(PandaException.class, () -> writer.write(new BadRecords()));
   }
 
   @Test

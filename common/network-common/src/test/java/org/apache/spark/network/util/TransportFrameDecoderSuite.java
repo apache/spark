@@ -202,15 +202,13 @@ public class TransportFrameDecoderSuite {
 
   @Test
   public void testNegativeFrameSize() {
-    assertThrows(IllegalArgumentException.class,
-      () -> testInvalidFrame(-1));
+    assertThrows(IllegalArgumentException.class, () -> testInvalidFrame(-1));
   }
 
   @Test
   public void testEmptyFrame() {
     // 8 because frame size includes the frame length.
-    assertThrows(IllegalArgumentException.class,
-      () -> testInvalidFrame(8));
+    assertThrows(IllegalArgumentException.class, () -> testInvalidFrame(8));
   }
 
   /**

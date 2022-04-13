@@ -54,7 +54,7 @@ public class TaskMemoryManagerSuite {
     // encode. This test exercises that corner-case:
     final long offset = ((1L << TaskMemoryManager.OFFSET_BITS) + 10);
     final long encodedAddress = manager.encodePageNumberAndOffset(dataPage, offset);
-    Assertions.assertEquals(null, manager.getPage(encodedAddress));
+    Assertions.assertNull(manager.getPage(encodedAddress));
     Assertions.assertEquals(offset, manager.getOffsetInPage(encodedAddress));
     manager.freePage(dataPage, c);
   }
