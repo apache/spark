@@ -134,6 +134,7 @@ Computations / Descriptive Stats
    Series.abs
    Series.all
    Series.any
+   Series.autocorr
    Series.between
    Series.clip
    Series.corr

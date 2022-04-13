@@ -3045,6 +3045,82 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             DataFrame(internal.with_new_sdf(sdf, index_fields=([None] * internal.index_level)))
         )
 
+    def autocorr(self, periods: int = 1) -> float:
+        """
+        Compute the lag-N autocorrelation.
+
+        This method computes the Pearson correlation between
+        the Series and its shifted self.
+
+        .. note:: the current implementation of rank uses Spark's Window without
+            specifying partition specification. This leads to move all data into
+            single partition in single machine and could cause serious
+            performance degradation. Avoid this method against very large dataset.
+
+        .. versionadded:: 3.4.0
+
+        Parameters
+        ----------
+        periods : int, default 1
+            Number of lags to apply before performing autocorrelation.
+
+        Returns
+        -------
+        float
+            The Pearson correlation between self and self.shift(lag).
+
+        See Also
+        --------
+        Series.corr : Compute the correlation between two Series.
+        Series.shift : Shift index by desired number of periods.
+        DataFrame.corr : Compute pairwise correlation of columns.
+
+        Notes
+        -----
+        If the Pearson correlation is not well defined return 'NaN'.
+
+        Examples
+        --------
+        >>> s = ps.Series([.2, .0, .6, .2, np.nan, .5, .6])
+        >>> s.autocorr()  # doctest: +ELLIPSIS
+        -0.141219...
+        >>> s.autocorr(0)  # doctest: +ELLIPSIS
+        1.0...
+        >>> s.autocorr(2)  # doctest: +ELLIPSIS
+        0.970725...
+        >>> s.autocorr(-3)  # doctest: +ELLIPSIS
+        0.277350...
+        >>> s.autocorr(5)  # doctest: +ELLIPSIS
+        -1.000000...
+        >>> s.autocorr(6)  # doctest: +ELLIPSIS
+        nan
+
+        If the Pearson correlation is not well defined, then 'NaN' is returned.
+
+        >>> s = ps.Series([1, 0, 0, 0])
+        >>> s.autocorr()
+        nan
+        """
+        # This implementation is suboptimal because it moves all data to a single partition,
+        # global sort should be used instead of window, but it should be a start
+        if not isinstance(periods, int):
+            raise TypeError("periods should be an int; however, got [%s]" % type(periods).__name__)
+
+        tmp_col = "__tmp_col__"
+        tmp_lag_col = "__tmp_lag_col__"
+        scol = self.spark.column.alias(tmp_col)
+        if periods == 0:
+            lag_col = scol.alias(tmp_lag_col)
+        else:
+            window = Window.orderBy(NATURAL_ORDER_COLUMN_NAME)
+            lag_col = F.lag(scol, periods).over(window).alias(tmp_lag_col)
+
+        return (
+            self._internal.spark_frame.select([scol, lag_col])
+            .dropna("any")
+            .corr(tmp_col, tmp_lag_col)
+        )
+
     def corr(self, other: "Series", method: str = "pearson") -> float:
         """
         Compute correlation with `other` Series, excluding missing values.
