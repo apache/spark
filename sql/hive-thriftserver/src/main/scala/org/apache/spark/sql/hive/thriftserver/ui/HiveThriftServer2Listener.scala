@@ -102,16 +102,16 @@ private[thriftserver] class HiveThriftServer2Listener(
       // Execution end event (Refer SPARK-27019). To handle that situation, if occurs in
       // Thriftserver, following code will take care. Here will come only if JobStart event comes
       // after Execution End event.
-      val storeExecInfo = Utils.tryWithResource(
+      Utils.tryWithResource(
         kvstore.view(classOf[ExecutionInfo]).closeableIterator()) { iterator =>
-        iterator.asScala.filter(_.groupId == groupId)
-      }
-      storeExecInfo.foreach { exec =>
-        val liveExec = getOrCreateExecution(exec.execId, exec.statement, exec.sessionId,
-          exec.startTimestamp, exec.userName)
-        liveExec.jobId += jobId
-        updateStoreWithTriggerEnabled(liveExec)
-        executionList.remove(liveExec.execId)
+        val storeExecInfo = iterator.asScala.filter(_.groupId == groupId)
+        storeExecInfo.foreach { exec =>
+          val liveExec = getOrCreateExecution(exec.execId, exec.statement, exec.sessionId,
+            exec.startTimestamp, exec.userName)
+          liveExec.jobId += jobId
+          updateStoreWithTriggerEnabled(liveExec)
+          executionList.remove(liveExec.execId)
+        }
       }
     }
   }
