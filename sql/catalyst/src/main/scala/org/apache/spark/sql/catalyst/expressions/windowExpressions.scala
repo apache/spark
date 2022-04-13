@@ -1026,9 +1026,6 @@ case class PercentRank(children: Seq[Expression]) extends RankLike with SizeBase
  *    y_t = \frac{\sum_{i=0}^t w_i x_{t-i}}{\sum_{i=0}^t w_i},
  * where x_t is the input, y_t is the result and the w_i are the weights.
  */
-@DeveloperApi
-@Experimental
-@Unstable
 case class EWM(input: Expression, alpha: Double)
   extends AggregateWindowFunction with UnaryLike[Expression] {
   assert(0 < alpha && alpha <= 1)
