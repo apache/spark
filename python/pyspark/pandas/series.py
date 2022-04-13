@@ -6722,6 +6722,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         name: str_type,
         axis: Optional[Axis] = None,
         numeric_only: bool = True,
+        skipna: bool = False,
         **kwargs: Any,
     ) -> Scalar:
         """
@@ -6732,7 +6733,8 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         sfun : the stats function to be used for aggregation
         name : original pandas API name.
         axis : used only for sanity check because series only support index axis.
-        numeric_only : not used by this implementation, but passed down by stats functions
+        numeric_only : not used by this implementation, but passed down by stats functions.
+        skipna : if True, exclude NA/null values when computing the result.
         """
         axis = validate_axis(axis)
         if axis == 1:
@@ -6744,7 +6746,10 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         if min_count > 0:
             scol = F.when(Frame._count_expr(self) >= min_count, scol)
 
-        result = unpack_scalar(self._internal.spark_frame.select(scol))
+        if skipna:
+            result = unpack_scalar(self._internal.spark_frame.where(scol.isNotNull()).select(scol))
+        else:
+            result = unpack_scalar(self._internal.spark_frame.select(scol))
         return result if result is not None else np.nan
 
     # Override the `groupby` to specify the actual return type annotation.
