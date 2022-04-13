@@ -36,7 +36,6 @@ class MissingPandasLikeSeries:
     combine = _unsupported_function("combine")
     convert_dtypes = _unsupported_function("convert_dtypes")
     infer_objects = _unsupported_function("infer_objects")
-    interpolate = _unsupported_function("interpolate")
     reorder_levels = _unsupported_function("reorder_levels")
     resample = _unsupported_function("resample")
     searchsorted = _unsupported_function("searchsorted")

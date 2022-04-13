@@ -222,6 +222,7 @@ Missing data handling
    Series.pad
    Series.dropna
    Series.fillna
+   Series.interpolate
 
 Reshaping, sorting, transposing
 -------------------------------

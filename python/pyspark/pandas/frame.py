@@ -5500,6 +5500,23 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         else:
             return psdf
 
+    def interpolate(self, method: Optional[str] = None, limit: Optional[int] = None) -> "DataFrame":
+        if (method is not None) and (method not in ["linear"]):
+            raise NotImplementedError("interpolate currently works only for method='linear'")
+        if (limit is not None) and (not limit > 0):
+            raise ValueError("limit must be > 0.")
+
+        numeric_col_names = []
+        for label in self._internal.column_labels:
+            psser = self._psser_for(label)
+            if isinstance(psser.spark.data_type, (NumericType, BooleanType)):
+                numeric_col_names.append(psser.name)
+
+        psdf = self[numeric_col_names]
+        return psdf._apply_series_op(
+            lambda psser: psser._interpolate(method=method, limit=limit), should_resolve=True
+        )
+
     def replace(
         self,
         to_replace: Optional[Union[Any, List, Tuple, Dict]] = None,

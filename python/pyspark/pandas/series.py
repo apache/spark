@@ -54,6 +54,7 @@ from pandas.api.types import (  # type: ignore[attr-defined]
     CategoricalDtype,
 )
 from pandas.tseries.frequencies import DateOffset
+from pyspark import SparkContext
 from pyspark.sql import functions as F, Column, DataFrame as SparkDataFrame
 from pyspark.sql.types import (
     ArrayType,
@@ -2166,6 +2167,62 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             self._psdf._internal.with_new_spark_column(
                 self._column_label, scol.alias(name_like_string(self.name))  # TODO: dtype?
             )
+        )._psser_for(self._column_label)
+
+    def interpolate(self, method: Optional[str] = None, limit: Optional[int] = None) -> "Series":
+        return self._interpolate(method=method, limit=limit)
+
+    def _interpolate(
+        self,
+        method: Optional[str] = None,
+        limit: Optional[int] = None,
+    ) -> "Series":
+        if (method is not None) and (method not in ["linear"]):
+            raise NotImplementedError("interpolate currently works only for method='linear'")
+        if (limit is not None) and (not limit > 0):
+            raise ValueError("limit must be > 0.")
+
+        if not self.spark.nullable and not isinstance(
+            self.spark.data_type, (FloatType, DoubleType)
+        ):
+            return self._psdf.copy()._psser_for(self._column_label)
+
+        scol = self.spark.column
+        sql_utils = SparkContext._active_spark_context._jvm.PythonSQLUtils
+        last_non_null = Column(sql_utils.lastNonNull(scol._jc))
+        null_index = Column(sql_utils.nullIndex(scol._jc))
+
+        window_forward = Window.orderBy(NATURAL_ORDER_COLUMN_NAME).rowsBetween(
+            Window.unboundedPreceding, Window.currentRow
+        )
+        last_non_null_forward = last_non_null.over(window_forward)
+        null_index_forward = null_index.over(window_forward)
+
+        window_backward = Window.orderBy(F.desc(NATURAL_ORDER_COLUMN_NAME)).rowsBetween(
+            Window.unboundedPreceding, Window.currentRow
+        )
+        last_non_null_backward = last_non_null.over(window_backward)
+        null_index_backward = null_index.over(window_backward)
+
+        fill = (last_non_null_backward - last_non_null_forward) / (
+            null_index_backward + null_index_forward
+        ) * null_index_forward + last_non_null_forward
+
+        fill_cond = ~F.isnull(last_non_null_backward) & ~F.isnull(last_non_null_forward)
+        pad_cond = F.isnull(last_non_null_backward) & ~F.isnull(last_non_null_forward)
+        if limit is not None:
+            fill_cond = fill_cond & (null_index_forward <= F.lit(limit))
+            pad_cond = pad_cond & (null_index_forward <= F.lit(limit))
+
+        cond = self.isnull().spark.column
+        scol = (
+            F.when(cond & fill_cond, fill)
+            .when(cond & pad_cond, last_non_null_forward)
+            .otherwise(scol)
+        )
+
+        return DataFrame(
+            self._psdf._internal.with_new_spark_column(self._column_label, scol)  # TODO: dtype?
         )._psser_for(self._column_label)
 
     def dropna(self, axis: Axis = 0, inplace: bool = False, **kwargs: Any) -> Optional["Series"]:
