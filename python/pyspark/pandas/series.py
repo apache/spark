@@ -2220,9 +2220,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         )
 
         return DataFrame(
-            self._psdf._internal.with_new_spark_column(
-                self._column_label, scol.alias(name_like_string(self.name))  # TODO: dtype?
-            )
+            self._psdf._internal.with_new_spark_column(self._column_label, scol)  # TODO: dtype?
         )._psser_for(self._column_label)
 
     def dropna(self, axis: Axis = 0, inplace: bool = False, **kwargs: Any) -> Optional["Series"]:
