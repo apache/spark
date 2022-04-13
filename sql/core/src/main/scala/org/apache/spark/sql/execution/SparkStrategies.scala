@@ -110,17 +110,22 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case Limit(IntegerLiteral(limit), Project(projectList, Sort(order, true, child)))
           if limit < conf.topKSortFallbackThreshold =>
         TakeOrderedAndProjectExec(limit, 0, order, projectList, planLater(child)) :: Nil
+      // This is a global LIMIT and OFFSET over a logical sorting operator,
+      // where the sum of specified limit and specified offset is less than a heuristic threshold.
+      // In this case we generate a physical top-K sorting operator, passing down
+      // the limit and offset values to be evaluated inline during the physical
+      // sorting operation for greater efficiency.
       case GlobalLimitAndOffset(
           IntegerLiteral(limit),
           IntegerLiteral(offset),
           Sort(order, true, child))
-          if limit < conf.topKSortFallbackThreshold =>
+          if limit + offset < conf.topKSortFallbackThreshold =>
         TakeOrderedAndProjectExec(limit, offset, order, child.output, planLater(child)) :: Nil
       case GlobalLimitAndOffset(
           IntegerLiteral(limit),
           IntegerLiteral(offset),
           Project(projectList, Sort(order, true, child)))
-          if limit < conf.topKSortFallbackThreshold =>
+          if limit + offset < conf.topKSortFallbackThreshold =>
         TakeOrderedAndProjectExec(limit, offset, order, projectList, planLater(child)) :: Nil
       case _ => Nil
     }

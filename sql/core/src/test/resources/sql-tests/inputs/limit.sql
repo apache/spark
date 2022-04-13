@@ -3,6 +3,7 @@
 SELECT * FROM testdata LIMIT 2;
 SELECT * FROM arraydata LIMIT 2;
 SELECT * FROM mapdata LIMIT 2;
+SELECT * FROM mapdata LIMIT 2 OFFSET 0;
 
 -- foldable non-literal in limit
 SELECT * FROM testdata LIMIT 2 + 1;
