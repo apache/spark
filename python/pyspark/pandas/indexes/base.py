@@ -73,6 +73,7 @@ from pyspark.pandas.utils import (
     scol_for,
     verify_temp_column_name,
     validate_bool_kwarg,
+    validate_index_loc,
     ERROR_MESSAGE_CANNOT_COMBINE,
     log_advice,
 )
@@ -2544,10 +2545,8 @@ class Index(IndexOpsMixin):
         >>> psidx.insert(-3, 100)
         Int64Index([1, 2, 100, 3, 4, 5], dtype='int64')
         """
-        if loc < 0:
-            length = len(self)
-            loc = loc + length
-            loc = 0 if loc < 0 else loc
+        validate_index_loc(self, loc)
+        loc = loc + len(self) if loc < 0 else loc
 
         index_name = self._internal.index_spark_column_names[0]
         sdf_before = self.to_frame(name=index_name)[:loc]._to_spark()
