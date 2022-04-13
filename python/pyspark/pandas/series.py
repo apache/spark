@@ -2703,7 +2703,11 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         return first_series(DataFrame(internal))
 
     def sort_values(
-        self, ascending: bool = True, inplace: bool = False, na_position: str = "last"
+        self,
+        ascending: bool = True,
+        inplace: bool = False,
+        na_position: str = "last",
+        ignore_index: bool = False,
     ) -> Optional["Series"]:
         """
         Sort by the values.
@@ -2720,6 +2724,10 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
              if True, perform operation in-place
         na_position : {'first', 'last'}, default 'last'
              `first` puts NaNs at the beginning, `last` puts NaNs at the end
+        ignore_index : bool, default False
+             If True, the resulting axis will be labeled 0, 1, …, n - 1.
+
+             .. versionadded:: 3.4.0
 
         Returns
         -------
@@ -2754,6 +2762,16 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         2     3.0
         1     1.0
         0     NaN
+        dtype: float64
+
+        Sort values descending order and ignoring index
+
+        >>> s.sort_values(ascending=False, ignore_index=True)
+        0    10.0
+        1     5.0
+        2     3.0
+        3     1.0
+        4     NaN
         dtype: float64
 
         Sort values inplace
@@ -2802,10 +2820,12 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         )
 
         if inplace:
+            if ignore_index:
+                psdf.reset_index(drop=True, inplace=inplace)
             self._update_anchor(psdf)
             return None
         else:
-            return first_series(psdf)
+            return first_series(psdf.reset_index(drop=True)) if ignore_index else first_series(psdf)
 
     def sort_index(
         self,
@@ -2815,6 +2835,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         inplace: bool = False,
         kind: str = None,
         na_position: str = "last",
+        ignore_index: bool = False,
     ) -> Optional["Series"]:
         """
         Sort object by labels (along an axis)
@@ -2834,6 +2855,10 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         na_position : {‘first’, ‘last’}, default ‘last’
             first puts NaNs at the beginning, last puts NaNs at the end. Not implemented for
             MultiIndex.
+        ignore_index : bool, default False
+            If True, the resulting axis will be labeled 0, 1, …, n - 1.
+
+            .. versionadded:: 3.4.0
 
         Returns
         -------
@@ -2841,50 +2866,58 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
         Examples
         --------
-        >>> df = ps.Series([2, 1, np.nan], index=['b', 'a', np.nan])
+        >>> s = ps.Series([2, 1, np.nan], index=['b', 'a', np.nan])
 
-        >>> df.sort_index()
+        >>> s.sort_index()
         a      1.0
         b      2.0
         NaN    NaN
         dtype: float64
 
-        >>> df.sort_index(ascending=False)
+        >>> s.sort_index(ignore_index=True)
+        0    1.0
+        1    2.0
+        2    NaN
+        dtype: float64
+
+        >>> s.sort_index(ascending=False)
         b      2.0
         a      1.0
         NaN    NaN
         dtype: float64
 
-        >>> df.sort_index(na_position='first')
+        >>> s.sort_index(na_position='first')
         NaN    NaN
         a      1.0
         b      2.0
         dtype: float64
 
-        >>> df.sort_index(inplace=True)
-        >>> df
+        >>> s.sort_index(inplace=True)
+        >>> s
         a      1.0
         b      2.0
         NaN    NaN
         dtype: float64
 
-        >>> df = ps.Series(range(4), index=[['b', 'b', 'a', 'a'], [1, 0, 1, 0]], name='0')
+        Multi-index series.
 
-        >>> df.sort_index()
+        >>> s = ps.Series(range(4), index=[['b', 'b', 'a', 'a'], [1, 0, 1, 0]], name='0')
+
+        >>> s.sort_index()
         a  0    3
            1    2
         b  0    1
            1    0
         Name: 0, dtype: int64
 
-        >>> df.sort_index(level=1)  # doctest: +SKIP
+        >>> s.sort_index(level=1)  # doctest: +SKIP
         a  0    3
         b  0    1
         a  1    2
         b  1    0
         Name: 0, dtype: int64
 
-        >>> df.sort_index(level=[1, 0])
+        >>> s.sort_index(level=[1, 0])
         a  0    3
         b  0    1
         a  1    2
@@ -2897,10 +2930,12 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         )
 
         if inplace:
+            if ignore_index:
+                psdf.reset_index(drop=True, inplace=inplace)
             self._update_anchor(psdf)
             return None
         else:
-            return first_series(psdf)
+            return first_series(psdf.reset_index(drop=True)) if ignore_index else first_series(psdf)
 
     def swaplevel(
         self, i: Union[int, Name] = -2, j: Union[int, Name] = -1, copy: bool = True
