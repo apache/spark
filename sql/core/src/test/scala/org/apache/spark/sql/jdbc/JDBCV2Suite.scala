@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.analysis.CannotReplaceMissingTableException
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, GlobalLimit, LocalLimit, Sort}
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2ScanRelation, V1ScanWrapper}
 import org.apache.spark.sql.execution.datasources.v2.jdbc.JDBCTableCatalog
-import org.apache.spark.sql.functions.{abs, avg, coalesce, count, count_distinct, lit, not, sum, udf, when}
+import org.apache.spark.sql.functions.{abs, avg, ceil, coalesce, count, count_distinct, exp, floor, lit, log => ln, not, pow, sqrt, sum, udf, when}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.util.Utils
@@ -464,6 +464,32 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
         checkPushedInfo(df5, expectedPlanFragment5)
         checkAnswer(df5, Seq(Row(1, "amy", 10000, 1000, true),
           Row(1, "cathy", 9000, 1200, false), Row(6, "jen", 12000, 1200, true)))
+
+        val df6 = spark.table("h2.test.employee")
+          .filter(ln($"dept") > 1)
+          .filter(exp($"salary") > 2000)
+          .filter(pow($"dept", 2) > 4)
+          .filter(sqrt($"salary") > 100)
+          .filter(floor($"dept") > 1)
+          .filter(ceil($"dept") > 1)
+        checkFiltersRemoved(df6, ansiMode)
+        val expectedPlanFragment6 = if (ansiMode) {
+          "PushedFilters: [DEPT IS NOT NULL, SALARY IS NOT NULL, " +
+            "LN(CAST(DEPT AS double)) > 1.0, EXP(CAST(SALARY AS double)...,"
+        } else {
+          "PushedFilters: [DEPT IS NOT NULL, SALARY IS NOT NULL]"
+        }
+        checkPushedInfo(df6, expectedPlanFragment6)
+        checkAnswer(df6, Seq(Row(6, "jen", 12000, 1200, true)))
+
+        // H2 does not support width_bucket
+        val df7 = sql("""
+                        |SELECT * FROM h2.test.employee
+                        |WHERE width_bucket(dept, 1, 6, 3) > 1
+                        |""".stripMargin)
+        checkFiltersRemoved(df7, false)
+        checkPushedInfo(df7, "PushedFilters: [DEPT IS NOT NULL]")
+        checkAnswer(df7, Seq(Row(6, "jen", 12000, 1200, true)))
       }
     }
   }

@@ -5304,9 +5304,9 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         dtype: int64
         """
         if not same_anchor(self, other):
-            if get_option("compute.eager_check") and not self.index.sort_values().equals(
-                other.index.sort_values()
-            ):
+            if get_option("compute.eager_check") and not cast(
+                ps.Index, self.index.sort_values()
+            ).equals(cast(ps.Index, other.index.sort_values())):
                 raise ValueError("matrices are not aligned")
             elif len(self.index) != len(other.index):
                 raise ValueError("matrices are not aligned")

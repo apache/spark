@@ -802,18 +802,38 @@ class IndexesTest(ComparisonTestBase, TestUtils):
         psidx.names = ["lv", "lv"]
         self.assertRaises(ValueError, lambda: psidx.drop(["x", "y"], level="lv"))
 
+    def _test_sort_values(self, pidx, psidx):
+        self.assert_eq(pidx.sort_values(), psidx.sort_values())
+        # Parameter ascending
+        self.assert_eq(pidx.sort_values(ascending=False), psidx.sort_values(ascending=False))
+        # Parameter return_indexer
+        p_sorted, p_indexer = pidx.sort_values(return_indexer=True)
+        ps_sorted, ps_indexer = psidx.sort_values(return_indexer=True)
+        self.assert_eq(p_sorted, ps_sorted)
+        self.assert_eq(p_indexer, ps_indexer.to_list())
+        self.assert_eq(
+            pidx.sort_values(return_indexer=False), psidx.sort_values(return_indexer=False)
+        )
+        # Parameter return_indexer and ascending
+        p_sorted, p_indexer = pidx.sort_values(return_indexer=True, ascending=False)
+        ps_sorted, ps_indexer = psidx.sort_values(return_indexer=True, ascending=False)
+        self.assert_eq(p_sorted, ps_sorted)
+        self.assert_eq(p_indexer, ps_indexer.to_list())
+        self.assert_eq(
+            pidx.sort_values(return_indexer=False, ascending=False),
+            psidx.sort_values(return_indexer=False, ascending=False),
+        )
+
     def test_sort_values(self):
         pidx = pd.Index([-10, -100, 200, 100])
         psidx = ps.from_pandas(pidx)
 
-        self.assert_eq(pidx.sort_values(), psidx.sort_values())
-        self.assert_eq(pidx.sort_values(ascending=False), psidx.sort_values(ascending=False))
+        self._test_sort_values(pidx, psidx)
 
         pidx.name = "koalas"
         psidx.name = "koalas"
 
-        self.assert_eq(pidx.sort_values(), psidx.sort_values())
-        self.assert_eq(pidx.sort_values(ascending=False), psidx.sort_values(ascending=False))
+        self._test_sort_values(pidx, psidx)
 
         pidx = pd.MultiIndex.from_tuples([("a", "x", 1), ("b", "y", 2), ("c", "z", 3)])
         psidx = ps.from_pandas(pidx)
@@ -821,8 +841,7 @@ class IndexesTest(ComparisonTestBase, TestUtils):
         pidx.names = ["hello", "koalas", "goodbye"]
         psidx.names = ["hello", "koalas", "goodbye"]
 
-        self.assert_eq(pidx.sort_values(), psidx.sort_values())
-        self.assert_eq(pidx.sort_values(ascending=False), psidx.sort_values(ascending=False))
+        self._test_sort_values(pidx, psidx)
 
     def test_index_drop_duplicates(self):
         pidx = pd.Index([1, 1, 2])

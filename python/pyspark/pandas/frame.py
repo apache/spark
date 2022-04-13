@@ -10164,8 +10164,10 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             )
         )
 
-    # TODO: axis, skipna, level and **kwargs should be implemented.
-    def all(self, axis: Axis = 0, bool_only: Optional[bool] = None) -> "Series":
+    # TODO: axis, level and **kwargs should be implemented.
+    def all(
+        self, axis: Axis = 0, bool_only: Optional[bool] = None, skipna: bool = True
+    ) -> "Series":
         """
         Return whether all elements are True.
 
@@ -10183,6 +10185,13 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         bool_only : bool, default None
             Include only boolean columns. If None, will attempt to use everything,
             then use only boolean data.
+
+        skipna : boolean, default True
+            Exclude NA values, such as None or numpy.NaN.
+            If an entire row/column is NA values and `skipna` is True,
+            then the result will be True, as for an empty row/column.
+            If `skipna` is False, numpy.NaNs are treated as True because these are
+            not equal to zero, Nones are treated as False.
 
         Returns
         -------
@@ -10212,6 +10221,13 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         col6    False
         dtype: bool
 
+        Include NA values when set `skipna=False`.
+
+        >>> df[['col5', 'col6']].all(skipna=False)
+        col5    False
+        col6    False
+        dtype: bool
+
         Include only boolean columns when set `bool_only=True`.
 
         >>> df.all(bool_only=True)
@@ -10232,7 +10248,15 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         applied = []
         for label in column_labels:
             scol = self._internal.spark_column_for(label)
-            all_col = F.min(F.coalesce(scol.cast("boolean"), SF.lit(True)))
+
+            if isinstance(self._internal.spark_type_for(label), NumericType) or skipna:
+                # np.nan takes no effect to the result; None takes no effect if `skipna`
+                all_col = F.min(F.coalesce(scol.cast("boolean"), SF.lit(True)))
+            else:
+                # Take None as False when not `skipna`
+                all_col = F.min(
+                    F.when(scol.isNull(), SF.lit(False)).otherwise(scol.cast("boolean"))
+                )
             applied.append(F.when(all_col.isNull(), True).otherwise(all_col))
 
         return self._result_aggregated(column_labels, applied)

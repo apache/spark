@@ -398,11 +398,11 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession {
       sqlState = "23000",
       message =
         """
-           |Found duplicate keys 'p1'(line 1, pos 29)
-           |
-           |== SQL ==
-           |INSERT OVERWRITE TABLE table PARTITION(p1='1', p1='1') SELECT 'col1', 'col2'
-           |-----------------------------^^^
-           |""".stripMargin)
+          |Found duplicate keys 'p1'(line 1, pos 29)
+          |
+          |== SQL ==
+          |INSERT OVERWRITE TABLE table PARTITION(p1='1', p1='1') SELECT 'col1', 'col2'
+          |-----------------------------^^^
+          |""".stripMargin)
   }
 }
