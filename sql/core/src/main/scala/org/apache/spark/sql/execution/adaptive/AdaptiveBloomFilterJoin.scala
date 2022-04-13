@@ -24,42 +24,28 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.BloomFilterAggregate
 import org.apache.spark.sql.catalyst.optimizer.ConstantFolding
 import org.apache.spark.sql.catalyst.optimizer.JoinSelectionHelper
 import org.apache.spark.sql.catalyst.planning.ExtractEquiJoinKeys
-import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.util.Utils
 
 /**
  * Insert a bloom filter on one side of the join if it may be spill when sorting and
- * the other side less than 100000000L rows.
+ * the other side less than conf.runtimeFilterCreationSideThreshold.
  */
 case class AdaptiveBloomFilterJoin(sparkSession: SparkSession)
     extends Rule[LogicalPlan] with JoinSelectionHelper {
-
-  // Larger number of items may take a long time to build bloom filter.
-  private final val maxNumItems = 100000000L
   // The factor of raw data to Java objects.
   private final val factor = 2
 
   private val sc = sparkSession.sparkContext
+  private val executorMem = Utils.byteStringAsBytes(s"${sc.executorMemory}m")
   private val fraction = sc.conf.get(config.MEMORY_FRACTION)
   private val storageFraction = sc.conf.get(config.MEMORY_STORAGE_FRACTION)
   private val executorCores = sc.conf.get(config.EXECUTOR_CORES)
 
   private val memoryPerTask =
-    (sc.executorMemory * fraction * (1 - storageFraction) * (1L << 20)).toFloat / executorCores
-
-  private def canPruneLeft(joinType: JoinType): Boolean = joinType match {
-    case Inner | LeftSemi | RightOuter => true
-    case _ => false
-  }
-
-  private def canPruneRight(joinType: JoinType): Boolean = joinType match {
-    case Inner | LeftSemi | LeftOuter => true
-    case _ => false
-  }
-
-  private def muchSmaller(filterSide: BigInt, pruningSide: BigInt): Boolean =
-    filterSide < maxNumItems && filterSide * 5 < pruningSide
+    (executorMem * fraction * (1 - storageFraction)).toFloat / executorCores
 
   private def avgSizePerPartition(logicalPlan: LogicalPlan): Float =
     logicalPlan.stats.sizeInBytes.toFloat / conf.numShufflePartitions
@@ -76,12 +62,13 @@ case class AdaptiveBloomFilterJoin(sparkSession: SparkSession)
       pruningPlan: LogicalPlan,
       filteringKey: Seq[Expression],
       filteringPlan: LogicalPlan): LogicalPlan = {
-    val filteringRowCount = filteringPlan.stats.rowCount.get
+    val expectedNumItems = math.min(filteringPlan.stats.rowCount.get.toLong,
+      conf.getConf(SQLConf.RUNTIME_BLOOM_FILTER_EXPECTED_NUM_ITEMS))
     // To improve build bloom filter performance.
-    val coalesceNum = scala.math.ceil(filteringRowCount.toDouble / 4000000).toInt
+    val coalesceNum = scala.math.ceil(expectedNumItems.toDouble / 4000000).toInt
 
     val bloomFilterAgg =
-      new BloomFilterAggregate(new XxHash64(filteringKey), Literal(filteringRowCount.toLong))
+      new BloomFilterAggregate(new XxHash64(filteringKey), Literal(expectedNumItems))
     val alias = Alias(bloomFilterAgg.toAggregateExpression(), "bloomFilter")()
     val aggregate = ConstantFolding(Aggregate(Nil, Seq(alias),
       Repartition(coalesceNum, false, filteringPlan)))
@@ -93,14 +80,11 @@ case class AdaptiveBloomFilterJoin(sparkSession: SparkSession)
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformDown {
     case join @ ExtractEquiJoinKeys(joinType, leftKeys, rightKeys, _, _, left, right, _)
         if left.stats.isRuntime && right.stats.isRuntime && nonBroadcastHashJoin(join) =>
-      val leftRowCnt = left.stats.rowCount.get
-      val rightRowCnt = right.stats.rowCount.get
-
-      if (canPruneLeft(joinType) && muchSmaller(rightRowCnt, leftRowCnt) &&
-        avgSizePerPartition(left) * factor > memoryPerTask) {
+      if (canPruneLeft(joinType) && avgSizePerPartition(left) * factor > memoryPerTask &&
+        right.stats.sizeInBytes <= conf.runtimeFilterCreationSideThreshold) {
         join.copy(left = insertPredicate(leftKeys, left, rightKeys, right))
-      } else if (canPruneRight(joinType) && muchSmaller(leftRowCnt, rightRowCnt) &&
-        avgSizePerPartition(right) * factor > memoryPerTask) {
+      } else if (canPruneRight(joinType) && avgSizePerPartition(right) * factor > memoryPerTask &&
+        left.stats.sizeInBytes <= conf.runtimeFilterCreationSideThreshold) {
         join.copy(right = insertPredicate(rightKeys, right, leftKeys, left))
       } else {
         join
