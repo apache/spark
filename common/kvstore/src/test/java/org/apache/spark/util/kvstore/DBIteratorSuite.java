@@ -493,7 +493,7 @@ public abstract class DBIteratorSuite {
     return db.view(CustomType1.class);
   }
 
-  private List<CustomType1> collect(KVStoreView<CustomType1> view) {
+  private List<CustomType1> collect(KVStoreView<CustomType1> view) throws Exception {
     return Arrays.asList(Iterables.toArray(view, CustomType1.class));
   }
 
