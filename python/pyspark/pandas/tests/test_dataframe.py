@@ -1678,6 +1678,8 @@ class DataFrameTest(ComparisonTestBase, SQLTestUtils):
 
         # Assert default behavior without parameters
         self.assert_eq(psdf.sort_index(), pdf.sort_index())
+        # Assert ignoring index
+        self.assert_eq(psdf.sort_index(ignore_index=True), pdf.sort_index(ignore_index=True))
         # Assert sorting descending
         self.assert_eq(psdf.sort_index(ascending=False), pdf.sort_index(ascending=False))
         # Assert sorting NA indices first
@@ -1694,6 +1696,14 @@ class DataFrameTest(ComparisonTestBase, SQLTestUtils):
         self.assertEqual(psdf.sort_index(inplace=True), pdf.sort_index(inplace=True))
         self.assert_eq(psdf, pdf)
         self.assert_eq(psserA, pserA)
+        pserA = pdf.A
+        psserA = psdf.A
+        self.assertEqual(
+            psdf.sort_index(inplace=True, ascending=False, ignore_index=True),
+            pdf.sort_index(inplace=True, ascending=False, ignore_index=True),
+        )
+        self.assert_eq(psdf, pdf)
+        self.assert_eq(psserA, pserA)
 
         # Assert multi-indices
         pdf = pd.DataFrame(
@@ -1703,6 +1713,8 @@ class DataFrameTest(ComparisonTestBase, SQLTestUtils):
         self.assert_eq(psdf.sort_index(), pdf.sort_index())
         self.assert_eq(psdf.sort_index(level=[1, 0]), pdf.sort_index(level=[1, 0]))
         self.assert_eq(psdf.reset_index().sort_index(), pdf.reset_index().sort_index())
+        # Assert ignoring index
+        self.assert_eq(psdf.sort_index(ignore_index=True), pdf.sort_index(ignore_index=True))
 
         # Assert with multi-index columns
         columns = pd.MultiIndex.from_tuples([("X", "A"), ("X", "B")])
