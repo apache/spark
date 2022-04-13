@@ -978,13 +978,14 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
         check(psdf.index.to_series(name=("x", "a")), pdf.index.to_series(name=("x", "a")))
 
     def test_sort_values(self):
-        pdf = pd.DataFrame({"x": [1, 2, 3, 4, 5, None, 7]})
+        pdf = pd.DataFrame({"x": [1, 2, 3, 4, 5, None, 7]}, index=np.random.rand(7))
         psdf = ps.from_pandas(pdf)
 
         pser = pdf.x
         psser = psdf.x
 
         self.assert_eq(psser.sort_values(), pser.sort_values())
+        self.assert_eq(psser.sort_values(ignore_index=True), pser.sort_values(ignore_index=True))
         self.assert_eq(psser.sort_values(ascending=False), pser.sort_values(ascending=False))
         self.assert_eq(
             psser.sort_values(na_position="first"), pser.sort_values(na_position="first")
@@ -996,6 +997,10 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
         # pandas raises an exception when the Series is derived from DataFrame
         psser.sort_values(inplace=True)
         self.assert_eq(psser, pser.sort_values())
+        self.assert_eq(psdf, pdf)
+
+        psser.sort_values(inplace=True, ascending=False, ignore_index=True)
+        self.assert_eq(psser, pser.sort_values(ascending=False, ignore_index=True))
         self.assert_eq(psdf, pdf)
 
         pser = pdf.x.copy()
@@ -1024,12 +1029,18 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
         self.assert_eq(psser.sort_index(ascending=False), pser.sort_index(ascending=False))
         # Assert sorting NA indices first
         self.assert_eq(psser.sort_index(na_position="first"), pser.sort_index(na_position="first"))
+        # Assert ignoring index
+        self.assert_eq(psser.sort_index(ignore_index=True), pser.sort_index(ignore_index=True))
 
         # Assert sorting inplace
         # pandas sorts pdf.x by the index and update the column only
         # when the Series is derived from DataFrame.
         psser.sort_index(inplace=True)
         self.assert_eq(psser, pser.sort_index())
+        self.assert_eq(psdf, pdf)
+
+        psser.sort_index(inplace=True, ascending=False, ignore_index=True)
+        self.assert_eq(psser, pser.sort_index(ascending=False, ignore_index=True))
         self.assert_eq(psdf, pdf)
 
         pser = pdf.x.copy()
