@@ -15,26 +15,11 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.catalyst.plans.logical
+package org.apache.spark.sql.connector.write
 
-import org.apache.spark.sql.catalyst.expressions.ExpressionSet
-import org.apache.spark.sql.internal.SQLConf.PROPAGATE_DISTINCT_KEYS_ENABLED
+import org.apache.spark.sql.connector.write.RowLevelOperation.Command
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
-/**
- * A trait to add distinct attributes to [[LogicalPlan]]. For example:
- * {{{
- *   SELECT a, b, SUM(c) FROM Tab1 GROUP BY a, b
- *   // returns a, b
- * }}}
- */
-trait LogicalPlanDistinctKeys { self: LogicalPlan =>
-  lazy val distinctKeys: Set[ExpressionSet] = {
-    if (conf.getConf(PROPAGATE_DISTINCT_KEYS_ENABLED)) {
-      val keys = DistinctKeyVisitor.visit(self)
-      require(keys.forall(_.nonEmpty))
-      keys
-    } else {
-      Set.empty
-    }
-  }
-}
+private[sql] case class RowLevelOperationInfoImpl(
+    command: Command,
+    options: CaseInsensitiveStringMap) extends RowLevelOperationInfo

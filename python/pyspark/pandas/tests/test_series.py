@@ -2121,7 +2121,12 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
 
         pser.name = "x"
         psser = ps.from_pandas(pser)
-        self.assert_eq(psser.mode(), pser.mode())
+        if LooseVersion(pd.__version__) < LooseVersion("1.4"):
+            # Due to pandas bug: https://github.com/pandas-dev/pandas/issues/46737
+            psser.name = None
+            self.assert_eq(psser.mode(), pser.mode())
+        else:
+            self.assert_eq(psser.mode(), pser.mode())
         self.assert_eq(
             psser.mode(dropna=False).sort_values().reset_index(drop=True),
             pser.mode(dropna=False).sort_values().reset_index(drop=True),
@@ -3103,6 +3108,23 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
         psser2.name = pser2.name = ("Y", "B")
 
         self.assert_eq(psser1.combine_first(psser2), pser1.combine_first(pser2))
+
+    def test_autocorr(self):
+        pdf = pd.DataFrame({"s1": [0.90010907, 0.13484424, 0.62036035]})
+        self._test_autocorr(pdf)
+
+        pdf = pd.DataFrame({"s1": [0.90010907, np.nan, 0.13484424, 0.62036035]})
+        self._test_autocorr(pdf)
+
+        pdf = pd.DataFrame({"s1": [0.2, 0.0, 0.6, 0.2, np.nan, 0.5, 0.6]})
+        self._test_autocorr(pdf)
+
+    def _test_autocorr(self, pdf):
+        psdf = ps.from_pandas(pdf)
+        for lag in range(-10, 10):
+            p_autocorr = pdf["s1"].autocorr(lag)
+            ps_autocorr = psdf["s1"].autocorr(lag)
+            self.assert_eq(p_autocorr, ps_autocorr, almost=True)
 
     def test_cov(self):
         pdf = pd.DataFrame(

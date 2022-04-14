@@ -1059,3 +1059,77 @@ case class EWM(input: Expression, alpha: Double)
 
   override protected def withNewChildInternal(newChild: Expression): EWM = copy(input = newChild)
 }
+
+
+/**
+ * Keep the last non-null value seen if any. This expression is dedicated only for
+ * Pandas API on Spark.
+ * For example,
+ *  Input: null, 1, 2, 3, null, 4, 5, null
+ *  Output: null, 1, 2, 3, 3, 4, 5, 5
+ */
+case class LastNonNull(input: Expression)
+  extends AggregateWindowFunction with UnaryLike[Expression] {
+
+  override def dataType: DataType = input.dataType
+
+  private val last = AttributeReference("last", dataType, nullable = true)()
+
+  override def aggBufferAttributes: Seq[AttributeReference] = last :: Nil
+
+  override val initialValues: Seq[Expression] = Seq(Literal.create(null, dataType))
+
+  override val updateExpressions: Seq[Expression] = {
+    Seq(
+      /* last = */ If(IsNull(input), last, input)
+    )
+  }
+
+  override val evaluateExpression: Expression = last
+
+  override def prettyName: String = "last_non_null"
+
+  override def sql: String = s"$prettyName(${input.sql})"
+
+  override def child: Expression = input
+
+  override protected def withNewChildInternal(newChild: Expression): LastNonNull =
+    copy(input = newChild)
+}
+
+
+/**
+ * Return the indices for consecutive null values, for non-null values, it returns 0.
+ * This expression is dedicated only for Pandas API on Spark.
+ * For example,
+ *  Input: null, 1, 2, 3, null, null, null, 5, null, null
+ *  Output: 1, 0, 0, 0, 1, 2, 3, 0, 1, 2
+ */
+case class NullIndex(input: Expression)
+  extends AggregateWindowFunction with UnaryLike[Expression] {
+
+  override def dataType: DataType = IntegerType
+
+  private val index = AttributeReference("index", IntegerType, nullable = false)()
+
+  override def aggBufferAttributes: Seq[AttributeReference] = index :: Nil
+
+  override val initialValues: Seq[Expression] = Seq(Literal(0))
+
+  override val updateExpressions: Seq[Expression] = {
+    Seq(
+      /* index = */ If(IsNull(input), index + Literal(1), Literal(0))
+    )
+  }
+
+  override val evaluateExpression: Expression = index
+
+  override def prettyName: String = "null_index"
+
+  override def sql: String = s"$prettyName(${input.sql})"
+
+  override def child: Expression = input
+
+  override protected def withNewChildInternal(newChild: Expression): NullIndex =
+    copy(input = newChild)
+}
