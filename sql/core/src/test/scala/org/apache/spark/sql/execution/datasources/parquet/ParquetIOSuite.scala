@@ -120,7 +120,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
   }
 
   test("SPARK-36182: TimestampNTZ") {
-    withSQLConf(SQLConf.PARQUET_TIMESTAMP_NTZ_SUPPORT_ENABLED.key -> "true") {
+    withSQLConf(SQLConf.PARQUET_TIMESTAMP_NTZ_ENABLED.key -> "true") {
       val data = Seq("2021-01-01T00:00:00", "1970-07-15T01:02:03.456789")
         .map(ts => Tuple1(LocalDateTime.parse(ts)))
       withAllParquetReaders {
@@ -157,9 +157,9 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
         }
         writer.close
 
-        for (ntzEnabled <- Seq(true, false)) {
-          withSQLConf(SQLConf.PARQUET_TIMESTAMP_NTZ_SUPPORT_ENABLED.key -> "false") {
-            val timestampNTZType = if (ntzEnabled) TimestampNTZType else TimestampType
+        for (timestampNTZEnabled <- Seq(true, false)) {
+          withSQLConf(SQLConf.PARQUET_TIMESTAMP_NTZ_ENABLED.key -> s"$timestampNTZEnabled") {
+            val timestampNTZType = if (timestampNTZEnabled) TimestampNTZType else TimestampType
 
             withAllParquetReaders {
               val df = spark.read.parquet(tablePath.toString)
@@ -178,7 +178,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
               val ltz_value = new java.sql.Timestamp(1000L)
               val ntz_value = LocalDateTime.of(1970, 1, 1, 0, 0, 1)
 
-              val exp = if (ntzEnabled) {
+              val exp = if (timestampNTZEnabled) {
                 (0 until numRecords).map { _ =>
                   (ltz_value, ltz_value, ltz_value, ltz_value, ntz_value, ntz_value)
                 }.toDF()
@@ -198,7 +198,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
 
   test("Write TimestampNTZ type") {
     // Writes should fail if timestamp_ntz support is disabled.
-    withSQLConf(SQLConf.PARQUET_TIMESTAMP_NTZ_SUPPORT_ENABLED.key -> "false") {
+    withSQLConf(SQLConf.PARQUET_TIMESTAMP_NTZ_ENABLED.key -> "false") {
       withTempPath { dir =>
         val data = Seq(LocalDateTime.parse("2021-01-01T00:00:00")).toDF("col")
         val err = intercept[Exception] {
@@ -208,7 +208,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
       }
     }
 
-    withSQLConf(SQLConf.PARQUET_TIMESTAMP_NTZ_SUPPORT_ENABLED.key -> "true") {
+    withSQLConf(SQLConf.PARQUET_TIMESTAMP_NTZ_ENABLED.key -> "true") {
       withTempPath { dir =>
         val data = Seq(LocalDateTime.parse("2021-01-01T00:00:00")).toDF("col")
         data.write.parquet(dir.getCanonicalPath)

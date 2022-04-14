@@ -409,7 +409,7 @@ object ParquetReadSupport extends Logging {
       caseSensitive: Boolean,
       useFieldId: Boolean): Seq[Type] = {
     val toParquet = new SparkToParquetSchemaConverter(
-      writeLegacyParquetFormat = false, useFieldId = useFieldId)
+      writeLegacyParquetFormat = false, useFieldId = useFieldId, timestampNTZEnabled = false)
     lazy val caseSensitiveParquetFieldMap =
         parquetRecord.getFields.asScala.map(f => f.getName -> f).toMap
     lazy val caseInsensitiveParquetFieldMap =
