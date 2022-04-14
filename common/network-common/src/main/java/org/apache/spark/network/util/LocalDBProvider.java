@@ -25,8 +25,7 @@ public class LocalDBProvider {
     }
 
     @VisibleForTesting
-    public static LocalDB initLocalDB(String dbKind, File file)
-            throws IOException {
+    public static LocalDB initLocalDB(String dbKind, File file) throws IOException {
         if(dbKind.equals("")) {
             return new LevelDBImpl(LevelDBProvider.initLevelDB(file));
         } else {
