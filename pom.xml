@@ -324,14 +324,14 @@
     </repository>
     <repository>
       <id>nexus</id>
-      <name>Kyligence Repository</name>
-      <url>http://repository.kyligence.io:8081/repository/maven-public/
-      </url>
+        <name>Kyligence Repository</name>
+        <url>https://repository.kyligence.io/repository/maven-public/
+        </url>
       <releases>
-        <enabled>true</enabled>
+    	<enabled>true</enabled>
       </releases>
       <snapshots>
-        <enabled>true</enabled>
+    	<enabled>true</enabled>
       </snapshots>
     </repository>
     <repository>
@@ -2854,7 +2854,7 @@
               <arg>-P:silencer:globalFilters=.*deprecated.*</arg>
             </args>
             <jvmArgs>
-              <jvmArg>-Xss128m</jvmArg>
+              <jvmArg>-Xss512m</jvmArg>
               <jvmArg>-Xms4g</jvmArg>
               <jvmArg>-Xmx4g</jvmArg>
               <jvmArg>-XX:MaxMetaspaceSize=2g</jvmArg>
@@ -3402,16 +3402,16 @@
   </build>
 
   <distributionManagement>
-    <snapshotRepository>
-      <id>user-snapshots</id>
-      <name>User Project SNAPSHOTS</name>
-      <url>http://repository.kyligence.io:8081/repository/maven-snapshots/</url>
-    </snapshotRepository>
     <repository>
-      <id>user-releases</id>
-      <name>User Project Release</name>
-      <url>http://repository.kyligence.io:8081/repository/maven-releases/</url>
+      <id>${repository.id}</id>
+      <url>${repository.url}</url>
+      <name>${repository.name}</name>
     </repository>
+    <snapshotRepository>
+      <id>${repository.id.snapshots}</id>
+      <url>${repository.url.snapshots}</url>
+      <name>${repository.name.snapshots}</name>
+    </snapshotRepository>
   </distributionManagement>
 
   <profiles>
