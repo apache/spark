@@ -682,7 +682,18 @@ case class SortMergeJoinExec(
     val matchesIter = joinType match {
       case Inner | LeftOuter | RightOuter =>
         ctx.addMutableState("scala.collection.Iterator<UnsafeRow>", "matchesIter",
-          v => s"$v = scala.collection.Iterator.empty;", forceInline = true)
+          v =>
+            s"""
+               |$v = new scala.collection.AbstractIterator<UnsafeRow>() {
+               |  public boolean hasNext() {
+               |    return false;
+               |  }
+               |  public UnsafeRow next() {
+               |    throw java.util.NoSuchElementException("next on empty iterator");
+               |  }
+               |};
+               |""".stripMargin,
+          forceInline = true)
       case LeftExistence(_) =>
         ctx.freshName("iterator")
       case x =>
