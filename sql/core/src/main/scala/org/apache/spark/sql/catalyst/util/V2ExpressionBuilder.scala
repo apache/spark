@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.util
 
-import org.apache.spark.sql.catalyst.expressions.{Abs, Add, And, BinaryComparison, BinaryOperator, BitwiseAnd, BitwiseNot, BitwiseOr, BitwiseXor, CaseWhen, Cast, Coalesce, Contains, Divide, EndsWith, EqualTo, Expression, In, InSet, IsNotNull, IsNull, Literal, Multiply, Not, Or, Predicate, Remainder, StartsWith, StringPredicate, Subtract, UnaryMinus}
+import org.apache.spark.sql.catalyst.expressions.{Abs, Add, And, BinaryComparison, BinaryOperator, BitwiseAnd, BitwiseNot, BitwiseOr, BitwiseXor, CaseWhen, Cast, Ceil, Coalesce, Contains, Divide, EndsWith, EqualTo, Exp, Expression, Floor, In, InSet, IsNotNull, IsNull, Literal, Log, Multiply, Not, Or, Pow, Predicate, Remainder, Sqrt, StartsWith, StringPredicate, Subtract, UnaryMinus, WidthBucket}
 import org.apache.spark.sql.connector.expressions.{Cast => V2Cast, Expression => V2Expression, FieldReference, GeneralScalarExpression, LiteralValue}
 import org.apache.spark.sql.connector.expressions.filter.{AlwaysFalse, AlwaysTrue, And => V2And, Not => V2Not, Or => V2Or, Predicate => V2Predicate}
 import org.apache.spark.sql.execution.datasources.PushableColumn
@@ -101,6 +101,32 @@ class V2ExpressionBuilder(
       val childrenExpressions = children.flatMap(generateExpression(_))
       if (children.length == childrenExpressions.length) {
         Some(new GeneralScalarExpression("COALESCE", childrenExpressions.toArray[V2Expression]))
+      } else {
+        None
+      }
+    case Log(child) => generateExpression(child)
+      .map(v => new GeneralScalarExpression("LN", Array[V2Expression](v)))
+    case Exp(child) => generateExpression(child)
+      .map(v => new GeneralScalarExpression("EXP", Array[V2Expression](v)))
+    case Pow(left, right) =>
+      val l = generateExpression(left)
+      val r = generateExpression(right)
+      if (l.isDefined && r.isDefined) {
+        Some(new GeneralScalarExpression("POWER", Array[V2Expression](l.get, r.get)))
+      } else {
+        None
+      }
+    case Sqrt(child) => generateExpression(child)
+      .map(v => new GeneralScalarExpression("SQRT", Array[V2Expression](v)))
+    case Floor(child) => generateExpression(child)
+      .map(v => new GeneralScalarExpression("FLOOR", Array[V2Expression](v)))
+    case Ceil(child) => generateExpression(child)
+      .map(v => new GeneralScalarExpression("CEIL", Array[V2Expression](v)))
+    case wb: WidthBucket =>
+      val childrenExpressions = wb.children.flatMap(generateExpression(_))
+      if (childrenExpressions.length == wb.children.length) {
+        Some(new GeneralScalarExpression("WIDTH_BUCKET",
+          childrenExpressions.toArray[V2Expression]))
       } else {
         None
       }
