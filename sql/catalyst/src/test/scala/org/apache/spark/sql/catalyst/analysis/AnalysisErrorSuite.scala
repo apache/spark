@@ -552,7 +552,7 @@ class AnalysisErrorSuite extends AnalysisTest {
 
   errorTest(
     "num_rows in offset clause must be equal to or greater than 0",
-    listRelation.offset(-1),
+    testRelation.offset(-1),
     "The offset expression must be equal to or greater than 0, but got -1" :: Nil
   )
 

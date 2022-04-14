@@ -50,8 +50,8 @@ case class CollectLimitExec(limit: Int, offset: Int, child: SparkPlan) extends L
     // Because CollectLimitExec collect all the output of child to a single partition, so we need
     // collect the first `limit` + `offset` elements and then to drop the first `offset` elements.
     // For example: limit is 1 and offset is 2 and the child output two partition.
-    // The first partition output [1, 2, 3] and the Second partition output [4, 5].
-    // Then [1, 2, 3] or [4, 5, 1] will be taken and output [3] or [1].
+    // The first partition output [1, 2] and the Second partition output [3, 4, 5].
+    // Then [1, 2, 3] will be taken and output [3].
     child.executeTake(limit + offset).drop(offset)
   }
   private val serializer: Serializer = new UnsafeRowSerializer(child.output.size)
@@ -252,7 +252,11 @@ case class TakeOrderedAndProjectExec(
 
   override def executeCollect(): Array[InternalRow] = {
     val ord = new LazilyGeneratedOrdering(sortOrder, child.output)
-    val data = child.execute().map(_.copy()).takeOrdered(limit + offset)(ord).drop(offset)
+    val data = if (offset > 0) {
+      child.execute().map(_.copy()).takeOrdered(limit + offset)(ord).drop(offset)
+    } else {
+      child.execute().map(_.copy()).takeOrdered(limit)(ord)
+    }
     if (projectList != child.output) {
       val proj = UnsafeProjection.create(projectList, child.output)
       data.map(r => proj(r).copy())

@@ -432,13 +432,6 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
 
           case Tail(limitExpr, _) => checkLimitLikeClause("tail", limitExpr)
 
-          case o if !o.isInstanceOf[GlobalLimit] && !o.isInstanceOf[LocalLimit]
-            && o.children.exists(_.isInstanceOf[Offset]) =>
-            failAnalysis(
-              s"""
-                 |The OFFSET clause is only allowed in the LIMIT clause, but the OFFSET
-                 |clause found in: ${o.nodeName}.""".stripMargin.replace("\n", " "))
-
           case _: Union | _: SetOperation if operator.children.length > 1 =>
             def dataTypes(plan: LogicalPlan): Seq[DataType] = plan.output.map(_.dataType)
             def ordinalNumber(i: Int): String = i match {
@@ -612,7 +605,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
         }
     }
     checkCollectedMetrics(plan)
-    checkOutermostOffset(plan)
+    checkOffsetOperator(plan)
     extendedCheckRules.foreach(_(plan))
     plan.foreachUp {
       case o if !o.resolved =>
@@ -856,9 +849,18 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
   }
 
   /**
-   * Validate that the root node of query or subquery is [[Offset]].
+   * Validate whether the [[Offset]] is valid.
    */
-  private def checkOutermostOffset(plan: LogicalPlan): Unit = {
+  private def checkOffsetOperator(plan: LogicalPlan): Unit = {
+    plan.foreachUp {
+      case o if !o.isInstanceOf[GlobalLimit] && !o.isInstanceOf[LocalLimit]
+        && o.children.exists(_.isInstanceOf[Offset]) =>
+        failAnalysis(
+          s"""
+             |The OFFSET clause is only allowed in the LIMIT clause, but the OFFSET
+             |clause found in: ${o.nodeName}.""".stripMargin.replace("\n", " "))
+      case _ =>
+    }
     plan match {
       case Offset(offsetExpr, _) =>
         checkLimitLikeClause("offset", offsetExpr)
