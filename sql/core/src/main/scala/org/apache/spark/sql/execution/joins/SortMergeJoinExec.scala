@@ -689,7 +689,7 @@ case class SortMergeJoinExec(
                |    return false;
                |  }
                |  public UnsafeRow next() {
-               |    throw java.util.NoSuchElementException("next on empty iterator");
+               |    throw new java.util.NoSuchElementException("next on empty iterator");
                |  }
                |};
                |""".stripMargin,
