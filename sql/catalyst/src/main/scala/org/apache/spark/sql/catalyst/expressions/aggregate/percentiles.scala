@@ -37,6 +37,7 @@ abstract class PercentileBase() extends TypedImperativeAggregate[OpenHashMap[Any
   val percentageExpression: Expression
   val frequencyExpression : Expression
 
+  // Whether to reverse calculate percentile value
   val reverse: Boolean
 
   // Mark as lazy so that percentageExpression is not evaluated during tree transformation.
@@ -209,7 +210,7 @@ abstract class PercentileBase() extends TypedImperativeAggregate[OpenHashMap[Any
   }
 
   /**
-   * whether value should be interpolated
+   * Whether value should be interpolated
    */
   protected def interpolate: Boolean
 
