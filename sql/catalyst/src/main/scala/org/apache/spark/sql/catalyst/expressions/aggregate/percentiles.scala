@@ -37,6 +37,8 @@ abstract class PercentileBase() extends TypedImperativeAggregate[OpenHashMap[Any
   val percentageExpression: Expression
   val frequencyExpression : Expression
 
+  val reverse: Boolean
+
   // Mark as lazy so that percentageExpression is not evaluated during tree transformation.
   @transient
   private lazy val returnPercentileArray = percentageExpression.dataType.isInstanceOf[ArrayType]
@@ -145,8 +147,19 @@ abstract class PercentileBase() extends TypedImperativeAggregate[OpenHashMap[Any
       case intervalType: DayTimeIntervalType => intervalType.ordering
       case otherType => QueryExecutionErrors.unsupportedTypeError(otherType)
     }
-    val sortedCounts = buffer.toSeq.sortBy(_._1)(ordering.asInstanceOf[Ordering[AnyRef]])
-    getPercentiles(sortedCounts)
+    val sortedCounts = if (reverse) {
+      buffer.toSeq.sortBy(_._1)(ordering.asInstanceOf[Ordering[AnyRef]]).reverse
+    } else {
+      buffer.toSeq.sortBy(_._1)(ordering.asInstanceOf[Ordering[AnyRef]])
+    }
+    val accumulatedCounts = sortedCounts.scanLeft((sortedCounts.head._1, 0L)) {
+      case ((key1, count1), (key2, count2)) => (key2, count1 + count2)
+    }.tail
+    val maxPosition = accumulatedCounts.last._2 - 1
+
+    percentages.map { percentile =>
+      getPercentile(accumulatedCounts, maxPosition * percentile)
+    }
   }
 
   private def generateOutput(results: Seq[Double]): Any = {
@@ -161,8 +174,44 @@ abstract class PercentileBase() extends TypedImperativeAggregate[OpenHashMap[Any
 
   /**
    * Get the percentile value.
+   * This function has been based upon similar function from HIVE
+   * `org.apache.hadoop.hive.ql.udf.UDAFPercentile.getPercentile()`.
    */
-  protected def getPercentiles(sortedCounts: Seq[(AnyRef, Long)]): Seq[Double]
+  private def getPercentile(
+      accumulatedCounts: Seq[(AnyRef, Long)], position: Double): Double = {
+    // We may need to do linear interpolation to get the exact percentile
+    val lower = position.floor.toLong
+    val higher = position.ceil.toLong
+
+    // Use binary search to find the lower and the higher position.
+    val countsArray = accumulatedCounts.map(_._2).toArray[Long]
+    val lowerIndex = binarySearchCount(countsArray, 0, accumulatedCounts.size, lower + 1)
+    val higherIndex = binarySearchCount(countsArray, 0, accumulatedCounts.size, higher + 1)
+
+    val lowerKey = accumulatedCounts(lowerIndex)._1
+    if (higher == lower) {
+      // no interpolation needed because position does not have a fraction
+      return toDoubleValue(lowerKey)
+    }
+
+    val higherKey = accumulatedCounts(higherIndex)._1
+    if (higherKey == lowerKey) {
+      // no interpolation needed because lower position and higher position has the same key
+      return toDoubleValue(lowerKey)
+    }
+
+    if (interpolate) {
+      // Linear interpolation to get the exact percentile
+      (higher - position) * toDoubleValue(lowerKey) + (position - lower) * toDoubleValue(higherKey)
+    } else {
+      toDoubleValue(lowerKey)
+    }
+  }
+
+  /**
+   * whether value should be interpolated
+   */
+  protected def interpolate: Boolean
 
   /**
    * use a binary search to find the index of the position closest to the current value.
@@ -272,7 +321,8 @@ case class Percentile(
     percentageExpression: Expression,
     frequencyExpression : Expression,
     mutableAggBufferOffset: Int = 0,
-    inputAggBufferOffset: Int = 0) extends PercentileBase {
+    inputAggBufferOffset: Int = 0,
+    reverse: Boolean = false) extends PercentileBase {
 
   def this(child: Expression, percentageExpression: Expression) = {
     this(child, percentageExpression, Literal(1L), 0, 0)
@@ -282,49 +332,13 @@ case class Percentile(
     this(child, percentageExpression, frequency, 0, 0)
   }
 
+  def this(child: Expression, percentageExpression: Expression, reverse: Boolean) = {
+    this(child, percentageExpression, Literal(1L), reverse = reverse)
+  }
+
   override def prettyName: String = "percentile"
 
-  /**
-   * This function has been based upon similar function from HIVE
-   * `org.apache.hadoop.hive.ql.udf.UDAFPercentile.getPercentile()`.
-   */
-  override protected def getPercentiles(sortedCounts: Seq[(AnyRef, Long)]): Seq[Double] = {
-    val accumulatedCounts = sortedCounts.scanLeft((sortedCounts.head._1, 0L)) {
-      case ((key1, count1), (key2, count2)) => (key2, count1 + count2)
-    }.tail
-    val maxPosition = accumulatedCounts.last._2 - 1
-
-    percentages.map { percentile =>
-      getPercentile(accumulatedCounts, maxPosition * percentile)
-    }
-  }
-
-  private def getPercentile(
-      accumulatedCounts: Seq[(AnyRef, Long)], position: Double): Double = {
-    // We may need to do linear interpolation to get the exact percentile
-    val lower = position.floor.toLong
-    val higher = position.ceil.toLong
-
-    // Use binary search to find the lower and the higher position.
-    val countsArray = accumulatedCounts.map(_._2).toArray[Long]
-    val lowerIndex = binarySearchCount(countsArray, 0, accumulatedCounts.size, lower + 1)
-    val higherIndex = binarySearchCount(countsArray, 0, accumulatedCounts.size, higher + 1)
-
-    val lowerKey = accumulatedCounts(lowerIndex)._1
-    if (higher == lower) {
-      // no interpolation needed because position does not have a fraction
-      return toDoubleValue(lowerKey)
-    }
-
-    val higherKey = accumulatedCounts(higherIndex)._1
-    if (higherKey == lowerKey) {
-      // no interpolation needed because lower position and higher position has the same key
-      return toDoubleValue(lowerKey)
-    }
-
-    // Linear interpolation to get the exact percentile
-    (higher - position) * toDoubleValue(lowerKey) + (position - lower) * toDoubleValue(higherKey)
-  }
+  override val interpolate: Boolean = true
 
   override def withNewMutableAggBufferOffset(newMutableAggBufferOffset: Int): Percentile =
     copy(mutableAggBufferOffset = newMutableAggBufferOffset)
@@ -371,90 +385,21 @@ case class PercentileDisc private(
     child: Expression,
     percentageExpression: Expression,
     frequencyExpression: Expression,
-    reverse: Boolean = false,
     mutableAggBufferOffset: Int = 0,
-    inputAggBufferOffset: Int = 0) extends PercentileBase {
+    inputAggBufferOffset: Int = 0,
+    reverse: Boolean = false) extends PercentileBase {
 
   def this(child: Expression, percentageExpression: Expression) = {
     this(child, percentageExpression, Literal(1L))
   }
 
   def this(child: Expression, percentageExpression: Expression, reverse: Boolean) = {
-    this(child, percentageExpression, Literal(1L), reverse)
-  }
-
-  override def checkInputDataTypes(): TypeCheckResult = {
-    val defaultCheck = super.checkInputDataTypes()
-    if (defaultCheck.isFailure) {
-      defaultCheck
-    } else {
-      assert(frequencyExpression == Literal(1L))
-      TypeCheckSuccess
-    }
+    this(child, percentageExpression, Literal(1L), reverse = reverse)
   }
 
   override def prettyName: String = "percentile_disc"
 
-  /**
-   * This function has been based upon similar function from H2
-   * `org.h2.expression.aggregate.Percentile.getValue`.
-   */
-  override protected def getPercentiles(sortedCounts: Seq[(AnyRef, Long)]): Seq[Double] = {
-    val passedSortedCounts = if (reverse) {
-      sortedCounts.reverse
-    } else {
-      sortedCounts
-    }
-    val maxPosition = passedSortedCounts.last._2 - 1
-
-    percentages.map { percentile =>
-      getPercentile(passedSortedCounts, maxPosition, percentile)
-    }
-  }
-
-  private def getPercentile(
-      sortedCounts: Seq[(AnyRef, Long)], maxPosition: Long, percentile: Double): Double = {
-    val position = maxPosition * percentile
-    var lower = position.floor.toLong
-    val factor = position - lower
-    var higher = 0L
-    if (factor.signum == 0) {
-      higher = lower
-    } else {
-      higher = lower + 1
-      if (factor.compareTo(0.5) > 0) {
-        lower = higher
-      } else {
-        higher = lower
-      }
-    }
-
-    // Build the mapping between the index of the input data and the index of the aggregated data
-    var accumulator = 0L
-    val idxMap = sortedCounts.zipWithIndex.map { case (c, i) =>
-      accumulator = accumulator + c._2
-      i -> accumulator
-    }.toMap
-
-    // Use binary search to find the lower position.
-    val countsArray = sortedCounts.map(_._2).toArray[Long]
-    var lowerIndex = binarySearchCount(countsArray, 0, sortedCounts.size, lower)
-
-    // Get the count of the input data
-    val count = countsArray.reduce(_ + _)
-
-    // Find the row has the smallest cumeDist value that is greater than or equal to the given
-    // percentile.
-    var index = idxMap(lowerIndex)
-    var cumeDist = index.toDouble / count
-    while (cumeDist < percentile) {
-      lowerIndex = lowerIndex + 1
-      index = idxMap(lowerIndex)
-      cumeDist = index.toDouble / count
-    }
-    val lowerKey = sortedCounts(lowerIndex)._1
-    toDoubleValue(lowerKey)
-  }
+  override val interpolate: Boolean = false
 
   override def withNewMutableAggBufferOffset(newMutableAggBufferOffset: Int): PercentileDisc =
     copy(mutableAggBufferOffset = newMutableAggBufferOffset)

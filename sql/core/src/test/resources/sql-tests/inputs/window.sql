@@ -504,6 +504,19 @@ SELECT
     employee_name,
     department,
     salary,
+    percentile_cont(0.5) WITHIN GROUP (ORDER BY salary) OVER w,
+    percentile_disc(0.5) WITHIN GROUP (ORDER BY salary) OVER w,
+    percentile_cont(0.5) WITHIN GROUP (ORDER BY salary DESC) OVER w,
+    percentile_disc(0.5) WITHIN GROUP (ORDER BY salary DESC) OVER w
+FROM basic_pays
+WHERE salary > 8900
+WINDOW w AS (PARTITION BY department)
+ORDER BY salary;
+
+SELECT
+    employee_name,
+    department,
+    salary,
     percentile_cont(0.25) WITHIN GROUP (ORDER BY salary) OVER w,
     percentile_cont(0.25) WITHIN GROUP (ORDER BY salary DESC) OVER w
 FROM basic_pays
