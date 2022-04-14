@@ -571,9 +571,12 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           resultExpressions,
           planLater(child)))
 
-      case PhysicalAggregation(_, _, _, _) =>
+      case PhysicalAggregation(_, aggExpressions, _, _) =>
+        val groupAggPandasUDFNames = aggExpressions
+          .filter(_.isInstanceOf[PythonUDF])
+          .map(_.asInstanceOf[PythonUDF].name)
         // If cannot match the two cases above, then it's an error
-        throw QueryCompilationErrors.cannotUseMixtureOfAggFunctionAndGroupAggPandasUDFError()
+        throw QueryCompilationErrors.invalidPandasUDFPlacementError(groupAggPandasUDFNames.distinct)
 
       case _ => Nil
     }

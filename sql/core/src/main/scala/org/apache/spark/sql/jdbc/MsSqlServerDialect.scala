@@ -40,6 +40,16 @@ private object MsSqlServerDialect extends JdbcDialect {
   override def canHandle(url: String): Boolean =
     url.toLowerCase(Locale.ROOT).startsWith("jdbc:sqlserver")
 
+  // Microsoft SQL Server does not have the boolean type.
+  // Compile the boolean value to the bit data type instead.
+  // scalastyle:off line.size.limit
+  // See https://docs.microsoft.com/en-us/sql/t-sql/data-types/data-types-transact-sql?view=sql-server-ver15
+  // scalastyle:on line.size.limit
+  override def compileValue(value: Any): Any = value match {
+    case booleanValue: Boolean => if (booleanValue) 1 else 0
+    case other => super.compileValue(other)
+  }
+
   // scalastyle:off line.size.limit
   // See https://docs.microsoft.com/en-us/sql/t-sql/functions/aggregate-functions-transact-sql?view=sql-server-ver15
   // scalastyle:on line.size.limit
