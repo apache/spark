@@ -50,7 +50,7 @@ trait QueryErrorsBase {
     parts.map(quoteIdentifier).mkString(".")
   }
 
-  def toSQLId(part: String): String = {
-    toSQLId(Seq(part))
+  def toSQLId(parts: String): String = {
+    toSQLId(parts.split("\\."))
   }
 }
