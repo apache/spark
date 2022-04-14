@@ -149,7 +149,7 @@ private object YarnExternalShuffleDriver extends Logging with Matchers {
       // only one process can open a leveldb file at a time, so we copy the files
       if (registeredExecFile != null && execStateCopy != null) {
         FileUtils.copyDirectory(registeredExecFile, execStateCopy)
-        assert(!ShuffleTestAccessor.reloadRegisteredExecutors(execStateCopy).isEmpty)
+        assert(!ShuffleTestAccessor.reloadRegisteredExecutors("ldb", execStateCopy).isEmpty)
       }
     } finally {
       sc.stop()

@@ -20,13 +20,12 @@ import java.io.File
 import java.util.concurrent.ConcurrentMap
 
 import org.apache.hadoop.yarn.api.records.ApplicationId
-import org.fusesource.leveldbjni.JniDBFactory
-import org.iq80.leveldb.Options
 
 import org.apache.spark.network.shuffle.ExternalShuffleBlockResolver.AppExecId
 import org.apache.spark.network.shuffle.protocol.ExecutorShuffleInfo
-import org.apache.spark.network.shuffledb.LevelDBImpl
 import org.apache.spark.network.shuffledb.LocalDB
+import org.apache.spark.network.util.LocalDBProvider
+
 
 /**
  * just a cheat to get package-visible members in tests
@@ -55,12 +54,9 @@ object ShuffleTestAccessor {
   }
 
   def reloadRegisteredExecutors(
+    dbKind: String,
     file: File): ConcurrentMap[ExternalShuffleBlockResolver.AppExecId, ExecutorShuffleInfo] = {
-    val options: Options = new Options
-    options.createIfMissing(true)
-    val factory = new JniDBFactory
-    // Need add a helper method to LocalDBProvider
-    val db = new LevelDBImpl(factory.open(file, options))
+    val db = LocalDBProvider.initLocalDB(dbKind, file);
     val result = ExternalShuffleBlockResolver.reloadRegisteredExecutors(db)
     db.close()
     result

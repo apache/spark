@@ -1,6 +1,7 @@
 package org.apache.spark.network.util;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.google.common.annotations.VisibleForTesting;
 import org.apache.spark.network.shuffledb.LevelDBImpl;
 import org.apache.spark.network.shuffledb.LocalDB;
 import org.apache.spark.network.shuffledb.StoreVersion;
@@ -21,5 +22,15 @@ public class LocalDBProvider {
             }
         }
         return null;
+    }
+
+    @VisibleForTesting
+    public static LocalDB initLocalDB(String dbKind, File file)
+            throws IOException {
+        if(dbKind.equals("")) {
+            return new LevelDBImpl(LevelDBProvider.initLevelDB(file));
+        } else {
+            return null;
+        }
     }
 }

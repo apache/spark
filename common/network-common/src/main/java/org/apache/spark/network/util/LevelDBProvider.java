@@ -17,10 +17,9 @@
 
 package org.apache.spark.network.util;
 
-import java.io.File;
-import java.io.IOException;
-
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.google.common.annotations.VisibleForTesting;
+import org.apache.spark.network.shuffledb.StoreVersion;
 import org.fusesource.leveldbjni.JniDBFactory;
 import org.fusesource.leveldbjni.internal.NativeDB;
 import org.iq80.leveldb.DB;
@@ -28,7 +27,8 @@ import org.iq80.leveldb.Options;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import org.apache.spark.network.shuffledb.StoreVersion;
+import java.io.File;
+import java.io.IOException;
 
 /**
  * LevelDB utility class available in the network package.
@@ -82,6 +82,14 @@ class LevelDBProvider {
       checkVersion(tmpDb, version, mapper);
     }
     return tmpDb;
+  }
+
+  @VisibleForTesting
+  static DB initLevelDB(File file) throws IOException {
+    Options options = new Options();
+    options.createIfMissing(true);
+    JniDBFactory factory = new JniDBFactory();
+    return factory.open(file, options);
   }
 
   private static class LevelDBLogger implements org.iq80.leveldb.Logger {
