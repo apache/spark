@@ -278,4 +278,21 @@ class QueryExecutionErrorsSuite extends QueryTest
     assert(e.getMessage ===
       "Datetime operation overflow: add 1000000 YEAR to TIMESTAMP '2022-03-09 01:02:03'.")
   }
+
+  test("DIVIDE_BY_ZERO - SPARK-38724: can't divide by zero") {
+    val e = intercept[SparkArithmeticException] {
+      sql("set spark.sql.ansi.enabled=true")
+      sql("select 6/0").collect()
+    }
+    assert(e.getErrorClass === "DIVIDE_BY_ZERO")
+    assert(e.getSqlState === "22012")
+    assert(e.getMessage ===
+      "divide by zero. To return NULL instead, use 'try_divide'. If necessary set " +
+      "spark.sql.ansi.enabled to false (except for ANSI interval type) to bypass this error." +
+      """
+        |== SQL(line 1, position 7) ==
+        |select 6/0
+        |       ^^^
+        |""".stripMargin)
+  }
 }
