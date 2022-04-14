@@ -17,15 +17,19 @@
 
 package org.apache.spark.sql.errors
 
-import org.apache.spark.{SparkArithmeticException, SparkException, SparkRuntimeException, SparkUnsupportedOperationException, SparkUpgradeException}
+import java.util.Locale
+
+import org.apache.spark.{SparkArithmeticException, SparkException, SparkIllegalStateException, SparkRuntimeException, SparkUnsupportedOperationException, SparkUpgradeException}
 import org.apache.spark.sql.{DataFrame, QueryTest}
+import org.apache.spark.sql.catalyst.util.BadRecordException
+import org.apache.spark.sql.execution.QueryExecutionException
 import org.apache.spark.sql.execution.datasources.orc.OrcTest
 import org.apache.spark.sql.execution.datasources.parquet.ParquetTest
 import org.apache.spark.sql.functions.{lit, lower, struct, sum}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy.EXCEPTION
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{StructType, TimestampType}
+import org.apache.spark.sql.types.{DecimalType, StructType, TimestampType}
 import org.apache.spark.sql.util.ArrowUtils
 
 class QueryExecutionErrorsSuite extends QueryTest
@@ -279,6 +283,48 @@ class QueryExecutionErrorsSuite extends QueryTest
       "Datetime operation overflow: add 1000000 YEAR to TIMESTAMP '2022-03-09 01:02:03'.")
   }
 
+  test("CANNOT_PARSE_DECIMAL: unparseable decimal") {
+    val e1 = intercept[SparkException] {
+      withTempPath { path =>
+
+        // original text
+        val df1 = Seq(
+          "money",
+          "\"$92,807.99\""
+        ).toDF()
+
+        df1.coalesce(1).write.text(path.getAbsolutePath)
+
+        val schema = new StructType().add("money", DecimalType.DoubleDecimal)
+        spark
+          .read
+          .schema(schema)
+          .format("csv")
+          .option("header", "true")
+          .option("locale", Locale.ROOT.toLanguageTag)
+          .option("multiLine", "true")
+          .option("inferSchema", "false")
+          .option("mode", "FAILFAST")
+          .load(path.getAbsolutePath).select($"money").collect()
+      }
+    }
+    assert(e1.getCause.isInstanceOf[QueryExecutionException])
+
+    val e2 = e1.getCause.asInstanceOf[QueryExecutionException]
+    assert(e2.getCause.isInstanceOf[SparkException])
+
+    val e3 = e2.getCause.asInstanceOf[SparkException]
+    assert(e3.getCause.isInstanceOf[BadRecordException])
+
+    val e4 = e3.getCause.asInstanceOf[BadRecordException]
+    assert(e4.getCause.isInstanceOf[SparkIllegalStateException])
+
+    val e5 = e4.getCause.asInstanceOf[SparkIllegalStateException]
+    assert(e5.getErrorClass === "CANNOT_PARSE_DECIMAL")
+    assert(e5.getSqlState === "42000")
+    assert(e5.getMessage === "Cannot parse decimal")
+  }
+
   test("DIVIDE_BY_ZERO - SPARK-38724: can't divide by zero") {
     val e = intercept[SparkArithmeticException] {
       sql("set spark.sql.ansi.enabled=true")
@@ -288,11 +334,10 @@ class QueryExecutionErrorsSuite extends QueryTest
     assert(e.getSqlState === "22012")
     assert(e.getMessage ===
       "divide by zero. To return NULL instead, use 'try_divide'. If necessary set " +
-      "spark.sql.ansi.enabled to false (except for ANSI interval type) to bypass this error." +
-      """
-        |== SQL(line 1, position 7) ==
-        |select 6/0
-        |       ^^^
-        |""".stripMargin)
-  }
+        "spark.sql.ansi.enabled to false (except for ANSI interval type) to bypass this error." +
+        """
+          |== SQL(line 1, position 7) ==
+          |select 6/0
+          |       ^^^
+          |""".stripMargin)
 }
