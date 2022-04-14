@@ -97,10 +97,12 @@ abstract class ParquetSchemaTest extends ParquetTest with SharedSparkSession {
       parquetSchema: String,
       writeLegacyParquetFormat: Boolean,
       outputTimestampType: SQLConf.ParquetOutputTimestampType.Value =
-        SQLConf.ParquetOutputTimestampType.INT96): Unit = {
+        SQLConf.ParquetOutputTimestampType.INT96,
+      timestampNTZEnabled: Boolean = true): Unit = {
     val converter = new SparkToParquetSchemaConverter(
       writeLegacyParquetFormat = writeLegacyParquetFormat,
-      outputTimestampType = outputTimestampType)
+      outputTimestampType = outputTimestampType,
+      timestampNTZEnabled = timestampNTZEnabled)
 
     test(s"sql => parquet: $testName") {
       val actual = converter.convert(sqlSchema)
@@ -2241,18 +2243,60 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
       binaryAsString = true,
       int96AsTimestamp = int96AsTimestamp,
       timestampNTZEnabled = true)
+  }
+
+  testCatalystToParquet(
+    "TimestampNTZ Spark to Parquet conversion for complex types",
+    StructType(
+      Seq(
+        StructField("f1", TimestampNTZType),
+        StructField("f2", ArrayType(TimestampNTZType)),
+        StructField("f3", StructType(Seq(StructField("f4", TimestampNTZType))))
+      )
+    ),
+    """message spark_schema {
+      |  optional int64 f1 (TIMESTAMP(MICROS,false));
+      |  optional group f2 (LIST) {
+      |    repeated group list {
+      |      optional int64 element (TIMESTAMP(MICROS,false));
+      |    }
+      |  }
+      |  optional group f3 {
+      |    optional int64 f4 (TIMESTAMP(MICROS,false));
+      |  }
+      |}
+      """.stripMargin,
+    writeLegacyParquetFormat = false,
+    timestampNTZEnabled = true)
+
+  for (timestampNTZEnabled <- Seq(true, false)) {
+    val dataType = if (timestampNTZEnabled) TimestampNTZType else TimestampType
 
     testParquetToCatalyst(
-      s"TimestampNTZ read as INT64 with TIMESTAMP_MILLIS - " +
-        s"int96AsTimestamp as $int96AsTimestamp, TimestampNTZ is disabled",
-      StructType(Seq(StructField("f1", TimestampType))),
-      """message root {
-        |  optional INT64 f1 (TIMESTAMP(MILLIS,false));
+      "TimestampNTZ Parquet to Spark conversion for complex types, " +
+        s"timestampNTZEnabled: $timestampNTZEnabled",
+      StructType(
+        Seq(
+          StructField("f1", dataType),
+          StructField("f2", ArrayType(dataType)),
+          StructField("f3", StructType(Seq(StructField("f4", dataType))))
+        )
+      ),
+      """message spark_schema {
+        |  optional int64 f1 (TIMESTAMP(MICROS,false));
+        |  optional group f2 (LIST) {
+        |    repeated group list {
+        |      optional int64 element (TIMESTAMP(MICROS,false));
+        |    }
+        |  }
+        |  optional group f3 {
+        |    optional int64 f4 (TIMESTAMP(MICROS,false));
+        |  }
         |}
         """.stripMargin,
       binaryAsString = true,
-      int96AsTimestamp = int96AsTimestamp,
-      timestampNTZEnabled = false)
+      int96AsTimestamp = false,
+      timestampNTZEnabled = timestampNTZEnabled)
   }
 
   private def testSchemaClipping(
@@ -2276,7 +2320,8 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
         MessageTypeParser.parseMessageType(parquetSchema),
         catalystSchema,
         caseSensitive,
-        useFieldId = false)
+        useFieldId = false,
+        timestampNTZEnabled = true)
 
       try {
         expectedSchema.checkContains(actual)
@@ -2843,7 +2888,8 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
          MessageTypeParser.parseMessageType(parquetSchema),
           catalystSchema,
           caseSensitive = false,
-          useFieldId = false)
+          useFieldId = false,
+          timestampNTZEnabled = false)
       }
     }
 }
