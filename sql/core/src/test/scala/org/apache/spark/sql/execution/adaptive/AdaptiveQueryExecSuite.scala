@@ -979,12 +979,10 @@ class AdaptiveQueryExecSuite
       assert(reads.length == 1)
       val read = reads.head
       val c = read.canonicalized.asInstanceOf[AQEShuffleReadExec]
-      // we can't just call execute() because that has separate checks for canonicalized plans
       val ex = intercept[IllegalStateException] {
-        val doExecute = PrivateMethod[Unit](Symbol("doExecute"))
-        c.invokePrivate(doExecute())
+        c.execute()
       }
-      assert(ex.getMessage === "operating on canonicalized plan")
+      assert(ex.getMessage === "A canonicalized plan is not supposed to be executed.")
     }
   }
 

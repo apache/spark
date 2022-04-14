@@ -48,6 +48,13 @@ case class AQEShuffleReadExec private(
     assert(partitionSpecs.forall(_.isInstanceOf[PartialMapperPartitionSpec]))
   }
 
+  private def shuffleStage = child match {
+    case stage: ShuffleQueryStageExec => Some(stage)
+    case _ => None
+  }
+
+  override protected def isCanonicalizedPlan: Boolean = shuffleStage.isEmpty
+
   override def supportsColumnar: Boolean = child.supportsColumnar
 
   override def output: Seq[Attribute] = child.output
@@ -67,8 +74,7 @@ case class AQEShuffleReadExec private(
             case e: Expression => r.updateAttr(e).asInstanceOf[Partitioning]
             case other => other
           }
-        case _ =>
-          throw new IllegalStateException("operating on canonicalization plan")
+        case _ => super.outputPartitioning
       }
     } else if (isCoalescedRead) {
       // For coalesced shuffle read, the data distribution is not changed, only the number of
@@ -144,12 +150,7 @@ case class AQEShuffleReadExec private(
     }
   }
 
-  private def shuffleStage = child match {
-    case stage: ShuffleQueryStageExec => Some(stage)
-    case _ => None
-  }
-
-  @transient private lazy val partitionDataSizes: Option[Seq[Long]] = {
+  private def partitionDataSizes: Option[Seq[Long]] = {
     if (!isLocalRead && shuffleStage.get.mapStats.isDefined) {
       Some(partitionSpecs.map {
         case p: CoalescedPartitionSpec =>
@@ -207,47 +208,38 @@ case class AQEShuffleReadExec private(
   }
 
   @transient override lazy val metrics: Map[String, SQLMetric] = {
-    if (shuffleStage.isDefined) {
-      Map("numPartitions" -> SQLMetrics.createMetric(sparkContext, "number of partitions")) ++ {
-        if (isLocalRead) {
-          // We split the mapper partition evenly when creating local shuffle read, so no
-          // data size info is available.
-          Map.empty
-        } else {
-          Map("partitionDataSize" ->
-            SQLMetrics.createSizeMetric(sparkContext, "partition data size"))
-        }
-      } ++ {
-        if (hasSkewedPartition) {
-          Map("numSkewedPartitions" ->
-            SQLMetrics.createMetric(sparkContext, "number of skewed partitions"),
-            "numSkewedSplits" ->
-              SQLMetrics.createMetric(sparkContext, "number of skewed partition splits"))
-        } else {
-          Map.empty
-        }
-      } ++ {
-        if (hasCoalescedPartition) {
-          Map("numCoalescedPartitions" ->
-            SQLMetrics.createMetric(sparkContext, "number of coalesced partitions"))
-        } else {
-          Map.empty
-        }
+    Map("numPartitions" -> SQLMetrics.createMetric(sparkContext, "number of partitions")) ++ {
+      if (isLocalRead) {
+        // We split the mapper partition evenly when creating local shuffle read, so no
+        // data size info is available.
+        Map.empty
+      } else {
+        Map("partitionDataSize" ->
+          SQLMetrics.createSizeMetric(sparkContext, "partition data size"))
       }
-    } else {
-      // It's a canonicalized plan, no need to report metrics.
-      Map.empty
+    } ++ {
+      if (hasSkewedPartition) {
+        Map("numSkewedPartitions" ->
+          SQLMetrics.createMetric(sparkContext, "number of skewed partitions"),
+          "numSkewedSplits" ->
+            SQLMetrics.createMetric(sparkContext, "number of skewed partition splits"))
+      } else {
+        Map.empty
+      }
+    } ++ {
+      if (hasCoalescedPartition) {
+        Map("numCoalescedPartitions" ->
+          SQLMetrics.createMetric(sparkContext, "number of coalesced partitions"))
+      } else {
+        Map.empty
+      }
     }
   }
 
   private lazy val shuffleRDD: RDD[_] = {
-    shuffleStage match {
-      case Some(stage) =>
-        sendDriverMetrics()
-        stage.shuffle.getShuffleRDD(partitionSpecs.toArray)
-      case _ =>
-        throw new IllegalStateException("operating on canonicalized plan")
-    }
+    assert(shuffleStage.isDefined)
+    sendDriverMetrics()
+    shuffleStage.get.shuffle.getShuffleRDD(partitionSpecs.toArray)
   }
 
   override protected def doExecute(): RDD[InternalRow] = {
