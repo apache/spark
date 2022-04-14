@@ -52,11 +52,12 @@ import org.apache.spark.status.AppStatusStore
 import org.apache.spark.status.KVUtils
 import org.apache.spark.status.KVUtils.KVStoreScalaSerializer
 import org.apache.spark.status.api.v1.{ApplicationAttemptInfo, ApplicationInfo}
+import org.apache.spark.tags.ExtendedLevelDBTest
 import org.apache.spark.util.{Clock, JsonProtocol, ManualClock, Utils}
 import org.apache.spark.util.kvstore.InMemoryStore
 import org.apache.spark.util.logging.DriverLogger
 
-class FsHistoryProviderSuite extends SparkFunSuite with Matchers with Logging {
+abstract class FsHistoryProviderSuite extends SparkFunSuite with Matchers with Logging {
   private var testDir: File = null
 
   override def beforeEach(): Unit = {
@@ -71,6 +72,8 @@ class FsHistoryProviderSuite extends SparkFunSuite with Matchers with Logging {
       super.afterEach()
     }
   }
+
+  protected def diskBackend: HybridStoreDiskBackend.Value
 
   /** Create a fake log file using the new log format used in Spark 1.3+ */
   private def newLogFile(
@@ -1651,11 +1654,10 @@ class FsHistoryProviderSuite extends SparkFunSuite with Matchers with Logging {
       .set(FAST_IN_PROGRESS_PARSING, true)
 
     if (!inMemory) {
-      // LevelDB doesn't support Apple Silicon yet
-      assume(!Utils.isMacOnAppleSilicon)
       conf.set(LOCAL_STORE_DIR, Utils.createTempDir().getAbsolutePath())
     }
     conf.set(HYBRID_STORE_ENABLED, useHybridStore)
+    conf.set(HYBRID_STORE_DISK_BACKEND.key, diskBackend.toString)
 
     conf
   }
@@ -1703,4 +1705,15 @@ class TestGroupsMappingProvider extends GroupMappingServiceProvider {
   override def getGroups(username: String): Set[String] = {
     mappings.get(username).map(Set(_)).getOrElse(Set.empty)
   }
+}
+
+@ExtendedLevelDBTest
+class LevelDBBackendFsHistoryProviderSuite extends FsHistoryProviderSuite {
+  override protected def diskBackend: HybridStoreDiskBackend.Value =
+    HybridStoreDiskBackend.LEVELDB
+}
+
+class RocksDBBackendFsHistoryProviderSuite extends FsHistoryProviderSuite {
+  override protected def diskBackend: HybridStoreDiskBackend.Value =
+    HybridStoreDiskBackend.ROCKSDB
 }

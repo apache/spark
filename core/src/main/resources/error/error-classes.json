@@ -22,9 +22,6 @@
   "CANNOT_UP_CAST_DATATYPE" : {
     "message" : [ "Cannot up cast %s from %s to %s.\n%s" ]
   },
-  "CANNOT_USE_MIXTURE" : {
-    "message" : [ "Cannot use a mixture of aggregate function and group aggregate pandas UDF" ]
-  },
   "CAST_CAUSES_OVERFLOW" : {
     "message" : [ "Casting %s to %s causes overflow. To return NULL instead, use 'try_cast'. If necessary set %s to false to bypass this error." ],
     "sqlState" : "22005"
@@ -111,6 +108,9 @@
   },
   "INVALID_JSON_SCHEMA_MAPTYPE" : {
     "message" : [ "Input schema %s can only contain StringType as a key type for a MapType." ]
+  },
+  "INVALID_PANDAS_UDF_PLACEMENT" : {
+    "message" : [ "The group aggregate pandas UDF %s cannot be invoked together with as other, non-pandas aggregate functions." ]
   },
   "INVALID_PARAMETER_VALUE" : {
     "message" : [ "The value of parameter(s) '%s' in %s is invalid: %s" ],

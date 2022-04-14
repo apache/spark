@@ -5500,6 +5500,23 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         else:
             return psdf
 
+    def interpolate(self, method: Optional[str] = None, limit: Optional[int] = None) -> "DataFrame":
+        if (method is not None) and (method not in ["linear"]):
+            raise NotImplementedError("interpolate currently works only for method='linear'")
+        if (limit is not None) and (not limit > 0):
+            raise ValueError("limit must be > 0.")
+
+        numeric_col_names = []
+        for label in self._internal.column_labels:
+            psser = self._psser_for(label)
+            if isinstance(psser.spark.data_type, (NumericType, BooleanType)):
+                numeric_col_names.append(psser.name)
+
+        psdf = self[numeric_col_names]
+        return psdf._apply_series_op(
+            lambda psser: psser._interpolate(method=method, limit=limit), should_resolve=True
+        )
+
     def replace(
         self,
         to_replace: Optional[Union[Any, List, Tuple, Dict]] = None,
@@ -6997,6 +7014,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         inplace: bool = False,
         kind: str = None,
         na_position: str = "last",
+        ignore_index: bool = False,
     ) -> Optional["DataFrame"]:
         """
         Sort object by labels (along an axis)
@@ -7016,6 +7034,10 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         na_position : {‘first’, ‘last’}, default ‘last’
             first puts NaNs at the beginning, last puts NaNs at the end. Not implemented for
             MultiIndex.
+        ignore_index : bool, default False
+            If True, the resulting axis will be labeled 0, 1, …, n - 1.
+
+            .. versionadded:: 3.4.0
 
         Returns
         -------
@@ -7042,6 +7064,12 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         NaN  NaN
         a    1.0
         b    2.0
+
+        >>> df.sort_index(ignore_index=True)
+             A
+        0  1.0
+        1  2.0
+        2  NaN
 
         >>> df.sort_index(inplace=True)
         >>> df
@@ -7074,6 +7102,13 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         b 0  1  2
         a 1  2  1
         b 1  0  3
+
+        >>> df.sort_index(ignore_index=True)
+           A  B
+        0  3  0
+        1  2  1
+        2  1  2
+        3  0  3
         """
         inplace = validate_bool_kwarg(inplace, "inplace")
         axis = validate_axis(axis)
@@ -7095,10 +7130,12 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         psdf = self._sort(by=by, ascending=ascending, na_position=na_position)
         if inplace:
+            if ignore_index:
+                psdf.reset_index(drop=True, inplace=inplace)
             self._update_internal_frame(psdf._internal)
             return None
         else:
-            return psdf
+            return psdf.reset_index(drop=True) if ignore_index else psdf
 
     def swaplevel(
         self, i: Union[int, Name] = -2, j: Union[int, Name] = -1, axis: Axis = 0
