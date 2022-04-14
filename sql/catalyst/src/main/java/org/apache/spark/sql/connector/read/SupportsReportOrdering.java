@@ -22,7 +22,8 @@ import org.apache.spark.sql.connector.expressions.SortOrder;
 
 /**
  * A mix in interface for {@link Scan}. Data sources can implement this interface to
- * report ordering to Spark.
+ * report the order of data in each partition to Spark.
+ * Global order is part of the partitioning, see {@link SupportsReportPartitioning}.
  * <p>
  * Spark uses ordering information to exploit existing order to avoid sorting required by
  * subsequent operations.
@@ -33,7 +34,7 @@ import org.apache.spark.sql.connector.expressions.SortOrder;
 public interface SupportsReportOrdering extends Scan {
 
   /**
-   * Returns the sort order of this data source scan.
+   * Returns the order in each partition of this data source scan.
    */
   SortOrder[] outputOrdering();
 }

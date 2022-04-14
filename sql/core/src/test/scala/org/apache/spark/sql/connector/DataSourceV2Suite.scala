@@ -29,11 +29,13 @@ import org.apache.spark.sql.connector.catalog.TableCapability._
 import org.apache.spark.sql.connector.expressions.{Expression, FieldReference, Literal, NamedReference, NullOrdering, SortDirection, SortOrder, Transform}
 import org.apache.spark.sql.connector.expressions.filter.Predicate
 import org.apache.spark.sql.connector.read._
-import org.apache.spark.sql.connector.read.partitioning.{KeyGroupedPartitioning, Partitioning}
+import org.apache.spark.sql.connector.read.partitioning.{KeyGroupedPartitioning, Partitioning, UnknownPartitioning}
+import org.apache.spark.sql.execution.SortExec
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, DataSourceV2Relation, DataSourceV2ScanRelation}
 import org.apache.spark.sql.execution.exchange.{Exchange, ShuffleExchangeExec}
 import org.apache.spark.sql.execution.vectorized.OnHeapColumnVector
+import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.{Filter, GreaterThan}
@@ -279,46 +281,116 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
     }
   }
 
+  private def readOrderAndPartitionAwareDataSource(cls: Class[_],
+                                                   partitionKeys: Option[String],
+                                                   orderKeys: Option[String]): DataFrame = {
+    val options = Map(
+      "partitionKeys" -> partitionKeys.orNull,
+      "orderKeys" -> orderKeys.orNull,
+    )
+    spark.read.options(options).format(cls.getName).load()
+  }
+
+  private def testOrderAndPartitionAwareDataSourceGroupBy(df: DataFrame,
+                                                          shuffleExpected: Boolean,
+                                                          sortExpected: Boolean): Unit = {
+    val groupBy = df.groupBy($"i").as[Int, (Int, Int)]
+      .flatMapGroups { case (i, it) => Iterator.single((i, it.length)) }
+    checkAnswer(
+      groupBy.toDF(),
+      Seq(Row(1, 2), Row(2, 1), Row(3, 1), Row(4, 2))
+    )
+    assert(collectFirst(groupBy.queryExecution.executedPlan) {
+      case e: ShuffleExchangeExec => e
+    }.isDefined === shuffleExpected)
+    assert(collectFirst(groupBy.queryExecution.executedPlan) {
+      case e: SortExec => e
+    }.isDefined === sortExpected)
+  }
+
+  private def testOrderAndPartitionAwareDataSourcePartByOrderBy(df: DataFrame,
+                                                                shuffleExpected: Boolean,
+                                                                sortExpected: Boolean): Unit = {
+    val windowPartByColIOrderByColJ = df.withColumn("no",
+      row_number() over Window.partitionBy(Symbol("i")).orderBy(Symbol("j"))
+    )
+    checkAnswer(
+      windowPartByColIOrderByColJ,
+      Seq(Row(1, 4, 1), Row(1, 5, 2), Row(2, 6, 1), Row(3, 5, 1), Row(4, 1, 1), Row(4, 2, 2))
+    )
+    assert(collectFirst(windowPartByColIOrderByColJ.queryExecution.executedPlan) {
+      case e: ShuffleExchangeExec => e
+    }.isDefined === shuffleExpected)
+    assert(collectFirst(windowPartByColIOrderByColJ.queryExecution.executedPlan) {
+      case e: SortExec => e
+    }.isDefined === sortExpected)
+  }
+
   test("ordering and partitioning reporting") {
-    import org.apache.spark.sql.execution.SortExec
-    import org.apache.spark.sql.expressions.Window
     withSQLConf(SQLConf.V2_BUCKETING_ENABLED.key -> "true") {
       Seq(
         classOf[OrderAndPartitionAwareDataSource],
         classOf[JavaOrderAndPartitionAwareDataSource]
       ).foreach { cls =>
         withClue(cls.getName) {
-          val df = spark.read.format(cls.getName).load()
-          checkAnswer(df, Seq(Row(1, 4), Row(1, 5), Row(2, 6), Row(3, 6), Row(4, 1), Row(4, 2)))
+          // dataframe without partitioning and sorting
+          val df = readOrderAndPartitionAwareDataSource(cls, None, None)
 
-          val windowPartByColIOrderByColJ = df.withColumn("no",
-            row_number() over Window.partitionBy(Symbol("i")).orderBy(Symbol("j"))
-          )
-          checkAnswer(
-            windowPartByColIOrderByColJ,
-            Seq(Row(1, 4, 1), Row(1, 5, 2), Row(2, 6, 1), Row(3, 6, 1), Row(4, 1, 1), Row(4, 2, 2))
-          )
-          val plan = windowPartByColIOrderByColJ.queryExecution.executedPlan
-          assert(collectFirst(windowPartByColIOrderByColJ.queryExecution.executedPlan) {
-            case e: ShuffleExchangeExec => e
-          }.isEmpty)
-          assert(collectFirst(windowPartByColIOrderByColJ.queryExecution.executedPlan) {
-            case e: SortExec => e
-          }.isEmpty)
+          // dataframe without partitioning but in-partition sorted by i
+          val df_i = readOrderAndPartitionAwareDataSource(cls, None, Some("i"))
 
-          val windowPartByColJOrderByColI = df.withColumn("no",
-            row_number() over Window.partitionBy(Symbol("j")).orderBy(Symbol("i"))
+          // dataframe partitioned by i but not sorted
+          val dfi = readOrderAndPartitionAwareDataSource(cls, Some("i"), None)
+
+          // dataframe partitioned by i and in-partition sorted by i
+          val dfi_i = readOrderAndPartitionAwareDataSource(cls, Some("i"), Some("i"))
+
+          // dataframe partitioned by i and in-partition sorted by i,j
+          val dfi_ij = readOrderAndPartitionAwareDataSource(cls, Some("i"), Some("i,j"))
+
+          // dataframe partitioned by j and in-partition sorted by i
+          val dfj_i = readOrderAndPartitionAwareDataSource(cls, Some("j"), Some("i"))
+
+          // dataframe partitioned by j and in-partition sorted by i,j
+          val dfj_ij = readOrderAndPartitionAwareDataSource(cls, Some("j"), Some("i,j"))
+
+          // all dataframes should contain the same data
+          Seq(df, df_i, dfi, dfi_i, dfi_ij, dfj_i, dfj_ij).foreach(
+            checkAnswer(_, Seq(Row(1, 4), Row(1, 5), Row(3, 5), Row(2, 6), Row(4, 1), Row(4, 2)))
           )
-          checkAnswer(
-            windowPartByColJOrderByColI,
-            Seq(Row(1, 4, 1), Row(1, 5, 1), Row(2, 6, 1), Row(3, 6, 2), Row(4, 1, 1), Row(4, 2, 1))
-          )
-          assert(collectFirst(windowPartByColJOrderByColI.queryExecution.executedPlan) {
-            case e: ShuffleExchangeExec => e
-          }.isDefined)
-          assert(collectFirst(windowPartByColJOrderByColI.queryExecution.executedPlan) {
-            case e: SortExec => e
-          }.isDefined)
+
+          // groupBy(x).flatMapGroups hash-partitions by x and then sorts in partitions by x
+          // df is not partitioned and not sorted, so we expect shuffling and sorting
+          testOrderAndPartitionAwareDataSourceGroupBy(df, true, true)
+
+          // dfi is partitioned by i and not sorted, so we expect no shuffling BUT sorting
+          testOrderAndPartitionAwareDataSourceGroupBy(dfi, false, true)
+
+          // dfi_i is partitioned by i and in-partition sorted by i,
+          // so we expect no shuffling and sorting
+          testOrderAndPartitionAwareDataSourceGroupBy(dfi_i, false, false)
+
+          // dfj_i is partitioned by j and in-partition sorted by i,
+          // so we expect shuffling and sorting
+          testOrderAndPartitionAwareDataSourceGroupBy(dfj_i, true, true)
+
+
+          // function over window partitioned by x and ordered by y
+          // does hash-partitions by x and sort in partition by y
+          // df is not partitioned and not sorted, so we expect shuffling and sorting
+          testOrderAndPartitionAwareDataSourcePartByOrderBy(df, true, true)
+
+          // dfi is partitioned by i but not sorted,
+          // so we expect no shuffling BUT sorting
+          testOrderAndPartitionAwareDataSourcePartByOrderBy(dfi, false, true)
+
+          // dfi_ij is partitioned by i and in-partition sorted by i,j,
+          // so we expect no shuffling and no sorting
+          testOrderAndPartitionAwareDataSourcePartByOrderBy(dfi_ij, false, false)
+
+          // dfj_ij is partitioned by j and in-partition sorted by i,j,
+          // so we expect shuffling and sorting
+          testOrderAndPartitionAwareDataSourcePartByOrderBy(dfj_ij, true, true)
         }
       }
     }
@@ -933,29 +1005,42 @@ class PartitionAwareDataSource extends TestingV2Source {
 
 class OrderAndPartitionAwareDataSource extends PartitionAwareDataSource {
 
-  class MyScanBuilder extends super.MyScanBuilder
-    with SupportsReportOrdering {
+  class MyScanBuilder(val partitionKeys: Option[Seq[String]],
+                      val orderKeys: Seq[String]) extends SimpleScanBuilder
+    with SupportsReportPartitioning with SupportsReportOrdering {
 
     override def planInputPartitions(): Array[InputPartition] = {
-      // Note that column `i` is ordered across partitions, while `j` is ordered per `i`.
-      // Note that we don't have same value of column `i` across partitions.
+      // data are partitioned by column `i` or `j`, so we can report any partitioning
+      // column `i` is not ordered globally, but within partitions, together with`j`
+      // this allows us to report ordering by [i] and [i, j]
       Array(
-        SpecificInputPartition(Array(1, 1, 2), Array(4, 5, 6)),
-        SpecificInputPartition(Array(3, 4, 4), Array(6, 1, 2)))
+        SpecificInputPartition(Array(1, 1, 3), Array(4, 5, 5)),
+        SpecificInputPartition(Array(2, 4, 4), Array(6, 1, 2)))
     }
 
     override def createReaderFactory(): PartitionReaderFactory = {
       SpecificReaderFactory
     }
 
-    override def outputOrdering(): Array[SortOrder] = Seq(
-      new MySortOrder("i"), new MySortOrder("j")
+    override def outputPartitioning(): Partitioning = {
+      partitionKeys.map(keys =>
+        new KeyGroupedPartitioning(keys.map(FieldReference(_)).toArray, 2)
+      ).getOrElse(
+        new UnknownPartitioning(2)
+      )
+    }
+
+    override def outputOrdering(): Array[SortOrder] = orderKeys.map(
+      new MySortOrder(_)
     ).toArray
   }
 
   override def getTable(options: CaseInsensitiveStringMap): Table = new SimpleBatchTable {
     override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
-      new MyScanBuilder()
+      new MyScanBuilder(
+        Option(options.get("partitionKeys")).map(_.split(",")),
+        Option(options.get("orderKeys")).map(_.split(",").toSeq).getOrElse(Seq.empty)
+      )
     }
   }
 
