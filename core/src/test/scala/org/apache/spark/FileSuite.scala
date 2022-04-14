@@ -136,10 +136,18 @@ class FileSuite extends SparkFunSuite with LocalSparkContext {
   }
 
   // Hadoop "gzip" and "zstd" codecs require native library installed for sequence files
-  val codecs = Seq((new DefaultCodec(), "default"), (new BZip2Codec(), "bzip2"),
-      (new SnappyCodec(), "snappy")) ++ {
-    if (VersionUtils.isHadoop3) Seq((new Lz4Codec(), "lz4")) else Seq()
+  private val codecs = Seq((new DefaultCodec(), "default"), (new BZip2Codec(), "bzip2")) ++ {
+    scala.util.Try {
+      // See HADOOP-17125. Hadoop lower than 3.3.1 can throw an exception when its native
+      // library for Snappy is unavailable. Here it calls `SnappyCodec.getCompressorType`
+      // to indirectly test if the Snappy native library is available in lower Hadoop versions.
+      new SnappyCodec().getCompressorType
+      (new SnappyCodec(), "snappy")
+    }.toOption
+  } ++ {
+    if (VersionUtils.isHadoop3) Seq((new Lz4Codec(), "lz4")) else Seq.empty
   }
+
   codecs.foreach { case (codec, codecName) =>
     runSequenceFileCodecTest(codec, codecName)
   }

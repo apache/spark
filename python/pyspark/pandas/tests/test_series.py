@@ -399,6 +399,32 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
             )
             self.assert_eq(psser.isin([1, 5, 0, None]), expected)
 
+    def test_duplicated(self):
+        for pser in [
+            pd.Series(["beetle", None, "beetle", None, "lama", "beetle"], name="objects"),
+            pd.Series([1, np.nan, 1, np.nan], name="numbers"),
+            pd.Series(
+                [
+                    pd.Timestamp("2022-01-01"),
+                    pd.Timestamp("2022-02-02"),
+                    pd.Timestamp("2022-01-01"),
+                    pd.Timestamp("2022-02-02"),
+                ],
+                name="times",
+            ),
+        ]:
+            psser = ps.from_pandas(pser)
+            self.assert_eq(psser.duplicated().sort_index(), pser.duplicated())
+            self.assert_eq(
+                psser.duplicated(keep="first").sort_index(), pser.duplicated(keep="first")
+            )
+            self.assert_eq(psser.duplicated(keep="last").sort_index(), pser.duplicated(keep="last"))
+            self.assert_eq(psser.duplicated(keep=False).sort_index(), pser.duplicated(keep=False))
+
+        pser = pd.Series([1, 2, 1, 2, 3], name="numbers")
+        psser = ps.from_pandas(pser)
+        self.assert_eq((psser + 1).duplicated().sort_index(), (pser + 1).duplicated())
+
     def test_drop_duplicates(self):
         pdf = pd.DataFrame({"animal": ["lama", "cow", "lama", "beetle", "lama", "hippo"]})
         psdf = ps.from_pandas(pdf)
@@ -1080,7 +1106,7 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
                 getattr(psser, name)
 
     def test_clip(self):
-        pser = pd.Series([0, 2, 4], index=np.random.rand(3))
+        pser = pd.Series([0, 2, 4], index=np.random.rand(3), name="x")
         psser = ps.from_pandas(pser)
 
         # Assert list-like values are not accepted for 'lower' and 'upper'
@@ -1098,6 +1124,13 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
         self.assert_eq(psser.clip(upper=3), pser.clip(upper=3))
         # Assert lower and upper
         self.assert_eq(psser.clip(1, 3), pser.clip(1, 3))
+        self.assert_eq((psser + 1).clip(1, 3), (pser + 1).clip(1, 3))
+
+        # Assert inplace is True
+        psser = ps.from_pandas(pser)
+        pser.clip(1, 3, inplace=True)
+        psser.clip(1, 3, inplace=True)
+        self.assert_eq(psser, pser)
 
         # Assert behavior on string values
         str_psser = ps.Series(["a", "b", "c"])
@@ -3070,6 +3103,23 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
         psser2.name = pser2.name = ("Y", "B")
 
         self.assert_eq(psser1.combine_first(psser2), pser1.combine_first(pser2))
+
+    def test_autocorr(self):
+        pdf = pd.DataFrame({"s1": [0.90010907, 0.13484424, 0.62036035]})
+        self._test_autocorr(pdf)
+
+        pdf = pd.DataFrame({"s1": [0.90010907, np.nan, 0.13484424, 0.62036035]})
+        self._test_autocorr(pdf)
+
+        pdf = pd.DataFrame({"s1": [0.2, 0.0, 0.6, 0.2, np.nan, 0.5, 0.6]})
+        self._test_autocorr(pdf)
+
+    def _test_autocorr(self, pdf):
+        psdf = ps.from_pandas(pdf)
+        for lag in range(-10, 10):
+            p_autocorr = pdf["s1"].autocorr(lag)
+            ps_autocorr = psdf["s1"].autocorr(lag)
+            self.assert_eq(p_autocorr, ps_autocorr, almost=True)
 
     def test_cov(self):
         pdf = pd.DataFrame(

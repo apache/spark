@@ -34,9 +34,9 @@ class RemoveRedundantAggregatesSuite extends PlanTest {
       RemoveRedundantAggregates) :: Nil
   }
 
-  private val relation = LocalRelation('a.int, 'b.int)
-  private val x = relation.subquery('x)
-  private val y = relation.subquery('y)
+  private val relation = LocalRelation($"a".int, $"b".int)
+  private val x = relation.subquery(Symbol("x"))
+  private val y = relation.subquery(Symbol("y"))
 
   private def aggregates(e: Expression): Seq[Expression] = {
     Seq(
@@ -47,13 +47,13 @@ class RemoveRedundantAggregatesSuite extends PlanTest {
   }
 
   test("Remove redundant aggregate") {
-    for (agg <- aggregates('b)) {
+    for (agg <- aggregates($"b")) {
       val query = relation
-        .groupBy('a)('a, agg)
-        .groupBy('a)('a)
+        .groupBy($"a")($"a", agg)
+        .groupBy($"a")($"a")
         .analyze
       val expected = relation
-        .groupBy('a)('a)
+        .groupBy($"a")($"a")
         .analyze
       val optimized = Optimize.execute(query)
       comparePlans(optimized, expected)
@@ -61,14 +61,14 @@ class RemoveRedundantAggregatesSuite extends PlanTest {
   }
 
   test("Remove 2 redundant aggregates") {
-    for (agg <- aggregates('b)) {
+    for (agg <- aggregates($"b")) {
       val query = relation
-        .groupBy('a)('a, agg)
-        .groupBy('a)('a)
-        .groupBy('a)('a)
+        .groupBy($"a")($"a", agg)
+        .groupBy($"a")($"a")
+        .groupBy($"a")($"a")
         .analyze
       val expected = relation
-        .groupBy('a)('a)
+        .groupBy($"a")($"a")
         .analyze
       val optimized = Optimize.execute(query)
       comparePlans(optimized, expected)
@@ -77,24 +77,24 @@ class RemoveRedundantAggregatesSuite extends PlanTest {
 
   test("Remove redundant aggregate with different grouping") {
     val query = relation
-      .groupBy('a, 'b)('a)
-      .groupBy('a)('a)
+      .groupBy($"a", $"b")($"a")
+      .groupBy($"a")($"a")
       .analyze
     val expected = relation
-      .groupBy('a)('a)
+      .groupBy($"a")($"a")
       .analyze
     val optimized = Optimize.execute(query)
     comparePlans(optimized, expected)
   }
 
   test("Remove redundant aggregate with aliases") {
-    for (agg <- aggregates('b)) {
+    for (agg <- aggregates($"b")) {
       val query = relation
-        .groupBy('a + 'b)(('a + 'b) as 'c, agg)
-        .groupBy('c)('c)
+        .groupBy($"a" + $"b")(($"a" + $"b") as Symbol("c"), agg)
+        .groupBy($"c")($"c")
         .analyze
       val expected = relation
-        .groupBy('a + 'b)(('a + 'b) as 'c)
+        .groupBy($"a" + $"b")(($"a" + $"b") as Symbol("c"))
         .analyze
       val optimized = Optimize.execute(query)
       comparePlans(optimized, expected)
@@ -103,11 +103,11 @@ class RemoveRedundantAggregatesSuite extends PlanTest {
 
   test("Remove redundant aggregate with non-deterministic upper") {
     val query = relation
-      .groupBy('a)('a)
-      .groupBy('a)('a, rand(0) as 'c)
+      .groupBy($"a")($"a")
+      .groupBy($"a")($"a", rand(0) as Symbol("c"))
       .analyze
     val expected = relation
-      .groupBy('a)('a, rand(0) as 'c)
+      .groupBy($"a")($"a", rand(0) as Symbol("c"))
       .analyze
     val optimized = Optimize.execute(query)
     comparePlans(optimized, expected)
@@ -115,22 +115,22 @@ class RemoveRedundantAggregatesSuite extends PlanTest {
 
   test("Remove redundant aggregate with non-deterministic lower") {
     val query = relation
-      .groupBy('a, 'c)('a, rand(0) as 'c)
-      .groupBy('a, 'c)('a, 'c)
+      .groupBy($"a", $"c")($"a", rand(0) as Symbol("c"))
+      .groupBy($"a", $"c")($"a", $"c")
       .analyze
     val expected = relation
-      .groupBy('a, 'c)('a, rand(0) as 'c)
+      .groupBy($"a", $"c")($"a", rand(0) as Symbol("c"))
       .analyze
     val optimized = Optimize.execute(query)
     comparePlans(optimized, expected)
   }
 
   test("Keep non-redundant aggregate - upper has duplicate sensitive agg expression") {
-    for (agg <- aggregates('b)) {
+    for (agg <- aggregates($"b")) {
       val query = relation
-        .groupBy('a, 'b)('a, 'b)
+        .groupBy($"a", $"b")($"a", $"b")
         // The count would change if we remove the first aggregate
-        .groupBy('a)('a, agg)
+        .groupBy($"a")($"a", agg)
         .analyze
       val optimized = Optimize.execute(query)
       comparePlans(optimized, query)
@@ -139,29 +139,29 @@ class RemoveRedundantAggregatesSuite extends PlanTest {
 
   test("Remove redundant aggregate - upper has duplicate agnostic agg expression") {
     val query = relation
-      .groupBy('a, 'b)('a, 'b)
+      .groupBy($"a", $"b")($"a", $"b")
       // The max and countDistinct does not change if there are duplicate values
-      .groupBy('a)('a, max('b), countDistinct('b))
+      .groupBy($"a")($"a", max($"b"), countDistinct($"b"))
       .analyze
     val expected = relation
-      .groupBy('a)('a, max('b), countDistinct('b))
+      .groupBy($"a")($"a", max($"b"), countDistinct($"b"))
       .analyze
     val optimized = Optimize.execute(query)
     comparePlans(optimized, expected)
   }
 
   test("Remove redundant aggregate - upper has contains foldable expressions") {
-    val originalQuery = x.groupBy('a, 'b)('a, 'b).groupBy('a)('a, TrueLiteral).analyze
-    val correctAnswer = x.groupBy('a)('a, TrueLiteral).analyze
+    val originalQuery = x.groupBy($"a", $"b")($"a", $"b").groupBy($"a")($"a", TrueLiteral).analyze
+    val correctAnswer = x.groupBy($"a")($"a", TrueLiteral).analyze
     val optimized = Optimize.execute(originalQuery)
     comparePlans(optimized, correctAnswer)
   }
 
   test("Keep non-redundant aggregate - upper references agg expression") {
-    for (agg <- aggregates('b)) {
+    for (agg <- aggregates($"b")) {
       val query = relation
-        .groupBy('a)('a, agg as 'c)
-        .groupBy('c)('c)
+        .groupBy($"a")($"a", agg as Symbol("c"))
+        .groupBy($"c")($"c")
         .analyze
       val optimized = Optimize.execute(query)
       comparePlans(optimized, query)
@@ -170,12 +170,12 @@ class RemoveRedundantAggregatesSuite extends PlanTest {
 
   test("Remove non-redundant aggregate - upper references non-deterministic non-grouping") {
     val query = relation
-      .groupBy('a)('a, ('a + rand(0)) as 'c)
-      .groupBy('a, 'c)('a, 'c)
+      .groupBy($"a")($"a", ($"a" + rand(0)) as Symbol("c"))
+      .groupBy($"a", $"c")($"a", $"c")
       .analyze
     val expected = relation
-      .groupBy('a)('a, ('a + rand(0)) as 'c)
-      .select('a, 'c)
+      .groupBy($"a")($"a", ($"a" + rand(0)) as Symbol("c"))
+      .select($"a", $"c")
       .analyze
     val optimized = Optimize.execute(query)
     comparePlans(optimized, expected)
@@ -183,10 +183,10 @@ class RemoveRedundantAggregatesSuite extends PlanTest {
 
   test("SPARK-36194: Remove aggregation from left semi/anti join if aggregation the same") {
     Seq(LeftSemi, LeftAnti).foreach { joinType =>
-      val originalQuery = x.groupBy('a, 'b)('a, 'b)
+      val originalQuery = x.groupBy($"a", $"b")($"a", $"b")
         .join(y, joinType, Some("x.a".attr === "y.a".attr && "x.b".attr === "y.b".attr))
         .groupBy("x.a".attr, "x.b".attr)("x.a".attr, "x.b".attr)
-      val correctAnswer = x.groupBy('a, 'b)('a, 'b)
+      val correctAnswer = x.groupBy($"a", $"b")($"a", $"b")
         .join(y, joinType, Some("x.a".attr === "y.a".attr && "x.b".attr === "y.b".attr))
         .select("x.a".attr, "x.b".attr)
 
@@ -197,10 +197,10 @@ class RemoveRedundantAggregatesSuite extends PlanTest {
 
   test("SPARK-36194: Remove aggregation from left semi/anti join with alias") {
     Seq(LeftSemi, LeftAnti).foreach { joinType =>
-      val originalQuery = x.groupBy('a, 'b)('a, 'b.as("d"))
+      val originalQuery = x.groupBy($"a", $"b")($"a", $"b".as("d"))
         .join(y, joinType, Some("x.a".attr === "y.a".attr && "d".attr === "y.b".attr))
         .groupBy("x.a".attr, "d".attr)("x.a".attr, "d".attr)
-      val correctAnswer = x.groupBy('a, 'b)('a, 'b.as("d"))
+      val correctAnswer = x.groupBy($"a", $"b")($"a", $"b".as("d"))
         .join(y, joinType, Some("x.a".attr === "y.a".attr && "d".attr === "y.b".attr))
         .select("x.a".attr, "d".attr)
 
@@ -211,10 +211,10 @@ class RemoveRedundantAggregatesSuite extends PlanTest {
 
   test("SPARK-36194: Remove aggregation from left semi/anti join if it is the sub aggregateExprs") {
     Seq(LeftSemi, LeftAnti).foreach { joinType =>
-      val originalQuery = x.groupBy('a, 'b)('a, 'b)
+      val originalQuery = x.groupBy($"a", $"b")($"a", $"b")
         .join(y, joinType, Some("x.a".attr === "y.a".attr && "x.b".attr === "y.b".attr))
         .groupBy("x.a".attr, "x.b".attr)("x.a".attr)
-      val correctAnswer = x.groupBy('a, 'b)('a, 'b)
+      val correctAnswer = x.groupBy($"a", $"b")($"a", $"b")
         .join(y, joinType, Some("x.a".attr === "y.a".attr && "x.b".attr === "y.b".attr))
         .select("x.a".attr)
 
@@ -225,12 +225,12 @@ class RemoveRedundantAggregatesSuite extends PlanTest {
 
   test("SPARK-36194: Transform down to remove more aggregates") {
     Seq(LeftSemi, LeftAnti).foreach { joinType =>
-      val originalQuery = x.groupBy('a, 'b)('a, 'b)
+      val originalQuery = x.groupBy($"a", $"b")($"a", $"b")
         .join(y, joinType, Some("x.a".attr === "y.a".attr && "x.b".attr === "y.b".attr))
         .groupBy("x.a".attr, "x.b".attr)("x.a".attr, "x.b".attr)
         .join(y, joinType, Some("x.a".attr === "y.a".attr && "x.b".attr === "y.b".attr))
         .groupBy("x.a".attr, "x.b".attr)("x.a".attr)
-      val correctAnswer = x.groupBy('a, 'b)('a, 'b)
+      val correctAnswer = x.groupBy($"a", $"b")($"a", $"b")
         .join(y, joinType, Some("x.a".attr === "y.a".attr && "x.b".attr === "y.b".attr))
         .select("x.a".attr, "x.b".attr)
         .join(y, joinType, Some("x.a".attr === "y.a".attr && "x.b".attr === "y.b".attr))
@@ -243,23 +243,23 @@ class RemoveRedundantAggregatesSuite extends PlanTest {
 
   test("SPARK-36194: Child distinct keys is the subset of required keys") {
     val originalQuery = relation
-      .groupBy('a)('a, count('b).as("cnt"))
-      .groupBy('a, 'cnt)('a, 'cnt)
+      .groupBy($"a")($"a", count($"b").as("cnt"))
+      .groupBy($"a", $"cnt")($"a", $"cnt")
       .analyze
     val correctAnswer = relation
-      .groupBy('a)('a, count('b).as("cnt"))
-      .select('a, 'cnt)
+      .groupBy($"a")($"a", count($"b").as("cnt"))
+      .select($"a", $"cnt")
       .analyze
     val optimized = Optimize.execute(originalQuery)
     comparePlans(optimized, correctAnswer)
   }
 
   test("SPARK-36194: Child distinct keys are subsets and aggregateExpressions are foldable") {
-    val originalQuery = x.groupBy('a, 'b)('a, 'b)
+    val originalQuery = x.groupBy($"a", $"b")($"a", $"b")
       .join(y, LeftSemi, Some("x.a".attr === "y.a".attr && "x.b".attr === "y.b".attr))
       .groupBy("x.a".attr, "x.b".attr)(TrueLiteral)
       .analyze
-    val correctAnswer = x.groupBy('a, 'b)('a, 'b)
+    val correctAnswer = x.groupBy($"a", $"b")($"a", $"b")
       .join(y, LeftSemi, Some("x.a".attr === "y.a".attr && "x.b".attr === "y.b".attr))
       .select(TrueLiteral)
       .analyze
@@ -269,13 +269,13 @@ class RemoveRedundantAggregatesSuite extends PlanTest {
 
   test("SPARK-36194: Negative case: child distinct keys is not the subset of required keys") {
     Seq(LeftSemi, LeftAnti).foreach { joinType =>
-      val originalQuery1 = x.groupBy('a, 'b)('a, 'b)
+      val originalQuery1 = x.groupBy($"a", $"b")($"a", $"b")
         .join(y, joinType, Some("x.a".attr === "y.a".attr && "x.b".attr === "y.b".attr))
         .groupBy("x.a".attr)("x.a".attr)
         .analyze
       comparePlans(Optimize.execute(originalQuery1), originalQuery1)
 
-      val originalQuery2 = x.groupBy('a, 'b)('a, 'b)
+      val originalQuery2 = x.groupBy($"a", $"b")($"a", $"b")
         .join(y, joinType, Some("x.a".attr === "y.a".attr && "x.b".attr === "y.b".attr))
         .groupBy("x.a".attr)(count("x.b".attr))
         .analyze
@@ -284,7 +284,7 @@ class RemoveRedundantAggregatesSuite extends PlanTest {
   }
 
   test("SPARK-36194: Negative case: child distinct keys is empty") {
-    val originalQuery = Distinct(x.groupBy('a, 'b)('a, TrueLiteral)).analyze
+    val originalQuery = Distinct(x.groupBy($"a", $"b")($"a", TrueLiteral)).analyze
     comparePlans(Optimize.execute(originalQuery), originalQuery)
   }
 }
