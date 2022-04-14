@@ -18,6 +18,7 @@
 package org.apache.spark.sql.errors
 
 import org.apache.spark.sql.catalyst.expressions.Literal
+import org.apache.spark.sql.catalyst.util.quoteIfNeeded
 import org.apache.spark.sql.types.{DataType, DoubleType, FloatType}
 
 trait QueryErrorsBase {
@@ -43,5 +44,13 @@ trait QueryErrorsBase {
 
   def toSQLValue(v: Any, t: DataType): String = {
     litToErrorValue(Literal.create(v, t))
+  }
+
+  def toSQLId(parts: Seq[String]): String = {
+    parts.map(quoteIfNeeded).mkString(".")
+  }
+
+  def toSQLId(part: String): String = {
+    toSQLId(Seq(part))
   }
 }
