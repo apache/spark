@@ -1342,10 +1342,11 @@ object QueryCompilationErrors {
       "Stream-stream join without equality predicate is not supported", plan = Some(plan))
   }
 
-  def cannotUseMixtureOfAggFunctionAndGroupAggPandasUDFError(): Throwable = {
+  def invalidPandasUDFPlacementError(
+      groupAggPandasUDFNames: Seq[String]): Throwable = {
     new AnalysisException(
-      errorClass = "CANNOT_USE_MIXTURE",
-      messageParameters = Array.empty)
+      errorClass = "INVALID_PANDAS_UDF_PLACEMENT",
+      messageParameters = Array(groupAggPandasUDFNames.map(name => s"'$name'").mkString(", ")))
   }
 
   def ambiguousAttributesInSelfJoinError(
