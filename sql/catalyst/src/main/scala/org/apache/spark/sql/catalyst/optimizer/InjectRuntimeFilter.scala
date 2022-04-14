@@ -141,6 +141,7 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
     plan.exists {
       case Join(left, right, _, _, hint) => isProbablyShuffleJoin(left, right, hint)
       case _: Aggregate => true
+      case _: Window => true
       case _ => false
     }
   }
@@ -172,8 +173,8 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
 
   /**
    * Check that:
-   * - The filterApplicationSideJoinExp can be pushed down through joins and aggregates (ie the
-   *   expression references originate from a single leaf node)
+   * - The filterApplicationSideJoinExp can be pushed down through joins, aggregates and windows
+   *   (ie the expression references originate from a single leaf node)
    * - The filter creation side has a selective predicate
    * - The current join is a shuffle join or a broadcast join that has a shuffle below it
    * - The max filterApplicationSide scan size is greater than a configurable threshold

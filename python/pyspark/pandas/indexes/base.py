@@ -73,6 +73,7 @@ from pyspark.pandas.utils import (
     scol_for,
     verify_temp_column_name,
     validate_bool_kwarg,
+    validate_index_loc,
     ERROR_MESSAGE_CANNOT_COMBINE,
     log_advice,
 )
@@ -1542,17 +1543,24 @@ class Index(IndexOpsMixin):
 
         return result
 
-    # TODO: return_indexer
-    def sort_values(self, ascending: bool = True) -> "Index":
+    def sort_values(
+        self, return_indexer: bool = False, ascending: bool = True
+    ) -> Union["Index", Tuple["Index", "Index"]]:
         """
-        Return a sorted copy of the index.
+        Return a sorted copy of the index, and optionally return the indices that
+        sorted the index itself.
 
         .. note:: This method is not supported for pandas when index has NaN value.
                   pandas raises unexpected TypeError, but we support treating NaN
                   as the smallest value.
+                  This method returns indexer as a pandas-on-Spark index while
+                  pandas returns it as a list. That's because indexer in pandas-on-Spark
+                  may not fit in memory.
 
         Parameters
         ----------
+        return_indexer : bool, default False
+            Should the indices that would sort the index be returned.
         ascending : bool, default True
             Should the index values be sorted in an ascending order.
 
@@ -1560,6 +1568,8 @@ class Index(IndexOpsMixin):
         -------
         sorted_index : ps.Index or ps.MultiIndex
             Sorted copy of the index.
+        indexer : ps.Index
+            The indices that the index itself was sorted by.
 
         See Also
         --------
@@ -1582,6 +1592,11 @@ class Index(IndexOpsMixin):
         >>> idx.sort_values(ascending=False)
         Int64Index([1000, 100, 10, 1], dtype='int64')
 
+        Sort values in descending order, and also get the indices idx was sorted by.
+
+        >>> idx.sort_values(ascending=False, return_indexer=True)
+        (Int64Index([1000, 100, 10, 1], dtype='int64'), Int64Index([3, 1, 0, 2], dtype='int64'))
+
         Support for MultiIndex.
 
         >>> psidx = ps.MultiIndex.from_tuples([('a', 'x', 1), ('c', 'y', 2), ('b', 'z', 3)])
@@ -1602,11 +1617,20 @@ class Index(IndexOpsMixin):
                     ('b', 'z', 3),
                     ('a', 'x', 1)],
                    )
+
+        >>> psidx.sort_values(ascending=False, return_indexer=True)  # doctest: +SKIP
+        (MultiIndex([('c', 'y', 2),
+                    ('b', 'z', 3),
+                    ('a', 'x', 1)],
+                   ), Int64Index([1, 2, 0], dtype='int64'))
         """
         sdf = self._internal.spark_frame
-        sdf = sdf.orderBy(*self._internal.index_spark_columns, ascending=ascending).select(
-            self._internal.index_spark_columns
-        )
+        if return_indexer:
+            sequence_col = verify_temp_column_name(sdf, "__distributed_sequence_column__")
+            sdf = InternalFrame.attach_distributed_sequence_column(sdf, column_name=sequence_col)
+
+        ordered_sdf = sdf.orderBy(*self._internal.index_spark_columns, ascending=ascending)
+        sdf = ordered_sdf.select(self._internal.index_spark_columns)
 
         internal = InternalFrame(
             spark_frame=sdf,
@@ -1616,7 +1640,21 @@ class Index(IndexOpsMixin):
             index_names=self._internal.index_names,
             index_fields=self._internal.index_fields,
         )
-        return DataFrame(internal).index
+        sorted_index = DataFrame(internal).index
+
+        if return_indexer:
+            alias_sequence_scol = scol_for(ordered_sdf, sequence_col).alias(
+                SPARK_DEFAULT_INDEX_NAME
+            )
+            indexer_sdf = ordered_sdf.select(alias_sequence_scol)
+            indexer_internal = InternalFrame(
+                spark_frame=indexer_sdf,
+                index_spark_columns=[scol_for(indexer_sdf, SPARK_DEFAULT_INDEX_NAME)],
+            )
+            indexer = DataFrame(indexer_internal).index
+            return sorted_index, indexer
+        else:
+            return sorted_index
 
     @no_type_check
     def sort(self, *args, **kwargs) -> None:
@@ -2135,7 +2173,7 @@ class Index(IndexOpsMixin):
         elif isinstance(self, type(other)) and not isinstance(self, MultiIndex):
             if self.name == other.name:
                 result.name = self.name
-        return result if sort is None else result.sort_values()
+        return result if sort is None else cast(Index, result.sort_values())
 
     @property
     def is_all_dates(self) -> bool:
@@ -2523,6 +2561,9 @@ class Index(IndexOpsMixin):
 
         Follows Python list.append semantics for negative values.
 
+        .. versionchanged:: 3.4.0
+           Raise IndexError when loc is out of bounds to follow Pandas 1.4+ behavior
+
         Parameters
         ----------
         loc : int
@@ -2544,10 +2585,8 @@ class Index(IndexOpsMixin):
         >>> psidx.insert(-3, 100)
         Int64Index([1, 2, 100, 3, 4, 5], dtype='int64')
         """
-        if loc < 0:
-            length = len(self)
-            loc = loc + length
-            loc = 0 if loc < 0 else loc
+        validate_index_loc(self, loc)
+        loc = loc + len(self) if loc < 0 else loc
 
         index_name = self._internal.index_spark_column_names[0]
         sdf_before = self.to_frame(name=index_name)[:loc]._to_spark()

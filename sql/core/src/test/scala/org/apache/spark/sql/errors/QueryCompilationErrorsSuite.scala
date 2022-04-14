@@ -108,7 +108,7 @@ class QueryCompilationErrorsSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("CANNOT_USE_MIXTURE: Using aggregate function with grouped aggregate pandas UDF") {
+  test("INVALID_PANDAS_UDF_PLACEMENT: Using aggregate function with grouped aggregate pandas UDF") {
     import IntegratedUDFTestUtils._
 
     val df = Seq(
@@ -117,14 +117,17 @@ class QueryCompilationErrorsSuite extends QueryTest with SharedSparkSession {
       (536363, "86123A", 6, 17851)
     ).toDF("InvoiceNo", "StockCode", "Quantity", "CustomerID")
     val e = intercept[AnalysisException] {
-      val pandasTestUDF = TestGroupedAggPandasUDF(name = "pandas_udf")
+      val pandasTestUDF1 = TestGroupedAggPandasUDF(name = "pandas_udf_1")
+      val pandasTestUDF2 = TestGroupedAggPandasUDF(name = "pandas_udf_2")
       df.groupBy("CustomerId")
-        .agg(pandasTestUDF(df("Quantity")), sum(df("Quantity"))).collect()
+        .agg(pandasTestUDF1(df("Quantity")), pandasTestUDF2(df("Quantity")), sum(df("Quantity")))
+        .collect()
     }
 
-    assert(e.errorClass === Some("CANNOT_USE_MIXTURE"))
+    assert(e.errorClass === Some("INVALID_PANDAS_UDF_PLACEMENT"))
     assert(e.message ===
-      "Cannot use a mixture of aggregate function and group aggregate pandas UDF")
+      "The group aggregate pandas UDF 'pandas_udf_1', 'pandas_udf_2' cannot be invoked " +
+      "together with as other, non-pandas aggregate functions.")
   }
 
   test("UNSUPPORTED_FEATURE: Using Python UDF with unsupported join condition") {
