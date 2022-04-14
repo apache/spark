@@ -7014,6 +7014,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         inplace: bool = False,
         kind: str = None,
         na_position: str = "last",
+        ignore_index: bool = False,
     ) -> Optional["DataFrame"]:
         """
         Sort object by labels (along an axis)
@@ -7033,6 +7034,10 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         na_position : {‘first’, ‘last’}, default ‘last’
             first puts NaNs at the beginning, last puts NaNs at the end. Not implemented for
             MultiIndex.
+        ignore_index : bool, default False
+            If True, the resulting axis will be labeled 0, 1, …, n - 1.
+
+            .. versionadded:: 3.4.0
 
         Returns
         -------
@@ -7059,6 +7064,12 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         NaN  NaN
         a    1.0
         b    2.0
+
+        >>> df.sort_index(ignore_index=True)
+             A
+        0  1.0
+        1  2.0
+        2  NaN
 
         >>> df.sort_index(inplace=True)
         >>> df
@@ -7091,6 +7102,13 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         b 0  1  2
         a 1  2  1
         b 1  0  3
+
+        >>> df.sort_index(ignore_index=True)
+           A  B
+        0  3  0
+        1  2  1
+        2  1  2
+        3  0  3
         """
         inplace = validate_bool_kwarg(inplace, "inplace")
         axis = validate_axis(axis)
@@ -7112,10 +7130,12 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         psdf = self._sort(by=by, ascending=ascending, na_position=na_position)
         if inplace:
+            if ignore_index:
+                psdf.reset_index(drop=True, inplace=inplace)
             self._update_internal_frame(psdf._internal)
             return None
         else:
-            return psdf
+            return psdf.reset_index(drop=True) if ignore_index else psdf
 
     def swaplevel(
         self, i: Union[int, Name] = -2, j: Union[int, Name] = -1, axis: Axis = 0
