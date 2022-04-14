@@ -24,5 +24,5 @@ public interface LocalDB {
     void put(byte[] key, byte[] value) throws RuntimeException;
     void delete(byte[] key) throws RuntimeException;
     void close() throws IOException;
-    Map<String, byte[]> readKVToMap(String prefix) throws IOException;;
+    Map<String, byte[]> readKVToMap(String prefix) throws IOException;
 }
