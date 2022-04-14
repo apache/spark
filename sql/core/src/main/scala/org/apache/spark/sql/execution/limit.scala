@@ -317,6 +317,13 @@ case class TakeOrderedAndProjectExec(
     s"TakeOrderedAndProject(limit=$limit, orderBy=$orderByString, output=$outputString)"
   }
 
+  override def stringArgs: Iterator[Any] = {
+    super.stringArgs.zipWithIndex.filter {
+      case (0, 1) => false
+      case _ => true
+    }.map(_._1)
+  }
+
   override protected def withNewChildInternal(newChild: SparkPlan): SparkPlan =
     copy(child = newChild)
 }

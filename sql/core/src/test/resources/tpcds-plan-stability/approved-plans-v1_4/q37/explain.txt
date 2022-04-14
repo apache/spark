@@ -139,7 +139,7 @@ Results [3]: [i_item_id#2, i_item_desc#3, i_current_price#4]
 
 (25) TakeOrderedAndProject
 Input [3]: [i_item_id#2, i_item_desc#3, i_current_price#4]
-Arguments: 100, 0, [i_item_id#2 ASC NULLS FIRST], [i_item_id#2, i_item_desc#3, i_current_price#4]
+Arguments: 100, [i_item_id#2 ASC NULLS FIRST], [i_item_id#2, i_item_desc#3, i_current_price#4]
 
 ===== Subqueries =====
 

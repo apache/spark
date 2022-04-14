@@ -354,7 +354,7 @@ Results [2]: [i_manufact_id#11, sum(total_sales#20)#52 AS total_sales#53]
 
 (63) TakeOrderedAndProject
 Input [2]: [i_manufact_id#11, total_sales#53]
-Arguments: 100, 0, [total_sales#53 ASC NULLS FIRST], [i_manufact_id#11, total_sales#53]
+Arguments: 100, [total_sales#53 ASC NULLS FIRST], [i_manufact_id#11, total_sales#53]
 
 ===== Subqueries =====
 

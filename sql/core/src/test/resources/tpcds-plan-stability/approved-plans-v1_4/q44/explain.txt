@@ -170,7 +170,7 @@ Input [5]: [rnk#16, item_sk#17, i_product_name#21, i_item_sk#23, i_product_name#
 
 (32) TakeOrderedAndProject
 Input [3]: [rnk#16, best_performing#25, worst_performing#26]
-Arguments: 100, 0, [rnk#16 ASC NULLS FIRST], [rnk#16, best_performing#25, worst_performing#26]
+Arguments: 100, [rnk#16 ASC NULLS FIRST], [rnk#16, best_performing#25, worst_performing#26]
 
 ===== Subqueries =====
 

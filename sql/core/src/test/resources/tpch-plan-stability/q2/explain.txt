@@ -303,5 +303,5 @@ Input [10]: [p_partkey#1, p_mfgr#2, s_name#28, s_address#29, s_phone#31, s_acctb
 
 (55) TakeOrderedAndProject
 Input [8]: [s_acctbal#32, s_name#28, n_name#36, p_partkey#1, p_mfgr#2, s_address#29, s_phone#31, s_comment#33]
-Arguments: 100, 0, [s_acctbal#32 DESC NULLS LAST, n_name#36 ASC NULLS FIRST, s_name#28 ASC NULLS FIRST, p_partkey#1 ASC NULLS FIRST], [s_acctbal#32, s_name#28, n_name#36, p_partkey#1, p_mfgr#2, s_address#29, s_phone#31, s_comment#33]
+Arguments: 100, [s_acctbal#32 DESC NULLS LAST, n_name#36 ASC NULLS FIRST, s_name#28 ASC NULLS FIRST, p_partkey#1 ASC NULLS FIRST], [s_acctbal#32, s_name#28, n_name#36, p_partkey#1, p_mfgr#2, s_address#29, s_phone#31, s_comment#33]
 
