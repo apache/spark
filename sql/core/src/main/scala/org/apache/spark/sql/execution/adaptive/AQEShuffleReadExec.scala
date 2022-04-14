@@ -53,7 +53,8 @@ case class AQEShuffleReadExec private(
     case _ => None
   }
 
-  override protected def isCanonicalizedPlan: Boolean = shuffleStage.isEmpty
+  override protected def isCanonicalizedPlan: Boolean =
+    super.isCanonicalizedPlan && shuffleStage.isEmpty
 
   override def supportsColumnar: Boolean = child.supportsColumnar
 
@@ -208,6 +209,7 @@ case class AQEShuffleReadExec private(
   }
 
   @transient override lazy val metrics: Map[String, SQLMetric] = {
+    assert(shuffleStage.isDefined)
     Map("numPartitions" -> SQLMetrics.createMetric(sparkContext, "number of partitions")) ++ {
       if (isLocalRead) {
         // We split the mapper partition evenly when creating local shuffle read, so no
