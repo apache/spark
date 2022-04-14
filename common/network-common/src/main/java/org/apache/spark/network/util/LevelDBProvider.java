@@ -17,9 +17,11 @@
 
 package org.apache.spark.network.util;
 
+import java.io.File;
+import java.io.IOException;
+
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.annotations.VisibleForTesting;
-import org.apache.spark.network.shuffledb.StoreVersion;
 import org.fusesource.leveldbjni.JniDBFactory;
 import org.fusesource.leveldbjni.internal.NativeDB;
 import org.iq80.leveldb.DB;
@@ -27,13 +29,12 @@ import org.iq80.leveldb.Options;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.File;
-import java.io.IOException;
+import org.apache.spark.network.shuffledb.StoreVersion;
 
 /**
  * LevelDB utility class available in the network package.
  */
-class LevelDBProvider {
+public class LevelDBProvider {
   private static final Logger logger = LoggerFactory.getLogger(LevelDBProvider.class);
 
   public static DB initLevelDB(File dbFile, StoreVersion version, ObjectMapper mapper) throws

@@ -17,10 +17,10 @@
 
 package org.apache.spark.network.shuffledb;
 
+import java.nio.charset.StandardCharsets;
+
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
-
-import java.nio.charset.StandardCharsets;
 
 public class StoreVersion {
 
