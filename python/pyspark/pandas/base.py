@@ -982,9 +982,11 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
               original column labels.
 
         skipna : boolean, default True
-            Exclude NA/null values. If an entire row/column is NA and skipna is True,
+            Exclude NA values, such as None or numpy.NaN.
+            If an entire row/column is NA values and `skipna` is True,
             then the result will be True, as for an empty row/column.
-            If skipna is False, then NA are treated as True, because these are not equal to zero.
+            If `skipna` is False, numpy.NaNs are treated as True because these are
+            not equal to zero, Nones are treated as False.
 
         Examples
         --------

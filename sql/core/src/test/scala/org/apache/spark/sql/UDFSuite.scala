@@ -471,11 +471,6 @@ class UDFSuite extends QueryTest with SharedSparkSession {
 
   }
 
-  test("use untyped Scala UDF should fail by default") {
-    val e = intercept[AnalysisException](udf((x: Int) => x, IntegerType))
-    assert(e.getMessage.contains("You're using untyped Scala UDF"))
-  }
-
   test("SPARK-26308: udf with decimal") {
     val df1 = spark.createDataFrame(
       sparkContext.parallelize(Seq(Row(new BigDecimal("2011000000000002456556")))),

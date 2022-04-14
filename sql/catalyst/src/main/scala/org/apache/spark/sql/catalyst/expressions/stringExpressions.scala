@@ -1461,15 +1461,17 @@ case class StringLocate(substr: Expression, str: Expression, start: Expression)
 
 trait PadExpressionBuilderBase extends ExpressionBuilder {
   override def build(funcName: String, expressions: Seq[Expression]): Expression = {
+    val behaviorChangeEnabled = !SQLConf.get.getConf(SQLConf.LEGACY_LPAD_RPAD_BINARY_TYPE_AS_STRING)
     val numArgs = expressions.length
     if (numArgs == 2) {
-      if (expressions(0).dataType == BinaryType) {
+      if (expressions(0).dataType == BinaryType && behaviorChangeEnabled) {
         BinaryPad(funcName, expressions(0), expressions(1), Literal(Array[Byte](0)))
       } else {
         createStringPad(expressions(0), expressions(1), Literal(" "))
       }
     } else if (numArgs == 3) {
-      if (expressions(0).dataType == BinaryType && expressions(2).dataType == BinaryType) {
+      if (expressions(0).dataType == BinaryType && expressions(2).dataType == BinaryType
+        && behaviorChangeEnabled) {
         BinaryPad(funcName, expressions(0), expressions(1), expressions(2))
       } else {
         createStringPad(expressions(0), expressions(1), expressions(2))
@@ -1808,7 +1810,9 @@ case class ParseUrl(children: Seq[Expression], failOnError: Boolean = SQLConf.ge
 case class FormatString(children: Expression*) extends Expression with ImplicitCastInputTypes {
 
   require(children.nonEmpty, s"$prettyName() should take at least 1 argument")
-  checkArgumentIndexNotZero(children(0))
+  if (!SQLConf.get.getConf(SQLConf.ALLOW_ZERO_INDEX_IN_FORMAT_STRING)) {
+    checkArgumentIndexNotZero(children(0))
+  }
 
 
   override def foldable: Boolean = children.forall(_.foldable)

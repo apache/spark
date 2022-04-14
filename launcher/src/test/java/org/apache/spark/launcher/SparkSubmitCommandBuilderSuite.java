@@ -193,11 +193,11 @@ public class SparkSubmitCommandBuilderSuite extends BaseSuite {
       env.get("SPARKR_SUBMIT_ARGS"));
   }
 
-  @Test(expected = IllegalArgumentException.class)
-  public void testExamplesRunnerNoArg() throws Exception {
+  @Test
+  public void testExamplesRunnerNoArg() {
     List<String> sparkSubmitArgs = Arrays.asList(SparkSubmitCommandBuilder.RUN_EXAMPLE);
     Map<String, String> env = new HashMap<>();
-    buildCommand(sparkSubmitArgs, env);
+    assertThrows(IllegalArgumentException.class, () -> buildCommand(sparkSubmitArgs, env));
   }
 
   @Test
@@ -254,9 +254,10 @@ public class SparkSubmitCommandBuilderSuite extends BaseSuite {
             || new File(primaryResource).getName().startsWith("spark-examples"));
   }
 
-  @Test(expected = IllegalArgumentException.class)
+  @Test
   public void testMissingAppResource() {
-    new SparkSubmitCommandBuilder().buildSparkSubmitArgs();
+    assertThrows(IllegalArgumentException.class,
+      () -> new SparkSubmitCommandBuilder().buildSparkSubmitArgs());
   }
 
   @Test

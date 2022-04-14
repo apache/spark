@@ -54,6 +54,7 @@ from pandas.api.types import (  # type: ignore[attr-defined]
     CategoricalDtype,
 )
 from pandas.tseries.frequencies import DateOffset
+from pyspark import SparkContext
 from pyspark.sql import functions as F, Column, DataFrame as SparkDataFrame
 from pyspark.sql.types import (
     ArrayType,
@@ -2168,6 +2169,62 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             )
         )._psser_for(self._column_label)
 
+    def interpolate(self, method: Optional[str] = None, limit: Optional[int] = None) -> "Series":
+        return self._interpolate(method=method, limit=limit)
+
+    def _interpolate(
+        self,
+        method: Optional[str] = None,
+        limit: Optional[int] = None,
+    ) -> "Series":
+        if (method is not None) and (method not in ["linear"]):
+            raise NotImplementedError("interpolate currently works only for method='linear'")
+        if (limit is not None) and (not limit > 0):
+            raise ValueError("limit must be > 0.")
+
+        if not self.spark.nullable and not isinstance(
+            self.spark.data_type, (FloatType, DoubleType)
+        ):
+            return self._psdf.copy()._psser_for(self._column_label)
+
+        scol = self.spark.column
+        sql_utils = SparkContext._active_spark_context._jvm.PythonSQLUtils
+        last_non_null = Column(sql_utils.lastNonNull(scol._jc))
+        null_index = Column(sql_utils.nullIndex(scol._jc))
+
+        window_forward = Window.orderBy(NATURAL_ORDER_COLUMN_NAME).rowsBetween(
+            Window.unboundedPreceding, Window.currentRow
+        )
+        last_non_null_forward = last_non_null.over(window_forward)
+        null_index_forward = null_index.over(window_forward)
+
+        window_backward = Window.orderBy(F.desc(NATURAL_ORDER_COLUMN_NAME)).rowsBetween(
+            Window.unboundedPreceding, Window.currentRow
+        )
+        last_non_null_backward = last_non_null.over(window_backward)
+        null_index_backward = null_index.over(window_backward)
+
+        fill = (last_non_null_backward - last_non_null_forward) / (
+            null_index_backward + null_index_forward
+        ) * null_index_forward + last_non_null_forward
+
+        fill_cond = ~F.isnull(last_non_null_backward) & ~F.isnull(last_non_null_forward)
+        pad_cond = F.isnull(last_non_null_backward) & ~F.isnull(last_non_null_forward)
+        if limit is not None:
+            fill_cond = fill_cond & (null_index_forward <= F.lit(limit))
+            pad_cond = pad_cond & (null_index_forward <= F.lit(limit))
+
+        cond = self.isnull().spark.column
+        scol = (
+            F.when(cond & fill_cond, fill)
+            .when(cond & pad_cond, last_non_null_forward)
+            .otherwise(scol)
+        )
+
+        return DataFrame(
+            self._psdf._internal.with_new_spark_column(self._column_label, scol)  # TODO: dtype?
+        )._psser_for(self._column_label)
+
     def dropna(self, axis: Axis = 0, inplace: bool = False, **kwargs: Any) -> Optional["Series"]:
         """
         Return a new Series with missing values removed.
@@ -2219,7 +2276,12 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         else:
             return first_series(psdf)
 
-    def clip(self, lower: Union[float, int] = None, upper: Union[float, int] = None) -> "Series":
+    def clip(
+        self,
+        lower: Union[float, int] = None,
+        upper: Union[float, int] = None,
+        inplace: bool = False,
+    ) -> "Series":
         """
         Trim values at input threshold(s).
 
@@ -2231,6 +2293,8 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             Minimum threshold value. All values below this threshold will be set to it.
         upper : float or int, default None
             Maximum threshold value. All values above this threshold will be set to it.
+        inplace : bool, default False
+             if True, perform operation in-place
 
         Returns
         -------
@@ -2239,8 +2303,24 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
         Examples
         --------
-        >>> ps.Series([0, 2, 4]).clip(1, 3)
+        >>> psser = ps.Series([0, 2, 4])
+        >>> psser
+        0    0
+        1    2
+        2    4
+        dtype: int64
+
+        >>> psser.clip(1, 3)
         0    1
+        1    2
+        2    3
+        dtype: int64
+
+        Clip can be performed in-place.
+
+        >>> psser.clip(2, 3, inplace=True)
+        >>> psser
+        0    2
         1    2
         2    3
         dtype: int64
@@ -2266,10 +2346,18 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
                 scol = F.when(scol < lower, lower).otherwise(scol)
             if upper is not None:
                 scol = F.when(scol > upper, upper).otherwise(scol)
-            return self._with_new_scol(
-                scol.alias(self._internal.data_spark_column_names[0]),
-                field=self._internal.data_fields[0],
-            )
+            if inplace:
+                internal = self._internal.copy(
+                    data_spark_columns=[scol.alias(self._internal.data_spark_column_names[0])],
+                    data_fields=[self._internal.data_fields[0]],
+                )
+                self._psdf._update_internal_frame(internal, requires_same_anchor=False)
+                return None
+            else:
+                return self._with_new_scol(
+                    scol.alias(self._internal.data_spark_column_names[0]),
+                    field=self._internal.data_fields[0],
+                )
         else:
             return self
 
@@ -3012,6 +3100,82 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         )
         return first_series(
             DataFrame(internal.with_new_sdf(sdf, index_fields=([None] * internal.index_level)))
+        )
+
+    def autocorr(self, periods: int = 1) -> float:
+        """
+        Compute the lag-N autocorrelation.
+
+        This method computes the Pearson correlation between
+        the Series and its shifted self.
+
+        .. note:: the current implementation of rank uses Spark's Window without
+            specifying partition specification. This leads to move all data into
+            single partition in single machine and could cause serious
+            performance degradation. Avoid this method against very large dataset.
+
+        .. versionadded:: 3.4.0
+
+        Parameters
+        ----------
+        periods : int, default 1
+            Number of lags to apply before performing autocorrelation.
+
+        Returns
+        -------
+        float
+            The Pearson correlation between self and self.shift(lag).
+
+        See Also
+        --------
+        Series.corr : Compute the correlation between two Series.
+        Series.shift : Shift index by desired number of periods.
+        DataFrame.corr : Compute pairwise correlation of columns.
+
+        Notes
+        -----
+        If the Pearson correlation is not well defined return 'NaN'.
+
+        Examples
+        --------
+        >>> s = ps.Series([.2, .0, .6, .2, np.nan, .5, .6])
+        >>> s.autocorr()  # doctest: +ELLIPSIS
+        -0.141219...
+        >>> s.autocorr(0)  # doctest: +ELLIPSIS
+        1.0...
+        >>> s.autocorr(2)  # doctest: +ELLIPSIS
+        0.970725...
+        >>> s.autocorr(-3)  # doctest: +ELLIPSIS
+        0.277350...
+        >>> s.autocorr(5)  # doctest: +ELLIPSIS
+        -1.000000...
+        >>> s.autocorr(6)  # doctest: +ELLIPSIS
+        nan
+
+        If the Pearson correlation is not well defined, then 'NaN' is returned.
+
+        >>> s = ps.Series([1, 0, 0, 0])
+        >>> s.autocorr()
+        nan
+        """
+        # This implementation is suboptimal because it moves all data to a single partition,
+        # global sort should be used instead of window, but it should be a start
+        if not isinstance(periods, int):
+            raise TypeError("periods should be an int; however, got [%s]" % type(periods).__name__)
+
+        tmp_col = "__tmp_col__"
+        tmp_lag_col = "__tmp_lag_col__"
+        scol = self.spark.column.alias(tmp_col)
+        if periods == 0:
+            lag_col = scol.alias(tmp_lag_col)
+        else:
+            window = Window.orderBy(NATURAL_ORDER_COLUMN_NAME)
+            lag_col = F.lag(scol, periods).over(window).alias(tmp_lag_col)
+
+        return (
+            self._internal.spark_frame.select([scol, lag_col])
+            .dropna("any")
+            .corr(tmp_col, tmp_lag_col)
         )
 
     def corr(self, other: "Series", method: str = "pearson") -> float:
@@ -4359,6 +4523,9 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
         Always returns Series even if only one value is returned.
 
+        .. versionchanged:: 3.4.0
+           Series name is preserved to follow pandas 1.4+ behavior.
+
         Parameters
         ----------
         dropna : bool, default True
@@ -4433,8 +4600,9 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             F.col(SPARK_DEFAULT_INDEX_NAME).alias(SPARK_DEFAULT_SERIES_NAME)
         )
         internal = InternalFrame(spark_frame=sdf, index_spark_columns=None, column_labels=[None])
-
-        return first_series(DataFrame(internal))
+        ser_mode = first_series(DataFrame(internal))
+        ser_mode.name = self.name
+        return ser_mode
 
     def keys(self) -> "ps.Index":
         """
@@ -5273,9 +5441,9 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         dtype: int64
         """
         if not same_anchor(self, other):
-            if get_option("compute.eager_check") and not self.index.sort_values().equals(
-                other.index.sort_values()
-            ):
+            if get_option("compute.eager_check") and not cast(
+                ps.Index, self.index.sort_values()
+            ).equals(cast(ps.Index, other.index.sort_values())):
                 raise ValueError("matrices are not aligned")
             elif len(self.index) != len(other.index):
                 raise ValueError("matrices are not aligned")

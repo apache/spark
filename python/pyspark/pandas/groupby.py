@@ -3205,23 +3205,35 @@ class SeriesGroupBy(GroupBy[Series]):
         Examples
         --------
         >>> df = ps.DataFrame({'A': [1, 2, 2, 3, 3, 3],
-        ...                    'B': [1, 1, 2, 3, 3, 3]},
+        ...                    'B': [1, 1, 2, 3, 3, np.nan]},
         ...                   columns=['A', 'B'])
         >>> df
-           A  B
-        0  1  1
-        1  2  1
-        2  2  2
-        3  3  3
-        4  3  3
-        5  3  3
+           A    B
+        0  1  1.0
+        1  2  1.0
+        2  2  2.0
+        3  3  3.0
+        4  3  3.0
+        5  3  NaN
 
         >>> df.groupby('A')['B'].value_counts().sort_index()  # doctest: +NORMALIZE_WHITESPACE
         A  B
-        1  1    1
-        2  1    1
-           2    1
-        3  3    3
+        1  1.0    1
+        2  1.0    1
+           2.0    1
+        3  3.0    2
+        Name: B, dtype: int64
+
+        Don't include counts of NaN when dropna is False.
+
+        >>> df.groupby('A')['B'].value_counts(
+        ...   dropna=False).sort_index()  # doctest: +NORMALIZE_WHITESPACE
+        A  B
+        1  1.0    1
+        2  1.0    1
+           2.0    1
+        3  3.0    2
+           NaN    1
         Name: B, dtype: int64
         """
         groupkeys = self._groupkeys + self._agg_columns
@@ -3229,8 +3241,17 @@ class SeriesGroupBy(GroupBy[Series]):
         groupkey_cols = [s.spark.column.alias(name) for s, name in zip(groupkeys, groupkey_names)]
 
         sdf = self._psdf._internal.spark_frame
+
         agg_column = self._agg_columns[0]._internal.data_spark_column_names[0]
         sdf = sdf.groupby(*groupkey_cols).count().withColumnRenamed("count", agg_column)
+
+        if self._dropna:
+            _groupkey_column_names = groupkey_names[: len(self._groupkeys)]
+            sdf = sdf.dropna(subset=_groupkey_column_names)
+
+        if dropna:
+            _agg_columns_names = groupkey_names[len(self._groupkeys) :]
+            sdf = sdf.dropna(subset=_agg_columns_names)
 
         if sort:
             if ascending:

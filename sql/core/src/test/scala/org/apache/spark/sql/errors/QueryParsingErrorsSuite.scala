@@ -390,4 +390,19 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession {
           |^^^
           |""".stripMargin)
   }
+
+  test("DUPLICATE_KEY: Found duplicate partition keys") {
+    validateParsingError(
+      sqlText = "INSERT OVERWRITE TABLE table PARTITION(p1='1', p1='1') SELECT 'col1', 'col2'",
+      errorClass = "DUPLICATE_KEY",
+      sqlState = "23000",
+      message =
+        """
+          |Found duplicate keys 'p1'(line 1, pos 29)
+          |
+          |== SQL ==
+          |INSERT OVERWRITE TABLE table PARTITION(p1='1', p1='1') SELECT 'col1', 'col2'
+          |-----------------------------^^^
+          |""".stripMargin)
+  }
 }
