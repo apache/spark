@@ -44,4 +44,9 @@ trait QueryErrorsBase {
   def toSQLValue(v: Any, t: DataType): String = {
     litToErrorValue(Literal.create(v, t))
   }
+
+  // Quote sql statements in error messages.
+  def toSQLStmt(text: String): String = {
+    s"'$text'"
+  }
 }

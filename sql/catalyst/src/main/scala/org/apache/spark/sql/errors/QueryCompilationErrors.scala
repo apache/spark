@@ -1932,13 +1932,13 @@ object QueryCompilationErrors extends QueryErrorsBase {
   def descPartitionNotAllowedOnTempView(table: String): Throwable = {
     new AnalysisException(
       errorClass = "INVALID_OPERATION_ON_TEMP_VIEW",
-      messageParameters = Array(toSQLValue("DESC PARTITION"), toSQLValue(table)))
+      messageParameters = Array(toSQLStmt("DESC PARTITION"), toSQLValue(table)))
   }
 
   def descPartitionNotAllowedOnView(table: String): Throwable = {
     new AnalysisException(
       errorClass = "INVALID_OPERATION_ON_VIEW",
-      messageParameters = Array(toSQLValue("DESC PARTITION"), toSQLValue(table)))
+      messageParameters = Array(toSQLStmt("DESC PARTITION"), toSQLValue(table)))
   }
 
   def showPartitionNotAllowedOnTableNotPartitionedError(tableIdentWithDB: String): Throwable = {
