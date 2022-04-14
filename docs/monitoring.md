@@ -612,6 +612,15 @@ can be identified by their `[attempt-id]`. In the API listed below, when running
     </td>
   </tr>
   <tr>
+    <td><code>/applications/[app-id]/diagnostics/sql/[execution-id]</code></td>
+    <td>Diagnostic for the given query. it includes:
+    <br>
+    1. plan change history of adaptive execution
+    <br>
+    2. physical plan description with unlimited fields
+    </td>
+  </tr>
+  <tr>
     <td><code>/applications/[app-id]/environment</code></td>
     <td>Environment details of the given application.</td>
   </tr>
