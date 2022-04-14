@@ -52,7 +52,11 @@ case class CollectLimitExec(limit: Int, offset: Int, child: SparkPlan) extends L
     // For example: limit is 1 and offset is 2 and the child output two partition.
     // The first partition output [1, 2] and the Second partition output [3, 4, 5].
     // Then [1, 2, 3] will be taken and output [3].
-    child.executeTake(limit + offset).drop(offset)
+    if (offset > 0) {
+      child.executeTake(limit + offset).drop(offset)
+    } else {
+      child.executeTake(limit)
+    }
   }
   private val serializer: Serializer = new UnsafeRowSerializer(child.output.size)
   private lazy val writeMetrics =
