@@ -1324,7 +1324,9 @@ Apart from these, the following properties are also available, and may be useful
     This setting affects all the workers and application UIs running in the cluster and must be set
     identically on all the workers, drivers and masters. In is only effective when
     <code>spark.ui.reverseProxy</code> is turned on. This setting is not needed when the Spark
-    master web UI is directly reachable.  </td>
+    master web UI is directly reachable.<br/>
+    Note that the value of the setting can't contain the keyword `proxy` or `history` after split by "/". Spark UI relies on both keywords for getting REST API endpoints from URIs.
+  </td>
   <td>2.1.0</td>
 </tr>
 <tr>

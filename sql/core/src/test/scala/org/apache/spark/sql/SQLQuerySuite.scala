@@ -3417,20 +3417,10 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
 
       withSQLConf(SQLConf.LEGACY_INTEGER_GROUPING_ID.key -> "true") {
         testGroupingIDs(32, Seq(0, 1))
-        val ex = intercept[AnalysisException] {
-          testGroupingIDs(33)
-        }
-        assert(ex.getMessage.contains("Grouping sets size cannot be greater than 32"))
-        assert(ex.getErrorClass == "GROUPING_SIZE_LIMIT_EXCEEDED")
       }
 
       withSQLConf(SQLConf.LEGACY_INTEGER_GROUPING_ID.key -> "false") {
         testGroupingIDs(64, Seq(0L, 1L))
-        val ex = intercept[AnalysisException] {
-          testGroupingIDs(65)
-        }
-        assert(ex.getMessage.contains("Grouping sets size cannot be greater than 64"))
-        assert(ex.getErrorClass == "GROUPING_SIZE_LIMIT_EXCEEDED")
       }
     }
   }
@@ -4326,6 +4316,31 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
             |FROM (SELECT 3 AS C1,2 AS C2,1 AS C3) T
             |""".stripMargin),
         Row(3, 2, 6) :: Nil)
+    }
+  }
+
+  test("SPARK-38548: try_sum should return null if overflow happens before merging") {
+    val longDf = Seq(Long.MaxValue, Long.MaxValue, 2).toDF("v")
+    val yearMonthDf = Seq(Int.MaxValue, Int.MaxValue, 2)
+      .map(Period.ofMonths)
+      .toDF("v")
+    val dayTimeDf = Seq(106751991L, 106751991L, 2L)
+      .map(Duration.ofDays)
+      .toDF("v")
+    Seq(longDf, yearMonthDf, dayTimeDf).foreach { df =>
+      checkAnswer(df.repartitionByRange(2, col("v")).selectExpr("try_sum(v)"), Row(null))
+    }
+  }
+
+  test("SPARK-38589: try_avg should return null if overflow happens before merging") {
+    val yearMonthDf = Seq(Int.MaxValue, Int.MaxValue, 2)
+      .map(Period.ofMonths)
+      .toDF("v")
+    val dayTimeDf = Seq(106751991L, 106751991L, 2L)
+      .map(Duration.ofDays)
+      .toDF("v")
+    Seq(yearMonthDf, dayTimeDf).foreach { df =>
+      checkAnswer(df.repartitionByRange(2, col("v")).selectExpr("try_avg(v)"), Row(null))
     }
   }
 }

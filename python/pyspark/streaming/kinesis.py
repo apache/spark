@@ -153,10 +153,11 @@ class KinesisUtils:
         The given AWS credentials will get saved in DStream checkpoints if checkpointing
         is enabled. Make sure that your checkpoint directory is secure.
         """
-        jlevel = ssc._sc._getJavaStorageLevel(storageLevel)  # type: ignore[attr-defined]
-        jduration = ssc._jduration(checkpointInterval)  # type: ignore[attr-defined]
+        jlevel = ssc._sc._getJavaStorageLevel(storageLevel)
+        jduration = ssc._jduration(checkpointInterval)
 
-        jvm = ssc._jvm  # type: ignore[attr-defined]
+        jvm = ssc._jvm
+        assert jvm is not None
 
         try:
             helper = jvm.org.apache.spark.streaming.kinesis.KinesisUtilsPythonHelper()
@@ -170,7 +171,7 @@ class KinesisUtils:
                 )
             raise
         jstream = helper.createStream(
-            ssc._jssc,  # type: ignore[attr-defined]
+            ssc._jssc,
             kinesisAppName,
             streamName,
             endpointUrl,

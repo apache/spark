@@ -146,7 +146,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
         PushDownPredicates) :: Nil
     }
 
-    val batches = (Batch("Eliminate Distinct", Once, EliminateDistinct) ::
+    val batches = (
     // Technically some of the rules in Finish Analysis are not optimizer rules and belong more
     // in the analyzer, because they are needed for correctness (e.g. ComputeCurrentTime).
     // However, because we also use the analyzer to canonicalized queries (for view definition),
@@ -166,6 +166,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
     //////////////////////////////////////////////////////////////////////////////////////////
     // Optimizer rules start here
     //////////////////////////////////////////////////////////////////////////////////////////
+    Batch("Eliminate Distinct", Once, EliminateDistinct) ::
     // - Do the first call of CombineUnions before starting the major Optimizer rules,
     //   since it can reduce the number of iteration and the other rules could add/move
     //   extra operators between two adjacent Union operators.
@@ -411,14 +412,26 @@ abstract class Optimizer(catalogManager: CatalogManager)
 }
 
 /**
- * Remove useless DISTINCT for MAX and MIN.
+ * Remove useless DISTINCT:
+ *   1. For some aggregate expression, e.g.: MAX and MIN.
+ *   2. If the distinct semantics is guaranteed by child.
+ *
  * This rule should be applied before RewriteDistinctAggregates.
  */
 object EliminateDistinct extends Rule[LogicalPlan] {
-  override def apply(plan: LogicalPlan): LogicalPlan = plan.transformAllExpressionsWithPruning(
-    _.containsPattern(AGGREGATE_EXPRESSION)) {
-    case ae: AggregateExpression if ae.isDistinct && isDuplicateAgnostic(ae.aggregateFunction) =>
-      ae.copy(isDistinct = false)
+  override def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
+    _.containsPattern(AGGREGATE)) {
+    case agg: Aggregate =>
+      agg.transformExpressionsWithPruning(_.containsPattern(AGGREGATE_EXPRESSION)) {
+        case ae: AggregateExpression if ae.isDistinct &&
+          isDuplicateAgnostic(ae.aggregateFunction) =>
+          ae.copy(isDistinct = false)
+
+        case ae: AggregateExpression if ae.isDistinct &&
+          agg.child.distinctKeys.exists(
+            _.subsetOf(ExpressionSet(ae.aggregateFunction.children.filterNot(_.foldable)))) =>
+          ae.copy(isDistinct = false)
+      }
   }
 
   def isDuplicateAgnostic(af: AggregateFunction): Boolean = af match {
@@ -831,13 +844,12 @@ object ColumnPruning extends Rule[LogicalPlan] {
       e.copy(child = prunedChild(child, e.references))
 
     // prune unrequired references
-    case p @ Project(_, g: Generate) if p.references != g.outputSet =>
-      val requiredAttrs = p.references -- g.producedAttributes ++ g.generator.references
-      val newChild = prunedChild(g.child, requiredAttrs)
-      val unrequired = g.generator.references -- p.references
-      val unrequiredIndices = newChild.output.zipWithIndex.filter(t => unrequired.contains(t._1))
-        .map(_._2)
-      p.copy(child = g.copy(child = newChild, unrequiredChildIndex = unrequiredIndices))
+    // There are 2 types of pruning here:
+    // 1. For attributes in g.child.outputSet that is not used by the generator nor the project,
+    //    we directly remove it from the output list of g.child.
+    // 2. For attributes that is not used by the project but it is used by the generator, we put
+    //    it in g.unrequiredChildIndex to save memory usage.
+    case GeneratorUnrequiredChildrenPruning(rewrittenPlan) => rewrittenPlan
 
     // prune unrequired nested fields from `Generate`.
     case GeneratorNestedColumnAliasing(rewrittenPlan) => rewrittenPlan
@@ -897,7 +909,7 @@ object ColumnPruning extends Rule[LogicalPlan] {
   })
 
   /** Applies a projection only when the child is producing unnecessary attributes */
-  private def prunedChild(c: LogicalPlan, allReferences: AttributeSet) =
+  def prunedChild(c: LogicalPlan, allReferences: AttributeSet): LogicalPlan =
     if (!c.outputSet.subsetOf(allReferences)) {
       Project(c.output.filter(allReferences.contains), c)
     } else {

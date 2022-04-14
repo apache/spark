@@ -38,6 +38,7 @@ from pyspark.pandas.utils import (
     name_like_string,
     scol_for,
     verify_temp_column_name,
+    validate_index_loc,
 )
 from pyspark.pandas.internal import (
     InternalField,
@@ -1080,6 +1081,9 @@ class MultiIndex(Index):
 
         Follows Python list.append semantics for negative values.
 
+        .. versionchanged:: 3.4.0
+           Raise IndexError when loc is out of bounds to follow Pandas 1.4+ behavior
+
         Parameters
         ----------
         loc : int
@@ -1108,20 +1112,8 @@ class MultiIndex(Index):
                     ('c', 'z')],
                    )
         """
-        length = len(self)
-        if loc < 0:
-            loc = loc + length
-            if loc < 0:
-                raise IndexError(
-                    "index {} is out of bounds for axis 0 with size {}".format(
-                        (loc - length), length
-                    )
-                )
-        else:
-            if loc > length:
-                raise IndexError(
-                    "index {} is out of bounds for axis 0 with size {}".format(loc, length)
-                )
+        validate_index_loc(self, loc)
+        loc = loc + len(self) if loc < 0 else loc
 
         index_name: List[Label] = [(name,) for name in self._internal.index_spark_column_names]
         sdf_before = self.to_frame(name=index_name)[:loc]._to_spark()
