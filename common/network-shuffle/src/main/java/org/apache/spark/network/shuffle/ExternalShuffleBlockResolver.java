@@ -38,8 +38,8 @@ import com.google.common.cache.CacheLoader;
 import com.google.common.cache.LoadingCache;
 import com.google.common.cache.Weigher;
 import com.google.common.collect.Maps;
-import org.iq80.leveldb.DB;
-import org.iq80.leveldb.DBIterator;
+import org.apache.spark.network.shuffledb.LocalDB;
+import org.apache.spark.network.util.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -48,11 +48,7 @@ import org.apache.spark.network.buffer.ManagedBuffer;
 import org.apache.spark.network.shuffle.checksum.Cause;
 import org.apache.spark.network.shuffle.checksum.ShuffleChecksumHelper;
 import org.apache.spark.network.shuffle.protocol.ExecutorShuffleInfo;
-import org.apache.spark.network.util.LevelDBProvider;
-import org.apache.spark.network.util.LevelDBProvider.StoreVersion;
-import org.apache.spark.network.util.JavaUtils;
-import org.apache.spark.network.util.NettyUtils;
-import org.apache.spark.network.util.TransportConf;
+import org.apache.spark.network.shuffledb.StoreVersion;
 
 /**
  * Manages converting shuffle BlockIds into physical segments of local files, from a process outside
@@ -92,7 +88,7 @@ public class ExternalShuffleBlockResolver {
   @VisibleForTesting
   final File registeredExecutorFile;
   @VisibleForTesting
-  final DB db;
+  final LocalDB db;
 
   public ExternalShuffleBlockResolver(TransportConf conf, File registeredExecutorFile)
       throws IOException {
@@ -123,7 +119,7 @@ public class ExternalShuffleBlockResolver {
       .weigher((Weigher<String, ShuffleIndexInformation>)
         (filePath, indexInfo) -> indexInfo.getRetainedMemorySize())
       .build(indexCacheLoader);
-    db = LevelDBProvider.initLevelDB(this.registeredExecutorFile, CURRENT_VERSION, mapper);
+    db = LocalDBProvider.initLocalDB(this.registeredExecutorFile, CURRENT_VERSION, mapper);
     if (db != null) {
       executors = reloadRegisteredExecutors(db);
     } else {
@@ -452,19 +448,12 @@ public class ExternalShuffleBlockResolver {
   }
 
   @VisibleForTesting
-  static ConcurrentMap<AppExecId, ExecutorShuffleInfo> reloadRegisteredExecutors(DB db)
+  static ConcurrentMap<AppExecId, ExecutorShuffleInfo> reloadRegisteredExecutors(LocalDB db)
       throws IOException {
     ConcurrentMap<AppExecId, ExecutorShuffleInfo> registeredExecutors = Maps.newConcurrentMap();
     if (db != null) {
-      DBIterator itr = db.iterator();
-      itr.seek(APP_KEY_PREFIX.getBytes(StandardCharsets.UTF_8));
-      while (itr.hasNext()) {
-        Map.Entry<byte[], byte[]> e = itr.next();
-        String key = new String(e.getKey(), StandardCharsets.UTF_8);
-        if (!key.startsWith(APP_KEY_PREFIX)) {
-          break;
-        }
-        AppExecId id = parseDbAppExecKey(key);
+      for (Map.Entry<String, byte[]> e : db.readKVToMap(APP_KEY_PREFIX).entrySet()) {
+        AppExecId id = parseDbAppExecKey(e.getKey());
         logger.info("Reloading registered executors: " +  id.toString());
         ExecutorShuffleInfo shuffleInfo = mapper.readValue(e.getValue(), ExecutorShuffleInfo.class);
         registeredExecutors.put(id, shuffleInfo);

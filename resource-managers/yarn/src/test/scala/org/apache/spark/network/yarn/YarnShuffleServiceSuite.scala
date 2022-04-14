@@ -200,7 +200,7 @@ class YarnShuffleServiceSuite extends SparkFunSuite with Matchers with BeforeAnd
     blockResolver.registerExecutor(app1Id.toString, "exec-1", shuffleInfo1)
     blockResolver.registerExecutor(app2Id.toString, "exec-2", shuffleInfo2)
 
-    val db = ShuffleTestAccessor.shuffleServiceLevelDB(blockResolver)
+    val db = ShuffleTestAccessor.shuffleServiceLocalDB(blockResolver)
     ShuffleTestAccessor.reloadRegisteredExecutors(db) should not be empty
 
     s1.stopApplication(new ApplicationTerminationContext(app1Id))

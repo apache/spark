@@ -44,9 +44,9 @@ import org.apache.hadoop.yarn.api.records.ContainerId;
 import org.apache.hadoop.yarn.server.api.*;
 import org.apache.spark.network.shuffle.MergedShuffleFileManager;
 import org.apache.spark.network.shuffle.NoOpMergedShuffleFileManager;
-import org.apache.spark.network.util.LevelDBProvider;
-import org.iq80.leveldb.DB;
-import org.iq80.leveldb.DBIterator;
+import org.apache.spark.network.shuffledb.LocalDB;
+import org.apache.spark.network.shuffledb.StoreVersion;
+import org.apache.spark.network.util.LocalDBProvider;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -131,8 +131,7 @@ public class YarnShuffleService extends AuxiliaryService {
   static int boundPort = -1;
   private static final ObjectMapper mapper = new ObjectMapper();
   private static final String APP_CREDS_KEY_PREFIX = "AppCreds";
-  private static final LevelDBProvider.StoreVersion CURRENT_VERSION = new LevelDBProvider
-      .StoreVersion(1, 0);
+  private static final StoreVersion CURRENT_VERSION = new StoreVersion(1, 0);
 
   /**
    * The name of the resource to search for on the classpath to find a shuffle service-specific
@@ -174,7 +173,7 @@ public class YarnShuffleService extends AuxiliaryService {
   @VisibleForTesting
   File secretsFile;
 
-  private DB db;
+  private LocalDB db;
 
   public YarnShuffleService() {
     // The name of the auxiliary service configured within the NodeManager
@@ -310,19 +309,12 @@ public class YarnShuffleService extends AuxiliaryService {
     FileSystem fs = FileSystem.getLocal(_conf);
     fs.mkdirs(new Path(secretsFile.getPath()), new FsPermission((short) 0700));
 
-    db = LevelDBProvider.initLevelDB(secretsFile, CURRENT_VERSION, mapper);
+    db = LocalDBProvider.initLocalDB(secretsFile, CURRENT_VERSION, mapper);
     logger.info("Recovery location is: " + secretsFile.getPath());
     if (db != null) {
       logger.info("Going to reload spark shuffle data");
-      DBIterator itr = db.iterator();
-      itr.seek(APP_CREDS_KEY_PREFIX.getBytes(StandardCharsets.UTF_8));
-      while (itr.hasNext()) {
-        Map.Entry<byte[], byte[]> e = itr.next();
-        String key = new String(e.getKey(), StandardCharsets.UTF_8);
-        if (!key.startsWith(APP_CREDS_KEY_PREFIX)) {
-          break;
-        }
-        String id = parseDbAppKey(key);
+      for (Map.Entry<String, byte[]> e : db.readKVToMap(APP_CREDS_KEY_PREFIX).entrySet()) {
+        String id = parseDbAppKey(e.getKey());
         ByteBuffer secret = mapper.readValue(e.getValue(), ByteBuffer.class);
         logger.info("Reloading tokens for app: " + id);
         secretManager.registerApp(id, secret);
