@@ -29,7 +29,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{Column, DataFrame, Row, SparkSession}
 import org.apache.spark.sql.catalyst.CatalystTypeConverters
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
-import org.apache.spark.sql.catalyst.expressions.{CastTimestampNTZToLong, EWM, ExpressionInfo, GenericRowWithSchema}
+import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.execution.{ExplainMode, QueryExecution}
 import org.apache.spark.sql.execution.arrow.ArrowConverters
@@ -96,6 +96,10 @@ private[sql] object PythonSQLUtils extends Logging {
   def castTimestampNTZToLong(c: Column): Column = Column(CastTimestampNTZToLong(c.expr))
 
   def ewm(e: Column, alpha: Double): Column = Column(EWM(e.expr, alpha))
+
+  def lastNonNull(e: Column): Column = Column(LastNonNull(e.expr))
+
+  def nullIndex(e: Column): Column = Column(NullIndex(e.expr))
 }
 
 /**
