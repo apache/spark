@@ -1242,7 +1242,8 @@ class GroupByTest(PandasOnSparkTestCase, TestUtils):
             pdf.groupby([("x", "a"), ("x", "b")]).rank().sort_index(),
         )
 
-    def test_min(self):
+    # TODO: All statistical functions should leverage this utility
+    def _test_stat_func(self, func):
         pdf = pd.DataFrame(
             {
                 "A": [1, 2, 1, 2],
@@ -1256,39 +1257,27 @@ class GroupByTest(PandasOnSparkTestCase, TestUtils):
             (pdf.groupby("A"), psdf.groupby("A")),
             (pdf.groupby("A")[["C"]], psdf.groupby("A")[["C"]]),
         ]:
-            self.assert_eq(p_groupby_obj.min().sort_index(), ps_groupby_obj.min().sort_index())
-            self.assert_eq(
-                p_groupby_obj.min(numeric_only=None).sort_index(),
-                ps_groupby_obj.min(numeric_only=None).sort_index(),
-            )
-            self.assert_eq(
-                p_groupby_obj.min(numeric_only=True).sort_index(),
-                ps_groupby_obj.min(numeric_only=True).sort_index(),
-            )
+            self.assert_eq(func(p_groupby_obj).sort_index(), func(ps_groupby_obj).sort_index())
+
+    def test_min(self):
+        self._test_stat_func(lambda groupby_obj: groupby_obj.min())
+        self._test_stat_func(lambda groupby_obj: groupby_obj.min(numeric_only=None))
+        self._test_stat_func(lambda groupby_obj: groupby_obj.min(numeric_only=True))
 
     def test_max(self):
-        pdf = pd.DataFrame(
-            {
-                "A": [1, 2, 1, 2],
-                "B": [3.1, 4.1, 4.1, 3.1],
-                "C": ["a", "b", "b", "a"],
-                "D": [True, False, False, True],
-            }
-        )
-        psdf = ps.from_pandas(pdf)
-        for p_groupby_obj, ps_groupby_obj in [
-            (pdf.groupby("A"), psdf.groupby("A")),
-            (pdf.groupby("A")[["C"]], psdf.groupby("A")[["C"]]),
-        ]:
-            self.assert_eq(p_groupby_obj.max().sort_index(), ps_groupby_obj.max().sort_index())
-            self.assert_eq(
-                p_groupby_obj.max(numeric_only=None).sort_index(),
-                ps_groupby_obj.max(numeric_only=None).sort_index(),
-            )
-            self.assert_eq(
-                p_groupby_obj.max(numeric_only=True).sort_index(),
-                ps_groupby_obj.max(numeric_only=True).sort_index(),
-            )
+        self._test_stat_func(lambda groupby_obj: groupby_obj.max())
+        self._test_stat_func(lambda groupby_obj: groupby_obj.max(numeric_only=None))
+        self._test_stat_func(lambda groupby_obj: groupby_obj.max(numeric_only=True))
+
+    def test_first(self):
+        self._test_stat_func(lambda groupby_obj: groupby_obj.first())
+        self._test_stat_func(lambda groupby_obj: groupby_obj.first(numeric_only=None))
+        self._test_stat_func(lambda groupby_obj: groupby_obj.first(numeric_only=True))
+
+    def test_last(self):
+        self._test_stat_func(lambda groupby_obj: groupby_obj.last())
+        self._test_stat_func(lambda groupby_obj: groupby_obj.last(numeric_only=None))
+        self._test_stat_func(lambda groupby_obj: groupby_obj.last(numeric_only=True))
 
     def test_cumcount(self):
         pdf = pd.DataFrame(
