@@ -427,7 +427,7 @@ class _LSHModel(JavaModel, _LSHParams):
         datasetA: DataFrame,
         datasetB: DataFrame,
         threshold: float,
-        distCol: str = "disCol",
+        distCol: str = "distCol",
     ) -> DataFrame:
         """
         Join two datasets to approximately find all pairs of rows whose distance are smaller than
@@ -6093,14 +6093,6 @@ class Word2VecModel(JavaModel, _Word2VecParams, JavaMLReadable["Word2VecModel"],
         """
         return self._set(outputCol=value)
 
-    @overload
-    def findSynonyms(self, word: str, num: int) -> DataFrame:
-        ...
-
-    @overload
-    def findSynonyms(self, word: Vector, num: int) -> DataFrame:
-        ...
-
     @since("1.5.0")
     def findSynonyms(self, word: Union[str, Vector], num: int) -> DataFrame:
         """
@@ -6112,14 +6104,6 @@ class Word2VecModel(JavaModel, _Word2VecParams, JavaMLReadable["Word2VecModel"],
         if not isinstance(word, str):
             word = _convert_to_vector(word)
         return self._call_java("findSynonyms", word, num)
-
-    @overload
-    def findSynonymsArray(self, word: str, num: int) -> List[Tuple[str, float]]:
-        ...
-
-    @overload
-    def findSynonymsArray(self, word: Vector, num: int) -> List[Tuple[str, float]]:
-        ...
 
     @since("2.3.0")
     def findSynonymsArray(self, word: Union[Vector, str], num: int) -> List[Tuple[str, float]]:
@@ -6864,7 +6848,7 @@ class ChiSqSelector(
     ) -> "ChiSqSelector":
         """
         setParams(self, \\*, numTopFeatures=50, featuresCol="features", outputCol=None, \
-                  labelCol="labels", selectorType="numTopFeatures", percentile=0.1, fpr=0.05, \
+                  labelCol="label", selectorType="numTopFeatures", percentile=0.1, fpr=0.05, \
                   fdr=0.05, fwe=0.05)
         Sets params for this ChiSqSelector.
         """
@@ -7353,7 +7337,7 @@ class UnivariateFeatureSelector(
     ) -> "UnivariateFeatureSelector":
         """
         setParams(self, \\*, featuresCol="features", outputCol=None, \
-                  labelCol="labels", selectionMode="numTopFeatures")
+                  labelCol="label", selectionMode="numTopFeatures")
         Sets params for this UnivariateFeatureSelector.
         """
         kwargs = self._input_kwargs
@@ -7450,7 +7434,7 @@ if __name__ == "__main__":
     import tempfile
 
     import pyspark.ml.feature
-    from pyspark.sql import Row, SparkSession, DataFrame
+    from pyspark.sql import Row, SparkSession
 
     globs = globals().copy()
     features = pyspark.ml.feature.__dict__.copy()
