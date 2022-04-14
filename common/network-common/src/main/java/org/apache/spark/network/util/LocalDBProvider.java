@@ -1,14 +1,15 @@
 package org.apache.spark.network.util;
 
+import java.io.File;
+import java.io.IOException;
+
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.annotations.VisibleForTesting;
+import org.iq80.leveldb.DB;
+
 import org.apache.spark.network.shuffledb.LevelDBImpl;
 import org.apache.spark.network.shuffledb.LocalDB;
 import org.apache.spark.network.shuffledb.StoreVersion;
-import org.iq80.leveldb.DB;
-
-import java.io.File;
-import java.io.IOException;
 
 public class LocalDBProvider {
     public static LocalDB initLocalDB(File dbFile, StoreVersion version, ObjectMapper mapper)
