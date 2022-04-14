@@ -872,9 +872,7 @@ case class SortMergeJoinExec(
        |    InternalRow $bufferedRow = (InternalRow) $matchIterator.next();
        |    $conditionCheck
        |    $outputRow
-       |    if (++outputCount % $maxRecordPerCycle == 0 && shouldStop()) {
-       |      return
-       |    }
+       |    if (++outputCount % $maxRecordPerCycle == 0 && shouldStop()) return;
        |  }
        |  if (shouldStop()) return;
        |}
@@ -912,9 +910,7 @@ case class SortMergeJoinExec(
        |    $conditionCheck
        |    $hasOutputRow = true;
        |    $outputRow
-       |    if (++outputCount % $maxRecordPerCycle == 0 && shouldStop()) {
-       |      return
-       |    }
+       |    if (++outputCount % $maxRecordPerCycle == 0 && shouldStop()) return;
        |  }
        |  if (shouldStop()) return;
        |}
