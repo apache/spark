@@ -543,7 +543,7 @@ Join condition: None
 
 (99) TakeOrderedAndProject
 Input [12]: [channel#62, i_brand_id#48, i_class_id#49, i_category_id#50, sales#63, number_sales#64, channel#87, i_brand_id#75, i_class_id#76, i_category_id#77, sales#88, number_sales#89]
-Arguments: 100, 0, [i_brand_id#48 ASC NULLS FIRST, i_class_id#49 ASC NULLS FIRST, i_category_id#50 ASC NULLS FIRST], [channel#62, i_brand_id#48, i_class_id#49, i_category_id#50, sales#63, number_sales#64, channel#87, i_brand_id#75, i_class_id#76, i_category_id#77, sales#88, number_sales#89]
+Arguments: 100, [i_brand_id#48 ASC NULLS FIRST, i_class_id#49 ASC NULLS FIRST, i_category_id#50 ASC NULLS FIRST], [channel#62, i_brand_id#48, i_class_id#49, i_category_id#50, sales#63, number_sales#64, channel#87, i_brand_id#75, i_class_id#76, i_category_id#77, sales#88, number_sales#89]
 
 ===== Subqueries =====
 

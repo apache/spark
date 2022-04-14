@@ -126,7 +126,7 @@ Input [9]: [i_item_id#7, i_item_desc#8, i_category#11, i_class#10, i_current_pri
 
 (23) TakeOrderedAndProject
 Input [7]: [i_item_id#7, i_item_desc#8, i_category#11, i_class#10, i_current_price#9, itemrevenue#18, revenueratio#23]
-Arguments: 100, 0, [i_category#11 ASC NULLS FIRST, i_class#10 ASC NULLS FIRST, i_item_id#7 ASC NULLS FIRST, i_item_desc#8 ASC NULLS FIRST, revenueratio#23 ASC NULLS FIRST], [i_item_id#7, i_item_desc#8, i_category#11, i_class#10, i_current_price#9, itemrevenue#18, revenueratio#23]
+Arguments: 100, [i_category#11 ASC NULLS FIRST, i_class#10 ASC NULLS FIRST, i_item_id#7 ASC NULLS FIRST, i_item_desc#8 ASC NULLS FIRST, revenueratio#23 ASC NULLS FIRST], [i_item_id#7, i_item_desc#8, i_category#11, i_class#10, i_current_price#9, itemrevenue#18, revenueratio#23]
 
 ===== Subqueries =====
 

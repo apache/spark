@@ -404,7 +404,7 @@ Results [7]: [null AS i_item_id#102, null AS s_state#103, 1 AS g_state#104, avg(
 
 (73) TakeOrderedAndProject
 Input [7]: [i_item_id#20, s_state#17, g_state#47, agg1#48, agg2#49, agg3#50, agg4#51]
-Arguments: 100, 0, [i_item_id#20 ASC NULLS FIRST, s_state#17 ASC NULLS FIRST], [i_item_id#20, s_state#17, g_state#47, agg1#48, agg2#49, agg3#50, agg4#51]
+Arguments: 100, [i_item_id#20 ASC NULLS FIRST, s_state#17 ASC NULLS FIRST], [i_item_id#20, s_state#17, g_state#47, agg1#48, agg2#49, agg3#50, agg4#51]
 
 ===== Subqueries =====
 

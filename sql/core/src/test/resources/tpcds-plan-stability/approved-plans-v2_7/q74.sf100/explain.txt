@@ -436,7 +436,7 @@ Input [9]: [customer_id#17, year_total#18, customer_id#34, customer_first_name#3
 
 (79) TakeOrderedAndProject
 Input [3]: [customer_id#34, customer_first_name#35, customer_last_name#36]
-Arguments: 100, 0, [customer_first_name#35 ASC NULLS FIRST, customer_id#34 ASC NULLS FIRST, customer_last_name#36 ASC NULLS FIRST], [customer_id#34, customer_first_name#35, customer_last_name#36]
+Arguments: 100, [customer_first_name#35 ASC NULLS FIRST, customer_id#34 ASC NULLS FIRST, customer_last_name#36 ASC NULLS FIRST], [customer_id#34, customer_first_name#35, customer_last_name#36]
 
 ===== Subqueries =====
 
