@@ -176,9 +176,9 @@ object EliminateOuterJoin extends Rule[LogicalPlan] with PredicateHelper {
     }
   }
 
-  private def hasNotDuplicateAgnosticAggregateFunction(
+  private def allDuplicateAgnostic(
       aggregateExpressions: Seq[NamedExpression]): Boolean = {
-    aggregateExpressions.exists(_.exists {
+    !aggregateExpressions.exists(_.exists {
       case agg: AggregateFunction => !EliminateDistinct.isDuplicateAgnostic(agg)
       case _ => false
     })
@@ -205,19 +205,19 @@ object EliminateOuterJoin extends Rule[LogicalPlan] with PredicateHelper {
 
     case a @ Aggregate(_, aggExprs, Join(left, _, LeftOuter, _, _))
         if a.references.subsetOf(left.outputSet) &&
-          !hasNotDuplicateAgnosticAggregateFunction(aggExprs) =>
+          allDuplicateAgnostic(aggExprs) =>
       a.copy(child = left)
     case a @ Aggregate(_, aggExprs, Join(_, right, RightOuter, _, _))
         if a.references.subsetOf(right.outputSet) &&
-          !hasNotDuplicateAgnosticAggregateFunction(aggExprs) =>
+          allDuplicateAgnostic(aggExprs) =>
       a.copy(child = right)
     case a @ Aggregate(_, aggExprs, p @ Project(_, Join(left, _, LeftOuter, _, _)))
         if p.references.subsetOf(left.outputSet) &&
-          !hasNotDuplicateAgnosticAggregateFunction(aggExprs) =>
+          allDuplicateAgnostic(aggExprs) =>
       a.copy(child = p.copy(child = left))
     case a @ Aggregate(_, aggExprs, p @ Project(_, Join(_, right, RightOuter, _, _)))
         if p.references.subsetOf(right.outputSet) &&
-          !hasNotDuplicateAgnosticAggregateFunction(aggExprs) =>
+          allDuplicateAgnostic(aggExprs) =>
       a.copy(child = p.copy(child = right))
   }
 }
