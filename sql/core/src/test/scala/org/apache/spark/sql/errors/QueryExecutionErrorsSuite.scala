@@ -17,8 +17,11 @@
 
 package org.apache.spark.sql.errors
 
+import test.org.apache.spark.sql.connector.JavaSimpleWritableDataSource
+
 import org.apache.spark.{SparkArithmeticException, SparkException, SparkRuntimeException, SparkUnsupportedOperationException, SparkUpgradeException}
 import org.apache.spark.sql.{DataFrame, QueryTest}
+import org.apache.spark.sql.connector.SimpleWritableDataSource
 import org.apache.spark.sql.execution.datasources.orc.OrcTest
 import org.apache.spark.sql.execution.datasources.parquet.ParquetTest
 import org.apache.spark.sql.functions.{lit, lower, struct, sum}
@@ -277,5 +280,35 @@ class QueryExecutionErrorsSuite extends QueryTest
     assert(e.getSqlState === "22008")
     assert(e.getMessage ===
       "Datetime operation overflow: add 1000000 YEAR to TIMESTAMP '2022-03-09 01:02:03'.")
+  }
+
+  test("WRITING_JOB_ABORTED: read of input data fails in the middle") {
+    Seq(classOf[SimpleWritableDataSource], classOf[JavaSimpleWritableDataSource]).foreach { cls =>
+      withTempPath { file =>
+        val path = file.getCanonicalPath
+        assert(spark.read.format(cls.getName).option("path", path).load().collect().isEmpty)
+        // test transaction
+        val failingUdf = org.apache.spark.sql.functions.udf {
+          var count = 0
+          (id: Long) => {
+            if (count > 5) {
+              throw new RuntimeException("testing error")
+            }
+            count += 1
+            id
+          }
+        }
+        val input = spark.range(15).select(failingUdf($"id").as(Symbol("i")))
+          .select($"i", -$"i" as Symbol("j"))
+        val e = intercept[SparkException] {
+          input.write.format(cls.getName).option("path", path).mode("overwrite").save()
+        }
+        assert(e.getMessage === "Writing job aborted")
+        assert(e.getErrorClass === "WRITING_JOB_ABORTED")
+        assert(e.getSqlState === "40000")
+        // make sure we don't have partial data.
+        assert(spark.read.format(cls.getName).option("path", path).load().collect().isEmpty)
+      }
+    }
   }
 }
