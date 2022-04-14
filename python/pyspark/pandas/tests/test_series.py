@@ -2121,7 +2121,12 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
 
         pser.name = "x"
         psser = ps.from_pandas(pser)
-        self.assert_eq(psser.mode(), pser.mode())
+        if LooseVersion(pd.__version__) < LooseVersion("1.4"):
+            # Due to pandas bug: https://github.com/pandas-dev/pandas/issues/46737
+            psser.name = None
+            self.assert_eq(psser.mode(), pser.mode())
+        else:
+            self.assert_eq(psser.mode(), pser.mode())
         self.assert_eq(
             psser.mode(dropna=False).sort_values().reset_index(drop=True),
             pser.mode(dropna=False).sort_values().reset_index(drop=True),

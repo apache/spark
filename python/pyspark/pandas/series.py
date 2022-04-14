@@ -4523,6 +4523,9 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
         Always returns Series even if only one value is returned.
 
+        .. versionchanged:: 3.4.0
+           Series name is preserved to follow pandas 1.4+ behavior.
+
         Parameters
         ----------
         dropna : bool, default True
@@ -4597,8 +4600,9 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             F.col(SPARK_DEFAULT_INDEX_NAME).alias(SPARK_DEFAULT_SERIES_NAME)
         )
         internal = InternalFrame(spark_frame=sdf, index_spark_columns=None, column_labels=[None])
-
-        return first_series(DataFrame(internal))
+        ser_mode = first_series(DataFrame(internal))
+        ser_mode.name = self.name
+        return ser_mode
 
     def keys(self) -> "ps.Index":
         """
