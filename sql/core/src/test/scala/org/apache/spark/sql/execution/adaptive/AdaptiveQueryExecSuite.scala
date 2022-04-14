@@ -33,7 +33,7 @@ import org.apache.spark.sql.execution.command.DataWritingCommandExec
 import org.apache.spark.sql.execution.datasources.noop.NoopDataSource
 import org.apache.spark.sql.execution.datasources.v2.V2TableWriteExec
 import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, ENSURE_REQUIREMENTS, REPARTITION_BY_COL, REPARTITION_BY_NUM, ReusedExchangeExec, ShuffleExchangeExec, ShuffleExchangeLike, ShuffleOrigin}
-import org.apache.spark.sql.execution.joins.{BaseJoinExec, BroadcastHashJoinExec, ShuffledHashJoinExec, ShuffledJoin, SortMergeJoinExec}
+import org.apache.spark.sql.execution.joins.{BaseJoinExec, BroadcastHashJoinExec, ShuffledJoin, SortMergeJoinExec}
 import org.apache.spark.sql.execution.metric.SQLShuffleReadMetricsReporter
 import org.apache.spark.sql.execution.ui.SparkListenerSQLAdaptiveExecutionUpdate
 import org.apache.spark.sql.functions._
@@ -54,12 +54,6 @@ class AdaptiveQueryExecSuite
   import testImplicits._
 
   setupTestData()
-
-  private def findTopLevelShuffledHashJoin(plan: SparkPlan): Seq[ShuffledHashJoinExec] = {
-    collect(plan) {
-      case j: ShuffledHashJoinExec => j
-    }
-  }
 
   private def findTopLevelBaseJoin(plan: SparkPlan): Seq[BaseJoinExec] = {
     collect(plan) {

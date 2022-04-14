@@ -95,4 +95,23 @@ class AdaptiveBloomFilterJoinSuite
       assert(hasBloomFilterJoin(adaptivePlan).size === 0)
     }
   }
+
+  test("Do not add Bloom filter if preferSortMergeJoin disabled") {
+    withSQLConf(
+      SQLConf.PREFER_SORTMERGEJOIN.key -> "false",
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+      val (plan, adaptivePlan) = runAdaptiveAndVerifyResult(
+        """
+          |SELECT /*+ SHUFFLE_HASH(testData) */ *
+          |FROM   testdata JOIN testdata2 ON KEY = a
+          |WHERE  value = 1
+        """.stripMargin)
+
+      assert(findTopLevelShuffledHashJoin(plan).size === 1)
+      assert(hasBloomFilterJoin(plan).size === 0)
+      assert(findTopLevelShuffledHashJoin(adaptivePlan).size === 1)
+      assert(hasBloomFilterJoin(adaptivePlan).size === 0)
+    }
+  }
 }

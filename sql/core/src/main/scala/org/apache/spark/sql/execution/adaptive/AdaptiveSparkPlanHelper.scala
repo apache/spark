@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution.adaptive
 
 import org.apache.spark.sql.execution.SparkPlan
-import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, SortMergeJoinExec}
+import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, ShuffledHashJoinExec, SortMergeJoinExec}
 
 /**
  * This class provides utility methods related to tree traversal of an [[AdaptiveSparkPlanExec]]
@@ -37,6 +37,12 @@ trait AdaptiveSparkPlanHelper {
   def findTopLevelSortMergeJoin(plan: SparkPlan): Seq[SortMergeJoinExec] = {
     collect(plan) {
       case j: SortMergeJoinExec => j
+    }
+  }
+
+  def findTopLevelShuffledHashJoin(plan: SparkPlan): Seq[ShuffledHashJoinExec] = {
+    collect(plan) {
+      case j: ShuffledHashJoinExec => j
     }
   }
 

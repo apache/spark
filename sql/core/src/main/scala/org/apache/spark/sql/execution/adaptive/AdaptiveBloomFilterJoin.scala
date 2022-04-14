@@ -77,17 +77,21 @@ case class AdaptiveBloomFilterJoin(sparkSession: SparkSession)
     Filter(BloomFilterMightContain(bloomFilterSubquery, new XxHash64(pruningKeys)), pruningPlan)
   }
 
-  def apply(plan: LogicalPlan): LogicalPlan = plan.transformDown {
-    case join @ ExtractEquiJoinKeys(joinType, leftKeys, rightKeys, _, _, left, right, _)
-        if left.stats.isRuntime && right.stats.isRuntime && nonBroadcastHashJoin(join) =>
-      if (canPruneLeft(joinType) && avgSizePerPartition(left) * factor > memoryPerTask &&
-        right.stats.sizeInBytes <= conf.runtimeFilterCreationSideThreshold) {
-        join.copy(left = insertPredicate(leftKeys, left, rightKeys, right))
-      } else if (canPruneRight(joinType) && avgSizePerPartition(right) * factor > memoryPerTask &&
-        left.stats.sizeInBytes <= conf.runtimeFilterCreationSideThreshold) {
-        join.copy(right = insertPredicate(rightKeys, right, leftKeys, left))
-      } else {
-        join
-      }
+  def apply(plan: LogicalPlan): LogicalPlan = {
+    if (!conf.preferSortMergeJoin) return plan
+
+    plan.transformDown {
+      case join @ ExtractEquiJoinKeys(joinType, leftKeys, rightKeys, _, _, left, right, _)
+          if left.stats.isRuntime && right.stats.isRuntime && nonBroadcastHashJoin(join) =>
+        if (canPruneLeft(joinType) && avgSizePerPartition(left) * factor > memoryPerTask &&
+          right.stats.sizeInBytes <= conf.runtimeFilterCreationSideThreshold) {
+          join.copy(left = insertPredicate(leftKeys, left, rightKeys, right))
+        } else if (canPruneRight(joinType) && avgSizePerPartition(right) * factor > memoryPerTask &&
+          left.stats.sizeInBytes <= conf.runtimeFilterCreationSideThreshold) {
+          join.copy(right = insertPredicate(rightKeys, right, leftKeys, left))
+        } else {
+          join
+        }
+    }
   }
 }
