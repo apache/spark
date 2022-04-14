@@ -141,7 +141,7 @@ class StarJoinReorderSuite extends JoinReorderPlanTestBase with StatsEstimationT
     size = Some(17),
     attributeStats = AttributeMap(Seq("s3_pk1", "s3_c2", "s3_c3", "s3_c4").map(nameToColInfo)))
 
-  private val d3_ns = LocalRelation('d3_fk1.int, 'd3_c2.int, 'd3_pk1.int, 'd3_c4.int)
+  private val d3_ns = LocalRelation($"d3_fk1".int, $"d3_c2".int, $"d3_pk1".int, $"d3_c4".int)
 
   private val f11 = StatsTestPlan(
     outputList = Seq("f11_fk1", "f11_fk2", "f11_fk3", "f11_c4").map(nameToAttr),
@@ -150,7 +150,7 @@ class StarJoinReorderSuite extends JoinReorderPlanTestBase with StatsEstimationT
     attributeStats = AttributeMap(Seq("f11_fk1", "f11_fk2", "f11_fk3", "f11_c4")
       .map(nameToColInfo)))
 
-  private val subq = d3.select(sum('d3_fk1).as('col))
+  private val subq = d3.select(sum($"d3_fk1").as(Symbol("col")))
 
   test("Test 1: Selective star-join on all dimensions") {
     // Star join:
@@ -362,7 +362,7 @@ class StarJoinReorderSuite extends JoinReorderPlanTestBase with StatsEstimationT
           (nameToAttr("f1_fk3") === "col".attr))
 
     val expected =
-      d3.select('d3_fk1).select(sum('d3_fk1).as('col))
+      d3.select($"d3_fk1").select(sum($"d3_fk1").as(Symbol("col")))
         .join(f1, Inner, Some(nameToAttr("f1_fk3") === "col".attr))
         .join(d1, Inner, Some(nameToAttr("f1_fk1") === nameToAttr("d1_pk1")))
         .join(d2.where(nameToAttr("d2_c2") === 2), Inner,

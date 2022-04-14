@@ -17,18 +17,27 @@
 
 package org.apache.spark.sql.errors
 
-import org.apache.spark.sql.{AnalysisException, QueryTest}
-import org.apache.spark.sql.connector.{DatasourceV2SQLBase, FakeV2Provider}
+import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest}
+import org.apache.spark.sql.connector.{DatasourceV2SQLBase, FakeV2Provider, InsertIntoSQLOnlyTests}
 import org.apache.spark.sql.test.SharedSparkSession
 
 class QueryCompilationErrorsDSv2Suite
   extends QueryTest
   with SharedSparkSession
-  with DatasourceV2SQLBase {
+  with DatasourceV2SQLBase
+  with InsertIntoSQLOnlyTests {
+
+  private val v2Source = classOf[FakeV2Provider].getName
+  override protected val v2Format = v2Source
+  override protected val catalogAndNamespace = "testcat.ns1.ns2."
+  override protected val supportsDynamicOverwrite: Boolean = false
+  override protected val includeSQLOnlyTests: Boolean = false
+  override def verifyTable(tableName: String, expected: DataFrame): Unit = {
+    checkAnswer(spark.table(tableName), expected)
+  }
 
   test("UNSUPPORTED_FEATURE: IF PARTITION NOT EXISTS not supported by INSERT") {
-    val v2Format = classOf[FakeV2Provider].getName
-    val tbl = "testcat.ns1.ns2.tbl"
+    val tbl = s"${catalogAndNamespace}tbl"
 
     withTable(tbl) {
       val view = "tmp_view"
@@ -47,6 +56,36 @@ class QueryCompilationErrorsDSv2Suite
         assert(e.getErrorClass === "UNSUPPORTED_FEATURE")
         assert(e.getSqlState === "0A000")
       }
+    }
+  }
+
+  test("NON_PARTITION_COLUMN: static PARTITION clause fails with non-partition column") {
+    val t1 = s"${catalogAndNamespace}tbl"
+    withTableAndData(t1) { view =>
+      sql(s"CREATE TABLE $t1 (id bigint, data string) USING $v2Format PARTITIONED BY (data)")
+
+      val e = intercept[AnalysisException] {
+        sql(s"INSERT INTO TABLE $t1 PARTITION (id=1) SELECT data FROM $view")
+      }
+
+      verifyTable(t1, spark.emptyDataFrame)
+      assert(e.getMessage === "PARTITION clause cannot contain a non-partition column name: id")
+      assert(e.getErrorClass === "NON_PARTITION_COLUMN")
+    }
+  }
+
+  test("NON_PARTITION_COLUMN: dynamic PARTITION clause fails with non-partition column") {
+    val t1 = s"${catalogAndNamespace}tbl"
+    withTableAndData(t1) { view =>
+      sql(s"CREATE TABLE $t1 (id bigint, data string) USING $v2Format PARTITIONED BY (id)")
+
+      val e = intercept[AnalysisException] {
+        sql(s"INSERT INTO TABLE $t1 PARTITION (data) SELECT * FROM $view")
+      }
+
+      verifyTable(t1, spark.emptyDataFrame)
+      assert(e.getMessage === "PARTITION clause cannot contain a non-partition column name: data")
+      assert(e.getErrorClass === "NON_PARTITION_COLUMN")
     }
   }
 }

@@ -35,7 +35,7 @@ import org.apache.spark.sql.catalyst.trees.TreePattern.{TreePattern, UPPER_OR_LO
 import org.apache.spark.sql.catalyst.util.{ArrayData, GenericArrayData, TypeUtils}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types._
+import org.apache.spark.sql.types.{StringType, _}
 import org.apache.spark.unsafe.UTF8StringBuilder
 import org.apache.spark.unsafe.array.ByteArrayMethods
 import org.apache.spark.unsafe.types.{ByteArray, UTF8String}
@@ -1461,15 +1461,17 @@ case class StringLocate(substr: Expression, str: Expression, start: Expression)
 
 trait PadExpressionBuilderBase extends ExpressionBuilder {
   override def build(funcName: String, expressions: Seq[Expression]): Expression = {
+    val behaviorChangeEnabled = !SQLConf.get.getConf(SQLConf.LEGACY_LPAD_RPAD_BINARY_TYPE_AS_STRING)
     val numArgs = expressions.length
     if (numArgs == 2) {
-      if (expressions(0).dataType == BinaryType) {
+      if (expressions(0).dataType == BinaryType && behaviorChangeEnabled) {
         BinaryPad(funcName, expressions(0), expressions(1), Literal(Array[Byte](0)))
       } else {
         createStringPad(expressions(0), expressions(1), Literal(" "))
       }
     } else if (numArgs == 3) {
-      if (expressions(0).dataType == BinaryType && expressions(2).dataType == BinaryType) {
+      if (expressions(0).dataType == BinaryType && expressions(2).dataType == BinaryType
+        && behaviorChangeEnabled) {
         BinaryPad(funcName, expressions(0), expressions(1), expressions(2))
       } else {
         createStringPad(expressions(0), expressions(1), expressions(2))
@@ -1808,7 +1810,9 @@ case class ParseUrl(children: Seq[Expression], failOnError: Boolean = SQLConf.ge
 case class FormatString(children: Expression*) extends Expression with ImplicitCastInputTypes {
 
   require(children.nonEmpty, s"$prettyName() should take at least 1 argument")
-  checkArgumentIndexNotZero(children(0))
+  if (!SQLConf.get.getConf(SQLConf.ALLOW_ZERO_INDEX_IN_FORMAT_STRING)) {
+    checkArgumentIndexNotZero(children(0))
+  }
 
 
   override def foldable: Boolean = children.forall(_.foldable)
@@ -2638,7 +2642,10 @@ case class Encode(value: Expression, charset: Expression)
   since = "3.3.0",
   group = "string_funcs")
 // scalastyle:on line.size.limit
-case class ToBinary(expr: Expression, format: Option[Expression]) extends RuntimeReplaceable
+case class ToBinary(
+    expr: Expression,
+    format: Option[Expression],
+    nullOnInvalidFormat: Boolean = false) extends RuntimeReplaceable
   with ImplicitCastInputTypes {
 
   override lazy val replacement: Expression = format.map { f =>
@@ -2651,6 +2658,7 @@ case class ToBinary(expr: Expression, format: Option[Expression]) extends Runtim
         case "hex" => Unhex(expr)
         case "utf-8" => Encode(expr, Literal("UTF-8"))
         case "base64" => UnBase64(expr)
+        case _ if nullOnInvalidFormat => Literal(null, BinaryType)
         case other => throw QueryCompilationErrors.invalidStringLiteralParameter(
           "to_binary", "format", other,
           Some("The value has to be a case-insensitive string literal of " +
@@ -2659,16 +2667,18 @@ case class ToBinary(expr: Expression, format: Option[Expression]) extends Runtim
     }
   }.getOrElse(Unhex(expr))
 
-  def this(expr: Expression) = this(expr, None)
+  def this(expr: Expression) = this(expr, None, false)
 
   def this(expr: Expression, format: Expression) = this(expr, Some({
-    // We perform this check in the constructor to make it eager and not go through type coercion.
-    if (format.foldable && (format.dataType == StringType || format.dataType == NullType)) {
-      format
-    } else {
-      throw QueryCompilationErrors.requireLiteralParameter("to_binary", "format", "string")
-    }
-  }))
+      // We perform this check in the constructor to make it eager and not go through type coercion.
+      if (format.foldable && (format.dataType == StringType || format.dataType == NullType)) {
+        format
+      } else {
+        throw QueryCompilationErrors.requireLiteralParameter("to_binary", "format", "string")
+      }
+    }),
+    false
+    )
 
   override def prettyName: String = "to_binary"
 
@@ -2942,4 +2952,77 @@ case class Sentences(
       newFirst: Expression, newSecond: Expression, newThird: Expression): Sentences =
     copy(str = newFirst, language = newSecond, country = newThird)
 
+}
+
+/**
+ * Splits a given string by a specified delimiter and return splits into a
+ * GenericArrayData. This expression is different from `split` function as
+ * `split` takes regex expression as the pattern to split strings while this
+ * expression take delimiter (a string without carrying special meaning on its
+ * characters, thus is not treated as regex) to split strings.
+ */
+case class StringSplitSQL(
+    str: Expression,
+    delimiter: Expression) extends BinaryExpression with NullIntolerant {
+  override def dataType: DataType = ArrayType(StringType, containsNull = false)
+  override def left: Expression = str
+  override def right: Expression = delimiter
+
+  override def nullSafeEval(string: Any, delimiter: Any): Any = {
+    val strings = string.asInstanceOf[UTF8String].splitSQL(
+      delimiter.asInstanceOf[UTF8String], -1);
+    new GenericArrayData(strings.asInstanceOf[Array[Any]])
+  }
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val arrayClass = classOf[GenericArrayData].getName
+    nullSafeCodeGen(ctx, ev, (str, delimiter) => {
+      // Array in java is covariant, so we don't need to cast UTF8String[] to Object[].
+      s"${ev.value} = new $arrayClass($str.splitSQL($delimiter,-1));"
+    })
+  }
+
+  override def withNewChildrenInternal(
+      newFirst: Expression, newSecond: Expression): StringSplitSQL =
+    copy(str = newFirst, delimiter = newSecond)
+}
+
+/**
+ * Splits a given string by a specified delimiter and returns the requested part.
+ * If any input is null, returns null.
+ * If index is out of range of split parts, return empty string.
+ * If index is 0, throws an ArrayIndexOutOfBoundsException.
+ */
+@ExpressionDescription(
+  usage =
+    """
+    _FUNC_(str, delimiter, partNum) - Splits `str` by delimiter and return
+      requested part of the split (1-based). If any input is null, returns null.
+      if `partNum` is out of range of split parts, returns empty string. If `partNum` is 0,
+      throws an error. If `partNum` is negative, the parts are counted backward from the
+      end of the string. If the `delimiter` is an empty string, the `str` is not split.
+  """,
+  examples =
+    """
+    Examples:
+      > SELECT _FUNC_('11.12.13', '.', 3);
+       13
+  """,
+  since = "3.3.0",
+  group = "string_funcs")
+case class SplitPart (
+    str: Expression,
+    delimiter: Expression,
+    partNum: Expression)
+  extends RuntimeReplaceable with ImplicitCastInputTypes {
+  override lazy val replacement: Expression =
+    ElementAt(StringSplitSQL(str, delimiter), partNum, Some(Literal.create("", StringType)),
+      false)
+  override def nodeName: String = "split_part"
+  override def inputTypes: Seq[DataType] = Seq(StringType, StringType, IntegerType)
+  def children: Seq[Expression] = Seq(str, delimiter, partNum)
+  protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): Expression = {
+    copy(str = newChildren.apply(0), delimiter = newChildren.apply(1),
+      partNum = newChildren.apply(2))
+  }
 }

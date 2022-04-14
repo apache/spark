@@ -856,4 +856,36 @@ class TreeNodeSuite extends SparkFunSuite with SQLHelper {
     val node = Node(Set("second", "first"), Seq(Set(3, 1), Set(2, 1)))
     assert(node.argString(10) == "{first, second}, [{1, 3}, {1, 2}]")
   }
+
+  test("SPARK-38676: truncate before/after sql text if too long") {
+    val text =
+      """
+        |
+        |SELECT
+        |1234567890 + 1234567890 + 1234567890, cast('a'
+        |as /* comment */
+        |int), 1234567890 + 1234567890 + 1234567890
+        |as foo
+        |""".stripMargin
+    val origin = Origin(
+      line = Some(3),
+      startPosition = Some(38),
+      startIndex = Some(47),
+      stopIndex = Some(77),
+      sqlText = Some(text),
+      objectType = Some("VIEW"),
+      objectName = Some("some_view"))
+    val expected =
+      """
+        |== SQL of VIEW some_view(line 3, position 38) ==
+        |...7890 + 1234567890 + 1234567890, cast('a'
+        |                                   ^^^^^^^^
+        |as /* comment */
+        |^^^^^^^^^^^^^^^^
+        |int), 1234567890 + 1234567890 + 12345...
+        |^^^^^
+        |""".stripMargin
+
+    assert(origin.context == expected)
+  }
 }

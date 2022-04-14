@@ -309,6 +309,10 @@ of the most common options to set are:
     Fraction of executor memory to be allocated as additional non-heap memory per executor process.
     This is memory that accounts for things like VM overheads, interned strings,
     other native overheads, etc. This tends to grow with the container size.
+    This value defaults to 0.10 except for Kubernetes non-JVM jobs, which defaults to
+    0.40. This is done as non-JVM tasks need more non-JVM heap space and such tasks
+    commonly fail with "Memory Overhead Exceeded" errors. This preempts this error
+    with a higher default.
     This value is ignored if <code>spark.executor.memoryOverhead</code> is set directly.
   </td>
   <td>3.3.0</td>
@@ -993,6 +997,17 @@ Apart from these, the following properties are also available, and may be useful
   <td>2.3.0</td>
 </tr>
 <tr>
+  <td><code>spark.shuffle.service.removeShuffle</code></td>
+  <td>false</td>
+  <td>
+    Whether to use the ExternalShuffleService for deleting shuffle blocks for
+    deallocated executors when the shuffle is no longer needed. Without this enabled,
+    shuffle data on executors that are deallocated will remain on disk until the
+    application ends.
+  </td>
+  <td>3.3.0</td>
+</tr>
+<tr>
   <td><code>spark.shuffle.maxChunksBeingTransferred</code></td>
   <td>Long.MAX_VALUE</td>
   <td>
@@ -1309,7 +1324,9 @@ Apart from these, the following properties are also available, and may be useful
     This setting affects all the workers and application UIs running in the cluster and must be set
     identically on all the workers, drivers and masters. In is only effective when
     <code>spark.ui.reverseProxy</code> is turned on. This setting is not needed when the Spark
-    master web UI is directly reachable.  </td>
+    master web UI is directly reachable.<br/>
+    Note that the value of the setting can't contain the keyword `proxy` or `history` after split by "/". Spark UI relies on both keywords for getting REST API endpoints from URIs.
+  </td>
   <td>2.1.0</td>
 </tr>
 <tr>

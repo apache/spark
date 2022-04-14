@@ -28,6 +28,7 @@ import java.util.List;
 import java.util.stream.Collectors;
 import static java.nio.file.attribute.PosixFilePermission.*;
 
+import org.apache.logging.log4j.core.config.Property;
 import org.apache.logging.log4j.core.config.plugins.*;
 import org.apache.logging.log4j.core.Filter;
 import org.apache.logging.log4j.core.Layout;
@@ -164,27 +165,29 @@ public class ChildProcAppHandleSuite extends BaseSuite {
     assertEquals(Arrays.asList("output"), Files.lines(out).collect(Collectors.toList()));
   }
 
-  @Test(expected = IllegalArgumentException.class)
+  @Test
   public void testBadLogRedirect() throws Exception {
     File out = Files.createTempFile("stdout", "txt").toFile();
     out.deleteOnExit();
-    new SparkLauncher()
-      .redirectError()
-      .redirectOutput(out)
-      .redirectToLog("foo")
-      .launch()
-      .waitFor();
+    assertThrows(IllegalArgumentException.class,
+      () -> new SparkLauncher()
+              .redirectError()
+              .redirectOutput(out)
+              .redirectToLog("foo")
+              .launch()
+              .waitFor());
   }
 
-  @Test(expected = IllegalArgumentException.class)
+  @Test
   public void testRedirectErrorTwiceFails() throws Exception {
     File err = Files.createTempFile("stderr", "txt").toFile();
     err.deleteOnExit();
-    new SparkLauncher()
-      .redirectError()
-      .redirectError(err)
-      .launch()
-      .waitFor();
+    assertThrows(IllegalArgumentException.class,
+      () -> new SparkLauncher()
+              .redirectError()
+              .redirectError(err)
+              .launch()
+              .waitFor());
   }
 
   @Test
@@ -249,7 +252,7 @@ public class ChildProcAppHandleSuite extends BaseSuite {
                           Filter filter,
                           Layout<? extends Serializable> layout,
                           boolean ignoreExceptions) {
-      super(name, filter, layout, ignoreExceptions);
+      super(name, filter, layout, ignoreExceptions, Property.EMPTY_ARRAY);
     }
 
     @Override

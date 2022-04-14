@@ -156,23 +156,6 @@ The following table describes the different options available for configuring th
   <td>2.2.0</td>
 </tr>
 <tr>
-  <td><code>spark.network.crypto.keyLength</code></td>
-  <td>128</td>
-  <td>
-    The length in bits of the encryption key to generate. Valid values are 128, 192 and 256.
-  </td>
-  <td>2.2.0</td>
-</tr>
-<tr>
-  <td><code>spark.network.crypto.keyFactoryAlgorithm</code></td>
-  <td>PBKDF2WithHmacSHA1</td>
-  <td>
-    The key factory algorithm to use when generating encryption keys. Should be one of the
-    algorithms supported by the javax.crypto.SecretKeyFactory class in the JRE being used.
-  </td>
-  <td>2.2.0</td>
-</tr>
-<tr>
   <td><code>spark.network.crypto.config.*</code></td>
   <td>None</td>
   <td>

@@ -189,16 +189,10 @@ public class OneForOneBlockFetcherSuite {
 
   @Test
   public void testEmptyBlockFetch() {
-    try {
-      fetchBlocks(
-        Maps.newLinkedHashMap(),
-        new String[] {},
-        new OpenBlocks("app-id", "exec-id", new String[] {}),
-        conf);
-      fail();
-    } catch (IllegalArgumentException e) {
-      assertEquals("Zero-sized blockIds array", e.getMessage());
-    }
+    IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
+      () -> fetchBlocks(Maps.newLinkedHashMap(), new String[] {},
+        new OpenBlocks("app-id", "exec-id", new String[] {}), conf));
+    assertEquals("Zero-sized blockIds array", e.getMessage());
   }
 
   @Test

@@ -223,9 +223,11 @@ class QueryExecution(
     append("\n")
   }
 
-  def explainString(mode: ExplainMode): String = {
+  def explainString(
+      mode: ExplainMode,
+      maxFields: Int = SQLConf.get.maxToStringFields): String = {
     val concat = new PlanStringConcat()
-    explainString(mode, SQLConf.get.maxToStringFields, concat.append)
+    explainString(mode, maxFields, concat.append)
     withRedaction {
       concat.toString
     }

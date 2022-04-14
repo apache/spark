@@ -336,7 +336,11 @@ package object config {
       .doc("Fraction of executor memory to be allocated as additional non-heap memory per " +
         "executor process. This is memory that accounts for things like VM overheads, " +
         "interned strings, other native overheads, etc. This tends to grow with the container " +
-        "size. This value is ignored if spark.executor.memoryOverhead is set directly.")
+        "size. This value defaults to 0.10 except for Kubernetes non-JVM jobs, which defaults " +
+        "to 0.40. This is done as non-JVM tasks need more non-JVM heap space and such tasks " +
+        "commonly fail with \"Memory Overhead Exceeded\" errors. This preempts this error " +
+        "with a higher default. This value is ignored if spark.executor.memoryOverhead is set " +
+        "directly.")
       .version("3.3.0")
       .doubleConf
       .checkValue(factor => factor > 0,
@@ -679,6 +683,16 @@ package object config {
   private[spark] val SHUFFLE_SERVICE_ENABLED =
     ConfigBuilder("spark.shuffle.service.enabled")
       .version("1.2.0")
+      .booleanConf
+      .createWithDefault(false)
+
+  private[spark] val SHUFFLE_SERVICE_REMOVE_SHUFFLE_ENABLED =
+    ConfigBuilder("spark.shuffle.service.removeShuffle")
+      .doc("Whether to use the ExternalShuffleService for deleting shuffle blocks for " +
+        "deallocated executors when the shuffle is no longer needed. Without this enabled, " +
+        "shuffle data on executors that are deallocated will remain on disk until the " +
+        "application ends.")
+      .version("3.3.0")
       .booleanConf
       .createWithDefault(false)
 
@@ -1479,6 +1493,14 @@ package object config {
       .version("0.9.0")
       .longConf
       .createWithDefault(10000)
+
+  private[spark] val SHUFFLE_MERGE_PREFER_NIO =
+    ConfigBuilder("spark.file.transferTo")
+      .doc("If true, NIO's `transferTo` API will be preferentially used when merging " +
+        "Spark shuffle spill files")
+      .version("1.4.0")
+      .booleanConf
+      .createWithDefault(true)
 
   private[spark] val SHUFFLE_SORT_BYPASS_MERGE_THRESHOLD =
     ConfigBuilder("spark.shuffle.sort.bypassMergeThreshold")

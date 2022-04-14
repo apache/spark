@@ -229,11 +229,16 @@ abstract class JdbcDialect extends Serializable with Logging{
 
     override def visitNamedReference(namedRef: NamedReference): String = {
       if (namedRef.fieldNames().length > 1) {
-        throw new IllegalArgumentException(
-          QueryCompilationErrors.commandNotSupportNestedColumnError(
-            "Filter push down", namedRef.toString).getMessage);
+        throw QueryCompilationErrors.commandNotSupportNestedColumnError(
+          "Filter push down", namedRef.toString)
       }
       quoteIdentifier(namedRef.fieldNames.head)
+    }
+
+    override def visitCast(l: String, dataType: DataType): String = {
+      val databaseTypeDefinition =
+        getJDBCType(dataType).map(_.databaseTypeDefinition).getOrElse(dataType.typeName)
+      s"CAST($l AS $databaseTypeDefinition)"
     }
   }
 

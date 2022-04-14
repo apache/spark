@@ -1426,39 +1426,39 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
   test("filter pushdown - StringStartsWith") {
     withParquetDataFrame((1 to 4).map(i => Tuple1(i + "str" + i))) { implicit df =>
       checkFilterPredicate(
-        Symbol("_1").startsWith("").asInstanceOf[Predicate],
+        $"_1".startsWith("").asInstanceOf[Predicate],
         classOf[UserDefinedByInstance[_, _]],
         Seq("1str1", "2str2", "3str3", "4str4").map(Row(_)))
 
       Seq("2", "2s", "2st", "2str", "2str2").foreach { prefix =>
         checkFilterPredicate(
-          Symbol("_1").startsWith(prefix).asInstanceOf[Predicate],
+          $"_1".startsWith(prefix).asInstanceOf[Predicate],
           classOf[UserDefinedByInstance[_, _]],
           "2str2")
       }
 
       Seq("2S", "null", "2str22").foreach { prefix =>
         checkFilterPredicate(
-          Symbol("_1").startsWith(prefix).asInstanceOf[Predicate],
+          $"_1".startsWith(prefix).asInstanceOf[Predicate],
           classOf[UserDefinedByInstance[_, _]],
           Seq.empty[Row])
       }
 
       checkFilterPredicate(
-        !Symbol("_1").startsWith("").asInstanceOf[Predicate],
+        !$"_1".startsWith("").asInstanceOf[Predicate],
         classOf[Operators.Not],
         Seq().map(Row(_)))
 
       Seq("2", "2s", "2st", "2str", "2str2").foreach { prefix =>
         checkFilterPredicate(
-          !Symbol("_1").startsWith(prefix).asInstanceOf[Predicate],
+          !$"_1".startsWith(prefix).asInstanceOf[Predicate],
           classOf[Operators.Not],
           Seq("1str1", "3str3", "4str4").map(Row(_)))
       }
 
       Seq("2S", "null", "2str22").foreach { prefix =>
         checkFilterPredicate(
-          !Symbol("_1").startsWith(prefix).asInstanceOf[Predicate],
+          !$"_1".startsWith(prefix).asInstanceOf[Predicate],
           classOf[Operators.Not],
           Seq("1str1", "2str2", "3str3", "4str4").map(Row(_)))
       }
@@ -1472,7 +1472,7 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
     // SPARK-28371: make sure filter is null-safe.
     withParquetDataFrame(Seq(Tuple1[String](null))) { implicit df =>
       checkFilterPredicate(
-        Symbol("_1").startsWith("blah").asInstanceOf[Predicate],
+        $"_1".startsWith("blah").asInstanceOf[Predicate],
         classOf[UserDefinedByInstance[_, _]],
         Seq.empty[Row])
     }
@@ -1901,6 +1901,27 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
       }
     }
   }
+
+  test("SPARK-38825: in and notIn filters") {
+    import testImplicits._
+    withTempPath { file =>
+      Seq(1, 2, 0, -1, 99, 1000, 3, 7, 2).toDF("id").coalesce(1).write.mode("overwrite")
+        .parquet(file.getCanonicalPath)
+      var df = spark.read.parquet(file.getCanonicalPath)
+      var in = df.filter(col("id").isin(100, 3, 11, 12, 13))
+      var notIn = df.filter(!col("id").isin(100, 3, 11, 12, 13))
+      checkAnswer(in, Seq(Row(3)))
+      checkAnswer(notIn, Seq(Row(1), Row(2), Row(0), Row(-1), Row(99), Row(1000), Row(7), Row(2)))
+
+      Seq("mary", "martin", "lucy", "alex", "mary", "dan").toDF("name").coalesce(1)
+        .write.mode("overwrite").parquet(file.getCanonicalPath)
+      df = spark.read.parquet(file.getCanonicalPath)
+      in = df.filter(col("name").isin("mary", "victor", "leo", "alex"))
+      notIn = df.filter(!col("name").isin("mary", "victor", "leo", "alex"))
+      checkAnswer(in, Seq(Row("mary"), Row("alex"), Row("mary")))
+      checkAnswer(notIn, Seq(Row("martin"), Row("lucy"), Row("dan")))
+    }
+  }
 }
 
 @ExtendedSQLTest
@@ -2016,7 +2037,7 @@ class ParquetV2FilterSuite extends ParquetFilterSuite {
 
       query.queryExecution.optimizedPlan.collectFirst {
         case PhysicalOperation(_, filters,
-            DataSourceV2ScanRelation(_, scan: ParquetScan, _)) =>
+            DataSourceV2ScanRelation(_, scan: ParquetScan, _, _)) =>
           assert(filters.nonEmpty, "No filter is analyzed from the given query")
           val sourceFilters = filters.flatMap(DataSourceStrategy.translateFilter(_, true)).toArray
           val pushedFilters = scan.pushedFilters
