@@ -41,11 +41,11 @@ from pyspark.storagelevel import StorageLevel
 from pyspark.streaming.util import rddToFileName, TransformFunction
 from pyspark.rdd import portable_hash, RDD
 from pyspark.resultiterable import ResultIterable
+from py4j.java_gateway import JavaObject
 
 if TYPE_CHECKING:
     from pyspark.serializers import Serializer
     from pyspark.streaming.context import StreamingContext
-    from py4j.java_gateway import JavaObject
 
 __all__ = ["DStream"]
 
