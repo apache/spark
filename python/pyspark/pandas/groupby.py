@@ -2652,7 +2652,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
             for psser in self._agg_columns
             if (
                 isinstance(psser.spark.data_type, NumericType)
-                or (isinstance(psser.spark.data_type, BooleanType) and bool_as_numeric)
+                or (bool_as_numeric and isinstance(psser.spark.data_type, BooleanType))
                 or not only_numeric
             )
         ]

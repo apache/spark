@@ -1246,7 +1246,7 @@ class GroupByTest(PandasOnSparkTestCase, TestUtils):
         pdf = pd.DataFrame(
             {
                 "A": [1, 2, 1, 2],
-                "B": [3, 4, 4, 3],
+                "B": [3.1, 4.1, 4.1, 3.1],
                 "C": ["a", "b", "b", "a"],
                 "D": [True, False, False, True],
             }
@@ -1270,7 +1270,7 @@ class GroupByTest(PandasOnSparkTestCase, TestUtils):
         pdf = pd.DataFrame(
             {
                 "A": [1, 2, 1, 2],
-                "B": [3, 4, 4, 3],
+                "B": [3.1, 4.1, 4.1, 3.1],
                 "C": ["a", "b", "b", "a"],
                 "D": [True, False, False, True],
             }
