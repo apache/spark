@@ -516,6 +516,8 @@ case class NewInstance(
 
   override def nullable: Boolean = needNullCheck
 
+  // Non-foldable to prevent the optimizer from replacing NewInstance with a singleton instance
+  // of the specified class.
   override def foldable: Boolean = false
   override def children: Seq[Expression] = arguments
 
