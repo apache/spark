@@ -97,7 +97,7 @@ class UnivocityGenerator(
       if (!row.isNullAt(i)) {
         values(i) = valueConverters(i).apply(row, i)
       } else if (
-        !SQLConf.get.getConf(SQLConf.LEGACY_NULL_VALUE_WRITTEN_AS_UNQUOTED_EMPTY_STRING_CSV)) {
+        SQLConf.get.getConf(SQLConf.LEGACY_NULL_VALUE_WRITTEN_AS_QUOTED_EMPTY_STRING_CSV)) {
         values(i) = options.nullValue
       }
       i += 1

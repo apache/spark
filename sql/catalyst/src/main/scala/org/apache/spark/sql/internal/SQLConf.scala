@@ -3754,14 +3754,15 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
-  val LEGACY_NULL_VALUE_WRITTEN_AS_UNQUOTED_EMPTY_STRING_CSV =
-    buildConf("spark.sql.legacy.nullValueWrittenAsUnquotedEmptyStringCsv.enabled")
+  val LEGACY_NULL_VALUE_WRITTEN_AS_QUOTED_EMPTY_STRING_CSV =
+    buildConf("spark.sql.legacy.nullValueWrittenAsQuotedEmptyStringCsv")
       .internal()
-      .doc("When set to true, nulls are written as empty strings in CSV data source. If set to " +
-        "false, nulls were written as empty strings as quoted empty strings, `\"\"`.")
+      .doc("When set to false, nulls are written as unquoted empty strings in CSV data source. " +
+        "If set to false, it restores the legacy behavior that nulls were written as quoted " +
+        "empty strings, `\"\"`.")
       .version("3.3.0")
       .booleanConf
-      .createWithDefault(true)
+      .createWithDefault(false)
 
   /**
    * Holds information about keys that have been deprecated.
