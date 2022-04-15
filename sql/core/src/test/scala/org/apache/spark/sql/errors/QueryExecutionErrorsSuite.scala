@@ -21,7 +21,7 @@ import java.util.Locale
 
 import test.org.apache.spark.sql.connector.JavaSimpleWritableDataSource
 
-import org.apache.spark.{SparkArithmeticException, SparkException, SparkIllegalStateException, SparkRuntimeException, SparkUnsupportedOperationException, SparkUpgradeException}
+import org.apache.spark.{SparkArithmeticException, SparkDateTimeException, SparkException, SparkIllegalStateException, SparkRuntimeException, SparkUnsupportedOperationException, SparkUpgradeException}
 import org.apache.spark.sql.{DataFrame, QueryTest}
 import org.apache.spark.sql.catalyst.util.BadRecordException
 import org.apache.spark.sql.connector.SimpleWritableDataSource
@@ -368,6 +368,18 @@ class QueryExecutionErrorsSuite extends QueryTest
       assert(e.getMessage === "Casting 253402258394567890L to int causes overflow. " +
         "To return NULL instead, use 'try_cast'. " +
         "If necessary set spark.sql.ansi.enabled to false to bypass this error.")
+    }
+  }
+
+  test("INVALID_FRACTION_OF_SECOND: make_timestamp failure - the fraction of sec must be zero") {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      val e = intercept[SparkDateTimeException] {
+        sql("select make_timestamp(2012, 11, 30, 9, 19, 60.66666666)").collect()
+      }
+      assert(e.getErrorClass === "INVALID_FRACTION_OF_SECOND")
+      assert(e.getSqlState === "22023")
+      assert(e.getMessage === "The fraction of sec must be zero. Valid range is [0, 60]. " +
+        "If necessary set spark.sql.ansi.enabled to false to bypass this error. ")
     }
   }
 }
