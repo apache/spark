@@ -264,6 +264,21 @@ case class VarianceSamp(
     copy(child = newChild)
 }
 
+case class RegrSXXReplacement(
+    child: Expression,
+    nullOnDivideByZero: Boolean = !SQLConf.get.legacyStatisticalAggregate)
+  extends CentralMomentAgg(child, nullOnDivideByZero) {
+
+  override protected def momentOrder = 2
+
+  override val evaluateExpression: Expression = {
+    If(n === 0.0, Literal.create(null, DoubleType), m2)
+  }
+
+  override protected def withNewChildInternal(newChild: Expression): RegrSXXReplacement =
+    copy(child = newChild)
+}
+
 @ExpressionDescription(
   usage = "_FUNC_(expr) - Returns the skewness value calculated from values of a group.",
   examples = """
