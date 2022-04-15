@@ -857,6 +857,29 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
     }
   }
 
+  test("Allow user to insert specified columns into insertable view") {
+    withSQLConf(SQLConf.USE_NULLS_FOR_MISSING_DEFAULT_COLUMN_VALUES.key -> "true") {
+      sql("INSERT OVERWRITE TABLE jsonTable(a) SELECT a FROM jt")
+      checkAnswer(
+        sql("SELECT a, b FROM jsonTable"),
+        (1 to 10).map(i => Row(i, null))
+      )
+
+      sql("INSERT OVERWRITE TABLE jsonTable(b) SELECT b FROM jt")
+      checkAnswer(
+        sql("SELECT a, b FROM jsonTable"),
+        (1 to 10).map(i => Row(null, s"str$i"))
+      )
+    }
+
+    withSQLConf(SQLConf.USE_NULLS_FOR_MISSING_DEFAULT_COLUMN_VALUES.key -> "false") {
+      val message = intercept[AnalysisException] {
+        sql("INSERT OVERWRITE TABLE jsonTable(a) SELECT a FROM jt")
+      }.getMessage
+      assert(message.contains("target table has 2 column(s) but the inserted data has 1 column(s)"))
+    }
+  }
+
   test("INSERT INTO statements with tables with default columns: positive tests") {
     // When the USE_NULLS_FOR_MISSING_DEFAULT_COLUMN_VALUES configuration is enabled, and no
     // explicit DEFAULT value is available when the INSERT INTO statement provides fewer

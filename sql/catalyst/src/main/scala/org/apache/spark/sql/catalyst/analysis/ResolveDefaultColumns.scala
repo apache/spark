@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
+
 /**
  * This is a rule to process DEFAULT columns in statements such as CREATE/REPLACE TABLE.
  *
@@ -279,6 +280,9 @@ case class ResolveDefaultColumns(
     val schema: StructType = lookup match {
       case SubqueryAlias(_, r: UnresolvedCatalogRelation) =>
         StructType(r.tableMeta.schema.fields.dropRight(
+          enclosingInsert.get.partitionSpec.size))
+      case SubqueryAlias(_, r: View) =>
+        StructType(r.schema.fields.dropRight(
           enclosingInsert.get.partitionSpec.size))
       case _ => return None
     }
