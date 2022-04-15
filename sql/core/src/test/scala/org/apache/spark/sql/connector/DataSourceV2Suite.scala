@@ -281,116 +281,82 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
     }
   }
 
-  private def readOrderAndPartitionAwareDataSource(cls: Class[_],
-                                                   partitionKeys: Option[String],
-                                                   orderKeys: Option[String]): DataFrame = {
-    val options = Map(
-      "partitionKeys" -> partitionKeys.orNull,
-      "orderKeys" -> orderKeys.orNull,
-    )
-    spark.read.options(options).format(cls.getName).load()
-  }
+  // we test report ordering (in conjunction with report partitioning) with these transformations:
+  // - groupBy("i").flatMapGroups: hash-partitions by "i" and then sorts in partitions by "i"
+  //   requires partitioning and sort by "i"
+  // - aggregation function over window partitioned by "i" and ordered by "j"
+  //   does hash-partitions by "i" and sort in partition by "j"
+  //   requires partitioning by "i" and sort by "j"
+  Seq(
+    // with not partitioning and no order, we expect shuffling AND sorting
+    (None, None, (true, true), (true, true)),
+    // with partitioned by i and no order, we expect NO shuffling BUT sorting
+    (Some("i"), None, (false, true), (false, true)),
+    // with partitioned by i and in-partition sorted by i,
+    // we expect NO shuffling AND sorting for groupBy but sorting for window function
+    (Some("i"), Some("i"), (false, false), (false, true)),
+    // with partitioned by j and in-partition sorted by i, we expect shuffling AND sorting
+    (Some("j"), Some("i"), (true, true), (true, true)),
 
-  private def testOrderAndPartitionAwareDataSourceGroupBy(df: DataFrame,
-                                                          shuffleExpected: Boolean,
-                                                          sortExpected: Boolean): Unit = {
-    val groupBy = df.groupBy($"i").as[Int, (Int, Int)]
-      .flatMapGroups { case (i, it) => Iterator.single((i, it.length)) }
-    checkAnswer(
-      groupBy.toDF(),
-      Seq(Row(1, 2), Row(2, 1), Row(3, 1), Row(4, 2))
-    )
-    assert(collectFirst(groupBy.queryExecution.executedPlan) {
-      case e: ShuffleExchangeExec => e
-    }.isDefined === shuffleExpected)
-    assert(collectFirst(groupBy.queryExecution.executedPlan) {
-      case e: SortExec => e
-    }.isDefined === sortExpected)
-  }
+    // with partitioned by i and in-partition sorted by j, we expect NO shuffling BUT sorting
+    (Some("i"), Some("j"), (false, true), (false, true)),
+    // with partitioned by i and in-partition sorted by i,j, we expect NO shuffling and NO sorting
+    (Some("i"), Some("i,j"), (false, false), (false, false)),
+    // with partitioned by j and in-partition sorted by i,j, we expect shuffling and sorting
+    (Some("j"), Some("i,j"), (true, true), (true, true))
+  ).foreach { case (partitionKeys, orderKeys, groupByExpects, windowFuncExpects) =>
+    test(f"ordering and partitioning reporting: (${partitionKeys.orNull}, ${orderKeys.orNull})") {
+      withSQLConf(SQLConf.V2_BUCKETING_ENABLED.key -> "true") {
+        Seq(
+          classOf[OrderAndPartitionAwareDataSource],
+          classOf[JavaOrderAndPartitionAwareDataSource]
+        ).foreach { cls =>
+          withClue(cls.getName) {
+            val options = Map(
+              "partitionKeys" -> partitionKeys.orNull,
+              "orderKeys" -> orderKeys.orNull,
+            )
+            val df = spark.read.options(options).format(cls.getName).load()
+            checkAnswer(df, Seq(Row(1, 4), Row(1, 5), Row(3, 5), Row(2, 6), Row(4, 1), Row(4, 2)))
 
-  private def testOrderAndPartitionAwareDataSourcePartByOrderBy(df: DataFrame,
-                                                                shuffleExpected: Boolean,
-                                                                sortExpected: Boolean): Unit = {
-    val windowPartByColIOrderByColJ = df.withColumn("no",
-      row_number() over Window.partitionBy(Symbol("i")).orderBy(Symbol("j"))
-    )
-    checkAnswer(
-      windowPartByColIOrderByColJ,
-      Seq(Row(1, 4, 1), Row(1, 5, 2), Row(2, 6, 1), Row(3, 5, 1), Row(4, 1, 1), Row(4, 2, 2))
-    )
-    assert(collectFirst(windowPartByColIOrderByColJ.queryExecution.executedPlan) {
-      case e: ShuffleExchangeExec => e
-    }.isDefined === shuffleExpected)
-    assert(collectFirst(windowPartByColIOrderByColJ.queryExecution.executedPlan) {
-      case e: SortExec => e
-    }.isDefined === sortExpected)
-  }
+            // groupBy(i).flatMapGroups
+            {
+              val groupBy = df.groupBy($"i").as[Int, (Int, Int)]
+                .flatMapGroups { case (i, it) => Iterator.single((i, it.length)) }
+              checkAnswer(
+                groupBy.toDF(),
+                Seq(Row(1, 2), Row(2, 1), Row(3, 1), Row(4, 2))
+              )
 
-  test("ordering and partitioning reporting") {
-    withSQLConf(SQLConf.V2_BUCKETING_ENABLED.key -> "true") {
-      Seq(
-        classOf[OrderAndPartitionAwareDataSource],
-        classOf[JavaOrderAndPartitionAwareDataSource]
-      ).foreach { cls =>
-        withClue(cls.getName) {
-          // dataframe without partitioning and sorting
-          val df = readOrderAndPartitionAwareDataSource(cls, None, None)
-
-          // dataframe without partitioning but in-partition sorted by i
-          val df_i = readOrderAndPartitionAwareDataSource(cls, None, Some("i"))
-
-          // dataframe partitioned by i but not sorted
-          val dfi = readOrderAndPartitionAwareDataSource(cls, Some("i"), None)
-
-          // dataframe partitioned by i and in-partition sorted by i
-          val dfi_i = readOrderAndPartitionAwareDataSource(cls, Some("i"), Some("i"))
-
-          // dataframe partitioned by i and in-partition sorted by i,j
-          val dfi_ij = readOrderAndPartitionAwareDataSource(cls, Some("i"), Some("i,j"))
-
-          // dataframe partitioned by j and in-partition sorted by i
-          val dfj_i = readOrderAndPartitionAwareDataSource(cls, Some("j"), Some("i"))
-
-          // dataframe partitioned by j and in-partition sorted by i,j
-          val dfj_ij = readOrderAndPartitionAwareDataSource(cls, Some("j"), Some("i,j"))
-
-          // all dataframes should contain the same data
-          Seq(df, df_i, dfi, dfi_i, dfi_ij, dfj_i, dfj_ij).foreach(
-            checkAnswer(_, Seq(Row(1, 4), Row(1, 5), Row(3, 5), Row(2, 6), Row(4, 1), Row(4, 2)))
-          )
-
-          // groupBy(x).flatMapGroups hash-partitions by x and then sorts in partitions by x
-          // df is not partitioned and not sorted, so we expect shuffling and sorting
-          testOrderAndPartitionAwareDataSourceGroupBy(df, true, true)
-
-          // dfi is partitioned by i and not sorted, so we expect no shuffling BUT sorting
-          testOrderAndPartitionAwareDataSourceGroupBy(dfi, false, true)
-
-          // dfi_i is partitioned by i and in-partition sorted by i,
-          // so we expect no shuffling and sorting
-          testOrderAndPartitionAwareDataSourceGroupBy(dfi_i, false, false)
-
-          // dfj_i is partitioned by j and in-partition sorted by i,
-          // so we expect shuffling and sorting
-          testOrderAndPartitionAwareDataSourceGroupBy(dfj_i, true, true)
+              val (shuffleExpected, sortExpected) = groupByExpects
+              assert(collectFirst(groupBy.queryExecution.executedPlan) {
+                case e: ShuffleExchangeExec => e
+              }.isDefined === shuffleExpected)
+              assert(collectFirst(groupBy.queryExecution.executedPlan) {
+                case e: SortExec => e
+              }.isDefined === sortExpected)
+            }
 
 
-          // function over window partitioned by x and ordered by y
-          // does hash-partitions by x and sort in partition by y
-          // df is not partitioned and not sorted, so we expect shuffling and sorting
-          testOrderAndPartitionAwareDataSourcePartByOrderBy(df, true, true)
+            // aggregation function over window partitioned by i and ordered by j
+            {
+              val windowPartByColIOrderByColJ = df.withColumn("no",
+                row_number() over Window.partitionBy(Symbol("i")).orderBy(Symbol("j"))
+              )
+              checkAnswer(
+                windowPartByColIOrderByColJ,
+                Seq(Row(1, 4, 1), Row(1, 5, 2), Row(2, 6, 1), Row(3, 5, 1), Row(4, 1, 1), Row(4, 2, 2))
+              )
 
-          // dfi is partitioned by i but not sorted,
-          // so we expect no shuffling BUT sorting
-          testOrderAndPartitionAwareDataSourcePartByOrderBy(dfi, false, true)
-
-          // dfi_ij is partitioned by i and in-partition sorted by i,j,
-          // so we expect no shuffling and no sorting
-          testOrderAndPartitionAwareDataSourcePartByOrderBy(dfi_ij, false, false)
-
-          // dfj_ij is partitioned by j and in-partition sorted by i,j,
-          // so we expect shuffling and sorting
-          testOrderAndPartitionAwareDataSourcePartByOrderBy(dfj_ij, true, true)
+              val (shuffleExpected, sortExpected) = windowFuncExpects
+              assert(collectFirst(windowPartByColIOrderByColJ.queryExecution.executedPlan) {
+                case e: ShuffleExchangeExec => e
+              }.isDefined === shuffleExpected)
+              assert(collectFirst(windowPartByColIOrderByColJ.queryExecution.executedPlan) {
+                case e: SortExec => e
+              }.isDefined === sortExpected)
+            }
+          }
         }
       }
     }
