@@ -31,7 +31,7 @@ import org.apache.spark.sql.types._
 import org.apache.spark.util.collection.OpenHashMap
 
 abstract class PercentileBase() extends TypedImperativeAggregate[OpenHashMap[AnyRef, Long]]
-  with ImplicitCastInputTypes with TernaryLike[Expression] {
+  with ImplicitCastInputTypes {
 
   val child: Expression
   val percentageExpression: Expression
@@ -50,10 +50,6 @@ abstract class PercentileBase() extends TypedImperativeAggregate[OpenHashMap[Any
     case num: Double => Array(num)
     case arrayData: ArrayData => arrayData.toDoubleArray()
   }
-
-  override def first: Expression = child
-  override def second: Expression = percentageExpression
-  override def third: Expression = frequencyExpression
 
   // Returns null for empty inputs
   override def nullable: Boolean = true
@@ -323,7 +319,7 @@ case class Percentile(
     frequencyExpression : Expression,
     mutableAggBufferOffset: Int = 0,
     inputAggBufferOffset: Int = 0,
-    reverse: Boolean = false) extends PercentileBase {
+    reverse: Boolean = false) extends PercentileBase with TernaryLike[Expression] {
 
   def this(child: Expression, percentageExpression: Expression) = {
     this(child, percentageExpression, Literal(1L), 0, 0)
@@ -337,9 +333,13 @@ case class Percentile(
     this(child, percentageExpression, Literal(1L), reverse = reverse)
   }
 
+  override def first: Expression = child
+  override def second: Expression = percentageExpression
+  override def third: Expression = frequencyExpression
+
   override def prettyName: String = "percentile"
 
-  override val interpolate: Boolean = true
+  override def interpolate: Boolean = true
 
   override def withNewMutableAggBufferOffset(newMutableAggBufferOffset: Int): Percentile =
     copy(mutableAggBufferOffset = newMutableAggBufferOffset)
@@ -360,12 +360,12 @@ case class Percentile(
  * numeric or ansi interval column at the given percentage (specified in ORDER BY clause).
  * The value of percentage must be between 0.0 and 1.0.
  */
-case class PercentileCont(left: Expression, right: Expression)
+case class PercentileCont(left: Expression, right: Expression, reverse: Boolean = false)
   extends AggregateFunction
   with RuntimeReplaceableAggregate
   with ImplicitCastInputTypes
   with BinaryLike[Expression] {
-  private lazy val percentile = new Percentile(left, right)
+  private lazy val percentile = new Percentile(left, right, reverse)
   override def replacement: Expression = percentile
   override def nodeName: String = "percentile_cont"
   override def inputTypes: Seq[AbstractDataType] = percentile.inputTypes
@@ -382,25 +382,21 @@ case class PercentileCont(left: Expression, right: Expression)
  * Therefore we have to store all the elements in memory, and so notice that too many elements can
  * cause GC paused and eventually OutOfMemory Errors.
  */
-case class PercentileDisc private(
+case class PercentileDisc(
     child: Expression,
     percentageExpression: Expression,
-    frequencyExpression: Expression,
+    reverse: Boolean = false,
     mutableAggBufferOffset: Int = 0,
-    inputAggBufferOffset: Int = 0,
-    reverse: Boolean = false) extends PercentileBase {
+    inputAggBufferOffset: Int = 0) extends PercentileBase with BinaryLike[Expression] {
 
-  def this(child: Expression, percentageExpression: Expression) = {
-    this(child, percentageExpression, Literal(1L))
-  }
+  val frequencyExpression: Expression = Literal(1L)
 
-  def this(child: Expression, percentageExpression: Expression, reverse: Boolean) = {
-    this(child, percentageExpression, Literal(1L), reverse = reverse)
-  }
+  override def left: Expression = child
+  override def right: Expression = percentageExpression
 
   override def prettyName: String = "percentile_disc"
 
-  override val interpolate: Boolean = false
+  override def interpolate: Boolean = false
 
   override def withNewMutableAggBufferOffset(newMutableAggBufferOffset: Int): PercentileDisc =
     copy(mutableAggBufferOffset = newMutableAggBufferOffset)
@@ -409,9 +405,8 @@ case class PercentileDisc private(
     copy(inputAggBufferOffset = newInputAggBufferOffset)
 
   override protected def withNewChildrenInternal(
-      newFirst: Expression, newSecond: Expression, newThird: Expression): PercentileDisc = copy(
-    child = newFirst,
-    percentageExpression = newSecond,
-    frequencyExpression = newThird
+      newLeft: Expression, newRight: Expression): PercentileDisc = copy(
+    child = newLeft,
+    percentageExpression = newRight
   )
 }

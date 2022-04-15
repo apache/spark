@@ -1316,12 +1316,12 @@ class PlanParserSuite extends AnalysisTest {
     assertPercentilePlans(
       "SELECT PERCENTILE_CONT(0.1) WITHIN GROUP (ORDER BY col DESC)",
       PercentileCont(UnresolvedAttribute("col"),
-        Subtract(Literal(1), Literal(Decimal(0.1), DecimalType(1, 1)))).toAggregateExpression()
+        Literal(Decimal(0.1), DecimalType(1, 1)), true).toAggregateExpression()
     )
 
     assertPercentilePlans(
       "SELECT PERCENTILE_DISC(0.1) WITHIN GROUP (ORDER BY col)",
-      new PercentileDisc(UnresolvedAttribute("col"), Literal(Decimal(0.1), DecimalType(1, 1)))
+      PercentileDisc(UnresolvedAttribute("col"), Literal(Decimal(0.1), DecimalType(1, 1)))
         .toAggregateExpression()
     )
 
