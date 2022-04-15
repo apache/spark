@@ -325,7 +325,8 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
               // groupBy(i).flatMapGroups
               {
                 val groupBy = df.groupBy($"i").as[Int, (Int, Int)]
-                  .flatMapGroups { case (i, it) => Iterator.single((i, it.length)) }
+                  .flatMapGroups { (i: Int, it: Iterator[(Int, Int)]) =>
+                    Iterator.single((i, it.length)) }
                 checkAnswer(
                   groupBy.toDF(),
                   Seq(Row(1, 2), Row(2, 1), Row(3, 1), Row(4, 2))
