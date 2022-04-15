@@ -371,7 +371,7 @@ class QueryExecutionErrorsSuite extends QueryTest
     }
   }
 
-  test("DIVIDE_BY_ZERO - SPARK-38724: can't divide by zero") {
+  test("DIVIDE_BY_ZERO: can't divide an integer by zero") {
     withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
       val e = intercept[SparkArithmeticException] {
         sql("select 6/0").collect()
