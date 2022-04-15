@@ -3256,11 +3256,12 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
   }
 
   test("test 1 resource profile") {
+    val sparkContext = sc
     val ereqs = new ExecutorResourceRequests().cores(4)
     val treqs = new TaskResourceRequests().cpus(1)
     val rp1 = new ResourceProfileBuilder().require(ereqs).require(treqs).build
 
-    val rdd = sc.parallelize(1 to 10).map(x => (x, x)).withResources(rp1)
+    val rdd = sparkContext.parallelize(1 to 10).map(x => (x, x)).withResources(rp1)
     val (shuffledeps, resourceprofiles) = scheduler.getShuffleDependenciesAndResourceProfiles(rdd)
     val rpMerged = scheduler.mergeResourceProfilesForStage(resourceprofiles)
     val expectedid = Option(rdd.getResourceProfile).map(_.id)
