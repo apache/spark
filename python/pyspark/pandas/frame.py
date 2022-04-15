@@ -1310,7 +1310,9 @@ class DataFrame(Frame, Generic[T]):
         """
         return cast(DataFrame, ps.from_pandas(corr(self, method)))
 
-    def corrwith(self, other: DataFrameOrSeries, drop=False, method: str = "pearson") -> "Series":
+    def corrwith(
+        self, other: DataFrameOrSeries, drop: bool = True, method: str = "pearson"
+    ) -> "Series":
         """
         Compute pairwise correlation.
 
