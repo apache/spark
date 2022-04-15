@@ -132,7 +132,7 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession {
       sqlState = "42000",
       message =
         """
-          |Invalid SQL syntax: The definition of window 'win' is repetitive.(line 1, pos 31)
+          |Invalid SQL syntax: The definition of window `win` is repetitive.(line 1, pos 31)
           |
           |== SQL ==
           |SELECT min(a) OVER win FROM t1 WINDOW win AS win, win AS win2
@@ -147,7 +147,7 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession {
       sqlState = "42000",
       message =
         """
-          |Invalid SQL syntax: Window reference 'win' is not a window specification.(line 1, pos 31)
+          |Invalid SQL syntax: Window reference `win` is not a window specification.(line 1, pos 31)
           |
           |== SQL ==
           |SELECT min(a) OVER win FROM t1 WINDOW win AS win
@@ -162,7 +162,7 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession {
       sqlState = "42000",
       message =
         """
-          |Invalid SQL syntax: Cannot resolve window reference 'win2'.(line 1, pos 31)
+          |Invalid SQL syntax: Cannot resolve window reference `win2`.(line 1, pos 31)
           |
           |== SQL ==
           |SELECT min(a) OVER win FROM t1 WINDOW win AS win2
@@ -211,7 +211,7 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession {
       sqlState = "42000",
       message =
         """
-          |Invalid SQL syntax: Too many arguments for transform years(line 1, pos 44)
+          |Invalid SQL syntax: Too many arguments for transform `years`(line 1, pos 44)
           |
           |== SQL ==
           |CREATE TABLE table(col int) PARTITIONED BY (years(col,col))
@@ -226,7 +226,7 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession {
       sqlState = "42000",
       message =
         """
-          |Invalid SQL syntax: Unsupported function name 'ns.db.func'(line 1, pos 14)
+          |Invalid SQL syntax: Unsupported function name `ns`.`db`.`func`(line 1, pos 14)
           |
           |== SQL ==
           |SELECT * FROM ns.db.func()
@@ -241,7 +241,7 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession {
       sqlState = "42000",
       message =
         """
-          |Invalid SQL syntax: SHOW sys FUNCTIONS not supported(line 1, pos 5)
+          |Invalid SQL syntax: SHOW `sys` FUNCTIONS not supported(line 1, pos 5)
           |
           |== SQL ==
           |SHOW sys FUNCTIONS
@@ -251,7 +251,7 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession {
 
   test("INVALID_SQL_SYNTAX: Invalid pattern in show functions") {
     val errorDesc =
-      "Invalid pattern in SHOW FUNCTIONS: f1. It must be a string literal.(line 1, pos 21)"
+      "Invalid pattern in SHOW FUNCTIONS: `f1`. It must be a string literal.(line 1, pos 21)"
 
     validateParsingError(
       sqlText = "SHOW FUNCTIONS IN db f1",
@@ -335,7 +335,7 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession {
       sqlState = "42000",
       message =
         """
-          |Invalid SQL syntax: Unsupported function name 'ns.db.func'(line 2, pos 0)
+          |Invalid SQL syntax: Unsupported function name `ns`.`db`.`func`(line 2, pos 0)
           |
           |== SQL ==
           |
@@ -354,7 +354,7 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession {
         |JAR '/path/to/jar2'
         |""".stripMargin
     val errorDesc =
-      "Specifying a database in CREATE TEMPORARY FUNCTION is not allowed: 'db'(line 2, pos 0)"
+      "Specifying a database in CREATE TEMPORARY FUNCTION is not allowed: `db`(line 2, pos 0)"
 
     validateParsingError(
       sqlText = sqlText,
@@ -375,7 +375,7 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession {
 
   test("INVALID_SQL_SYNTAX: Drop temporary function requires a single part name") {
     val errorDesc =
-      "DROP TEMPORARY FUNCTION requires a single part name but got: db.func(line 1, pos 0)"
+      "DROP TEMPORARY FUNCTION requires a single part name but got: `db`.`func`(line 1, pos 0)"
 
     validateParsingError(
       sqlText = "DROP TEMPORARY FUNCTION db.func",
@@ -398,7 +398,7 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession {
       sqlState = "23000",
       message =
         """
-          |Found duplicate keys 'p1'(line 1, pos 29)
+          |Found duplicate keys `p1`(line 1, pos 29)
           |
           |== SQL ==
           |INSERT OVERWRITE TABLE table PARTITION(p1='1', p1='1') SELECT 'col1', 'col2'
