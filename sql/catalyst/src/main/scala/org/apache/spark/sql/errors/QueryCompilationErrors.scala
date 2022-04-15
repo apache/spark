@@ -1347,7 +1347,7 @@ object QueryCompilationErrors extends QueryErrorsBase {
       groupAggPandasUDFNames: Seq[String]): Throwable = {
     new AnalysisException(
       errorClass = "INVALID_PANDAS_UDF_PLACEMENT",
-      messageParameters = Array(groupAggPandasUDFNames.map(name => s"'$name'").mkString(", ")))
+      messageParameters = Array(groupAggPandasUDFNames.map(toSQLId).mkString(", ")))
   }
 
   def ambiguousAttributesInSelfJoinError(
