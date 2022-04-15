@@ -27,7 +27,6 @@ import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
-
 /**
  * This is a rule to process DEFAULT columns in statements such as CREATE/REPLACE TABLE.
  *
