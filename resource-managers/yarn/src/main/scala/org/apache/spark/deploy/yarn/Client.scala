@@ -1333,9 +1333,6 @@ private[spark] class Client(
       if (state == YarnApplicationState.FAILED || state == YarnApplicationState.KILLED) {
         cleanupStagingDir()
         throw new SparkException(s"Application $appId finished with status: $state")
-      } else {
-        val fs = stagingDirPath.getFileSystem(hadoopConf)
-        fs.deleteOnExit(stagingDirPath)
       }
     } else {
       val YarnAppReport(appState, finalState, diags) = monitorApplication()
