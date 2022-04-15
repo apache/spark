@@ -371,6 +371,24 @@ class QueryExecutionErrorsSuite extends QueryTest
     }
   }
 
+  test("DIVIDE_BY_ZERO: can't divide an integer by zero") {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      val e = intercept[SparkArithmeticException] {
+        sql("select 6/0").collect()
+      }
+      assert(e.getErrorClass === "DIVIDE_BY_ZERO")
+      assert(e.getSqlState === "22012")
+      assert(e.getMessage ===
+        "divide by zero. To return NULL instead, use 'try_divide'. If necessary set " +
+          "spark.sql.ansi.enabled to false (except for ANSI interval type) to bypass this error." +
+          """
+            |== SQL(line 1, position 7) ==
+            |select 6/0
+            |       ^^^
+            |""".stripMargin)
+    }
+  }
+
   test("INVALID_FRACTION_OF_SECOND: make_timestamp failure - the fraction of sec must be zero") {
     withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
       val e = intercept[SparkDateTimeException] {
