@@ -416,4 +416,19 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession {
           |-----------------------------^^^
           |""".stripMargin)
   }
+
+  test("DUPLICATE_KEY: in table properties") {
+    validateParsingError(
+      sqlText = "ALTER TABLE dbx.tab1 SET TBLPROPERTIES ('key1' = '1', 'key1' = '2')",
+      errorClass = "DUPLICATE_KEY",
+      sqlState = "23000",
+      message =
+        """
+          |Found duplicate keys `key1`(line 1, pos 39)
+          |
+          |== SQL ==
+          |ALTER TABLE dbx.tab1 SET TBLPROPERTIES ('key1' = '1', 'key1' = '2')
+          |---------------------------------------^^^
+          |""".stripMargin)
+  }
 }
