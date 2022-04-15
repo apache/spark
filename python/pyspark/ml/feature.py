@@ -177,6 +177,8 @@ class Binarizer(
     ...
     """
 
+    _input_kwargs: Dict[str, Any]
+
     threshold: Param[float] = Param(
         Params._dummy(),
         "threshold",
@@ -194,8 +196,6 @@ class Binarizer(
         + "be applied across all columns.",
         typeConverter=TypeConverters.toListFloat,
     )
-
-    _input_kwargs: Dict[str, Any]
 
     @overload
     def __init__(
@@ -721,6 +721,8 @@ class Bucketizer(
     ...
     """
 
+    _input_kwargs: Dict[str, Any]
+
     splits: Param[List[float]] = Param(
         Params._dummy(),
         "splits",
@@ -761,8 +763,6 @@ class Bucketizer(
         + "specified will be treated as errors.",
         typeConverter=TypeConverters.toListListFloat,
     )
-
-    _input_kwargs: Dict[str, Any]
 
     @overload
     def __init__(
@@ -1284,14 +1284,14 @@ class DCT(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable["DCT"], Jav
     False
     """
 
+    _input_kwargs: Dict[str, Any]
+
     inverse: Param[bool] = Param(
         Params._dummy(),
         "inverse",
         "Set transformer to perform inverse DCT, " + "default False.",
         typeConverter=TypeConverters.toBoolean,
     )
-
-    _input_kwargs: Dict[str, Any]
 
     @keyword_only
     def __init__(
@@ -1392,14 +1392,14 @@ class ElementwiseProduct(
     True
     """
 
+    _input_kwargs: Dict[str, Any]
+
     scalingVec: Param[Vector] = Param(
         Params._dummy(),
         "scalingVec",
         "Vector for hadamard product.",
         typeConverter=TypeConverters.toVector,
     )
-
-    _input_kwargs: Dict[str, Any]
 
     @keyword_only
     def __init__(
@@ -1528,14 +1528,14 @@ class FeatureHasher(
     True
     """
 
+    _input_kwargs: Dict[str, Any]
+
     categoricalCols: Param[List[str]] = Param(
         Params._dummy(),
         "categoricalCols",
         "numeric columns to treat as categorical",
         typeConverter=TypeConverters.toListString,
     )
-
-    _input_kwargs: Dict[str, Any]
 
     @keyword_only
     def __init__(
@@ -1650,6 +1650,8 @@ class HashingTF(
     5
     """
 
+    _input_kwargs: Dict[str, Any]
+
     binary: Param[bool] = Param(
         Params._dummy(),
         "binary",
@@ -1658,8 +1660,6 @@ class HashingTF(
         + "rather than integer counts. Default False.",
         typeConverter=TypeConverters.toBoolean,
     )
-
-    _input_kwargs: Dict[str, Any]
 
     @keyword_only
     def __init__(
@@ -2882,14 +2882,14 @@ class NGram(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable["NGram"],
     True
     """
 
+    _input_kwargs: Dict[str, Any]
+
     n: Param[int] = Param(
         Params._dummy(),
         "n",
         "number of elements per n-gram (>=1)",
         typeConverter=TypeConverters.toInt,
     )
-
-    _input_kwargs: Dict[str, Any]
 
     @keyword_only
     def __init__(
@@ -2982,9 +2982,9 @@ class Normalizer(
     True
     """
 
-    p = Param(Params._dummy(), "p", "the p norm value.", typeConverter=TypeConverters.toFloat)
-
     _input_kwargs: Dict[str, Any]
+
+    p = Param(Params._dummy(), "p", "the p norm value.", typeConverter=TypeConverters.toFloat)
 
     @keyword_only
     def __init__(
@@ -3378,14 +3378,14 @@ class PolynomialExpansion(
     True
     """
 
+    _input_kwargs: Dict[str, Any]
+
     degree: Param[int] = Param(
         Params._dummy(),
         "degree",
         "the polynomial degree to expand (>= 1)",
         typeConverter=TypeConverters.toInt,
     )
-
-    _input_kwargs: Dict[str, Any]
 
     @keyword_only
     def __init__(
@@ -3546,6 +3546,8 @@ class QuantileDiscretizer(
     ...
     """
 
+    _input_kwargs: Dict[str, Any]
+
     numBuckets: Param[int] = Param(
         Params._dummy(),
         "numBuckets",
@@ -3578,8 +3580,6 @@ class QuantileDiscretizer(
         + "then numBuckets will be applied across all columns.",
         typeConverter=TypeConverters.toListInt,
     )
-
-    _input_kwargs: Dict[str, Any]
 
     @overload
     def __init__(
@@ -4076,6 +4076,8 @@ class RegexTokenizer(
     True
     """
 
+    _input_kwargs: Dict[str, Any]
+
     minTokenLength: Param[int] = Param(
         Params._dummy(),
         "minTokenLength",
@@ -4099,8 +4101,6 @@ class RegexTokenizer(
         "whether to convert all characters to " + "lowercase before tokenizing",
         typeConverter=TypeConverters.toBoolean,
     )
-
-    _input_kwargs: Dict[str, Any]
 
     @keyword_only
     def __init__(
@@ -4237,11 +4237,11 @@ class SQLTransformer(JavaTransformer, JavaMLReadable["SQLTransformer"], JavaMLWr
     True
     """
 
+    _input_kwargs: Dict[str, Any]
+
     statement = Param(
         Params._dummy(), "statement", "SQL statement", typeConverter=TypeConverters.toString
     )
-
-    _input_kwargs: Dict[str, Any]
 
     @keyword_only
     def __init__(self, *, statement: Optional[str] = None):
@@ -4874,6 +4874,8 @@ class IndexToString(
     StringIndexer : for converting categorical values into category indices
     """
 
+    _input_kwargs: Dict[str, Any]
+
     labels: Param[List[str]] = Param(
         Params._dummy(),
         "labels",
@@ -4881,8 +4883,6 @@ class IndexToString(
         + " If not provided or if empty, then metadata from inputCol is used instead.",
         typeConverter=TypeConverters.toListString,
     )
-
-    _input_kwargs: Dict[str, Any]
 
     @keyword_only
     def __init__(
@@ -4996,6 +4996,8 @@ class StopWordsRemover(
     ...
     """
 
+    _input_kwargs: Dict[str, Any]
+
     stopWords: Param[List[str]] = Param(
         Params._dummy(),
         "stopWords",
@@ -5014,8 +5016,6 @@ class StopWordsRemover(
         "locale of the input. ignored when case sensitive " + "is true",
         typeConverter=TypeConverters.toString,
     )
-
-    _input_kwargs: Dict[str, Any]
 
     @overload
     def __init__(
@@ -5327,6 +5327,8 @@ class VectorAssembler(
     ...
     """
 
+    _input_kwargs: Dict[str, Any]
+
     handleInvalid: Param[str] = Param(
         Params._dummy(),
         "handleInvalid",
@@ -5340,8 +5342,6 @@ class VectorAssembler(
         + "only in case of 'error' or 'skip').",
         typeConverter=TypeConverters.toString,
     )
-
-    _input_kwargs: Dict[str, Any]
 
     @keyword_only
     def __init__(
@@ -5690,6 +5690,8 @@ class VectorSlicer(
     True
     """
 
+    _input_kwargs: Dict[str, Any]
+
     indices: Param[List[int]] = Param(
         Params._dummy(),
         "indices",
@@ -5706,8 +5708,6 @@ class VectorSlicer(
         + "indices.",
         typeConverter=TypeConverters.toListString,
     )
-
-    _input_kwargs: Dict[str, Any]
 
     @keyword_only
     def __init__(
@@ -6909,6 +6909,8 @@ class VectorSizeHint(
     True
     """
 
+    _input_kwargs: Dict[str, Any]
+
     size: Param[int] = Param(
         Params._dummy(), "size", "Size of vectors in column.", typeConverter=TypeConverters.toInt
     )
@@ -6923,8 +6925,6 @@ class VectorSizeHint(
         "`error` by default.",
         TypeConverters.toString,
     )
-
-    _input_kwargs: Dict[str, Any]
 
     @keyword_only
     def __init__(
