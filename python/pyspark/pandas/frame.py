@@ -1310,7 +1310,7 @@ class DataFrame(Frame, Generic[T]):
         """
         return cast(DataFrame, ps.from_pandas(corr(self, method)))
 
-    def corrwith(self, other: DataFrameOrSeries, drop=False, method="pearson") -> "Series":
+    def corrwith(self, other: DataFrameOrSeries, drop=False, method: str = "pearson") -> "Series":
         """
         Compute pairwise correlation.
 
@@ -1391,30 +1391,26 @@ class DataFrame(Frame, Generic[T]):
             this = combined["this"]
             that = combined["that"]
 
-        this_numeric_column_labels = []
+        this_numeric_column_labels: List[Label] = []
         for column_label in this._internal.column_labels:
             if isinstance(this._internal.spark_type_for(column_label), (NumericType, BooleanType)):
                 this_numeric_column_labels.append(column_label)
 
-        that_numeric_column_labels = []
+        that_numeric_column_labels: List[Label] = []
         for column_label in that._internal.column_labels:
             if isinstance(that._internal.spark_type_for(column_label), (NumericType, BooleanType)):
                 that_numeric_column_labels.append(column_label)
 
+        intersect_numeric_column_labels: List[Label] = []
+        diff_numeric_column_labels: List[Label] = []
         if right_is_series:
             intersect_numeric_column_labels = this_numeric_column_labels
-            diff_numeric_column_labels = []
-
             corr_scols = []
-            that_scol = that._internal.spark_column_for(that_numeric_column_labels[0]).cast(
-                "double"
-            )
+            that_scol = that._internal.spark_column_for(that_numeric_column_labels[0])
             for numeric_column_label in intersect_numeric_column_labels:
-                this_scol = this._internal.spark_column_for(numeric_column_label).cast("double")
-                corr_scols.append(F.corr(this_scol, that_scol))
+                this_scol = this._internal.spark_column_for(numeric_column_label)
+                corr_scols.append(F.corr(this_scol.cast("double"), that_scol.cast("double")))
         else:
-            intersect_numeric_column_labels = []
-            diff_numeric_column_labels = []
             for numeric_column_label in this_numeric_column_labels:
                 if numeric_column_label in that_numeric_column_labels:
                     intersect_numeric_column_labels.append(numeric_column_label)
@@ -1423,29 +1419,26 @@ class DataFrame(Frame, Generic[T]):
             for numeric_column_label in that_numeric_column_labels:
                 if numeric_column_label not in this_numeric_column_labels:
                     diff_numeric_column_labels.append(numeric_column_label)
-
             corr_scols = []
             for numeric_column_label in intersect_numeric_column_labels:
-                this_scol = this._internal.spark_column_for(numeric_column_label).cast("double")
-                that_scol = that._internal.spark_column_for(numeric_column_label).cast("double")
-                corr_scols.append(F.corr(this_scol, that_scol))
+                this_scol = this._internal.spark_column_for(numeric_column_label)
+                that_scol = that._internal.spark_column_for(numeric_column_label)
+                corr_scols.append(F.corr(this_scol.cast("double"), that_scol.cast("double")))
 
         ret_column_labels = []
-        ret_corr_values = []
+        ret_values = []
         if len(intersect_numeric_column_labels) > 0:
             ret_column_labels = intersect_numeric_column_labels
             pcorr = combined._internal.spark_frame.select(*corr_scols).toPandas()
-            ret_corr_values = [
-                pcorr.iloc[0, i] for i in range(len(intersect_numeric_column_labels))
-            ]
+            ret_values = [pcorr.iloc[0, i] for i in range(len(intersect_numeric_column_labels))]
 
         if not drop and len(diff_numeric_column_labels) > 0:
             for numeric_column_label in diff_numeric_column_labels:
                 ret_column_labels.append(numeric_column_label)
-                ret_corr_values.append(np.nan)
+                ret_values.append(np.nan)
 
         idx = pd.Index([label[0] for label in ret_column_labels])
-        return ps.Series(ret_corr_values, idx)
+        return ps.Series(ret_values, idx)
 
     def iteritems(self) -> Iterator[Tuple[Name, "Series"]]:
         """
