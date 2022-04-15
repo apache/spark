@@ -310,6 +310,16 @@ class QueryCompilationErrorsSuite extends QueryTest with SharedSparkSession {
       }
     }
   }
+
+  test("SECOND_FUNCTION_ARGUMENT_NOT_INTEGER: data_add's second argument must be integer") {
+    val e = intercept[AnalysisException] {
+      sql("select date_add('1982-08-15', 'x')").collect()
+    }
+    assert(e.getErrorClass === "SECOND_FUNCTION_ARGUMENT_NOT_INTEGER")
+    assert(e.getSqlState === "22023")
+    assert(e.getMessage.matches(
+      "The second argument of 'date_add' function needs to be an integer."))
+  }
 }
 
 class MyCastToString extends SparkUserDefinedFunction(
