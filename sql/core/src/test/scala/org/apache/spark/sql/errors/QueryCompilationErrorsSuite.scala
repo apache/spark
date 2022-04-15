@@ -311,7 +311,8 @@ class QueryCompilationErrorsSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("SECOND_FUNCTION_ARGUMENT_NOT_INTEGER: data_add's second argument must be integer") {
+  test("SECOND_FUNCTION_ARGUMENT_NOT_INTEGER: " +
+    "the second argument of 'date_add' function needs to be an integer") {
     val e = intercept[AnalysisException] {
       sql("select date_add('1982-08-15', 'x')").collect()
     }
