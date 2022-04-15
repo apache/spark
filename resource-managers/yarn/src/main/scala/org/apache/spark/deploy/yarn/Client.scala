@@ -1331,7 +1331,6 @@ private[spark] class Client(
       logInfo(s"Application report for $appId (state: $state)")
       logInfo(formatReportDetails(report, getDriverLogsLink(report)))
       if (state == YarnApplicationState.FAILED || state == YarnApplicationState.KILLED) {
-        cleanupStagingDir()
         throw new SparkException(s"Application $appId finished with status: $state")
       }
     } else {
