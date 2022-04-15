@@ -1311,7 +1311,7 @@ class DataFrame(Frame, Generic[T]):
         return cast(DataFrame, ps.from_pandas(corr(self, method)))
 
     def corrwith(
-        self, other: DataFrameOrSeries, drop: bool = True, method: str = "pearson"
+        self, other: DataFrameOrSeries, drop: bool = False, method: str = "pearson"
     ) -> "Series":
         """
         Compute pairwise correlation.
@@ -1347,33 +1347,33 @@ class DataFrame(Frame, Generic[T]):
 
         Examples
         --------
-        >>> from pyspark.pandas.config import set_option, reset_option
-        >>> set_option("compute.ops_on_diff_frames", True)
         >>> df1 = ps.DataFrame({"A":[1, 5, 7, 8],
         ...         "X":[5, 8, 4, 3],
         ...         "C":[10, 4, 9, 3]})
-        >>> df2 = ps.DataFrame({"A":[5, 3, 6, 4],
-        ...         "B":[11, 2, 4, 3],
-        ...         "C":[4, 3, 8, 5]})
-        >>> df1.corrwith(df2)
-        A   -0.041703
-        C    0.395437
-        X         NaN
-        B         NaN
-        dtype: float64
-
         >>> df1.corrwith(df1[["X", "C"]])
         X    1.0
         C    1.0
         A    NaN
         dtype: float64
 
-        >>> df2.corrwith(df1.X)
+        >>> df2 = ps.DataFrame({"A":[5, 3, 6, 4],
+        ...         "B":[11, 2, 4, 3],
+        ...         "C":[4, 3, 8, 5]})
+
+        >>> with ps.option_context("compute.ops_on_diff_frames", True):
+        >>>     df1.corrwith(df2)
+        A   -0.041703
+        C    0.395437
+        X         NaN
+        B         NaN
+        dtype: float64
+
+        >>> with ps.option_context("compute.ops_on_diff_frames", True):
+        >>>     df2.corrwith(df1.X)
         A   -0.597614
         B   -0.151186
         C   -0.642857
         dtype: float64
-        >>> reset_option("compute.ops_on_diff_frames")
         """
         from pyspark.pandas.series import Series
 
