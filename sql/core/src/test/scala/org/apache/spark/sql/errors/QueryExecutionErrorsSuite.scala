@@ -17,15 +17,22 @@
 
 package org.apache.spark.sql.errors
 
-import org.apache.spark.{SparkArithmeticException, SparkException, SparkRuntimeException, SparkUnsupportedOperationException, SparkUpgradeException}
+import java.util.Locale
+
+import test.org.apache.spark.sql.connector.JavaSimpleWritableDataSource
+
+import org.apache.spark.{SparkArithmeticException, SparkException, SparkIllegalStateException, SparkRuntimeException, SparkUnsupportedOperationException, SparkUpgradeException}
 import org.apache.spark.sql.{DataFrame, QueryTest}
+import org.apache.spark.sql.catalyst.util.BadRecordException
+import org.apache.spark.sql.connector.SimpleWritableDataSource
+import org.apache.spark.sql.execution.QueryExecutionException
 import org.apache.spark.sql.execution.datasources.orc.OrcTest
 import org.apache.spark.sql.execution.datasources.parquet.ParquetTest
 import org.apache.spark.sql.functions.{lit, lower, struct, sum}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy.EXCEPTION
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{StructType, TimestampType}
+import org.apache.spark.sql.types.{DecimalType, StructType, TimestampType}
 import org.apache.spark.sql.util.ArrowUtils
 
 class QueryExecutionErrorsSuite extends QueryTest
@@ -277,5 +284,77 @@ class QueryExecutionErrorsSuite extends QueryTest
     assert(e.getSqlState === "22008")
     assert(e.getMessage ===
       "Datetime operation overflow: add 1000000 YEAR to TIMESTAMP '2022-03-09 01:02:03'.")
+  }
+
+  test("CANNOT_PARSE_DECIMAL: unparseable decimal") {
+    val e1 = intercept[SparkException] {
+      withTempPath { path =>
+
+        // original text
+        val df1 = Seq(
+          "money",
+          "\"$92,807.99\""
+        ).toDF()
+
+        df1.coalesce(1).write.text(path.getAbsolutePath)
+
+        val schema = new StructType().add("money", DecimalType.DoubleDecimal)
+        spark
+          .read
+          .schema(schema)
+          .format("csv")
+          .option("header", "true")
+          .option("locale", Locale.ROOT.toLanguageTag)
+          .option("multiLine", "true")
+          .option("inferSchema", "false")
+          .option("mode", "FAILFAST")
+          .load(path.getAbsolutePath).select($"money").collect()
+      }
+    }
+    assert(e1.getCause.isInstanceOf[QueryExecutionException])
+
+    val e2 = e1.getCause.asInstanceOf[QueryExecutionException]
+    assert(e2.getCause.isInstanceOf[SparkException])
+
+    val e3 = e2.getCause.asInstanceOf[SparkException]
+    assert(e3.getCause.isInstanceOf[BadRecordException])
+
+    val e4 = e3.getCause.asInstanceOf[BadRecordException]
+    assert(e4.getCause.isInstanceOf[SparkIllegalStateException])
+
+    val e5 = e4.getCause.asInstanceOf[SparkIllegalStateException]
+    assert(e5.getErrorClass === "CANNOT_PARSE_DECIMAL")
+    assert(e5.getSqlState === "42000")
+    assert(e5.getMessage === "Cannot parse decimal")
+  }
+
+  test("WRITING_JOB_ABORTED: read of input data fails in the middle") {
+    Seq(classOf[SimpleWritableDataSource], classOf[JavaSimpleWritableDataSource]).foreach { cls =>
+      withTempPath { file =>
+        val path = file.getCanonicalPath
+        assert(spark.read.format(cls.getName).option("path", path).load().collect().isEmpty)
+        // test transaction
+        val failingUdf = org.apache.spark.sql.functions.udf {
+          var count = 0
+          (id: Long) => {
+            if (count > 5) {
+              throw new RuntimeException("testing error")
+            }
+            count += 1
+            id
+          }
+        }
+        val input = spark.range(15).select(failingUdf($"id").as(Symbol("i")))
+          .select($"i", -$"i" as Symbol("j"))
+        val e = intercept[SparkException] {
+          input.write.format(cls.getName).option("path", path).mode("overwrite").save()
+        }
+        assert(e.getMessage === "Writing job aborted")
+        assert(e.getErrorClass === "WRITING_JOB_ABORTED")
+        assert(e.getSqlState === "40000")
+        // make sure we don't have partial data.
+        assert(spark.read.format(cls.getName).option("path", path).load().collect().isEmpty)
+      }
+    }
   }
 }
