@@ -17,7 +17,6 @@
 
 package test.org.apache.spark.sql.connector;
 
-import org.apache.spark.sql.connector.TestingV2Source;
 import org.apache.spark.sql.connector.catalog.Table;
 import org.apache.spark.sql.connector.expressions.*;
 import org.apache.spark.sql.connector.read.*;
@@ -34,7 +33,7 @@ public class JavaOrderAndPartitionAwareDataSource extends JavaPartitionAwareData
     private final Partitioning partitioning;
     private final SortOrder[] ordering;
 
-    public MyScanBuilder(String partitionKeys, String orderKeys) {
+    MyScanBuilder(String partitionKeys, String orderKeys) {
       if (partitionKeys != null) {
         String[] keys = partitionKeys.split(",");
         Expression[] clustering = new Transform[keys.length];
