@@ -149,61 +149,61 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
   test("advanced implementation with V2 Filter") {
     Seq(classOf[AdvancedDataSourceV2WithV2Filter], classOf[JavaAdvancedDataSourceV2WithV2Filter])
       .foreach { cls =>
-      withClue(cls.getName) {
-        val df = spark.read.format(cls.getName).load()
-        checkAnswer(df, (0 until 10).map(i => Row(i, -i)))
+        withClue(cls.getName) {
+          val df = spark.read.format(cls.getName).load()
+          checkAnswer(df, (0 until 10).map(i => Row(i, -i)))
 
-        val q1 = df.select($"j")
-        checkAnswer(q1, (0 until 10).map(i => Row(-i)))
-        if (cls == classOf[AdvancedDataSourceV2WithV2Filter]) {
-          val batch = getBatchWithV2Filter(q1)
-          assert(batch.predicates.isEmpty)
-          assert(batch.requiredSchema.fieldNames === Seq("j"))
-        } else {
-          val batch = getJavaBatchWithV2Filter(q1)
-          assert(batch.predicates.isEmpty)
-          assert(batch.requiredSchema.fieldNames === Seq("j"))
-        }
+          val q1 = df.select($"j")
+          checkAnswer(q1, (0 until 10).map(i => Row(-i)))
+          if (cls == classOf[AdvancedDataSourceV2WithV2Filter]) {
+            val batch = getBatchWithV2Filter(q1)
+            assert(batch.predicates.isEmpty)
+            assert(batch.requiredSchema.fieldNames === Seq("j"))
+          } else {
+            val batch = getJavaBatchWithV2Filter(q1)
+            assert(batch.predicates.isEmpty)
+            assert(batch.requiredSchema.fieldNames === Seq("j"))
+          }
 
-        val q2 = df.filter($"i" > 3)
-        checkAnswer(q2, (4 until 10).map(i => Row(i, -i)))
-        if (cls == classOf[AdvancedDataSourceV2WithV2Filter]) {
-          val batch = getBatchWithV2Filter(q2)
-          assert(batch.predicates.flatMap(_.references.map(_.describe)).toSet == Set("i"))
-          assert(batch.requiredSchema.fieldNames === Seq("i", "j"))
-        } else {
-          val batch = getJavaBatchWithV2Filter(q2)
-          assert(batch.predicates.flatMap(_.references.map(_.describe)).toSet == Set("i"))
-          assert(batch.requiredSchema.fieldNames === Seq("i", "j"))
-        }
+          val q2 = df.filter($"i" > 3)
+          checkAnswer(q2, (4 until 10).map(i => Row(i, -i)))
+          if (cls == classOf[AdvancedDataSourceV2WithV2Filter]) {
+            val batch = getBatchWithV2Filter(q2)
+            assert(batch.predicates.flatMap(_.references.map(_.describe)).toSet == Set("i"))
+            assert(batch.requiredSchema.fieldNames === Seq("i", "j"))
+          } else {
+            val batch = getJavaBatchWithV2Filter(q2)
+            assert(batch.predicates.flatMap(_.references.map(_.describe)).toSet == Set("i"))
+            assert(batch.requiredSchema.fieldNames === Seq("i", "j"))
+          }
 
-        val q3 = df.select($"i").filter($"i" > 6)
-        checkAnswer(q3, (7 until 10).map(i => Row(i)))
-        if (cls == classOf[AdvancedDataSourceV2WithV2Filter]) {
-          val batch = getBatchWithV2Filter(q3)
-          assert(batch.predicates.flatMap(_.references.map(_.describe)).toSet == Set("i"))
-          assert(batch.requiredSchema.fieldNames === Seq("i"))
-        } else {
-          val batch = getJavaBatchWithV2Filter(q3)
-          assert(batch.predicates.flatMap(_.references.map(_.describe)).toSet == Set("i"))
-          assert(batch.requiredSchema.fieldNames === Seq("i"))
-        }
+          val q3 = df.select($"i").filter($"i" > 6)
+          checkAnswer(q3, (7 until 10).map(i => Row(i)))
+          if (cls == classOf[AdvancedDataSourceV2WithV2Filter]) {
+            val batch = getBatchWithV2Filter(q3)
+            assert(batch.predicates.flatMap(_.references.map(_.describe)).toSet == Set("i"))
+            assert(batch.requiredSchema.fieldNames === Seq("i"))
+          } else {
+            val batch = getJavaBatchWithV2Filter(q3)
+            assert(batch.predicates.flatMap(_.references.map(_.describe)).toSet == Set("i"))
+            assert(batch.requiredSchema.fieldNames === Seq("i"))
+          }
 
-        val q4 = df.select($"j").filter($"j" < -10)
-        checkAnswer(q4, Nil)
-        if (cls == classOf[AdvancedDataSourceV2WithV2Filter]) {
-          val batch = getBatchWithV2Filter(q4)
-          // $"j" < 10 is not supported by the testing data source.
-          assert(batch.predicates.isEmpty)
-          assert(batch.requiredSchema.fieldNames === Seq("j"))
-        } else {
-          val batch = getJavaBatchWithV2Filter(q4)
-          // $"j" < 10 is not supported by the testing data source.
-          assert(batch.predicates.isEmpty)
-          assert(batch.requiredSchema.fieldNames === Seq("j"))
+          val q4 = df.select($"j").filter($"j" < -10)
+          checkAnswer(q4, Nil)
+          if (cls == classOf[AdvancedDataSourceV2WithV2Filter]) {
+            val batch = getBatchWithV2Filter(q4)
+            // $"j" < 10 is not supported by the testing data source.
+            assert(batch.predicates.isEmpty)
+            assert(batch.requiredSchema.fieldNames === Seq("j"))
+          } else {
+            val batch = getJavaBatchWithV2Filter(q4)
+            // $"j" < 10 is not supported by the testing data source.
+            assert(batch.predicates.isEmpty)
+            assert(batch.requiredSchema.fieldNames === Seq("j"))
+          }
         }
       }
-    }
   }
 
   test("columnar batch scan implementation") {
@@ -239,9 +239,9 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
       spark.range(10).select($"id" as Symbol("i"), -$"id" as Symbol("j"))
         .write.format(cls).option("path", dir.getCanonicalPath).mode("append").save()
       val schema = new StructType().add("i", "long").add("j", "long")
-        checkAnswer(
-          spark.read.format(cls).option("path", dir.getCanonicalPath).schema(schema).load(),
-          spark.range(10).select($"id", -$"id"))
+      checkAnswer(
+        spark.read.format(cls).option("path", dir.getCanonicalPath).schema(schema).load(),
+        spark.range(10).select($"id", -$"id"))
     }
   }
 
@@ -281,80 +281,82 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
     }
   }
 
-  // we test report ordering (in conjunction with report partitioning) with these transformations:
-  // - groupBy("i").flatMapGroups: hash-partitions by "i" and then sorts in partitions by "i"
-  //   requires partitioning and sort by "i"
-  // - aggregation function over window partitioned by "i" and ordered by "j"
-  //   does hash-partitions by "i" and sort in partition by "j"
-  //   requires partitioning by "i" and sort by "j"
-  Seq(
-    // with not partitioning and no order, we expect shuffling AND sorting
-    (None, None, (true, true), (true, true)),
-    // with partitioned by i and no order, we expect NO shuffling BUT sorting
-    (Some("i"), None, (false, true), (false, true)),
-    // with partitioned by i and in-partition sorted by i,
-    // we expect NO shuffling AND sorting for groupBy but sorting for window function
-    (Some("i"), Some("i"), (false, false), (false, true)),
-    // with partitioned by j and in-partition sorted by i, we expect shuffling AND sorting
-    (Some("j"), Some("i"), (true, true), (true, true)),
+  test("ordering and partitioning reporting") {
+    withSQLConf(SQLConf.V2_BUCKETING_ENABLED.key -> "true") {
+      Seq(
+        classOf[OrderAndPartitionAwareDataSource],
+        classOf[JavaOrderAndPartitionAwareDataSource]
+      ).foreach { cls =>
+        withClue(cls.getName) {
+          // we test report ordering (together with report partitioning) with these transformations:
+          // - groupBy("i").flatMapGroups:
+          //   hash-partitions by "i" and sorts each partition by "i"
+          //   requires partitioning and sort by "i"
+          // - aggregation function over window partitioned by "i" and ordered by "j":
+          //   hash-partitions by "i" and sorts each partition by "j"
+          //   requires partitioning by "i" and sort by "i" and "j"
+          Seq(
+            // with no partitioning and no order, we expect shuffling AND sorting
+            (None, None, (true, true), (true, true)),
+            // partitioned by i and no order, we expect NO shuffling BUT sorting
+            (Some("i"), None, (false, true), (false, true)),
+            // partitioned by i and in-partition sorted by i,
+            // we expect NO shuffling AND sorting for groupBy but sorting for window function
+            (Some("i"), Some("i"), (false, false), (false, true)),
+            // partitioned by i and in-partition sorted by j, we expect NO shuffling BUT sorting
+            (Some("i"), Some("j"), (false, true), (false, true)),
+            // partitioned by i and in-partition sorted by i,j, we expect NO shuffling NOR sorting
+            (Some("i"), Some("i,j"), (false, false), (false, false)),
+            // partitioned by j and in-partition sorted by i, we expect shuffling AND sorting
+            (Some("j"), Some("i"), (true, true), (true, true)),
+            // partitioned by j and in-partition sorted by i,j, we expect shuffling and sorting
+            (Some("j"), Some("i,j"), (true, true), (true, true))
+          ).foreach { testParams =>
+            val (partitionKeys, orderKeys, groupByExpects, windowFuncExpects) = testParams
 
-    // with partitioned by i and in-partition sorted by j, we expect NO shuffling BUT sorting
-    (Some("i"), Some("j"), (false, true), (false, true)),
-    // with partitioned by i and in-partition sorted by i,j, we expect NO shuffling and NO sorting
-    (Some("i"), Some("i,j"), (false, false), (false, false)),
-    // with partitioned by j and in-partition sorted by i,j, we expect shuffling and sorting
-    (Some("j"), Some("i,j"), (true, true), (true, true))
-  ).foreach { case (partitionKeys, orderKeys, groupByExpects, windowFuncExpects) =>
-    test(f"ordering and partitioning reporting: (${partitionKeys.orNull}, ${orderKeys.orNull})") {
-      withSQLConf(SQLConf.V2_BUCKETING_ENABLED.key -> "true") {
-        Seq(
-          classOf[OrderAndPartitionAwareDataSource],
-          classOf[JavaOrderAndPartitionAwareDataSource]
-        ).foreach { cls =>
-          withClue(cls.getName) {
-            val options = Map(
-              "partitionKeys" -> partitionKeys.orNull,
-              "orderKeys" -> orderKeys.orNull,
-            )
-            val df = spark.read.options(options).format(cls.getName).load()
-            checkAnswer(df, Seq(Row(1, 4), Row(1, 5), Row(3, 5), Row(2, 6), Row(4, 1), Row(4, 2)))
+            withClue(f"${partitionKeys.orNull} ${orderKeys.orNull}") {
+              val df = spark.read
+                .option("partitionKeys", partitionKeys.orNull)
+                .option("orderKeys", orderKeys.orNull)
+                .format(cls.getName)
+                .load()
+              checkAnswer(df, Seq(Row(1, 4), Row(1, 5), Row(3, 5), Row(2, 6), Row(4, 1), Row(4, 2)))
 
-            // groupBy(i).flatMapGroups
-            {
-              val groupBy = df.groupBy($"i").as[Int, (Int, Int)]
-                .flatMapGroups { case (i, it) => Iterator.single((i, it.length)) }
-              checkAnswer(
-                groupBy.toDF(),
-                Seq(Row(1, 2), Row(2, 1), Row(3, 1), Row(4, 2))
-              )
+              // groupBy(i).flatMapGroups
+              {
+                val groupBy = df.groupBy($"i").as[Int, (Int, Int)]
+                  .flatMapGroups { case (i, it) => Iterator.single((i, it.length)) }
+                checkAnswer(
+                  groupBy.toDF(),
+                  Seq(Row(1, 2), Row(2, 1), Row(3, 1), Row(4, 2))
+                )
 
-              val (shuffleExpected, sortExpected) = groupByExpects
-              assert(collectFirst(groupBy.queryExecution.executedPlan) {
-                case e: ShuffleExchangeExec => e
-              }.isDefined === shuffleExpected)
-              assert(collectFirst(groupBy.queryExecution.executedPlan) {
-                case e: SortExec => e
-              }.isDefined === sortExpected)
-            }
+                val (shuffleExpected, sortExpected) = groupByExpects
+                assert(collectFirst(groupBy.queryExecution.executedPlan) {
+                  case e: ShuffleExchangeExec => e
+                }.isDefined === shuffleExpected)
+                assert(collectFirst(groupBy.queryExecution.executedPlan) {
+                  case e: SortExec => e
+                }.isDefined === sortExpected)
+              }
 
+              // aggregation function over window partitioned by i and ordered by j
+              {
+                val windowPartByColIOrderByColJ = df.withColumn("no",
+                  row_number() over Window.partitionBy(Symbol("i")).orderBy(Symbol("j"))
+                )
+                checkAnswer(windowPartByColIOrderByColJ, Seq(
+                  Row(1, 4, 1), Row(1, 5, 2), Row(2, 6, 1), Row(3, 5, 1), Row(4, 1, 1), Row(4, 2, 2)
+                ))
 
-            // aggregation function over window partitioned by i and ordered by j
-            {
-              val windowPartByColIOrderByColJ = df.withColumn("no",
-                row_number() over Window.partitionBy(Symbol("i")).orderBy(Symbol("j"))
-              )
-              checkAnswer(
-                windowPartByColIOrderByColJ,
-                Seq(Row(1, 4, 1), Row(1, 5, 2), Row(2, 6, 1), Row(3, 5, 1), Row(4, 1, 1), Row(4, 2, 2))
-              )
-
-              val (shuffleExpected, sortExpected) = windowFuncExpects
-              assert(collectFirst(windowPartByColIOrderByColJ.queryExecution.executedPlan) {
-                case e: ShuffleExchangeExec => e
-              }.isDefined === shuffleExpected)
-              assert(collectFirst(windowPartByColIOrderByColJ.queryExecution.executedPlan) {
-                case e: SortExec => e
-              }.isDefined === sortExpected)
+                val (shuffleExpected, sortExpected) = windowFuncExpects
+                assert(collectFirst(windowPartByColIOrderByColJ.queryExecution.executedPlan) {
+                  case e: ShuffleExchangeExec => e
+                }.isDefined === shuffleExpected)
+                assert(collectFirst(windowPartByColIOrderByColJ.queryExecution.executedPlan) {
+                  case e: SortExec => e
+                }.isDefined === sortExpected)
+              }
             }
           }
         }
