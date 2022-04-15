@@ -1361,7 +1361,7 @@ class DataFrame(Frame, Generic[T]):
         ...         "C":[4, 3, 8, 5]})
 
         >>> with ps.option_context("compute.ops_on_diff_frames", True):
-        >>>     df1.corrwith(df2)
+        ...     df1.corrwith(df2)
         A   -0.041703
         C    0.395437
         X         NaN
@@ -1369,7 +1369,7 @@ class DataFrame(Frame, Generic[T]):
         dtype: float64
 
         >>> with ps.option_context("compute.ops_on_diff_frames", True):
-        >>>     df2.corrwith(df1.X)
+        ...     df2.corrwith(df1.X)
         A   -0.597614
         B   -0.151186
         C   -0.642857
