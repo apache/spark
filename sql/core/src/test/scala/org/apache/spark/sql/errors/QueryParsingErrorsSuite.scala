@@ -249,23 +249,34 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession {
           |""".stripMargin)
   }
 
+  // scalastyle:off line.size.limit
   test("INVALID_SQL_SYNTAX: Invalid pattern in show functions") {
-    val errorDesc =
-      "Invalid pattern in SHOW FUNCTIONS: `f1`. It must be a string literal.(line 1, pos 21)"
-
     validateParsingError(
       sqlText = "SHOW FUNCTIONS IN db f1",
       errorClass = "INVALID_SQL_SYNTAX",
       sqlState = "42000",
       message =
         s"""
-          |Invalid SQL syntax: $errorDesc
+          |Invalid SQL syntax: Invalid pattern in SHOW FUNCTIONS: `f1`. It must be a string literal.(line 1, pos 21)
           |
           |== SQL ==
           |SHOW FUNCTIONS IN db f1
           |---------------------^^^
           |""".stripMargin)
+    validateParsingError(
+      sqlText = "SHOW FUNCTIONS IN db LIKE f1",
+      errorClass = "INVALID_SQL_SYNTAX",
+      sqlState = "42000",
+      message =
+        s"""
+           |Invalid SQL syntax: Invalid pattern in SHOW FUNCTIONS: `f1`. It must be a string literal.(line 1, pos 26)
+           |
+           |== SQL ==
+           |SHOW FUNCTIONS IN db LIKE f1
+           |--------------------------^^^
+           |""".stripMargin)
   }
+  // scalastyle:on line.size.limit
 
   test("INVALID_SQL_SYNTAX: Create function with both if not exists and replace") {
     val sqlText =
