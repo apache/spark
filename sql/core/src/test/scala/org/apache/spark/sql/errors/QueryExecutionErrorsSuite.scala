@@ -357,4 +357,17 @@ class QueryExecutionErrorsSuite extends QueryTest
       }
     }
   }
+
+  test("CAST_CAUSES_OVERFLOW: from timestamp to int") {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      val e = intercept[SparkArithmeticException] {
+        sql("select CAST(TIMESTAMP '9999-12-31T12:13:14.56789Z' AS INT)").collect()
+      }
+      assert(e.getErrorClass === "CAST_CAUSES_OVERFLOW")
+      assert(e.getSqlState === "22005")
+      assert(e.getMessage === "Casting 253402258394567890L to int causes overflow. " +
+        "To return NULL instead, use 'try_cast'. " +
+        "If necessary set spark.sql.ansi.enabled to false to bypass this error.")
+    }
+  }
 }
