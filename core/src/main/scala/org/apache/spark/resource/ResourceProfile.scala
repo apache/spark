@@ -290,7 +290,7 @@ object ResourceProfile extends Logging {
 
   private[spark] val MEMORY_OVERHEAD_MIN_MIB = 384L
 
-  private lazy val nextProfileId = new AtomicInteger(0)
+  private lazy val nextProfileId = new AtomicInteger(DEFAULT_RESOURCE_PROFILE_ID + 1)
   private val DEFAULT_PROFILE_LOCK = new Object()
 
   // The default resource profile uses the application level configs.
