@@ -189,14 +189,21 @@ class AggregateOptimizeSuite extends AnalysisTest {
           .groupBy()(max($"$t.b"), min($"$t.c")).analyze),
         streamed.groupBy()(max($"$t.b"), min($"$t.c")).analyze)
 
-      // negative case
-      val p1 = x.join(y, joinType, Some($"x.a" === $"y.a"))
-        .groupBy($"x.a", $"y.b")(min($"x.b"), max($"y.a")).analyze
+      // negative cases
+      // with non-deterministic project
+      val p1 = x.join(y, joinType, Some($"x.a" === $"y.a")).select($"$t.a" as "a1", rand(1) as "b1")
+        .groupBy($"b1")($"b1", max($"a1")).analyze
       comparePlans(Optimize.execute(p1), p1)
 
+      // not from streamed side
       val p2 = x.join(y, joinType, Some($"x.a" === $"y.a"))
-        .groupBy($"$t.a")(sum($"$t.a")).analyze
+        .groupBy($"x.a", $"y.b")(min($"x.b"), max($"y.a")).analyze
       comparePlans(Optimize.execute(p2), p2)
+
+      // not duplicate agnostic
+      val p3 = x.join(y, joinType, Some($"x.a" === $"y.a"))
+        .groupBy($"$t.a")(sum($"$t.a")).analyze
+      comparePlans(Optimize.execute(p3), p3)
     }
   }
 }

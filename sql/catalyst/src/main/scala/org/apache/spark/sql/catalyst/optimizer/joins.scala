@@ -204,19 +204,17 @@ object EliminateOuterJoin extends Rule[LogicalPlan] with PredicateHelper {
       a.copy(child = p.copy(child = right))
 
     case a @ Aggregate(_, aggExprs, Join(left, _, LeftOuter, _, _))
-        if a.references.subsetOf(left.outputSet) &&
-          allDuplicateAgnostic(aggExprs) =>
+        if a.references.subsetOf(left.outputSet) && allDuplicateAgnostic(aggExprs) =>
       a.copy(child = left)
     case a @ Aggregate(_, aggExprs, Join(_, right, RightOuter, _, _))
-        if a.references.subsetOf(right.outputSet) &&
-          allDuplicateAgnostic(aggExprs) =>
+        if a.references.subsetOf(right.outputSet) && allDuplicateAgnostic(aggExprs) =>
       a.copy(child = right)
-    case a @ Aggregate(_, aggExprs, p @ Project(_, Join(left, _, LeftOuter, _, _)))
-        if p.references.subsetOf(left.outputSet) &&
+    case a @ Aggregate(_, aggExprs, p @ Project(projectList, Join(left, _, LeftOuter, _, _)))
+        if projectList.forall(_.deterministic) && p.references.subsetOf(left.outputSet) &&
           allDuplicateAgnostic(aggExprs) =>
       a.copy(child = p.copy(child = left))
-    case a @ Aggregate(_, aggExprs, p @ Project(_, Join(_, right, RightOuter, _, _)))
-        if p.references.subsetOf(right.outputSet) &&
+    case a @ Aggregate(_, aggExprs, p @ Project(projectList, Join(_, right, RightOuter, _, _)))
+        if projectList.forall(_.deterministic) && p.references.subsetOf(right.outputSet) &&
           allDuplicateAgnostic(aggExprs) =>
       a.copy(child = p.copy(child = right))
   }
