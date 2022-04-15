@@ -209,9 +209,8 @@ case class GlobalLimitAndOffsetExec(
 
   override def outputOrdering: Seq[SortOrder] = child.outputOrdering
 
-  override def doExecute(): RDD[InternalRow] = {
-    val rdd = child.execute().mapPartitions { iter => iter.take(limit + offset)}
-    rdd.zipWithIndex().filter(_._2 >= offset).map(_._1)
+  override def doExecute(): RDD[InternalRow] = child.execute().mapPartitions { iter =>
+    iter.take(limit + offset).drop(offset)
   }
 
   private lazy val skipTerm = BaseLimitExec.newLimitCountTerm()
