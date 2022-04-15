@@ -90,7 +90,7 @@ class DStream(Generic[T_co]):
         self.is_cached = False
         self.is_checkpointed = False
 
-    def context(self) -> StreamingContext:
+    def context(self) -> "StreamingContext":
         """
         Return the StreamingContext associated with this DStream
         """
