@@ -325,6 +325,8 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
 
   override def getListing(): Iterator[ApplicationInfo] = {
     // Return the listing in end time descending order.
+    // SPARK-38896: tryWithResource cannot be used here
+    // because this method needs to return an `Iterator`.
     listing.view(classOf[ApplicationInfoWrapper])
       .index("endTime")
       .reverse()

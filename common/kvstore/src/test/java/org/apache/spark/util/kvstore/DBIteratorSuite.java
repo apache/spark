@@ -490,6 +490,8 @@ public abstract class DBIteratorSuite {
   }
 
   private KVStoreView<CustomType1> view() throws Exception {
+    // SPARK-38896: this `view` will be closed in
+    // the `collect(KVStoreView<CustomType1> view)` method.
     return db.view(CustomType1.class);
   }
 
