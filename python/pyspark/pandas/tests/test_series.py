@@ -1715,11 +1715,17 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
 
         self.assert_eq(psser.drop(1), pser.drop(1))
         self.assert_eq(psser.drop([1, 4]), pser.drop([1, 4]))
+        self.assert_eq(psser.drop(columns=1), pser.drop(columns=1))
+        self.assert_eq(psser.drop(columns=[1, 4]), pser.drop(columns=[1, 4]))
 
-        msg = "Need to specify at least one of 'labels' or 'index'"
+        msg = "Need to specify at least one of 'labels', 'index' or 'columns'"
         with self.assertRaisesRegex(ValueError, msg):
             psser.drop()
         self.assertRaises(KeyError, lambda: psser.drop((0, 1)))
+
+        psser.drop([2, 3], inplace=True)
+        pser.drop([2, 3], inplace=True)
+        self.assert_eq(psser, pser)
 
         # For MultiIndex
         midx = pd.MultiIndex(
@@ -1750,13 +1756,20 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
         with self.assertRaisesRegex(ValueError, msg):
             psser.drop(["lama", ["cow", "falcon"]])
 
-        msg = "Cannot specify both 'labels' and 'index'"
+        msg = "Cannot specify both 'labels' and 'index'/'columns'"
         with self.assertRaisesRegex(ValueError, msg):
             psser.drop("lama", index="cow")
+
+        with self.assertRaisesRegex(ValueError, msg):
+            psser.drop("lama", columns="cow")
 
         msg = r"'Key length \(2\) exceeds index depth \(3\)'"
         with self.assertRaisesRegex(KeyError, msg):
             psser.drop(("lama", "speed", "x"))
+
+        psser.drop({"lama": "speed"}, inplace=True)
+        pser.drop({"lama": "speed"}, inplace=True)
+        self.assert_eq(psser, pser)
 
     def test_pop(self):
         midx = pd.MultiIndex(
