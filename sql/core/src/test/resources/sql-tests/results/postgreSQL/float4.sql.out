@@ -97,6 +97,9 @@ struct<>
 -- !query output
 org.apache.spark.SparkNumberFormatException
 invalid input syntax for type numeric: 'N A N'. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
+== SQL(line 1, position 7) ==
+SELECT float('N A N')
+       ^^^^^^^^^^^^^^
 
 
 -- !query
@@ -106,6 +109,9 @@ struct<>
 -- !query output
 org.apache.spark.SparkNumberFormatException
 invalid input syntax for type numeric: 'NaN x'. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
+== SQL(line 1, position 7) ==
+SELECT float('NaN x')
+       ^^^^^^^^^^^^^^
 
 
 -- !query
@@ -115,6 +121,9 @@ struct<>
 -- !query output
 org.apache.spark.SparkNumberFormatException
 invalid input syntax for type numeric: ' INFINITY    x'. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
+== SQL(line 1, position 7) ==
+SELECT float(' INFINITY    x')
+       ^^^^^^^^^^^^^^^^^^^^^^^
 
 
 -- !query
@@ -148,6 +157,9 @@ struct<>
 -- !query output
 org.apache.spark.SparkNumberFormatException
 invalid input syntax for type numeric: 'nan'. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
+== SQL(line 1, position 13) ==
+SELECT float(decimal('nan'))
+             ^^^^^^^^^^^^^^
 
 
 -- !query
