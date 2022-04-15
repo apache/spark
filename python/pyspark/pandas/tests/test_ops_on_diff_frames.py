@@ -1842,6 +1842,38 @@ class OpsOnDiffFramesEnabledTest(PandasOnSparkTestCase, SQLTestUtils):
         pscov = psser1.cov(psser2, min_periods=3)
         self.assert_eq(pcov, pscov, almost=True)
 
+    def test_corrwith(self):
+        df1 = pd.DataFrame({"A": [1, np.nan, 7, 8], "X": [5, 8, np.nan, 3], "C": [10, 4, 9, 3]})
+        df2 = df1[["A", "C"]]
+        self._test_corrwith(df1, df2)
+        self._test_corrwith(df1, df2.A)
+
+        df3 = pd.DataFrame({"A": [5, 3, 6, 4], "B": [11, 2, 4, 3], "C": [4, 3, 8, np.nan]})
+        self._test_corrwith(df1, df3)
+        self._test_corrwith(df1, df3.B)
+
+        df_bool = pd.DataFrame({"A": [True, True, False, False], "B": [True, False, False, True]})
+        ser_bool = pd.Series([True, True, False, True])
+        self._test_corrwith(df_bool, ser_bool)
+
+        self._test_corrwith(self.pdf1, self.pdf1)
+        self._test_corrwith(self.pdf1, self.pdf2)
+        self._test_corrwith(self.pdf2, self.pdf3)
+        self._test_corrwith(self.pdf3, self.pdf4)
+
+        self._test_corrwith(self.pdf1, self.pdf1.a)
+        self._test_corrwith(self.pdf1, self.pdf2.b)
+        self._test_corrwith(self.pdf2, self.pdf3.c)
+        self._test_corrwith(self.pdf3, self.pdf4.f)
+
+    def _test_corrwith(self, pdf, pobj):
+        psdf = ps.from_pandas(pdf)
+        psobj = ps.from_pandas(pobj)
+        for drop in [True, False]:
+            p_corr = pdf.corrwith(pobj, drop=drop)
+            ps_corr = psdf.corrwith(psobj, drop=drop)
+            self.assert_eq(p_corr.sort_index(), ps_corr.sort_index(), almost=True)
+
     def test_series_eq(self):
         pser = pd.Series([1, 2, 3, 4, 5, 6], name="x")
         psser = ps.from_pandas(pser)

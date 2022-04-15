@@ -1310,6 +1310,143 @@ class DataFrame(Frame, Generic[T]):
         """
         return cast(DataFrame, ps.from_pandas(corr(self, method)))
 
+    def corrwith(self, other: DataFrameOrSeries, drop=False, method="pearson") -> "Series":
+        """
+        Compute pairwise correlation.
+
+        Pairwise correlation is computed between rows or columns of
+        DataFrame with rows or columns of Series or DataFrame. DataFrames
+        are first aligned along both axes before computing the
+        correlations.
+
+        .. versionadded:: 3.4.0
+
+        Parameters
+        ----------
+        other : DataFrame, Series
+            Object with which to compute correlations.
+
+        drop : bool, default False
+            Drop missing indices from result.
+
+        method : str, default 'pearson'
+            Method of correlation, one of:
+
+            * pearson : standard correlation coefficient
+
+        Returns
+        -------
+        Series
+            Pairwise correlations.
+
+        See Also
+        --------
+        DataFrame.corr : Compute pairwise correlation of columns.
+
+        Examples
+        --------
+        >>> from pyspark.pandas.config import set_option, reset_option
+        >>> set_option("compute.ops_on_diff_frames", True)
+        >>> df1 = ps.DataFrame({"A":[1, 5, 7, 8],
+        ...         "X":[5, 8, 4, 3],
+        ...         "C":[10, 4, 9, 3]})
+        >>> df2 = ps.DataFrame({"A":[5, 3, 6, 4],
+        ...         "B":[11, 2, 4, 3],
+        ...         "C":[4, 3, 8, 5]})
+        >>> df1.corrwith(df2)
+        A   -0.041703
+        C    0.395437
+        X         NaN
+        B         NaN
+        dtype: float64
+
+        >>> df1.corrwith(df1[["X", "C"]])
+        X    1.0
+        C    1.0
+        A    NaN
+        dtype: float64
+
+        >>> df2.corrwith(df1.X)
+        A   -0.597614
+        B   -0.151186
+        C   -0.642857
+        dtype: float64
+        >>> reset_option("compute.ops_on_diff_frames")
+        """
+        from pyspark.pandas.series import Series
+
+        if (method is not None) and (method not in ["pearson"]):
+            raise NotImplementedError("corrwith currently works only for method='pearson'")
+        if not isinstance(other, (DataFrame, Series)):
+            raise TypeError("unsupported type: {}".format(type(other).__name__))
+
+        right_is_series = isinstance(other, Series)
+
+        if same_anchor(self, other):
+            combined = self
+            this = self
+            that = other
+        else:
+            combined = combine_frames(self, other, how="inner")
+            this = combined["this"]
+            that = combined["that"]
+
+        this_numeric_column_labels = []
+        for column_label in this._internal.column_labels:
+            if isinstance(this._internal.spark_type_for(column_label), (NumericType, BooleanType)):
+                this_numeric_column_labels.append(column_label)
+
+        that_numeric_column_labels = []
+        for column_label in that._internal.column_labels:
+            if isinstance(that._internal.spark_type_for(column_label), (NumericType, BooleanType)):
+                that_numeric_column_labels.append(column_label)
+
+        if right_is_series:
+            intersect_numeric_column_labels = this_numeric_column_labels
+            diff_numeric_column_labels = []
+
+            corr_scols = []
+            that_scol = that._internal.spark_column_for(that_numeric_column_labels[0]).cast(
+                "double"
+            )
+            for numeric_column_label in intersect_numeric_column_labels:
+                this_scol = this._internal.spark_column_for(numeric_column_label).cast("double")
+                corr_scols.append(F.corr(this_scol, that_scol))
+        else:
+            intersect_numeric_column_labels = []
+            diff_numeric_column_labels = []
+            for numeric_column_label in this_numeric_column_labels:
+                if numeric_column_label in that_numeric_column_labels:
+                    intersect_numeric_column_labels.append(numeric_column_label)
+                else:
+                    diff_numeric_column_labels.append(numeric_column_label)
+            for numeric_column_label in that_numeric_column_labels:
+                if numeric_column_label not in this_numeric_column_labels:
+                    diff_numeric_column_labels.append(numeric_column_label)
+
+            corr_scols = []
+            for numeric_column_label in intersect_numeric_column_labels:
+                this_scol = this._internal.spark_column_for(numeric_column_label).cast("double")
+                that_scol = that._internal.spark_column_for(numeric_column_label).cast("double")
+                corr_scols.append(F.corr(this_scol, that_scol))
+
+        ret_column_labels = []
+        ret_corr_values = []
+        if len(intersect_numeric_column_labels) > 0:
+            ret_column_labels = intersect_numeric_column_labels
+            pcorr = combined._internal.spark_frame.select(*corr_scols).toPandas()
+            ret_corr_values = [
+                pcorr.iloc[0, i] for i in range(len(intersect_numeric_column_labels))
+            ]
+
+        if not drop and len(diff_numeric_column_labels) > 0:
+            for numeric_column_label in diff_numeric_column_labels:
+                ret_column_labels.append(numeric_column_label)
+                ret_corr_values.append(np.nan)
+
+        idx = pd.Index([label[0] for label in ret_column_labels])
+        return ps.Series(ret_corr_values, idx)
+
     def iteritems(self) -> Iterator[Tuple[Name, "Series"]]:
         """
         Iterator over (column name, Series) pairs.
