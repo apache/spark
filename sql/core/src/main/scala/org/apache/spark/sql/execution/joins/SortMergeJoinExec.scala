@@ -680,7 +680,7 @@ case class SortMergeJoinExec(
     val bufferedInput = ctx.addMutableState("scala.collection.Iterator", "bufferedInput",
       v => s"$v = inputs[1];", forceInline = true)
     val matchesIter = joinType match {
-      case Inner | LeftOuter | RightOuter =>
+      case _: InnerLike | LeftOuter | RightOuter =>
         ctx.addMutableState("scala.collection.Iterator<UnsafeRow>", "matchesIter",
           v =>
             s"""
@@ -791,7 +791,7 @@ case class SortMergeJoinExec(
     }
 
     val initMatchesIter = joinType match {
-      case Inner | LeftOuter | RightOuter =>
+      case _: InnerLike | LeftOuter | RightOuter =>
         s"""
            |if ($matchesIter.isEmpty()) {
            |  $matchesIter = $matches.generateIterator();
@@ -876,7 +876,7 @@ case class SortMergeJoinExec(
       outputRow: String,
       eagerCleanup: String): String = {
     s"""
-       |while ($matchIterator.hasNext() && $findNextJoinRows) {
+       |while ($matchIterator.hasNext() || $findNextJoinRows) {
        |  $beforeLoop
        |  int outputCount = 0;
        |  while ($matchIterator.hasNext()) {
@@ -905,13 +905,12 @@ case class SortMergeJoinExec(
       outputRow: String,
       eagerCleanup: String): String = {
     s"""
-       |while ($matchIterator.hasNext() && $streamedInput.hasNext()) {
+       |while ($matchIterator.hasNext() || $streamedInput.hasNext()) {
        |  if ($matchIterator.isEmpty()) {
        |    $findNextJoinRows;
        |    $hasOutputRow = false;
        |  }
        |  $beforeLoop
-       |  boolean $hasOutputRow = false;
        |  int outputCount = 0;
        |
        |  // the last iteration of this loop is to emit an empty row if there is no matched rows.
