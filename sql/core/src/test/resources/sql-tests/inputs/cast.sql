@@ -87,6 +87,7 @@ select cast('\t\n xyz \t\r' as boolean);
 
 select cast('23.45' as decimal(4, 2));
 select cast('123.45' as decimal(4, 2));
+select cast('xyz' as decimal(4, 2));
 
 select cast('2022-01-01' as date);
 select cast('a' as date);

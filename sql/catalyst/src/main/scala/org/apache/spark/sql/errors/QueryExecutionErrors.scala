@@ -111,9 +111,11 @@ object QueryExecutionErrors extends QueryErrorsBase {
       s"If necessary set ${SQLConf.ANSI_ENABLED.key} to false to bypass this error." + errorContext)
   }
 
-  def invalidInputSyntaxForNumericError(s: UTF8String): NumberFormatException = {
+  def invalidInputSyntaxForNumericError(
+      s: UTF8String,
+      errorContext: String): NumberFormatException = {
     new SparkNumberFormatException(errorClass = "INVALID_INPUT_SYNTAX_FOR_NUMERIC_TYPE",
-      messageParameters = Array(toSQLValue(s, StringType), SQLConf.ANSI_ENABLED.key))
+      messageParameters = Array(toSQLValue(s, StringType), SQLConf.ANSI_ENABLED.key, errorContext))
   }
 
   def cannotCastFromNullTypeError(to: DataType): Throwable = {
@@ -1145,10 +1147,12 @@ object QueryExecutionErrors extends QueryErrorsBase {
       "SQLUserDefinedType nor registered with UDTRegistration.}")
   }
 
-  def invalidInputSyntaxForBooleanError(s: UTF8String): UnsupportedOperationException = {
+  def invalidInputSyntaxForBooleanError(
+      s: UTF8String,
+      errorContext: String): UnsupportedOperationException = {
     new UnsupportedOperationException(s"invalid input syntax for type boolean: $s. " +
       s"To return NULL instead, use 'try_cast'. If necessary set ${SQLConf.ANSI_ENABLED.key} " +
-      "to false to bypass this error.")
+      "to false to bypass this error." + errorContext)
   }
 
   def unsupportedOperandTypeForSizeFunctionError(dataType: DataType): Throwable = {
