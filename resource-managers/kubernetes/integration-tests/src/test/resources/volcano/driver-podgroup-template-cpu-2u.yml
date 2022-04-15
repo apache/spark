@@ -17,7 +17,7 @@
 apiVersion: scheduling.volcano.sh/v1beta1
 kind: PodGroup
 spec:
-  queue: queue-2u-3g
+  queue: queue-2u
   minMember: 1
   minResources:
     cpu: "2"
