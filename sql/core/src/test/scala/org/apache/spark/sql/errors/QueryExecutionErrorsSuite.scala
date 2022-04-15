@@ -19,9 +19,12 @@ package org.apache.spark.sql.errors
 
 import java.util.Locale
 
+import test.org.apache.spark.sql.connector.JavaSimpleWritableDataSource
+
 import org.apache.spark.{SparkArithmeticException, SparkException, SparkIllegalStateException, SparkRuntimeException, SparkUnsupportedOperationException, SparkUpgradeException}
 import org.apache.spark.sql.{DataFrame, QueryTest}
 import org.apache.spark.sql.catalyst.util.BadRecordException
+import org.apache.spark.sql.connector.SimpleWritableDataSource
 import org.apache.spark.sql.execution.QueryExecutionException
 import org.apache.spark.sql.execution.datasources.orc.OrcTest
 import org.apache.spark.sql.execution.datasources.parquet.ParquetTest
@@ -325,19 +328,51 @@ class QueryExecutionErrorsSuite extends QueryTest
     assert(e5.getMessage === "Cannot parse decimal")
   }
 
-  test("DIVIDE_BY_ZERO - SPARK-38724: can't divide by zero") {
-    val e = intercept[SparkArithmeticException] {
-      sql("set spark.sql.ansi.enabled=true")
-      sql("select 6/0").collect()
+  test("WRITING_JOB_ABORTED: read of input data fails in the middle") {
+    Seq(classOf[SimpleWritableDataSource], classOf[JavaSimpleWritableDataSource]).foreach { cls =>
+      withTempPath { file =>
+        val path = file.getCanonicalPath
+        assert(spark.read.format(cls.getName).option("path", path).load().collect().isEmpty)
+        // test transaction
+        val failingUdf = org.apache.spark.sql.functions.udf {
+          var count = 0
+          (id: Long) => {
+            if (count > 5) {
+              throw new RuntimeException("testing error")
+            }
+            count += 1
+            id
+          }
+        }
+        val input = spark.range(15).select(failingUdf($"id").as(Symbol("i")))
+          .select($"i", -$"i" as Symbol("j"))
+        val e = intercept[SparkException] {
+          input.write.format(cls.getName).option("path", path).mode("overwrite").save()
+        }
+        assert(e.getMessage === "Writing job aborted")
+        assert(e.getErrorClass === "WRITING_JOB_ABORTED")
+        assert(e.getSqlState === "40000")
+        // make sure we don't have partial data.
+        assert(spark.read.format(cls.getName).option("path", path).load().collect().isEmpty)
+      }
     }
-    assert(e.getErrorClass === "DIVIDE_BY_ZERO")
-    assert(e.getSqlState === "22012")
-    assert(e.getMessage ===
-      "divide by zero. To return NULL instead, use 'try_divide'. If necessary set " +
-        "spark.sql.ansi.enabled to false (except for ANSI interval type) to bypass this error." +
-        """
-          |== SQL(line 1, position 7) ==
-          |select 6/0
-          |       ^^^
-          |""".stripMargin)
+  }
+
+  test("DIVIDE_BY_ZERO - SPARK-38724: can't divide by zero") {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      val e = intercept[SparkArithmeticException] {
+        sql("select 6/0").collect()
+      }
+      assert(e.getErrorClass === "DIVIDE_BY_ZERO")
+      assert(e.getSqlState === "22012")
+      assert(e.getMessage ===
+        "divide by zero. To return NULL instead, use 'try_divide'. If necessary set " +
+          "spark.sql.ansi.enabled to false (except for ANSI interval type) to bypass this error." +
+          """
+            |== SQL(line 1, position 7) ==
+            |select 6/0
+            |       ^^^
+            |""".stripMargin)
+    }
+  }
 }
