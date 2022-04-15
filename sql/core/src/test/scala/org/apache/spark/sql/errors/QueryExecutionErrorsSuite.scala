@@ -66,8 +66,8 @@ class QueryExecutionErrorsSuite extends QueryTest
       assert(e.getErrorClass === "INVALID_PARAMETER_VALUE")
       assert(e.getSqlState === "22023")
       assert(e.getMessage.matches(
-        "The value of parameter\\(s\\) 'key' in the aes_encrypt/aes_decrypt function is invalid: " +
-        "expects a binary value with 16, 24 or 32 bytes, but got \\d+ bytes."))
+        "The value of parameter\\(s\\) 'key' in the `aes_encrypt`/`aes_decrypt` function " +
+        "is invalid: expects a binary value with 16, 24 or 32 bytes, but got \\d+ bytes."))
     }
 
     // Encryption failure - invalid key length
@@ -100,7 +100,7 @@ class QueryExecutionErrorsSuite extends QueryTest
       assert(e.getErrorClass === "INVALID_PARAMETER_VALUE")
       assert(e.getSqlState === "22023")
       assert(e.getMessage ===
-        "The value of parameter(s) 'expr, key' in the aes_encrypt/aes_decrypt function " +
+        "The value of parameter(s) 'expr, key' in the `aes_encrypt`/`aes_decrypt` function " +
         "is invalid: Detail message: " +
         "Given final block not properly padded. " +
         "Such issues can arise if a bad key is used during decryption.")
@@ -118,7 +118,7 @@ class QueryExecutionErrorsSuite extends QueryTest
       assert(e.getErrorClass === "UNSUPPORTED_FEATURE")
       assert(e.getSqlState === "0A000")
       assert(e.getMessage.matches("""The feature is not supported: AES-\w+ with the padding \w+""" +
-        " by the aes_encrypt/aes_decrypt function."))
+        " by the `aes_encrypt`/`aes_decrypt` function."))
     }
 
     // Unsupported AES mode and padding in encrypt
