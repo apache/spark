@@ -28,6 +28,8 @@ import org.apache.commons.lang3.builder.ToStringBuilder;
 import org.apache.commons.lang3.builder.ToStringStyle;
 import org.junit.jupiter.api.*;
 
+import org.apache.spark.api.java.function.MapFunction;
+import org.apache.spark.api.java.function.ReduceFunction;
 import org.apache.spark.sql.*;
 import org.apache.spark.sql.catalyst.expressions.GenericRow;
 import org.apache.spark.sql.catalyst.util.DateTimeUtils;
@@ -37,6 +39,7 @@ import org.apache.spark.sql.types.DataTypes;
 import org.apache.spark.sql.types.StructType;
 
 import org.apache.spark.sql.test.TestSparkSession;
+import scala.Tuple2;
 
 public class JavaBeanDeserializationSuite implements Serializable {
 
@@ -550,6 +553,96 @@ public class JavaBeanDeserializationSuite implements Serializable {
       Assertions.assertEquals(expectedRecords, records);
     } finally {
         spark.conf().set(SQLConf.DATETIME_JAVA8API_ENABLED().key(), originConf);
+    }
+  }
+
+  @Test
+  public void testSPARK38823NoBeanReuse() {
+    List<Item> items = Arrays.asList(
+            new Item("a", 1),
+            new Item("b", 3),
+            new Item("c", 2),
+            new Item("a", 7));
+
+    Encoder<Item> encoder = Encoders.bean(Item.class);
+
+    Dataset<Item> ds = spark.createDataFrame(items, Item.class)
+            .as(encoder)
+            .coalesce(1);
+
+    MapFunction<Item, String> mf = new MapFunction<Item, String>() {
+      @Override
+      public String call(Item item) throws Exception {
+        return item.getK();
+      }
+    };
+
+    ReduceFunction<Item> rf = new ReduceFunction<Item>() {
+      @Override
+      public Item call(Item item1, Item item2) throws Exception {
+        Assertions.assertNotSame(item1, item2);
+        return item1.addValue(item2.getV());
+      }
+    };
+
+    Dataset<Tuple2<String, Item>> finalDs = ds
+            .groupByKey(mf, Encoders.STRING())
+            .reduceGroups(rf);
+
+    List<Tuple2<String, Item>> expectedRecords = Arrays.asList(
+            new Tuple2("a", new Item("a", 8)),
+            new Tuple2("b", new Item("b", 3)),
+            new Tuple2("c", new Item("c", 2)));
+
+    List<Tuple2<String, Item>> result = finalDs.collectAsList();
+
+    Assertions.assertEquals(expectedRecords, result);
+  }
+
+  public static class Item implements Serializable {
+    private String k;
+    private int v;
+
+    public String getK() {
+      return k;
+    }
+
+    public int getV() {
+      return v;
+    }
+
+    public void setK(String k) {
+      this.k = k;
+    }
+
+    public void setV(int v) {
+      this.v = v;
+    }
+
+    public Item() { }
+
+    public Item(String k, int v) {
+      this.k = k;
+      this.v = v;
+    }
+
+    public Item addValue(int inc) {
+      return new Item(k, v + inc);
+    }
+
+    public String toString() {
+      return "Item(" + k + "," + v + ")";
+    }
+
+    public boolean equals(Object o) {
+      if (!(o instanceof Item)) {
+        return false;
+      }
+      Item other = (Item) o;
+      if (other.getK().equals(k) && other.getV() == v) {
+        return true;
+      }
+      return false;
     }
   }
 
