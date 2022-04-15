@@ -999,6 +999,7 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
         self.assert_eq(psser, pser.sort_values())
         self.assert_eq(psdf, pdf)
 
+        # pandas raises an exception when the Series is derived from DataFrame
         psser.sort_values(inplace=True, ascending=False, ignore_index=True)
         self.assert_eq(psser, pser.sort_values(ascending=False, ignore_index=True))
         self.assert_eq(psdf, pdf)
@@ -1039,6 +1040,8 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
         self.assert_eq(psser, pser.sort_index())
         self.assert_eq(psdf, pdf)
 
+        # pandas sorts pdf.x by the index and update the column only
+        # when the Series is derived from DataFrame.
         psser.sort_index(inplace=True, ascending=False, ignore_index=True)
         self.assert_eq(psser, pser.sort_index(ascending=False, ignore_index=True))
         self.assert_eq(psdf, pdf)
