@@ -22,7 +22,6 @@ import java.util.OptionalLong
 
 import test.org.apache.spark.sql.connector._
 
-import org.apache.spark.SparkException
 import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.connector.catalog.{SupportsRead, Table, TableCapability, TableProvider}
@@ -349,29 +348,6 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
             .option("path", path).mode("error").save()
         }
         assert(e2.getMessage.contains("please use Append or Overwrite modes instead"))
-
-        // test transaction
-        val failingUdf = org.apache.spark.sql.functions.udf {
-          var count = 0
-          (id: Long) => {
-            if (count > 5) {
-              throw new RuntimeException("testing error")
-            }
-            count += 1
-            id
-          }
-        }
-        // this input data will fail to read middle way.
-        val input = spark.range(15).select(failingUdf($"id").as(Symbol("i")))
-          .select($"i", -$"i" as Symbol("j"))
-        val e3 = intercept[SparkException] {
-          input.write.format(cls.getName).option("path", path).mode("overwrite").save()
-        }
-        assert(e3.getMessage.contains("Writing job aborted"))
-        assert(e3.getErrorClass == "WRITING_JOB_ABORTED")
-        assert(e3.getSqlState == "40000")
-        // make sure we don't have partial data.
-        assert(spark.read.format(cls.getName).option("path", path).load().collect().isEmpty)
       }
     }
   }
