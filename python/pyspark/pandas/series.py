@@ -2434,6 +2434,21 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         A    0
         dtype: int64
 
+        With 'columns', no change is made to the Series.
+
+        >>> s.drop(columns=['A'])
+        A    0
+        B    1
+        C    2
+        dtype: int64
+
+        With 'inplace=True', do operation inplace and return None.
+
+        >>> s.drop(index=['B', 'C'], inplace=True)
+        >>> s
+        A    0
+        dtype: int64
+
         Also support for MultiIndex
 
         >>> midx = pd.MultiIndex([['lama', 'cow', 'falcon'],
