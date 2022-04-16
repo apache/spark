@@ -1844,13 +1844,10 @@ class OpsOnDiffFramesEnabledTest(PandasOnSparkTestCase, SQLTestUtils):
 
     def test_corrwith(self):
         df1 = pd.DataFrame({"A": [1, np.nan, 7, 8], "X": [5, 8, np.nan, 3], "C": [10, 4, 9, 3]})
-        df2 = df1[["A", "C"]]
+        df2 = pd.DataFrame({"A": [5, 3, 6, 4], "B": [11, 2, 4, 3], "C": [4, 3, 8, np.nan]})
         self._test_corrwith(df1, df2)
-        self._test_corrwith(df1, df2.A)
-
-        df3 = pd.DataFrame({"A": [5, 3, 6, 4], "B": [11, 2, 4, 3], "C": [4, 3, 8, np.nan]})
-        self._test_corrwith(df1, df3)
-        self._test_corrwith(df1, df3.B)
+        self._test_corrwith((df1 + 1), df2.B)
+        self._test_corrwith((df1 + 1), (df2.B + 2))
 
         df_bool = pd.DataFrame({"A": [True, True, False, False], "B": [True, False, False, True]})
         ser_bool = pd.Series([True, True, False, True])

@@ -1405,9 +1405,9 @@ class DataFrame(Frame, Generic[T]):
 
         intersect_numeric_column_labels: List[Label] = []
         diff_numeric_column_labels: List[Label] = []
+        corr_scols = []
         if right_is_series:
             intersect_numeric_column_labels = this_numeric_column_labels
-            corr_scols = []
             that_scol = that._internal.spark_column_for(that_numeric_column_labels[0])
             for numeric_column_label in intersect_numeric_column_labels:
                 this_scol = this._internal.spark_column_for(numeric_column_label)
@@ -1421,7 +1421,6 @@ class DataFrame(Frame, Generic[T]):
             for numeric_column_label in that_numeric_column_labels:
                 if numeric_column_label not in this_numeric_column_labels:
                     diff_numeric_column_labels.append(numeric_column_label)
-            corr_scols = []
             for numeric_column_label in intersect_numeric_column_labels:
                 this_scol = this._internal.spark_column_for(numeric_column_label)
                 that_scol = that._internal.spark_column_for(numeric_column_label)

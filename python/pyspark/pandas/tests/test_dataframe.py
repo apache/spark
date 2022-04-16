@@ -5533,13 +5533,14 @@ class DataFrameTest(ComparisonTestBase, SQLTestUtils):
         df1 = ps.DataFrame({"A": [1, np.nan, 7, 8], "X": [5, 8, np.nan, 3], "C": [10, 4, 9, 3]})
         df2 = df1[["A", "C"]]
         self._test_corrwith(df1, df2)
-        self._test_corrwith(df1, df2.A)
-        self._test_corrwith(df1, df2.C)
+        self._test_corrwith((df1 + 1), df2.A)
+        self._test_corrwith((df1 + 1), (df2.C + 2))
 
         df_bool = ps.DataFrame({"A": [True, True, False, False], "B": [True, False, False, True]})
         self._test_corrwith(df_bool, df_bool.A)
         self._test_corrwith(df_bool, df_bool.B)
 
+    # the anchors of the input psdf and psobj should be the same
     def _test_corrwith(self, psdf, psobj):
         pdf = psdf.to_pandas()
         pobj = psobj.to_pandas()
