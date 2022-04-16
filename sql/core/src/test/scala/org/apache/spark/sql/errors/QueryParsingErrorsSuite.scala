@@ -405,4 +405,47 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession {
           |-----------------------------^^^
           |""".stripMargin)
   }
+
+  test("PARSE_EMPTY_STATEMENT: ") {
+    validateParsingError(
+      sqlText = "",
+      errorClass = "PARSE_EMPTY_STATEMENT",
+      sqlState = "42000",
+      message =
+        """
+          |Syntax error, unexpected empty statement(line 1, pos 0)
+          |
+          |== SQL ==
+          |
+          |^^^
+          |""".stripMargin)
+
+    validateParsingError(
+      sqlText = "   ",
+      errorClass = "PARSE_EMPTY_STATEMENT",
+      sqlState = "42000",
+      message =
+        """
+          |Syntax error, unexpected empty statement(line 1, pos 3)
+          |
+          |== SQL ==
+          |   """.stripMargin +
+          """
+            |---^^^
+            |""".stripMargin)
+
+    validateParsingError(
+      sqlText = " \n",
+      errorClass = "PARSE_EMPTY_STATEMENT",
+      sqlState = "42000",
+      message =
+        """
+          |Syntax error, unexpected empty statement(line 2, pos 0)
+          |
+          |== SQL ==
+          | """.stripMargin +
+          """
+            |^^^
+            |""".stripMargin)
+  }
 }
