@@ -318,8 +318,8 @@ class QueryCompilationErrorsSuite extends QueryTest with SharedSparkSession {
     }
     assert(e.getErrorClass === "SECOND_FUNCTION_ARGUMENT_NOT_INTEGER")
     assert(e.getSqlState === "22023")
-    assert(e.getMessage.matches(
-      "The second argument of 'date_add' function needs to be an integer."))
+    assert(e.getMessage ===
+      "The second argument of 'date_add' function needs to be an integer.")
   }
 }
 
