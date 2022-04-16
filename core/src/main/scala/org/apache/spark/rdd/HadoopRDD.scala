@@ -378,7 +378,7 @@ class HadoopRDD[K, V](
         HadoopRDD.convertSplitLocationInfo(lsplit.getLocationInfo)
       case _ => None
     }
-    locs.getOrElse(hsplit.getLocations.filter(_ != "localhost"))
+    locs.getOrElse(hsplit.getLocations.filter(loc => loc != "localhost"))
   }
 
   override def checkpoint(): Unit = {
@@ -457,9 +457,9 @@ private[spark] object HadoopRDD extends Logging {
       if (locationStr != "localhost") {
         if (loc.isInMemory) {
           logDebug(s"Partition $locationStr is cached by Hadoop.")
-          Some(HDFSCacheTaskLocation(locationStr).toString)
+          Option(HDFSCacheTaskLocation(locationStr).toString)
         } else {
-          Some(HostTaskLocation(locationStr).toString)
+          Option(HostTaskLocation(locationStr).toString)
         }
       } else {
         None

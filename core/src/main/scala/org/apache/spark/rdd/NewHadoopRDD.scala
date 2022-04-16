@@ -329,7 +329,7 @@ class NewHadoopRDD[K, V](
   override def getPreferredLocations(hsplit: Partition): Seq[String] = {
     val split = hsplit.asInstanceOf[NewHadoopPartition].serializableHadoopSplit.value
     val locs = HadoopRDD.convertSplitLocationInfo(split.getLocationInfo)
-    locs.getOrElse(split.getLocations.filter(_ != "localhost"))
+    locs.getOrElse(split.getLocations.filter(loc => loc != "localhost"))
   }
 
   override def persist(storageLevel: StorageLevel): this.type = {
