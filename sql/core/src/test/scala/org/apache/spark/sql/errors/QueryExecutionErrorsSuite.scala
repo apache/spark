@@ -389,7 +389,7 @@ class QueryExecutionErrorsSuite extends QueryTest
     }
   }
 
-  test("INVALID_FRACTION_OF_SECOND: make_timestamp failure - the fraction of sec must be zero") {
+  test("INVALID_FRACTION_OF_SECOND: in the function make_timestamp") {
     withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
       val e = intercept[SparkDateTimeException] {
         sql("select make_timestamp(2012, 11, 30, 9, 19, 60.66666666)").collect()
