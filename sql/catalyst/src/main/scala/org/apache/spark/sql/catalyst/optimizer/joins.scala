@@ -144,6 +144,8 @@ object EliminateOuterJoin extends Rule[LogicalPlan] with PredicateHelper {
     val emptyRow = new GenericInternalRow(attributes.length)
     val boundE = BindReferences.bindReference(e, attributes)
     if (boundE.exists(_.isInstanceOf[Unevaluable])) return false
+    // don't evaluate an expression that might purposefully throw an exception
+    if (boundE.exists(_.isInstanceOf[RaiseError])) return false
     val v = boundE.eval(emptyRow)
     v == null || v == false
   }
