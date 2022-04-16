@@ -378,7 +378,7 @@ class HadoopRDD[K, V](
         HadoopRDD.convertSplitLocationInfo(lsplit.getLocationInfo)
       case _ => None
     }
-    locs.getOrElse(hsplit.getLocations.filter(loc => loc != "localhost"))
+    locs.getOrElse(hsplit.getLocations.filter(_ != "localhost"))
   }
 
   override def checkpoint(): Unit = {
