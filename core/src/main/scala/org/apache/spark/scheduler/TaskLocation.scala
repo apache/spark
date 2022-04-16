@@ -87,5 +87,4 @@ private[spark] object TaskLocation {
       null
     }
   }
-
 }
