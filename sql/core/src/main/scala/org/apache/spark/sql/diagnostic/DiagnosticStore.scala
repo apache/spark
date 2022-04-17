@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.diagnostic
 
-import scala.collection.JavaConverters._
-
 import com.fasterxml.jackson.annotation.JsonIgnore
 
 import org.apache.spark.status.KVUtils
