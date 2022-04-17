@@ -20,6 +20,7 @@ import os
 import random
 import tempfile
 import time
+import unittest
 from glob import glob
 
 from py4j.protocol import Py4JJavaError
@@ -30,7 +31,8 @@ from pyspark.resource import ExecutorResourceRequests, ResourceProfileBuilder,\
 from pyspark.serializers import CloudPickleSerializer, BatchedSerializer, PickleSerializer,\
     MarshalSerializer, UTF8Deserializer, NoOpSerializer
 from pyspark.sql import SparkSession
-from pyspark.testing.utils import ReusedPySparkTestCase, SPARK_HOME, QuietTest
+from pyspark.testing.utils import ReusedPySparkTestCase, SPARK_HOME, QuietTest, have_numpy
+from pyspark.testing.sqlutils import have_pandas
 
 
 global_func = lambda: "Hi"
@@ -694,6 +696,7 @@ class RDDTests(ReusedPySparkTestCase):
         rdd = self.sc.parallelize(range(1 << 20)).map(lambda x: str(x))
         rdd._jrdd.first()
 
+    @unittest.skipIf(not have_numpy or not have_pandas, "NumPy or Pandas not installed")
     def test_take_on_jrdd_with_large_rows_should_not_cause_deadlock(self):
         # Regression test for SPARK-38677.
         #
