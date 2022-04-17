@@ -233,6 +233,9 @@ struct<>
 -- !query output
 java.time.DateTimeException
 Cannot cast xx to DateType. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
+== SQL(line 1, position 7) ==
+select next_day("xx", "Mon")
+       ^^^^^^^^^^^^^^^^^^^^^
 
 
 -- !query
@@ -325,6 +328,9 @@ struct<>
 -- !query output
 java.lang.NumberFormatException
 invalid input syntax for type numeric: '1.2'. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
+== SQL(line 1, position 7) ==
+select date_add('2011-11-11', '1.2')
+       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 
 -- !query
@@ -433,6 +439,9 @@ struct<>
 -- !query output
 java.lang.NumberFormatException
 invalid input syntax for type numeric: '1.2'. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
+== SQL(line 1, position 7) ==
+select date_sub(date'2011-11-11', '1.2')
+       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 
 -- !query

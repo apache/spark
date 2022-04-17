@@ -70,7 +70,11 @@ object MimaExcludes {
     ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.connector.read.partitioning.ClusteredDistribution"),
     ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.connector.read.partitioning.Distribution"),
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.connector.read.partitioning.Partitioning.*"),
-    ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.sql.connector.read.partitioning.Partitioning.*")
+    ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.sql.connector.read.partitioning.Partitioning.*"),
+
+    // [SPARK-38908][SQL] Provide query context in runtime error of Casting from String to
+    // Number/Date/Timestamp/Boolean
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.types.Decimal.fromStringANSI")
   )
 
   // Exclude rules for 3.2.x from 3.1.1
