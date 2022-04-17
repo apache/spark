@@ -48,6 +48,6 @@ trait QueryErrorsBase {
   }
 
   def toSQLType(t: DataType): String = {
-    t.typeName.toUpperCase(Locale.ROOT)
+    t.sql
   }
 }
