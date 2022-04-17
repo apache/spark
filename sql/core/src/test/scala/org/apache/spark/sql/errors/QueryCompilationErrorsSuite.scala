@@ -311,7 +311,7 @@ class QueryCompilationErrorsSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("INVALID_OPERATION_ON_TEMP_VIEW: desc partition on a temporary view") {
+  test("FORBIDDEN_OPERATION: desc partition on a temporary view") {
     val tableName: String = "t"
     val tempViewName: String = "tempView"
 
@@ -329,14 +329,14 @@ class QueryCompilationErrorsSuite extends QueryTest with SharedSparkSession {
         val e = intercept[AnalysisException](
           sql(s"DESC TABLE $tempViewName PARTITION (c='Us', d=1)")
         )
-        assert(e.errorClass === Some("INVALID_OPERATION_ON_TEMP_VIEW"))
+        assert(e.getErrorClass === "FORBIDDEN_OPERATION")
         assert(e.message ===
-          s"Operation 'DESC PARTITION' is not allowed on a temporary view: '$tempViewName'")
+          s"The operation 'DESC PARTITION' is not allowed on the temporary view: '$tempViewName'")
       }
     }
   }
 
-  test("INVALID_OPERATION_ON_VIEW: desc partition on a view") {
+  test("FORBIDDEN_OPERATION: desc partition on a view") {
     val tableName: String = "t"
     val viewName: String = "view"
 
@@ -354,9 +354,9 @@ class QueryCompilationErrorsSuite extends QueryTest with SharedSparkSession {
         val e = intercept[AnalysisException](
           sql(s"DESC TABLE $viewName PARTITION (c='Us', d=1)")
         )
-        assert(e.errorClass === Some("INVALID_OPERATION_ON_VIEW"))
+        assert(e.getErrorClass === "FORBIDDEN_OPERATION")
         assert(e.message ===
-          s"Operation 'DESC PARTITION' is not allowed on a view: '$viewName'")
+          s"The operation 'DESC PARTITION' is not allowed on the view: '$viewName'")
       }
     }
   }
