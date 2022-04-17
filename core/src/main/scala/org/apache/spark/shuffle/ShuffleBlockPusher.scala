@@ -131,7 +131,7 @@ private[spark] class ShuffleBlockPusher(conf: SparkConf) extends Logging {
       pushUpToMax()
     } catch {
       case NonFatal(e) =>
-        logWarning("Failed to push blocks to a remote shuffle service", e)
+        logWarning("Failure during push so stopping the block push", e)
     }
   }
 
