@@ -43,11 +43,13 @@ class PrometheusServletSuite extends SparkFunSuite with PrivateMethodTester {
     sink.registry.register("counter1", counter)
 
     val metricGaugeKeys = sink.registry.getGauges.keySet.asScala
-    assert(metricGaugeKeys.equals(Set("gauge1", "gauge2")),
+    assert(
+      metricGaugeKeys.equals(Set("gauge1", "gauge2")),
       "Should contain 2 gauges metrics registered")
 
     val metricCounterKeys = sink.registry.getCounters.keySet.asScala
-    assert(metricCounterKeys.equals(Set("counter1")),
+    assert(
+      metricCounterKeys.equals(Set("counter1")),
       "Should contain 1 counter metric registered")
 
     val gaugeValues = sink.registry.getGauges.values.asScala
@@ -64,10 +66,10 @@ class PrometheusServletSuite extends SparkFunSuite with PrivateMethodTester {
       "listenerProcessingTime.org.apache.spark.HeartbeatReceiver"
     val sink = createPrometheusServlet()
     val suffix = sink invokePrivate PrivateMethod[String](Symbol("normalizeKey"))(key)
-    assert(suffix == "metrics_local_1592132938718_driver_LiveListenerBus_" +
-      "listenerProcessingTime_org_apache_spark_HeartbeatReceiver_")
+    assert(
+      suffix == "metrics_local_1592132938718_driver_LiveListenerBus_" +
+        "listenerProcessingTime_org_apache_spark_HeartbeatReceiver_")
   }
-
 
   test("do not export null values in metric snapshots") {
     val sink = createPrometheusServlet()
@@ -87,7 +89,8 @@ class PrometheusServletSuite extends SparkFunSuite with PrivateMethodTester {
     sink.registry.register("counter1", counter)
 
     val metricGaugeKeys = sink.registry.getGauges.keySet.asScala
-    assert(metricGaugeKeys.equals(Set("gauge1", "gauge2")),
+    assert(
+      metricGaugeKeys.equals(Set("gauge1", "gauge2")),
       "Should contain 2 gauges metrics registered")
 
     val expectedResult =

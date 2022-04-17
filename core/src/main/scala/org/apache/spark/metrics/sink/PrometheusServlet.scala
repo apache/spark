@@ -33,8 +33,8 @@ import org.apache.spark.ui.JettyUtils._
  * and with the previous result of Spark JMX Sink + Prometheus JMX Converter combination
  * in terms of key string format.
  */
-private[spark] class PrometheusServlet(
-    val property: Properties, val registry: MetricRegistry) extends Sink {
+private[spark] class PrometheusServlet(val property: Properties, val registry: MetricRegistry)
+    extends Sink {
 
   val SERVLET_KEY_PATH = "path"
 
@@ -42,9 +42,10 @@ private[spark] class PrometheusServlet(
 
   def getHandlers(conf: SparkConf): Array[ServletContextHandler] = {
     Array[ServletContextHandler](
-      createServletHandler(servletPath,
-        new ServletParams(request => getMetricsSnapshot(request), "text/plain"), conf)
-    )
+      createServletHandler(
+        servletPath,
+        new ServletParams(request => getMetricsSnapshot(request), "text/plain"),
+        conf))
   }
 
   def getMetricsSnapshot(request: HttpServletRequest): String = {
@@ -57,29 +58,32 @@ private[spark] class PrometheusServlet(
     val timersLabels = """{type="timers"}"""
 
     val sb = new StringBuilder()
-    registry.getGauges.asScala.foreach { case (k, v) =>
-      if (!v.getValue.isInstanceOf[String] && !(v.getValue == null)) {
-        sb.append(s"${normalizeKey(k)}Number$gaugesLabel ${v.getValue}\n")
-        sb.append(s"${normalizeKey(k)}Value$gaugesLabel ${v.getValue}\n")
-      }
+    registry.getGauges.asScala.foreach {
+      case (k, v) =>
+        if (!v.getValue.isInstanceOf[String] && !(v.getValue == null)) {
+          sb.append(s"${normalizeKey(k)}Number$gaugesLabel ${v.getValue}\n")
+          sb.append(s"${normalizeKey(k)}Value$gaugesLabel ${v.getValue}\n")
+        }
     }
-    registry.getCounters.asScala.foreach { case (k, v) =>
-      sb.append(s"${normalizeKey(k)}Count$countersLabel ${v.getCount}\n")
+    registry.getCounters.asScala.foreach {
+      case (k, v) =>
+        sb.append(s"${normalizeKey(k)}Count$countersLabel ${v.getCount}\n")
     }
-    registry.getHistograms.asScala.foreach { case (k, h) =>
-      val snapshot = h.getSnapshot
-      val prefix = normalizeKey(k)
-      sb.append(s"${prefix}Count$histogramslabels ${h.getCount}\n")
-      sb.append(s"${prefix}Max$histogramslabels ${snapshot.getMax}\n")
-      sb.append(s"${prefix}Mean$histogramslabels ${snapshot.getMean}\n")
-      sb.append(s"${prefix}Min$histogramslabels ${snapshot.getMin}\n")
-      sb.append(s"${prefix}50thPercentile$histogramslabels ${snapshot.getMedian}\n")
-      sb.append(s"${prefix}75thPercentile$histogramslabels ${snapshot.get75thPercentile}\n")
-      sb.append(s"${prefix}95thPercentile$histogramslabels ${snapshot.get95thPercentile}\n")
-      sb.append(s"${prefix}98thPercentile$histogramslabels ${snapshot.get98thPercentile}\n")
-      sb.append(s"${prefix}99thPercentile$histogramslabels ${snapshot.get99thPercentile}\n")
-      sb.append(s"${prefix}999thPercentile$histogramslabels ${snapshot.get999thPercentile}\n")
-      sb.append(s"${prefix}StdDev$histogramslabels ${snapshot.getStdDev}\n")
+    registry.getHistograms.asScala.foreach {
+      case (k, h) =>
+        val snapshot = h.getSnapshot
+        val prefix = normalizeKey(k)
+        sb.append(s"${prefix}Count$histogramslabels ${h.getCount}\n")
+        sb.append(s"${prefix}Max$histogramslabels ${snapshot.getMax}\n")
+        sb.append(s"${prefix}Mean$histogramslabels ${snapshot.getMean}\n")
+        sb.append(s"${prefix}Min$histogramslabels ${snapshot.getMin}\n")
+        sb.append(s"${prefix}50thPercentile$histogramslabels ${snapshot.getMedian}\n")
+        sb.append(s"${prefix}75thPercentile$histogramslabels ${snapshot.get75thPercentile}\n")
+        sb.append(s"${prefix}95thPercentile$histogramslabels ${snapshot.get95thPercentile}\n")
+        sb.append(s"${prefix}98thPercentile$histogramslabels ${snapshot.get98thPercentile}\n")
+        sb.append(s"${prefix}99thPercentile$histogramslabels ${snapshot.get99thPercentile}\n")
+        sb.append(s"${prefix}999thPercentile$histogramslabels ${snapshot.get999thPercentile}\n")
+        sb.append(s"${prefix}StdDev$histogramslabels ${snapshot.getStdDev}\n")
     }
     registry.getMeters.entrySet.iterator.asScala.foreach { kv =>
       val prefix = normalizeKey(kv.getKey)
@@ -117,9 +121,9 @@ private[spark] class PrometheusServlet(
     s"metrics_${key.replaceAll("[^a-zA-Z0-9]", "_")}_"
   }
 
-  override def start(): Unit = { }
+  override def start(): Unit = {}
 
-  override def stop(): Unit = { }
+  override def stop(): Unit = {}
 
-  override def report(): Unit = { }
+  override def report(): Unit = {}
 }
