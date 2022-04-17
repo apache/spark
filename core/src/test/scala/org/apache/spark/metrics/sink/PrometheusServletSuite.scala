@@ -68,6 +68,36 @@ class PrometheusServletSuite extends SparkFunSuite with PrivateMethodTester {
       "listenerProcessingTime_org_apache_spark_HeartbeatReceiver_")
   }
 
+
+  test("do not export null values in metric snapshots") {
+    val sink = createPrometheusServlet()
+
+    val gauge = new Gauge[Double] {
+      override def getValue: Double = 5.0
+    }
+
+    val nullGauge = new Gauge[java.lang.Double] {
+      override def getValue: java.lang.Double = null
+    }
+
+    val counter = new Counter
+
+    sink.registry.register("gauge1", gauge)
+    sink.registry.register("gauge2", nullGauge)
+    sink.registry.register("counter1", counter)
+
+    val metricGaugeKeys = sink.registry.getGauges.keySet.asScala
+    assert(metricGaugeKeys.equals(Set("gauge1", "gauge2")),
+      "Should contain 2 gauges metrics registered")
+
+    val expectedResult =
+      """metrics_gauge1_Number{type="gauges"} 5.0
+        |metrics_gauge1_Value{type="gauges"} 5.0
+        |metrics_counter1_Count{type="counters"} 0
+        |""".stripMargin
+    assert(expectedResult == sink.getMetricsSnapshot(null))
+  }
+
   private def createPrometheusServlet(): PrometheusServlet =
     new PrometheusServlet(new Properties, new MetricRegistry)
 }

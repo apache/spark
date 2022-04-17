@@ -58,7 +58,7 @@ private[spark] class PrometheusServlet(
 
     val sb = new StringBuilder()
     registry.getGauges.asScala.foreach { case (k, v) =>
-      if (!v.getValue.isInstanceOf[String]) {
+      if (!v.getValue.isInstanceOf[String] && !(v.getValue == null)) {
         sb.append(s"${normalizeKey(k)}Number$gaugesLabel ${v.getValue}\n")
         sb.append(s"${normalizeKey(k)}Value$gaugesLabel ${v.getValue}\n")
       }
