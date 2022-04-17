@@ -46,7 +46,7 @@ import org.apache.spark.sql.types._
  * As commands are executed eagerly, this also includes errors thrown during the execution of
  * commands, which users can see immediately.
  */
-object QueryCompilationErrors {
+object QueryCompilationErrors extends QueryErrorsBase {
 
   def groupingIDMismatchError(groupingID: GroupingID, groupByExprs: Seq[Expression]): Throwable = {
     new AnalysisException(
@@ -161,8 +161,8 @@ object QueryCompilationErrors {
       errorClass = "CANNOT_UP_CAST_DATATYPE",
       messageParameters = Array(
         fromStr,
-        from.dataType.catalogString,
-        to.catalogString,
+        toSQLType(from.dataType),
+        toSQLType(to),
         s"The type path of the target object is:\n" + walkedTypePath.mkString("", "\n", "\n") +
           "You can either add an explicit cast to the input data or choose a higher precision " +
           "type of the field in the target object"
