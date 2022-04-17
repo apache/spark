@@ -77,17 +77,6 @@ class ErrorParserSuite extends AnalysisTest {
       Some(line), Some(startPosition), Some(stopPosition), Some(errorClass))
   }
 
-  test("no viable input") {
-    intercept("select ((r + 1) ", 1, 16, 16,
-      "Syntax error at or near", "----------------^^^")
-  }
-
-  test("extraneous input") {
-    intercept("select 1 1", 1, 9, 10,
-      "Syntax error at or near '1': extra input '1'", "---------^^^")
-    intercept("select *\nfrom r as q t", 2, 12, 13, "Syntax error at or near", "------------^^^")
-  }
-
   test("empty input") {
     val expectedErrMsg = SparkThrowableHelper.getMessage("PARSE_EMPTY_STATEMENT", Array[String]())
     intercept("", Some("PARSE_EMPTY_STATEMENT"), expectedErrMsg)

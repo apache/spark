@@ -507,4 +507,49 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession {
           |---------------------------^^^
           |""".stripMargin)
   }
+
+  test("PARSE_SYNTAX_ERROR: no viable input") {
+    val sqlText = "select ((r + 1) "
+    validateParsingError(
+      sqlText = sqlText,
+      errorClass = "PARSE_SYNTAX_ERROR",
+      sqlState = "42000",
+      message =
+        s"""
+          |Syntax error at or near end of input(line 1, pos 16)
+          |
+          |== SQL ==
+          |$sqlText
+          |----------------^^^
+          |""".stripMargin)
+  }
+
+  test("PARSE_SYNTAX_ERROR: extraneous input") {
+    validateParsingError(
+      sqlText = "select 1 1",
+      errorClass = "PARSE_SYNTAX_ERROR",
+      sqlState = "42000",
+      message =
+        s"""
+           |Syntax error at or near '1': extra input '1'(line 1, pos 9)
+           |
+           |== SQL ==
+           |select 1 1
+           |---------^^^
+           |""".stripMargin)
+
+    validateParsingError(
+      sqlText = "select *\nfrom r as q t",
+      errorClass = "PARSE_SYNTAX_ERROR",
+      sqlState = "42000",
+      message =
+        s"""
+           |Syntax error at or near 't': extra input 't'(line 2, pos 12)
+           |
+           |== SQL ==
+           |select *
+           |from r as q t
+           |------------^^^
+           |""".stripMargin)
+  }
 }
