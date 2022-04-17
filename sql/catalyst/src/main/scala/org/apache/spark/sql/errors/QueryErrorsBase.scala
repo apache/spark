@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.errors
 
-import java.util.Locale
-
 import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.types.{DataType, DoubleType, FloatType}
 
