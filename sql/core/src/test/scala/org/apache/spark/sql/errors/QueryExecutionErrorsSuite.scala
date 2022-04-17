@@ -21,7 +21,7 @@ import java.util.Locale
 
 import test.org.apache.spark.sql.connector.JavaSimpleWritableDataSource
 
-import org.apache.spark.{SparkArithmeticException, SparkDateTimeException, SparkException, SparkIllegalStateException, SparkRuntimeException, SparkUnsupportedOperationException, SparkUpgradeException}
+import org.apache.spark.{SparkArithmeticException, SparkDateTimeException, SparkException, SparkIllegalStateException, SparkNoSuchElementException, SparkRuntimeException, SparkUnsupportedOperationException, SparkUpgradeException}
 import org.apache.spark.sql.{DataFrame, QueryTest}
 import org.apache.spark.sql.catalyst.util.BadRecordException
 import org.apache.spark.sql.connector.SimpleWritableDataSource
@@ -398,6 +398,39 @@ class QueryExecutionErrorsSuite extends QueryTest
       assert(e.getSqlState === "22023")
       assert(e.getMessage === "The fraction of sec must be zero. Valid range is [0, 60]. " +
         "If necessary set spark.sql.ansi.enabled to false to bypass this error. ")
+    }
+  }
+
+  test("MAP_KEY_DOES_NOT_EXIST_IN_ELEMENT_AT: key does not exist") {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      val e1 = intercept[SparkNoSuchElementException] {
+        sql("select element_at(map(1, 'a', 2, 'b'), 3)").collect()
+      }
+      assert(e1.getErrorClass === "MAP_KEY_DOES_NOT_EXIST_IN_ELEMENT_AT")
+      assert(e1.getMessage ===
+        "Key 3 does not exist. To return NULL instead, use 'try_element_at'. " +
+          "If necessary set spark.sql.ansi.enabled to false to bypass this error." +
+          """
+            |== SQL(line 1, position 7) ==
+            |select element_at(map(1, 'a', 2, 'b'), 3)
+            |       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+            |""".stripMargin)
+    }
+  }
+
+  test("MAP_KEY_DOES_NOT_EXIST: key does not exist") {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      val e1 = intercept[SparkException] {
+        val df = Seq((1L, Map("google" -> "US"))).toDF("id", "params")
+        df.select($"params"("baidu")).collect()
+      }
+      assert(e1.getCause.isInstanceOf[SparkRuntimeException])
+
+      val e2 = e1.getCause.asInstanceOf[SparkRuntimeException]
+      val stackTrace = e2.getStackTrace.filter(st =>
+        st.getClassName.equals(QueryExecutionErrors.getClass.getName) &&
+          st.getMethodName.equals("mapKeyNotExistError"))
+      assert(!stackTrace.isEmpty)
     }
   }
 }
