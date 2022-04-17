@@ -406,7 +406,7 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession {
           |""".stripMargin)
   }
 
-  test("PARSE_EMPTY_STATEMENT: ") {
+  test("PARSE_EMPTY_STATEMENT: empty input") {
     validateParsingError(
       sqlText = "",
       errorClass = "PARSE_EMPTY_STATEMENT",
@@ -429,10 +429,9 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession {
           |Syntax error, unexpected empty statement(line 1, pos 3)
           |
           |== SQL ==
-          |   """.stripMargin +
-          """
-            |---^^^
-            |""".stripMargin)
+          |   
+          |---^^^
+          |""".stripMargin)
 
     validateParsingError(
       sqlText = " \n",
@@ -443,9 +442,8 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession {
           |Syntax error, unexpected empty statement(line 2, pos 0)
           |
           |== SQL ==
-          | """.stripMargin +
-          """
-            |^^^
-            |""".stripMargin)
+          | 
+          |^^^
+          |""".stripMargin)
   }
 }
