@@ -251,7 +251,7 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession {
 
   test("INVALID_SQL_SYNTAX: Invalid pattern in show functions") {
     val errorDesc =
-      "Invalid pattern in SHOW FUNCTIONS: f1. It must be a string literal.(line 1, pos 21)"
+      "Invalid pattern in SHOW FUNCTIONS: f1. It must be a STRING literal.(line 1, pos 21)"
 
     validateParsingError(
       sqlText = "SHOW FUNCTIONS IN db f1",
