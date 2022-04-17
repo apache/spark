@@ -87,3 +87,14 @@ select cast('\t\n xyz \t\r' as boolean);
 
 select cast('23.45' as decimal(4, 2));
 select cast('123.45' as decimal(4, 2));
+select cast('xyz' as decimal(4, 2));
+
+select cast('2022-01-01' as date);
+select cast('a' as date);
+select cast('2022-01-01 00:00:00' as timestamp);
+select cast('a' as timestamp);
+select cast('2022-01-01 00:00:00' as timestamp_ntz);
+select cast('a' as timestamp_ntz);
+
+select cast(cast('inf' as double) as timestamp);
+select cast(cast('inf' as float) as timestamp);

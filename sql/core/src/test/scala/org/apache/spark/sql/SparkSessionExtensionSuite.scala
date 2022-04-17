@@ -27,7 +27,8 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, InternalRow, TableIdentifier}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParserInterface}
-import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan, Statistics, UnresolvedHint}
+import org.apache.spark.sql.catalyst.plans.SQLHelper
+import org.apache.spark.sql.catalyst.plans.logical.{Limit, LocalRelation, LogicalPlan, Statistics, UnresolvedHint}
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
@@ -45,7 +46,7 @@ import org.apache.spark.unsafe.types.UTF8String
 /**
  * Test cases for the [[SparkSessionExtensions]].
  */
-class SparkSessionExtensionSuite extends SparkFunSuite {
+class SparkSessionExtensionSuite extends SparkFunSuite with SQLHelper {
   private def create(
       builder: SparkSessionExtensionsProvider): Seq[SparkSessionExtensionsProvider] = Seq(builder)
 
@@ -171,7 +172,8 @@ class SparkSessionExtensionSuite extends SparkFunSuite {
     }
     withSession(extensions) { session =>
       session.conf.set(SQLConf.ADAPTIVE_EXECUTION_ENABLED, true)
-      assert(session.sessionState.queryStagePrepRules.contains(MyQueryStagePrepRule()))
+      assert(session.sessionState.adaptiveRulesHolder.queryStagePrepRules
+        .contains(MyQueryStagePrepRule()))
       assert(session.sessionState.columnarRules.contains(
         MyColumnarRule(MyNewQueryStageRule(), MyNewQueryStageRule())))
       import session.sqlContext.implicits._
@@ -404,6 +406,26 @@ class SparkSessionExtensionSuite extends SparkFunSuite {
     withSession(extensions) { session =>
       session.sql("CREATE TEMP VIEW v AS SELECT myFunction(a) FROM VALUES(1), (2) t(a)")
       session.sql("SELECT * FROM v")
+    }
+  }
+
+  test("SPARK-38697: Extend SparkSessionExtensions to inject rules into AQE Optimizer") {
+    def executedPlan(df: Dataset[java.lang.Long]): SparkPlan = {
+      assert(df.queryExecution.executedPlan.isInstanceOf[AdaptiveSparkPlanExec])
+      df.queryExecution.executedPlan.asInstanceOf[AdaptiveSparkPlanExec].executedPlan
+    }
+    val extensions = create { extensions =>
+      extensions.injectRuntimeOptimizerRule(_ => AddLimit)
+    }
+    withSession(extensions) { session =>
+      assert(session.sessionState.adaptiveRulesHolder.runtimeOptimizerRules.contains(AddLimit))
+
+      withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true") {
+        val df = session.range(2).repartition()
+        assert(!executedPlan(df).isInstanceOf[CollectLimitExec])
+        df.collect()
+        assert(executedPlan(df).isInstanceOf[CollectLimitExec])
+      }
     }
   }
 }
@@ -1022,5 +1044,12 @@ class YourExtensions extends SparkSessionExtensionsProvider {
 
   override def apply(v1: SparkSessionExtensions): Unit = {
     v1.injectFunction(getAppName)
+  }
+}
+
+object AddLimit extends Rule[LogicalPlan] {
+  override def apply(plan: LogicalPlan): LogicalPlan = plan match {
+    case Limit(_, _) => plan
+    case _ => Limit(Literal(1), plan)
   }
 }
