@@ -17,7 +17,7 @@
 
 package org.apache.spark.deploy.history
 
-import java.io.{File, FileNotFoundException, IOException}
+import java.io.{Closeable, File, FileNotFoundException, IOException}
 import java.lang.{Long => JLong}
 import java.nio.file.Files
 import java.util.{Date, NoSuchElementException, ServiceLoader}
@@ -327,12 +327,16 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     // Return the listing in end time descending order.
     // SPARK-38896: tryWithResource cannot be used here
     // because this method needs to return an `Iterator`.
-    listing.view(classOf[ApplicationInfoWrapper])
+    val closeableIter = listing.view(classOf[ApplicationInfoWrapper])
       .index("endTime")
       .reverse()
-      .iterator()
-      .asScala
-      .map(_.toApplicationInfo())
+      .closeableIterator()
+    val dataIter = closeableIter.asScala.map(_.toApplicationInfo())
+    new Iterator[ApplicationInfo] with Closeable {
+      override def hasNext: Boolean = dataIter.hasNext
+      override def next(): ApplicationInfo = dataIter.next()
+      override def close(): Unit = closeableIter.close()
+    }
   }
 
   override def getApplicationInfo(appId: String): Option[ApplicationInfo] = {
