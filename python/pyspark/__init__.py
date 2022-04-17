@@ -49,6 +49,11 @@ Public classes:
 from functools import wraps
 import types
 from typing import cast, Any, Callable, Optional, TypeVar, Union
+from warnings import filterwarnings
+
+filterwarnings(
+    "ignore", message="distutils Version classes are deprecated. Use packaging.version instead."
+)
 
 from pyspark.conf import SparkConf
 from pyspark.rdd import RDD, RDDBarrier
