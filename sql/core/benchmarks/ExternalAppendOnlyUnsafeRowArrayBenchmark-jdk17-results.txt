@@ -2,44 +2,44 @@
 WITHOUT SPILL
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 17.0.1+12-LTS on Linux 5.11.0-1022-azure
+OpenJDK 64-Bit Server VM 17.0.2+8-LTS on Linux 5.13.0-1021-azure
 Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 Array with 100000 rows:                   Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-ArrayBuffer                                        4659           5099         622         22.0          45.5       1.0X
-ExternalAppendOnlyUnsafeRowArray                   6727           7217         693         15.2          65.7       0.7X
+ArrayBuffer                                        4568           4597          41         22.4          44.6       1.0X
+ExternalAppendOnlyUnsafeRowArray                   6330           6484         218         16.2          61.8       0.7X
 
-OpenJDK 64-Bit Server VM 17.0.1+12-LTS on Linux 5.11.0-1022-azure
+OpenJDK 64-Bit Server VM 17.0.2+8-LTS on Linux 5.13.0-1021-azure
 Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 Array with 1000 rows:                     Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-ArrayBuffer                                        7589           7639          70         34.5          29.0       1.0X
-ExternalAppendOnlyUnsafeRowArray                  25408          25477          98         10.3          96.9       0.3X
+ArrayBuffer                                        7951           8018          94         33.0          30.3       1.0X
+ExternalAppendOnlyUnsafeRowArray                  25398          25426          39         10.3          96.9       0.3X
 
-OpenJDK 64-Bit Server VM 17.0.1+12-LTS on Linux 5.11.0-1022-azure
+OpenJDK 64-Bit Server VM 17.0.2+8-LTS on Linux 5.13.0-1021-azure
 Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 Array with 30000 rows:                    Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-ArrayBuffer                                       16033          16049          23         30.7          32.6       1.0X
-ExternalAppendOnlyUnsafeRowArray                  29290          29322          44         16.8          59.6       0.5X
+ArrayBuffer                                       17625          17650          35         27.9          35.9       1.0X
+ExternalAppendOnlyUnsafeRowArray                  29319          29326           9         16.8          59.6       0.6X
 
 
 ================================================================================================
 WITH SPILL
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 17.0.1+12-LTS on Linux 5.11.0-1022-azure
+OpenJDK 64-Bit Server VM 17.0.2+8-LTS on Linux 5.13.0-1021-azure
 Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 Spilling with 1000 rows:                  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-UnsafeExternalSorter                              18894          18952          82         13.9          72.1       1.0X
-ExternalAppendOnlyUnsafeRowArray                   9685           9686           0         27.1          36.9       2.0X
+UnsafeExternalSorter                              19730          19846         163         13.3          75.3       1.0X
+ExternalAppendOnlyUnsafeRowArray                   9183           9188           6         28.5          35.0       2.1X
 
-OpenJDK 64-Bit Server VM 17.0.1+12-LTS on Linux 5.11.0-1022-azure
+OpenJDK 64-Bit Server VM 17.0.2+8-LTS on Linux 5.13.0-1021-azure
 Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 Spilling with 10000 rows:                 Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-UnsafeExternalSorter                                  8              8           1         20.6          48.6       1.0X
-ExternalAppendOnlyUnsafeRowArray                      6              7           0         25.1          39.9       1.2X
+UnsafeExternalSorter                                  8              8           1         19.8          50.6       1.0X
+ExternalAppendOnlyUnsafeRowArray                      6              6           0         25.9          38.6       1.3X
 
 
