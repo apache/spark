@@ -317,7 +317,7 @@ private[spark] class ShuffleBlockPusher(conf: SparkConf) extends Logging {
       pushResult: PushResult): Boolean = synchronized {
     remainingBlocks -= pushResult.blockId
     bytesInFlight -= bytesPushed
-    numBlocksInFlightPerAddress(address) = numBlocksInFlightPerAddress(address) - 1
+    numBlocksInFlightPerAddress(address) -= 1
     if (remainingBlocks.isEmpty) {
       reqsInFlight -= 1
     }
