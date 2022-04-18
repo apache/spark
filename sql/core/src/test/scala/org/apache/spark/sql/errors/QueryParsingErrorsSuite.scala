@@ -481,12 +481,12 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession {
       sqlState = "42000",
       message =
         s"""
-           |Syntax error at or near end of input(line 1, pos 16)
-           |
-           |== SQL ==
-           |$sqlText
-           |----------------^^^
-           |""".stripMargin)
+          |Syntax error at or near end of input(line 1, pos 16)
+          |
+          |== SQL ==
+          |$sqlText
+          |----------------^^^
+          |""".stripMargin)
   }
 
   test("PARSE_SYNTAX_ERROR: extraneous input") {
