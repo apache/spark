@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.expressions
 import java.sql.Timestamp
 import java.time.DateTimeException
 
-import org.apache.spark.SparkArithmeticException
+import org.apache.spark.{SparkArithmeticException, SparkNumberFormatException}
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.util.DateTimeConstants.MILLIS_PER_SECOND
@@ -174,29 +174,35 @@ abstract class AnsiCastSuiteBase extends CastSuiteBase {
   test("cast from invalid string to numeric should throw NumberFormatException") {
     // cast to IntegerType
     Seq(IntegerType, ShortType, ByteType, LongType).foreach { dataType =>
+      val typeName = dataType.sql
+      checkExceptionInExpression[SparkNumberFormatException](
+        cast("string", dataType), s"invalid input syntax for type $typeName: 'string'")
       checkExceptionInExpression[NumberFormatException](
-        cast("string", dataType), "invalid input syntax for type numeric: 'string'")
+        cast("123-string", dataType), s"invalid input syntax for type $typeName: '123-string'")
       checkExceptionInExpression[NumberFormatException](
-        cast("123-string", dataType), "invalid input syntax for type numeric: '123-string'")
+        cast("2020-07-19", dataType), s"invalid input syntax for type $typeName: '2020-07-19'")
       checkExceptionInExpression[NumberFormatException](
-        cast("2020-07-19", dataType), "invalid input syntax for type numeric: '2020-07-19'")
-      checkExceptionInExpression[NumberFormatException](
-        cast("1.23", dataType), "invalid input syntax for type numeric: '1.23'")
+        cast("1.23", dataType), s"invalid input syntax for type $typeName: '1.23'")
     }
 
     Seq(DoubleType, FloatType, DecimalType.USER_DEFAULT).foreach { dataType =>
+      val typeName = dataType.sql
       checkExceptionInExpression[NumberFormatException](
-        cast("string", dataType), "invalid input syntax for type numeric: 'string'")
+        cast("string", dataType), s"invalid input syntax for type $typeName: 'string'")
       checkExceptionInExpression[NumberFormatException](
-        cast("123.000.00", dataType), "invalid input syntax for type numeric: '123.000.00'")
+        cast("123.000.00", dataType), s"invalid input syntax for type $typeName: '123.000.00'")
       checkExceptionInExpression[NumberFormatException](
-        cast("abc.com", dataType), "invalid input syntax for type numeric: 'abc.com'")
+        cast("abc.com", dataType), s"invalid input syntax for type $typeName: 'abc.com'")
     }
   }
 
   protected def checkCastToNumericError(l: Literal, to: DataType, tryCastResult: Any): Unit = {
+    val typeName = to match {
+      case a: ArrayType => a.elementType.sql
+      case _ => to.sql
+    }
     checkExceptionInExpression[NumberFormatException](
-      cast(l, to), "invalid input syntax for type numeric: 'true'")
+      cast(l, to), s"invalid input syntax for type $typeName: 'true'")
   }
 
   test("cast from invalid string array to numeric array should throw NumberFormatException") {
@@ -243,7 +249,7 @@ abstract class AnsiCastSuiteBase extends CastSuiteBase {
 
     checkExceptionInExpression[NumberFormatException](
       cast("abcd", DecimalType(38, 1)),
-      "invalid input syntax for type numeric")
+      "invalid input syntax for type DECIMAL(38,1): 'abcd'")
   }
 
   protected def checkCastToBooleanError(l: Literal, to: DataType, tryCastResult: Any): Unit = {
@@ -368,8 +374,8 @@ abstract class AnsiCastSuiteBase extends CastSuiteBase {
       val ret = cast(map, MapType(IntegerType, StringType, valueContainsNull = true))
       assert(ret.resolved == !isTryCast)
       if (!isTryCast) {
-        checkExceptionInExpression[NumberFormatException](
-          ret, "invalid input syntax for type numeric")
+        checkExceptionInExpression[SparkNumberFormatException](
+          ret, "invalid input syntax for type INT: 'a'")
       }
     }
 
@@ -387,7 +393,7 @@ abstract class AnsiCastSuiteBase extends CastSuiteBase {
       assert(ret.resolved == !isTryCast)
       if (!isTryCast) {
         checkExceptionInExpression[NumberFormatException](
-          ret, "invalid input syntax for type numeric")
+          ret, "invalid input syntax for type INT: 'a'")
       }
     }
   }
@@ -511,8 +517,8 @@ abstract class AnsiCastSuiteBase extends CastSuiteBase {
 
     assert(ret.resolved === !isTryCast)
     if (!isTryCast) {
-      checkExceptionInExpression[NumberFormatException](
-        ret, "invalid input syntax for type numeric")
+      checkExceptionInExpression[SparkNumberFormatException](
+        ret, "invalid input syntax for type INT")
     }
   }
 
