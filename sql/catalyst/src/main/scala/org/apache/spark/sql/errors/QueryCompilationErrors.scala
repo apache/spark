@@ -1931,11 +1931,17 @@ object QueryCompilationErrors extends QueryErrorsBase {
   }
 
   def descPartitionNotAllowedOnTempView(table: String): Throwable = {
-    new AnalysisException(s"DESC PARTITION is not allowed on a temporary view: $table")
+    new AnalysisException(
+      errorClass = "FORBIDDEN_OPERATION",
+      messageParameters =
+        Array(toSQLStmt("DESC PARTITION"), "the temporary view", toSQLId(table)))
   }
 
   def descPartitionNotAllowedOnView(table: String): Throwable = {
-    new AnalysisException(s"DESC PARTITION is not allowed on a view: $table")
+    new AnalysisException(
+      errorClass = "FORBIDDEN_OPERATION",
+      messageParameters = Array(
+        toSQLStmt("DESC PARTITION"), "the view", toSQLId(table)))
   }
 
   def showPartitionNotAllowedOnTableNotPartitionedError(tableIdentWithDB: String): Throwable = {
@@ -1969,10 +1975,6 @@ object QueryCompilationErrors extends QueryErrorsBase {
         "following unsupported serde configuration\n" +
         builder.toString()
     )
-  }
-
-  def descPartitionNotAllowedOnViewError(table: String): Throwable = {
-    new AnalysisException(s"DESC PARTITION is not allowed on a view: $table")
   }
 
   def showCreateTableAsSerdeNotAllowedOnSparkDataSourceTableError(

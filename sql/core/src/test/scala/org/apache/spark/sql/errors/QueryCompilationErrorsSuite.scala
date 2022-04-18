@@ -312,6 +312,56 @@ class QueryCompilationErrorsSuite extends QueryTest with SharedSparkSession {
       }
     }
   }
+
+  test("FORBIDDEN_OPERATION: desc partition on a temporary view") {
+    val tableName: String = "t"
+    val tempViewName: String = "tempView"
+
+    withTable(tableName) {
+      sql(
+        s"""
+          |CREATE TABLE $tableName (a STRING, b INT, c STRING, d STRING)
+          |USING parquet
+          |PARTITIONED BY (c, d)
+          |""".stripMargin)
+
+      withTempView(tempViewName) {
+        sql(s"CREATE TEMPORARY VIEW $tempViewName as SELECT * FROM $tableName")
+
+        val e = intercept[AnalysisException](
+          sql(s"DESC TABLE $tempViewName PARTITION (c='Us', d=1)")
+        )
+        assert(e.getErrorClass === "FORBIDDEN_OPERATION")
+        assert(e.message ===
+          s"The operation 'DESC PARTITION' is not allowed on the temporary view: `$tempViewName`")
+      }
+    }
+  }
+
+  test("FORBIDDEN_OPERATION: desc partition on a view") {
+    val tableName: String = "t"
+    val viewName: String = "view"
+
+    withTable(tableName) {
+      sql(
+        s"""
+           |CREATE TABLE $tableName (a STRING, b INT, c STRING, d STRING)
+           |USING parquet
+           |PARTITIONED BY (c, d)
+           |""".stripMargin)
+
+      withView(viewName) {
+        sql(s"CREATE VIEW $viewName as SELECT * FROM $tableName")
+
+        val e = intercept[AnalysisException](
+          sql(s"DESC TABLE $viewName PARTITION (c='Us', d=1)")
+        )
+        assert(e.getErrorClass === "FORBIDDEN_OPERATION")
+        assert(e.message ===
+          s"The operation 'DESC PARTITION' is not allowed on the view: `$viewName`")
+      }
+    }
+  }
 }
 
 class MyCastToString extends SparkUserDefinedFunction(
