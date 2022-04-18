@@ -457,7 +457,7 @@ private[spark] object HadoopRDD extends Logging {
       if (locationStr != "localhost") {
         if (loc.isInMemory) {
           logDebug(s"Partition $locationStr is cached by Hadoop.")
-          Option(HDFSCacheTaskLocation(locationStr).toString)
+          Some(HDFSCacheTaskLocation(locationStr).toString)
         } else {
           Option(HostTaskLocation(locationStr).toString)
         }
