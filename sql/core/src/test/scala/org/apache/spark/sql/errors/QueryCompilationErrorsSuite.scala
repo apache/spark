@@ -107,6 +107,7 @@ class QueryCompilationErrorsSuite extends QueryTest with SharedSparkSession {
 
   test("CANNOT_USE_MIXTURE: Using aggregate function with grouped aggregate pandas UDF") {
     import IntegratedUDFTestUtils._
+    assume(shouldTestGroupedAggPandasUDFs)
 
     val df = Seq(
       (536361, "85123A", 2, 17850),
@@ -153,6 +154,7 @@ class QueryCompilationErrorsSuite extends QueryTest with SharedSparkSession {
 
   test("UNSUPPORTED_FEATURE: Using pandas UDF aggregate expression with pivot") {
     import IntegratedUDFTestUtils._
+    assume(shouldTestGroupedAggPandasUDFs)
 
     val df = Seq(
       (536361, "85123A", 2, 17850),
