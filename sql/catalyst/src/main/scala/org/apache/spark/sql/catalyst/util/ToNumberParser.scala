@@ -51,9 +51,7 @@ object ToNumberParser {
   // This class represents one or more characters that we expect to be present in the input string
   // based on the format string. The toString method returns a representation of each token suitable
   // for use in error messages.
-  abstract class InputToken() {
-    def toString: String
-  }
+  abstract class InputToken()
   // Represents some number of digits (0-9).
   abstract class Digits extends InputToken
   // Represents exactly 'num' digits (0-9).
@@ -99,7 +97,7 @@ object ToNumberParser {
   }
   // Represents any unrecognized character other than the above.
   case class InvalidUnrecognizedCharacter(char: Char) extends InputToken {
-    override def toString: String = s"character $char"
+    override def toString: String = s"character '$char''"
   }
 }
 
@@ -345,15 +343,14 @@ class ToNumberParser(numberFormat: String, errorOnFail: Boolean) extends Seriali
       }
     }
     // Enforce the ordering of tokens in the format string according to this specification:
-    // [ MI ] [ S ] [ L | $ ]
+    // [ MI | S ] [ $ ]
     // [ 0 | 9 | G | , ] [...]
     // [ . | D ]
     // [ 0 | 9 ] [...]
-    // [ L | $ ] [ PR | MI | S ]
+    // [ $ ] [ PR | MI | S ]
     val allowedFormatTokens: Seq[Seq[InputToken]] = Seq(
       Seq(OpeningAngleBracket()),
-      Seq(OptionalMinusSign()),
-      Seq(OptionalPlusOrMinusSign()),
+      Seq(OptionalMinusSign(), OptionalPlusOrMinusSign()),
       Seq(DollarSign()),
       Seq(DigitGroups(Seq(), Seq())),
       Seq(DecimalPoint()),
@@ -362,7 +359,7 @@ class ToNumberParser(numberFormat: String, errorOnFail: Boolean) extends Seriali
       Seq(OptionalMinusSign(), OptionalPlusOrMinusSign(), ClosingAngleBracket())
     )
     var formatTokenIndex = 0
-    for (allowed <- allowedFormatTokens) {
+    for (allowedTokens: Seq[InputToken] <- allowedFormatTokens) {
       def tokensMatch(lhs: InputToken, rhs: InputToken): Boolean = {
         lhs match {
           case _: DigitGroups => rhs.isInstanceOf[DigitGroups]
@@ -370,14 +367,14 @@ class ToNumberParser(numberFormat: String, errorOnFail: Boolean) extends Seriali
         }
       }
       if (formatTokenIndex < formatTokens.length &&
-        allowed.exists(tokensMatch(_, formatTokens(formatTokenIndex)))) {
+        allowedTokens.exists(tokensMatch(_, formatTokens(formatTokenIndex)))) {
         formatTokenIndex += 1
       }
     }
     if (formatTokenIndex < formatTokens.length) {
       return s"Unexpected ${formatTokens(formatTokenIndex).toString} found in the format string " +
         s"'$numberFormat'; the structure of the format string must match: " +
-        "[MI] [S] [$] [0|9|G|,]* [.|D] [0|9]* [$] [PR|MI|S]"
+        "[MI|S] [$] [0|9|G|,]* [.|D] [0|9]* [$] [PR|MI|S]"
     }
     // Validation of the format string finished successfully.
     ""

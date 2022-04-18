@@ -46,10 +46,8 @@ import org.apache.spark.unsafe.types.UTF8String
            grouping separator relevant for the size of the number.
          '$': Specifies the location of the $ currency sign. This character may only be specified
            once.
-         'S': Specifies the position of a '-' or '+' sign (optional, only allowed once at the
-           beginning or end of the format string).
-         'MI': Specifies that 'expr' has an optional '-' sign, but no '+' (only allowed once at the
-           beginning or end of the format string).
+         'S' or 'MI': Specifies the position of a '-' or '+' sign (optional, only allowed once at
+           the beginning or end of the format string). Note that 'S' allows '-' but 'MI' does not.
          'PR': Only allowed at the end of the format string; specifies that 'expr' indicates a
            negative number with wrapping angled brackets.
            ('<1>').

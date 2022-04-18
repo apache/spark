@@ -953,7 +953,8 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("ToNumber: negative tests (the format string is invalid)") {
-    val unexpectedCharacter = "found in the format string"
+    val unexpectedCharacter = "the structure of the format string must match: " +
+      "[MI|S] [$] [0|9|G|,]* [.|D] [0|9]* [$] [PR|MI|S]"
     val thousandsSeparatorDigitsBetween =
       "Thousands separators (,) must have digits in between them"
     val mustBeAtEnd = "must be at the end of the number format"
@@ -973,6 +974,7 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       ("454", "$$99") -> atMostOne,
       // Make sure the format string contains at most one minus sign at the beginning or end.
       ("$4-4", "$9MI9") -> unexpectedCharacter,
+      ("--4", "SMI9") -> unexpectedCharacter,
       ("--$54", "SS$99") -> atMostOne,
       ("-$54", "MI$99MI") -> atMostOne,
       ("$4-4", "$9MI9MI") -> atMostOne,
