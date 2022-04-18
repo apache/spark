@@ -77,15 +77,15 @@ Supported DataFrame APIs
 | /api/python/reference/pyspark.pandas/api/p |             |                                      |
 | yspark.pandas.DataFrame.aggregate.html>`__ |             |                                      |
 +--------------------------------------------+-------------+--------------------------------------+
-| `align <https://spark.apache.org/docs/la   | O           | ``fill_value``, ``method``, ``limit``|
-| test/api/python/reference/pyspark.pandas/a |             | ``fill_axis``                        |
+| `align <https://spark.apache.org/docs/la   | O           | ``fill_value``, ``method``,          |
+| test/api/python/reference/pyspark.pandas/a |             | ``limit``, ``fill_axis``             |
 | pi/pyspark.pandas.DataFrame.align.html>`__ |             |                                      |
 +--------------------------------------------+-------------+--------------------------------------+
-| `all <https://spark.apache.org/docs/       | O           | ``bool_only``, ``skipna``, ``level`` |
+| `all <https://spark.apache.org/docs/       | O           | ``level``                            |
 | latest/api/python/reference/pyspark.pandas |             |                                      |
 | /api/pyspark.pandas.DataFrame.all.html>`__ |             |                                      |
 +--------------------------------------------+-------------+--------------------------------------+
-| `any <https://spark.apache.org/docs/       | O           | ``bool_only``, ``skipna``, ``level`` |
+| `any <https://spark.apache.org/docs/       | O           | `skipna``, ``level``                 |
 | latest/api/python/reference/pyspark.pandas |             |                                      |
 | /api/pyspark.pandas.DataFrame.any.html>`__ |             |                                      |
 +--------------------------------------------+-------------+--------------------------------------+
@@ -265,7 +265,9 @@ Supported DataFrame APIs
 | atest/api/python/reference/pyspark.pandas/ |             |                                      |
 | api/pyspark.pandas.DataFrame.eval.html>`__ |             |                                      |
 +--------------------------------------------+-------------+--------------------------------------+
-| ewm                                        | X           |                                      |
+| `ewm <https://spark.apache.org/docs/l      | O           | ``adjust``, ``ignore_na``, ``axis``, |
+| atest/api/python/reference/pyspark.pandas/ |             | ``method``                           |
+| api/pyspark.pandas.DataFrame.ewm.html>`__  |             |                                      |
 +--------------------------------------------+-------------+--------------------------------------+
 | `expan                                     | O           |                                      |
 | ding <https://spark.apache.org/docs/latest |             |                                      |
@@ -371,7 +373,10 @@ Supported DataFrame APIs
 | est/api/python/reference/pyspark.pandas/ap |             |                                      |
 | i/pyspark.pandas.DataFrame.insert.html>`__ |             |                                      |
 +--------------------------------------------+-------------+--------------------------------------+
-| interpolate                                | X           |                                      |
+| `interpolate <https://spark.apache.org/doc | O           | ``axis``, ``inplace``,               |
+| s/latest/api/python/reference/pyspark.pand |             | ``limit_direction``, ``limit_area``, |
+| as/api/pyspark.pandas.DataFrame.interpolat |             | ``downcast``                         |
+| e.html>`__                                 |             |                                      |
 +--------------------------------------------+-------------+--------------------------------------+
 | `isin <https://spark.apache.org/docs/l     | O           |                                      |
 | atest/api/python/reference/pyspark.pandas/ |             |                                      |
@@ -501,7 +506,7 @@ Supported DataFrame APIs
 | /latest/api/python/reference/pyspark.panda |             |                                      |
 | s/api/pyspark.pandas.DataFrame.ne.html>`__ |             |                                      |
 +--------------------------------------------+-------------+--------------------------------------+
-| `nla                                       | O           | ``keep``                             |
+| `nla                                       | O           |                                      |
 | rgest <https://spark.apache.org/docs/lates |             |                                      |
 | t/api/python/reference/pyspark.pandas/api/ |             |                                      |
 | pyspark.pandas.DataFrame.nlargest.html>`__ |             |                                      |
@@ -515,7 +520,7 @@ Supported DataFrame APIs
 | st/api/python/reference/pyspark.pandas/api |             |                                      |
 | /pyspark.pandas.DataFrame.notnull.html>`__ |             |                                      |
 +--------------------------------------------+-------------+--------------------------------------+
-| `nsmal                                     | O           | ``keep``                             |
+| `nsmal                                     | O           |                                      |
 | lest <https://spark.apache.org/docs/latest |             |                                      |
 | /api/python/reference/pyspark.pandas/api/p |             |                                      |
 | yspark.pandas.DataFrame.nsmallest.html>`__ |             |                                      |
@@ -632,8 +637,8 @@ Supported DataFrame APIs
 | atest/api/python/reference/pyspark.pandas/ |             |                                      |
 | api/pyspark.pandas.DataFrame.radd.html>`__ |             |                                      |
 +--------------------------------------------+-------------+--------------------------------------+
-| `rank <https://spark.apache.org/docs/l     | O           | ``axis``, ``numeric_only``,          |
-| atest/api/python/reference/pyspark.pandas/ |             | ``na_options``, ``pct``              |
+| `rank <https://spark.apache.org/docs/l     | O           | ``axis``, ``na_options``, ``pct``    |
+| atest/api/python/reference/pyspark.pandas/ |             |                                      |
 | api/pyspark.pandas.DataFrame.rank.html>`__ |             |                                      |
 |                                            |             |                                      |
 +--------------------------------------------+-------------+--------------------------------------+
@@ -852,10 +857,10 @@ Supported DataFrame APIs
 | o_json <https://spark.apache.org/docs/late |             | ``double_precision``,                |
 | st/api/python/reference/pyspark.pandas/api |             | ``force_ascii``, ``date_unit``,      | 
 | /pyspark.pandas.DataFrame.to_json.html>`__ |             | ``default_handler`` and more. See th |
-|                                            |             | e pandas.DataFrame.to_json <https:// |
-|                                            |             | pandas.pydata.org/docs/reference/api |
-|                                            |             | /pandas.DataFrame.to_json.html>`__ a |
-|                                            |             | nd `pyspark.pandas.DataFrame.        |
+|                                            |             | e `pandas.DataFrame.to_json <https:  |
+|                                            |             | //pandas.pydata.org/docs/reference/a |
+|                                            |             | pi/pandas.DataFrame.to_json.htm      |
+|                                            |             | l>`__ and `pyspark.pandas.DataFrame. |
 |                                            |             | to_json <https://spark.apache.org/   |
 |                                            |             | docs/latest/api/python/reference/pys |
 |                                            |             | park.pandas/api/pyspark.pandas.DataF |
@@ -980,7 +985,7 @@ Supported I/O APIs
 | s://spark.apache.org/ |                    | ``skipinitialspace``, ``skiprows`` and more. See th |
 | docs/latest/api/pytho |                    | e `pandas.read_csv <https://pandas.py               |
 | n/reference/pyspark.p |                    | data.org/docs/reference/api/pandas.read_csv         |
-| andas/api/pyspark.pan |                    | .html>`__ and pyspark.pandas.read_csv <https://     |
+| andas/api/pyspark.pan |                    | .html>`__ and `pyspark.pandas.read_csv <https://    |
 | das.read_csv.html>`__ |                    | spark.apache.org/docs/latest/api/python/reference   |
 |                       |                    | /pyspark.pandas/api/pyspark.pandas.read_csv         |
 |                       |                    | .html>`__ for detail.                               |
@@ -1039,11 +1044,11 @@ Supported I/O APIs
 | `DataFrame.t          | O                  | ``date_format``, ``double_precision``,              |
 | o_json <https://spark |                    | ``force_ascii``, ``date_unit``,                     | 
 | .apache.org/docs/late |                    | ``default_handler`` and more. See the `pandas.DataF |
-| st/api/python/referen |                    | rame.to_json <https://pandas.pydata.org/docs/rferen |
-| ce/pyspark.pandas/api |                    | ce/api/pandas.DataFrame.to_json.html>`__ and `pyspa |
-| /pyspark.pandas.DataF |                    | rk.pandas.to_json <https://spark.apache.org/docs/la |
-| rame.to_json.html>`__ |                    | test/api/python/reference/pyspark.pandas/api/pyspar |
-|                       |                    | k.pandas.DataFrame.to_json.html>`__ for detail.     |
+| st/api/python/referen |                    | rame.to_json <https://pandas.pydata.org/docs/refere |
+| ce/pyspark.pandas/api |                    | nce/api/pandas.DataFrame.to_json.html>`__ and `pysp |
+| /pyspark.pandas.DataF |                    | ark.pandas.to_json <https://spark.apache.org/docs/l |
+| rame.to_json.html>`__ |                    | atest/api/python/reference/pyspark.pandas/api/pyspa |
+|                       |                    | rk.pandas.DataFrame.to_json.html>`__ for detail.    |
 +-----------------------+--------------------+-----------------------------------------------------+
 | `read_html <https     | O                  |                                                     |
 | ://spark.apache.org/d |                    |                                                     |
@@ -1432,7 +1437,7 @@ Supported Series APIs
 | andas/api/pyspark.pand |                   |                                                     |
 | as.Series.cat.html>`__ |                   |                                                     |
 +------------------------+-------------------+-----------------------------------------------------+
-| `clip <ht              | O                 | ``axis``, ``inplace``                               |
+| `clip <ht              | O                 | ``axis``                                            |
 | tps://spark.apache.org |                   |                                                     |
 | /docs/latest/api/pytho |                   |                                                     |
 | n/reference/pyspark.pa |                   |                                                     |
@@ -1634,7 +1639,12 @@ Supported Series APIs
 | as/api/pyspark.pandas. |                   |                                                     |
 | Series.equals.html>`__ |                   |                                                     |
 +------------------------+-------------------+-----------------------------------------------------+
-| ewm                    | X                 |                                                     |
+| `ewm <http             | O                 | ``adjust``, ``ignore_na``, ``axis``, ``method``     |
+| s://spark.apache.org/d |                   |                                                     |
+| ocs/latest/api/python/ |                   |                                                     |
+| reference/pyspark.pand |                   |                                                     |
+| as/api/pyspark.pandas. |                   |                                                     |
+| Series.ewm.html>`__    |                   |                                                     |
 +------------------------+-------------------+-----------------------------------------------------+
 | `expanding <https:/    | O                 |                                                     |
 | /spark.apache.org/docs |                   |                                                     |
@@ -1788,7 +1798,13 @@ Supported Series APIs
 +------------------------+-------------------+-----------------------------------------------------+
 | infer_objects          | X                 |                                                     |
 +------------------------+-------------------+-----------------------------------------------------+
-| interpolate            | X                 |                                                     |
+| `interpolate <https:// | O                 | ``axis``, ``inplace``, ``limit_direction``,         |
+| spark.apache.          |                   | ``limit_area``, ``downcast``                        |
+| org/docs/latest/api/py |                   |                                                     |
+| thon/reference/pyspark |                   |                                                     |
+| .pandas/api/pyspark.pa |                   |                                                     |
+| ndas.Series.interpolat |                   |                                                     |
+| e.html>`__             |                   |                                                     |
 +------------------------+-------------------+-----------------------------------------------------+
 | `is                    | O                 |                                                     |
 | _monotonic <https://sp |                   |                                                     |
@@ -1929,7 +1945,7 @@ Supported Series APIs
 | andas/api/pyspark.pand |                   |                                                     |
 | as.Series.mad.html>`__ |                   |                                                     |
 +------------------------+-------------------+-----------------------------------------------------+
-| `map <h                | O                 | ``na_action``                                       |
+| `map <h                | O                 |                                                     |
 | ttps://spark.apache.or |                   |                                                     |
 | g/docs/latest/api/pyth |                   |                                                     |
 | on/reference/pyspark.p |                   |                                                     |
@@ -2185,7 +2201,7 @@ Supported Series APIs
 | ndas/api/pyspark.panda |                   |                                                     |
 | s.Series.radd.html>`__ |                   |                                                     |
 +------------------------+-------------------+-----------------------------------------------------+
-| `rank <ht              | O                 | ``axis``, ``numeric_only``, ``na_option``, ``pct``  |
+| `rank <ht              | O                 | ``axis``, ``na_option``, ``pct``                    |
 | tps://spark.apache.org |                   |                                                     |
 | /docs/latest/api/pytho |                   |                                                     |
 | n/reference/pyspark.pa |                   |                                                     |
@@ -2377,7 +2393,7 @@ Supported Series APIs
 | pi/pyspark.pandas.Seri |                   |                                                     |
 | es.sort_index.html>`__ |                   |                                                     |
 +------------------------+-------------------+-----------------------------------------------------+
-| `                      | O                 | ``axis``, ``kind``, ``ignore_index``, ``key``       |
+| `                      | O                 | ``axis``, ``kind``, ``key``                         |
 | sort_values <https://s |                   |                                                     |
 | park.apache.org/docs/l |                   |                                                     |
 | atest/api/python/refer |                   |                                                     |
@@ -2464,8 +2480,8 @@ Supported Series APIs
 | reference/pyspark.pand |                   | docs/reference/api/pandas.Series.to_csv.html>`__ an |
 | as/api/pyspark.pandas. |                   | d `pyspark.pandas.Series.to_csv <https://           |
 | Series.to_csv.html>`__ |                   | spark.apache.org/docs/latest/api/python/reference/p |
-|                        |                   | yspark.pandas/api/pyspark.pandas.Series.to_csv.html |
-|                        |                   | >`__ for detail.                                    |
+|                        |                   | yspark.pandas/api/pyspark.pandas.Series.to_csv.htm  |
+|                        |                   | l>`__ for detail.                                   |
 +------------------------+-------------------+-----------------------------------------------------+
 | `to_dict <https        | O                 |                                                     |
 | ://spark.apache.org/do |                   |                                                     |
@@ -2645,11 +2661,6 @@ Supported Index APIs
 +-----------------------------------------+-------------+-----------------------------------------+
 | API                                     | Implemented | Missing parameters                      |
 +=========================================+=============+=========================================+
-| `sort_values <h                         | O           | ``return_indexer``, ``na_position``,    |
-| ttps://spark.apache.org/docs/latest/api |             | ``key``                                 |
-| /python/reference/pyspark.pandas/api/py |             |                                         |
-| spark.pandas.Index.sort_values.html>`__ |             |                                         |
-+-----------------------------------------+-------------+-----------------------------------------+
 | `T <https://spark.apache.org/docs/      | O           |                                         |
 | latest/api/python/reference/pyspark.pan |             |                                         |
 | das/api/pyspark.pandas.Index.T.html>`__ |             |                                         |
@@ -2718,7 +2729,7 @@ Supported Index APIs
 | est/api/python/reference/pyspark.pandas |             |                                         |
 | /api/pyspark.pandas.Index.drop.html>`__ |             |                                         |
 +-----------------------------------------+-------------+-----------------------------------------+
-| `drop_duplicates <https                 | O           | ``keep``                                |
+| `drop_duplicates <https                 | O           |                                         |
 | ://spark.apache.org/docs/latest/api/pyt |             |                                         |
 | hon/reference/pyspark.pandas/api/pyspar |             |                                         |
 | k.pandas.Index.drop_duplicates.html>`__ |             |                                         |
@@ -2996,8 +3007,8 @@ Supported Index APIs
 +-----------------------------------------+-------------+-----------------------------------------+
 | slice_locs                              | X           |                                         |
 +-----------------------------------------+-------------+-----------------------------------------+
-| `sort_values <h                         | O           | ``return_indexer``, ``na_position``,    |
-| ttps://spark.apache.org/docs/latest/api |             | ``key``                                 |
+| `sort_values <h                         | O           | ``na_position``, ``key``                |
+| ttps://spark.apache.org/docs/latest/api |             |                                         |
 | /python/reference/pyspark.pandas/api/py |             |                                         |
 | spark.pandas.Index.sort_values.html>`__ |             |                                         |
 +-----------------------------------------+-------------+-----------------------------------------+
