@@ -303,8 +303,7 @@ private[spark] class ExecutorAllocationManager(
     val maxNeeded = math.ceil(numRunningOrPendingTasks * executorAllocationRatio /
       tasksPerExecutor).toInt
 
-    logDebug(s"max needed for rpId: $rpId numpending: $numRunningOrPendingTasks," +
-      s" tasksperexecutor: $tasksPerExecutor = $maxNeeded")
+    logDebug(s"max executors needed for rpId $rpId: $maxNeeded")
 
     val maxNeededWithSpeculationLocalityOffset =
       if (tasksPerExecutor > 1 && maxNeeded == 1 && pendingSpeculative > 0) {
@@ -523,10 +522,10 @@ private[spark] class ExecutorAllocationManager(
       }
     } else {
       val numCompatibleExecutors = numExecutorsTargetsCompatibleProfiles(rpId)
-      if (oldNumExecutorsTarget +  numCompatibleExecutors >= maxNumExecutors) {
+      if (oldNumExecutorsTarget + numCompatibleExecutors >= maxNumExecutors) {
         logDebug("Not adding executors because our current target total is already " +
-          s"${oldNumExecutorsTarget} (limit: max $maxNumExecutors - " +
-          s"reused $numCompatibleExecutors)")
+          s"${oldNumExecutorsTarget} (limit: max $maxNumExecutors)" +
+          s"(reused $numCompatibleExecutors)")
         numExecutorsToAddPerResourceProfileId(rpId) = 1
         return 0
       }
