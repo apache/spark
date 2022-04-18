@@ -4,9 +4,11 @@ SELECT CAST('1.23' AS long);
 SELECT CAST('-4.56' AS int);
 SELECT CAST('-4.56' AS long);
 
--- cast string which are not numbers to integral should return null
+-- cast string which are not numbers to numeric types
 SELECT CAST('abc' AS int);
 SELECT CAST('abc' AS long);
+SELECT CAST('abc' AS float);
+SELECT CAST('abc' AS double);
 
 -- cast string representing a very large number to integral should return null
 SELECT CAST('1234567890123' AS int);
@@ -15,14 +17,18 @@ SELECT CAST('12345678901234567890123' AS long);
 -- cast empty string to integral should return null
 SELECT CAST('' AS int);
 SELECT CAST('' AS long);
+SELECT CAST('' AS float);
+SELECT CAST('' AS double);
 
 -- cast null to integral should return null
 SELECT CAST(NULL AS int);
 SELECT CAST(NULL AS long);
 
--- cast invalid decimal string to integral should return null
+-- cast invalid decimal string to numeric types
 SELECT CAST('123.a' AS int);
 SELECT CAST('123.a' AS long);
+SELECT CAST('123.a' AS float);
+SELECT CAST('123.a' AS double);
 
 -- '-2147483648' is the smallest int value
 SELECT CAST('-2147483648' AS int);
