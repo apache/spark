@@ -110,6 +110,7 @@ class QueryCompilationErrorsSuite extends QueryTest with SharedSparkSession {
 
   test("INVALID_PANDAS_UDF_PLACEMENT: Using aggregate function with grouped aggregate pandas UDF") {
     import IntegratedUDFTestUtils._
+    assume(shouldTestGroupedAggPandasUDFs)
 
     val df = Seq(
       (536361, "85123A", 2, 17850),
@@ -126,7 +127,7 @@ class QueryCompilationErrorsSuite extends QueryTest with SharedSparkSession {
 
     assert(e.errorClass === Some("INVALID_PANDAS_UDF_PLACEMENT"))
     assert(e.message ===
-      "The group aggregate pandas UDF 'pandas_udf_1', 'pandas_udf_2' cannot be invoked " +
+      "The group aggregate pandas UDF `pandas_udf_1`, `pandas_udf_2` cannot be invoked " +
       "together with as other, non-pandas aggregate functions.")
   }
 
@@ -159,6 +160,7 @@ class QueryCompilationErrorsSuite extends QueryTest with SharedSparkSession {
 
   test("UNSUPPORTED_FEATURE: Using pandas UDF aggregate expression with pivot") {
     import IntegratedUDFTestUtils._
+    assume(shouldTestGroupedAggPandasUDFs)
 
     val df = Seq(
       (536361, "85123A", 2, 17850),

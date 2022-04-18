@@ -22,13 +22,12 @@ import org.antlr.v4.runtime.ParserRuleContext
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.parser.SqlBaseParser._
 import org.apache.spark.sql.catalyst.trees.Origin
-import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 
 /**
  * Object for grouping all error messages of the query parsing.
  * Currently it includes all ParseException.
  */
-object QueryParsingErrors {
+object QueryParsingErrors extends QueryErrorsBase {
 
   def invalidInsertIntoError(ctx: InsertIntoContext): Throwable = {
     new ParseException("Invalid InsertIntoContext", ctx)
@@ -121,17 +120,17 @@ object QueryParsingErrors {
 
   def repetitiveWindowDefinitionError(name: String, ctx: WindowClauseContext): Throwable = {
     new ParseException("INVALID_SQL_SYNTAX",
-      Array(s"The definition of window '$name' is repetitive."), ctx)
+      Array(s"The definition of window ${toSQLId(name)} is repetitive."), ctx)
   }
 
   def invalidWindowReferenceError(name: String, ctx: WindowClauseContext): Throwable = {
     new ParseException("INVALID_SQL_SYNTAX",
-      Array(s"Window reference '$name' is not a window specification."), ctx)
+      Array(s"Window reference ${toSQLId(name)} is not a window specification."), ctx)
   }
 
   def cannotResolveWindowReferenceError(name: String, ctx: WindowClauseContext): Throwable = {
     new ParseException("INVALID_SQL_SYNTAX",
-      Array(s"Cannot resolve window reference '$name'."), ctx)
+      Array(s"Cannot resolve window reference ${toSQLId(name)}."), ctx)
   }
 
   def naturalCrossJoinUnsupportedError(ctx: RelationContext): Throwable = {
@@ -162,7 +161,7 @@ object QueryParsingErrors {
 
   def functionNameUnsupportedError(functionName: String, ctx: ParserRuleContext): Throwable = {
     new ParseException("INVALID_SQL_SYNTAX",
-      Array(s"Unsupported function name '$functionName'"), ctx)
+      Array(s"Unsupported function name ${toSQLId(functionName)}"), ctx)
   }
 
   def cannotParseValueTypeError(
@@ -231,7 +230,10 @@ object QueryParsingErrors {
   }
 
   def tooManyArgumentsForTransformError(name: String, ctx: ApplyTransformContext): Throwable = {
-    new ParseException("INVALID_SQL_SYNTAX", Array(s"Too many arguments for transform $name"), ctx)
+    new ParseException(
+      errorClass = "INVALID_SQL_SYNTAX",
+      messageParameters = Array(s"Too many arguments for transform ${toSQLId(name)}"),
+      ctx)
   }
 
   def invalidBucketsNumberError(describe: String, ctx: ApplyTransformContext): Throwable = {
@@ -299,12 +301,13 @@ object QueryParsingErrors {
 
   def showFunctionsUnsupportedError(identifier: String, ctx: IdentifierContext): Throwable = {
     new ParseException("INVALID_SQL_SYNTAX",
-      Array(s"SHOW $identifier FUNCTIONS not supported"), ctx)
+      Array(s"SHOW ${toSQLId(identifier)} FUNCTIONS not supported"), ctx)
   }
 
   def showFunctionsInvalidPatternError(pattern: String, ctx: ParserRuleContext): Throwable = {
     new ParseException("INVALID_SQL_SYNTAX",
-      Array(s"Invalid pattern in SHOW FUNCTIONS: $pattern. It must be a string literal."), ctx)
+      Array(s"Invalid pattern in SHOW FUNCTIONS: ${toSQLId(pattern)}. " +
+        "It must be a string literal."), ctx)
   }
 
   def duplicateCteDefinitionNamesError(duplicateNames: String, ctx: CtesContext): Throwable = {
@@ -326,7 +329,7 @@ object QueryParsingErrors {
 
   def duplicateKeysError(key: String, ctx: ParserRuleContext): Throwable = {
     // Found duplicate keys '$key'
-    new ParseException(errorClass = "DUPLICATE_KEY", messageParameters = Array(key), ctx)
+    new ParseException(errorClass = "DUPLICATE_KEY", messageParameters = Array(toSQLId(key)), ctx)
   }
 
   def unexpectedFomatForSetConfigurationError(ctx: ParserRuleContext): Throwable = {
@@ -418,9 +421,9 @@ object QueryParsingErrors {
       Array("It is not allowed to define a TEMPORARY function with IF NOT EXISTS."), ctx)
   }
 
-  def unsupportedFunctionNameError(quoted: String, ctx: CreateFunctionContext): Throwable = {
+  def unsupportedFunctionNameError(funcName: Seq[String], ctx: CreateFunctionContext): Throwable = {
     new ParseException("INVALID_SQL_SYNTAX",
-      Array(s"Unsupported function name '$quoted'"), ctx)
+      Array(s"Unsupported function name ${toSQLId(funcName)}"), ctx)
   }
 
   def specifyingDBInCreateTempFuncError(
@@ -428,7 +431,8 @@ object QueryParsingErrors {
       ctx: CreateFunctionContext): Throwable = {
     new ParseException(
       "INVALID_SQL_SYNTAX",
-      Array(s"Specifying a database in CREATE TEMPORARY FUNCTION is not allowed: '$databaseName'"),
+      Array("Specifying a database in CREATE TEMPORARY FUNCTION is not allowed: " +
+        toSQLId(databaseName)),
       ctx)
   }
 
@@ -442,7 +446,7 @@ object QueryParsingErrors {
 
   def invalidNameForDropTempFunc(name: Seq[String], ctx: ParserRuleContext): Throwable = {
     new ParseException("INVALID_SQL_SYNTAX",
-      Array(s"DROP TEMPORARY FUNCTION requires a single part name but got: ${name.quoted}"), ctx)
+      Array(s"DROP TEMPORARY FUNCTION requires a single part name but got: ${toSQLId(name)}"), ctx)
   }
 
   def defaultColumnNotImplementedYetError(ctx: ParserRuleContext): Throwable = {

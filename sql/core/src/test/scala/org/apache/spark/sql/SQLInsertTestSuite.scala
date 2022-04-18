@@ -276,7 +276,7 @@ trait SQLInsertTestSuite extends QueryTest with SQLTestUtils {
       val e = intercept[AnalysisException] {
         sql("INSERT OVERWRITE t PARTITION (c='2', C='3') VALUES (1)")
       }
-      assert(e.getMessage.contains("Found duplicate keys 'c'"))
+      assert(e.getMessage.contains("Found duplicate keys `c`"))
     }
     // The following code is skipped for Hive because columns stored in Hive Metastore is always
     // case insensitive and we cannot create such table in Hive Metastore.
