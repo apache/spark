@@ -144,14 +144,16 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
   }
 
   test("SELECT clause generating a different number of columns is not allowed.") {
-    val message = intercept[AnalysisException] {
-      sql(
-        s"""
-        |INSERT OVERWRITE TABLE jsonTable SELECT a FROM jt
-      """.stripMargin)
-    }.getMessage
-    assert(message.contains("target table has 2 column(s) but the inserted data has 1 column(s)")
-    )
+    withSQLConf(SQLConf.USE_NULLS_FOR_MISSING_DEFAULT_COLUMN_VALUES.key -> "false") {
+      val message = intercept[AnalysisException] {
+        sql(
+          s"""
+             |INSERT OVERWRITE TABLE jsonTable SELECT a FROM jt
+          """.stripMargin)
+      }.getMessage
+      assert(message.contains("target table has 2 column(s) but the inserted data has 1 column(s)")
+      )
+    }
   }
 
   test("INSERT OVERWRITE a JSONRelation multiple times") {
@@ -650,9 +652,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
         msg = intercept[AnalysisException] {
           sql("insert into t select 1")
         }.getMessage
-        assert(msg.contains("`t` requires that the data to be inserted have the same number of " +
-          "columns as the target table: target table has 2 column(s)" +
-          " but the inserted data has 1 column(s)"))
+        assert(msg.contains("Cannot write incompatible data to table"))
 
         // Insert into table successfully.
         sql("insert into t select 1, 2.0D")
@@ -1101,11 +1101,13 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
       }
     }
     // There is one trailing default value referenced implicitly by the INSERT INTO statement.
-    withTable("t") {
-      sql("create table t(i int, s bigint default 42, x bigint) using parquet")
-      assert(intercept[AnalysisException] {
-        sql("insert into t values(1)")
-      }.getMessage.contains("expected 3 columns but found"))
+    withSQLConf(SQLConf.USE_NULLS_FOR_MISSING_DEFAULT_COLUMN_VALUES.key -> "false") {
+      withTable("t") {
+        sql("create table t(i int, s bigint default 42, x bigint) using parquet")
+        assert(intercept[AnalysisException] {
+          sql("insert into t values(1)")
+        }.getMessage.contains("expected 3 columns but found"))
+      }
     }
     // The table has a partitioning column with a default value; this is not allowed.
     withTable("t") {
@@ -1158,11 +1160,13 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
     }
     // When the CASE_SENSITIVE configuration is disabled, then using different cases for the
     // required and provided column names is successful.
-    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
-      withTable("t") {
-        sql("create table t(i boolean, s bigint default 42, q int default 43) using parquet")
-        sql("insert into t (I, Q) select true from (select 1)")
-        checkAnswer(spark.table("t"), Row(true, 42L, 43))
+    withSQLConf(SQLConf.USE_NULLS_FOR_MISSING_DEFAULT_COLUMN_VALUES.key -> "false") {
+      withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
+        withTable("t") {
+          sql("create table t(i boolean, s bigint default 42, q int default 43) using parquet")
+          sql("insert into t (I, Q) select true from (select 1)")
+          checkAnswer(spark.table("t"), Row(true, 42L, 43))
+        }
       }
     }
     // When the USE_NULLS_FOR_MISSING_DEFAULT_COLUMN_VALUES configuration is enabled, and no
@@ -1201,34 +1205,34 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
     val addOneColButExpectedTwo = "target table has 2 column(s) but the inserted data has 1 col"
     val addTwoColButExpectedThree = "target table has 3 column(s) but the inserted data has 2 col"
     // The missing columns in these INSERT INTO commands do not have explicit default values.
-    withTable("t") {
-      sql("create table t(i boolean, s bigint) using parquet")
-      assert(intercept[AnalysisException] {
-        sql("insert into t (i) values (true)")
-      }.getMessage.contains(addOneColButExpectedTwo))
-    }
-    withTable("t") {
-      sql("create table t(i boolean default true, s bigint) using parquet")
-      assert(intercept[AnalysisException] {
-        sql("insert into t (i) values (default)")
-      }.getMessage.contains(addOneColButExpectedTwo))
-    }
-    withTable("t") {
-      sql("create table t(i boolean, s bigint default 42) using parquet")
-      assert(intercept[AnalysisException] {
-        sql("insert into t (s) values (default)")
-      }.getMessage.contains(addOneColButExpectedTwo))
-    }
-    withTable("t") {
-      sql("create table t(i boolean, s bigint, q int default 43) using parquet")
-      assert(intercept[AnalysisException] {
-        sql("insert into t (i, q) select true from (select 1)")
-      }.getMessage.contains(addTwoColButExpectedThree))
-    }
-    // When the USE_NULLS_FOR_MISSING_DEFAULT_COLUMN_VALUES configuration is disabled, and no
-    // explicit DEFAULT value is available when the INSERT INTO statement provides fewer
-    // values than expected, the INSERT INTO command fails to execute.
     withSQLConf(SQLConf.USE_NULLS_FOR_MISSING_DEFAULT_COLUMN_VALUES.key -> "false") {
+      withTable("t") {
+        sql("create table t(i boolean, s bigint) using parquet")
+        assert(intercept[AnalysisException] {
+          sql("insert into t (i) values (true)")
+        }.getMessage.contains(addOneColButExpectedTwo))
+      }
+      withTable("t") {
+        sql("create table t(i boolean default true, s bigint) using parquet")
+        assert(intercept[AnalysisException] {
+          sql("insert into t (i) values (default)")
+        }.getMessage.contains(addOneColButExpectedTwo))
+      }
+      withTable("t") {
+        sql("create table t(i boolean, s bigint default 42) using parquet")
+        assert(intercept[AnalysisException] {
+          sql("insert into t (s) values (default)")
+        }.getMessage.contains(addOneColButExpectedTwo))
+      }
+      withTable("t") {
+        sql("create table t(i boolean, s bigint, q int default 43) using parquet")
+        assert(intercept[AnalysisException] {
+          sql("insert into t (i, q) select true from (select 1)")
+        }.getMessage.contains(addTwoColButExpectedThree))
+      }
+      // When the USE_NULLS_FOR_MISSING_DEFAULT_COLUMN_VALUES configuration is disabled, and no
+      // explicit DEFAULT value is available when the INSERT INTO statement provides fewer
+      // values than expected, the INSERT INTO command fails to execute.
       withTable("t") {
         sql("create table t(i boolean, s bigint) using parquet")
         assert(intercept[AnalysisException] {
@@ -1490,10 +1494,12 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
   }
 
   test("SPARK-36980: Insert support query with CTE") {
-    withTable("t") {
-      sql("CREATE TABLE t(i int, part1 int, part2 int) using parquet")
-      sql("INSERT INTO t WITH v1(c1) as (values (1)) select 1, 2, 3 from v1")
-      checkAnswer(spark.table("t"), Row(1, 2, 3))
+    withSQLConf(SQLConf.USE_NULLS_FOR_MISSING_DEFAULT_COLUMN_VALUES.key -> "false") {
+      withTable("t") {
+        sql("CREATE TABLE t(i int, part1 int, part2 int) using parquet")
+        sql("INSERT INTO t WITH v1(c1) as (values (1)) select 1, 2, 3 from v1")
+        checkAnswer(spark.table("t"), Row(1, 2, 3))
+      }
     }
   }
 
