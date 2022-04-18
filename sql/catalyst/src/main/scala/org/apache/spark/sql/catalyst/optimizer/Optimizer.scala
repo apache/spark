@@ -152,6 +152,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
     //////////////////////////////////////////////////////////////////////////////////////////
     // Optimizer rules start here
     //////////////////////////////////////////////////////////////////////////////////////////
+    Batch("Eliminate Distinct", Once, EliminateDistinct) ::
     // - Do the first call of CombineUnions before starting the major Optimizer rules,
     //   since it can reduce the number of iteration and the other rules could add/move
     //   extra operators between two adjacent Union operators.
@@ -279,7 +280,6 @@ abstract class Optimizer(catalogManager: CatalogManager)
     // However, because we also use the analyzer to canonicalized queries (for view definition),
     // we do not eliminate subqueries or compute current time in the analyzer.
     private val rules = Seq(
-      EliminateDistinct,
       EliminateResolvedHint,
       EliminateSubqueryAliases,
       EliminateView,
@@ -422,14 +422,26 @@ abstract class Optimizer(catalogManager: CatalogManager)
 }
 
 /**
- * Remove useless DISTINCT for MAX and MIN.
+ * Remove useless DISTINCT:
+ *   1. For some aggregate expression, e.g.: MAX and MIN.
+ *   2. If the distinct semantics is guaranteed by child.
+ *
  * This rule should be applied before RewriteDistinctAggregates.
  */
 object EliminateDistinct extends Rule[LogicalPlan] {
-  override def apply(plan: LogicalPlan): LogicalPlan = plan.transformAllExpressionsWithPruning(
-    _.containsPattern(AGGREGATE_EXPRESSION)) {
-    case ae: AggregateExpression if ae.isDistinct && isDuplicateAgnostic(ae.aggregateFunction) =>
-      ae.copy(isDistinct = false)
+  override def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
+    _.containsPattern(AGGREGATE)) {
+    case agg: Aggregate =>
+      agg.transformExpressionsWithPruning(_.containsPattern(AGGREGATE_EXPRESSION)) {
+        case ae: AggregateExpression if ae.isDistinct &&
+          isDuplicateAgnostic(ae.aggregateFunction) =>
+          ae.copy(isDistinct = false)
+
+        case ae: AggregateExpression if ae.isDistinct &&
+          agg.child.distinctKeys.exists(
+            _.subsetOf(ExpressionSet(ae.aggregateFunction.children.filterNot(_.foldable)))) =>
+          ae.copy(isDistinct = false)
+      }
   }
 
   def isDuplicateAgnostic(af: AggregateFunction): Boolean = af match {

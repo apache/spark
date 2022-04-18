@@ -194,7 +194,7 @@ class StreamingListenerTests(ReusedSQLTestCase):
             self.check_state_operator_progress(so)
 
         self.assertTrue(isinstance(progress.sources, list))
-        for so in progress.stateOperators:
+        for so in progress.sources:
             self.check_source_progress(so)
 
         self.assertTrue(isinstance(progress.sink, SinkProgress))
