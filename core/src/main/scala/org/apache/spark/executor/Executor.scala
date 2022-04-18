@@ -332,7 +332,6 @@ private[spark] class Executor(
       } else {
         taskRunner.kill(interruptThread = interruptThread, reason = reason)
       }
-    } else {
       // Safe to remove kill mark as we got a chance with the TaskRunner.
       killMarks.remove(taskId)
     }
