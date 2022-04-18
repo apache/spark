@@ -277,10 +277,18 @@ class V2CommandsCaseSensitivitySuite extends SharedSparkSession with AnalysisTes
 
   test("AlterTable: drop column resolution") {
     Seq(Array("ID"), Array("point", "X"), Array("POINT", "X"), Array("POINT", "x")).foreach { ref =>
-      alterTableTest(
-        DropColumns(table, Seq(UnresolvedFieldName(ref))),
-        Seq("Missing field " + ref.quoted)
-      )
+      Seq(true, false).foreach { ifExists =>
+        val expectedErrors = if (ifExists) {
+          Seq.empty[String]
+        } else {
+          Seq("Missing field " + ref.quoted)
+        }
+        alterTableTest(
+          DropColumns(table, Seq(UnresolvedFieldName(ref)), ifExists),
+          expectedErrors,
+          expectErrorOnCaseSensitive = !ifExists
+        )
+      }
     }
   }
 

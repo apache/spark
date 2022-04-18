@@ -110,10 +110,11 @@ statement
         RENAME COLUMN
         from=multipartIdentifier TO to=errorCapturingIdentifier        #renameTableColumn
     | ALTER TABLE multipartIdentifier
-        DROP (COLUMN | COLUMNS)
+        DROP (IF EXISTS)? (COLUMN | COLUMNS)
         LEFT_PAREN columns=multipartIdentifierList RIGHT_PAREN         #dropTableColumns
     | ALTER TABLE multipartIdentifier
-        DROP (COLUMN | COLUMNS) columns=multipartIdentifierList        #dropTableColumns
+        DROP (IF EXISTS)? (COLUMN | COLUMNS)
+        columns=multipartIdentifierList                                #dropTableColumns
     | ALTER (TABLE | VIEW) from=multipartIdentifier
         RENAME TO to=multipartIdentifier                               #renameTable
     | ALTER (TABLE | VIEW) multipartIdentifier
