@@ -264,10 +264,8 @@ case class VarianceSamp(
     copy(child = newChild)
 }
 
-case class RegrSXXReplacement(
-    child: Expression,
-    nullOnDivideByZero: Boolean = !SQLConf.get.legacyStatisticalAggregate)
-  extends CentralMomentAgg(child, nullOnDivideByZero) {
+case class RegrSXXReplacement(child: Expression)
+  extends CentralMomentAgg(child, !SQLConf.get.legacyStatisticalAggregate) {
 
   override protected def momentOrder = 2
 
