@@ -257,7 +257,7 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession {
       sqlState = "42000",
       message =
         s"""
-          |Invalid SQL syntax: Invalid pattern in SHOW FUNCTIONS: `f1`. It must be a string literal.(line 1, pos 21)
+          |Invalid SQL syntax: Invalid pattern in SHOW FUNCTIONS: `f1`. It must be a STRING literal.(line 1, pos 21)
           |
           |== SQL ==
           |SHOW FUNCTIONS IN db f1
@@ -269,7 +269,7 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession {
       sqlState = "42000",
       message =
         s"""
-           |Invalid SQL syntax: Invalid pattern in SHOW FUNCTIONS: `f1`. It must be a string literal.(line 1, pos 26)
+           |Invalid SQL syntax: Invalid pattern in SHOW FUNCTIONS: `f1`. It must be a STRING literal.(line 1, pos 26)
            |
            |== SQL ==
            |SHOW FUNCTIONS IN db LIKE f1
@@ -430,5 +430,46 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession {
           |ALTER TABLE dbx.tab1 SET TBLPROPERTIES ('key1' = '1', 'key1' = '2')
           |---------------------------------------^^^
           |""".stripMargin)
+  }
+
+  test("PARSE_EMPTY_STATEMENT: empty input") {
+    validateParsingError(
+      sqlText = "",
+      errorClass = "PARSE_EMPTY_STATEMENT",
+      sqlState = "42000",
+      message =
+        """
+          |Syntax error, unexpected empty statement(line 1, pos 0)
+          |
+          |== SQL ==
+          |
+          |^^^
+          |""".stripMargin)
+
+    validateParsingError(
+      sqlText = "   ",
+      errorClass = "PARSE_EMPTY_STATEMENT",
+      sqlState = "42000",
+      message =
+        s"""
+           |Syntax error, unexpected empty statement(line 1, pos 3)
+           |
+           |== SQL ==
+           |${"   "}
+           |---^^^
+           |""".stripMargin)
+
+    validateParsingError(
+      sqlText = " \n",
+      errorClass = "PARSE_EMPTY_STATEMENT",
+      sqlState = "42000",
+      message =
+        s"""
+           |Syntax error, unexpected empty statement(line 2, pos 0)
+           |
+           |== SQL ==
+           |${" "}
+           |^^^
+           |""".stripMargin)
   }
 }
