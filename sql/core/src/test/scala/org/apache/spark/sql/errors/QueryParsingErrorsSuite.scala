@@ -496,12 +496,12 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession {
       sqlState = "42000",
       message =
         s"""
-           |Syntax error at or near '1': extra input '1'(line 1, pos 9)
-           |
-           |== SQL ==
-           |select 1 1
-           |---------^^^
-           |""".stripMargin)
+          |Syntax error at or near '1': extra input '1'(line 1, pos 9)
+          |
+          |== SQL ==
+          |select 1 1
+          |---------^^^
+          |""".stripMargin)
 
     validateParsingError(
       sqlText = "select *\nfrom r as q t",
