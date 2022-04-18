@@ -43,120 +43,67 @@ to_numpy.html>`__ requires to collect the data to the driver side.
 Supported DataFrame APIs
 ------------------------
 
+.. currentmodule:: pyspark.pandas.DataFrame
+
 +--------------------------------------------+-------------+--------------------------------------+
 | API                                        | Implemented | Missing parameters                   |
 +============================================+=============+======================================+
-| `T <https://spark.apache.org/doc           | O           |                                      |
-| s/latest/api/python/reference/pyspark.pand |             |                                      |
-| as/api/pyspark.pandas.DataFrame.T.html>`__ |             |                                      |
+| :func:`T`                                  | O           |                                      |
 +--------------------------------------------+-------------+--------------------------------------+
-| `abs <https://spark.apache.org/docs/       | O           |                                      |
-| latest/api/python/reference/pyspark.pandas |             |                                      |
-| /api/pyspark.pandas.DataFrame.abs.html>`__ |             |                                      |
+| :func:`abs`                                | O           |                                      |
 +--------------------------------------------+-------------+--------------------------------------+
-| `add <https://spark.apache.org/docs/       | O           | ``axis``, ``level``, ``fill_value``  |
-| latest/api/python/reference/pyspark.pandas |             |                                      |
-| /api/pyspark.pandas.DataFrame.add.html>`__ |             |                                      |
+| :func:`add`                                | O           | ``axis``, ``level``, ``fill_value``  |
 +--------------------------------------------+-------------+--------------------------------------+
-| `add_pre                                   | O           |                                      |
-| fix <https://spark.apache.org/docs/latest/ |             |                                      |
-| api/python/reference/pyspark.pandas/api/py |             |                                      |
-| spark.pandas.DataFrame.add_prefix.html>`__ |             |                                      |
+| :func:`add_prefix`                         | O           |                                      |
 +--------------------------------------------+-------------+--------------------------------------+
-| `add_suf                                   | O           |                                      |
-| fix <https://spark.apache.org/docs/latest/ |             |                                      |
-| api/python/reference/pyspark.pandas/api/py |             |                                      |
-| spark.pandas.DataFrame.add_suffix.html>`__ |             |                                      |
+| :func:`add_suffix`                         | O           |                                      |
 +--------------------------------------------+-------------+--------------------------------------+
-| `agg <https://spark.apache.org/docs/       | O           |                                      |
-| latest/api/python/reference/pyspark.pandas |             |                                      |
-| /api/pyspark.pandas.DataFrame.agg.html>`__ |             |                                      |
+| :func:`agg`                                | O           |                                      |
 +--------------------------------------------+-------------+--------------------------------------+
-| `aggre                                     | O           |                                      |
-| gate <https://spark.apache.org/docs/latest |             |                                      |
-| /api/python/reference/pyspark.pandas/api/p |             |                                      |
-| yspark.pandas.DataFrame.aggregate.html>`__ |             |                                      |
+| :func:`aggregate`                          | O           |                                      |
 +--------------------------------------------+-------------+--------------------------------------+
-| `align <https://spark.apache.org/docs/la   | O           | ``fill_value``, ``method``,          |
-| test/api/python/reference/pyspark.pandas/a |             | ``limit``, ``fill_axis``             |
-| pi/pyspark.pandas.DataFrame.align.html>`__ |             |                                      |
+| :func:`align`                              | O           | ``fill_value``, ``method``,          |
+|                                            |             | ``limit``, ``fill_axis``             |
 +--------------------------------------------+-------------+--------------------------------------+
-| `all <https://spark.apache.org/docs/       | O           | ``level``                            |
-| latest/api/python/reference/pyspark.pandas |             |                                      |
-| /api/pyspark.pandas.DataFrame.all.html>`__ |             |                                      |
+| :func:`all`                                | O           | ``level``                            |
 +--------------------------------------------+-------------+--------------------------------------+
-| `any <https://spark.apache.org/docs/       | O           | ``skipna``, ``level``                |
-| latest/api/python/reference/pyspark.pandas |             |                                      |
-| /api/pyspark.pandas.DataFrame.any.html>`__ |             |                                      |
+| :func:`any`                                | O           | ``skipna``, ``level``                |
 +--------------------------------------------+-------------+--------------------------------------+
-| `append <https://spark.apache.org/docs/lat | O           |                                      |
-| est/api/python/reference/pyspark.pandas/ap |             |                                      |
-| i/pyspark.pandas.DataFrame.append.html>`__ |             |                                      |
+| :func:`append`                             | O           |                                      |
 +--------------------------------------------+-------------+--------------------------------------+
-| `apply <https://spark.apache.org/docs/la   | O           | ``raw``, ``result_type``             |
-| test/api/python/reference/pyspark.pandas/a |             |                                      |
-| pi/pyspark.pandas.DataFrame.apply.html>`__ |             |                                      |
+| :func:`apply`                              | O           | ``raw``, ``result_type``             |
 +--------------------------------------------+-------------+--------------------------------------+
-| `app                                       | O           | ``na_action``                        |
-| lymap <https://spark.apache.org/docs/lates |             |                                      |
-| t/api/python/reference/pyspark.pandas/api/ |             |                                      |
-| pyspark.pandas.DataFrame.applymap.html>`__ |             |                                      |
+| :func:`applymap`                           | O           | ``na_action``                        |
 +--------------------------------------------+-------------+--------------------------------------+
 | asfreq                                     | X           |                                      |
 +--------------------------------------------+-------------+--------------------------------------+
 | asof                                       | X           |                                      |
 +--------------------------------------------+-------------+--------------------------------------+
-| `assign <https://spark.apache.org/docs/lat | O           |                                      |
-| est/api/python/reference/pyspark.pandas/ap |             |                                      |
-| i/pyspark.pandas.DataFrame.assign.html>`__ |             |                                      |
+| :func:`assign`                             | O           |                                      |
 +--------------------------------------------+-------------+--------------------------------------+
-| `astype <https://spark.apache.org/docs/lat | O           | ``copy``, ``errors``                 |
-| est/api/python/reference/pyspark.pandas/ap |             |                                      |
-| i/pyspark.pandas.DataFrame.astype.html>`__ |             |                                      |
+| :func:`astype`                             | O           | ``copy``, ``errors``                 |
 +--------------------------------------------+-------------+--------------------------------------+
-| `at <https://spark.apache.org/docs         | O           |                                      |
-| /latest/api/python/reference/pyspark.panda |             |                                      |
-| s/api/pyspark.pandas.DataFrame.at.html>`__ |             |                                      |
+| :func:`at`                                 | O           |                                      |
 +--------------------------------------------+-------------+--------------------------------------+
-| `a                                         | O           |                                      |
-| t_time <https://spark.apache.org/docs/late |             |                                      |
-| st/api/python/reference/pyspark.pandas/api |             |                                      |
-| /pyspark.pandas.DataFrame.at_time.html>`__ |             |                                      |
+| :func:`at_time`                            | O           |                                      |
 +--------------------------------------------+-------------+--------------------------------------+
 | attrs                                      | X           |                                      |
 +--------------------------------------------+-------------+--------------------------------------+
-| `axes <https://spark.apache.org/docs/l     | O           |                                      |
-| atest/api/python/reference/pyspark.pandas/ |             |                                      |
-| api/pyspark.pandas.DataFrame.axes.html>`__ |             |                                      |
+| :func:`axes`                               | O           |                                      |
 +--------------------------------------------+-------------+--------------------------------------+
-| `bac                                       | O           |                                      |
-| kfill <https://spark.apache.org/docs/lates |             |                                      |
-| t/api/python/reference/pyspark.pandas/api/ |             |                                      |
-| pyspark.pandas.DataFrame.backfill.html>`__ |             |                                      |
+| :func:`backfill`                           | O           |                                      |
 +--------------------------------------------+-------------+--------------------------------------+
-| `between_tim                               | O           | ``inclusive``                        |
-| e <https://spark.apache.org/docs/latest/ap |             |                                      |
-| i/python/reference/pyspark.pandas/api/pysp |             |                                      |
-| ark.pandas.DataFrame.between_time.html>`__ |             |                                      |
+| :func:`between_time`                       | O           | ``inclusive``                        |
 +--------------------------------------------+-------------+--------------------------------------+
-| `bfill <https://spark.apache.org/docs/la   | O           |                                      |
-| test/api/python/reference/pyspark.pandas/a |             |                                      |
-| pi/pyspark.pandas.DataFrame.bfill.html>`__ |             |                                      |
+| :func:`bfill`                              | O           |                                      |
 +--------------------------------------------+-------------+--------------------------------------+
-| `bool <https://spark.apache.org/docs/l     | O           |                                      |
-| atest/api/python/reference/pyspark.pandas/ |             |                                      |
-| api/pyspark.pandas.DataFrame.bool.html>`__ |             |                                      |
+| :func:`bool`                               | O           |                                      |
 +--------------------------------------------+-------------+--------------------------------------+
 | boxplot                                    | X           |                                      |
 +--------------------------------------------+-------------+--------------------------------------+
-| `clip <https://spark.apache.org/docs/l     | O           | ``axis``, ``inplace``                |
-| atest/api/python/reference/pyspark.pandas/ |             |                                      |
-| api/pyspark.pandas.DataFrame.clip.html>`__ |             |                                      |
+| :func:`clip`                               | O           | ``axis``, ``inplace``                |
 +--------------------------------------------+-------------+--------------------------------------+
-| `c                                         | O           |                                      |
-| olumns <https://spark.apache.org/docs/late |             |                                      |
-| st/api/python/reference/pyspark.pandas/api |             |                                      |
-| /pyspark.pandas.DataFrame.columns.html>`__ |             |                                      |
+| :func:`columns`                            | O           |                                      |
 +--------------------------------------------+-------------+--------------------------------------+
 | combine                                    | X           |                                      |
 +--------------------------------------------+-------------+--------------------------------------+
@@ -166,662 +113,330 @@ Supported DataFrame APIs
 +--------------------------------------------+-------------+--------------------------------------+
 | convert_dtypes                             | X           |                                      |
 +--------------------------------------------+-------------+--------------------------------------+
-| `copy <https://spark.apache.org/docs/l     | O           |                                      |
-| atest/api/python/reference/pyspark.pandas/ |             |                                      |
-| api/pyspark.pandas.DataFrame.copy.html>`__ |             |                                      |
+| :func:`copy`                               | O           |                                      |
 +--------------------------------------------+-------------+--------------------------------------+
-| `corr <https://spark.apache.org/docs/l     | O           | ``min_periods``                      |
-| atest/api/python/reference/pyspark.pandas/ |             |                                      |
-| api/pyspark.pandas.DataFrame.corr.html>`__ |             |                                      |
+| :func:`corr`                               | O           | ``min_periods``                      |
 +--------------------------------------------+-------------+--------------------------------------+
 | corrwith                                   | X           |                                      |
 +--------------------------------------------+-------------+--------------------------------------+
-| `count <https://spark.apache.org/docs/la   | O           | ``level``                            |
-| test/api/python/reference/pyspark.pandas/a |             |                                      |
-| pi/pyspark.pandas.DataFrame.count.html>`__ |             |                                      |
+| :func:`count`                              | O           | ``level``                            |
 +--------------------------------------------+-------------+--------------------------------------+
-| `cov <https://spark.apache.org/docs/       | O           | ``ddof``                             |
-| latest/api/python/reference/pyspark.pandas |             |                                      |
-| /api/pyspark.pandas.DataFrame.cov.html>`__ |             |                                      |
+| :func:`cov`                                | O           | ``ddof``                             |
 +--------------------------------------------+-------------+--------------------------------------+
-| `cummax <https://spark.apache.org/docs/lat | O           | ``axis``                             |
-| est/api/python/reference/pyspark.pandas/ap |             |                                      |
-| i/pyspark.pandas.DataFrame.cummax.html>`__ |             |                                      |
+| :func:`cummax`                             | O           | ``axis``                             |
 +--------------------------------------------+-------------+--------------------------------------+
-| `cummin <https://spark.apache.org/docs/lat | O           | ``axis``                             |
-| est/api/python/reference/pyspark.pandas/ap |             |                                      |
-| i/pyspark.pandas.DataFrame.cummin.html>`__ |             |                                      |
+| :func:`cummin`                             | O           | ``axis``                             |
 +--------------------------------------------+-------------+--------------------------------------+
-| `c                                         | O           | ``axis``                             |
-| umprod <https://spark.apache.org/docs/late |             |                                      |
-| st/api/python/reference/pyspark.pandas/api |             |                                      |
-| /pyspark.pandas.DataFrame.cumprod.html>`__ |             |                                      |
+| :func:`cumprod`                            | O           | ``axis``                             |
 +--------------------------------------------+-------------+--------------------------------------+
-| `cumsum <https://spark.apache.org/docs/lat | O           | ``axis``                             |
-| est/api/python/reference/pyspark.pandas/ap |             |                                      |
-| i/pyspark.pandas.DataFrame.cumsum.html>`__ |             |                                      |
+| :func:`cumsum`                             | O           | ``axis``                             |
 +--------------------------------------------+-------------+--------------------------------------+
-| `des                                       | O           | ``include``, ``exclude``,            |
-| cribe <https://spark.apache.org/docs/lates |             | ``datetime_is_numeric``              |
-| t/api/python/reference/pyspark.pandas/api/ |             |                                      |
-| pyspark.pandas.DataFrame.describe.html>`__ |             |                                      |
+| :func:`describe`                           | O           | ``include``, ``exclude``,            |
+|                                            |             | ``datetime_is_numeric``              |
 +--------------------------------------------+-------------+--------------------------------------+
-| `diff <https://spark.apache.org/docs/l     | O           |                                      |
-| atest/api/python/reference/pyspark.pandas/ |             |                                      |
-| api/pyspark.pandas.DataFrame.diff.html>`__ |             |                                      |
+| :func:`diff`                               | O           |                                      |
 +--------------------------------------------+-------------+--------------------------------------+
-| `div <https://spark.apache.org/docs/       | O           | ``axis``, ``level``, ``fill_value``  |
-| latest/api/python/reference/pyspark.pandas |             |                                      |
-| /api/pyspark.pandas.DataFrame.div.html>`__ |             |                                      |
+| :func:`div`                                | O           | ``axis``, ``level``, ``fill_value``  |
 +--------------------------------------------+-------------+--------------------------------------+
-| `divide <https://spark.apache.org/docs/lat | O           | ``axis``, ``level``, ``fill_value``  |
-| est/api/python/reference/pyspark.pandas/ap |             |                                      |
-| i/pyspark.pandas.DataFrame.divide.html>`__ |             |                                      |
+| :func:`divide`                             | O           | ``axis``, ``level``, ``fill_value``  |
 +--------------------------------------------+-------------+--------------------------------------+
-| `dot <https://spark.apache.org/docs/       | O           |                                      |
-| latest/api/python/reference/pyspark.pandas |             |                                      |
-| /api/pyspark.pandas.DataFrame.dot.html>`__ |             |                                      |
+| :func:`dot`                                | O           |                                      |
 +--------------------------------------------+-------------+--------------------------------------+
-| `drop <https://spark.apache.org/docs/l     | O           | ``index``, ``level``, ``inplace``,   |
-| atest/api/python/reference/pyspark.pandas/ |             | ``errors``                           |
-| api/pyspark.pandas.DataFrame.drop.html>`__ |             |                                      |
+| :func:`drop`                               | O           | ``index``, ``level``, ``inplace``,   |
+|                                            |             | ``errors``                           |
 +--------------------------------------------+-------------+--------------------------------------+
-| `drop_duplicates <h                        | O           | ``ignore_index``                     |
-| ttps://spark.apache.org/docs/latest/api/p  |             |                                      |
-| ython/reference/pyspark.pandas/api/pyspark |             |                                      |
-| .pandas.DataFrame.drop_duplicates.html>`__ |             |                                      |
+| :func:`drop_duplicates`                    | O           | ``ignore_index``                     |
 +--------------------------------------------+-------------+--------------------------------------+
-| `dropl                                     | O           |                                      |
-| evel <https://spark.apache.org/docs/latest |             |                                      |
-| /api/python/reference/pyspark.pandas/api/p |             |                                      |
-| yspark.pandas.DataFrame.droplevel.html>`__ |             |                                      |
+| :func:`droplevel`                          | O           |                                      |
 +--------------------------------------------+-------------+--------------------------------------+
-| `dropna <https://spark.apache.org/docs/lat | O           |                                      |
-| est/api/python/reference/pyspark.pandas/ap |             |                                      |
-| i/pyspark.pandas.DataFrame.dropna.html>`__ |             |                                      |
+| :func:`dropna`                             | O           |                                      |
 +--------------------------------------------+-------------+--------------------------------------+
-| `dtypes <https://spark.apache.org/docs/lat | O           |                                      |
-| est/api/python/reference/pyspark.pandas/ap |             |                                      |
-| i/pyspark.pandas.DataFrame.dtypes.html>`__ |             |                                      |
+| :func:`dtypes`                             | O           |                                      |
 +--------------------------------------------+-------------+--------------------------------------+
-| `duplica                                   | O           |                                      |
-| ted <https://spark.apache.org/docs/latest/ |             |                                      |
-| api/python/reference/pyspark.pandas/api/py |             |                                      |
-| spark.pandas.DataFrame.duplicated.html>`__ |             |                                      |
+| :func:`duplicated`                         | O           |                                      |
 +--------------------------------------------+-------------+--------------------------------------+
-| `empty <https://spark.apache.org/docs/la   | O           |                                      |
-| test/api/python/reference/pyspark.pandas/a |             |                                      |
-| pi/pyspark.pandas.DataFrame.empty.html>`__ |             |                                      |
+| :func:`empty`                              | O           |                                      |
 +--------------------------------------------+-------------+--------------------------------------+
-| `eq <https://spark.apache.org/docs         | O           | ``axis``, ``level``                  |
-| /latest/api/python/reference/pyspark.panda |             |                                      |
-| s/api/pyspark.pandas.DataFrame.eq.html>`__ |             |                                      |
+| :func:`eq`                                 | O           | ``axis``, ``level``                  |
 +--------------------------------------------+-------------+--------------------------------------+
-| `equals <https://spark.apache.org/docs/lat | O           | ``axis``, ``level``                  |
-| est/api/python/reference/pyspark.pandas/ap |             |                                      |
-| i/pyspark.pandas.DataFrame.equals.html>`__ |             |                                      |
+| :func:`equals`                             | O           | ``axis``, ``level``                  |
 +--------------------------------------------+-------------+--------------------------------------+
-| `eval <https://spark.apache.org/docs/l     | O           |                                      |
-| atest/api/python/reference/pyspark.pandas/ |             |                                      |
-| api/pyspark.pandas.DataFrame.eval.html>`__ |             |                                      |
+| :func:`eval`                               | O           |                                      |
 +--------------------------------------------+-------------+--------------------------------------+
-| `ewm <https://spark.apache.org/docs/l      | O           | ``adjust``, ``ignore_na``, ``axis``, |
-| atest/api/python/reference/pyspark.pandas/ |             | ``method``                           |
-| api/pyspark.pandas.DataFrame.ewm.html>`__  |             |                                      |
+| :func:`ewm`                                | O           | ``adjust``, ``ignore_na``, ``axis``, |
+|                                            |             | ``method``                           |
 +--------------------------------------------+-------------+--------------------------------------+
-| `expan                                     | O           |                                      |
-| ding <https://spark.apache.org/docs/latest |             |                                      |
-| /api/python/reference/pyspark.pandas/api/p |             |                                      |
-| yspark.pandas.DataFrame.expanding.html>`__ |             |                                      |
+| :func:`expanding`                          | O           |                                      |
 +--------------------------------------------+-------------+--------------------------------------+
-| `e                                         | O           | ``ignore_index``                     |
-| xplode <https://spark.apache.org/docs/late |             |                                      |
-| st/api/python/reference/pyspark.pandas/api |             |                                      |
-| /pyspark.pandas.DataFrame.explode.html>`__ |             |                                      |
+| :func:`explode`                            | O           | ``ignore_index``                     |
 +--------------------------------------------+-------------+--------------------------------------+
-| `ffill <https://spark.apache.org/docs/la   | O           |                                      |
-| test/api/python/reference/pyspark.pandas/a |             |                                      |
-| pi/pyspark.pandas.DataFrame.ffill.html>`__ |             |                                      |
+| :func:`ffill`                              | O           |                                      |
 +--------------------------------------------+-------------+--------------------------------------+
-| `fillna <https://spark.apache.org/docs/lat | O           | ``downcast``                         |
-| est/api/python/reference/pyspark.pandas/ap |             |                                      |
-| i/pyspark.pandas.DataFrame.fillna.html>`__ |             |                                      |
+| :func:`fillna`                             | O           | ``downcast``                         |
 +--------------------------------------------+-------------+--------------------------------------+
-| `filter <https://spark.apache.org/docs/lat | O           |                                      |
-| est/api/python/reference/pyspark.pandas/ap |             |                                      |
-| i/pyspark.pandas.DataFrame.filter.html>`__ |             |                                      |
+| :func:`filter`                             | O           |                                      |
 +--------------------------------------------+-------------+--------------------------------------+
-| `first <https://spark.apache.org/docs/la   | O           |                                      |
-| test/api/python/reference/pyspark.pandas/a |             |                                      |
-| pi/pyspark.pandas.DataFrame.first.html>`__ |             |                                      |
+| :func:`first`                              | O           |                                      |
 +--------------------------------------------+-------------+--------------------------------------+
-| `f                                         | O           |                                      |
-| irst_valid_index <ht                       |             |                                      |
-| tps://spark.apache.org/docs/latest/api/pyt |             |                                      |
-| hon/reference/pyspark.pandas/api/pyspark.p |             |                                      |
-| andas.DataFrame.first_valid_index.html>`__ |             |                                      |
+| :func:`first_valid_index`                  | O           |                                      |
 +--------------------------------------------+-------------+--------------------------------------+
 | flags                                      | X           |                                      |
 +--------------------------------------------+-------------+--------------------------------------+
-| `flo                                       | O           | ``axis``, ``level``, ``fill_value``  |
-| ordiv <https://spark.apache.org/docs/lates |             |                                      |
-| t/api/python/reference/pyspark.pandas/api/ |             |                                      |
-| pyspark.pandas.DataFrame.floordiv.html>`__ |             |                                      |
+| :func:`floordiv`                           | O           | ``axis``, ``level``, ``fill_value``  |
 +--------------------------------------------+-------------+--------------------------------------+
-| `from_                                     | O           |                                      |
-| dict <https://spark.apache.org/docs/latest |             |                                      |
-| /api/python/reference/pyspark.pandas/api/p |             |                                      |
-| yspark.pandas.DataFrame.from_dict.html>`__ |             |                                      |
+| :func:`from_dict`                          | O           |                                      |
 +--------------------------------------------+-------------+--------------------------------------+
-| `from_record                               | O           |                                      |
-| s <https://spark.apache.org/docs/latest/ap |             |                                      |
-| i/python/reference/pyspark.pandas/api/pysp |             |                                      |
-| ark.pandas.DataFrame.from_records.html>`__ |             |                                      |
+| :func:`from_records`                       | O           |                                      |
 +--------------------------------------------+-------------+--------------------------------------+
-| `ge <https://spark.apache.org/docs         | O           | ``axis``, ``level``                  |
-| /latest/api/python/reference/pyspark.panda |             |                                      |
-| s/api/pyspark.pandas.DataFrame.ge.html>`__ |             |                                      |
+| :func:`ge`                                 | O           | ``axis``, ``level``                  |
 +--------------------------------------------+-------------+--------------------------------------+
-| `get <https://spark.apache.org/docs/       | O           |                                      |
-| latest/api/python/reference/pyspark.pandas |             |                                      |
-| /api/pyspark.pandas.DataFrame.get.html>`__ |             |                                      |
+| :func:`get`                                | O           |                                      |
 +--------------------------------------------+-------------+--------------------------------------+
-| `g                                         | O           |                                      |
-| roupby <https://spark.apache.org/docs/late |             |                                      |
-| st/api/python/reference/pyspark.pandas/api |             |                                      |
-| /pyspark.pandas.DataFrame.groupby.html>`__ |             |                                      |
+| :func:`groupby`                            | O           |                                      |
 +--------------------------------------------+-------------+--------------------------------------+
-| `gt <https://spark.apache.org/docs         | O           | ``axis``, ``level``                  |
-| /latest/api/python/reference/pyspark.panda |             |                                      |
-| s/api/pyspark.pandas.DataFrame.gt.html>`__ |             |                                      |
+| :func:`gt`                                 | O           | ``axis``, ``level``                  |
 +--------------------------------------------+-------------+--------------------------------------+
-| `head <https://spark.apache.org/docs/l     | O           |                                      |
-| atest/api/python/reference/pyspark.pandas/ |             |                                      |
-| api/pyspark.pandas.DataFrame.head.html>`__ |             |                                      |
+| :func:`head`                               | O           |                                      |
 +--------------------------------------------+-------------+--------------------------------------+
-| `hist <https://spark.apache.org/docs/l     | O           |                                      |
-| atest/api/python/reference/pyspark.pandas/ |             |                                      |
-| api/pyspark.pandas.DataFrame.hist.html>`__ |             |                                      |
+| :func:`hist`                               | O           |                                      |
 +--------------------------------------------+-------------+--------------------------------------+
-| `iat <https://spark.apache.org/docs/       | O           |                                      |
-| latest/api/python/reference/pyspark.pandas |             |                                      |
-| /api/pyspark.pandas.DataFrame.iat.html>`__ |             |                                      |
+| :func:`iat`                                | O           |                                      |
 +--------------------------------------------+-------------+--------------------------------------+
-| `idxmax <https://spark.apache.org/docs/lat | O           | ``skipna``                           |
-| est/api/python/reference/pyspark.pandas/ap |             |                                      |
-| i/pyspark.pandas.DataFrame.idxmax.html>`__ |             |                                      |
+| :func:`idxmax`                             | O           | ``skipna``                           |
 +--------------------------------------------+-------------+--------------------------------------+
-| `idxmin <https://spark.apache.org/docs/lat | O           | ``skipna``                           |
-| est/api/python/reference/pyspark.pandas/ap |             |                                      |
-| i/pyspark.pandas.DataFrame.idxmin.html>`__ |             |                                      |
+| :func:`idxmin`                             | O           | ``skipna``                           |
 +--------------------------------------------+-------------+--------------------------------------+
-| `iloc <https://spark.apache.org/docs/l     | O           |                                      |
-| atest/api/python/reference/pyspark.pandas/ |             |                                      |
-| api/pyspark.pandas.DataFrame.iloc.html>`__ |             |                                      |
+| :func:`iloc`                               | O           |                                      |
 +--------------------------------------------+-------------+--------------------------------------+
-| `index <https://spark.apache.org/docs/la   | O           |                                      |
-| test/api/python/reference/pyspark.pandas/a |             |                                      |
-| pi/pyspark.pandas.DataFrame.index.html>`__ |             |                                      |
+| :func:`index`                              | O           |                                      |
 +--------------------------------------------+-------------+--------------------------------------+
 | infer_objects                              | X           |                                      |
 +--------------------------------------------+-------------+--------------------------------------+
-| `info <https://spark.apache.org/docs/l     | O           | ``show_counts``                      |
-| atest/api/python/reference/pyspark.pandas/ |             |                                      |
-| api/pyspark.pandas.DataFrame.info.html>`__ |             |                                      |
+| :func:`info`                               | O           | ``show_counts``                      |
 +--------------------------------------------+-------------+--------------------------------------+
-| `insert <https://spark.apache.org/docs/lat | O           |                                      |
-| est/api/python/reference/pyspark.pandas/ap |             |                                      |
-| i/pyspark.pandas.DataFrame.insert.html>`__ |             |                                      |
+| :func:`insert`                             | O           |                                      |
 +--------------------------------------------+-------------+--------------------------------------+
-| `interpolate <https://spark.apache.org/doc | O           | ``axis``, ``inplace``,               |
-| s/latest/api/python/reference/pyspark.pand |             | ``limit_direction``, ``limit_area``, |
-| as/api/pyspark.pandas.DataFrame.interpolat |             | ``downcast``                         |
-| e.html>`__                                 |             |                                      |
+| :func:`interpolate`                        | O           | ``axis``, ``inplace``,               |
+|                                            |             | ``limit_direction``, ``limit_area``, |
+|                                            |             | ``downcast``                         |
+|                                            |             |                                      |
 +--------------------------------------------+-------------+--------------------------------------+
-| `isin <https://spark.apache.org/docs/l     | O           |                                      |
-| atest/api/python/reference/pyspark.pandas/ |             |                                      |
-| api/pyspark.pandas.DataFrame.isin.html>`__ |             |                                      |
+| :func:`isin`                               | O           |                                      |
 +--------------------------------------------+-------------+--------------------------------------+
-| `isna <https://spark.apache.org/docs/l     | O           |                                      |
-| atest/api/python/reference/pyspark.pandas/ |             |                                      |
-| api/pyspark.pandas.DataFrame.isna.html>`__ |             |                                      |
+| :func:`isna`                               | O           |                                      |
 +--------------------------------------------+-------------+--------------------------------------+
-| `isnull <https://spark.apache.org/docs/lat | O           |                                      |
-| est/api/python/reference/pyspark.pandas/ap |             |                                      |
-| i/pyspark.pandas.DataFrame.isnull.html>`__ |             |                                      |
+| :func:`isnull`                             | O           |                                      |
 +--------------------------------------------+-------------+--------------------------------------+
-| `items <https://spark.apache.org/docs/la   | O           |                                      |
-| test/api/python/reference/pyspark.pandas/a |             |                                      |
-| pi/pyspark.pandas.DataFrame.items.html>`__ |             |                                      |
+| :func:`items`                              | O           |                                      |
 +--------------------------------------------+-------------+--------------------------------------+
-| `iteri                                     | O           |                                      |
-| tems <https://spark.apache.org/docs/latest |             |                                      |
-| /api/python/reference/pyspark.pandas/api/p |             |                                      |
-| yspark.pandas.DataFrame.iteritems.html>`__ |             |                                      |
+| :func:`iteritems`                          | O           |                                      |
 +--------------------------------------------+-------------+--------------------------------------+
-| `ite                                       | O           |                                      |
-| rrows <https://spark.apache.org/docs/lates |             |                                      |
-| t/api/python/reference/pyspark.pandas/api/ |             |                                      |
-| pyspark.pandas.DataFrame.iterrows.html>`__ |             |                                      |
+| :func:`iterrows`                           | O           |                                      |
 +--------------------------------------------+-------------+--------------------------------------+
-| `itertup                                   | O           |                                      |
-| les <https://spark.apache.org/docs/latest/ |             |                                      |
-| api/python/reference/pyspark.pandas/api/py |             |                                      |
-| spark.pandas.DataFrame.itertuples.html>`__ |             |                                      |
+| :func:`itertuples`                         | O           |                                      |
 +--------------------------------------------+-------------+--------------------------------------+
-| `join <https://spark.apache.org/docs/l     | O           | ``sort``                             |
-| atest/api/python/reference/pyspark.pandas/ |             |                                      |
-| api/pyspark.pandas.DataFrame.join.html>`__ |             |                                      |
+| :func:`join`                               | O           | ``sort``                             |
 +--------------------------------------------+-------------+--------------------------------------+
-| `keys <https://spark.apache.org/docs/l     | O           |                                      |
-| atest/api/python/reference/pyspark.pandas/ |             |                                      |
-| api/pyspark.pandas.DataFrame.keys.html>`__ |             |                                      |
+| :func:`keys`                               | O           |                                      |
 +--------------------------------------------+-------------+--------------------------------------+
-| `kurt <https://spark.apache.org/docs/l     | O           | ``skipna``, ``level``                |
-| atest/api/python/reference/pyspark.pandas/ |             |                                      |
-| api/pyspark.pandas.DataFrame.kurt.html>`__ |             |                                      |
+| :func:`kurt`                               | O           | ``skipna``, ``level``                |
 +--------------------------------------------+-------------+--------------------------------------+
-| `kur                                       | O           | ``skipna``, ``level``                |
-| tosis <https://spark.apache.org/docs/lates |             |                                      |
-| t/api/python/reference/pyspark.pandas/api/ |             |                                      |
-| pyspark.pandas.DataFrame.kurtosis.html>`__ |             |                                      |
+| :func:`kurtosis`                           | O           | ``skipna``, ``level``                |
 +--------------------------------------------+-------------+--------------------------------------+
-| `last <https://spark.apache.org/docs/l     | O           |                                      |
-| atest/api/python/reference/pyspark.pandas/ |             |                                      |
-| api/pyspark.pandas.DataFrame.last.html>`__ |             |                                      |
+| :func:`last`                               | O           |                                      |
 +--------------------------------------------+-------------+--------------------------------------+
-| `last_valid_index <h                       | O           |                                      |
-| ttps://spark.apache.org/docs/latest/api/py |             |                                      |
-| thon/reference/pyspark.pandas/api/pyspark. |             |                                      |
-| pandas.DataFrame.last_valid_index.html>`__ |             |                                      |
+| :func:`last_valid_index`                   | O           |                                      |
 +--------------------------------------------+-------------+--------------------------------------+
-| `le <https://spark.apache.org/docs         | O           | ``axis``, ``level``                  |
-| /latest/api/python/reference/pyspark.panda |             |                                      |
-| s/api/pyspark.pandas.DataFrame.le.html>`__ |             |                                      |
+| :func:`le`                                 | O           | ``axis``, ``level``                  |
 +--------------------------------------------+-------------+--------------------------------------+
-| `loc <https://spark.apache.org/docs/       | O           |                                      |
-| latest/api/python/reference/pyspark.pandas |             |                                      |
-| /api/pyspark.pandas.DataFrame.loc.html>`__ |             |                                      |
+| :func:`loc`                                | O           |                                      |
 +--------------------------------------------+-------------+--------------------------------------+
 | lookup                                     | X           |                                      |
 +--------------------------------------------+-------------+--------------------------------------+
-| `lt <https://spark.apache.org/docs         | O           | ``axis``, ``level``                  |
-| /latest/api/python/reference/pyspark.panda |             |                                      |
-| s/api/pyspark.pandas.DataFrame.lt.html>`__ |             |                                      |
+| :func:`lt`                                 | O           | ``axis``, ``level``                  |
 +--------------------------------------------+-------------+--------------------------------------+
-| `mad <https://spark.apache.org/docs/       | O           | ``skipna``, ``level``                |
-| latest/api/python/reference/pyspark.pandas |             |                                      |
-| /api/pyspark.pandas.DataFrame.mad.html>`__ |             |                                      |
+| :func:`mad`                                | O           | ``skipna``, ``level``                |
 +--------------------------------------------+-------------+--------------------------------------+
-| `mask <https://spark.apache.org/docs/l     | O           | ``inplace``, ``axis``, ``level``,    |
-| atest/api/python/reference/pyspark.pandas/ |             | ``errors``                           |
-| api/pyspark.pandas.DataFrame.mask.html>`__ |             |                                      |
+| :func:`mask`                               | O           | ``inplace``, ``axis``, ``level``,    |
+|                                            |             | ``errors``                           |
 +--------------------------------------------+-------------+--------------------------------------+
-| `max <https://spark.apache.org/docs/       | O           | ``skipna``, ``level``                |
-| latest/api/python/reference/pyspark.pandas |             |                                      |
-| /api/pyspark.pandas.DataFrame.max.html>`__ |             |                                      |
+| :func:`max`                                | O           | ``skipna``, ``level``                |
 +--------------------------------------------+-------------+--------------------------------------+
-| `mean <https://spark.apache.org/docs/l     | O           | ``skipna``, ``level``                |
-| atest/api/python/reference/pyspark.pandas/ |             |                                      |
-| api/pyspark.pandas.DataFrame.mean.html>`__ |             |                                      |
+| :func:`mean`                               | O           | ``skipna``, ``level``                |
 +--------------------------------------------+-------------+--------------------------------------+
-| `median <https://spark.apache.org/docs/lat | O           | ``skipna``, ``level``                |
-| est/api/python/reference/pyspark.pandas/ap |             |                                      |
-| i/pyspark.pandas.DataFrame.median.html>`__ |             |                                      |
+| :func:`median`                             | O           | ``skipna``, ``level``                |
 +--------------------------------------------+-------------+--------------------------------------+
-| `melt <https://spark.apache.org/docs/l     | O           | ``col_level``, ``ignore_index``      |
-| atest/api/python/reference/pyspark.pandas/ |             |                                      |
-| api/pyspark.pandas.DataFrame.melt.html>`__ |             |                                      |
+| :func:`melt`                               | O           | ``col_level``, ``ignore_index``      |
 +--------------------------------------------+-------------+--------------------------------------+
 | memory_usage                               | X           |                                      |
 +--------------------------------------------+-------------+--------------------------------------+
-| `merge <https://spark.apache.org/docs/la   | O           | ``sort``, ``copy``, ``indicator``,   |
-| test/api/python/reference/pyspark.pandas/a |             | ``validate``                         |
-| pi/pyspark.pandas.DataFrame.merge.html>`__ |             |                                      |
+| :func:`merge`                              | O           | ``sort``, ``copy``, ``indicator``,   |
+|                                            |             | ``validate``                         |
 +--------------------------------------------+-------------+--------------------------------------+
-| `min <https://spark.apache.org/docs/       | O           | ``skipna``, ``level``                |
-| latest/api/python/reference/pyspark.pandas |             |                                      |
-| /api/pyspark.pandas.DataFrame.min.html>`__ |             |                                      |
+| :func:`min`                                | O           | ``skipna``, ``level``                |
 +--------------------------------------------+-------------+--------------------------------------+
-| `mod <https://spark.apache.org/docs/       | O           | ``axis``, ``level``, ``fill_value``  |
-| latest/api/python/reference/pyspark.pandas |             |                                      |
-| /api/pyspark.pandas.DataFrame.mod.html>`__ |             |                                      |
+| :func:`mod`                                | O           | ``axis``, ``level``, ``fill_value``  |
 +--------------------------------------------+-------------+--------------------------------------+
 | mode                                       | X           |                                      |
 +--------------------------------------------+-------------+--------------------------------------+
-| `mul <https://spark.apache.org/docs/       | O           | ``axis``, ``level``, ``fill_value``  |
-| latest/api/python/reference/pyspark.pandas |             |                                      |
-| /api/pyspark.pandas.DataFrame.mul.html>`__ |             |                                      |
+| :func:`mul`                                | O           | ``axis``, ``level``, ``fill_value``  |
 +--------------------------------------------+-------------+--------------------------------------+
-| `mul                                       | O           | ``axis``, ``level``, ``fill_value``  |
-| tiply <https://spark.apache.org/docs/lates |             |                                      |
-| t/api/python/reference/pyspark.pandas/api/ |             |                                      |
-| pyspark.pandas.DataFrame.multiply.html>`__ |             |                                      |
+| :func:`multiply`                           | O           | ``axis``, ``level``, ``fill_value``  |
 +--------------------------------------------+-------------+--------------------------------------+
-| `ndim <https://spark.apache.org/docs/l     | O           |                                      |
-| atest/api/python/reference/pyspark.pandas/ |             |                                      |
-| api/pyspark.pandas.DataFrame.ndim.html>`__ |             |                                      |
+| :func:`ndim`                               | O           |                                      |
 +--------------------------------------------+-------------+--------------------------------------+
-| `ne <https://spark.apache.org/docs         | O           | ``axis``, ``level``                  |
-| /latest/api/python/reference/pyspark.panda |             |                                      |
-| s/api/pyspark.pandas.DataFrame.ne.html>`__ |             |                                      |
+| :func:`ne`                                 | O           | ``axis``, ``level``                  |
 +--------------------------------------------+-------------+--------------------------------------+
-| `nla                                       | O           |                                      |
-| rgest <https://spark.apache.org/docs/lates |             |                                      |
-| t/api/python/reference/pyspark.pandas/api/ |             |                                      |
-| pyspark.pandas.DataFrame.nlargest.html>`__ |             |                                      |
+| :func:`nlargest`                           | O           |                                      |
 +--------------------------------------------+-------------+--------------------------------------+
-| `notna <https://spark.apache.org/docs/la   | O           |                                      |
-| test/api/python/reference/pyspark.pandas/a |             |                                      |
-| pi/pyspark.pandas.DataFrame.notna.html>`__ |             |                                      |
+| :func:`notna`                              | O           |                                      |
 +--------------------------------------------+-------------+--------------------------------------+
-| `n                                         | O           |                                      |
-| otnull <https://spark.apache.org/docs/late |             |                                      |
-| st/api/python/reference/pyspark.pandas/api |             |                                      |
-| /pyspark.pandas.DataFrame.notnull.html>`__ |             |                                      |
+| :func:`notnull`                            | O           |                                      |
 +--------------------------------------------+-------------+--------------------------------------+
-| `nsmal                                     | O           |                                      |
-| lest <https://spark.apache.org/docs/latest |             |                                      |
-| /api/python/reference/pyspark.pandas/api/p |             |                                      |
-| yspark.pandas.DataFrame.nsmallest.html>`__ |             |                                      |
+| :func:`nsmallest`                          | O           |                                      |
 +--------------------------------------------+-------------+--------------------------------------+
-| `n                                         | O           |                                      |
-| unique <https://spark.apache.org/docs/late |             |                                      |
-| st/api/python/reference/pyspark.pandas/api |             |                                      |
-| /pyspark.pandas.DataFrame.nunique.html>`__ |             |                                      |
+| :func:`nunique`                            | O           |                                      |
 +--------------------------------------------+-------------+--------------------------------------+
-| `pad <https://spark.apache.org/docs/       | O           |                                      |
-| latest/api/python/reference/pyspark.pandas |             |                                      |
-| /api/pyspark.pandas.DataFrame.pad.html>`__ |             |                                      |
+| :func:`pad`                                | O           |                                      |
 +--------------------------------------------+-------------+--------------------------------------+
-| `pct_cha                                   | O           | ``fill_method``, ``limit``, ``freq`` |
-| nge <https://spark.apache.org/docs/latest/ |             |                                      |
-| api/python/reference/pyspark.pandas/api/py |             |                                      |
-| spark.pandas.DataFrame.pct_change.html>`__ |             |                                      |
+| :func:`pct_change`                         | O           | ``fill_method``, ``limit``, ``freq`` |
 +--------------------------------------------+-------------+--------------------------------------+
-| `pipe <https://spark.apache.org/docs/l     | O           |                                      |
-| atest/api/python/reference/pyspark.pandas/ |             |                                      |
-| api/pyspark.pandas.DataFrame.pipe.html>`__ |             |                                      |
+| :func:`pipe`                               | O           |                                      |
 +--------------------------------------------+-------------+--------------------------------------+
-| `pivot <https://spark.apache.org/docs/la   | O           |                                      |
-| test/api/python/reference/pyspark.pandas/a |             |                                      |
-| pi/pyspark.pandas.DataFrame.pivot.html>`__ |             |                                      |
+| :func:`pivot`                              | O           |                                      |
 +--------------------------------------------+-------------+--------------------------------------+
-| `pivot_tab                                 | O           |                                      |
-| le <https://spark.apache.org/docs/latest/a |             |                                      |
-| pi/python/reference/pyspark.pandas/api/pys |             |                                      |
-| park.pandas.DataFrame.pivot_table.html>`__ |             |                                      |
+| :func:`pivot_table`                        | O           |                                      |
 +--------------------------------------------+-------------+--------------------------------------+
-| `plot.                                     | O           |                                      |
-| area <https://spark.apache.org/docs/latest |             |                                      |
-| /api/python/reference/pyspark.pandas/api/p |             |                                      |
-| yspark.pandas.DataFrame.plot.area.html>`__ |             |                                      |
+| :func:`plot.area`                          | O           |                                      |
 +--------------------------------------------+-------------+--------------------------------------+
-| `plo                                       | O           |                                      |
-| t.bar <https://spark.apache.org/docs/lates |             |                                      |
-| t/api/python/reference/pyspark.pandas/api/ |             |                                      |
-| pyspark.pandas.DataFrame.plot.bar.html>`__ |             |                                      |
+| :func:`plot.bar`                           | O           |                                      |
 +--------------------------------------------+-------------+--------------------------------------+
-| `plot.                                     | O           |                                      |
-| barh <https://spark.apache.org/docs/latest |             |                                      |
-| /api/python/reference/pyspark.pandas/api/p |             |                                      |
-| yspark.pandas.DataFrame.plot.barh.html>`__ |             |                                      |
+| :func:`plot.barh`                          | O           |                                      |
 +--------------------------------------------+-------------+--------------------------------------+
-| `plo                                       | O           |                                      |
-| t.box <https://spark.apache.org/docs/lates |             |                                      |
-| t/api/python/reference/pyspark.pandas/api/ |             |                                      |
-| pyspark.pandas.DataFrame.plot.box.html>`__ |             |                                      |
+| :func:`plot.box`                           | X           |                                      |
 +--------------------------------------------+-------------+--------------------------------------+
-| `plot.densit                               | O           |                                      |
-| y <https://spark.apache.org/docs/latest/ap |             |                                      |
-| i/python/reference/pyspark.pandas/api/pysp |             |                                      |
-| ark.pandas.DataFrame.plot.density.html>`__ |             |                                      |
+| :func:`plot.density`                       | O           |                                      |
 +--------------------------------------------+-------------+--------------------------------------+
-| `plot.hexb                                 | O           |                                      |
-| in <https://spark.apache.org/docs/latest/a |             |                                      |
-| pi/python/reference/pyspark.pandas/api/pys |             |                                      |
-| park.pandas.DataFrame.plot.hexbin.html>`__ |             |                                      |
+| :func:`plot.hexbin`                        | X           |                                      |
 +--------------------------------------------+-------------+--------------------------------------+
-| `plot.                                     | O           |                                      |
-| hist <https://spark.apache.org/docs/latest |             |                                      |
-| /api/python/reference/pyspark.pandas/api/p |             |                                      |
-| yspark.pandas.DataFrame.plot.hist.html>`__ |             |                                      |
+| :func:`plot.hist`                          | O           |                                      |
 +--------------------------------------------+-------------+--------------------------------------+
-| `plo                                       | O           |                                      |
-| t.kde <https://spark.apache.org/docs/lates |             |                                      |
-| t/api/python/reference/pyspark.pandas/api/ |             |                                      |
-| pyspark.pandas.DataFrame.plot.kde.html>`__ |             |                                      |
+| :func:`plot.kde`                           | O           |                                      |
 +--------------------------------------------+-------------+--------------------------------------+
-| `plot.                                     | O           |                                      |
-| line <https://spark.apache.org/docs/latest |             |                                      |
-| /api/python/reference/pyspark.pandas/api/p |             |                                      |
-| yspark.pandas.DataFrame.plot.line.html>`__ |             |                                      |
+| :func:`plot.line`                          | O           |                                      |
 +--------------------------------------------+-------------+--------------------------------------+
-| `plo                                       | O           |                                      |
-| t.pie <https://spark.apache.org/docs/lates |             |                                      |
-| t/api/python/reference/pyspark.pandas/api/ |             |                                      |
-| pyspark.pandas.DataFrame.plot.pie.html>`__ |             |                                      |
+| :func:`plot.pie`                           | O           |                                      |
 +--------------------------------------------+-------------+--------------------------------------+
-| `plot.scatte                               | O           |                                      |
-| r <https://spark.apache.org/docs/latest/ap |             |                                      |
-| i/python/reference/pyspark.pandas/api/pysp |             |                                      |
-| ark.pandas.DataFrame.plot.scatter.html>`__ |             |                                      |
+| :func:`plot.scatter`                       | O           |                                      |
 +--------------------------------------------+-------------+--------------------------------------+
-| `pop <https://spark.apache.org/docs/       | O           |                                      |
-| latest/api/python/reference/pyspark.pandas |             |                                      |
-| /api/pyspark.pandas.DataFrame.pop.html>`__ |             |                                      |
+| :func:`pop`                                | O           |                                      |
 +--------------------------------------------+-------------+--------------------------------------+
-| `pow <https://spark.apache.org/docs/       | O           | ``axis``, ``level``, ``fill_value``  |
-| latest/api/python/reference/pyspark.pandas |             |                                      |
-| /api/pyspark.pandas.DataFrame.pow.html>`__ |             |                                      |
+| :func:`pow`                                | O           | ``axis``, ``level``, ``fill_value``  |
 +--------------------------------------------+-------------+--------------------------------------+
-| `prod <https://spark.apache.org/docs/l     | O           | ``skipna``, ``level``                |
-| atest/api/python/reference/pyspark.pandas/ |             |                                      |
-| api/pyspark.pandas.DataFrame.prod.html>`__ |             |                                      |
+| :func:`prod`                               | O           | ``skipna``, ``level``                |
 +--------------------------------------------+-------------+--------------------------------------+
-| `p                                         | O           | ``skipna``, ``level``                |
-| roduct <https://spark.apache.org/docs/late |             |                                      |
-| st/api/python/reference/pyspark.pandas/api |             |                                      |
-| /pyspark.pandas.DataFrame.product.html>`__ |             |                                      |
+| :func:`product`                            | O           | ``skipna``, ``level``                |
 +--------------------------------------------+-------------+--------------------------------------+
-| `qua                                       | O           | ``interpolation``                    |
-| ntile <https://spark.apache.org/docs/lates |             |                                      |
-| t/api/python/reference/pyspark.pandas/api/ |             |                                      |
-| pyspark.pandas.DataFrame.quantile.html>`__ |             |                                      |
+| :func:`quantile`                           | O           | ``interpolation``                    |
 +--------------------------------------------+-------------+--------------------------------------+
-| `query <https://spark.apache.org/docs/la   | O           |                                      |
-| test/api/python/reference/pyspark.pandas/a |             |                                      |
-| pi/pyspark.pandas.DataFrame.query.html>`__ |             |                                      |
+| :func:`query`                              | O           |                                      |
 +--------------------------------------------+-------------+--------------------------------------+
-| `radd <https://spark.apache.org/docs/l     | O           | ``axis``, ``level``, ``fill_value``  |
-| atest/api/python/reference/pyspark.pandas/ |             |                                      |
-| api/pyspark.pandas.DataFrame.radd.html>`__ |             |                                      |
+| :func:`radd`                               | O           | ``axis``, ``level``, ``fill_value``  |
 +--------------------------------------------+-------------+--------------------------------------+
-| `rank <https://spark.apache.org/docs/l     | O           | ``axis``, ``na_options``, ``pct``    |
-| atest/api/python/reference/pyspark.pandas/ |             |                                      |
-| api/pyspark.pandas.DataFrame.rank.html>`__ |             |                                      |
-|                                            |             |                                      |
+| :func:`rank`                               | O           | ``axis``, ``na_options``, ``pct``    |
 +--------------------------------------------+-------------+--------------------------------------+
-| `rdiv <https://spark.apache.org/docs/l     | O           | ``axis``, ``level``, ``fill_value``  |
-| atest/api/python/reference/pyspark.pandas/ |             |                                      |
-| api/pyspark.pandas.DataFrame.rdiv.html>`__ |             |                                      |
+| :func:`rdiv`                               | O           | ``axis``, ``level``, ``fill_value``  |
 +--------------------------------------------+-------------+--------------------------------------+
-| `r                                         | O           | ``method``, ``level``, ``limit``,    |
-| eindex <https://spark.apache.org/docs/late |             | ``tolerance``                        |
-| st/api/python/reference/pyspark.pandas/api |             |                                      |
-| /pyspark.pandas.DataFrame.reindex.html>`__ |             |                                      |
+| :func:`reindex`                            | O           | ``method``, ``level``, ``limit``,    |
+|                                            |             | ``tolerance``                        |
 +--------------------------------------------+-------------+--------------------------------------+
-| `reindex_lik                               | O           | ``method``, ``limit``, ``tolerance`` |
-| e <https://spark.apache.org/docs/latest/ap |             |                                      |
-| i/python/reference/pyspark.pandas/api/pysp |             |                                      |
-| ark.pandas.DataFrame.reindex_like.html>`__ |             |                                      |
+| :func:`reindex_like`                       | O           | ``method``, ``limit``, ``tolerance`` |
 +--------------------------------------------+-------------+--------------------------------------+
-| `rename <https://spark.apache.org/docs/lat | O           |                                      |
-| est/api/python/reference/pyspark.pandas/ap |             |                                      |
-| i/pyspark.pandas.DataFrame.rename.html>`__ |             |                                      |
+| :func:`rename`                             | O           |                                      |
 +--------------------------------------------+-------------+--------------------------------------+
-| `rename_ax                                 | O           | ``copy``                             |
-| is <https://spark.apache.org/docs/latest/a |             |                                      |
-| pi/python/reference/pyspark.pandas/api/pys |             |                                      |
-| park.pandas.DataFrame.rename_axis.html>`__ |             |                                      |
+| :func:`rename_axis`                        | O           | ``copy``                             |
 +--------------------------------------------+-------------+--------------------------------------+
 | reorder_levels                             | X           |                                      |
 +--------------------------------------------+-------------+--------------------------------------+
-| `r                                         | O           | ``regex``, ``method``                |
-| eplace <https://spark.apache.org/docs/late |             |                                      |
-| st/api/python/reference/pyspark.pandas/api |             |                                      |
-| /pyspark.pandas.DataFrame.replace.html>`__ |             |                                      |
+| :func:`replace`                            | O           | ``regex``, ``method``                |
 +--------------------------------------------+-------------+--------------------------------------+
 | resample                                   | X           |                                      |
 +--------------------------------------------+-------------+--------------------------------------+
-| `reset_ind                                 | O           |                                      |
-| ex <https://spark.apache.org/docs/latest/a |             |                                      |
-| pi/python/reference/pyspark.pandas/api/pys |             |                                      |
-| park.pandas.DataFrame.reset_index.html>`__ |             |                                      |
+| :func:`reset_index`                        | O           |                                      |
 +--------------------------------------------+-------------+--------------------------------------+
-| `rfloo                                     | O           | ``axis``, ``level``, ``fill_value``  |
-| rdiv <https://spark.apache.org/docs/latest |             |                                      |
-| /api/python/reference/pyspark.pandas/api/p |             |                                      |
-| yspark.pandas.DataFrame.rfloordiv.html>`__ |             |                                      |
+| :func:`rfloordiv`                          | O           | ``axis``, ``level``, ``fill_value``  |
 +--------------------------------------------+-------------+--------------------------------------+
-| `rmod <https://spark.apache.org/docs/l     | O           | ``axis``, ``level``, ``fill_value``  |
-| atest/api/python/reference/pyspark.pandas/ |             |                                      |
-| api/pyspark.pandas.DataFrame.rmod.html>`__ |             |                                      |
+| :func:`rmod`                               | O           | ``axis``, ``level``, ``fill_value``  |
 +--------------------------------------------+-------------+--------------------------------------+
-| `rmul <https://spark.apache.org/docs/l     | O           | ``axis``, ``level``, ``fill_value``  |
-| atest/api/python/reference/pyspark.pandas/ |             |                                      |
-| api/pyspark.pandas.DataFrame.rmul.html>`__ |             |                                      |
+| :func:`rmul`                               | O           | ``axis``, ``level``, ``fill_value``  |
 +--------------------------------------------+-------------+--------------------------------------+
-| `r                                         | O           |                                      |
-| olling <https://spark.apache.org/docs/late |             |                                      |
-| st/api/python/reference/pyspark.pandas/api |             |                                      |
-| /pyspark.pandas.DataFrame.rolling.html>`__ |             |                                      |
+| :func:`rolling`                            | O           |                                      |
 +--------------------------------------------+-------------+--------------------------------------+
-| `round <https://spark.apache.org/docs/la   | O           |                                      |
-| test/api/python/reference/pyspark.pandas/a |             |                                      |
-| pi/pyspark.pandas.DataFrame.round.html>`__ |             |                                      |
+| :func:`round`                              | O           |                                      |
 +--------------------------------------------+-------------+--------------------------------------+
-| `rpow <https://spark.apache.org/docs/l     | O           | ``axis``, ``level``, ``fill_value``  |
-| atest/api/python/reference/pyspark.pandas/ |             |                                      |
-| api/pyspark.pandas.DataFrame.rpow.html>`__ |             |                                      |
+| :func:`rpow`                               | O           | ``axis``, ``level``, ``fill_value``  |
 +--------------------------------------------+-------------+--------------------------------------+
-| `rsub <https://spark.apache.org/docs/l     | O           | ``axis``, ``level``, ``fill_value``  |
-| atest/api/python/reference/pyspark.pandas/ |             |                                      |
-| api/pyspark.pandas.DataFrame.rsub.html>`__ |             |                                      |
+| :func:`rsub`                               | O           | ``axis``, ``level``, ``fill_value``  |
 +--------------------------------------------+-------------+--------------------------------------+
-| `rtr                                       | O           | ``axis``, ``level``, ``fill_value``  |
-| uediv <https://spark.apache.org/docs/lates |             |                                      |
-| t/api/python/reference/pyspark.pandas/api/ |             |                                      |
-| pyspark.pandas.DataFrame.rtruediv.html>`__ |             |                                      |
+| :func:`rtruediv`                           | O           | ``axis``, ``level``, ``fill_value``  |
 +--------------------------------------------+-------------+--------------------------------------+
-| `sample <https://spark.apache.org/docs/lat | O           | ``weights``, ``axis``,               |
-| est/api/python/reference/pyspark.pandas/ap |             | ``ignore_index``                     |
-| i/pyspark.pandas.DataFrame.sample.html>`__ |             |                                      |
+| :func:`sample`                             | O           | ``weights``, ``axis``,               |
+|                                            |             | ``ignore_index``                     |
 +--------------------------------------------+-------------+--------------------------------------+
-| `select_dtypes <https://                   | O           |                                      |
-| spark.apache.org/docs/latest/api           |             |                                      |
-| /python/reference/pyspark.pandas/api/pyspa |             |                                      |
-| rk.pandas.DataFrame.select_dtypes.html>`__ |             |                                      |
+| :func:`select_dtypes`                      | O           |                                      |
 +--------------------------------------------+-------------+--------------------------------------+
-| `sem <https://spark.apache.org/docs/       | O           | ``skipna``                           |
-| latest/api/python/reference/pyspark.pandas |             |                                      |
-| /api/pyspark.pandas.DataFrame.sem.html>`__ |             |                                      |
+| :func:`sem`                                | O           | ``skipna``                           |
 +--------------------------------------------+-------------+--------------------------------------+
 | set_axis                                   | X           |                                      |
 +--------------------------------------------+-------------+--------------------------------------+
 | set_flags                                  | X           |                                      |
 +--------------------------------------------+-------------+--------------------------------------+
-| `set_i                                     | O           | ``verify_integrity``                 |
-| ndex <https://spark.apache.org/docs/latest |             |                                      |
-| /api/python/reference/pyspark.pandas/api/p |             |                                      |
-| yspark.pandas.DataFrame.set_index.html>`__ |             |                                      |
+| :func:`set_index`                          | O           | ``verify_integrity``                 |
 +--------------------------------------------+-------------+--------------------------------------+
-| `shape <https://spark.apache.org/docs/la   | O           |                                      |
-| test/api/python/reference/pyspark.pandas/a |             |                                      |
-| pi/pyspark.pandas.DataFrame.shape.html>`__ |             |                                      |
+| :func:`shape`                              | O           |                                      |
 +--------------------------------------------+-------------+--------------------------------------+
-| `shift <https://spark.apache.org/docs/la   | O           | ``freq``, ``axis``                   |
-| test/api/python/reference/pyspark.pandas/a |             |                                      |
-| pi/pyspark.pandas.DataFrame.shift.html>`__ |             |                                      |
+| :func:`shift`                              | O           | ``freq``, ``axis``                   |
 +--------------------------------------------+-------------+--------------------------------------+
-| `size <https://spark.apache.org/docs/l     | O           |                                      |
-| atest/api/python/reference/pyspark.pandas/ |             |                                      |
-| api/pyspark.pandas.DataFrame.size.html>`__ |             |                                      |
+| :func:`size`                               | O           |                                      |
 +--------------------------------------------+-------------+--------------------------------------+
-| `skew <https://spark.apache.org/docs/l     | O           | ``skipna``, ``level``                |
-| atest/api/python/reference/pyspark.pandas/ |             |                                      |
-| api/pyspark.pandas.DataFrame.skew.html>`__ |             |                                      |
+| :func:`skew`                               | O           | ``skipna``, ``level``                |
 +--------------------------------------------+-------------+--------------------------------------+
 | slice_shift                                | X           |                                      |
 +--------------------------------------------+-------------+--------------------------------------+
-| `sort_in                                   | O           | ``sort_remaining``,                  |
-| dex <https://spark.apache.org/docs/latest/ |             | ``ignore_index``, ``key``            |
-| api/python/reference/pyspark.pandas/api/py |             |                                      |
-| spark.pandas.DataFrame.sort_index.html>`__ |             |                                      |
+| :func:`sort_index`                         | O           | ``sort_remaining``,                  |
+|                                            |             | ``ignore_index``, ``key``            |
 +--------------------------------------------+-------------+--------------------------------------+
-| `sort_valu                                 | O           | ``keep``                             |
-| es <https://spark.apache.org/docs/latest/a |             |                                      |
-| pi/python/reference/pyspark.pandas/api/pys |             |                                      |
-| park.pandas.DataFrame.sort_values.html>`__ |             |                                      |
+| :func:`sort_values`                        | O           | ``keep``                             |
 +--------------------------------------------+-------------+--------------------------------------+
 | sparse                                     | X           |                                      |
 +--------------------------------------------+-------------+--------------------------------------+
-| `s                                         | O           |                                      |
-| queeze <https://spark.apache.org/docs/late |             |                                      |
-| st/api/python/reference/pyspark.pandas/api |             |                                      |
-| /pyspark.pandas.DataFrame.squeeze.html>`__ |             |                                      |
+| :func:`squeeze`                            | O           |                                      |
 +--------------------------------------------+-------------+--------------------------------------+
-| `stack <https://spark.apache.org/docs/la   | O           | ``level``, ``dropna``                |
-| test/api/python/reference/pyspark.pandas/a |             |                                      |
-| pi/pyspark.pandas.DataFrame.stack.html>`__ |             |                                      |
+| :func:`stack`                              | O           | ``level``, ``dropna``                |
 +--------------------------------------------+-------------+--------------------------------------+
-| `std <https://spark.apache.org/docs/       | O           | ``skipna``, ``level``                |
-| latest/api/python/reference/pyspark.pandas |             |                                      |
-| /api/pyspark.pandas.DataFrame.std.html>`__ |             |                                      |
+| :func:`std`                                | O           | ``skipna``, ``level``                |
 +--------------------------------------------+-------------+--------------------------------------+
-| `style <https://spark.apache.org/docs/la   | O           |                                      |
-| test/api/python/reference/pyspark.pandas/a |             |                                      |
-| pi/pyspark.pandas.DataFrame.style.html>`__ |             |                                      |
+| :func:`style`                              | O           |                                      |
 +--------------------------------------------+-------------+--------------------------------------+
-| `sub <https://spark.apache.org/docs/       | O           | ``axis``, ``level``, ``fill_value``  |
-| latest/api/python/reference/pyspark.pandas |             |                                      |
-| /api/pyspark.pandas.DataFrame.sub.html>`__ |             |                                      |
+| :func:`sub`                                | O           | ``axis``, ``level``, ``fill_value``  |
 +--------------------------------------------+-------------+--------------------------------------+
-| `sub                                       | O           | ``axis``, ``level``, ``fill_value``  |
-| tract <https://spark.apache.org/docs/lates |             |                                      |
-| t/api/python/reference/pyspark.pandas/api/ |             |                                      |
-| pyspark.pandas.DataFrame.subtract.html>`__ |             |                                      |
+| :func:`subtract`                           | O           | ``axis``, ``level``, ``fill_value``  |
 +--------------------------------------------+-------------+--------------------------------------+
-| `sum <https://spark.apache.org/docs/       | O           | ``skipna``, ``level``                |
-| latest/api/python/reference/pyspark.pandas |             |                                      |
-| /api/pyspark.pandas.DataFrame.sum.html>`__ |             |                                      |
+| :func:`sum`                                | O           | ``skipna``, ``level``                |
 +--------------------------------------------+-------------+--------------------------------------+
-| `swa                                       | O           |                                      |
-| paxes <https://spark.apache.org/docs/lates |             |                                      |
-| t/api/python/reference/pyspark.pandas/api/ |             |                                      |
-| pyspark.pandas.DataFrame.swapaxes.html>`__ |             |                                      |
+| :func:`swapaxes`                           | O           |                                      |
 +--------------------------------------------+-------------+--------------------------------------+
-| `swapl                                     | O           |                                      |
-| evel <https://spark.apache.org/docs/latest |             |                                      |
-| /api/python/reference/pyspark.pandas/api/p |             |                                      |
-| yspark.pandas.DataFrame.swaplevel.html>`__ |             |                                      |
+| :func:`swaplevel`                          | O           |                                      |
 +--------------------------------------------+-------------+--------------------------------------+
-| `tail <https://spark.apache.org/docs/l     | O           |                                      |
-| atest/api/python/reference/pyspark.pandas/ |             |                                      |
-| api/pyspark.pandas.DataFrame.tail.html>`__ |             |                                      |
+| :func:`tail`                               | O           |                                      |
 +--------------------------------------------+-------------+--------------------------------------+
-| `take <https://spark.apache.org/docs/l     | O           |                                      |
-| atest/api/python/reference/pyspark.pandas/ |             |                                      |
-| api/pyspark.pandas.DataFrame.take.html>`__ |             |                                      |
+| :func:`take`                               | O           |                                      |
 +--------------------------------------------+-------------+--------------------------------------+
-| `to_clipboar                               | O           |                                      |
-| d <https://spark.apache.org/docs/latest/ap |             |                                      |
-| i/python/reference/pyspark.pandas/api/pysp |             |                                      |
-| ark.pandas.DataFrame.to_clipboard.html>`__ |             |                                      |
+| :func:`to_clipboard`                       | O           |                                      |
 +--------------------------------------------+-------------+--------------------------------------+
-| `to_csv <https://spark.apache.org/docs/lat | O           | ``encoding``, ``compression``,       |
-| est/api/python/reference/pyspark.pandas/ap |             | ``quoting``, ``line_terminator``,    |
-| i/pyspark.pandas.DataFrame.to_csv.html>`__ |             | ``cunksize`` and more. See the       |
+| :func:`to_csv`                             | O           | ``encoding``, ``compression``,       |
+|                                            |             | ``quoting``, ``line_terminator``,    |
+|                                            |             | ``cunksize`` and more. See the       |
 |                                            |             | `pandas.DataFrame.t                  |
 |                                            |             | o_csv <https://                      |
 |                                            |             | pandas.pydata.org/docs/reference/    |
@@ -832,15 +447,9 @@ Supported DataFrame APIs
 |                                            |             | spark.pandas/api/pyspark.pandas.Data |
 |                                            |             | Frame.to_csv.html>`__ for detail.    |
 +--------------------------------------------+-------------+--------------------------------------+
-| `t                                         | O           |                                      |
-| o_dict <https://spark.apache.org/docs/late |             |                                      |
-| st/api/python/reference/pyspark.pandas/api |             |                                      |
-| /pyspark.pandas.DataFrame.to_dict.html>`__ |             |                                      |
+| :func:`to_dict`                            | O           |                                      |
 +--------------------------------------------+-------------+--------------------------------------+
-| `to_                                       | O           | ``storage_options``                  |
-| excel <https://spark.apache.org/docs/lates |             |                                      |
-| t/api/python/reference/pyspark.pandas/api/ |             |                                      |
-| pyspark.pandas.DataFrame.to_excel.html>`__ |             |                                      |
+| :func:`to_excel`                           | O           | ``storage_options``                  |
 +--------------------------------------------+-------------+--------------------------------------+
 | to_feather                                 | X           |                                      |
 +--------------------------------------------+-------------+--------------------------------------+
@@ -848,15 +457,12 @@ Supported DataFrame APIs
 +--------------------------------------------+-------------+--------------------------------------+
 | to_hdf                                     | X           |                                      |
 +--------------------------------------------+-------------+--------------------------------------+
-| `t                                         | O           | ``encoding``                         |
-| o_html <https://spark.apache.org/docs/late |             |                                      |
-| st/api/python/reference/pyspark.pandas/api |             |                                      |
-| /pyspark.pandas.DataFrame.to_html.html>`__ |             |                                      |
+| :func:`to_html`                            | O           | ``encoding``                         |
 +--------------------------------------------+-------------+--------------------------------------+
-| `t                                         | O           | ``date_format``,                     |
-| o_json <https://spark.apache.org/docs/late |             | ``double_precision``,                |
-| st/api/python/reference/pyspark.pandas/api |             | ``force_ascii``, ``date_unit``,      | 
-| /pyspark.pandas.DataFrame.to_json.html>`__ |             | ``default_handler`` and more. See th |
+| :func:`to_json`                            | O           | ``date_format``,                     |
+|                                            |             | ``double_precision``,                |
+|                                            |             | ``force_ascii``, ``date_unit``,      | 
+|                                            |             | ``default_handler`` and more. See th |
 |                                            |             | e `pandas.DataFrame.to_json <https:  |
 |                                            |             | //pandas.pydata.org/docs/reference/a |
 |                                            |             | pi/pandas.DataFrame.to_json.htm      |
@@ -866,43 +472,25 @@ Supported DataFrame APIs
 |                                            |             | park.pandas/api/pyspark.pandas.DataF |
 |                                            |             | rame.to_json.html>`__ for detail.    |
 +--------------------------------------------+-------------+--------------------------------------+
-| `to_                                       | O           | ``caption``, ``label``, ``position`` |
-| latex <https://spark.apache.org/docs/lates |             |                                      |
-| t/api/python/reference/pyspark.pandas/api/ |             |                                      |
-| pyspark.pandas.DataFrame.to_latex.html>`__ |             |                                      |
+| :func:`to_latex`                           | O           | ``caption``, ``label``, ``position`` |
 +--------------------------------------------+-------------+--------------------------------------+
-| `to_markdo                                 | O           | ``storage_options``                  |
-| wn <https://spark.apache.org/docs/latest/a |             |                                      |
-| pi/python/reference/pyspark.pandas/api/pys |             |                                      |
-| park.pandas.DataFrame.to_markdown.html>`__ |             |                                      |
+| :func:`to_markdown`                        | O           | ``storage_options``                  |
 +--------------------------------------------+-------------+--------------------------------------+
-| `to_                                       | O           |                                      |
-| numpy <https://spark.apache.org/docs/lates |             |                                      |
-| t/api/python/reference/pyspark.pandas/api/ |             |                                      |
-| pyspark.pandas.DataFrame.to_numpy.html>`__ |             |                                      |
+| :func:`to_numpy`                           | O           |                                      |
 +--------------------------------------------+-------------+--------------------------------------+
-| `to_parq                                   | O           | ``engine``, ``storage_options``      |
-| uet <https://spark.apache.org/docs/latest/ |             |                                      |
-| api/python/reference/pyspark.pandas/api/py |             |                                      |
-| spark.pandas.DataFrame.to_parquet.html>`__ |             |                                      |
+| :func:`to_parquet`                         | O           | ``engine``, ``storage_options``      |
 +--------------------------------------------+-------------+--------------------------------------+
 | to_period                                  | X           |                                      |
 +--------------------------------------------+-------------+--------------------------------------+
 | to_pickle                                  | X           |                                      |
 +--------------------------------------------+-------------+--------------------------------------+
-| `to_reco                                   | O           |                                      |
-| rds <https://spark.apache.org/docs/latest/ |             |                                      |
-| api/python/reference/pyspark.pandas/api/py |             |                                      |
-| spark.pandas.DataFrame.to_records.html>`__ |             |                                      |
+| :func:`to_records`                         | O           |                                      |
 +--------------------------------------------+-------------+--------------------------------------+
 | to_sql                                     | X           |                                      |
 +--------------------------------------------+-------------+--------------------------------------+
 | to_stata                                   | X           |                                      |
 +--------------------------------------------+-------------+--------------------------------------+
-| `to_st                                     | O           |                                      |
-| ring <https://spark.apache.org/docs/latest |             |                                      |
-| /api/python/reference/pyspark.pandas/api/p |             |                                      |
-| yspark.pandas.DataFrame.to_string.html>`__ |             |                                      |
+| :func:`to_string`                          | O           |                                      |
 +--------------------------------------------+-------------+--------------------------------------+
 | to_timestamp                               | X           |                                      |
 +--------------------------------------------+-------------+--------------------------------------+
@@ -910,25 +498,13 @@ Supported DataFrame APIs
 +--------------------------------------------+-------------+--------------------------------------+
 | to_xml                                     | X           |                                      |
 +--------------------------------------------+-------------+--------------------------------------+
-| `trans                                     | O           |                                      |
-| form <https://spark.apache.org/docs/latest |             |                                      |
-| /api/python/reference/pyspark.pandas/api/p |             |                                      |
-| yspark.pandas.DataFrame.transform.html>`__ |             |                                      |
+| :func:`transform`                          | O           |                                      |
 +--------------------------------------------+-------------+--------------------------------------+
-| `trans                                     | O           | ``copy``                             |
-| pose <https://spark.apache.org/docs/latest |             |                                      |
-| /api/python/reference/pyspark.pandas/api/p |             |                                      |
-| yspark.pandas.DataFrame.transpose.html>`__ |             |                                      |
+| :func:`transpose`                          | O           | ``copy``                             |
 +--------------------------------------------+-------------+--------------------------------------+
-| `t                                         | O           | ``axis``, ``level``, ``fill_value``  |
-| ruediv <https://spark.apache.org/docs/late |             |                                      |
-| st/api/python/reference/pyspark.pandas/api |             |                                      |
-| /pyspark.pandas.DataFrame.truediv.html>`__ |             |                                      |
+| :func:`truediv`                            | O           | ``axis``, ``level``, ``fill_value``  |
 +--------------------------------------------+-------------+--------------------------------------+
-| `tru                                       | O           |                                      |
-| ncate <https://spark.apache.org/docs/lates |             |                                      |
-| t/api/python/reference/pyspark.pandas/api/ |             |                                      |
-| pyspark.pandas.DataFrame.truncate.html>`__ |             |                                      |
+| :func:`truncate`                           | O           |                                      |
 +--------------------------------------------+-------------+--------------------------------------+
 | tshift                                     | X           |                                      |
 +--------------------------------------------+-------------+--------------------------------------+
@@ -936,1840 +512,716 @@ Supported DataFrame APIs
 +--------------------------------------------+-------------+--------------------------------------+
 | tz_localize                                | X           |                                      |
 +--------------------------------------------+-------------+--------------------------------------+
-| `u                                         | O           | ``level``, ``fill_value``            |
-| nstack <https://spark.apache.org/docs/late |             |                                      |
-| st/api/python/reference/pyspark.pandas/api |             |                                      |
-| /pyspark.pandas.DataFrame.unstack.html>`__ |             |                                      |
+| :func:`unstack`                            | O           | ``level``, ``fill_value``            |
 +--------------------------------------------+-------------+--------------------------------------+
-| `update <https://spark.apache.org/docs/lat | O           | ``filter_func``, ``errors``          |
-| est/api/python/reference/pyspark.pandas/ap |             |                                      |
-| i/pyspark.pandas.DataFrame.update.html>`__ |             |                                      |
+| :func:`update`                             | O           | ``filter_func``, ``errors``          |
 +--------------------------------------------+-------------+--------------------------------------+
 | value_counts                               | X           |                                      |
 +--------------------------------------------+-------------+--------------------------------------+
-| `values <https://spark.apache.org/docs/lat | O           |                                      |
-| est/api/python/reference/pyspark.pandas/ap |             |                                      |
-| i/pyspark.pandas.DataFrame.values.html>`__ |             |                                      |
+| :func:`values`                             | O           |                                      |
 +--------------------------------------------+-------------+--------------------------------------+
-| `var <https://spark.apache.org/docs/       | O           |                                      |
-| latest/api/python/reference/pyspark.pandas |             |                                      |
-| /api/pyspark.pandas.DataFrame.var.html>`__ |             |                                      |
+| :func:`var`                                | O           |                                      |
 +--------------------------------------------+-------------+--------------------------------------+
-| `where <https://spark.apache.org/docs/la   | O           | ``inplace``, ``level``, ``errors``   |
-| test/api/python/reference/pyspark.pandas/a |             |                                      |
-| pi/pyspark.pandas.DataFrame.where.html>`__ |             |                                      |
+| :func:`where`                              | O           | ``inplace``, ``level``, ``errors``   |
 +--------------------------------------------+-------------+--------------------------------------+
-| `xs <https://spark.apache.org/docs         | O           | ``drop_level``                       |
-| /latest/api/python/reference/pyspark.panda |             |                                      |
-| s/api/pyspark.pandas.DataFrame.xs.html>`__ |             |                                      |
+| :func:`xs`                                 | O           | ``drop_level``                       |
 +--------------------------------------------+-------------+--------------------------------------+
 
 Supported I/O APIs
 ------------------
 
-+-----------------------+--------------------+-----------------------------------------------------+
-| API                   | Implemented        | Missing parameters                                  |
-+=======================+====================+=====================================================+
-| read_pickle           | X                  |                                                     |
-+-----------------------+--------------------+-----------------------------------------------------+
-| DataFrame.to_pickle   | X                  |                                                     |
-+-----------------------+--------------------+-----------------------------------------------------+
-| `read_table <https:/  | O                  |                                                     |
-| /spark.apache.org/doc |                    |                                                     |
-| s/latest/api/python/r |                    |                                                     |
-| eference/pyspark.pand |                    |                                                     |
-| as/api/pyspark.pandas |                    |                                                     |
-| .read_pickle.html>`__ |                    |                                                     |
-+-----------------------+--------------------+-----------------------------------------------------+
-| `read_csv <http       | O                  | ``converters``, ``true_values``, ``false_values``,  |
-| s://spark.apache.org/ |                    | ``skipinitialspace``, ``skiprows`` and more. See th |
-| docs/latest/api/pytho |                    | e `pandas.read_csv <https://pandas.py               |
-| n/reference/pyspark.p |                    | data.org/docs/reference/api/pandas.read_csv         |
-| andas/api/pyspark.pan |                    | .html>`__ and `pyspark.pandas.read_csv <https://    |
-| das.read_csv.html>`__ |                    | spark.apache.org/docs/latest/api/python/reference   |
-|                       |                    | /pyspark.pandas/api/pyspark.pandas.read_csv         |
-|                       |                    | .html>`__ for detail.                               |
-+-----------------------+--------------------+-----------------------------------------------------+
-| `DataFrame            | O                  |                                                     |
-| .to_csv <https://spar |                    |                                                     |
-| k.apache.org/docs/lat |                    |                                                     |
-| est/api/python/refere |                    |                                                     |
-| nce/pyspark.pandas/ap |                    |                                                     |
-| i/pyspark.pandas.Data |                    |                                                     |
-| Frame.to_csv.html>`__ |                    |                                                     |
-+-----------------------+--------------------+-----------------------------------------------------+
-| read_fwf              | X                  |                                                     |
-+-----------------------+--------------------+-----------------------------------------------------+
-| `read_                | O                  |                                                     |
-| clipboard <https://sp |                    |                                                     |
-| ark.apache.org/docs/l |                    |                                                     |
-| atest/api/python/refe |                    |                                                     |
-| rence/pyspark.pandas/ |                    |                                                     |
-| api/pyspark.pandas.re |                    |                                                     |
-| ad_clipboard.html>`__ |                    |                                                     |
-+-----------------------+--------------------+-----------------------------------------------------+
-| `Da                   | O                  |                                                     |
-| taFrame.to_clipboar   |                    |                                                     |
-| d <https://spark.apac |                    |                                                     |
-| he.org/docs/latest/ap |                    |                                                     |
-| i/python/reference/py |                    |                                                     |
-| spark.pandas/api/pysp |                    |                                                     |
-| ark.pandas.DataFrame. |                    |                                                     |
-| to_clipboard.html>`__ |                    |                                                     |
-+-----------------------+--------------------+-----------------------------------------------------+
-| `read_excel <https:   | O                  | ``skiprows``, ``na_filter``, ``decimal``,           |
-| //spark.apache.org/do |                    | ``skipfooter``, ``storage_options``                 |
-| cs/latest/api/python/ |                    |                                                     |
-| reference/pyspark.pan |                    |                                                     |
-| das/api/pyspark.panda |                    |                                                     |
-| s.read_excel.html>`__ |                    |                                                     |
-+-----------------------+--------------------+-----------------------------------------------------+
-| `DataFrame.to_        | O                  | ``storage_options``                                 |
-| excel <https://spark. |                    |                                                     |
-| apache.org/docs/lates |                    |                                                     |
-| t/api/python/referenc |                    |                                                     |
-| e/pyspark.pandas/api/ |                    |                                                     |
-| pyspark.pandas.DataFr |                    |                                                     |
-| ame.to_excel.html>`__ |                    |                                                     |
-+-----------------------+--------------------+-----------------------------------------------------+
-| `read_json <https     | O                  | ``orient``, ``typ``, ``dtype``, ``convert_axes``,   |
-| ://spark.apache.org/d |                    | ``convert_dates`` and more. See the                 |
-| ocs/latest/api/python |                    | `pandas.read_json <https://pandas.pydata.org/       |
-| /reference/pyspark.pa |                    | docs/reference/api/pandas.read_json.html>`__ and `p |
-| ndas/api/pyspark.pand |                    | yspark.pandas.read_json <https://                   |
-| as.read_json.html>`__ |                    | spark.apache.org/docs/latest/api/python/reference   |
-|                       |                    | /pyspark.pandas/api/pyspark.pandas.read_json        |
-|                       |                    | .html>`__ for detail.                               |
-+-----------------------+--------------------+-----------------------------------------------------+
-| `DataFrame.t          | O                  | ``date_format``, ``double_precision``,              |
-| o_json <https://spark |                    | ``force_ascii``, ``date_unit``,                     | 
-| .apache.org/docs/late |                    | ``default_handler`` and more. See the `pandas.DataF |
-| st/api/python/referen |                    | rame.to_json <https://pandas.pydata.org/docs/refere |
-| ce/pyspark.pandas/api |                    | nce/api/pandas.DataFrame.to_json.html>`__ and `pysp |
-| /pyspark.pandas.DataF |                    | ark.pandas.to_json <https://spark.apache.org/docs/l |
-| rame.to_json.html>`__ |                    | atest/api/python/reference/pyspark.pandas/api/pyspa |
-|                       |                    | rk.pandas.DataFrame.to_json.html>`__ for detail.    |
-+-----------------------+--------------------+-----------------------------------------------------+
-| `read_html <https     | O                  |                                                     |
-| ://spark.apache.org/d |                    |                                                     |
-| ocs/latest/api/python |                    |                                                     |
-| /reference/pyspark.pa |                    |                                                     |
-| ndas/api/pyspark.pand |                    |                                                     |
-| as.read_html.html>`__ |                    |                                                     |
-+-----------------------+--------------------+-----------------------------------------------------+
-| `DataFrame.t          | O                  | ``encoding``                                        |
-| o_html <https://spark |                    |                                                     |
-| .apache.org/docs/late |                    |                                                     |
-| st/api/python/referen |                    |                                                     |
-| ce/pyspark.pandas/api |                    |                                                     |
-| /pyspark.pandas.DataF |                    |                                                     |
-| rame.to_html.html>`__ |                    |                                                     |
-+-----------------------+--------------------+-----------------------------------------------------+
-| read_xml              | X                  |                                                     |
-+-----------------------+--------------------+-----------------------------------------------------+
-| DataFrame.to_xml      | X                  |                                                     |
-+-----------------------+--------------------+-----------------------------------------------------+
-| `DataFrame.to_        | O                  | ``caption``, ``label``, ``position``                |
-| latex <https://spark. |                    |                                                     |
-| apache.org/docs/lates |                    |                                                     |
-| t/api/python/referenc |                    |                                                     |
-| e/pyspark.pandas/api/ |                    |                                                     |
-| pyspark.pandas.DataFr |                    |                                                     |
-| ame.to_latex.html>`__ |                    |                                                     |
-+-----------------------+--------------------+-----------------------------------------------------+
-| read_hdf              | X                  |                                                     |
-+-----------------------+--------------------+-----------------------------------------------------+
-| read_feather          | X                  |                                                     |
-+-----------------------+--------------------+-----------------------------------------------------+
-| DataFrame.to_feather  | X                  |                                                     |
-+-----------------------+--------------------+-----------------------------------------------------+
-| `r                    | O                  | ``engine``, ``storage_options``,                    |
-| ead_parquet <https:// |                    | ``use_nullable_dtypes``                             |
-| spark.apache.org/docs |                    |                                                     |
-| /latest/api/python/re |                    |                                                     |
-| ference/pyspark.panda |                    |                                                     |
-| s/api/pyspark.pandas. |                    |                                                     |
-| read_parquet.html>`__ |                    |                                                     |
-+-----------------------+--------------------+-----------------------------------------------------+
-| `DataFrame.to_parq    | O                  | ``engine``, ``storage_options``                     |
-| uet <https://spark.ap |                    |                                                     |
-| ache.org/docs/latest/ |                    |                                                     |
-| api/python/reference/ |                    |                                                     |
-| pyspark.pandas/api/py |                    |                                                     |
-| spark.pandas.DataFram |                    |                                                     |
-| e.to_parquet.html>`__ |                    |                                                     |
-+-----------------------+--------------------+-----------------------------------------------------+
-| `read_orc <http       | O                  |                                                     |
-| s://spark.apache.org/ |                    |                                                     |
-| docs/latest/api/pytho |                    |                                                     |
-| n/reference/pyspark.p |                    |                                                     |
-| andas/api/pyspark.pan |                    |                                                     |
-| das.read_orc.html>`__ |                    |                                                     |
-+-----------------------+--------------------+-----------------------------------------------------+
-| read_sas              | X                  |                                                     |
-+-----------------------+--------------------+-----------------------------------------------------+
-| read_spss             | X                  |                                                     |
-+-----------------------+--------------------+-----------------------------------------------------+
-| `read_                | O                  | ``coerce_float``, ``parse_dates``, ``chunksize``    |
-| sql_table <https://sp |                    |                                                     |
-| ark.apache.org/docs/l |                    |                                                     |
-| atest/api/python/refe |                    |                                                     |
-| rence/pyspark.pandas/ |                    |                                                     |
-| api/pyspark.pandas.re |                    |                                                     |
-| ad_sql_table.html>`__ |                    |                                                     |
-+-----------------------+--------------------+-----------------------------------------------------+
-| `read_                | O                  | ``coerce_float``, ``params``, ``parse_dates``,      |
-| sql_query <https://sp |                    | ``chunksize``, ``dtype``                            |
-| ark.apache.org/docs/l |                    |                                                     |
-| atest/api/python/refe |                    |                                                     |
-| rence/pyspark.pandas/ |                    |                                                     |
-| api/pyspark.pandas.re |                    |                                                     |
-| ad_sql_query.html>`__ |                    |                                                     |
-+-----------------------+--------------------+-----------------------------------------------------+
-| `read_sql <http       | O                  | ``coerce_float``, ``params``, ``parse_dates``,      |
-| s://spark.apache.org/ |                    | ``chunksize``                                       |
-| docs/latest/api/pytho |                    |                                                     |
-| n/reference/pyspark.p |                    |                                                     |
-| andas/api/pyspark.pan |                    |                                                     |
-| das.read_sql.html>`__ |                    |                                                     |
-+-----------------------+--------------------+-----------------------------------------------------+
-| DataFrame.to_sql      | X                  |                                                     |
-+-----------------------+--------------------+-----------------------------------------------------+
-| read_gbq              | X                  |                                                     |
-+-----------------------+--------------------+-----------------------------------------------------+
-| read_stata            | X                  |                                                     |
-+-----------------------+--------------------+-----------------------------------------------------+
-| DataFrame.to_stata    | X                  |                                                     |
-+-----------------------+--------------------+-----------------------------------------------------+
+.. currentmodule:: pyspark.pandas
+
++--------------------------------+--------------------+-------------------------------------------+
+| API                            | Implemented        | Missing parameters                        |
++================================+====================+===========================================+
+| read_pickle                    | X                  |                                           |
++--------------------------------+--------------------+-------------------------------------------+
+| DataFrame.to_pickle            | X                  |                                           |
++--------------------------------+--------------------+-------------------------------------------+
+| :func:`read_table`             | O                  |                                           |
++--------------------------------+--------------------+-------------------------------------------+
+| :func:`read_csv`               | O                  | ``converters``, ``true_values``,          |
+|                                |                    | ``false_values``, ``skipinitialspace``,   |
+|                                |                    | ``skiprows`` and more. See the `pandas.re |
+|                                |                    | ad_csv <https://pandas.pydata.org/docs/re |
+|                                |                    | ference/api/pandas.read_csv.html>`__ an   |
+|                                |                    | d `pyspark.pandas.read_csv <https://spark |
+|                                |                    | .apache.org/docs/latest/api/python/refere |
+|                                |                    | nce/pyspark.pandas/api/pyspark.pandas.rea |
+|                                |                    | d_csv.html>`__ for detail.                |
++--------------------------------+--------------------+-------------------------------------------+
+| :func:`DataFrame.to_csv`       | O                  |                                           |
++--------------------------------+--------------------+-------------------------------------------+
+| read_fwf                       | X                  |                                           |
++--------------------------------+--------------------+-------------------------------------------+
+| :func:`read_clipboard`         | O                  |                                           |
++--------------------------------+--------------------+-------------------------------------------+
+| :func:`DataFrame.to_clipboard` | O                  |                                           |
++--------------------------------+--------------------+-------------------------------------------+
+| :func:`read_excel`             | O                  | ``skiprows``, ``na_filter``, ``decimal``, |
+|                                |                    | ``skipfooter``, ``storage_options``       |
++--------------------------------+--------------------+-------------------------------------------+
+| :func:`DataFrame.to_excel`     | O                  | ``storage_options``                       |
++--------------------------------+--------------------+-------------------------------------------+
+| :func:`read_json`              | O                  | ``orient``, ``typ``, ``dtype``,           |
+|                                |                    | ``convert_axes``, ``convert_dates`` and m |
+|                                |                    | ore. See the `pandas.read_json <https://p |
+|                                |                    | andas.pydata.org/docs/reference/api/panda |
+|                                |                    | s.read_json.html>`__ and `pyspark.pandas. |
+|                                |                    | read_json <https://spark.apache.org/docs/ |
+|                                |                    | latest/api/python/reference/pyspark.panda |
+|                                |                    | s/api/pyspark.pandas.read_json.html>`__ f |
+|                                |                    | or detail.                                |
++--------------------------------+--------------------+-------------------------------------------+
+| :func:`DataFrame.t             | O                  | ``date_format``, ``double_precision``,    |
+| o_json`                        |                    | ``force_ascii``, ``date_unit``,           |
+|                                |                    | ``default_handler`` and more. See the `pa |
+|                                |                    | ndas.DataFrame.to_json <https://pandas.py |
+|                                |                    | data.org/docs/reference/api/pandas.DataFr |
+|                                |                    | ame.to_json.html>`__ and `pyspark.pandas. |
+|                                |                    | to_json <https://spark.apache.org/docs/la |
+|                                |                    | test/api/python/reference/pyspark.pandas/ |
+|                                |                    | api/pyspark.pandas.DataFrame.to_json.htm  |
+|                                |                    | l>`__ for detail.                         |
++--------------------------------+--------------------+-------------------------------------------+
+| :func:`read_html`              | O                  |                                           |
++--------------------------------+--------------------+-------------------------------------------+
+| :func:`DataFrame.t             | O                  | ``encoding``                              |
+| o_html`                        |                    |                                           |
++--------------------------------+--------------------+-------------------------------------------+
+| read_xml                       | X                  |                                           |
++--------------------------------+--------------------+-------------------------------------------+
+| DataFrame.to_xml               | X                  |                                           |
++--------------------------------+--------------------+-------------------------------------------+
+| :func:`DataFrame.to_           | O                  | ``caption``, ``label``, ``position``      |
+| latex`                         |                    |                                           |
++--------------------------------+--------------------+-------------------------------------------+
+| read_hdf                       | X                  |                                           |
++--------------------------------+--------------------+-------------------------------------------+
+| read_feather                   | X                  |                                           |
++--------------------------------+--------------------+-------------------------------------------+
+| DataFrame.to_feather           | X                  |                                           |
++--------------------------------+--------------------+-------------------------------------------+
+| :func:`r                       | O                  | ``engine``, ``storage_options``,          |
+| ead_parquet`                   |                    | ``use_nullable_dtypes``                   |
++--------------------------------+--------------------+-------------------------------------------+
+| :func:`DataFrame.              | O                  | ``engine``, ``storage_options``           |
+| to_parquet`                    |                    |                                           |
++--------------------------------+--------------------+-------------------------------------------+
+| :func:`read_orc`               | O                  |                                           |
++--------------------------------+--------------------+-------------------------------------------+
+| read_sas                       | X                  |                                           |
++--------------------------------+--------------------+-------------------------------------------+
+| read_spss                      | X                  |                                           |
++--------------------------------+--------------------+-------------------------------------------+
+| :func:`read_                   | O                  | ``coerce_float``, ``parse_dates``,        |
+| sql_table`                     |                    | ``chunksize``                             |
++--------------------------------+--------------------+-------------------------------------------+
+| :func:`read_                   | O                  | ``coerce_float``, ``params``,             |
+| sql_query`                     |                    | ``parse_dates``, ``chunksize``, ``dtype`` |
++--------------------------------+--------------------+-------------------------------------------+
+| :func:`read_sql`               | O                  | ``coerce_float``, ``params``,             |
+|                                |                    | ``parse_dates``, ``chunksize``            |
++--------------------------------+--------------------+-------------------------------------------+
+| DataFrame.to_sql               | X                  |                                           |
++--------------------------------+--------------------+-------------------------------------------+
+| read_gbq                       | X                  |                                           |
++--------------------------------+--------------------+-------------------------------------------+
+| read_stata                     | X                  |                                           |
++--------------------------------+--------------------+-------------------------------------------+
+| DataFrame.to_stata             | X                  |                                           |
++--------------------------------+--------------------+-------------------------------------------+
 
 Supported General Function APIs
 -------------------------------
 
-+-----------------------------------------+--------------+-----------------------------------------+
-| API                                     | Implemented  | Missing parameters                      |
-+=========================================+==============+=========================================+
-| `melt <https://spark.apache.org/do      | O            | ``col_level``, ``ignore_index``         |
-| cs/latest/api/python/reference/pyspark. |              |                                         |
-| pandas/api/pyspark.pandas.melt.html>`__ |              |                                         |
-+-----------------------------------------+--------------+-----------------------------------------+
-| pivot                                   | X            |                                         |
-+-----------------------------------------+--------------+-----------------------------------------+
-| pivot_table                             | X            |                                         |
-+-----------------------------------------+--------------+-----------------------------------------+
-| crosstab                                | X            |                                         |
-+-----------------------------------------+--------------+-----------------------------------------+
-| cut                                     | X            |                                         |
-+-----------------------------------------+--------------+-----------------------------------------+
-| qcut                                    | X            |                                         |
-+-----------------------------------------+--------------+-----------------------------------------+
-| `merge <https://spark.apache.org/doc    | O            | ``copy``, ``indicator``, ``validate``   |
-| s/latest/api/python/reference/pyspark.p |              |                                         |
-| andas/api/pyspark.pandas.merge.html>`__ |              |                                         |
-+-----------------------------------------+--------------+-----------------------------------------+
-| merge_ordered                           | X            |                                         |
-+-----------------------------------------+--------------+-----------------------------------------+
-| `merge_                                 | O            |                                         |
-| asof <https://spark.apache.org/docs/lat |              |                                         |
-| est/api/python/reference/pyspark.pandas |              |                                         |
-| /api/pyspark.pandas.merge_asof.html>`__ |              |                                         |
-+-----------------------------------------+--------------+-----------------------------------------+
-| `concat <https://spark.apache.org/docs  | O            | ``keys``, ``levels``, ``names``,        |
-| /latest/api/python/reference/pyspark.pa |              | ``verify_integrity``, ``copy``          |
-| ndas/api/pyspark.pandas.concat.html>`__ |              |                                         |
-+-----------------------------------------+--------------+-----------------------------------------+
-| `get                                    | O            |                                         |
-| \_dumm                                  |              |                                         |
-| ies <https://spark.apache.org/docs/late |              |                                         |
-| st/api/python/reference/pyspark.pandas/ |              |                                         |
-| api/pyspark.pandas.get_dummies.html>`__ |              |                                         |
-+-----------------------------------------+--------------+-----------------------------------------+
-| factorize                               | X            |                                         |
-+-----------------------------------------+--------------+-----------------------------------------+
-| unique                                  | X            |                                         |
-+-----------------------------------------+--------------+-----------------------------------------+
-| wide_to_long                            | X            |                                         |
-+-----------------------------------------+--------------+-----------------------------------------+
-| `isna <https://spark.apache.org/do      | O            |                                         |
-| cs/latest/api/python/reference/pyspark. |              |                                         |
-| pandas/api/pyspark.pandas.isna.html>`__ |              |                                         |
-+-----------------------------------------+--------------+-----------------------------------------+
-| `isnull <https://spark.apache.org/docs  | O            |                                         |
-| /latest/api/python/reference/pyspark.pa |              |                                         |
-| ndas/api/pyspark.pandas.isnull.html>`__ |              |                                         |
-+-----------------------------------------+--------------+-----------------------------------------+
-| `notna <https://spark.apache.org/doc    | O            |                                         |
-| s/latest/api/python/reference/pyspark.p |              |                                         |
-| andas/api/pyspark.pandas.notna.html>`__ |              |                                         |
-+-----------------------------------------+--------------+-----------------------------------------+
-| `                                       | O            |                                         |
-| notnull <https://spark.apache.org/docs/ |              |                                         |
-| latest/api/python/reference/pyspark.pan |              |                                         |
-| das/api/pyspark.pandas.notnull.html>`__ |              |                                         |
-+-----------------------------------------+--------------+-----------------------------------------+
-| `to                                     | O            | ``errors``, ``downcast``                |
-| _num                                    |              |                                         |
-| eric <https://spark.apache.org/docs/lat |              |                                         |
-| est/api/python/reference/pyspark.pandas |              |                                         |
-| /api/pyspark.pandas.to_numeric.html>`__ |              |                                         |
-+-----------------------------------------+--------------+-----------------------------------------+
-| `to                                     | O            | ``dayfirst``, ``yearfirst``, ``utc``,   |
-| _datet                                  |              | ``exact``                               |
-| ime <https://spark.apache.org/docs/late |              |                                         |
-| st/api/python/reference/pyspark.pandas/ |              |                                         |
-| api/pyspark.pandas.to_datetime.html>`__ |              |                                         |
-+-----------------------------------------+--------------+-----------------------------------------+
-| `date                                   | O            |                                         |
-| _r                                      |              |                                         |
-| ange <https://spark.apache.org/docs/lat |              |                                         |
-| est/api/python/reference/pyspark.pandas |              |                                         |
-| /api/pyspark.pandas.date_range.html>`__ |              |                                         |
-+-----------------------------------------+--------------+-----------------------------------------+
-| bdate_range                             | X            |                                         |
-+-----------------------------------------+--------------+-----------------------------------------+
-| period_range                            | X            |                                         |
-+-----------------------------------------+--------------+-----------------------------------------+
-| `timedelta_range <https://              | O            |                                         |
-| spark.apache.org/docs/latest/a          |              |                                         |
-| pi/python/reference/pyspark.pandas/api/ |              |                                         |
-| pyspark.pandas.timedelta_range.html>`__ |              |                                         |
-+-----------------------------------------+--------------+-----------------------------------------+
-| infer_freq                              | X            |                                         |
-+-----------------------------------------+--------------+-----------------------------------------+
-| interval_range                          | X            |                                         |
-+-----------------------------------------+--------------+-----------------------------------------+
-| eval                                    | X            |                                         |
-+-----------------------------------------+--------------+-----------------------------------------+
++-----------------------------------------+--------------+----------------------------------------+
+| API                                     | Implemented  | Missing parameters                     |
++=========================================+==============+========================================+
+| :func:`melt`                            | O            | ``col_level``, ``ignore_index``        |
++-----------------------------------------+--------------+----------------------------------------+
+| pivot                                   | X            |                                        |
++-----------------------------------------+--------------+----------------------------------------+
+| pivot_table                             | X            |                                        |
++-----------------------------------------+--------------+----------------------------------------+
+| crosstab                                | X            |                                        |
++-----------------------------------------+--------------+----------------------------------------+
+| cut                                     | X            |                                        |
++-----------------------------------------+--------------+----------------------------------------+
+| qcut                                    | X            |                                        |
++-----------------------------------------+--------------+----------------------------------------+
+| :func:`merge`                           | O            | ``copy``, ``indicator``, ``validate``  |
++-----------------------------------------+--------------+----------------------------------------+
+| merge_ordered                           | X            |                                        |
++-----------------------------------------+--------------+----------------------------------------+
+| :func:`merge_asof`                      | O            |                                        |
++-----------------------------------------+--------------+----------------------------------------+
+| :func:`concat`                          | O            | ``keys``, ``levels``, ``names``,       |
+|                                         |              | ``verify_integrity``, ``copy``         |
++-----------------------------------------+--------------+----------------------------------------+
+| :func:`get_dummies`                     | O            |                                        |
++-----------------------------------------+--------------+----------------------------------------+
+| factorize                               | X            |                                        |
++-----------------------------------------+--------------+----------------------------------------+
+| unique                                  | X            |                                        |
++-----------------------------------------+--------------+----------------------------------------+
+| wide_to_long                            | X            |                                        |
++-----------------------------------------+--------------+----------------------------------------+
+| :func:`isna`                            | O            |                                        |
++-----------------------------------------+--------------+----------------------------------------+
+| :func:`isnull`                          | O            |                                        |
++-----------------------------------------+--------------+----------------------------------------+
+| :func:`notna`                           | O            |                                        |
++-----------------------------------------+--------------+----------------------------------------+
+| :func:`notnull`                         | O            |                                        |
++-----------------------------------------+--------------+----------------------------------------+
+| :func:`to_numeric`                      | O            | ``errors``, ``downcast``               |
++-----------------------------------------+--------------+----------------------------------------+
+| :func:`to_datetime`                     | O            | ``dayfirst``, ``yearfirst``, ``utc``,  |
+|                                         |              | ``exact``                              |
++-----------------------------------------+--------------+----------------------------------------+
+| :func:`date_range`                      | O            |                                        |
++-----------------------------------------+--------------+----------------------------------------+
+| bdate_range                             | X            |                                        |
++-----------------------------------------+--------------+----------------------------------------+
+| period_range                            | X            |                                        |
++-----------------------------------------+--------------+----------------------------------------+
+| :func:`timedelta_range`                 | O            |                                        |
++-----------------------------------------+--------------+----------------------------------------+
+| infer_freq                              | X            |                                        |
++-----------------------------------------+--------------+----------------------------------------+
+| interval_range                          | X            |                                        |
++-----------------------------------------+--------------+----------------------------------------+
+| eval                                    | X            |                                        |
++-----------------------------------------+--------------+----------------------------------------+
 
 Supported Series APIs
 ---------------------
 
-+------------------------+-------------------+-----------------------------------------------------+
-| API                    | Implemented       | Missing parameters                                  |
-+========================+===================+=====================================================+
-| `T <https://           | O                 |                                                     |
-| spark.apache.          |                   |                                                     |
-| org/docs/latest/api/py |                   |                                                     |
-| thon/reference/pyspark |                   |                                                     |
-| .pandas/api/pyspark.pa |                   |                                                     |
-| ndas.Series.T.html>`__ |                   |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| `abs <h                | O                 |                                                     |
-| ttps://spark.apache.or |                   |                                                     |
-| g/docs/latest/api/pyth |                   |                                                     |
-| on/reference/pyspark.p |                   |                                                     |
-| andas/api/pyspark.pand |                   |                                                     |
-| as.Series.abs.html>`__ |                   |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| `add <h                | O                 |                                                     |
-| ttps://spark.apache.or |                   |                                                     |
-| g/docs/latest/api/pyth |                   |                                                     |
-| on/reference/pyspark.p |                   |                                                     |
-| andas/api/pyspark.pand |                   |                                                     |
-| as.Series.add.html>`__ |                   |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| `add_prefix <https://  | O                 |                                                     |
-| spark.apache.org/docs/ |                   |                                                     |
-| latest/api/python/refe |                   |                                                     |
-| rence/pyspark.pandas/a |                   |                                                     |
-| pi/pyspark.pandas.Seri |                   |                                                     |
-| es.add_prefix.html>`__ |                   |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| `add_suffix <https://  | O                 |                                                     |
-| spark.apache.org/docs/ |                   |                                                     |
-| latest/api/python/refe |                   |                                                     |
-| rence/pyspark.pandas/a |                   |                                                     |
-| pi/pyspark.pandas.Seri |                   |                                                     |
-| es.add_suffix.html>`__ |                   |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| `agg <h                | O                 | ``axis``                                            |
-| ttps://spark.apache.or |                   |                                                     |
-| g/docs/latest/api/pyth |                   |                                                     |
-| on/reference/pyspark.p |                   |                                                     |
-| andas/api/pyspark.pand |                   |                                                     |
-| as.Series.agg.html>`__ |                   |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| `aggregate <https:/    | O                 | ``axis``                                            |
-| /spark.apache.org/docs |                   |                                                     |
-| /latest/api/python/ref |                   |                                                     |
-| erence/pyspark.pandas/ |                   |                                                     |
-| api/pyspark.pandas.Ser |                   |                                                     |
-| ies.aggregate.html>`__ |                   |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| `align <htt            | O                 | ``level``, ``fill_value``, ``method``, ``limit``,   |
-| ps://spark.apache.org/ |                   | ``fill_axis``                                       |
-| docs/latest/api/python |                   |                                                     |
-| /reference/pyspark.pan |                   |                                                     |
-| das/api/pyspark.pandas |                   |                                                     |
-| .Series.align.html>`__ |                   |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| `all <h                | O                 | ``bool_only``, ``skipna``, ``level``                |
-| ttps://spark.apache.or |                   |                                                     |
-| g/docs/latest/api/pyth |                   |                                                     |
-| on/reference/pyspark.p |                   |                                                     |
-| andas/api/pyspark.pand |                   |                                                     |
-| as.Series.all.html>`__ |                   |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| `any <h                | O                 | ``bool_only``, ``skipna``, ``level``                |
-| ttps://spark.apache.or |                   |                                                     |
-| g/docs/latest/api/pyth |                   |                                                     |
-| on/reference/pyspark.p |                   |                                                     |
-| andas/api/pyspark.pand |                   |                                                     |
-| as.Series.any.html>`__ |                   |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| `append <http          | O                 |                                                     |
-| s://spark.apache.org/d |                   |                                                     |
-| ocs/latest/api/python/ |                   |                                                     |
-| reference/pyspark.pand |                   |                                                     |
-| as/api/pyspark.pandas. |                   |                                                     |
-| Series.append.html>`__ |                   |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| `apply <htt            | O                 | ``convert_dtype``                                   |
-| ps://spark.apache.org/ |                   |                                                     |
-| docs/latest/api/python |                   |                                                     |
-| /reference/pyspark.pan |                   |                                                     |
-| das/api/pyspark.pandas |                   |                                                     |
-| .Series.apply.html>`__ |                   |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| `argmax <http          | O                 | ``axis``, ``skipna``                                |
-| s://spark.apache.org/d |                   |                                                     |
-| ocs/latest/api/python/ |                   |                                                     |
-| reference/pyspark.pand |                   |                                                     |
-| as/api/pyspark.pandas. |                   |                                                     |
-| Series.argmax.html>`__ |                   |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| `argmin <http          | O                 | ``axis``, ``skipna``                                |
-| s://spark.apache.org/d |                   |                                                     |
-| ocs/latest/api/python/ |                   |                                                     |
-| reference/pyspark.pand |                   |                                                     |
-| as/api/pyspark.pandas. |                   |                                                     |
-| Series.argmin.html>`__ |                   |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| `argsort <https        | O                 | ``axis``, ``kind``, ``order``                       |
-| ://spark.apache.org/do |                   |                                                     |
-| cs/latest/api/python/r |                   |                                                     |
-| eference/pyspark.panda |                   |                                                     |
-| s/api/pyspark.pandas.S |                   |                                                     |
-| eries.argsort.html>`__ |                   |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| array                  | X                 |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| asfreq                 | X                 |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| `asof <ht              | O                 | ``subset``                                          |
-| tps://spark.apache.org |                   |                                                     |
-| /docs/latest/api/pytho |                   |                                                     |
-| n/reference/pyspark.pa |                   |                                                     |
-| ndas/api/pyspark.panda |                   |                                                     |
-| s.Series.asof.html>`__ |                   |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| `astype <http          | O                 | ``copy``, ``errors``                                |
-| s://spark.apache.org/d |                   |                                                     |
-| ocs/latest/api/python/ |                   |                                                     |
-| reference/pyspark.pand |                   |                                                     |
-| as/api/pyspark.pandas. |                   |                                                     |
-| Series.astype.html>`__ |                   |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| `at <h                 | O                 |                                                     |
-| ttps://spark.apache.o  |                   |                                                     |
-| rg/docs/latest/api/pyt |                   |                                                     |
-| hon/reference/pyspark. |                   |                                                     |
-| pandas/api/pyspark.pan |                   |                                                     |
-| das.Series.at.html>`__ |                   |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| `at_time <https        | O                 |                                                     |
-| ://spark.apache.org/do |                   |                                                     |
-| cs/latest/api/python/r |                   |                                                     |
-| eference/pyspark.panda |                   |                                                     |
-| s/api/pyspark.pandas.S |                   |                                                     |
-| eries.at_time.html>`__ |                   |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| attrs                  | X                 |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| autocorr               | X                 |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| `axes <ht              | O                 |                                                     |
-| tps://spark.apache.org |                   |                                                     |
-| /docs/latest/api/pytho |                   |                                                     |
-| n/reference/pyspark.pa |                   |                                                     |
-| ndas/api/pyspark.panda |                   |                                                     |
-| s.Series.axes.html>`__ |                   |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| `backfill <https:      | O                 |                                                     |
-| //spark.apache.org/doc |                   |                                                     |
-| s/latest/api/python/re |                   |                                                     |
-| ference/pyspark.pandas |                   |                                                     |
-| /api/pyspark.pandas.Se |                   |                                                     |
-| ries.backfill.html>`__ |                   |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| `between <https        | O                 |                                                     |
-| ://spark.apache.org/do |                   |                                                     |
-| cs/latest/api/python/r |                   |                                                     |
-| eference/pyspark.panda |                   |                                                     |
-| s/api/pyspark.pandas.S |                   |                                                     |
-| eries.between.html>`__ |                   |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| `be                    | O                 | ``inclusive``                                       |
-| tween_time <https://sp |                   |                                                     |
-| ark.apache.org/docs/la |                   |                                                     |
-| test/api/python/refere |                   |                                                     |
-| nce/pyspark.pandas/api |                   |                                                     |
-| /pyspark.pandas.Series |                   |                                                     |
-| .between_time.html>`__ |                   |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| `bfill <htt            | O                 |                                                     |
-| ps://spark.apache.org/ |                   |                                                     |
-| docs/latest/api/python |                   |                                                     |
-| /reference/pyspark.pan |                   |                                                     |
-| das/api/pyspark.pandas |                   |                                                     |
-| .Series.bfill.html>`__ |                   |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| `bool <ht              | O                 |                                                     |
-| tps://spark.apache.org |                   |                                                     |
-| /docs/latest/api/pytho |                   |                                                     |
-| n/reference/pyspark.pa |                   |                                                     |
-| ndas/api/pyspark.panda |                   |                                                     |
-| s.Series.bool.html>`__ |                   |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| `cat <h                | O                 |                                                     |
-| ttps://spark.apache.or |                   |                                                     |
-| g/docs/latest/api/pyth |                   |                                                     |
-| on/reference/pyspark.p |                   |                                                     |
-| andas/api/pyspark.pand |                   |                                                     |
-| as.Series.cat.html>`__ |                   |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| `clip <ht              | O                 | ``axis``                                            |
-| tps://spark.apache.org |                   |                                                     |
-| /docs/latest/api/pytho |                   |                                                     |
-| n/reference/pyspark.pa |                   |                                                     |
-| ndas/api/pyspark.panda |                   |                                                     |
-| s.Series.clip.html>`__ |                   |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| combine                | X                 |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| `comb                  | O                 |                                                     |
-| ine_first <https://spa |                   |                                                     |
-| rk.apache.org/docs/lat |                   |                                                     |
-| est/api/python/referen |                   |                                                     |
-| ce/pyspark.pandas/api/ |                   |                                                     |
-| pyspark.pandas.Series. |                   |                                                     |
-| combine_first.html>`__ |                   |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| `compare <https        | O                 | ``align_axis``                                      |
-| ://spark.apache.org/do |                   |                                                     |
-| cs/latest/api/python/r |                   |                                                     |
-| eference/pyspark.panda |                   |                                                     |
-| s/api/pyspark.pandas.S |                   |                                                     |
-| eries.compare.html>`__ |                   |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| convert_dtypes         | X                 |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| `copy <ht              | O                 |                                                     |
-| tps://spark.apache.org |                   |                                                     |
-| /docs/latest/api/pytho |                   |                                                     |
-| n/reference/pyspark.pa |                   |                                                     |
-| ndas/api/pyspark.panda |                   |                                                     |
-| s.Series.copy.html>`__ |                   |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| `corr <ht              | O                 |                                                     |
-| tps://spark.apache.org |                   |                                                     |
-| /docs/latest/api/pytho |                   |                                                     |
-| n/reference/pyspark.pa |                   |                                                     |
-| ndas/api/pyspark.panda |                   |                                                     |
-| s.Series.corr.html>`__ |                   |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| `count <htt            | O                 |                                                     |
-| ps://spark.apache.org/ |                   |                                                     |
-| docs/latest/api/python |                   |                                                     |
-| /reference/pyspark.pan |                   |                                                     |
-| das/api/pyspark.pandas |                   |                                                     |
-| .Series.count.html>`__ |                   |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| `cov <h                | O                 | ``ddof``                                            |
-| ttps://spark.apache.or |                   |                                                     |
-| g/docs/latest/api/pyth |                   |                                                     |
-| on/reference/pyspark.p |                   |                                                     |
-| andas/api/pyspark.pand |                   |                                                     |
-| as.Series.cov.html>`__ |                   |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| `cummax <http          | O                 | ``axis``                                            |
-| s://spark.apache.org/d |                   |                                                     |
-| ocs/latest/api/python/ |                   |                                                     |
-| reference/pyspark.pand |                   |                                                     |
-| as/api/pyspark.pandas. |                   |                                                     |
-| Series.cummax.html>`__ |                   |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| `cummin <http          | O                 | ``axis``                                            |
-| s://spark.apache.org/d |                   |                                                     |
-| ocs/latest/api/python/ |                   |                                                     |
-| reference/pyspark.pand |                   |                                                     |
-| as/api/pyspark.pandas. |                   |                                                     |
-| Series.cummin.html>`__ |                   |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| `cumprod <https        | O                 | ``axis``                                            |
-| ://spark.apache.org/do |                   |                                                     |
-| cs/latest/api/python/r |                   |                                                     |
-| eference/pyspark.panda |                   |                                                     |
-| s/api/pyspark.pandas.S |                   |                                                     |
-| eries.cumprod.html>`__ |                   |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| `cumsum <http          | O                 | ``axis``                                            |
-| s://spark.apache.org/d |                   |                                                     |
-| ocs/latest/api/python/ |                   |                                                     |
-| reference/pyspark.pand |                   |                                                     |
-| as/api/pyspark.pandas. |                   |                                                     |
-| Series.cumsum.html>`__ |                   |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| `describe <https:      | O                 | ``include``, ``exclude``, ``datetime_is_numeric``   |
-| //spark.apache.org/doc |                   |                                                     |
-| s/latest/api/python/re |                   |                                                     |
-| ference/pyspark.pandas |                   |                                                     |
-| /api/pyspark.pandas.Se |                   |                                                     |
-| ries.describe.html>`__ |                   |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| `diff <ht              | O                 |                                                     |
-| tps://spark.apache.org |                   |                                                     |
-| /docs/latest/api/pytho |                   |                                                     |
-| n/reference/pyspark.pa |                   |                                                     |
-| ndas/api/pyspark.panda |                   |                                                     |
-| s.Series.diff.html>`__ |                   |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| `div <h                | O                 | ``fill_value``, ``level``                           |
-| ttps://spark.apache.or |                   |                                                     |
-| g/docs/latest/api/pyth |                   |                                                     |
-| on/reference/pyspark.p |                   |                                                     |
-| andas/api/pyspark.pand |                   |                                                     |
-| as.Series.div.html>`__ |                   |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| `divide <http          | O                 | ``fill_value``, ``level``                           |
-| s://spark.apache.org/d |                   |                                                     |
-| ocs/latest/api/python/ |                   |                                                     |
-| reference/pyspark.pand |                   |                                                     |
-| as/api/pyspark.pandas. |                   |                                                     |
-| Series.divide.html>`__ |                   |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| `divmod <http          | O                 | ``fill_value``, ``level``                           |
-| s://spark.apache.org/d |                   |                                                     |
-| ocs/latest/api/python/ |                   |                                                     |
-| reference/pyspark.pand |                   |                                                     |
-| as/api/pyspark.pandas. |                   |                                                     |
-| Series.divmod.html>`__ |                   |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| `dot <h                | O                 |                                                     |
-| ttps://spark.apache.or |                   |                                                     |
-| g/docs/latest/api/pyth |                   |                                                     |
-| on/reference/pyspark.p |                   |                                                     |
-| andas/api/pyspark.pand |                   |                                                     |
-| as.Series.dot.html>`__ |                   |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| `drop <ht              | O                 | ``columns``, ``inplace``, ``errors``                |
-| tps://spark.apache.org |                   |                                                     |
-| /docs/latest/api/pytho |                   |                                                     |
-| n/reference/pyspark.pa |                   |                                                     |
-| ndas/api/pyspark.panda |                   |                                                     |
-| s.Series.drop.html>`__ |                   |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| `drop_dup              | O                 |                                                     |
-| licates <https://spark |                   |                                                     |
-| .apache.org/docs/lates |                   |                                                     |
-| t/api/python/reference |                   |                                                     |
-| /pyspark.pandas/api/py |                   |                                                     |
-| spark.pandas.Series.dr |                   |                                                     |
-| op_duplicates.html>`__ |                   |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| `droplevel <https:/    | O                 | ``axis``                                            |
-| /spark.apache.org/docs |                   |                                                     |
-| /latest/api/python/ref |                   |                                                     |
-| erence/pyspark.pandas/ |                   |                                                     |
-| api/pyspark.pandas.Ser |                   |                                                     |
-| ies.droplevel.html>`__ |                   |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| `dropna <http          | O                 |                                                     |
-| s://spark.apache.org/d |                   |                                                     |
-| ocs/latest/api/python/ |                   |                                                     |
-| reference/pyspark.pand |                   |                                                     |
-| as/api/pyspark.pandas. |                   |                                                     |
-| Series.dropna.html>`__ |                   |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| `dt <h                 | O                 |                                                     |
-| ttps://spark.apache.o  |                   |                                                     |
-| rg/docs/latest/api/pyt |                   |                                                     |
-| hon/reference/pyspark. |                   |                                                     |
-| pandas/api/pyspark.pan |                   |                                                     |
-| das.Series.dt.html>`__ |                   |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| `dtype <htt            | O                 |                                                     |
-| ps://spark.apache.org/ |                   |                                                     |
-| docs/latest/api/python |                   |                                                     |
-| /reference/pyspark.pan |                   |                                                     |
-| das/api/pyspark.pandas |                   |                                                     |
-| .Series.dtype.html>`__ |                   |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| `dtypes <http          | O                 |                                                     |
-| s://spark.apache.org/d |                   |                                                     |
-| ocs/latest/api/python/ |                   |                                                     |
-| reference/pyspark.pand |                   |                                                     |
-| as/api/pyspark.pandas. |                   |                                                     |
-| Series.dtypes.html>`__ |                   |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| `duplicated <https://  | O                 |                                                     |
-| spark.apache.org/docs/ |                   |                                                     |
-| latest/api/python/refe |                   |                                                     |
-| rence/pyspark.pandas/a |                   |                                                     |
-| pi/pyspark.pandas.Seri |                   |                                                     |
-| es.duplicated.html>`__ |                   |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| `empty <htt            | O                 |                                                     |
-| ps://spark.apache.org/ |                   |                                                     |
-| docs/latest/api/python |                   |                                                     |
-| /reference/pyspark.pan |                   |                                                     |
-| das/api/pyspark.pandas |                   |                                                     |
-| .Series.empty.html>`__ |                   |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| `eq <h                 | O                 |                                                     |
-| ttps://spark.apache.o  |                   |                                                     |
-| rg/docs/latest/api/pyt |                   |                                                     |
-| hon/reference/pyspark. |                   |                                                     |
-| pandas/api/pyspark.pan |                   |                                                     |
-| das.Series.eq.html>`__ |                   |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| `equals <http          | O                 |                                                     |
-| s://spark.apache.org/d |                   |                                                     |
-| ocs/latest/api/python/ |                   |                                                     |
-| reference/pyspark.pand |                   |                                                     |
-| as/api/pyspark.pandas. |                   |                                                     |
-| Series.equals.html>`__ |                   |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| `ewm <http             | O                 | ``adjust``, ``ignore_na``, ``axis``, ``method``     |
-| s://spark.apache.org/d |                   |                                                     |
-| ocs/latest/api/python/ |                   |                                                     |
-| reference/pyspark.pand |                   |                                                     |
-| as/api/pyspark.pandas. |                   |                                                     |
-| Series.ewm.html>`__    |                   |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| `expanding <https:/    | O                 |                                                     |
-| /spark.apache.org/docs |                   |                                                     |
-| /latest/api/python/ref |                   |                                                     |
-| erence/pyspark.pandas/ |                   |                                                     |
-| api/pyspark.pandas.Ser |                   |                                                     |
-| ies.expanding.html>`__ |                   |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| `explode <https        | O                 |                                                     |
-| ://spark.apache.org/do |                   |                                                     |
-| cs/latest/api/python/r |                   |                                                     |
-| eference/pyspark.panda |                   |                                                     |
-| s/api/pyspark.pandas.S |                   |                                                     |
-| eries.explode.html>`__ |                   |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| `factorize <https:/    | O                 |                                                     |
-| /spark.apache.org/docs |                   |                                                     |
-| /latest/api/python/ref |                   |                                                     |
-| erence/pyspark.pandas/ |                   |                                                     |
-| api/pyspark.pandas.Ser |                   |                                                     |
-| ies.factorize.html>`__ |                   |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| `ffill <htt            | O                 |                                                     |
-| ps://spark.apache.org/ |                   |                                                     |
-| docs/latest/api/python |                   |                                                     |
-| /reference/pyspark.pan |                   |                                                     |
-| das/api/pyspark.pandas |                   |                                                     |
-| .Series.ffill.html>`__ |                   |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| `fillna <http          | O                 | ``downcast``                                        |
-| s://spark.apache.org/d |                   |                                                     |
-| ocs/latest/api/python/ |                   |                                                     |
-| reference/pyspark.pand |                   |                                                     |
-| as/api/pyspark.pandas. |                   |                                                     |
-| Series.fillna.html>`__ |                   |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| `filter <http          | O                 |                                                     |
-| s://spark.apache.org/d |                   |                                                     |
-| ocs/latest/api/python/ |                   |                                                     |
-| reference/pyspark.pand |                   |                                                     |
-| as/api/pyspark.pandas. |                   |                                                     |
-| Series.filter.html>`__ |                   |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| `first <htt            | O                 |                                                     |
-| ps://spark.apache.org/ |                   |                                                     |
-| docs/latest/api/python |                   |                                                     |
-| /reference/pyspark.pan |                   |                                                     |
-| das/api/pyspark.pandas |                   |                                                     |
-| .Series.first.html>`__ |                   |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| `first_valid_          | O                 |                                                     |
-| index <https://spark.a |                   |                                                     |
-| pache.org/docs/latest/ |                   |                                                     |
-| api/python/reference/p |                   |                                                     |
-| yspark.pandas/api/pysp |                   |                                                     |
-| ark.pandas.Series.firs |                   |                                                     |
-| t_valid_index.html>`__ |                   |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| flags                  | X                 |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| `floordiv <https:      | O                 | ``fill_value``, ``level``                           |
-| //spark.apache.org/doc |                   |                                                     |
-| s/latest/api/python/re |                   |                                                     |
-| ference/pyspark.pandas |                   |                                                     |
-| /api/pyspark.pandas.Se |                   |                                                     |
-| ries.floordiv.html>`__ |                   |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| `ge <h                 | O                 | ``fill_value``, ``level``                           |
-| ttps://spark.apache.o  |                   |                                                     |
-| rg/docs/latest/api/pyt |                   |                                                     |
-| hon/reference/pyspark. |                   |                                                     |
-| pandas/api/pyspark.pan |                   |                                                     |
-| das.Series.ge.html>`__ |                   |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| `get <h                | O                 |                                                     |
-| ttps://spark.apache.or |                   |                                                     |
-| g/docs/latest/api/pyth |                   |                                                     |
-| on/reference/pyspark.p |                   |                                                     |
-| andas/api/pyspark.pand |                   |                                                     |
-| as.Series.get.html>`__ |                   |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| `groupby <https        | O                 |                                                     |
-| ://spark.apache.org/do |                   |                                                     |
-| cs/latest/api/python/r |                   |                                                     |
-| eference/pyspark.panda |                   |                                                     |
-| s/api/pyspark.pandas.S |                   |                                                     |
-| eries.groupby.html>`__ |                   |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| `gt <h                 | O                 | ``fill_value``, ``level``                           |
-| ttps://spark.apache.o  |                   |                                                     |
-| rg/docs/latest/api/pyt |                   |                                                     |
-| hon/reference/pyspark. |                   |                                                     |
-| pandas/api/pyspark.pan |                   |                                                     |
-| das.Series.gt.html>`__ |                   |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| `hasnans <https        | O                 |                                                     |
-| ://spark.apache.org/do |                   |                                                     |
-| cs/latest/api/python/r |                   |                                                     |
-| eference/pyspark.panda |                   |                                                     |
-| s/api/pyspark.pandas.S |                   |                                                     |
-| eries.hasnans.html>`__ |                   |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| `head <ht              | O                 |                                                     |
-| tps://spark.apache.org |                   |                                                     |
-| /docs/latest/api/pytho |                   |                                                     |
-| n/reference/pyspark.pa |                   |                                                     |
-| ndas/api/pyspark.panda |                   |                                                     |
-| s.Series.head.html>`__ |                   |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| `hist <ht              | O                 |                                                     |
-| tps://spark.apache.org |                   |                                                     |
-| /docs/latest/api/pytho |                   |                                                     |
-| n/reference/pyspark.pa |                   |                                                     |
-| ndas/api/pyspark.panda |                   |                                                     |
-| s.Series.hist.html>`__ |                   |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| `iat <h                | O                 |                                                     |
-| ttps://spark.apache.or |                   |                                                     |
-| g/docs/latest/api/pyth |                   |                                                     |
-| on/reference/pyspark.p |                   |                                                     |
-| andas/api/pyspark.pand |                   |                                                     |
-| as.Series.iat.html>`__ |                   |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| `idxmax <http          | O                 | ``axis``                                            |
-| s://spark.apache.org/d |                   |                                                     |
-| ocs/latest/api/python/ |                   |                                                     |
-| reference/pyspark.pand |                   |                                                     |
-| as/api/pyspark.pandas. |                   |                                                     |
-| Series.idxmax.html>`__ |                   |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| `idxmin <http          | O                 | ``axis``                                            |
-| s://spark.apache.org/d |                   |                                                     |
-| ocs/latest/api/python/ |                   |                                                     |
-| reference/pyspark.pand |                   |                                                     |
-| as/api/pyspark.pandas. |                   |                                                     |
-| Series.idxmin.html>`__ |                   |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| `iloc <ht              | O                 |                                                     |
-| tps://spark.apache.org |                   |                                                     |
-| /docs/latest/api/pytho |                   |                                                     |
-| n/reference/pyspark.pa |                   |                                                     |
-| ndas/api/pyspark.panda |                   |                                                     |
-| s.Series.iloc.html>`__ |                   |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| `index <htt            | O                 |                                                     |
-| ps://spark.apache.org/ |                   |                                                     |
-| docs/latest/api/python |                   |                                                     |
-| /reference/pyspark.pan |                   |                                                     |
-| das/api/pyspark.pandas |                   |                                                     |
-| .Series.index.html>`__ |                   |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| infer_objects          | X                 |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| `interpolate <https:// | O                 | ``axis``, ``inplace``, ``limit_direction``,         |
-| spark.apache.          |                   | ``limit_area``, ``downcast``                        |
-| org/docs/latest/api/py |                   |                                                     |
-| thon/reference/pyspark |                   |                                                     |
-| .pandas/api/pyspark.pa |                   |                                                     |
-| ndas.Series.interpolat |                   |                                                     |
-| e.html>`__             |                   |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| `is                    | O                 |                                                     |
-| _monotonic <https://sp |                   |                                                     |
-| ark.apache.org/docs/la |                   |                                                     |
-| test/api/python/refere |                   |                                                     |
-| nce/pyspark.pandas/api |                   |                                                     |
-| /pyspark.pandas.Series |                   |                                                     |
-| .is_monotonic.html>`__ |                   |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| `is_monotonic_decrea   | O                 |                                                     |
-| sing <https://         |                   |                                                     |
-| spark.apache.          |                   |                                                     |
-| org/docs/latest/api/py |                   |                                                     |
-| thon/reference/pyspark |                   |                                                     |
-| .pandas/api/pyspark.pa |                   |                                                     |
-| ndas.Series.is_monoton |                   |                                                     |
-| ic_decreasing.html>`__ |                   |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| `is_monotonic_increa   | O                 |                                                     |
-| sing <https://         |                   |                                                     |
-| spark.apache.          |                   |                                                     |
-| org/docs/latest/api/py |                   |                                                     |
-| thon/reference/pyspark |                   |                                                     |
-| .pandas/api/pyspark.pa |                   |                                                     |
-| ndas.Series.is_monoton |                   |                                                     |
-| ic_increasing.html>`__ |                   |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| `is_unique <https:/    | O                 |                                                     |
-| /spark.apache.org/docs |                   |                                                     |
-| /latest/api/python/ref |                   |                                                     |
-| erence/pyspark.pandas/ |                   |                                                     |
-| api/pyspark.pandas.Ser |                   |                                                     |
-| ies.is_unique.html>`__ |                   |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| `isin <ht              | O                 |                                                     |
-| tps://spark.apache.org |                   |                                                     |
-| /docs/latest/api/pytho |                   |                                                     |
-| n/reference/pyspark.pa |                   |                                                     |
-| ndas/api/pyspark.panda |                   |                                                     |
-| s.Series.isin.html>`__ |                   |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| `isna <ht              | O                 |                                                     |
-| tps://spark.apache.org |                   |                                                     |
-| /docs/latest/api/pytho |                   |                                                     |
-| n/reference/pyspark.pa |                   |                                                     |
-| ndas/api/pyspark.panda |                   |                                                     |
-| s.Series.isna.html>`__ |                   |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| `isnull <http          | O                 |                                                     |
-| s://spark.apache.org/d |                   |                                                     |
-| ocs/latest/api/python/ |                   |                                                     |
-| reference/pyspark.pand |                   |                                                     |
-| as/api/pyspark.pandas. |                   |                                                     |
-| Series.isnull.html>`__ |                   |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| `item <ht              | O                 |                                                     |
-| tps://spark.apache.org |                   |                                                     |
-| /docs/latest/api/pytho |                   |                                                     |
-| n/reference/pyspark.pa |                   |                                                     |
-| ndas/api/pyspark.panda |                   |                                                     |
-| s.Series.item.html>`__ |                   |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| `items <htt            | O                 |                                                     |
-| ps://spark.apache.org/ |                   |                                                     |
-| docs/latest/api/python |                   |                                                     |
-| /reference/pyspark.pan |                   |                                                     |
-| das/api/pyspark.pandas |                   |                                                     |
-| .Series.items.html>`__ |                   |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| `iteritems <https:/    | O                 |                                                     |
-| /spark.apache.org/docs |                   |                                                     |
-| /latest/api/python/ref |                   |                                                     |
-| erence/pyspark.pandas/ |                   |                                                     |
-| api/pyspark.pandas.Ser |                   |                                                     |
-| ies.iteritems.html>`__ |                   |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| `keys <ht              | O                 |                                                     |
-| tps://spark.apache.org |                   |                                                     |
-| /docs/latest/api/pytho |                   |                                                     |
-| n/reference/pyspark.pa |                   |                                                     |
-| ndas/api/pyspark.panda |                   |                                                     |
-| s.Series.keys.html>`__ |                   |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| `kurt <ht              | O                 | ``skipna``, ``level``                               |
-| tps://spark.apache.org |                   |                                                     |
-| /docs/latest/api/pytho |                   |                                                     |
-| n/reference/pyspark.pa |                   |                                                     |
-| ndas/api/pyspark.panda |                   |                                                     |
-| s.Series.kurt.html>`__ |                   |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| `kurtosis <https:      | O                 | ``skipna``, ``level``                               |
-| //spark.apache.org/doc |                   |                                                     |
-| s/latest/api/python/re |                   |                                                     |
-| ference/pyspark.pandas |                   |                                                     |
-| /api/pyspark.pandas.Se |                   |                                                     |
-| ries.kurtosis.html>`__ |                   |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| `last <ht              | O                 |                                                     |
-| tps://spark.apache.org |                   |                                                     |
-| /docs/latest/api/pytho |                   |                                                     |
-| n/reference/pyspark.pa |                   |                                                     |
-| ndas/api/pyspark.panda |                   |                                                     |
-| s.Series.last.html>`__ |                   |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| `last_valid            | O                 |                                                     |
-| _index <https://spark. |                   |                                                     |
-| apache.org/docs/latest |                   |                                                     |
-| /api/python/reference/ |                   |                                                     |
-| pyspark.pandas/api/pys |                   |                                                     |
-| park.pandas.Series.las |                   |                                                     |
-| t_valid_index.html>`__ |                   |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| `le <h                 | O                 | ``fill_value``, ``level``                           |
-| ttps://spark.apache.o  |                   |                                                     |
-| rg/docs/latest/api/pyt |                   |                                                     |
-| hon/reference/pyspark. |                   |                                                     |
-| pandas/api/pyspark.pan |                   |                                                     |
-| das.Series.le.html>`__ |                   |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| `loc <h                | O                 |                                                     |
-| ttps://spark.apache.or |                   |                                                     |
-| g/docs/latest/api/pyth |                   |                                                     |
-| on/reference/pyspark.p |                   |                                                     |
-| andas/api/pyspark.pand |                   |                                                     |
-| as.Series.loc.html>`__ |                   |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| `lt <h                 | O                 | ``fill_value``, ``level``                           |
-| ttps://spark.apache.o  |                   |                                                     |
-| rg/docs/latest/api/pyt |                   |                                                     |
-| hon/reference/pyspark. |                   |                                                     |
-| pandas/api/pyspark.pan |                   |                                                     |
-| das.Series.lt.html>`__ |                   |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| `mad <h                | O                 | ``axis``, ``skipna``, ``level``                     |
-| ttps://spark.apache.or |                   |                                                     |
-| g/docs/latest/api/pyth |                   |                                                     |
-| on/reference/pyspark.p |                   |                                                     |
-| andas/api/pyspark.pand |                   |                                                     |
-| as.Series.mad.html>`__ |                   |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| `map <h                | O                 |                                                     |
-| ttps://spark.apache.or |                   |                                                     |
-| g/docs/latest/api/pyth |                   |                                                     |
-| on/reference/pyspark.p |                   |                                                     |
-| andas/api/pyspark.pand |                   |                                                     |
-| as.Series.map.html>`__ |                   |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| `mask <ht              | O                 | ``inplace``, ``axis``, ``level``, ``errors``        |
-| tps://spark.apache.org |                   |                                                     |
-| /docs/latest/api/pytho |                   |                                                     |
-| n/reference/pyspark.pa |                   |                                                     |
-| ndas/api/pyspark.panda |                   |                                                     |
-| s.Series.mask.html>`__ |                   |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| `max <h                | O                 | ``skipna``, ``level``                               |
-| ttps://spark.apache.or |                   |                                                     |
-| g/docs/latest/api/pyth |                   |                                                     |
-| on/reference/pyspark.p |                   |                                                     |
-| andas/api/pyspark.pand |                   |                                                     |
-| as.Series.max.html>`__ |                   |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| `mean <ht              | O                 | ``skipna``, ``level``                               |
-| tps://spark.apache.org |                   |                                                     |
-| /docs/latest/api/pytho |                   |                                                     |
-| n/reference/pyspark.pa |                   |                                                     |
-| ndas/api/pyspark.panda |                   |                                                     |
-| s.Series.mean.html>`__ |                   |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| `median <http          | O                 | ``skipna``, ``level``                               |
-| s://spark.apache.org/d |                   |                                                     |
-| ocs/latest/api/python/ |                   |                                                     |
-| reference/pyspark.pand |                   |                                                     |
-| as/api/pyspark.pandas. |                   |                                                     |
-| Series.median.html>`__ |                   |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| memory_usage           | X                 |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| `min <h                | O                 | ``skipna``, ``level``                               |
-| ttps://spark.apache.or |                   |                                                     |
-| g/docs/latest/api/pyth |                   |                                                     |
-| on/reference/pyspark.p |                   |                                                     |
-| andas/api/pyspark.pand |                   |                                                     |
-| as.Series.min.html>`__ |                   |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| `mod <h                | O                 | ``fill_value``, ``level``                           |
-| ttps://spark.apache.or |                   |                                                     |
-| g/docs/latest/api/pyth |                   |                                                     |
-| on/reference/pyspark.p |                   |                                                     |
-| andas/api/pyspark.pand |                   |                                                     |
-| as.Series.mod.html>`__ |                   |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| `mode <ht              | O                 |                                                     |
-| tps://spark.apache.org |                   |                                                     |
-| /docs/latest/api/pytho |                   |                                                     |
-| n/reference/pyspark.pa |                   |                                                     |
-| ndas/api/pyspark.panda |                   |                                                     |
-| s.Series.mode.html>`__ |                   |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| `mul <h                | O                 | ``fill_value``, ``level``                           |
-| ttps://spark.apache.or |                   |                                                     |
-| g/docs/latest/api/pyth |                   |                                                     |
-| on/reference/pyspark.p |                   |                                                     |
-| andas/api/pyspark.pand |                   |                                                     |
-| as.Series.mul.html>`__ |                   |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| `multiply <https:      | O                 | ``fill_value``, ``level``                           |
-| //spark.apache.org/doc |                   |                                                     |
-| s/latest/api/python/re |                   |                                                     |
-| ference/pyspark.pandas |                   |                                                     |
-| /api/pyspark.pandas.Se |                   |                                                     |
-| ries.multiply.html>`__ |                   |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| `name <ht              | O                 |                                                     |
-| tps://spark.apache.org |                   |                                                     |
-| /docs/latest/api/pytho |                   |                                                     |
-| n/reference/pyspark.pa |                   |                                                     |
-| ndas/api/pyspark.panda |                   |                                                     |
-| s.Series.name.html>`__ |                   |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| nbytes                 | X                 |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| `ndim <ht              | O                 |                                                     |
-| tps://spark.apache.org |                   |                                                     |
-| /docs/latest/api/pytho |                   |                                                     |
-| n/reference/pyspark.pa |                   |                                                     |
-| ndas/api/pyspark.panda |                   |                                                     |
-| s.Series.ndim.html>`__ |                   |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| `ne <h                 | O                 | ``fill_value``, ``level``                           |
-| ttps://spark.apache.o  |                   |                                                     |
-| rg/docs/latest/api/pyt |                   |                                                     |
-| hon/reference/pyspark. |                   |                                                     |
-| pandas/api/pyspark.pan |                   |                                                     |
-| das.Series.ne.html>`__ |                   |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| `nlargest <https:      | O                 | ``keep``                                            |
-| //spark.apache.org/doc |                   |                                                     |
-| s/latest/api/python/re |                   |                                                     |
-| ference/pyspark.pandas |                   |                                                     |
-| /api/pyspark.pandas.Se |                   |                                                     |
-| ries.nlargest.html>`__ |                   |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| `notna <htt            | O                 |                                                     |
-| ps://spark.apache.org/ |                   |                                                     |
-| docs/latest/api/python |                   |                                                     |
-| /reference/pyspark.pan |                   |                                                     |
-| das/api/pyspark.pandas |                   |                                                     |
-| .Series.notna.html>`__ |                   |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| `notnull <https        | O                 |                                                     |
-| ://spark.apache.org/do |                   |                                                     |
-| cs/latest/api/python/r |                   |                                                     |
-| eference/pyspark.panda |                   |                                                     |
-| s/api/pyspark.pandas.S |                   |                                                     |
-| eries.notnull.html>`__ |                   |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| `nsmallest <https:/    | O                 | ``keep``                                            |
-| /spark.apache.org/docs |                   |                                                     |
-| /latest/api/python/ref |                   |                                                     |
-| erence/pyspark.pandas/ |                   |                                                     |
-| api/pyspark.pandas.Ser |                   |                                                     |
-| ies.nsmallest.html>`__ |                   |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| `nunique <https        | O                 |                                                     |
-| ://spark.apache.org/do |                   |                                                     |
-| cs/latest/api/python/r |                   |                                                     |
-| eference/pyspark.panda |                   |                                                     |
-| s/api/pyspark.pandas.S |                   |                                                     |
-| eries.nunique.html>`__ |                   |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| `pad <h                | O                 | ``downcast``                                        |
-| ttps://spark.apache.or |                   |                                                     |
-| g/docs/latest/api/pyth |                   |                                                     |
-| on/reference/pyspark.p |                   |                                                     |
-| andas/api/pyspark.pand |                   |                                                     |
-| as.Series.pad.html>`__ |                   |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| `pct_change <https://  | O                 | ``fill_method``, ``limit``, ``freq``                |
-| spark.apache.org/docs/ |                   |                                                     |
-| latest/api/python/refe |                   |                                                     |
-| rence/pyspark.pandas/a |                   |                                                     |
-| pi/pyspark.pandas.Seri |                   |                                                     |
-| es.pct_change.html>`__ |                   |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| `pipe <ht              | O                 |                                                     |
-| tps://spark.apache.org |                   |                                                     |
-| /docs/latest/api/pytho |                   |                                                     |
-| n/reference/pyspark.pa |                   |                                                     |
-| ndas/api/pyspark.panda |                   |                                                     |
-| s.Series.pipe.html>`__ |                   |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| `plot.area <https:/    | O                 |                                                     |
-| /spark.apache.org/docs |                   |                                                     |
-| /latest/api/python/ref |                   |                                                     |
-| erence/pyspark.pandas/ |                   |                                                     |
-| api/pyspark.pandas.Ser |                   |                                                     |
-| ies.plot.area.html>`__ |                   |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| `plot.bar <https:      | O                 |                                                     |
-| //spark.apache.org/doc |                   |                                                     |
-| s/latest/api/python/re |                   |                                                     |
-| ference/pyspark.pandas |                   |                                                     |
-| /api/pyspark.pandas.Se |                   |                                                     |
-| ries.plot.bar.html>`__ |                   |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| `plot.barh <https:/    | O                 |                                                     |
-| /spark.apache.org/docs |                   |                                                     |
-| /latest/api/python/ref |                   |                                                     |
-| erence/pyspark.pandas/ |                   |                                                     |
-| api/pyspark.pandas.Ser |                   |                                                     |
-| ies.plot.barh.html>`__ |                   |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| `plot.box <https:      | O                 |                                                     |
-| //spark.apache.org/doc |                   |                                                     |
-| s/latest/api/python/re |                   |                                                     |
-| ference/pyspark.pandas |                   |                                                     |
-| /api/pyspark.pandas.Se |                   |                                                     |
-| ries.plot.box.html>`__ |                   |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| `plot.density <https   | O                 |                                                     |
-| ://spark.apache.org/do |                   |                                                     |
-| cs/latest/api/python/r |                   |                                                     |
-| eference/pyspark.panda |                   |                                                     |
-| s/api/pyspark.pandas.S |                   |                                                     |
-| eries.density.html>`__ |                   |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| `plot.hist <https:/    | O                 |                                                     |
-| /spark.apache.org/docs |                   |                                                     |
-| /latest/api/python/ref |                   |                                                     |
-| erence/pyspark.pandas/ |                   |                                                     |
-| api/pyspark.pandas.Ser |                   |                                                     |
-| ies.plot.hist.html>`__ |                   |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| `plot.kde <https:      | O                 |                                                     |
-| //spark.apache.org/doc |                   |                                                     |
-| s/latest/api/python/re |                   |                                                     |
-| ference/pyspark.pandas |                   |                                                     |
-| /api/pyspark.pandas.Se |                   |                                                     |
-| ries.plot.kde.html>`__ |                   |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| `plot.line <https:/    | O                 |                                                     |
-| /spark.apache.org/docs |                   |                                                     |
-| /latest/api/python/ref |                   |                                                     |
-| erence/pyspark.pandas/ |                   |                                                     |
-| api/pyspark.pandas.Ser |                   |                                                     |
-| ies.plot.line.html>`__ |                   |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| `plot.pie <https:      | O                 |                                                     |
-| //spark.apache.org/doc |                   |                                                     |
-| s/latest/api/python/re |                   |                                                     |
-| ference/pyspark.pandas |                   |                                                     |
-| /api/pyspark.pandas.Se |                   |                                                     |
-| ries.plot.pie.html>`__ |                   |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| `pop <h                | O                 |                                                     |
-| ttps://spark.apache.or |                   |                                                     |
-| g/docs/latest/api/pyth |                   |                                                     |
-| on/reference/pyspark.p |                   |                                                     |
-| andas/api/pyspark.pand |                   |                                                     |
-| as.Series.pop.html>`__ |                   |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| `pow <h                | O                 | ``fill_value``, ``level``                           |
-| ttps://spark.apache.or |                   |                                                     |
-| g/docs/latest/api/pyth |                   |                                                     |
-| on/reference/pyspark.p |                   |                                                     |
-| andas/api/pyspark.pand |                   |                                                     |
-| as.Series.pow.html>`__ |                   |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| `prod <ht              | O                 | ``skipna``, ``level``                               |
-| tps://spark.apache.org |                   |                                                     |
-| /docs/latest/api/pytho |                   |                                                     |
-| n/reference/pyspark.pa |                   |                                                     |
-| ndas/api/pyspark.panda |                   |                                                     |
-| s.Series.prod.html>`__ |                   |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| `product <https        | O                 | ``skipna``, ``level``                               |
-| ://spark.apache.org/do |                   |                                                     |
-| cs/latest/api/python/r |                   |                                                     |
-| eference/pyspark.panda |                   |                                                     |
-| s/api/pyspark.pandas.S |                   |                                                     |
-| eries.product.html>`__ |                   |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| `quantile <https:      | O                 | ``interpolation``                                   |
-| //spark.apache.org/doc |                   |                                                     |
-| s/latest/api/python/re |                   |                                                     |
-| ference/pyspark.pandas |                   |                                                     |
-| /api/pyspark.pandas.Se |                   |                                                     |
-| ries.quantile.html>`__ |                   |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| `radd <ht              | O                 | ``fill_value``, ``level``                           |
-| tps://spark.apache.org |                   |                                                     |
-| /docs/latest/api/pytho |                   |                                                     |
-| n/reference/pyspark.pa |                   |                                                     |
-| ndas/api/pyspark.panda |                   |                                                     |
-| s.Series.radd.html>`__ |                   |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| `rank <ht              | O                 | ``axis``, ``na_option``, ``pct``                    |
-| tps://spark.apache.org |                   |                                                     |
-| /docs/latest/api/pytho |                   |                                                     |
-| n/reference/pyspark.pa |                   |                                                     |
-| ndas/api/pyspark.panda |                   |                                                     |
-| s.Series.rank.html>`__ |                   |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| ravel                  | X                 |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| `rdiv <ht              | O                 | ``fill_value``, ``level``                           |
-| tps://spark.apache.org |                   |                                                     |
-| /docs/latest/api/pytho |                   |                                                     |
-| n/reference/pyspark.pa |                   |                                                     |
-| ndas/api/pyspark.panda |                   |                                                     |
-| s.Series.rdiv.html>`__ |                   |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| `rdivmod <https        | O                 | ``fill_value``, ``level``                           |
-| ://spark.apache.org/do |                   |                                                     |
-| cs/latest/api/python/r |                   |                                                     |
-| eference/pyspark.panda |                   |                                                     |
-| s/api/pyspark.pandas.S |                   |                                                     |
-| eries.rdivmod.html>`__ |                   |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| `reindex <https        | O                 | ``method``, ``copy``, ``level``, ``limit``,         |
-| ://spark.apache.org/do |                   | ``tolerance``                                       |
-| cs/latest/api/python/r |                   |                                                     |
-| eference/pyspark.panda |                   |                                                     |
-| s/api/pyspark.pandas.S |                   |                                                     |
-| eries.reindex.html>`__ |                   |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| `re                    | O                 | ``method``, ``copy``, ``limit``, ``tolerance``      |
-| index_like <https://sp |                   |                                                     |
-| ark.apache.org/docs/la |                   |                                                     |
-| test/api/python/refere |                   |                                                     |
-| nce/pyspark.pandas/api |                   |                                                     |
-| /pyspark.pandas.Series |                   |                                                     |
-| .reindex_like.html>`__ |                   |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| `rename <http          | O                 | ``axis``                                            |
-| s://spark.apache.org/d |                   |                                                     |
-| ocs/latest/api/python/ |                   |                                                     |
-| reference/pyspark.pand |                   |                                                     |
-| as/api/pyspark.pandas. |                   |                                                     |
-| Series.rename.html>`__ |                   |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| `rename_axis <h        | O                 | ``axis``, ``copy``, ``inplace``                     |
-| ttps://s               |                   |                                                     |
-| park.apache.org/docs/l |                   |                                                     |
-| atest/api/python/refer |                   |                                                     |
-| ence/pyspark.pandas/ap |                   |                                                     |
-| i/pyspark.pandas.Serie |                   |                                                     |
-| s.rename_axis.html>`__ |                   |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| reorder_levels         | X                 |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| `repeat <http          | O                 | ``axis``                                            |
-| s://spark.apache.org/d |                   |                                                     |
-| ocs/latest/api/python/ |                   |                                                     |
-| reference/pyspark.pand |                   |                                                     |
-| as/api/pyspark.pandas. |                   |                                                     |
-| Series.repeat.html>`__ |                   |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| `replace <https        | O                 | ``inplace``, ``limit``, ``regex``, ``method``       |
-| ://spark.apache.org/do |                   |                                                     |
-| cs/latest/api/python/r |                   |                                                     |
-| eference/pyspark.panda |                   |                                                     |
-| s/api/pyspark.pandas.S |                   |                                                     |
-| eries.replace.html>`__ |                   |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| resample               | X                 |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| `reset_index <h        | O                 |                                                     |
-| ttps://s               |                   |                                                     |
-| park.apache.org/docs/l |                   |                                                     |
-| atest/api/python/refer |                   |                                                     |
-| ence/pyspark.pandas/ap |                   |                                                     |
-| i/pyspark.pandas.Serie |                   |                                                     |
-| s.reset_index.html>`__ |                   |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| `rfloordiv <https:/    | O                 | ``fill_value``, ``level``                           |
-| /spark.apache.org/docs |                   |                                                     |
-| /latest/api/python/ref |                   |                                                     |
-| erence/pyspark.pandas/ |                   |                                                     |
-| api/pyspark.pandas.Ser |                   |                                                     |
-| ies.rfloordiv.html>`__ |                   |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| `rmod <ht              | O                 | ``fill_value``, ``level``                           |
-| tps://spark.apache.org |                   |                                                     |
-| /docs/latest/api/pytho |                   |                                                     |
-| n/reference/pyspark.pa |                   |                                                     |
-| ndas/api/pyspark.panda |                   |                                                     |
-| s.Series.rmod.html>`__ |                   |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| `rmul <ht              | O                 | ``fill_value``, ``level``                           |
-| tps://spark.apache.org |                   |                                                     |
-| /docs/latest/api/pytho |                   |                                                     |
-| n/reference/pyspark.pa |                   |                                                     |
-| ndas/api/pyspark.panda |                   |                                                     |
-| s.Series.rmul.html>`__ |                   |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| `rolling <https        | O                 |                                                     |
-| ://spark.apache.org/do |                   |                                                     |
-| cs/latest/api/python/r |                   |                                                     |
-| eference/pyspark.panda |                   |                                                     |
-| s/api/pyspark.pandas.S |                   |                                                     |
-| eries.rolling.html>`__ |                   |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| `round <htt            | O                 |                                                     |
-| ps://spark.apache.org/ |                   |                                                     |
-| docs/latest/api/python |                   |                                                     |
-| /reference/pyspark.pan |                   |                                                     |
-| das/api/pyspark.pandas |                   |                                                     |
-| .Series.round.html>`__ |                   |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| `rpow <ht              | O                 | ``fill_value``, ``level``                           |
-| tps://spark.apache.org |                   |                                                     |
-| /docs/latest/api/pytho |                   |                                                     |
-| n/reference/pyspark.pa |                   |                                                     |
-| ndas/api/pyspark.panda |                   |                                                     |
-| s.Series.rpow.html>`__ |                   |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| `rsub <ht              | O                 | ``fill_value``, ``level``                           |
-| tps://spark.apache.org |                   |                                                     |
-| /docs/latest/api/pytho |                   |                                                     |
-| n/reference/pyspark.pa |                   |                                                     |
-| ndas/api/pyspark.panda |                   |                                                     |
-| s.Series.rsub.html>`__ |                   |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| `rtruediv <https:      | O                 | ``fill_value``, ``level``                           |
-| //spark.apache.org/doc |                   |                                                     |
-| s/latest/api/python/re |                   |                                                     |
-| ference/pyspark.pandas |                   |                                                     |
-| /api/pyspark.pandas.Se |                   |                                                     |
-| ries.rtruediv.html>`__ |                   |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| `sample <http          | O                 | ``weight``, ``axis``                                |
-| s://spark.apache.org/d |                   |                                                     |
-| ocs/latest/api/python/ |                   |                                                     |
-| reference/pyspark.pand |                   |                                                     |
-| as/api/pyspark.pandas. |                   |                                                     |
-| Series.sample.html>`__ |                   |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| searchsorted           | X                 |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| `sem <h                | O                 | ``skipna``, ``level``                               |
-| ttps://spark.apache.or |                   |                                                     |
-| g/docs/latest/api/pyth |                   |                                                     |
-| on/reference/pyspark.p |                   |                                                     |
-| andas/api/pyspark.pand |                   |                                                     |
-| as.Series.sem.html>`__ |                   |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| set_axis               | X                 |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| set_flags              | X                 |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| `shape <htt            | O                 |                                                     |
-| ps://spark.apache.org/ |                   |                                                     |
-| docs/latest/api/python |                   |                                                     |
-| /reference/pyspark.pan |                   |                                                     |
-| das/api/pyspark.pandas |                   |                                                     |
-| .Series.shape.html>`__ |                   |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| `shift <htt            | O                 | ``freq``, ``axis``                                  |
-| ps://spark.apache.org/ |                   |                                                     |
-| docs/latest/api/python |                   |                                                     |
-| /reference/pyspark.pan |                   |                                                     |
-| das/api/pyspark.pandas |                   |                                                     |
-| .Series.shift.html>`__ |                   |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| `size <ht              | O                 |                                                     |
-| tps://spark.apache.org |                   |                                                     |
-| /docs/latest/api/pytho |                   |                                                     |
-| n/reference/pyspark.pa |                   |                                                     |
-| ndas/api/pyspark.panda |                   |                                                     |
-| s.Series.size.html>`__ |                   |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| `skew <ht              | O                 | ``skipna``, ``level``                               |
-| tps://spark.apache.org |                   |                                                     |
-| /docs/latest/api/pytho |                   |                                                     |
-| n/reference/pyspark.pa |                   |                                                     |
-| ndas/api/pyspark.panda |                   |                                                     |
-| s.Series.skew.html>`__ |                   |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| slice_shift            | X                 |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| `sort_index <https://  | O                 | ``sort_remaining``, ``ignore_index``, ``key``       |
-| spark.apache.org/docs/ |                   |                                                     |
-| latest/api/python/refe |                   |                                                     |
-| rence/pyspark.pandas/a |                   |                                                     |
-| pi/pyspark.pandas.Seri |                   |                                                     |
-| es.sort_index.html>`__ |                   |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| `                      | O                 | ``axis``, ``kind``, ``key``                         |
-| sort_values <https://s |                   |                                                     |
-| park.apache.org/docs/l |                   |                                                     |
-| atest/api/python/refer |                   |                                                     |
-| ence/pyspark.pandas/ap |                   |                                                     |
-| i/pyspark.pandas.Serie |                   |                                                     |
-| s.sort_values.html>`__ |                   |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| sparse                 | X                 |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| `squeeze <https        | O                 |                                                     |
-| ://spark.apache.org/do |                   |                                                     |
-| cs/latest/api/python/r |                   |                                                     |
-| eference/pyspark.panda |                   |                                                     |
-| s/api/pyspark.pandas.S |                   |                                                     |
-| eries.squeeze.html>`__ |                   |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| `std <h                | O                 | ``skipna``, ``level``                               |
-| ttps://spark.apache.or |                   |                                                     |
-| g/docs/latest/api/pyth |                   |                                                     |
-| on/reference/pyspark.p |                   |                                                     |
-| andas/api/pyspark.pand |                   |                                                     |
-| as.Series.std.html>`__ |                   |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| `str <h                | O                 |                                                     |
-| ttps://spark.apache.or |                   |                                                     |
-| g/docs/latest/api/pyth |                   |                                                     |
-| on/reference/pyspark.p |                   |                                                     |
-| andas/api/pyspark.pand |                   |                                                     |
-| as.Series.std.html>`__ |                   |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| `sub <h                | O                 | ``fill_value``, ``level``                           |
-| ttps://spark.apache.or |                   |                                                     |
-| g/docs/latest/api/pyth |                   |                                                     |
-| on/reference/pyspark.p |                   |                                                     |
-| andas/api/pyspark.pand |                   |                                                     |
-| as.Series.sub.html>`__ |                   |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| `subtract <https:      | O                 | ``fill_value``, ``level``                           |
-| //spark.apache.org/doc |                   |                                                     |
-| s/latest/api/python/re |                   |                                                     |
-| ference/pyspark.pandas |                   |                                                     |
-| /api/pyspark.pandas.Se |                   |                                                     |
-| ries.subtract.html>`__ |                   |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| `sum <h                | O                 | ``fill_value``, ``level``                           |
-| ttps://spark.apache.or |                   |                                                     |
-| g/docs/latest/api/pyth |                   |                                                     |
-| on/reference/pyspark.p |                   |                                                     |
-| andas/api/pyspark.pand |                   |                                                     |
-| as.Series.sum.html>`__ |                   |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| `swaplevel <https:/    | O                 |                                                     |
-| /spark.apache.org/docs |                   |                                                     |
-| /latest/api/python/ref |                   |                                                     |
-| erence/pyspark.pandas/ |                   |                                                     |
-| api/pyspark.pandas.Ser |                   |                                                     |
-| ies.swaplevel.html>`__ |                   |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| `tail <ht              | O                 |                                                     |
-| tps://spark.apache.org |                   |                                                     |
-| /docs/latest/api/pytho |                   |                                                     |
-| n/reference/pyspark.pa |                   |                                                     |
-| ndas/api/pyspark.panda |                   |                                                     |
-| s.Series.tail.html>`__ |                   |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| `take <ht              | O                 | ``axis``                                            |
-| tps://spark.apache.org |                   |                                                     |
-| /docs/latest/api/pytho |                   |                                                     |
-| n/reference/pyspark.pa |                   |                                                     |
-| ndas/api/pyspark.panda |                   |                                                     |
-| s.Series.take.html>`__ |                   |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| `to                    | O                 |                                                     |
-| _clipboard <https://sp |                   |                                                     |
-| ark.apache.org/docs/la |                   |                                                     |
-| test/api/python/refere |                   |                                                     |
-| nce/pyspark.pandas/api |                   |                                                     |
-| /pyspark.pandas.Series |                   |                                                     |
-| .to_clipboard.html>`__ |                   |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| `to_csv <http          | O                 | ``encoding``, ``compression``, ``quoting``,         |
-| s://spark.apache.org/d |                   | ``line_terminator``, ``cunksize`` and more. See the |
-| ocs/latest/api/python/ |                   | `pandas.Series.to_csv <https://pandas.pydata.org/   |
-| reference/pyspark.pand |                   | docs/reference/api/pandas.Series.to_csv.html>`__ an |
-| as/api/pyspark.pandas. |                   | d `pyspark.pandas.Series.to_csv <https://           |
-| Series.to_csv.html>`__ |                   | spark.apache.org/docs/latest/api/python/reference/p |
-|                        |                   | yspark.pandas/api/pyspark.pandas.Series.to_csv.htm  |
-|                        |                   | l>`__ for detail.                                   |
-+------------------------+-------------------+-----------------------------------------------------+
-| `to_dict <https        | O                 |                                                     |
-| ://spark.apache.org/do |                   |                                                     |
-| cs/latest/api/python/r |                   |                                                     |
-| eference/pyspark.panda |                   |                                                     |
-| s/api/pyspark.pandas.S |                   |                                                     |
-| eries.to_dict.html>`__ |                   |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| `to_excel <https:      | O                 | ``storage_options``                                 |
-| //spark.apache.org/doc |                   |                                                     |
-| s/latest/api/python/re |                   |                                                     |
-| ference/pyspark.pandas |                   |                                                     |
-| /api/pyspark.pandas.Se |                   |                                                     |
-| ries.to_excel.html>`__ |                   |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| `to_frame <https:      | O                 |                                                     |
-| //spark.apache.org/doc |                   |                                                     |
-| s/latest/api/python/re |                   |                                                     |
-| ference/pyspark.pandas |                   |                                                     |
-| /api/pyspark.pandas.Se |                   |                                                     |
-| ries.to_frame.html>`__ |                   |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| to_hdf                 | X                 |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| `to_json <https        | O                 | ``date_format``, ``double_precision``,              |
-| ://spark.apache.org/do |                   | ``force_ascii``, ``default_handler``,               |
-| cs/latest/api/python/r |                   | ``storage_options``                                 |
-| eference/pyspark.panda |                   |                                                     |
-| s/api/pyspark.pandas.S |                   |                                                     |
-| eries.to_json.html>`__ |                   |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| `to_latex <https:      | O                 | ``caption``, ``label``, ``position``                |
-| //spark.apache.org/doc |                   |                                                     |
-| s/latest/api/python/re |                   |                                                     |
-| ference/pyspark.pandas |                   |                                                     |
-| /api/pyspark.pandas.Se |                   |                                                     |
-| ries.to_latex.html>`__ |                   |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| `to_list <https        | O                 |                                                     |
-| ://spark.apache.org/do |                   |                                                     |
-| cs/latest/api/python/r |                   |                                                     |
-| eference/pyspark.panda |                   |                                                     |
-| s/api/pyspark.pandas.S |                   |                                                     |
-| eries.to_list.html>`__ |                   |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| `                      | O                 | ``storage_options``                                 |
-| to_markdown <https://s |                   |                                                     |
-| park.apache.org/docs/l |                   |                                                     |
-| atest/api/python/refer |                   |                                                     |
-| ence/pyspark.pandas/ap |                   |                                                     |
-| i/pyspark.pandas.Serie |                   |                                                     |
-| s.to_markdown.html>`__ |                   |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| `to_numpy <https:      | O                 |                                                     |
-| //spark.apache.org/doc |                   |                                                     |
-| s/latest/api/python/re |                   |                                                     |
-| ference/pyspark.pandas |                   |                                                     |
-| /api/pyspark.pandas.Se |                   |                                                     |
-| ries.to_numpy.html>`__ |                   |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| to_period              | X                 |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| to_pickle              | X                 |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| to_sql                 | X                 |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| `to_string <https:/    | O                 | ``min_rows``                                        |
-| /spark.apache.org/docs |                   |                                                     |
-| /latest/api/python/ref |                   |                                                     |
-| erence/pyspark.pandas/ |                   |                                                     |
-| api/pyspark.pandas.Ser |                   |                                                     |
-| ies.to_string.html>`__ |                   |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| to_timestamp           | X                 |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| to_xarray              | X                 |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| tolist                 | X                 |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| `transform <https:/    | O                 |                                                     |
-| /spark.apache.org/docs |                   |                                                     |
-| /latest/api/python/ref |                   |                                                     |
-| erence/pyspark.pandas/ |                   |                                                     |
-| api/pyspark.pandas.Ser |                   |                                                     |
-| ies.transform.html>`__ |                   |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| `transpose <https:/    | O                 |                                                     |
-| /spark.apache.org/docs |                   |                                                     |
-| /latest/api/python/ref |                   |                                                     |
-| erence/pyspark.pandas/ |                   |                                                     |
-| api/pyspark.pandas.Ser |                   |                                                     |
-| ies.transpose.html>`__ |                   |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| `truediv <https        | O                 | ``fill_value``, ``level``                           |
-| ://spark.apache.org/do |                   |                                                     |
-| cs/latest/api/python/r |                   |                                                     |
-| eference/pyspark.panda |                   |                                                     |
-| s/api/pyspark.pandas.S |                   |                                                     |
-| eries.truediv.html>`__ |                   |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| `truncate <https:      | O                 |                                                     |
-| //spark.apache.org/doc |                   |                                                     |
-| s/latest/api/python/re |                   |                                                     |
-| ference/pyspark.pandas |                   |                                                     |
-| /api/pyspark.pandas.Se |                   |                                                     |
-| ries.truncate.html>`__ |                   |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| tshift                 | X                 |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| tz_convert             | X                 |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| tz_localize            | X                 |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| `unique <http          | O                 |                                                     |
-| s://spark.apache.org/d |                   |                                                     |
-| ocs/latest/api/python/ |                   |                                                     |
-| reference/pyspark.pand |                   |                                                     |
-| as/api/pyspark.pandas. |                   |                                                     |
-| Series.unique.html>`__ |                   |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| `unstack <https        | O                 | ``fill_value``                                      |
-| ://spark.apache.org/do |                   |                                                     |
-| cs/latest/api/python/r |                   |                                                     |
-| eference/pyspark.panda |                   |                                                     |
-| s/api/pyspark.pandas.S |                   |                                                     |
-| eries.unstack.html>`__ |                   |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| `update <http          | O                 |                                                     |
-| s://spark.apache.org/d |                   |                                                     |
-| ocs/latest/api/python/ |                   |                                                     |
-| reference/pyspark.pand |                   |                                                     |
-| as/api/pyspark.pandas. |                   |                                                     |
-| Series.update.html>`__ |                   |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| `va                    | O                 |                                                     |
-| lue_counts <https://sp |                   |                                                     |
-| ark.apache.org/docs/la |                   |                                                     |
-| test/api/python/refere |                   |                                                     |
-| nce/pyspark.pandas/api |                   |                                                     |
-| /pyspark.pandas.Series |                   |                                                     |
-| .value_counts.html>`__ |                   |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| `values <http          | O                 |                                                     |
-| s://spark.apache.org/d |                   |                                                     |
-| ocs/latest/api/python/ |                   |                                                     |
-| reference/pyspark.pand |                   |                                                     |
-| as/api/pyspark.pandas. |                   |                                                     |
-| Series.values.html>`__ |                   |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| `var <h                | O                 | ``skipna``, ``level``                               |
-| ttps://spark.apache.or |                   |                                                     |
-| g/docs/latest/api/pyth |                   |                                                     |
-| on/reference/pyspark.p |                   |                                                     |
-| andas/api/pyspark.pand |                   |                                                     |
-| as.Series.var.html>`__ |                   |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| view                   | X                 |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| `where <htt            | O                 | ``inplace``, ``axis``, ``level``, ``errors``        |
-| ps://spark.apache.org/ |                   |                                                     |
-| docs/latest/api/python |                   |                                                     |
-| /reference/pyspark.pan |                   |                                                     |
-| das/api/pyspark.pandas |                   |                                                     |
-| .Series.where.html>`__ |                   |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
-| `xs <h                 | O                 | ``axis``, ``drop_level``                            |
-| ttps://spark.apache.o  |                   |                                                     |
-| rg/docs/latest/api/pyt |                   |                                                     |
-| hon/reference/pyspark. |                   |                                                     |
-| pandas/api/pyspark.pan |                   |                                                     |
-| das.Series.xs.html>`__ |                   |                                                     |
-+------------------------+-------------------+-----------------------------------------------------+
+.. currentmodule:: pyspark.pandas.Series
+
++---------------------------------+-------------------+-------------------------------------------+
+| API                             | Implemented       | Missing parameters                        |
++=================================+===================+===========================================+
+| :func:`T`                       | O                 |                                           |
++---------------------------------+-------------------+-------------------------------------------+
+| :func:`abs`                     | O                 |                                           |
++---------------------------------+-------------------+-------------------------------------------+
+| :func:`add`                     | O                 |                                           |
++---------------------------------+-------------------+-------------------------------------------+
+| :func:`add_prefix`              | O                 |                                           |
++---------------------------------+-------------------+-------------------------------------------+
+| :func:`add_suffix`              | O                 |                                           |
++---------------------------------+-------------------+-------------------------------------------+
+| :func:`agg`                     | O                 | ``axis``                                  |
++---------------------------------+-------------------+-------------------------------------------+
+| :func:`aggregate`               | O                 | ``axis``                                  |
++---------------------------------+-------------------+-------------------------------------------+
+| :func:`align`                   | O                 | ``level``, ``fill_value``, ``method``,    |
+|                                 |                   | ``limit``, ``fill_axis``                  |
++---------------------------------+-------------------+-------------------------------------------+
+| :func:`all`                     | O                 | ``bool_only``, ``skipna``, ``level``      |
++---------------------------------+-------------------+-------------------------------------------+
+| :func:`any`                     | O                 | ``bool_only``, ``skipna``, ``level``      |
++---------------------------------+-------------------+-------------------------------------------+
+| :func:`append`                  | O                 |                                           |
++---------------------------------+-------------------+-------------------------------------------+
+| :func:`apply`                   | O                 | ``convert_dtype``                         |
++---------------------------------+-------------------+-------------------------------------------+
+| :func:`argmax`                  | O                 | ``axis``, ``skipna``                      |
++---------------------------------+-------------------+-------------------------------------------+
+| :func:`argmin`                  | O                 | ``axis``, ``skipna``                      |
++---------------------------------+-------------------+-------------------------------------------+
+| :func:`argsort`                 | O                 | ``axis``, ``kind``, ``order``             |
++---------------------------------+-------------------+-------------------------------------------+
+| array                           | X                 |                                           |
++---------------------------------+-------------------+-------------------------------------------+
+| asfreq                          | X                 |                                           |
++---------------------------------+-------------------+-------------------------------------------+
+| :func:`asof`                    | O                 | ``subset``                                |
++---------------------------------+-------------------+-------------------------------------------+
+| :func:`astype`                  | O                 | ``copy``, ``errors``                      |
++---------------------------------+-------------------+-------------------------------------------+
+| :func:`at`                      | O                 |                                           |
++---------------------------------+-------------------+-------------------------------------------+
+| :func:`at_time`                 | O                 |                                           |
++---------------------------------+-------------------+-------------------------------------------+
+| attrs                           | X                 |                                           |
++---------------------------------+-------------------+-------------------------------------------+
+| autocorr                        | X                 |                                           |
++---------------------------------+-------------------+-------------------------------------------+
+| :func:`axes`                    | O                 |                                           |
++---------------------------------+-------------------+-------------------------------------------+
+| :func:`backfill`                | O                 |                                           |
++---------------------------------+-------------------+-------------------------------------------+
+| :func:`between`                 | O                 |                                           |
++---------------------------------+-------------------+-------------------------------------------+
+| :func:`between_time`            | O                 | ``inclusive``                             |
++---------------------------------+-------------------+-------------------------------------------+
+| :func:`bfill`                   | O                 |                                           |
++---------------------------------+-------------------+-------------------------------------------+
+| :func:`bool`                    | O                 |                                           |
++---------------------------------+-------------------+-------------------------------------------+
+| :func:`cat`                     | O                 |                                           |
++---------------------------------+-------------------+-------------------------------------------+
+| :func:`clip`                    | O                 | ``axis``                                  |
++---------------------------------+-------------------+-------------------------------------------+
+| combine                         | X                 |                                           |
++---------------------------------+-------------------+-------------------------------------------+
+| :func:`combine_first`           | O                 |                                           |
++---------------------------------+-------------------+-------------------------------------------+
+| :func:`compare`                 | O                 | ``align_axis``                            |
++---------------------------------+-------------------+-------------------------------------------+
+| convert_dtypes                  | X                 |                                           |
++---------------------------------+-------------------+-------------------------------------------+
+| :func:`copy`                    | O                 |                                           |
++---------------------------------+-------------------+-------------------------------------------+
+| :func:`corr`                    | O                 |                                           |
++---------------------------------+-------------------+-------------------------------------------+
+| :func:`count`                   | O                 |                                           |
++---------------------------------+-------------------+-------------------------------------------+
+| :func:`cov`                     | O                 | ``ddof``                                  |
++---------------------------------+-------------------+-------------------------------------------+
+| :func:`cummax`                  | O                 | ``axis``                                  |
++---------------------------------+-------------------+-------------------------------------------+
+| :func:`cummin`                  | O                 | ``axis``                                  |
++---------------------------------+-------------------+-------------------------------------------+
+| :func:`cumprod`                 | O                 | ``axis``                                  |
++---------------------------------+-------------------+-------------------------------------------+
+| :func:`cumsum`                  | O                 | ``axis``                                  |
++---------------------------------+-------------------+-------------------------------------------+
+| :func:`describe`                | O                 | ``include``, ``exclude``,                 |
+|                                 |                   | ``datetime_is_numeric``                   |
++---------------------------------+-------------------+-------------------------------------------+
+| :func:`diff`                    | O                 |                                           |
++---------------------------------+-------------------+-------------------------------------------+
+| :func:`div`                     | O                 | ``fill_value``, ``level``                 |
++---------------------------------+-------------------+-------------------------------------------+
+| :func:`divide`                  | O                 | ``fill_value``, ``level``                 |
++---------------------------------+-------------------+-------------------------------------------+
+| :func:`divmod`                  | O                 | ``fill_value``, ``level``                 |
++---------------------------------+-------------------+-------------------------------------------+
+| :func:`dot`                     | O                 |                                           |
++---------------------------------+-------------------+-------------------------------------------+
+| :func:`drop`                    | O                 | ``columns``, ``inplace``, ``errors``      |
++---------------------------------+-------------------+-------------------------------------------+
+| :func:`drop_duplicates`         | O                 |                                           |
++---------------------------------+-------------------+-------------------------------------------+
+| :func:`droplevel`               | O                 | ``axis``                                  |
++---------------------------------+-------------------+-------------------------------------------+
+| :func:`dropna`                  | O                 |                                           |
++---------------------------------+-------------------+-------------------------------------------+
+| :func:`dt`                      | O                 |                                           |
++---------------------------------+-------------------+-------------------------------------------+
+| :func:`dtype`                   | O                 |                                           |
++---------------------------------+-------------------+-------------------------------------------+
+| :func:`dtypes`                  | O                 |                                           |
++---------------------------------+-------------------+-------------------------------------------+
+| :func:`duplicated`              | O                 |                                           |
++---------------------------------+-------------------+-------------------------------------------+
+| :func:`empty`                   | O                 |                                           |
++---------------------------------+-------------------+-------------------------------------------+
+| :func:`eq`                      | O                 |                                           |
++---------------------------------+-------------------+-------------------------------------------+
+| :func:`equals`                  | O                 |                                           |
++---------------------------------+-------------------+-------------------------------------------+
+| :func:`ewm`                     | O                 | ``adjust``, ``ignore_na``, ``axis``,      |
+|                                 |                   | ``method``                                |
++---------------------------------+-------------------+-------------------------------------------+
+| :func:`expanding`               | O                 |                                           |
++---------------------------------+-------------------+-------------------------------------------+
+| :func:`explode`                 | O                 |                                           |
++---------------------------------+-------------------+-------------------------------------------+
+| :func:`factorize`               | O                 |                                           |
++---------------------------------+-------------------+-------------------------------------------+
+| :func:`ffill`                   | O                 |                                           |
++---------------------------------+-------------------+-------------------------------------------+
+| :func:`fillna`                  | O                 | ``downcast``                              |
++---------------------------------+-------------------+-------------------------------------------+
+| :func:`filter`                  | O                 |                                           |
++---------------------------------+-------------------+-------------------------------------------+
+| :func:`first`                   | O                 |                                           |
++---------------------------------+-------------------+-------------------------------------------+
+| :func:`first_valid_index`       | O                 |                                           |
++---------------------------------+-------------------+-------------------------------------------+
+| flags                           | X                 |                                           |
++---------------------------------+-------------------+-------------------------------------------+
+| :func:`floordiv`                | O                 | ``fill_value``, ``level``                 |
++---------------------------------+-------------------+-------------------------------------------+
+| :func:`ge`                      | O                 | ``fill_value``, ``level``                 |
++---------------------------------+-------------------+-------------------------------------------+
+| :func:`get`                     | O                 |                                           |
++---------------------------------+-------------------+-------------------------------------------+
+| :func:`groupby`                 | O                 |                                           |
++---------------------------------+-------------------+-------------------------------------------+
+| :func:`gt`                      | O                 | ``fill_value``, ``level``                 |
++---------------------------------+-------------------+-------------------------------------------+
+| :func:`hasnans`                 | O                 |                                           |
++---------------------------------+-------------------+-------------------------------------------+
+| :func:`head`                    | O                 |                                           |
++---------------------------------+-------------------+-------------------------------------------+
+| :func:`hist`                    | O                 |                                           |
++---------------------------------+-------------------+-------------------------------------------+
+| :func:`iat`                     | O                 |                                           |
++---------------------------------+-------------------+-------------------------------------------+
+| :func:`idxmax`                  | O                 | ``axis``                                  |
++---------------------------------+-------------------+-------------------------------------------+
+| :func:`idxmin`                  | O                 | ``axis``                                  |
++---------------------------------+-------------------+-------------------------------------------+
+| :func:`iloc`                    | O                 |                                           |
++---------------------------------+-------------------+-------------------------------------------+
+| :func:`index`                   | O                 |                                           |
++---------------------------------+-------------------+-------------------------------------------+
+| infer_objects                   | X                 |                                           |
++---------------------------------+-------------------+-------------------------------------------+
+| :func:`interpolate`             | O                 | ``axis``, ``inplace``,                    |
+|                                 |                   | ``limit_direction``, ``limit_area``,      |
+|                                 |                   | ``downcast``                              |
++---------------------------------+-------------------+-------------------------------------------+
+| :func:`is_monotonic`            | O                 |                                           |
++---------------------------------+-------------------+-------------------------------------------+
+| :func:`is_monotonic_decreasing` | O                 |                                           |
++------------------------+-------------------+----------------------------------------------------+
+| :func:`is_monotonic_increasing` | O                 |                                           |
++---------------------------------+-------------------+-------------------------------------------+
+| :func:`is_unique`               | O                 |                                           |
++---------------------------------+-------------------+-------------------------------------------+
+| :func:`isin`                    | O                 |                                           |
++---------------------------------+-------------------+-------------------------------------------+
+| :func:`isna`                    | O                 |                                           |
++---------------------------------+-------------------+-------------------------------------------+
+| :func:`isnull`                  | O                 |                                           |
++---------------------------------+-------------------+-------------------------------------------+
+| :func:`item`                    | O                 |                                           |
++---------------------------------+-------------------+-------------------------------------------+
+| :func:`items`                   | O                 |                                           |
++---------------------------------+-------------------+-------------------------------------------+
+| :func:`iteritems`               | O                 |                                           |
++---------------------------------+-------------------+-------------------------------------------+
+| :func:`keys`                    | O                 |                                           |
++---------------------------------+-------------------+-------------------------------------------+
+| :func:`kurt`                    | O                 | ``skipna``, ``level``                     |
++---------------------------------+-------------------+-------------------------------------------+
+| :func:`kurtosis`                | O                 | ``skipna``, ``level``                     |
++---------------------------------+-------------------+-------------------------------------------+
+| :func:`last`                    | O                 |                                           |
++---------------------------------+-------------------+-------------------------------------------+
+| :func:`last_valid_index`        | O                 |                                           |
++---------------------------------+-------------------+-------------------------------------------+
+| :func:`le`                      | O                 | ``fill_value``, ``level``                 |
++---------------------------------+-------------------+-------------------------------------------+
+| :func:`loc`                     | O                 |                                           |
++---------------------------------+-------------------+-------------------------------------------+
+| :func:`lt`                      | O                 | ``fill_value``, ``level``                 |
++---------------------------------+-------------------+-------------------------------------------+
+| :func:`mad`                     | O                 | ``axis``, ``skipna``, ``level``           |
++---------------------------------+-------------------+-------------------------------------------+
+| :func:`map`                     | O                 |                                           |
++---------------------------------+-------------------+-------------------------------------------+
+| :func:`mask`                    | O                 | ``inplace``, ``axis``, ``level``,         |
+|                                 |                   | ``errors``                                |
++---------------------------------+-------------------+-------------------------------------------+
+| :func:`max`                     | O                 | ``skipna``, ``level``                     |
++---------------------------------+-------------------+-------------------------------------------+
+| :func:`mean`                    | O                 | ``skipna``, ``level``                     |
++---------------------------------+-------------------+-------------------------------------------+
+| :func:`median`                  | O                 | ``skipna``, ``level``                     |
++---------------------------------+-------------------+-------------------------------------------+
+| memory_usage                    | X                 |                                           |
++---------------------------------+-------------------+-------------------------------------------+
+| :func:`min`                     | O                 | ``skipna``, ``level``                     |
++---------------------------------+-------------------+-------------------------------------------+
+| :func:`mod`                     | O                 | ``fill_value``, ``level``                 |
++---------------------------------+-------------------+-------------------------------------------+
+| :func:`mode`                    | O                 |                                           |
++---------------------------------+-------------------+-------------------------------------------+
+| :func:`mul`                     | O                 | ``fill_value``, ``level``                 |
++---------------------------------+-------------------+-------------------------------------------+
+| :func:`multiply`                | O                 | ``fill_value``, ``level``                 |
++---------------------------------+-------------------+-------------------------------------------+
+| :func:`name`                    | O                 |                                           |
++---------------------------------+-------------------+-------------------------------------------+
+| nbytes                          | X                 |                                           |
++---------------------------------+-------------------+-------------------------------------------+
+| :func:`ndim`                    | O                 |                                           |
++---------------------------------+-------------------+-------------------------------------------+
+| :func:`ne`                      | O                 | ``fill_value``, ``level``                 |
++---------------------------------+-------------------+-------------------------------------------+
+| :func:`nlargest`                | O                 | ``keep``                                  |
++---------------------------------+-------------------+-------------------------------------------+
+| :func:`notna`                   | O                 |                                           |
++---------------------------------+-------------------+-------------------------------------------+
+| :func:`notnull`                 | O                 |                                           |
++---------------------------------+-------------------+-------------------------------------------+
+| :func:`nsmallest`               | O                 | ``keep``                                  |
++---------------------------------+-------------------+-------------------------------------------+
+| :func:`nunique`                 | O                 |                                           |
++---------------------------------+-------------------+-------------------------------------------+
+| :func:`pad`                     | O                 | ``downcast``                              |
++---------------------------------+-------------------+-------------------------------------------+
+| :func:`pct_change`              | O                 | ``fill_method``, ``limit``, ``freq``      |
++---------------------------------+-------------------+-------------------------------------------+
+| :func:`pipe`                    | O                 |                                           |
++---------------------------------+-------------------+-------------------------------------------+
+| :func:`plot.area`               | O                 |                                           |
++---------------------------------+-------------------+-------------------------------------------+
+| :func:`plot.bar`                | O                 |                                           |
++---------------------------------+-------------------+-------------------------------------------+
+| :func:`plot.barh`               | O                 |                                           |
++---------------------------------+-------------------+-------------------------------------------+
+| :func:`plot.box`                | O                 |                                           |
++---------------------------------+-------------------+-------------------------------------------+
+| :func:`plot.density`            | O                 |                                           |
++---------------------------------+-------------------+-------------------------------------------+
+| :func:`plot.hist`               | O                 |                                           |
++---------------------------------+-------------------+-------------------------------------------+
+| :func:`plot.kde`                | O                 |                                           |
++---------------------------------+-------------------+-------------------------------------------+
+| :func:`plot.line`               | O                 |                                           |
++---------------------------------+-------------------+-------------------------------------------+
+| :func:`plot.pie`                | O                 |                                           |
++---------------------------------+-------------------+-------------------------------------------+
+| :func:`pop`                     | O                 |                                           |
++---------------------------------+-------------------+-------------------------------------------+
+| :func:`pow`                     | O                 | ``fill_value``, ``level``                 |
++---------------------------------+-------------------+-------------------------------------------+
+| :func:`prod`                    | O                 | ``skipna``, ``level``                     |
++---------------------------------+-------------------+-------------------------------------------+
+| :func:`product`                 | O                 | ``skipna``, ``level``                     |
++---------------------------------+-------------------+-------------------------------------------+
+| :func:`quantile`                | O                 | ``interpolation``                         |
++---------------------------------+-------------------+-------------------------------------------+
+| :func:`radd`                    | O                 | ``fill_value``, ``level``                 |
++---------------------------------+-------------------+-------------------------------------------+
+| :func:`rank`                    | O                 | ``axis``, ``na_option``, ``pct``          |
++---------------------------------+-------------------+-------------------------------------------+
+| ravel                           | X                 |                                           |
++---------------------------------+-------------------+-------------------------------------------+
+| :func:`rdiv`                    | O                 | ``fill_value``, ``level``                 |
++---------------------------------+-------------------+-------------------------------------------+
+| :func:`rdivmod`                 | O                 | ``fill_value``, ``level``                 |
++---------------------------------+-------------------+-------------------------------------------+
+| :func:`reindex`                 | O                 | ``method``, ``copy``, ``level``,          |
+|                                 |                   | ``limit``, ``tolerance``                  |
++---------------------------------+-------------------+-------------------------------------------+
+| :func:`reindex_like`            | O                 | ``method``, ``copy``, ``limit``,          |
+|                                 |                   | ``tolerance``                             |
++---------------------------------+-------------------+-------------------------------------------+
+| :func:`rename`                  | O                 | ``axis``                                  |
++---------------------------------+-------------------+-------------------------------------------+
+| :func:`rename_axis`             | O                 | ``axis``, ``copy``, ``inplace``           |
++---------------------------------+-------------------+-------------------------------------------+
+| reorder_levels                  | X                 |                                           |
++---------------------------------+-------------------+-------------------------------------------+
+| :func:`repeat`                  | O                 | ``axis``                                  |
++---------------------------------+-------------------+-------------------------------------------+
+| :func:`replace`                 | O                 | ``inplace``, ``limit``, ``regex``,        |
+|                                 |                   | ``method``                                |
++---------------------------------+-------------------+-------------------------------------------+
+| resample                        | X                 |                                           |
++---------------------------------+-------------------+-------------------------------------------+
+| :func:`reset_index`             | O                 |                                           |
++---------------------------------+-------------------+-------------------------------------------+
+| :func:`rfloordiv`               | O                 | ``fill_value``, ``level``                 |
++---------------------------------+-------------------+-------------------------------------------+
+| :func:`rmod`                    | O                 | ``fill_value``, ``level``                 |
++---------------------------------+-------------------+-------------------------------------------+
+| :func:`rmul`                    | O                 | ``fill_value``, ``level``                 |
++---------------------------------+-------------------+-------------------------------------------+
+| :func:`rolling`                 | O                 |                                           |
++---------------------------------+-------------------+-------------------------------------------+
+| :func:`round`                   | O                 |                                           |
++---------------------------------+-------------------+-------------------------------------------+
+| :func:`rpow`                    | O                 | ``fill_value``, ``level``                 |
++---------------------------------+-------------------+-------------------------------------------+
+| :func:`rsub`                    | O                 | ``fill_value``, ``level``                 |
++---------------------------------+-------------------+-------------------------------------------+
+| :func:`rtruediv`                | O                 | ``fill_value``, ``level``                 |
++---------------------------------+-------------------+-------------------------------------------+
+| :func:`sample`                  | O                 | ``weight``, ``axis``                      |
++---------------------------------+-------------------+-------------------------------------------+
+| searchsorted                    | X                 |                                           |
++---------------------------------+-------------------+-------------------------------------------+
+| :func:`sem`                     | O                 | ``skipna``, ``level``                     |
++---------------------------------+-------------------+-------------------------------------------+
+| set_axis                        | X                 |                                           |
++---------------------------------+-------------------+-------------------------------------------+
+| set_flags                       | X                 |                                           |
++---------------------------------+-------------------+-------------------------------------------+
+| :func:`shape`                   | O                 |                                           |
++---------------------------------+-------------------+-------------------------------------------+
+| :func:`shift`                   | O                 | ``freq``, ``axis``                        |
++---------------------------------+-------------------+-------------------------------------------+
+| :func:`size`                    | O                 |                                           |
++---------------------------------+-------------------+-------------------------------------------+
+| :func:`skew`                    | O                 | ``skipna``, ``level``                     |
++---------------------------------+-------------------+-------------------------------------------+
+| slice_shift                     | X                 |                                           |
++---------------------------------+-------------------+-------------------------------------------+
+| :func:`sort_index`              | O                 | ``sort_remaining``, ``ignore_index``,     |
+|                                 |                   | ``key``                                   |
++---------------------------------+-------------------+-------------------------------------------+
+| :func:`sort_values`             | O                 | ``axis``, ``kind``, ``key``               |
++---------------------------------+-------------------+-------------------------------------------+
+| sparse                          | X                 |                                           |
++---------------------------------+-------------------+-------------------------------------------+
+| :func:`squeeze`                 | O                 |                                           |
++---------------------------------+-------------------+-------------------------------------------+
+| :func:`std`                     | O                 | ``skipna``, ``level``                     |
++---------------------------------+-------------------+-------------------------------------------+
+| :func:`str`                     | O                 |                                           |
++---------------------------------+-------------------+-------------------------------------------+
+| :func:`sub`                     | O                 | ``fill_value``, ``level``                 |
++---------------------------------+-------------------+-------------------------------------------+
+| :func:`subtract`                | O                 | ``fill_value``, ``level``                 |
++---------------------------------+-------------------+-------------------------------------------+
+| :func:`sum`                     | O                 | ``fill_value``, ``level``                 |
++---------------------------------+-------------------+-------------------------------------------+
+| :func:`swaplevel`               | O                 |                                           |
++---------------------------------+-------------------+-------------------------------------------+
+| :func:`tail`                    | O                 |                                           |
++---------------------------------+-------------------+-------------------------------------------+
+| :func:`take`                    | O                 | ``axis``                                  |
++---------------------------------+-------------------+-------------------------------------------+
+| :func:`to_clipboard`            | O                 |                                           |
++---------------------------------+-------------------+-------------------------------------------+
+| :func:`to_csv`                  | O                 | ``encoding``, ``compression``,            |
+|                                 |                   | ``quoting``, ``line_terminator``,         |
+|                                 |                   | ``cunksize`` and more. See the `pandas.Se |
+|                                 |                   | ries.to_csv <https://pandas.pydata.org/do |
+|                                 |                   | cs/reference/api/pandas.Series.to_csv.htm |
+|                                 |                   | l>`__ and `pyspark.pandas.Series.to_c     |
+|                                 |                   | sv <https://spark.apache.org/docs/latest/ |
+|                                 |                   | api/python/reference/pyspark.pandas/api/p |
+|                                 |                   | yspark.pandas.Series.to_csv.html>`__ fo   |
+|                                 |                   | r detail.                                 |
++---------------------------------+-------------------+-------------------------------------------+
+| :func:`to_dict`                 | O                 |                                           |
++---------------------------------+-------------------+-------------------------------------------+
+| :func:`to_excel`                | O                 | ``storage_options``                       |
++---------------------------------+-------------------+-------------------------------------------+
+| :func:`to_frame`                | O                 |                                           |
++---------------------------------+-------------------+-------------------------------------------+
+| to_hdf                          | X                 |                                           |
++---------------------------------+-------------------+-------------------------------------------+
+| :func:`to_json`                 | O                 | ``date_format``, ``double_precision``,    |
+|                                 |                   | ``force_ascii``, ``default_handler``,     |
+|                                 |                   | ``storage_options``                       |
++---------------------------------+-------------------+-------------------------------------------+
+| :func:`to_latex`                | O                 | ``caption``, ``label``, ``position``      |
++---------------------------------+-------------------+-------------------------------------------+
+| :func:`to_list`                 | O                 |                                           |
++---------------------------------+-------------------+-------------------------------------------+
+| :func:`to_markdown`             | O                 | ``storage_options``                       |
++---------------------------------+-------------------+-------------------------------------------+
+| :func:`to_numpy`                | O                 |                                           |
++---------------------------------+-------------------+-------------------------------------------+
+| to_period                       | X                 |                                           |
++---------------------------------+-------------------+-------------------------------------------+
+| to_pickle                       | X                 |                                           |
++---------------------------------+-------------------+-------------------------------------------+
+| to_sql                          | X                 |                                           |
++---------------------------------+-------------------+-------------------------------------------+
+| :func:`to_string`               | O                 | ``min_rows``                              |
++---------------------------------+-------------------+-------------------------------------------+
+| to_timestamp                    | X                 |                                           |
++---------------------------------+-------------------+-------------------------------------------+
+| to_xarray                       | X                 |                                           |
++---------------------------------+-------------------+-------------------------------------------+
+| tolist                          | X                 |                                           |
++---------------------------------+-------------------+-------------------------------------------+
+| :func:`transform`               | O                 |                                           |
++---------------------------------+-------------------+-------------------------------------------+
+| :func:`transpose`               | O                 |                                           |
++---------------------------------+-------------------+-------------------------------------------+
+| :func:`truediv`                 | O                 | ``fill_value``, ``level``                 |
++---------------------------------+-------------------+-------------------------------------------+
+| :func:`truncate`                | O                 |                                           |
++---------------------------------+-------------------+-------------------------------------------+
+| tshift                          | X                 |                                           |
++---------------------------------+-------------------+-------------------------------------------+
+| tz_convert                      | X                 |                                           |
++---------------------------------+-------------------+-------------------------------------------+
+| tz_localize                     | X                 |                                           |
++---------------------------------+-------------------+-------------------------------------------+
+| :func:`unique`                  | O                 |                                           |
++---------------------------------+-------------------+-------------------------------------------+
+| :func:`unstack`                 | O                 | ``fill_value``                            |
++---------------------------------+-------------------+-------------------------------------------+
+| :func:`update`                  | O                 |                                           |
++---------------------------------+-------------------+-------------------------------------------+
+| :func:`value_counts`            | O                 |                                           |
++---------------------------------+-------------------+-------------------------------------------+
+| :func:`values`                  | O                 |                                           |
++---------------------------------+-------------------+-------------------------------------------+
+| :func:`var`                     | O                 | ``skipna``, ``level``                     |
++---------------------------------+-------------------+-------------------------------------------+
+| view                            | X                 |                                           |
++---------------------------------+-------------------+-------------------------------------------+
+| :func:`where`                   | O                 | ``inplace``, ``axis``, ``level``,         |
+|                                 |                   | ``errors``                                |
++---------------------------------+-------------------+-------------------------------------------+
+| :func:`xs`                      | O                 | ``axis``, ``drop_level``                  |
++---------------------------------+-------------------+-------------------------------------------+
 
 Supported Index APIs
 --------------------
 
+.. currentmodule:: pyspark.pandas.Index
+
 +-----------------------------------------+-------------+-----------------------------------------+
 | API                                     | Implemented | Missing parameters                      |
 +=========================================+=============+=========================================+
-| `T <https://spark.apache.org/docs/      | O           |                                         |
-| latest/api/python/reference/pyspark.pan |             |                                         |
-| das/api/pyspark.pandas.Index.T.html>`__ |             |                                         |
+| :func:`T`                               | O           |                                         |
 +-----------------------------------------+-------------+-----------------------------------------+
-| `all <https://spark.apache.org/docs/la  | O           |                                         |
-| test/api/python/reference/pyspark.panda |             |                                         |
-| s/api/pyspark.pandas.Index.all.html>`__ |             |                                         |
+| :func:`all`                             | O           |                                         |
 +-----------------------------------------+-------------+-----------------------------------------+
-| `any <https://spark.apache.org/docs/la  | O           |                                         |
-| test/api/python/reference/pyspark.panda |             |                                         |
-| s/api/pyspark.pandas.Index.any.html>`__ |             |                                         |
+| :func:`any`                             | O           |                                         |
 +-----------------------------------------+-------------+-----------------------------------------+
-| `appe                                   | O           |                                         |
-| nd <https://spark.apache.org/docs/lates |             |                                         |
-| t/api/python/reference/pyspark.pandas/a |             |                                         |
-| pi/pyspark.pandas.Index.append.html>`__ |             |                                         |
+| :func:`append`                          | O           |                                         |
 +-----------------------------------------+-------------+-----------------------------------------+
-| `argm                                   | O           | ``axis``                                |
-| ax <https://spark.apache.org/docs/lates |             |                                         |
-| t/api/python/reference/pyspark.pandas/a |             |                                         |
-| pi/pyspark.pandas.Index.argmax.html>`__ |             |                                         |
+| :func:`argmax`                          | O           | ``axis``                                |
 +-----------------------------------------+-------------+-----------------------------------------+
-| `argm                                   | O           | ``axis``                                |
-| in <https://spark.apache.org/docs/lates |             |                                         |
-| t/api/python/reference/pyspark.pandas/a |             |                                         |
-| pi/pyspark.pandas.Index.argmin.html>`__ |             |                                         |
+| :func:`argmin`                          | O           | ``axis``                                |
 +-----------------------------------------+-------------+-----------------------------------------+
 | argsort                                 | X           |                                         |
 +-----------------------------------------+-------------+-----------------------------------------+
 | array                                   | X           |                                         |
 +-----------------------------------------+-------------+-----------------------------------------+
-| `asi8 <https://                         | O           |                                         |
-| spark.apache.org/docs/lat               |             |                                         |
-| est/api/python/reference/pyspark.pandas |             |                                         |
-| /api/pyspark.pandas.Index.asi8.html>`__ |             |                                         |
+| :func:`asi8`                            | O           |                                         |
 +-----------------------------------------+-------------+-----------------------------------------+
-| `asof <https://                         | O           |                                         |
-| spark.apache.org/docs/lat               |             |                                         |
-| est/api/python/reference/pyspark.pandas |             |                                         |
-| /api/pyspark.pandas.Index.asof.html>`__ |             |                                         |
+| :func:`asof`                            | O           |                                         |
 +-----------------------------------------+-------------+-----------------------------------------+
 | asof_locs                               | X           |                                         |
 +-----------------------------------------+-------------+-----------------------------------------+
-| `asty                                   | O           | ``copy``                                |
-| pe <https://spark.apache.org/docs/lates |             |                                         |
-| t/api/python/reference/pyspark.pandas/a |             |                                         |
-| pi/pyspark.pandas.Index.astype.html>`__ |             |                                         |
+| :func:`astype`                          | O           | ``copy``                                |
 +-----------------------------------------+-------------+-----------------------------------------+
-| `copy <https://                         | O           |                                         |
-| spark.apache.org/docs/lat               |             |                                         |
-| est/api/python/reference/pyspark.pandas |             |                                         |
-| /api/pyspark.pandas.Index.copy.html>`__ |             |                                         |
+| :func:`copy`                            | O           |                                         |
 +-----------------------------------------+-------------+-----------------------------------------+
-| `dele                                   | O           |                                         |
-| te <https://spark.apache.org/docs/lates |             |                                         |
-| t/api/python/reference/pyspark.pandas/a |             |                                         |
-| pi/pyspark.pandas.Index.delete.html>`__ |             |                                         |
+| :func:`delete`                          | O           |                                         |
 +-----------------------------------------+-------------+-----------------------------------------+
-| `difference <h                          | O           |                                         |
-| ttps://spark.apache.org/docs/latest/ap  |             |                                         |
-| i/python/reference/pyspark.pandas/api/p |             |                                         |
-| yspark.pandas.Index.difference.html>`__ |             |                                         |
+| :func:`difference`                      | O           |                                         |
 +-----------------------------------------+-------------+-----------------------------------------+
-| `drop <https://                         | O           | ``errors``                              |
-| spark.apache.org/docs/lat               |             |                                         |
-| est/api/python/reference/pyspark.pandas |             |                                         |
-| /api/pyspark.pandas.Index.drop.html>`__ |             |                                         |
+| :func:`drop`                            | O           | ``errors``                              |
 +-----------------------------------------+-------------+-----------------------------------------+
-| `drop_duplicates <https                 | O           |                                         |
-| ://spark.apache.org/docs/latest/api/pyt |             |                                         |
-| hon/reference/pyspark.pandas/api/pyspar |             |                                         |
-| k.pandas.Index.drop_duplicates.html>`__ |             |                                         |
+| :func:`drop_duplicates`                 | O           |                                         |
 +-----------------------------------------+-------------+-----------------------------------------+
-| `droplevel <https://                    | O           |                                         |
-| spark.apache.org/docs/latest/a          |             |                                         |
-| pi/python/reference/pyspark.pandas/api/ |             |                                         |
-| pyspark.pandas.Index.droplevel.html>`__ |             |                                         |
+| :func:`droplevel`                       | O           |                                         |
 +-----------------------------------------+-------------+-----------------------------------------+
-| `drop                                   | O           | ``how``                                 |
-| na <https://spark.apache.org/docs/lates |             |                                         |
-| t/api/python/reference/pyspark.pandas/a |             |                                         |
-| pi/pyspark.pandas.Index.dropna.html>`__ |             |                                         |
+| :func:`dropna`                          | O           | ``how``                                 |
 +-----------------------------------------+-------------+-----------------------------------------+
-| `dt                                     | O           |                                         |
-| ype <https://spark.apache.org/docs/late |             |                                         |
-| st/api/python/reference/pyspark.pandas/ |             |                                         |
-| api/pyspark.pandas.Index.dtype.html>`__ |             |                                         |
+| :func:`dtype`                           | O           |                                         |
 +-----------------------------------------+-------------+-----------------------------------------+
 | duplicated                              | X           |                                         |
 +-----------------------------------------+-------------+-----------------------------------------+
-| `em                                     | O           |                                         |
-| pty <https://spark.apache.org/docs/late |             |                                         |
-| st/api/python/reference/pyspark.pandas/ |             |                                         |
-| api/pyspark.pandas.Index.empty.html>`__ |             |                                         |
+| :func:`empty`                           | O           |                                         |
 +-----------------------------------------+-------------+-----------------------------------------+
-| `equa                                   | O           |                                         |
-| ls <https://spark.apache.org/docs/lates |             |                                         |
-| t/api/python/reference/pyspark.pandas/a |             |                                         |
-| pi/pyspark.pandas.Index.equals.html>`__ |             |                                         |
+| :func:`equals`                          | O           |                                         |
 +-----------------------------------------+-------------+-----------------------------------------+
-| `factorize <https://                    | O           |                                         |
-| spark.apache.org/docs/latest/a          |             |                                         |
-| pi/python/reference/pyspark.pandas/api/ |             |                                         |
-| pyspark.pandas.Index.factorize.html>`__ |             |                                         |
+| :func:`factorize`                       | O           |                                         |
 +-----------------------------------------+-------------+-----------------------------------------+
-| `fill                                   | O           | ``downcast``                            |
-| na <https://spark.apache.org/docs/lates |             |                                         |
-| t/api/python/reference/pyspark.pandas/a |             |                                         |
-| pi/pyspark.pandas.Index.fillna.html>`__ |             |                                         |
+| :func:`fillna`                          | O           | ``downcast``                            |
 +-----------------------------------------+-------------+-----------------------------------------+
 | format                                  | X           |                                         |
 +-----------------------------------------+-------------+-----------------------------------------+
@@ -2789,179 +1241,83 @@ Supported Index APIs
 +-----------------------------------------+-------------+-----------------------------------------+
 | groupby                                 | X           |                                         |
 +-----------------------------------------+-------------+-----------------------------------------+
-| `has_duplicates <http                   | O           |                                         |
-| s://spark.apache.org/docs/latest/api/py |             |                                         |
-| thon/reference/pyspark.pandas/api/pyspa |             |                                         |
-| rk.pandas.Index.has_duplicates.html>`__ |             |                                         |
+| :func:`has_duplicates`                  | O           |                                         |
 +-----------------------------------------+-------------+-----------------------------------------+
-| `hasnan                                 | O           |                                         |
-| s <https://spark.apache.org/docs/latest |             |                                         |
-| /api/python/reference/pyspark.pandas/ap |             |                                         |
-| i/pyspark.pandas.Index.hasnans.html>`__ |             |                                         |
+| :func:`hasnans`                         | O           |                                         |
 +-----------------------------------------+-------------+-----------------------------------------+
 | holds_integer                           | X           |                                         |
 +-----------------------------------------+-------------+-----------------------------------------+
-| `identical <https://                    | O           |                                         |
-| spark.apache.org/docs/latest/a          |             |                                         |
-| pi/python/reference/pyspark.pandas/api/ |             |                                         |
-| pyspark.pandas.Index.identical.html>`__ |             |                                         |
+| :func:`identical`                       | O           |                                         |
 +-----------------------------------------+-------------+-----------------------------------------+
-| `inferred_type <htt                     | O           |                                         |
-| ps://spark.apache.org/docs/latest/api/p |             |                                         |
-| ython/reference/pyspark.pandas/api/pysp |             |                                         |
-| ark.pandas.Index.inferred_type.html>`__ |             |                                         |
+| :func:`inferred_type`                   | O           |                                         |
 +-----------------------------------------+-------------+-----------------------------------------+
-| `inse                                   | O           |                                         |
-| rt <https://spark.apache.org/docs/lates |             |                                         |
-| t/api/python/reference/pyspark.pandas/a |             |                                         |
-| pi/pyspark.pandas.Index.insert.html>`__ |             |                                         |
+| :func:`insert`                          | O           |                                         |
 +-----------------------------------------+-------------+-----------------------------------------+
-| `intersection <ht                       | O           | ``sort``                                |
-| tps://spark.apache.org/docs/latest/api/ |             |                                         |
-| python/reference/pyspark.pandas/api/pys |             |                                         |
-| park.pandas.Index.intersection.html>`__ |             |                                         |
+| :func:`intersection`                    | O           | ``sort``                                |
 +-----------------------------------------+-------------+-----------------------------------------+
 | is\_                                    | X           |                                         |
 +-----------------------------------------+-------------+-----------------------------------------+
-| `is_all_dates <ht                       | O           |                                         |
-| tps://spark.apache.org/docs/latest/api/ |             |                                         |
-| python/reference/pyspark.pandas/api/pys |             |                                         |
-| park.pandas.Index.is_all_dates.html>`__ |             |                                         |
+| :func:`is_all_dates`                    | O           |                                         |
 +-----------------------------------------+-------------+-----------------------------------------+
-| `is_boolean <h                          | O           |                                         |
-| ttps://spark.apache.org/docs/latest/ap  |             |                                         |
-| i/python/reference/pyspark.pandas/api/p |             |                                         |
-| yspark.pandas.Index.is_boolean.html>`__ |             |                                         |
+| :func:`is_boolean`                      | O           |                                         |
 +-----------------------------------------+-------------+-----------------------------------------+
-| `is_categorical <http                   | O           |                                         |
-| s://spark.apache.org/docs/latest/api/py |             |                                         |
-| thon/reference/pyspark.pandas/api/pyspa |             |                                         |
-| rk.pandas.Index.is_categorical.html>`__ |             |                                         |
+| :func:`is_categorical`                  | O           |                                         |
 +-----------------------------------------+-------------+-----------------------------------------+
-| `is_floating <h                         | O           |                                         |
-| ttps://spark.apache.org/docs/latest/api |             |                                         |
-| /python/reference/pyspark.pandas/api/py |             |                                         |
-| spark.pandas.Index.is_floating.html>`__ |             |                                         |
+| :func:`is_floating`                     | O           |                                         |
 +-----------------------------------------+-------------+-----------------------------------------+
-| `is_integer <h                          | O           |                                         |
-| ttps://spark.apache.org/docs/latest/ap  |             |                                         |
-| i/python/reference/pyspark.pandas/api/p |             |                                         |
-| yspark.pandas.Index.is_integer.html>`__ |             |                                         |
+| :func:`is_integer`                      | O           |                                         |
 +-----------------------------------------+-------------+-----------------------------------------+
-| `is_interval <h                         | O           |                                         |
-| ttps://spark.apache.org/docs/latest/api |             |                                         |
-| /python/reference/pyspark.pandas/api/py |             |                                         |
-| spark.pandas.Index.is_interval.html>`__ |             |                                         |
+| :func:`is_interval`                     | O           |                                         |
 +-----------------------------------------+-------------+-----------------------------------------+
 | is_mixed                                | X           |                                         |
 +-----------------------------------------+-------------+-----------------------------------------+
-| `is_monotonic <ht                       | O           |                                         |
-| tps://spark.apache.org/docs/latest/api/ |             |                                         |
-| python/reference/pyspark.pandas/api/pys |             |                                         |
-| park.pandas.Index.is_monotonic.html>`__ |             |                                         |
+| :func:`is_monotonic`                    | O           |                                         |
 +-----------------------------------------+-------------+-----------------------------------------+
-| `is_monotonic_decreasing <https://spark | O           |                                         |
-| .apache.org/docs/latest/api/python/refe |             |                                         |
-| rence/pyspark.pandas/api/pyspark.pandas |             |                                         |
-| .Index.is_monotonic_decreasing.html>`__ |             |                                         |
+| :func:`is_monotonic_decreasing`         | O           |                                         |
 +-----------------------------------------+-------------+-----------------------------------------+
-| `is_monotonic_increasing <https://spark | O           |                                         |
-| .apache.org/docs/latest/api/python/refe |             |                                         |
-| rence/pyspark.pandas/api/pyspark.pandas |             |                                         |
-| .Index.is_monotonic_increasing.html>`__ |             |                                         |
+| :func:`is_monotonic_increasing`         | O           |                                         |
 +-----------------------------------------+-------------+-----------------------------------------+
-| `is_numeric <h                          | O           |                                         |
-| ttps://spark.apache.org/docs/latest/ap  |             |                                         |
-| i/python/reference/pyspark.pandas/api/p |             |                                         |
-| yspark.pandas.Index.is_numeric.html>`__ |             |                                         |
+| :func:`is_numeric`                      | O           |                                         |
 +-----------------------------------------+-------------+-----------------------------------------+
-| `is_object <https://                    | O           |                                         |
-| spark.apache.org/docs/latest/a          |             |                                         |
-| pi/python/reference/pyspark.pandas/api/ |             |                                         |
-| pyspark.pandas.Index.is_object.html>`__ |             |                                         |
+| :func:`is_object`                       | O           |                                         |
 +-----------------------------------------+-------------+-----------------------------------------+
-| `is_type_compatible <https://           | O           |                                         |
-| spark.apache.org/docs/latest/api/python |             |                                         |
-| /reference/pyspark.pandas/api/pyspark.p |             |                                         |
-| andas.Index.is_type_compatible.html>`__ |             |                                         |
+| :func:`is_type_compatible`              | O           |                                         |
 +-----------------------------------------+-------------+-----------------------------------------+
-| `is_unique <https://                    | O           |                                         |
-| spark.apache.org/docs/latest/a          |             |                                         |
-| pi/python/reference/pyspark.pandas/api/ |             |                                         |
-| pyspark.pandas.Index.is_unique.html>`__ |             |                                         |
+| :func:`is_unique`                       | O           |                                         |
 +-----------------------------------------+-------------+-----------------------------------------+
-| `isin <https://                         | O           | ``level``                               |
-| spark.apache.org/docs/lat               |             |                                         |
-| est/api/python/reference/pyspark.pandas |             |                                         |
-| /api/pyspark.pandas.Index.isin.html>`__ |             |                                         |
+| :func:`isin`                            | O           | ``level``                               |
 +-----------------------------------------+-------------+-----------------------------------------+
-| `isna <https://                         | O           |                                         |
-| spark.apache.org/docs/lat               |             |                                         |
-| est/api/python/reference/pyspark.pandas |             |                                         |
-| /api/pyspark.pandas.Index.isna.html>`__ |             |                                         |
+| :func:`isna`                            | O           |                                         |
 +-----------------------------------------+-------------+-----------------------------------------+
-| `isnu                                   | O           |                                         |
-| ll <https://spark.apache.org/docs/lates |             |                                         |
-| t/api/python/reference/pyspark.pandas/a |             |                                         |
-| pi/pyspark.pandas.Index.isnull.html>`__ |             |                                         |
+| isnull                                  | X           |                                         |
 +-----------------------------------------+-------------+-----------------------------------------+
-| `item <https://                         | O           |                                         |
-| spark.apache.org/docs/lat               |             |                                         |
-| est/api/python/reference/pyspark.pandas |             |                                         |
-| /api/pyspark.pandas.Index.item.html>`__ |             |                                         |
+| :func:`item`                            | O           |                                         |
 +-----------------------------------------+-------------+-----------------------------------------+
 | join                                    | X           |                                         |
 +-----------------------------------------+-------------+-----------------------------------------+
-| `map <https://spark.apache.org/docs/la  | O           |                                         |
-| test/api/python/reference/pyspark.panda |             |                                         |
-| s/api/pyspark.pandas.Index.map.html>`__ |             |                                         |
+| :func:`map`                             | O           |                                         |
 +-----------------------------------------+-------------+-----------------------------------------+
-| `max <https://spark.apache.org/docs/la  | O           | ``axis``, ``skipna``                    |
-| test/api/python/reference/pyspark.panda |             |                                         |
-| s/api/pyspark.pandas.Index.max.html>`__ |             |                                         |
+| :func:`max`                             | O           | ``axis``, ``skipna``                    |
 +-----------------------------------------+-------------+-----------------------------------------+
 | memory_usage                            | X           |                                         |
 +-----------------------------------------+-------------+-----------------------------------------+
-| `min <https://spark.apache.org/docs/la  | O           | ``axis``, ``skipna``                    |
-| test/api/python/reference/pyspark.panda |             |                                         |
-| s/api/pyspark.pandas.Index.min.html>`__ |             |                                         |
+| :func:`min`                             | O           | ``axis``, ``skipna``                    |
 +-----------------------------------------+-------------+-----------------------------------------+
-| `na                                     | O           |                                         |
-| me <https://spark.apache.org/docs/lat   |             |                                         |
-| est/api/python/reference/pyspark.pandas |             |                                         |
-| /api/pyspark.pandas.Index.name.html>`__ |             |                                         |
+| :func:`name`                            | O           |                                         |
 +-----------------------------------------+-------------+-----------------------------------------+
-| `na                                     | O           |                                         |
-| mes <https://spark.apache.org/docs/late |             |                                         |
-| st/api/python/reference/pyspark.pandas/ |             |                                         |
-| api/pyspark.pandas.Index.names.html>`__ |             |                                         |
+| :func:`names`                           | O           |                                         |
 +-----------------------------------------+-------------+-----------------------------------------+
 | nbytes                                  | X           |                                         |
 +-----------------------------------------+-------------+-----------------------------------------+
-| `nd                                     | O           |                                         |
-| im <https://spark.apache.org/docs/lat   |             |                                         |
-| est/api/python/reference/pyspark.pandas |             |                                         |
-| /api/pyspark.pandas.Index.ndim.html>`__ |             |                                         |
+| :func:`ndim`                            | O           |                                         |
 +-----------------------------------------+-------------+-----------------------------------------+
-| `nlevel                                 | O           |                                         |
-| s <https://spark.apache.org/docs/latest |             |                                         |
-| /api/python/reference/pyspark.pandas/ap |             |                                         |
-| i/pyspark.pandas.Index.nlevels.html>`__ |             |                                         |
+| :func:`nlevels`                         | O           |                                         |
 +-----------------------------------------+-------------+-----------------------------------------+
-| `no                                     | O           |                                         |
-| tna <https://spark.apache.org/docs/late |             |                                         |
-| st/api/python/reference/pyspark.pandas/ |             |                                         |
-| api/pyspark.pandas.Index.notna.html>`__ |             |                                         |
+| :func:`notna`                           | O           |                                         |
 +-----------------------------------------+-------------+-----------------------------------------+
-| `notnul                                 | O           |                                         |
-| l <https://spark.apache.org/docs/latest |             |                                         |
-| /api/python/reference/pyspark.pandas/ap |             |                                         |
-| i/pyspark.pandas.Index.notnull.html>`__ |             |                                         |
+| :func:`notnull`                         | O           |                                         |
 +-----------------------------------------+-------------+-----------------------------------------+
-| `nuniqu                                 | O           |                                         |
-| e <https://spark.apache.org/docs/latest |             |                                         |
-| /api/python/reference/pyspark.pandas/ap |             |                                         |
-| i/pyspark.pandas.Index.nunique.html>`__ |             |                                         |
+| :func:`nunique`                         | O           |                                         |
 +-----------------------------------------+-------------+-----------------------------------------+
 | putmask                                 | X           |                                         |
 +-----------------------------------------+-------------+-----------------------------------------+
@@ -2969,113 +1325,60 @@ Supported Index APIs
 +-----------------------------------------+-------------+-----------------------------------------+
 | reindex                                 | X           |                                         |
 +-----------------------------------------+-------------+-----------------------------------------+
-| `rena                                   | O           |                                         |
-| me <https://spark.apache.org/docs/lates |             |                                         |
-| t/api/python/reference/pyspark.pandas/a |             |                                         |
-| pi/pyspark.pandas.Index.rename.html>`__ |             |                                         |
+| :func:`rename`                          | O           |                                         |
 +-----------------------------------------+-------------+-----------------------------------------+
-| `repe                                   | O           | ``axis``                                |
-| at <https://spark.apache.org/docs/lates |             |                                         |
-| t/api/python/reference/pyspark.pandas/a |             |                                         |
-| pi/pyspark.pandas.Index.repeat.html>`__ |             |                                         |
+| :func:`repeat`                          | O           | ``axis``                                |
 +-----------------------------------------+-------------+-----------------------------------------+
 | searchsorted                            | X           |                                         |
 +-----------------------------------------+-------------+-----------------------------------------+
-| `set_names <https://                    | O           |                                         |
-| spark.apache.org/docs/latest/a          |             |                                         |
-| pi/python/reference/pyspark.pandas/api/ |             |                                         |
-| pyspark.pandas.Index.set_names.html>`__ |             |                                         |
+| :func:`set_names`                       | O           |                                         |
 +-----------------------------------------+-------------+-----------------------------------------+
 | set_value                               | X           |                                         |
 +-----------------------------------------+-------------+-----------------------------------------+
-| `sh                                     | O           |                                         |
-| ape <https://spark.apache.org/docs/late |             |                                         |
-| st/api/python/reference/pyspark.pandas/ |             |                                         |
-| api/pyspark.pandas.Index.shape.html>`__ |             |                                         |
+| :func:`shape`                           | O           |                                         |
 +-----------------------------------------+-------------+-----------------------------------------+
-| `sh                                     | O           | ``freq``                                |
-| ift <https://spark.apache.org/docs/late |             |                                         |
-| st/api/python/reference/pyspark.pandas/ |             |                                         |
-| api/pyspark.pandas.Index.shift.html>`__ |             |                                         |
+| :func:`shift`                           | O           | ``freq``                                |
 +-----------------------------------------+-------------+-----------------------------------------+
-| `si                                     | O           |                                         |
-| ze <https://spark.apache.org/docs/lat   |             |                                         |
-| est/api/python/reference/pyspark.pandas |             |                                         |
-| /api/pyspark.pandas.Index.size.html>`__ |             |                                         |
+| :func:`size`                            | O           |                                         |
 +-----------------------------------------+-------------+-----------------------------------------+
 | slice_indexer                           | X           |                                         |
 +-----------------------------------------+-------------+-----------------------------------------+
 | slice_locs                              | X           |                                         |
 +-----------------------------------------+-------------+-----------------------------------------+
-| `sort_values <h                         | O           | ``na_position``, ``key``                |
-| ttps://spark.apache.org/docs/latest/api |             |                                         |
-| /python/reference/pyspark.pandas/api/py |             |                                         |
-| spark.pandas.Index.sort_values.html>`__ |             |                                         |
+| :func:`sort_values`                     | O           | ``na_position``, ``key``                |
 +-----------------------------------------+-------------+-----------------------------------------+
 | sortlevel                               | X           |                                         |
 +-----------------------------------------+-------------+-----------------------------------------+
-| `symmetric_difference <https://sp       | O           |                                         |
-| ark.apache.org/docs/latest/api/python/r |             |                                         |
-| eference/pyspark.pandas/api/pyspark.pan |             |                                         |
-| das.Index.symmetric_difference.html>`__ |             |                                         |
+| :func:`symmetric_difference`            | O           |                                         |
 +-----------------------------------------+-------------+-----------------------------------------+
-| `ta                                     | O           | ``axis``, ``allow_fill``,               |
-| ke <https://spark.apache.org/docs/lat   |             | ``fill_value``                          |
-| est/api/python/reference/pyspark.pandas |             |                                         |
-| /api/pyspark.pandas.Index.take.html>`__ |             |                                         |
+| :func:`take`                            | O           | ``axis``, ``allow_fill``,               |
+|                                         | O           | ``fill_value``                          |
 +-----------------------------------------+-------------+-----------------------------------------+
 | to_flat_index                           | X           |                                         |
 +-----------------------------------------+-------------+-----------------------------------------+
-| `to_frame <https://                     | O           |                                         |
-| spark.apache.org/docs/latest/           |             |                                         |
-| api/python/reference/pyspark.pandas/api |             |                                         |
-| /pyspark.pandas.Index.to_frame.html>`__ |             |                                         |
+| :func:`to_frame`                        | O           |                                         |
 +-----------------------------------------+-------------+-----------------------------------------+
-| `to_lis                                 | O           |                                         |
-| t <https://spark.apache.org/docs/latest |             |                                         |
-| /api/python/reference/pyspark.pandas/ap |             |                                         |
-| i/pyspark.pandas.Index.to_list.html>`__ |             |                                         |
+| :func:`to_list`                         | O           |                                         |
 +-----------------------------------------+-------------+-----------------------------------------+
 | to_native_types                         | X           |                                         |
 +-----------------------------------------+-------------+-----------------------------------------+
-| `to_numpy <https://                     | O           |                                         |
-| spark.apache.org/docs/latest/           |             |                                         |
-| api/python/reference/pyspark.pandas/api |             |                                         |
-| /pyspark.pandas.Index.to_numpy.html>`__ |             |                                         |
+| :func:`to_numpy`                        | O           |                                         |
 +-----------------------------------------+-------------+-----------------------------------------+
-| `to_series <https://                    | O           |                                         |
-| spark.apache.org/docs/latest/a          |             |                                         |
-| pi/python/reference/pyspark.pandas/api/ |             |                                         |
-| pyspark.pandas.Index.to_series.html>`__ |             |                                         |
+| :func:`to_series`                       | O           |                                         |
 +-----------------------------------------+-------------+-----------------------------------------+
 | tolist                                  | X           |                                         |
 +-----------------------------------------+-------------+-----------------------------------------+
 | transpose                               | X           |                                         |
 +-----------------------------------------+-------------+-----------------------------------------+
-| `un                                     | O           |                                         |
-| ion <https://spark.apache.org/docs/late |             |                                         |
-| st/api/python/reference/pyspark.pandas/ |             |                                         |
-| api/pyspark.pandas.Index.union.html>`__ |             |                                         |
+| :func:`union`                           | O           |                                         |
 +-----------------------------------------+-------------+-----------------------------------------+
-| `uniq                                   | O           |                                         |
-| ue <https://spark.apache.org/docs/lates |             |                                         |
-| t/api/python/reference/pyspark.pandas/a |             |                                         |
-| pi/pyspark.pandas.Index.unique.html>`__ |             |                                         |
+| :func:`unique`                          | O           |                                         |
 +-----------------------------------------+-------------+-----------------------------------------+
-| `value_counts <ht                       | O           |                                         |
-| tps://spark.apache.org/docs/latest/api/ |             |                                         |
-| python/reference/pyspark.pandas/api/pys |             |                                         |
-| park.pandas.Index.value_counts.html>`__ |             |                                         |
+| :func:`value_counts`                    | O           |                                         |
 +-----------------------------------------+-------------+-----------------------------------------+
-| `valu                                   | O           |                                         |
-| es <https://spark.apache.org/docs/lates |             |                                         |
-| t/api/python/reference/pyspark.pandas/a |             |                                         |
-| pi/pyspark.pandas.Index.values.html>`__ |             |                                         |
+| :func:`values`                          | O           |                                         |
 +-----------------------------------------+-------------+-----------------------------------------+
-| `vi                                     | O           |                                         |
-| ew <https://spark.apache.org/docs/lat   |             |                                         |
-| est/api/python/reference/pyspark.pandas |             |                                         |
-| /api/pyspark.pandas.Index.view.html>`__ |             |                                         |
+| :func:`view`                            | O           |                                         |
 +-----------------------------------------+-------------+-----------------------------------------+
 | where                                   | X           |                                         |
 +-----------------------------------------+-------------+-----------------------------------------+
@@ -3083,191 +1386,153 @@ Supported Index APIs
 Supported Window APIs
 ---------------------
 
-+---------------------------------------------------------------+-------------+--------------------+
-| API                                                           | Implemented | Missing parameters |
-+===============================================================+=============+====================+
-| rolling.agg                                                   | X           |                    |
-+---------------------------------------------------------------+-------------+--------------------+
-| rolling.aggregate                                             | X           |                    |
-+---------------------------------------------------------------+-------------+--------------------+
-| rolling.apply                                                 | X           |                    |
-+---------------------------------------------------------------+-------------+--------------------+
-| rolling.axis                                                  | X           |                    |
-+---------------------------------------------------------------+-------------+--------------------+
-| rolling.center                                                | X           |                    |
-+---------------------------------------------------------------+-------------+--------------------+
-| rolling.closed                                                | X           |                    |
-+---------------------------------------------------------------+-------------+--------------------+
-| rolling.corr                                                  | X           |                    |
-+---------------------------------------------------------------+-------------+--------------------+
-| `rolling.count <https://                                      | O           |                    |
-| spark.apache.org/docs/latest/api/python/reference/py          |             |                    |
-| spark.pandas/api/pyspark.pandas.window.Rolling.count.html>`__ |             |                    |
-+---------------------------------------------------------------+-------------+--------------------+
-| rolling.cov                                                   | X           |                    |
-+---------------------------------------------------------------+-------------+--------------------+
-| rolling.exclusions                                            | X           |                    |
-+---------------------------------------------------------------+-------------+--------------------+
-| rolling. is_datetimelike                                      | X           |                    |
-+---------------------------------------------------------------+-------------+--------------------+
-| rolling.kurt                                                  | X           |                    |
-+---------------------------------------------------------------+-------------+--------------------+
-| `rolling.ma                                                   | O           |                    |
-| x <https://spark.apache.org/docs/latest/api/python/reference/ |             |                    |
-| pyspark.pandas/api/pyspark.pandas.window.Rolling.max.html>`__ |             |                    |
-+---------------------------------------------------------------+-------------+--------------------+
-| `rolling.mean <https://                                       | O           |                    |
-| spark.apache.org/docs/latest/api/python/reference/p           |             |                    |
-| yspark.pandas/api/pyspark.pandas.window.Rolling.mean.html>`__ |             |                    |
-+---------------------------------------------------------------+-------------+--------------------+
-| rolling.median                                                | X           |                    |
-+---------------------------------------------------------------+-------------+--------------------+
-| rolling.method                                                | X           |                    |
-+---------------------------------------------------------------+-------------+--------------------+
-| `rolling.mi                                                   | O           |                    |
-| n <https://spark.apache.org/docs/latest/api/python/reference/ |             |                    |
-| pyspark.pandas/api/pyspark.pandas.window.Rolling.min.html>`__ |             |                    |
-+---------------------------------------------------------------+-------------+--------------------+
-| rolling.min_periods                                           | X           |                    |
-+---------------------------------------------------------------+-------------+--------------------+
-| rolling.ndim                                                  | X           |                    |
-+---------------------------------------------------------------+-------------+--------------------+
-| rolling.obj                                                   | X           |                    |
-+---------------------------------------------------------------+-------------+--------------------+
-| rolling.on                                                    | X           |                    |
-+---------------------------------------------------------------+-------------+--------------------+
-| rolling.quantile                                              | X           |                    |
-+---------------------------------------------------------------+-------------+--------------------+
-| rolling.sem                                                   | X           |                    |
-+---------------------------------------------------------------+-------------+--------------------+
-| rolling.skew                                                  | X           |                    |
-+---------------------------------------------------------------+-------------+--------------------+
-| rolling.std                                                   | X           |                    |
-+---------------------------------------------------------------+-------------+--------------------+
-| `rolling.su                                                   | O           |                    |
-| m <https://spark.apache.org/docs/latest/api/python/reference/ |             |                    |
-| pyspark.pandas/api/pyspark.pandas.window.Rolling.sum.html>`__ |             |                    |
-+---------------------------------------------------------------+-------------+--------------------+
-| rolling.validate                                              | X           |                    |
-+---------------------------------------------------------------+-------------+--------------------+
-| rolling.var                                                   | X           |                    |
-+---------------------------------------------------------------+-------------+--------------------+
-| rolling.win_type                                              | X           |                    |
-+---------------------------------------------------------------+-------------+--------------------+
-| rolling.window                                                | X           |                    |
-+---------------------------------------------------------------+-------------+--------------------+
-| expanding.agg                                                 | X           |                    |
-+---------------------------------------------------------------+-------------+--------------------+
-| expanding.aggregate                                           | X           |                    |
-+---------------------------------------------------------------+-------------+--------------------+
-| expanding.apply                                               | X           |                    |
-+---------------------------------------------------------------+-------------+--------------------+
-| expanding.axis                                                | X           |                    |
-+---------------------------------------------------------------+-------------+--------------------+
-| expanding.center                                              | X           |                    |
-+---------------------------------------------------------------+-------------+--------------------+
-| expanding.closed                                              | X           |                    |
-+---------------------------------------------------------------+-------------+--------------------+
-| expanding.corr                                                | X           |                    |
-+---------------------------------------------------------------+-------------+--------------------+
-| `expanding.count <h                                           | O           |                    |
-| ttps://spark.apache.org/docs/latest/api/python/reference/pysp |             |                    |
-| ark.pandas/api/pyspark.pandas.window.Expanding.count.html>`__ |             |                    |
-+---------------------------------------------------------------+-------------+--------------------+
-| expanding.cov                                                 | X           |                    |
-+---------------------------------------------------------------+-------------+--------------------+
-| expanding.exclusions                                          | X           |                    |
-+---------------------------------------------------------------+-------------+--------------------+
-| expanding.is_datetimelike                                     | X           |                    |
-+---------------------------------------------------------------+-------------+--------------------+
-| expanding.kurt                                                | X           |                    |
-+---------------------------------------------------------------+-------------+--------------------+
-| `expanding.max <https://                                      | O           |                    |
-| spark.apache.org/docs/latest/api/python/reference/py          |             |                    |
-| spark.pandas/api/pyspark.pandas.window.Expanding.max.html>`__ |             |                    |
-+---------------------------------------------------------------+-------------+--------------------+
-| `expanding.mean <h                                            | O           |                    |
-| ttps://spark.apache.org/docs/latest/api/python/reference/pys  |             |                    |
-| park.pandas/api/pyspark.pandas.window.Expanding.mean.html>`__ |             |                    |
-+---------------------------------------------------------------+-------------+--------------------+
-| expanding.median                                              | X           |                    |
-+---------------------------------------------------------------+-------------+--------------------+
-| expanding.method                                              | X           |                    |
-+---------------------------------------------------------------+-------------+--------------------+
-| `expanding.min <https://                                      | O           |                    |
-| spark.apache.org/docs/latest/api/python/reference/py          |             |                    |
-| spark.pandas/api/pyspark.pandas.window.Expanding.min.html>`__ |             |                    |
-+---------------------------------------------------------------+-------------+--------------------+
-| expanding.min_periods                                         | X           |                    |
-+---------------------------------------------------------------+-------------+--------------------+
-| expanding.ndim                                                | X           |                    |
-+---------------------------------------------------------------+-------------+--------------------+
-| expanding.obj                                                 | X           |                    |
-+---------------------------------------------------------------+-------------+--------------------+
-| expanding.on                                                  | X           |                    |
-+---------------------------------------------------------------+-------------+--------------------+
-| expanding.quantile                                            | X           |                    |
-+---------------------------------------------------------------+-------------+--------------------+
-| expanding.sem                                                 | X           |                    |
-+---------------------------------------------------------------+-------------+--------------------+
-| expanding.skew                                                | X           |                    |
-+---------------------------------------------------------------+-------------+--------------------+
-| expanding.std                                                 | X           |                    |
-+---------------------------------------------------------------+-------------+--------------------+
-| `expanding.sum <https://                                      | O           |                    |
-| spark.apache.org/docs/latest/api/python/reference/py          |             |                    |
-| spark.pandas/api/pyspark.pandas.window.Expanding.sum.html>`__ |             |                    |
-+---------------------------------------------------------------+-------------+--------------------+
-| expanding.validate                                            | X           |                    |
-+---------------------------------------------------------------+-------------+--------------------+
-| expanding.var                                                 | X           |                    |
-+---------------------------------------------------------------+-------------+--------------------+
-| expanding.win_type                                            | X           |                    |
-+---------------------------------------------------------------+-------------+--------------------+
-| expanding.window                                              | X           |                    |
-+---------------------------------------------------------------+-------------+--------------------+
+.. currentmodule:: pyspark.pandas.window
+
++--------------------------------------------------------------+-------------+--------------------+
+| API                                                          | Implemented | Missing parameters |
++==============================================================+=============+====================+
+| Rolling.agg                                                  | X           |                    |
++--------------------------------------------------------------+-------------+--------------------+
+| Rolling.aggregate                                            | X           |                    |
++--------------------------------------------------------------+-------------+--------------------+
+| Rolling.apply                                                | X           |                    |
++--------------------------------------------------------------+-------------+--------------------+
+| Rolling.axis                                                 | X           |                    |
++--------------------------------------------------------------+-------------+--------------------+
+| Rolling.center                                               | X           |                    |
++--------------------------------------------------------------+-------------+--------------------+
+| Rolling.closed                                               | X           |                    |
++--------------------------------------------------------------+-------------+--------------------+
+| Rolling.corr                                                 | X           |                    |
++--------------------------------------------------------------+-------------+--------------------+
+| :func:`Rolling.count`                                        | O           |                    |
++--------------------------------------------------------------+-------------+--------------------+
+| Rolling.cov                                                  | X           |                    |
++--------------------------------------------------------------+-------------+--------------------+
+| Rolling.exclusions                                           | X           |                    |
++--------------------------------------------------------------+-------------+--------------------+
+| Rolling. is_datetimelike                                     | X           |                    |
++--------------------------------------------------------------+-------------+--------------------+
+| Rolling.kurt                                                 | X           |                    |
++--------------------------------------------------------------+-------------+--------------------+
+| :func:`Rolling.max`                                          | O           |                    |
++--------------------------------------------------------------+-------------+--------------------+
+| :func:`Rolling.mean`                                         | O           |                    |
++--------------------------------------------------------------+-------------+--------------------+
+| Rolling.median                                               | X           |                    |
++--------------------------------------------------------------+-------------+--------------------+
+| Rolling.method                                               | X           |                    |
++--------------------------------------------------------------+-------------+--------------------+
+| :func:`Rolling.min`                                          | O           |                    |
++--------------------------------------------------------------+-------------+--------------------+
+| Rolling.min_periods                                          | X           |                    |
++--------------------------------------------------------------+-------------+--------------------+
+| Rolling.ndim                                                 | X           |                    |
++--------------------------------------------------------------+-------------+--------------------+
+| Rolling.obj                                                  | X           |                    |
++--------------------------------------------------------------+-------------+--------------------+
+| Rolling.on                                                   | X           |                    |
++--------------------------------------------------------------+-------------+--------------------+
+| Rolling.quantile                                             | X           |                    |
++--------------------------------------------------------------+-------------+--------------------+
+| Rolling.sem                                                  | X           |                    |
++--------------------------------------------------------------+-------------+--------------------+
+| Rolling.skew                                                 | X           |                    |
++--------------------------------------------------------------+-------------+--------------------+
+| Rolling.std                                                  | X           |                    |
++--------------------------------------------------------------+-------------+--------------------+
+| :func:`Rolling.sum`                                          | O           |                    |
++--------------------------------------------------------------+-------------+--------------------+
+| Rolling.validate                                             | X           |                    |
++--------------------------------------------------------------+-------------+--------------------+
+| Rolling.var                                                  | X           |                    |
++--------------------------------------------------------------+-------------+--------------------+
+| Rolling.win_type                                             | X           |                    |
++--------------------------------------------------------------+-------------+--------------------+
+| Rolling.window                                               | X           |                    |
++--------------------------------------------------------------+-------------+--------------------+
+| Expanding.agg                                                | X           |                    |
++--------------------------------------------------------------+-------------+--------------------+
+| Expanding.aggregate                                          | X           |                    |
++--------------------------------------------------------------+-------------+--------------------+
+| Expanding.apply                                              | X           |                    |
++--------------------------------------------------------------+-------------+--------------------+
+| Expanding.axis                                               | X           |                    |
++--------------------------------------------------------------+-------------+--------------------+
+| Expanding.center                                             | X           |                    |
++--------------------------------------------------------------+-------------+--------------------+
+| Expanding.closed                                             | X           |                    |
++--------------------------------------------------------------+-------------+--------------------+
+| Expanding.corr                                               | X           |                    |
++--------------------------------------------------------------+-------------+--------------------+
+| :func:`Expanding.count`                                      | O           |                    |
++--------------------------------------------------------------+-------------+--------------------+
+| Expanding.cov                                                | X           |                    |
++--------------------------------------------------------------+-------------+--------------------+
+| Expanding.exclusions                                         | X           |                    |
++--------------------------------------------------------------+-------------+--------------------+
+| Expanding.is_datetimelike                                    | X           |                    |
++--------------------------------------------------------------+-------------+--------------------+
+| Expanding.kurt                                               | X           |                    |
++--------------------------------------------------------------+-------------+--------------------+
+| :func:`Expanding.max`                                        | O           |                    |
++--------------------------------------------------------------+-------------+--------------------+
+| :func:`Expanding.mean`                                       | O           |                    |
++--------------------------------------------------------------+-------------+--------------------+
+| Expanding.median                                             | X           |                    |
++--------------------------------------------------------------+-------------+--------------------+
+| Expanding.method                                             | X           |                    |
++--------------------------------------------------------------+-------------+--------------------+
+| :func:`Expanding.min`                                        | O           |                    |
++--------------------------------------------------------------+-------------+--------------------+
+| Expanding.min_periods                                        | X           |                    |
++--------------------------------------------------------------+-------------+--------------------+
+| Expanding.ndim                                               | X           |                    |
++--------------------------------------------------------------+-------------+--------------------+
+| Expanding.obj                                                | X           |                    |
++--------------------------------------------------------------+-------------+--------------------+
+| Expanding.on                                                 | X           |                    |
++--------------------------------------------------------------+-------------+--------------------+
+| Expanding.quantile                                           | X           |                    |
++--------------------------------------------------------------+-------------+--------------------+
+| Expanding.sem                                                | X           |                    |
++--------------------------------------------------------------+-------------+--------------------+
+| Expanding.skew                                               | X           |                    |
++--------------------------------------------------------------+-------------+--------------------+
+| Expanding.std                                                | X           |                    |
++--------------------------------------------------------------+-------------+--------------------+
+| :func:`Expanding.sum`                                        | O           |                    |
++--------------------------------------------------------------+-------------+--------------------+
+| Expanding.validate                                           | X           |                    |
++--------------------------------------------------------------+-------------+--------------------+
+| Expanding.var                                                | X           |                    |
++--------------------------------------------------------------+-------------+--------------------+
+| Expanding.win_type                                           | X           |                    |
++--------------------------------------------------------------+-------------+--------------------+
+| Expanding.window                                             | X           |                    |
++--------------------------------------------------------------+-------------+--------------------+
 
 Supported GroupBy APIs
 ----------------------
 
+.. currentmodule:: pyspark.pandas.groupby
+
 +-----------------------------------------+-------------+-----------------------------------------+
 | API                                     | Implemented | Missing parameters                      |
 +=========================================+=============+=========================================+
-| `agg <https://spark.apa                 | O           |                                         |
-| che.org/docs/latest/api/python/referenc |             |                                         |
-| e/pyspark.pandas/api/pyspark.pandas.gro |             |                                         |
-| upby.DataFrameGroupBy.agg.html#pyspark. |             |                                         |
-| pandas.groupby.DataFrameGroupBy.agg>`__ |             |                                         |
+| :func:`DataFrameGroupBy.agg`            | O           |                                         |
 +-----------------------------------------+-------------+-----------------------------------------+
-| `aggregate <https://spark.apac          | O           |                                         |
-| he.org/docs/latest/api/python/reference |             |                                         |
-| /pyspark.pandas/api/pyspark.pandas.grou |             |                                         |
-| pby.DataFrameGroupBy.aggregate.html>`__ |             |                                         |
+| :func:`DataFrameGroupBy.aggregate`      | O           |                                         |
 +-----------------------------------------+-------------+-----------------------------------------+
-| `all <htt                               | O           | ``skipna``                              |
-| ps://spark.apache.org/docs/latest/api/p |             |                                         |
-| ython/reference/pyspark.pandas/api/pysp |             |                                         |
-| ark.pandas.groupby.GroupBy.all.html>`__ |             |                                         |
+| :func:`GroupBy.all`                     | O           | ``skipna``                              |
 +-----------------------------------------+-------------+-----------------------------------------+
-| `any <htt                               | O           | ``skipna``                              |
-| ps://spark.apache.org/docs/latest/api/p |             |                                         |
-| ython/reference/pyspark.pandas/api/pysp |             |                                         |
-| ark.pandas.groupby.GroupBy.any.html>`__ |             |                                         |
+| :func:`GroupBy.any`                     | O           | ``skipna``                              |
 +-----------------------------------------+-------------+-----------------------------------------+
-| `apply <https                           | O           |                                         |
-| ://spark.apache.org/docs/latest/api/pyt |             |                                         |
-| hon/reference/pyspark.pandas/api/pyspar |             |                                         |
-| k.pandas.groupby.GroupBy.apply.html>`__ |             |                                         |
+| :func:`GroupBy.apply`                   | O           |                                         |
 +-----------------------------------------+-------------+-----------------------------------------+
-| `backfill <https://                     | O           |                                         |
-| spark.apache.org/docs/latest/api/python |             |                                         |
-| /reference/pyspark.pandas/api/pyspark.p |             |                                         |
-| andas.groupby.GroupBy.backfill.html>`__ |             |                                         |
+| :func:`GroupBy.backfill`                | O           |                                         |
 +-----------------------------------------+-------------+-----------------------------------------+
-| `bfill <https                           | O           |                                         |
-| ://spark.apache.org/docs/latest/api/pyt |             |                                         |
-| hon/reference/pyspark.pandas/api/pyspar |             |                                         |
-| k.pandas.groupby.GroupBy.bfill.html>`__ |             |                                         |
+| :func:`GroupBy.bfill`                   | O           |                                         |
 +-----------------------------------------+-------------+-----------------------------------------+
 | boxplot                                 | X           |                                         |
 +-----------------------------------------+-------------+-----------------------------------------+
@@ -3275,125 +1540,62 @@ Supported GroupBy APIs
 +-----------------------------------------+-------------+-----------------------------------------+
 | corrwith                                | X           |                                         |
 +-----------------------------------------+-------------+-----------------------------------------+
-| `count <https                           | O           |                                         |
-| ://spark.apache.org/docs/latest/api/pyt |             |                                         |
-| hon/reference/pyspark.pandas/api/pyspar |             |                                         |
-| k.pandas.groupby.GroupBy.count.html>`__ |             |                                         |
+| :func:`GroupBy.count`                   | O           |                                         |
 +-----------------------------------------+-------------+-----------------------------------------+
 | cov                                     | X           |                                         |
 +-----------------------------------------+-------------+-----------------------------------------+
-| `cumcount <https://                     | O           |                                         |
-| spark.apache.org/docs/latest/api/python |             |                                         |
-| /reference/pyspark.pandas/api/pyspark.p |             |                                         |
-| andas.groupby.GroupBy.cumcount.html>`__ |             |                                         |
+| :func:`GroupBy.cumcount`                | O           |                                         |
 +-----------------------------------------+-------------+-----------------------------------------+
-| `cummax <https:                         | O           |                                         |
-| //spark.apache.org/docs/latest/api/pyth |             |                                         |
-| on/reference/pyspark.pandas/api/pyspark |             |                                         |
-| .pandas.groupby.GroupBy.cummax.html>`__ |             |                                         |
+| :func:`GroupBy.cummax`                  | O           |                                         |
 +-----------------------------------------+-------------+-----------------------------------------+
-| `cummin <https:                         | O           |                                         |
-| //spark.apache.org/docs/latest/api/pyth |             |                                         |
-| on/reference/pyspark.pandas/api/pyspark |             |                                         |
-| .pandas.groupby.GroupBy.cummin.html>`__ |             |                                         |
+| :func:`GroupBy.cummin`                  | O           |                                         |
 +-----------------------------------------+-------------+-----------------------------------------+
-| `cumprod <https:/                       | O           |                                         |
-| /spark.apache.org/docs/latest/api/pytho |             |                                         |
-| n/reference/pyspark.pandas/api/pyspark. |             |                                         |
-| pandas.groupby.GroupBy.cumprod.html>`__ |             |                                         |
+| :func:`GroupBy.cumprod`                 | O           |                                         |
 +-----------------------------------------+-------------+-----------------------------------------+
-| `cumsum <https:                         | O           |                                         |
-| //spark.apache.org/docs/latest/api/pyth |             |                                         |
-| on/reference/pyspark.pandas/api/pyspark |             |                                         |
-| .pandas.groupby.GroupBy.cumsum.html>`__ |             |                                         |
+| :func:`GroupBy.cumsum`                  | O           |                                         |
 +-----------------------------------------+-------------+-----------------------------------------+
-| `describe <https://spark.apa            | O           | ``percentiles``, ``include``,           |
-| che.org/docs/latest/api/python/referenc |             | ``exclude``, ``datetime_is_numeric``    |
-| e/pyspark.pandas/api/pyspark.pandas.gro |             |                                         |
-| upby.DataFrameGroupBy.describe.html>`__ |             |                                         |
+| :func:`DataFrameGroupBy.describe`       | O           | ``percentiles``, ``include``,           |
+|                                         |             | ``exclude``, ``datetime_is_numeric``    |
 +-----------------------------------------+-------------+-----------------------------------------+
-| `diff <http                             | O           | ``axis``                                |
-| s://spark.apache.org/docs/latest/api/py |             |                                         |
-| thon/reference/pyspark.pandas/api/pyspa |             |                                         |
-| rk.pandas.groupby.GroupBy.diff.html>`__ |             |                                         |
+| :func:`GroupBy.diff`                    | O           | ``axis``                                |
 +-----------------------------------------+-------------+-----------------------------------------+
 | dtypes                                  | X           |                                         |
 +-----------------------------------------+-------------+-----------------------------------------+
 | ewm                                     | X           |                                         |
 +-----------------------------------------+-------------+-----------------------------------------+
-| `ffill <https                           | O           |                                         |
-| ://spark.apache.org/docs/latest/api/pyt |             |                                         |
-| hon/reference/pyspark.pandas/api/pyspar |             |                                         |
-| k.pandas.groupby.GroupBy.ffill.html>`__ |             |                                         |
+| :func:`GroupBy.ffill`                   | O           |                                         |
 +-----------------------------------------+-------------+-----------------------------------------+
-| `fillna <https:                         | O           | ``downcast``                            |
-| //spark.apache.org/docs/latest/api/pyth |             |                                         |
-| on/reference/pyspark.pandas/api/pyspark |             |                                         |
-| .pandas.groupby.GroupBy.fillna.html>`__ |             |                                         |
+| :func:`GroupBy.fillna`                  | O           | ``downcast``                            |
 +-----------------------------------------+-------------+-----------------------------------------+
-| `filter <https:                         | O           |                                         |
-| //spark.apache.org/docs/latest/api/pyth |             |                                         |
-| on/reference/pyspark.pandas/api/pyspark |             |                                         |
-| .pandas.groupby.GroupBy.filter.html>`__ |             |                                         |
+| :func:`GroupBy.filter`                  | O           |                                         |
 +-----------------------------------------+-------------+-----------------------------------------+
-| `first <https                           | O           | ``numeric_only``, ``min_count``         |
-| ://spark.apache.org/docs/latest/api/pyt |             |                                         |
-| hon/reference/pyspark.pandas/api/pyspar |             |                                         |
-| k.pandas.groupby.GroupBy.first.html>`__ |             |                                         |
+| :func:`GroupBy.first`                   | O           | ``numeric_only``, ``min_count``         |
 +-----------------------------------------+-------------+-----------------------------------------+
-| `get\_                                  | O           |                                         |
-| group <https://s                        |             |                                         |
-| park.apache.org/docs/latest/api/python/ |             |                                         |
-| reference/pyspark.pandas/api/pyspark.pa |             |                                         |
-| ndas.groupby.GroupBy.get_group.html>`__ |             |                                         |
+| :func:`GroupBy.get_group`               | O           |                                         |
 +-----------------------------------------+-------------+-----------------------------------------+
 | groups                                  | X           |                                         |
 +-----------------------------------------+-------------+-----------------------------------------+
-| `head <http                             | O           |                                         |
-| s://spark.apache.org/docs/latest/api/py |             |                                         |
-| thon/reference/pyspark.pandas/api/pyspa |             |                                         |
-| rk.pandas.groupby.GroupBy.head.html>`__ |             |                                         |
+| :func:`GroupBy.head`                    | O           |                                         |
 +-----------------------------------------+-------------+-----------------------------------------+
 | hist                                    | X           |                                         |
 +-----------------------------------------+-------------+-----------------------------------------+
-| `idxmax <https:                         | O           | ``axis``                                |
-| //spark.apache.org/docs/latest/api/pyth |             |                                         |
-| on/reference/pyspark.pandas/api/pyspark |             |                                         |
-| .pandas.groupby.GroupBy.idxmax.html>`__ |             |                                         |
+| :func:`GroupBy.idxmax`                  | O           | ``axis``                                |
 +-----------------------------------------+-------------+-----------------------------------------+
-| `idxmin <https:                         | O           | ``axis``                                |
-| //spark.apache.org/docs/latest/api/pyth |             |                                         |
-| on/reference/pyspark.pandas/api/pyspark |             |                                         |
-| .pandas.groupby.GroupBy.idxmin.html>`__ |             |                                         |
+| :func:`GroupBy.idxmin`                  | O           | ``axis``                                |
 +-----------------------------------------+-------------+-----------------------------------------+
 | indices                                 | X           |                                         |
 +-----------------------------------------+-------------+-----------------------------------------+
-| `last <http                             | O           | ``numeric_only``, ``min_count``         |
-| s://spark.apache.org/docs/latest/api/py |             |                                         |
-| thon/reference/pyspark.pandas/api/pyspa |             |                                         |
-| rk.pandas.groupby.GroupBy.last.html>`__ |             |                                         |
+| :func:`GroupBy.last`                    | O           | ``numeric_only``, ``min_count``         |
 +-----------------------------------------+-------------+-----------------------------------------+
 | mad                                     | X           |                                         |
 +-----------------------------------------+-------------+-----------------------------------------+
-| `max <htt                               | O           | ``numeric_only``, ``min_count``         |
-| ps://spark.apache.org/docs/latest/api/p |             |                                         |
-| ython/reference/pyspark.pandas/api/pysp |             |                                         |
-| ark.pandas.groupby.GroupBy.max.html>`__ |             |                                         |
+| :func:`GroupBy.max`                     | O           | ``numeric_only``, ``min_count``         |
 +-----------------------------------------+-------------+-----------------------------------------+
-| `mean <http                             | O           | ``numeric_only``, ``engine``            |
-| s://spark.apache.org/docs/latest/api/py |             |                                         |
-| thon/reference/pyspark.pandas/api/pyspa |             |                                         |
-| rk.pandas.groupby.GroupBy.mean.html>`__ |             |                                         |
+| :func:`GroupBy.mean`                    | O           | ``numeric_only``, ``engine``            |
 +-----------------------------------------+-------------+-----------------------------------------+
-| `median <https:                         | O           |                                         |
-| //spark.apache.org/docs/latest/api/pyth |             |                                         |
-| on/reference/pyspark.pandas/api/pyspark |             |                                         |
-| .pandas.groupby.GroupBy.median.html>`__ |             |                                         |
+| :func:`GroupBy.median`                  | O           |                                         |
 +-----------------------------------------+-------------+-----------------------------------------+
-| `min <htt                               | O           |                                         |
-| ps://spark.apache.org/docs/latest/api/p |             |                                         |
-| ython/reference/pyspark.pandas/api/pysp |             |                                         |
-| ark.pandas.groupby.GroupBy.min.html>`__ |             |                                         |
+| :func:`GroupBy.min`                     | O           |                                         |
 +-----------------------------------------+-------------+-----------------------------------------+
 | ndim                                    | X           |                                         |
 +-----------------------------------------+-------------+-----------------------------------------+
@@ -3403,10 +1605,7 @@ Supported GroupBy APIs
 +-----------------------------------------+-------------+-----------------------------------------+
 | nth                                     | X           |                                         |
 +-----------------------------------------+-------------+-----------------------------------------+
-| `nunique <https:/                       | O           |                                         |
-| /spark.apache.org/docs/latest/api/pytho |             |                                         |
-| n/reference/pyspark.pandas/api/pyspark. |             |                                         |
-| pandas.groupby.GroupBy.nunique.html>`__ |             |                                         |
+| :func:`GroupBy.nunique`                 | O           |                                         |
 +-----------------------------------------+-------------+-----------------------------------------+
 | ohlc                                    | X           |                                         |
 +-----------------------------------------+-------------+-----------------------------------------+
@@ -3422,10 +1621,7 @@ Supported GroupBy APIs
 +-----------------------------------------+-------------+-----------------------------------------+
 | qua ntile                               | X           |                                         |
 +-----------------------------------------+-------------+-----------------------------------------+
-| `rank <http                             | O           | ``na_option``, ``pct``, ``axis``        |
-| s://spark.apache.org/docs/latest/api/py |             |                                         |
-| thon/reference/pyspark.pandas/api/pyspa |             |                                         |
-| rk.pandas.groupby.GroupBy.rank.html>`__ |             |                                         |
+| :func:`GroupBy.rank`                    | O           | ``na_option``, ``pct``, ``axis``        |
 +-----------------------------------------+-------------+-----------------------------------------+
 | resample                                | X           |                                         |
 +-----------------------------------------+-------------+-----------------------------------------+
@@ -3433,44 +1629,23 @@ Supported GroupBy APIs
 +-----------------------------------------+-------------+-----------------------------------------+
 | sem                                     | X           |                                         |
 +-----------------------------------------+-------------+-----------------------------------------+
-| `shift <https                           | O           | ``freq``, ``axis``                      |
-| ://spark.apache.org/docs/latest/api/pyt |             |                                         |
-| hon/reference/pyspark.pandas/api/pyspar |             |                                         |
-| k.pandas.groupby.GroupBy.shift.html>`__ |             |                                         |
+| :func:`GroupBy.shift`                   | O           | ``freq``, ``axis``                      |
 +-----------------------------------------+-------------+-----------------------------------------+
-| `size <http                             | O           |                                         |
-| s://spark.apache.org/docs/latest/api/py |             |                                         |
-| thon/reference/pyspark.pandas/api/pyspa |             |                                         |
-| rk.pandas.groupby.GroupBy.size.html>`__ |             |                                         |
+| :func:`GroupBy.size`                    | O           |                                         |
 +-----------------------------------------+-------------+-----------------------------------------+
 | skew                                    | X           |                                         |
 +-----------------------------------------+-------------+-----------------------------------------+
-| `std <htt                               | O           | ``engine``                              |
-| ps://spark.apache.org/docs/latest/api/p |             |                                         |
-| ython/reference/pyspark.pandas/api/pysp |             |                                         |
-| ark.pandas.groupby.GroupBy.std.html>`__ |             |                                         |
+| :func:`GroupBy.std`                     | O           | ``engine``                              |
 +-----------------------------------------+-------------+-----------------------------------------+
-| `sum <htt                               | O           | ``numeric_only``, ``min_count``         |
-| ps://spark.apache.org/docs/latest/api/p |             |                                         |
-| ython/reference/pyspark.pandas/api/pysp |             |                                         |
-| ark.pandas.groupby.GroupBy.sum.html>`__ |             |                                         |
+| :func:`GroupBy.sum`                     | O           | ``numeric_only``, ``min_count``         |
 +-----------------------------------------+-------------+-----------------------------------------+
-| `tail <http                             | O           |                                         |
-| s://spark.apache.org/docs/latest/api/py |             |                                         |
-| thon/reference/pyspark.pandas/api/pyspa |             |                                         |
-| rk.pandas.groupby.GroupBy.tail.html>`__ |             |                                         |
+| :func:`GroupBy.tail`                    | O           |                                         |
 +-----------------------------------------+-------------+-----------------------------------------+
 | take                                    | X           |                                         |
 +-----------------------------------------+-------------+-----------------------------------------+
-| `transform <https://s                   | O           | ``engine``                              |
-| park.apache.org/docs/latest/api/python/ |             |                                         |
-| reference/pyspark.pandas/api/pyspark.pa |             |                                         |
-| ndas.groupby.GroupBy.transform.html>`__ |             |                                         |
+| :func:`GroupBy.transform`               | O           | ``engine``                              |
 +-----------------------------------------+-------------+-----------------------------------------+
 | tshift                                  | X           |                                         |
 +-----------------------------------------+-------------+-----------------------------------------+
-| `var <htt                               | O           | ``engine``                              |
-| ps://spark.apache.org/docs/latest/api/p |             |                                         |
-| ython/reference/pyspark.pandas/api/pysp |             |                                         |
-| ark.pandas.groupby.GroupBy.var.html>`__ |             |                                         |
+| :func:`GroupBy.var`                     | O           | ``engine``                              |
 +-----------------------------------------+-------------+-----------------------------------------+
