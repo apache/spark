@@ -487,7 +487,7 @@ class GroupedAggPandasUDFTests(ReusedSQLTestCase):
         with QuietTest(self.sc):
             with self.assertRaisesRegex(
                 AnalysisException,
-                "The group aggregate pandas UDF 'avg' cannot be invoked together with as other, "
+                "The group aggregate pandas UDF `avg` cannot be invoked together with as other, "
                 "non-pandas aggregate functions.",
             ):
                 df.groupby(df.id).agg(mean_udf(df.v), mean(df.v)).collect()

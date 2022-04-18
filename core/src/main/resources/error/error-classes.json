@@ -38,7 +38,7 @@
     "sqlState" : "22012"
   },
   "DUPLICATE_KEY" : {
-    "message" : [ "Found duplicate keys '%s'" ],
+    "message" : [ "Found duplicate keys %s" ],
     "sqlState" : "23000"
   },
   "FAILED_EXECUTE_UDF" : {
