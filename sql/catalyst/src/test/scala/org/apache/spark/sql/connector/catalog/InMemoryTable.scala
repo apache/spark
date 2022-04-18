@@ -29,12 +29,14 @@ import org.scalatest.Assertions._
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, JoinedRow}
 import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, DateTimeUtils}
-import org.apache.spark.sql.connector.distributions.{Distribution, Distributions}
+import org.apache.spark.sql.connector.distributions.{ClusteredDistribution, Distribution, Distributions}
 import org.apache.spark.sql.connector.expressions._
 import org.apache.spark.sql.connector.metric.{CustomMetric, CustomTaskMetric}
 import org.apache.spark.sql.connector.read._
+import org.apache.spark.sql.connector.read.partitioning.{KeyGroupedPartitioning, Partitioning, UnknownPartitioning}
 import org.apache.spark.sql.connector.write._
 import org.apache.spark.sql.connector.write.streaming.{StreamingDataWriterFactory, StreamingWrite}
+import org.apache.spark.sql.internal.connector.SupportsStreamingUpdateAsAppend
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -54,7 +56,7 @@ class InMemoryTable(
   extends Table with SupportsRead with SupportsWrite with SupportsDelete
       with SupportsMetadataColumns {
 
-  private object PartitionKeyColumn extends MetadataColumn {
+  protected object PartitionKeyColumn extends MetadataColumn {
     override def name: String = "_partition"
     override def dataType: DataType = StringType
     override def comment: String = "Partition key used to store the row"
@@ -80,6 +82,7 @@ class InMemoryTable(
     case _: DaysTransform =>
     case _: HoursTransform =>
     case _: BucketTransform =>
+    case _: SortedBucketTransform =>
     case t if !allowUnsupportedTransforms =>
       throw new IllegalArgumentException(s"Transform $t is not a supported transform")
   }
@@ -101,7 +104,11 @@ class InMemoryTable(
   private val UTC = ZoneId.of("UTC")
   private val EPOCH_LOCAL_DATE = Instant.EPOCH.atZone(UTC).toLocalDate
 
-  private def getKey(row: InternalRow): Seq[Any] = {
+  protected def getKey(row: InternalRow): Seq[Any] = {
+    getKey(row, schema)
+  }
+
+  protected def getKey(row: InternalRow, rowSchema: StructType): Seq[Any] = {
     @scala.annotation.tailrec
     def extractor(
         fieldNames: Array[String],
@@ -121,7 +128,7 @@ class InMemoryTable(
       }
     }
 
-    val cleanedSchema = CharVarcharUtils.replaceCharVarcharWithStringInSchema(schema)
+    val cleanedSchema = CharVarcharUtils.replaceCharVarcharWithStringInSchema(rowSchema)
     partitioning.map {
       case IdentityTransform(ref) =>
         extractor(ref.fieldNames, cleanedSchema, row)._1
@@ -161,10 +168,15 @@ class InMemoryTable(
           case (v, t) =>
             throw new IllegalArgumentException(s"Match: unsupported argument(s) type - ($v, $t)")
         }
-      case BucketTransform(numBuckets, ref, _) =>
-        val (value, dataType) = extractor(ref.fieldNames, cleanedSchema, row)
-        val valueHashCode = if (value == null) 0 else value.hashCode
-        ((valueHashCode + 31 * dataType.hashCode()) & Integer.MAX_VALUE) % numBuckets
+      case BucketTransform(numBuckets, cols, _) =>
+        val valueTypePairs = cols.map(col => extractor(col.fieldNames, cleanedSchema, row))
+        var valueHashCode = 0
+        valueTypePairs.foreach( pair =>
+          if ( pair._1 != null) valueHashCode += pair._1.hashCode()
+        )
+        var dataTypeHashCode = 0
+        valueTypePairs.foreach(dataTypeHashCode += _._2.hashCode())
+        ((valueHashCode + 31 * dataTypeHashCode) & Integer.MAX_VALUE) % numBuckets
     }
   }
 
@@ -211,9 +223,15 @@ class InMemoryTable(
     dataMap(key).clear()
   }
 
-  def withData(data: Array[BufferedRows]): InMemoryTable = dataMap.synchronized {
+  def withData(data: Array[BufferedRows]): InMemoryTable = {
+    withData(data, schema)
+  }
+
+  def withData(
+      data: Array[BufferedRows],
+      writeSchema: StructType): InMemoryTable = dataMap.synchronized {
     data.foreach(_.rows.foreach { row =>
-      val key = getKey(row)
+      val key = getKey(row, writeSchema)
       dataMap += dataMap.get(key)
         .map(key -> _.withRow(row))
         .getOrElse(key -> new BufferedRows(key).withRow(row))
@@ -253,7 +271,8 @@ class InMemoryTable(
       var data: Seq[InputPartition],
       readSchema: StructType,
       tableSchema: StructType)
-    extends Scan with Batch with SupportsRuntimeFiltering with SupportsReportStatistics {
+    extends Scan with Batch with SupportsRuntimeFiltering with SupportsReportStatistics
+        with SupportsReportPartitioning {
 
     override def toBatch: Batch = this
 
@@ -271,6 +290,13 @@ class InMemoryTable(
       InMemoryStats(OptionalLong.of(sizeInBytes), OptionalLong.of(numRows))
     }
 
+    override def outputPartitioning(): Partitioning = {
+      InMemoryTable.this.distribution match {
+        case cd: ClusteredDistribution => new KeyGroupedPartitioning(cd.clustering(), data.size)
+        case _ => new UnknownPartitioning(data.size)
+      }
+    }
+
     override def planInputPartitions(): Array[InputPartition] = data.toArray
 
     override def createReaderFactory(): PartitionReaderFactory = {
@@ -286,9 +312,10 @@ class InMemoryTable(
     }
 
     override def filter(filters: Array[Filter]): Unit = {
-      if (partitioning.length == 1) {
+      if (partitioning.length == 1 && partitioning.head.references().length == 1) {
+        val ref = partitioning.head.references().head
         filters.foreach {
-          case In(attrName, values) if attrName == partitioning.head.name =>
+          case In(attrName, values) if attrName == ref.toString =>
             val matchingKeys = values.map(_.toString).toSet
             data = data.filter(partition => {
               val key = partition.asInstanceOf[BufferedRows].keyString
@@ -305,7 +332,9 @@ class InMemoryTable(
     InMemoryTable.maybeSimulateFailedTableWrite(new CaseInsensitiveStringMap(properties))
     InMemoryTable.maybeSimulateFailedTableWrite(info.options)
 
-    new WriteBuilder with SupportsTruncate with SupportsOverwrite with SupportsDynamicOverwrite {
+    new WriteBuilder with SupportsTruncate with SupportsOverwrite
+      with SupportsDynamicOverwrite with SupportsStreamingUpdateAsAppend {
+
       private var writer: BatchWrite = Append
       private var streamingWriter: StreamingWrite = StreamingAppend
 
@@ -353,7 +382,7 @@ class InMemoryTable(
     }
   }
 
-  private abstract class TestBatchWrite extends BatchWrite {
+  protected abstract class TestBatchWrite extends BatchWrite {
     override def createBatchWriterFactory(info: PhysicalWriteInfo): DataWriterFactory = {
       BufferedRowsWriterFactory
     }

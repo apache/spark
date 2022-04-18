@@ -28,7 +28,7 @@ import org.apache.spark.{SparkException, SparkFiles}
 import org.apache.spark.internal.config
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row, SaveMode}
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, QualifiedTableName, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, NoSuchFunctionException, TableFunctionRegistry, TempTableAlreadyExistsException}
+import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, TableFunctionRegistry, TempTableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.connector.catalog.SupportsNamespaces.PROP_OWNER
@@ -115,7 +115,7 @@ class InMemoryCatalogedDDLSuite extends DDLSuite with SharedSparkSession {
       }.getMessage
       assert(e.contains("Hive support is required to CREATE Hive TABLE (AS SELECT)"))
 
-      spark.range(1).select('id as 'a, 'id as 'b).write.saveAsTable("t1")
+      spark.range(1).select($"id" as Symbol("a"), $"id" as Symbol("b")).write.saveAsTable("t1")
       e = intercept[AnalysisException] {
         sql("CREATE TABLE t STORED AS parquet SELECT a, b from t1")
       }.getMessage
@@ -1246,24 +1246,24 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     assert(getMetadata("col1").getString("comment") == "this is col1")
   }
 
-  test("drop build-in function") {
+  test("drop built-in function") {
     Seq("true", "false").foreach { caseSensitive =>
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive) {
         // partition to add already exists
         var e = intercept[AnalysisException] {
           sql("DROP TEMPORARY FUNCTION year")
         }
-        assert(e.getMessage.contains("Cannot drop native function 'year'"))
+        assert(e.getMessage.contains("Cannot drop built-in function 'year'"))
 
         e = intercept[AnalysisException] {
           sql("DROP TEMPORARY FUNCTION YeAr")
         }
-        assert(e.getMessage.contains("Cannot drop native function 'YeAr'"))
+        assert(e.getMessage.contains("Cannot drop built-in function 'YeAr'"))
 
         e = intercept[AnalysisException] {
           sql("DROP TEMPORARY FUNCTION `YeAr`")
         }
-        assert(e.getMessage.contains("Cannot drop native function 'YeAr'"))
+        assert(e.getMessage.contains("Cannot drop built-in function 'YeAr'"))
       }
     }
   }
@@ -1374,7 +1374,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
       sql("CREATE TABLE t USING parquet SELECT 1 as a, 1 as b")
       checkAnswer(spark.table("t"), Row(1, 1) :: Nil)
 
-      spark.range(1).select('id as 'a, 'id as 'b).write.saveAsTable("t1")
+      spark.range(1).select($"id" as Symbol("a"), $"id" as Symbol("b")).write.saveAsTable("t1")
       sql("CREATE TABLE t2 USING parquet SELECT a, b from t1")
       checkAnswer(spark.table("t2"), spark.table("t1"))
     }
@@ -1468,7 +1468,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     withUserDefinedFunction("add_one" -> true) {
       val numFunctions = FunctionRegistry.functionSet.size.toLong +
         TableFunctionRegistry.functionSet.size.toLong +
-        FunctionsCommand.virtualOperators.size.toLong
+        FunctionRegistry.builtinOperators.size.toLong
       assert(sql("show functions").count() === numFunctions)
       assert(sql("show system functions").count() === numFunctions)
       assert(sql("show all functions").count() === numFunctions)
@@ -2103,57 +2103,6 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     }
   }
 
-  test("create temporary function with if not exists") {
-    withUserDefinedFunction("func1" -> true) {
-      val sql1 =
-        """
-          |CREATE TEMPORARY FUNCTION IF NOT EXISTS func1 as
-          |'com.matthewrathbone.example.SimpleUDFExample' USING JAR '/path/to/jar1',
-          |JAR '/path/to/jar2'
-        """.stripMargin
-      val e = intercept[AnalysisException] {
-        sql(sql1)
-      }.getMessage
-      assert(e.contains("It is not allowed to define a TEMPORARY function with IF NOT EXISTS"))
-    }
-  }
-
-  test("create function with both if not exists and replace") {
-    withUserDefinedFunction("func1" -> false) {
-      val sql1 =
-        """
-          |CREATE OR REPLACE FUNCTION IF NOT EXISTS func1 as
-          |'com.matthewrathbone.example.SimpleUDFExample' USING JAR '/path/to/jar1',
-          |JAR '/path/to/jar2'
-        """.stripMargin
-      val e = intercept[AnalysisException] {
-        sql(sql1)
-      }.getMessage
-      assert(e.contains("CREATE FUNCTION with both IF NOT EXISTS and REPLACE is not allowed"))
-    }
-  }
-
-  test("create temporary function by specifying a database") {
-    val dbName = "mydb"
-    withDatabase(dbName) {
-      sql(s"CREATE DATABASE $dbName")
-      sql(s"USE $dbName")
-      withUserDefinedFunction("func1" -> true) {
-        val sql1 =
-          s"""
-             |CREATE TEMPORARY FUNCTION $dbName.func1 as
-             |'com.matthewrathbone.example.SimpleUDFExample' USING JAR '/path/to/jar1',
-             |JAR '/path/to/jar2'
-            """.stripMargin
-        val e = intercept[AnalysisException] {
-          sql(sql1)
-        }.getMessage
-        assert(e.contains(s"Specifying a database in CREATE TEMPORARY FUNCTION " +
-          s"is not allowed: '$dbName'"))
-      }
-    }
-  }
-
   Seq(true, false).foreach { caseSensitive =>
     test(s"alter table add columns with existing column name - caseSensitive $caseSensitive") {
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> s"$caseSensitive") {
@@ -2288,25 +2237,26 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     val msg = intercept[AnalysisException] {
       sql("REFRESH FUNCTION md5")
     }.getMessage
-    assert(msg.contains("Cannot refresh built-in function"))
-    val msg2 = intercept[NoSuchFunctionException] {
+    assert(msg.contains(
+      "md5 is a built-in/temporary function. 'REFRESH FUNCTION' expects a persistent function"))
+    val msg2 = intercept[AnalysisException] {
       sql("REFRESH FUNCTION default.md5")
     }.getMessage
-    assert(msg2.contains(s"Undefined function: 'md5'. This function is neither a registered " +
-      s"temporary function nor a permanent function registered in the database 'default'."))
+    assert(msg2.contains(s"Undefined function: default.md5"))
 
     withUserDefinedFunction("func1" -> true) {
       sql("CREATE TEMPORARY FUNCTION func1 AS 'test.org.apache.spark.sql.MyDoubleAvg'")
       val msg = intercept[AnalysisException] {
         sql("REFRESH FUNCTION func1")
       }.getMessage
-      assert(msg.contains("Cannot refresh temporary function"))
+      assert(msg.contains("" +
+        "func1 is a built-in/temporary function. 'REFRESH FUNCTION' expects a persistent function"))
     }
 
     withUserDefinedFunction("func1" -> false) {
       val func = FunctionIdentifier("func1", Some("default"))
       assert(!spark.sessionState.catalog.isRegisteredFunction(func))
-      intercept[NoSuchFunctionException] {
+      intercept[AnalysisException] {
         sql("REFRESH FUNCTION func1")
       }
       assert(!spark.sessionState.catalog.isRegisteredFunction(func))
@@ -2315,16 +2265,17 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
       assert(!spark.sessionState.catalog.isRegisteredFunction(func))
       sql("REFRESH FUNCTION func1")
       assert(spark.sessionState.catalog.isRegisteredFunction(func))
-      val msg = intercept[NoSuchFunctionException] {
+      val msg = intercept[AnalysisException] {
         sql("REFRESH FUNCTION func2")
       }.getMessage
-      assert(msg.contains(s"Undefined function: 'func2'. This function is neither a registered " +
-        s"temporary function nor a permanent function registered in the database 'default'."))
+      assert(msg.contains(s"Undefined function: func2. This function is neither a " +
+        "built-in/temporary function, nor a persistent function that is qualified as " +
+        "spark_catalog.default.func2"))
       assert(spark.sessionState.catalog.isRegisteredFunction(func))
 
       spark.sessionState.catalog.externalCatalog.dropFunction("default", "func1")
       assert(spark.sessionState.catalog.isRegisteredFunction(func))
-      intercept[NoSuchFunctionException] {
+      intercept[AnalysisException] {
         sql("REFRESH FUNCTION func1")
       }
       assert(!spark.sessionState.catalog.isRegisteredFunction(func))
@@ -2348,7 +2299,8 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
       val msg = intercept[AnalysisException] {
         sql("REFRESH FUNCTION rand")
       }.getMessage
-      assert(msg.contains("Cannot refresh built-in function"))
+      assert(msg.contains(
+        "rand is a built-in/temporary function. 'REFRESH FUNCTION' expects a persistent function"))
       assert(!spark.sessionState.catalog.isRegisteredFunction(rand))
       sql("REFRESH FUNCTION default.rand")
       assert(spark.sessionState.catalog.isRegisteredFunction(rand))

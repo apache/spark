@@ -114,7 +114,7 @@ class BigDataBenchmarkSuite extends HiveComparisonTest {
         |DROP TABLE IF EXISTS url_counts_partial;
         |CREATE TABLE url_counts_partial AS
         |  SELECT TRANSFORM (line)
-        |  USING 'python target/url_count.py' as (sourcePage,
+        |  USING 'python3 target/url_count.py' as (sourcePage,
         |    destPage, count) from documents;
         |DROP TABLE IF EXISTS url_counts_total;
         |CREATE TABLE url_counts_total AS

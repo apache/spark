@@ -403,7 +403,7 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
 
   test("SPARK-24709: infers schemas of json strings and pass them to from_json") {
     val in = Seq("""{"a": [1, 2, 3]}""").toDS()
-    val out = in.select(from_json('value, schema_of_json("""{"a": [1]}""")) as "parsed")
+    val out = in.select(from_json($"value", schema_of_json("""{"a": [1]}""")) as "parsed")
     val expected = StructType(StructField(
       "parsed",
       StructType(StructField(
@@ -417,7 +417,7 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
   test("infers schemas using options") {
     val df = spark.range(1)
       .select(schema_of_json(lit("{a:1}"), Map("allowUnquotedFieldNames" -> "true").asJava))
-    checkAnswer(df, Seq(Row("STRUCT<`a`: BIGINT>")))
+    checkAnswer(df, Seq(Row("STRUCT<a: BIGINT>")))
   }
 
   test("from_json - array of primitive types") {
@@ -672,8 +672,8 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
     Seq(2000, 2800, 8000 - 1, 8000, 8000 + 1, 65535).foreach { len =>
       val str = Array.tabulate(len)(_ => "a").mkString
       val json_tuple_result = Seq(s"""{"test":"$str"}""").toDF("json")
-        .withColumn("result", json_tuple('json, "test"))
-        .select('result)
+        .withColumn("result", json_tuple($"json", "test"))
+        .select($"result")
         .as[String].head.length
       assert(json_tuple_result === len)
     }
@@ -697,14 +697,14 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
     val input = regexp_replace(lit("""{"item_id": 1, "item_price": 0.1}"""), "item_", "")
     checkAnswer(
       spark.range(1).select(schema_of_json(input)),
-      Seq(Row("STRUCT<`id`: BIGINT, `price`: DOUBLE>")))
+      Seq(Row("STRUCT<id: BIGINT, price: DOUBLE>")))
   }
 
   test("SPARK-31065: schema_of_json - null and empty strings as strings") {
     Seq("""{"id": null}""", """{"id": ""}""").foreach { input =>
       checkAnswer(
         spark.range(1).select(schema_of_json(input)),
-        Seq(Row("STRUCT<`id`: STRING>")))
+        Seq(Row("STRUCT<id: STRING>")))
     }
   }
 
@@ -716,7 +716,7 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
         schema_of_json(
           lit("""{"id": "a", "drop": {"drop": null}}"""),
           options.asJava)),
-      Seq(Row("STRUCT<`id`: STRING>")))
+      Seq(Row("STRUCT<id: STRING>")))
 
     // Array of structs
     checkAnswer(
@@ -724,7 +724,7 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
         schema_of_json(
           lit("""[{"id": "a", "drop": {"drop": null}}]"""),
           options.asJava)),
-      Seq(Row("ARRAY<STRUCT<`id`: STRING>>")))
+      Seq(Row("ARRAY<STRUCT<id: STRING>>")))
 
     // Other types are not affected.
     checkAnswer(
@@ -763,7 +763,7 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
 
   test("SPARK-33270: infers schema for JSON field with spaces and pass them to from_json") {
     val in = Seq("""{"a b": 1}""").toDS()
-    val out = in.select(from_json('value, schema_of_json("""{"a b": 100}""")) as "parsed")
+    val out = in.select(from_json($"value", schema_of_json("""{"a b": 100}""")) as "parsed")
     val expected = new StructType().add("parsed", new StructType().add("a b", LongType))
     assert(out.schema == expected)
   }

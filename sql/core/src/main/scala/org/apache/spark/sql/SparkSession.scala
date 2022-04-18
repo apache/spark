@@ -1104,13 +1104,13 @@ object SparkSession extends Logging {
   private[sql] def getOrCloneSessionWithConfigsOff(
       session: SparkSession,
       configurations: Seq[ConfigEntry[Boolean]]): SparkSession = {
-    val configsEnabled = configurations.filter(session.sessionState.conf.getConf(_))
+    val configsEnabled = configurations.filter(session.conf.get[Boolean])
     if (configsEnabled.isEmpty) {
       session
     } else {
       val newSession = session.cloneSession()
       configsEnabled.foreach(conf => {
-        newSession.sessionState.conf.setConf(conf, false)
+        newSession.conf.set(conf, false)
       })
       newSession
     }

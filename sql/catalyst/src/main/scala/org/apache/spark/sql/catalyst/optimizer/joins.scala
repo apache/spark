@@ -143,7 +143,7 @@ object EliminateOuterJoin extends Rule[LogicalPlan] with PredicateHelper {
     val attributes = e.references.toSeq
     val emptyRow = new GenericInternalRow(attributes.length)
     val boundE = BindReferences.bindReference(e, attributes)
-    if (boundE.find(_.isInstanceOf[Unevaluable]).isDefined) return false
+    if (boundE.exists(_.isInstanceOf[Unevaluable])) return false
     val v = boundE.eval(emptyRow)
     v == null || v == false
   }
@@ -195,9 +195,9 @@ object EliminateOuterJoin extends Rule[LogicalPlan] with PredicateHelper {
 object ExtractPythonUDFFromJoinCondition extends Rule[LogicalPlan] with PredicateHelper {
 
   private def hasUnevaluablePythonUDF(expr: Expression, j: Join): Boolean = {
-    expr.find { e =>
+    expr.exists { e =>
       PythonUDF.isScalarPythonUDF(e) && !canEvaluate(e, j.left) && !canEvaluate(e, j.right)
-    }.isDefined
+    }
   }
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan.transformUpWithPruning(
@@ -345,6 +345,16 @@ trait JoinSelectionHelper {
       join.hint, hintOnly = true, conf).isDefined ||
       getBroadcastBuildSide(join.left, join.right, join.joinType,
         join.hint, hintOnly = false, conf).isDefined
+  }
+
+  def canPruneLeft(joinType: JoinType): Boolean = joinType match {
+    case Inner | LeftSemi | RightOuter => true
+    case _ => false
+  }
+
+  def canPruneRight(joinType: JoinType): Boolean = joinType match {
+    case Inner | LeftSemi | LeftOuter => true
+    case _ => false
   }
 
   def hintToBroadcastLeft(hint: JoinHint): Boolean = {

@@ -45,6 +45,8 @@ import org.apache.spark.util.Utils
  */
 case class HashAggregateExec(
     requiredChildDistributionExpressions: Option[Seq[Expression]],
+    isStreaming: Boolean,
+    numShufflePartitions: Option[Int],
     groupingExpressions: Seq[NamedExpression],
     aggregateExpressions: Seq[AggregateExpression],
     aggregateAttributes: Seq[Attribute],
@@ -65,7 +67,7 @@ case class HashAggregateExec(
     "spillSize" -> SQLMetrics.createSizeMetric(sparkContext, "spill size"),
     "aggTime" -> SQLMetrics.createTimingMetric(sparkContext, "time in aggregation build"),
     "avgHashProbe" ->
-      SQLMetrics.createAverageMetric(sparkContext, "avg hash probe bucket list iters"),
+      SQLMetrics.createAverageMetric(sparkContext, "avg hash probes per key"),
     "numTasksFallBacked" -> SQLMetrics.createMetric(sparkContext, "number of sort fallback tasks"))
 
   // This is for testing. We force TungstenAggregationIterator to fall back to the unsafe row hash
@@ -204,7 +206,7 @@ case class HashAggregateExec(
     metrics.incPeakExecutionMemory(maxMemory)
 
     // Update average hashmap probe
-    avgHashProbe.set(hashMap.getAvgHashProbeBucketListIterations)
+    avgHashProbe.set(hashMap.getAvgHashProbesPerKey)
 
     if (sorter == null) {
       // not spilled
@@ -376,7 +378,7 @@ case class HashAggregateExec(
    * Currently fast hash map is supported for primitive data types during partial aggregation.
    * This list of supported use-cases should be expanded over time.
    */
-  private def checkIfFastHashMapSupported(ctx: CodegenContext): Boolean = {
+  private def checkIfFastHashMapSupported(): Boolean = {
     val isSupported =
       (groupingKeySchema ++ bufferSchema).forall(f => CodeGenerator.isPrimitiveType(f.dataType) ||
         f.dataType.isInstanceOf[DecimalType] || f.dataType.isInstanceOf[StringType] ||
@@ -402,8 +404,8 @@ case class HashAggregateExec(
     isSupported && isNotByteArrayDecimalType && isEnabledForAggModes
   }
 
-  private def enableTwoLevelHashMap(ctx: CodegenContext): Unit = {
-    if (!checkIfFastHashMapSupported(ctx)) {
+  private def enableTwoLevelHashMap(): Unit = {
+    if (!checkIfFastHashMapSupported()) {
       if (!Utils.isTesting) {
         logInfo(s"${SQLConf.ENABLE_TWOLEVEL_AGG_MAP.key} is set to true, but"
           + " current version of codegened fast hashmap does not support this aggregate.")
@@ -417,10 +419,12 @@ case class HashAggregateExec(
     }
   }
 
+  protected override def needHashTable: Boolean = true
+
   protected override def doProduceWithKeys(ctx: CodegenContext): String = {
     val initAgg = ctx.addMutableState(CodeGenerator.JAVA_BOOLEAN, "initAgg")
     if (conf.enableTwoLevelAggMap) {
-      enableTwoLevelHashMap(ctx)
+      enableTwoLevelHashMap()
     } else if (conf.enableVectorizedHashMap) {
       logWarning("Two level hashmap is disabled but vectorized hashmap is enabled.")
     }

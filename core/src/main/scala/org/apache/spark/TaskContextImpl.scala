@@ -49,6 +49,7 @@ private[spark] class TaskContextImpl(
     override val partitionId: Int,
     override val taskAttemptId: Long,
     override val attemptNumber: Int,
+    override val numPartitions: Int,
     override val taskMemoryManager: TaskMemoryManager,
     localProperties: Properties,
     @transient private val metricsSystem: MetricsSystem,

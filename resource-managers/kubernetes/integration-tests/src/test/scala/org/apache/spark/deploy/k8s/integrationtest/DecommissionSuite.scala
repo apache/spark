@@ -27,6 +27,7 @@ import org.scalatest.concurrent.{Eventually, PatienceConfiguration}
 import org.scalatest.matchers.should.Matchers._
 import org.scalatest.time.{Minutes, Seconds, Span}
 
+import org.apache.spark.deploy.k8s.Config.{KUBERNETES_EXECUTOR_DECOMMISSION_LABEL, KUBERNETES_EXECUTOR_DECOMMISSION_LABEL_VALUE}
 import org.apache.spark.internal.config
 import org.apache.spark.internal.config.PLUGINS
 
@@ -140,8 +141,8 @@ private[spark] trait DecommissionSuite { k8sSuite: KubernetesSuite =>
         // give enough time to validate the labels are set.
         .set("spark.storage.decommission.replicationReattemptInterval", "75")
         // Configure labels for decommissioning pods.
-        .set("spark.kubernetes.executor.decommmissionLabel", "solong")
-        .set("spark.kubernetes.executor.decommmissionLabelValue", "cruelworld")
+        .set(KUBERNETES_EXECUTOR_DECOMMISSION_LABEL.key, "solong")
+        .set(KUBERNETES_EXECUTOR_DECOMMISSION_LABEL_VALUE.key, "cruelworld")
 
       // This is called on all exec pods but we only care about exec 0 since it's the "first."
       // We only do this inside of this test since the other tests trigger k8s side deletes where we
@@ -151,7 +152,7 @@ private[spark] trait DecommissionSuite { k8sSuite: KubernetesSuite =>
           val client = kubernetesTestComponents.kubernetesClient
           // The label will be added eventually, but k8s objects don't refresh.
           Eventually.eventually(
-            PatienceConfiguration.Timeout(Span(1200, Seconds)),
+            PatienceConfiguration.Timeout(Span(120, Seconds)),
             PatienceConfiguration.Interval(Span(1, Seconds))) {
 
             val currentPod = client.pods().withName(pod.getMetadata.getName).get

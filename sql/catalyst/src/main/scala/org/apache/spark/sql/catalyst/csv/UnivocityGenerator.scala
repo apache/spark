@@ -24,6 +24,7 @@ import com.univocity.parsers.csv.CsvWriter
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.util.{DateFormatter, DateTimeUtils, IntervalStringStyles, IntervalUtils, TimestampFormatter}
 import org.apache.spark.sql.catalyst.util.LegacyDateFormats.FAST_DATE_FORMAT
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 class UnivocityGenerator(
@@ -60,6 +61,7 @@ class UnivocityGenerator(
     legacyFormat = FAST_DATE_FORMAT,
     isParsing = false)
 
+  @scala.annotation.tailrec
   private def makeConverter(dataType: DataType): ValueConverter = dataType match {
     case DateType =>
       (row: InternalRow, ordinal: Int) => dateFormatter.format(row.getInt(ordinal))
@@ -94,6 +96,9 @@ class UnivocityGenerator(
     while (i < row.numFields) {
       if (!row.isNullAt(i)) {
         values(i) = valueConverters(i).apply(row, i)
+      } else if (
+        SQLConf.get.getConf(SQLConf.LEGACY_NULL_VALUE_WRITTEN_AS_QUOTED_EMPTY_STRING_CSV)) {
+        values(i) = options.nullValue
       }
       i += 1
     }

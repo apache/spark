@@ -38,6 +38,7 @@ import org.apache.logging.log4j.core.appender.ConsoleAppender;
 import org.apache.logging.log4j.core.appender.AbstractWriterAppender;
 import org.apache.logging.log4j.core.appender.WriterManager;
 import com.google.common.base.Joiner;
+import org.apache.logging.log4j.core.config.Property;
 import org.apache.logging.log4j.message.Message;
 
 /**
@@ -267,7 +268,7 @@ public class LogDivertAppender extends AbstractWriterAppender<WriterManager> {
       Appender ap = entry.getValue();
       if (ap.getClass().equals(ConsoleAppender.class)) {
         Layout l = ap.getLayout();
-        if (l.getClass().equals(StringLayout.class)) {
+        if (l instanceof StringLayout) {
           layout = (StringLayout) l;
           break;
         }
@@ -278,7 +279,7 @@ public class LogDivertAppender extends AbstractWriterAppender<WriterManager> {
 
   public LogDivertAppender(OperationManager operationManager,
     OperationLog.LoggingLevel loggingMode) {
-    super("LogDivertAppender", initLayout(loggingMode), null, false, true,
+    super("LogDivertAppender", initLayout(loggingMode), null, false, true, Property.EMPTY_ARRAY,
             new WriterManager(new CharArrayWriter(), "LogDivertAppender",
                     initLayout(loggingMode), true));
 

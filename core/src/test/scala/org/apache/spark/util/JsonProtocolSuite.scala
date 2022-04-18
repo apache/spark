@@ -45,23 +45,23 @@ class JsonProtocolSuite extends SparkFunSuite {
     val stageSubmitted =
       SparkListenerStageSubmitted(makeStageInfo(100, 200, 300, 400L, 500L), properties)
     val stageCompleted = SparkListenerStageCompleted(makeStageInfo(101, 201, 301, 401L, 501L))
-    val taskStart = SparkListenerTaskStart(111, 0, makeTaskInfo(222L, 333, 1, 444L, false))
+    val taskStart = SparkListenerTaskStart(111, 0, makeTaskInfo(222L, 333, 1, 333, 444L, false))
     val taskGettingResult =
-      SparkListenerTaskGettingResult(makeTaskInfo(1000L, 2000, 5, 3000L, true))
+      SparkListenerTaskGettingResult(makeTaskInfo(1000L, 2000, 5, 2000, 3000L, true))
     val taskEnd = SparkListenerTaskEnd(1, 0, "ShuffleMapTask", Success,
-      makeTaskInfo(123L, 234, 67, 345L, false),
+      makeTaskInfo(123L, 234, 67, 234, 345L, false),
       new ExecutorMetrics(Array(543L, 123456L, 12345L, 1234L, 123L, 12L, 432L,
         321L, 654L, 765L, 256912L, 123456L, 123456L, 61728L, 30364L, 15182L,
         0, 0, 0, 0, 80001L)),
       makeTaskMetrics(300L, 400L, 500L, 600L, 700, 800, hasHadoopInput = false, hasOutput = false))
     val taskEndWithHadoopInput = SparkListenerTaskEnd(1, 0, "ShuffleMapTask", Success,
-      makeTaskInfo(123L, 234, 67, 345L, false),
+      makeTaskInfo(123L, 234, 67, 234, 345L, false),
       new ExecutorMetrics(Array(543L, 123456L, 12345L, 1234L, 123L, 12L, 432L,
         321L, 654L, 765L, 256912L, 123456L, 123456L, 61728L, 30364L, 15182L,
         0, 0, 0, 0, 80001L)),
       makeTaskMetrics(300L, 400L, 500L, 600L, 700, 800, hasHadoopInput = true, hasOutput = false))
     val taskEndWithOutput = SparkListenerTaskEnd(1, 0, "ResultTask", Success,
-      makeTaskInfo(123L, 234, 67, 345L, false),
+      makeTaskInfo(123L, 234, 67, 234, 345L, false),
       new ExecutorMetrics(Array(543L, 123456L, 12345L, 1234L, 123L, 12L, 432L,
         321L, 654L, 765L, 256912L, 123456L, 123456L, 61728L, 30364L, 15182L,
         0, 0, 0, 0, 80001L)),
@@ -175,7 +175,7 @@ class JsonProtocolSuite extends SparkFunSuite {
     val attributes = Map("ContainerId" -> "ct1", "User" -> "spark").toMap
     testRDDInfo(makeRddInfo(2, 3, 4, 5L, 6L, DeterministicLevel.DETERMINATE))
     testStageInfo(makeStageInfo(10, 20, 30, 40L, 50L))
-    testTaskInfo(makeTaskInfo(999L, 888, 55, 777L, false))
+    testTaskInfo(makeTaskInfo(999L, 888, 55, 888, 777L, false))
     testTaskMetrics(makeTaskMetrics(
       33333L, 44444L, 55555L, 66666L, 7, 8, hasHadoopInput = false, hasOutput = false))
     testBlockManagerId(BlockManagerId("Hong", "Kong", 500))
@@ -1021,9 +1021,9 @@ private[spark] object JsonProtocolSuite extends Assertions {
     stageInfo
   }
 
-  private def makeTaskInfo(a: Long, b: Int, c: Int, d: Long, speculative: Boolean) = {
-    val taskInfo = new TaskInfo(a, b, c, d, "executor", "your kind sir", TaskLocality.NODE_LOCAL,
-      speculative)
+  private def makeTaskInfo(a: Long, b: Int, c: Int, d: Int, e: Long, speculative: Boolean) = {
+    val taskInfo = new TaskInfo(a, b, c, d, e,
+      "executor", "your kind sir", TaskLocality.NODE_LOCAL, speculative)
     taskInfo.setAccumulables(
       List(makeAccumulableInfo(1), makeAccumulableInfo(2), makeAccumulableInfo(3, internal = true)))
     taskInfo
@@ -1226,6 +1226,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |    "Task ID": 222,
       |    "Index": 333,
       |    "Attempt": 1,
+      |    "Partition ID": 333,
       |    "Launch Time": 444,
       |    "Executor ID": "executor",
       |    "Host": "your kind sir",
@@ -1273,6 +1274,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |    "Task ID": 1000,
       |    "Index": 2000,
       |    "Attempt": 5,
+      |    "Partition ID": 2000,
       |    "Launch Time": 3000,
       |    "Executor ID": "executor",
       |    "Host": "your kind sir",
@@ -1326,6 +1328,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |    "Task ID": 123,
       |    "Index": 234,
       |    "Attempt": 67,
+      |    "Partition ID": 234,
       |    "Launch Time": 345,
       |    "Executor ID": "executor",
       |    "Host": "your kind sir",
@@ -1451,6 +1454,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |    "Task ID": 123,
       |    "Index": 234,
       |    "Attempt": 67,
+      |    "Partition ID": 234,
       |    "Launch Time": 345,
       |    "Executor ID": "executor",
       |    "Host": "your kind sir",
@@ -1576,6 +1580,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |    "Task ID": 123,
       |    "Index": 234,
       |    "Attempt": 67,
+      |    "Partition ID": 234,
       |    "Launch Time": 345,
       |    "Executor ID": "executor",
       |    "Host": "your kind sir",

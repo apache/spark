@@ -58,7 +58,7 @@ private[spark] object Config extends Logging {
   val KUBERNETES_DRIVER_SERVICE_DELETE_ON_TERMINATION =
     ConfigBuilder("spark.kubernetes.driver.service.deleteOnTermination")
       .doc("If true, driver service will be deleted on Spark application termination. " +
-        "If false, it will be cleaned up when the driver pod is deletion.")
+        "If false, it will be cleaned up when the driver pod is deleted.")
       .version("3.2.0")
       .booleanConf
       .createWithDefault(true)
@@ -147,7 +147,8 @@ private[spark] object Config extends Logging {
       .createWithDefault(0)
 
   object ExecutorRollPolicy extends Enumeration {
-    val ID, ADD_TIME, TOTAL_GC_TIME, TOTAL_DURATION, AVERAGE_DURATION, FAILED_TASKS, OUTLIER = Value
+    val ID, ADD_TIME, TOTAL_GC_TIME, TOTAL_DURATION, AVERAGE_DURATION, FAILED_TASKS,
+      OUTLIER, OUTLIER_NO_FALLBACK = Value
   }
 
   val EXECUTOR_ROLL_POLICY =
@@ -165,7 +166,9 @@ private[spark] object Config extends Logging {
         "OUTLIER policy chooses an executor with outstanding statistics which is bigger than" +
         "at least two standard deviation from the mean in average task time, " +
         "total task time, total task GC time, and the number of failed tasks if exists. " +
-        "If there is no outlier, it works like TOTAL_DURATION policy.")
+        "If there is no outlier it works like TOTAL_DURATION policy. " +
+        "OUTLIER_NO_FALLBACK policy picks an outlier using the OUTLIER policy above. " +
+        "If there is no outlier then no executor will be rolled.")
       .version("3.3.0")
       .stringConf
       .transform(_.toUpperCase(Locale.ROOT))
@@ -280,6 +283,15 @@ private[spark] object Config extends Logging {
       .stringConf
       .createOptional
 
+  val KUBERNETES_SCHEDULER_NAME =
+    ConfigBuilder("spark.kubernetes.scheduler.name")
+      .doc("Specify the scheduler name for driver and executor pods. If " +
+        s"`${KUBERNETES_DRIVER_SCHEDULER_NAME.key}` or " +
+        s"`${KUBERNETES_EXECUTOR_SCHEDULER_NAME.key}` is set, will override this.")
+      .version("3.3.0")
+      .stringConf
+      .createOptional
+
   val KUBERNETES_EXECUTOR_REQUEST_CORES =
     ConfigBuilder("spark.kubernetes.executor.request.cores")
       .doc("Specify the cpu request for each executor pod")
@@ -341,7 +353,9 @@ private[spark] object Config extends Logging {
     ConfigBuilder("spark.kubernetes.driver.pod.featureSteps")
       .doc("Class names of an extra driver pod feature step implementing " +
         "KubernetesFeatureConfigStep. This is a developer API. Comma separated. " +
-        "Runs after all of Spark internal feature steps.")
+        "Runs after all of Spark internal feature steps. Since 3.3.0, your driver feature " +
+        "step can implement `KubernetesDriverCustomFeatureConfigStep` where the driver " +
+        "config is also available.")
       .version("3.2.0")
       .stringConf
       .toSequence
@@ -351,14 +365,16 @@ private[spark] object Config extends Logging {
     ConfigBuilder("spark.kubernetes.executor.pod.featureSteps")
       .doc("Class name of an extra executor pod feature step implementing " +
         "KubernetesFeatureConfigStep. This is a developer API. Comma separated. " +
-        "Runs after all of Spark internal feature steps.")
+        "Runs after all of Spark internal feature steps. Since 3.3.0, your executor feature " +
+        "step can implement `KubernetesExecutorCustomFeatureConfigStep` where the executor " +
+        "config is also available.")
       .version("3.2.0")
       .stringConf
       .toSequence
       .createWithDefault(Nil)
 
   val KUBERNETES_EXECUTOR_DECOMMISSION_LABEL =
-    ConfigBuilder("spark.kubernetes.executor.decommmissionLabel")
+    ConfigBuilder("spark.kubernetes.executor.decommissionLabel")
       .doc("Label to apply to a pod which is being decommissioned." +
         " Designed for use with pod disruption budgets and similar mechanism" +
         " such as pod-deletion-cost.")
@@ -367,7 +383,7 @@ private[spark] object Config extends Logging {
       .createOptional
 
   val KUBERNETES_EXECUTOR_DECOMMISSION_LABEL_VALUE =
-    ConfigBuilder("spark.kubernetes.executor.decommmissionLabelValue")
+    ConfigBuilder("spark.kubernetes.executor.decommissionLabelValue")
       .doc("Label value to apply to a pod which is being decommissioned." +
         " Designed for use with pod disruption budgets and similar mechanism" +
         " such as pod-deletion-cost.")

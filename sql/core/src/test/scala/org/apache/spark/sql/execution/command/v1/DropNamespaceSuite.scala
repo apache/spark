@@ -28,7 +28,8 @@ import org.apache.spark.sql.execution.command
  *   - V1 In-Memory catalog: `org.apache.spark.sql.execution.command.v1.DropNamespaceSuite`
  *   - V1 Hive External catalog: `org.apache.spark.sql.hive.execution.command.DropNamespaceSuite`
  */
-trait DropNamespaceSuiteBase extends command.DropNamespaceSuiteBase {
+trait DropNamespaceSuiteBase extends command.DropNamespaceSuiteBase
+  with command.TestsV1AndV2Commands {
   override protected def builtinTopNamespaces: Seq[String] = Seq("default")
 
   override protected def namespaceAlias(): String = "database"
@@ -41,4 +42,6 @@ trait DropNamespaceSuiteBase extends command.DropNamespaceSuiteBase {
   }
 }
 
-class DropNamespaceSuite extends DropNamespaceSuiteBase with CommandSuiteBase
+class DropNamespaceSuite extends DropNamespaceSuiteBase with CommandSuiteBase {
+  override def commandVersion: String = super[DropNamespaceSuiteBase].commandVersion
+}

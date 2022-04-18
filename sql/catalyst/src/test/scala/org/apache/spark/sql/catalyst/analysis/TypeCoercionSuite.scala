@@ -190,6 +190,7 @@ abstract class TypeCoercionSuiteBase extends AnalysisTest {
   test("implicit type cast - DateType") {
     val checkedType = DateType
     checkTypeCasting(checkedType, castableTypes = Seq(checkedType, StringType) ++ datetimeTypes)
+    shouldCast(checkedType, AnyTimestampType, AnyTimestampType.defaultConcreteType)
     shouldNotCast(checkedType, DecimalType)
     shouldNotCast(checkedType, NumericType)
     shouldNotCast(checkedType, IntegralType)
@@ -198,6 +199,16 @@ abstract class TypeCoercionSuiteBase extends AnalysisTest {
   test("implicit type cast - TimestampType") {
     val checkedType = TimestampType
     checkTypeCasting(checkedType, castableTypes = Seq(checkedType, StringType) ++ datetimeTypes)
+    shouldCast(checkedType, AnyTimestampType, checkedType)
+    shouldNotCast(checkedType, DecimalType)
+    shouldNotCast(checkedType, NumericType)
+    shouldNotCast(checkedType, IntegralType)
+  }
+
+  test("implicit type cast - TimestampNTZType") {
+    val checkedType = TimestampNTZType
+    checkTypeCasting(checkedType, castableTypes = Seq(checkedType, StringType) ++ datetimeTypes)
+    shouldCast(checkedType, AnyTimestampType, checkedType)
     shouldNotCast(checkedType, DecimalType)
     shouldNotCast(checkedType, NumericType)
     shouldNotCast(checkedType, IntegralType)
@@ -476,6 +487,7 @@ class TypeCoercionSuite extends TypeCoercionSuiteBase {
     checkTypeCasting(checkedType, castableTypes = allTypes.filterNot(nonCastableTypes.contains))
     shouldCast(checkedType, DecimalType, DecimalType.SYSTEM_DEFAULT)
     shouldCast(checkedType, NumericType, NumericType.defaultConcreteType)
+    shouldCast(checkedType, AnyTimestampType, AnyTimestampType.defaultConcreteType)
     shouldNotCast(checkedType, IntegralType)
   }
 
@@ -1478,7 +1490,7 @@ class TypeCoercionSuite extends TypeCoercionSuiteBase {
     val wp1 = widenSetOperationTypes(union.select(p1.output.head, $"p2.v"))
     assert(wp1.isInstanceOf[Project])
     // The attribute `p1.output.head` should be replaced in the root `Project`.
-    assert(wp1.expressions.forall(_.find(_ == p1.output.head).isEmpty))
+    assert(wp1.expressions.forall(!_.exists(_ == p1.output.head)))
     val wp2 = widenSetOperationTypes(Aggregate(Nil, sum(p1.output.head).as("v") :: Nil, union))
     assert(wp2.isInstanceOf[Aggregate])
     assert(wp2.missingInput.isEmpty)

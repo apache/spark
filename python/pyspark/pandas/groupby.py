@@ -1251,9 +1251,9 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
                 )
 
             if isinstance(return_type, DataFrameType):
-                data_fields = cast(DataFrameType, return_type).data_fields
-                return_schema = cast(DataFrameType, return_type).spark_type
-                index_fields = cast(DataFrameType, return_type).index_fields
+                data_fields = return_type.data_fields
+                return_schema = return_type.spark_type
+                index_fields = return_type.index_fields
                 should_retain_index = len(index_fields) > 0
                 psdf_from_pandas = None
             else:
@@ -2287,8 +2287,8 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
                     "but found type {}".format(return_type)
                 )
 
-            dtype = cast(SeriesType, return_type).dtype
-            spark_type = cast(SeriesType, return_type).spark_type
+            dtype = return_type.dtype
+            spark_type = return_type.spark_type
 
             data_fields = [
                 InternalField(dtype=dtype, struct_field=StructField(name=c, dataType=spark_type))
@@ -2356,12 +2356,16 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         Name: value1, dtype: int64
         """
         if dropna:
-            stat_function = lambda col: F.countDistinct(col)
+
+            def stat_function(col: Column) -> Column:
+                return F.countDistinct(col)
+
         else:
-            stat_function = lambda col: (
-                F.countDistinct(col)
-                + F.when(F.count(F.when(col.isNull(), 1).otherwise(None)) >= 1, 1).otherwise(0)
-            )
+
+            def stat_function(col: Column) -> Column:
+                return F.countDistinct(col) + F.when(
+                    F.count(F.when(col.isNull(), 1).otherwise(None)) >= 1, 1
+                ).otherwise(0)
 
         return self._reduce_for_stat_function(stat_function, only_numeric=False)
 
@@ -2563,7 +2567,9 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
                 "accuracy must be an integer; however, got [%s]" % type(accuracy).__name__
             )
 
-        stat_function = lambda col: F.percentile_approx(col, 0.5, accuracy)
+        def stat_function(col: Column) -> Column:
+            return F.percentile_approx(col, 0.5, accuracy)
+
         return self._reduce_for_stat_function(stat_function, only_numeric=numeric_only)
 
     def _reduce_for_stat_function(
@@ -2832,7 +2838,7 @@ class DataFrameGroupBy(GroupBy[DataFrame]):
     ) -> DataFrame:
         applied = []
         for column in self._agg_columns:
-            applied.append(op(cast(SeriesGroupBy, column.groupby(self._groupkeys))))
+            applied.append(op(column.groupby(self._groupkeys)))
         if numeric_only:
             applied = [col for col in applied if isinstance(col.spark.data_type, NumericType)]
             if not applied:
@@ -3199,23 +3205,35 @@ class SeriesGroupBy(GroupBy[Series]):
         Examples
         --------
         >>> df = ps.DataFrame({'A': [1, 2, 2, 3, 3, 3],
-        ...                    'B': [1, 1, 2, 3, 3, 3]},
+        ...                    'B': [1, 1, 2, 3, 3, np.nan]},
         ...                   columns=['A', 'B'])
         >>> df
-           A  B
-        0  1  1
-        1  2  1
-        2  2  2
-        3  3  3
-        4  3  3
-        5  3  3
+           A    B
+        0  1  1.0
+        1  2  1.0
+        2  2  2.0
+        3  3  3.0
+        4  3  3.0
+        5  3  NaN
 
         >>> df.groupby('A')['B'].value_counts().sort_index()  # doctest: +NORMALIZE_WHITESPACE
         A  B
-        1  1    1
-        2  1    1
-           2    1
-        3  3    3
+        1  1.0    1
+        2  1.0    1
+           2.0    1
+        3  3.0    2
+        Name: B, dtype: int64
+
+        Don't include counts of NaN when dropna is False.
+
+        >>> df.groupby('A')['B'].value_counts(
+        ...   dropna=False).sort_index()  # doctest: +NORMALIZE_WHITESPACE
+        A  B
+        1  1.0    1
+        2  1.0    1
+           2.0    1
+        3  3.0    2
+           NaN    1
         Name: B, dtype: int64
         """
         groupkeys = self._groupkeys + self._agg_columns
@@ -3223,8 +3241,17 @@ class SeriesGroupBy(GroupBy[Series]):
         groupkey_cols = [s.spark.column.alias(name) for s, name in zip(groupkeys, groupkey_names)]
 
         sdf = self._psdf._internal.spark_frame
+
         agg_column = self._agg_columns[0]._internal.data_spark_column_names[0]
         sdf = sdf.groupby(*groupkey_cols).count().withColumnRenamed("count", agg_column)
+
+        if self._dropna:
+            _groupkey_column_names = groupkey_names[: len(self._groupkeys)]
+            sdf = sdf.dropna(subset=_groupkey_column_names)
+
+        if dropna:
+            _agg_columns_names = groupkey_names[len(self._groupkeys) :]
+            sdf = sdf.dropna(subset=_agg_columns_names)
 
         if sort:
             if ascending:

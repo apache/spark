@@ -164,7 +164,7 @@ class AddFileTests(PySparkTestCase):
         self.assertEqual("My Server", SimpleHTTPServer.__name__)
 
         def func(x):
-            import SimpleHTTPServer  # type: ignore[import]
+            import SimpleHTTPServer
 
             return SimpleHTTPServer.__name__
 

@@ -20,6 +20,7 @@ import os
 import random
 import tempfile
 import time
+import unittest
 from glob import glob
 
 from py4j.protocol import Py4JJavaError
@@ -34,10 +35,12 @@ from pyspark.serializers import (
     UTF8Deserializer,
     NoOpSerializer,
 )
-from pyspark.testing.utils import ReusedPySparkTestCase, SPARK_HOME, QuietTest
+from pyspark.sql import SparkSession
+from pyspark.testing.utils import ReusedPySparkTestCase, SPARK_HOME, QuietTest, have_numpy
+from pyspark.testing.sqlutils import have_pandas
 
 
-global_func = lambda: "Hi"
+global_func = lambda: "Hi"  # noqa: E731
 
 
 class RDDTests(ReusedPySparkTestCase):
@@ -697,6 +700,41 @@ class RDDTests(ReusedPySparkTestCase):
         rdd = self.sc.parallelize(range(1 << 20)).map(lambda x: str(x))
         rdd._jrdd.first()
 
+    @unittest.skipIf(not have_numpy or not have_pandas, "NumPy or Pandas not installed")
+    def test_take_on_jrdd_with_large_rows_should_not_cause_deadlock(self):
+        # Regression test for SPARK-38677.
+        #
+        # Create a DataFrame with many columns, call a Python function on each row, and take only
+        # the first result row.
+        #
+        # This produces large rows that trigger a deadlock involving the following three threads:
+        #
+        # 1. The Scala task executor thread. During task execution, this is responsible for reading
+        #    output produced by the Python process. However, in this case the task has finished
+        #    early, and this thread is no longer reading output produced by the Python process.
+        #    Instead, it is waiting for the Scala WriterThread to exit so that it can finish the
+        #    task.
+        #
+        # 2. The Scala WriterThread. This is trying to send a large row to the Python process, and
+        #    is waiting for the Python process to read that row.
+        #
+        # 3. The Python process. This is trying to send a large output to the Scala task executor
+        #    thread, and is waiting for that thread to read that output.
+        #
+        # For this test to succeed rather than hanging, the Scala MonitorThread must detect this
+        # deadlock and kill the Python worker.
+        import numpy as np
+        import pandas as pd
+
+        num_rows = 100000
+        num_columns = 134
+        data = np.zeros((num_rows, num_columns))
+        columns = map(str, range(num_columns))
+        df = SparkSession(self.sc).createDataFrame(pd.DataFrame(data, columns=columns))
+        actual = CPickleSerializer().loads(df.rdd.map(list)._jrdd.first())
+        expected = [list(data[0])]
+        self.assertEqual(expected, actual)
+
     def test_sortByKey_uses_all_partitions_not_only_first_and_last(self):
         # Regression test for SPARK-5969
         seq = [(i * 59 % 101, i) for i in range(101)]  # unsorted sequence
@@ -764,7 +802,7 @@ class RDDTests(ReusedPySparkTestCase):
         # Regression test for SPARK-27000
         global global_func
         self.assertEqual(self.sc.parallelize([1]).map(lambda _: global_func()).first(), "Hi")
-        global_func = lambda: "Yeah"
+        global_func = lambda: "Yeah"  # noqa: E731
         self.assertEqual(self.sc.parallelize([1]).map(lambda _: global_func()).first(), "Yeah")
 
     def test_to_local_iterator_failure(self):

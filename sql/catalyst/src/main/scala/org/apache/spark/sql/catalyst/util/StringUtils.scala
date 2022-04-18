@@ -44,7 +44,7 @@ object StringUtils extends Logging {
    * @return the equivalent Java regular expression of the pattern
    */
   def escapeLikeRegex(pattern: String, escapeChar: Char): String = {
-    val in = pattern.toIterator
+    val in = pattern.iterator
     val out = new StringBuilder()
 
     def fail(message: String) = throw QueryCompilationErrors.invalidPatternError(pattern, message)

@@ -51,6 +51,7 @@ from pyspark.sql.types import (
     NullType,
     TimestampType,
 )
+from pyspark.sql.utils import PythonException
 from pyspark.testing.sqlutils import (
     ReusedSQLTestCase,
     have_pandas,
@@ -267,6 +268,81 @@ class GroupedMapInPandasTests(ReusedSQLTestCase):
         expected = expected.sort_values(["id", "v"]).reset_index(drop=True)
         expected = expected.assign(norm=expected.norm.astype("float64"))
         assert_frame_equal(expected, result)
+
+    def test_apply_in_pandas_not_returning_pandas_dataframe(self):
+        df = self.data
+
+        def stats(key, _):
+            return key
+
+        with QuietTest(self.sc):
+            with self.assertRaisesRegex(
+                PythonException,
+                "Return type of the user-defined function should be pandas.DataFrame, "
+                "but is <class 'tuple'>",
+            ):
+                df.groupby("id").applyInPandas(stats, schema="id integer, m double").collect()
+
+    def test_apply_in_pandas_returning_wrong_number_of_columns(self):
+        df = self.data
+
+        def stats(key, pdf):
+            v = pdf.v
+            # returning three columns
+            res = pd.DataFrame([key + (v.mean(), v.std())])
+            return res
+
+        with QuietTest(self.sc):
+            with self.assertRaisesRegex(
+                PythonException,
+                "Number of columns of the returned pandas.DataFrame doesn't match "
+                "specified schema. Expected: 2 Actual: 3",
+            ):
+                # stats returns three columns while here we set schema with two columns
+                df.groupby("id").applyInPandas(stats, schema="id integer, m double").collect()
+
+    def test_apply_in_pandas_returning_empty_dataframe(self):
+        df = self.data
+
+        def odd_means(key, pdf):
+            if key[0] % 2 == 0:
+                return pd.DataFrame([])
+            else:
+                return pd.DataFrame([key + (pdf.v.mean(),)])
+
+        expected_ids = {row[0] for row in self.data.collect() if row[0] % 2 != 0}
+
+        result = (
+            df.groupby("id")
+            .applyInPandas(odd_means, schema="id integer, m double")
+            .sort("id", "m")
+            .collect()
+        )
+
+        actual_ids = {row[0] for row in result}
+        self.assertSetEqual(expected_ids, actual_ids)
+
+        self.assertEqual(len(expected_ids), len(result))
+        for row in result:
+            self.assertEqual(24.5, row[1])
+
+    def test_apply_in_pandas_returning_empty_dataframe_and_wrong_number_of_columns(self):
+        df = self.data
+
+        def odd_means(key, pdf):
+            if key[0] % 2 == 0:
+                return pd.DataFrame([], columns=["id"])
+            else:
+                return pd.DataFrame([key + (pdf.v.mean(),)])
+
+        with QuietTest(self.sc):
+            with self.assertRaisesRegex(
+                PythonException,
+                "Number of columns of the returned pandas.DataFrame doesn't match "
+                "specified schema. Expected: 2 Actual: 1",
+            ):
+                # stats returns one column for even keys while here we set schema with two columns
+                df.groupby("id").applyInPandas(odd_means, schema="id integer, m double").collect()
 
     def test_datatype_string(self):
         df = self.data

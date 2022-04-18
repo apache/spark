@@ -73,10 +73,10 @@ public class VectorizedDeltaBinaryPackedReader extends VectorizedReaderBase {
   private ByteBufferInputStream in;
 
   // temporary buffers used by readByte, readShort, readInteger, and readLong
-  byte byteVal;
-  short shortVal;
-  int intVal;
-  long longVal;
+  private byte byteVal;
+  private short shortVal;
+  private int intVal;
+  private long longVal;
 
   @Override
   public void initFromPage(int valueCount, ByteBufferInputStream in) throws IOException {
@@ -90,11 +90,17 @@ public class VectorizedDeltaBinaryPackedReader extends VectorizedReaderBase {
     Preconditions.checkArgument(miniSize % 8 == 0,
         "miniBlockSize must be multiple of 8, but it's " + miniSize);
     this.miniBlockSizeInValues = (int) miniSize;
+    // True value count. May be less than valueCount because of nulls
     this.totalValueCount = BytesUtils.readUnsignedVarInt(in);
     this.bitWidths = new int[miniBlockNumInABlock];
     this.unpackedValuesBuffer = new long[miniBlockSizeInValues];
     // read the first value
     firstValue = BytesUtils.readZigZagVarLong(in);
+  }
+
+  // True value count. May be less than valueCount because of nulls
+  int getTotalValueCount() {
+    return totalValueCount;
   }
 
   @Override

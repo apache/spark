@@ -172,7 +172,7 @@ class AtIndexer(IndexerLike):
         if len(pdf) < 1:
             raise KeyError(name_like_string(row_sel))
 
-        values = cast(pd.DataFrame, pdf).iloc[:, 0].values
+        values = pdf.iloc[:, 0].values
         return (
             values if (len(row_sel) < self._internal.index_level or len(values) > 1) else values[0]
         )
@@ -535,7 +535,7 @@ class LocIndexerLike(IndexerLike, metaclass=ABCMeta):
         except AnalysisException:
             raise KeyError(
                 "[{}] don't exist in columns".format(
-                    [col._jc.toString() for col in data_spark_columns]  # type: ignore[operator]
+                    [col._jc.toString() for col in data_spark_columns]
                 )
             )
 
@@ -553,7 +553,7 @@ class LocIndexerLike(IndexerLike, metaclass=ABCMeta):
 
         psdf_or_psser: Union[DataFrame, Series]
         if returns_series:
-            psdf_or_psser = cast(Series, first_series(psdf))
+            psdf_or_psser = first_series(psdf)
             if series_name is not None and series_name != psdf_or_psser.name:
                 psdf_or_psser = psdf_or_psser.rename(series_name)
         else:
@@ -1795,7 +1795,7 @@ class iLocIndexer(LocIndexerLike):
             )
 
     def __setitem__(self, key: Any, value: Any) -> None:
-        if is_list_like(value) and not isinstance(value, Column):
+        if not isinstance(value, Column) and is_list_like(value):
             iloc_item = self[key]
             if not is_list_like(key) or not is_list_like(iloc_item):
                 raise ValueError("setting an array element with a sequence.")

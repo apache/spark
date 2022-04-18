@@ -20,7 +20,6 @@ package org.apache.spark.deploy.history
 import java.io.File
 import java.util.concurrent.atomic.AtomicLong
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable.{HashMap, ListBuffer}
 
 import org.apache.commons.io.FileUtils
@@ -28,6 +27,8 @@ import org.apache.commons.io.FileUtils
 import org.apache.spark.SparkConf
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.History._
+import org.apache.spark.internal.config.History.HybridStoreDiskBackend.LEVELDB
+import org.apache.spark.status.KVUtils
 import org.apache.spark.status.KVUtils._
 import org.apache.spark.util.{Clock, Utils}
 import org.apache.spark.util.kvstore.KVStore
@@ -55,6 +56,8 @@ private class HistoryServerDiskManager(
   if (!appStoreDir.isDirectory() && !appStoreDir.mkdir()) {
     throw new IllegalArgumentException(s"Failed to create app directory ($appStoreDir).")
   }
+  private val extension =
+    if (conf.get(HYBRID_STORE_DISK_BACKEND) == LEVELDB.toString) ".ldb" else ".rdb"
 
   private val tmpStoreDir = new File(path, "temp")
   if (!tmpStoreDir.isDirectory() && !tmpStoreDir.mkdir()) {
@@ -75,10 +78,8 @@ private class HistoryServerDiskManager(
 
     // Go through the recorded store directories and remove any that may have been removed by
     // external code.
-    val (existences, orphans) = listing
-      .view(classOf[ApplicationStoreInfo])
-      .asScala
-      .toSeq
+    val (existences, orphans) = KVUtils.viewToSeq(listing
+      .view(classOf[ApplicationStoreInfo]))
       .partition { info =>
         new File(info.path).exists()
       }
@@ -251,7 +252,7 @@ private class HistoryServerDiskManager(
   }
 
   private[history] def appStorePath(appId: String, attemptId: Option[String]): File = {
-    val fileName = appId + attemptId.map("_" + _).getOrElse("") + ".ldb"
+    val fileName = appId + attemptId.map("_" + _).getOrElse("") + extension
     new File(appStoreDir, fileName)
   }
 

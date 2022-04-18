@@ -32,6 +32,7 @@ import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.regression.FactorizationMachines._
 import org.apache.spark.ml.util._
+import org.apache.spark.ml.util.DatasetUtils._
 import org.apache.spark.ml.util.Instrumentation.instrumented
 import org.apache.spark.mllib.{linalg => OldLinalg}
 import org.apache.spark.mllib.linalg.{Vector => OldVector, Vectors => OldVectors}
@@ -416,8 +417,12 @@ class FMRegressor @Since("3.0.0") (
     instr.logNumFeatures(numFeatures)
 
     val handlePersistence = dataset.storageLevel == StorageLevel.NONE
-    val labeledPoint = extractLabeledPoints(dataset)
-    val data: RDD[(Double, OldVector)] = labeledPoint.map(x => (x.label, x.features))
+
+    val data = dataset.select(
+      checkRegressionLabels($(labelCol)),
+      checkNonNanVectors($(featuresCol))
+    ).rdd.map { case Row(l: Double, v: Vector) => (l, OldVectors.fromML(v))
+    }.setName("training instances")
 
     if (handlePersistence) data.persist(StorageLevel.MEMORY_AND_DISK)
 

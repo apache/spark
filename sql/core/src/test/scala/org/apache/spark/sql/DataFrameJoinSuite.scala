@@ -64,7 +64,7 @@ class DataFrameJoinSuite extends QueryTest
 
     checkAnswer(
       df.join(df2, $"df1.int" === $"df2.int", "outer").select($"df1.int", $"df2.int2")
-        .orderBy(Symbol("str_sort").asc, Symbol("str").asc),
+        .orderBy($"str_sort".asc, $"str".asc),
       Row(null, 6) :: Row(1, 3) :: Row(3, null) :: Nil)
 
     checkAnswer(

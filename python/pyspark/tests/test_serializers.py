@@ -72,7 +72,10 @@ class SerializationTestCase(unittest.TestCase):
 
     def test_function_module_name(self):
         ser = CloudPickleSerializer()
-        func = lambda x: x
+
+        def func(x):
+            return x
+
         func2 = ser.loads(ser.dumps(func))
         self.assertEqual(func.__module__, func2.__module__)
 
@@ -246,7 +249,7 @@ if __name__ == "__main__":
     from pyspark.tests.test_serializers import *  # noqa: F401
 
     try:
-        import xmlrunner  # type: ignore[import]
+        import xmlrunner
 
         testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:

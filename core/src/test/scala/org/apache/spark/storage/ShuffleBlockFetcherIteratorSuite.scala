@@ -24,7 +24,9 @@ import java.util.concurrent.{CompletableFuture, Semaphore}
 import java.util.zip.CheckedInputStream
 
 import scala.collection.mutable
+// scalastyle:off executioncontextglobal
 import scala.concurrent.ExecutionContext.Implicits.global
+// scalastyle:on executioncontextglobal
 import scala.concurrent.Future
 
 import com.google.common.io.ByteStreams
@@ -160,10 +162,12 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
     verify(buffer, times(0)).release()
     val delegateAccess = PrivateMethod[InputStream](Symbol("delegate"))
     var in = wrappedInputStream.invokePrivate(delegateAccess())
-    if (in.isInstanceOf[CheckedInputStream]) {
-      val underlyingInputFiled = classOf[CheckedInputStream].getSuperclass.getDeclaredField("in")
-      underlyingInputFiled.setAccessible(true)
-      in = underlyingInputFiled.get(in.asInstanceOf[CheckedInputStream]).asInstanceOf[InputStream]
+    in match {
+      case stream: CheckedInputStream =>
+        val underlyingInputFiled = classOf[CheckedInputStream].getSuperclass.getDeclaredField("in")
+        underlyingInputFiled.setAccessible(true)
+        in = underlyingInputFiled.get(stream).asInstanceOf[InputStream]
+      case _ => // do nothing
     }
     verify(in, times(0)).close()
     wrappedInputStream.close()
@@ -197,7 +201,7 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
       transfer,
       blockManager.getOrElse(createMockBlockManager()),
       mapOutputTracker,
-      blocksByAddress.toIterator,
+      blocksByAddress.iterator,
       (_, in) => streamWrapperLimitSize.map(new LimitedInputStream(in, _)).getOrElse(in),
       maxBytesInFlight,
       maxReqsInFlight,

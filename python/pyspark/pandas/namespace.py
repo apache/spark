@@ -816,8 +816,9 @@ def read_parquet(
     if index_col is None and pandas_metadata:
         # Try to read pandas metadata
 
-        @no_type_check
-        @pandas_udf("index_col array<string>, index_names array<string>")
+        @pandas_udf(  # type: ignore[call-overload]
+            "index_col array<string>, index_names array<string>"
+        )
         def read_index_metadata(pser: pd.Series) -> pd.DataFrame:
             binary = pser.iloc[0]
             metadata = pq.ParquetFile(pa.BufferReader(binary)).metadata.metadata
@@ -3363,7 +3364,9 @@ def merge_asof(
     right_as_of_name = right_as_of_names[0]
 
     def resolve(internal: InternalFrame, side: str) -> InternalFrame:
-        rename = lambda col: "__{}_{}".format(side, col)
+        def rename(col: str) -> str:
+            return "__{}_{}".format(side, col)
+
         internal = internal.resolved_copy
         sdf = internal.spark_frame
         sdf = sdf.select(
@@ -3430,12 +3433,11 @@ def merge_asof(
     data_columns = []
     column_labels = []
 
-    left_scol_for = lambda label: scol_for(
-        as_of_joined_table, left_internal.spark_column_name_for(label)
-    )
-    right_scol_for = lambda label: scol_for(
-        as_of_joined_table, right_internal.spark_column_name_for(label)
-    )
+    def left_scol_for(label: Label) -> Column:
+        return scol_for(as_of_joined_table, left_internal.spark_column_name_for(label))
+
+    def right_scol_for(label: Label) -> Column:
+        return scol_for(as_of_joined_table, right_internal.spark_column_name_for(label))
 
     for label in left_internal.column_labels:
         col = left_internal.spark_column_name_for(label)

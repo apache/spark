@@ -87,7 +87,7 @@ class ResourceProfile(
   }
 
   private[spark] def getPySparkMemory: Option[Long] = {
-    executorResources.get(ResourceProfile.PYSPARK_MEM).map(_.amount.toLong)
+    executorResources.get(ResourceProfile.PYSPARK_MEM).map(_.amount)
   }
 
   /*

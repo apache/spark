@@ -272,12 +272,14 @@ abstract class SparkFunSuite
     override def append(loggingEvent: LogEvent): Unit = loggingEvent.synchronized {
       val copyEvent = loggingEvent.toImmutable
       if (copyEvent.getLevel.isMoreSpecificThan(_threshold)) {
-        if (_loggingEvents.size >= maxEvents) {
-          val loggingInfo = if (msg == "") "." else s" while logging $msg."
-          throw new IllegalStateException(
-            s"Number of events reached the limit of $maxEvents$loggingInfo")
+        _loggingEvents.synchronized {
+          if (_loggingEvents.size >= maxEvents) {
+            val loggingInfo = if (msg == "") "." else s" while logging $msg."
+            throw new IllegalStateException(
+              s"Number of events reached the limit of $maxEvents$loggingInfo")
+          }
+          _loggingEvents.append(copyEvent)
         }
-        _loggingEvents.append(copyEvent)
       }
     }
 
@@ -285,6 +287,8 @@ abstract class SparkFunSuite
       _threshold = threshold
     }
 
-    def loggingEvents: ArrayBuffer[LogEvent] = _loggingEvents.filterNot(_ == null)
+    def loggingEvents: ArrayBuffer[LogEvent] = _loggingEvents.synchronized {
+      _loggingEvents.filterNot(_ == null)
+    }
   }
 }

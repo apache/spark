@@ -162,11 +162,9 @@ class DataStreamTableAPISuite extends StreamTest with BeforeAndAfter {
         spark.sql(s"CREATE TABLE $tblName (data int) USING $v2Source")
 
         // Check the StreamingRelationV2 has been replaced by StreamingRelation
-        val plan = spark.readStream.option("path", tempDir.getCanonicalPath).table(tblName)
-          .queryExecution.analyzed.collectFirst {
-            case d: StreamingRelationV2 => d
-          }
-        assert(plan.isEmpty)
+        val exists = spark.readStream.option("path", tempDir.getCanonicalPath).table(tblName)
+          .queryExecution.analyzed.exists(_.isInstanceOf[StreamingRelationV2])
+        assert(!exists)
       }
     }
   }

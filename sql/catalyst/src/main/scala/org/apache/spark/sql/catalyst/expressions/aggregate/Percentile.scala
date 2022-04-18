@@ -198,14 +198,12 @@ case class Percentile(
       return Seq.empty
     }
 
-    val ordering =
-      if (child.dataType.isInstanceOf[NumericType]) {
-        child.dataType.asInstanceOf[NumericType].ordering
-      } else if (child.dataType.isInstanceOf[YearMonthIntervalType]) {
-        child.dataType.asInstanceOf[YearMonthIntervalType].ordering
-      } else if (child.dataType.isInstanceOf[DayTimeIntervalType]) {
-        child.dataType.asInstanceOf[DayTimeIntervalType].ordering
-      }
+    val ordering = child.dataType match {
+      case numericType: NumericType => numericType.ordering
+      case intervalType: YearMonthIntervalType => intervalType.ordering
+      case intervalType: DayTimeIntervalType => intervalType.ordering
+      case otherType => QueryExecutionErrors.unsupportedTypeError(otherType)
+    }
     val sortedCounts = buffer.toSeq.sortBy(_._1)(ordering.asInstanceOf[Ordering[AnyRef]])
     val accumulatedCounts = sortedCounts.scanLeft((sortedCounts.head._1, 0L)) {
       case ((key1, count1), (key2, count2)) => (key2, count1 + count2)
@@ -270,12 +268,13 @@ case class Percentile(
     }
   }
 
+  private lazy val projection = UnsafeProjection.create(Array[DataType](child.dataType, LongType))
+
   override def serialize(obj: OpenHashMap[AnyRef, Long]): Array[Byte] = {
     val buffer = new Array[Byte](4 << 10)  // 4K
     val bos = new ByteArrayOutputStream()
     val out = new DataOutputStream(bos)
     try {
-      val projection = UnsafeProjection.create(Array[DataType](child.dataType, LongType))
       // Write pairs in counts map to byte buffer.
       obj.foreach { case (key, count) =>
         val row = InternalRow.apply(key, count)

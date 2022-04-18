@@ -216,6 +216,7 @@ try:
                   'pyspark.sql',
                   'pyspark.sql.avro',
                   'pyspark.sql.pandas',
+                  'pyspark.sql.streaming',
                   'pyspark.streaming',
                   'pyspark.bin',
                   'pyspark.sbin',
@@ -258,10 +259,10 @@ try:
         license='http://www.apache.org/licenses/LICENSE-2.0',
         # Don't forget to update python/docs/source/getting_started/install.rst
         # if you're updating the versions or dependencies.
-        install_requires=['py4j==0.10.9.3'],
+        install_requires=['py4j==0.10.9.5'],
         extras_require={
-            'ml': ['numpy>=1.7'],
-            'mllib': ['numpy>=1.7'],
+            'ml': ['numpy>=1.15'],
+            'mllib': ['numpy>=1.15'],
             'sql': [
                 'pandas>=%s' % _minimum_pandas_version,
                 'pyarrow>=%s' % _minimum_pyarrow_version,
@@ -269,7 +270,7 @@ try:
             'pandas_on_spark': [
                 'pandas>=%s' % _minimum_pandas_version,
                 'pyarrow>=%s' % _minimum_pyarrow_version,
-                'numpy>=1.14',
+                'numpy>=1.15',
             ],
         },
         python_requires='>=3.7',

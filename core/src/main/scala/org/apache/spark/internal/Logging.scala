@@ -154,7 +154,11 @@ trait Logging {
         // Use the repl's main class to define the default log level when running the shell,
         // overriding the root logger's config if they're different.
         val replLogger = LogManager.getLogger(logName).asInstanceOf[Log4jLogger]
-        val replLevel = Option(replLogger.getLevel()).getOrElse(Level.WARN)
+        val replLevel = if (Logging.loggerWithCustomConfig(replLogger)) {
+          replLogger.getLevel()
+        } else {
+          Level.WARN
+        }
         // Update the consoleAppender threshold to replLevel
         if (replLevel != rootLogger.getLevel()) {
           if (!silent) {
@@ -229,6 +233,17 @@ private[spark] object Logging {
     "org.apache.logging.slf4j.Log4jLoggerFactory".equals(binderClass)
   }
 
+  // Return true if the logger has custom configuration. It depends on:
+  // 1. If the logger isn't attached with root logger config (i.e., with custom configuration), or
+  // 2. the logger level is different to root config level (i.e., it is changed programmatically).
+  //
+  // Note that if a logger is programmatically changed log level but set to same level
+  // as root config level, we cannot tell if it is with custom configuration.
+  private def loggerWithCustomConfig(logger: Log4jLogger): Boolean = {
+    val rootConfig = LogManager.getRootLogger.asInstanceOf[Log4jLogger].get()
+    (logger.get() ne rootConfig) || (logger.getLevel != rootConfig.getLevel())
+  }
+
   /**
    * Return true if log4j2 is initialized by default configuration which has one
    * appender with error level. See `org.apache.logging.log4j.core.config.DefaultConfiguration`.
@@ -265,17 +280,6 @@ private[spark] object Logging {
         }
         Filter.Result.DENY
       }
-    }
-
-    // Return true if the logger has custom configuration. It depends on:
-    // 1. If the logger isn't attached with root logger config (i.e., with custom configuration), or
-    // 2. the logger level is different to root config level (i.e., it is changed programmatically).
-    //
-    // Note that if a logger is programmatically changed log level but set to same level
-    // as root config level, we cannot tell if it is with custom configuration.
-    private def loggerWithCustomConfig(logger: Log4jLogger): Boolean = {
-      val rootConfig = LogManager.getRootLogger.asInstanceOf[Log4jLogger].get()
-      (logger.get() ne rootConfig) || (logger.getLevel != rootConfig.getLevel())
     }
 
     override def getState: LifeCycle.State = status

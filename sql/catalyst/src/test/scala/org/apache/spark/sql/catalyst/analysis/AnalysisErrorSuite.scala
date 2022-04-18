@@ -218,7 +218,7 @@ class AnalysisErrorSuite extends AnalysisTest {
     "higher order function with filter predicate",
     CatalystSqlParser.parsePlan("SELECT aggregate(array(1, 2, 3), 0, (acc, x) -> acc + x) " +
       "FILTER (WHERE c > 1)"),
-    "FILTER predicate specified, but aggregate is not an aggregate function" :: Nil)
+    "Function aggregate does not support FILTER clause" :: Nil)
 
   errorTest(
     "non-deterministic filter predicate in aggregate functions",
@@ -305,7 +305,7 @@ class AnalysisErrorSuite extends AnalysisTest {
       .where(sum($"b") > 0)
       .orderBy($"havingCondition".asc),
     "MISSING_COLUMN",
-    Array("havingCondition", "max('b)"))
+    Array("havingCondition", "max(b)"))
 
   errorTest(
     "unresolved star expansion in max",
@@ -641,31 +641,31 @@ class AnalysisErrorSuite extends AnalysisTest {
   }
 
   test("Join can work on binary types but can't work on map types") {
-    val left = LocalRelation(Symbol("a").binary, Symbol("b").map(StringType, StringType))
-    val right = LocalRelation(Symbol("c").binary, Symbol("d").map(StringType, StringType))
+    val left = LocalRelation($"a".binary, Symbol("b").map(StringType, StringType))
+    val right = LocalRelation($"c".binary, Symbol("d").map(StringType, StringType))
 
     val plan1 = left.join(
       right,
       joinType = Cross,
-      condition = Some(Symbol("a") === Symbol("c")))
+      condition = Some($"a" === $"c"))
 
     assertAnalysisSuccess(plan1)
 
     val plan2 = left.join(
       right,
       joinType = Cross,
-      condition = Some(Symbol("b") === Symbol("d")))
+      condition = Some($"b" === $"d"))
     assertAnalysisError(plan2, "EqualTo does not support ordering on type map" :: Nil)
   }
 
-  test("PredicateSubQuery is used outside of a filter") {
+  test("PredicateSubQuery is used outside of a allowed nodes") {
     val a = AttributeReference("a", IntegerType)()
     val b = AttributeReference("b", IntegerType)()
-    val plan = Project(
-      Seq(a, Alias(InSubquery(Seq(a), ListQuery(LocalRelation(b))), "c")()),
+    val plan = Sort(
+      Seq(SortOrder(InSubquery(Seq(a), ListQuery(LocalRelation(b))), Ascending)),
+      global = true,
       LocalRelation(a))
-    assertAnalysisError(plan, "Predicate sub-queries can only be used" +
-        " in Filter" :: Nil)
+    assertAnalysisError(plan, "Predicate sub-queries can only be used in " :: Nil)
   }
 
   test("PredicateSubQuery correlated predicate is nested in an illegal plan") {
@@ -722,7 +722,7 @@ class AnalysisErrorSuite extends AnalysisTest {
   test("Error on filter condition containing aggregate expressions") {
     val a = AttributeReference("a", IntegerType)()
     val b = AttributeReference("b", IntegerType)()
-    val plan = Filter(Symbol("a") === UnresolvedFunction("max", Seq(b), true), LocalRelation(a, b))
+    val plan = Filter($"a" === UnresolvedFunction("max", Seq(b), true), LocalRelation(a, b))
     assertAnalysisError(plan,
       "Aggregate/Window/Generate expressions are not valid in where clause of the query" :: Nil)
   }
@@ -793,7 +793,8 @@ class AnalysisErrorSuite extends AnalysisTest {
     val a = AttributeReference("a", IntegerType)()
     val b = AttributeReference("b", IntegerType)()
     val c = AttributeReference("c", IntegerType)()
-    val t1 = LocalRelation(a, b)
+    val d = AttributeReference("d", DoubleType)()
+    val t1 = LocalRelation(a, b, d)
     val t2 = LocalRelation(c)
     val conditions = Seq(
       (abs($"a") === $"c", "abs(a) = outer(c)"),
@@ -801,7 +802,7 @@ class AnalysisErrorSuite extends AnalysisTest {
       ($"a" + 1 === $"c", "(a + 1) = outer(c)"),
       ($"a" + $"b" === $"c", "(a + b) = outer(c)"),
       ($"a" + $"c" === $"b", "(a + outer(c)) = b"),
-      (And($"a" === $"c", Cast($"a", IntegerType) === $"c"), "CAST(a AS INT) = outer(c)"))
+      (And($"a" === $"c", Cast($"d", IntegerType) === $"c"), "CAST(d AS INT) = outer(c)"))
     conditions.foreach { case (cond, msg) =>
       val plan = Project(
         ScalarSubquery(

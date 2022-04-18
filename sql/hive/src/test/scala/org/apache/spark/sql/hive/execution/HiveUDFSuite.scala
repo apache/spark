@@ -34,8 +34,8 @@ import org.apache.hadoop.io.{LongWritable, Writable}
 
 import org.apache.spark.{SparkFiles, TestUtils}
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
+import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
 import org.apache.spark.sql.catalyst.plans.logical.Project
-import org.apache.spark.sql.execution.command.FunctionsCommand
 import org.apache.spark.sql.functions.max
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
@@ -563,7 +563,7 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
           sql("SELECT testUDFToListInt(s) FROM inputTable"),
           Seq(Row(Seq(1, 2, 3))))
         assert(sql("show functions").count() ==
-          numFunc + FunctionsCommand.virtualOperators.size + 1)
+          numFunc + FunctionRegistry.builtinOperators.size + 1)
         assert(spark.catalog.listFunctions().count() == numFunc + 1)
 
         withDatabase("db2") {
@@ -600,8 +600,7 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
           val message = intercept[AnalysisException] {
             sql("SELECT dAtABaSe1.unknownFunc(1)")
           }.getMessage
-          assert(message.contains("Undefined function: 'unknownFunc'") &&
-            message.contains("nor a permanent function registered in the database 'dAtABaSe1'"))
+          assert(message.contains("Undefined function: dAtABaSe1.unknownFunc"))
         }
       }
     }

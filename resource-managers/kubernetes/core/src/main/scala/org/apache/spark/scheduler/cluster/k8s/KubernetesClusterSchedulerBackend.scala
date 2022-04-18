@@ -79,7 +79,8 @@ private[spark] class KubernetesClusterSchedulerBackend(
     val resolvedExecutorProperties =
       Map(KUBERNETES_NAMESPACE.key -> conf.get(KUBERNETES_NAMESPACE))
     val confFilesMap = KubernetesClientUtils
-      .buildSparkConfDirFilesMap(configMapName, conf, resolvedExecutorProperties)
+      .buildSparkConfDirFilesMap(configMapName, conf, resolvedExecutorProperties) ++
+      resolvedExecutorProperties
     val labels =
       Map(SPARK_APP_ID_LABEL -> applicationId(), SPARK_ROLE_LABEL -> SPARK_POD_EXECUTOR_ROLE)
     val configMap = KubernetesClientUtils.buildConfigMap(configMapName, confFilesMap, labels)
@@ -95,7 +96,7 @@ private[spark] class KubernetesClusterSchedulerBackend(
    * @return The application ID
    */
   override def applicationId(): String = {
-    conf.getOption("spark.app.id").map(_.toString).getOrElse(appId)
+    conf.getOption("spark.app.id").getOrElse(appId)
   }
 
   override def start(): Unit = {
@@ -301,7 +302,7 @@ private[spark] class KubernetesClusterSchedulerBackend(
             kubernetesClient.pods()
               .withName(x.podName)
               .edit({p: Pod => new PodBuilder(p).editMetadata()
-                .addToLabels(SPARK_EXECUTOR_ID_LABEL, newId.toString)
+                .addToLabels(SPARK_EXECUTOR_ID_LABEL, newId)
                 .endMetadata()
                 .build()})
           }

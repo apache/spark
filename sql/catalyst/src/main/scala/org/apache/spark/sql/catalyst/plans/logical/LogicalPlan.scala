@@ -31,6 +31,7 @@ abstract class LogicalPlan
   extends QueryPlan[LogicalPlan]
   with AnalysisHelper
   with LogicalPlanStats
+  with LogicalPlanDistinctKeys
   with QueryPlanConstraints
   with Logging {
 
@@ -183,7 +184,7 @@ trait UnaryNode extends LogicalPlan with UnaryLike[LogicalPlan] {
     projectList.foreach {
       case a @ Alias(l: Literal, _) =>
         allConstraints += EqualNullSafe(a.toAttribute, l)
-      case a @ Alias(e, _) =>
+      case a @ Alias(e, _) if e.deterministic =>
         // For every alias in `projectList`, replace the reference in constraints by its attribute.
         allConstraints ++= allConstraints.map(_ transform {
           case expr: Expression if expr.semanticEquals(e) =>
@@ -212,11 +213,12 @@ object LogicalPlanIntegrity {
 
   private def canGetOutputAttrs(p: LogicalPlan): Boolean = {
     p.resolved && !p.expressions.exists { e =>
-      e.collectFirst {
+      e.exists {
         // We cannot call `output` in plans with a `ScalarSubquery` expr having no column,
         // so, we filter out them in advance.
-        case s: ScalarSubquery if s.plan.schema.fields.isEmpty => true
-      }.isDefined
+        case s: ScalarSubquery => s.plan.schema.fields.isEmpty
+        case _ => false
+      }
     }
   }
 

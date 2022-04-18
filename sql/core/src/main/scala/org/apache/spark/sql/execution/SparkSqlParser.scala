@@ -26,8 +26,8 @@ import scala.collection.JavaConverters._
 import org.antlr.v4.runtime.{ParserRuleContext, Token}
 import org.antlr.v4.runtime.tree.TerminalNode
 
-import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.analysis.{GlobalTempView, LocalTempView, PersistedView, UnresolvedDBObjectName}
+import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
+import org.apache.spark.sql.catalyst.analysis.{GlobalTempView, LocalTempView, PersistedView, UnresolvedDBObjectName, UnresolvedFunc}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.parser._
@@ -318,7 +318,7 @@ class SparkSqlAstBuilder extends AstBuilder {
       val (_, _, _, _, options, location, _, _) = visitCreateTableClauses(ctx.createTableClauses())
       val provider = Option(ctx.tableProvider).map(_.multipartIdentifier.getText).getOrElse(
         throw QueryParsingErrors.createTempTableNotSpecifyProviderError(ctx))
-      val schema = Option(ctx.colTypeList()).map(createSchema)
+      val schema = Option(ctx.createOrReplaceTableColTypeList()).map(createSchema)
 
       logWarning(s"CREATE TEMPORARY TABLE ... USING ... is deprecated, please use " +
           "CREATE TEMPORARY VIEW ... USING ... instead")
@@ -563,19 +563,49 @@ class SparkSqlAstBuilder extends AstBuilder {
       }
 
       if (functionIdentifier.length > 2) {
-        throw QueryParsingErrors.unsupportedFunctionNameError(functionIdentifier.quoted, ctx)
+        throw QueryParsingErrors.unsupportedFunctionNameError(functionIdentifier, ctx)
       } else if (functionIdentifier.length == 2) {
         // Temporary function names should not contain database prefix like "database.function"
         throw QueryParsingErrors.specifyingDBInCreateTempFuncError(functionIdentifier.head, ctx)
       }
       CreateFunctionCommand(
-        None,
-        functionIdentifier.last,
+        FunctionIdentifier(functionIdentifier.last),
         string(ctx.className),
         resources.toSeq,
         true,
         ctx.EXISTS != null,
         ctx.REPLACE != null)
+    }
+  }
+
+  /**
+   * Create a DROP FUNCTION statement.
+   *
+   * For example:
+   * {{{
+   *   DROP [TEMPORARY] FUNCTION [IF EXISTS] function;
+   * }}}
+   */
+  override def visitDropFunction(ctx: DropFunctionContext): LogicalPlan = withOrigin(ctx) {
+    val functionName = visitMultipartIdentifier(ctx.multipartIdentifier)
+    val isTemp = ctx.TEMPORARY != null
+    if (isTemp) {
+      if (functionName.length > 1) {
+        throw QueryParsingErrors.invalidNameForDropTempFunc(functionName, ctx)
+      }
+      DropFunctionCommand(
+        identifier = FunctionIdentifier(functionName.head),
+        ifExists = ctx.EXISTS != null,
+        isTemp = true)
+    } else {
+      val hintStr = "Please use fully qualified identifier to drop the persistent function."
+      DropFunction(
+        UnresolvedFunc(
+          functionName,
+          "DROP FUNCTION",
+          requirePersistent = true,
+          funcTypeMismatchHint = Some(hintStr)),
+        ctx.EXISTS != null)
     }
   }
 

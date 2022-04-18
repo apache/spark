@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.datasources.parquet
 
+import java.util.Locale
+
 import org.apache.hadoop.conf.Configuration
 import org.apache.parquet.io.{ColumnIO, ColumnIOFactory, GroupColumnIO, PrimitiveColumnIO}
 import org.apache.parquet.schema._
@@ -92,10 +94,16 @@ class ParquetToSparkSchemaConverter(
   private def convertInternal(
       groupColumn: GroupColumnIO,
       sparkReadSchema: Option[StructType] = None): ParquetColumn = {
+    // First convert the read schema into a map from field name to the field itself, to avoid O(n)
+    // lookup cost below.
+    val schemaMapOpt = sparkReadSchema.map { schema =>
+      schema.map(f => normalizeFieldName(f.name) -> f).toMap
+    }
+
     val converted = (0 until groupColumn.getChildrenCount).map { i =>
       val field = groupColumn.getChild(i)
-      val fieldFromReadSchema = sparkReadSchema.flatMap { schema =>
-        schema.find(f => isSameFieldName(f.name, field.getName, caseSensitive))
+      val fieldFromReadSchema = schemaMapOpt.flatMap { schemaMap =>
+        schemaMap.get(normalizeFieldName(field.getName))
       }
       var fieldReadType = fieldFromReadSchema.map(_.dataType)
 
@@ -146,9 +154,8 @@ class ParquetToSparkSchemaConverter(
     ParquetColumn(StructType(converted.map(_._1)), groupColumn, converted.map(_._2))
   }
 
-  private def isSameFieldName(left: String, right: String, caseSensitive: Boolean): Boolean =
-    if (!caseSensitive) left.equalsIgnoreCase(right)
-    else left == right
+  private def normalizeFieldName(name: String): String =
+    if (caseSensitive) name else name.toLowerCase(Locale.ROOT)
 
   /**
    * Converts a Parquet [[Type]] to a [[ParquetColumn]] which wraps a Spark SQL [[DataType]] with
@@ -434,20 +441,25 @@ class ParquetToSparkSchemaConverter(
  *        When set to false, use standard format defined in parquet-format spec.  This argument only
  *        affects Parquet write path.
  * @param outputTimestampType which parquet timestamp type to use when writing.
+ * @param useFieldId whether we should include write field id to Parquet schema. Set this to false
+ *        via `spark.sql.parquet.fieldId.write.enabled = false` to disable writing field ids.
  */
 class SparkToParquetSchemaConverter(
     writeLegacyParquetFormat: Boolean = SQLConf.PARQUET_WRITE_LEGACY_FORMAT.defaultValue.get,
     outputTimestampType: SQLConf.ParquetOutputTimestampType.Value =
-      SQLConf.ParquetOutputTimestampType.INT96) {
+      SQLConf.ParquetOutputTimestampType.INT96,
+    useFieldId: Boolean = SQLConf.PARQUET_FIELD_ID_WRITE_ENABLED.defaultValue.get) {
 
   def this(conf: SQLConf) = this(
     writeLegacyParquetFormat = conf.writeLegacyParquetFormat,
-    outputTimestampType = conf.parquetOutputTimestampType)
+    outputTimestampType = conf.parquetOutputTimestampType,
+    useFieldId = conf.parquetFieldIdWriteEnabled)
 
   def this(conf: Configuration) = this(
     writeLegacyParquetFormat = conf.get(SQLConf.PARQUET_WRITE_LEGACY_FORMAT.key).toBoolean,
     outputTimestampType = SQLConf.ParquetOutputTimestampType.withName(
-      conf.get(SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE.key)))
+      conf.get(SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE.key)),
+    useFieldId = conf.get(SQLConf.PARQUET_FIELD_ID_WRITE_ENABLED.key).toBoolean)
 
   /**
    * Converts a Spark SQL [[StructType]] to a Parquet [[MessageType]].
@@ -463,11 +475,15 @@ class SparkToParquetSchemaConverter(
    * Converts a Spark SQL [[StructField]] to a Parquet [[Type]].
    */
   def convertField(field: StructField): Type = {
-    convertField(field, if (field.nullable) OPTIONAL else REQUIRED)
+    val converted = convertField(field, if (field.nullable) OPTIONAL else REQUIRED)
+    if (useFieldId && ParquetUtils.hasFieldId(field)) {
+      converted.withId(ParquetUtils.getFieldId(field))
+    } else {
+      converted
+    }
   }
 
   private def convertField(field: StructField, repetition: Type.Repetition): Type = {
-    ParquetSchemaConverter.checkFieldName(field.name)
 
     field.dataType match {
       // ===================
@@ -697,23 +713,6 @@ private[sql] object ParquetSchemaConverter {
 
   val EMPTY_MESSAGE: MessageType =
     Types.buildMessage().named(ParquetSchemaConverter.SPARK_PARQUET_SCHEMA_NAME)
-
-  def checkFieldName(name: String): Unit = {
-    // ,;{}()\n\t= and space are special characters in Parquet schema
-    if (name.matches(".*[ ,;{}()\n\t=].*")) {
-      throw QueryCompilationErrors.columnNameContainsInvalidCharactersError(name)
-    }
-  }
-
-  def checkFieldNames(schema: StructType): Unit = {
-    schema.foreach { field =>
-      checkFieldName(field.name)
-      field.dataType match {
-        case s: StructType => checkFieldNames(s)
-        case _ =>
-      }
-    }
-  }
 
   def checkConversionRequirement(f: => Boolean, message: String): Unit = {
     if (!f) {

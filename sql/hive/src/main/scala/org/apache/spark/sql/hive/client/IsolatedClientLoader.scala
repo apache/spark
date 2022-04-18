@@ -69,7 +69,7 @@ private[hive] object IsolatedClientLoader extends Logging {
             // If the error message contains hadoop, it is probably because the hadoop
             // version cannot be resolved.
             val fallbackVersion = if (VersionUtils.isHadoop3) {
-              "3.3.1"
+              "3.3.2"
             } else {
               "2.7.4"
             }
@@ -316,12 +316,12 @@ private[hive] class IsolatedClientLoader(
         .asInstanceOf[HiveClient]
     } catch {
       case e: InvocationTargetException =>
-        if (e.getCause().isInstanceOf[NoClassDefFoundError]) {
-          val cnf = e.getCause().asInstanceOf[NoClassDefFoundError]
-          throw QueryExecutionErrors.loadHiveClientCausesNoClassDefFoundError(
-            cnf, execJars, HiveUtils.HIVE_METASTORE_JARS.key, e)
-        } else {
-          throw e
+        e.getCause match {
+          case cnf: NoClassDefFoundError =>
+            throw QueryExecutionErrors.loadHiveClientCausesNoClassDefFoundError(
+              cnf, execJars, HiveUtils.HIVE_METASTORE_JARS.key, e)
+          case _ =>
+            throw e
         }
     } finally {
       Thread.currentThread.setContextClassLoader(origLoader)

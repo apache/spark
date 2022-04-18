@@ -20,7 +20,9 @@ package org.apache.spark.sql.catalyst
 import org.apache.spark.SparkFunSuite
 /* Implicit conversions */
 import org.apache.spark.sql.catalyst.dsl.expressions._
+import org.apache.spark.sql.catalyst.expressions.{Literal, Murmur3Hash, Pmod}
 import org.apache.spark.sql.catalyst.plans.physical._
+import org.apache.spark.sql.types.IntegerType
 
 class DistributionSuite extends SparkFunSuite {
 
@@ -167,6 +169,24 @@ class DistributionSuite extends SparkFunSuite {
       ClusteredDistribution(Seq($"d", $"e")),
       false)
 
+    // When ClusteredDistribution.requireAllClusterKeys is set to true,
+    // HashPartitioning can only satisfy ClusteredDistribution iff its hash expressions are
+    // exactly same as the required clustering expressions.
+    checkSatisfied(
+      HashPartitioning(Seq($"a", $"b", $"c"), 10),
+      ClusteredDistribution(Seq($"a", $"b", $"c"), requireAllClusterKeys = true),
+      true)
+
+    checkSatisfied(
+      HashPartitioning(Seq($"b", $"c"), 10),
+      ClusteredDistribution(Seq($"a", $"b", $"c"), requireAllClusterKeys = true),
+      false)
+
+    checkSatisfied(
+      HashPartitioning(Seq($"b", $"a", $"c"), 10),
+      ClusteredDistribution(Seq($"a", $"b", $"c"), requireAllClusterKeys = true),
+      false)
+
     // HashPartitioning cannot satisfy OrderedDistribution
     checkSatisfied(
       HashPartitioning(Seq($"a", $"b", $"c"), 10),
@@ -247,22 +267,116 @@ class DistributionSuite extends SparkFunSuite {
       RangePartitioning(Seq($"a".asc, $"b".asc, $"c".asc), 10),
       ClusteredDistribution(Seq($"c", $"d")),
       false)
+
+    // When ClusteredDistribution.requireAllClusterKeys is set to true,
+    // RangePartitioning can only satisfy ClusteredDistribution iff its ordering expressions are
+    // exactly same as the required clustering expressions.
+    checkSatisfied(
+      RangePartitioning(Seq($"a".asc, $"b".asc, $"c".asc), 10),
+      ClusteredDistribution(Seq($"a", $"b", $"c"), requireAllClusterKeys = true),
+      true)
+
+    checkSatisfied(
+      RangePartitioning(Seq($"a".asc, $"b".asc), 10),
+      ClusteredDistribution(Seq($"a", $"b", $"c"), requireAllClusterKeys = true),
+      false)
+
+    checkSatisfied(
+      RangePartitioning(Seq($"b".asc, $"a".asc, $"c".asc), 10),
+      ClusteredDistribution(Seq($"a", $"b", $"c"), requireAllClusterKeys = true),
+      false)
   }
 
   test("Partitioning.numPartitions must match Distribution.requiredNumPartitions to satisfy it") {
     checkSatisfied(
       SinglePartition,
-      ClusteredDistribution(Seq($"a", $"b", $"c"), Some(10)),
+      ClusteredDistribution(Seq($"a", $"b", $"c"), requiredNumPartitions = Some(10)),
       false)
 
     checkSatisfied(
       HashPartitioning(Seq($"a", $"b", $"c"), 10),
-      ClusteredDistribution(Seq($"a", $"b", $"c"), Some(5)),
+      ClusteredDistribution(Seq($"a", $"b", $"c"), requiredNumPartitions = Some(5)),
       false)
 
     checkSatisfied(
       RangePartitioning(Seq($"a".asc, $"b".asc, $"c".asc), 10),
-      ClusteredDistribution(Seq($"a", $"b", $"c"), Some(5)),
+      ClusteredDistribution(Seq($"a", $"b", $"c"), requiredNumPartitions = Some(5)),
+      false)
+  }
+
+  test("Structured Streaming output partitioning and distribution") {
+    // Validate HashPartitioning.partitionIdExpression to be exactly expected format, because
+    // Structured Streaming state store requires it to be consistent across Spark versions.
+    val expressions = Seq($"a", $"b", $"c")
+    val hashPartitioning = HashPartitioning(expressions, 10)
+    hashPartitioning.partitionIdExpression match {
+      case Pmod(Murmur3Hash(es, 42), Literal(10, IntegerType), _) =>
+        assert(es.length == expressions.length && es.zip(expressions).forall {
+          case (l, r) => l.semanticEquals(r)
+        })
+      case x => fail(s"Unexpected partitionIdExpression $x for $hashPartitioning")
+    }
+
+    // Validate only HashPartitioning (and HashPartitioning in PartitioningCollection) can satisfy
+    // StatefulOpClusteredDistribution. SinglePartition can also satisfy this distribution when
+    // `_requiredNumPartitions` is 1.
+    checkSatisfied(
+      HashPartitioning(Seq($"a", $"b", $"c"), 10),
+      StatefulOpClusteredDistribution(Seq($"a", $"b", $"c"), 10),
+      true)
+
+    checkSatisfied(
+      PartitioningCollection(Seq(
+        HashPartitioning(Seq($"a", $"b", $"c"), 10),
+        RangePartitioning(Seq($"a".asc, $"b".asc, $"c".asc), 10))),
+      StatefulOpClusteredDistribution(Seq($"a", $"b", $"c"), 10),
+      true)
+
+    checkSatisfied(
+      SinglePartition,
+      StatefulOpClusteredDistribution(Seq($"a", $"b", $"c"), 1),
+      true)
+
+    checkSatisfied(
+      PartitioningCollection(Seq(
+        HashPartitioning(Seq($"a", $"b"), 1),
+        SinglePartition)),
+      StatefulOpClusteredDistribution(Seq($"a", $"b", $"c"), 1),
+      true)
+
+    checkSatisfied(
+      HashPartitioning(Seq($"a", $"b"), 10),
+      StatefulOpClusteredDistribution(Seq($"a", $"b", $"c"), 10),
+      false)
+
+    checkSatisfied(
+      HashPartitioning(Seq($"a", $"b", $"c"), 5),
+      StatefulOpClusteredDistribution(Seq($"a", $"b", $"c"), 10),
+      false)
+
+    checkSatisfied(
+      RangePartitioning(Seq($"a".asc, $"b".asc, $"c".asc), 10),
+      StatefulOpClusteredDistribution(Seq($"a", $"b", $"c"), 10),
+      false)
+
+    checkSatisfied(
+      SinglePartition,
+      StatefulOpClusteredDistribution(Seq($"a", $"b", $"c"), 10),
+      false)
+
+    checkSatisfied(
+      BroadcastPartitioning(IdentityBroadcastMode),
+      StatefulOpClusteredDistribution(Seq($"a", $"b", $"c"), 10),
+      false)
+
+    checkSatisfied(
+      RoundRobinPartitioning(10),
+      StatefulOpClusteredDistribution(Seq($"a", $"b", $"c"), 10),
+      false)
+
+    checkSatisfied(
+      UnknownPartitioning(10),
+      StatefulOpClusteredDistribution(Seq($"a", $"b", $"c"), 10),
       false)
   }
 }

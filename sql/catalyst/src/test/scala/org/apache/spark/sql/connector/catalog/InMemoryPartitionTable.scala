@@ -43,7 +43,7 @@ class InMemoryPartitionTable(
     new ConcurrentHashMap[InternalRow, util.Map[String, String]]()
 
   def partitionSchema: StructType = {
-    val partitionColumnNames = partitioning.toSeq.asPartitionColumns
+    val partitionColumnNames = partitioning.toSeq.convertTransforms._1
     new StructType(schema.filter(p => partitionColumnNames.contains(p.name)).toArray)
   }
 

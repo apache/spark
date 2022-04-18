@@ -248,6 +248,44 @@ class TreeNodeSuite extends SparkFunSuite with SQLHelper {
     assert(expected === actual)
   }
 
+  test("exists") {
+    val expression = Add(Literal(1), Multiply(Literal(2), Subtract(Literal(3), Literal(4))))
+    // Check the top node.
+    var exists = expression.exists {
+      case _: Add => true
+      case _ => false
+    }
+    assert(exists)
+
+    // Check the first children.
+    exists = expression.exists {
+      case Literal(1, IntegerType) => true
+      case _ => false
+    }
+    assert(exists)
+
+    // Check an internal node (Subtract).
+    exists = expression.exists {
+      case _: Subtract => true
+      case _ => false
+    }
+    assert(exists)
+
+    // Check a leaf node.
+    exists = expression.exists {
+      case Literal(3, IntegerType) => true
+      case _ => false
+    }
+    assert(exists)
+
+    // Check not exists.
+    exists = expression.exists {
+      case Literal(100, IntegerType) => true
+      case _ => false
+    }
+    assert(!exists)
+  }
+
   test("collectFirst") {
     val expression = Add(Literal(1), Multiply(Literal(2), Subtract(Literal(3), Literal(4))))
 
@@ -817,5 +855,37 @@ class TreeNodeSuite extends SparkFunSuite with SQLHelper {
     }
     val node = Node(Set("second", "first"), Seq(Set(3, 1), Set(2, 1)))
     assert(node.argString(10) == "{first, second}, [{1, 3}, {1, 2}]")
+  }
+
+  test("SPARK-38676: truncate before/after sql text if too long") {
+    val text =
+      """
+        |
+        |SELECT
+        |1234567890 + 1234567890 + 1234567890, cast('a'
+        |as /* comment */
+        |int), 1234567890 + 1234567890 + 1234567890
+        |as foo
+        |""".stripMargin
+    val origin = Origin(
+      line = Some(3),
+      startPosition = Some(38),
+      startIndex = Some(47),
+      stopIndex = Some(77),
+      sqlText = Some(text),
+      objectType = Some("VIEW"),
+      objectName = Some("some_view"))
+    val expected =
+      """
+        |== SQL of VIEW some_view(line 3, position 38) ==
+        |...7890 + 1234567890 + 1234567890, cast('a'
+        |                                   ^^^^^^^^
+        |as /* comment */
+        |^^^^^^^^^^^^^^^^
+        |int), 1234567890 + 1234567890 + 12345...
+        |^^^^^
+        |""".stripMargin
+
+    assert(origin.context == expected)
   }
 }

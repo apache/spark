@@ -55,7 +55,7 @@ import org.apache.spark.unsafe.types.UTF8String
  *  // SQL verbs can be used to construct logical query plans.
  *  scala> import org.apache.spark.sql.catalyst.plans.logical._
  *  scala> import org.apache.spark.sql.catalyst.dsl.plans._
- *  scala> LocalRelation('key.int, 'value.string).where('key === 1).select('value).analyze
+ *  scala> LocalRelation($"key".int, $"value".string).where('key === 1).select('value).analyze
  *  res3: org.apache.spark.sql.catalyst.plans.logical.LogicalPlan =
  *  Project [value#3]
  *   Filter (key#2 = 1)
@@ -135,6 +135,14 @@ package object dsl {
         val cast = Cast(expr, to)
         cast.setTagValue(Cast.USER_SPECIFIED_CAST, true)
         cast
+      }
+    }
+
+    def castNullable(): Expression = {
+      if (expr.resolved && expr.nullable) {
+        expr
+      } else {
+        KnownNullable(expr)
       }
     }
 
@@ -432,7 +440,7 @@ package object dsl {
       def groupBy(groupingExprs: Expression*)(aggregateExprs: Expression*): LogicalPlan = {
         val aliasedExprs = aggregateExprs.map {
           case ne: NamedExpression => ne
-          case e => Alias(e, e.toString)()
+          case e => UnresolvedAlias(e)
         }
         Aggregate(groupingExprs, aliasedExprs, logicalPlan)
       }
@@ -489,6 +497,9 @@ package object dsl {
 
       def distribute(exprs: Expression*)(n: Int): LogicalPlan =
         RepartitionByExpression(exprs, logicalPlan, numPartitions = n)
+
+      def rebalance(exprs: Expression*): LogicalPlan =
+        RebalancePartitions(exprs, logicalPlan)
 
       def analyze: LogicalPlan = {
         val analyzed = analysis.SimpleAnalyzer.execute(logicalPlan)

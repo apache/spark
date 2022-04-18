@@ -41,13 +41,12 @@ import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.catalog.ExternalCatalogUtils._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, CharVarcharUtils}
-import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.execution.datasources.{PartitioningUtils, SourceOptions}
 import org.apache.spark.sql.hive.client.HiveClient
 import org.apache.spark.sql.internal.HiveSerDe
 import org.apache.spark.sql.internal.StaticSQLConf._
-import org.apache.spark.sql.types.{AnsiIntervalType, ArrayType, DataType, MapType, StructType}
+import org.apache.spark.sql.types.{AnsiIntervalType, ArrayType, DataType, MapType, StructType, TimestampNTZType}
 
 /**
  * A persistent implementation of the system catalog using Hive.
@@ -197,15 +196,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
       db: String,
       ignoreIfNotExists: Boolean,
       cascade: Boolean): Unit = withClient {
-    try {
-      client.dropDatabase(db, ignoreIfNotExists, cascade)
-    } catch {
-      case NonFatal(exception) =>
-        if (exception.getClass.getName.equals("org.apache.hadoop.hive.ql.metadata.HiveException")
-          && exception.getMessage.contains(s"Database $db is not empty.")) {
-          throw QueryCompilationErrors.cannotDropNonemptyDatabaseError(db)
-        } else throw exception
-    }
+    client.dropDatabase(db, ignoreIfNotExists, cascade)
   }
 
   /**
@@ -777,8 +768,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     val version: String = table.properties.getOrElse(CREATED_SPARK_VERSION, "2.2 or prior")
 
     // Restore Spark's statistics from information in Metastore.
-    val restoredStats =
-      statsFromProperties(table.properties, table.identifier.table, table.schema)
+    val restoredStats = statsFromProperties(table.properties, table.identifier.table)
     if (restoredStats.isDefined) {
       table = table.copy(stats = restoredStats)
     }
@@ -1146,8 +1136,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
 
   private def statsFromProperties(
       properties: Map[String, String],
-      table: String,
-      schema: StructType): Option[CatalogStatistics] = {
+      table: String): Option[CatalogStatistics] = {
 
     val statsProps = properties.filterKeys(_.startsWith(STATISTICS_PREFIX))
     if (statsProps.isEmpty) {
@@ -1217,8 +1206,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
 
     // Restore Spark's statistics from information in Metastore.
     // Note: partition-level statistics were introduced in 2.3.
-    val restoredStats =
-      statsFromProperties(partition.parameters, table.identifier.table, table.schema)
+    val restoredStats = statsFromProperties(partition.parameters, table.identifier.table)
     if (restoredStats.isDefined) {
       partition.copy(
         spec = restoredSpec,
@@ -1282,7 +1270,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
       // treats dot as matching any single character and may return more partitions than we
       // expected. Here we do an extra filter to drop unexpected partitions.
       case Some(spec) if spec.exists(_._2.contains(".")) =>
-        res.filter(p => isPartialPartitionSpec(spec, p.spec))
+        res.filter(p => isPartialPartitionSpec(spec, toMetaStorePartitionSpec(p.spec)))
       case _ => res
     }
   }
@@ -1437,6 +1425,7 @@ object HiveExternalCatalog {
 
   private[spark] def isHiveCompatibleDataType(dt: DataType): Boolean = dt match {
     case _: AnsiIntervalType => false
+    case _: TimestampNTZType => false
     case s: StructType => s.forall(f => isHiveCompatibleDataType(f.dataType))
     case a: ArrayType => isHiveCompatibleDataType(a.elementType)
     case m: MapType =>
