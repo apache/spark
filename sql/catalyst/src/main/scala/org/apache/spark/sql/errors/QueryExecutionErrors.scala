@@ -116,7 +116,7 @@ object QueryExecutionErrors extends QueryErrorsBase {
       s: UTF8String,
       errorContext: String): NumberFormatException = {
     new SparkNumberFormatException(errorClass = "INVALID_LITERAL_FORMAT_FOR_CAST",
-      messageParameters = Array(to.simpleString, toSQLValue(s, StringType),
+      messageParameters = Array(toSQLId(to.simpleString), toSQLValue(s, StringType),
         SQLConf.ANSI_ENABLED.key, errorContext))
   }
 
