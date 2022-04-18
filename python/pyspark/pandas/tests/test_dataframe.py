@@ -5536,6 +5536,14 @@ class DataFrameTest(ComparisonTestBase, SQLTestUtils):
         self._test_corrwith((df1 + 1), df2.A)
         self._test_corrwith((df1 + 1), (df2.C + 2))
 
+        with self.assertRaisesRegex(
+            NotImplementedError, "corrwith currently works only for method='pearson'"
+        ):
+            df1.corrwith(df2, method="kendall")
+
+        with self.assertRaisesRegex(TypeError, "unsupported type"):
+            df1.corrwith(123)
+
         df_bool = ps.DataFrame({"A": [True, True, False, False], "B": [True, False, False, True]})
         self._test_corrwith(df_bool, df_bool.A)
         self._test_corrwith(df_bool, df_bool.B)
