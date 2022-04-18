@@ -613,7 +613,7 @@ object Decimal {
     }
   }
 
-  def fromStringANSI(str: UTF8String): Decimal = {
+  def fromStringANSI(str: UTF8String, errorContext: String = ""): Decimal = {
     try {
       val bigDecimal = stringToJavaBigDecimal(str)
       // We fast fail because constructing a very large JavaBigDecimal to Decimal is very slow.
@@ -626,7 +626,7 @@ object Decimal {
       }
     } catch {
       case _: NumberFormatException =>
-        throw QueryExecutionErrors.invalidInputSyntaxForNumericError(str)
+        throw QueryExecutionErrors.invalidInputSyntaxForNumericError(str, errorContext)
     }
   }
 
