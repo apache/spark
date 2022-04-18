@@ -1710,8 +1710,9 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
             psser.aggregate(["min", max])
 
     def test_drop(self):
-        pser = pd.Series([10, 20, 15, 30, 45], name="x")
-        psser = ps.Series(pser)
+        pdf = pd.DataFrame({"x": [10, 20, 15, 30, 45]})
+        psdf = ps.from_pandas(pdf)
+        pser, psser = pdf.x, psdf.x
 
         self.assert_eq(psser.drop(1), pser.drop(1))
         self.assert_eq(psser.drop([1, 4]), pser.drop([1, 4]))
@@ -1726,14 +1727,17 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
         psser.drop([2, 3], inplace=True)
         pser.drop([2, 3], inplace=True)
         self.assert_eq(psser, pser)
+        self.assert_eq(psdf, pdf)
 
         # For MultiIndex
         midx = pd.MultiIndex(
             [["lama", "cow", "falcon"], ["speed", "weight", "length"]],
             [[0, 0, 0, 1, 1, 1, 2, 2, 2], [0, 1, 2, 0, 1, 2, 0, 1, 2]],
         )
-        pser = pd.Series([45, 200, 1.2, 30, 250, 1.5, 320, 1, 0.3], index=midx)
-        psser = ps.from_pandas(pser)
+
+        pdf = pd.DataFrame({"x": [45, 200, 1.2, 30, 250, 1.5, 320, 1, 0.3]}, index=midx)
+        psdf = ps.from_pandas(pdf)
+        psser, pser = psdf.x, pdf.x
 
         self.assert_eq(psser.drop("lama"), pser.drop("lama"))
         self.assert_eq(psser.drop(labels="weight", level=1), pser.drop(labels="weight", level=1))
@@ -1770,6 +1774,7 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
         psser.drop({"lama": "speed"}, inplace=True)
         pser.drop({"lama": "speed"}, inplace=True)
         self.assert_eq(psser, pser)
+        self.assert_eq(psdf, pdf)
 
     def test_pop(self):
         midx = pd.MultiIndex(

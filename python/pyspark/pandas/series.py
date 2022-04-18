@@ -2556,7 +2556,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             cond = ~reduce(lambda x, y: x | y, drop_index_scols)
             dropped_internal = internal.with_filter(cond)
             if inplace:
-                self._psdf._update_internal_frame(dropped_internal, requires_same_anchor=False)
+                self._update_anchor(DataFrame(dropped_internal))
                 return None
             else:
                 return DataFrame(dropped_internal)
