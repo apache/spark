@@ -46,7 +46,7 @@ import org.apache.spark.sql.types._
  * As commands are executed eagerly, this also includes errors thrown during the execution of
  * commands, which users can see immediately.
  */
-object QueryCompilationErrors {
+object QueryCompilationErrors extends QueryErrorsBase {
 
   def groupingIDMismatchError(groupingID: GroupingID, groupByExprs: Seq[Expression]): Throwable = {
     new AnalysisException(
@@ -94,13 +94,14 @@ object QueryCompilationErrors {
   def unsupportedIfNotExistsError(tableName: String): Throwable = {
     new AnalysisException(
       errorClass = "UNSUPPORTED_FEATURE",
-      messageParameters = Array(s"IF NOT EXISTS for the table '$tableName' by INSERT INTO."))
+      messageParameters = Array(
+        s"IF NOT EXISTS for the table ${toSQLId(tableName)} by INSERT INTO."))
   }
 
   def nonPartitionColError(partitionName: String): Throwable = {
     new AnalysisException(
       errorClass = "NON_PARTITION_COLUMN",
-      messageParameters = Array(partitionName))
+      messageParameters = Array(toSQLId(partitionName)))
   }
 
   def missingStaticPartitionColumn(staticName: String): Throwable = {
@@ -161,8 +162,8 @@ object QueryCompilationErrors {
       errorClass = "CANNOT_UP_CAST_DATATYPE",
       messageParameters = Array(
         fromStr,
-        from.dataType.catalogString,
-        to.catalogString,
+        toSQLType(from.dataType),
+        toSQLType(to),
         s"The type path of the target object is:\n" + walkedTypePath.mkString("", "\n", "\n") +
           "You can either add an explicit cast to the input data or choose a higher precision " +
           "type of the field in the target object"
@@ -1346,7 +1347,7 @@ object QueryCompilationErrors {
       groupAggPandasUDFNames: Seq[String]): Throwable = {
     new AnalysisException(
       errorClass = "INVALID_PANDAS_UDF_PLACEMENT",
-      messageParameters = Array(groupAggPandasUDFNames.map(name => s"'$name'").mkString(", ")))
+      messageParameters = Array(groupAggPandasUDFNames.map(toSQLId).mkString(", ")))
   }
 
   def ambiguousAttributesInSelfJoinError(

@@ -40,7 +40,7 @@ class QueryCompilationErrorsSuite extends QueryTest with SharedSparkSession {
     }.message
     assert(msg1 ===
       s"""
-         |Cannot up cast b from bigint to int.
+         |Cannot up cast b from BIGINT to INT.
          |The type path of the target object is:
          |- field (class: "scala.Int", name: "b")
          |- root class: "org.apache.spark.sql.errors.StringIntClass"
@@ -54,7 +54,7 @@ class QueryCompilationErrorsSuite extends QueryTest with SharedSparkSession {
     }.message
     assert(msg2 ===
       s"""
-         |Cannot up cast b.`b` from decimal(38,18) to bigint.
+         |Cannot up cast b.`b` from DECIMAL(38,18) to BIGINT.
          |The type path of the target object is:
          |- field (class: "scala.Long", name: "b")
          |- field (class: "org.apache.spark.sql.errors.StringLongClass", name: "b")
@@ -110,6 +110,7 @@ class QueryCompilationErrorsSuite extends QueryTest with SharedSparkSession {
 
   test("INVALID_PANDAS_UDF_PLACEMENT: Using aggregate function with grouped aggregate pandas UDF") {
     import IntegratedUDFTestUtils._
+    assume(shouldTestGroupedAggPandasUDFs)
 
     val df = Seq(
       (536361, "85123A", 2, 17850),
@@ -126,7 +127,7 @@ class QueryCompilationErrorsSuite extends QueryTest with SharedSparkSession {
 
     assert(e.errorClass === Some("INVALID_PANDAS_UDF_PLACEMENT"))
     assert(e.message ===
-      "The group aggregate pandas UDF 'pandas_udf_1', 'pandas_udf_2' cannot be invoked " +
+      "The group aggregate pandas UDF `pandas_udf_1`, `pandas_udf_2` cannot be invoked " +
       "together with as other, non-pandas aggregate functions.")
   }
 
@@ -159,6 +160,7 @@ class QueryCompilationErrorsSuite extends QueryTest with SharedSparkSession {
 
   test("UNSUPPORTED_FEATURE: Using pandas UDF aggregate expression with pivot") {
     import IntegratedUDFTestUtils._
+    assume(shouldTestGroupedAggPandasUDFs)
 
     val df = Seq(
       (536361, "85123A", 2, 17850),

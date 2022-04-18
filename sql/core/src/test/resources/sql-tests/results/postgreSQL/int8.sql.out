@@ -619,7 +619,7 @@ SELECT CAST(q1 AS int) FROM int8_tbl WHERE q2 <> 456
 struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
-Casting 4567890123456789L to int causes overflow. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
+Casting 4567890123456789L to INT causes overflow. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
 
 
 -- !query
@@ -636,7 +636,7 @@ SELECT CAST(q1 AS smallint) FROM int8_tbl WHERE q2 <> 456
 struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
-Casting 4567890123456789L to smallint causes overflow. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
+Casting 4567890123456789L to SMALLINT causes overflow. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
 
 
 -- !query
@@ -673,7 +673,7 @@ SELECT CAST(double('922337203685477580700.0') AS bigint)
 struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
-Casting 9.223372036854776E20D to bigint causes overflow. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
+Casting 9.223372036854776E20D to BIGINT causes overflow. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
 
 
 -- !query
@@ -745,7 +745,7 @@ SELECT string(int(shiftleft(bigint(-1), 63))+1)
 struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
-Casting -9223372036854775808L to int causes overflow. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
+Casting -9223372036854775808L to INT causes overflow. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
 
 
 -- !query

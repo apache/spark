@@ -123,6 +123,9 @@ struct<>
 -- !query output
 org.apache.spark.SparkNumberFormatException
 invalid input syntax for type numeric: 'a'. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
+== SQL(line 1, position 7) ==
+select interval 2 second * 'a'
+       ^^^^^^^^^^^^^^^^^^^^^^^
 
 
 -- !query
@@ -132,6 +135,9 @@ struct<>
 -- !query output
 org.apache.spark.SparkNumberFormatException
 invalid input syntax for type numeric: 'a'. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
+== SQL(line 1, position 7) ==
+select interval 2 second / 'a'
+       ^^^^^^^^^^^^^^^^^^^^^^^
 
 
 -- !query
@@ -141,6 +147,9 @@ struct<>
 -- !query output
 org.apache.spark.SparkNumberFormatException
 invalid input syntax for type numeric: 'a'. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
+== SQL(line 1, position 7) ==
+select interval 2 year * 'a'
+       ^^^^^^^^^^^^^^^^^^^^^
 
 
 -- !query
@@ -150,6 +159,9 @@ struct<>
 -- !query output
 org.apache.spark.SparkNumberFormatException
 invalid input syntax for type numeric: 'a'. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
+== SQL(line 1, position 7) ==
+select interval 2 year / 'a'
+       ^^^^^^^^^^^^^^^^^^^^^
 
 
 -- !query
@@ -175,6 +187,9 @@ struct<>
 -- !query output
 org.apache.spark.SparkNumberFormatException
 invalid input syntax for type numeric: 'a'. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
+== SQL(line 1, position 7) ==
+select 'a' * interval 2 second
+       ^^^^^^^^^^^^^^^^^^^^^^^
 
 
 -- !query
@@ -184,6 +199,9 @@ struct<>
 -- !query output
 org.apache.spark.SparkNumberFormatException
 invalid input syntax for type numeric: 'a'. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
+== SQL(line 1, position 7) ==
+select 'a' * interval 2 year
+       ^^^^^^^^^^^^^^^^^^^^^
 
 
 -- !query
@@ -1499,6 +1517,9 @@ struct<>
 -- !query output
 java.time.DateTimeException
 Cannot cast 4 11:11 to TimestampType. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
+== SQL(line 1, position 7) ==
+select '4 11:11' - interval '4 22:12' day to minute
+       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 
 -- !query
@@ -1508,6 +1529,9 @@ struct<>
 -- !query output
 java.time.DateTimeException
 Cannot cast 4 12:12:12 to TimestampType. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
+== SQL(line 1, position 7) ==
+select '4 12:12:12' + interval '4 22:12' day to minute
+       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 
 -- !query
@@ -1543,6 +1567,9 @@ struct<>
 -- !query output
 java.time.DateTimeException
 Cannot cast 1 to TimestampType. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
+== SQL(line 1, position 7) ==
+select str - interval '4 22:12' day to minute from interval_view
+       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 
 -- !query
@@ -1552,6 +1579,9 @@ struct<>
 -- !query output
 java.time.DateTimeException
 Cannot cast 1 to TimestampType. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
+== SQL(line 1, position 7) ==
+select str + interval '4 22:12' day to minute from interval_view
+       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 
 -- !query
