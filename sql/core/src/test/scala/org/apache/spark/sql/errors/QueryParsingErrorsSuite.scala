@@ -509,13 +509,13 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession {
       sqlState = "42000",
       message =
         s"""
-           |Syntax error at or near 't': extra input 't'(line 2, pos 12)
-           |
-           |== SQL ==
-           |select *
-           |from r as q t
-           |------------^^^
-           |""".stripMargin)
+          |Syntax error at or near 't': extra input 't'(line 2, pos 12)
+          |
+          |== SQL ==
+          |select *
+          |from r as q t
+          |------------^^^
+          |""".stripMargin)
   }
 
   test("PARSE_SYNTAX_ERROR: mismatched input") {
