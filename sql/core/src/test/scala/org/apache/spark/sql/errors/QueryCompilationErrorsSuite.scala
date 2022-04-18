@@ -126,7 +126,7 @@ class QueryCompilationErrorsSuite extends QueryTest with SharedSparkSession {
 
     assert(e.errorClass === Some("INVALID_PANDAS_UDF_PLACEMENT"))
     assert(e.message ===
-      "The group aggregate pandas UDF 'pandas_udf_1', 'pandas_udf_2' cannot be invoked " +
+      "The group aggregate pandas UDF `pandas_udf_1`, `pandas_udf_2` cannot be invoked " +
       "together with as other, non-pandas aggregate functions.")
   }
 

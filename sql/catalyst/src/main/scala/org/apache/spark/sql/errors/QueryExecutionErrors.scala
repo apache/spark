@@ -104,14 +104,18 @@ object QueryExecutionErrors extends QueryErrorsBase {
         decimalPrecision.toString, decimalScale.toString, SQLConf.ANSI_ENABLED.key, context))
   }
 
-  def invalidInputSyntaxForNumericError(e: NumberFormatException): NumberFormatException = {
+  def invalidInputSyntaxForNumericError(
+      e: NumberFormatException,
+      errorContext: String): NumberFormatException = {
     new NumberFormatException(s"${e.getMessage}. To return NULL instead, use 'try_cast'. " +
-      s"If necessary set ${SQLConf.ANSI_ENABLED.key} to false to bypass this error.")
+      s"If necessary set ${SQLConf.ANSI_ENABLED.key} to false to bypass this error." + errorContext)
   }
 
-  def invalidInputSyntaxForNumericError(s: UTF8String): NumberFormatException = {
+  def invalidInputSyntaxForNumericError(
+      s: UTF8String,
+      errorContext: String): NumberFormatException = {
     new SparkNumberFormatException(errorClass = "INVALID_INPUT_SYNTAX_FOR_NUMERIC_TYPE",
-      messageParameters = Array(toSQLValue(s, StringType), SQLConf.ANSI_ENABLED.key))
+      messageParameters = Array(toSQLValue(s, StringType), SQLConf.ANSI_ENABLED.key, errorContext))
   }
 
   def cannotCastFromNullTypeError(to: DataType): Throwable = {
@@ -1007,9 +1011,9 @@ object QueryExecutionErrors extends QueryErrorsBase {
       e)
   }
 
-  def cannotCastToDateTimeError(value: Any, to: DataType): Throwable = {
+  def cannotCastToDateTimeError(value: Any, to: DataType, errorContext: String): Throwable = {
     new DateTimeException(s"Cannot cast $value to $to. To return NULL instead, use 'try_cast'. " +
-      s"If necessary set ${SQLConf.ANSI_ENABLED.key} to false to bypass this error.")
+      s"If necessary set ${SQLConf.ANSI_ENABLED.key} to false to bypass this error." + errorContext)
   }
 
   def registeringStreamingQueryListenerError(e: Exception): Throwable = {
@@ -1143,10 +1147,12 @@ object QueryExecutionErrors extends QueryErrorsBase {
       "SQLUserDefinedType nor registered with UDTRegistration.}")
   }
 
-  def invalidInputSyntaxForBooleanError(s: UTF8String): UnsupportedOperationException = {
+  def invalidInputSyntaxForBooleanError(
+      s: UTF8String,
+      errorContext: String): UnsupportedOperationException = {
     new UnsupportedOperationException(s"invalid input syntax for type boolean: $s. " +
       s"To return NULL instead, use 'try_cast'. If necessary set ${SQLConf.ANSI_ENABLED.key} " +
-      "to false to bypass this error.")
+      "to false to bypass this error." + errorContext)
   }
 
   def unsupportedOperandTypeForSizeFunctionError(dataType: DataType): Throwable = {
@@ -1888,12 +1894,14 @@ object QueryExecutionErrors extends QueryErrorsBase {
       messageParameters = Array("Pivot not after a groupBy."))
   }
 
+  private val aesFuncName = toSQLId("aes_encrypt") + "/" + toSQLId("aes_decrypt")
+
   def invalidAesKeyLengthError(actualLength: Int): RuntimeException = {
     new SparkRuntimeException(
       errorClass = "INVALID_PARAMETER_VALUE",
       messageParameters = Array(
         "key",
-        "the aes_encrypt/aes_decrypt function",
+        s"the $aesFuncName function",
         s"expects a binary value with 16, 24 or 32 bytes, but got ${actualLength.toString} bytes."))
   }
 
@@ -1901,7 +1909,7 @@ object QueryExecutionErrors extends QueryErrorsBase {
     new SparkRuntimeException(
       errorClass = "UNSUPPORTED_FEATURE",
       messageParameters = Array(
-        s"AES-$mode with the padding $padding by the aes_encrypt/aes_decrypt function."))
+        s"AES-$mode with the padding $padding by the $aesFuncName function."))
   }
 
   def aesCryptoError(detailMessage: String): RuntimeException = {
@@ -1909,7 +1917,7 @@ object QueryExecutionErrors extends QueryErrorsBase {
       errorClass = "INVALID_PARAMETER_VALUE",
       messageParameters = Array(
         "expr, key",
-        "the aes_encrypt/aes_decrypt function",
+        s"the $aesFuncName function",
         s"Detail message: $detailMessage"))
   }
 

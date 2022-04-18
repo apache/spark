@@ -94,13 +94,14 @@ object QueryCompilationErrors extends QueryErrorsBase {
   def unsupportedIfNotExistsError(tableName: String): Throwable = {
     new AnalysisException(
       errorClass = "UNSUPPORTED_FEATURE",
-      messageParameters = Array(s"IF NOT EXISTS for the table '$tableName' by INSERT INTO."))
+      messageParameters = Array(
+        s"IF NOT EXISTS for the table ${toSQLId(tableName)} by INSERT INTO."))
   }
 
   def nonPartitionColError(partitionName: String): Throwable = {
     new AnalysisException(
       errorClass = "NON_PARTITION_COLUMN",
-      messageParameters = Array(partitionName))
+      messageParameters = Array(toSQLId(partitionName)))
   }
 
   def missingStaticPartitionColumn(staticName: String): Throwable = {
@@ -1346,7 +1347,7 @@ object QueryCompilationErrors extends QueryErrorsBase {
       groupAggPandasUDFNames: Seq[String]): Throwable = {
     new AnalysisException(
       errorClass = "INVALID_PANDAS_UDF_PLACEMENT",
-      messageParameters = Array(groupAggPandasUDFNames.map(name => s"'$name'").mkString(", ")))
+      messageParameters = Array(groupAggPandasUDFNames.map(toSQLId).mkString(", ")))
   }
 
   def ambiguousAttributesInSelfJoinError(

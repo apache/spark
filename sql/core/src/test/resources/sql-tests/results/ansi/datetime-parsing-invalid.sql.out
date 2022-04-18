@@ -243,6 +243,9 @@ struct<>
 -- !query output
 java.time.DateTimeException
 Cannot cast Unparseable to TimestampType. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
+== SQL(line 1, position 7) ==
+select cast("Unparseable" as timestamp)
+       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 
 -- !query
@@ -252,3 +255,6 @@ struct<>
 -- !query output
 java.time.DateTimeException
 Cannot cast Unparseable to DateType. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
+== SQL(line 1, position 7) ==
+select cast("Unparseable" as date)
+       ^^^^^^^^^^^^^^^^^^^^^^^^^^^
