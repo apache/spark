@@ -91,7 +91,7 @@ object QueryExecutionErrors extends QueryErrorsBase {
 
   def castingCauseOverflowError(t: Any, dataType: DataType): ArithmeticException = {
     new SparkArithmeticException(errorClass = "CAST_CAUSES_OVERFLOW",
-      messageParameters = Array(toSQLValue(t), dataType.catalogString, SQLConf.ANSI_ENABLED.key))
+      messageParameters = Array(toSQLValue(t), toSQLType(dataType), SQLConf.ANSI_ENABLED.key))
   }
 
   def cannotChangeDecimalPrecisionError(
@@ -244,8 +244,7 @@ object QueryExecutionErrors extends QueryErrorsBase {
     new SparkRuntimeException(
       errorClass = "UNSUPPORTED_FEATURE",
       messageParameters = Array(
-        s"pivoting by the value '${v.toString}' of the column data type" +
-        s" '${dataType.catalogString}'."))
+        s"pivoting by the value '${v.toString}' of the column data type ${toSQLType(dataType)}."))
   }
 
   def noDefaultForDataTypeError(dataType: DataType): RuntimeException = {
@@ -1608,8 +1607,8 @@ object QueryExecutionErrors extends QueryErrorsBase {
     new SparkUnsupportedOperationException(
       errorClass = "UNSUPPORTED_OPERATION",
       messageParameters = Array(
-        s"${TimestampType.catalogString} must supply timeZoneId parameter " +
-          s"while converting to ArrowType")
+        s"${toSQLType(TimestampType)} must supply timeZoneId parameter " +
+          s"while converting to the arrow timestamp type.")
     )
   }
 
@@ -1928,14 +1927,17 @@ object QueryExecutionErrors extends QueryErrorsBase {
   def cannotConvertOrcTimestampToTimestampNTZError(): Throwable = {
     new SparkUnsupportedOperationException(
       errorClass = "UNSUPPORTED_OPERATION",
-      messageParameters = Array("Unable to convert timestamp of Orc to data type 'timestamp_ntz'"))
+      messageParameters = Array(
+        s"Unable to convert ${toSQLType(TimestampType)} of Orc to " +
+        s"data type ${toSQLType(TimestampNTZType)}."))
   }
 
   def cannotConvertOrcTimestampNTZToTimestampLTZError(): Throwable = {
     new SparkUnsupportedOperationException(
       errorClass = "UNSUPPORTED_OPERATION",
-      messageParameters =
-        Array("Unable to convert timestamp ntz of Orc to data type 'timestamp_ltz'"))
+      messageParameters = Array(
+        s"Unable to convert ${toSQLType(TimestampNTZType)} of Orc to " +
+        s"data type ${toSQLType(TimestampType)}."))
   }
 
   def writePartitionExceedConfigSizeWhenDynamicPartitionError(

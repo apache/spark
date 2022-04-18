@@ -40,7 +40,7 @@ class QueryCompilationErrorsSuite extends QueryTest with SharedSparkSession {
     }.message
     assert(msg1 ===
       s"""
-         |Cannot up cast b from bigint to int.
+         |Cannot up cast b from BIGINT to INT.
          |The type path of the target object is:
          |- field (class: "scala.Int", name: "b")
          |- root class: "org.apache.spark.sql.errors.StringIntClass"
@@ -54,7 +54,7 @@ class QueryCompilationErrorsSuite extends QueryTest with SharedSparkSession {
     }.message
     assert(msg2 ===
       s"""
-         |Cannot up cast b.`b` from decimal(38,18) to bigint.
+         |Cannot up cast b.`b` from DECIMAL(38,18) to BIGINT.
          |The type path of the target object is:
          |- field (class: "scala.Long", name: "b")
          |- field (class: "org.apache.spark.sql.errors.StringLongClass", name: "b")
@@ -110,6 +110,7 @@ class QueryCompilationErrorsSuite extends QueryTest with SharedSparkSession {
 
   test("INVALID_PANDAS_UDF_PLACEMENT: Using aggregate function with grouped aggregate pandas UDF") {
     import IntegratedUDFTestUtils._
+    assume(shouldTestGroupedAggPandasUDFs)
 
     val df = Seq(
       (536361, "85123A", 2, 17850),
@@ -159,6 +160,7 @@ class QueryCompilationErrorsSuite extends QueryTest with SharedSparkSession {
 
   test("UNSUPPORTED_FEATURE: Using pandas UDF aggregate expression with pivot") {
     import IntegratedUDFTestUtils._
+    assume(shouldTestGroupedAggPandasUDFs)
 
     val df = Seq(
       (536361, "85123A", 2, 17850),
@@ -307,6 +309,56 @@ class QueryCompilationErrorsSuite extends QueryTest with SharedSparkSession {
         }
         assert(ex.getMessage.contains("Grouping sets size cannot be greater than 64"))
         assert(ex.getErrorClass == "GROUPING_SIZE_LIMIT_EXCEEDED")
+      }
+    }
+  }
+
+  test("FORBIDDEN_OPERATION: desc partition on a temporary view") {
+    val tableName: String = "t"
+    val tempViewName: String = "tempView"
+
+    withTable(tableName) {
+      sql(
+        s"""
+          |CREATE TABLE $tableName (a STRING, b INT, c STRING, d STRING)
+          |USING parquet
+          |PARTITIONED BY (c, d)
+          |""".stripMargin)
+
+      withTempView(tempViewName) {
+        sql(s"CREATE TEMPORARY VIEW $tempViewName as SELECT * FROM $tableName")
+
+        val e = intercept[AnalysisException](
+          sql(s"DESC TABLE $tempViewName PARTITION (c='Us', d=1)")
+        )
+        assert(e.getErrorClass === "FORBIDDEN_OPERATION")
+        assert(e.message ===
+          s"The operation 'DESC PARTITION' is not allowed on the temporary view: `$tempViewName`")
+      }
+    }
+  }
+
+  test("FORBIDDEN_OPERATION: desc partition on a view") {
+    val tableName: String = "t"
+    val viewName: String = "view"
+
+    withTable(tableName) {
+      sql(
+        s"""
+           |CREATE TABLE $tableName (a STRING, b INT, c STRING, d STRING)
+           |USING parquet
+           |PARTITIONED BY (c, d)
+           |""".stripMargin)
+
+      withView(viewName) {
+        sql(s"CREATE VIEW $viewName as SELECT * FROM $tableName")
+
+        val e = intercept[AnalysisException](
+          sql(s"DESC TABLE $viewName PARTITION (c='Us', d=1)")
+        )
+        assert(e.getErrorClass === "FORBIDDEN_OPERATION")
+        assert(e.message ===
+          s"The operation 'DESC PARTITION' is not allowed on the view: `$viewName`")
       }
     }
   }

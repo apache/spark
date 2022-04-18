@@ -16,7 +16,6 @@
  */
 package org.apache.spark.sql.catalyst.parser
 
-import org.apache.spark.SparkThrowableHelper
 import org.apache.spark.sql.catalyst.analysis.AnalysisTest
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 
@@ -75,13 +74,6 @@ class ErrorParserSuite extends AnalysisTest {
       messages: String*): Unit = {
     interceptImpl(sql, messages: _*)(
       Some(line), Some(startPosition), Some(stopPosition), Some(errorClass))
-  }
-
-  test("empty input") {
-    val expectedErrMsg = SparkThrowableHelper.getMessage("PARSE_EMPTY_STATEMENT", Array[String]())
-    intercept("", Some("PARSE_EMPTY_STATEMENT"), expectedErrMsg)
-    intercept("   ", Some("PARSE_EMPTY_STATEMENT"), expectedErrMsg)
-    intercept(" \n", Some("PARSE_EMPTY_STATEMENT"), expectedErrMsg)
   }
 
   test("semantic errors") {

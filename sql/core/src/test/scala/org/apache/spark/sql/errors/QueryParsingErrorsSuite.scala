@@ -257,7 +257,7 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession {
       sqlState = "42000",
       message =
         s"""
-          |Invalid SQL syntax: Invalid pattern in SHOW FUNCTIONS: `f1`. It must be a string literal.(line 1, pos 21)
+          |Invalid SQL syntax: Invalid pattern in SHOW FUNCTIONS: `f1`. It must be a STRING literal.(line 1, pos 21)
           |
           |== SQL ==
           |SHOW FUNCTIONS IN db f1
@@ -269,7 +269,7 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession {
       sqlState = "42000",
       message =
         s"""
-           |Invalid SQL syntax: Invalid pattern in SHOW FUNCTIONS: `f1`. It must be a string literal.(line 1, pos 26)
+           |Invalid SQL syntax: Invalid pattern in SHOW FUNCTIONS: `f1`. It must be a STRING literal.(line 1, pos 26)
            |
            |== SQL ==
            |SHOW FUNCTIONS IN db LIKE f1
@@ -432,6 +432,92 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession {
           |""".stripMargin)
   }
 
+  test("PARSE_EMPTY_STATEMENT: empty input") {
+    validateParsingError(
+      sqlText = "",
+      errorClass = "PARSE_EMPTY_STATEMENT",
+      sqlState = "42000",
+      message =
+        """
+          |Syntax error, unexpected empty statement(line 1, pos 0)
+          |
+          |== SQL ==
+          |
+          |^^^
+          |""".stripMargin)
+
+    validateParsingError(
+      sqlText = "   ",
+      errorClass = "PARSE_EMPTY_STATEMENT",
+      sqlState = "42000",
+      message =
+        s"""
+           |Syntax error, unexpected empty statement(line 1, pos 3)
+           |
+           |== SQL ==
+           |${"   "}
+           |---^^^
+           |""".stripMargin)
+
+    validateParsingError(
+      sqlText = " \n",
+      errorClass = "PARSE_EMPTY_STATEMENT",
+      sqlState = "42000",
+      message =
+        s"""
+           |Syntax error, unexpected empty statement(line 2, pos 0)
+           |
+           |== SQL ==
+           |${" "}
+           |^^^
+           |""".stripMargin)
+  }
+
+  test("PARSE_SYNTAX_ERROR: no viable input") {
+    val sqlText = "select ((r + 1) "
+    validateParsingError(
+      sqlText = sqlText,
+      errorClass = "PARSE_SYNTAX_ERROR",
+      sqlState = "42000",
+      message =
+        s"""
+           |Syntax error at or near end of input(line 1, pos 16)
+           |
+           |== SQL ==
+           |$sqlText
+           |----------------^^^
+           |""".stripMargin)
+  }
+
+  test("PARSE_SYNTAX_ERROR: extraneous input") {
+    validateParsingError(
+      sqlText = "select 1 1",
+      errorClass = "PARSE_SYNTAX_ERROR",
+      sqlState = "42000",
+      message =
+        s"""
+           |Syntax error at or near '1': extra input '1'(line 1, pos 9)
+           |
+           |== SQL ==
+           |select 1 1
+           |---------^^^
+           |""".stripMargin)
+
+    validateParsingError(
+      sqlText = "select *\nfrom r as q t",
+      errorClass = "PARSE_SYNTAX_ERROR",
+      sqlState = "42000",
+      message =
+        s"""
+           |Syntax error at or near 't': extra input 't'(line 2, pos 12)
+           |
+           |== SQL ==
+           |select *
+           |from r as q t
+           |------------^^^
+           |""".stripMargin)
+  }
+
   test("PARSE_SYNTAX_ERROR: mismatched input") {
     validateParsingError(
       sqlText = "select * from r order by q from t",
@@ -532,50 +618,5 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession {
           |SELECT * FROM test WHERE x NOT NULL
           |---------------------------^^^
           |""".stripMargin)
-  }
-
-  test("PARSE_SYNTAX_ERROR: no viable input") {
-    val sqlText = "select ((r + 1) "
-    validateParsingError(
-      sqlText = sqlText,
-      errorClass = "PARSE_SYNTAX_ERROR",
-      sqlState = "42000",
-      message =
-        s"""
-           |Syntax error at or near end of input(line 1, pos 16)
-           |
-           |== SQL ==
-           |$sqlText
-           |----------------^^^
-           |""".stripMargin)
-  }
-
-  test("PARSE_SYNTAX_ERROR: extraneous input") {
-    validateParsingError(
-      sqlText = "select 1 1",
-      errorClass = "PARSE_SYNTAX_ERROR",
-      sqlState = "42000",
-      message =
-        s"""
-           |Syntax error at or near '1': extra input '1'(line 1, pos 9)
-           |
-           |== SQL ==
-           |select 1 1
-           |---------^^^
-           |""".stripMargin)
-
-    validateParsingError(
-      sqlText = "select *\nfrom r as q t",
-      errorClass = "PARSE_SYNTAX_ERROR",
-      sqlState = "42000",
-      message =
-        s"""
-           |Syntax error at or near 't': extra input 't'(line 2, pos 12)
-           |
-           |== SQL ==
-           |select *
-           |from r as q t
-           |------------^^^
-           |""".stripMargin)
   }
 }

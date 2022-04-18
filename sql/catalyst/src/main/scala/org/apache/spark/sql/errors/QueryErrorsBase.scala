@@ -46,11 +46,20 @@ trait QueryErrorsBase {
     litToErrorValue(Literal.create(v, t))
   }
 
+  // Quote sql statements in error messages.
+  def toSQLStmt(text: String): String = {
+    s"'$text'"
+  }
+
   def toSQLId(parts: Seq[String]): String = {
     parts.map(quoteIdentifier).mkString(".")
   }
 
   def toSQLId(parts: String): String = {
     toSQLId(parts.split("\\."))
+  }
+
+  def toSQLType(t: DataType): String = {
+    t.sql
   }
 }

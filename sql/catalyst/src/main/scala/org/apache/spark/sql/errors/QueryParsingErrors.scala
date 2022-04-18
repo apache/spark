@@ -22,6 +22,7 @@ import org.antlr.v4.runtime.ParserRuleContext
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.parser.SqlBaseParser._
 import org.apache.spark.sql.catalyst.trees.Origin
+import org.apache.spark.sql.types.StringType
 
 /**
  * Object for grouping all error messages of the query parsing.
@@ -305,9 +306,12 @@ object QueryParsingErrors extends QueryErrorsBase {
   }
 
   def showFunctionsInvalidPatternError(pattern: String, ctx: ParserRuleContext): Throwable = {
-    new ParseException("INVALID_SQL_SYNTAX",
-      Array(s"Invalid pattern in SHOW FUNCTIONS: ${toSQLId(pattern)}. " +
-        "It must be a string literal."), ctx)
+    new ParseException(
+      errorClass = "INVALID_SQL_SYNTAX",
+      messageParameters = Array(
+        s"Invalid pattern in SHOW FUNCTIONS: ${toSQLId(pattern)}. " +
+        s"It must be a ${toSQLType(StringType)} literal."),
+      ctx)
   }
 
   def duplicateCteDefinitionNamesError(duplicateNames: String, ctx: CtesContext): Throwable = {
