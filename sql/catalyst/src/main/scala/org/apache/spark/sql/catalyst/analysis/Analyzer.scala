@@ -3986,6 +3986,9 @@ object ApplyCharTypePadding extends Rule[LogicalPlan] {
   }
 
   override def apply(plan: LogicalPlan): LogicalPlan = {
+    if (SQLConf.get.charVarcharAsString) {
+      return plan
+    }
     plan.resolveOperatorsUp {
       case operator => operator.transformExpressionsUp {
         case e if !e.childrenResolved => e
