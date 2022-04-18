@@ -2502,7 +2502,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         dropped = self._drop(
             labels=labels, index=index, level=level, inplace=inplace, columns=columns
         )
-        return dropped if dropped is None else first_series(dropped)
+        return None if dropped is None else first_series(dropped)
 
     def _drop(
         self,
@@ -4525,7 +4525,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         rows = [internal.spark_columns[level] == index for level, index in enumerate(item)]
         sdf = internal.spark_frame.filter(reduce(lambda x, y: x & y, rows)).select(scols)
 
-        psdf = cast(DataFrame, self._drop(item))
+        psdf = self._drop(item)
         self._update_anchor(psdf)
 
         if self._internal.index_level == len(item):
