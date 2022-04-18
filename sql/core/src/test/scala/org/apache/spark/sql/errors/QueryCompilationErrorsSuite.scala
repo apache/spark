@@ -331,7 +331,7 @@ class QueryCompilationErrorsSuite extends QueryTest with SharedSparkSession {
         )
         assert(e.getErrorClass === "FORBIDDEN_OPERATION")
         assert(e.message ===
-          s"The operation 'DESC PARTITION' is not allowed on the temporary view: '$tempViewName'")
+          s"The operation 'DESC PARTITION' is not allowed on the temporary view: `$tempViewName`")
       }
     }
   }
@@ -356,7 +356,7 @@ class QueryCompilationErrorsSuite extends QueryTest with SharedSparkSession {
         )
         assert(e.getErrorClass === "FORBIDDEN_OPERATION")
         assert(e.message ===
-          s"The operation 'DESC PARTITION' is not allowed on the view: '$viewName'")
+          s"The operation 'DESC PARTITION' is not allowed on the view: `$viewName`")
       }
     }
   }

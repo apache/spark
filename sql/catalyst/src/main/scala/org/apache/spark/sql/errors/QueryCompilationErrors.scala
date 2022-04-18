@@ -1934,14 +1934,14 @@ object QueryCompilationErrors extends QueryErrorsBase {
     new AnalysisException(
       errorClass = "FORBIDDEN_OPERATION",
       messageParameters =
-        Array(toSQLStmt("DESC PARTITION"), "the temporary view", toSQLValue(table)))
+        Array(toSQLStmt("DESC PARTITION"), "the temporary view", toSQLId(table)))
   }
 
   def descPartitionNotAllowedOnView(table: String): Throwable = {
     new AnalysisException(
       errorClass = "FORBIDDEN_OPERATION",
       messageParameters = Array(
-        toSQLStmt("DESC PARTITION"), "the view", toSQLValue(table)))
+        toSQLStmt("DESC PARTITION"), "the view", toSQLId(table)))
   }
 
   def showPartitionNotAllowedOnTableNotPartitionedError(tableIdentWithDB: String): Throwable = {
