@@ -159,6 +159,35 @@ class MergeScalarSubqueriesSuite extends PlanTest {
     comparePlans(Optimize.execute(originalQuery.analyze), correctAnswer.analyze)
   }
 
+  test("Merging subqueries with aggregates with multiple grouping expressions") {
+    // supports HashAggregate
+    val subquery1 = ScalarSubquery(testRelation.groupBy('b, 'c)(max('a).as("max_a")))
+    val subquery2 = ScalarSubquery(testRelation.groupBy('b, 'c)(min('a).as("min_a")))
+
+    val originalQuery = testRelation
+      .select(
+        subquery1,
+        subquery2)
+
+    val hashAggregates = testRelation
+      .groupBy('b, 'c)(
+        max('a).as("max_a"),
+        min('a).as("min_a"))
+      .select(CreateNamedStruct(Seq(
+        Literal("max_a"), 'max_a,
+        Literal("min_a"), 'min_a
+      )).as("mergedValue"))
+    val analyzedHashAggregates = hashAggregates.analyze
+    val correctAnswer = WithCTE(
+      testRelation
+        .select(
+          extractorExpression(0, analyzedHashAggregates.output, 0),
+          extractorExpression(0, analyzedHashAggregates.output, 1)),
+      Seq(CTERelationDef(analyzedHashAggregates, 0)))
+
+    comparePlans(Optimize.execute(originalQuery.analyze), correctAnswer.analyze)
+  }
+
   test("Merging subqueries with filters") {
     val subquery1 = ScalarSubquery(testRelation.where('a > 1).select('a))
     // Despite having an extra Project node, `subquery2` is mergeable with `subquery1`
@@ -486,6 +515,19 @@ class MergeScalarSubqueriesSuite extends PlanTest {
           CTERelationDef(analyzedHashAggregates, 0)))
 
     comparePlans(Optimize.execute(originalQuery.analyze), correctAnswer.analyze)
+  }
+
+  test("Do not merge subqueries with different aggregate grouping orders") {
+    // supports HashAggregate
+    val subquery1 = ScalarSubquery(testRelation.groupBy('b, 'c)(max('a).as("max_a")))
+    val subquery2 = ScalarSubquery(testRelation.groupBy('c, 'b)(min('a).as("min_a")))
+
+    val originalQuery = testRelation
+      .select(
+        subquery1,
+        subquery2)
+
+    comparePlans(Optimize.execute(originalQuery.analyze), originalQuery.analyze)
   }
 
   test("Merging subqueries from different places") {

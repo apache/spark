@@ -202,8 +202,8 @@ object MergeScalarSubqueries extends Rule[LogicalPlan] with PredicateHelper {
             val mappedNewGroupingExpression =
               np.groupingExpressions.map(mapAttributes(_, outputMap))
             // Order of grouping expression doesn't matter so we can compare sets
-            if (ExpressionSet(mappedNewGroupingExpression) ==
-              ExpressionSet(cp.groupingExpressions)) {
+            if (mappedNewGroupingExpression.map(_.canonicalized) ==
+              cp.groupingExpressions.map(_.canonicalized)) {
               val (mergedAggregateExpressions, newOutputMap) =
                 mergeNamedExpressions(np.aggregateExpressions, outputMap, cp.aggregateExpressions)
               val mergedPlan =
