@@ -28,8 +28,7 @@ import com.fasterxml.jackson.module.scala.DefaultScalaModule
 
 import org.apache.spark.SparkConf
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.config.History.HYBRID_STORE_DISK_BACKEND
-import org.apache.spark.internal.config.History.HybridStoreDiskBackend
+import org.apache.spark.internal.config.History.{HYBRID_STORE_DISK_BACKEND, HybridStoreDiskBackend}
 import org.apache.spark.internal.config.History.HybridStoreDiskBackend._
 import org.apache.spark.util.Utils
 import org.apache.spark.util.kvstore._
@@ -104,6 +103,26 @@ private[spark] object KVUtils extends Logging {
   def count[T](view: KVStoreView[T])(countFunc: T => Boolean): Int = {
     Utils.tryWithResource(view.closeableIterator()) { iter =>
       iter.asScala.count(countFunc)
+    }
+  }
+
+  /** Applies a function f to all values produced by KVStoreView. */
+  def foreach[T](view: KVStoreView[T])(foreachFunc: T => Unit): Unit = {
+    Utils.tryWithResource(view.closeableIterator()) { iter =>
+      iter.asScala.foreach(foreachFunc)
+    }
+  }
+
+  /** Maps all values of KVStoreView to new values using a transformation function. */
+  def mapToSeq[T, B](view: KVStoreView[T])(mapFunc: T => B): Seq[B] = {
+    Utils.tryWithResource(view.closeableIterator()) { iter =>
+      iter.asScala.map(mapFunc).toList
+    }
+  }
+
+  def size[T](view: KVStoreView[T]): Int = {
+    Utils.tryWithResource(view.closeableIterator()) { iter =>
+      iter.asScala.size
     }
   }
 

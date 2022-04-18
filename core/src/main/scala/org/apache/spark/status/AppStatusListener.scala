@@ -35,7 +35,6 @@ import org.apache.spark.status.api.v1
 import org.apache.spark.storage._
 import org.apache.spark.ui.SparkUI
 import org.apache.spark.ui.scope._
-import org.apache.spark.util.Utils
 
 /**
  * A Spark listener that writes application information to a data store. The types written to the
@@ -1277,21 +1276,18 @@ private[spark] class AppStatusListener(
   private def cleanupStagesWithInMemoryStore(countToDelete: Long): Seq[Array[Int]] = {
     val stageArray = new ArrayBuffer[StageCompletionTime]()
     val stageDataCount = new mutable.HashMap[Int, Int]()
-    Utils.tryWithResource(
-      kvstore.view(classOf[StageDataWrapper]).closeableIterator()) { iterator =>
-      iterator.asScala.foreach { s =>
-        // Here we keep track of the total number of StageDataWrapper entries for each stage id.
-        // This will be used in cleaning up the RDDOperationGraphWrapper data.
-        if (stageDataCount.contains(s.info.stageId)) {
-          stageDataCount(s.info.stageId) += 1
-        } else {
-          stageDataCount(s.info.stageId) = 1
-        }
-        if (s.info.status != v1.StageStatus.ACTIVE && s.info.status != v1.StageStatus.PENDING) {
-          val candidate =
-            StageCompletionTime(s.info.stageId, s.info.attemptId, s.completionTime)
-          stageArray.append(candidate)
-        }
+    KVUtils.foreach(kvstore.view(classOf[StageDataWrapper])) { s =>
+      // Here we keep track of the total number of StageDataWrapper entries for each stage id.
+      // This will be used in cleaning up the RDDOperationGraphWrapper data.
+      if (stageDataCount.contains(s.info.stageId)) {
+        stageDataCount(s.info.stageId) += 1
+      } else {
+        stageDataCount(s.info.stageId) = 1
+      }
+      if (s.info.status != v1.StageStatus.ACTIVE && s.info.status != v1.StageStatus.PENDING) {
+        val candidate =
+          StageCompletionTime(s.info.stageId, s.info.attemptId, s.completionTime)
+        stageArray.append(candidate)
       }
     }
 

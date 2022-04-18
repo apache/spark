@@ -988,22 +988,15 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
 
     // If the number of files is bigger than MAX_LOG_NUM,
     // clean up all completed attempts per application one by one.
-    val num = Utils.tryWithResource(
-      listing.view(classOf[LogInfo]).index("lastProcessed").closeableIterator()) { iterator =>
-      iterator.asScala.size
-    }
+    val num = KVUtils.size(listing.view(classOf[LogInfo]).index("lastProcessed"))
     var count = num - maxNum
     if (count > 0) {
       logInfo(s"Try to delete $count old event logs to keep $maxNum logs in total.")
-      Utils.tryWithResource(
-        listing.view(classOf[ApplicationInfoWrapper])
-          .index("oldestAttempt").closeableIterator()) { iterator =>
-        iterator.asScala.foreach { app =>
-          if (count > 0) {
-            // Applications may have multiple attempts, some of which may not be completed yet.
-            val (toDelete, remaining) = app.attempts.partition(_.info.completed)
-            count -= deleteAttemptLogs(app, remaining, toDelete)
-          }
+      KVUtils.foreach(listing.view(classOf[ApplicationInfoWrapper]).index("oldestAttempt")) { app =>
+        if (count > 0) {
+          // Applications may have multiple attempts, some of which may not be completed yet.
+          val (toDelete, remaining) = app.attempts.partition(_.info.completed)
+          count -= deleteAttemptLogs(app, remaining, toDelete)
         }
       }
       if (count > 0) {
