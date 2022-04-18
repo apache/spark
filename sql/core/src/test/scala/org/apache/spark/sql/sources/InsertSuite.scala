@@ -721,13 +721,13 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
         var msg = intercept[SparkException] {
           sql(s"insert into t values($outOfRangeValue1)")
         }.getCause.getMessage
-        assert(msg.contains(s"Casting ${outOfRangeValue1}L to int causes overflow"))
+        assert(msg.contains(s"Casting ${outOfRangeValue1}L to INT causes overflow"))
 
         val outOfRangeValue2 = (Int.MinValue - 1L).toString
         msg = intercept[SparkException] {
           sql(s"insert into t values($outOfRangeValue2)")
         }.getCause.getMessage
-        assert(msg.contains(s"Casting ${outOfRangeValue2}L to int causes overflow"))
+        assert(msg.contains(s"Casting ${outOfRangeValue2}L to INT causes overflow"))
       }
     }
   }
@@ -741,13 +741,13 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
         var msg = intercept[SparkException] {
           sql(s"insert into t values(${outOfRangeValue1}D)")
         }.getCause.getMessage
-        assert(msg.contains(s"Casting ${outOfRangeValue1}D to bigint causes overflow"))
+        assert(msg.contains(s"Casting ${outOfRangeValue1}D to BIGINT causes overflow"))
 
         val outOfRangeValue2 = Math.nextDown(Long.MinValue)
         msg = intercept[SparkException] {
           sql(s"insert into t values(${outOfRangeValue2}D)")
         }.getCause.getMessage
-        assert(msg.contains(s"Casting ${outOfRangeValue2}D to bigint causes overflow"))
+        assert(msg.contains(s"Casting ${outOfRangeValue2}D to BIGINT causes overflow"))
       }
     }
   }

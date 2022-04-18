@@ -162,8 +162,8 @@ object QueryCompilationErrors extends QueryErrorsBase {
       errorClass = "CANNOT_UP_CAST_DATATYPE",
       messageParameters = Array(
         fromStr,
-        from.dataType.catalogString,
-        to.catalogString,
+        toSQLType(from.dataType),
+        toSQLType(to),
         s"The type path of the target object is:\n" + walkedTypePath.mkString("", "\n", "\n") +
           "You can either add an explicit cast to the input data or choose a higher precision " +
           "type of the field in the target object"

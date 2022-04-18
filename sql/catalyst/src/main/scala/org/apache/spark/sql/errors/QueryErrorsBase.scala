@@ -53,4 +53,8 @@ trait QueryErrorsBase {
   def toSQLId(parts: String): String = {
     toSQLId(parts.split("\\."))
   }
+
+  def toSQLType(t: DataType): String = {
+    t.sql
+  }
 }

@@ -40,7 +40,7 @@ class QueryCompilationErrorsSuite extends QueryTest with SharedSparkSession {
     }.message
     assert(msg1 ===
       s"""
-         |Cannot up cast b from bigint to int.
+         |Cannot up cast b from BIGINT to INT.
          |The type path of the target object is:
          |- field (class: "scala.Int", name: "b")
          |- root class: "org.apache.spark.sql.errors.StringIntClass"
@@ -54,7 +54,7 @@ class QueryCompilationErrorsSuite extends QueryTest with SharedSparkSession {
     }.message
     assert(msg2 ===
       s"""
-         |Cannot up cast b.`b` from decimal(38,18) to bigint.
+         |Cannot up cast b.`b` from DECIMAL(38,18) to BIGINT.
          |The type path of the target object is:
          |- field (class: "scala.Long", name: "b")
          |- field (class: "org.apache.spark.sql.errors.StringLongClass", name: "b")
