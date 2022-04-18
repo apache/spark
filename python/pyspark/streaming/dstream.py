@@ -479,7 +479,7 @@ class DStream(Generic[T_co]):
         """
         return self._jdstream.dstream().slideDuration().milliseconds() / 1000.0
 
-    def union(self, other: "DStream[U]") -> "DStream[Union[T, U]]":
+    def union(self: "DStream[T]", other: "DStream[U]") -> "DStream[Union[T, U]]":
         """
         Return a new DStream by unifying data of another DStream with this DStream.
 
@@ -491,15 +491,13 @@ class DStream(Generic[T_co]):
         """
         if self._slideDuration != other._slideDuration:
             raise ValueError("the two DStream should have same slide duration")
-        return self.transformWith(
-            lambda a, b: a.union(b), other, True  # type: ignore[arg-type, return-value]
-        )
+        return self.transformWith(lambda a, b: a.union(b), other, True)
 
     def cogroup(
         self: "DStream[Tuple[K, V]]",
         other: "DStream[Tuple[K, U]]",
         numPartitions: Optional[int] = None,
-    ) -> "DStream[Tuple[K, Tuple[List[V], List[U]]]]":
+    ) -> "DStream[Tuple[K, Tuple[ResultIterable[V], ResultIterable[U]]]]":
         """
         Return a new DStream by applying 'cogroup' between RDDs of this
         DStream and `other` DStream.
@@ -509,9 +507,7 @@ class DStream(Generic[T_co]):
         if numPartitions is None:
             numPartitions = self._sc.defaultParallelism
         return self.transformWith(
-            lambda a, b: a.cogroup(  # type: ignore[arg-type]
-                b, numPartitions
-            ),  # type: ignore[return-value]
+            lambda a, b: a.cogroup(b, numPartitions),
             other,
         )
 
@@ -673,7 +669,7 @@ class DStream(Generic[T_co]):
 
     def countByWindow(
         self: "DStream[T]", windowDuration: int, slideDuration: int
-    ) -> "DStream[Tuple[T, int]]":
+    ) -> "DStream[int]":
         """
         Return a new DStream in which each RDD has a single element generated
         by counting the number of elements in a window over this DStream.
@@ -682,7 +678,7 @@ class DStream(Generic[T_co]):
         This is equivalent to window(windowDuration, slideDuration).count(),
         but will be more efficient if window is large.
         """
-        return self.map(lambda x: 1).reduceByWindow(  # type: ignore[return-value]
+        return self.map(lambda x: 1).reduceByWindow(
             operator.add, operator.sub, windowDuration, slideDuration
         )
 
@@ -831,7 +827,7 @@ class DStream(Generic[T_co]):
         self: "DStream[Tuple[K, V]]",
         updateFunc: Callable[[Iterable[V], Optional[S]], S],
         numPartitions: Optional[int] = None,
-        initialRDD: Optional[RDD[Tuple[K, S]]] = None,
+        initialRDD: Optional[Union[RDD[Tuple[K, S]], Iterable[Tuple[K, S]]]] = None,
     ) -> "DStream[Tuple[K, S]]":
         """
         Return a new "state" DStream where the state for each key is updated by applying
@@ -865,7 +861,7 @@ class DStream(Generic[T_co]):
             self._jrdd_deserializer,
         )
         if initialRDD:
-            initialRDD = initialRDD._reserialize(self._jrdd_deserializer)
+            initialRDD = cast(RDD[Tuple[K, S]], initialRDD)._reserialize(self._jrdd_deserializer)
             assert self._sc._jvm is not None
             dstream = self._sc._jvm.PythonStateDStream(
                 self._jdstream.dstream(),
