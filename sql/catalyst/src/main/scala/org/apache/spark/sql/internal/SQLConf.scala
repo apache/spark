@@ -2858,7 +2858,7 @@ object SQLConf {
       .createWithDefault(true)
 
   val USE_NULLS_FOR_MISSING_DEFAULT_COLUMN_VALUES =
-    buildConf("spark.sql.defaultColumn.useNullsForMissingDefautValues")
+    buildConf("spark.sql.defaultColumn.useNullsForMissingDefaultValues")
       .internal()
       .doc("When true, and DEFAULT columns are enabled, allow column definitions lacking " +
         "explicit default values to behave as if they had specified DEFAULT NULL instead. " +
@@ -2866,7 +2866,7 @@ object SQLConf {
         "columns in the target table, and the remaining columns will receive NULL values.")
       .version("3.4.0")
       .booleanConf
-      .createWithDefault(false)
+      .createWithDefault(true)
 
   val ENFORCE_RESERVED_KEYWORDS = buildConf("spark.sql.ansi.enforceReservedKeywords")
     .doc(s"When true and '${ANSI_ENABLED.key}' is true, the Spark SQL parser enforces the ANSI " +
