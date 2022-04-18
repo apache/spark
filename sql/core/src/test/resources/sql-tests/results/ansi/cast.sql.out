@@ -626,7 +626,7 @@ select cast('a' as date)
 struct<>
 -- !query output
 java.time.DateTimeException
-Cannot cast a to DateType. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
+Invalid `date` literal: 'a'. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
 == SQL(line 1, position 7) ==
 select cast('a' as date)
        ^^^^^^^^^^^^^^^^^
@@ -646,7 +646,7 @@ select cast('a' as timestamp)
 struct<>
 -- !query output
 java.time.DateTimeException
-Cannot cast a to TimestampType. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
+Invalid `timestamp` literal: 'a'. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
 == SQL(line 1, position 7) ==
 select cast('a' as timestamp)
        ^^^^^^^^^^^^^^^^^^^^^^
@@ -666,7 +666,7 @@ select cast('a' as timestamp_ntz)
 struct<>
 -- !query output
 java.time.DateTimeException
-Cannot cast a to TimestampNTZType. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
+Invalid `timestamp_ntz` literal: 'a'. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
 == SQL(line 1, position 7) ==
 select cast('a' as timestamp_ntz)
        ^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -678,7 +678,7 @@ select cast(cast('inf' as double) as timestamp)
 struct<>
 -- !query output
 java.time.DateTimeException
-Cannot cast Infinity to TimestampType. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
+Invalid `timestamp` literal: Infinity. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
 == SQL(line 1, position 7) ==
 select cast(cast('inf' as double) as timestamp)
        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -690,7 +690,7 @@ select cast(cast('inf' as float) as timestamp)
 struct<>
 -- !query output
 java.time.DateTimeException
-Cannot cast Infinity to TimestampType. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
+Invalid `timestamp` literal: Infinity. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
 == SQL(line 1, position 7) ==
 select cast(cast('inf' as float) as timestamp)
        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^

@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.util.DateTimeConstants.MILLIS_PER_SECOND
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.{withDefaultTimeZone, UTC}
+import org.apache.spark.sql.errors.QueryExecutionErrors.toSQLValue
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -269,7 +270,7 @@ abstract class AnsiCastSuiteBase extends CastSuiteBase {
 
   protected def checkCastToTimestampError(l: Literal, to: DataType): Unit = {
     checkExceptionInExpression[DateTimeException](
-      cast(l, to), s"Cannot cast $l to $to")
+      cast(l, to), s"Invalid `timestamp` literal: ${toSQLValue(l)}")
   }
 
   test("cast from timestamp II") {
@@ -532,7 +533,7 @@ abstract class AnsiCastSuiteBase extends CastSuiteBase {
       def checkCastWithParseError(str: String): Unit = {
         checkExceptionInExpression[DateTimeException](
           cast(Literal(str), TimestampType, Option(zid.getId)),
-          s"Cannot cast $str to TimestampType.")
+          s"Invalid `timestamp` literal: '$str'")
       }
 
       checkCastWithParseError("123")
@@ -553,7 +554,7 @@ abstract class AnsiCastSuiteBase extends CastSuiteBase {
       def checkCastWithParseError(str: String): Unit = {
         checkExceptionInExpression[DateTimeException](
           cast(Literal(str), DateType, Option(zid.getId)),
-          s"Cannot cast $str to DateType.")
+          s"Invalid `date` literal: '$str'")
       }
 
       checkCastWithParseError("2015-13-18")
@@ -581,7 +582,7 @@ abstract class AnsiCastSuiteBase extends CastSuiteBase {
       "2021-06-17 00:00:00ABC").foreach { invalidInput =>
       checkExceptionInExpression[DateTimeException](
         cast(invalidInput, TimestampNTZType),
-        s"Cannot cast $invalidInput to TimestampNTZType")
+        s"Invalid `timestamp_ntz` literal: '$invalidInput'")
     }
   }
 }

@@ -1014,8 +1014,14 @@ object QueryExecutionErrors extends QueryErrorsBase {
   }
 
   def cannotCastToDateTimeError(value: Any, to: DataType, errorContext: String): Throwable = {
-    new DateTimeException(s"Cannot cast $value to $to. To return NULL instead, use 'try_cast'. " +
-      s"If necessary set ${SQLConf.ANSI_ENABLED.key} to false to bypass this error." + errorContext)
+    new DateTimeException(s"Invalid ${toSQLId(to.simpleString)} literal: " +
+      s"${if (value.isInstanceOf[UTF8String]) {
+        toSQLValue(value, StringType)
+      } else {
+        toSQLValue(value)
+      }}. " +
+      s"To return NULL instead, use 'try_cast'. If necessary set ${SQLConf.ANSI_ENABLED.key} " +
+      s"to false to bypass this error." + errorContext)
   }
 
   def registeringStreamingQueryListenerError(e: Exception): Throwable = {
