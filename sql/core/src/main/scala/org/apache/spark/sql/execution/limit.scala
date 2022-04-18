@@ -86,6 +86,13 @@ case class CollectLimitExec(limit: Int, offset: Int, child: SparkPlan) extends L
     }
   }
 
+  override def stringArgs: Iterator[Any] = {
+    super.stringArgs.zipWithIndex.filter {
+      case (0, 1) => false
+      case _ => true
+    }.map(_._1)
+  }
+
   override protected def withNewChildInternal(newChild: SparkPlan): SparkPlan =
     copy(child = newChild)
 }
@@ -205,10 +212,6 @@ case class GlobalLimitAndOffsetExec(
 
   override def requiredChildDistribution: List[Distribution] = AllTuples :: Nil
 
-  override def outputPartitioning: Partitioning = child.outputPartitioning
-
-  override def outputOrdering: Seq[SortOrder] = child.outputOrdering
-
   override def doExecute(): RDD[InternalRow] = child.execute().mapPartitions { iter =>
     iter.take(limit + offset).drop(offset)
   }
@@ -298,7 +301,11 @@ case class TakeOrderedAndProjectExec(
           readMetrics)
       }
       singlePartitionRDD.mapPartitions { iter =>
-        val topK = Utils.takeOrdered(iter.map(_.copy()), limit + offset)(ord).drop(offset)
+        val topK = if (offset > 0) {
+          Utils.takeOrdered(iter.map(_.copy()), limit + offset)(ord).drop(offset)
+        } else {
+          Utils.takeOrdered(iter.map(_.copy()), limit)(ord)
+        }
         if (projectList != child.output) {
           val proj = UnsafeProjection.create(projectList, child.output)
           topK.map(r => proj(r))
