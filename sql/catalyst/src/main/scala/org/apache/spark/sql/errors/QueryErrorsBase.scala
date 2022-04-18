@@ -44,4 +44,8 @@ trait QueryErrorsBase {
   def toSQLValue(v: Any, t: DataType): String = {
     litToErrorValue(Literal.create(v, t))
   }
+
+  def toSQLType(t: DataType): String = {
+    t.sql
+  }
 }

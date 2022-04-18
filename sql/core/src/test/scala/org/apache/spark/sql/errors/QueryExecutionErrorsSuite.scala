@@ -142,7 +142,7 @@ class QueryExecutionErrorsSuite extends QueryTest
         .collect()
     }
     assert(e2.getMessage === "The feature is not supported: pivoting by the value" +
-      """ '[dotnet,Dummies]' of the column data type 'struct<col1:string,training:string>'.""")
+      """ '[dotnet,Dummies]' of the column data type STRUCT<col1: STRING, training: STRING>.""")
   }
 
   test("UNSUPPORTED_FEATURE: unsupported pivot operations") {
@@ -236,7 +236,7 @@ class QueryExecutionErrorsSuite extends QueryTest
 
     assert(e.getErrorClass === "UNSUPPORTED_OPERATION")
     assert(e.getMessage === "The operation is not supported: " +
-      "timestamp must supply timeZoneId parameter while converting to ArrowType")
+      "TIMESTAMP must supply timeZoneId parameter while converting to the arrow timestamp type.")
   }
 
   test("UNSUPPORTED_OPERATION - SPARK-36346: can't read Timestamp as TimestampNTZ") {
@@ -249,7 +249,7 @@ class QueryExecutionErrorsSuite extends QueryTest
 
         assert(e.getErrorClass === "UNSUPPORTED_OPERATION")
         assert(e.getMessage === "The operation is not supported: " +
-          "Unable to convert timestamp of Orc to data type 'timestamp_ntz'")
+          "Unable to convert TIMESTAMP of Orc to data type TIMESTAMP_NTZ.")
       }
     }
   }
@@ -264,7 +264,7 @@ class QueryExecutionErrorsSuite extends QueryTest
 
         assert(e.getErrorClass === "UNSUPPORTED_OPERATION")
         assert(e.getMessage === "The operation is not supported: " +
-          "Unable to convert timestamp ntz of Orc to data type 'timestamp_ltz'")
+          "Unable to convert TIMESTAMP_NTZ of Orc to data type TIMESTAMP.")
       }
     }
   }
