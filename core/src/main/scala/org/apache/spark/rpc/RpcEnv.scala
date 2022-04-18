@@ -18,6 +18,7 @@
 package org.apache.spark.rpc
 
 import java.io.File
+import java.net.URI
 import java.nio.channels.ReadableByteChannel
 
 import scala.concurrent.Future
@@ -25,7 +26,8 @@ import scala.concurrent.Future
 import org.apache.spark.{SecurityManager, SparkConf}
 import org.apache.spark.rpc.netty.NettyRpcEnvFactory
 import org.apache.spark.util.RpcUtils
-import org.apache.spark.util.Utils
+
+
 
 
 /**
@@ -188,10 +190,7 @@ private[spark] trait RpcEnvFileServer {
 
   /** Validates and normalizes the base URI for directories. */
   protected def validateDirectoryUri(baseUri: String): String = {
-    var baseCanonicalUri = new File(baseUri).getCanonicalPath
-    if(Utils.isWindows) {
-      baseCanonicalUri = baseCanonicalUri.replaceFirst("^[A-Z]:", "").replaceAll("\\\\", "/")
-    }
+    val baseCanonicalUri = new URI(baseUri).normalize().getPath.replaceFirst("^/[A-Z]:", "")
     val fixedBaseUri = "/" + baseCanonicalUri.stripPrefix("/").stripSuffix("/")
     require(fixedBaseUri != "/files" && fixedBaseUri != "/jars",
       "Directory URI cannot be /files nor /jars.")
