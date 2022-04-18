@@ -85,7 +85,7 @@ Supported DataFrame APIs
 | latest/api/python/reference/pyspark.pandas |             |                                      |
 | /api/pyspark.pandas.DataFrame.all.html>`__ |             |                                      |
 +--------------------------------------------+-------------+--------------------------------------+
-| `any <https://spark.apache.org/docs/       | O           | `skipna``, ``level``                 |
+| `any <https://spark.apache.org/docs/       | O           | ``skipna``, ``level``                |
 | latest/api/python/reference/pyspark.pandas |             |                                      |
 | /api/pyspark.pandas.DataFrame.any.html>`__ |             |                                      |
 +--------------------------------------------+-------------+--------------------------------------+
