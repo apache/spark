@@ -262,7 +262,8 @@ trait BaseScriptTransformationExec extends UnaryExecNode {
       }
 }
 
-abstract class BaseScriptTransformationWriterThread extends Thread with Logging {
+abstract class BaseScriptTransformationWriterThread
+  extends Thread("Thread-ScriptTransformation-Feed") with Logging {
 
   def iter: Iterator[InternalRow]
   def inputSchema: Seq[DataType]
