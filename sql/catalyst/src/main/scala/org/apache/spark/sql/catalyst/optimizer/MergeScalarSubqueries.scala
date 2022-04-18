@@ -303,13 +303,13 @@ object MergeScalarSubqueries extends Rule[LogicalPlan] with PredicateHelper {
     val cachedPlanSupportsHashAggregate = Aggregate.supportsHashAggregate(
       cachedPlanAggregateExpressions.flatMap(_.aggregateFunction.aggBufferAttributes))
     newPlanSupportsHashAggregate && cachedPlanSupportsHashAggregate ||
-      !newPlanSupportsHashAggregate && !cachedPlanSupportsHashAggregate && {
+      newPlanSupportsHashAggregate == cachedPlanSupportsHashAggregate && {
         val newPlanSupportsObjectHashAggregate =
           Aggregate.supportsObjectHashAggregate(newPlanAggregateExpressions)
         val cachedPlanSupportsObjectHashAggregate =
           Aggregate.supportsObjectHashAggregate(cachedPlanAggregateExpressions)
         newPlanSupportsObjectHashAggregate && cachedPlanSupportsObjectHashAggregate ||
-          !newPlanSupportsObjectHashAggregate && !cachedPlanSupportsObjectHashAggregate
+          newPlanSupportsObjectHashAggregate == cachedPlanSupportsObjectHashAggregate
       }
   }
 
