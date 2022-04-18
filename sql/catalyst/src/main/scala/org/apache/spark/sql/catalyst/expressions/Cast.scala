@@ -844,7 +844,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
           case _: NumberFormatException =>
             val d = Cast.processFloatingPointSpecialLiterals(doubleStr, false)
             if(ansiEnabled && d == null) {
-              throw QueryExecutionErrors.invalidInputSyntaxForNumericError(s)
+              throw QueryExecutionErrors.invalidInputSyntaxForNumericError(DoubleType, s)
             } else {
               d
             }
@@ -869,7 +869,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
           case _: NumberFormatException =>
             val f = Cast.processFloatingPointSpecialLiterals(floatStr, true)
             if (ansiEnabled && f == null) {
-              throw QueryExecutionErrors.invalidInputSyntaxForNumericError(s)
+              throw QueryExecutionErrors.invalidInputSyntaxForNumericError(FloatType, s)
             } else {
               f
             }
@@ -1886,7 +1886,8 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
         val floatStr = ctx.freshVariable("floatStr", StringType)
         (c, evPrim, evNull) =>
           val handleNull = if (ansiEnabled) {
-            s"throw QueryExecutionErrors.invalidInputSyntaxForNumericError($c);"
+            s"""throw QueryExecutionErrors.invalidInputSyntaxForNumericError(
+               |org.apache.spark.sql.types.FloatType$$.MODULE$$, $c);""".stripMargin
           } else {
             s"$evNull = true;"
           }
@@ -1921,8 +1922,10 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
       case StringType =>
         val doubleStr = ctx.freshVariable("doubleStr", StringType)
         (c, evPrim, evNull) =>
+          val dt = ctx.addReferenceObj("doubleType", DoubleType, DoubleType.getClass.getName)
           val handleNull = if (ansiEnabled) {
-            s"throw QueryExecutionErrors.invalidInputSyntaxForNumericError($c);"
+            s"""throw QueryExecutionErrors.invalidInputSyntaxForNumericError(
+               |org.apache.spark.sql.types.DoubleType$$.MODULE$$, $c);""".stripMargin
           } else {
             s"$evNull = true;"
           }

@@ -175,41 +175,52 @@ abstract class AnsiCastSuiteBase extends CastSuiteBase {
     // cast to IntegerType
     Seq(IntegerType, ShortType, ByteType, LongType).foreach { dataType =>
       checkExceptionInExpression[NumberFormatException](
-        cast("string", dataType), "invalid input syntax for type numeric: 'string'")
+        cast("string", dataType), s"Invalid `${dataType.simpleString}` literal: 'string'")
       checkExceptionInExpression[NumberFormatException](
-        cast("123-string", dataType), "invalid input syntax for type numeric: '123-string'")
+        cast("123-string", dataType), s"Invalid `${dataType.simpleString}` literal: '123-string'")
       checkExceptionInExpression[NumberFormatException](
-        cast("2020-07-19", dataType), "invalid input syntax for type numeric: '2020-07-19'")
+        cast("2020-07-19", dataType), s"Invalid `${dataType.simpleString}` literal: '2020-07-19'")
       checkExceptionInExpression[NumberFormatException](
-        cast("1.23", dataType), "invalid input syntax for type numeric: '1.23'")
+        cast("1.23", dataType), s"Invalid `${dataType.simpleString}` literal: '1.23'")
     }
 
-    Seq(DoubleType, FloatType, DecimalType.USER_DEFAULT).foreach { dataType =>
+    Seq(DoubleType, FloatType).foreach { dataType =>
       checkExceptionInExpression[NumberFormatException](
-        cast("string", dataType), "invalid input syntax for type numeric: 'string'")
+        cast("string", dataType), s"Invalid `${dataType.simpleString}` literal: 'string'")
       checkExceptionInExpression[NumberFormatException](
-        cast("123.000.00", dataType), "invalid input syntax for type numeric: '123.000.00'")
+        cast("123.000.00", dataType), s"Invalid `${dataType.simpleString}` literal: '123.000.00'")
       checkExceptionInExpression[NumberFormatException](
-        cast("abc.com", dataType), "invalid input syntax for type numeric: 'abc.com'")
+        cast("abc.com", dataType), s"Invalid `${dataType.simpleString}` literal: 'abc.com'")
     }
+
+    checkExceptionInExpression[NumberFormatException](
+      cast("string", DecimalType.USER_DEFAULT),
+      s"Invalid `${DecimalType.simpleString}` literal: 'string'")
+    checkExceptionInExpression[NumberFormatException](
+      cast("123.000.00", DecimalType.USER_DEFAULT),
+      s"Invalid `${DecimalType.simpleString}` literal: '123.000.00'")
+    checkExceptionInExpression[NumberFormatException](
+      cast("abc.com", DecimalType.USER_DEFAULT),
+      s"Invalid `${DecimalType.simpleString}` literal: 'abc.com'")
   }
 
-  protected def checkCastToNumericError(l: Literal, to: DataType, tryCastResult: Any): Unit = {
+  protected def checkCastToNumericError(l: Literal, to: DataType,
+      expectedDataTypeInErrorMsg: DataType, tryCastResult: Any): Unit = {
     checkExceptionInExpression[NumberFormatException](
-      cast(l, to), "invalid input syntax for type numeric: 'true'")
+      cast(l, to), s"Invalid `${expectedDataTypeInErrorMsg.simpleString}` literal: 'true'")
   }
 
   test("cast from invalid string array to numeric array should throw NumberFormatException") {
     val array = Literal.create(Seq("123", "true", "f", null),
       ArrayType(StringType, containsNull = true))
 
-    checkCastToNumericError(array, ArrayType(ByteType, containsNull = true),
+    checkCastToNumericError(array, ArrayType(ByteType, containsNull = true), ByteType,
       Seq(123.toByte, null, null, null))
-    checkCastToNumericError(array, ArrayType(ShortType, containsNull = true),
+    checkCastToNumericError(array, ArrayType(ShortType, containsNull = true), ShortType,
       Seq(123.toShort, null, null, null))
-    checkCastToNumericError(array, ArrayType(IntegerType, containsNull = true),
+    checkCastToNumericError(array, ArrayType(IntegerType, containsNull = true), IntegerType,
       Seq(123, null, null, null))
-    checkCastToNumericError(array, ArrayType(LongType, containsNull = true),
+    checkCastToNumericError(array, ArrayType(LongType, containsNull = true), LongType,
       Seq(123L, null, null, null))
   }
 
@@ -243,7 +254,7 @@ abstract class AnsiCastSuiteBase extends CastSuiteBase {
 
     checkExceptionInExpression[NumberFormatException](
       cast("abcd", DecimalType(38, 1)),
-      "invalid input syntax for type numeric")
+      s"Invalid `${DecimalType.simpleString}` literal: 'abcd'")
   }
 
   protected def checkCastToBooleanError(l: Literal, to: DataType, tryCastResult: Any): Unit = {
@@ -369,7 +380,7 @@ abstract class AnsiCastSuiteBase extends CastSuiteBase {
       assert(ret.resolved == !isTryCast)
       if (!isTryCast) {
         checkExceptionInExpression[NumberFormatException](
-          ret, "invalid input syntax for type numeric")
+          ret, s"Invalid `${IntegerType.simpleString}` literal:")
       }
     }
 
@@ -387,7 +398,7 @@ abstract class AnsiCastSuiteBase extends CastSuiteBase {
       assert(ret.resolved == !isTryCast)
       if (!isTryCast) {
         checkExceptionInExpression[NumberFormatException](
-          ret, "invalid input syntax for type numeric")
+          ret, s"Invalid `${IntegerType.simpleString}` literal:")
       }
     }
   }
@@ -512,7 +523,7 @@ abstract class AnsiCastSuiteBase extends CastSuiteBase {
     assert(ret.resolved === !isTryCast)
     if (!isTryCast) {
       checkExceptionInExpression[NumberFormatException](
-        ret, "invalid input syntax for type numeric")
+        ret, s"Invalid `${IntegerType.simpleString}` literal:")
     }
   }
 
