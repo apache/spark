@@ -17,6 +17,7 @@
 package org.apache.spark.streaming.kinesis
 
 import com.amazonaws.services.kinesis.clientlibrary.lib.worker.InitialPositionInStream
+import com.amazonaws.services.kinesis.metrics.interfaces.MetricsLevel
 
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.Duration
@@ -37,6 +38,7 @@ private class KinesisUtilsPythonHelper {
       regionName: String,
       initialPositionInStream: Int,
       checkpointInterval: Duration,
+      metricsLevel: Int,
       storageLevel: StorageLevel,
       awsAccessKeyId: String,
       awsSecretKey: String,
@@ -64,6 +66,13 @@ private class KinesisUtilsPythonHelper {
           "InitialPositionInStream.LATEST or InitialPositionInStream.TRIM_HORIZON")
     }
 
+    val cloudWatchMetricsLevel = metricsLevel match {
+      case 0 => MetricsLevel.DETAILED
+      case 1 => MetricsLevel.SUMMARY
+      case 2 => MetricsLevel.NONE
+      case _ => MetricsLevel.DETAILED
+    }
+
     val builder = KinesisInputDStream.builder.
       streamingContext(jssc).
       checkpointAppName(kinesisAppName).
@@ -72,6 +81,7 @@ private class KinesisUtilsPythonHelper {
       regionName(regionName).
       initialPosition(KinesisInitialPositions.fromKinesisInitialPosition(kinesisInitialPosition)).
       checkpointInterval(checkpointInterval).
+      metricsLevel(cloudWatchMetricsLevel).
       storageLevel(storageLevel)
 
     if (stsAssumeRoleArn != null && stsSessionName != null && stsExternalId != null) {
