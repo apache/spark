@@ -127,14 +127,11 @@ object ReorderJoin extends Rule[LogicalPlan] with PredicateHelper {
  * - full outer -> left outer if only the left side has such predicates
  * - full outer -> right outer if only the right side has such predicates
  *
- * 2. Removes outer join if it only has distinct on streamed side
+ * 2. Removes outer join if aggregate is from streamed side and duplicate agnostic
  *
  * {{{
  *   SELECT DISTINCT f1 FROM t1 LEFT JOIN t2 ON t1.id = t2.id  ==>  SELECT DISTINCT f1 FROM t1
  * }}}
- *
- * 3. Remove outer join if aggregate references are coming from streamed side and
- * aggregate functions are duplicate agnostic
  *
  * {{{
  *   SELECT t1.c1, max(t1.c2) FROM t1 LEFT JOIN t2 ON t1.c1 = t2.c1 GROUP BY t1.c1  ==>
