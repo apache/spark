@@ -211,7 +211,7 @@ class MergeScalarSubqueriesSuite extends PlanTest {
       .select('a, 'b)
       .select(CreateNamedStruct(Seq(
         Literal("a"), 'a,
-        Literal("b_1"), 'b
+        Literal("b"), 'b
       )).as("mergedValue"))
     val analyzedMergedSubquery = mergedSubquery.analyze
     val correctAnswer = WithCTE(
@@ -327,7 +327,7 @@ class MergeScalarSubqueriesSuite extends PlanTest {
       .select($"t1.a", $"t2.c")
       .select(CreateNamedStruct(Seq(
         Literal("a"), 'a,
-        Literal("c_2"), 'c
+        Literal("c"), 'c
       )).as("mergedValue"))
     val analyzedMergedSubquery = mergedSubquery.analyze
     val correctAnswer = WithCTE(
@@ -367,7 +367,7 @@ class MergeScalarSubqueriesSuite extends PlanTest {
       .select($"t1.a", $"t2.c")
       .select(CreateNamedStruct(Seq(
         Literal("a"), 'a,
-        Literal("c_2"), 'c
+        Literal("c"), 'c
       )).as("mergedValue"))
     val analyzedMergedSubquery = mergedSubquery.analyze
     val correctAnswer = WithCTE(

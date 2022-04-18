@@ -94,16 +94,15 @@ object MergeScalarSubqueries extends Rule[LogicalPlan] with PredicateHelper {
   /**
    * An item in the cache of merged scalar subqueries.
    *
-   * @param elements  List of member names and attributes that form the struct scalar return value
-   *                  of a merged subquery.
-   * @param plan      The plan of a merged scalar subquery.
-   * @param merged    A flag to identify if this item is the result of merging subqueries.
-   *                  Please note that `elements.size == 1` doesn't always mean that the plan is not
-   *                  merged as there can be subqueries that are different ([[checkIdenticalPlans]]
-   *                  is false) due to an extra [[Project]] node in one of them. In that case
-   *                  `elements.size` remains 1 after merging, but the merged flag becomes true.
+   * @param attributes Attributes that form the struct scalar return value of a merged subquery.
+   * @param plan The plan of a merged scalar subquery.
+   * @param merged A flag to identify if this item is the result of merging subqueries.
+   *               Please note that `attributes.size == 1` doesn't always mean that the plan is not
+   *               merged as there can be subqueries that are different ([[checkIdenticalPlans]] is
+   *               false) due to an extra [[Project]] node in one of them. In that case
+   *               `attributes.size` remains 1 after merging, but the merged flag becomes true.
    */
-  case class Header(elements: Seq[(String, Attribute)], plan: LogicalPlan, merged: Boolean)
+  case class Header(attributes: Seq[Attribute], plan: LogicalPlan, merged: Boolean)
 
   private def extractCommonScalarSubqueries(plan: LogicalPlan) = {
     val cache = ListBuffer.empty[Header]
@@ -131,27 +130,23 @@ object MergeScalarSubqueries extends Rule[LogicalPlan] with PredicateHelper {
     cache.zipWithIndex.collectFirst(Function.unlift { case (header, subqueryIndex) =>
       checkIdenticalPlans(plan, header.plan).map { outputMap =>
         val mappedOutput = mapAttributes(output, outputMap)
-        val headerIndex = header.elements.indexWhere {
-          case (_, attribute) => attribute.exprId == mappedOutput.exprId
-        }
+        val headerIndex = header.attributes.indexWhere(_.exprId == mappedOutput.exprId)
         subqueryIndex -> headerIndex
       }.orElse(tryMergePlans(plan, header.plan).map {
         case (mergedPlan, outputMap) =>
           val mappedOutput = mapAttributes(output, outputMap)
-          var headerIndex = header.elements.indexWhere {
-            case (_, attribute) => attribute.exprId == mappedOutput.exprId
-          }
-          val newHeaderElements = if (headerIndex == -1) {
-            headerIndex = header.elements.size
-            header.elements :+ (output.name -> mappedOutput)
+          var headerIndex = header.attributes.indexWhere(_.exprId == mappedOutput.exprId)
+          val newHeaderAttributes = if (headerIndex == -1) {
+            headerIndex = header.attributes.size
+            header.attributes :+ mappedOutput
           } else {
-            header.elements
+            header.attributes
           }
-          cache(subqueryIndex) = Header(newHeaderElements, mergedPlan, true)
+          cache(subqueryIndex) = Header(newHeaderAttributes, mergedPlan, true)
           subqueryIndex -> headerIndex
       })
     }).getOrElse {
-      cache += Header(Seq(output.name -> output), plan, false)
+      cache += Header(Seq(output), plan, false)
       cache.length - 1 -> 0
     }
   }
@@ -248,12 +243,10 @@ object MergeScalarSubqueries extends Rule[LogicalPlan] with PredicateHelper {
       })
   }
 
-  private def createProject(elements: Seq[(String, Attribute)], plan: LogicalPlan): Project = {
+  private def createProject(attributes: Seq[Attribute], plan: LogicalPlan): Project = {
     Project(
       Seq(Alias(
-        CreateNamedStruct(elements.flatMap {
-          case (name, attribute) => Seq(Literal(name), attribute)
-        }),
+        CreateNamedStruct(attributes.flatMap(a => Seq(Literal(a.name), a))),
         "mergedValue")()),
       plan)
   }
@@ -264,7 +257,7 @@ object MergeScalarSubqueries extends Rule[LogicalPlan] with PredicateHelper {
     }.asInstanceOf[T]
   }
 
-  // Applies `outputMap` attribute mapping on elements of `newExpressions` and merges them into
+  // Applies `outputMap` attribute mapping on attributes of `newExpressions` and merges them into
   // `cachedExpressions`. Returns the merged expressions and the attribute mapping from the new to
   // the merged version that can be propagated up during merging nodes.
   private def mergeNamedExpressions(
@@ -326,7 +319,7 @@ object MergeScalarSubqueries extends Rule[LogicalPlan] with PredicateHelper {
           val header = cache(ssr.subqueryIndex)
           if (header.merged) {
             val subqueryCTE = subqueryCTEs.getOrElseUpdate(ssr.subqueryIndex,
-              CTERelationDef(createProject(header.elements, header.plan)))
+              CTERelationDef(createProject(header.attributes, header.plan)))
             GetStructField(
               ScalarSubquery(
                 CTERelationRef(subqueryCTE.id, _resolved = true, subqueryCTE.output,
