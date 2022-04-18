@@ -1123,7 +1123,8 @@ private[spark] class TaskSetManager(
               // Whereas the time when the executor might be decommissioned is estimated using the
               // config executorDecommissionKillInterval. If the task is going to finish after
               // decommissioning, then we will eagerly speculate the task.
-              val taskEndTimeBasedOnMedianDuration = taskInfos(tid).launchTime + successfulTaskDurations.median
+              val taskEndTimeBasedOnMedianDuration =
+              taskInfos(tid).launchTime + successfulTaskDurations.median
               val executorDecomTime =
                 decomState.get.startTime + executorDecommissionKillInterval.get
               executorDecomTime < taskEndTimeBasedOnMedianDuration
@@ -1316,7 +1317,10 @@ private[spark] class TaskSetManager(
       }
     }
 
-    private def setTaskData(stageId: Int, stageAttemptId: Int, appStatusStore: AppStatusStore) {
+    private def setTaskData(
+        stageId: Int,
+        stageAttemptId: Int,
+        appStatusStore: AppStatusStore): Unit = {
       try {
         // The stage entity will be writen into appStatusStore by
         // 'listener.onStageSubmitted' and updated by 'listener.onExecutorMetricsUpdate',
@@ -1332,8 +1336,10 @@ private[spark] class TaskSetManager(
       }
     }
 
-    private def computeSuccessTaskProgress(stageId: Int, stageAttemptId: Int,
-      appStatusStore: AppStatusStore) = {
+    private def computeSuccessTaskProgress(
+        stageId: Int,
+        stageAttemptId: Int,
+        appStatusStore: AppStatusStore): (Double, Int) = {
       var sumInputRecords, sumShuffleReadRecords, sumExecutorRunTime = 0.0
       var progressRate = 0.0
       var numSuccessTasks = 0
