@@ -1573,7 +1573,8 @@ object QueryCompilationErrors extends QueryErrorsBase {
     new AnalysisException(
       errorClass = "UNSUPPORTED_FEATURE",
       messageParameters = Array(
-        s"Using PythonUDF in join condition of join type $joinType is not supported"))
+        "Using PythonUDF in join condition of join type " +
+        s"${toSQLStmt(joinType.sql)} is not supported."))
   }
 
   def conflictingAttributesInJoinConditionError(

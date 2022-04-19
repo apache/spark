@@ -155,7 +155,7 @@ class QueryCompilationErrorsSuite extends QueryTest with SharedSparkSession {
     assert(e.getSqlState === "0A000")
     assert(e.message ===
       "The feature is not supported: " +
-      "Using PythonUDF in join condition of join type LeftOuter is not supported")
+      "Using PythonUDF in join condition of join type \"LEFT OUTER\" is not supported.")
   }
 
   test("UNSUPPORTED_FEATURE: Using pandas UDF aggregate expression with pivot") {
@@ -333,7 +333,8 @@ class QueryCompilationErrorsSuite extends QueryTest with SharedSparkSession {
         )
         assert(e.getErrorClass === "FORBIDDEN_OPERATION")
         assert(e.message ===
-          s"The operation 'DESC PARTITION' is not allowed on the temporary view: `$tempViewName`")
+          s"""The operation "DESC PARTITION" is not allowed """ +
+          s"on the temporary view: `$tempViewName`")
       }
     }
   }
@@ -358,7 +359,8 @@ class QueryCompilationErrorsSuite extends QueryTest with SharedSparkSession {
         )
         assert(e.getErrorClass === "FORBIDDEN_OPERATION")
         assert(e.message ===
-          s"The operation 'DESC PARTITION' is not allowed on the view: `$viewName`")
+          s"""The operation "DESC PARTITION" is not allowed """ +
+          s"on the view: `$viewName`")
       }
     }
   }
