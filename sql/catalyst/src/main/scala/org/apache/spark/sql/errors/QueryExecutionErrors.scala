@@ -1013,12 +1013,12 @@ object QueryExecutionErrors extends QueryErrorsBase {
   }
 
   def cannotCastToDateTimeError(value: Any, to: DataType, errorContext: String): Throwable = {
-    new DateTimeException(s"Invalid input syntax for type ${toSQLType(to)}: " +
-      s"${if (value.isInstanceOf[UTF8String]) {
-        toSQLValue(value, StringType)
-      } else {
-        toSQLValue(value)
-      }}. " +
+    val valueString = if (value.isInstanceOf[UTF8String]) {
+      toSQLValue(value, StringType)
+    } else {
+      toSQLValue(value)
+    }
+    new DateTimeException(s"Invalid input syntax for type ${toSQLType(to)}: $valueString. " +
       s"To return NULL instead, use 'try_cast'. If necessary set ${SQLConf.ANSI_ENABLED.key} " +
       s"to false to bypass this error." + errorContext)
   }

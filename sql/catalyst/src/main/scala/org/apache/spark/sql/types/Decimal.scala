@@ -613,7 +613,9 @@ object Decimal {
     }
   }
 
-  def fromStringANSI(str: UTF8String, to: DecimalType = DecimalType.USER_DEFAULT,
+  def fromStringANSI(
+      str: UTF8String,
+      to: DecimalType = DecimalType.USER_DEFAULT,
       errorContext: String = ""): Decimal = {
     try {
       val bigDecimal = stringToJavaBigDecimal(str)
