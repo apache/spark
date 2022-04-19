@@ -2626,7 +2626,7 @@ class Frame(object, metaclass=ABCMeta):
         span: Optional[float] = None,
         halflife: Optional[float] = None,
         alpha: Optional[float] = None,
-        ignore_na: bool = False,
+        ignore_na: bool_type = False,
         min_periods: Optional[int] = None,
     ) -> "ExponentialMoving[FrameLike]":
         """
