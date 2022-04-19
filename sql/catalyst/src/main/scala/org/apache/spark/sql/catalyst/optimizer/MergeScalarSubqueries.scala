@@ -225,7 +225,9 @@ object MergeScalarSubqueries extends Rule[LogicalPlan] with PredicateHelper {
           tryMergePlans(np.child, cp.child).flatMap { case (mergedChild, outputMap) =>
             val mappedNewGroupingExpression =
               np.groupingExpressions.map(mapAttributes(_, outputMap))
-            // Order of grouping expression does matter
+            // Order of grouping expression does matter as merging different grouping orders can
+            // introduce "extra" shuffles/sorts that might not present in all of the original
+            // subqueries.
             if (mappedNewGroupingExpression.map(_.canonicalized) ==
               cp.groupingExpressions.map(_.canonicalized)) {
               val (mergedAggregateExpressions, newOutputMap) =
