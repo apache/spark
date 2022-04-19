@@ -816,7 +816,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
       })
     case StringType if ansiEnabled =>
       buildCast[UTF8String](_,
-        s => changePrecision(Decimal.fromStringANSI(s, origin.context), target))
+        s => changePrecision(Decimal.fromStringANSI(s, target, origin.context), target))
     case BooleanType =>
       buildCast[Boolean](_, b => toPrecision(if (b) Decimal.ONE else Decimal.ZERO, target))
     case DateType =>
@@ -1378,9 +1378,10 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
           """
       case StringType if ansiEnabled =>
         val errorContext = ctx.addReferenceObj("errCtx", origin.context)
+        val toType = ctx.addReferenceObj("toType", target)
         (c, evPrim, evNull) =>
           code"""
-              Decimal $tmp = Decimal.fromStringANSI($c, $errorContext);
+              Decimal $tmp = Decimal.fromStringANSI($c, $toType, $errorContext);
               ${changePrecision(tmp, target, evPrim, evNull, canNullSafeCast, ctx)}
           """
       case BooleanType =>

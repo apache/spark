@@ -112,7 +112,7 @@ object QueryExecutionErrors extends QueryErrorsBase {
   }
 
   def invalidInputSyntaxForNumericError(
-      to: AbstractDataType,
+      to: DataType,
       s: UTF8String,
       errorContext: String): NumberFormatException = {
     new SparkNumberFormatException(errorClass = "INVALID_SYNTAX_FOR_CAST",

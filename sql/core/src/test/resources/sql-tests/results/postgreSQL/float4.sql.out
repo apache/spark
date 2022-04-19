@@ -156,7 +156,7 @@ SELECT float(decimal('nan'))
 struct<>
 -- !query output
 org.apache.spark.SparkNumberFormatException
-Invalid input syntax for type decimal: 'nan'. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
+Invalid input syntax for type DECIMAL(10,0): 'nan'. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
 == SQL(line 1, position 13) ==
 SELECT float(decimal('nan'))
              ^^^^^^^^^^^^^^

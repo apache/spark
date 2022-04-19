@@ -185,7 +185,7 @@ abstract class AnsiCastSuiteBase extends CastSuiteBase {
         s"Invalid input syntax for type ${dataType.sql}: '1.23'")
     }
 
-    Seq(DoubleType, FloatType).foreach { dataType =>
+    Seq(DoubleType, FloatType, DecimalType.USER_DEFAULT).foreach { dataType =>
       checkExceptionInExpression[NumberFormatException](cast("string", dataType),
         s"Invalid input syntax for type ${dataType.sql}: 'string'")
       checkExceptionInExpression[NumberFormatException](cast("123.000.00", dataType),
@@ -193,16 +193,6 @@ abstract class AnsiCastSuiteBase extends CastSuiteBase {
       checkExceptionInExpression[NumberFormatException](cast("abc.com", dataType),
         s"Invalid input syntax for type ${dataType.sql}: 'abc.com'")
     }
-
-    checkExceptionInExpression[NumberFormatException](
-      cast("string", DecimalType.USER_DEFAULT),
-      s"Invalid input syntax for type ${DecimalType.simpleString}: 'string'")
-    checkExceptionInExpression[NumberFormatException](
-      cast("123.000.00", DecimalType.USER_DEFAULT),
-      s"Invalid input syntax for type ${DecimalType.simpleString}: '123.000.00'")
-    checkExceptionInExpression[NumberFormatException](
-      cast("abc.com", DecimalType.USER_DEFAULT),
-      s"Invalid input syntax for type ${DecimalType.simpleString}: 'abc.com'")
   }
 
   protected def checkCastToNumericError(l: Literal, to: DataType,
@@ -255,7 +245,7 @@ abstract class AnsiCastSuiteBase extends CastSuiteBase {
 
     checkExceptionInExpression[NumberFormatException](
       cast("abcd", DecimalType(38, 1)),
-      s"Invalid input syntax for type ${DecimalType.simpleString}: 'abcd'")
+      s"Invalid input syntax for type ${DecimalType(38, 1).sql}: 'abcd'")
   }
 
   protected def checkCastToBooleanError(l: Literal, to: DataType, tryCastResult: Any): Unit = {

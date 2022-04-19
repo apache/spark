@@ -19,7 +19,7 @@ package org.apache.spark.sql.errors
 
 import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.catalyst.util.quoteIdentifier
-import org.apache.spark.sql.types.{AbstractDataType, DataType, DoubleType, FloatType}
+import org.apache.spark.sql.types.{DataType, DoubleType, FloatType}
 
 trait QueryErrorsBase {
   private def litToErrorValue(l: Literal): String = l match {
@@ -59,10 +59,7 @@ trait QueryErrorsBase {
     toSQLId(parts.split("\\."))
   }
 
-  def toSQLType(t: AbstractDataType): String = {
-    t match {
-      case dt: DataType => dt.sql
-      case adt => adt.simpleString
-    }
+  def toSQLType(t: DataType): String = {
+    t.sql
   }
 }
