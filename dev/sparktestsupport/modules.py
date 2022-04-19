@@ -446,6 +446,7 @@ pyspark_sql = Module(
         "pyspark.sql.tests.test_dataframe",
         "pyspark.sql.tests.test_datasources",
         "pyspark.sql.tests.test_functions",
+        "pyspark.sql.tests.test_generic_functions",
         "pyspark.sql.tests.test_group",
         "pyspark.sql.tests.test_pandas_cogrouped_map",
         "pyspark.sql.tests.test_pandas_grouped_map",
