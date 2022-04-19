@@ -153,7 +153,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 
-The feature is not supported: LATERAL join with NATURAL join.(line 1, pos 14)
+The feature is not supported: "LATERAL" join with "NATURAL" join.(line 1, pos 14)
 
 == SQL ==
 SELECT * FROM t1 NATURAL JOIN LATERAL (SELECT c1 + c2 AS c2)
@@ -167,7 +167,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 
-The feature is not supported: LATERAL join with USING join.(line 1, pos 14)
+The feature is not supported: "LATERAL" join with "USING" join.(line 1, pos 14)
 
 == SQL ==
 SELECT * FROM t1 JOIN LATERAL (SELECT c1 + c2 AS c2) USING (c2)
