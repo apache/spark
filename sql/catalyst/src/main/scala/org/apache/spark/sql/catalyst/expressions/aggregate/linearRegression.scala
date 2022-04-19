@@ -139,7 +139,7 @@ case class RegrAvgY(
   group = "agg_funcs",
   since = "3.3.0")
 // scalastyle:on line.size.limit
-case class RegrR2(x: Expression, y: Expression) extends PearsonCorrelation(x, y, true) {
+case class RegrR2(y: Expression, x: Expression) extends PearsonCorrelation(y, x, true) {
   override def prettyName: String = "regr_r2"
   override val evaluateExpression: Expression = {
     val corr = ck / sqrt(xMk * yMk)
@@ -148,7 +148,7 @@ case class RegrR2(x: Expression, y: Expression) extends PearsonCorrelation(x, y,
   }
   override protected def withNewChildrenInternal(
       newLeft: Expression, newRight: Expression): RegrR2 =
-    this.copy(x = newLeft, y = newRight)
+    this.copy(y = newLeft, x = newRight)
 }
 
 // scalastyle:off line.size.limit
@@ -197,12 +197,12 @@ case class RegrSXX(
   group = "agg_funcs",
   since = "3.4.0")
 // scalastyle:on line.size.limit
-case class RegrSXY(x: Expression, y: Expression) extends Covariance(x, y, true) {
+case class RegrSXY(y: Expression, x: Expression) extends Covariance(y, x, true) {
   override def prettyName: String = "regr_sxy"
   override val evaluateExpression: Expression = {
     If(n === 0.0, Literal.create(null, DoubleType), ck)
   }
   override protected def withNewChildrenInternal(
       newLeft: Expression, newRight: Expression): RegrSXY =
-    this.copy(x = newLeft, y = newRight)
+    this.copy(y = newLeft, x = newRight)
 }
