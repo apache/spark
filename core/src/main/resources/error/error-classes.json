@@ -38,7 +38,7 @@
     "sqlState" : "22012"
   },
   "DUPLICATE_KEY" : {
-    "message" : [ "Found duplicate keys '%s'" ],
+    "message" : [ "Found duplicate keys %s" ],
     "sqlState" : "23000"
   },
   "FAILED_EXECUTE_UDF" : {
@@ -50,6 +50,9 @@
   },
   "FAILED_SET_ORIGINAL_PERMISSION_BACK" : {
     "message" : [ "Failed to set original permission %s back to the created path: %s. Exception: %s" ]
+  },
+  "FORBIDDEN_OPERATION" : {
+    "message" : [ "The operation %s is not allowed on %s: %s" ]
   },
   "GRAPHITE_SINK_INVALID_PROTOCOL" : {
     "message" : [ "Invalid Graphite protocol: %s" ]

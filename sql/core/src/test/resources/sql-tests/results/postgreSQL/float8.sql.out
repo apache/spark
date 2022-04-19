@@ -845,7 +845,7 @@ SELECT bigint(double('-9223372036854780000'))
 struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
-Casting -9.22337203685478E18D to bigint causes overflow. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
+Casting -9.22337203685478E18D to BIGINT causes overflow. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
 
 
 -- !query
