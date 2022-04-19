@@ -3672,9 +3672,7 @@ class Analyzer(override val catalogManager: CatalogManager)
         // for DropColumn with IF EXISTS clause, we should resolve and ignore missing column errors
         val table = a.table.asInstanceOf[ResolvedTable]
         val columnsToDrop = a.columnsToDrop
-        a.copy(columnsToDrop =
-          columnsToDrop
-            .flatMap(c => resolveFieldNamesOpt(table, c.name, c)))
+        a.copy(columnsToDrop = columnsToDrop.flatMap(c => resolveFieldNamesOpt(table, c.name, c)))
 
       case a: AlterTableCommand if a.table.resolved && hasUnresolvedFieldName(a) =>
         val table = a.table.asInstanceOf[ResolvedTable]
