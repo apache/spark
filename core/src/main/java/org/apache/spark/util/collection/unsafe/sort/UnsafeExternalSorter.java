@@ -17,8 +17,19 @@
 
 package org.apache.spark.util.collection.unsafe.sort;
 
+import javax.annotation.Nullable;
+import java.io.Closeable;
+import java.io.File;
+import java.io.IOException;
+import java.util.LinkedList;
+import java.util.Queue;
+import java.util.function.Supplier;
+
 import com.google.common.annotations.VisibleForTesting;
 import org.apache.commons.io.IOUtils;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import org.apache.spark.TaskContext;
 import org.apache.spark.executor.ShuffleWriteMetrics;
 import org.apache.spark.memory.MemoryConsumer;
@@ -32,16 +43,6 @@ import org.apache.spark.unsafe.UnsafeAlignedOffset;
 import org.apache.spark.unsafe.array.LongArray;
 import org.apache.spark.unsafe.memory.MemoryBlock;
 import org.apache.spark.util.Utils;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
-import javax.annotation.Nullable;
-import java.io.Closeable;
-import java.io.File;
-import java.io.IOException;
-import java.util.LinkedList;
-import java.util.Queue;
-import java.util.function.Supplier;
 
 /**
  * External sorter based on {@link UnsafeInMemorySorter}.
