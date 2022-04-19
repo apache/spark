@@ -184,7 +184,7 @@ case class RegrSXX(
 
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(expr1, expr2) - Returns REGR_COUNT(expr1, expr2) * COVAR_POP(expr1, expr2) for non-null pairs in a group, where `y` is the dependent variable and `x` is the independent variable.",
+  usage = "_FUNC_(y, x) - Returns REGR_COUNT(y, x) * COVAR_POP(y, x) for non-null pairs in a group, where `y` is the dependent variable and `x` is the independent variable.",
   examples = """
     Examples:
       > SELECT _FUNC_(y, x) FROM VALUES (1, 2), (2, 2), (2, 3), (2, 4) AS tab(y, x);
