@@ -279,7 +279,7 @@ abstract class AnsiCastSuiteBase extends CastSuiteBase {
       assert(negativeTs.getTime < 0)
       Seq(ByteType, ShortType, IntegerType).foreach { dt =>
         checkExceptionInExpression[SparkArithmeticException](
-          cast(negativeTs, dt), s"to ${dt.catalogString} causes overflow")
+          cast(negativeTs, dt), s"to ${dt.sql} causes overflow")
       }
     }
   }
@@ -290,7 +290,7 @@ abstract class AnsiCastSuiteBase extends CastSuiteBase {
       assert(negativeTs.getTime < 0)
       Seq(ByteType, ShortType, IntegerType).foreach { dt =>
         checkExceptionInExpression[SparkArithmeticException](
-          cast(negativeTs, dt), s"to ${dt.catalogString} causes overflow")
+          cast(negativeTs, dt), s"to ${dt.sql} causes overflow")
       }
       val expectedSecs = Math.floorDiv(negativeTs.getTime, MILLIS_PER_SECOND)
       checkEvaluation(cast(negativeTs, LongType), expectedSecs)
