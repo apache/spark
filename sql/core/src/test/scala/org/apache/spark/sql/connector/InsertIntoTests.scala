@@ -18,6 +18,7 @@
 package org.apache.spark.sql.connector
 
 import org.scalatest.BeforeAndAfter
+
 import org.apache.spark.sql._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.{PARTITION_OVERWRITE_MODE, PartitionOverwriteMode}
@@ -129,6 +130,19 @@ abstract class InsertIntoTests(
       verifyTable(t1, Seq.empty[(Long, String, String)].toDF("id", "data", "missing"))
       val tableName = if (catalogAndNamespace.isEmpty) s"default.$t1" else t1
       assert(exc.getMessage.contains(s"Cannot write to '$tableName', not enough data columns"))
+    }
+  }
+
+  test("insertInto: use null for the missing column") {
+    withSQLConf(SQLConf.USE_NULLS_FOR_MISSING_DEFAULT_COLUMN_VALUES.key -> "true") {
+      val t1 = s"${catalogAndNamespace}tbl"
+      sql(s"CREATE TABLE $t1 (id bigint, data string, missing string) USING $v2Format")
+      val df = Seq((1L, "a"), (2L, "b"), (3L, "c")).toDF("id", "data")
+      doInsert(t1, df)
+
+      val expected = Seq((1L, "a", null), (2L, "b", null), (3L, "c", null))
+        .toDF("id", "data", "missing")
+      verifyTable(t1, expected)
     }
   }
 
