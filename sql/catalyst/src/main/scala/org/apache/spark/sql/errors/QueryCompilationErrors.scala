@@ -95,7 +95,8 @@ object QueryCompilationErrors extends QueryErrorsBase {
     new AnalysisException(
       errorClass = "UNSUPPORTED_FEATURE",
       messageParameters = Array(
-        s"IF NOT EXISTS for the table ${toSQLId(tableName)} by INSERT INTO."))
+        s"${toSQLStmt("IF NOT EXISTS")} for the table ${toSQLId(tableName)} " +
+        s"by ${toSQLStmt("INSERT INTO")}."))
   }
 
   def nonPartitionColError(partitionName: String): Throwable = {
