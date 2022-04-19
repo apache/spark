@@ -131,17 +131,21 @@ case class ResolveDefaultColumns(
    * Adds a new expressions to a projection to generate missing default column values.
    */
   private def addMissingDefaultColumnValues(project: Project): Option[Project] = {
-    val numQueryOutputs: Int = project.projectList.size
-    val schema = insertTableSchemaWithoutPartitionColumns.getOrElse(return None)
-    val newDefaultExpressions: Seq[Expression] = getDefaultExpressions(numQueryOutputs, schema)
-    val newAliases: Seq[NamedExpression] =
-      newDefaultExpressions.zip(schema.fields).map {
-        case (expr, field) => Alias(expr, field.name)()
-      }
-    if (newDefaultExpressions.nonEmpty) {
-      Some(project.copy(projectList = project.projectList ++ newAliases))
-    } else {
+    if (project.projectList.exists(_.isInstanceOf[Star])) {
       None
+    } else {
+      val numQueryOutputs: Int = project.projectList.size
+      val schema = insertTableSchemaWithoutPartitionColumns.getOrElse(return None)
+      val newDefaultExpressions: Seq[Expression] = getDefaultExpressions(numQueryOutputs, schema)
+      val newAliases: Seq[NamedExpression] =
+        newDefaultExpressions.zip(schema.fields).map {
+          case (expr, field) => Alias(expr, field.name)()
+        }
+      if (newDefaultExpressions.nonEmpty) {
+        Some(project.copy(projectList = project.projectList ++ newAliases))
+      } else {
+        None
+      }
     }
   }
 
