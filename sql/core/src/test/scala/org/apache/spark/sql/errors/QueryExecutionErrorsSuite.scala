@@ -163,7 +163,7 @@ class QueryExecutionErrorsSuite extends QueryTest
     }
     assert(e1.getErrorClass === "UNSUPPORTED_FEATURE")
     assert(e1.getSqlState === "0A000")
-    assert(e1.getMessage === "The feature is not supported: Repeated pivots.")
+    assert(e1.getMessage === """The feature is not supported: Repeated "PIVOT"s.""")
 
     val e2 = intercept[SparkUnsupportedOperationException] {
       trainingSales
@@ -174,7 +174,7 @@ class QueryExecutionErrorsSuite extends QueryTest
     }
     assert(e2.getErrorClass === "UNSUPPORTED_FEATURE")
     assert(e2.getSqlState === "0A000")
-    assert(e2.getMessage === "The feature is not supported: Pivot not after a groupBy.")
+    assert(e2.getMessage === """The feature is not supported: "PIVOT" not after a "GROUP BY".""")
   }
 
   test("INCONSISTENT_BEHAVIOR_CROSS_VERSION: " +
