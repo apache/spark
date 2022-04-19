@@ -181,3 +181,28 @@ case class RegrSXX(
       newLeft: Expression, newRight: Expression): RegrSXX =
     this.copy(left = newLeft, right = newRight)
 }
+
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = "_FUNC_(expr1, expr2) - Returns REGR_COUNT(expr1, expr2) * COVAR_POP(expr1, expr2) for non-null pairs in a group, where `y` is the dependent variable and `x` is the independent variable.",
+  examples = """
+    Examples:
+      > SELECT _FUNC_(y, x) FROM VALUES (1, 2), (2, 2), (2, 3), (2, 4) AS tab(y, x);
+       0.75
+      > SELECT _FUNC_(y, x) FROM VALUES (1, 2), (2, null), (2, 3), (2, 4) AS tab(y, x);
+       1.0
+      > SELECT _FUNC_(y, x) FROM VALUES (1, 2), (2, null), (null, 3), (2, 4) AS tab(y, x);
+       1.0
+  """,
+  group = "agg_funcs",
+  since = "3.4.0")
+// scalastyle:on line.size.limit
+case class RegrSXY(x: Expression, y: Expression) extends Covariance(x, y, true) {
+  override def prettyName: String = "regr_sxy"
+  override val evaluateExpression: Expression = {
+    If(n === 0.0, Literal.create(null, DoubleType), ck)
+  }
+  override protected def withNewChildrenInternal(
+      newLeft: Expression, newRight: Expression): RegrSXY =
+    this.copy(x = newLeft, y = newRight)
+}
