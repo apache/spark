@@ -28,7 +28,7 @@ import org.apache.spark.sql.connector.SimpleWritableDataSource
 import org.apache.spark.sql.execution.QueryExecutionException
 import org.apache.spark.sql.execution.datasources.orc.OrcTest
 import org.apache.spark.sql.execution.datasources.parquet.ParquetTest
-import org.apache.spark.sql.functions.{lit, lower, struct, sum}
+import org.apache.spark.sql.functions.{lit, lower, struct, sum, udf}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy.EXCEPTION
 import org.apache.spark.sql.test.SharedSparkSession
@@ -417,5 +417,21 @@ class QueryExecutionErrorsSuite extends QueryTest
           |       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
           |""".stripMargin)
     }
+  }
+
+  test("FAILED_EXECUTE_UDF: execute user defined function") {
+    val e1 = intercept[SparkException] {
+      val words = Seq(("Jacek", 5), ("Agata", 5), ("Sweet", 6)).toDF("word", "index")
+      val luckyCharOfWord = udf { (word: String, index: Int) => {
+        word.substring(index, index + 1)
+      }}
+      words.select(luckyCharOfWord($"word", $"index")).collect()
+    }
+    assert(e1.getCause.isInstanceOf[SparkException])
+
+    val e2 = e1.getCause.asInstanceOf[SparkException]
+    assert(e2.getErrorClass === "FAILED_EXECUTE_UDF")
+    assert(e2.getMessage.matches("Failed to execute user defined function " +
+      "\\(QueryExecutionErrorsSuite\\$\\$Lambda\\$\\d+/\\d+: \\(string, int\\) => string\\)"))
   }
 }
