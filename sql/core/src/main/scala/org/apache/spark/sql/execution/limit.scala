@@ -43,7 +43,8 @@ trait LimitExec extends UnaryExecNode {
  * This operator will be used when a logical `Limit` operation is the final operator in an
  * logical plan, which happens when the user is collecting results back to the driver.
  */
-case class CollectLimitExec(limit: Int, offset: Int, child: SparkPlan) extends LimitExec {
+case class CollectLimitExec(
+    limit: Int, child: SparkPlan, offsetOpt: Option[Int] = None) extends LimitExec {
   override def output: Seq[Attribute] = child.output
   override def outputPartitioning: Partitioning = SinglePartition
   override def executeCollect(): Array[InternalRow] = {
@@ -52,11 +53,8 @@ case class CollectLimitExec(limit: Int, offset: Int, child: SparkPlan) extends L
     // For example: limit is 1 and offset is 2 and the child output two partition.
     // The first partition output [1, 2] and the Second partition output [3, 4, 5].
     // Then [1, 2, 3] will be taken and output [3].
-    if (offset > 0) {
-      child.executeTake(limit + offset).drop(offset)
-    } else {
-      child.executeTake(limit)
-    }
+    offsetOpt.map(offset => child.executeTake(limit + offset).drop(offset))
+      .getOrElse(child.executeTake(limit))
   }
   private val serializer: Serializer = new UnsafeRowSerializer(child.output.size)
   private lazy val writeMetrics =
@@ -72,7 +70,9 @@ case class CollectLimitExec(limit: Int, offset: Int, child: SparkPlan) extends L
       val singlePartitionRDD = if (childRDD.getNumPartitions == 1) {
         childRDD
       } else {
-        val locallyLimited = childRDD.mapPartitionsInternal(_.take(limit + offset))
+        val locallyLimited =
+          offsetOpt.map(offset => childRDD.mapPartitionsInternal(_.take(limit + offset)))
+            .getOrElse(childRDD.mapPartitionsInternal(_.take(limit)))
         new ShuffledRowRDD(
           ShuffleExchangeExec.prepareShuffleDependency(
             locallyLimited,
@@ -82,7 +82,8 @@ case class CollectLimitExec(limit: Int, offset: Int, child: SparkPlan) extends L
             writeMetrics),
           readMetrics)
       }
-      singlePartitionRDD.mapPartitionsInternal(_.drop(offset).take(limit))
+      offsetOpt.map(offset => singlePartitionRDD.mapPartitionsInternal(_.drop(offset).take(limit)))
+        .getOrElse(singlePartitionRDD.mapPartitionsInternal(_.take(limit)))
     }
   }
 
@@ -247,10 +248,9 @@ case class GlobalLimitAndOffsetExec(
  */
 case class TakeOrderedAndProjectExec(
     limit: Int,
-    offset: Int,
     sortOrder: Seq[SortOrder],
     projectList: Seq[NamedExpression],
-    child: SparkPlan) extends UnaryExecNode {
+    child: SparkPlan, offsetOpt: Option[Int] = None) extends UnaryExecNode {
 
   override def output: Seq[Attribute] = {
     projectList.map(_.toAttribute)
@@ -258,11 +258,9 @@ case class TakeOrderedAndProjectExec(
 
   override def executeCollect(): Array[InternalRow] = {
     val ord = new LazilyGeneratedOrdering(sortOrder, child.output)
-    val data = if (offset > 0) {
-      child.execute().map(_.copy()).takeOrdered(limit + offset)(ord).drop(offset)
-    } else {
-      child.execute().map(_.copy()).takeOrdered(limit)(ord)
-    }
+    val data = offsetOpt
+      .map(offset => child.execute().map(_.copy()).takeOrdered(limit + offset)(ord).drop(offset))
+      .getOrElse(child.execute().map(_.copy()).takeOrdered(limit)(ord))
     if (projectList != child.output) {
       val proj = UnsafeProjection.create(projectList, child.output)
       data.map(r => proj(r).copy())
@@ -288,9 +286,11 @@ case class TakeOrderedAndProjectExec(
       val singlePartitionRDD = if (childRDD.getNumPartitions == 1) {
         childRDD
       } else {
-        val localTopK = childRDD.mapPartitions { iter =>
+        val localTopK = offsetOpt.map(offset => childRDD.mapPartitions { iter =>
           Utils.takeOrdered(iter.map(_.copy()), limit + offset)(ord)
-        }
+        }).getOrElse(childRDD.mapPartitions { iter =>
+          Utils.takeOrdered(iter.map(_.copy()), limit)(ord)
+        })
         new ShuffledRowRDD(
           ShuffleExchangeExec.prepareShuffleDependency(
             localTopK,
@@ -301,11 +301,9 @@ case class TakeOrderedAndProjectExec(
           readMetrics)
       }
       singlePartitionRDD.mapPartitions { iter =>
-        val topK = if (offset > 0) {
-          Utils.takeOrdered(iter.map(_.copy()), limit + offset)(ord).drop(offset)
-        } else {
-          Utils.takeOrdered(iter.map(_.copy()), limit)(ord)
-        }
+        val topK = offsetOpt
+          .map(offset => Utils.takeOrdered(iter.map(_.copy()), limit + offset)(ord).drop(offset))
+          .getOrElse(Utils.takeOrdered(iter.map(_.copy()), limit)(ord))
         if (projectList != child.output) {
           val proj = UnsafeProjection.create(projectList, child.output)
           topK.map(r => proj(r))

@@ -1855,8 +1855,13 @@ object RewriteOffsets extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case GlobalLimit(le, Offset(oe, grandChild)) =>
       GlobalLimitAndOffset(le, oe, grandChild)
-    case LocalLimit(le, Offset(oe, grandChild)) =>
-      Offset(oe, LocalLimit(Add(le, oe), grandChild))
+    case localLimit @ LocalLimit(le, Offset(oe, grandChild)) =>
+      val offset = oe.eval().asInstanceOf[Int]
+      if (offset == 0) {
+        localLimit.withNewChildren(Seq(grandChild))
+      } else {
+        Offset(oe, LocalLimit(Add(le, oe), grandChild))
+      }
   }
 }
 

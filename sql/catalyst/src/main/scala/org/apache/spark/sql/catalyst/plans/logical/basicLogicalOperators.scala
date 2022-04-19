@@ -1273,6 +1273,17 @@ case class LocalLimit(limitExpr: Expression, child: LogicalPlan) extends OrderPr
     copy(child = newChild)
 }
 
+object LimitAndOffset {
+  def unapply(p: GlobalLimitAndOffset): Option[(Expression, Expression, LogicalPlan)] = {
+    p match {
+      case GlobalLimitAndOffset(le1, le2, LocalLimit(le3, child)) if le1.eval().asInstanceOf[Int]
+        + le2.eval().asInstanceOf[Int] == le3.eval().asInstanceOf[Int] =>
+        Some((le1, le2, child))
+      case _ => None
+    }
+  }
+}
+
 /**
  * A global (coordinated) limit with offset. This operator can skip at most `offsetExpr` number and
  * emit at most `limitExpr` number in total. For example, if we have LIMIT 10 OFFSET 5, we impose a
