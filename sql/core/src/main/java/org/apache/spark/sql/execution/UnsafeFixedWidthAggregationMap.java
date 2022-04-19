@@ -68,7 +68,7 @@ public final class UnsafeFixedWidthAggregationMap {
    *         schema, false otherwise.
    */
   public static boolean supportsAggregationBufferSchema(StructType schema) {
-    return Aggregate$.MODULE$.supportsAggregationBufferSchema(schema);
+    return Aggregate$.MODULE$.isAggregateBufferMutable(schema);
   }
 
   /**

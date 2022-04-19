@@ -1019,13 +1019,13 @@ case class Aggregate(
 }
 
 object Aggregate {
-  def supportsAggregationBufferSchema(schema: StructType): Boolean = {
+  def isAggregateBufferMutable(schema: StructType): Boolean = {
     schema.forall(f => UnsafeRow.isMutable(f.dataType))
   }
 
   def supportsHashAggregate(aggregateBufferAttributes: Seq[Attribute]): Boolean = {
     val aggregationBufferSchema = StructType.fromAttributes(aggregateBufferAttributes)
-    supportsAggregationBufferSchema(aggregationBufferSchema)
+    isAggregateBufferMutable(aggregationBufferSchema)
   }
 
   def supportsObjectHashAggregate(aggregateExpressions: Seq[AggregateExpression]): Boolean = {
