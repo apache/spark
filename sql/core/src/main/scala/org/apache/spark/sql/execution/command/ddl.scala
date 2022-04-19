@@ -356,15 +356,19 @@ case class AlterTableChangeColumnCommand(
         // Create a new column from the origin column with the new comment.
         val withNewComment: StructField =
           if (newColumn.getComment().isDefined) {
-            addComment(field, newColumn.getComment)
+            field.withComment(newColumn.getComment().get)
           } else {
             field
           }
         // Create a new column from the origin column with the new current default value.
         val withNewDefaultValue: StructField =
           if (newColumn.metadata.contains(CURRENT_DEFAULT_COLUMN_METADATA_KEY)) {
-            addCurrentDefaultValue(
-              withNewComment, newColumn.metadata.getString(CURRENT_DEFAULT_COLUMN_METADATA_KEY))
+            withNewComment.copy(metadata =
+              new MetadataBuilder()
+                .withMetadata(withNewComment.metadata)
+                .putString(CURRENT_DEFAULT_COLUMN_METADATA_KEY,
+                  newColumn.metadata.getString(CURRENT_DEFAULT_COLUMN_METADATA_KEY))
+                .build())
           } else {
             withNewComment
           }
@@ -386,18 +390,6 @@ case class AlterTableChangeColumnCommand(
       case field if resolver(field.name, name) => field
     }.getOrElse(throw QueryCompilationErrors.cannotFindColumnError(name, schema.fieldNames))
   }
-
-  // Add the comment to a column.
-  private def addComment(column: StructField, comment: String): StructField =
-    comment.map(column.withComment).getOrElse(column)
-
-  // Add the current default value to a column.
-  private def addCurrentDefaultValue(column: StructField, value: String): StructField =
-    column.copy(metadata =
-      new MetadataBuilder()
-        .withMetadata(column.metadata)
-        .putString(CURRENT_DEFAULT_COLUMN_METADATA_KEY, value)
-        .build())
 
   // Compare a [[StructField]] to another, return true if they have the same column
   // name(by resolver) and dataType.

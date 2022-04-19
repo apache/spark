@@ -18,12 +18,12 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.catalog.{SessionCatalog, UnresolvedCatalogRelation}
+import org.apache.spark.sql.catalyst.catalog.UnresolvedCatalogRelation
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns._
+import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
@@ -45,11 +45,8 @@ import org.apache.spark.sql.types._
  * (4, 6)
  *
  * @param analyzer analyzer to use for processing DEFAULT values stored as text.
- * @param catalog  the catalog to use for looking up the schema of INSERT INTO table objects.
  */
-case class ResolveDefaultColumns(
-  analyzer: Analyzer,
-  catalog: SessionCatalog) extends Rule[LogicalPlan] {
+case class ResolveDefaultColumns(analyzer: Analyzer) extends Rule[LogicalPlan] {
 
   // This field stores the enclosing INSERT INTO command, once we find one.
   var enclosingInsert: Option[InsertIntoStatement] = None
@@ -260,22 +257,20 @@ case class ResolveDefaultColumns(
    */
   private def getInsertTableSchemaWithoutPartitionColumns: Option[StructType] = {
     assert(enclosingInsert.isDefined)
-    val tableName = enclosingInsert.get.table match {
-      case r: UnresolvedRelation => TableIdentifier(r.name)
-      case r: UnresolvedCatalogRelation => r.tableMeta.identifier
-      case _ => return None
-    }
     // Lookup the relation from the catalog by name. This either succeeds or returns some "not
     // found" error. In the latter cases, return out of this rule without changing anything and let
     // the analyzer return a proper error message elsewhere.
     val lookup: LogicalPlan = try {
-      catalog.lookupRelation(tableName)
+      analyzer.ResolveRelations(enclosingInsert.get.table)
     } catch {
       case _: AnalysisException => return None
     }
     val schema: StructType = lookup match {
       case SubqueryAlias(_, r: UnresolvedCatalogRelation) =>
         StructType(r.tableMeta.schema.fields.dropRight(
+          enclosingInsert.get.partitionSpec.size))
+      case SubqueryAlias(_, r: DataSourceV2Relation) =>
+        StructType(r.schema.fields.dropRight(
           enclosingInsert.get.partitionSpec.size))
       case _ => return None
     }
