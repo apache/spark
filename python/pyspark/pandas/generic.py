@@ -2619,13 +2619,14 @@ class Frame(object, metaclass=ABCMeta):
 
         return Expanding(self, min_periods=min_periods)
 
-    # TODO: 'adjust', 'ignore_na', 'axis', 'method' parameter should be implemented.
+    # TODO: 'adjust', 'axis', 'method' parameter should be implemented.
     def ewm(
         self: FrameLike,
         com: Optional[float] = None,
         span: Optional[float] = None,
         halflife: Optional[float] = None,
         alpha: Optional[float] = None,
+        ignore_na: bool = False,
         min_periods: Optional[int] = None,
     ) -> "ExponentialMoving[FrameLike]":
         """
@@ -2666,7 +2667,13 @@ class Frame(object, metaclass=ABCMeta):
         from pyspark.pandas.window import ExponentialMoving
 
         return ExponentialMoving(
-            self, com=com, span=span, halflife=halflife, alpha=alpha, min_periods=min_periods
+            self,
+            com=com,
+            span=span,
+            halflife=halflife,
+            alpha=alpha,
+            ignore_na=ignore_na,
+            min_periods=min_periods,
         )
 
     def get(self, key: Any, default: Optional[Any] = None) -> Any:

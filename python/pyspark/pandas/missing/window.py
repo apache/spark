@@ -152,6 +152,5 @@ class MissingPandasLikeExponentialMoving:
     corr = _unsupported_function_exponential_moving("corr")
 
     adjust = _unsupported_property_exponential_moving("adjust")
-    ignore_na = _unsupported_property_exponential_moving("ignore_na")
     axis = _unsupported_property_exponential_moving("axis")
     method = _unsupported_property_exponential_moving("method")
