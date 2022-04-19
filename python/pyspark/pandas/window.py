@@ -1761,8 +1761,8 @@ class ExponentialMovingLike(Generic[FrameLike], metaclass=ABCMeta):
         span: Optional[float] = None,
         halflife: Optional[float] = None,
         alpha: Optional[float] = None,
-        ignore_na: bool = False,
         min_periods: Optional[int] = None,
+        ignore_na: bool = False,
     ):
         if (min_periods is not None) and (min_periods < 0):
             raise ValueError("min_periods must be >= 0")
@@ -1848,8 +1848,8 @@ class ExponentialMoving(ExponentialMovingLike[FrameLike]):
         span: Optional[float] = None,
         halflife: Optional[float] = None,
         alpha: Optional[float] = None,
-        ignore_na: bool = False,
         min_periods: Optional[int] = None,
+        ignore_na: bool = False,
     ):
         from pyspark.pandas.frame import DataFrame
         from pyspark.pandas.series import Series
@@ -1865,7 +1865,7 @@ class ExponentialMoving(ExponentialMovingLike[FrameLike]):
             Window.unboundedPreceding, Window.currentRow
         )
 
-        super().__init__(window_spec, com, span, halflife, alpha, ignore_na, min_periods)
+        super().__init__(window_spec, com, span, halflife, alpha, min_periods, ignore_na)
 
     def __getattr__(self, item: str) -> Any:
         if hasattr(MissingPandasLikeExponentialMoving, item):
@@ -1934,14 +1934,14 @@ class ExponentialMoving(ExponentialMovingLike[FrameLike]):
     # TODO: when add 'adjust' parameter, should add to here too.
     def __repr__(self) -> str:
         return (
-            "ExponentialMoving [com={}, span={}, halflife={}, alpha={}, ignore_na={}, "
-            "min_periods={}]".format(
+            "ExponentialMoving [com={}, span={}, halflife={}, alpha={}, "
+            "min_periods={}, ignore_na={}]".format(
                 self._com,
                 self._span,
                 self._halflife,
                 self._alpha,
-                self._ignore_na,
                 self._min_periods,
+                self._ignore_na,
             )
         )
 
