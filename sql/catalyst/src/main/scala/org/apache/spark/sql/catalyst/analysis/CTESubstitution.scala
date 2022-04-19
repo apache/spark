@@ -69,13 +69,13 @@ object CTESubstitution extends Rule[LogicalPlan] {
     if (cteDefs.isEmpty) {
       substituted
     } else if (substituted eq lastSubstituted.get) {
-      WithCTE(substituted, cteDefs.toSeq)
+      WithCTE(substituted, cteDefs.sortBy(_.id).toSeq)
     } else {
       var done = false
       substituted.resolveOperatorsWithPruning(_ => !done) {
         case p if p eq lastSubstituted.get =>
           done = true
-          WithCTE(p, cteDefs.toSeq)
+          WithCTE(p, cteDefs.sortBy(_.id).toSeq)
       }
     }
   }
@@ -203,6 +203,7 @@ object CTESubstitution extends Rule[LogicalPlan] {
       cteDefs: mutable.ArrayBuffer[CTERelationDef]): Seq[(String, CTERelationDef)] = {
     val resolvedCTERelations = new mutable.ArrayBuffer[(String, CTERelationDef)](relations.size)
     for ((name, relation) <- relations) {
+      val lastCTEDefCount = cteDefs.length
       val innerCTEResolved = if (isLegacy) {
         // In legacy mode, outer CTE relations take precedence. Here we don't resolve the inner
         // `With` nodes, later we will substitute `UnresolvedRelation`s with outer CTE relations.
@@ -211,8 +212,33 @@ object CTESubstitution extends Rule[LogicalPlan] {
       } else {
         // A CTE definition might contain an inner CTE that has a higher priority, so traverse and
         // substitute CTE defined in `relation` first.
+        // NOTE: we must call `traverseAndSubstituteCTE` before `substituteCTE`, as the relations
+        // in the inner CTE have higher priority over the relations in the outer CTE when resolving
+        // inner CTE relations. For example:
+        // WITH t1 AS (SELECT 1)
+        // t2 AS (
+        //   WITH t1 AS (SELECT 2)
+        //   WITH t3 AS (SELECT * FROM t1)
+        // )
+        // t3 should resolve the t1 to `SELECT 2` instead of `SELECT 1`.
         traverseAndSubstituteCTE(relation, isCommand, cteDefs)._1
       }
+
+      if (cteDefs.length > lastCTEDefCount) {
+        // We have added more CTE relations to the `cteDefs` from the inner CTE, and these relations
+        // should also be substituted with `resolvedCTERelations` as inner CTE relation can refer to
+        // outer CTE relation. For example:
+        // WITH t1 AS (SELECT 1)
+        // t2 AS (
+        //   WITH t3 AS (SELECT * FROM t1)
+        // )
+        for (i <- lastCTEDefCount until cteDefs.length) {
+          val substituted =
+            substituteCTE(cteDefs(i).child, isLegacy || isCommand, resolvedCTERelations.toSeq)
+          cteDefs(i) = cteDefs(i).copy(child = substituted)
+        }
+      }
+
       // CTE definition can reference a previous one
       val substituted =
         substituteCTE(innerCTEResolved, isLegacy || isCommand, resolvedCTERelations.toSeq)
