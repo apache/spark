@@ -613,7 +613,7 @@ class CatalogSuite extends SparkFunSuite {
 
     // with if exists it should pass
     catalog.alterTable(testIdent, TableChange.deleteColumn(Array("point", "z"), true))
-    assert(table.schema == schema)
+    assert(table.schema == tableSchema)
   }
 
   test("alterTable: table does not exist") {

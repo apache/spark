@@ -1047,7 +1047,7 @@ class DDLParserSuite extends AnalysisTest {
     }
 
     val sqlIfExists = "ALTER TABLE table_name DROP COLUMN IF EXISTS x, y, a.b.c"
-    Seq(sqlIfExists, sql.replace("COLUMN", "COLUMNS")).foreach { drop =>
+    Seq(sqlIfExists, sqlIfExists.replace("COLUMN", "COLUMNS")).foreach { drop =>
       comparePlans(
         parsePlan(drop),
         DropColumns(

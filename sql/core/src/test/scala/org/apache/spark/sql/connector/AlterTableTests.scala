@@ -1114,7 +1114,8 @@ trait AlterTableTests extends SharedSparkSession {
         s"USING $v2Format")
 
       // with if exists it should pass
-      sql(s"ALTER TABLE $t DROP COLUMNS IF EXISTS names, name, points.z, id, points.x")
+      sql(s"ALTER TABLE $t DROP COLUMNS IF EXISTS " +
+        s"names, name, points.element.z, id, points.element.x")
       val table = getTableMetadata(fullTableName(t))
       assert(table.schema == new StructType()
         .add("points", ArrayType(StructType(Seq(StructField("y", DoubleType))))))
