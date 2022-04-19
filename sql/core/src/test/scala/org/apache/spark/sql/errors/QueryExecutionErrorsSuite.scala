@@ -410,12 +410,12 @@ class QueryExecutionErrorsSuite extends QueryTest
       assert(e.getSqlState === "22005")
       assert(e.getMessage ===
         "Decimal(expanded,66666666666666.666,17,3}) cannot be represented as Decimal(8, 1). " +
-          "If necessary set spark.sql.ansi.enabled to false to bypass this error." +
-          """
-            |== SQL(line 1, position 7) ==
-            |select CAST('66666666666666.666' AS DECIMAL(8, 1))
-            |       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-            |""".stripMargin)
+        "If necessary set spark.sql.ansi.enabled to false to bypass this error." +
+        """
+          |== SQL(line 1, position 7) ==
+          |select CAST('66666666666666.666' AS DECIMAL(8, 1))
+          |       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+          |""".stripMargin)
     }
   }
 
