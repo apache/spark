@@ -55,7 +55,7 @@ private[sql] class StreamingQueryStatusListener(
 
   private def cleanupInactiveQueries(count: Long): Unit = {
     val view = store.view(classOf[StreamingQueryData]).index("active").first(false).last(false)
-    val inactiveQueries = KVUtils.viewToSeq(view, Int.MaxValue)(_ => true)
+    val inactiveQueries = KVUtils.viewToSeq(view)
     val numInactiveQueries = inactiveQueries.size
     if (numInactiveQueries <= inactiveQueryStatusRetention) {
       return

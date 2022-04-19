@@ -50,11 +50,27 @@ object DistinctKeyVisitor extends LogicalPlanVisitor[Set[ExpressionSet]] {
     }.filter(_.nonEmpty)
   }
 
+  /**
+   * Add a new ExpressionSet S into distinctKeys D.
+   * To minimize the size of D:
+   * 1. If there is a subset of S in D, return D.
+   * 2. Otherwise, remove all the ExpressionSet containing S from D, and add the new one.
+   */
+  private def addDistinctKey(
+      keys: Set[ExpressionSet],
+      newExpressionSet: ExpressionSet): Set[ExpressionSet] = {
+    if (keys.exists(_.subsetOf(newExpressionSet))) {
+      keys
+    } else {
+      keys.filterNot(s => newExpressionSet.subsetOf(s)) + newExpressionSet
+    }
+  }
+
   override def default(p: LogicalPlan): Set[ExpressionSet] = Set.empty[ExpressionSet]
 
   override def visitAggregate(p: Aggregate): Set[ExpressionSet] = {
     val groupingExps = ExpressionSet(p.groupingExpressions) // handle group by a, a
-    projectDistinctKeys(Set(groupingExps), p.aggregateExpressions)
+    projectDistinctKeys(addDistinctKey(p.child.distinctKeys, groupingExps), p.aggregateExpressions)
   }
 
   override def visitDistinct(p: Distinct): Set[ExpressionSet] = Set(ExpressionSet(p.output))
@@ -70,7 +86,7 @@ object DistinctKeyVisitor extends LogicalPlanVisitor[Set[ExpressionSet]] {
 
   override def visitGlobalLimit(p: GlobalLimit): Set[ExpressionSet] = {
     p.maxRows match {
-      case Some(value) if value <= 1 => Set(ExpressionSet(p.output))
+      case Some(value) if value <= 1 => p.output.map(attr => ExpressionSet(Seq(attr))).toSet
       case _ => p.child.distinctKeys
     }
   }

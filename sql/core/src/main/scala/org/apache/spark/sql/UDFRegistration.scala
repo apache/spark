@@ -661,7 +661,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
       if (udfInterfaces.length == 0) {
         throw QueryCompilationErrors.udfClassDoesNotImplementAnyUDFInterfaceError(className)
       } else if (udfInterfaces.length > 1) {
-        throw QueryCompilationErrors.udfClassNotAllowedToImplementMultiUDFInterfacesError(className)
+        throw QueryCompilationErrors.udfClassImplementMultiUDFInterfacesError(className)
       } else {
         try {
           val udf = clazz.getConstructor().newInstance()

@@ -161,11 +161,13 @@ class RocksDBFileManager(
     metadata.writeToFile(metadataFile)
     logInfo(s"Written metadata for version $version:\n${metadata.prettyJson}")
 
-    if (version <= 1 && numKeys == 0) {
+    if (version <= 1 && numKeys <= 0) {
       // If we're writing the initial version and there's no data, we have to explicitly initialize
       // the root directory. Normally saveImmutableFilesToDfs will do this initialization, but
       // when there's no data that method won't write any files, and zipToDfsFile uses the
       // CheckpointFileManager.createAtomic API which doesn't auto-initialize parent directories.
+      // Moreover, once we disable to track the number of keys, in which the numKeys is -1, we
+      // still need to create the initial dfs root directory anyway.
       val path = new Path(dfsRootDir)
       if (!fm.exists(path)) fm.mkdirs(path)
     }

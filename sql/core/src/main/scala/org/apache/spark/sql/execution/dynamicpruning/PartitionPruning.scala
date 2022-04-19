@@ -19,8 +19,8 @@ package org.apache.spark.sql.execution.dynamicpruning
 
 import org.apache.spark.sql.catalyst.catalog.HiveTableRelation
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.optimizer.JoinSelectionHelper
 import org.apache.spark.sql.catalyst.planning.ExtractEquiJoinKeys
-import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.connector.read.SupportsRuntimeFiltering
@@ -49,7 +49,7 @@ import org.apache.spark.sql.execution.datasources.v2.DataSourceV2ScanRelation
  *    subquery query twice, we keep the duplicated subquery
  *    (3) otherwise, we drop the subquery.
  */
-object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper {
+object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper with JoinSelectionHelper {
 
   /**
    * Searches for a table scan that can be filtered for a given column in a logical plan.
@@ -213,16 +213,6 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper {
    */
   private def hasPartitionPruningFilter(plan: LogicalPlan): Boolean = {
     !plan.isStreaming && hasSelectivePredicate(plan)
-  }
-
-  private def canPruneLeft(joinType: JoinType): Boolean = joinType match {
-    case Inner | LeftSemi | RightOuter => true
-    case _ => false
-  }
-
-  private def canPruneRight(joinType: JoinType): Boolean = joinType match {
-    case Inner | LeftSemi | LeftOuter => true
-    case _ => false
   }
 
   private def prune(plan: LogicalPlan): LogicalPlan = {

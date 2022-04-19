@@ -2,52 +2,52 @@
 Nested Schema Pruning Benchmark For ORC v1
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 11.0.13+8-LTS on Linux 5.11.0-1022-azure
-Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 11.0.14+9-LTS on Linux 5.13.0-1021-azure
+Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
 Selection:                                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Top-level column                                     89            123          35         11.2          89.3       1.0X
-Nested column                                       697            732          34          1.4         696.6       0.1X
-Nested column in array                             3095           3122          26          0.3        3095.4       0.0X
+Top-level column                                     88            109          28         11.4          87.7       1.0X
+Nested column                                       235            246          10          4.3         234.7       0.4X
+Nested column in array                             1388           1444          68          0.7        1388.5       0.1X
 
-OpenJDK 64-Bit Server VM 11.0.13+8-LTS on Linux 5.11.0-1022-azure
-Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 11.0.14+9-LTS on Linux 5.13.0-1021-azure
+Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
 Limiting:                                 Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Top-level column                                    308            353          42          3.2         308.2       1.0X
-Nested column                                       940            964          31          1.1         940.2       0.3X
-Nested column in array                             3557           3615          70          0.3        3556.6       0.1X
+Top-level column                                    350            402          48          2.9         349.7       1.0X
+Nested column                                       496            533          28          2.0         495.6       0.7X
+Nested column in array                             1914           1991          58          0.5        1914.1       0.2X
 
-OpenJDK 64-Bit Server VM 11.0.13+8-LTS on Linux 5.11.0-1022-azure
-Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 11.0.14+9-LTS on Linux 5.13.0-1021-azure
+Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
 Repartitioning:                           Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Top-level column                                    293            316          44          3.4         292.6       1.0X
-Nested column                                       918            929          13          1.1         918.1       0.3X
-Nested column in array                             3528           3570          55          0.3        3528.0       0.1X
+Top-level column                                    319            347          37          3.1         319.3       1.0X
+Nested column                                       473            503          20          2.1         472.6       0.7X
+Nested column in array                             1931           1959          33          0.5        1930.7       0.2X
 
-OpenJDK 64-Bit Server VM 11.0.13+8-LTS on Linux 5.11.0-1022-azure
-Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 11.0.14+9-LTS on Linux 5.13.0-1021-azure
+Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
 Repartitioning by exprs:                  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Top-level column                                    289            307          31          3.5         288.7       1.0X
-Nested column                                       938            956          24          1.1         937.6       0.3X
-Nested column in array                             3540           3565          23          0.3        3540.0       0.1X
+Top-level column                                    307            344          38          3.3         307.4       1.0X
+Nested column                                       537            556          10          1.9         537.2       0.6X
+Nested column in array                             1963           2025          44          0.5        1963.2       0.2X
 
-OpenJDK 64-Bit Server VM 11.0.13+8-LTS on Linux 5.11.0-1022-azure
-Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 11.0.14+9-LTS on Linux 5.13.0-1021-azure
+Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
 Sample:                                   Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Top-level column                                    104            143          49          9.6         103.7       1.0X
-Nested column                                       688            701          12          1.5         688.2       0.2X
-Nested column in array                             3123           3147          19          0.3        3123.3       0.0X
+Top-level column                                    108            140          31          9.3         107.8       1.0X
+Nested column                                       260            279          19          3.8         259.9       0.4X
+Nested column in array                             1419           1454          34          0.7        1418.9       0.1X
 
-OpenJDK 64-Bit Server VM 11.0.13+8-LTS on Linux 5.11.0-1022-azure
-Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 11.0.14+9-LTS on Linux 5.13.0-1021-azure
+Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
 Sorting:                                  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Top-level column                                    429            463          38          2.3         429.0       1.0X
-Nested column                                      1119           1159          37          0.9        1119.5       0.4X
-Nested column in array                             3854           3993         140          0.3        3854.1       0.1X
+Top-level column                                    451            556          74          2.2         450.8       1.0X
+Nested column                                       682            769          59          1.5         682.0       0.7X
+Nested column in array                             2150           2255         135          0.5        2149.7       0.2X
 
 

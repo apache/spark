@@ -147,7 +147,7 @@ class V2CommandsCaseSensitivitySuite extends SharedSparkSession with AnalysisTes
         AddColumns(
           table,
           Seq(QualifiedColType(
-            Some(UnresolvedFieldName(field.init)), field.last, LongType, true, None, None))),
+            Some(UnresolvedFieldName(field.init)), field.last, LongType, true, None, None, None))),
         Seq("Missing field " + field.head)
       )
     }
@@ -164,7 +164,8 @@ class V2CommandsCaseSensitivitySuite extends SharedSparkSession with AnalysisTes
             LongType,
             true,
             None,
-            Some(UnresolvedFieldPosition(ColumnPosition.after(ref)))))),
+            Some(UnresolvedFieldPosition(ColumnPosition.after(ref))),
+            None))),
         Seq("reference column", ref)
       )
     }
@@ -180,14 +181,16 @@ class V2CommandsCaseSensitivitySuite extends SharedSparkSession with AnalysisTes
           LongType,
           true,
           None,
-          Some(UnresolvedFieldPosition(ColumnPosition.after("id")))),
+          Some(UnresolvedFieldPosition(ColumnPosition.after("id"))),
+          None),
         QualifiedColType(
           None,
           "y",
           LongType,
           true,
           None,
-          Some(UnresolvedFieldPosition(ColumnPosition.after("X")))))),
+          Some(UnresolvedFieldPosition(ColumnPosition.after("X"))),
+          None))),
       Seq("Couldn't find the reference column for AFTER X at root")
     )
   }
@@ -203,7 +206,8 @@ class V2CommandsCaseSensitivitySuite extends SharedSparkSession with AnalysisTes
             LongType,
             true,
             None,
-            Some(UnresolvedFieldPosition(ColumnPosition.after(ref)))))),
+            Some(UnresolvedFieldPosition(ColumnPosition.after(ref))),
+            None))),
         Seq("reference column", ref)
       )
     }
@@ -219,6 +223,7 @@ class V2CommandsCaseSensitivitySuite extends SharedSparkSession with AnalysisTes
           LongType,
           true,
           None,
+          None,
           None),
         QualifiedColType(
           Some(UnresolvedFieldName(Seq("point"))),
@@ -226,7 +231,8 @@ class V2CommandsCaseSensitivitySuite extends SharedSparkSession with AnalysisTes
           LongType,
           true,
           None,
-          Some(UnresolvedFieldPosition(ColumnPosition.after("Z")))))),
+          Some(UnresolvedFieldPosition(ColumnPosition.after("Z"))),
+          None))),
       Seq("Couldn't find the reference column for AFTER Z at point")
     )
   }
@@ -241,12 +247,14 @@ class V2CommandsCaseSensitivitySuite extends SharedSparkSession with AnalysisTes
           LongType,
           true,
           None,
+          None,
           None),
         QualifiedColType(
           Some(UnresolvedFieldName(Seq("point"))),
           "Z",
           LongType,
           true,
+          None,
           None,
           None))),
       Seq("Found duplicate column(s) in the user specified columns: `point.z`"),
@@ -263,7 +271,8 @@ class V2CommandsCaseSensitivitySuite extends SharedSparkSession with AnalysisTes
           LongType,
           true,
           None,
-          Some(UnresolvedFieldPosition(ColumnPosition.after("id")))))),
+          Some(UnresolvedFieldPosition(ColumnPosition.after("id"))),
+          None))),
       Seq("Cannot add column, because ID already exists in root"),
       expectErrorOnCaseSensitive = false)
   }
@@ -324,8 +333,8 @@ class V2CommandsCaseSensitivitySuite extends SharedSparkSession with AnalysisTes
     alterTableTest(
       ReplaceColumns(
         table,
-        Seq(QualifiedColType(None, "f", LongType, true, None, None),
-          QualifiedColType(None, "F", LongType, true, None, None))),
+        Seq(QualifiedColType(None, "f", LongType, true, None, None, None),
+          QualifiedColType(None, "F", LongType, true, None, None, None))),
       Seq("Found duplicate column(s) in the user specified columns: `f`"),
       expectErrorOnCaseSensitive = false)
   }

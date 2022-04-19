@@ -776,7 +776,7 @@ class DDLParserSuite extends AnalysisTest {
       parsePlan("ALTER TABLE table_name ADD COLUMN x int"),
       AddColumns(
         UnresolvedTable(Seq("table_name"), "ALTER TABLE ... ADD COLUMN", None),
-        Seq(QualifiedColType(None, "x", IntegerType, true, None, None)
+        Seq(QualifiedColType(None, "x", IntegerType, true, None, None, None)
       )))
   }
 
@@ -785,8 +785,8 @@ class DDLParserSuite extends AnalysisTest {
       parsePlan("ALTER TABLE table_name ADD COLUMNS x int, y string"),
       AddColumns(
         UnresolvedTable(Seq("table_name"), "ALTER TABLE ... ADD COLUMNS", None),
-        Seq(QualifiedColType(None, "x", IntegerType, true, None, None),
-          QualifiedColType(None, "y", StringType, true, None, None)
+        Seq(QualifiedColType(None, "x", IntegerType, true, None, None, None),
+          QualifiedColType(None, "y", StringType, true, None, None, None)
       )))
   }
 
@@ -795,7 +795,7 @@ class DDLParserSuite extends AnalysisTest {
       parsePlan("ALTER TABLE table_name ADD COLUMNS x int"),
       AddColumns(
         UnresolvedTable(Seq("table_name"), "ALTER TABLE ... ADD COLUMNS", None),
-        Seq(QualifiedColType(None, "x", IntegerType, true, None, None)
+        Seq(QualifiedColType(None, "x", IntegerType, true, None, None, None)
       )))
   }
 
@@ -804,7 +804,7 @@ class DDLParserSuite extends AnalysisTest {
       parsePlan("ALTER TABLE table_name ADD COLUMNS (x int)"),
       AddColumns(
         UnresolvedTable(Seq("table_name"), "ALTER TABLE ... ADD COLUMNS", None),
-        Seq(QualifiedColType(None, "x", IntegerType, true, None, None)
+        Seq(QualifiedColType(None, "x", IntegerType, true, None, None, None)
       )))
   }
 
@@ -813,7 +813,7 @@ class DDLParserSuite extends AnalysisTest {
       parsePlan("ALTER TABLE table_name ADD COLUMNS (x int COMMENT 'doc')"),
       AddColumns(
         UnresolvedTable(Seq("table_name"), "ALTER TABLE ... ADD COLUMNS", None),
-        Seq(QualifiedColType(None, "x", IntegerType, true, Some("doc"), None)
+        Seq(QualifiedColType(None, "x", IntegerType, true, Some("doc"), None, None)
       )))
   }
 
@@ -822,7 +822,7 @@ class DDLParserSuite extends AnalysisTest {
       parsePlan("ALTER TABLE table_name ADD COLUMN x int NOT NULL"),
       AddColumns(
         UnresolvedTable(Seq("table_name"), "ALTER TABLE ... ADD COLUMN", None),
-        Seq(QualifiedColType(None, "x", IntegerType, false, None, None)
+        Seq(QualifiedColType(None, "x", IntegerType, false, None, None, None)
       )))
   }
 
@@ -831,7 +831,7 @@ class DDLParserSuite extends AnalysisTest {
       parsePlan("ALTER TABLE table_name ADD COLUMN x int COMMENT 'doc'"),
       AddColumns(
         UnresolvedTable(Seq("table_name"), "ALTER TABLE ... ADD COLUMN", None),
-        Seq(QualifiedColType(None, "x", IntegerType, true, Some("doc"), None)
+        Seq(QualifiedColType(None, "x", IntegerType, true, Some("doc"), None, None)
       )))
   }
 
@@ -846,7 +846,8 @@ class DDLParserSuite extends AnalysisTest {
           IntegerType,
           true,
           None,
-          Some(UnresolvedFieldPosition(first())))
+          Some(UnresolvedFieldPosition(first())),
+          None)
       )))
 
     comparePlans(
@@ -859,7 +860,8 @@ class DDLParserSuite extends AnalysisTest {
           IntegerType,
           true,
           None,
-          Some(UnresolvedFieldPosition(after("y"))))
+          Some(UnresolvedFieldPosition(after("y"))),
+          None)
       )))
   }
 
@@ -869,7 +871,7 @@ class DDLParserSuite extends AnalysisTest {
       AddColumns(
         UnresolvedTable(Seq("table_name"), "ALTER TABLE ... ADD COLUMN", None),
         Seq(QualifiedColType(
-          Some(UnresolvedFieldName(Seq("x", "y"))), "z", IntegerType, true, Some("doc"), None)
+          Some(UnresolvedFieldName(Seq("x", "y"))), "z", IntegerType, true, Some("doc"), None, None)
       )))
   }
 
@@ -885,6 +887,7 @@ class DDLParserSuite extends AnalysisTest {
             IntegerType,
             true,
             Some("doc"),
+            None,
             None),
           QualifiedColType(
             Some(UnresolvedFieldName(Seq("a"))),
@@ -892,7 +895,8 @@ class DDLParserSuite extends AnalysisTest {
             StringType,
             true,
             None,
-            Some(UnresolvedFieldPosition(first())))
+            Some(UnresolvedFieldPosition(first())),
+            None)
       )))
   }
 
@@ -1096,21 +1100,21 @@ class DDLParserSuite extends AnalysisTest {
       parsePlan(sql1),
       ReplaceColumns(
         UnresolvedTable(Seq("table_name"), "ALTER TABLE ... REPLACE COLUMNS", None),
-        Seq(QualifiedColType(None, "x", StringType, true, None, None))))
+        Seq(QualifiedColType(None, "x", StringType, true, None, None, None))))
 
     comparePlans(
       parsePlan(sql2),
       ReplaceColumns(
         UnresolvedTable(Seq("table_name"), "ALTER TABLE ... REPLACE COLUMNS", None),
-        Seq(QualifiedColType(None, "x", StringType, true, Some("x1"), None))))
+        Seq(QualifiedColType(None, "x", StringType, true, Some("x1"), None, None))))
 
     comparePlans(
       parsePlan(sql3),
       ReplaceColumns(
         UnresolvedTable(Seq("table_name"), "ALTER TABLE ... REPLACE COLUMNS", None),
         Seq(
-          QualifiedColType(None, "x", StringType, true, Some("x1"), None),
-          QualifiedColType(None, "y", IntegerType, true, None, None)
+          QualifiedColType(None, "x", StringType, true, Some("x1"), None, None),
+          QualifiedColType(None, "y", IntegerType, true, None, None, None)
         )))
 
     comparePlans(
@@ -1118,8 +1122,8 @@ class DDLParserSuite extends AnalysisTest {
       ReplaceColumns(
         UnresolvedTable(Seq("table_name"), "ALTER TABLE ... REPLACE COLUMNS", None),
         Seq(
-          QualifiedColType(None, "x", StringType, true, Some("x1"), None),
-          QualifiedColType(None, "y", IntegerType, true, Some("y1"), None)
+          QualifiedColType(None, "x", StringType, true, Some("x1"), None, None),
+          QualifiedColType(None, "y", IntegerType, true, Some("y1"), None, None)
         )))
 
     intercept("ALTER TABLE table_name PARTITION (a='1') REPLACE COLUMNS (x string)",
@@ -2058,12 +2062,6 @@ class DDLParserSuite extends AnalysisTest {
     comparePlans(
       parsePlan("SHOW FUNCTIONS IN db LIKE 'funct*'"),
       ShowFunctions(UnresolvedNamespace(Seq("db")), true, true, Some("funct*")))
-    val sql = "SHOW other FUNCTIONS"
-    intercept(sql, s"$sql not supported")
-    intercept("SHOW FUNCTIONS IN db f1",
-      "Invalid pattern in SHOW FUNCTIONS: f1")
-    intercept("SHOW FUNCTIONS IN db LIKE f1",
-      "Invalid pattern in SHOW FUNCTIONS: f1")
 
     // The legacy syntax.
     comparePlans(
@@ -2250,6 +2248,28 @@ class DDLParserSuite extends AnalysisTest {
   }
 
   test("SPARK-38335: Implement parser support for DEFAULT values for columns in tables") {
+    // These CREATE/REPLACE TABLE statements should parse successfully.
+    val schemaWithDefaultColumn = new StructType()
+      .add("a", IntegerType, true)
+      .add("b", StringType, false,
+        new MetadataBuilder()
+          .putString(ResolveDefaultColumns.CURRENT_DEFAULT_COLUMN_METADATA_KEY, "\"abc\"")
+          .putString(ResolveDefaultColumns.EXISTS_DEFAULT_COLUMN_METADATA_KEY, "\"abc\"").build())
+    comparePlans(parsePlan(
+      "CREATE TABLE my_tab(a INT, b STRING NOT NULL DEFAULT \"abc\") USING parquet"),
+      CreateTable(UnresolvedDBObjectName(Seq("my_tab"), false), schemaWithDefaultColumn,
+        Seq.empty[Transform], LogicalTableSpec(Map.empty[String, String], Some("parquet"),
+          Map.empty[String, String], None, None, None, false), false))
+    comparePlans(parsePlan("REPLACE TABLE my_tab(a INT, " +
+      "b STRING NOT NULL DEFAULT \"abc\") USING parquet"),
+      ReplaceTable(UnresolvedDBObjectName(Seq("my_tab"), false), schemaWithDefaultColumn,
+        Seq.empty[Transform], LogicalTableSpec(Map.empty[String, String], Some("parquet"),
+          Map.empty[String, String], None, None, None, false), false))
+    // THese ALTER TABLE statements should parse successfully.
+    comparePlans(
+      parsePlan("ALTER TABLE t1 ADD COLUMN x int NOT NULL DEFAULT 42"),
+      AddColumns(UnresolvedTable(Seq("t1"), "ALTER TABLE ... ADD COLUMN", None),
+        Seq(QualifiedColType(None, "x", IntegerType, false, None, None, Some("42")))))
     comparePlans(
       parsePlan("ALTER TABLE t1 ALTER COLUMN a.b.c SET DEFAULT 42"),
       AlterColumn(
@@ -2270,32 +2290,6 @@ class DDLParserSuite extends AnalysisTest {
         None,
         None,
         Some("")))
-    // The following ALTER TABLE commands will support DEFAULT columns, but this has not been
-    // implemented yet.
-    val unsupportedError = "Support for DEFAULT column values is not implemented yet"
-    assert(intercept[ParseException] {
-      parsePlan("ALTER TABLE t1 ADD COLUMN x int NOT NULL DEFAULT 42")
-    }.getMessage.contains(unsupportedError))
-    assert(intercept[ParseException] {
-      parsePlan("ALTER TABLE t1 REPLACE COLUMNS (x STRING DEFAULT 42)")
-    }.getMessage.contains(unsupportedError))
-    // These CREATE/REPLACE TABLE statements should parse successfully.
-    val schemaWithDefaultColumn = new StructType()
-      .add("a", IntegerType, true)
-      .add("b", StringType, false,
-        new MetadataBuilder()
-          .putString(ResolveDefaultColumns.CURRENT_DEFAULT_COLUMN_METADATA_KEY, "\"abc\"")
-          .putString(ResolveDefaultColumns.EXISTS_DEFAULT_COLUMN_METADATA_KEY, "\"abc\"").build())
-    comparePlans(parsePlan(
-      "CREATE TABLE my_tab(a INT, b STRING NOT NULL DEFAULT \"abc\") USING parquet"),
-      CreateTable(UnresolvedDBObjectName(Seq("my_tab"), false), schemaWithDefaultColumn,
-        Seq.empty[Transform], LogicalTableSpec(Map.empty[String, String], Some("parquet"),
-          Map.empty[String, String], None, None, None, false), false))
-    comparePlans(parsePlan("REPLACE TABLE my_tab(a INT, " +
-      "b STRING NOT NULL DEFAULT \"abc\") USING parquet"),
-      ReplaceTable(UnresolvedDBObjectName(Seq("my_tab"), false), schemaWithDefaultColumn,
-        Seq.empty[Transform], LogicalTableSpec(Map.empty[String, String], Some("parquet"),
-          Map.empty[String, String], None, None, None, false), false))
     // Make sure that the parser returns an exception when the feature is disabled.
     withSQLConf(SQLConf.ENABLE_DEFAULT_COLUMNS.key -> "false") {
       intercept(

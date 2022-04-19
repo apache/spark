@@ -218,6 +218,7 @@ Missing data handling
    DataFrame.replace
    DataFrame.bfill
    DataFrame.ffill
+   DataFrame.interpolate
 
 Reshaping, sorting, transposing
 -------------------------------

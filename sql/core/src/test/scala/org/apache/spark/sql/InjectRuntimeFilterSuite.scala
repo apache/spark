@@ -526,4 +526,43 @@ class InjectRuntimeFilterSuite extends QueryTest with SQLTestUtils with SharedSp
         "bf1.c1 = square(bf2.c2) where bf2.a2 = 62" )
     }
   }
+
+  test("Support Left Semi join in row level runtime filters") {
+    withSQLConf(SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "3000",
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "32") {
+      assertRewroteWithBloomFilter(
+        """
+          |SELECT *
+          |FROM   bf1 LEFT SEMI
+          |JOIN   (SELECT * FROM bf2 WHERE bf2.a2 = 62) tmp
+          |ON     bf1.c1 = tmp.c2
+        """.stripMargin)
+    }
+  }
+
+  test("Runtime Filter supports pruning side has Aggregate") {
+    withSQLConf(SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "3000") {
+      assertRewroteWithBloomFilter(
+        """
+          |SELECT *
+          |FROM   (SELECT c1 AS aliased_c1, d1 FROM bf1 GROUP BY c1, d1) bf1
+          |       JOIN bf2 ON bf1.aliased_c1 = bf2.c2
+          |WHERE  bf2.a2 = 62
+        """.stripMargin)
+    }
+  }
+
+  test("Runtime Filter supports pruning side has Window") {
+    withSQLConf(SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "3000") {
+      assertRewroteWithBloomFilter(
+        """
+          |SELECT *
+          |FROM   (SELECT *,
+          |               Row_number() OVER (PARTITION BY c1 ORDER BY f1) rn
+          |        FROM   bf1) bf1
+          |       JOIN bf2 ON bf1.c1 = bf2.c2
+          |WHERE  bf2.a2 = 62
+        """.stripMargin)
+    }
+  }
 }
