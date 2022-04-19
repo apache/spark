@@ -1717,20 +1717,87 @@ spec:
 
 Spark allows users to specify a custom Kubernetes schedulers.
 
-1. Specify scheduler name.
+1. Specify a scheduler name.
 
    Users can specify a custom scheduler using <code>spark.kubernetes.scheduler.name</code> or
    <code>spark.kubernetes.{driver/executor}.scheduler.name</code> configuration.
 
 2. Specify scheduler related configurations.
 
-   To configure the custom scheduler the user can use [Pod templates](#pod-template), add labels (<code>spark.kubernetes.{driver,executor}.label.*</code>)  and/or annotations (<code>spark.kubernetes.{driver/executor}.annotation.*</code>).
+   To configure the custom scheduler the user can use [Pod templates](#pod-template), add labels (<code>spark.kubernetes.{driver,executor}.label.*</code>), annotations (<code>spark.kubernetes.{driver/executor}.annotation.*</code>) or scheduler specific configurations (such as <code>spark.kubernetes.scheduler.volcano.podGroupTemplateFile</code>).
 
 3. Specify scheduler feature step.
 
    Users may also consider to use <code>spark.kubernetes.{driver/executor}.pod.featureSteps</code> to support more complex requirements, including but not limited to:
   - Create additional Kubernetes custom resources for driver/executor scheduling.
   - Set scheduler hints according to configuration or existing Pod info dynamically.
+
+#### Using Volcano as Customized Scheduler for Spark on Kubernetes
+
+**This feature is currently experimental. In future versions, there may be behavioral changes around configuration, feature step improvement.**
+
+##### Prerequisites
+* Spark on Kubernetes with [Volcano](https://volcano.sh/en) as a custom scheduler is supported since Spark v3.3.0 and Volcano v1.5.1. Below is an example to install Volcano 1.5.1:
+
+  ```bash
+  # x86_64
+  kubectl apply -f https://raw.githubusercontent.com/volcano-sh/volcano/v1.5.1/installer/volcano-development.yaml
+
+  # arm64:
+  kubectl apply -f https://raw.githubusercontent.com/volcano-sh/volcano/v1.5.1/installer/volcano-development-arm64.yaml
+  ```
+
+##### Build
+To create a Spark distribution along with Volcano suppport like those distributed by the Spark [Downloads page](https://spark.apache.org/downloads.html), also see more in ["Building Spark"](https://spark.apache.org/docs/latest/building-spark.html):
+
+```bash
+./dev/make-distribution.sh --name custom-spark --pip --r --tgz -Psparkr -Phive -Phive-thriftserver -Pkubernetes -Pvolcano
+```
+
+##### Usage
+Spark on Kubernetes allows using Volcano as a custom scheduler. Users can use Volcano to
+support more advanced resource scheduling: queue scheduling, resource reservation, priority scheduling, and more.
+
+To use Volcano as a custom scheduler the user needs to specify the following configuration options:
+
+```bash
+# Specify volcano scheduler and PodGroup template
+--conf spark.kubernetes.scheduler.name=volcano
+--conf spark.kubernetes.scheduler.volcano.podGroupTemplateFile=/path/to/podgroup-template.yaml
+# Specify driver/executor VolcanoFeatureStep
+--conf spark.kubernetes.driver.pod.featureSteps=org.apache.spark.deploy.k8s.features.VolcanoFeatureStep
+--conf spark.kubernetes.executor.pod.featureSteps=org.apache.spark.deploy.k8s.features.VolcanoFeatureStep```
+```
+
+##### Volcano Feature Step
+Volcano feature steps help users to create a Volcano PodGroup and set driver/executor pod annotation to link with this [PodGroup](https://volcano.sh/en/docs/podgroup/).
+
+Note that currently only driver/job level PodGroup is supported in Volcano Feature Step.
+
+##### Volcano PodGroup Template
+Volcano defines PodGroup spec using [CRD yaml](https://volcano.sh/en/docs/podgroup/#example).
+
+Similar to [Pod template](#pod-template), Spark users can use Volcano PodGroup Template to define the PodGroup spec configurations.
+To do so, specify the Spark property `spark.kubernetes.scheduler.volcano.podGroupTemplateFile` to point to files accessible to the `spark-submit` process.
+Below is an example of PodGroup template:
+
+```yaml
+apiVersion: scheduling.volcano.sh/v1beta1
+kind: PodGroup
+spec:
+  # Specify minMember to 1 to make a driver pod
+  minMember: 1
+  # Specify minResources to support resource reservation (the driver pod resource and executors pod resource should be considered)
+  # It is useful for ensource the available resources meet the minimum requirements of the Spark job and avoiding the
+  # situation where drivers are scheduled, and then they are unable to schedule sufficient executors to progress.
+  minResources:
+    cpu: "2"
+    memory: "3Gi"
+  # Specify the priority, help users to specify job priority in the queue during scheduling.
+  priorityClassName: system-node-critical
+  # Specify the queue, indicates the resource queue which the job should be submitted to
+  queue: default
+```
 
 ### Stage Level Scheduling Overview
 

@@ -356,7 +356,8 @@ final class Decimal extends Ordered[Decimal] with Serializable {
       precision: Int,
       scale: Int,
       roundMode: BigDecimal.RoundingMode.Value = ROUND_HALF_UP,
-      nullOnOverflow: Boolean = true): Decimal = {
+      nullOnOverflow: Boolean = true,
+      context: String = ""): Decimal = {
     val copy = clone()
     if (copy.changePrecision(precision, scale, roundMode)) {
       copy
@@ -364,7 +365,8 @@ final class Decimal extends Ordered[Decimal] with Serializable {
       if (nullOnOverflow) {
         null
       } else {
-        throw QueryExecutionErrors.cannotChangeDecimalPrecisionError(this, precision, scale)
+        throw QueryExecutionErrors.cannotChangeDecimalPrecisionError(
+          this, precision, scale, context)
       }
     }
   }
@@ -611,7 +613,7 @@ object Decimal {
     }
   }
 
-  def fromStringANSI(str: UTF8String): Decimal = {
+  def fromStringANSI(str: UTF8String, errorContext: String = ""): Decimal = {
     try {
       val bigDecimal = stringToJavaBigDecimal(str)
       // We fast fail because constructing a very large JavaBigDecimal to Decimal is very slow.
@@ -624,7 +626,7 @@ object Decimal {
       }
     } catch {
       case _: NumberFormatException =>
-        throw QueryExecutionErrors.invalidInputSyntaxForNumericError(str)
+        throw QueryExecutionErrors.invalidInputSyntaxForNumericError(str, errorContext)
     }
   }
 

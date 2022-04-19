@@ -165,27 +165,29 @@ public class ChildProcAppHandleSuite extends BaseSuite {
     assertEquals(Arrays.asList("output"), Files.lines(out).collect(Collectors.toList()));
   }
 
-  @Test(expected = IllegalArgumentException.class)
+  @Test
   public void testBadLogRedirect() throws Exception {
     File out = Files.createTempFile("stdout", "txt").toFile();
     out.deleteOnExit();
-    new SparkLauncher()
-      .redirectError()
-      .redirectOutput(out)
-      .redirectToLog("foo")
-      .launch()
-      .waitFor();
+    assertThrows(IllegalArgumentException.class,
+      () -> new SparkLauncher()
+              .redirectError()
+              .redirectOutput(out)
+              .redirectToLog("foo")
+              .launch()
+              .waitFor());
   }
 
-  @Test(expected = IllegalArgumentException.class)
+  @Test
   public void testRedirectErrorTwiceFails() throws Exception {
     File err = Files.createTempFile("stderr", "txt").toFile();
     err.deleteOnExit();
-    new SparkLauncher()
-      .redirectError()
-      .redirectError(err)
-      .launch()
-      .waitFor();
+    assertThrows(IllegalArgumentException.class,
+      () -> new SparkLauncher()
+              .redirectError()
+              .redirectError(err)
+              .launch()
+              .waitFor());
   }
 
   @Test

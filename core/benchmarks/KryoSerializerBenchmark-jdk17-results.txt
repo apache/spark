@@ -2,11 +2,11 @@
 Benchmark KryoPool vs old"pool of 1" implementation
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 17.0.1+12-LTS on Linux 5.11.0-1022-azure
-Intel(R) Xeon(R) CPU E5-2673 v4 @ 2.30GHz
+OpenJDK 64-Bit Server VM 17.0.2+8-LTS on Linux 5.13.0-1021-azure
+Intel(R) Xeon(R) Platinum 8171M CPU @ 2.60GHz
 Benchmark KryoPool vs old"pool of 1" implementation:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 -----------------------------------------------------------------------------------------------------------------------------------
-KryoPool:true                                                 9650          11973         NaN          0.0    19300202.2       1.0X
-KryoPool:false                                               14016          17091         NaN          0.0    28031247.1       0.7X
+KryoPool:true                                                 8859          11328         NaN          0.0    17718316.6       1.0X
+KryoPool:false                                               13101          16612         822          0.0    26201781.0       0.7X
 
 

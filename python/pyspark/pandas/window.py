@@ -18,6 +18,9 @@ from abc import ABCMeta, abstractmethod
 from functools import partial
 from typing import Any, Callable, Generic, List, Optional
 
+import numpy as np
+
+from pyspark import SparkContext
 from pyspark.sql import Window
 from pyspark.sql import functions as F
 from pyspark.pandas.missing.window import (
@@ -25,6 +28,7 @@ from pyspark.pandas.missing.window import (
     MissingPandasLikeRollingGroupby,
     MissingPandasLikeExpanding,
     MissingPandasLikeExpandingGroupby,
+    MissingPandasLikeExponentialMoving,
 )
 
 # For running doctests and reference resolution in PyCharm.
@@ -1747,6 +1751,188 @@ class ExpandingGroupby(ExpandingLike[FrameLike]):
         numpy.var : Equivalent method for Numpy array.
         """
         return super().var()
+
+
+class ExponentialMovingLike(Generic[FrameLike], metaclass=ABCMeta):
+    def __init__(
+        self,
+        window: WindowSpec,
+        com: Optional[float] = None,
+        span: Optional[float] = None,
+        halflife: Optional[float] = None,
+        alpha: Optional[float] = None,
+        min_periods: Optional[int] = None,
+    ):
+        if (min_periods is not None) and (min_periods < 0):
+            raise ValueError("min_periods must be >= 0")
+        if min_periods is None:
+            min_periods = 0
+        self._min_periods = min_periods
+
+        self._window = window
+        # This unbounded Window is later used to handle 'min_periods' for now.
+        self._unbounded_window = Window.orderBy(NATURAL_ORDER_COLUMN_NAME).rowsBetween(
+            Window.unboundedPreceding, Window.currentRow
+        )
+
+        if (com is not None) and (not com >= 0):
+            raise ValueError("com must be >= 0")
+        self._com = com
+
+        if (span is not None) and (not span >= 1):
+            raise ValueError("span must be >= 1")
+        self._span = span
+
+        if (halflife is not None) and (not halflife > 0):
+            raise ValueError("halflife must be > 0")
+        self._halflife = halflife
+
+        if (alpha is not None) and (not 0 < alpha <= 1):
+            raise ValueError("alpha must be in (0, 1]")
+        self._alpha = alpha
+
+    def _compute_unified_alpha(self) -> float:
+        unified_alpha = np.nan
+        opt_count = 0
+
+        if self._com is not None:
+            unified_alpha = 1.0 / (1 + self._com)
+            opt_count += 1
+        if self._span is not None:
+            unified_alpha = 2.0 / (1 + self._span)
+            opt_count += 1
+        if self._halflife is not None:
+            unified_alpha = 1.0 - np.exp(-np.log(2) / self._halflife)
+            opt_count += 1
+        if self._alpha is not None:
+            unified_alpha = self._alpha
+            opt_count += 1
+
+        if opt_count == 0:
+            raise ValueError("Must pass one of com, span, halflife, or alpha")
+        if opt_count != 1:
+            raise ValueError("com, span, halflife, and alpha are mutually exclusive")
+
+        return unified_alpha
+
+    @abstractmethod
+    def _apply_as_series_or_frame(self, func: Callable[[Column], Column]) -> FrameLike:
+        """
+        Wraps a function that handles Spark column in order
+        to support it in both pandas-on-Spark Series and DataFrame.
+        Note that the given `func` name should be same as the API's method name.
+        """
+        pass
+
+    def mean(self) -> FrameLike:
+        unified_alpha = self._compute_unified_alpha()
+
+        def mean(scol: Column) -> Column:
+            jf = SparkContext._active_spark_context._jvm.PythonSQLUtils.ewm
+            return F.when(
+                F.row_number().over(self._unbounded_window) >= self._min_periods,
+                Column(jf(scol._jc, unified_alpha)).over(self._window),
+            ).otherwise(SF.lit(None))
+
+        return self._apply_as_series_or_frame(mean)
+
+
+class ExponentialMoving(ExponentialMovingLike[FrameLike]):
+    def __init__(
+        self,
+        psdf_or_psser: FrameLike,
+        com: Optional[float] = None,
+        span: Optional[float] = None,
+        halflife: Optional[float] = None,
+        alpha: Optional[float] = None,
+        min_periods: Optional[int] = None,
+    ):
+        from pyspark.pandas.frame import DataFrame
+        from pyspark.pandas.series import Series
+
+        if not isinstance(psdf_or_psser, (DataFrame, Series)):
+            raise TypeError(
+                "psdf_or_psser must be a series or dataframe; however, got: %s"
+                % type(psdf_or_psser)
+            )
+        self._psdf_or_psser = psdf_or_psser
+
+        window_spec = Window.orderBy(NATURAL_ORDER_COLUMN_NAME).rowsBetween(
+            Window.unboundedPreceding, Window.currentRow
+        )
+
+        super().__init__(window_spec, com, span, halflife, alpha, min_periods)
+
+    def __getattr__(self, item: str) -> Any:
+        if hasattr(MissingPandasLikeExponentialMoving, item):
+            property_or_func = getattr(MissingPandasLikeExponentialMoving, item)
+            if isinstance(property_or_func, property):
+                return property_or_func.fget(self)
+            else:
+                return partial(property_or_func, self)
+        raise AttributeError(item)
+
+    _apply_as_series_or_frame = Rolling._apply_as_series_or_frame
+
+    def mean(self) -> FrameLike:
+        """
+        Calculate an online exponentially weighted mean.
+
+        Notes
+        -----
+        There are behavior differences between pandas-on-Spark and pandas.
+
+        * the data should not contain NaNs. pandas-on-Spark will return an error.
+        * the current implementation of this API uses Spark's Window without
+          specifying partition specification. This leads to move all data into
+          single partition in single machine and could cause serious
+          performance degradation. Avoid this method against very large dataset.
+
+        Returns
+        -------
+        Series or DataFrame
+            Returned object type is determined by the caller of the exponentially
+            calculation.
+
+        See Also
+        --------
+        Series.expanding : Calling object with Series data.
+        DataFrame.expanding : Calling object with DataFrames.
+        Series.mean : Equivalent method for Series.
+        DataFrame.mean : Equivalent method for DataFrame.
+
+        Examples
+        --------
+        The below examples will show computing exponentially weighted moving average.
+
+        >>> df = ps.DataFrame({'s1': [.2, .0, .6, .2, .4, .5, .6], 's2': [2, 1, 3, 1, 0, 0, 0]})
+        >>> df.ewm(com=0.1).mean()
+                 s1        s2
+        0  0.200000  2.000000
+        1  0.016667  1.083333
+        2  0.547368  2.827068
+        3  0.231557  1.165984
+        4  0.384688  0.105992
+        5  0.489517  0.009636
+        6  0.589956  0.000876
+
+        >>> df.s2.ewm(halflife=1.5, min_periods=3).mean()
+        0         NaN
+        1         NaN
+        2    2.182572
+        3    1.663174
+        4    0.979949
+        5    0.593155
+        6    0.364668
+        Name: s2, dtype: float64
+        """
+        return super().mean()
+
+    # TODO: when add 'adjust' and 'ignore_na' parameter, should add to here too.
+    def __repr__(self) -> str:
+        return "ExponentialMoving [com={}, span={}, halflife={}, alpha={}, min_periods={}]".format(
+            self._com, self._span, self._halflife, self._alpha, self._min_periods
+        )
 
 
 def _test() -> None:

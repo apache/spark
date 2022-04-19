@@ -1054,23 +1054,55 @@ class GroupByTest(PandasOnSparkTestCase, TestUtils):
                     self.assertTrue(sorted(act) == sorted(exp))
 
     def test_value_counts(self):
-        pdf = pd.DataFrame({"A": [1, 2, 2, 3, 3, 3], "B": [1, 1, 2, 3, 3, 3]}, columns=["A", "B"])
+        pdf = pd.DataFrame(
+            {"A": [np.nan, 2, 2, 3, 3, 3], "B": [1, 1, 2, 3, 3, np.nan]}, columns=["A", "B"]
+        )
         psdf = ps.from_pandas(pdf)
         self.assert_eq(
             psdf.groupby("A")["B"].value_counts().sort_index(),
             pdf.groupby("A")["B"].value_counts().sort_index(),
         )
         self.assert_eq(
+            psdf.groupby("A")["B"].value_counts(dropna=False).sort_index(),
+            pdf.groupby("A")["B"].value_counts(dropna=False).sort_index(),
+        )
+        self.assert_eq(
+            psdf.groupby("A", dropna=False)["B"].value_counts(dropna=False).sort_index(),
+            pdf.groupby("A", dropna=False)["B"].value_counts(dropna=False).sort_index(),
+            # Returns are the same considering values and types,
+            # disable check_exact to pass the assert_eq
+            check_exact=False,
+        )
+        self.assert_eq(
             psdf.groupby("A")["B"].value_counts(sort=True, ascending=False).sort_index(),
             pdf.groupby("A")["B"].value_counts(sort=True, ascending=False).sort_index(),
         )
         self.assert_eq(
-            psdf.groupby("A")["B"].value_counts(sort=True, ascending=True).sort_index(),
-            pdf.groupby("A")["B"].value_counts(sort=True, ascending=True).sort_index(),
+            psdf.groupby("A")["B"]
+            .value_counts(sort=True, ascending=False, dropna=False)
+            .sort_index(),
+            pdf.groupby("A")["B"]
+            .value_counts(sort=True, ascending=False, dropna=False)
+            .sort_index(),
+        )
+        self.assert_eq(
+            psdf.groupby("A")["B"]
+            .value_counts(sort=True, ascending=True, dropna=False)
+            .sort_index(),
+            pdf.groupby("A")["B"]
+            .value_counts(sort=True, ascending=True, dropna=False)
+            .sort_index(),
         )
         self.assert_eq(
             psdf.B.rename().groupby(psdf.A).value_counts().sort_index(),
             pdf.B.rename().groupby(pdf.A).value_counts().sort_index(),
+        )
+        self.assert_eq(
+            psdf.B.rename().groupby(psdf.A, dropna=False).value_counts().sort_index(),
+            pdf.B.rename().groupby(pdf.A, dropna=False).value_counts().sort_index(),
+            # Returns are the same considering values and types,
+            # disable check_exact to pass the assert_eq
+            check_exact=False,
         )
         self.assert_eq(
             psdf.B.groupby(psdf.A.rename()).value_counts().sort_index(),
@@ -1209,6 +1241,54 @@ class GroupByTest(PandasOnSparkTestCase, TestUtils):
             psdf.groupby([("x", "a"), ("x", "b")]).rank().sort_index(),
             pdf.groupby([("x", "a"), ("x", "b")]).rank().sort_index(),
         )
+
+    def test_min(self):
+        pdf = pd.DataFrame(
+            {
+                "A": [1, 2, 1, 2],
+                "B": [3.1, 4.1, 4.1, 3.1],
+                "C": ["a", "b", "b", "a"],
+                "D": [True, False, False, True],
+            }
+        )
+        psdf = ps.from_pandas(pdf)
+        for p_groupby_obj, ps_groupby_obj in [
+            (pdf.groupby("A"), psdf.groupby("A")),
+            (pdf.groupby("A")[["C"]], psdf.groupby("A")[["C"]]),
+        ]:
+            self.assert_eq(p_groupby_obj.min().sort_index(), ps_groupby_obj.min().sort_index())
+            self.assert_eq(
+                p_groupby_obj.min(numeric_only=None).sort_index(),
+                ps_groupby_obj.min(numeric_only=None).sort_index(),
+            )
+            self.assert_eq(
+                p_groupby_obj.min(numeric_only=True).sort_index(),
+                ps_groupby_obj.min(numeric_only=True).sort_index(),
+            )
+
+    def test_max(self):
+        pdf = pd.DataFrame(
+            {
+                "A": [1, 2, 1, 2],
+                "B": [3.1, 4.1, 4.1, 3.1],
+                "C": ["a", "b", "b", "a"],
+                "D": [True, False, False, True],
+            }
+        )
+        psdf = ps.from_pandas(pdf)
+        for p_groupby_obj, ps_groupby_obj in [
+            (pdf.groupby("A"), psdf.groupby("A")),
+            (pdf.groupby("A")[["C"]], psdf.groupby("A")[["C"]]),
+        ]:
+            self.assert_eq(p_groupby_obj.max().sort_index(), ps_groupby_obj.max().sort_index())
+            self.assert_eq(
+                p_groupby_obj.max(numeric_only=None).sort_index(),
+                ps_groupby_obj.max(numeric_only=None).sort_index(),
+            )
+            self.assert_eq(
+                p_groupby_obj.max(numeric_only=True).sort_index(),
+                ps_groupby_obj.max(numeric_only=True).sort_index(),
+            )
 
     def test_cumcount(self):
         pdf = pd.DataFrame(

@@ -979,8 +979,8 @@ abstract class ParquetPartitionDiscoverySuite
     withTempPath { dir =>
       withSQLConf(SQLConf.PARALLEL_PARTITION_DISCOVERY_THRESHOLD.key -> "1") {
         val path = dir.getCanonicalPath
-        val df = spark.range(5).select(Symbol("id") as Symbol("a"), Symbol("id") as Symbol("b"),
-          Symbol("id") as Symbol("c")).coalesce(1)
+        val df = spark.range(5).select($"id" as Symbol("a"), $"id" as Symbol("b"),
+          $"id" as Symbol("c")).coalesce(1)
         df.write.partitionBy("b", "c").parquet(path)
         checkAnswer(spark.read.parquet(path), df)
       }
@@ -1076,7 +1076,7 @@ abstract class ParquetPartitionDiscoverySuite
       val input = spark.read.parquet(path.getAbsolutePath).select("id",
         "date_month", "date_hour", "date_t_hour", "data")
 
-      assert(input.schema.sameType(input.schema))
+      assert(data.schema.sameType(input.schema))
       checkAnswer(input, data)
     }
   }

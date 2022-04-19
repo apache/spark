@@ -94,6 +94,60 @@ import org.apache.spark.sql.connector.util.V2ExpressionSQLBuilder;
  *    <li>Since version: 3.3.0</li>
  *   </ul>
  *  </li>
+ *  <li>Name: <code>ABS</code>
+ *   <ul>
+ *    <li>SQL semantic: <code>ABS(expr)</code></li>
+ *    <li>Since version: 3.3.0</li>
+ *   </ul>
+ *  </li>
+ *  <li>Name: <code>COALESCE</code>
+ *   <ul>
+ *    <li>SQL semantic: <code>COALESCE(expr1, expr2)</code></li>
+ *    <li>Since version: 3.3.0</li>
+ *   </ul>
+ *  </li>
+ *  <li>Name: <code>LN</code>
+ *   <ul>
+ *    <li>SQL semantic: <code>LN(expr)</code></li>
+ *    <li>Since version: 3.3.0</li>
+ *   </ul>
+ *  </li>
+ *  <li>Name: <code>EXP</code>
+ *   <ul>
+ *    <li>SQL semantic: <code>EXP(expr)</code></li>
+ *    <li>Since version: 3.3.0</li>
+ *   </ul>
+ *  </li>
+ *  <li>Name: <code>POWER</code>
+ *   <ul>
+ *    <li>SQL semantic: <code>POWER(expr, number)</code></li>
+ *    <li>Since version: 3.3.0</li>
+ *   </ul>
+ *  </li>
+ *  <li>Name: <code>SQRT</code>
+ *   <ul>
+ *    <li>SQL semantic: <code>SQRT(expr)</code></li>
+ *    <li>Since version: 3.3.0</li>
+ *   </ul>
+ *  </li>
+ *  <li>Name: <code>FLOOR</code>
+ *   <ul>
+ *    <li>SQL semantic: <code>FLOOR(expr)</code></li>
+ *    <li>Since version: 3.3.0</li>
+ *   </ul>
+ *  </li>
+ *  <li>Name: <code>CEIL</code>
+ *   <ul>
+ *    <li>SQL semantic: <code>CEIL(expr)</code></li>
+ *    <li>Since version: 3.3.0</li>
+ *   </ul>
+ *  </li>
+ *  <li>Name: <code>WIDTH_BUCKET</code>
+ *   <ul>
+ *    <li>SQL semantic: <code>WIDTH_BUCKET(expr)</code></li>
+ *    <li>Since version: 3.3.0</li>
+ *   </ul>
+ *  </li>
  * </ol>
  * Note: SQL semantic conforms ANSI standard, so some expressions are not supported when ANSI off,
  * including: add, subtract, multiply, divide, remainder, pmod.
