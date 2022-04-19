@@ -1242,6 +1242,54 @@ class GroupByTest(PandasOnSparkTestCase, TestUtils):
             pdf.groupby([("x", "a"), ("x", "b")]).rank().sort_index(),
         )
 
+    def test_min(self):
+        pdf = pd.DataFrame(
+            {
+                "A": [1, 2, 1, 2],
+                "B": [3.1, 4.1, 4.1, 3.1],
+                "C": ["a", "b", "b", "a"],
+                "D": [True, False, False, True],
+            }
+        )
+        psdf = ps.from_pandas(pdf)
+        for p_groupby_obj, ps_groupby_obj in [
+            (pdf.groupby("A"), psdf.groupby("A")),
+            (pdf.groupby("A")[["C"]], psdf.groupby("A")[["C"]]),
+        ]:
+            self.assert_eq(p_groupby_obj.min().sort_index(), ps_groupby_obj.min().sort_index())
+            self.assert_eq(
+                p_groupby_obj.min(numeric_only=None).sort_index(),
+                ps_groupby_obj.min(numeric_only=None).sort_index(),
+            )
+            self.assert_eq(
+                p_groupby_obj.min(numeric_only=True).sort_index(),
+                ps_groupby_obj.min(numeric_only=True).sort_index(),
+            )
+
+    def test_max(self):
+        pdf = pd.DataFrame(
+            {
+                "A": [1, 2, 1, 2],
+                "B": [3.1, 4.1, 4.1, 3.1],
+                "C": ["a", "b", "b", "a"],
+                "D": [True, False, False, True],
+            }
+        )
+        psdf = ps.from_pandas(pdf)
+        for p_groupby_obj, ps_groupby_obj in [
+            (pdf.groupby("A"), psdf.groupby("A")),
+            (pdf.groupby("A")[["C"]], psdf.groupby("A")[["C"]]),
+        ]:
+            self.assert_eq(p_groupby_obj.max().sort_index(), ps_groupby_obj.max().sort_index())
+            self.assert_eq(
+                p_groupby_obj.max(numeric_only=None).sort_index(),
+                ps_groupby_obj.max(numeric_only=None).sort_index(),
+            )
+            self.assert_eq(
+                p_groupby_obj.max(numeric_only=True).sort_index(),
+                ps_groupby_obj.max(numeric_only=True).sort_index(),
+            )
+
     def test_cumcount(self):
         pdf = pd.DataFrame(
             {

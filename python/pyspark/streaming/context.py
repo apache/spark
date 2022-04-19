@@ -397,12 +397,12 @@ class StreamingContext:
         the transform function parameter will be the same as the order
         of corresponding DStreams in the list.
         """
-        jdstreams = [d._jdstream for d in dstreams]  # type: ignore[attr-defined]
+        jdstreams = [d._jdstream for d in dstreams]
         # change the final serializer to sc.serializer
         func = TransformFunction(
             self._sc,
             lambda t, *rdds: transformFunc(rdds),
-            *[d._jrdd_deserializer for d in dstreams],  # type: ignore[attr-defined]
+            *[d._jrdd_deserializer for d in dstreams],
         )
 
         assert self._jvm is not None
@@ -419,35 +419,31 @@ class StreamingContext:
             raise ValueError("should have at least one DStream to union")
         if len(dstreams) == 1:
             return dstreams[0]
-        if len(set(s._jrdd_deserializer for s in dstreams)) > 1:  # type: ignore[attr-defined]
+        if len(set(s._jrdd_deserializer for s in dstreams)) > 1:
             raise ValueError("All DStreams should have same serializer")
-        if len(set(s._slideDuration for s in dstreams)) > 1:  # type: ignore[attr-defined]
+        if len(set(s._slideDuration for s in dstreams)) > 1:
             raise ValueError("All DStreams should have same slide duration")
 
         assert SparkContext._jvm is not None
         jdstream_cls = SparkContext._jvm.org.apache.spark.streaming.api.java.JavaDStream
         jpair_dstream_cls = SparkContext._jvm.org.apache.spark.streaming.api.java.JavaPairDStream
         gw = SparkContext._gateway
-        if is_instance_of(gw, dstreams[0]._jdstream, jdstream_cls):  # type: ignore[attr-defined]
+        if is_instance_of(gw, dstreams[0]._jdstream, jdstream_cls):
             cls = jdstream_cls
-        elif is_instance_of(
-            gw, dstreams[0]._jdstream, jpair_dstream_cls  # type: ignore[attr-defined]
-        ):
+        elif is_instance_of(gw, dstreams[0]._jdstream, jpair_dstream_cls):
             cls = jpair_dstream_cls
         else:
-            cls_name = (
-                dstreams[0]._jdstream.getClass().getCanonicalName()  # type: ignore[attr-defined]
-            )
+            cls_name = dstreams[0]._jdstream.getClass().getCanonicalName()
             raise TypeError("Unsupported Java DStream class %s" % cls_name)
 
         assert gw is not None
         jdstreams = gw.new_array(cls, len(dstreams))
         for i in range(0, len(dstreams)):
-            jdstreams[i] = dstreams[i]._jdstream  # type: ignore[attr-defined]
+            jdstreams[i] = dstreams[i]._jdstream
         return DStream(
             self._jssc.union(jdstreams),
             self,
-            dstreams[0]._jrdd_deserializer,  # type: ignore[attr-defined]
+            dstreams[0]._jrdd_deserializer,
         )
 
     def addStreamingListener(self, streamingListener: StreamingListener) -> None:
