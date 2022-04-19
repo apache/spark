@@ -400,4 +400,22 @@ class QueryExecutionErrorsSuite extends QueryTest
         "If necessary set spark.sql.ansi.enabled to false to bypass this error. ")
     }
   }
+
+  test("CANNOT_CHANGE_DECIMAL_PRECISION: cast string to decimal") {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      val e = intercept[SparkArithmeticException] {
+        sql("select CAST('66666666666666.666' AS DECIMAL(8, 1))").collect()
+      }
+      assert(e.getErrorClass === "CANNOT_CHANGE_DECIMAL_PRECISION")
+      assert(e.getSqlState === "22005")
+      assert(e.getMessage ===
+        "Decimal(expanded,66666666666666.666,17,3}) cannot be represented as Decimal(8, 1). " +
+        "If necessary set spark.sql.ansi.enabled to false to bypass this error." +
+        """
+          |== SQL(line 1, position 7) ==
+          |select CAST('66666666666666.666' AS DECIMAL(8, 1))
+          |       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+          |""".stripMargin)
+    }
+  }
 }
