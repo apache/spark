@@ -353,7 +353,8 @@ object MergeScalarSubqueries extends Rule[LogicalPlan] with PredicateHelper {
               val subqueryCTE = subqueryCTEs.getOrElseUpdate(
                 ssr.subqueryIndex,
                 CTERelationDef(
-                  createProject(header.attributes,
+                  createProject(
+                    header.attributes,
                     removeReferences(header.plan, cache, subqueryCTEs)),
                   mergedScalarSubquery = true))
               GetStructField(
@@ -362,7 +363,9 @@ object MergeScalarSubqueries extends Rule[LogicalPlan] with PredicateHelper {
                   exprId = ssr.exprId),
                 ssr.headerIndex)
             } else {
-              ScalarSubquery(plan = header.plan, exprId = ssr.exprId)
+              ScalarSubquery(
+                removeReferences(header.plan, cache, subqueryCTEs),
+                exprId = ssr.exprId)
             }
         }
     }
