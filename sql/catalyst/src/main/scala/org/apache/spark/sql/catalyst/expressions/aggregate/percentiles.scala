@@ -30,7 +30,7 @@ import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types._
 import org.apache.spark.util.collection.OpenHashMap
 
-abstract class PercentileBase() extends TypedImperativeAggregate[OpenHashMap[AnyRef, Long]]
+abstract class PercentileBase extends TypedImperativeAggregate[OpenHashMap[AnyRef, Long]]
   with ImplicitCastInputTypes {
 
   val child: Expression
@@ -39,6 +39,9 @@ abstract class PercentileBase() extends TypedImperativeAggregate[OpenHashMap[Any
 
   // Whether to reverse calculate percentile value
   val reverse: Boolean
+
+  // Whether the value is discrete
+  protected def discrete: Boolean
 
   // Mark as lazy so that percentageExpression is not evaluated during tree transformation.
   @transient
@@ -145,7 +148,7 @@ abstract class PercentileBase() extends TypedImperativeAggregate[OpenHashMap[Any
       case otherType => QueryExecutionErrors.unsupportedTypeError(otherType)
     }
     val sortedCounts = if (reverse) {
-      buffer.toSeq.sortBy(_._1)(ordering.asInstanceOf[Ordering[AnyRef]]).reverse
+      buffer.toSeq.sortBy(_._1)(ordering.asInstanceOf[Ordering[AnyRef]].reverse)
     } else {
       buffer.toSeq.sortBy(_._1)(ordering.asInstanceOf[Ordering[AnyRef]])
     }
@@ -197,18 +200,13 @@ abstract class PercentileBase() extends TypedImperativeAggregate[OpenHashMap[Any
       return toDoubleValue(lowerKey)
     }
 
-    if (interpolate) {
+    if (discrete) {
+      toDoubleValue(lowerKey)
+    } else {
       // Linear interpolation to get the exact percentile
       (higher - position) * toDoubleValue(lowerKey) + (position - lower) * toDoubleValue(higherKey)
-    } else {
-      toDoubleValue(lowerKey)
     }
   }
-
-  /**
-   * Whether value should be interpolated
-   */
-  protected def interpolate: Boolean
 
   /**
    * use a binary search to find the index of the position closest to the current value.
@@ -339,13 +337,19 @@ case class Percentile(
 
   override def prettyName: String = "percentile"
 
-  override def interpolate: Boolean = true
+  override def discrete: Boolean = false
 
   override def withNewMutableAggBufferOffset(newMutableAggBufferOffset: Int): Percentile =
     copy(mutableAggBufferOffset = newMutableAggBufferOffset)
 
   override def withNewInputAggBufferOffset(newInputAggBufferOffset: Int): Percentile =
     copy(inputAggBufferOffset = newInputAggBufferOffset)
+
+  override protected def stringArgs: Iterator[Any] = if (discrete) {
+    super.stringArgs ++ Some(discrete)
+  } else {
+    super.stringArgs
+  }
 
   override protected def withNewChildrenInternal(
       newFirst: Expression, newSecond: Expression, newThird: Expression): Percentile = copy(
@@ -401,7 +405,7 @@ case class PercentileDisc(
 
   override def prettyName: String = "percentile_disc"
 
-  override def interpolate: Boolean = false
+  override def discrete: Boolean = true
 
   override def withNewMutableAggBufferOffset(newMutableAggBufferOffset: Int): PercentileDisc =
     copy(mutableAggBufferOffset = newMutableAggBufferOffset)
