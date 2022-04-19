@@ -85,34 +85,6 @@ case class StructField(
     if (metadata.contains("comment")) Option(metadata.getString("comment")) else None
   }
 
-  /**
-   * Updates the StructField with a new default value string, or removes it if empty.
-   */
-  def withDefaultValue(defaultType: DefaultType.Value, value: String): StructField = {
-    val key = DefaultType.key(defaultType)
-    val builder = new MetadataBuilder()
-      .withMetadata(metadata)
-    if (value.nonEmpty) {
-      builder.putString(key, value)
-    } else {
-      builder.remove(key)
-    }
-    val newMetadata = builder.build()
-    copy(metadata = newMetadata)
-  }
-
-  /**
-   * Returns the default value string of this StructField.
-   */
-  def getDefaultValue(defaultType: DefaultType.Value): Option[String] = {
-    val key = DefaultType.key(defaultType)
-    if (metadata.contains(key)) {
-      Option(metadata.getString(key))
-    } else {
-      None
-    }
-  }
-
   private def getDDLComment = getComment()
     .map(escapeSingleQuotedString)
     .map(" COMMENT '" + _ + "'")

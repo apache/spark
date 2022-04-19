@@ -354,10 +354,21 @@ case class AlterTableChangeColumnCommand(
     val newDataSchema = table.dataSchema.fields.map { field =>
       if (field.name == originColumn.name) {
         // Create a new column from the origin column with the new comment.
-        val updated = addComment(field, newColumn.getComment)
+        val withNewComment: StructField =
+          if (newColumn.getComment().isDefined) {
+            addComment(field, newColumn.getComment)
+          } else {
+            field
+          }
         // Create a new column from the origin column with the new current default value.
-        addCurrentDefaultValue(
-          updated, newColumn.getDefaultValue(DefaultType.CURRENT_DEFAULT))
+        val withNewDefaultValue: StructField =
+          if (newColumn.metadata.contains(CURRENT_DEFAULT_COLUMN_METADATA_KEY)) {
+            addCurrentDefaultValue(
+              withNewComment, newColumn.metadata.getString(CURRENT_DEFAULT_COLUMN_METADATA_KEY))
+          } else {
+            withNewComment
+          }
+        withNewDefaultValue
       } else {
         field
       }
@@ -376,13 +387,17 @@ case class AlterTableChangeColumnCommand(
     }.getOrElse(throw QueryCompilationErrors.cannotFindColumnError(name, schema.fieldNames))
   }
 
-  // Add the comment to a column, if comment is empty, return the original column.
-  private def addComment(column: StructField, comment: Option[String]): StructField =
+  // Add the comment to a column.
+  private def addComment(column: StructField, comment: String): StructField =
     comment.map(column.withComment).getOrElse(column)
 
-  // Add the current default value to a column, if this value is empty, return the original column.
-  private def addCurrentDefaultValue(column: StructField, value: Option[String]): StructField =
-    value.map(v => column.withDefaultValue(DefaultType.CURRENT_DEFAULT, v)).getOrElse(column)
+  // Add the current default value to a column.
+  private def addCurrentDefaultValue(column: StructField, value: String): StructField =
+    column.copy(metadata =
+      new MetadataBuilder()
+        .withMetadata(column.metadata)
+        .putString(CURRENT_DEFAULT_COLUMN_METADATA_KEY, value)
+        .build())
 
   // Compare a [[StructField]] to another, return true if they have the same column
   // name(by resolver) and dataType.

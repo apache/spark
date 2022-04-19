@@ -62,25 +62,6 @@ object ResolveDefaultColumns {
     "not allowed"
 
   /**
-   * Represents the type of a default value associated with a table column.
-   */
-  object DefaultType extends Enumeration {
-    // The current default value is a string representing an expression to evaluate for future
-    // insertions or updates to the column value in the absence of any explicit provided value.
-    val CURRENT_DEFAULT = Value
-    // The existence default value is a string representing the constant-folded value of a default
-    // expression for a column when it is first created. The system returns this value in response
-    // to future scans of that column when the corresponding value is not present in storage.
-    val EXISTS_DEFAULT = Value
-    // This is a convenience method to return the corresponding column metadata key string for a
-    // value belonging to this enumeration.
-    def key(defaultType: Value): String = defaultType match {
-      case DefaultType.CURRENT_DEFAULT => CURRENT_DEFAULT_COLUMN_METADATA_KEY
-      case DefaultType.EXISTS_DEFAULT => EXISTS_DEFAULT_COLUMN_METADATA_KEY
-    }
-  }
-
-  /**
    * Finds "current default" expressions in CREATE/REPLACE TABLE columns and constant-folds them.
    *
    * The results are stored in the "exists default" metadata of the same columns. For example, in
