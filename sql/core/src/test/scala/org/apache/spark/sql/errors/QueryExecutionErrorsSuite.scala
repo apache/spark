@@ -389,22 +389,6 @@ class QueryExecutionErrorsSuite extends QueryTest
     }
   }
 
-  test("FAILED_EXECUTE_UDF: execute user defined function") {
-    val e1 = intercept[SparkException] {
-      val names = Seq("Jacek", "Agata", "Sweet").toDF("name")
-      val hello = udf { _: String => {
-        throw new SparkException("throw spark exception for udf test")
-      }}
-      names.select(hello($"name")).collect()
-    }
-    assert(e1.getCause.isInstanceOf[SparkException])
-
-    val e2 = e1.getCause.asInstanceOf[SparkException]
-    assert(e2.getErrorClass === "FAILED_EXECUTE_UDF")
-    assert(e2.getMessage.matches("Failed to execute user defined function " +
-        "\\(QueryExecutionErrorsSuite\\$\\$Lambda\\$\\d+/\\d+: \\(string\\) => void\\)"))
-  }
-
   test("CANNOT_CHANGE_DECIMAL_PRECISION: cast string to decimal") {
     withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
       val e = intercept[SparkArithmeticException] {
@@ -421,5 +405,21 @@ class QueryExecutionErrorsSuite extends QueryTest
           |       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
           |""".stripMargin)
     }
+  }
+
+  test("FAILED_EXECUTE_UDF: execute user defined function") {
+    val e1 = intercept[SparkException] {
+      val words = Seq(("Jacek", 5), ("Agata", 5), ("Sweet", 6)).toDF("word", "index")
+      val luckyCharOfWord = udf { (word: String, index: Int) => {
+        word.substring(index, index + 1)
+      }}
+      words.select(luckyCharOfWord($"word", $"index")).collect()
+    }
+    assert(e1.getCause.isInstanceOf[SparkException])
+
+    val e2 = e1.getCause.asInstanceOf[SparkException]
+    assert(e2.getErrorClass === "FAILED_EXECUTE_UDF")
+    assert(e2.getMessage.matches("Failed to execute user defined function " +
+      "\\(QueryExecutionErrorsSuite\\$\\$Lambda\\$\\d+/\\d+: \\(string, int\\) => string\\)"))
   }
 }
