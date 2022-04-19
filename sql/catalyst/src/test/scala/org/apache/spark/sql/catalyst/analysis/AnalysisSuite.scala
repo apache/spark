@@ -1176,4 +1176,13 @@ class AnalysisSuite extends AnalysisTest with Matchers {
         false)
     }
   }
+
+  test("SPARK-38951: Aggregate aliases override field names in ResolveAggregateFunctions") {
+    assertAnalysisSuccess(parsePlan(
+      s"""
+         |select sum(id) as id
+         |from range(10)
+         |group by id
+         |order by sum(id)""".stripMargin))
+  }
 }

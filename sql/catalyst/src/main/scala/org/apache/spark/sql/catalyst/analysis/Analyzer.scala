@@ -2563,7 +2563,23 @@ class Analyzer(override val catalogManager: CatalogManager)
 
       case Sort(sortOrder, global, agg: Aggregate) if agg.resolved =>
         // We should resolve the references normally based on child (agg.output) first.
-        val maybeResolved = sortOrder.map(_.child).map(resolveExpressionByPlanOutput(_, agg))
+        val aggAliasSet = agg.aggregateExpressions.collect {
+          case a: Alias => a.name
+        }.toSet
+        val maybeResolved: Seq[Expression] = sortOrder.map(_.child).map { expr =>
+          var existSameName = false
+          expr.foreach {
+            case UnresolvedAttribute(nameParts) =>
+              existSameName = aggAliasSet.contains(agg.resolve(nameParts, resolver)
+                .map(_.name).getOrElse(""))
+            case _ =>
+          }
+          if (existSameName) {
+            expr
+          } else {
+            resolveExpressionByPlanOutput(expr, agg)
+          }
+        }
         resolveOperatorWithAggregate(maybeResolved, agg, (newExprs, newChild) => {
           val newSortOrder = sortOrder.zip(newExprs).map {
             case (sortOrder, expr) => sortOrder.copy(child = expr)
