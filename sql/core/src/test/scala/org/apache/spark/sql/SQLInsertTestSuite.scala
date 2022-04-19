@@ -183,11 +183,13 @@ trait SQLInsertTestSuite extends QueryTest with SQLTestUtils {
         assert(e2.getMessage.contains(msgs(0)) || e2.getMessage.contains(msgs(1)))
       }
     }
-    withSQLConf(SQLConf.ENABLE_DEFAULT_COLUMNS.key -> "false") {
-      test
-    }
-    withSQLConf(SQLConf.ENABLE_DEFAULT_COLUMNS.key -> "true") {
-      test
+    withSQLConf(SQLConf.USE_NULLS_FOR_MISSING_DEFAULT_COLUMN_VALUES.key -> "false") {
+      withSQLConf(SQLConf.ENABLE_DEFAULT_COLUMNS.key -> "false") {
+        test
+      }
+      withSQLConf(SQLConf.ENABLE_DEFAULT_COLUMNS.key -> "true") {
+        test
+      }
     }
   }
 
@@ -195,23 +197,25 @@ trait SQLInsertTestSuite extends QueryTest with SQLTestUtils {
     val v2Msg = "expected 2 columns but found"
     val cols = Seq("c1", "c2", "c3", "c4")
 
-    withTable("t1") {
-      createTable("t1", cols, Seq.fill(4)("int"))
-      val e1 = intercept[AnalysisException](sql(s"INSERT INTO t1 (c1) values(1)"))
-      assert(e1.getMessage.contains("target table has 4 column(s) but the inserted data has 1") ||
-        e1.getMessage.contains("expected 4 columns but found 1") ||
-        e1.getMessage.contains("not enough data columns") ||
-        e1.getMessage.contains(v2Msg))
-    }
-
-    withTable("t1") {
-      createTable("t1", cols, Seq.fill(4)("int"), cols.takeRight(2))
-      val e1 = intercept[AnalysisException] {
-        sql(s"INSERT INTO t1 partition(c3=3, c4=4) (c1) values(1)")
+    withSQLConf(SQLConf.USE_NULLS_FOR_MISSING_DEFAULT_COLUMN_VALUES.key -> "false") {
+      withTable("t1") {
+        createTable("t1", cols, Seq.fill(4)("int"))
+        val e1 = intercept[AnalysisException](sql(s"INSERT INTO t1 (c1) values(1)"))
+        assert(e1.getMessage.contains("target table has 4 column(s) but the inserted data has 1") ||
+          e1.getMessage.contains("expected 4 columns but found 1") ||
+          e1.getMessage.contains("not enough data columns") ||
+          e1.getMessage.contains(v2Msg))
       }
-      assert(e1.getMessage.contains("target table has 4 column(s) but the inserted data has 3") ||
-        e1.getMessage.contains("not enough data columns") ||
-        e1.getMessage.contains(v2Msg))
+
+      withTable("t1") {
+        createTable("t1", cols, Seq.fill(4)("int"), cols.takeRight(2))
+        val e1 = intercept[AnalysisException] {
+          sql(s"INSERT INTO t1 partition(c3=3, c4=4) (c1) values(1)")
+        }
+        assert(e1.getMessage.contains("target table has 4 column(s) but the inserted data has 3") ||
+          e1.getMessage.contains("not enough data columns") ||
+          e1.getMessage.contains(v2Msg))
+      }
     }
   }
 

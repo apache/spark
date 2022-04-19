@@ -133,19 +133,6 @@ abstract class InsertIntoTests(
     }
   }
 
-  test("insertInto: use null for the missing column") {
-    withSQLConf(SQLConf.USE_NULLS_FOR_MISSING_DEFAULT_COLUMN_VALUES.key -> "true") {
-      val t1 = s"${catalogAndNamespace}tbl"
-      sql(s"CREATE TABLE $t1 (id bigint, data string, missing string) USING $v2Format")
-      val df = Seq((1L, "a"), (2L, "b"), (3L, "c")).toDF("id", "data")
-      doInsert(t1, df)
-
-      val expected = Seq((1L, "a", null), (2L, "b", null), (3L, "c", null))
-        .toDF("id", "data", "missing")
-      verifyTable(t1, expected)
-    }
-  }
-
   test("insertInto: fails when an extra column is present") {
     val t1 = s"${catalogAndNamespace}tbl"
     withTable(t1) {

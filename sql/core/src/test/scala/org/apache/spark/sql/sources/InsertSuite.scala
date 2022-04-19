@@ -1404,52 +1404,54 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
     object Errors {
       val COMMON_SUBSTRING = " has a DEFAULT value"
     }
-    // The default value fails to analyze.
-    withTable("t") {
-      sql("create table t(i boolean) using parquet")
-      assert(intercept[AnalysisException] {
-        sql("alter table t add column s bigint default badvalue")
-      }.getMessage.contains(Errors.COMMON_SUBSTRING))
-    }
-    // The default value analyzes to a table not in the catalog.
-    withTable("t") {
-      sql("create table t(i boolean) using parquet")
-      assert(intercept[AnalysisException] {
-        sql("alter table t add column s bigint default (select min(x) from badtable)")
-      }.getMessage.contains(Errors.COMMON_SUBSTRING))
-    }
-    // The default value parses but refers to a table from the catalog.
-    withTable("t", "other") {
-      sql("create table other(x string) using parquet")
-      sql("create table t(i boolean) using parquet")
-      assert(intercept[AnalysisException] {
-        sql("alter table t add column s bigint default (select min(x) from other)")
-      }.getMessage.contains(Errors.COMMON_SUBSTRING))
-    }
-    // The default value parses but the type is not coercible.
-    withTable("t") {
-      sql("create table t(i boolean) using parquet")
-      assert(intercept[AnalysisException] {
-        sql("alter table t add column s bigint default false")
-      }.getMessage.contains("provided a value of incompatible type"))
-    }
-    // The default value is disabled per configuration.
-    withTable("t") {
-      withSQLConf(SQLConf.ENABLE_DEFAULT_COLUMNS.key -> "false") {
+    withSQLConf(SQLConf.USE_NULLS_FOR_MISSING_DEFAULT_COLUMN_VALUES.key -> "false") {
+      // The default value fails to analyze.
+      withTable("t") {
         sql("create table t(i boolean) using parquet")
         assert(intercept[AnalysisException] {
-          sql("alter table t add column s bigint default 42L")
-        }.getMessage.contains("Support for DEFAULT column values is not allowed"))
+          sql("alter table t add column s bigint default badvalue")
+        }.getMessage.contains(Errors.COMMON_SUBSTRING))
       }
-    }
-    // There is one trailing default value referenced implicitly by the INSERT INTO statement.
-    withTable("t") {
-      sql("create table t(i int) using parquet")
-      sql("alter table t add column s bigint default 42")
-      sql("alter table t add column x bigint")
-      assert(intercept[AnalysisException] {
-        sql("insert into t values(1)")
-      }.getMessage.contains("expected 3 columns but found"))
+      // The default value analyzes to a table not in the catalog.
+      withTable("t") {
+        sql("create table t(i boolean) using parquet")
+        assert(intercept[AnalysisException] {
+          sql("alter table t add column s bigint default (select min(x) from badtable)")
+        }.getMessage.contains(Errors.COMMON_SUBSTRING))
+      }
+      // The default value parses but refers to a table from the catalog.
+      withTable("t", "other") {
+        sql("create table other(x string) using parquet")
+        sql("create table t(i boolean) using parquet")
+        assert(intercept[AnalysisException] {
+          sql("alter table t add column s bigint default (select min(x) from other)")
+        }.getMessage.contains(Errors.COMMON_SUBSTRING))
+      }
+      // The default value parses but the type is not coercible.
+      withTable("t") {
+        sql("create table t(i boolean) using parquet")
+        assert(intercept[AnalysisException] {
+          sql("alter table t add column s bigint default false")
+        }.getMessage.contains("provided a value of incompatible type"))
+      }
+      // The default value is disabled per configuration.
+      withTable("t") {
+        withSQLConf(SQLConf.ENABLE_DEFAULT_COLUMNS.key -> "false") {
+          sql("create table t(i boolean) using parquet")
+          assert(intercept[AnalysisException] {
+            sql("alter table t add column s bigint default 42L")
+          }.getMessage.contains("Support for DEFAULT column values is not allowed"))
+        }
+      }
+      // There is one trailing default value referenced implicitly by the INSERT INTO statement.
+      withTable("t") {
+        sql("create table t(i int) using parquet")
+        sql("alter table t add column s bigint default 42")
+        sql("alter table t add column x bigint")
+        assert(intercept[AnalysisException] {
+          sql("insert into t values(1)")
+        }.getMessage.contains("expected 3 columns but found"))
+      }
     }
   }
 
