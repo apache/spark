@@ -453,7 +453,7 @@ class TimestampFormatterSuite extends DatetimeFormatterSuite {
       val errMsg = intercept[DateTimeException] {
         formatter.parse("x123")
       }.getMessage
-      assert(errMsg.contains("Invalid `timestamp` literal: 'x123'"))
+      assert(errMsg.contains("Invalid input value for type TIMESTAMP: 'x123'"))
     }
   }
 }

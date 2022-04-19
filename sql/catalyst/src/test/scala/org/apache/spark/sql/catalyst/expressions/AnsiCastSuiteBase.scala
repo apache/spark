@@ -175,40 +175,40 @@ abstract class AnsiCastSuiteBase extends CastSuiteBase {
   test("cast from invalid string to numeric should throw NumberFormatException") {
     // cast to IntegerType
     Seq(IntegerType, ShortType, ByteType, LongType).foreach { dataType =>
-      checkExceptionInExpression[NumberFormatException](
-        cast("string", dataType), s"Invalid `${dataType.simpleString}` literal: 'string'")
-      checkExceptionInExpression[NumberFormatException](
-        cast("123-string", dataType), s"Invalid `${dataType.simpleString}` literal: '123-string'")
-      checkExceptionInExpression[NumberFormatException](
-        cast("2020-07-19", dataType), s"Invalid `${dataType.simpleString}` literal: '2020-07-19'")
-      checkExceptionInExpression[NumberFormatException](
-        cast("1.23", dataType), s"Invalid `${dataType.simpleString}` literal: '1.23'")
+      checkExceptionInExpression[NumberFormatException](cast("string", dataType),
+        s"Invalid input value for type ${dataType.sql}: 'string'")
+      checkExceptionInExpression[NumberFormatException](cast("123-string", dataType),
+        s"Invalid input value for type ${dataType.sql}: '123-string'")
+      checkExceptionInExpression[NumberFormatException](cast("2020-07-19", dataType),
+        s"Invalid input value for type ${dataType.sql}: '2020-07-19'")
+      checkExceptionInExpression[NumberFormatException](cast("1.23", dataType),
+        s"Invalid input value for type ${dataType.sql}: '1.23'")
     }
 
     Seq(DoubleType, FloatType).foreach { dataType =>
-      checkExceptionInExpression[NumberFormatException](
-        cast("string", dataType), s"Invalid `${dataType.simpleString}` literal: 'string'")
-      checkExceptionInExpression[NumberFormatException](
-        cast("123.000.00", dataType), s"Invalid `${dataType.simpleString}` literal: '123.000.00'")
-      checkExceptionInExpression[NumberFormatException](
-        cast("abc.com", dataType), s"Invalid `${dataType.simpleString}` literal: 'abc.com'")
+      checkExceptionInExpression[NumberFormatException](cast("string", dataType),
+        s"Invalid input value for type ${dataType.sql}: 'string'")
+      checkExceptionInExpression[NumberFormatException](cast("123.000.00", dataType),
+        s"Invalid input value for type ${dataType.sql}: '123.000.00'")
+      checkExceptionInExpression[NumberFormatException](cast("abc.com", dataType),
+        s"Invalid input value for type ${dataType.sql}: 'abc.com'")
     }
 
     checkExceptionInExpression[NumberFormatException](
       cast("string", DecimalType.USER_DEFAULT),
-      s"Invalid `${DecimalType.simpleString}` literal: 'string'")
+      s"Invalid input value for type ${DecimalType.simpleString}: 'string'")
     checkExceptionInExpression[NumberFormatException](
       cast("123.000.00", DecimalType.USER_DEFAULT),
-      s"Invalid `${DecimalType.simpleString}` literal: '123.000.00'")
+      s"Invalid input value for type ${DecimalType.simpleString}: '123.000.00'")
     checkExceptionInExpression[NumberFormatException](
       cast("abc.com", DecimalType.USER_DEFAULT),
-      s"Invalid `${DecimalType.simpleString}` literal: 'abc.com'")
+      s"Invalid input value for type ${DecimalType.simpleString}: 'abc.com'")
   }
 
   protected def checkCastToNumericError(l: Literal, to: DataType,
       expectedDataTypeInErrorMsg: DataType, tryCastResult: Any): Unit = {
     checkExceptionInExpression[NumberFormatException](
-      cast(l, to), s"Invalid `${expectedDataTypeInErrorMsg.simpleString}` literal: 'true'")
+      cast(l, to), s"Invalid input value for type ${expectedDataTypeInErrorMsg.sql}: 'true'")
   }
 
   test("cast from invalid string array to numeric array should throw NumberFormatException") {
@@ -255,7 +255,7 @@ abstract class AnsiCastSuiteBase extends CastSuiteBase {
 
     checkExceptionInExpression[NumberFormatException](
       cast("abcd", DecimalType(38, 1)),
-      s"Invalid `${DecimalType.simpleString}` literal: 'abcd'")
+      s"Invalid input value for type ${DecimalType.simpleString}: 'abcd'")
   }
 
   protected def checkCastToBooleanError(l: Literal, to: DataType, tryCastResult: Any): Unit = {
@@ -270,7 +270,7 @@ abstract class AnsiCastSuiteBase extends CastSuiteBase {
 
   protected def checkCastToTimestampError(l: Literal, to: DataType): Unit = {
     checkExceptionInExpression[DateTimeException](
-      cast(l, to), s"Invalid `timestamp` literal: ${toSQLValue(l)}")
+      cast(l, to), s"Invalid input value for type TIMESTAMP: ${toSQLValue(l)}")
   }
 
   test("cast from timestamp II") {
@@ -381,7 +381,7 @@ abstract class AnsiCastSuiteBase extends CastSuiteBase {
       assert(ret.resolved == !isTryCast)
       if (!isTryCast) {
         checkExceptionInExpression[NumberFormatException](
-          ret, s"Invalid `${IntegerType.simpleString}` literal:")
+          ret, s"Invalid input value for type ${IntegerType.sql}")
       }
     }
 
@@ -399,7 +399,7 @@ abstract class AnsiCastSuiteBase extends CastSuiteBase {
       assert(ret.resolved == !isTryCast)
       if (!isTryCast) {
         checkExceptionInExpression[NumberFormatException](
-          ret, s"Invalid `${IntegerType.simpleString}` literal:")
+          ret, s"Invalid input value for type ${IntegerType.sql}")
       }
     }
   }
@@ -524,7 +524,7 @@ abstract class AnsiCastSuiteBase extends CastSuiteBase {
     assert(ret.resolved === !isTryCast)
     if (!isTryCast) {
       checkExceptionInExpression[NumberFormatException](
-        ret, s"Invalid `${IntegerType.simpleString}` literal:")
+        ret, s"Invalid input value for type ${IntegerType.sql}")
     }
   }
 
@@ -533,7 +533,7 @@ abstract class AnsiCastSuiteBase extends CastSuiteBase {
       def checkCastWithParseError(str: String): Unit = {
         checkExceptionInExpression[DateTimeException](
           cast(Literal(str), TimestampType, Option(zid.getId)),
-          s"Invalid `timestamp` literal: '$str'")
+          s"Invalid input value for type TIMESTAMP: '$str'")
       }
 
       checkCastWithParseError("123")
@@ -554,7 +554,7 @@ abstract class AnsiCastSuiteBase extends CastSuiteBase {
       def checkCastWithParseError(str: String): Unit = {
         checkExceptionInExpression[DateTimeException](
           cast(Literal(str), DateType, Option(zid.getId)),
-          s"Invalid `date` literal: '$str'")
+          s"Invalid input value for type DATE: '$str'")
       }
 
       checkCastWithParseError("2015-13-18")
@@ -582,7 +582,7 @@ abstract class AnsiCastSuiteBase extends CastSuiteBase {
       "2021-06-17 00:00:00ABC").foreach { invalidInput =>
       checkExceptionInExpression[DateTimeException](
         cast(invalidInput, TimestampNTZType),
-        s"Invalid `timestamp_ntz` literal: '$invalidInput'")
+        s"Invalid input value for type TIMESTAMP_NTZ: '$invalidInput'")
     }
   }
 }

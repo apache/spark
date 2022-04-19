@@ -1937,7 +1937,6 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
       case StringType =>
         val doubleStr = ctx.freshVariable("doubleStr", StringType)
         (c, evPrim, evNull) =>
-          val dt = ctx.addReferenceObj("doubleType", DoubleType, DoubleType.getClass.getName)
           val handleNull = if (ansiEnabled) {
             val errorContext = ctx.addReferenceObj("errCtx", origin.context)
             s"throw QueryExecutionErrors.invalidInputSyntaxForNumericError(" +

@@ -208,6 +208,6 @@ class DateFormatterSuite extends DatetimeFormatterSuite {
     val errMsg = intercept[DateTimeException] {
       formatter.parse("x123")
     }.getMessage
-    assert(errMsg.contains("Invalid `date` literal: 'x123'"))
+    assert(errMsg.contains("Invalid input value for type DATE: 'x123'"))
   }
 }

@@ -314,7 +314,7 @@ trait SQLInsertTestSuite extends QueryTest with SQLTestUtils {
             val errorMsg = intercept[NumberFormatException] {
               sql("insert into t partition(a='ansi') values('ansi')")
             }.getMessage
-            assert(errorMsg.contains("Invalid `int` literal: 'ansi'"))
+            assert(errorMsg.contains("Invalid input value for type INT: 'ansi'"))
           } else {
             sql("insert into t partition(a='ansi') values('ansi')")
             checkAnswer(sql("select * from t"), Row("ansi", null) :: Nil)
