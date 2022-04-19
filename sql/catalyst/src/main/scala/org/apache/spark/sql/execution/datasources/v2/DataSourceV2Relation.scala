@@ -80,7 +80,7 @@ case class DataSourceV2Relation(
         s"BUG: computeStats called before pushdown on DSv2 relation: $name")
     } else {
       // when not testing, return stats because bad stats are better than failing a query
-      table.asReadable.newScanBuilder(options) match {
+      table.asReadable.newScanBuilder(options).build() match {
         case r: SupportsReportStatistics =>
           val statistics = r.estimateStatistics()
           DataSourceV2Relation.transformV2Stats(statistics, None, conf.defaultSizeInBytes)
