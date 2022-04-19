@@ -86,7 +86,7 @@ case class StructField(
   }
 
   /**
-   * Updates the StructField with a new current default value string, or removes it if empty.
+   * Updates the StructField with a new default value string, or removes it if empty.
    */
   def withDefaultValue(defaultType: DefaultType.Value, value: String): StructField = {
     val key = DefaultType.key(defaultType)
@@ -102,9 +102,9 @@ case class StructField(
   }
 
   /**
-   * Returns the current default value string of this StructField.
+   * Returns the default value string of this StructField.
    */
-  def getCurrentDefaultValue(defaultType: DefaultType.Value): Option[String] = {
+  def getDefaultValue(defaultType: DefaultType.Value): Option[String] = {
     val key = DefaultType.key(defaultType)
     if (metadata.contains(key)) {
       Option(metadata.getString(key))

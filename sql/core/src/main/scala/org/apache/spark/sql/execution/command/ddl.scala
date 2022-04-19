@@ -357,7 +357,7 @@ case class AlterTableChangeColumnCommand(
         val updated = addComment(field, newColumn.getComment)
         // Create a new column from the origin column with the new current default value.
         addCurrentDefaultValue(
-          updated, newColumn.getCurrentDefaultValue(DefaultType.CURRENT_DEFAULT))
+          updated, newColumn.getDefaultValue(DefaultType.CURRENT_DEFAULT))
       } else {
         field
       }
