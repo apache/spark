@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, CTERelationDef, CTERelationRef, Filter, Join, LogicalPlan, Project, Subquery, WithCTE}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.{SCALAR_SUBQUERY, SCALAR_SUBQUERY_REFERENCE, TreePattern}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.DataType
 
 /**
@@ -71,22 +72,47 @@ import org.apache.spark.sql.types.DataType
  *
  * to:
  *
- * WithCTE
- * :- CTERelationDef 0
+ * == Optimized Logical Plan ==
+ * Project [scalar-subquery#242 [].avg(a) AS scalarsubquery()#253,
+ *          scalar-subquery#243 [].sum(a) AS scalarsubquery()#254L]
+ * :  :- Project [named_struct(avg(a), avg(a)#247, sum(a), sum(a)#250L) AS mergedValue#260]
+ * :  :  +- Aggregate [avg(a#244) AS avg(a)#247, sum(a#244) AS sum(a)#250L]
+ * :  :     +- Project [a#244]
+ * :  :        +- Relation default.t[a#244,b#245] parquet
  * :  +- Project [named_struct(avg(a), avg(a)#247, sum(a), sum(a)#250L) AS mergedValue#260]
  * :     +- Aggregate [avg(a#244) AS avg(a)#247, sum(a#244) AS sum(a)#250L]
  * :        +- Project [a#244]
  * :           +- Relation default.t[a#244,b#245] parquet
- * +- Project [scalar-subquery#242 [].avg(a) AS scalarsubquery()#253,
- *             scalar-subquery#243 [].sum(a) AS scalarsubquery()#254L]
- *    :  :- CTERelationRef 0, true, [mergedValue#260], true
- *    :  +- CTERelationRef 0, true, [mergedValue#260], true
- *    +- OneRowRelation
+ * +- OneRowRelation
+ *
+ * == Physical Plan ==
+ *  *(1) Project [Subquery scalar-subquery#242, [id=#125].avg(a) AS scalarsubquery()#253,
+ *                ReusedSubquery
+ *                  Subquery scalar-subquery#242, [id=#125].sum(a) AS scalarsubquery()#254L]
+ * :  :- Subquery scalar-subquery#242, [id=#125]
+ * :  :  +- *(2) Project [named_struct(avg(a), avg(a)#247, sum(a), sum(a)#250L) AS mergedValue#260]
+ * :  :     +- *(2) HashAggregate(keys=[], functions=[avg(a#244), sum(a#244)],
+ *                                output=[avg(a)#247, sum(a)#250L])
+ * :  :        +- Exchange SinglePartition, ENSURE_REQUIREMENTS, [id=#120]
+ * :  :           +- *(1) HashAggregate(keys=[], functions=[partial_avg(a#244), partial_sum(a#244)],
+ *                                      output=[sum#262, count#263L, sum#264L])
+ * :  :              +- *(1) ColumnarToRow
+ * :  :                 +- FileScan parquet default.t[a#244] ...
+ * :  +- ReusedSubquery Subquery scalar-subquery#242, [id=#125]
+ * +- *(1) Scan OneRowRelation[]
  */
 object MergeScalarSubqueries extends Rule[LogicalPlan] with PredicateHelper {
   def apply(plan: LogicalPlan): LogicalPlan = {
     plan match {
-      case s: Subquery => s.copy(child = extractCommonScalarSubqueries(s.child))
+      // Subquery reuse needs to be enabled for this optimization.
+      case _ if !conf.getConf(SQLConf.SUBQUERY_REUSE_ENABLED) => plan
+
+      // This rule does a whole plan traversal, no need to run on subqueries.
+      case _: Subquery => plan
+
+      // Plans with CTEs are not supported for now.
+      case _: WithCTE => plan
+
       case _ => extractCommonScalarSubqueries(plan)
     }
   }
@@ -116,10 +142,12 @@ object MergeScalarSubqueries extends Rule[LogicalPlan] with PredicateHelper {
 
   // First traversal builds up the cache and inserts `ScalarSubqueryReference`s to the plan.
   private def insertReferences(plan: LogicalPlan, cache: ListBuffer[Header]): LogicalPlan = {
-    plan.transformAllExpressionsWithPruning(_.containsAnyPattern(SCALAR_SUBQUERY)) {
-      case s: ScalarSubquery if !s.isCorrelated && s.deterministic =>
-        val (subqueryIndex, headerIndex) = cacheSubquery(s.plan, cache)
-        ScalarSubqueryReference(subqueryIndex, headerIndex, s.dataType, s.exprId)
+    plan.transformWithSubqueries {
+      case n => n.transformExpressionsWithPruning(_.containsAnyPattern(SCALAR_SUBQUERY)) {
+        case s: ScalarSubquery if !s.isCorrelated && s.deterministic =>
+          val (subqueryIndex, headerIndex) = cacheSubquery(insertReferences(s.plan, cache), cache)
+          ScalarSubqueryReference(subqueryIndex, headerIndex, s.dataType, s.exprId)
+      }
     }
   }
 
@@ -313,22 +341,26 @@ object MergeScalarSubqueries extends Rule[LogicalPlan] with PredicateHelper {
       plan: LogicalPlan,
       cache: ListBuffer[Header]): (LogicalPlan, Seq[CTERelationDef]) = {
     val subqueryCTEs = mutable.Map.empty[Int, CTERelationDef]
-    val newPlan =
-      plan.transformAllExpressionsWithPruning(_.containsAnyPattern(SCALAR_SUBQUERY_REFERENCE)) {
-        case ssr: ScalarSubqueryReference =>
-          val header = cache(ssr.subqueryIndex)
-          if (header.merged) {
-            val subqueryCTE = subqueryCTEs.getOrElseUpdate(ssr.subqueryIndex,
-              CTERelationDef(createProject(header.attributes, header.plan)))
-            GetStructField(
-              ScalarSubquery(
-                CTERelationRef(subqueryCTE.id, _resolved = true, subqueryCTE.output,
-                  mergedScalarSubquery = true),
-                exprId = ssr.exprId),
-              ssr.headerIndex)
-          } else {
-            ScalarSubquery(plan = header.plan, exprId = ssr.exprId)
-          }
+    val newPlan = plan.transformWithSubqueries {
+      case n =>
+        n.transformExpressionsWithPruning(_.containsAnyPattern(SCALAR_SUBQUERY_REFERENCE)) {
+          case ssr: ScalarSubqueryReference =>
+            val header = cache(ssr.subqueryIndex)
+            if (header.merged) {
+              val subqueryCTE = subqueryCTEs.getOrElseUpdate(
+                ssr.subqueryIndex,
+                CTERelationDef(
+                  createProject(header.attributes, header.plan),
+                  mergedScalarSubquery = true))
+              GetStructField(
+                ScalarSubquery(
+                  CTERelationRef(subqueryCTE.id, _resolved = true, subqueryCTE.output),
+                  exprId = ssr.exprId),
+                ssr.headerIndex)
+            } else {
+              ScalarSubquery(plan = header.plan, exprId = ssr.exprId)
+            }
+        }
     }
     (newPlan, subqueryCTEs.values.toSeq)
   }

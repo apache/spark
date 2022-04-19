@@ -663,11 +663,13 @@ case class UnresolvedWith(
  *                                   predicates that have been pushed down into `child`. This is
  *                                   a temporary field used by optimization rules for CTE predicate
  *                                   pushdown to help ensure rule idempotency.
+ * @param mergedScalarSubquery If this definition is a merged scalar subquery.
  */
 case class CTERelationDef(
     child: LogicalPlan,
     id: Long = CTERelationDef.newId,
-    originalPlanWithPredicates: Option[(LogicalPlan, Seq[Expression])] = None) extends UnaryNode {
+    originalPlanWithPredicates: Option[(LogicalPlan, Seq[Expression])] = None,
+    mergedScalarSubquery: Boolean = false) extends UnaryNode {
 
   final override val nodePatterns: Seq[TreePattern] = Seq(CTE)
 
@@ -691,14 +693,12 @@ object CTERelationDef {
  *                             de-duplication.
  * @param statsOpt             The optional statistics inferred from the corresponding CTE
  *                             definition.
- * @param mergedScalarSubquery If this reference points to a merged scalar subquery.
  */
 case class CTERelationRef(
     cteId: Long,
     _resolved: Boolean,
     override val output: Seq[Attribute],
-    statsOpt: Option[Statistics] = None,
-    mergedScalarSubquery: Boolean = false) extends LeafNode with MultiInstanceRelation {
+    statsOpt: Option[Statistics] = None) extends LeafNode with MultiInstanceRelation {
 
   final override val nodePatterns: Seq[TreePattern] = Seq(CTE)
 

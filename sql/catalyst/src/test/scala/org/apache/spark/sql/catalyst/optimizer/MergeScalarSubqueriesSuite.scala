@@ -37,11 +37,13 @@ class MergeScalarSubqueriesSuite extends PlanTest {
 
   val testRelation = LocalRelation('a.int, 'b.int, 'c.string)
 
+  private def definitionNode(plan: LogicalPlan, cteIndex: Int) = {
+    CTERelationDef(plan, cteIndex, mergedScalarSubquery = true)
+  }
+
   private def extractorExpression(cteIndex: Int, output: Seq[Attribute], fieldIndex: Int) = {
-    GetStructField(
-      ScalarSubquery(
-        CTERelationRef(cteIndex, _resolved = true, output, mergedScalarSubquery = true)),
-      fieldIndex).as("scalarsubquery()")
+    GetStructField(ScalarSubquery(CTERelationRef(cteIndex, _resolved = true, output)), fieldIndex)
+      .as("scalarsubquery()")
   }
 
   test("Merging subqueries with projects") {
@@ -81,7 +83,7 @@ class MergeScalarSubqueriesSuite extends PlanTest {
           extractorExpression(0, analyzedMergedSubquery.output, 0),
           extractorExpression(0, analyzedMergedSubquery.output, 1),
           extractorExpression(0, analyzedMergedSubquery.output, 2)),
-      Seq(CTERelationDef(analyzedMergedSubquery, 0)))
+      Seq(definitionNode(analyzedMergedSubquery, 0)))
 
     comparePlans(Optimize.execute(originalQuery.analyze), correctAnswer.analyze)
   }
@@ -122,7 +124,7 @@ class MergeScalarSubqueriesSuite extends PlanTest {
           extractorExpression(0, analyzedMergedSubquery.output, 0),
           extractorExpression(0, analyzedMergedSubquery.output, 1),
           extractorExpression(0, analyzedMergedSubquery.output, 2)),
-      Seq(CTERelationDef(analyzedMergedSubquery, 0)))
+      Seq(definitionNode(analyzedMergedSubquery, 0)))
 
     comparePlans(Optimize.execute(originalQuery.analyze), correctAnswer.analyze)
   }
@@ -154,7 +156,7 @@ class MergeScalarSubqueriesSuite extends PlanTest {
         .select(
           extractorExpression(0, analyzedMergedSubquery.output, 0),
           extractorExpression(0, analyzedMergedSubquery.output, 1)),
-      Seq(CTERelationDef(analyzedMergedSubquery, 0)))
+      Seq(definitionNode(analyzedMergedSubquery, 0)))
 
     comparePlans(Optimize.execute(originalQuery.analyze), correctAnswer.analyze)
   }
@@ -183,7 +185,7 @@ class MergeScalarSubqueriesSuite extends PlanTest {
         .select(
           extractorExpression(0, analyzedHashAggregates.output, 0),
           extractorExpression(0, analyzedHashAggregates.output, 1)),
-      Seq(CTERelationDef(analyzedHashAggregates, 0)))
+      Seq(definitionNode(analyzedHashAggregates, 0)))
 
     comparePlans(Optimize.execute(originalQuery.analyze), correctAnswer.analyze)
   }
@@ -221,7 +223,7 @@ class MergeScalarSubqueriesSuite extends PlanTest {
           extractorExpression(0, analyzedMergedSubquery.output, 1),
           extractorExpression(0, analyzedMergedSubquery.output, 0),
           extractorExpression(0, analyzedMergedSubquery.output, 1)),
-      Seq(CTERelationDef(analyzedMergedSubquery, 0)))
+      Seq(definitionNode(analyzedMergedSubquery, 0)))
 
     comparePlans(Optimize.execute(originalQuery.analyze), correctAnswer.analyze)
   }
@@ -252,7 +254,7 @@ class MergeScalarSubqueriesSuite extends PlanTest {
         .select(
           extractorExpression(0, analyzedMergedSubquery.output, 0),
           extractorExpression(0, analyzedMergedSubquery.output, 1)),
-      Seq(CTERelationDef(analyzedMergedSubquery, 0)))
+      Seq(definitionNode(analyzedMergedSubquery, 0)))
 
     comparePlans(Optimize.execute(originalQuery.analyze), correctAnswer.analyze)
   }
@@ -295,7 +297,7 @@ class MergeScalarSubqueriesSuite extends PlanTest {
         .select(
           extractorExpression(0, analyzedMergedSubquery.output, 0),
           extractorExpression(0, analyzedMergedSubquery.output, 1)),
-      Seq(CTERelationDef(analyzedMergedSubquery, 0)))
+      Seq(definitionNode(analyzedMergedSubquery, 0)))
 
     comparePlans(Optimize.execute(originalQuery.analyze), correctAnswer.analyze)
   }
@@ -335,7 +337,7 @@ class MergeScalarSubqueriesSuite extends PlanTest {
         .select(
           extractorExpression(0, analyzedMergedSubquery.output, 0),
           extractorExpression(0, analyzedMergedSubquery.output, 1)),
-      Seq(CTERelationDef(analyzedMergedSubquery, 0)))
+      Seq(definitionNode(analyzedMergedSubquery, 0)))
 
     comparePlans(Optimize.execute(originalQuery.analyze), correctAnswer.analyze)
   }
@@ -375,7 +377,7 @@ class MergeScalarSubqueriesSuite extends PlanTest {
         .select(
           extractorExpression(0, analyzedMergedSubquery.output, 0),
           extractorExpression(0, analyzedMergedSubquery.output, 1)),
-      Seq(CTERelationDef(analyzedMergedSubquery, 0)))
+      Seq(definitionNode(analyzedMergedSubquery, 0)))
 
     comparePlans(Optimize.execute(originalQuery.analyze), correctAnswer.analyze)
   }
@@ -510,9 +512,9 @@ class MergeScalarSubqueriesSuite extends PlanTest {
           extractorExpression(2, analyzedSortAggregates.output, 0),
           extractorExpression(2, analyzedSortAggregates.output, 1)),
         Seq(
-          CTERelationDef(analyzedSortAggregates, 2),
-          CTERelationDef(analyzedObjectHashAggregates, 1),
-          CTERelationDef(analyzedHashAggregates, 0)))
+          definitionNode(analyzedSortAggregates, 2),
+          definitionNode(analyzedObjectHashAggregates, 1),
+          definitionNode(analyzedHashAggregates, 0)))
 
     comparePlans(Optimize.execute(originalQuery.analyze), correctAnswer.analyze)
   }
@@ -569,7 +571,7 @@ class MergeScalarSubqueriesSuite extends PlanTest {
           extractorExpression(0, analyzedMergedSubquery.output, 0) +
           extractorExpression(0, analyzedMergedSubquery.output, 1) +
           extractorExpression(0, analyzedMergedSubquery.output, 2) === 0),
-      Seq(CTERelationDef(analyzedMergedSubquery, 0)))
+      Seq(definitionNode(analyzedMergedSubquery, 0)))
 
     comparePlans(Optimize.execute(originalQuery.analyze), correctAnswer.analyze)
   }
