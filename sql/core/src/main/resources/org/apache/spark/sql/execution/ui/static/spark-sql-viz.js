@@ -102,9 +102,23 @@ function preprocessGraphLayout(g) {
     node.label.split(splitter).forEach(function(text, i) {
       var newTexts = text.match(stageAndTaskMetricsPattern);
       if (newTexts) {
-        node.label = node.label.replace(
-            newTexts[0],
-            newTexts[1] + firstSeparator + newTexts[2] + secondSeparator + newTexts[3]);
+         if (newTexts[2].search("stage ") > 0) {
+           var stageString=newTexts[2].split(" ")
+
+           var stage=stageString[1].split(".")[0]
+           var attempt=stageString[1].split(".")[1].split(":")[0]
+           var url = stageString[0]
+           +" <a href=\"/stages/stage/?id=" + stage + "&attempt="+ attempt+ "\">"  + stageString[1]  +" </a>"
+           + stageString[2] + " "
+           + stageString[3]
+           node.label = node.label.replace(
+               newTexts[0],
+               newTexts[1] + firstSeparator + url + secondSeparator + newTexts[3]);
+         } else {
+           node.label = node.label.replace(
+               newTexts[0],
+               newTexts[1] + firstSeparator + newTexts[2] + secondSeparator + newTexts[3]);
+         }
       }
     });
   }
@@ -197,7 +211,7 @@ function postprocessForAdditionalMetrics() {
           var newTexts = originalText.split(labelSeparator);
           var thisD3Node = d3.selectAll($(this));
           thisD3Node.text(newTexts[0]);
-          thisD3Node.append("tspan").attr("class", "stageId-and-taskId-metrics").text(newTexts[1]);
+          thisD3Node.append("tspan").attr("class", "stageId-and-taskId-metrics").html(newTexts[1]);
           $(this).append(newTexts[2]);
         } else {
           return originalText;
