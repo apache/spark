@@ -149,61 +149,61 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
   test("advanced implementation with V2 Filter") {
     Seq(classOf[AdvancedDataSourceV2WithV2Filter], classOf[JavaAdvancedDataSourceV2WithV2Filter])
       .foreach { cls =>
-        withClue(cls.getName) {
-          val df = spark.read.format(cls.getName).load()
-          checkAnswer(df, (0 until 10).map(i => Row(i, -i)))
+      withClue(cls.getName) {
+        val df = spark.read.format(cls.getName).load()
+        checkAnswer(df, (0 until 10).map(i => Row(i, -i)))
 
-          val q1 = df.select($"j")
-          checkAnswer(q1, (0 until 10).map(i => Row(-i)))
-          if (cls == classOf[AdvancedDataSourceV2WithV2Filter]) {
-            val batch = getBatchWithV2Filter(q1)
-            assert(batch.predicates.isEmpty)
-            assert(batch.requiredSchema.fieldNames === Seq("j"))
-          } else {
-            val batch = getJavaBatchWithV2Filter(q1)
-            assert(batch.predicates.isEmpty)
-            assert(batch.requiredSchema.fieldNames === Seq("j"))
-          }
+        val q1 = df.select($"j")
+        checkAnswer(q1, (0 until 10).map(i => Row(-i)))
+        if (cls == classOf[AdvancedDataSourceV2WithV2Filter]) {
+          val batch = getBatchWithV2Filter(q1)
+          assert(batch.predicates.isEmpty)
+          assert(batch.requiredSchema.fieldNames === Seq("j"))
+        } else {
+          val batch = getJavaBatchWithV2Filter(q1)
+          assert(batch.predicates.isEmpty)
+          assert(batch.requiredSchema.fieldNames === Seq("j"))
+        }
 
-          val q2 = df.filter($"i" > 3)
-          checkAnswer(q2, (4 until 10).map(i => Row(i, -i)))
-          if (cls == classOf[AdvancedDataSourceV2WithV2Filter]) {
-            val batch = getBatchWithV2Filter(q2)
-            assert(batch.predicates.flatMap(_.references.map(_.describe)).toSet == Set("i"))
-            assert(batch.requiredSchema.fieldNames === Seq("i", "j"))
-          } else {
-            val batch = getJavaBatchWithV2Filter(q2)
-            assert(batch.predicates.flatMap(_.references.map(_.describe)).toSet == Set("i"))
-            assert(batch.requiredSchema.fieldNames === Seq("i", "j"))
-          }
+        val q2 = df.filter($"i" > 3)
+        checkAnswer(q2, (4 until 10).map(i => Row(i, -i)))
+        if (cls == classOf[AdvancedDataSourceV2WithV2Filter]) {
+          val batch = getBatchWithV2Filter(q2)
+          assert(batch.predicates.flatMap(_.references.map(_.describe)).toSet == Set("i"))
+          assert(batch.requiredSchema.fieldNames === Seq("i", "j"))
+        } else {
+          val batch = getJavaBatchWithV2Filter(q2)
+          assert(batch.predicates.flatMap(_.references.map(_.describe)).toSet == Set("i"))
+          assert(batch.requiredSchema.fieldNames === Seq("i", "j"))
+        }
 
-          val q3 = df.select($"i").filter($"i" > 6)
-          checkAnswer(q3, (7 until 10).map(i => Row(i)))
-          if (cls == classOf[AdvancedDataSourceV2WithV2Filter]) {
-            val batch = getBatchWithV2Filter(q3)
-            assert(batch.predicates.flatMap(_.references.map(_.describe)).toSet == Set("i"))
-            assert(batch.requiredSchema.fieldNames === Seq("i"))
-          } else {
-            val batch = getJavaBatchWithV2Filter(q3)
-            assert(batch.predicates.flatMap(_.references.map(_.describe)).toSet == Set("i"))
-            assert(batch.requiredSchema.fieldNames === Seq("i"))
-          }
+        val q3 = df.select($"i").filter($"i" > 6)
+        checkAnswer(q3, (7 until 10).map(i => Row(i)))
+        if (cls == classOf[AdvancedDataSourceV2WithV2Filter]) {
+          val batch = getBatchWithV2Filter(q3)
+          assert(batch.predicates.flatMap(_.references.map(_.describe)).toSet == Set("i"))
+          assert(batch.requiredSchema.fieldNames === Seq("i"))
+        } else {
+          val batch = getJavaBatchWithV2Filter(q3)
+          assert(batch.predicates.flatMap(_.references.map(_.describe)).toSet == Set("i"))
+          assert(batch.requiredSchema.fieldNames === Seq("i"))
+        }
 
-          val q4 = df.select($"j").filter($"j" < -10)
-          checkAnswer(q4, Nil)
-          if (cls == classOf[AdvancedDataSourceV2WithV2Filter]) {
-            val batch = getBatchWithV2Filter(q4)
-            // $"j" < 10 is not supported by the testing data source.
-            assert(batch.predicates.isEmpty)
-            assert(batch.requiredSchema.fieldNames === Seq("j"))
-          } else {
-            val batch = getJavaBatchWithV2Filter(q4)
-            // $"j" < 10 is not supported by the testing data source.
-            assert(batch.predicates.isEmpty)
-            assert(batch.requiredSchema.fieldNames === Seq("j"))
-          }
+        val q4 = df.select($"j").filter($"j" < -10)
+        checkAnswer(q4, Nil)
+        if (cls == classOf[AdvancedDataSourceV2WithV2Filter]) {
+          val batch = getBatchWithV2Filter(q4)
+          // $"j" < 10 is not supported by the testing data source.
+          assert(batch.predicates.isEmpty)
+          assert(batch.requiredSchema.fieldNames === Seq("j"))
+        } else {
+          val batch = getJavaBatchWithV2Filter(q4)
+          // $"j" < 10 is not supported by the testing data source.
+          assert(batch.predicates.isEmpty)
+          assert(batch.requiredSchema.fieldNames === Seq("j"))
         }
       }
+    }
   }
 
   test("columnar batch scan implementation") {
@@ -239,9 +239,9 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
       spark.range(10).select($"id" as Symbol("i"), -$"id" as Symbol("j"))
         .write.format(cls).option("path", dir.getCanonicalPath).mode("append").save()
       val schema = new StructType().add("i", "long").add("j", "long")
-      checkAnswer(
-        spark.read.format(cls).option("path", dir.getCanonicalPath).schema(schema).load(),
-        spark.range(10).select($"id", -$"id"))
+        checkAnswer(
+          spark.read.format(cls).option("path", dir.getCanonicalPath).schema(schema).load(),
+          spark.range(10).select($"id", -$"id"))
     }
   }
 
