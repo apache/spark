@@ -132,9 +132,10 @@ object MergeScalarSubqueries extends Rule[LogicalPlan] with PredicateHelper {
 
   private def extractCommonScalarSubqueries(plan: LogicalPlan) = {
     val cache = ListBuffer.empty[Header]
-    val (newPlan, subqueryCTEs) = removeReferences(insertReferences(plan, cache), cache)
+    val subqueryCTEs = mutable.Map.empty[Int, CTERelationDef]
+    val newPlan = removeReferences(insertReferences(plan, cache), cache, subqueryCTEs)
     if (subqueryCTEs.nonEmpty) {
-      WithCTE(newPlan, subqueryCTEs)
+      WithCTE(newPlan, subqueryCTEs.values.toSeq.sortBy(_.id))
     } else {
       newPlan
     }
@@ -142,10 +143,10 @@ object MergeScalarSubqueries extends Rule[LogicalPlan] with PredicateHelper {
 
   // First traversal builds up the cache and inserts `ScalarSubqueryReference`s to the plan.
   private def insertReferences(plan: LogicalPlan, cache: ListBuffer[Header]): LogicalPlan = {
-    plan.transformWithSubqueries {
-      case n => n.transformExpressionsWithPruning(_.containsAnyPattern(SCALAR_SUBQUERY)) {
+    plan.transformUpWithSubqueries {
+      case n => n.transformExpressionsUpWithPruning(_.containsAnyPattern(SCALAR_SUBQUERY)) {
         case s: ScalarSubquery if !s.isCorrelated && s.deterministic =>
-          val (subqueryIndex, headerIndex) = cacheSubquery(insertReferences(s.plan, cache), cache)
+          val (subqueryIndex, headerIndex) = cacheSubquery(s.plan, cache)
           ScalarSubqueryReference(subqueryIndex, headerIndex, s.dataType, s.exprId)
       }
     }
@@ -224,7 +225,7 @@ object MergeScalarSubqueries extends Rule[LogicalPlan] with PredicateHelper {
           tryMergePlans(np.child, cp.child).flatMap { case (mergedChild, outputMap) =>
             val mappedNewGroupingExpression =
               np.groupingExpressions.map(mapAttributes(_, outputMap))
-            // Order of grouping expression doesn't matter so we can compare sets
+            // Order of grouping expression does matter
             if (mappedNewGroupingExpression.map(_.canonicalized) ==
               cp.groupingExpressions.map(_.canonicalized)) {
               val (mergedAggregateExpressions, newOutputMap) =
@@ -339,9 +340,9 @@ object MergeScalarSubqueries extends Rule[LogicalPlan] with PredicateHelper {
   // multiple subqueries or `ScalarSubquery(original plan)` if it isn't.
   private def removeReferences(
       plan: LogicalPlan,
-      cache: ListBuffer[Header]): (LogicalPlan, Seq[CTERelationDef]) = {
-    val subqueryCTEs = mutable.Map.empty[Int, CTERelationDef]
-    val newPlan = plan.transformWithSubqueries {
+      cache: ListBuffer[Header],
+      subqueryCTEs: mutable.Map[Int, CTERelationDef]): LogicalPlan = {
+    plan.transformUpWithSubqueries {
       case n =>
         n.transformExpressionsWithPruning(_.containsAnyPattern(SCALAR_SUBQUERY_REFERENCE)) {
           case ssr: ScalarSubqueryReference =>
@@ -350,7 +351,8 @@ object MergeScalarSubqueries extends Rule[LogicalPlan] with PredicateHelper {
               val subqueryCTE = subqueryCTEs.getOrElseUpdate(
                 ssr.subqueryIndex,
                 CTERelationDef(
-                  createProject(header.attributes, header.plan),
+                  createProject(header.attributes,
+                    removeReferences(header.plan, cache, subqueryCTEs)),
                   mergedScalarSubquery = true))
               GetStructField(
                 ScalarSubquery(
@@ -362,7 +364,6 @@ object MergeScalarSubqueries extends Rule[LogicalPlan] with PredicateHelper {
             }
         }
     }
-    (newPlan, subqueryCTEs.values.toSeq)
   }
 }
 
