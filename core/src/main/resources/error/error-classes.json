@@ -105,10 +105,6 @@
     "message" : [ "The fraction of sec must be zero. Valid range is [0, 60]. If necessary set %s to false to bypass this error. " ],
     "sqlState" : "22023"
   },
-  "INVALID_INPUT_SYNTAX_FOR_NUMERIC_TYPE" : {
-    "message" : [ "invalid input syntax for type numeric: %s. To return NULL instead, use 'try_cast'. If necessary set %s to false to bypass this error.%s" ],
-    "sqlState" : "42000"
-  },
   "INVALID_JSON_SCHEMA_MAPTYPE" : {
     "message" : [ "Input schema %s can only contain StringType as a key type for a MapType." ]
   },
@@ -121,6 +117,10 @@
   },
   "INVALID_SQL_SYNTAX" : {
     "message" : [ "Invalid SQL syntax: %s" ],
+    "sqlState" : "42000"
+  },
+  "INVALID_SYNTAX_FOR_CAST" : {
+    "message" : [ "Invalid input syntax for type %s: %s. To return NULL instead, use 'try_cast'. If necessary set %s to false to bypass this error.%s" ],
     "sqlState" : "42000"
   },
   "MAP_KEY_DOES_NOT_EXIST" : {

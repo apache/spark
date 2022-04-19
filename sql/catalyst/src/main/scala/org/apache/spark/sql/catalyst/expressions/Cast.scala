@@ -816,7 +816,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
       })
     case StringType if ansiEnabled =>
       buildCast[UTF8String](_,
-        s => changePrecision(Decimal.fromStringANSI(s, origin.context), target))
+        s => changePrecision(Decimal.fromStringANSI(s, target, origin.context), target))
     case BooleanType =>
       buildCast[Boolean](_, b => toPrecision(if (b) Decimal.ONE else Decimal.ZERO, target))
     case DateType =>
@@ -845,7 +845,8 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
           case _: NumberFormatException =>
             val d = Cast.processFloatingPointSpecialLiterals(doubleStr, false)
             if(ansiEnabled && d == null) {
-              throw QueryExecutionErrors.invalidInputSyntaxForNumericError(s, origin.context)
+              throw QueryExecutionErrors.invalidInputSyntaxForNumericError(
+                DoubleType, s, origin.context)
             } else {
               d
             }
@@ -870,7 +871,8 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
           case _: NumberFormatException =>
             val f = Cast.processFloatingPointSpecialLiterals(floatStr, true)
             if (ansiEnabled && f == null) {
-              throw QueryExecutionErrors.invalidInputSyntaxForNumericError(s, origin.context)
+              throw QueryExecutionErrors.invalidInputSyntaxForNumericError(
+                FloatType, s, origin.context)
             } else {
               f
             }
@@ -1376,9 +1378,10 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
           """
       case StringType if ansiEnabled =>
         val errorContext = ctx.addReferenceObj("errCtx", origin.context)
+        val toType = ctx.addReferenceObj("toType", target)
         (c, evPrim, evNull) =>
           code"""
-              Decimal $tmp = Decimal.fromStringANSI($c, $errorContext);
+              Decimal $tmp = Decimal.fromStringANSI($c, $toType, $errorContext);
               ${changePrecision(tmp, target, evPrim, evNull, canNullSafeCast, ctx)}
           """
       case BooleanType =>
@@ -1899,7 +1902,8 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
         (c, evPrim, evNull) =>
           val handleNull = if (ansiEnabled) {
             val errorContext = ctx.addReferenceObj("errCtx", origin.context)
-            s"throw QueryExecutionErrors.invalidInputSyntaxForNumericError($c, $errorContext);"
+            s"throw QueryExecutionErrors.invalidInputSyntaxForNumericError(" +
+              s"org.apache.spark.sql.types.FloatType$$.MODULE$$,$c, $errorContext);"
           } else {
             s"$evNull = true;"
           }
@@ -1936,7 +1940,8 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
         (c, evPrim, evNull) =>
           val handleNull = if (ansiEnabled) {
             val errorContext = ctx.addReferenceObj("errCtx", origin.context)
-            s"throw QueryExecutionErrors.invalidInputSyntaxForNumericError($c, $errorContext);"
+            s"throw QueryExecutionErrors.invalidInputSyntaxForNumericError(" +
+              s"org.apache.spark.sql.types.DoubleType$$.MODULE$$, $c, $errorContext);"
           } else {
             s"$evNull = true;"
           }
