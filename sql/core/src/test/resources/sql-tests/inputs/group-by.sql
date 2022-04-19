@@ -270,6 +270,12 @@ SELECT regr_avgx(y, x), regr_avgy(y, x) FROM testRegression WHERE x IS NOT NULL 
 SELECT k, avg(x), avg(y), regr_avgx(y, x), regr_avgy(y, x) FROM testRegression GROUP BY k;
 SELECT k, avg(x) FILTER (WHERE x IS NOT NULL AND y IS NOT NULL), avg(y) FILTER (WHERE x IS NOT NULL AND y IS NOT NULL), regr_avgx(y, x), regr_avgy(y, x) FROM testRegression GROUP BY k;
 
+-- SPARK-37672: Support ANSI Aggregate Function: regr_sxx
+SELECT regr_sxx(y, x) FROM testRegression;
+SELECT regr_sxx(y, x) FROM testRegression WHERE x IS NOT NULL AND y IS NOT NULL;
+SELECT k, regr_sxx(y, x) FROM testRegression GROUP BY k;
+SELECT k, regr_sxx(y, x) FROM testRegression WHERE x IS NOT NULL AND y IS NOT NULL GROUP BY k;
+
 -- SPARK-37676: Support ANSI Aggregation Function: percentile_cont
 SELECT
  percentile_cont(0.25) WITHIN GROUP (ORDER BY v),

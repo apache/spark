@@ -99,13 +99,6 @@ class ErrorParserSuite extends AnalysisTest {
       "Syntax error at or near", "^^^")
   }
 
-  test("empty input") {
-    val expectedErrMsg = SparkThrowableHelper.getMessage("PARSE_EMPTY_STATEMENT", Array[String]())
-    intercept("", Some("PARSE_EMPTY_STATEMENT"), expectedErrMsg)
-    intercept("   ", Some("PARSE_EMPTY_STATEMENT"), expectedErrMsg)
-    intercept(" \n", Some("PARSE_EMPTY_STATEMENT"), expectedErrMsg)
-  }
-
   test("jargon token substitute to user-facing language") {
     // '<EOF>' -> end of input
     intercept("select count(*", "PARSE_SYNTAX_ERROR",

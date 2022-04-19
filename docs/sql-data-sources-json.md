@@ -235,7 +235,7 @@ Data source options of JSON can be set via:
   <tr>
     <td><code>dropFieldIfAllNull</code></td>
     <td><code>false</code></td>
-    <td>Whether to ignore column of all null values or empty array/struct during schema inference.</td>
+    <td>Whether to ignore column of all null values or empty array during schema inference.</td>
     <td>read</td>
   </tr>
   <tr>

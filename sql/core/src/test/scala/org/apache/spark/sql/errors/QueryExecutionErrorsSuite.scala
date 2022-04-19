@@ -21,7 +21,7 @@ import java.util.Locale
 
 import test.org.apache.spark.sql.connector.JavaSimpleWritableDataSource
 
-import org.apache.spark.{SparkArithmeticException, SparkException, SparkIllegalStateException, SparkRuntimeException, SparkUnsupportedOperationException, SparkUpgradeException}
+import org.apache.spark.{SparkArithmeticException, SparkDateTimeException, SparkException, SparkIllegalStateException, SparkRuntimeException, SparkUnsupportedOperationException, SparkUpgradeException}
 import org.apache.spark.sql.{DataFrame, QueryTest}
 import org.apache.spark.sql.catalyst.util.BadRecordException
 import org.apache.spark.sql.connector.SimpleWritableDataSource
@@ -66,8 +66,8 @@ class QueryExecutionErrorsSuite extends QueryTest
       assert(e.getErrorClass === "INVALID_PARAMETER_VALUE")
       assert(e.getSqlState === "22023")
       assert(e.getMessage.matches(
-        "The value of parameter\\(s\\) 'key' in the aes_encrypt/aes_decrypt function is invalid: " +
-        "expects a binary value with 16, 24 or 32 bytes, but got \\d+ bytes."))
+        "The value of parameter\\(s\\) 'key' in the `aes_encrypt`/`aes_decrypt` function " +
+        "is invalid: expects a binary value with 16, 24 or 32 bytes, but got \\d+ bytes."))
     }
 
     // Encryption failure - invalid key length
@@ -100,7 +100,7 @@ class QueryExecutionErrorsSuite extends QueryTest
       assert(e.getErrorClass === "INVALID_PARAMETER_VALUE")
       assert(e.getSqlState === "22023")
       assert(e.getMessage ===
-        "The value of parameter(s) 'expr, key' in the aes_encrypt/aes_decrypt function " +
+        "The value of parameter(s) 'expr, key' in the `aes_encrypt`/`aes_decrypt` function " +
         "is invalid: Detail message: " +
         "Given final block not properly padded. " +
         "Such issues can arise if a bad key is used during decryption.")
@@ -118,7 +118,7 @@ class QueryExecutionErrorsSuite extends QueryTest
       assert(e.getErrorClass === "UNSUPPORTED_FEATURE")
       assert(e.getSqlState === "0A000")
       assert(e.getMessage.matches("""The feature is not supported: AES-\w+ with the padding \w+""" +
-        " by the aes_encrypt/aes_decrypt function."))
+        " by the `aes_encrypt`/`aes_decrypt` function."))
     }
 
     // Unsupported AES mode and padding in encrypt
@@ -149,7 +149,7 @@ class QueryExecutionErrorsSuite extends QueryTest
         .collect()
     }
     assert(e2.getMessage === "The feature is not supported: pivoting by the value" +
-      """ '[dotnet,Dummies]' of the column data type 'struct<col1:string,training:string>'.""")
+      """ '[dotnet,Dummies]' of the column data type STRUCT<col1: STRING, training: STRING>.""")
   }
 
   test("UNSUPPORTED_FEATURE: unsupported pivot operations") {
@@ -243,7 +243,7 @@ class QueryExecutionErrorsSuite extends QueryTest
 
     assert(e.getErrorClass === "UNSUPPORTED_OPERATION")
     assert(e.getMessage === "The operation is not supported: " +
-      "timestamp must supply timeZoneId parameter while converting to ArrowType")
+      "TIMESTAMP must supply timeZoneId parameter while converting to the arrow timestamp type.")
   }
 
   test("UNSUPPORTED_OPERATION - SPARK-36346: can't read Timestamp as TimestampNTZ") {
@@ -256,7 +256,7 @@ class QueryExecutionErrorsSuite extends QueryTest
 
         assert(e.getErrorClass === "UNSUPPORTED_OPERATION")
         assert(e.getMessage === "The operation is not supported: " +
-          "Unable to convert timestamp of Orc to data type 'timestamp_ntz'")
+          "Unable to convert TIMESTAMP of Orc to data type TIMESTAMP_NTZ.")
       }
     }
   }
@@ -271,7 +271,7 @@ class QueryExecutionErrorsSuite extends QueryTest
 
         assert(e.getErrorClass === "UNSUPPORTED_OPERATION")
         assert(e.getMessage === "The operation is not supported: " +
-          "Unable to convert timestamp ntz of Orc to data type 'timestamp_ltz'")
+          "Unable to convert TIMESTAMP_NTZ of Orc to data type TIMESTAMP.")
       }
     }
   }
@@ -355,6 +355,67 @@ class QueryExecutionErrorsSuite extends QueryTest
         // make sure we don't have partial data.
         assert(spark.read.format(cls.getName).option("path", path).load().collect().isEmpty)
       }
+    }
+  }
+
+  test("CAST_CAUSES_OVERFLOW: from timestamp to int") {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      val e = intercept[SparkArithmeticException] {
+        sql("select CAST(TIMESTAMP '9999-12-31T12:13:14.56789Z' AS INT)").collect()
+      }
+      assert(e.getErrorClass === "CAST_CAUSES_OVERFLOW")
+      assert(e.getSqlState === "22005")
+      assert(e.getMessage === "Casting 253402258394567890L to INT causes overflow. " +
+        "To return NULL instead, use 'try_cast'. " +
+        "If necessary set spark.sql.ansi.enabled to false to bypass this error.")
+    }
+  }
+
+  test("DIVIDE_BY_ZERO: can't divide an integer by zero") {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      val e = intercept[SparkArithmeticException] {
+        sql("select 6/0").collect()
+      }
+      assert(e.getErrorClass === "DIVIDE_BY_ZERO")
+      assert(e.getSqlState === "22012")
+      assert(e.getMessage ===
+        "divide by zero. To return NULL instead, use 'try_divide'. If necessary set " +
+          "spark.sql.ansi.enabled to false (except for ANSI interval type) to bypass this error." +
+          """
+            |== SQL(line 1, position 7) ==
+            |select 6/0
+            |       ^^^
+            |""".stripMargin)
+    }
+  }
+
+  test("INVALID_FRACTION_OF_SECOND: in the function make_timestamp") {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      val e = intercept[SparkDateTimeException] {
+        sql("select make_timestamp(2012, 11, 30, 9, 19, 60.66666666)").collect()
+      }
+      assert(e.getErrorClass === "INVALID_FRACTION_OF_SECOND")
+      assert(e.getSqlState === "22023")
+      assert(e.getMessage === "The fraction of sec must be zero. Valid range is [0, 60]. " +
+        "If necessary set spark.sql.ansi.enabled to false to bypass this error. ")
+    }
+  }
+
+  test("CANNOT_CHANGE_DECIMAL_PRECISION: cast string to decimal") {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      val e = intercept[SparkArithmeticException] {
+        sql("select CAST('66666666666666.666' AS DECIMAL(8, 1))").collect()
+      }
+      assert(e.getErrorClass === "CANNOT_CHANGE_DECIMAL_PRECISION")
+      assert(e.getSqlState === "22005")
+      assert(e.getMessage ===
+        "Decimal(expanded,66666666666666.666,17,3}) cannot be represented as Decimal(8, 1). " +
+        "If necessary set spark.sql.ansi.enabled to false to bypass this error." +
+        """
+          |== SQL(line 1, position 7) ==
+          |select CAST('66666666666666.666' AS DECIMAL(8, 1))
+          |       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+          |""".stripMargin)
     }
   }
 }

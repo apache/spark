@@ -201,7 +201,7 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
             .getTableMetadata(TableIdentifier(checkSizeTable))
           HiveCatalogMetrics.reset()
           assert(HiveCatalogMetrics.METRIC_PARALLEL_LISTING_JOB_COUNT.getCount() == 0)
-          val size = CommandUtils.calculateTotalSize(spark, tableMeta)
+          val (size, _) = CommandUtils.calculateTotalSize(spark, tableMeta)
           assert(HiveCatalogMetrics.METRIC_PARALLEL_LISTING_JOB_COUNT.getCount() == 1)
           assert(size === BigInt(17436))
       }
@@ -984,6 +984,16 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
               assert(fetched2.get.colStats.isEmpty)
               val statsProp = getStatsProperties(table)
               assert(statsProp(STATISTICS_TOTAL_SIZE).toLong == fetched2.get.sizeInBytes)
+
+              // SPARK-38573: Support Partition Level Statistics Collection
+              val partStats1 = getPartitionStats(table, Map("ds" -> "2008-04-08", "hr" -> "11"))
+              assert(partStats1.sizeInBytes > 0)
+              val partStats2 = getPartitionStats(table, Map("ds" -> "2008-04-08", "hr" -> "12"))
+              assert(partStats2.sizeInBytes > 0)
+              val partStats3 = getPartitionStats(table, Map("ds" -> "2008-04-09", "hr" -> "11"))
+              assert(partStats3.sizeInBytes > 0)
+              val partStats4 = getPartitionStats(table, Map("ds" -> "2008-04-09", "hr" -> "12"))
+              assert(partStats4.sizeInBytes > 0)
             } else {
               assert(getStatsProperties(table).isEmpty)
             }
@@ -1007,6 +1017,10 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
               assert(fetched4.get.colStats.isEmpty)
               val statsProp = getStatsProperties(table)
               assert(statsProp(STATISTICS_TOTAL_SIZE).toLong == fetched4.get.sizeInBytes)
+
+              // SPARK-38573: Support Partition Level Statistics Collection
+              val partStats3 = getPartitionStats(table, Map("ds" -> "2008-04-09", "hr" -> "11"))
+              assert(partStats3.sizeInBytes > 0)
             } else {
               assert(getStatsProperties(table).isEmpty)
             }
@@ -1525,6 +1539,73 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
           partStats = getPartitionStats(tblName, Map("ds" -> "2019-12-13"))
           assert(partStats.sizeInBytes == expectedSize)
           assert(partStats.rowCount.get == 1)
+        }
+      }
+    }
+  }
+
+  test("SPARK-38573: partition stats auto update for dynamic partitions") {
+    val table = "partition_stats_dynamic_partition"
+    Seq("hive", "parquet").foreach { source =>
+      withSQLConf(SQLConf.AUTO_SIZE_UPDATE_ENABLED.key -> "true") {
+        withTable(table) {
+          sql(s"CREATE TABLE $table (id INT, sp INT, dp INT) USING $source PARTITIONED BY (sp, dp)")
+          sql(s"INSERT INTO $table PARTITION (sp=0, dp) VALUES (0, 0)")
+          sql(s"INSERT OVERWRITE TABLE $table PARTITION (sp=0, dp) SELECT id, id FROM range(5)")
+          for (i <- 0 until 5) {
+            val partStats = getPartitionStats(table, Map("sp" -> s"0", "dp" -> s"$i"))
+            assert(partStats.sizeInBytes > 0)
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-38573: change partition stats after load/set/truncate data command") {
+    val table = "partition_stats_load_set_truncate"
+    withSQLConf(SQLConf.AUTO_SIZE_UPDATE_ENABLED.key -> "true") {
+      withTable(table) {
+        sql(s"CREATE TABLE $table (i INT, j STRING) USING hive " +
+          "PARTITIONED BY (ds STRING, hr STRING)")
+
+        withTempPaths(numPaths = 2) { case Seq(dir1, dir2) =>
+          val partDir1 = new File(new File(dir1, "ds=2008-04-09"), "hr=11")
+          val file1 = new File(partDir1, "data")
+          file1.getParentFile.mkdirs()
+          Utils.tryWithResource(new PrintWriter(file1)) { writer =>
+            writer.write("1,a")
+          }
+
+          val partDir2 = new File(new File(dir2, "ds=2008-04-09"), "hr=12")
+          val file2 = new File(partDir2, "data")
+          file2.getParentFile.mkdirs()
+          Utils.tryWithResource(new PrintWriter(file2)) { writer =>
+            writer.write("1,a")
+          }
+
+          sql(s"""
+            |LOAD DATA INPATH '${file1.toURI.toString}' INTO TABLE $table
+            |PARTITION (ds='2008-04-09', hr='11')
+            """.stripMargin)
+          sql(s"ALTER TABLE $table ADD PARTITION (ds='2008-04-09', hr='12')")
+          sql(s"""
+            |ALTER TABLE $table PARTITION (ds='2008-04-09', hr='12')
+            |SET LOCATION '${partDir2.toURI.toString}'
+            |""".stripMargin)
+          val partStats1 = getPartitionStats(table, Map("ds" -> "2008-04-09", "hr" -> "11"))
+          assert(partStats1.sizeInBytes > 0)
+          val partStats2 = getPartitionStats(table, Map("ds" -> "2008-04-09", "hr" -> "12"))
+          assert(partStats2.sizeInBytes > 0)
+
+
+          sql(s"TRUNCATE TABLE $table PARTITION (ds='2008-04-09', hr='11')")
+          val partStats3 = getPartitionStats(table, Map("ds" -> "2008-04-09", "hr" -> "11"))
+          assert(partStats3.sizeInBytes == 0)
+          val partStats4 = getPartitionStats(table, Map("ds" -> "2008-04-09", "hr" -> "12"))
+          assert(partStats4.sizeInBytes > 0)
+          sql(s"TRUNCATE TABLE $table")
+          val partStats5 = getPartitionStats(table, Map("ds" -> "2008-04-09", "hr" -> "12"))
+          assert(partStats5.sizeInBytes == 0)
         }
       }
     }

@@ -2,69 +2,69 @@
 single ints
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 11.0.13+8-LTS on Linux 5.11.0-1022-azure
-Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 11.0.14+9-LTS on Linux 5.13.0-1021-azure
+Intel(R) Xeon(R) CPU E5-2673 v3 @ 2.40GHz
 Hash For single ints:                     Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-interpreted version                                3353           3387          49        160.1           6.2       1.0X
-codegen version                                    4430           4562         187        121.2           8.3       0.8X
-codegen version 64-bit                             4307           4600         415        124.6           8.0       0.8X
-codegen HiveHash version                           3460           3464           6        155.2           6.4       1.0X
+interpreted version                                4113           4148          50        130.5           7.7       1.0X
+codegen version                                    6150           6161          15         87.3          11.5       0.7X
+codegen version 64-bit                             5561           5592          44         96.5          10.4       0.7X
+codegen HiveHash version                           4535           4546          15        118.4           8.4       0.9X
 
 
 ================================================================================================
 single longs
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 11.0.13+8-LTS on Linux 5.11.0-1022-azure
-Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 11.0.14+9-LTS on Linux 5.13.0-1021-azure
+Intel(R) Xeon(R) CPU E5-2673 v3 @ 2.40GHz
 Hash For single longs:                    Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-interpreted version                                4122           4241         168        130.2           7.7       1.0X
-codegen version                                    7562           7563           2         71.0          14.1       0.5X
-codegen version 64-bit                             5001           5070          98        107.4           9.3       0.8X
-codegen HiveHash version                           4140           4378         337        129.7           7.7       1.0X
+interpreted version                                4530           4545          21        118.5           8.4       1.0X
+codegen version                                    8812           8819          11         60.9          16.4       0.5X
+codegen version 64-bit                             6194           6203          13         86.7          11.5       0.7X
+codegen HiveHash version                           5217           5228          16        102.9           9.7       0.9X
 
 
 ================================================================================================
 normal
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 11.0.13+8-LTS on Linux 5.11.0-1022-azure
-Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 11.0.14+9-LTS on Linux 5.13.0-1021-azure
+Intel(R) Xeon(R) CPU E5-2673 v3 @ 2.40GHz
 Hash For normal:                          Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-interpreted version                                2476           2559         117          0.8        1180.7       1.0X
-codegen version                                    2179           2179           0          1.0        1038.9       1.1X
-codegen version 64-bit                              750            792          52          2.8         357.8       3.3X
-codegen HiveHash version                           3830           3999         239          0.5        1826.4       0.6X
+interpreted version                                2917           2918           2          0.7        1390.8       1.0X
+codegen version                                    2286           2295          13          0.9        1089.8       1.3X
+codegen version 64-bit                              858            868          15          2.4         409.0       3.4X
+codegen HiveHash version                           4551           4565          20          0.5        2170.0       0.6X
 
 
 ================================================================================================
 array
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 11.0.13+8-LTS on Linux 5.11.0-1022-azure
-Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 11.0.14+9-LTS on Linux 5.13.0-1021-azure
+Intel(R) Xeon(R) CPU E5-2673 v3 @ 2.40GHz
 Hash For array:                           Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-interpreted version                                1629           1629           1          0.1       12424.9       1.0X
-codegen version                                    2605           2608           4          0.1       19874.6       0.6X
-codegen version 64-bit                             2453           2467          19          0.1       18714.1       0.7X
-codegen HiveHash version                           1161           1166           7          0.1        8860.6       1.4X
+interpreted version                                1688           1715          39          0.1       12876.7       1.0X
+codegen version                                    3650           3680          41          0.0       27851.0       0.5X
+codegen version 64-bit                             2902           2919          24          0.0       22141.3       0.6X
+codegen HiveHash version                           1157           1165          12          0.1        8824.6       1.5X
 
 
 ================================================================================================
 map
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 11.0.13+8-LTS on Linux 5.11.0-1022-azure
-Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 11.0.14+9-LTS on Linux 5.13.0-1021-azure
+Intel(R) Xeon(R) CPU E5-2673 v3 @ 2.40GHz
 Hash For map:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-interpreted version                                   0              0           0         59.8          16.7       1.0X
-codegen version                                     208            208           0          0.0       50687.4       0.0X
-codegen version 64-bit                              178            179           0          0.0       43543.6       0.0X
-codegen HiveHash version                             53             53           0          0.1       12928.5       0.0X
+interpreted version                                   0              0           0         62.0          16.1       1.0X
+codegen version                                     233            247           8          0.0       56784.9       0.0X
+codegen version 64-bit                              186            195           7          0.0       45500.9       0.0X
+codegen HiveHash version                             46             49           3          0.1       11247.1       0.0X
 
 

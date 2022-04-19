@@ -659,8 +659,15 @@ case class UnresolvedWith(
  * A wrapper for CTE definition plan with a unique ID.
  * @param child The CTE definition query plan.
  * @param id    The unique ID for this CTE definition.
+ * @param originalPlanWithPredicates The original query plan before predicate pushdown and the
+ *                                   predicates that have been pushed down into `child`. This is
+ *                                   a temporary field used by optimization rules for CTE predicate
+ *                                   pushdown to help ensure rule idempotency.
  */
-case class CTERelationDef(child: LogicalPlan, id: Long = CTERelationDef.newId) extends UnaryNode {
+case class CTERelationDef(
+    child: LogicalPlan,
+    id: Long = CTERelationDef.newId,
+    originalPlanWithPredicates: Option[(LogicalPlan, Seq[Expression])] = None) extends UnaryNode {
 
   final override val nodePatterns: Seq[TreePattern] = Seq(CTE)
 
