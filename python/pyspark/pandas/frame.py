@@ -5502,11 +5502,11 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
     def interpolate(
         self,
-        method: Optional[str] = None,
+        method: str = "linear",
         limit: Optional[int] = None,
         limit_direction: Optional[str] = None,
     ) -> "DataFrame":
-        if (method is not None) and (method not in ["linear"]):
+        if method not in ["linear"]:
             raise NotImplementedError("interpolate currently works only for method='linear'")
         if (limit is not None) and (not limit > 0):
             raise ValueError("limit must be > 0.")

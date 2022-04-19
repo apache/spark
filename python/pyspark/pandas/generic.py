@@ -3256,7 +3256,7 @@ class Frame(object, metaclass=ABCMeta):
     # TODO: add 'axis', 'inplace', 'limit_area', 'downcast'
     def interpolate(
         self: FrameLike,
-        method: Optional[str] = None,
+        method: str = "linear",
         limit: Optional[int] = None,
         limit_direction: Optional[str] = None,
     ) -> FrameLike:
@@ -3272,7 +3272,7 @@ class Frame(object, metaclass=ABCMeta):
 
         Parameters
         ----------
-        method : str, default None
+        method : str, default 'linear'
             Interpolation technique to use. One of:
 
             * 'linear': Ignore the index and treat the values as equally

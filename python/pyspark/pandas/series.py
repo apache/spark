@@ -2171,7 +2171,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
     def interpolate(
         self,
-        method: Optional[str] = None,
+        method: str = "linear",
         limit: Optional[int] = None,
         limit_direction: Optional[str] = None,
     ) -> "Series":
@@ -2179,11 +2179,11 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
     def _interpolate(
         self,
-        method: Optional[str] = None,
+        method: str = "linear",
         limit: Optional[int] = None,
         limit_direction: Optional[str] = None,
     ) -> "Series":
-        if (method is not None) and (method not in ["linear"]):
+        if method not in ["linear"]:
             raise NotImplementedError("interpolate currently works only for method='linear'")
         if (limit is not None) and (not limit > 0):
             raise ValueError("limit must be > 0.")
