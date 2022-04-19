@@ -472,4 +472,151 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession {
            |^^^
            |""".stripMargin)
   }
+
+  test("PARSE_SYNTAX_ERROR: no viable input") {
+    val sqlText = "select ((r + 1) "
+    validateParsingError(
+      sqlText = sqlText,
+      errorClass = "PARSE_SYNTAX_ERROR",
+      sqlState = "42000",
+      message =
+        s"""
+          |Syntax error at or near end of input(line 1, pos 16)
+          |
+          |== SQL ==
+          |$sqlText
+          |----------------^^^
+          |""".stripMargin)
+  }
+
+  test("PARSE_SYNTAX_ERROR: extraneous input") {
+    validateParsingError(
+      sqlText = "select 1 1",
+      errorClass = "PARSE_SYNTAX_ERROR",
+      sqlState = "42000",
+      message =
+        s"""
+          |Syntax error at or near '1': extra input '1'(line 1, pos 9)
+          |
+          |== SQL ==
+          |select 1 1
+          |---------^^^
+          |""".stripMargin)
+
+    validateParsingError(
+      sqlText = "select *\nfrom r as q t",
+      errorClass = "PARSE_SYNTAX_ERROR",
+      sqlState = "42000",
+      message =
+        s"""
+          |Syntax error at or near 't': extra input 't'(line 2, pos 12)
+          |
+          |== SQL ==
+          |select *
+          |from r as q t
+          |------------^^^
+          |""".stripMargin)
+  }
+
+  test("PARSE_SYNTAX_ERROR: mismatched input") {
+    validateParsingError(
+      sqlText = "select * from r order by q from t",
+      errorClass = "PARSE_SYNTAX_ERROR",
+      sqlState = "42000",
+      message =
+        """
+          |Syntax error at or near 'from'(line 1, pos 27)
+          |
+          |== SQL ==
+          |select * from r order by q from t
+          |---------------------------^^^
+          |""".stripMargin)
+
+    validateParsingError(
+      sqlText = "select *\nfrom r\norder by q\nfrom t",
+      errorClass = "PARSE_SYNTAX_ERROR",
+      sqlState = "42000",
+      message =
+        """
+          |Syntax error at or near 'from'(line 4, pos 0)
+          |
+          |== SQL ==
+          |select *
+          |from r
+          |order by q
+          |from t
+          |^^^
+          |""".stripMargin)
+  }
+
+  test("PARSE_SYNTAX_ERROR: jargon token substitute to user-facing language") {
+    // '<EOF>' -> end of input
+    validateParsingError(
+      sqlText = "select count(*",
+      errorClass = "PARSE_SYNTAX_ERROR",
+      sqlState = "42000",
+      message =
+        """
+          |Syntax error at or near end of input(line 1, pos 14)
+          |
+          |== SQL ==
+          |select count(*
+          |--------------^^^
+          |""".stripMargin)
+
+    validateParsingError(
+      sqlText = "select 1 as a from",
+      errorClass = "PARSE_SYNTAX_ERROR",
+      sqlState = "42000",
+      message =
+        """
+          |Syntax error at or near end of input(line 1, pos 18)
+          |
+          |== SQL ==
+          |select 1 as a from
+          |------------------^^^
+          |""".stripMargin)
+  }
+
+  test("PARSE_SYNTAX_ERROR - SPARK-21136: " +
+    "misleading error message due to problematic antlr grammar") {
+    validateParsingError(
+      sqlText = "select * from a left join_ b on a.id = b.id",
+      errorClass = "PARSE_SYNTAX_ERROR",
+      sqlState = "42000",
+      message =
+        """
+          |Syntax error at or near 'join_': missing 'JOIN'(line 1, pos 21)
+          |
+          |== SQL ==
+          |select * from a left join_ b on a.id = b.id
+          |---------------------^^^
+          |""".stripMargin)
+
+    validateParsingError(
+      sqlText = "select * from test where test.t is like 'test'",
+      errorClass = "PARSE_SYNTAX_ERROR",
+      sqlState = "42000",
+      message =
+        """
+          |Syntax error at or near 'is'(line 1, pos 32)
+          |
+          |== SQL ==
+          |select * from test where test.t is like 'test'
+          |--------------------------------^^^
+          |""".stripMargin)
+
+    validateParsingError(
+      sqlText = "SELECT * FROM test WHERE x NOT NULL",
+      errorClass = "PARSE_SYNTAX_ERROR",
+      sqlState = "42000",
+      message =
+        """
+          |Syntax error at or near 'NOT'(line 1, pos 27)
+          |
+          |== SQL ==
+          |SELECT * FROM test WHERE x NOT NULL
+          |---------------------------^^^
+          |""".stripMargin)
+  }
 }
