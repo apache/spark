@@ -1082,7 +1082,7 @@ trait AlterTableTests extends SharedSparkSession {
       assert(exc.getMessage.contains("Missing field data"))
 
       // with if exists it should pass
-      sql(s"ALTER TABLE $t DROP IF EXISTS COLUMN data")
+      sql(s"ALTER TABLE $t DROP COLUMN IF EXISTS data")
       val table = getTableMetadata(fullTableName(t))
       assert(table.schema == new StructType().add("id", IntegerType))
     }
@@ -1100,7 +1100,7 @@ trait AlterTableTests extends SharedSparkSession {
       assert(exc.getMessage.contains("Missing field point.x"))
 
       // with if exists it should pass
-      sql(s"ALTER TABLE $t DROP IF EXISTS COLUMN point.x")
+      sql(s"ALTER TABLE $t DROP COLUMN IF EXISTS point.x")
       val table = getTableMetadata(fullTableName(t))
       assert(table.schema == new StructType().add("id", IntegerType))
 
@@ -1114,7 +1114,7 @@ trait AlterTableTests extends SharedSparkSession {
         s"USING $v2Format")
 
       // with if exists it should pass
-      sql(s"ALTER TABLE $t DROP IF EXISTS COLUMNS names, name, points.z, id, points.x")
+      sql(s"ALTER TABLE $t DROP COLUMNS IF EXISTS names, name, points.z, id, points.x")
       val table = getTableMetadata(fullTableName(t))
       assert(table.schema == new StructType()
         .add("points", ArrayType(StructType(Seq(StructField("y", DoubleType))))))
