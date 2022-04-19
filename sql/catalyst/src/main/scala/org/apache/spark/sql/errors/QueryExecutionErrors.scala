@@ -115,7 +115,7 @@ object QueryExecutionErrors extends QueryErrorsBase {
       to: AbstractDataType,
       s: UTF8String,
       errorContext: String): NumberFormatException = {
-    new SparkNumberFormatException(errorClass = "INVALID_FORMAT_FOR_CAST",
+    new SparkNumberFormatException(errorClass = "INVALID_SYNTAX_FOR_CAST",
       messageParameters = Array(toSQLType(to), toSQLValue(s, StringType),
         SQLConf.ANSI_ENABLED.key, errorContext))
   }
@@ -1013,7 +1013,7 @@ object QueryExecutionErrors extends QueryErrorsBase {
   }
 
   def cannotCastToDateTimeError(value: Any, to: DataType, errorContext: String): Throwable = {
-    new DateTimeException(s"Invalid input value for type ${toSQLType(to)}: " +
+    new DateTimeException(s"Invalid input syntax for type ${toSQLType(to)}: " +
       s"${if (value.isInstanceOf[UTF8String]) {
         toSQLValue(value, StringType)
       } else {

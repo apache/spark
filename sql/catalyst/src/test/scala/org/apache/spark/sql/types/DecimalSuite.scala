@@ -284,7 +284,7 @@ class DecimalSuite extends SparkFunSuite with PrivateMethodTester with SQLHelper
 
     assert(Decimal.fromString(UTF8String.fromString("str")) === null)
     val e = intercept[NumberFormatException](Decimal.fromStringANSI(UTF8String.fromString("str")))
-    assert(e.getMessage.contains(s"Invalid input value for type ${DecimalType.simpleString}: " +
+    assert(e.getMessage.contains(s"Invalid input syntax for type ${DecimalType.simpleString}: " +
       "'str'"))
   }
 
