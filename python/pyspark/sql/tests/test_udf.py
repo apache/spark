@@ -258,7 +258,8 @@ class UDFTests(ReusedSQLTestCase):
         def runWithJoinType(join_type, type_string):
             with self.assertRaisesRegex(
                 AnalysisException,
-                """Using PythonUDF in join condition of join type "%s" is not supported""" % type_string,
+                """Using PythonUDF in join condition of join type "%s" is not supported"""
+                % type_string,
             ):
                 left.join(right, [f("a", "b"), left.a1 == right.b1], join_type).collect()
 
