@@ -1521,6 +1521,7 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest {
   }
 
   test("SPARK-38320 - flatMapGroupsWithState state with data should not timeout") {
+    assume(!Utils.isMacOnAppleSilicon)
     withTempDir { dir =>
       withSQLConf(
         (SQLConf.STREAMING_NO_DATA_MICRO_BATCHES_ENABLED.key -> "false"),
