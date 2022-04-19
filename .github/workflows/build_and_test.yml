@@ -106,6 +106,10 @@ jobs:
     name: Check changes
     runs-on: ubuntu-20.04
     needs: configure-jobs
+    # Run scheduled jobs for Apache Spark only
+    # Run regular jobs for commit in both Apache Spark and forked repository
+    if: >-
+      (github.repository == 'apache/spark' && needs.configure-jobs.outputs.type == 'scheduled') || (needs.configure-jobs.outputs.type == 'regular')
     env:
       GITHUB_PREV_SHA: ${{ github.event.before }}
     outputs:
