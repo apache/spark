@@ -1905,21 +1905,33 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
   test("SPARK-38825: in and notIn filters") {
     import testImplicits._
     withTempPath { file =>
-      Seq(1, 2, 0, -1, 99, 1000, 3, 7, 2).toDF("id").coalesce(1).write.mode("overwrite")
+      Seq(1, 2, 0, -1, 99, Integer.MAX_VALUE, 1000, 3, 7, Integer.MIN_VALUE, 2)
+        .toDF("id").coalesce(1).write.mode("overwrite")
         .parquet(file.getCanonicalPath)
       var df = spark.read.parquet(file.getCanonicalPath)
-      var in = df.filter(col("id").isin(100, 3, 11, 12, 13))
-      var notIn = df.filter(!col("id").isin(100, 3, 11, 12, 13))
-      checkAnswer(in, Seq(Row(3)))
+      var in = df.filter(col("id").isin(100, 3, 11, 12, 13, Integer.MAX_VALUE, Integer.MIN_VALUE))
+      var notIn =
+        df.filter(!col("id").isin(100, 3, 11, 12, 13, Integer.MAX_VALUE, Integer.MIN_VALUE))
+      checkAnswer(in, Seq(Row(3), Row(-2147483648), Row(2147483647)))
       checkAnswer(notIn, Seq(Row(1), Row(2), Row(0), Row(-1), Row(99), Row(1000), Row(7), Row(2)))
 
-      Seq("mary", "martin", "lucy", "alex", "mary", "dan").toDF("name").coalesce(1)
+      Seq("mary", "martin", "lucy", "alex", null, "mary", "dan").toDF("name").coalesce(1)
         .write.mode("overwrite").parquet(file.getCanonicalPath)
       df = spark.read.parquet(file.getCanonicalPath)
       in = df.filter(col("name").isin("mary", "victor", "leo", "alex"))
       notIn = df.filter(!col("name").isin("mary", "victor", "leo", "alex"))
       checkAnswer(in, Seq(Row("mary"), Row("alex"), Row("mary")))
       checkAnswer(notIn, Seq(Row("martin"), Row("lucy"), Row("dan")))
+
+      in = df.filter(col("name").isin("mary", "victor", "leo", "alex", null))
+      notIn = df.filter(!col("name").isin("mary", "victor", "leo", "alex", null))
+      checkAnswer(in, Seq(Row("mary"), Row("alex"), Row("mary")))
+      checkAnswer(notIn, Seq())
+
+      in = df.filter(col("name").isin(null))
+      notIn = df.filter(!col("name").isin(null))
+      checkAnswer(in, Seq())
+      checkAnswer(notIn, Seq())
     }
   }
 }
