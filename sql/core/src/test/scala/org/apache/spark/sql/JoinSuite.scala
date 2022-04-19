@@ -31,6 +31,7 @@ import org.apache.spark.sql.catalyst.expressions.{Ascending, GenericRow, SortOrd
 import org.apache.spark.sql.catalyst.plans.logical.Filter
 import org.apache.spark.sql.execution.{BinaryExecNode, FilterExec, ProjectExec, SortExec, SparkPlan, WholeStageCodegenExec}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
+import org.apache.spark.sql.execution.aggregate.HashAggregateExec
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
 import org.apache.spark.sql.execution.joins._
 import org.apache.spark.sql.execution.python.BatchEvalPythonExec
@@ -1438,6 +1439,24 @@ class JoinSuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlan
             }.size == 1)
           }
       }
+    }
+  }
+
+  test("SPARK-38887: Support switch inner join side for sort merge join") {
+    withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+      val df1 = spark.range(2).selectExpr("id as c1")
+      val df2 = spark.range(100).selectExpr("id as c2")
+      val plan1 = df1.groupBy($"c1").agg($"c1").join(df2, $"c1" === $"c2", "inner")
+        .queryExecution.executedPlan
+      val smj1 = find(plan1)(_.isInstanceOf[SortMergeJoinExec]).get.asInstanceOf[SortMergeJoinExec]
+      assert(!smj1.left.exists(_.isInstanceOf[HashAggregateExec]))
+      assert(smj1.right.exists(_.isInstanceOf[HashAggregateExec]))
+
+      val plan2 = df2.groupBy($"c2").agg($"c2").join(df1, $"c1" === $"c2", "inner")
+        .queryExecution.executedPlan
+      val smj2 = find(plan2)(_.isInstanceOf[SortMergeJoinExec]).get.asInstanceOf[SortMergeJoinExec]
+      assert(smj2.left.exists(_.isInstanceOf[HashAggregateExec]))
+      assert(!smj2.right.exists(_.isInstanceOf[HashAggregateExec]))
     }
   }
 }

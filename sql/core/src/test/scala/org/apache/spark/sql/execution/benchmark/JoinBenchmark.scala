@@ -149,6 +149,22 @@ object JoinBenchmark extends SqlBasedBenchmark {
     }
   }
 
+  def sortMergeJoinWithBufferedSideDuplicates(switch: Boolean): Unit = {
+    val N1 = 2 << 20
+    val N2 = 2 << 24
+    withSQLConf(SQLConf.SWITCH_SORT_MERGE_JOIN_SIDES_ENABLED.key -> switch.toString) {
+      codegenBenchmark(s"sort merge join with buffered side duplicates, switched: $switch,", N2) {
+        val df1 = spark.range(N1).distinct()
+          .selectExpr(s"id as k1")
+        val df2 = spark.range(N2)
+          .selectExpr(s"id % 1000 as k2")
+        val df = df1.join(df2, col("k1") === col("k2"))
+        assert(df.queryExecution.sparkPlan.exists(_.isInstanceOf[SortMergeJoinExec]))
+        df.noop()
+      }
+    }
+  }
+
   def shuffleHashJoin(): Unit = {
     val N: Long = 4 << 20
     withSQLConf(
@@ -188,6 +204,8 @@ object JoinBenchmark extends SqlBasedBenchmark {
       broadcastHashJoinSemiJoinLongKey()
       sortMergeJoin()
       sortMergeJoinWithDuplicates()
+      sortMergeJoinWithBufferedSideDuplicates(true)
+      sortMergeJoinWithBufferedSideDuplicates(false)
       shuffleHashJoin()
       broadcastNestedLoopJoin()
     }

@@ -2421,6 +2421,15 @@ object SQLConf {
     .doubleConf
     .createWithDefault(0.9)
 
+  val SWITCH_SORT_MERGE_JOIN_SIDES_ENABLED =
+    buildConf("spark.sql.switchSortMergeJoinSides.enabled")
+      .internal()
+      .doc("If true, switch the inner like join side for sort merge join according to the " +
+        "plan size and child unique keys.")
+      .version("3.4.0")
+      .booleanConf
+      .createWithDefault(true)
+
   private def isValidTimezone(zone: String): Boolean = {
     Try { DateTimeUtils.getZoneId(zone) }.isSuccess
   }
