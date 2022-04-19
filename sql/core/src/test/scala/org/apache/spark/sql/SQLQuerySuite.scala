@@ -593,6 +593,21 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
         |select * from q1 union all select * from q2""".stripMargin),
       Row(5, "5") :: Row(4, "4") :: Nil)
 
+    // inner CTE relation refers to outer CTE relation.
+    withSQLConf(SQLConf.LEGACY_CTE_PRECEDENCE_POLICY.key -> "CORRECTED") {
+      checkAnswer(
+        sql(
+          """
+            |with temp1 as (select 1 col),
+            |temp2 as (
+            |  with temp1 as (select col + 1 AS col from temp1),
+            |  temp3 as (select col + 1 from temp1)
+            |  select * from temp3
+            |)
+            |select * from temp2
+            |""".stripMargin),
+        Row(3))
+      }
   }
 
   test("Allow only a single WITH clause per query") {
