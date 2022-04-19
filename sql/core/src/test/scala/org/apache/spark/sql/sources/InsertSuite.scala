@@ -143,7 +143,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
     )
   }
 
-  test("SELECT clause generating a different number of columns is not allowed.") {
+  test("SELECT clause generating a different number of columns: negative test.") {
     withSQLConf(SQLConf.USE_NULLS_FOR_MISSING_DEFAULT_COLUMN_VALUES.key -> "false") {
       val message = intercept[AnalysisException] {
         sql(
@@ -152,6 +152,19 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
           """.stripMargin)
       }.getMessage
       assert(message.contains("target table has 2 column(s) but the inserted data has 1 column(s)")
+      )
+    }
+  }
+
+  test("SELECT clause generating a different number of columns: positive test.") {
+    withSQLConf(SQLConf.USE_NULLS_FOR_MISSING_DEFAULT_COLUMN_VALUES.key -> "true") {
+      sql(
+        s"""
+           |INSERT OVERWRITE TABLE jsonTable SELECT a FROM jt
+        """.stripMargin)
+      checkAnswer(
+        sql("SELECT a, b FROM jsonTable"),
+        (1 to 10).map(i => Row(i, null))
       )
     }
   }
