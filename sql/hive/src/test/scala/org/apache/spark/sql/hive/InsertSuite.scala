@@ -375,7 +375,8 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
 
   testPartitionedTable("INSERT INTO a partitioned table (semantic and error handling)") {
     tableName =>
-      withSQLConf(("hive.exec.dynamic.partition.mode", "nonstrict")) {
+      withSQLConf(("hive.exec.dynamic.partition.mode", "nonstrict"),
+        (SQLConf.USE_NULLS_FOR_MISSING_DEFAULT_COLUMN_VALUES.key, "false")) {
         sql(s"INSERT INTO TABLE $tableName PARTITION (b=2, c=3) SELECT 1, 4")
 
         sql(s"INSERT INTO TABLE $tableName PARTITION (b=6, c=7) SELECT 5, 8")
@@ -435,6 +436,76 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
           Row(1, 2, 3, 4) ::
             Row(5, 6, 7, 8) ::
             Row(9, 10, 11, 12) ::
+            Row(13, 14, 15, 16) ::
+            Row(17, 18, 19, 20) ::
+            Row(21, 22, 23, 24) ::
+            Row(25, 26, 27, 28) :: Nil
+        )
+      }
+  }
+
+  testPartitionedTable("INSERT INTO a partitioned table, use nulls for missing columns") {
+    tableName =>
+      withSQLConf(("hive.exec.dynamic.partition.mode", "nonstrict"),
+        (SQLConf.USE_NULLS_FOR_MISSING_DEFAULT_COLUMN_VALUES.key, "true")) {
+        sql(s"INSERT INTO TABLE $tableName PARTITION (b=2, c=3) SELECT 1, 4")
+
+        sql(s"INSERT INTO TABLE $tableName PARTITION (b=6, c=7) SELECT 5, 8")
+
+        sql(s"INSERT INTO TABLE $tableName PARTITION (c=11, b=10) SELECT 9, 12")
+
+        // c is defined twice. Analyzer will complain.
+        intercept[AnalysisException] {
+          sql(s"INSERT INTO TABLE $tableName PARTITION (b=14, c=15, c=16) SELECT 13")
+        }
+
+        // d is not a partitioning column.
+        intercept[AnalysisException] {
+          sql(s"INSERT INTO TABLE $tableName PARTITION (b=14, c=15, d=16) SELECT 13, 14")
+        }
+
+        // d is not a partitioning column. The total number of columns is correct.
+        intercept[AnalysisException] {
+          sql(s"INSERT INTO TABLE $tableName PARTITION (b=14, c=15, d=16) SELECT 13")
+        }
+
+        // The data is missing a column.
+        sql(s"INSERT INTO TABLE $tableName PARTITION (c=15, b=16) SELECT 13")
+
+        // d is not a partitioning column.
+        intercept[AnalysisException] {
+          sql(s"INSERT INTO TABLE $tableName PARTITION (b=15, d=15) SELECT 13, 14")
+        }
+
+        // The statement is missing a column.
+        intercept[AnalysisException] {
+          sql(s"INSERT INTO TABLE $tableName PARTITION (b=15) SELECT 13, 14")
+        }
+
+        // The statement is missing a column.
+        intercept[AnalysisException] {
+          sql(s"INSERT INTO TABLE $tableName PARTITION (b=15) SELECT 13, 14, 16")
+        }
+
+        sql(s"INSERT INTO TABLE $tableName PARTITION (b=14, c) SELECT 13, 16, 15")
+
+        // Dynamic partitioning columns need to be after static partitioning columns.
+        intercept[AnalysisException] {
+          sql(s"INSERT INTO TABLE $tableName PARTITION (b, c=19) SELECT 17, 20, 18")
+        }
+
+        sql(s"INSERT INTO TABLE $tableName PARTITION (b, c) SELECT 17, 20, 18, 19")
+
+        sql(s"INSERT INTO TABLE $tableName PARTITION (c, b) SELECT 21, 24, 22, 23")
+
+        sql(s"INSERT INTO TABLE $tableName SELECT 25, 28, 26, 27")
+
+        checkAnswer(
+          sql(s"SELECT a, b, c, d FROM $tableName"),
+          Row(1, 2, 3, 4) ::
+            Row(5, 6, 7, 8) ::
+            Row(9, 10, 11, 12) ::
+            Row(13, 16, 15, null) ::
             Row(13, 14, 15, 16) ::
             Row(17, 18, 19, 20) ::
             Row(21, 22, 23, 24) ::

@@ -284,7 +284,7 @@ case class ResolveDefaultColumns(
       case SubqueryAlias(_, r: UnresolvedCatalogRelation) =>
         StructType(r.tableMeta.schema.fields.dropRight(
           enclosingInsert.get.partitionSpec.size))
-      case SubqueryAlias(_, r: View) =>
+      case SubqueryAlias(_, r: View) if r.isTempView =>
         StructType(r.schema.fields.dropRight(
           enclosingInsert.get.partitionSpec.size))
       case _ => return None
