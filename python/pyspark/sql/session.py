@@ -105,8 +105,8 @@ def _monkey_patch_RDD(sparkSession: "SparkSession") -> None:
 
 
 # TODO(SPARK-38912): This method can be dropped once support for Python 3.8 is dropped
-# In Python 3.9, the @property decorator has been made compatible with the @classmethod decorator.
-# https://docs.python.org/3.9/library/functions.html#classmethod
+# In Python 3.9, the @property decorator has been made compatible with the
+# @classmethod decorator (https://docs.python.org/3.9/library/functions.html#classmethod)
 #
 # @classmethod + @property is also affected by a bug in Python's docstring which was backported
 # to Python 3.9.6 (https://github.com/python/cpython/pull/28838)
@@ -322,14 +322,14 @@ class SparkSession(SparkConversionMixin):
     # TODO(SPARK-38912): Replace @classproperty with @classmethod + @property once support for
     # Python 3.8 is dropped.
     #
-    # In Python 3.9, the @property decorator has been made compatible with the @classmethod decorator.
-    # https://docs.python.org/3.9/library/functions.html#classmethod
+    # In Python 3.9, the @property decorator has been made compatible with the
+    # @classmethod decorator (https://docs.python.org/3.9/library/functions.html#classmethod)
     #
     # @classmethod + @property is also affected by a bug in Python's docstring which was backported
     # to Python 3.9.6 (https://github.com/python/cpython/pull/28838)
     @classproperty
     def builder(cls):
-        """A class attribute having a :class:`Builder` to construct :class:`SparkSession` instances."""
+        """Creates a :class:`Builder` for constructing a :class:`SparkSession`."""
         return cls.Builder()
 
     _instantiatedSession: ClassVar[Optional["SparkSession"]] = None
