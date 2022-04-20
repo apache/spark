@@ -619,7 +619,7 @@ can be identified by their `[attempt-id]`. In the API listed below, when running
     <br>
     2. physical plan description with unlimited fields
     <br>
-    This API requires setting `spark.appStatusStore.diskStoreDir` for storing the diagnostic information.
+    This API requires setting <code>spark.appStatusStore.diskStoreDir</code> for storing the diagnostic information.
     </td>
   </tr>
   <tr>
