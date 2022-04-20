@@ -1303,8 +1303,7 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
     }
     val name = getFunctionMultiparts(func.functionName)
     if (name.length > 1) {
-      operationNotAllowed(
-        s"table valued function cannot specify database name: ${name.quoted}", ctx)
+      throw QueryParsingErrors.invalidTableValuedFunctionNameError(name, ctx)
     }
 
     val tvf = UnresolvedTableValuedFunction(
