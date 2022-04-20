@@ -272,13 +272,26 @@ SELECT k, avg(x) FILTER (WHERE x IS NOT NULL AND y IS NOT NULL), avg(y) FILTER (
 
 -- SPARK-37676: Support ANSI Aggregation Function: percentile_cont
 SELECT
- percentile_cont(0.25) WITHIN GROUP (ORDER BY v),
- percentile_cont(0.25) WITHIN GROUP (ORDER BY v DESC)
+  percentile_cont(0.25) WITHIN GROUP (ORDER BY v),
+  percentile_cont(0.25) WITHIN GROUP (ORDER BY v DESC)
 FROM aggr;
 SELECT
   k,
   percentile_cont(0.25) WITHIN GROUP (ORDER BY v),
   percentile_cont(0.25) WITHIN GROUP (ORDER BY v DESC)
+FROM aggr
+GROUP BY k
+ORDER BY k;
+
+-- SPARK-37691: Support ANSI Aggregation Function: percentile_disc
+SELECT
+  percentile_disc(0.25) WITHIN GROUP (ORDER BY v),
+  percentile_disc(0.25) WITHIN GROUP (ORDER BY v DESC)
+FROM aggr;
+SELECT
+  k,
+  percentile_disc(0.25) WITHIN GROUP (ORDER BY v),
+  percentile_disc(0.25) WITHIN GROUP (ORDER BY v DESC)
 FROM aggr
 GROUP BY k
 ORDER BY k;
