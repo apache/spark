@@ -56,7 +56,7 @@ class SparkScriptTransformationSuite extends BaseScriptTransformationSuite with 
             |FROM v
           """.stripMargin)
       }.getMessage
-      assert(e.contains("TRANSFORM with serde is only supported in hive mode"))
+      assert(e.contains("\"TRANSFORM\" with serde is only supported in hive mode"))
     }
   }
 }

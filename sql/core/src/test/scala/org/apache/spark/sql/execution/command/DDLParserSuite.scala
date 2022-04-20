@@ -484,9 +484,9 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
       DropFunctionCommand(None, "a", true, true))
 
     intercept("DROP TEMPORARY FUNCTION a.b",
-      "DROP TEMPORARY FUNCTION requires a single part name")
+      "\"DROP TEMPORARY FUNCTION\" requires a single part name")
     intercept("DROP TEMPORARY FUNCTION IF EXISTS a.b",
-      "DROP TEMPORARY FUNCTION requires a single part name")
+      "\"DROP TEMPORARY FUNCTION\" requires a single part name")
   }
 
   test("SPARK-32374: create temporary view with properties not allowed") {
