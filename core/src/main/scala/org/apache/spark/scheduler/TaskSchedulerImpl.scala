@@ -392,10 +392,10 @@ private[spark] class TaskSchedulerImpl(
         taskSetRpID == shuffledOffers(i).resourceProfileId ||
           compatibleProfiles.contains(shuffledOffers(i).resourceProfileId)
         } else {
-        // make the resource profile id a hard requirement for now - ie only put tasksets
-        // on executors where resource profile exactly matches.
-        taskSetRpID == shuffledOffers(i).resourceProfileId
-      }
+          // make the resource profile id a hard requirement for now - ie only put tasksets
+          // on executors where resource profile exactly matches.
+          taskSetRpID == shuffledOffers(i).resourceProfileId
+        }
 
       if (assignTasks) {
         val taskResAssignmentsOpt = resourcesMeetTaskRequirements(taskSet, availableCpus(i),
