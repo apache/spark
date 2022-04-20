@@ -362,6 +362,45 @@ class QueryCompilationErrorsSuite extends QueryTest with SharedSparkSession {
       }
     }
   }
+
+  test("MISSING_COLUMN: SELECT distinct does not work correctly if order by missing attribute") {
+    checkAnswer(
+      sql("""select distinct struct.a, struct.b
+            |from (
+            |  select named_struct('a', 1, 'b', 2, 'c', 3) as struct
+            |  union all
+            |  select named_struct('a', 1, 'b', 2, 'c', 4) as struct) tmp
+            |order by a, b
+            |""".stripMargin),
+      Row(1, 2) :: Nil)
+
+    val e = intercept[AnalysisException] {
+      sql("""select distinct struct.a, struct.b
+            |from (
+            |  select named_struct('a', 1, 'b', 2, 'c', 3) as struct
+            |  union all
+            |  select named_struct('a', 1, 'b', 2, 'c', 4) as struct) tmp
+            |order by struct.a, struct.b
+            |""".stripMargin)
+    }
+    assert(e.getErrorClass === "MISSING_COLUMN")
+    assert(e.message === "Column 'struct.a' does not exist. " +
+      "Did you mean one of the following? [a, b]")
+  }
+
+  test("MISSING_COLUMN - SPARK-21335: support un-aliased subquery") {
+    withTempView("v") {
+      Seq(1 -> "a").toDF("i", "j").createOrReplaceTempView("v")
+      checkAnswer(sql("SELECT i from (SELECT i FROM v)"), Row(1))
+
+      val e = intercept[AnalysisException](sql("SELECT v.i from (SELECT i FROM v)"))
+      assert(e.getErrorClass === "MISSING_COLUMN")
+      assert(e.message === "Column 'v.i' does not exist. " +
+        "Did you mean one of the following? [__auto_generated_subquery_name.i]")
+
+      checkAnswer(sql("SELECT __auto_generated_subquery_name.i from (SELECT i FROM v)"), Row(1))
+    }
+  }
 }
 
 class MyCastToString extends SparkUserDefinedFunction(
