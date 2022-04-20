@@ -1733,6 +1733,7 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
         n_psser.drop([1, 4], inplace=True)
         n_pser.drop([1, 4], inplace=True)
         self.assert_eq(n_psser, n_pser)
+        self.assert_eq(psser, pser)
 
         # For MultiIndex
         midx = pd.MultiIndex(
