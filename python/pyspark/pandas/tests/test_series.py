@@ -1729,6 +1729,11 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
         self.assert_eq(psser, pser)
         self.assert_eq(psdf, pdf)
 
+        n_pser, n_psser = pser + 1, psser + 1
+        n_psser.drop([1, 4], inplace=True)
+        n_pser.drop([1, 4], inplace=True)
+        self.assert_eq(n_psser, n_pser)
+
         # For MultiIndex
         midx = pd.MultiIndex(
             [["lama", "cow", "falcon"], ["speed", "weight", "length"]],
