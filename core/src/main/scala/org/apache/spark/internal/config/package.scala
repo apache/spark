@@ -2030,6 +2030,10 @@ package object config {
   private[spark] val SCHEDULER_REUSE_COMPATIBLE_EXECUTORS =
     ConfigBuilder("spark.scheduler.reuseCompatibleExecutors")
       .version("3.3.0")
+      .doc("Whether to reuse compatible executors for stage-level scheduling. " +
+        "When enabled, the executors are reused over different stages when " +
+        "their resource profiles are compatible. The user should specify compatible " +
+        "policy for resource profiles.")
       .booleanConf
       .createWithDefault(false)
 
