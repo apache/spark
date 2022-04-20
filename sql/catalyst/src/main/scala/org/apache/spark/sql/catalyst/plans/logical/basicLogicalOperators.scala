@@ -1153,6 +1153,23 @@ case class Expand(
 }
 
 /**
+ * A logical offset, which may removing a specified number of rows from the beginning of the
+ * output of child logical plan.
+ */
+case class Offset(offsetExpr: Expression, child: LogicalPlan) extends OrderPreservingUnaryNode {
+  override def output: Seq[Attribute] = child.output
+  override def maxRows: Option[Long] = {
+    import scala.math.max
+    offsetExpr match {
+      case IntegerLiteral(offset) => child.maxRows.map { x => max(x - offset, 0) }
+      case _ => None
+    }
+  }
+  override protected def withNewChildInternal(newChild: LogicalPlan): Offset =
+    copy(child = newChild)
+}
+
+/**
  * A constructor for creating a pivot, which will later be converted to a [[Project]]
  * or an [[Aggregate]] during the query analysis.
  *
@@ -1260,6 +1277,37 @@ case class LocalLimit(limitExpr: Expression, child: LogicalPlan) extends OrderPr
   final override val nodePatterns: Seq[TreePattern] = Seq(LIMIT)
 
   override protected def withNewChildInternal(newChild: LogicalPlan): LocalLimit =
+    copy(child = newChild)
+}
+
+object LimitAndOffset {
+  def unapply(p: GlobalLimitAndOffset): Option[(Expression, Expression, LogicalPlan)] = {
+    p match {
+      case GlobalLimitAndOffset(le1, le2, LocalLimit(le3, child)) if le1.eval().asInstanceOf[Int]
+        + le2.eval().asInstanceOf[Int] == le3.eval().asInstanceOf[Int] =>
+        Some((le1, le2, child))
+      case _ => None
+    }
+  }
+}
+
+/**
+ * A global (coordinated) limit with offset. This operator can skip at most `offsetExpr` number and
+ * emit at most `limitExpr` number in total. For example, if we have LIMIT 10 OFFSET 5, we impose a
+ * total limit of 10 + 5 = 15 rows and then discard the first 5, leaving 10 rows remaining.
+ */
+case class GlobalLimitAndOffset(
+    limitExpr: Expression,
+    offsetExpr: Expression,
+    child: LogicalPlan) extends OrderPreservingUnaryNode {
+  override def output: Seq[Attribute] = child.output
+  override def maxRows: Option[Long] = {
+    limitExpr match {
+      case IntegerLiteral(limit) => Some(limit)
+      case _ => None
+    }
+  }
+  override protected def withNewChildInternal(newChild: LogicalPlan): GlobalLimitAndOffset =
     copy(child = newChild)
 }
 

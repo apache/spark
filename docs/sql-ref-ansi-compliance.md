@@ -494,6 +494,7 @@ Below is a list of all the keywords in Spark SQL.
 |NULL|reserved|non-reserved|reserved|
 |NULLS|non-reserved|non-reserved|non-reserved|
 |OF|non-reserved|non-reserved|reserved|
+|OFFSET|reserved|non-reserved|reserved|
 |ON|reserved|strict-non-reserved|reserved|
 |ONLY|reserved|non-reserved|reserved|
 |OPTION|non-reserved|non-reserved|non-reserved|

@@ -31,6 +31,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, GenericArrayData, MapData}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.UTF8String
 
 private[sql] case class GroupableData(data: Int) {
   def getData: Int = data
@@ -529,6 +530,52 @@ class AnalysisErrorSuite extends AnalysisTest {
     "num_rows in limit clause must be equal to or greater than 0",
     listRelation.limit(-1),
     "The limit expression must be equal to or greater than 0, but got -1" :: Nil
+  )
+
+  errorTest(
+    "an evaluated offset class must not be string",
+    testRelation.offset(Literal(UTF8String.fromString("abc"), StringType)),
+    "The offset expression must be integer type, but got string" :: Nil
+  )
+
+  errorTest(
+    "an evaluated offset class must not be long",
+    testRelation.offset(Literal(10L, LongType)),
+    "The offset expression must be integer type, but got bigint" :: Nil
+  )
+
+  errorTest(
+    "an evaluated offset class must not be null",
+    testRelation.offset(Literal(null, IntegerType)),
+    "The evaluated offset expression must not be null, but got " :: Nil
+  )
+
+  errorTest(
+    "num_rows in offset clause must be equal to or greater than 0",
+    testRelation.offset(-1),
+    "The offset expression must be equal to or greater than 0, but got -1" :: Nil
+  )
+
+  errorTest(
+    "OFFSET clause is outermost node",
+    testRelation.offset(Literal(10, IntegerType)),
+    "The OFFSET clause is only allowed in the LIMIT clause, but the OFFSET" +
+      " clause is found to be the outermost node." :: Nil
+  )
+
+  errorTest(
+    "OFFSET clause in other node",
+    testRelation2.offset(Literal(10, IntegerType)).where('b > 1),
+    "The OFFSET clause is only allowed in the LIMIT clause, but the OFFSET" +
+      " clause found in: Filter." :: Nil
+  )
+
+  errorTest(
+    "the sum of num_rows in limit clause and num_rows in offset clause less than Int.MaxValue",
+    testRelation.offset(Literal(2000000000, IntegerType)).limit(Literal(1000000000, IntegerType)),
+    "The sum of the LIMIT clause and the OFFSET clause must not be greater than" +
+      " the maximum 32-bit integer value (2,147,483,647)," +
+      " but found limit = 1000000000, offset = 2000000000." :: Nil
   )
 
   errorTest(
