@@ -145,7 +145,7 @@ object MergeScalarSubqueries extends Rule[LogicalPlan] with PredicateHelper {
     val newPlan = removeReferences(planWithReferences, cache)
     val subqueryCTEs = cache.filter(_.merged).map(_.plan.asInstanceOf[CTERelationDef])
     if (subqueryCTEs.nonEmpty) {
-      WithCTE(newPlan, subqueryCTEs)
+      WithCTE(newPlan, subqueryCTEs.toSeq)
     } else {
       newPlan
     }
