@@ -1025,7 +1025,7 @@ case class PercentRank(children: Seq[Expression]) extends RankLike with SizeBase
  *    y_t = \frac{\sum_{i=0}^t w_i x_{t-i}}{\sum_{i=0}^t w_i},
  * where x_t is the input, y_t is the result and the w_i are the weights.
  */
-case class EWM(input: Expression, alpha: Double)
+case class EWM(input: Expression, alpha: Double, ignoreNA: Boolean)
   extends AggregateWindowFunction with UnaryLike[Expression] {
   assert(0 < alpha && alpha <= 1)
 
@@ -1033,27 +1033,37 @@ case class EWM(input: Expression, alpha: Double)
 
   private val numerator = AttributeReference("numerator", DoubleType, nullable = false)()
   private val denominator = AttributeReference("denominator", DoubleType, nullable = false)()
-  override def aggBufferAttributes: Seq[AttributeReference] = numerator :: denominator :: Nil
+  private val result = AttributeReference("result", DoubleType, nullable = true)()
 
-  override val initialValues: Seq[Expression] = Seq(Literal(0.0), Literal(0.0))
+  override def aggBufferAttributes: Seq[AttributeReference] =
+    numerator :: denominator :: result :: Nil
+
+  override val initialValues: Seq[Expression] =
+    Literal(0.0) :: Literal(0.0) :: Literal.create(null, DoubleType) :: Nil
 
   override val updateExpressions: Seq[Expression] = {
     val beta = Literal(1.0 - alpha)
     val casted = input.cast(DoubleType)
-    // TODO: after adding param ignore_na, we can remove this check
-    val error = RaiseError(Literal("Input values must not be null or NaN")).cast(DoubleType)
-    val validated = If(IsNull(casted) || IsNaN(casted), error, casted)
-    Seq(
-      /* numerator = */ numerator * beta + validated,
-      /* denominator = */ denominator * beta + Literal(1.0)
-    )
+    val isNA = IsNull(casted)
+    val newNumerator = numerator * beta + casted
+    val newDenominator = denominator * beta + Literal(1.0)
+
+    if (ignoreNA) {
+      /* numerator = */ If(isNA, numerator, newNumerator) ::
+      /* denominator = */ If(isNA, denominator, newDenominator) ::
+      /* result = */ If(isNA, result, newNumerator / newDenominator) :: Nil
+    } else {
+      /* numerator = */ If(isNA, numerator * beta, newNumerator) ::
+      /* denominator = */ If(isNA, denominator * beta, newDenominator) ::
+      /* result = */ If(isNA, result, newNumerator / newDenominator) :: Nil
+    }
   }
 
-  override val evaluateExpression: Expression = numerator / denominator
+  override val evaluateExpression: Expression = result
 
   override def prettyName: String = "ewm"
 
-  override def sql: String = s"$prettyName(${input.sql})"
+  override def sql: String = s"$prettyName(${input.sql}, $alpha, $ignoreNA)"
 
   override def child: Expression = input
 

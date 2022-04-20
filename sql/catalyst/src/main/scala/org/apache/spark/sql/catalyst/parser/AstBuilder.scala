@@ -35,7 +35,7 @@ import org.apache.spark.sql.catalyst.{FunctionIdentifier, SQLConfHelper, TableId
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat}
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.aggregate.{First, Last, PercentileCont}
+import org.apache.spark.sql.catalyst.expressions.aggregate.{First, Last, PercentileCont, PercentileDisc}
 import org.apache.spark.sql.catalyst.parser.SqlBaseParser._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -1841,11 +1841,19 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
   override def visitPercentile(ctx: PercentileContext): Expression = withOrigin(ctx) {
     val percentage = expression(ctx.percentage)
     val sortOrder = visitSortItem(ctx.sortItem)
-    val percentileCont = sortOrder.direction match {
-      case Ascending => PercentileCont(sortOrder.child, percentage)
-      case Descending => PercentileCont(sortOrder.child, Subtract(Literal(1), percentage))
+    val percentile = ctx.name.getType match {
+      case SqlBaseParser.PERCENTILE_CONT =>
+        sortOrder.direction match {
+          case Ascending => PercentileCont(sortOrder.child, percentage)
+          case Descending => PercentileCont(sortOrder.child, percentage, true)
+        }
+      case SqlBaseParser.PERCENTILE_DISC =>
+        sortOrder.direction match {
+          case Ascending => PercentileDisc(sortOrder.child, percentage)
+          case Descending => PercentileDisc(sortOrder.child, percentage, true)
+        }
     }
-    val aggregateExpression = percentileCont.toAggregateExpression()
+    val aggregateExpression = percentile.toAggregateExpression()
     ctx.windowSpec match {
       case spec: WindowRefContext =>
         UnresolvedWindowExpression(aggregateExpression, visitWindowRef(spec))
@@ -3735,9 +3743,10 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
   override def visitQualifiedColTypeWithPosition(
       ctx: QualifiedColTypeWithPositionContext): QualifiedColType = withOrigin(ctx) {
     val name = typedVisit[Seq[String]](ctx.name)
+    // Add the 'DEFAULT expression' clause in the column definition, if any, to the column metadata.
     val defaultExpr = Option(ctx.defaultExpression()).map(visitDefaultExpression)
-    if (defaultExpr.isDefined) {
-      throw QueryParsingErrors.defaultColumnNotImplementedYetError(ctx)
+    if (defaultExpr.isDefined && !conf.getConf(SQLConf.ENABLE_DEFAULT_COLUMNS)) {
+      throw QueryParsingErrors.defaultColumnNotEnabledError(ctx)
     }
     QualifiedColType(
       path = if (name.length > 1) Some(UnresolvedFieldName(name.init)) else None,
@@ -3746,7 +3755,8 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
       nullable = ctx.NULL == null,
       comment = Option(ctx.commentSpec()).map(visitCommentSpec),
       position = Option(ctx.colPosition).map( pos =>
-        UnresolvedFieldPosition(typedVisit[ColumnPosition](pos))))
+        UnresolvedFieldPosition(typedVisit[ColumnPosition](pos))),
+      default = defaultExpr)
   }
 
   /**

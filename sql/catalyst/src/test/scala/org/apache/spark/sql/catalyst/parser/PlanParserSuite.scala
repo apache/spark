@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.parser
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, RelationTimeTravel, UnresolvedAlias, UnresolvedAttribute, UnresolvedFunction, UnresolvedGenerator, UnresolvedInlineTable, UnresolvedRelation, UnresolvedStar, UnresolvedSubqueryColumnAliases, UnresolvedTableValuedFunction}
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.aggregate.PercentileCont
+import org.apache.spark.sql.catalyst.expressions.aggregate.{PercentileCont, PercentileDisc}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.internal.SQLConf
@@ -437,18 +437,6 @@ class PlanParserSuite extends AnalysisTest {
          |       w2 as w1,
          |       w3 as w1""".stripMargin,
       WithWindowDefinition(ws1, plan))
-
-    // Fail with no reference.
-    intercept(s"$sql window w2 as w1", "Cannot resolve window reference 'w1'")
-
-    // Fail when resolved reference is not a window spec.
-    intercept(
-      s"""$sql
-         |window w1 as (partition by a, b order by c rows between 1 preceding and 1 following),
-         |       w2 as w1,
-         |       w3 as w2""".stripMargin,
-      "Window reference 'w2' is not a window specification"
-    )
   }
 
   test("lateral view") {
@@ -1311,24 +1299,36 @@ class PlanParserSuite extends AnalysisTest {
       "timestamp expression cannot contain subqueries")
   }
 
-  test("PERCENTILE_CONT function") {
-    def assertPercentileContPlans(inputSQL: String, expectedExpression: Expression): Unit = {
+  test("PERCENTILE_CONT & PERCENTILE_DISC") {
+    def assertPercentilePlans(inputSQL: String, expectedExpression: Expression): Unit = {
       comparePlans(
         parsePlan(inputSQL),
         Project(Seq(UnresolvedAlias(expectedExpression)), OneRowRelation())
       )
     }
 
-    assertPercentileContPlans(
+    assertPercentilePlans(
       "SELECT PERCENTILE_CONT(0.1) WITHIN GROUP (ORDER BY col)",
       PercentileCont(UnresolvedAttribute("col"), Literal(Decimal(0.1), DecimalType(1, 1)))
         .toAggregateExpression()
     )
 
-    assertPercentileContPlans(
+    assertPercentilePlans(
       "SELECT PERCENTILE_CONT(0.1) WITHIN GROUP (ORDER BY col DESC)",
       PercentileCont(UnresolvedAttribute("col"),
-        Subtract(Literal(1), Literal(Decimal(0.1), DecimalType(1, 1)))).toAggregateExpression()
+        Literal(Decimal(0.1), DecimalType(1, 1)), true).toAggregateExpression()
+    )
+
+    assertPercentilePlans(
+      "SELECT PERCENTILE_DISC(0.1) WITHIN GROUP (ORDER BY col)",
+      PercentileDisc(UnresolvedAttribute("col"), Literal(Decimal(0.1), DecimalType(1, 1)))
+        .toAggregateExpression()
+    )
+
+    assertPercentilePlans(
+      "SELECT PERCENTILE_DISC(0.1) WITHIN GROUP (ORDER BY col DESC)",
+      new PercentileDisc(UnresolvedAttribute("col"),
+        Literal(Decimal(0.1), DecimalType(1, 1)), true).toAggregateExpression()
     )
   }
 }
