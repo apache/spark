@@ -40,7 +40,7 @@ class QueryCompilationErrorsSuite extends QueryTest with SharedSparkSession {
     }.message
     assert(msg1 ===
       s"""
-         |Cannot up cast b from bigint to int.
+         |Cannot up cast b from BIGINT to INT.
          |The type path of the target object is:
          |- field (class: "scala.Int", name: "b")
          |- root class: "org.apache.spark.sql.errors.StringIntClass"
@@ -54,7 +54,7 @@ class QueryCompilationErrorsSuite extends QueryTest with SharedSparkSession {
     }.message
     assert(msg2 ===
       s"""
-         |Cannot up cast b.`b` from decimal(38,18) to bigint.
+         |Cannot up cast b.`b` from DECIMAL(38,18) to BIGINT.
          |The type path of the target object is:
          |- field (class: "scala.Long", name: "b")
          |- field (class: "org.apache.spark.sql.errors.StringLongClass", name: "b")
@@ -108,8 +108,9 @@ class QueryCompilationErrorsSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("CANNOT_USE_MIXTURE: Using aggregate function with grouped aggregate pandas UDF") {
+  test("INVALID_PANDAS_UDF_PLACEMENT: Using aggregate function with grouped aggregate pandas UDF") {
     import IntegratedUDFTestUtils._
+    assume(shouldTestGroupedAggPandasUDFs)
 
     val df = Seq(
       (536361, "85123A", 2, 17850),
@@ -117,14 +118,17 @@ class QueryCompilationErrorsSuite extends QueryTest with SharedSparkSession {
       (536363, "86123A", 6, 17851)
     ).toDF("InvoiceNo", "StockCode", "Quantity", "CustomerID")
     val e = intercept[AnalysisException] {
-      val pandasTestUDF = TestGroupedAggPandasUDF(name = "pandas_udf")
+      val pandasTestUDF1 = TestGroupedAggPandasUDF(name = "pandas_udf_1")
+      val pandasTestUDF2 = TestGroupedAggPandasUDF(name = "pandas_udf_2")
       df.groupBy("CustomerId")
-        .agg(pandasTestUDF(df("Quantity")), sum(df("Quantity"))).collect()
+        .agg(pandasTestUDF1(df("Quantity")), pandasTestUDF2(df("Quantity")), sum(df("Quantity")))
+        .collect()
     }
 
-    assert(e.errorClass === Some("CANNOT_USE_MIXTURE"))
+    assert(e.errorClass === Some("INVALID_PANDAS_UDF_PLACEMENT"))
     assert(e.message ===
-      "Cannot use a mixture of aggregate function and group aggregate pandas UDF")
+      "The group aggregate pandas UDF `pandas_udf_1`, `pandas_udf_2` cannot be invoked " +
+      "together with as other, non-pandas aggregate functions.")
   }
 
   test("UNSUPPORTED_FEATURE: Using Python UDF with unsupported join condition") {
@@ -156,6 +160,7 @@ class QueryCompilationErrorsSuite extends QueryTest with SharedSparkSession {
 
   test("UNSUPPORTED_FEATURE: Using pandas UDF aggregate expression with pivot") {
     import IntegratedUDFTestUtils._
+    assume(shouldTestGroupedAggPandasUDFs)
 
     val df = Seq(
       (536361, "85123A", 2, 17850),
@@ -304,6 +309,56 @@ class QueryCompilationErrorsSuite extends QueryTest with SharedSparkSession {
         }
         assert(ex.getMessage.contains("Grouping sets size cannot be greater than 64"))
         assert(ex.getErrorClass == "GROUPING_SIZE_LIMIT_EXCEEDED")
+      }
+    }
+  }
+
+  test("FORBIDDEN_OPERATION: desc partition on a temporary view") {
+    val tableName: String = "t"
+    val tempViewName: String = "tempView"
+
+    withTable(tableName) {
+      sql(
+        s"""
+          |CREATE TABLE $tableName (a STRING, b INT, c STRING, d STRING)
+          |USING parquet
+          |PARTITIONED BY (c, d)
+          |""".stripMargin)
+
+      withTempView(tempViewName) {
+        sql(s"CREATE TEMPORARY VIEW $tempViewName as SELECT * FROM $tableName")
+
+        val e = intercept[AnalysisException](
+          sql(s"DESC TABLE $tempViewName PARTITION (c='Us', d=1)")
+        )
+        assert(e.getErrorClass === "FORBIDDEN_OPERATION")
+        assert(e.message ===
+          s"The operation 'DESC PARTITION' is not allowed on the temporary view: `$tempViewName`")
+      }
+    }
+  }
+
+  test("FORBIDDEN_OPERATION: desc partition on a view") {
+    val tableName: String = "t"
+    val viewName: String = "view"
+
+    withTable(tableName) {
+      sql(
+        s"""
+           |CREATE TABLE $tableName (a STRING, b INT, c STRING, d STRING)
+           |USING parquet
+           |PARTITIONED BY (c, d)
+           |""".stripMargin)
+
+      withView(viewName) {
+        sql(s"CREATE VIEW $viewName as SELECT * FROM $tableName")
+
+        val e = intercept[AnalysisException](
+          sql(s"DESC TABLE $viewName PARTITION (c='Us', d=1)")
+        )
+        assert(e.getErrorClass === "FORBIDDEN_OPERATION")
+        assert(e.message ===
+          s"The operation 'DESC PARTITION' is not allowed on the view: `$viewName`")
       }
     }
   }

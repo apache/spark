@@ -82,7 +82,7 @@ if TYPE_CHECKING:
     from pyspark.pandas.indexes.base import Index
     from pyspark.pandas.groupby import GroupBy
     from pyspark.pandas.series import Series
-    from pyspark.pandas.window import Rolling, Expanding
+    from pyspark.pandas.window import Rolling, Expanding, ExponentialMoving
 
 
 bool_type = bool
@@ -2619,6 +2619,56 @@ class Frame(object, metaclass=ABCMeta):
 
         return Expanding(self, min_periods=min_periods)
 
+    # TODO: 'adjust', 'ignore_na', 'axis', 'method' parameter should be implemented.
+    def ewm(
+        self: FrameLike,
+        com: Optional[float] = None,
+        span: Optional[float] = None,
+        halflife: Optional[float] = None,
+        alpha: Optional[float] = None,
+        min_periods: Optional[int] = None,
+    ) -> "ExponentialMoving[FrameLike]":
+        """
+        Provide exponentially weighted window transformations.
+
+        .. note:: 'min_periods' in pandas-on-Spark works as a fixed window size unlike pandas.
+            Unlike pandas, NA is also counted as the period. This might be changed
+            in the near future.
+
+        .. versionadded:: 3.4.0
+
+        Parameters
+        ----------
+        com : float, optional
+            Specify decay in terms of center of mass.
+            alpha = 1 / (1 + com), for com >= 0.
+
+        span : float, optional
+            Specify decay in terms of span.
+            alpha = 2 / (span + 1), for span >= 1.
+
+        halflife : float, optional
+            Specify decay in terms of half-life.
+            alpha = 1 - exp(-ln(2) / halflife), for halflife > 0.
+
+        alpha : float, optional
+            Specify smoothing factor alpha directly.
+            0 < alpha <= 1.
+
+        min_periods : int, default None
+            Minimum number of observations in window required to have a value
+            (otherwise result is NA).
+
+        Returns
+        -------
+        a Window sub-classed for the particular operation
+        """
+        from pyspark.pandas.window import ExponentialMoving
+
+        return ExponentialMoving(
+            self, com=com, span=span, halflife=halflife, alpha=alpha, min_periods=min_periods
+        )
+
     def get(self, key: Any, default: Optional[Any] = None) -> Any:
         """
         Get item from object for given key (DataFrame column, Panel slice,
@@ -3180,6 +3230,90 @@ class Frame(object, metaclass=ABCMeta):
         return self.fillna(method="ffill", axis=axis, inplace=inplace, limit=limit)
 
     pad = ffill
+
+    # TODO: add 'axis', 'inplace', 'limit_direction', 'limit_area', 'downcast'
+    def interpolate(
+        self: FrameLike,
+        method: Optional[str] = None,
+        limit: Optional[int] = None,
+    ) -> FrameLike:
+        """
+        Fill NaN values using an interpolation method.
+
+        .. note:: the current implementation of rank uses Spark's Window without
+            specifying partition specification. This leads to move all data into
+            single partition in single machine and could cause serious
+            performance degradation. Avoid this method against very large dataset.
+
+        .. versionadded:: 3.4.0
+
+        Parameters
+        ----------
+        method : str, default 'linear'
+            Interpolation technique to use. One of:
+
+            * 'linear': Ignore the index and treat the values as equally
+              spaced.
+
+        limit : int, optional
+            Maximum number of consecutive NaNs to fill. Must be greater than
+            0.
+
+        Returns
+        -------
+        Series or DataFrame or None
+            Returns the same object type as the caller, interpolated at
+            some or all NA values.
+
+        See Also
+        --------
+        fillna : Fill missing values using different methods.
+
+        Examples
+        --------
+        Filling in NA via linear interpolation.
+
+        >>> s = ps.Series([0, 1, np.nan, 3])
+        >>> s
+        0    0.0
+        1    1.0
+        2    NaN
+        3    3.0
+        dtype: float64
+        >>> s.interpolate()
+        0    0.0
+        1    1.0
+        2    2.0
+        3    3.0
+        dtype: float64
+
+        Fill the DataFrame forward (that is, going down) along each column
+        using linear interpolation.
+
+        Note how the last entry in column 'a' is interpolated differently,
+        because there is no entry after it to use for interpolation.
+        Note how the first entry in column 'b' remains NA, because there
+        is no entry before it to use for interpolation.
+
+        >>> df = ps.DataFrame([(0.0, np.nan, -1.0, 1.0),
+        ...                    (np.nan, 2.0, np.nan, np.nan),
+        ...                    (2.0, 3.0, np.nan, 9.0),
+        ...                    (np.nan, 4.0, -4.0, 16.0)],
+        ...                   columns=list('abcd'))
+        >>> df
+             a    b    c     d
+        0  0.0  NaN -1.0   1.0
+        1  NaN  2.0  NaN   NaN
+        2  2.0  3.0  NaN   9.0
+        3  NaN  4.0 -4.0  16.0
+        >>> df.interpolate(method='linear')
+             a    b    c     d
+        0  0.0  NaN -1.0   1.0
+        1  1.0  2.0 -2.0   5.0
+        2  2.0  3.0 -3.0   9.0
+        3  2.0  4.0 -4.0  16.0
+        """
+        return self.interpolate(method=method, limit=limit)
 
     @property
     def at(self) -> AtIndexer:

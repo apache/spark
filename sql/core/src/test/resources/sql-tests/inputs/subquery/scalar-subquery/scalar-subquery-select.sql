@@ -145,3 +145,45 @@ SELECT t1c, (SELECT t1c WHERE t1c = 8) FROM t1;
 SELECT t1c, t1d, (SELECT c + d FROM (SELECT t1c AS c, t1d AS d)) FROM t1;
 SELECT t1c, (SELECT SUM(c) FROM (SELECT t1c AS c)) FROM t1;
 SELECT t1a, (SELECT SUM(t2b) FROM t2 JOIN (SELECT t1a AS a) ON t2a = a) FROM t1;
+
+-- CTE in correlated scalar subqueries
+CREATE OR REPLACE TEMPORARY VIEW t1 AS VALUES (0, 1), (1, 2) t1(c1, c2);
+CREATE OR REPLACE TEMPORARY VIEW t2 AS VALUES (0, 2), (0, 3) t2(c1, c2);
+
+-- Single row subquery
+SELECT c1, (WITH t AS (SELECT 1 AS a) SELECT a + c1 FROM t) FROM t1;
+-- Correlation in CTE.
+SELECT c1, (WITH t AS (SELECT * FROM t2 WHERE c1 = t1.c1) SELECT SUM(c2) FROM t) FROM t1;
+-- Multiple CTE definitions.
+SELECT c1, (
+    WITH t3 AS (SELECT c1 + 1 AS c1, c2 + 1 AS c2 FROM t2),
+    t4 AS (SELECT * FROM t3 WHERE t1.c1 = c1)
+    SELECT SUM(c2) FROM t4
+) FROM t1;
+-- Multiple CTE references.
+SELECT c1, (
+    WITH t AS (SELECT * FROM t2)
+    SELECT SUM(c2) FROM (SELECT c1, c2 FROM t UNION SELECT c2, c1 FROM t) r(c1, c2)
+    WHERE c1 = t1.c1
+) FROM t1;
+-- Reference CTE in both the main query and the subquery.
+WITH v AS (SELECT * FROM t2)
+SELECT * FROM t1 WHERE c1 > (
+    WITH t AS (SELECT * FROM t2)
+    SELECT COUNT(*) FROM v WHERE c1 = t1.c1 AND c1 > (SELECT SUM(c2) FROM t WHERE c1 = v.c1)
+);
+-- Single row subquery that references CTE in the main query.
+WITH t AS (SELECT 1 AS a)
+SELECT c1, (SELECT a FROM t WHERE a = c1) FROM t1;
+-- Multiple CTE references with non-deterministic CTEs.
+WITH
+v1 AS (SELECT c1, c2, rand(0) c3 FROM t1),
+v2 AS (SELECT c1, c2, rand(0) c4 FROM v1 WHERE c3 IN (SELECT c3 FROM v1))
+SELECT c1, (
+    WITH v3 AS (SELECT c1, c2, rand(0) c5 FROM t2)
+    SELECT COUNT(*) FROM (
+        SELECT * FROM v2 WHERE c1 > 0
+        UNION SELECT * FROM v2 WHERE c2 > 0
+        UNION SELECT * FROM v3 WHERE c2 > 0
+    ) WHERE c1 = v1.c1
+) FROM v1;
