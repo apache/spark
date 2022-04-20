@@ -1471,7 +1471,7 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 <tr>
   <td><code>spark.appStatusStore.diskStoreDir</code></td>
-  <td>(none)</td>
+  <td>None</td>
   <td>
     Local directory where to store diagnostic information of SQL executions. This configuration is only for live UI.
   </td>
