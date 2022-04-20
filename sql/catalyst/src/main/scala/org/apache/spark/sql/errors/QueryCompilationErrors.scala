@@ -94,7 +94,9 @@ object QueryCompilationErrors extends QueryErrorsBase {
   def unsupportedIfNotExistsError(tableName: String): Throwable = {
     new AnalysisException(
       errorClass = "UNSUPPORTED_FEATURE",
-      messageParameters = Array(s"IF NOT EXISTS for the table '$tableName' by INSERT INTO."))
+      messageParameters = Array(
+        s"${toSQLStmt("IF NOT EXISTS")} for the table '$tableName' " +
+        s"by ${toSQLStmt("INSERT INTO")}."))
   }
 
   def nonPartitionColError(partitionName: String): Throwable = {
@@ -1576,7 +1578,8 @@ object QueryCompilationErrors extends QueryErrorsBase {
     new AnalysisException(
       errorClass = "UNSUPPORTED_FEATURE",
       messageParameters = Array(
-        s"Using PythonUDF in join condition of join type $joinType is not supported"))
+        "Using PythonUDF in join condition of join type " +
+        s"${toSQLStmt(joinType.sql)} is not supported."))
   }
 
   def conflictingAttributesInJoinConditionError(
