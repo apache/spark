@@ -17,8 +17,7 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
-import scala.collection.mutable
-import scala.collection.mutable.ListBuffer
+import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
@@ -131,18 +130,29 @@ object MergeScalarSubqueries extends Rule[LogicalPlan] with PredicateHelper {
   case class Header(attributes: Seq[Attribute], plan: LogicalPlan, merged: Boolean)
 
   private def extractCommonScalarSubqueries(plan: LogicalPlan) = {
-    val cache = ListBuffer.empty[Header]
-    val subqueryCTEs = mutable.Map.empty[Int, CTERelationDef]
-    val newPlan = removeReferences(insertReferences(plan, cache), cache, subqueryCTEs)
+    val cache = ArrayBuffer.empty[Header]
+    val planWithReferences = insertReferences(plan, cache)
+    cache.zipWithIndex.foreach { case (header, i) =>
+      cache(i) = cache(i).copy(plan =
+        if (header.merged) {
+          CTERelationDef(
+            createProject(header.attributes, removeReferences(header.plan, cache)),
+            underSubquery = true)
+        } else {
+          removeReferences(header.plan, cache)
+        })
+    }
+    val newPlan = removeReferences(planWithReferences, cache)
+    val subqueryCTEs = cache.filter(_.merged).map(_.plan.asInstanceOf[CTERelationDef])
     if (subqueryCTEs.nonEmpty) {
-      WithCTE(newPlan, subqueryCTEs.values.toSeq.sortBy(_.id))
+      WithCTE(newPlan, subqueryCTEs)
     } else {
       newPlan
     }
   }
 
   // First traversal builds up the cache and inserts `ScalarSubqueryReference`s to the plan.
-  private def insertReferences(plan: LogicalPlan, cache: ListBuffer[Header]): LogicalPlan = {
+  private def insertReferences(plan: LogicalPlan, cache: ArrayBuffer[Header]): LogicalPlan = {
     plan.transformUpWithSubqueries {
       case n => n.transformExpressionsUpWithPruning(_.containsAnyPattern(SCALAR_SUBQUERY)) {
         case s: ScalarSubquery if !s.isCorrelated && s.deterministic =>
@@ -154,7 +164,7 @@ object MergeScalarSubqueries extends Rule[LogicalPlan] with PredicateHelper {
 
   // Caching returns the index of the subquery in the cache and the index of scalar member in the
   // "Header".
-  private def cacheSubquery(plan: LogicalPlan, cache: ListBuffer[Header]): (Int, Int) = {
+  private def cacheSubquery(plan: LogicalPlan, cache: ArrayBuffer[Header]): (Int, Int) = {
     val output = plan.output.head
     cache.zipWithIndex.collectFirst(Function.unlift { case (header, subqueryIndex) =>
       checkIdenticalPlans(plan, header.plan).map { outputMap =>
@@ -295,7 +305,7 @@ object MergeScalarSubqueries extends Rule[LogicalPlan] with PredicateHelper {
       newExpressions: Seq[NamedExpression],
       outputMap: AttributeMap[Attribute],
       cachedExpressions: Seq[NamedExpression]) = {
-    val mergedExpressions = ListBuffer[NamedExpression](cachedExpressions: _*)
+    val mergedExpressions = ArrayBuffer[NamedExpression](cachedExpressions: _*)
     val newOutputMap = AttributeMap(newExpressions.map { ne =>
       val mapped = mapAttributes(ne, outputMap)
       val withoutAlias = mapped match {
@@ -342,30 +352,21 @@ object MergeScalarSubqueries extends Rule[LogicalPlan] with PredicateHelper {
   // multiple subqueries or `ScalarSubquery(original plan)` if it isn't.
   private def removeReferences(
       plan: LogicalPlan,
-      cache: ListBuffer[Header],
-      subqueryCTEs: mutable.Map[Int, CTERelationDef]): LogicalPlan = {
+      cache: ArrayBuffer[Header]) = {
     plan.transformUpWithSubqueries {
       case n =>
         n.transformExpressionsWithPruning(_.containsAnyPattern(SCALAR_SUBQUERY_REFERENCE)) {
           case ssr: ScalarSubqueryReference =>
             val header = cache(ssr.subqueryIndex)
             if (header.merged) {
-              val subqueryCTE = subqueryCTEs.getOrElseUpdate(
-                ssr.subqueryIndex,
-                CTERelationDef(
-                  createProject(
-                    header.attributes,
-                    removeReferences(header.plan, cache, subqueryCTEs)),
-                  underSubquery = true))
+              val subqueryCTE = header.plan.asInstanceOf[CTERelationDef]
               GetStructField(
                 ScalarSubquery(
                   CTERelationRef(subqueryCTE.id, _resolved = true, subqueryCTE.output),
                   exprId = ssr.exprId),
                 ssr.headerIndex)
             } else {
-              ScalarSubquery(
-                removeReferences(header.plan, cache, subqueryCTEs),
-                exprId = ssr.exprId)
+              ScalarSubquery(header.plan, exprId = ssr.exprId)
             }
         }
     }

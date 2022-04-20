@@ -512,9 +512,9 @@ class MergeScalarSubqueriesSuite extends PlanTest {
           extractorExpression(2, analyzedSortAggregates.output, 0),
           extractorExpression(2, analyzedSortAggregates.output, 1)),
         Seq(
-          definitionNode(analyzedSortAggregates, 2),
+          definitionNode(analyzedHashAggregates, 0),
           definitionNode(analyzedObjectHashAggregates, 1),
-          definitionNode(analyzedHashAggregates, 0)))
+          definitionNode(analyzedSortAggregates, 2)))
 
     comparePlans(Optimize.execute(originalQuery.analyze), correctAnswer.analyze)
   }
@@ -551,14 +551,14 @@ class MergeScalarSubqueriesSuite extends PlanTest {
 
     val mergedSubquery = testRelation
       .select(
-        ('a + 1).as("a_plus1_2"),
-        ('a + 2).as("a_plus2_2"),
-        'b.as("b_2"))
+        ('a + 1).as("a_plus1"),
+        ('a + 2).as("a_plus2"),
+        'b)
       .select(
         CreateNamedStruct(Seq(
-          Literal("a_plus1_2"), 'a_plus1_2,
-          Literal("a_plus2_2"), 'a_plus2_2,
-          Literal("b_2"), 'b_2
+          Literal("a_plus1"), 'a_plus1,
+          Literal("a_plus2"), 'a_plus2,
+          Literal("b"), 'b
         )).as("mergedValue"))
     val analyzedMergedSubquery = mergedSubquery.analyze
     val correctAnswer = WithCTE(
