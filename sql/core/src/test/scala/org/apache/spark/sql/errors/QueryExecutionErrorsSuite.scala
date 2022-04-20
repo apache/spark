@@ -35,8 +35,12 @@ import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{DecimalType, StructType, TimestampType}
 import org.apache.spark.sql.util.ArrowUtils
 
-class QueryExecutionErrorsSuite extends QueryTest
-  with ParquetTest with OrcTest with SharedSparkSession {
+class QueryExecutionErrorsSuite
+  extends QueryTest
+  with ParquetTest
+  with OrcTest
+  with SharedSparkSession
+  with QueryErrorsSuiteBase {
 
   import testImplicits._
 
@@ -63,11 +67,13 @@ class QueryExecutionErrorsSuite extends QueryTest
       val e = intercept[SparkException] {
         df.collect
       }.getCause.asInstanceOf[SparkRuntimeException]
-      assert(e.getErrorClass === "INVALID_PARAMETER_VALUE")
-      assert(e.getSqlState === "22023")
-      assert(e.getMessage.matches(
-        "The value of parameter\\(s\\) 'key' in the `aes_encrypt`/`aes_decrypt` function " +
-        "is invalid: expects a binary value with 16, 24 or 32 bytes, but got \\d+ bytes."))
+      checkErrorClass(
+        exception = e,
+        errorClass = "INVALID_PARAMETER_VALUE",
+        msg = "The value of parameter\\(s\\) 'key' in the `aes_encrypt`/`aes_decrypt` function " +
+          "is invalid: expects a binary value with 16, 24 or 32 bytes, but got \\d+ bytes.",
+        sqlState = Some("22023"),
+        matchMsg = true)
     }
 
     // Encryption failure - invalid key length
@@ -97,13 +103,15 @@ class QueryExecutionErrorsSuite extends QueryTest
       val e = intercept[SparkException] {
         df2.selectExpr(s"aes_decrypt(unbase64($colName), binary('$key'), 'ECB')").collect
       }.getCause.asInstanceOf[SparkRuntimeException]
-      assert(e.getErrorClass === "INVALID_PARAMETER_VALUE")
-      assert(e.getSqlState === "22023")
-      assert(e.getMessage ===
-        "The value of parameter(s) 'expr, key' in the `aes_encrypt`/`aes_decrypt` function " +
-        "is invalid: Detail message: " +
-        "Given final block not properly padded. " +
-        "Such issues can arise if a bad key is used during decryption.")
+      checkErrorClass(
+        exception = e,
+        errorClass = "INVALID_PARAMETER_VALUE",
+        msg =
+          "The value of parameter(s) 'expr, key' in the `aes_encrypt`/`aes_decrypt` function " +
+          "is invalid: Detail message: " +
+          "Given final block not properly padded. " +
+          "Such issues can arise if a bad key is used during decryption.",
+        sqlState = Some("22023"))
     }
   }
 
@@ -115,10 +123,14 @@ class QueryExecutionErrorsSuite extends QueryTest
       val e = intercept[SparkException] {
         df.collect
       }.getCause.asInstanceOf[SparkRuntimeException]
-      assert(e.getErrorClass === "UNSUPPORTED_FEATURE")
-      assert(e.getSqlState === "0A000")
-      assert(e.getMessage.matches("""The feature is not supported: AES-\w+ with the padding \w+""" +
-        " by the `aes_encrypt`/`aes_decrypt` function."))
+      checkErrorClass(
+        exception = e,
+        errorClass = "UNSUPPORTED_FEATURE",
+        msg =
+          """The feature is not supported: AES-\w+ with the padding \w+""" +
+          " by the `aes_encrypt`/`aes_decrypt` function.",
+        sqlState = Some("0A000"),
+        matchMsg = true)
     }
 
     // Unsupported AES mode and padding in encrypt
@@ -133,10 +145,12 @@ class QueryExecutionErrorsSuite extends QueryTest
 
   test("UNSUPPORTED_FEATURE: unsupported types (map and struct) in lit()") {
     def checkUnsupportedTypeInLiteral(v: Any): Unit = {
-      val e1 = intercept[SparkRuntimeException] { lit(v) }
-      assert(e1.getErrorClass === "UNSUPPORTED_FEATURE")
-      assert(e1.getSqlState === "0A000")
-      assert(e1.getMessage.matches("""The feature is not supported: literal for '.+' of .+\."""))
+      checkErrorClass(
+        exception = intercept[SparkRuntimeException] { lit(v) },
+        errorClass = "UNSUPPORTED_FEATURE",
+        msg = """The feature is not supported: literal for '.+' of .+\.""",
+        sqlState = Some("0A000"),
+        matchMsg = true)
     }
     checkUnsupportedTypeInLiteral(Map("key1" -> 1, "key2" -> 2))
     checkUnsupportedTypeInLiteral(("mike", 29, 1.0))
@@ -148,8 +162,12 @@ class QueryExecutionErrorsSuite extends QueryTest
         .agg(sum($"sales.earnings"))
         .collect()
     }
-    assert(e2.getMessage === "The feature is not supported: pivoting by the value" +
-      """ '[dotnet,Dummies]' of the column data type STRUCT<col1: STRING, training: STRING>.""")
+    checkErrorClass(
+      exception = e2,
+      errorClass = "UNSUPPORTED_FEATURE",
+      msg = "The feature is not supported: pivoting by the value" +
+        """ '[dotnet,Dummies]' of the column data type STRUCT<col1: STRING, training: STRING>.""",
+      sqlState = Some("0A000"))
   }
 
   test("UNSUPPORTED_FEATURE: unsupported pivot operations") {
@@ -161,9 +179,11 @@ class QueryExecutionErrorsSuite extends QueryTest
         .agg(sum($"sales.earnings"))
         .collect()
     }
-    assert(e1.getErrorClass === "UNSUPPORTED_FEATURE")
-    assert(e1.getSqlState === "0A000")
-    assert(e1.getMessage === """The feature is not supported: Repeated "PIVOT"s.""")
+    checkErrorClass(
+      exception = e1,
+      errorClass = "UNSUPPORTED_FEATURE",
+      msg = """The feature is not supported: Repeated "PIVOT"s.""",
+      sqlState = Some("0A000"))
 
     val e2 = intercept[SparkUnsupportedOperationException] {
       trainingSales
@@ -172,9 +192,11 @@ class QueryExecutionErrorsSuite extends QueryTest
         .agg(sum($"sales.earnings"))
         .collect()
     }
-    assert(e2.getErrorClass === "UNSUPPORTED_FEATURE")
-    assert(e2.getSqlState === "0A000")
-    assert(e2.getMessage === """The feature is not supported: "PIVOT" not after a "GROUP BY".""")
+    checkErrorClass(
+      exception = e2,
+      errorClass = "UNSUPPORTED_FEATURE",
+      msg = """The feature is not supported: "PIVOT" not after a "GROUP BY".""",
+      sqlState = Some("0A000"))
   }
 
   test("INCONSISTENT_BEHAVIOR_CROSS_VERSION: " +
@@ -191,20 +213,22 @@ class QueryExecutionErrorsSuite extends QueryTest
       val format = "Parquet"
       val config = SQLConf.PARQUET_REBASE_MODE_IN_READ.key
       val option = "datetimeRebaseMode"
-      assert(e.getErrorClass === "INCONSISTENT_BEHAVIOR_CROSS_VERSION")
-      assert(e.getMessage ===
-        "You may get a different result due to the upgrading to Spark >= 3.0: " +
+      checkErrorClass(
+        exception = e,
+        errorClass = "INCONSISTENT_BEHAVIOR_CROSS_VERSION",
+        msg =
+          "You may get a different result due to the upgrading to Spark >= 3.0: " +
           s"""
-             |reading dates before 1582-10-15 or timestamps before 1900-01-01T00:00:00Z
-             |from $format files can be ambiguous, as the files may be written by
-             |Spark 2.x or legacy versions of Hive, which uses a legacy hybrid calendar
-             |that is different from Spark 3.0+'s Proleptic Gregorian calendar.
-             |See more details in SPARK-31404. You can set the SQL config '$config' or
-             |the datasource option '$option' to 'LEGACY' to rebase the datetime values
-             |w.r.t. the calendar difference during reading. To read the datetime values
-             |as it is, set the SQL config '$config' or the datasource option '$option'
-             |to 'CORRECTED'.
-             |""".stripMargin)
+            |reading dates before 1582-10-15 or timestamps before 1900-01-01T00:00:00Z
+            |from $format files can be ambiguous, as the files may be written by
+            |Spark 2.x or legacy versions of Hive, which uses a legacy hybrid calendar
+            |that is different from Spark 3.0+'s Proleptic Gregorian calendar.
+            |See more details in SPARK-31404. You can set the SQL config '$config' or
+            |the datasource option '$option' to 'LEGACY' to rebase the datetime values
+            |w.r.t. the calendar difference during reading. To read the datetime values
+            |as it is, set the SQL config '$config' or the datasource option '$option'
+            |to 'CORRECTED'.
+            |""".stripMargin)
     }
 
     // Fail to write ancient datetime values.
@@ -217,20 +241,22 @@ class QueryExecutionErrorsSuite extends QueryTest
 
         val format = "Parquet"
         val config = SQLConf.PARQUET_REBASE_MODE_IN_WRITE.key
-        assert(e.getErrorClass === "INCONSISTENT_BEHAVIOR_CROSS_VERSION")
-        assert(e.getMessage ===
-          "You may get a different result due to the upgrading to Spark >= 3.0: " +
+        checkErrorClass(
+          exception = e,
+          errorClass = "INCONSISTENT_BEHAVIOR_CROSS_VERSION",
+          msg =
+            "You may get a different result due to the upgrading to Spark >= 3.0: " +
             s"""
-               |writing dates before 1582-10-15 or timestamps before 1900-01-01T00:00:00Z
-               |into $format files can be dangerous, as the files may be read by Spark 2.x
-               |or legacy versions of Hive later, which uses a legacy hybrid calendar that
-               |is different from Spark 3.0+'s Proleptic Gregorian calendar. See more
-               |details in SPARK-31404. You can set $config to 'LEGACY' to rebase the
-               |datetime values w.r.t. the calendar difference during writing, to get maximum
-               |interoperability. Or set $config to 'CORRECTED' to write the datetime values
-               |as it is, if you are 100% sure that the written files will only be read by
-               |Spark 3.0+ or other systems that use Proleptic Gregorian calendar.
-               |""".stripMargin)
+              |writing dates before 1582-10-15 or timestamps before 1900-01-01T00:00:00Z
+              |into $format files can be dangerous, as the files may be read by Spark 2.x
+              |or legacy versions of Hive later, which uses a legacy hybrid calendar that
+              |is different from Spark 3.0+'s Proleptic Gregorian calendar. See more
+              |details in SPARK-31404. You can set $config to 'LEGACY' to rebase the
+              |datetime values w.r.t. the calendar difference during writing, to get maximum
+              |interoperability. Or set $config to 'CORRECTED' to write the datetime values
+              |as it is, if you are 100% sure that the written files will only be read by
+              |Spark 3.0+ or other systems that use Proleptic Gregorian calendar.
+              |""".stripMargin)
       }
     }
   }
