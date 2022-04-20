@@ -16,7 +16,6 @@
  */
 package org.apache.spark.sql.catalyst.parser
 
-import org.apache.spark.SparkThrowableHelper
 import org.apache.spark.sql.catalyst.analysis.AnalysisTest
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 
@@ -77,49 +76,10 @@ class ErrorParserSuite extends AnalysisTest {
       Some(line), Some(startPosition), Some(stopPosition), Some(errorClass))
   }
 
-  test("no viable input") {
-    intercept("select ((r + 1) ", 1, 16, 16,
-      "Syntax error at or near", "----------------^^^")
-  }
-
-  test("extraneous input") {
-    intercept("select 1 1", 1, 9, 10,
-      "Syntax error at or near '1': extra input '1'", "---------^^^")
-    intercept("select *\nfrom r as q t", 2, 12, 13, "Syntax error at or near", "------------^^^")
-  }
-
-  test("mismatched input") {
-    intercept("select * from r order by q from t", "PARSE_SYNTAX_ERROR",
-      1, 27, 31,
-      "Syntax error at or near",
-      "---------------------------^^^"
-    )
-    intercept("select *\nfrom r\norder by q\nfrom t", "PARSE_SYNTAX_ERROR",
-      4, 0, 4,
-      "Syntax error at or near", "^^^")
-  }
-
-  test("jargon token substitute to user-facing language") {
-    // '<EOF>' -> end of input
-    intercept("select count(*", "PARSE_SYNTAX_ERROR",
-      1, 14, 14, "Syntax error at or near end of input")
-    intercept("select 1 as a from", "PARSE_SYNTAX_ERROR",
-      1, 18, 18, "Syntax error at or near end of input")
-  }
-
   test("semantic errors") {
     intercept("select *\nfrom r\norder by q\ncluster by q", 3, 0, 11,
       "Combination of ORDER BY/SORT BY/DISTRIBUTE BY/CLUSTER BY is not supported",
       "^^^")
-  }
-
-  test("SPARK-21136: misleading error message due to problematic antlr grammar") {
-    intercept("select * from a left join_ b on a.id = b.id", None,
-      "Syntax error at or near 'join_': missing 'JOIN'")
-    intercept("select * from test where test.t is like 'test'", Some("PARSE_SYNTAX_ERROR"),
-      SparkThrowableHelper.getMessage("PARSE_SYNTAX_ERROR", Array("'is'", "")))
-    intercept("SELECT * FROM test WHERE x NOT NULL", Some("PARSE_SYNTAX_ERROR"),
-      SparkThrowableHelper.getMessage("PARSE_SYNTAX_ERROR", Array("'NOT'", "")))
   }
 
   test("hyphen in identifier - DDL tests") {

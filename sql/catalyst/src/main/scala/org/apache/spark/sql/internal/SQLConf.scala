@@ -3758,7 +3758,7 @@ object SQLConf {
     buildConf("spark.sql.legacy.nullValueWrittenAsQuotedEmptyStringCsv")
       .internal()
       .doc("When set to false, nulls are written as unquoted empty strings in CSV data source. " +
-        "If set to false, it restores the legacy behavior that nulls were written as quoted " +
+        "If set to true, it restores the legacy behavior that nulls were written as quoted " +
         "empty strings, `\"\"`.")
       .version("3.3.0")
       .booleanConf

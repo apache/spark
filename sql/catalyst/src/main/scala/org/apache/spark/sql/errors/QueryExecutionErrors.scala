@@ -112,10 +112,12 @@ object QueryExecutionErrors extends QueryErrorsBase {
   }
 
   def invalidInputSyntaxForNumericError(
+      to: DataType,
       s: UTF8String,
       errorContext: String): NumberFormatException = {
-    new SparkNumberFormatException(errorClass = "INVALID_INPUT_SYNTAX_FOR_NUMERIC_TYPE",
-      messageParameters = Array(toSQLValue(s, StringType), SQLConf.ANSI_ENABLED.key, errorContext))
+    new SparkNumberFormatException(errorClass = "INVALID_SYNTAX_FOR_CAST",
+      messageParameters = Array(toSQLType(to), toSQLValue(s, StringType),
+        SQLConf.ANSI_ENABLED.key, errorContext))
   }
 
   def cannotCastFromNullTypeError(to: DataType): Throwable = {
@@ -1011,8 +1013,14 @@ object QueryExecutionErrors extends QueryErrorsBase {
   }
 
   def cannotCastToDateTimeError(value: Any, to: DataType, errorContext: String): Throwable = {
-    new DateTimeException(s"Cannot cast $value to $to. To return NULL instead, use 'try_cast'. " +
-      s"If necessary set ${SQLConf.ANSI_ENABLED.key} to false to bypass this error." + errorContext)
+    val valueString = if (value.isInstanceOf[UTF8String]) {
+      toSQLValue(value, StringType)
+    } else {
+      toSQLValue(value)
+    }
+    new DateTimeException(s"Invalid input syntax for type ${toSQLType(to)}: $valueString. " +
+      s"To return NULL instead, use 'try_cast'. If necessary set ${SQLConf.ANSI_ENABLED.key} " +
+      s"to false to bypass this error." + errorContext)
   }
 
   def registeringStreamingQueryListenerError(e: Exception): Throwable = {

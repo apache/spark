@@ -96,7 +96,7 @@ SELECT float('N A N')
 struct<>
 -- !query output
 org.apache.spark.SparkNumberFormatException
-invalid input syntax for type numeric: 'N A N'. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
+Invalid input syntax for type FLOAT: 'N A N'. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
 == SQL(line 1, position 7) ==
 SELECT float('N A N')
        ^^^^^^^^^^^^^^
@@ -108,7 +108,7 @@ SELECT float('NaN x')
 struct<>
 -- !query output
 org.apache.spark.SparkNumberFormatException
-invalid input syntax for type numeric: 'NaN x'. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
+Invalid input syntax for type FLOAT: 'NaN x'. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
 == SQL(line 1, position 7) ==
 SELECT float('NaN x')
        ^^^^^^^^^^^^^^
@@ -120,7 +120,7 @@ SELECT float(' INFINITY    x')
 struct<>
 -- !query output
 org.apache.spark.SparkNumberFormatException
-invalid input syntax for type numeric: ' INFINITY    x'. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
+Invalid input syntax for type FLOAT: ' INFINITY    x'. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
 == SQL(line 1, position 7) ==
 SELECT float(' INFINITY    x')
        ^^^^^^^^^^^^^^^^^^^^^^^
@@ -156,7 +156,7 @@ SELECT float(decimal('nan'))
 struct<>
 -- !query output
 org.apache.spark.SparkNumberFormatException
-invalid input syntax for type numeric: 'nan'. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
+Invalid input syntax for type DECIMAL(10,0): 'nan'. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
 == SQL(line 1, position 13) ==
 SELECT float(decimal('nan'))
              ^^^^^^^^^^^^^^
