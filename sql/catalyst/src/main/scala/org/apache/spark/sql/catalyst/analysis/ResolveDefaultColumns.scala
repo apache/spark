@@ -96,6 +96,7 @@ case class ResolveDefaultColumns(analyzer: Analyzer) extends Rule[LogicalPlan] {
         val expanded: Project = addMissingDefaultValuesForInsertFromProject(project)
         val replaced: LogicalPlan = replaceExplicitDefaultValuesForLogicalPlan(analyzer, expanded)
         val regenerated: InsertIntoStatement = regenerateUserSpecifiedCols(i.copy(query = replaced))
+        enclosingInsert = None
         if (updated) {
           regenerated
         } else {
@@ -288,7 +289,7 @@ case class ResolveDefaultColumns(analyzer: Analyzer) extends Rule[LogicalPlan] {
       return Some(schema)
     }
     def normalize(str: String) = {
-      if (SQLConf.get.getConf(SQLConf.CASE_SENSITIVE)) str else str.toLowerCase()
+      if (SQLConf.get.caseSensitiveAnalysis) str else str.toLowerCase()
     }
     val colNamesToFields: Map[String, StructField] =
       schema.fields.map {
