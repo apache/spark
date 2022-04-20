@@ -719,7 +719,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 
-The feature is not supported: TRANSFORM does not support DISTINCT/ALL in inputs(line 1, pos 17)
+The feature is not supported: "TRANSFORM" does not support "DISTINCT"/"ALL" in inputs(line 1, pos 17)
 
 == SQL ==
 SELECT TRANSFORM(DISTINCT b, a, c)
@@ -739,7 +739,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 
-The feature is not supported: TRANSFORM does not support DISTINCT/ALL in inputs(line 1, pos 17)
+The feature is not supported: "TRANSFORM" does not support "DISTINCT"/"ALL" in inputs(line 1, pos 17)
 
 == SQL ==
 SELECT TRANSFORM(ALL b, a, c)

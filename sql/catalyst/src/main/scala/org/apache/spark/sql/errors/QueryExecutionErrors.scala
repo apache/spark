@@ -1892,13 +1892,13 @@ object QueryExecutionErrors extends QueryErrorsBase {
   def repeatedPivotsUnsupportedError(): Throwable = {
     new SparkUnsupportedOperationException(
       errorClass = "UNSUPPORTED_FEATURE",
-      messageParameters = Array("Repeated pivots."))
+      messageParameters = Array(s"Repeated ${toSQLStmt("pivot")}s."))
   }
 
   def pivotNotAfterGroupByUnsupportedError(): Throwable = {
     new SparkUnsupportedOperationException(
       errorClass = "UNSUPPORTED_FEATURE",
-      messageParameters = Array("Pivot not after a groupBy."))
+      messageParameters = Array(s"${toSQLStmt("pivot")} not after a ${toSQLStmt("group by")}."))
   }
 
   private val aesFuncName = toSQLId("aes_encrypt") + "/" + toSQLId("aes_decrypt")

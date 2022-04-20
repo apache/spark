@@ -1250,7 +1250,7 @@ class PlanParserSuite extends AnalysisTest {
         |    "escapeChar" = "\\")
         |FROM testData
       """.stripMargin,
-      "TRANSFORM with serde is only supported in hive mode")
+      "\"TRANSFORM\" with serde is only supported in hive mode")
   }
 
 

@@ -21,6 +21,8 @@ import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.test.SharedSparkSession
 
+// Turn of the length check because most of the tests check entire error messages
+// scalastyle:off line.size.limit
 class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession {
   def validateParsingError(
       sqlText: String,
@@ -42,7 +44,7 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession {
       sqlState = "0A000",
       message =
         """
-          |The feature is not supported: LATERAL join with NATURAL join.(line 1, pos 14)
+          |The feature is not supported: "LATERAL" join with "NATURAL" join.(line 1, pos 14)
           |
           |== SQL ==
           |SELECT * FROM t1 NATURAL JOIN LATERAL (SELECT c1 + c2 AS c2)
@@ -57,7 +59,7 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession {
       sqlState = "0A000",
       message =
         """
-          |The feature is not supported: LATERAL join with USING join.(line 1, pos 14)
+          |The feature is not supported: "LATERAL" join with "USING" join.(line 1, pos 14)
           |
           |== SQL ==
           |SELECT * FROM t1 JOIN LATERAL (SELECT c1 + c2 AS c2) USING (c2)
@@ -66,21 +68,17 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession {
   }
 
   test("UNSUPPORTED_FEATURE: Unsupported LATERAL join type") {
-    Seq(
-      ("RIGHT OUTER", "RightOuter"),
-      ("FULL OUTER", "FullOuter"),
-      ("LEFT SEMI", "LeftSemi"),
-      ("LEFT ANTI", "LeftAnti")).foreach { pair =>
+    Seq("RIGHT OUTER", "FULL OUTER", "LEFT SEMI", "LEFT ANTI").foreach { joinType =>
       validateParsingError(
-        sqlText = s"SELECT * FROM t1 ${pair._1} JOIN LATERAL (SELECT c1 + c2 AS c3) ON c2 = c3",
+        sqlText = s"SELECT * FROM t1 $joinType JOIN LATERAL (SELECT c1 + c2 AS c3) ON c2 = c3",
         errorClass = "UNSUPPORTED_FEATURE",
         sqlState = "0A000",
         message =
           s"""
-            |The feature is not supported: LATERAL join type '${pair._2}'.(line 1, pos 14)
+            |The feature is not supported: "LATERAL" join type "$joinType".(line 1, pos 14)
             |
             |== SQL ==
-            |SELECT * FROM t1 ${pair._1} JOIN LATERAL (SELECT c1 + c2 AS c3) ON c2 = c3
+            |SELECT * FROM t1 $joinType JOIN LATERAL (SELECT c1 + c2 AS c3) ON c2 = c3
             |--------------^^^
             |""".stripMargin)
     }
@@ -101,7 +99,7 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession {
         sqlState = "42000",
         message =
           s"""
-            |Invalid SQL syntax: LATERAL can only be used with subquery.(line 1, pos $pos)
+            |Invalid SQL syntax: "LATERAL" can only be used with subquery.(line 1, pos $pos)
             |
             |== SQL ==
             |$sqlText
@@ -117,7 +115,7 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession {
       sqlState = "0A000",
       message =
         """
-          |The feature is not supported: NATURAL CROSS JOIN.(line 1, pos 14)
+          |The feature is not supported: "NATURAL CROSS JOIN".(line 1, pos 14)
           |
           |== SQL ==
           |SELECT * FROM a NATURAL CROSS JOIN b
@@ -177,8 +175,7 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession {
       sqlState = "0A000",
       message =
         """
-          |The feature is not supported: """.stripMargin +
-        """TRANSFORM does not support DISTINCT/ALL in inputs(line 1, pos 17)
+          |The feature is not supported: "TRANSFORM" does not support "DISTINCT"/"ALL" in inputs(line 1, pos 17)
           |
           |== SQL ==
           |SELECT TRANSFORM(DISTINCT a) USING 'a' FROM t
@@ -194,12 +191,10 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession {
       sqlState = "0A000",
       message =
         """
-          |The feature is not supported: """.stripMargin +
-        """TRANSFORM with serde is only supported in hive mode(line 1, pos 0)
+          |The feature is not supported: "TRANSFORM" with serde is only supported in hive mode(line 1, pos 0)
           |
           |== SQL ==
-          |SELECT TRANSFORM(a) ROW FORMAT SERDE """.stripMargin +
-        """'org.apache.hadoop.hive.serde2.OpenCSVSerde' USING 'a' FROM t
+          |SELECT TRANSFORM(a) ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.OpenCSVSerde' USING 'a' FROM t
           |^^^
           |""".stripMargin)
   }
@@ -241,7 +236,7 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession {
       sqlState = "42000",
       message =
         """
-          |Invalid SQL syntax: SHOW `sys` FUNCTIONS not supported(line 1, pos 5)
+          |Invalid SQL syntax: "SHOW" `sys` "FUNCTIONS" not supported(line 1, pos 5)
           |
           |== SQL ==
           |SHOW sys FUNCTIONS
@@ -249,7 +244,6 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession {
           |""".stripMargin)
   }
 
-  // scalastyle:off line.size.limit
   test("INVALID_SQL_SYNTAX: Invalid pattern in show functions") {
     validateParsingError(
       sqlText = "SHOW FUNCTIONS IN db f1",
@@ -257,7 +251,7 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession {
       sqlState = "42000",
       message =
         s"""
-          |Invalid SQL syntax: Invalid pattern in SHOW FUNCTIONS: `f1`. It must be a STRING literal.(line 1, pos 21)
+          |Invalid SQL syntax: Invalid pattern in "SHOW FUNCTIONS": `f1`. It must be a STRING literal.(line 1, pos 21)
           |
           |== SQL ==
           |SHOW FUNCTIONS IN db f1
@@ -269,14 +263,13 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession {
       sqlState = "42000",
       message =
         s"""
-           |Invalid SQL syntax: Invalid pattern in SHOW FUNCTIONS: `f1`. It must be a STRING literal.(line 1, pos 26)
-           |
-           |== SQL ==
-           |SHOW FUNCTIONS IN db LIKE f1
-           |--------------------------^^^
-           |""".stripMargin)
+          |Invalid SQL syntax: Invalid pattern in "SHOW FUNCTIONS": `f1`. It must be a STRING literal.(line 1, pos 26)
+          |
+          |== SQL ==
+          |SHOW FUNCTIONS IN db LIKE f1
+          |--------------------------^^^
+          |""".stripMargin)
   }
-  // scalastyle:on line.size.limit
 
   test("INVALID_SQL_SYNTAX: Create function with both if not exists and replace") {
     val sqlText =
@@ -286,7 +279,7 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession {
         |JAR '/path/to/jar2'
         |""".stripMargin
     val errorDesc =
-      "CREATE FUNCTION with both IF NOT EXISTS and REPLACE is not allowed.(line 2, pos 0)"
+      """"CREATE FUNCTION" with both "IF NOT EXISTS" and "REPLACE" is not allowed.(line 2, pos 0)"""
 
     validateParsingError(
       sqlText = sqlText,
@@ -313,7 +306,7 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession {
         |JAR '/path/to/jar2'
         |""".stripMargin
     val errorDesc =
-      "It is not allowed to define a TEMPORARY function with IF NOT EXISTS.(line 2, pos 0)"
+      """It is not allowed to define a "TEMPORARY FUNCTION" with "IF NOT EXISTS".(line 2, pos 0)"""
 
     validateParsingError(
       sqlText = sqlText,
@@ -365,7 +358,7 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession {
         |JAR '/path/to/jar2'
         |""".stripMargin
     val errorDesc =
-      "Specifying a database in CREATE TEMPORARY FUNCTION is not allowed: `db`(line 2, pos 0)"
+      """Specifying a database in "CREATE TEMPORARY FUNCTION" is not allowed: `db`(line 2, pos 0)"""
 
     validateParsingError(
       sqlText = sqlText,
@@ -386,7 +379,7 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession {
 
   test("INVALID_SQL_SYNTAX: Drop temporary function requires a single part name") {
     val errorDesc =
-      "DROP TEMPORARY FUNCTION requires a single part name but got: `db`.`func`(line 1, pos 0)"
+      "\"DROP TEMPORARY FUNCTION\" requires a single part name but got: `db`.`func`(line 1, pos 0)"
 
     validateParsingError(
       sqlText = "DROP TEMPORARY FUNCTION db.func",

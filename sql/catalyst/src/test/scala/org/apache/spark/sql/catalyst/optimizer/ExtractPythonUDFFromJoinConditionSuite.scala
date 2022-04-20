@@ -187,9 +187,9 @@ class ExtractPythonUDFFromJoinConditionSuite extends PlanTest {
           condition = Some(unevaluableJoinCond))
         Optimize.execute(query.analyze)
       }
-      assert(e.message.contentEquals(
+      assert(e.message ==
         "The feature is not supported: " +
-        s"Using PythonUDF in join condition of join type $joinType is not supported"))
+        s"""Using PythonUDF in join condition of join type "${joinType.sql}" is not supported.""")
 
       val query2 = testRelationLeft.join(
         testRelationRight,

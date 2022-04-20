@@ -1166,7 +1166,7 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
         }
         if (join.LATERAL != null) {
           if (!Seq(Inner, Cross, LeftOuter).contains(joinType)) {
-            throw QueryParsingErrors.unsupportedLateralJoinTypeError(ctx, joinType.toString)
+            throw QueryParsingErrors.unsupportedLateralJoinTypeError(ctx, joinType.sql)
           }
           LateralJoin(left, LateralSubquery(plan(join.right)), joinType, condition)
         } else {

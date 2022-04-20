@@ -90,13 +90,19 @@ object QueryParsingErrors extends QueryErrorsBase {
   }
 
   def transformNotSupportQuantifierError(ctx: ParserRuleContext): Throwable = {
-    new ParseException("UNSUPPORTED_FEATURE",
-      Array("TRANSFORM does not support DISTINCT/ALL in inputs"), ctx)
+    new ParseException(
+      errorClass = "UNSUPPORTED_FEATURE",
+      messageParameters = Array(s"${toSQLStmt("TRANSFORM")} does not support" +
+        s" ${toSQLStmt("DISTINCT")}/${toSQLStmt("ALL")} in inputs"),
+      ctx)
   }
 
   def transformWithSerdeUnsupportedError(ctx: ParserRuleContext): Throwable = {
-    new ParseException("UNSUPPORTED_FEATURE",
-      Array("TRANSFORM with serde is only supported in hive mode"), ctx)
+    new ParseException(
+      errorClass = "UNSUPPORTED_FEATURE",
+      messageParameters = Array(
+        s"${toSQLStmt("TRANSFORM")} with serde is only supported in hive mode"),
+      ctx)
   }
 
   def lateralWithPivotInFromClauseNotAllowedError(ctx: FromClauseContext): Throwable = {
@@ -104,19 +110,31 @@ object QueryParsingErrors extends QueryErrorsBase {
   }
 
   def lateralJoinWithNaturalJoinUnsupportedError(ctx: ParserRuleContext): Throwable = {
-    new ParseException("UNSUPPORTED_FEATURE", Array("LATERAL join with NATURAL join."), ctx)
+    new ParseException(
+      errorClass = "UNSUPPORTED_FEATURE",
+      messageParameters = Array(s"${toSQLStmt("LATERAL")} join with ${toSQLStmt("NATURAL")} join."),
+      ctx)
   }
 
   def lateralJoinWithUsingJoinUnsupportedError(ctx: ParserRuleContext): Throwable = {
-    new ParseException("UNSUPPORTED_FEATURE", Array("LATERAL join with USING join."), ctx)
+    new ParseException(
+      errorClass = "UNSUPPORTED_FEATURE",
+      messageParameters = Array(s"${toSQLStmt("LATERAL")} join with ${toSQLStmt("USING")} join."),
+      ctx)
   }
 
   def unsupportedLateralJoinTypeError(ctx: ParserRuleContext, joinType: String): Throwable = {
-    new ParseException("UNSUPPORTED_FEATURE", Array(s"LATERAL join type '$joinType'."), ctx)
+    new ParseException(
+      errorClass = "UNSUPPORTED_FEATURE",
+      messageParameters = Array(s"${toSQLStmt("LATERAL")} join type ${toSQLStmt(joinType)}."),
+      ctx)
   }
 
   def invalidLateralJoinRelationError(ctx: RelationPrimaryContext): Throwable = {
-    new ParseException("INVALID_SQL_SYNTAX", Array("LATERAL can only be used with subquery."), ctx)
+    new ParseException(
+      errorClass = "INVALID_SQL_SYNTAX",
+      messageParameters = Array(s"${toSQLStmt("LATERAL")} can only be used with subquery."),
+      ctx)
   }
 
   def repetitiveWindowDefinitionError(name: String, ctx: WindowClauseContext): Throwable = {
@@ -135,7 +153,7 @@ object QueryParsingErrors extends QueryErrorsBase {
   }
 
   def naturalCrossJoinUnsupportedError(ctx: RelationContext): Throwable = {
-    new ParseException("UNSUPPORTED_FEATURE", Array("NATURAL CROSS JOIN."), ctx)
+    new ParseException("UNSUPPORTED_FEATURE", Array(toSQLStmt("NATURAL CROSS JOIN") + "."), ctx)
   }
 
   def emptyInputForTableSampleError(ctx: ParserRuleContext): Throwable = {
@@ -301,15 +319,18 @@ object QueryParsingErrors extends QueryErrorsBase {
   }
 
   def showFunctionsUnsupportedError(identifier: String, ctx: IdentifierContext): Throwable = {
-    new ParseException("INVALID_SQL_SYNTAX",
-      Array(s"SHOW ${toSQLId(identifier)} FUNCTIONS not supported"), ctx)
+    new ParseException(
+      errorClass = "INVALID_SQL_SYNTAX",
+      messageParameters = Array(
+        s"${toSQLStmt("SHOW")} ${toSQLId(identifier)} ${toSQLStmt("FUNCTIONS")} not supported"),
+      ctx)
   }
 
   def showFunctionsInvalidPatternError(pattern: String, ctx: ParserRuleContext): Throwable = {
     new ParseException(
       errorClass = "INVALID_SQL_SYNTAX",
       messageParameters = Array(
-        s"Invalid pattern in SHOW FUNCTIONS: ${toSQLId(pattern)}. " +
+        s"Invalid pattern in ${toSQLStmt("SHOW FUNCTIONS")}: ${toSQLId(pattern)}. " +
         s"It must be a ${toSQLType(StringType)} literal."),
       ctx)
   }
@@ -416,13 +437,20 @@ object QueryParsingErrors extends QueryErrorsBase {
   }
 
   def createFuncWithBothIfNotExistsAndReplaceError(ctx: CreateFunctionContext): Throwable = {
-    new ParseException("INVALID_SQL_SYNTAX",
-      Array("CREATE FUNCTION with both IF NOT EXISTS and REPLACE is not allowed."), ctx)
+    new ParseException(
+      errorClass = "INVALID_SQL_SYNTAX",
+      messageParameters = Array(
+        s"${toSQLStmt("CREATE FUNCTION")} with both ${toSQLStmt("IF NOT EXISTS")} " +
+        s"and ${toSQLStmt("REPLACE")} is not allowed."),
+      ctx)
   }
 
   def defineTempFuncWithIfNotExistsError(ctx: CreateFunctionContext): Throwable = {
-    new ParseException("INVALID_SQL_SYNTAX",
-      Array("It is not allowed to define a TEMPORARY function with IF NOT EXISTS."), ctx)
+    new ParseException(
+      errorClass = "INVALID_SQL_SYNTAX",
+      messageParameters = Array(
+        s"It is not allowed to define a ${toSQLStmt("TEMPORARY FUNCTION")}" +
+        s" with ${toSQLStmt("IF NOT EXISTS")}."), ctx)
   }
 
   def unsupportedFunctionNameError(funcName: Seq[String], ctx: CreateFunctionContext): Throwable = {
@@ -435,7 +463,8 @@ object QueryParsingErrors extends QueryErrorsBase {
       ctx: CreateFunctionContext): Throwable = {
     new ParseException(
       "INVALID_SQL_SYNTAX",
-      Array("Specifying a database in CREATE TEMPORARY FUNCTION is not allowed: " +
+      Array(
+        s"Specifying a database in ${toSQLStmt("CREATE TEMPORARY FUNCTION")} is not allowed: " +
         toSQLId(databaseName)),
       ctx)
   }
@@ -449,8 +478,12 @@ object QueryParsingErrors extends QueryErrorsBase {
   }
 
   def invalidNameForDropTempFunc(name: Seq[String], ctx: ParserRuleContext): Throwable = {
-    new ParseException("INVALID_SQL_SYNTAX",
-      Array(s"DROP TEMPORARY FUNCTION requires a single part name but got: ${toSQLId(name)}"), ctx)
+    new ParseException(
+      errorClass = "INVALID_SQL_SYNTAX",
+      messageParameters = Array(
+        s"${toSQLStmt("DROP TEMPORARY FUNCTION")} requires a single part name but got: " +
+        toSQLId(name)),
+      ctx)
   }
 
   def defaultColumnNotImplementedYetError(ctx: ParserRuleContext): Throwable = {
