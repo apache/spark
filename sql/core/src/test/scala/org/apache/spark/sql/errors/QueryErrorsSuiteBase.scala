@@ -26,9 +26,14 @@ trait QueryErrorsSuiteBase extends AnyFunSuite {
       exception: Exception with SparkThrowable,
       errorClass: String,
       msg: String,
-      sqlState: Option[String] = None): Unit = {
+      sqlState: Option[String] = None,
+      matchMsg: Boolean = false): Unit = {
     assert(exception.getErrorClass === errorClass)
     sqlState.foreach(state => exception.getSqlState === state)
-    assert(exception.getMessage === s"""[$errorClass] """ + msg)
+    if (matchMsg) {
+      assert(exception.getMessage.matches(s"""\\[$errorClass\\] """ + msg))
+    } else {
+      assert(exception.getMessage === s"""[$errorClass] """ + msg)
+    }
   }
 }
