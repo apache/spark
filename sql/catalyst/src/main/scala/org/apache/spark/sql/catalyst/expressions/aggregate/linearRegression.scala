@@ -22,10 +22,9 @@ import org.apache.spark.sql.catalyst.expressions.{And, Expression, ExpressionDes
 import org.apache.spark.sql.catalyst.trees.BinaryLike
 import org.apache.spark.sql.types.{AbstractDataType, DoubleType, NumericType}
 
+// scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = """
-    _FUNC_(expr) - Returns the number of non-null number pairs in a group.
-  """,
+  usage = "_FUNC_(y, x) - Returns the number of non-null number pairs in a group, where `y` is the dependent variable and `x` is the independent variable.",
   examples = """
     Examples:
       > SELECT _FUNC_(y, x) FROM VALUES (1, 2), (2, 2), (2, 3), (2, 4) AS tab(y, x);
@@ -37,6 +36,7 @@ import org.apache.spark.sql.types.{AbstractDataType, DoubleType, NumericType}
   """,
   group = "agg_funcs",
   since = "3.3.0")
+// scalastyle:on line.size.limit
 case class RegrCount(left: Expression, right: Expression)
   extends AggregateFunction
   with RuntimeReplaceableAggregate
