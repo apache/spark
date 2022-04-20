@@ -634,6 +634,7 @@ pyspark_pandas = Module(
         "pyspark.pandas.tests.test_expanding",
         "pyspark.pandas.tests.test_extension",
         "pyspark.pandas.tests.test_frame_spark",
+        "pyspark.pandas.tests.test_generic_functions",
         "pyspark.pandas.tests.test_indexops_spark",
         "pyspark.pandas.tests.test_internal",
         "pyspark.pandas.tests.test_namespace",
