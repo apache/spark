@@ -264,28 +264,25 @@ class InjectRuntimeFilterSuite extends QueryTest with SQLTestUtils with SharedSp
     }
   }
 
-  def getNumBloomFilters(plan: LogicalPlan): Integer = {
-    val numBloomFilterAggs = plan.collect {
-      case Filter(condition, _) => condition.collect {
-        case subquery: org.apache.spark.sql.catalyst.expressions.ScalarSubquery
-        => subquery.plan.collect {
-          case Aggregate(_, aggregateExpressions, _) =>
-            aggregateExpressions.map {
-              case Alias(AggregateExpression(bfAgg : BloomFilterAggregate, _, _, _, _),
-              _) =>
-                assert(bfAgg.estimatedNumItemsExpression.isInstanceOf[Literal])
-                assert(bfAgg.numBitsExpression.isInstanceOf[Literal])
-                1
-            }.sum
+  // `MergeScalarSubqueries` can duplicate subqueries in the optimized plan, but the subqueries will
+  // be reused in the physical plan.
+  def getNumBloomFilters(plan: LogicalPlan, scalarSubqueryCTEMultiplicator: Int = 1): Integer = {
+    print(plan)
+    val numBloomFilterAggs = plan.collectWithSubqueries {
+      case Aggregate(_, aggregateExpressions, _) =>
+        aggregateExpressions.collect {
+          case Alias(AggregateExpression(bfAgg: BloomFilterAggregate, _, _, _, _), _) =>
+            assert(bfAgg.estimatedNumItemsExpression.isInstanceOf[Literal])
+            assert(bfAgg.numBitsExpression.isInstanceOf[Literal])
+            1
         }.sum
-      }.sum
     }.sum
     val numMightContains = plan.collect {
       case Filter(condition, _) => condition.collect {
         case BloomFilterMightContain(_, _) => 1
       }.sum
     }.sum
-    assert(numBloomFilterAggs == numMightContains)
+    assert(numBloomFilterAggs == numMightContains * scalarSubqueryCTEMultiplicator)
     numMightContains
   }
 
@@ -389,7 +386,7 @@ class InjectRuntimeFilterSuite extends QueryTest with SQLTestUtils with SharedSp
         planEnabled = sql(query).queryExecution.optimizedPlan
         checkAnswer(sql(query), expectedAnswer)
       }
-      assert(getNumBloomFilters(planEnabled) == getNumBloomFilters(planDisabled) + 2)
+      assert(getNumBloomFilters(planEnabled, 2) == getNumBloomFilters(planDisabled) + 2)
     }
   }
 
@@ -417,10 +414,10 @@ class InjectRuntimeFilterSuite extends QueryTest with SQLTestUtils with SharedSp
           checkAnswer(sql(query), expectedAnswer)
         }
         if (numFilterThreshold < 3) {
-          assert(getNumBloomFilters(planEnabled) == getNumBloomFilters(planDisabled)
-            + numFilterThreshold)
+          assert(getNumBloomFilters(planEnabled, numFilterThreshold) ==
+            getNumBloomFilters(planDisabled) + numFilterThreshold)
         } else {
-          assert(getNumBloomFilters(planEnabled) == getNumBloomFilters(planDisabled) + 2)
+          assert(getNumBloomFilters(planEnabled, 2) == getNumBloomFilters(planDisabled) + 2)
         }
       }
     }
