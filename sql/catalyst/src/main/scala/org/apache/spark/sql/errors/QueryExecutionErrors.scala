@@ -152,7 +152,7 @@ object QueryExecutionErrors extends QueryErrorsBase {
   }
 
   def invalidArrayIndexError(index: Int, numElements: Int): ArrayIndexOutOfBoundsException = {
-    invalidArrayIndexErrorInternal(index, numElements, SQLConf.ANSI_STRICT_INDEX_OPERATOR.key)
+    invalidArrayIndexErrorInternal(index, numElements, SQLConf.ANSI_ENABLED.key)
   }
 
   def invalidInputIndexError(index: Int, numElements: Int): ArrayIndexOutOfBoundsException = {
@@ -176,17 +176,9 @@ object QueryExecutionErrors extends QueryErrorsBase {
         Array(toSQLValue(index), toSQLValue(numElements), SQLConf.ANSI_ENABLED.key))
   }
 
-  def mapKeyNotExistError(
-      key: Any,
-      isElementAtFunction: Boolean,
-      context: String): NoSuchElementException = {
-    if (isElementAtFunction) {
-      new SparkNoSuchElementException(errorClass = "MAP_KEY_DOES_NOT_EXIST_IN_ELEMENT_AT",
-        messageParameters = Array(toSQLValue(key), SQLConf.ANSI_ENABLED.key, context))
-    } else {
-      new SparkNoSuchElementException(errorClass = "MAP_KEY_DOES_NOT_EXIST",
-        messageParameters = Array(toSQLValue(key), SQLConf.ANSI_STRICT_INDEX_OPERATOR.key, context))
-    }
+  def mapKeyNotExistError(key: Any, context: String): NoSuchElementException = {
+    new SparkNoSuchElementException(errorClass = "MAP_KEY_DOES_NOT_EXIST",
+      messageParameters = Array(toSQLValue(key), SQLConf.ANSI_ENABLED.key, context))
   }
 
   def invalidFractionOfSecondError(): DateTimeException = {
