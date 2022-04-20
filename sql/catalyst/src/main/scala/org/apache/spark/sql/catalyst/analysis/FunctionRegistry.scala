@@ -170,7 +170,7 @@ object FunctionRegistryBase {
     if (df != null) {
       if (df.extended().isEmpty) {
         new ExpressionInfo(
-          clazz.getCanonicalName,
+          clazz.getCanonicalName.stripSuffix("$"),
           null,
           name,
           df.usage(),
@@ -184,10 +184,11 @@ object FunctionRegistryBase {
       } else {
         // This exists for the backward compatibility with old `ExpressionDescription`s defining
         // the extended description in `extended()`.
-        new ExpressionInfo(clazz.getCanonicalName, null, name, df.usage(), df.extended())
+        new ExpressionInfo(
+          clazz.getCanonicalName.stripSuffix("$"), null, name, df.usage(), df.extended())
       }
     } else {
-      new ExpressionInfo(clazz.getCanonicalName, name)
+      new ExpressionInfo(clazz.getCanonicalName.stripSuffix("$"), name)
     }
   }
 }
@@ -452,7 +453,9 @@ object FunctionRegistry {
     expression[TrySubtract]("try_subtract"),
     expression[TryMultiply]("try_multiply"),
     expression[TryElementAt]("try_element_at"),
+    expression[TryAverage]("try_avg"),
     expression[TrySum]("try_sum"),
+    expression[TryToBinary]("try_to_binary"),
 
     // aggregate functions
     expression[HyperLogLogPlusPlus]("approx_count_distinct"),
@@ -497,6 +500,8 @@ object FunctionRegistry {
     expression[RegrCount]("regr_count"),
     expression[RegrAvgX]("regr_avgx"),
     expression[RegrAvgY]("regr_avgy"),
+    expression[RegrR2]("regr_r2"),
+    expression[RegrSXX]("regr_sxx"),
 
     // string functions
     expression[Ascii]("ascii"),
@@ -517,6 +522,7 @@ object FunctionRegistry {
     expression[FormatNumber]("format_number"),
     expression[FormatString]("format_string"),
     expression[ToNumber]("to_number"),
+    expression[TryToNumber]("try_to_number"),
     expression[GetJsonObject]("get_json_object"),
     expression[InitCap]("initcap"),
     expression[StringInstr]("instr"),

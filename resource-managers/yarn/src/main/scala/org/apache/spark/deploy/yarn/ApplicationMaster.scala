@@ -261,8 +261,8 @@ private[spark] class ApplicationMaster(
           if (!unregistered) {
             // we only want to unregister if we don't want the RM to retry
             if (finalStatus == FinalApplicationStatus.SUCCEEDED || isLastAttempt) {
-              unregister(finalStatus, finalMsg)
               cleanupStagingDir(new Path(System.getenv("SPARK_YARN_STAGING_DIR")))
+              unregister(finalStatus, finalMsg)
             }
           }
         } catch {

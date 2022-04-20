@@ -549,6 +549,7 @@ class ExecutorSuite extends SparkFunSuite
       stageAttemptId = 0,
       taskBinary = taskBinary,
       partition = rdd.partitions(0),
+      numPartitions = 1,
       locs = Seq(),
       outputId = 0,
       localProperties = new Properties(),

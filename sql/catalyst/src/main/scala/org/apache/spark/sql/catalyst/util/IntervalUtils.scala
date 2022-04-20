@@ -733,7 +733,7 @@ object IntervalUtils {
    * @throws ArithmeticException if the result overflows any field value or divided by zero
    */
   def divideExact(interval: CalendarInterval, num: Double): CalendarInterval = {
-    if (num == 0) throw QueryExecutionErrors.divideByZeroError()
+    if (num == 0) throw QueryExecutionErrors.divideByZeroError("")
     fromDoubles(interval.months / num, interval.days / num, interval.microseconds / num)
   }
 
@@ -1289,7 +1289,8 @@ object IntervalUtils {
     val vShort = vInt.toShort
     if (vInt != vShort) {
       throw QueryExecutionErrors.castingCauseOverflowError(
-        toYearMonthIntervalString(v, ANSI_STYLE, startField, endField), ShortType)
+        Literal(v, YearMonthIntervalType(startField, endField)),
+        ShortType)
     }
     vShort
   }
@@ -1299,7 +1300,8 @@ object IntervalUtils {
     val vByte = vInt.toByte
     if (vInt != vByte) {
       throw QueryExecutionErrors.castingCauseOverflowError(
-        toYearMonthIntervalString(v, ANSI_STYLE, startField, endField), ByteType)
+        Literal(v, YearMonthIntervalType(startField, endField)),
+        ByteType)
     }
     vByte
   }
@@ -1347,7 +1349,8 @@ object IntervalUtils {
     val vInt = vLong.toInt
     if (vLong != vInt) {
       throw QueryExecutionErrors.castingCauseOverflowError(
-        toDayTimeIntervalString(v, ANSI_STYLE, startField, endField), IntegerType)
+        Literal(v, DayTimeIntervalType(startField, endField)),
+        IntegerType)
     }
     vInt
   }
@@ -1357,7 +1360,8 @@ object IntervalUtils {
     val vShort = vLong.toShort
     if (vLong != vShort) {
       throw QueryExecutionErrors.castingCauseOverflowError(
-        toDayTimeIntervalString(v, ANSI_STYLE, startField, endField), ShortType)
+        Literal(v, DayTimeIntervalType(startField, endField)),
+        ShortType)
     }
     vShort
   }
@@ -1367,7 +1371,8 @@ object IntervalUtils {
     val vByte = vLong.toByte
     if (vLong != vByte) {
       throw QueryExecutionErrors.castingCauseOverflowError(
-        toDayTimeIntervalString(v, ANSI_STYLE, startField, endField), ByteType)
+        Literal(v, DayTimeIntervalType(startField, endField)),
+        ByteType)
     }
     vByte
   }

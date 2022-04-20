@@ -524,7 +524,7 @@ abstract class KafkaSinkBatchSuiteBase extends KafkaSinkSuiteBase {
   test("SPARK-20496: batch - enforce analyzed plans") {
     val inputEvents =
       spark.range(1, 1000)
-        .select(to_json(struct("*")) as 'value)
+        .select(to_json(struct("*")) as Symbol("value"))
 
     val topic = newTopic()
     testUtils.createTopic(topic)

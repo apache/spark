@@ -216,6 +216,7 @@ try:
                   'pyspark.sql',
                   'pyspark.sql.avro',
                   'pyspark.sql.pandas',
+                  'pyspark.sql.streaming',
                   'pyspark.streaming',
                   'pyspark.bin',
                   'pyspark.sbin',

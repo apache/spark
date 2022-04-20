@@ -45,7 +45,8 @@ class TryCastSuite extends AnsiCastSuiteBase {
     checkEvaluation(cast(l, to), tryCastResult, InternalRow(l.value))
   }
 
-  override def checkCastToNumericError(l: Literal, to: DataType, tryCastResult: Any): Unit = {
+  override def checkCastToNumericError(l: Literal, to: DataType,
+      expectedDataTypeInErrorMsg: DataType, tryCastResult: Any): Unit = {
     checkEvaluation(cast(l, to), tryCastResult, InternalRow(l.value))
   }
 

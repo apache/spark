@@ -53,18 +53,18 @@ public class ByteArraySuite {
   public void testCompareBinary() {
     byte[] x1 = new byte[0];
     byte[] y1 = new byte[]{(byte) 1, (byte) 2, (byte) 3};
-    assert(ByteArray.compareBinary(x1, y1) < 0);
+    Assert.assertTrue(ByteArray.compareBinary(x1, y1) < 0);
 
     byte[] x2 = new byte[]{(byte) 200, (byte) 100};
     byte[] y2 = new byte[]{(byte) 100, (byte) 100};
-    assert(ByteArray.compareBinary(x2, y2) > 0);
+    Assert.assertTrue(ByteArray.compareBinary(x2, y2) > 0);
 
     byte[] x3 = new byte[]{(byte) 100, (byte) 200, (byte) 12};
     byte[] y3 = new byte[]{(byte) 100, (byte) 200};
-    assert(ByteArray.compareBinary(x3, y3) > 0);
+    Assert.assertTrue(ByteArray.compareBinary(x3, y3) > 0);
 
     byte[] x4 = new byte[]{(byte) 100, (byte) 200};
     byte[] y4 = new byte[]{(byte) 100, (byte) 200};
-    assert(ByteArray.compareBinary(x4, y4) == 0);
+    Assert.assertEquals(0, ByteArray.compareBinary(x4, y4));
   }
 }

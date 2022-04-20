@@ -90,10 +90,6 @@ class AppStatusStoreSuite extends SparkFunSuite {
     if (live) {
       return AppStatusStore.createLiveStore(conf)
     }
-    // LevelDB doesn't support Apple Silicon yet
-    if (Utils.isMacOnAppleSilicon && disk) {
-      return null
-    }
 
     val store: KVStore = if (disk) {
       conf.set(HYBRID_STORE_DISK_BACKEND, diskStoreType.toString)
@@ -106,12 +102,22 @@ class AppStatusStoreSuite extends SparkFunSuite {
     new AppStatusStore(store)
   }
 
-  Seq(
-    "disk leveldb" -> createAppStore(disk = true, HybridStoreDiskBackend.LEVELDB, live = false),
-    "disk rocksdb" -> createAppStore(disk = true, HybridStoreDiskBackend.ROCKSDB, live = false),
-    "in memory" -> createAppStore(disk = false, live = false),
-    "in memory live" -> createAppStore(disk = false, live = true)
-  ).foreach { case (hint, appStore) =>
+  private val cases = {
+    val baseCases = Seq(
+      "disk rocksdb" -> createAppStore(disk = true, HybridStoreDiskBackend.ROCKSDB, live = false),
+      "in memory" -> createAppStore(disk = false, live = false),
+      "in memory live" -> createAppStore(disk = false, live = true)
+    )
+    if (Utils.isMacOnAppleSilicon) {
+      baseCases
+    } else {
+      Seq(
+        "disk leveldb" -> createAppStore(disk = true, HybridStoreDiskBackend.LEVELDB, live = false)
+      ) ++ baseCases
+    }
+  }
+
+  cases.foreach { case (hint, appStore) =>
     test(s"SPARK-26260: summary should contain only successful tasks' metrics (store = $hint)") {
       assume(appStore != null)
       val store = appStore.store
@@ -219,7 +225,8 @@ class AppStatusStoreSuite extends SparkFunSuite {
       resourceProfileId = ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
     (1 to 2).foreach {
       taskId =>
-        val taskInfo = new TaskInfo(taskId, taskId, 0, 0, "0", "localhost", TaskLocality.ANY,
+        val taskInfo = new TaskInfo(
+          taskId, taskId, 0, taskId, 0, "0", "localhost", TaskLocality.ANY,
           false)
         listener.onStageSubmitted(SparkListenerStageSubmitted(stageInfo))
         listener.onTaskStart(SparkListenerTaskStart(0, 0, taskInfo))
@@ -246,14 +253,15 @@ class AppStatusStoreSuite extends SparkFunSuite {
 
   private def newTaskData(i: Int, status: String = "SUCCESS"): TaskDataWrapper = {
     new TaskDataWrapper(
-      i.toLong, i, i, i, i, i, i.toString, i.toString, status, i.toString, false, Nil, None, true,
+      i.toLong, i, i, i, i, i, i,
+      i.toString, i.toString, status, i.toString, false, Nil, None, true,
       i, i, i, i, i, i, i, i, i, i,
       i, i, i, i, i, i, i, i, i, i,
       i, i, i, i, stageId, attemptId)
   }
 
   private def writeTaskDataToStore(i: Int, store: KVStore, status: String): Unit = {
-    val liveTask = new LiveTask(new TaskInfo( i.toLong, i, i, i.toLong, i.toString,
+    val liveTask = new LiveTask(new TaskInfo( i.toLong, i, i, i, i.toLong, i.toString,
        i.toString, TaskLocality.ANY, false), stageId, attemptId, None)
 
     if (status == "SUCCESS") {
