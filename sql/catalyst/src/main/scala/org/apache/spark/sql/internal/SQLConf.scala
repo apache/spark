@@ -2877,6 +2877,7 @@ object SQLConf {
     .createWithDefault(false)
 
   val ANSI_STRICT_INDEX_OPERATOR = buildConf("spark.sql.ansi.strictIndexOperator")
+    .internal()
     .doc(s"When true and '${ANSI_ENABLED.key}' is true, accessing complex SQL types via [] " +
       "operator will throw an exception if array index is out of bound, or map key does not " +
       "exist. Otherwise, Spark will return a null result when accessing an invalid index.")
