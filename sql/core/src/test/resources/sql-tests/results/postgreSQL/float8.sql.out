@@ -128,7 +128,7 @@ SELECT double('N A N')
 struct<>
 -- !query output
 org.apache.spark.SparkNumberFormatException
-invalid input syntax for type numeric: 'N A N'. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
+Invalid input syntax for type DOUBLE: 'N A N'. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
 == SQL(line 1, position 7) ==
 SELECT double('N A N')
        ^^^^^^^^^^^^^^^
@@ -140,7 +140,7 @@ SELECT double('NaN x')
 struct<>
 -- !query output
 org.apache.spark.SparkNumberFormatException
-invalid input syntax for type numeric: 'NaN x'. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
+Invalid input syntax for type DOUBLE: 'NaN x'. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
 == SQL(line 1, position 7) ==
 SELECT double('NaN x')
        ^^^^^^^^^^^^^^^
@@ -152,7 +152,7 @@ SELECT double(' INFINITY    x')
 struct<>
 -- !query output
 org.apache.spark.SparkNumberFormatException
-invalid input syntax for type numeric: ' INFINITY    x'. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
+Invalid input syntax for type DOUBLE: ' INFINITY    x'. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
 == SQL(line 1, position 7) ==
 SELECT double(' INFINITY    x')
        ^^^^^^^^^^^^^^^^^^^^^^^^
@@ -188,7 +188,7 @@ SELECT double(decimal('nan'))
 struct<>
 -- !query output
 org.apache.spark.SparkNumberFormatException
-invalid input syntax for type numeric: 'nan'. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
+Invalid input syntax for type DECIMAL(10,0): 'nan'. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
 == SQL(line 1, position 14) ==
 SELECT double(decimal('nan'))
               ^^^^^^^^^^^^^^

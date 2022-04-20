@@ -130,7 +130,8 @@ case class QualifiedColType(
     dataType: DataType,
     nullable: Boolean,
     comment: Option[String],
-    position: Option[FieldPosition]) {
+    position: Option[FieldPosition],
+    default: Option[String]) {
   def name: Seq[String] = path.map(_.name).getOrElse(Nil) :+ colName
 
   def resolved: Boolean = path.forall(_.resolved) && position.forall(_.resolved)

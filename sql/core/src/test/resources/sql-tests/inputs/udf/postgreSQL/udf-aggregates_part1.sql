@@ -81,7 +81,7 @@ FROM (VALUES (7000000000005), (7000000000007)) v(x);
 
 -- SQL2003 binary aggregates [SPARK-23907]
 SELECT regr_count(b, a) FROM aggtest;
--- SELECT regr_sxx(b, a) FROM aggtest;
+SELECT regr_sxx(b, a) FROM aggtest;
 -- SELECT regr_syy(b, a) FROM aggtest;
 -- SELECT regr_sxy(b, a) FROM aggtest;
 SELECT regr_avgx(b, a), regr_avgy(b, a) FROM aggtest;

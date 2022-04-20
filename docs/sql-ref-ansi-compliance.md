@@ -512,6 +512,7 @@ Below is a list of all the keywords in Spark SQL.
 |PARTITIONS|non-reserved|non-reserved|non-reserved|
 |PERCENT|non-reserved|non-reserved|non-reserved|
 |PERCENTILE_CONT|reserved|non-reserved|non-reserved|
+|PERCENTILE_DISC|reserved|non-reserved|non-reserved|
 |PIVOT|non-reserved|non-reserved|non-reserved|
 |PLACING|non-reserved|non-reserved|non-reserved|
 |POSITION|non-reserved|non-reserved|reserved|

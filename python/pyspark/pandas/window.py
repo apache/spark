@@ -1762,12 +1762,14 @@ class ExponentialMovingLike(Generic[FrameLike], metaclass=ABCMeta):
         halflife: Optional[float] = None,
         alpha: Optional[float] = None,
         min_periods: Optional[int] = None,
+        ignore_na: bool = False,
     ):
         if (min_periods is not None) and (min_periods < 0):
             raise ValueError("min_periods must be >= 0")
         if min_periods is None:
             min_periods = 0
         self._min_periods = min_periods
+        self._ignore_na = ignore_na
 
         self._window = window
         # This unbounded Window is later used to handle 'min_periods' for now.
@@ -1828,10 +1830,11 @@ class ExponentialMovingLike(Generic[FrameLike], metaclass=ABCMeta):
         unified_alpha = self._compute_unified_alpha()
 
         def mean(scol: Column) -> Column:
-            jf = SparkContext._active_spark_context._jvm.PythonSQLUtils.ewm
+            sql_utils = SparkContext._active_spark_context._jvm.PythonSQLUtils
             return F.when(
-                F.row_number().over(self._unbounded_window) >= self._min_periods,
-                Column(jf(scol._jc, unified_alpha)).over(self._window),
+                F.count(F.when(~scol.isNull(), 1).otherwise(None)).over(self._unbounded_window)
+                >= self._min_periods,
+                Column(sql_utils.ewm(scol._jc, unified_alpha, self._ignore_na)).over(self._window),
             ).otherwise(SF.lit(None))
 
         return self._apply_as_series_or_frame(mean)
@@ -1846,6 +1849,7 @@ class ExponentialMoving(ExponentialMovingLike[FrameLike]):
         halflife: Optional[float] = None,
         alpha: Optional[float] = None,
         min_periods: Optional[int] = None,
+        ignore_na: bool = False,
     ):
         from pyspark.pandas.frame import DataFrame
         from pyspark.pandas.series import Series
@@ -1861,7 +1865,7 @@ class ExponentialMoving(ExponentialMovingLike[FrameLike]):
             Window.unboundedPreceding, Window.currentRow
         )
 
-        super().__init__(window_spec, com, span, halflife, alpha, min_periods)
+        super().__init__(window_spec, com, span, halflife, alpha, min_periods, ignore_na)
 
     def __getattr__(self, item: str) -> Any:
         if hasattr(MissingPandasLikeExponentialMoving, item):
@@ -1882,7 +1886,6 @@ class ExponentialMoving(ExponentialMovingLike[FrameLike]):
         -----
         There are behavior differences between pandas-on-Spark and pandas.
 
-        * the data should not contain NaNs. pandas-on-Spark will return an error.
         * the current implementation of this API uses Spark's Window without
           specifying partition specification. This leads to move all data into
           single partition in single machine and could cause serious
@@ -1928,10 +1931,18 @@ class ExponentialMoving(ExponentialMovingLike[FrameLike]):
         """
         return super().mean()
 
-    # TODO: when add 'adjust' and 'ignore_na' parameter, should add to here too.
+    # TODO: when add 'adjust' parameter, should add to here too.
     def __repr__(self) -> str:
-        return "ExponentialMoving [com={}, span={}, halflife={}, alpha={}, min_periods={}]".format(
-            self._com, self._span, self._halflife, self._alpha, self._min_periods
+        return (
+            "ExponentialMoving [com={}, span={}, halflife={}, alpha={}, "
+            "min_periods={}, ignore_na={}]".format(
+                self._com,
+                self._span,
+                self._halflife,
+                self._alpha,
+                self._min_periods,
+                self._ignore_na,
+            )
         )
 
 

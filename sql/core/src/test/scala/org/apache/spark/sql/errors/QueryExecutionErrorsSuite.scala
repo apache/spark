@@ -28,7 +28,7 @@ import org.apache.spark.sql.connector.SimpleWritableDataSource
 import org.apache.spark.sql.execution.QueryExecutionException
 import org.apache.spark.sql.execution.datasources.orc.OrcTest
 import org.apache.spark.sql.execution.datasources.parquet.ParquetTest
-import org.apache.spark.sql.functions.{lit, lower, struct, sum}
+import org.apache.spark.sql.functions.{lit, lower, struct, sum, udf}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy.EXCEPTION
 import org.apache.spark.sql.test.SharedSparkSession
@@ -399,5 +399,39 @@ class QueryExecutionErrorsSuite extends QueryTest
       assert(e.getMessage === "The fraction of sec must be zero. Valid range is [0, 60]. " +
         "If necessary set spark.sql.ansi.enabled to false to bypass this error. ")
     }
+  }
+
+  test("CANNOT_CHANGE_DECIMAL_PRECISION: cast string to decimal") {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      val e = intercept[SparkArithmeticException] {
+        sql("select CAST('66666666666666.666' AS DECIMAL(8, 1))").collect()
+      }
+      assert(e.getErrorClass === "CANNOT_CHANGE_DECIMAL_PRECISION")
+      assert(e.getSqlState === "22005")
+      assert(e.getMessage ===
+        "Decimal(expanded,66666666666666.666,17,3}) cannot be represented as Decimal(8, 1). " +
+        "If necessary set spark.sql.ansi.enabled to false to bypass this error." +
+        """
+          |== SQL(line 1, position 7) ==
+          |select CAST('66666666666666.666' AS DECIMAL(8, 1))
+          |       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+          |""".stripMargin)
+    }
+  }
+
+  test("FAILED_EXECUTE_UDF: execute user defined function") {
+    val e1 = intercept[SparkException] {
+      val words = Seq(("Jacek", 5), ("Agata", 5), ("Sweet", 6)).toDF("word", "index")
+      val luckyCharOfWord = udf { (word: String, index: Int) => {
+        word.substring(index, index + 1)
+      }}
+      words.select(luckyCharOfWord($"word", $"index")).collect()
+    }
+    assert(e1.getCause.isInstanceOf[SparkException])
+
+    val e2 = e1.getCause.asInstanceOf[SparkException]
+    assert(e2.getErrorClass === "FAILED_EXECUTE_UDF")
+    assert(e2.getMessage.matches("Failed to execute user defined function " +
+      "\\(QueryExecutionErrorsSuite\\$\\$Lambda\\$\\d+/\\w+: \\(string, int\\) => string\\)"))
   }
 }
