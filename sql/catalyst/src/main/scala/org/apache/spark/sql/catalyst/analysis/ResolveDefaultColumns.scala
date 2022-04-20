@@ -64,7 +64,14 @@ case class ResolveDefaultColumns(analyzer: Analyzer) extends Rule[LogicalPlan] {
     plan.resolveOperatorsWithPruning(
       (_ => SQLConf.get.enableDefaultColumns), ruleId) {
       case i@InsertIntoStatement(_, _, _, _, _, _)
-        if i.query.collectFirst { case u: UnresolvedInlineTable => u }.isDefined =>
+        // Match against a VALUES list under any combination of projections and/or aggregates.
+        if i.query.exists(t =>
+            t.isInstanceOf[UnresolvedInlineTable]) &&
+          !i.query.exists(t =>
+            !t.isInstanceOf[UnresolvedInlineTable] &&
+            !t.isInstanceOf[Project] &&
+            !t.isInstanceOf[Aggregate] &&
+            !t.isInstanceOf[SubqueryAlias]) =>
         enclosingInsert = Some(i)
         insertTableSchemaWithoutPartitionColumns = getInsertTableSchemaWithoutPartitionColumns
         val regenerated: InsertIntoStatement = regenerateUserSpecifiedCols(i)
@@ -281,7 +288,7 @@ case class ResolveDefaultColumns(analyzer: Analyzer) extends Rule[LogicalPlan] {
       return Some(schema)
     }
     def normalize(str: String) = {
-      if (SQLConf.get.caseSensitiveAnalysis) str else str.toLowerCase()
+      if (SQLConf.get.getConf(SQLConf.CASE_SENSITIVE)) str else str.toLowerCase()
     }
     val colNamesToFields: Map[String, StructField] =
       schema.fields.map {
@@ -291,10 +298,10 @@ case class ResolveDefaultColumns(analyzer: Analyzer) extends Rule[LogicalPlan] {
       userSpecifiedCols.map {
         name: String => colNamesToFields.getOrElse(normalize(name), return None)
       }
-    val userSpecifiedColNames: Set[String] = userSpecifiedCols.toSet
+    val userSpecifiedColNames: Set[String] = userSpecifiedCols.map(normalize).toSet
     val nonUserSpecifiedFields: Seq[StructField] =
       schema.fields.filter {
-        field => !userSpecifiedColNames.contains(field.name)
+        field => !userSpecifiedColNames.contains(normalize(field.name))
       }
     Some(StructType(userSpecifiedFields ++
       getStructFieldsForDefaultExpressions(nonUserSpecifiedFields)))

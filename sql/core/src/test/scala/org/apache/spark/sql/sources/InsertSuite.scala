@@ -1715,6 +1715,8 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
         sql("INSERT INTO t WITH v1(c1) as (values (1)) select 1, 2, 3 from v1")
         checkAnswer(spark.table("t"), Row(1, 2, 3))
       }
+    }
+    withTable("t") {
       withSQLConf(SQLConf.USE_NULLS_FOR_MISSING_DEFAULT_COLUMN_VALUES.key -> "true") {
         sql("CREATE TABLE t(i int, part1 int, part2 int) using parquet")
         sql("INSERT INTO t WITH v1(c1) as (values (1)) select 1, 2, 3 from v1")

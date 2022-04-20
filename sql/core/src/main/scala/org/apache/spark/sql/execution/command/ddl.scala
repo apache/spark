@@ -358,7 +358,7 @@ case class AlterTableChangeColumnCommand(
           if (newColumn.getComment().isDefined) {
             field.withComment(newColumn.getComment().get)
           } else {
-            field
+            newColumn
           }
         // Create a new column from the origin column with the new current default value.
         val withNewDefaultValue: StructField =
