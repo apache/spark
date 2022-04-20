@@ -3195,6 +3195,14 @@ private[spark] object Utils extends Logging {
   }
 
   /**
+   * Convert initial memory size(set by spark.executor.extraJavaOptions=-XmsXXX) to MB Unit
+   */
+  def executorInitialMemorySizeAsMb(javaOpts: String): Int = {
+    val javaXmsOpts = Utils.splitCommandString(javaOpts).filter(_.startsWith("-Xms"))
+    Utils.memoryStringToMb(javaXmsOpts.last.substring("-Xms".length))
+  }
+
+  /**
    * return 0 if MEMORY_OFFHEAP_ENABLED is false.
    */
   def checkOffHeapEnabled(sparkConf: SparkConf, offHeapSize: Long): Long = {

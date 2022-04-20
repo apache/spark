@@ -520,6 +520,29 @@ class SparkConfSuite extends SparkFunSuite with LocalSparkContext with ResetSyst
         }
     }
   }
+
+  test("executor initial memory must not be larger than spark.executor.memory") {
+    val conf = new SparkConf()
+    conf.validateSettings()
+
+    conf.set(EXECUTOR_MEMORY.key, "10G")
+    conf.set(EXECUTOR_JAVA_OPTIONS, "-Xms20G")
+    val e1 = intercept[Exception] {
+      conf.validateSettings()
+    }
+    assert(e1.getMessage ===
+      "The initial memory value 20480Mb (set by spark.executor.extraJavaOptions=-Xms20G) " +
+        "must not be larger than the value 10240Mb (set by spark.executor.memory=10G).")
+
+    conf.set(EXECUTOR_MEMORY.key, "10G")
+    conf.set(EXECUTOR_JAVA_OPTIONS, "-Xms20G -Xms15G")
+    val e2 = intercept[Exception] {
+      conf.validateSettings()
+    }
+    assert(e2.getMessage ===
+      "The initial memory value 15360Mb (set by spark.executor.extraJavaOptions=-Xms20G -Xms15G) " +
+        "must not be larger than the value 10240Mb (set by spark.executor.memory=10G).")
+  }
 }
 
 class Class1 {}

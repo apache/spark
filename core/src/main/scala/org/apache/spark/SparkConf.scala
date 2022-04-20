@@ -529,6 +529,17 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
           s"(was '$javaOpts'). Use spark.executor.memory instead."
         throw new Exception(msg)
       }
+      if (javaOpts.contains("-Xms") && contains(EXECUTOR_MEMORY)) {
+        val executorInitialMemory = Utils.executorInitialMemorySizeAsMb(javaOpts)
+        val executorMemory = Utils.memoryStringToMb(get(EXECUTOR_MEMORY.key))
+        if (executorInitialMemory > executorMemory) {
+          val msg = s"The initial memory value ${executorInitialMemory}Mb " +
+            s"(set by $executorOptsKey=$javaOpts) " +
+            s"must not be larger than the value ${executorMemory}Mb " +
+            s"(set by ${EXECUTOR_MEMORY.key}=${get(EXECUTOR_MEMORY.key)})."
+          throw new Exception(msg)
+        }
+      }
     }
 
     // Validate memory fractions
