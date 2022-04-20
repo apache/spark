@@ -2619,7 +2619,7 @@ class Frame(object, metaclass=ABCMeta):
 
         return Expanding(self, min_periods=min_periods)
 
-    # TODO: 'adjust', 'ignore_na', 'axis', 'method' parameter should be implemented.
+    # TODO: 'adjust', 'axis', 'method' parameter should be implemented.
     def ewm(
         self: FrameLike,
         com: Optional[float] = None,
@@ -2627,6 +2627,7 @@ class Frame(object, metaclass=ABCMeta):
         halflife: Optional[float] = None,
         alpha: Optional[float] = None,
         min_periods: Optional[int] = None,
+        ignore_na: bool_type = False,
     ) -> "ExponentialMoving[FrameLike]":
         """
         Provide exponentially weighted window transformations.
@@ -2659,6 +2660,21 @@ class Frame(object, metaclass=ABCMeta):
             Minimum number of observations in window required to have a value
             (otherwise result is NA).
 
+        ignore_na : bool, default False
+            Ignore missing values when calculating weights.
+
+            - When ``ignore_na=False`` (default), weights are based on absolute positions.
+              For example, the weights of :math:`x_0` and :math:`x_2` used in calculating
+              the final weighted average of [:math:`x_0`, None, :math:`x_2`] are
+              :math:`(1-\alpha)^2` and :math:`1` if ``adjust=True``, and
+              :math:`(1-\alpha)^2` and :math:`\alpha` if ``adjust=False``.
+
+            - When ``ignore_na=True``, weights are based
+              on relative positions. For example, the weights of :math:`x_0` and :math:`x_2`
+              used in calculating the final weighted average of
+              [:math:`x_0`, None, :math:`x_2`] are :math:`1-\alpha` and :math:`1` if
+              ``adjust=True``, and :math:`1-\alpha` and :math:`\alpha` if ``adjust=False``.
+
         Returns
         -------
         a Window sub-classed for the particular operation
@@ -2666,7 +2682,13 @@ class Frame(object, metaclass=ABCMeta):
         from pyspark.pandas.window import ExponentialMoving
 
         return ExponentialMoving(
-            self, com=com, span=span, halflife=halflife, alpha=alpha, min_periods=min_periods
+            self,
+            com=com,
+            span=span,
+            halflife=halflife,
+            alpha=alpha,
+            min_periods=min_periods,
+            ignore_na=ignore_na,
         )
 
     def get(self, key: Any, default: Optional[Any] = None) -> Any:
