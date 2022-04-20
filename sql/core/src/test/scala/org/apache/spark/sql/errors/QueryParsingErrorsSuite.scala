@@ -306,7 +306,7 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession {
         |JAR '/path/to/jar2'
         |""".stripMargin
     val errorDesc =
-      """It is not allowed to define a "TEMPORARY" function with "IF NOT EXISTS".(line 2, pos 0)"""
+      """It is not allowed to define a "TEMPORARY FUNCTION" with "IF NOT EXISTS".(line 2, pos 0)"""
 
     validateParsingError(
       sqlText = sqlText,

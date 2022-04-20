@@ -449,7 +449,7 @@ object QueryParsingErrors extends QueryErrorsBase {
     new ParseException(
       errorClass = "INVALID_SQL_SYNTAX",
       messageParameters = Array(
-        s"It is not allowed to define a ${toSQLStmt("TEMPORARY")} function" +
+        s"It is not allowed to define a ${toSQLStmt("TEMPORARY FUNCTION")}" +
         s" with ${toSQLStmt("IF NOT EXISTS")}."), ctx)
   }
 
