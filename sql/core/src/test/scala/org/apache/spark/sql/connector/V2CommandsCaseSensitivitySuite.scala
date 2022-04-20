@@ -292,11 +292,14 @@ class V2CommandsCaseSensitivitySuite extends SharedSparkSession with AnalysisTes
         } else {
           Seq("Missing field " + ref.quoted)
         }
-        alterTableTest(
-          DropColumns(table, Seq(UnresolvedFieldName(ref)), ifExists),
-          expectedErrors,
-          expectErrorOnCaseSensitive = !ifExists
-        )
+        val alter = DropColumns(table, Seq(UnresolvedFieldName(ref)), ifExists)
+        if (ifExists) {
+          // using IF EXISTS will silence all errors for missing columns
+          assertAnalysisSuccess(alter, caseSensitive = true)
+          assertAnalysisSuccess(alter, caseSensitive = false)
+        } else {
+          alterTableTest(alter, expectedErrors, expectErrorOnCaseSensitive = true)
+        }
       }
     }
   }
