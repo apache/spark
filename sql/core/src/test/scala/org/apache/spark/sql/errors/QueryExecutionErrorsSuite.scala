@@ -432,6 +432,6 @@ class QueryExecutionErrorsSuite extends QueryTest
     val e2 = e1.getCause.asInstanceOf[SparkException]
     assert(e2.getErrorClass === "FAILED_EXECUTE_UDF")
     assert(e2.getMessage.matches("Failed to execute user defined function " +
-      "\\(QueryExecutionErrorsSuite\\$\\$Lambda\\$\\d+/\\d+: \\(string, int\\) => string\\)"))
+      "\\(QueryExecutionErrorsSuite\\$\\$Lambda\\$\\d+/\\w+: \\(string, int\\) => string\\)"))
   }
 }
