@@ -3709,7 +3709,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     assertDataStructuresEmpty()
   }
 
-  test("SPARK-32920: Merge results should be unregistered if the running stage is cancelled" +
+  test("SPARK-32920: Merge results should not be unregistered if the running stage is cancelled" +
     " before shuffle merge is finalized") {
     initPushBasedShuffleConfs(conf)
     DAGSchedulerSuite.clearMergerLocs()
@@ -3742,7 +3742,8 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     runEvent(StageCancelled(0, Option("Explicit cancel check")))
     scheduler.handleShuffleMergeFinalized(shuffleMapStageToCancel,
       shuffleMapStageToCancel.shuffleDep.shuffleMergeId)
-    assert(mapOutputTracker.getNumAvailableMergeResults(shuffleDep.shuffleId) == 0)
+    assert(mapOutputTracker.getNumAvailableMergeResults(shuffleDep.shuffleId) == 2)
+    assert(shuffleMapStageToCancel.shuffleDep.isShuffleMergeFinalizedMarked)
   }
 
   test("SPARK-32920: SPARK-35549: Merge results should not get registered" +
@@ -4001,13 +4002,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
   }
 
   // Test the behavior of stage cancellation during the spark.shuffle.push.finalize.timeout
-  // wait for shuffle merge finalization, there are 2 different cases:
-  // 1. Deterministic stage - With deterministic stage, the shuffleMergeId = 0 for multiple
-  // stage attempts, so if the stage is cancelled before shuffle is merge finalized then
-  // the merge results are unregistered from MapOutputTracker
-  // 2. Indeterminate stage - Different attempt of the same stage can trigger shuffle merge
-  // finalization but it is validated by the shuffleMergeId (unique across stages and stage
-  // attempts for indeterminate stages) and only the shuffle merge is finalized
+  // wait for shuffle merge finalization
   test("SPARK-33701: check adaptive shuffle merge finalization behavior with stage" +
     " cancellation during spark.shuffle.push.finalize.timeout wait") {
     initPushBasedShuffleConfs(conf)
@@ -4052,9 +4047,9 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     scheduler.handleShuffleMergeFinalized(shuffleStage1, shuffleStage1.shuffleDep.shuffleMergeId)
 
     assert(shuffleStage1.shuffleDep.mergerLocs.nonEmpty)
-    assert(!shuffleStage1.shuffleDep.isShuffleMergeFinalizedMarked)
+    assert(shuffleStage1.shuffleDep.isShuffleMergeFinalizedMarked)
     assert(mapOutputTracker.
-      getNumAvailableMergeResults(shuffleStage1.shuffleDep.shuffleId) == 0)
+      getNumAvailableMergeResults(shuffleStage1.shuffleDep.shuffleId) == 4)
 
     // Indeterminate stage
     val shuffleMapIndeterminateRdd1 = new MyRDD(sc, parts, Nil, indeterminate = true)
