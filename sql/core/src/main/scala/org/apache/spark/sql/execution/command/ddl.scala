@@ -37,7 +37,6 @@ import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns._
 import org.apache.spark.sql.connector.catalog.{CatalogV2Util, TableCatalog}
 import org.apache.spark.sql.connector.catalog.SupportsNamespaces._
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -355,24 +354,17 @@ case class AlterTableChangeColumnCommand(
       if (field.name == originColumn.name) {
         // Create a new column from the origin column with the new comment.
         val withNewComment: StructField =
-          if (newColumn.getComment().isDefined) {
-            field.withComment(newColumn.getComment().get)
-          } else {
-            newColumn
-          }
+          addComment(field, newColumn.getComment)
         // Create a new column from the origin column with the new current default value.
-        val withNewDefaultValue: StructField =
-          if (newColumn.metadata.contains(CURRENT_DEFAULT_COLUMN_METADATA_KEY)) {
-            withNewComment.copy(metadata =
-              new MetadataBuilder()
-                .withMetadata(withNewComment.metadata)
-                .putString(CURRENT_DEFAULT_COLUMN_METADATA_KEY,
-                  newColumn.metadata.getString(CURRENT_DEFAULT_COLUMN_METADATA_KEY))
-                .build())
+        if (newColumn.getCurrentDefaultValue().isDefined) {
+          if (newColumn.getCurrentDefaultValue().get.nonEmpty) {
+            addCurrentDefaultValue(withNewComment, newColumn.getCurrentDefaultValue())
           } else {
-            withNewComment
+            withNewComment.clearCurrentDefaultValue()
           }
-        withNewDefaultValue
+        } else {
+          withNewComment
+        }
       } else {
         field
       }
@@ -390,6 +382,15 @@ case class AlterTableChangeColumnCommand(
       case field if resolver(field.name, name) => field
     }.getOrElse(throw QueryCompilationErrors.cannotFindColumnError(name, schema.fieldNames))
   }
+
+  // Add the comment to a column, if comment is empty, return the original column.
+  private def addComment(column: StructField, comment: Option[String]): StructField =
+    comment.map(column.withComment).getOrElse(column)
+
+  // Add the current default value to a column, if default value is empty, return the original
+  // column.
+  private def addCurrentDefaultValue(column: StructField, value: Option[String]): StructField =
+    value.map(column.withCurrentDefaultValue).getOrElse(column)
 
   // Compare a [[StructField]] to another, return true if they have the same column
   // name(by resolver) and dataType.

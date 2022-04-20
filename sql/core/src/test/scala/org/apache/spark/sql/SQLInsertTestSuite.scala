@@ -171,27 +171,24 @@ trait SQLInsertTestSuite extends QueryTest with SQLTestUtils {
   }
 
   test("insert with column list - mismatched column list size") {
-    val msgs = Seq("Cannot write to table due to mismatched user specified column size",
-      "expected 3 columns but found")
-    withTable("t1") {
-      val cols = Seq("c1", "c2", "c3")
-      createTable("t1", cols, Seq("int", "long", "string"))
-      withSQLConf(SQLConf.USE_NULLS_FOR_MISSING_DEFAULT_COLUMN_VALUES.key -> "false") {
-        val e1 = intercept[AnalysisException](sql(s"INSERT INTO t1 (c1, c2) values(1, 2, 3)"))
-        assert(e1.getMessage.contains(msgs(0)) || e1.getMessage.contains(msgs(1)))
-        val e2 = intercept[AnalysisException](sql(s"INSERT INTO t1 (c1, c2, c3) values(1, 2)"))
-        assert(e2.getMessage.contains(msgs(0)) || e2.getMessage.contains(msgs(1)))
+    test("insert with column list - mismatched column list size") {
+      val msgs = Seq("Cannot write to table due to mismatched user specified column size",
+        "expected 3 columns but found")
+      def test: Unit = {
+        withTable("t1") {
+          val cols = Seq("c1", "c2", "c3")
+          createTable("t1", cols, Seq("int", "long", "string"))
+          val e1 = intercept[AnalysisException](sql(s"INSERT INTO t1 (c1, c2) values(1, 2, 3)"))
+          assert(e1.getMessage.contains(msgs(0)) || e1.getMessage.contains(msgs(1)))
+          val e2 = intercept[AnalysisException](sql(s"INSERT INTO t1 (c1, c2, c3) values(1, 2)"))
+          assert(e2.getMessage.contains(msgs(0)) || e2.getMessage.contains(msgs(1)))
+        }
       }
-      withSQLConf(SQLConf.USE_NULLS_FOR_MISSING_DEFAULT_COLUMN_VALUES.key -> "true") {
-        // The command inserts the first two provided values into the two indicated columns, and the
-        // third value into the first remaining column (c3).
-        sql(s"INSERT INTO t1 (c1, c2) values(1, 2, 3)")
-        // The command inserts the first two provided values are into the two indicated columns, and
-        // literal NULL into the first remaining column (c3).
-        sql(s"INSERT INTO t1 (c1, c2, c3) values(1, 2)")
-        checkAnswer(spark.table("t1"),
-          Seq(Row(1, 2L, "3"),
-            Row(1, 2L, null)))
+      withSQLConf(SQLConf.ENABLE_DEFAULT_COLUMNS.key -> "false") {
+        test
+      }
+      withSQLConf(SQLConf.ENABLE_DEFAULT_COLUMNS.key -> "true") {
+        test
       }
     }
   }

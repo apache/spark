@@ -64,13 +64,12 @@ case class ResolveDefaultColumns(analyzer: Analyzer) extends Rule[LogicalPlan] {
     plan.resolveOperatorsWithPruning(
       (_ => SQLConf.get.enableDefaultColumns), ruleId) {
       case i@InsertIntoStatement(_, _, _, _, _, _)
-        // Match against a VALUES list under any combination of projections and/or aggregates.
+        // Match against a VALUES list under any combination of projections and/or aliases.
         if i.query.exists(t =>
             t.isInstanceOf[UnresolvedInlineTable]) &&
           !i.query.exists(t =>
             !t.isInstanceOf[UnresolvedInlineTable] &&
             !t.isInstanceOf[Project] &&
-            !t.isInstanceOf[Aggregate] &&
             !t.isInstanceOf[SubqueryAlias]) =>
         enclosingInsert = Some(i)
         insertTableSchemaWithoutPartitionColumns = getInsertTableSchemaWithoutPartitionColumns
