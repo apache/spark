@@ -254,7 +254,7 @@ select array(1, 2, 3)[5]
 struct<>
 -- !query output
 org.apache.spark.SparkArrayIndexOutOfBoundsException
-Invalid index: 5, numElements: 3. If necessary set spark.sql.ansi.strictIndexOperator to false to bypass this error.
+Invalid index: 5, numElements: 3. If necessary set spark.sql.ansi.enabled to false to bypass this error.
 
 
 -- !query
@@ -263,7 +263,7 @@ select array(1, 2, 3)[-1]
 struct<>
 -- !query output
 org.apache.spark.SparkArrayIndexOutOfBoundsException
-Invalid index: -1, numElements: 3. If necessary set spark.sql.ansi.strictIndexOperator to false to bypass this error.
+Invalid index: -1, numElements: 3. If necessary set spark.sql.ansi.enabled to false to bypass this error.
 
 
 -- !query
