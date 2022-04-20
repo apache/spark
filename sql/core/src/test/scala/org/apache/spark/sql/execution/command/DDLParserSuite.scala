@@ -200,21 +200,6 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
     assert(parsed.isInstanceOf[Project])
   }
 
-  test("duplicate keys in table properties") {
-    val e = intercept[ParseException] {
-      parser.parsePlan("ALTER TABLE dbx.tab1 SET TBLPROPERTIES ('key1' = '1', 'key1' = '2')")
-    }.getMessage
-    assert(e.contains("Found duplicate keys 'key1'"))
-  }
-
-  test("duplicate columns in partition specs") {
-    val e = intercept[ParseException] {
-      parser.parsePlan(
-        "ALTER TABLE dbx.tab1 PARTITION (a='1', a='2') RENAME TO PARTITION (a='100', a='200')")
-    }.getMessage
-    assert(e.contains("Found duplicate keys 'a'"))
-  }
-
   test("unsupported operations") {
     intercept[ParseException] {
       parser.parsePlan(
@@ -288,12 +273,12 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
     val s = ScriptTransformation("func", Seq.empty, p, null)
 
     compareTransformQuery("select transform(a, b) using 'func' from e where f < 10",
-      s.copy(child = p.copy(child = p.child.where(Symbol("f") < 10)),
-        output = Seq(Symbol("key").string, Symbol("value").string)))
+      s.copy(child = p.copy(child = p.child.where($"f" < 10)),
+        output = Seq($"key".string, $"value".string)))
     compareTransformQuery("map a, b using 'func' as c, d from e",
-      s.copy(output = Seq(Symbol("c").string, Symbol("d").string)))
+      s.copy(output = Seq($"c".string, $"d".string)))
     compareTransformQuery("reduce a, b using 'func' as (c int, d decimal(10, 0)) from e",
-      s.copy(output = Seq(Symbol("c").int, Symbol("d").decimal(10, 0))))
+      s.copy(output = Seq($"c".int, $"d".decimal(10, 0))))
   }
 
   test("use backticks in output of Script Transform") {

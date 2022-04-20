@@ -3,12 +3,16 @@
     "message" : [ "Field name %s is ambiguous and has %s matching fields in the struct." ],
     "sqlState" : "42000"
   },
+  "ARITHMETIC_OVERFLOW" : {
+    "message" : [ "%s.%s If necessary set %s to false (except for ANSI interval type) to bypass this error.%s" ],
+    "sqlState" : "22003"
+  },
   "CANNOT_CAST_DATATYPE" : {
     "message" : [ "Cannot cast %s to %s." ],
     "sqlState" : "22005"
   },
   "CANNOT_CHANGE_DECIMAL_PRECISION" : {
-    "message" : [ "%s cannot be represented as Decimal(%s, %s). If necessary set %s to false to bypass this error." ],
+    "message" : [ "%s cannot be represented as Decimal(%s, %s). If necessary set %s to false to bypass this error.%s" ],
     "sqlState" : "22005"
   },
   "CANNOT_PARSE_DECIMAL" : {
@@ -17,9 +21,6 @@
   },
   "CANNOT_UP_CAST_DATATYPE" : {
     "message" : [ "Cannot up cast %s from %s to %s.\n%s" ]
-  },
-  "CANNOT_USE_MIXTURE" : {
-    "message" : [ "Cannot use a mixture of aggregate function and group aggregate pandas UDF" ]
   },
   "CAST_CAUSES_OVERFLOW" : {
     "message" : [ "Casting %s to %s causes overflow. To return NULL instead, use 'try_cast'. If necessary set %s to false to bypass this error." ],
@@ -37,7 +38,7 @@
     "sqlState" : "22012"
   },
   "DUPLICATE_KEY" : {
-    "message" : [ "Found duplicate keys '%s'" ],
+    "message" : [ "Found duplicate keys %s" ],
     "sqlState" : "23000"
   },
   "FAILED_EXECUTE_UDF" : {
@@ -49,6 +50,9 @@
   },
   "FAILED_SET_ORIGINAL_PERMISSION_BACK" : {
     "message" : [ "Failed to set original permission %s back to the created path: %s. Exception: %s" ]
+  },
+  "FORBIDDEN_OPERATION" : {
+    "message" : [ "The operation %s is not allowed on %s: %s" ]
   },
   "GRAPHITE_SINK_INVALID_PROTOCOL" : {
     "message" : [ "Invalid Graphite protocol: %s" ]
@@ -101,12 +105,11 @@
     "message" : [ "The fraction of sec must be zero. Valid range is [0, 60]. If necessary set %s to false to bypass this error. " ],
     "sqlState" : "22023"
   },
-  "INVALID_INPUT_SYNTAX_FOR_NUMERIC_TYPE" : {
-    "message" : [ "invalid input syntax for type numeric: %s. To return NULL instead, use 'try_cast'. If necessary set %s to false to bypass this error." ],
-    "sqlState" : "42000"
-  },
   "INVALID_JSON_SCHEMA_MAPTYPE" : {
     "message" : [ "Input schema %s can only contain StringType as a key type for a MapType." ]
+  },
+  "INVALID_PANDAS_UDF_PLACEMENT" : {
+    "message" : [ "The group aggregate pandas UDF %s cannot be invoked together with as other, non-pandas aggregate functions." ]
   },
   "INVALID_PARAMETER_VALUE" : {
     "message" : [ "The value of parameter(s) '%s' in %s is invalid: %s" ],
@@ -116,11 +119,15 @@
     "message" : [ "Invalid SQL syntax: %s" ],
     "sqlState" : "42000"
   },
+  "INVALID_SYNTAX_FOR_CAST" : {
+    "message" : [ "Invalid input syntax for type %s: %s. To return NULL instead, use 'try_cast'. If necessary set %s to false to bypass this error.%s" ],
+    "sqlState" : "42000"
+  },
   "MAP_KEY_DOES_NOT_EXIST" : {
-    "message" : [ "Key %s does not exist. If necessary set %s to false to bypass this error." ]
+    "message" : [ "Key %s does not exist. If necessary set %s to false to bypass this error.%s" ]
   },
   "MAP_KEY_DOES_NOT_EXIST_IN_ELEMENT_AT" : {
-    "message" : [ "Key %s does not exist. To return NULL instead, use 'try_element_at'. If necessary set %s to false to bypass this error." ]
+    "message" : [ "Key %s does not exist. To return NULL instead, use 'try_element_at'. If necessary set %s to false to bypass this error.%s" ]
   },
   "MISSING_COLUMN" : {
     "message" : [ "Column '%s' does not exist. Did you mean one of the following? [%s]" ],
@@ -130,6 +137,9 @@
     "message" : [ "Unknown static partition column: %s" ],
     "sqlState" : "42000"
   },
+  "MULTI_UDF_INTERFACE_ERROR" : {
+    "message" : [ "Not allowed to implement multiple UDF interfaces, UDF class %s" ]
+  },
   "NON_LITERAL_PIVOT_VALUES" : {
     "message" : [ "Literal expressions required for pivot values, found '%s'" ],
     "sqlState" : "42000"
@@ -137,6 +147,12 @@
   "NON_PARTITION_COLUMN" : {
     "message" : [ "PARTITION clause cannot contain a non-partition column name: %s" ],
     "sqlState" : "42000"
+  },
+  "NO_HANDLER_FOR_UDAF" : {
+    "message" : [ "No handler for UDAF '%s'. Use sparkSession.udf.register(...) instead." ]
+  },
+  "NO_UDF_INTERFACE_ERROR" : {
+    "message" : [ "UDF class %s doesn't implement any UDF interface" ]
   },
   "PARSE_CHAR_MISSING_LENGTH" : {
     "message" : [ "DataType %s requires a length parameter, for example %s(10). Please specify the length." ],
@@ -182,6 +198,9 @@
   },
   "UNSUPPORTED_OPERATION" : {
     "message" : [ "The operation is not supported: %s" ]
+  },
+  "UNTYPED_SCALA_UDF" : {
+    "message" : [ "You're using untyped Scala UDF, which does not have the input type information. Spark may blindly pass null to the Scala closure with primitive-type argument, and the closure will see the default value of the Java type for the null argument, e.g. `udf((x: Int) => x, IntegerType)`, the result is 0 for null input. To get rid of this error, you could:\n1. use typed Scala UDF APIs(without return type parameter), e.g. `udf((x: Int) => x)`\n2. use Java UDF APIs, e.g. `udf(new UDF1[String, Integer] { override def call(s: String): Integer = s.length() }, IntegerType)`, if input types are all non primitive\n3. set spark.sql.legacy.allowUntypedScalaUDF to true and use this API with caution" ]
   },
   "WRITING_JOB_ABORTED" : {
     "message" : [ "Writing job aborted" ],

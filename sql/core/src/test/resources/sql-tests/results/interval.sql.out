@@ -1744,7 +1744,7 @@ select -(a) from values (interval '-2147483648 months', interval '2147483647 mon
 -- !query schema
 struct<>
 -- !query output
-java.lang.ArithmeticException
+org.apache.spark.SparkArithmeticException
 integer overflow. If necessary set spark.sql.ansi.enabled to false (except for ANSI interval type) to bypass this error.
 
 
@@ -1753,7 +1753,7 @@ select a - b from values (interval '-2147483648 months', interval '2147483647 mo
 -- !query schema
 struct<>
 -- !query output
-java.lang.ArithmeticException
+org.apache.spark.SparkArithmeticException
 integer overflow. If necessary set spark.sql.ansi.enabled to false (except for ANSI interval type) to bypass this error.
 
 
@@ -1762,7 +1762,7 @@ select b + interval '1 month' from values (interval '-2147483648 months', interv
 -- !query schema
 struct<>
 -- !query output
-java.lang.ArithmeticException
+org.apache.spark.SparkArithmeticException
 integer overflow. If necessary set spark.sql.ansi.enabled to false (except for ANSI interval type) to bypass this error.
 
 
@@ -1991,7 +1991,7 @@ SELECT (INTERVAL '-178956970-8' YEAR TO MONTH) / -1
 -- !query schema
 struct<>
 -- !query output
-java.lang.ArithmeticException
+org.apache.spark.SparkArithmeticException
 Overflow in integral divide. To return NULL instead, use 'try_divide'. If necessary set spark.sql.ansi.enabled to false (except for ANSI interval type) to bypass this error.
 == SQL(line 1, position 7) ==
 SELECT (INTERVAL '-178956970-8' YEAR TO MONTH) / -1
@@ -2003,7 +2003,7 @@ SELECT (INTERVAL '-178956970-8' YEAR TO MONTH) / -1L
 -- !query schema
 struct<>
 -- !query output
-java.lang.ArithmeticException
+org.apache.spark.SparkArithmeticException
 Overflow in integral divide. To return NULL instead, use 'try_divide'. If necessary set spark.sql.ansi.enabled to false (except for ANSI interval type) to bypass this error.
 == SQL(line 1, position 7) ==
 SELECT (INTERVAL '-178956970-8' YEAR TO MONTH) / -1L
@@ -2049,7 +2049,7 @@ SELECT (INTERVAL '-106751991 04:00:54.775808' DAY TO SECOND) / -1
 -- !query schema
 struct<>
 -- !query output
-java.lang.ArithmeticException
+org.apache.spark.SparkArithmeticException
 Overflow in integral divide. To return NULL instead, use 'try_divide'. If necessary set spark.sql.ansi.enabled to false (except for ANSI interval type) to bypass this error.
 == SQL(line 1, position 7) ==
 SELECT (INTERVAL '-106751991 04:00:54.775808' DAY TO SECOND) / -1
@@ -2061,7 +2061,7 @@ SELECT (INTERVAL '-106751991 04:00:54.775808' DAY TO SECOND) / -1L
 -- !query schema
 struct<>
 -- !query output
-java.lang.ArithmeticException
+org.apache.spark.SparkArithmeticException
 Overflow in integral divide. To return NULL instead, use 'try_divide'. If necessary set spark.sql.ansi.enabled to false (except for ANSI interval type) to bypass this error.
 == SQL(line 1, position 7) ==
 SELECT (INTERVAL '-106751991 04:00:54.775808' DAY TO SECOND) / -1L

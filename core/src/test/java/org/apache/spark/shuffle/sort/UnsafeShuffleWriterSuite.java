@@ -181,7 +181,8 @@ public class UnsafeShuffleWriterSuite implements ShuffleChecksumTestHelper {
   private UnsafeShuffleWriter<Object, Object> createWriter(
     boolean transferToEnabled,
     IndexShuffleBlockResolver blockResolver) throws SparkException {
-    conf.set("spark.file.transferTo", String.valueOf(transferToEnabled));
+    conf.set(package$.MODULE$.SHUFFLE_MERGE_PREFER_NIO().key(),
+      String.valueOf(transferToEnabled));
     return new UnsafeShuffleWriter<>(
       blockManager,
       taskMemoryManager,
@@ -227,9 +228,9 @@ public class UnsafeShuffleWriterSuite implements ShuffleChecksumTestHelper {
     return recordsList;
   }
 
-  @Test(expected=IllegalStateException.class)
+  @Test
   public void mustCallWriteBeforeSuccessfulStop() throws IOException, SparkException {
-    createWriter(false).stop(true);
+    assertThrows(IllegalStateException.class, () -> createWriter(false).stop(true));
   }
 
   @Test
@@ -240,7 +241,7 @@ public class UnsafeShuffleWriterSuite implements ShuffleChecksumTestHelper {
   static class PandaException extends RuntimeException {
   }
 
-  @Test(expected=PandaException.class)
+  @Test
   public void writeFailurePropagates() throws Exception {
     class BadRecords extends scala.collection.AbstractIterator<Product2<Object, Object>> {
       @Override public boolean hasNext() {
@@ -251,7 +252,7 @@ public class UnsafeShuffleWriterSuite implements ShuffleChecksumTestHelper {
       }
     }
     final UnsafeShuffleWriter<Object, Object> writer = createWriter(true);
-    writer.write(new BadRecords());
+    assertThrows(PandaException.class, () -> writer.write(new BadRecords()));
   }
 
   @Test

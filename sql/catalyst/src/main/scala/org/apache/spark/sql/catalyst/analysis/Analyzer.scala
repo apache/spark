@@ -41,6 +41,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
 import org.apache.spark.sql.catalyst.trees.{AlwaysProcess, CurrentOrigin}
+import org.apache.spark.sql.catalyst.trees.CurrentOrigin.withOrigin
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.util.{toPrettySQL, CharVarcharUtils}
 import org.apache.spark.sql.connector.catalog._
@@ -318,6 +319,7 @@ class Analyzer(override val catalogManager: CatalogManager)
       ResolveRandomSeed ::
       ResolveBinaryArithmetic ::
       ResolveUnion ::
+      RewriteDeleteFromTable ::
       typeCoercionRules ++
       Seq(ResolveWithCTE) ++
       extendedResolutionRules : _*),
@@ -1750,7 +1752,9 @@ class Analyzer(override val catalogManager: CatalogManager)
         case u @ UnresolvedExtractValue(child, fieldName) =>
           val newChild = innerResolve(child, isTopLevel = false)
           if (newChild.resolved) {
-            ExtractValue(newChild, fieldName, resolver)
+            withOrigin(u.origin) {
+              ExtractValue(newChild, fieldName, resolver)
+            }
           } else {
             u.copy(child = newChild)
           }
@@ -1762,7 +1766,9 @@ class Analyzer(override val catalogManager: CatalogManager)
     try {
       innerResolve(expr, isTopLevel = true)
     } catch {
-      case _: AnalysisException if !throws => expr
+      case ae: AnalysisException if !throws =>
+        logDebug(ae.getMessage)
+        expr
     }
   }
 
@@ -2382,7 +2388,9 @@ class Analyzer(override val catalogManager: CatalogManager)
                     case None => u
                   }
                 } catch {
-                  case _: AnalysisException => u
+                  case ae: AnalysisException =>
+                    logDebug(ae.getMessage)
+                    u
                 }
               }
           }
@@ -2588,7 +2596,9 @@ class Analyzer(override val catalogManager: CatalogManager)
                 case o => TempResolvedColumn(o, u.nameParts)
               }).getOrElse(u)
             } catch {
-              case _: AnalysisException => u
+              case ae: AnalysisException =>
+                logDebug(ae.getMessage)
+                u
             }
         }
       }
@@ -4192,6 +4202,9 @@ object ApplyCharTypePadding extends Rule[LogicalPlan] {
   }
 
   override def apply(plan: LogicalPlan): LogicalPlan = {
+    if (SQLConf.get.charVarcharAsString) {
+      return plan
+    }
     plan.resolveOperatorsUpWithPruning(_.containsAnyPattern(BINARY_COMPARISON, IN)) {
       case operator => operator.transformExpressionsUpWithPruning(
         _.containsAnyPattern(BINARY_COMPARISON, IN)) {

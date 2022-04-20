@@ -221,6 +221,11 @@ public final class OffHeapColumnVector extends WritableColumnVector {
     return UTF8String.fromAddress(null, data + rowId, count);
   }
 
+  @Override
+  public ByteBuffer getByteBuffer(int rowId, int count) {
+    return ByteBuffer.wrap(getBytes(rowId, count));
+  }
+
   //
   // APIs dealing with shorts
   //

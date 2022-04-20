@@ -593,6 +593,21 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
         |select * from q1 union all select * from q2""".stripMargin),
       Row(5, "5") :: Row(4, "4") :: Nil)
 
+    // inner CTE relation refers to outer CTE relation.
+    withSQLConf(SQLConf.LEGACY_CTE_PRECEDENCE_POLICY.key -> "CORRECTED") {
+      checkAnswer(
+        sql(
+          """
+            |with temp1 as (select 1 col),
+            |temp2 as (
+            |  with temp1 as (select col + 1 AS col from temp1),
+            |  temp3 as (select col + 1 from temp1)
+            |  select * from temp3
+            |)
+            |select * from temp2
+            |""".stripMargin),
+        Row(3))
+      }
   }
 
   test("Allow only a single WITH clause per query") {
@@ -3066,17 +3081,17 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
           val df = spark.read.format(format).load(dir.getCanonicalPath)
           checkPushedFilters(
             format,
-            df.where((Symbol("id") < 2 and Symbol("s").contains("foo")) or
-              (Symbol("id") > 10 and Symbol("s").contains("bar"))),
+            df.where(($"id" < 2 and $"s".contains("foo")) or
+              ($"id" > 10 and $"s".contains("bar"))),
             Array(sources.Or(sources.LessThan("id", 2), sources.GreaterThan("id", 10))))
           checkPushedFilters(
             format,
-            df.where(Symbol("s").contains("foo") or
-              (Symbol("id") > 10 and Symbol("s").contains("bar"))),
+            df.where($"s".contains("foo") or
+              ($"id" > 10 and $"s".contains("bar"))),
             Array.empty)
           checkPushedFilters(
             format,
-            df.where(Symbol("id") < 2 and not(Symbol("id") > 10 and Symbol("s").contains("bar"))),
+            df.where($"id" < 2 and not($"id" > 10 and $"s".contains("bar"))),
             Array(sources.IsNotNull("id"), sources.LessThan("id", 2)))
         }
       }
@@ -3417,20 +3432,10 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
 
       withSQLConf(SQLConf.LEGACY_INTEGER_GROUPING_ID.key -> "true") {
         testGroupingIDs(32, Seq(0, 1))
-        val ex = intercept[AnalysisException] {
-          testGroupingIDs(33)
-        }
-        assert(ex.getMessage.contains("Grouping sets size cannot be greater than 32"))
-        assert(ex.getErrorClass == "GROUPING_SIZE_LIMIT_EXCEEDED")
       }
 
       withSQLConf(SQLConf.LEGACY_INTEGER_GROUPING_ID.key -> "false") {
         testGroupingIDs(64, Seq(0L, 1L))
-        val ex = intercept[AnalysisException] {
-          testGroupingIDs(65)
-        }
-        assert(ex.getMessage.contains("Grouping sets size cannot be greater than 64"))
-        assert(ex.getErrorClass == "GROUPING_SIZE_LIMIT_EXCEEDED")
       }
     }
   }
@@ -4326,6 +4331,31 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
             |FROM (SELECT 3 AS C1,2 AS C2,1 AS C3) T
             |""".stripMargin),
         Row(3, 2, 6) :: Nil)
+    }
+  }
+
+  test("SPARK-38548: try_sum should return null if overflow happens before merging") {
+    val longDf = Seq(Long.MaxValue, Long.MaxValue, 2).toDF("v")
+    val yearMonthDf = Seq(Int.MaxValue, Int.MaxValue, 2)
+      .map(Period.ofMonths)
+      .toDF("v")
+    val dayTimeDf = Seq(106751991L, 106751991L, 2L)
+      .map(Duration.ofDays)
+      .toDF("v")
+    Seq(longDf, yearMonthDf, dayTimeDf).foreach { df =>
+      checkAnswer(df.repartitionByRange(2, col("v")).selectExpr("try_sum(v)"), Row(null))
+    }
+  }
+
+  test("SPARK-38589: try_avg should return null if overflow happens before merging") {
+    val yearMonthDf = Seq(Int.MaxValue, Int.MaxValue, 2)
+      .map(Period.ofMonths)
+      .toDF("v")
+    val dayTimeDf = Seq(106751991L, 106751991L, 2L)
+      .map(Duration.ofDays)
+      .toDF("v")
+    Seq(yearMonthDf, dayTimeDf).foreach { df =>
+      checkAnswer(df.repartitionByRange(2, col("v")).selectExpr("try_avg(v)"), Row(null))
     }
   }
 }

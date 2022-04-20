@@ -132,7 +132,7 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession {
       sqlState = "42000",
       message =
         """
-          |Invalid SQL syntax: The definition of window 'win' is repetitive.(line 1, pos 31)
+          |Invalid SQL syntax: The definition of window `win` is repetitive.(line 1, pos 31)
           |
           |== SQL ==
           |SELECT min(a) OVER win FROM t1 WINDOW win AS win, win AS win2
@@ -147,7 +147,7 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession {
       sqlState = "42000",
       message =
         """
-          |Invalid SQL syntax: Window reference 'win' is not a window specification.(line 1, pos 31)
+          |Invalid SQL syntax: Window reference `win` is not a window specification.(line 1, pos 31)
           |
           |== SQL ==
           |SELECT min(a) OVER win FROM t1 WINDOW win AS win
@@ -162,7 +162,7 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession {
       sqlState = "42000",
       message =
         """
-          |Invalid SQL syntax: Cannot resolve window reference 'win2'.(line 1, pos 31)
+          |Invalid SQL syntax: Cannot resolve window reference `win2`.(line 1, pos 31)
           |
           |== SQL ==
           |SELECT min(a) OVER win FROM t1 WINDOW win AS win2
@@ -211,7 +211,7 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession {
       sqlState = "42000",
       message =
         """
-          |Invalid SQL syntax: Too many arguments for transform years(line 1, pos 44)
+          |Invalid SQL syntax: Too many arguments for transform `years`(line 1, pos 44)
           |
           |== SQL ==
           |CREATE TABLE table(col int) PARTITIONED BY (years(col,col))
@@ -226,7 +226,7 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession {
       sqlState = "42000",
       message =
         """
-          |Invalid SQL syntax: Unsupported function name 'ns.db.func'(line 1, pos 14)
+          |Invalid SQL syntax: Unsupported function name `ns`.`db`.`func`(line 1, pos 14)
           |
           |== SQL ==
           |SELECT * FROM ns.db.func()
@@ -241,7 +241,7 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession {
       sqlState = "42000",
       message =
         """
-          |Invalid SQL syntax: SHOW sys FUNCTIONS not supported(line 1, pos 5)
+          |Invalid SQL syntax: SHOW `sys` FUNCTIONS not supported(line 1, pos 5)
           |
           |== SQL ==
           |SHOW sys FUNCTIONS
@@ -249,23 +249,34 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession {
           |""".stripMargin)
   }
 
+  // scalastyle:off line.size.limit
   test("INVALID_SQL_SYNTAX: Invalid pattern in show functions") {
-    val errorDesc =
-      "Invalid pattern in SHOW FUNCTIONS: f1. It must be a string literal.(line 1, pos 21)"
-
     validateParsingError(
       sqlText = "SHOW FUNCTIONS IN db f1",
       errorClass = "INVALID_SQL_SYNTAX",
       sqlState = "42000",
       message =
         s"""
-          |Invalid SQL syntax: $errorDesc
+          |Invalid SQL syntax: Invalid pattern in SHOW FUNCTIONS: `f1`. It must be a STRING literal.(line 1, pos 21)
           |
           |== SQL ==
           |SHOW FUNCTIONS IN db f1
           |---------------------^^^
           |""".stripMargin)
+    validateParsingError(
+      sqlText = "SHOW FUNCTIONS IN db LIKE f1",
+      errorClass = "INVALID_SQL_SYNTAX",
+      sqlState = "42000",
+      message =
+        s"""
+           |Invalid SQL syntax: Invalid pattern in SHOW FUNCTIONS: `f1`. It must be a STRING literal.(line 1, pos 26)
+           |
+           |== SQL ==
+           |SHOW FUNCTIONS IN db LIKE f1
+           |--------------------------^^^
+           |""".stripMargin)
   }
+  // scalastyle:on line.size.limit
 
   test("INVALID_SQL_SYNTAX: Create function with both if not exists and replace") {
     val sqlText =
@@ -335,7 +346,7 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession {
       sqlState = "42000",
       message =
         """
-          |Invalid SQL syntax: Unsupported function name 'ns.db.func'(line 2, pos 0)
+          |Invalid SQL syntax: Unsupported function name `ns`.`db`.`func`(line 2, pos 0)
           |
           |== SQL ==
           |
@@ -354,7 +365,7 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession {
         |JAR '/path/to/jar2'
         |""".stripMargin
     val errorDesc =
-      "Specifying a database in CREATE TEMPORARY FUNCTION is not allowed: 'db'(line 2, pos 0)"
+      "Specifying a database in CREATE TEMPORARY FUNCTION is not allowed: `db`(line 2, pos 0)"
 
     validateParsingError(
       sqlText = sqlText,
@@ -375,7 +386,7 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession {
 
   test("INVALID_SQL_SYNTAX: Drop temporary function requires a single part name") {
     val errorDesc =
-      "DROP TEMPORARY FUNCTION requires a single part name but got: db.func(line 1, pos 0)"
+      "DROP TEMPORARY FUNCTION requires a single part name but got: `db`.`func`(line 1, pos 0)"
 
     validateParsingError(
       sqlText = "DROP TEMPORARY FUNCTION db.func",
@@ -388,6 +399,224 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession {
           |== SQL ==
           |DROP TEMPORARY FUNCTION db.func
           |^^^
+          |""".stripMargin)
+  }
+
+  test("DUPLICATE_KEY: Found duplicate partition keys") {
+    validateParsingError(
+      sqlText = "INSERT OVERWRITE TABLE table PARTITION(p1='1', p1='1') SELECT 'col1', 'col2'",
+      errorClass = "DUPLICATE_KEY",
+      sqlState = "23000",
+      message =
+        """
+          |Found duplicate keys `p1`(line 1, pos 29)
+          |
+          |== SQL ==
+          |INSERT OVERWRITE TABLE table PARTITION(p1='1', p1='1') SELECT 'col1', 'col2'
+          |-----------------------------^^^
+          |""".stripMargin)
+  }
+
+  test("DUPLICATE_KEY: in table properties") {
+    validateParsingError(
+      sqlText = "ALTER TABLE dbx.tab1 SET TBLPROPERTIES ('key1' = '1', 'key1' = '2')",
+      errorClass = "DUPLICATE_KEY",
+      sqlState = "23000",
+      message =
+        """
+          |Found duplicate keys `key1`(line 1, pos 39)
+          |
+          |== SQL ==
+          |ALTER TABLE dbx.tab1 SET TBLPROPERTIES ('key1' = '1', 'key1' = '2')
+          |---------------------------------------^^^
+          |""".stripMargin)
+  }
+
+  test("PARSE_EMPTY_STATEMENT: empty input") {
+    validateParsingError(
+      sqlText = "",
+      errorClass = "PARSE_EMPTY_STATEMENT",
+      sqlState = "42000",
+      message =
+        """
+          |Syntax error, unexpected empty statement(line 1, pos 0)
+          |
+          |== SQL ==
+          |
+          |^^^
+          |""".stripMargin)
+
+    validateParsingError(
+      sqlText = "   ",
+      errorClass = "PARSE_EMPTY_STATEMENT",
+      sqlState = "42000",
+      message =
+        s"""
+           |Syntax error, unexpected empty statement(line 1, pos 3)
+           |
+           |== SQL ==
+           |${"   "}
+           |---^^^
+           |""".stripMargin)
+
+    validateParsingError(
+      sqlText = " \n",
+      errorClass = "PARSE_EMPTY_STATEMENT",
+      sqlState = "42000",
+      message =
+        s"""
+           |Syntax error, unexpected empty statement(line 2, pos 0)
+           |
+           |== SQL ==
+           |${" "}
+           |^^^
+           |""".stripMargin)
+  }
+
+  test("PARSE_SYNTAX_ERROR: no viable input") {
+    val sqlText = "select ((r + 1) "
+    validateParsingError(
+      sqlText = sqlText,
+      errorClass = "PARSE_SYNTAX_ERROR",
+      sqlState = "42000",
+      message =
+        s"""
+          |Syntax error at or near end of input(line 1, pos 16)
+          |
+          |== SQL ==
+          |$sqlText
+          |----------------^^^
+          |""".stripMargin)
+  }
+
+  test("PARSE_SYNTAX_ERROR: extraneous input") {
+    validateParsingError(
+      sqlText = "select 1 1",
+      errorClass = "PARSE_SYNTAX_ERROR",
+      sqlState = "42000",
+      message =
+        s"""
+          |Syntax error at or near '1': extra input '1'(line 1, pos 9)
+          |
+          |== SQL ==
+          |select 1 1
+          |---------^^^
+          |""".stripMargin)
+
+    validateParsingError(
+      sqlText = "select *\nfrom r as q t",
+      errorClass = "PARSE_SYNTAX_ERROR",
+      sqlState = "42000",
+      message =
+        s"""
+          |Syntax error at or near 't': extra input 't'(line 2, pos 12)
+          |
+          |== SQL ==
+          |select *
+          |from r as q t
+          |------------^^^
+          |""".stripMargin)
+  }
+
+  test("PARSE_SYNTAX_ERROR: mismatched input") {
+    validateParsingError(
+      sqlText = "select * from r order by q from t",
+      errorClass = "PARSE_SYNTAX_ERROR",
+      sqlState = "42000",
+      message =
+        """
+          |Syntax error at or near 'from'(line 1, pos 27)
+          |
+          |== SQL ==
+          |select * from r order by q from t
+          |---------------------------^^^
+          |""".stripMargin)
+
+    validateParsingError(
+      sqlText = "select *\nfrom r\norder by q\nfrom t",
+      errorClass = "PARSE_SYNTAX_ERROR",
+      sqlState = "42000",
+      message =
+        """
+          |Syntax error at or near 'from'(line 4, pos 0)
+          |
+          |== SQL ==
+          |select *
+          |from r
+          |order by q
+          |from t
+          |^^^
+          |""".stripMargin)
+  }
+
+  test("PARSE_SYNTAX_ERROR: jargon token substitute to user-facing language") {
+    // '<EOF>' -> end of input
+    validateParsingError(
+      sqlText = "select count(*",
+      errorClass = "PARSE_SYNTAX_ERROR",
+      sqlState = "42000",
+      message =
+        """
+          |Syntax error at or near end of input(line 1, pos 14)
+          |
+          |== SQL ==
+          |select count(*
+          |--------------^^^
+          |""".stripMargin)
+
+    validateParsingError(
+      sqlText = "select 1 as a from",
+      errorClass = "PARSE_SYNTAX_ERROR",
+      sqlState = "42000",
+      message =
+        """
+          |Syntax error at or near end of input(line 1, pos 18)
+          |
+          |== SQL ==
+          |select 1 as a from
+          |------------------^^^
+          |""".stripMargin)
+  }
+
+  test("PARSE_SYNTAX_ERROR - SPARK-21136: " +
+    "misleading error message due to problematic antlr grammar") {
+    validateParsingError(
+      sqlText = "select * from a left join_ b on a.id = b.id",
+      errorClass = "PARSE_SYNTAX_ERROR",
+      sqlState = "42000",
+      message =
+        """
+          |Syntax error at or near 'join_': missing 'JOIN'(line 1, pos 21)
+          |
+          |== SQL ==
+          |select * from a left join_ b on a.id = b.id
+          |---------------------^^^
+          |""".stripMargin)
+
+    validateParsingError(
+      sqlText = "select * from test where test.t is like 'test'",
+      errorClass = "PARSE_SYNTAX_ERROR",
+      sqlState = "42000",
+      message =
+        """
+          |Syntax error at or near 'is'(line 1, pos 32)
+          |
+          |== SQL ==
+          |select * from test where test.t is like 'test'
+          |--------------------------------^^^
+          |""".stripMargin)
+
+    validateParsingError(
+      sqlText = "SELECT * FROM test WHERE x NOT NULL",
+      errorClass = "PARSE_SYNTAX_ERROR",
+      sqlState = "42000",
+      message =
+        """
+          |Syntax error at or near 'NOT'(line 1, pos 27)
+          |
+          |== SQL ==
+          |SELECT * FROM test WHERE x NOT NULL
+          |---------------------------^^^
           |""".stripMargin)
   }
 }
