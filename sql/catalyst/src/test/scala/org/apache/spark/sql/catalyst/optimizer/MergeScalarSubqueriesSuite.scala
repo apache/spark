@@ -38,7 +38,7 @@ class MergeScalarSubqueriesSuite extends PlanTest {
   val testRelation = LocalRelation('a.int, 'b.int, 'c.string)
 
   private def definitionNode(plan: LogicalPlan, cteIndex: Int) = {
-    CTERelationDef(plan, cteIndex, mergedScalarSubquery = true)
+    CTERelationDef(plan, cteIndex, underSubquery = true)
   }
 
   private def extractorExpression(cteIndex: Int, output: Seq[Attribute], fieldIndex: Int) = {
