@@ -211,7 +211,7 @@ class QueryCompilationErrorsSuite
         exception = e,
         errorClass = "NO_HANDLER_FOR_UDAF",
         msg = "No handler for UDAF 'org.apache.spark.sql.errors.MyCastToString'. " +
-          "Use sparkSession.udf.register(...) instead.")
+          "Use sparkSession.udf.register(...) instead.; line 1 pos 7")
     }
   }
 
