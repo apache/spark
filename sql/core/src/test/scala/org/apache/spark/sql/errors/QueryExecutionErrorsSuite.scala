@@ -64,11 +64,10 @@ class QueryExecutionErrorsSuite
   test("INVALID_PARAMETER_VALUE: invalid key lengths in AES functions") {
     val (df1, df2) = getAesInputs()
     def checkInvalidKeyLength(df: => DataFrame): Unit = {
-      val e = intercept[SparkException] {
-        df.collect
-      }.getCause.asInstanceOf[SparkRuntimeException]
       checkErrorClass(
-        exception = e,
+        exception = intercept[SparkException] {
+          df.collect
+        }.getCause.asInstanceOf[SparkRuntimeException],
         errorClass = "INVALID_PARAMETER_VALUE",
         msg = "The value of parameter\\(s\\) 'key' in the `aes_encrypt`/`aes_decrypt` function " +
           "is invalid: expects a binary value with 16, 24 or 32 bytes, but got \\d+ bytes.",
@@ -100,11 +99,10 @@ class QueryExecutionErrorsSuite
       ("value16", "1234567812345678"),
       ("value24", "123456781234567812345678"),
       ("value32", "12345678123456781234567812345678")).foreach { case (colName, key) =>
-      val e = intercept[SparkException] {
-        df2.selectExpr(s"aes_decrypt(unbase64($colName), binary('$key'), 'ECB')").collect
-      }.getCause.asInstanceOf[SparkRuntimeException]
       checkErrorClass(
-        exception = e,
+        exception = intercept[SparkException] {
+          df2.selectExpr(s"aes_decrypt(unbase64($colName), binary('$key'), 'ECB')").collect
+        }.getCause.asInstanceOf[SparkRuntimeException],
         errorClass = "INVALID_PARAMETER_VALUE",
         msg =
           "The value of parameter(s) 'expr, key' in the `aes_encrypt`/`aes_decrypt` function " +
@@ -120,11 +118,10 @@ class QueryExecutionErrorsSuite
     val key32 = "abcdefghijklmnop12345678ABCDEFGH"
     val (df1, df2) = getAesInputs()
     def checkUnsupportedMode(df: => DataFrame): Unit = {
-      val e = intercept[SparkException] {
-        df.collect
-      }.getCause.asInstanceOf[SparkRuntimeException]
       checkErrorClass(
-        exception = e,
+        exception = intercept[SparkException] {
+          df.collect
+        }.getCause.asInstanceOf[SparkRuntimeException],
         errorClass = "UNSUPPORTED_FEATURE",
         msg =
           """The feature is not supported: AES-\w+ with the padding \w+""" +
@@ -262,27 +259,26 @@ class QueryExecutionErrorsSuite
   }
 
   test("UNSUPPORTED_OPERATION: timeZoneId not specified while converting TimestampType to Arrow") {
-    val schema = new StructType().add("value", TimestampType)
-    val e = intercept[SparkUnsupportedOperationException] {
-      ArrowUtils.toArrowSchema(schema, null)
-    }
-
-    assert(e.getErrorClass === "UNSUPPORTED_OPERATION")
-    assert(e.getMessage === "The operation is not supported: " +
-      "TIMESTAMP must supply timeZoneId parameter while converting to the arrow timestamp type.")
+    checkErrorClass(
+      exception = intercept[SparkUnsupportedOperationException] {
+        ArrowUtils.toArrowSchema(new StructType().add("value", TimestampType), null)
+      },
+      errorClass = "UNSUPPORTED_OPERATION",
+      msg = "The operation is not supported: " +
+        "TIMESTAMP must supply timeZoneId parameter while converting to the arrow timestamp type.")
   }
 
   test("UNSUPPORTED_OPERATION - SPARK-36346: can't read Timestamp as TimestampNTZ") {
     withTempPath { file =>
       sql("select timestamp_ltz'2019-03-21 00:02:03'").write.orc(file.getCanonicalPath)
       withAllNativeOrcReaders {
-        val e = intercept[SparkException] {
-          spark.read.schema("time timestamp_ntz").orc(file.getCanonicalPath).collect()
-        }.getCause.asInstanceOf[SparkUnsupportedOperationException]
-
-        assert(e.getErrorClass === "UNSUPPORTED_OPERATION")
-        assert(e.getMessage === "The operation is not supported: " +
-          "Unable to convert TIMESTAMP of Orc to data type TIMESTAMP_NTZ.")
+        checkErrorClass(
+          exception = intercept[SparkException] {
+            spark.read.schema("time timestamp_ntz").orc(file.getCanonicalPath).collect()
+          }.getCause.asInstanceOf[SparkUnsupportedOperationException],
+          errorClass = "UNSUPPORTED_OPERATION",
+          msg = "The operation is not supported: " +
+            "Unable to convert TIMESTAMP of Orc to data type TIMESTAMP_NTZ.")
       }
     }
   }
@@ -291,25 +287,26 @@ class QueryExecutionErrorsSuite
     withTempPath { file =>
       sql("select timestamp_ntz'2019-03-21 00:02:03'").write.orc(file.getCanonicalPath)
       withAllNativeOrcReaders {
-        val e = intercept[SparkException] {
-          spark.read.schema("time timestamp_ltz").orc(file.getCanonicalPath).collect()
-        }.getCause.asInstanceOf[SparkUnsupportedOperationException]
-
-        assert(e.getErrorClass === "UNSUPPORTED_OPERATION")
-        assert(e.getMessage === "The operation is not supported: " +
-          "Unable to convert TIMESTAMP_NTZ of Orc to data type TIMESTAMP.")
+        checkErrorClass(
+          exception = intercept[SparkException] {
+            spark.read.schema("time timestamp_ltz").orc(file.getCanonicalPath).collect()
+          }.getCause.asInstanceOf[SparkUnsupportedOperationException],
+          errorClass = "UNSUPPORTED_OPERATION",
+          msg = "The operation is not supported: " +
+            "Unable to convert TIMESTAMP_NTZ of Orc to data type TIMESTAMP.")
       }
     }
   }
 
   test("DATETIME_OVERFLOW: timestampadd() overflows its input timestamp") {
-    val e = intercept[SparkArithmeticException] {
-      sql("select timestampadd(YEAR, 1000000, timestamp'2022-03-09 01:02:03')").collect()
-    }
-    assert(e.getErrorClass === "DATETIME_OVERFLOW")
-    assert(e.getSqlState === "22008")
-    assert(e.getMessage ===
-      "Datetime operation overflow: add 1000000 YEAR to TIMESTAMP '2022-03-09 01:02:03'.")
+    checkErrorClass(
+      exception = intercept[SparkArithmeticException] {
+        sql("select timestampadd(YEAR, 1000000, timestamp'2022-03-09 01:02:03')").collect()
+      },
+      errorClass = "DATETIME_OVERFLOW",
+      msg =
+        "Datetime operation overflow: add 1000000 YEAR to TIMESTAMP '2022-03-09 01:02:03'.",
+      sqlState = Some("22008"))
   }
 
   test("CANNOT_PARSE_DECIMAL: unparseable decimal") {
@@ -348,10 +345,11 @@ class QueryExecutionErrorsSuite
     val e4 = e3.getCause.asInstanceOf[BadRecordException]
     assert(e4.getCause.isInstanceOf[SparkIllegalStateException])
 
-    val e5 = e4.getCause.asInstanceOf[SparkIllegalStateException]
-    assert(e5.getErrorClass === "CANNOT_PARSE_DECIMAL")
-    assert(e5.getSqlState === "42000")
-    assert(e5.getMessage === "Cannot parse decimal")
+    checkErrorClass(
+      exception = e4.getCause.asInstanceOf[SparkIllegalStateException],
+      errorClass = "CANNOT_PARSE_DECIMAL",
+      msg = "Cannot parse decimal",
+      sqlState = Some("42000"))
   }
 
   test("WRITING_JOB_ABORTED: read of input data fails in the middle") {
@@ -372,12 +370,13 @@ class QueryExecutionErrorsSuite
         }
         val input = spark.range(15).select(failingUdf($"id").as(Symbol("i")))
           .select($"i", -$"i" as Symbol("j"))
-        val e = intercept[SparkException] {
-          input.write.format(cls.getName).option("path", path).mode("overwrite").save()
-        }
-        assert(e.getMessage === "Writing job aborted")
-        assert(e.getErrorClass === "WRITING_JOB_ABORTED")
-        assert(e.getSqlState === "40000")
+        checkErrorClass(
+          exception = intercept[SparkException] {
+            input.write.format(cls.getName).option("path", path).mode("overwrite").save()
+          },
+          errorClass = "WRITING_JOB_ABORTED",
+          msg = "Writing job aborted",
+          sqlState = Some("40000"))
         // make sure we don't have partial data.
         assert(spark.read.format(cls.getName).option("path", path).load().collect().isEmpty)
       }
@@ -386,62 +385,67 @@ class QueryExecutionErrorsSuite
 
   test("CAST_CAUSES_OVERFLOW: from timestamp to int") {
     withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
-      val e = intercept[SparkArithmeticException] {
-        sql("select CAST(TIMESTAMP '9999-12-31T12:13:14.56789Z' AS INT)").collect()
-      }
-      assert(e.getErrorClass === "CAST_CAUSES_OVERFLOW")
-      assert(e.getSqlState === "22005")
-      assert(e.getMessage === "Casting 253402258394567890L to INT causes overflow. " +
-        "To return NULL instead, use 'try_cast'. " +
-        "If necessary set spark.sql.ansi.enabled to false to bypass this error.")
+      checkErrorClass(
+        exception = intercept[SparkArithmeticException] {
+          sql("select CAST(TIMESTAMP '9999-12-31T12:13:14.56789Z' AS INT)").collect()
+        },
+        errorClass = "CAST_CAUSES_OVERFLOW",
+        msg =
+          "Casting 253402258394567890L to INT causes overflow. " +
+          "To return NULL instead, use 'try_cast'. " +
+          "If necessary set spark.sql.ansi.enabled to false to bypass this error.",
+        sqlState = Some("22005"))
     }
   }
 
   test("DIVIDE_BY_ZERO: can't divide an integer by zero") {
     withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
-      val e = intercept[SparkArithmeticException] {
-        sql("select 6/0").collect()
-      }
-      assert(e.getErrorClass === "DIVIDE_BY_ZERO")
-      assert(e.getSqlState === "22012")
-      assert(e.getMessage ===
-        "divide by zero. To return NULL instead, use 'try_divide'. If necessary set " +
+      checkErrorClass(
+        exception = intercept[SparkArithmeticException] {
+          sql("select 6/0").collect()
+        },
+        errorClass = "DIVIDE_BY_ZERO",
+        msg =
+          "divide by zero. To return NULL instead, use 'try_divide'. If necessary set " +
           "spark.sql.ansi.enabled to false (except for ANSI interval type) to bypass this error." +
           """
             |== SQL(line 1, position 7) ==
             |select 6/0
             |       ^^^
-            |""".stripMargin)
+            |""".stripMargin,
+        sqlState = Some("22012"))
     }
   }
 
   test("INVALID_FRACTION_OF_SECOND: in the function make_timestamp") {
     withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
-      val e = intercept[SparkDateTimeException] {
-        sql("select make_timestamp(2012, 11, 30, 9, 19, 60.66666666)").collect()
-      }
-      assert(e.getErrorClass === "INVALID_FRACTION_OF_SECOND")
-      assert(e.getSqlState === "22023")
-      assert(e.getMessage === "The fraction of sec must be zero. Valid range is [0, 60]. " +
-        "If necessary set spark.sql.ansi.enabled to false to bypass this error. ")
+      checkErrorClass(
+        exception = intercept[SparkDateTimeException] {
+          sql("select make_timestamp(2012, 11, 30, 9, 19, 60.66666666)").collect()
+        },
+        errorClass = "INVALID_FRACTION_OF_SECOND",
+        msg = "The fraction of sec must be zero. Valid range is [0, 60]. " +
+          "If necessary set spark.sql.ansi.enabled to false to bypass this error. ",
+        sqlState = Some("22023"))
     }
   }
 
   test("CANNOT_CHANGE_DECIMAL_PRECISION: cast string to decimal") {
     withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
-      val e = intercept[SparkArithmeticException] {
-        sql("select CAST('66666666666666.666' AS DECIMAL(8, 1))").collect()
-      }
-      assert(e.getErrorClass === "CANNOT_CHANGE_DECIMAL_PRECISION")
-      assert(e.getSqlState === "22005")
-      assert(e.getMessage ===
-        "Decimal(expanded,66666666666666.666,17,3}) cannot be represented as Decimal(8, 1). " +
-        "If necessary set spark.sql.ansi.enabled to false to bypass this error." +
-        """
-          |== SQL(line 1, position 7) ==
-          |select CAST('66666666666666.666' AS DECIMAL(8, 1))
-          |       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-          |""".stripMargin)
+      checkErrorClass(
+        exception = intercept[SparkArithmeticException] {
+          sql("select CAST('66666666666666.666' AS DECIMAL(8, 1))").collect()
+        },
+        errorClass = "CANNOT_CHANGE_DECIMAL_PRECISION",
+        msg =
+          "Decimal(expanded,66666666666666.666,17,3}) cannot be represented as Decimal(8, 1). " +
+          "If necessary set spark.sql.ansi.enabled to false to bypass this error." +
+          """
+            |== SQL(line 1, position 7) ==
+            |select CAST('66666666666666.666' AS DECIMAL(8, 1))
+            |       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+            |""".stripMargin,
+        sqlState = Some("22005"))
     }
   }
 
@@ -455,9 +459,11 @@ class QueryExecutionErrorsSuite
     }
     assert(e1.getCause.isInstanceOf[SparkException])
 
-    val e2 = e1.getCause.asInstanceOf[SparkException]
-    assert(e2.getErrorClass === "FAILED_EXECUTE_UDF")
-    assert(e2.getMessage.matches("Failed to execute user defined function " +
-      "\\(QueryExecutionErrorsSuite\\$\\$Lambda\\$\\d+/\\w+: \\(string, int\\) => string\\)"))
+    checkErrorClass(
+      exception = e1.getCause.asInstanceOf[SparkException],
+      errorClass = "FAILED_EXECUTE_UDF",
+      msg = "Failed to execute user defined function " +
+        "\\(QueryExecutionErrorsSuite\\$\\$Lambda\\$\\d+/\\w+: \\(string, int\\) => string\\)",
+      matchMsg = true)
   }
 }
