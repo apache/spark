@@ -37,9 +37,9 @@ object DistinctKeyVisitor extends LogicalPlanVisitor[Set[ExpressionSet]] {
       keys.filter(_.subsetOf(outputSet))
     } else {
       val aliasedDistinctKeys = keys.map(_.map(_.transform {
-          case expr: Expression =>
-            aliases.get(expr.canonicalized).map(_.toAttribute).getOrElse(expr)
-        }))
+        case expr: Expression =>
+          aliases.get(expr.canonicalized).map(_.toAttribute).getOrElse(expr)
+      }))
       aliasedDistinctKeys.collect {
         case es: ExpressionSet if es.subsetOf(outputSet) => ExpressionSet(es)
       } ++ keys.filter(_.subsetOf(outputSet))
@@ -65,8 +65,7 @@ object DistinctKeyVisitor extends LogicalPlanVisitor[Set[ExpressionSet]] {
   override def default(p: LogicalPlan): Set[ExpressionSet] = Set.empty[ExpressionSet]
 
   override def visitAggregate(p: Aggregate): Set[ExpressionSet] = {
-    // handle group by a, a
-    // handle global aggregate
+    // handle group by a, a and global aggregate
     val groupingExps = ExpressionSet(p.groupingExpressions)
     projectDistinctKeys(addDistinctKey(p.child.distinctKeys, groupingExps), p.aggregateExpressions)
   }
