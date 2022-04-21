@@ -23,7 +23,7 @@ import org.apache.spark.sql.expressions.SparkUserDefinedFunction
 import org.apache.spark.sql.functions.{grouping, grouping_id, sum, udf}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{IntegerType, StringType}
+import org.apache.spark.sql.types.{IntegerType, MapType, StringType, StructField, StructType}
 
 case class StringLongClass(a: String, b: Long)
 
@@ -362,6 +362,21 @@ class QueryCompilationErrorsSuite extends QueryTest with SharedSparkSession {
           s"""The operation "DESC PARTITION" is not allowed """ +
           s"on the view: `$viewName`")
       }
+    }
+  }
+
+  test("INVALID_JSON_SCHEMA_MAPTYPE: " +
+    "Parse JSON rows can only contain StringType as a key type for a MapType.") {
+    withTempPath { path =>
+      val schema = StructType(
+        StructField("map", MapType(IntegerType, IntegerType, true), false) :: Nil)
+      val e = intercept[AnalysisException] {
+        spark.read.schema(schema).json(path.getCanonicalPath)
+      }
+      assert(e.getErrorClass === "INVALID_JSON_SCHEMA_MAPTYPE")
+      assert(e.getMessage ===
+        "Input schema StructType(StructField(map,MapType(IntegerType,IntegerType,true),false)) " +
+          "can only contain StringType as a key type for a MapType.")
     }
   }
 }
