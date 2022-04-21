@@ -18,27 +18,26 @@
 package org.apache.spark.sql.connector.read;
 
 import org.apache.spark.annotation.Evolving;
-import org.apache.spark.sql.connector.expressions.SortOrder;
 
 /**
  * A mix-in interface for {@link ScanBuilder}. Data sources can implement this interface to
- * push down top N(query with ORDER BY ... LIMIT n). Please note that the combination of top N
- * with other operations such as AGGREGATE, GROUP BY, CLUSTER BY, DISTRIBUTE BY, etc.
+ * push down LIMIT and OFFSET. Please note that the combination of LIMIT and OFFSET with other
+ * operations such as AGGREGATE, GROUP BY, SORT BY, CLUSTER BY, DISTRIBUTE BY, etc.
  * is NOT pushed down.
  *
- * @since 3.3.0
+ * @since 3.4.0
  */
 @Evolving
-public interface SupportsPushDownTopN extends ScanBuilder {
-
+public interface SupportsPushDownLimitAndOffset {
   /**
-   * Pushes down top N to the data source.
+   * Pushes down LIMIT and OFFSET to the data source.
    */
-  boolean pushTopN(SortOrder[] orders, int limit);
+  boolean pushLimitAndOffset(int limit, int offset);
 
   /**
-   * Whether the top N is partially pushed or not. If it returns true, then Spark will do top N
-   * again. This method will only be called when {@link #pushTopN} returns true.
+   * Whether the LIMIT and OFFSET is partially pushed or not. If it returns true, then Spark will
+   * do LIMIT and OFFSET again. This method will only be called when {@link #pushLimitAndOffset}
+   * returns true.
    */
   default boolean isPartiallyPushed() { return true; }
 }

@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.expressions.{aggregate, Alias, AliasHelper,
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.optimizer.CollapseProject
 import org.apache.spark.sql.catalyst.planning.ScanOperation
-import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, LeafNode, Limit, LocalLimit, LogicalPlan, Project, Sample, Sort}
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, LeafNode, Limit, LimitAndOffset, LocalLimit, LogicalPlan, Project, Sample, Sort}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.connector.expressions.{SortOrder => V2SortOrder}
 import org.apache.spark.sql.connector.expressions.aggregate.{Aggregation, Avg, Count, GeneralAggregateFunc, Sum}
@@ -44,6 +44,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper wit
       pushDownFilters,
       pushDownAggregates,
       pushDownLimits,
+      pushDownLimitAndOffsets,
       pruneColumns)
 
     pushdownRules.foldLeft(plan) { (newPlan, pushDownRule) =>
@@ -419,6 +420,34 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper wit
       }
   }
 
+  private def pushDownLimitAndOffset(
+      plan: LogicalPlan, limit: Int, offset: Int): (LogicalPlan, Boolean) = plan match {
+    case operation @ ScanOperation(_, filter, sHolder: ScanBuilderHolder) if filter.isEmpty =>
+      val (isPushed, isPartiallyPushed) =
+        PushDownUtils.pushLimitAndOffset(sHolder.builder, limit, offset)
+      if (isPushed) {
+        sHolder.pushedLimit = Some(limit)
+        sHolder.pushedOffset = Some(offset)
+      }
+      (operation, isPushed && !isPartiallyPushed)
+    case p: Project =>
+      val (newChild, isPartiallyPushed) = pushDownLimitAndOffset(p.child, limit, offset)
+      (p.withNewChildren(Seq(newChild)), isPartiallyPushed)
+    case other => (other, false)
+  }
+
+  def pushDownLimitAndOffsets(plan: LogicalPlan): LogicalPlan = plan.transform {
+    case limitAndOffset @ LimitAndOffset(IntegerLiteral(limit), IntegerLiteral(offset), child) =>
+      val (newChild, canRemoveLimitAndOffset) = pushDownLimitAndOffset(child, limit, offset)
+      if (canRemoveLimitAndOffset) {
+        newChild
+      } else {
+        val newLocalLimit =
+          limitAndOffset.child.asInstanceOf[LocalLimit].withNewChildren(Seq(newChild))
+        limitAndOffset.withNewChildren(Seq(newLocalLimit))
+      }
+  }
+
   private def getWrappedScan(
       scan: Scan,
       sHolder: ScanBuilderHolder,
@@ -431,7 +460,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper wit
           case _ => Array.empty[sources.Filter]
         }
         val pushedDownOperators = PushedDownOperators(aggregation, sHolder.pushedSample,
-          sHolder.pushedLimit, sHolder.sortOrders, sHolder.pushedPredicates)
+          sHolder.pushedLimit, sHolder.pushedOffset, sHolder.sortOrders, sHolder.pushedPredicates)
         V1ScanWrapper(v1, pushedFilters, pushedDownOperators)
       case _ => scan
     }
@@ -443,6 +472,8 @@ case class ScanBuilderHolder(
     relation: DataSourceV2Relation,
     builder: ScanBuilder) extends LeafNode {
   var pushedLimit: Option[Int] = None
+
+  var pushedOffset: Option[Int] = None
 
   var sortOrders: Seq[V2SortOrder] = Seq.empty[V2SortOrder]
 

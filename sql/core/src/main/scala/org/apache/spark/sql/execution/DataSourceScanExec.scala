@@ -152,6 +152,8 @@ case class RowDataSourceScanExec(
       pushedDownOperators.limit.map(value => "PushedLimit" -> s"LIMIT $value")
     }
 
+    val pushedOffset = pushedDownOperators.offset.map(value => "PushedOffset" -> s"OFFSET $value")
+
     val pushedFilters = if (pushedDownOperators.pushedPredicates.nonEmpty) {
       seqToString(pushedDownOperators.pushedPredicates.map(_.describe()))
     } else {
@@ -164,6 +166,7 @@ case class RowDataSourceScanExec(
         Map("PushedAggregates" -> seqToString(v.aggregateExpressions.map(_.describe())),
           "PushedGroupByExpressions" -> seqToString(v.groupByExpressions.map(_.describe())))} ++
       topNOrLimitInfo ++
+      pushedOffset ++
       pushedDownOperators.sample.map(v => "PushedSample" ->
         s"SAMPLE (${(v.upperBound - v.lowerBound) * 100}) ${v.withReplacement} SEED(${v.seed})"
       )

@@ -23,7 +23,7 @@ import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.connector.expressions.{FieldReference, SortOrder}
 import org.apache.spark.sql.connector.expressions.aggregate.Aggregation
 import org.apache.spark.sql.connector.expressions.filter.Predicate
-import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownAggregates, SupportsPushDownLimit, SupportsPushDownRequiredColumns, SupportsPushDownTableSample, SupportsPushDownTopN, SupportsPushDownV2Filters}
+import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownAggregates, SupportsPushDownLimit, SupportsPushDownLimitAndOffset, SupportsPushDownRequiredColumns, SupportsPushDownTableSample, SupportsPushDownTopN, SupportsPushDownV2Filters}
 import org.apache.spark.sql.execution.datasources.PartitioningUtils
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JDBCRDD, JDBCRelation}
 import org.apache.spark.sql.execution.datasources.v2.TableSampleInfo
@@ -39,6 +39,7 @@ case class JDBCScanBuilder(
     with SupportsPushDownRequiredColumns
     with SupportsPushDownAggregates
     with SupportsPushDownLimit
+    with SupportsPushDownLimitAndOffset
     with SupportsPushDownTableSample
     with SupportsPushDownTopN
     with Logging {
@@ -52,6 +53,8 @@ case class JDBCScanBuilder(
   private var tableSample: Option[TableSampleInfo] = None
 
   private var pushedLimit = 0
+
+  private var pushedOffset = 0
 
   private var sortOrders: Array[String] = Array.empty[String]
 
@@ -139,6 +142,15 @@ case class JDBCScanBuilder(
     false
   }
 
+  override def pushLimitAndOffset(limit: Int, offset: Int): Boolean = {
+    if (jdbcOptions.pushDownOffset) {
+      pushedLimit = limit
+      pushedOffset = offset
+      return true
+    }
+    false
+  }
+
   override def pushTopN(orders: Array[SortOrder], limit: Int): Boolean = {
     if (jdbcOptions.pushDownLimit) {
       val dialect = JdbcDialects.get(jdbcOptions.url)
@@ -181,6 +193,6 @@ case class JDBCScanBuilder(
     // prunedSchema and quote them (will become "MAX(SALARY)", "MIN(BONUS)" and can't
     // be used in sql string.
     JDBCScan(JDBCRelation(schema, parts, jdbcOptions)(session), finalSchema, pushedPredicate,
-      pushedAggregateList, pushedGroupBys, tableSample, pushedLimit, sortOrders)
+      pushedAggregateList, pushedGroupBys, tableSample, pushedLimit, sortOrders, pushedOffset)
   }
 }
