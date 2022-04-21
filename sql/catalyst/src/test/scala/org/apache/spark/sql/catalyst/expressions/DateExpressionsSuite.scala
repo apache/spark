@@ -754,7 +754,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(
       TruncDate(Literal.create(input, DateType), NonFoldableLiteral.create(fmt, StringType)),
       expected)
-    // ensure that evaluation with input rows also works
+    // SPARK-38990: ensure that evaluation with input rows also works
     val catalystInput = CatalystTypeConverters.convertToCatalyst(input)
     val inputRow = InternalRow(catalystInput, UTF8String.fromString(fmt))
     checkEvaluation(
@@ -789,7 +789,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       TruncTimestamp(
         NonFoldableLiteral.create(fmt, StringType), Literal.create(input, TimestampType)),
       expected)
-    // ensure that evaluation with input rows also works
+    // SPARK-38990: ensure that evaluation with input rows also works
     val catalystInput = CatalystTypeConverters.convertToCatalyst(input)
     val inputRow = InternalRow(UTF8String.fromString(fmt), catalystInput)
     checkEvaluation(
