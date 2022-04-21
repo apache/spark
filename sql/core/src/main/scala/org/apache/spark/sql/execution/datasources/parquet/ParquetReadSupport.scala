@@ -187,18 +187,6 @@ object ParquetReadSupport extends Logging {
   }
 
   /**
-   * Overloaded method for backward compatibility with
-   * `caseSensitive` default to `true` and `useFieldId` default to `false`
-   */
-  def clipParquetSchema(
-      parquetSchema: MessageType,
-      catalystSchema: StructType,
-      caseSensitive: Boolean = true): MessageType = {
-    clipParquetSchema(parquetSchema, catalystSchema, caseSensitive, useFieldId = false,
-      timestampNTZEnabled = true)
-  }
-
-  /**
    * Tailors `parquetSchema` according to `catalystSchema` by removing column paths don't exist
    * in `catalystSchema`, and adding those only exist in `catalystSchema`.
    */
