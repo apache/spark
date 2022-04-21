@@ -136,8 +136,12 @@ class classproperty(property):
     True
     """
 
-    def __get__(self, cls, owner):
-        return classmethod(self.fget).__get__(None, owner)()
+    def __get__(self, instance: Any, owner: Any = None) -> "SparkSession.Builder":
+        # The "type: ignore" below silences the following error from mypy:
+        # error: Argument 1 to "classmethod" has incompatible
+        # type "Optional[Callable[[Any], Any]]";
+        # expected "Callable[..., Any]"  [arg-type]
+        return classmethod(self.fget).__get__(None, owner)()  # type: ignore
 
 
 class SparkSession(SparkConversionMixin):
@@ -179,7 +183,7 @@ class SparkSession(SparkConversionMixin):
 
         _lock = RLock()
 
-        def __init__(self):
+        def __init__(self) -> None:
             self._options: Dict[str, Any] = {}
 
         @overload
@@ -328,7 +332,7 @@ class SparkSession(SparkConversionMixin):
     # @classmethod + @property is also affected by a bug in Python's docstring which was backported
     # to Python 3.9.6 (https://github.com/python/cpython/pull/28838)
     @classproperty
-    def builder(cls):
+    def builder(cls) -> Builder:
         """Creates a :class:`Builder` for constructing a :class:`SparkSession`."""
         return cls.Builder()
 
