@@ -82,7 +82,7 @@ FROM (VALUES (7000000000005), (7000000000007)) v(x);
 -- SQL2003 binary aggregates [SPARK-23907]
 SELECT regr_count(b, a) FROM aggtest;
 SELECT regr_sxx(b, a) FROM aggtest;
--- SELECT regr_syy(b, a) FROM aggtest;
+SELECT regr_syy(b, a) FROM aggtest;
 SELECT regr_sxy(b, a) FROM aggtest;
 SELECT regr_avgx(b, a), regr_avgy(b, a) FROM aggtest;
 SELECT regr_r2(b, a) FROM aggtest;
@@ -92,18 +92,17 @@ SELECT corr(b, udf(a)) FROM aggtest;
 
 
 -- test accum and combine functions directly [SPARK-23907]
--- CREATE TABLE regr_test (x float8, y float8);
--- INSERT INTO regr_test VALUES (10,150),(20,250),(30,350),(80,540),(100,200);
--- SELECT count(*), sum(x), regr_sxx(y,x), sum(y),regr_syy(y,x), regr_sxy(y,x)
--- FROM regr_test WHERE x IN (10,20,30,80);
--- SELECT count(*), sum(x), regr_sxx(y,x), sum(y),regr_syy(y,x), regr_sxy(y,x)
--- FROM regr_test;
+CREATE TEMPORARY VIEW regr_test AS SELECT * FROM VALUES (10,150),(20,250),(30,350),(80,540),(100,200) AS regr_test (x, y);
+SELECT count(*), sum(x), regr_sxx(y,x), sum(y),regr_syy(y,x), regr_sxy(y,x)
+FROM regr_test WHERE x IN (10,20,30,80);
+SELECT count(*), sum(x), regr_sxx(y,x), sum(y),regr_syy(y,x), regr_sxy(y,x)
+FROM regr_test;
 -- SELECT float8_accum('{4,140,2900}'::float8[], 100);
 -- SELECT float8_regr_accum('{4,140,2900,1290,83075,15050}'::float8[], 200, 100);
--- SELECT count(*), sum(x), regr_sxx(y,x), sum(y),regr_syy(y,x), regr_sxy(y,x)
--- FROM regr_test WHERE x IN (10,20,30);
--- SELECT count(*), sum(x), regr_sxx(y,x), sum(y),regr_syy(y,x), regr_sxy(y,x)
--- FROM regr_test WHERE x IN (80,100);
+SELECT count(*), sum(x), regr_sxx(y,x), sum(y),regr_syy(y,x), regr_sxy(y,x)
+FROM regr_test WHERE x IN (10,20,30);
+SELECT count(*), sum(x), regr_sxx(y,x), sum(y),regr_syy(y,x), regr_sxy(y,x)
+FROM regr_test WHERE x IN (80,100);
 -- SELECT float8_combine('{3,60,200}'::float8[],ELECT CAST(udf(covar_pop(b, udf(a))) AS '{0,0,0}'::float8[]);
 -- SELECT float8_combine('{0,0,0}'::float8[], '{2,180,200}'::float8[]);
 -- SELECT float8_combine('{3,60,200}'::float8[], '{2,180,200}'::float8[]);
@@ -113,7 +112,7 @@ SELECT corr(b, udf(a)) FROM aggtest;
 --                            '{2,180,200,740,57800,-3400}'::float8[]);
 -- SELECT float8_regr_combine('{3,60,200,750,20000,2000}'::float8[],
 --                            '{2,180,200,740,57800,-3400}'::float8[]);
--- DROP TABLE regr_test;
+DROP VIEW regr_test;
 
 
 -- test count, distinct
