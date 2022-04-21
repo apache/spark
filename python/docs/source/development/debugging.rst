@@ -350,7 +350,7 @@ Example:
     >>> df = spark.range(1)
     >>> df['bad_key']
     Traceback (most recent call last):
-    …
+    ...
     pyspark.sql.utils.AnalysisException: Cannot resolve column name "bad_key" among (id)
 
 Solution:
@@ -370,7 +370,7 @@ Example:
 
     >>> spark.sql("select * 1")
     Traceback (most recent call last):
-    …
+    ...
     pyspark.sql.utils.ParseException:
     Syntax error at or near '1': extra input '1'(line 1, pos 9)
     == SQL ==
@@ -394,7 +394,7 @@ Example:
 
     >>> spark.range(1).sample(-1.0)
     Traceback (most recent call last):
-    …
+    ...
     pyspark.sql.utils.IllegalArgumentException: requirement failed: Sampling fraction (-1.0) must be on interval [0, 1] without replacement
 
 Solution:
@@ -421,7 +421,7 @@ Example:
     >>> spark.range(-1, 1).withColumn("abs", udf(f)("id")).collect()
     22/04/12 14:52:31 ERROR Executor: Exception in task 7.0 in stage 37.0 (TID 232)
     org.apache.spark.api.python.PythonException: Traceback (most recent call last):
-    …
+    ...
     TypeError: Invalid argument, not a string or column: -1 of type <class 'int'>. For column literals, use 'lit', 'array', 'struct' or 'create_map' function.
 
 Solution:
@@ -447,11 +447,11 @@ Example:
     >>> bad_udf = udf(lambda x: 1 / 0)
     >>> (sdf.select(bad_udf(col("value"))).writeStream.format("memory").queryName("q1").start()).processAllAvailable()
     Traceback (most recent call last):
-    …
+    ...
     org.apache.spark.api.python.PythonException: Traceback (most recent call last):
       File "<stdin>", line 1, in <lambda>
     ZeroDivisionError: division by zero
-    …
+    ...
     pyspark.sql.utils.StreamingQueryException: Query q1 [id = ced5797c-74e2-4079-825b-f3316b327c7d, runId = 65bacaf3-9d51-476a-80ce-0ac388d4906a] terminated with exception: Writing job aborted
 
 Solution:
@@ -471,7 +471,7 @@ Example:
     >>> df2 = df.select("date_str", to_date(from_unixtime(unix_timestamp("date_str", "yyyy-dd-aa"))))
     >>> df2.collect()
     Traceback (most recent call last):
-    …
+    ...
     pyspark.sql.utils.SparkUpgradeException: You may get a different result due to the upgrading to Spark >= 3.0: Fail to recognize 'yyyy-dd-aa' pattern in the DateTimeFormatter. 1) You can set spark.sql.legacy.timeParserPolicy to LEGACY to restore the behavior before Spark 3.0. 2) You can form a valid datetime pattern with the guide from https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html
 
 Solution:
@@ -498,7 +498,7 @@ Exception:
 
     >>> ps.Series([1, 2]) + ps.Series([3, 4])
     Traceback (most recent call last):
-    …
+    ...
     ValueError: Cannot combine the series or dataframe because it comes from a different dataframe. In order to allow this operation, enable 'compute.ops_on_diff_frames' option.
 
 
@@ -525,7 +525,7 @@ Exception:
     >>> ps.DataFrame({"x":[1, 2], "y":[3, 4]}).transform(f)
     22/04/12 13:46:39 ERROR Executor: Exception in task 2.0 in stage 16.0 (TID 88)
     org.apache.spark.api.python.PythonException: Traceback (most recent call last):
-    …
+    ...
     RuntimeError: Result vector from pandas_udf was not the required length: expected 1, got 0
 
 Solution:
