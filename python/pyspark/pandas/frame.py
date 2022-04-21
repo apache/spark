@@ -8608,6 +8608,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         frac: Optional[float] = None,
         replace: bool = False,
         random_state: Optional[int] = None,
+        ignore_index: bool = False,
     ) -> "DataFrame":
         """
         Return a random sample of items from an axis of object.
@@ -8630,6 +8631,10 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             Sample with or without replacement.
         random_state : int, optional
             Seed for the random number generator (if int).
+        ignore_index : bool, default False
+            If True, the resulting index will be labeled 0, 1, …, n - 1.
+
+            .. versionadded:: 3.4.0
 
         Returns
         -------
@@ -8658,6 +8663,14 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                 num_legs  num_wings  num_specimen_seen
         falcon         2          2                 10
         fish           0          0                  8
+
+        A random 50% sample of the ``DataFrame``, while ignoring the index.
+
+        >>> df.sample(frac=0.5, random_state=1, ignore_index=True)  # doctest: +SKIP
+           num_legs  num_wings  num_specimen_seen
+        0         4          0                  2
+        1         8          0                  1
+        2         0          0                  8
 
         Extract 25% random elements from the ``Series`` ``df['num_legs']``, with replacement,
         so the same items could appear more than once.
@@ -8689,7 +8702,13 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         sdf = self._internal.resolved_copy.spark_frame.sample(
             withReplacement=replace, fraction=frac, seed=random_state
         )
-        return DataFrame(self._internal.with_new_sdf(sdf))
+        if ignore_index:
+            spark_index_names = [
+                SPARK_INDEX_NAME_FORMAT(i) for i in range(self._internal.index_level)
+            ]
+            return DataFrame(sdf.drop(*spark_index_names))
+        else:
+            return DataFrame(self._internal.with_new_sdf(sdf))
 
     def astype(self, dtype: Union[str, Dtype, Dict[Name, Union[str, Dtype]]]) -> "DataFrame":
         """
