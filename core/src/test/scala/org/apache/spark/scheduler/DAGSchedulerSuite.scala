@@ -3709,8 +3709,8 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     assertDataStructuresEmpty()
   }
 
-  test("SPARK-32920: Merge results should not be unregistered if the running stage is cancelled" +
-    " before shuffle merge is finalized") {
+  test("SPARK-32920: Merge results should not be unregistered if a determinate running stage is " +
+    "cancelled before shuffle merge is finalized") {
     initPushBasedShuffleConfs(conf)
     DAGSchedulerSuite.clearMergerLocs()
     DAGSchedulerSuite.addMergerLocs(Seq("host1", "host2", "host3", "host4", "host5"))
@@ -4003,8 +4003,9 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
 
   // Test the behavior of stage cancellation during the spark.shuffle.push.finalize.timeout
   // wait for shuffle merge finalization
-  test("SPARK-33701: check adaptive shuffle merge finalization behavior with stage" +
-    " cancellation during spark.shuffle.push.finalize.timeout wait") {
+  test("SPARK-33701: check adaptive shuffle merge finalization behavior with stage " +
+    "cancellation for determinate and indeterminate stages during " +
+    "spark.shuffle.push.finalize.timeout wait") {
     initPushBasedShuffleConfs(conf)
     conf.set(config.PUSH_BASED_SHUFFLE_SIZE_MIN_SHUFFLE_SIZE_TO_WAIT, 10L)
     conf.set(config.SHUFFLE_MERGER_LOCATIONS_MIN_STATIC_THRESHOLD, 5)
