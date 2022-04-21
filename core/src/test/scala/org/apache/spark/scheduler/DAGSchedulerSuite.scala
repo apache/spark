@@ -3709,8 +3709,8 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     assertDataStructuresEmpty()
   }
 
-  test("SPARK-32920: Merge results should not be unregistered if a determinate running stage is " +
-    "cancelled before shuffle merge is finalized") {
+  test("SPARK-32920: Cancelled stage should be marked finalized after the shuffle merge " +
+    "is finalized") {
     initPushBasedShuffleConfs(conf)
     DAGSchedulerSuite.clearMergerLocs()
     DAGSchedulerSuite.addMergerLocs(Seq("host1", "host2", "host3", "host4", "host5"))
