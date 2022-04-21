@@ -664,7 +664,9 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
         msg = intercept[AnalysisException] {
           sql("insert into t select 1")
         }.getMessage
-        assert(msg.contains("Cannot write incompatible data to table"))
+        assert(msg.contains("`t` requires that the data to be inserted have the same number of " +
+          "columns as the target table: target table has 2 column(s)" +
+          " but the inserted data has 1 column(s)"))
 
         // Insert into table successfully.
         sql("insert into t select 1, 2.0D")
