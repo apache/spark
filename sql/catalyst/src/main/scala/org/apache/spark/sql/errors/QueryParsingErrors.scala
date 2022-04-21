@@ -452,6 +452,14 @@ object QueryParsingErrors extends QueryErrorsBase {
       s"Specifying a database in CREATE TEMPORARY FUNCTION is not allowed: '$databaseName'", ctx)
   }
 
+  def invalidTableValuedFunctionNameError(
+      name: Seq[String],
+      ctx: TableValuedFunctionContext): Throwable = {
+    new ParseException(
+      "INVALID_SQL_SYNTAX",
+      Array("table valued function cannot specify database name ", toSQLId(name)), ctx)
+  }
+
   def unclosedBracketedCommentError(command: String, position: Origin): Throwable = {
     new ParseException(Some(command), "Unclosed bracketed comment", position, position)
   }
