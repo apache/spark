@@ -140,17 +140,17 @@ object QueryParsingErrors extends QueryErrorsBase {
 
   def repetitiveWindowDefinitionError(name: String, ctx: WindowClauseContext): Throwable = {
     new ParseException("INVALID_SQL_SYNTAX",
-      Array(s"The definition of window '$name' is repetitive."), ctx)
+      Array(s"The definition of window ${toSQLId(name)} is repetitive."), ctx)
   }
 
   def invalidWindowReferenceError(name: String, ctx: WindowClauseContext): Throwable = {
     new ParseException("INVALID_SQL_SYNTAX",
-      Array(s"Window reference '$name' is not a window specification."), ctx)
+      Array(s"Window reference ${toSQLId(name)} is not a window specification."), ctx)
   }
 
   def cannotResolveWindowReferenceError(name: String, ctx: WindowClauseContext): Throwable = {
     new ParseException("INVALID_SQL_SYNTAX",
-      Array(s"Cannot resolve window reference '$name'."), ctx)
+      Array(s"Cannot resolve window reference ${toSQLId(name)}."), ctx)
   }
 
   def naturalCrossJoinUnsupportedError(ctx: RelationContext): Throwable = {
@@ -249,7 +249,10 @@ object QueryParsingErrors extends QueryErrorsBase {
   }
 
   def tooManyArgumentsForTransformError(name: String, ctx: ApplyTransformContext): Throwable = {
-    new ParseException("INVALID_SQL_SYNTAX", Array(s"Too many arguments for transform $name"), ctx)
+    new ParseException(
+      errorClass = "INVALID_SQL_SYNTAX",
+      messageParameters = Array(s"Too many arguments for transform ${toSQLId(name)}"),
+      ctx)
   }
 
   def invalidBucketsNumberError(describe: String, ctx: ApplyTransformContext): Throwable = {
@@ -327,7 +330,7 @@ object QueryParsingErrors extends QueryErrorsBase {
     new ParseException(
       errorClass = "INVALID_SQL_SYNTAX",
       messageParameters = Array(
-        s"Invalid pattern in ${toSQLStmt("SHOW FUNCTIONS")}: $pattern. " +
+        s"Invalid pattern in ${toSQLStmt("SHOW FUNCTIONS")}: ${toSQLId(pattern)}. " +
         s"It must be a ${toSQLType(StringType)} literal."),
       ctx)
   }
@@ -351,7 +354,7 @@ object QueryParsingErrors extends QueryErrorsBase {
 
   def duplicateKeysError(key: String, ctx: ParserRuleContext): Throwable = {
     // Found duplicate keys '$key'
-    new ParseException(errorClass = "DUPLICATE_KEY", messageParameters = Array(key), ctx)
+    new ParseException(errorClass = "DUPLICATE_KEY", messageParameters = Array(toSQLId(key)), ctx)
   }
 
   def unexpectedFomatForSetConfigurationError(ctx: ParserRuleContext): Throwable = {

@@ -2050,9 +2050,9 @@ class DDLParserSuite extends AnalysisTest {
       ShowFunctions(UnresolvedNamespace(Seq("db")), true, true, Some("funct*")))
     intercept("SHOW other FUNCTIONS", "\"SHOW\" other \"FUNCTIONS\" not supported")
     intercept("SHOW FUNCTIONS IN db f1",
-      "Invalid pattern in \"SHOW FUNCTIONS\": f1")
+      "Invalid pattern in \"SHOW FUNCTIONS\": `f1`")
     intercept("SHOW FUNCTIONS IN db LIKE f1",
-      "Invalid pattern in \"SHOW FUNCTIONS\": f1")
+      "Invalid pattern in \"SHOW FUNCTIONS\": `f1`")
 
     // The legacy syntax.
     comparePlans(

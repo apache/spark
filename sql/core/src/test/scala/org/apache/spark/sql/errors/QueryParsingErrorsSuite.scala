@@ -130,7 +130,7 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession {
       sqlState = "42000",
       message =
         """
-          |Invalid SQL syntax: The definition of window 'win' is repetitive.(line 1, pos 31)
+          |Invalid SQL syntax: The definition of window `win` is repetitive.(line 1, pos 31)
           |
           |== SQL ==
           |SELECT min(a) OVER win FROM t1 WINDOW win AS win, win AS win2
@@ -145,7 +145,7 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession {
       sqlState = "42000",
       message =
         """
-          |Invalid SQL syntax: Window reference 'win' is not a window specification.(line 1, pos 31)
+          |Invalid SQL syntax: Window reference `win` is not a window specification.(line 1, pos 31)
           |
           |== SQL ==
           |SELECT min(a) OVER win FROM t1 WINDOW win AS win
@@ -160,7 +160,7 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession {
       sqlState = "42000",
       message =
         """
-          |Invalid SQL syntax: Cannot resolve window reference 'win2'.(line 1, pos 31)
+          |Invalid SQL syntax: Cannot resolve window reference `win2`.(line 1, pos 31)
           |
           |== SQL ==
           |SELECT min(a) OVER win FROM t1 WINDOW win AS win2
@@ -206,7 +206,7 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession {
       sqlState = "42000",
       message =
         """
-          |Invalid SQL syntax: Too many arguments for transform years(line 1, pos 44)
+          |Invalid SQL syntax: Too many arguments for transform `years`(line 1, pos 44)
           |
           |== SQL ==
           |CREATE TABLE table(col int) PARTITIONED BY (years(col,col))
