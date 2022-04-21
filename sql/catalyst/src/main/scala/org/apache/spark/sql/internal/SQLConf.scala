@@ -1063,10 +1063,11 @@ object SQLConf {
 
   val PARQUET_TIMESTAMP_NTZ_ENABLED =
     buildConf("spark.sql.parquet.timestampNTZ.enabled")
-      .doc("Enables TIMESTAMP_NTZ support for Parquet reads and writes. When enabled, " +
-        "TIMESTAMP_NTZ values are writen as Parquet timestamp columns with annotation " +
-        "isAdjustedToUTC = false and are inferred in a similar way. When disabled, such values " +
-        "are read as TIMESTAMP_LTZ and have to be converted to TIMESTAMP_LTZ for writes.")
+      .doc(s"Enables ${TimestampTypes.TIMESTAMP_NTZ} support for Parquet reads and writes. " +
+        s"When enabled, ${TimestampTypes.TIMESTAMP_NTZ} values are written as Parquet timestamp " +
+        "columns with annotation isAdjustedToUTC = false and are inferred in a similar way. " +
+        s"When disabled, such values are read as ${TimestampTypes.TIMESTAMP_LTZ} and have to be " +
+        s"converted to ${TimestampTypes.TIMESTAMP_LTZ} for writes.")
       .version("3.4.0")
       .booleanConf
       .createWithDefault(true)
