@@ -19,11 +19,9 @@ package org.apache.spark.sql.errors
 
 import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest}
 import org.apache.spark.sql.connector.{DatasourceV2SQLBase, FakeV2Provider, InsertIntoSQLOnlyTests}
-import org.apache.spark.sql.test.SharedSparkSession
 
 class QueryCompilationErrorsDSv2Suite
   extends QueryTest
-  with SharedSparkSession
   with DatasourceV2SQLBase
   with InsertIntoSQLOnlyTests
   with QueryErrorsSuiteBase {

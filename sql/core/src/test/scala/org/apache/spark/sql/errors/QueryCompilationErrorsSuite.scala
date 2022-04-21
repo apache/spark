@@ -22,7 +22,6 @@ import org.apache.spark.sql.api.java.{UDF1, UDF2, UDF23Test}
 import org.apache.spark.sql.expressions.SparkUserDefinedFunction
 import org.apache.spark.sql.functions.{grouping, grouping_id, sum, udf}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{IntegerType, StringType}
 
 case class StringLongClass(a: String, b: Long)
@@ -33,7 +32,6 @@ case class ComplexClass(a: Long, b: StringLongClass)
 
 class QueryCompilationErrorsSuite
   extends QueryTest
-  with SharedSparkSession
   with QueryErrorsSuiteBase {
   import testImplicits._
 

@@ -31,7 +31,6 @@ import org.apache.spark.sql.execution.datasources.parquet.ParquetTest
 import org.apache.spark.sql.functions.{lit, lower, struct, sum, udf}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy.EXCEPTION
-import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{DecimalType, StructType, TimestampType}
 import org.apache.spark.sql.util.ArrowUtils
 
@@ -39,7 +38,6 @@ class QueryExecutionErrorsSuite
   extends QueryTest
   with ParquetTest
   with OrcTest
-  with SharedSparkSession
   with QueryErrorsSuiteBase {
 
   import testImplicits._

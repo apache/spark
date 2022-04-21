@@ -17,11 +17,11 @@
 
 package org.apache.spark.sql.errors
 
-import org.scalatest.funsuite.AnyFunSuite // scalastyle:ignore funsuite
-
 import org.apache.spark.SparkThrowable
+import org.apache.spark.sql.catalyst.parser.ParseException
+import org.apache.spark.sql.test.SharedSparkSession
 
-trait QueryErrorsSuiteBase extends AnyFunSuite {
+trait QueryErrorsSuiteBase extends SharedSparkSession {
   def checkErrorClass(
       exception: Exception with SparkThrowable,
       errorClass: String,
@@ -35,5 +35,18 @@ trait QueryErrorsSuiteBase extends AnyFunSuite {
     } else {
       assert(exception.getMessage === s"""[$errorClass] """ + msg)
     }
+  }
+
+  def validateParsingError(
+      sqlText: String,
+      errorClass: String,
+      sqlState: String,
+      message: String): Unit = {
+    val e = intercept[ParseException] {
+      sql(sqlText)
+    }
+    assert(e.getErrorClass === errorClass)
+    assert(e.getSqlState === sqlState)
+    assert(e.getMessage === s"""\n[$errorClass] """ + message)
   }
 }
