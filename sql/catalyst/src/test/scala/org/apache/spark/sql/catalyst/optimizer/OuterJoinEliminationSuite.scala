@@ -255,8 +255,7 @@ class OuterJoinEliminationSuite extends PlanTest {
     }
   }
 
-  // evaluating if assert_true/raised in filter predicate will cause exception
-  test("SPARK-38868: assert_true/raised in filter predicate does not throw exception") {
+  test("SPARK-38868: exception thrown from filter predicate does not propagate") {
     val x = testRelation.subquery(Symbol("x"))
     val y = testRelation1.subquery(Symbol("y"))
 

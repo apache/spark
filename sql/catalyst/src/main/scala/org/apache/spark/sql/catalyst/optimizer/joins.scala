@@ -144,10 +144,17 @@ object EliminateOuterJoin extends Rule[LogicalPlan] with PredicateHelper {
     val emptyRow = new GenericInternalRow(attributes.length)
     val boundE = BindReferences.bindReference(e, attributes)
     if (boundE.exists(_.isInstanceOf[Unevaluable])) return false
-    // don't evaluate an expression that might purposefully throw an exception
-    if (boundE.exists(_.isInstanceOf[RaiseError])) return false
-    val v = boundE.eval(emptyRow)
-    v == null || v == false
+
+    // some expressions, like map(), may throw an exception when dealing with null values.
+    // therefore, we need to handle exceptions.
+    try {
+      val v = boundE.eval(emptyRow)
+      v == null || v == false
+    } catch {
+      case e: Exception =>
+        // cannot filter out null if `where` expression throws an exception with null input
+        false
+    }
   }
 
   private def buildNewJoinType(filter: Filter, join: Join): JoinType = {
