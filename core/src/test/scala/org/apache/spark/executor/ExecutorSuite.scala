@@ -22,7 +22,7 @@ import java.lang.Thread.UncaughtExceptionHandler
 import java.net.URL
 import java.nio.ByteBuffer
 import java.util.Properties
-import java.util.concurrent.{ConcurrentHashMap, CountDownLatch, TimeUnit}
+import java.util.concurrent.{CountDownLatch, TimeUnit}
 import java.util.concurrent.atomic.AtomicBoolean
 
 import scala.collection.immutable
@@ -321,13 +321,7 @@ class ExecutorSuite extends SparkFunSuite
       nonZeroAccumulator.add(1)
       metrics.registerAccumulator(nonZeroAccumulator)
 
-      val executorClass = classOf[Executor]
-      val tasksMap = {
-        val field =
-          executorClass.getDeclaredField("org$apache$spark$executor$Executor$$runningTasks")
-        field.setAccessible(true)
-        field.get(executor).asInstanceOf[ConcurrentHashMap[Long, executor.TaskRunner]]
-      }
+      val tasksMap = executor.runningTasks
       val mockTaskRunner = mock[executor.TaskRunner]
       val mockTask = mock[Task[Any]]
       when(mockTask.metrics).thenReturn(metrics)
