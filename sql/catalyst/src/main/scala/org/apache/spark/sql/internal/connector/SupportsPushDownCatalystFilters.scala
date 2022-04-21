@@ -35,7 +35,7 @@ trait SupportsPushDownCatalystFilters {
 
   /**
    * Returns the data filters that are pushed to the data source via
-   * {@link #pushFilters(Predicate[])}.
+   * {@link #pushFilters(Seq[Expression])}.
    */
   def pushedFilters: Array[Predicate]
 }
