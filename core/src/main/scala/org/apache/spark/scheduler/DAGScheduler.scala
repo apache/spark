@@ -2357,10 +2357,9 @@ private[spark] class DAGScheduler(
           // results here just to free up some memory. If the indeterminate stage is resubmitted,
           // merge results are cleared again when the newer attempt is submitted.
           mapOutputTracker.unregisterAllMergeResult(stage.shuffleDep.shuffleId)
-          // For deterministic stages that are cancelled we would like to unregister all the merge
-          // results but we are unable to distinguish between a cancelled stage or whether it
-          // will be resubmitted here. In case the stage is not cancelled, the mergeResults of that
-          // stage will still be usable and valid.
+          // For determinate stages, which have completed merge finalization, we don't need to
+          // unregister merge results - since the stage retry, or any other stage computing the
+          // same shuffle id, can use it.
         }
     }
   }
