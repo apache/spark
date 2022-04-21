@@ -21,7 +21,7 @@ import java.util.Locale
 
 import test.org.apache.spark.sql.connector.JavaSimpleWritableDataSource
 
-import org.apache.spark.{SparkArithmeticException, SparkDateTimeException, SparkException, SparkIllegalStateException, SparkRuntimeException, SparkUnsupportedOperationException, SparkUpgradeException}
+import org.apache.spark.{SparkArithmeticException, SparkException, SparkIllegalStateException, SparkRuntimeException, SparkUnsupportedOperationException, SparkUpgradeException}
 import org.apache.spark.sql.{DataFrame, QueryTest}
 import org.apache.spark.sql.catalyst.util.BadRecordException
 import org.apache.spark.sql.connector.SimpleWritableDataSource
@@ -378,72 +378,6 @@ class QueryExecutionErrorsSuite
         // make sure we don't have partial data.
         assert(spark.read.format(cls.getName).option("path", path).load().collect().isEmpty)
       }
-    }
-  }
-
-  test("CAST_CAUSES_OVERFLOW: from timestamp to int") {
-    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
-      checkErrorClass(
-        exception = intercept[SparkArithmeticException] {
-          sql("select CAST(TIMESTAMP '9999-12-31T12:13:14.56789Z' AS INT)").collect()
-        },
-        errorClass = "CAST_CAUSES_OVERFLOW",
-        msg =
-          "Casting 253402258394567890L to INT causes overflow. " +
-          "To return NULL instead, use 'try_cast'. " +
-          "If necessary set spark.sql.ansi.enabled to false to bypass this error.",
-        sqlState = Some("22005"))
-    }
-  }
-
-  test("DIVIDE_BY_ZERO: can't divide an integer by zero") {
-    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
-      checkErrorClass(
-        exception = intercept[SparkArithmeticException] {
-          sql("select 6/0").collect()
-        },
-        errorClass = "DIVIDE_BY_ZERO",
-        msg =
-          "divide by zero. To return NULL instead, use 'try_divide'. If necessary set " +
-          "spark.sql.ansi.enabled to false (except for ANSI interval type) to bypass this error." +
-          """
-            |== SQL(line 1, position 7) ==
-            |select 6/0
-            |       ^^^
-            |""".stripMargin,
-        sqlState = Some("22012"))
-    }
-  }
-
-  test("INVALID_FRACTION_OF_SECOND: in the function make_timestamp") {
-    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
-      checkErrorClass(
-        exception = intercept[SparkDateTimeException] {
-          sql("select make_timestamp(2012, 11, 30, 9, 19, 60.66666666)").collect()
-        },
-        errorClass = "INVALID_FRACTION_OF_SECOND",
-        msg = "The fraction of sec must be zero. Valid range is [0, 60]. " +
-          "If necessary set spark.sql.ansi.enabled to false to bypass this error. ",
-        sqlState = Some("22023"))
-    }
-  }
-
-  test("CANNOT_CHANGE_DECIMAL_PRECISION: cast string to decimal") {
-    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
-      checkErrorClass(
-        exception = intercept[SparkArithmeticException] {
-          sql("select CAST('66666666666666.666' AS DECIMAL(8, 1))").collect()
-        },
-        errorClass = "CANNOT_CHANGE_DECIMAL_PRECISION",
-        msg =
-          "Decimal(expanded,66666666666666.666,17,3}) cannot be represented as Decimal(8, 1). " +
-          "If necessary set spark.sql.ansi.enabled to false to bypass this error." +
-          """
-            |== SQL(line 1, position 7) ==
-            |select CAST('66666666666666.666' AS DECIMAL(8, 1))
-            |       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-            |""".stripMargin,
-        sqlState = Some("22005"))
     }
   }
 
