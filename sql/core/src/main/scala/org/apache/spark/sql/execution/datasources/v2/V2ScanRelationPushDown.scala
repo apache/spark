@@ -426,8 +426,12 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper wit
       val (isPushed, isPartiallyPushed) =
         PushDownUtils.pushLimitAndOffset(sHolder.builder, limit, offset)
       if (isPushed) {
-        sHolder.pushedLimit = Some(limit)
-        sHolder.pushedOffset = Some(offset)
+        if (isPartiallyPushed) {
+          sHolder.pushedLimit = Some(limit + offset)
+        } else {
+          sHolder.pushedLimit = Some(limit)
+          sHolder.pushedOffset = Some(offset)
+        }
       }
       (operation, isPushed && !isPartiallyPushed)
     case p: Project =>

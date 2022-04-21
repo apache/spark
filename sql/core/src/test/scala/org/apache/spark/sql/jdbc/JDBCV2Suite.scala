@@ -236,7 +236,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
       .limitAndOffset(1, 1)
     checkLimitAndOffsetRemoved(df2, false)
     checkPushedInfo(df2,
-      "PushedFilters: [DEPT IS NOT NULL, DEPT > 1], PushedLimit: LIMIT 1, PushedOffset: OFFSET 1,")
+      "PushedFilters: [DEPT IS NOT NULL, DEPT > 1], PushedLimit: LIMIT 2,")
     checkAnswer(df2, Seq(Row(2, "david", 10000.00, 1300.0, true)))
 
     val df3 = sql("SELECT name FROM h2.test.employee WHERE dept > 1 LIMIT 1 OFFSET 1")
