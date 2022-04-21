@@ -215,7 +215,7 @@ case class RegrSXY(y: Expression, x: Expression) extends Covariance(y, x, true) 
       > SELECT _FUNC_(y, x) FROM VALUES (1, 2), (2, 2), (2, 3), (2, 4) AS tab(y, x);
        0.75
       > SELECT _FUNC_(y, x) FROM VALUES (1, 2), (2, null), (2, 3), (2, 4) AS tab(y, x);
-       0.66666666666666666666666666666666666667
+       0.6666666666666666
       > SELECT _FUNC_(y, x) FROM VALUES (1, 2), (2, null), (null, 3), (2, 4) AS tab(y, x);
        0.5
   """,
