@@ -242,10 +242,9 @@ class ResourceProfile(
   }
 
   private[spark] def resourcesCompatible(rp: ResourceProfile,
-    resourceProfileCompatibleFunc: (ResourceProfile, ResourceProfile) => Boolean
-    = ResourceProfileCompatiblePolicy.resourceProfileCompatibleWithEqualCores)
+    resourceProfileCompatiblePolicy: ResourceProfileCompatiblePolicyInterface)
   : Boolean = {
-    resourceProfileCompatibleFunc(this, rp)
+    resourceProfileCompatiblePolicy.isCompatible(this, rp)
   }
 
   override def hashCode(): Int = Seq(taskResources, executorResources).hashCode()
@@ -253,67 +252,6 @@ class ResourceProfile(
   override def toString(): String = {
     s"Profile: id = ${_id}, executor resources: ${executorResources.mkString(",")}, " +
       s"task resources: ${taskResources.mkString(",")}"
-  }
-}
-
-/**
- * Resource profile compatibility based on user policy
- *
- * EQUAL_RESOURCES:
- *     only reuse executors with same resources (including cores, memory and all 3rd party
- *     resources)
- * MORE_RESOURCES:
- *     reuse executors with equal or more resources (including cores, memory and all 3rd party
- *     resources)
- * Notes:
- *     if EQUAL_RESOURCES is specified, there is no resource waste but less
- *     user flexibility.
- *     if MORE_RESOURCES is specified, users should know there are some resources
- *     wasted. They need to tradeoff between reusing executors and creating new ones.
- */
-object ResourceProfileCompatiblePolicy extends Enumeration {
-
-  type ResourceProfileCompatiblePolicy = Value
-
-  val EQUAL_RESOURCES, MORE_RESOURCES = Value
-
-  def resourceProfileCompatibleWithPolicy(
-      prevRP: ResourceProfile, curRP: ResourceProfile,
-      resourceNames: Set[String], policy: ResourceProfileCompatiblePolicy): Boolean = {
-    resourceNames.forall { resourceName: String =>
-      policy match {
-        case EQUAL_RESOURCES =>
-          ! prevRP.executorResources.get(resourceName).isEmpty &&
-          ! curRP.executorResources.get(resourceName).isEmpty &&
-          prevRP.executorResources(resourceName).amount ==
-            curRP.executorResources(resourceName).amount
-        case MORE_RESOURCES =>
-          ! prevRP.executorResources.get(resourceName).isEmpty &&
-          ! curRP.executorResources.get(resourceName).isEmpty &&
-          prevRP.executorResources(resourceName).amount >=
-            curRP.executorResources(resourceName).amount
-      }
-    }
-  }
-
-  def resourceProfileCompatibleWithEqualCores(prevRP: ResourceProfile,
-                                              curRP: ResourceProfile): Boolean = {
-    resourceProfileCompatibleWithPolicy(prevRP, curRP, Set("cores"), EQUAL_RESOURCES)
-  }
-
-  def resourceProfileCompatibleWithMoreCores(prevRP: ResourceProfile,
-                                             curRP: ResourceProfile): Boolean = {
-    resourceProfileCompatibleWithPolicy(prevRP, curRP, Set("cores"), MORE_RESOURCES)
-  }
-
-  def resourceProfileCompatibleWithEqualResources(
-    prevRP: ResourceProfile, curRP: ResourceProfile, resourceNames: Set[String]): Boolean = {
-    resourceProfileCompatibleWithPolicy(prevRP, curRP, resourceNames, EQUAL_RESOURCES)
-  }
-
-  def resourceProfileCompatibleWithMoreResources(
-      prevRP: ResourceProfile, curRP: ResourceProfile, resourceNames: Set[String]): Boolean = {
-    resourceProfileCompatibleWithPolicy(prevRP, curRP, resourceNames, MORE_RESOURCES)
   }
 }
 

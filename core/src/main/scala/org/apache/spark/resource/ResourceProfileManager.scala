@@ -26,7 +26,6 @@ import org.apache.spark.annotation.Evolving
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.SCHEDULER_REUSE_COMPATIBLE_EXECUTORS
 import org.apache.spark.internal.config.Tests._
-import org.apache.spark.resource.ResourceProfileCompatiblePolicy.{EQUAL_RESOURCES, ResourceProfileCompatiblePolicy}
 import org.apache.spark.scheduler.{LiveListenerBus, SparkListenerResourceProfileAdded}
 import org.apache.spark.util.Utils
 import org.apache.spark.util.Utils.isTesting
@@ -55,8 +54,9 @@ private[spark] class ResourceProfileManager(sparkConf: SparkConf,
 
   def defaultResourceProfile: ResourceProfile = defaultProfile
 
-  var reuseResourceNames: Set[String] = Set("cores")
-  var reusePolicy = EQUAL_RESOURCES
+  // Set default reuse policy
+  var reusePolicy: ResourceProfileCompatiblePolicyInterface
+    = new ResourceProfileCompatiblePolicyEqualCores()
 
   private val dynamicEnabled = Utils.isDynamicAllocationEnabled(sparkConf)
   private val master = sparkConf.getOption("spark.master")
@@ -85,12 +85,12 @@ private[spark] class ResourceProfileManager(sparkConf: SparkConf,
     true
   }
 
-  def updateResourceReusePolicy(resourceNames: Set[String],
-    policy: ResourceProfileCompatiblePolicy): Unit = {
+  def updateResourceReusePolicy(policy: Option[ResourceProfileCompatiblePolicyInterface]): Unit = {
     writeLock.lock()
     try {
-      reuseResourceNames = resourceNames
-      reusePolicy = policy
+      if (policy.isDefined) {
+        reusePolicy = policy.get
+      }
     } finally {
       writeLock.unlock()
     }
@@ -170,7 +170,7 @@ private[spark] class ResourceProfileManager(sparkConf: SparkConf,
         val resourceProfile = resourceProfileFromId(id)
         val compatibleIdSet = resourceProfileIdToResourceProfile.filter {
           case (otherId: Int, _: ResourceProfile) =>
-            id != otherId && rpEntry.resourcesCompatible(resourceProfile)
+            id != otherId && rpEntry.resourcesCompatible(resourceProfile, reusePolicy)
         }.map(_._1).toSet
         resourceProfileIdToCompatibleResourceProfileIds.put(id, compatibleIdSet)
     }

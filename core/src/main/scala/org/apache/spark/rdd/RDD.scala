@@ -44,8 +44,7 @@ import org.apache.spark.partial.BoundedDouble
 import org.apache.spark.partial.CountEvaluator
 import org.apache.spark.partial.GroupedCountEvaluator
 import org.apache.spark.partial.PartialResult
-import org.apache.spark.resource.ResourceProfile
-import org.apache.spark.resource.ResourceProfileCompatiblePolicy.ResourceProfileCompatiblePolicy
+import org.apache.spark.resource.{ResourceProfile, ResourceProfileCompatiblePolicyInterface}
 import org.apache.spark.storage.{RDDBlockId, StorageLevel}
 import org.apache.spark.util.{BoundedPriorityQueue, Utils}
 import org.apache.spark.util.collection.{ExternalAppendOnlyMap, OpenHashMap,
@@ -1801,28 +1800,16 @@ abstract class RDD[T: ClassTag](
    * certain cluster managers and currently requires dynamic allocation to be enabled.
    * It will result in new executors with the resources specified being acquired to
    * calculate the RDD.
-   */
-  @Experimental
-  @Since("3.1.0")
-  def withResources(rp: ResourceProfile): this.type = {
-    resourceProfile = Option(rp)
-    sc.resourceProfileManager.addResourceProfile(resourceProfile.get)
-    this
-  }
-
-  /**
-   * Specify a ResourceProfile and reuse existing compatible executors to use when calculating
-   * this RDD.
-   * @param reuseResourceNames specify what resource should be checked when reusing executors
-   * @param reusePolicy specify executor reuse policy
+   *
+   * @param reusePolicy specify executor reuse policy, used only when reusing executors enabled
    */
   @Experimental
   @Since("3.3.0")
   def withResources(rp: ResourceProfile,
-    reuseResourceNames: Set[String], reusePolicy: ResourceProfileCompatiblePolicy): this.type = {
+    reusePolicy: Option[ResourceProfileCompatiblePolicyInterface] = None): this.type = {
     resourceProfile = Option(rp)
-    sc.resourceProfileManager.updateResourceReusePolicy(reuseResourceNames, reusePolicy)
     sc.resourceProfileManager.addResourceProfile(resourceProfile.get)
+    sc.resourceProfileManager.updateResourceReusePolicy(reusePolicy)
     this
   }
 
