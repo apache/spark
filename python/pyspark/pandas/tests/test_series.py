@@ -228,8 +228,9 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
 
     def test_rename_axis(self):
         index = pd.Index(["A", "B", "C"], name="index")
-        pser = pd.Series([1.0, 2.0, 3.0], index=index, name="name")
-        psser = ps.from_pandas(pser)
+        pdf = pd.DataFrame({"x": [1.0, 2.0, 3.0]}, index=index)
+        psdf = ps.from_pandas(pdf)
+        pser, psser = pdf.x, psdf.x
 
         self.assert_eq(
             pser.rename_axis("index2").sort_index(),
@@ -240,12 +241,6 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
             (pser + 1).rename_axis("index2").sort_index(),
             (psser + 1).rename_axis("index2").sort_index(),
         )
-
-        pser2 = pser.copy()
-        psser2 = psser.copy()
-        pser2.rename_axis("index2", inplace=True)
-        psser2.rename_axis("index2", inplace=True)
-        self.assert_eq(pser2.sort_index(), psser2.sort_index())
 
         self.assertRaises(ValueError, lambda: psser.rename_axis(["index2", "index3"]))
         self.assertRaises(TypeError, lambda: psser.rename_axis(mapper=["index2"], index=["index3"]))
@@ -259,6 +254,12 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
             pser.rename_axis(index=str.upper).sort_index(),
             psser.rename_axis(index=str.upper).sort_index(),
         )
+
+        pser.rename_axis("index2", inplace=True)
+        psser.rename_axis("index2", inplace=True)
+        self.assert_eq(pser.sort_index(), psser.sort_index())
+        # Note: in pandas, pdf.x's index is renamed, whereas pdf's index isn't due to a bug.
+        self.assert_eq(pdf, psdf)
 
         index = pd.MultiIndex.from_tuples(
             [("A", "B"), ("C", "D"), ("E", "F")], names=["index1", "index2"]
