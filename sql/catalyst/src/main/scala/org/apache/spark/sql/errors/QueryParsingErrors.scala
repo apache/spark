@@ -330,7 +330,7 @@ object QueryParsingErrors extends QueryErrorsBase {
     new ParseException(
       errorClass = "INVALID_SQL_SYNTAX",
       messageParameters = Array(
-        s"Invalid pattern in ${toSQLStmt("SHOW FUNCTIONS")}: $pattern. " +
+        s"Invalid pattern in ${toSQLStmt("SHOW FUNCTIONS")}: ${toSQLId(pattern)}. " +
         s"It must be a ${toSQLType(StringType)} literal."),
       ctx)
   }
