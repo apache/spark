@@ -216,12 +216,26 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession {
 
   test("INVALID_SQL_SYNTAX: Invalid table value function name") {
     validateParsingError(
+      sqlText = "SELECT * FROM db.func()",
+      errorClass = "INVALID_SQL_SYNTAX",
+      sqlState = "42000",
+      message =
+        """
+          |Invalid SQL syntax: table valued function cannot specify database name (line 1, pos 14)
+          |
+          |== SQL ==
+          |SELECT * FROM db.func()
+          |--------------^^^
+          |""".stripMargin
+    )
+
+    validateParsingError(
       sqlText = "SELECT * FROM ns.db.func()",
       errorClass = "INVALID_SQL_SYNTAX",
       sqlState = "42000",
       message =
         """
-          |Invalid SQL syntax: Unsupported function name `ns`.`db`.`func`(line 1, pos 14)
+          |Invalid SQL syntax: table valued function cannot specify database name (line 1, pos 14)
           |
           |== SQL ==
           |SELECT * FROM ns.db.func()
