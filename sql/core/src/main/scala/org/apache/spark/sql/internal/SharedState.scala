@@ -52,6 +52,18 @@ private[sql] class SharedState(
     initialConfigs: scala.collection.Map[String, String])
   extends Logging {
 
+  /**
+   * A classloader used to load all user-added jar.
+   */
+  val jarClassLoader = new NonClosableMutableURLClassLoader(
+    org.apache.spark.util.Utils.getContextOrSparkClassLoader)
+
+  // Initialize commons-logging or jcl-over-slf4j in advance
+  // before setting FsUrlStreamHandlerFactory
+  Utils.withContextClassLoader(jarClassLoader) {
+    org.apache.commons.logging.LogFactory.getFactory
+  }
+
   SharedState.setFsUrlStreamHandlerFactory(sparkContext.conf, sparkContext.hadoopConfiguration)
 
   private[sql] val (conf, hadoopConf) = {
@@ -179,12 +191,6 @@ private[sql] class SharedState(
     }
     new GlobalTempViewManager(globalTempDB)
   }
-
-  /**
-   * A classloader used to load all user-added jar.
-   */
-  val jarClassLoader = new NonClosableMutableURLClassLoader(
-    org.apache.spark.util.Utils.getContextOrSparkClassLoader)
 
 }
 
