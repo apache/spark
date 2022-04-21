@@ -22,7 +22,7 @@ import java.util.Locale
 import test.org.apache.spark.sql.connector.JavaSimpleWritableDataSource
 
 import org.apache.spark.{SparkArithmeticException, SparkDateTimeException, SparkException, SparkIllegalStateException, SparkRuntimeException, SparkUnsupportedOperationException, SparkUpgradeException}
-import org.apache.spark.sql.{DataFrame, QueryTest}
+import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest}
 import org.apache.spark.sql.catalyst.util.BadRecordException
 import org.apache.spark.sql.connector.SimpleWritableDataSource
 import org.apache.spark.sql.execution.QueryExecutionException
@@ -433,5 +433,30 @@ class QueryExecutionErrorsSuite extends QueryTest
     assert(e2.getErrorClass === "FAILED_EXECUTE_UDF")
     assert(e2.getMessage.matches("Failed to execute user defined function " +
       "\\(QueryExecutionErrorsSuite\\$\\$Lambda\\$\\d+/\\w+: \\(string, int\\) => string\\)"))
+  }
+
+  test("INCOMPARABLE_PIVOT_COLUMN: Pivot columns can't be comparable") {
+    withSQLConf() {
+      val e = intercept[AnalysisException] {
+        trainingSales
+        sql(
+          """
+            | select * from (
+            | select *,map(sales.course, sales.year) as map
+            | from trainingSales
+            | )
+            | pivot (
+            | sum(sales.earnings) as sum
+            | for map in (
+            | map("dotNET", 2012), map("JAVA", 2012),
+            | map("dotNet", 2013), map("Java", 2013)
+            | ))
+            |""".stripMargin).collect()
+      }
+      assert(e.getErrorClass === "INCOMPARABLE_PIVOT_COLUMN")
+      assert(e.getSqlState === "42000")
+      assert(e.getMessage.matches("Invalid pivot column 'map.*\\'. " +
+        "Pivot columns must be comparable."))
+    }
   }
 }
