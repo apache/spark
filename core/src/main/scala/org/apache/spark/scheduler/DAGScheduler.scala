@@ -2338,7 +2338,7 @@ private[spark] class DAGScheduler(
     // re-executing now.
     if (stage.shuffleDep.shuffleMergeId == shuffleMergeId) {
       // When it reaches here, there is a possibility that the stage will be resubmitted again
-      // because of various reasons. Some of the could be:
+      // because of various reasons. Some of these could be:
       // a) Stage results are not available. All the tasks completed once so the
       // pendingPartitions is empty but due to an executor failure some of the map outputs are not
       // available any more, so the stage will be re-submitted.
@@ -2346,7 +2346,7 @@ private[spark] class DAGScheduler(
       // We should mark the stage as merged finalized irrespective of what state it is in.
       // This will prevent the push being enabled for the re-attempt.
       // Note: for indeterminate stages, this doesn't matter at all, since the merge finalization
-      // related state is resetted during the stage submission.
+      // related state is reset during the stage submission.
       stage.shuffleDep.markShuffleMergeFinalized()
       if (stage.pendingPartitions.isEmpty)
         if (runningStages.contains(stage)) {
@@ -2358,9 +2358,9 @@ private[spark] class DAGScheduler(
           // merge results are cleared again when the newer attempt is submitted.
           mapOutputTracker.unregisterAllMergeResult(stage.shuffleDep.shuffleId)
           // For deterministic stages that are cancelled we would like to unregister all the merge
-          // results but we are unable to distinguish between a cancelled stage here or whether it
-          // will be resubmitted. In case the stage is not cancelled, the mergeResults of that stage
-          // will still be usable and valid.
+          // results but we are unable to distinguish between a cancelled stage or whether it
+          // will be resubmitted here. In case the stage is not cancelled, the mergeResults of that
+          // stage will still be usable and valid.
         }
     }
   }
