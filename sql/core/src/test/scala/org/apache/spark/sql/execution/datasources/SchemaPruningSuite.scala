@@ -637,6 +637,11 @@ abstract class SchemaPruningSuite
             |where not exists (select null from employees e where e.name.first = c.name.first
             |  and e.employer.name = c.employer.company.name)
             |""".stripMargin)
+        checkScan(query,
+          "struct<name:struct<first:string,middle:string,last:string>," +
+            "employer:struct<id:int,company:struct<name:string,address:string>>>",
+          "struct<name:struct<first:string,middle:string,last:string>," +
+            "employer:struct<name:string,address:string>>")
         checkAnswer(query, Row(3))
       }
     }

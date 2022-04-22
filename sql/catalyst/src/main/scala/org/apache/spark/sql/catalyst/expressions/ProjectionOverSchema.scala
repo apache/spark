@@ -29,14 +29,13 @@ import org.apache.spark.sql.types._
  * @param output output attributes of the data source relation. They are used to filter out
  *               attributes in the schema that do not belong to the current relation.
  */
-case class ProjectionOverSchema(schema: StructType, output: Option[AttributeSet] = None) {
-  private val fieldNames = schema.fieldNames.toSet
+case class ProjectionOverSchema(schema: StructType, output: AttributeSet) {
 
   def unapply(expr: Expression): Option[Expression] = getProjection(expr)
 
   private def getProjection(expr: Expression): Option[Expression] =
     expr match {
-      case a: AttributeReference if fieldNames.contains(a.name) && output.forall(_.contains(a)) =>
+      case a: AttributeReference if output.contains(a) =>
         Some(a.copy(dataType = schema(a.name).dataType)(a.exprId, a.qualifier))
       case GetArrayItem(child, arrayItemOrdinal, failOnError) =>
         getProjection(child).map {

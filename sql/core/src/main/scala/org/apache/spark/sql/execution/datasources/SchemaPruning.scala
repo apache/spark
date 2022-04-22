@@ -92,7 +92,7 @@ object SchemaPruning extends Rule[LogicalPlan] {
         countLeaves(metadataSchema) > countLeaves(prunedMetadataSchema)) {
         val prunedRelation = leafNodeBuilder(prunedDataSchema, prunedMetadataSchema)
         val projectionOverSchema = ProjectionOverSchema(
-          prunedDataSchema.merge(prunedMetadataSchema), Some(AttributeSet(relation.output)))
+          prunedDataSchema.merge(prunedMetadataSchema), AttributeSet(relation.output))
         Some(buildNewProjection(projects, normalizedProjects, normalizedFilters,
           prunedRelation, projectionOverSchema))
       } else {
