@@ -227,7 +227,7 @@ object OrcUtils extends Logging {
           s"${dataSchema.catalogString} (length:${dataSchema.length}) " +
           s"has less ${orcFieldNames.length - dataSchema.length} fields than " +
           s"the actual ORC physical schema $orcSchema (length:${orcFieldNames.length}), " +
-          s"no idea which columns were dropped, fail to read.")
+          "no idea which columns were dropped, fail to read.")
         // for ORC file written by Hive, no field names
         // in the physical schema, there is a need to send the
         // entire dataSchema instead of required schema.
