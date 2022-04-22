@@ -153,7 +153,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 
-The feature is not supported: "LATERAL" join with "NATURAL" join.(line 1, pos 14)
+[UNSUPPORTED_FEATURE] The feature is not supported: "LATERAL" join with "NATURAL" join.(line 1, pos 14)
 
 == SQL ==
 SELECT * FROM t1 NATURAL JOIN LATERAL (SELECT c1 + c2 AS c2)
@@ -167,7 +167,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 
-The feature is not supported: "LATERAL" join with "USING" join.(line 1, pos 14)
+[UNSUPPORTED_FEATURE] The feature is not supported: "LATERAL" join with "USING" join.(line 1, pos 14)
 
 == SQL ==
 SELECT * FROM t1 JOIN LATERAL (SELECT c1 + c2 AS c2) USING (c2)
@@ -269,7 +269,7 @@ SELECT * FROM t1 JOIN LATERAL (SELECT t1.c1 AS a, t2.c1 AS b) s JOIN t2 ON s.b =
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Column 't2.c1' does not exist. Did you mean one of the following? []; line 1 pos 50
+[MISSING_COLUMN] Column 't2.c1' does not exist. Did you mean one of the following? []; line 1 pos 50
 
 
 -- !query
@@ -387,7 +387,7 @@ SELECT * FROM t1, LATERAL (SELECT * FROM t2, LATERAL (SELECT t1.c1 + t2.c1))
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Column 't1.c1' does not exist. Did you mean one of the following? []; line 1 pos 61
+[MISSING_COLUMN] Column 't1.c1' does not exist. Did you mean one of the following? []; line 1 pos 61
 
 
 -- !query
@@ -396,7 +396,7 @@ SELECT * FROM t1, LATERAL (SELECT * FROM (SELECT c1), LATERAL (SELECT c2))
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Column 'c2' does not exist. Did you mean one of the following? []; line 1 pos 70
+[MISSING_COLUMN] Column 'c2' does not exist. Did you mean one of the following? []; line 1 pos 70
 
 
 -- !query
@@ -423,7 +423,7 @@ SELECT * FROM t1, LATERAL (SELECT c1, (SELECT SUM(c2) FROM t2 WHERE c1 = t1.c1))
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Column 't1.c1' does not exist. Did you mean one of the following? [spark_catalog.default.t2.c1, spark_catalog.default.t2.c2]; line 1 pos 73
+[MISSING_COLUMN] Column 't1.c1' does not exist. Did you mean one of the following? [spark_catalog.default.t2.c1, spark_catalog.default.t2.c2]; line 1 pos 73
 
 
 -- !query

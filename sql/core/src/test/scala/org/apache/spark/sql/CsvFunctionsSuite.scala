@@ -379,4 +379,11 @@ class CsvFunctionsSuite extends QueryTest with SharedSparkSession {
       .selectExpr("value.a")
     checkAnswer(fromCsvDF, Row(null))
   }
+
+  test("SPARK-38955: disable lineSep option in from_csv and schema_of_csv") {
+    val df = Seq[String]("1,2\n2").toDF("csv")
+    val actual = df.select(from_csv(
+      $"csv", schema_of_csv("1,2\n2"), Map.empty[String, String].asJava))
+    checkAnswer(actual, Row(Row(1, "2\n2")))
+  }
 }
