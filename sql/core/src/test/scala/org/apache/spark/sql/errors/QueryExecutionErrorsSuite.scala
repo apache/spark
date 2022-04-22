@@ -161,7 +161,7 @@ class QueryExecutionErrorsSuite
       exception = e2,
       errorClass = "UNSUPPORTED_FEATURE",
       msg = "The feature is not supported: pivoting by the value" +
-        """ '[dotnet,Dummies]' of the column data type STRUCT<col1: STRING, training: STRING>.""",
+        """ '[dotnet,Dummies]' of the column data type "STRUCT<col1: STRING, training: STRING>".""",
       sqlState = Some("0A000"))
   }
 
@@ -262,8 +262,8 @@ class QueryExecutionErrorsSuite
         ArrowUtils.toArrowSchema(new StructType().add("value", TimestampType), null)
       },
       errorClass = "UNSUPPORTED_OPERATION",
-      msg = "The operation is not supported: " +
-        "TIMESTAMP must supply timeZoneId parameter while converting to the arrow timestamp type.")
+      msg = "The operation is not supported: \"TIMESTAMP\" must supply timeZoneId " +
+        "parameter while converting to the arrow timestamp type.")
   }
 
   test("UNSUPPORTED_OPERATION - SPARK-36346: can't read Timestamp as TimestampNTZ") {
@@ -276,7 +276,7 @@ class QueryExecutionErrorsSuite
           }.getCause.asInstanceOf[SparkUnsupportedOperationException],
           errorClass = "UNSUPPORTED_OPERATION",
           msg = "The operation is not supported: " +
-            "Unable to convert TIMESTAMP of Orc to data type TIMESTAMP_NTZ.")
+            "Unable to convert \"TIMESTAMP\" of Orc to data type \"TIMESTAMP_NTZ\".")
       }
     }
   }
@@ -291,7 +291,7 @@ class QueryExecutionErrorsSuite
           }.getCause.asInstanceOf[SparkUnsupportedOperationException],
           errorClass = "UNSUPPORTED_OPERATION",
           msg = "The operation is not supported: " +
-            "Unable to convert TIMESTAMP_NTZ of Orc to data type TIMESTAMP.")
+            "Unable to convert \"TIMESTAMP_NTZ\" of Orc to data type \"TIMESTAMP\".")
       }
     }
   }

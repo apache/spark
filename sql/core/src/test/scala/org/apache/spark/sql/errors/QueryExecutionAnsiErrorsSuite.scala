@@ -31,7 +31,7 @@ class QueryExecutionAnsiErrorsSuite extends QueryTest with QueryErrorsSuiteBase 
       },
       errorClass = "CAST_CAUSES_OVERFLOW",
       msg =
-        "Casting 253402258394567890L to INT causes overflow. " +
+        "Casting 253402258394567890L to \"INT\" causes overflow. " +
         "To return NULL instead, use 'try_cast'. " +
         "If necessary set spark.sql.ansi.enabled to false to bypass this error.",
       sqlState = Some("22005"))

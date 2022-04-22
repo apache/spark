@@ -44,7 +44,7 @@ class QueryCompilationErrorsSuite
       errorClass = "CANNOT_UP_CAST_DATATYPE",
       msg =
         s"""
-           |Cannot up cast b from BIGINT to INT.
+           |Cannot up cast b from "BIGINT" to "INT".
            |The type path of the target object is:
            |- field (class: "scala.Int", name: "b")
            |- root class: "org.apache.spark.sql.errors.StringIntClass"
@@ -61,7 +61,7 @@ class QueryCompilationErrorsSuite
       errorClass = "CANNOT_UP_CAST_DATATYPE",
       msg =
         s"""
-           |Cannot up cast b.`b` from DECIMAL(38,18) to BIGINT.
+           |Cannot up cast b.`b` from "DECIMAL(38,18)" to "BIGINT".
            |The type path of the target object is:
            |- field (class: "scala.Long", name: "b")
            |- field (class: "org.apache.spark.sql.errors.StringLongClass", name: "b")
