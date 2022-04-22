@@ -1310,6 +1310,7 @@ class DataFrame(Frame, Generic[T]):
         """
         return cast(DataFrame, ps.from_pandas(corr(self, method)))
 
+    # TODO: add axis parameter and support more methods
     def corrwith(
         self, other: DataFrameOrSeries, drop: bool = False, method: str = "pearson"
     ) -> "Series":
@@ -1347,7 +1348,8 @@ class DataFrame(Frame, Generic[T]):
 
         Examples
         --------
-        >>> df1 = ps.DataFrame({"A":[1, 5, 7, 8],
+        >>> df1 = ps.DataFrame({
+        ...         "A":[1, 5, 7, 8],
         ...         "X":[5, 8, 4, 3],
         ...         "C":[10, 4, 9, 3]})
         >>> df1.corrwith(df1[["X", "C"]])
@@ -1356,7 +1358,8 @@ class DataFrame(Frame, Generic[T]):
         A    NaN
         dtype: float64
 
-        >>> df2 = ps.DataFrame({"A":[5, 3, 6, 4],
+        >>> df2 = ps.DataFrame({
+        ...         "A":[5, 3, 6, 4],
         ...         "B":[11, 2, 4, 3],
         ...         "C":[4, 3, 8, 5]})
 
@@ -1375,7 +1378,7 @@ class DataFrame(Frame, Generic[T]):
         C   -0.642857
         dtype: float64
         """
-        from pyspark.pandas.series import Series
+        from pyspark.pandas.series import Series, first_series
 
         if (method is not None) and (method not in ["pearson"]):
             raise NotImplementedError("corrwith currently works only for method='pearson'")
@@ -1411,7 +1414,11 @@ class DataFrame(Frame, Generic[T]):
             that_scol = that._internal.spark_column_for(that_numeric_column_labels[0])
             for numeric_column_label in intersect_numeric_column_labels:
                 this_scol = this._internal.spark_column_for(numeric_column_label)
-                corr_scols.append(F.corr(this_scol.cast("double"), that_scol.cast("double")))
+                corr_scols.append(
+                    F.corr(this_scol.cast("double"), that_scol.cast("double")).alias(
+                        name_like_string(numeric_column_label)
+                    )
+                )
         else:
             for numeric_column_label in this_numeric_column_labels:
                 if numeric_column_label in that_numeric_column_labels:
@@ -1424,22 +1431,35 @@ class DataFrame(Frame, Generic[T]):
             for numeric_column_label in intersect_numeric_column_labels:
                 this_scol = this._internal.spark_column_for(numeric_column_label)
                 that_scol = that._internal.spark_column_for(numeric_column_label)
-                corr_scols.append(F.corr(this_scol.cast("double"), that_scol.cast("double")))
+                corr_scols.append(
+                    F.corr(this_scol.cast("double"), that_scol.cast("double")).alias(
+                        name_like_string(numeric_column_label)
+                    )
+                )
 
-        ret_column_labels = []
-        ret_values = []
-        if len(intersect_numeric_column_labels) > 0:
-            ret_column_labels = intersect_numeric_column_labels
-            pcorr = combined._internal.spark_frame.select(*corr_scols).toPandas()
-            ret_values = [pcorr.iloc[0, i] for i in range(len(intersect_numeric_column_labels))]
-
-        if not drop and len(diff_numeric_column_labels) > 0:
+        corr_labels: List[Label] = intersect_numeric_column_labels
+        if not drop:
             for numeric_column_label in diff_numeric_column_labels:
-                ret_column_labels.append(numeric_column_label)
-                ret_values.append(np.nan)
+                corr_scols.append(
+                    SF.lit(None).cast("double").alias(name_like_string(numeric_column_label))
+                )
+                corr_labels.append(numeric_column_label)
 
-        idx = pd.Index([label[0] for label in ret_column_labels])
-        return ps.Series(ret_values, idx)
+        sdf = combined._internal.spark_frame.select(
+            *[SF.lit(None).cast(StringType()).alias(SPARK_DEFAULT_INDEX_NAME)], *corr_scols
+        ).limit(
+            1
+        )  # limit(1) to avoid returning more than 1 row when intersection is empty
+
+        # The data is expected to be small so it's fine to transpose/use default index.
+        with ps.option_context("compute.max_rows", 1):
+            internal = InternalFrame(
+                spark_frame=sdf,
+                index_spark_columns=[scol_for(sdf, SPARK_DEFAULT_INDEX_NAME)],
+                column_labels=corr_labels,
+                column_label_names=self._internal.column_label_names,
+            )
+            return first_series(DataFrame(internal).transpose())
 
     def iteritems(self) -> Iterator[Tuple[Name, "Series"]]:
         """
