@@ -8703,10 +8703,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             withReplacement=replace, fraction=frac, seed=random_state
         )
         if ignore_index:
-            spark_index_names = [
-                SPARK_INDEX_NAME_FORMAT(i) for i in range(self._internal.index_level)
-            ]
-            return DataFrame(sdf.drop(*spark_index_names))
+            return DataFrame(sdf.drop(*self._internal.index_spark_column_names))
         else:
             return DataFrame(self._internal.with_new_sdf(sdf))
 
