@@ -18,10 +18,11 @@
 package org.apache.spark.sql.catalyst.optimizer
 
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.{Alias, IntegerLiteral, Literal}
+import org.apache.spark.sql.catalyst.expressions.{Alias, EqualTo, IntegerLiteral, Literal}
 import org.apache.spark.sql.catalyst.plans.PlanTest
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, OneRowRelation, Project}
+import org.apache.spark.sql.catalyst.plans.logical.{Filter, LogicalPlan, Offset, OneRowRelation, Project}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.internal.SQLConf
 
@@ -70,5 +71,29 @@ class OptimizerSuite extends PlanTest {
       assert(message2.startsWith(s"Max iterations ($maxIterationsNotEnough) reached for batch " +
         s"test, please set '${SQLConf.OPTIMIZER_MAX_ITERATIONS.key}' to a larger value."))
     }
+  }
+
+  test("Test CheckOffsetOperator") {
+    val optimizer = new SimpleTestOptimizer()
+
+    val analyzed1 =
+      Offset(Literal(2), Project(Alias(Literal(5), "attr")() :: Nil, OneRowRelation())).analyze
+    val message1 = intercept[RuntimeException] {
+      optimizer.execute(analyzed1)
+    }.getMessage
+    assert(message1.equals(
+      s"""
+         |The OFFSET clause is only allowed in the LIMIT clause, but the OFFSET
+         |clause is found to be the outermost node.""".stripMargin.replace("\n", " ")))
+
+    val analyzed2 =
+      Filter(EqualTo(UnresolvedAttribute(Seq("attr")), Literal("alex")), analyzed1).analyze
+    val message2 = intercept[RuntimeException] {
+      optimizer.execute(analyzed2)
+    }.getMessage
+    assert(message2.equals(
+      s"""
+         |The OFFSET clause is only allowed in the LIMIT clause, but the OFFSET
+         |clause found in: ${analyzed2.nodeName}.""".stripMargin.replace("\n", " ")))
   }
 }

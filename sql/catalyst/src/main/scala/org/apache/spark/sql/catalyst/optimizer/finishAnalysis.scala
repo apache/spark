@@ -138,3 +138,29 @@ object SpecialDatetimeValues extends Rule[LogicalPlan] {
     }
   }
 }
+
+/**
+ * Validate whether the [[Offset]] is valid.
+ */
+object CheckOffsetOperator extends Rule[LogicalPlan] {
+  def apply(plan: LogicalPlan): LogicalPlan = {
+    plan.foreachUp {
+      case o if !o.isInstanceOf[GlobalLimit] && !o.isInstanceOf[LocalLimit]
+        && o.children.exists(_.isInstanceOf[Offset]) =>
+        throw new IllegalStateException(
+          s"""
+             |The OFFSET clause is only allowed in the LIMIT clause, but the OFFSET
+             |clause found in: ${o.nodeName}.""".stripMargin.replace("\n", " "))
+      case _ =>
+    }
+    plan match {
+      case Offset(_, _) =>
+        throw new IllegalStateException(
+          s"""
+             |The OFFSET clause is only allowed in the LIMIT clause, but the OFFSET
+             |clause is found to be the outermost node.""".stripMargin.replace("\n", " "))
+      case _ =>
+    }
+    plan
+  }
+}
