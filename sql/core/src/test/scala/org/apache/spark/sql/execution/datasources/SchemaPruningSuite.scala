@@ -948,12 +948,12 @@ abstract class SchemaPruningSuite
       df2.createOrReplaceTempView("first_names")
 
       val query = sql(
-        s"""SELECT name FROM contacts c
-           |WHERE
-           | EXISTS (SELECT 1 FROM ids i WHERE i.value = c.id)
-           | AND
-           | EXISTS (SELECT 1 FROM first_names n WHERE c.name.first = n.value)
-           |""".stripMargin)
+        """SELECT name FROM contacts c
+          |WHERE
+          |  EXISTS (SELECT 1 FROM ids i WHERE i.value = c.id)
+          |  AND
+          |  EXISTS (SELECT 1 FROM first_names n WHERE c.name.first = n.value)
+          |""".stripMargin)
 
       checkScan(query, "struct<id:int,name:struct<first:string,middle:string,last:string>>")
 
@@ -973,12 +973,12 @@ abstract class SchemaPruningSuite
       df2.createOrReplaceTempView("first_names")
 
       val query = sql(
-        s"""SELECT name FROM contacts c
-           |WHERE
-           | NOT EXISTS (SELECT 1 FROM ids i WHERE i.value = c.id)
-           | AND
-           | NOT EXISTS (SELECT 1 FROM first_names n WHERE c.name.first = n.value)
-           |""".stripMargin)
+        """SELECT name FROM contacts c
+          |WHERE
+          |  NOT EXISTS (SELECT 1 FROM ids i WHERE i.value = c.id)
+          |  AND
+          |  NOT EXISTS (SELECT 1 FROM first_names n WHERE c.name.first = n.value)
+          |""".stripMargin)
 
       checkScan(query, "struct<id:int,name:struct<first:string,middle:string,last:string>>")
 
@@ -998,12 +998,12 @@ abstract class SchemaPruningSuite
       df2.createOrReplaceTempView("first_names")
 
       val query = sql(
-        s"""SELECT name FROM contacts c
-           |WHERE
-           | id IN (SELECT * FROM ids i WHERE c.pets > i.value)
-           | AND
-           | name.first IN (SELECT * FROM first_names n WHERE c.name.last < n.value)
-           |""".stripMargin)
+        """SELECT name FROM contacts c
+          |WHERE
+          |  id IN (SELECT * FROM ids i WHERE c.pets > i.value)
+          |  AND
+          |  name.first IN (SELECT * FROM first_names n WHERE c.name.last < n.value)
+          |""".stripMargin)
 
       checkScan(query,
         "struct<id:int,name:struct<first:string,middle:string,last:string>,pets:int>")
@@ -1024,12 +1024,12 @@ abstract class SchemaPruningSuite
       df2.createOrReplaceTempView("first_names")
 
       val query = sql(
-        s"""SELECT name FROM contacts c
-           |WHERE
-           | id NOT IN (SELECT * FROM ids i WHERE c.pets > i.value)
-           | AND
-           | name.first NOT IN (SELECT * FROM first_names n WHERE c.name.last > n.value)
-           |""".stripMargin)
+        """SELECT name FROM contacts c
+          |WHERE
+          |  id NOT IN (SELECT * FROM ids i WHERE c.pets > i.value)
+          |  AND
+          |  name.first NOT IN (SELECT * FROM first_names n WHERE c.name.last > n.value)
+          |""".stripMargin)
 
       checkScan(query,
         "struct<id:int,name:struct<first:string,middle:string,last:string>,pets:int>")
