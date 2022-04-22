@@ -257,10 +257,10 @@ private[spark] object Config extends Logging {
 
   val KUBERNETES_DRIVER_SUBMIT_CHECK =
     ConfigBuilder("spark.kubernetes.submitInDriver")
-    .internal()
-    .version("2.4.0")
-    .booleanConf
-    .createWithDefault(false)
+      .internal()
+      .version("2.4.0")
+      .booleanConf
+      .createWithDefault(false)
 
   val KUBERNETES_EXECUTOR_LIMIT_CORES =
     ConfigBuilder("spark.kubernetes.executor.limit.cores")
@@ -396,7 +396,7 @@ private[spark] object Config extends Logging {
       .doc("Allocator to use for pods. Possible values are direct (the default) and statefulset " +
         ", or a full class name of a class implementing AbstractPodsAllocator. " +
         "Future version may add Job or replicaset. This is a developer API and may change " +
-      "or be removed at anytime.")
+        "or be removed at anytime.")
       .version("3.3.0")
       .stringConf
       .createWithDefault("direct")
