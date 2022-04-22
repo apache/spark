@@ -383,20 +383,18 @@ class QueryCompilationErrorsSuite
 
   test("INVALID_JSON_SCHEMA_MAPTYPE: " +
     "Parse JSON rows can only contain StringType as a key type for a MapType.") {
-    withTempPath { path =>
-      val schema = StructType(
-        StructField("map", MapType(IntegerType, IntegerType, true), false) :: Nil)
+    val schema = StructType(
+      StructField("map", MapType(IntegerType, IntegerType, true), false) :: Nil)
 
-      checkErrorClass(
-        exception = intercept[AnalysisException] {
-          spark.read.schema(schema).json(path.getCanonicalPath)
-        },
-        errorClass = "INVALID_JSON_SCHEMA_MAPTYPE",
-        msg = "Input schema " +
-          "StructType(StructField(map,MapType(IntegerType,IntegerType,true),false)) " +
-          "can only contain StringType as a key type for a MapType."
-      )
-    }
+    checkErrorClass(
+      exception = intercept[AnalysisException] {
+        spark.read.schema(schema).json(spark.emptyDataset[String])
+      },
+      errorClass = "INVALID_JSON_SCHEMA_MAPTYPE",
+      msg = "Input schema " +
+        "StructType(StructField(map,MapType(IntegerType,IntegerType,true),false)) " +
+        "can only contain StringType as a key type for a MapType."
+    )
   }
 }
 
