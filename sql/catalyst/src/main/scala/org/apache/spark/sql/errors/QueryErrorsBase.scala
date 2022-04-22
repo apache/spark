@@ -62,6 +62,6 @@ trait QueryErrorsBase {
   }
 
   def toSQLType(t: DataType): String = {
-    t.sql
+    "\"" + t.sql + "\""
   }
 }
