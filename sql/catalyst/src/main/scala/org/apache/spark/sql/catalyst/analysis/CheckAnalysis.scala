@@ -161,7 +161,8 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
         throw QueryCompilationErrors.commandUnsupportedInV2TableError("SHOW TABLE EXTENDED")
 
       case operator: LogicalPlan
-        if !Utils.isTesting && operator.output.exists(_.dataType.isInstanceOf[TimestampNTZType]) =>
+        if !Utils.isTesting && operator.output.exists(attr =>
+          attr.resolved && attr.dataType.isInstanceOf[TimestampNTZType]) =>
         operator.failAnalysis("TimestampNTZ type is not supported in Spark 3.3.")
 
       case operator: LogicalPlan =>
