@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.optimizer
 
 import scala.annotation.tailrec
+import scala.util.control.NonFatal
 
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning.ExtractFiltersAndInnerJoins
@@ -151,7 +152,7 @@ object EliminateOuterJoin extends Rule[LogicalPlan] with PredicateHelper {
       val v = boundE.eval(emptyRow)
       v == null || v == false
     } catch {
-      case e: Exception =>
+      case NonFatal(e) =>
         // cannot filter out null if `where` expression throws an exception with null input
         false
     }

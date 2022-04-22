@@ -259,7 +259,7 @@ class OuterJoinEliminationSuite extends PlanTest {
     val x = testRelation.subquery(Symbol("x"))
     val y = testRelation1.subquery(Symbol("y"))
 
-    val message = Literal(UTF8String fromString("Bad value"), StringType)
+    val message = Literal(UTF8String.fromString("Bad value"), StringType)
     val originalQuery =
       x.join(y, LeftOuter, Option("x.a".attr === "y.d".attr))
         .where(If("y.d".attr > 0, true, RaiseError(message)).isNull)
