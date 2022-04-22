@@ -592,6 +592,22 @@ class AnalysisErrorSuite extends AnalysisTest {
       "explode(array(min(a))), explode(array(max(a)))" :: Nil
   )
 
+  errorTest(
+    "SPARK-38666: non-boolean aggregate filter",
+    CatalystSqlParser.parsePlan("SELECT sum(c) filter (where e) FROM TaBlE2"),
+    "FILTER expression is not of type boolean" :: Nil)
+
+  errorTest(
+    "SPARK-38666: aggregate in aggregate filter",
+    CatalystSqlParser.parsePlan("SELECT sum(c) filter (where max(e) > 1) FROM TaBlE2"),
+    "FILTER expression contains aggregate" :: Nil)
+
+  errorTest(
+    "SPARK-38666: window function in aggregate filter",
+    CatalystSqlParser.parsePlan("SELECT sum(c) " +
+       "filter (where nth_value(e, 2) over(order by b) > 1) FROM TaBlE2"),
+    "FILTER expression contains window function" :: Nil)
+
   test("SPARK-6452 regression test") {
     // CheckAnalysis should throw AnalysisException when Aggregate contains missing attribute(s)
     // Since we manually construct the logical plan at here and Sum only accept

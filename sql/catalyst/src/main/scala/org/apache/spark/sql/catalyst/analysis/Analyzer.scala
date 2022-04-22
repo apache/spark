@@ -2221,8 +2221,16 @@ class Analyzer(override val catalogManager: CatalogManager)
           }
         // We get an aggregate function, we need to wrap it in an AggregateExpression.
         case agg: AggregateFunction =>
-          if (u.filter.isDefined && !u.filter.get.deterministic) {
-            throw QueryCompilationErrors.nonDeterministicFilterInAggregateError
+          u.filter match {
+            case Some(filter) if !filter.deterministic =>
+              throw QueryCompilationErrors.nonDeterministicFilterInAggregateError
+            case Some(filter) if filter.dataType != BooleanType =>
+              throw QueryCompilationErrors.nonBooleanFilterInAggregateError
+            case Some(filter) if filter.exists(_.isInstanceOf[AggregateExpression]) =>
+              throw QueryCompilationErrors.aggregateInAggregateFilterError
+            case Some(filter) if filter.exists(_.isInstanceOf[WindowExpression]) =>
+              throw QueryCompilationErrors.windowFunctionInAggregateFilterError
+            case _ =>
           }
           if (u.ignoreNulls) {
             val aggFunc = agg match {
