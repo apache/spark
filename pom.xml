@@ -207,6 +207,11 @@
     <commons-cli.version>1.5.0</commons-cli.version>
     <bouncycastle.version>1.60</bouncycastle.version>
     <tink.version>1.6.1</tink.version>
+    <!-- When upgrading `netty.version`, need to check whether
+         the version of `netty-tcnative-classes.version` also needs to be upgraded
+    -->
+    <netty.version>4.1.76.Final</netty.version>
+    <netty-tcnative-classes.version>2.0.51.Final</netty-tcnative-classes.version>
     <!--
     If you are changing Arrow version specification, please check
     ./python/pyspark/sql/pandas/utils.py, and ./python/setup.py too.
@@ -816,10 +821,12 @@
         <artifactId>RoaringBitmap</artifactId>
         <version>0.9.25</version>
       </dependency>
+
+      <!-- Netty Begin -->
       <dependency>
         <groupId>io.netty</groupId>
         <artifactId>netty-all</artifactId>
-        <version>4.1.76.Final</version>
+        <version>${netty.version}</version>
         <exclusions>
           <exclusion>
             <groupId>io.netty</groupId>
@@ -893,7 +900,38 @@
             <groupId>io.netty</groupId>
             <artifactId>netty-transport-udt</artifactId>
           </exclusion>
+          <exclusion>
+            <groupId>org.jctools</groupId>
+            <artifactId>jctools-core</artifactId>
+          </exclusion>
         </exclusions>
+      </dependency>
+      <!-- SPARK-38885: After Netty 4.1.76, add the following `Netty` dependencies explicitly
+           to ensure `./dev/test-dependencies.sh` produce the same results on Linux and MacOS.
+      -->
+      <dependency>
+        <groupId>io.netty</groupId>
+        <artifactId>netty-transport-native-epoll</artifactId>
+        <version>${netty.version}</version>
+        <classifier>linux-x86_64</classifier>
+      </dependency>
+      <dependency>
+        <groupId>io.netty</groupId>
+        <artifactId>netty-transport-native-epoll</artifactId>
+        <version>${netty.version}</version>
+        <classifier>linux-aarch_64</classifier>
+      </dependency>
+      <dependency>
+        <groupId>io.netty</groupId>
+        <artifactId>netty-transport-native-kqueue</artifactId>
+        <version>${netty.version}</version>
+        <classifier>osx-aarch_64</classifier>
+      </dependency>
+      <dependency>
+        <groupId>io.netty</groupId>
+        <artifactId>netty-transport-native-kqueue</artifactId>
+        <version>${netty.version}</version>
+        <classifier>osx-x86_64</classifier>
       </dependency>
       <!-- SPARK-38541: Add the explicit dependency on `netty-tcnative-classes` because the dependency on
            `netty-tcnative-classes` is changed to `Optional` in [netty](https://github.com/netty/netty/pull/12146).
@@ -903,8 +941,10 @@
       <dependency>
         <groupId>io.netty</groupId>
         <artifactId>netty-tcnative-classes</artifactId>
-        <version>2.0.51.Final</version>
+        <version>${netty-tcnative-classes.version}</version>
       </dependency>
+      <!-- Netty End -->
+
       <dependency>
         <groupId>org.apache.derby</groupId>
         <artifactId>derby</artifactId>
