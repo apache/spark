@@ -100,6 +100,34 @@ private[spark] object KVUtils extends Logging {
     }
   }
 
+  /** Counts the number of elements in the KVStoreView which satisfy a predicate. */
+  def count[T](view: KVStoreView[T])(countFunc: T => Boolean): Int = {
+    Utils.tryWithResource(view.closeableIterator()) { iter =>
+      iter.asScala.count(countFunc)
+    }
+  }
+
+  /** Applies a function f to all values produced by KVStoreView. */
+  def foreach[T](view: KVStoreView[T])(foreachFunc: T => Unit): Unit = {
+    Utils.tryWithResource(view.closeableIterator()) { iter =>
+      iter.asScala.foreach(foreachFunc)
+    }
+  }
+
+  /** Maps all values of KVStoreView to new Seq using a transformation function. */
+  def mapToSeq[T, B](view: KVStoreView[T])(mapFunc: T => B): Seq[B] = {
+    Utils.tryWithResource(view.closeableIterator()) { iter =>
+      iter.asScala.map(mapFunc).toList
+    }
+  }
+
+  /** The size of KVStoreView. */
+  def size[T](view: KVStoreView[T]): Int = {
+    Utils.tryWithResource(view.closeableIterator()) { iter =>
+      iter.asScala.size
+    }
+  }
+
   private[spark] class MetadataMismatchException extends Exception
 
 }

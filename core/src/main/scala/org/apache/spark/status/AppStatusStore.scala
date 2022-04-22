@@ -65,15 +65,15 @@ private[spark] class AppStatusStore(
   }
 
   def resourceProfileInfo(): Seq[v1.ResourceProfileInfo] = {
-    store.view(classOf[ResourceProfileWrapper]).asScala.map(_.rpInfo).toSeq
+    KVUtils.mapToSeq(store.view(classOf[ResourceProfileWrapper]))(_.rpInfo)
   }
 
   def jobsList(statuses: JList[JobExecutionStatus]): Seq[v1.JobData] = {
-    val it = store.view(classOf[JobDataWrapper]).reverse().asScala.map(_.info)
+    val it = KVUtils.mapToSeq(store.view(classOf[JobDataWrapper]).reverse())(_.info)
     if (statuses != null && !statuses.isEmpty()) {
-      it.filter { job => statuses.contains(job.status) }.toSeq
+      it.filter { job => statuses.contains(job.status) }
     } else {
-      it.toSeq
+      it
     }
   }
 
@@ -95,9 +95,9 @@ private[spark] class AppStatusStore(
     } else {
       base
     }
-    filtered.asScala.map(_.info)
+    KVUtils.mapToSeq(filtered)(_.info)
       .filter(_.id != FALLBACK_BLOCK_MANAGER_ID.executorId)
-      .map(replaceExec).toSeq
+      .map(replaceExec)
   }
 
   private def replaceExec(origin: v1.ExecutorSummary): v1.ExecutorSummary = {
@@ -155,7 +155,7 @@ private[spark] class AppStatusStore(
     } else {
       base
     }
-    filtered.asScala.map(_.info).toSeq
+    KVUtils.mapToSeq(filtered)(_.info)
   }
 
   def executorSummary(executorId: String): v1.ExecutorSummary = {
@@ -177,11 +177,11 @@ private[spark] class AppStatusStore(
     unsortedQuantiles: Array[Double] = Array.empty,
     taskStatus: JList[v1.TaskStatus] = List().asJava): Seq[v1.StageData] = {
     val quantiles = unsortedQuantiles.sorted
-    val it = store.view(classOf[StageDataWrapper]).reverse().asScala.map(_.info)
+    val it = KVUtils.mapToSeq(store.view(classOf[StageDataWrapper]).reverse())(_.info)
     val ret = if (statuses != null && !statuses.isEmpty()) {
-      it.filter { s => statuses.contains(s.status) }.toSeq
+      it.filter { s => statuses.contains(s.status) }
     } else {
-      it.toSeq
+      it
     }
     ret.map { s =>
       newStageData(s, withDetail = details, taskStatus = taskStatus,
@@ -195,11 +195,11 @@ private[spark] class AppStatusStore(
     taskStatus: JList[v1.TaskStatus] = List().asJava,
     withSummaries: Boolean = false,
     unsortedQuantiles: Array[Double] = Array.empty[Double]): Seq[v1.StageData] = {
-    store.view(classOf[StageDataWrapper]).index("stageId").first(stageId).last(stageId)
-      .asScala.map { s =>
-        newStageData(s.info, withDetail = details, taskStatus = taskStatus,
-          withSummaries = withSummaries, unsortedQuantiles = unsortedQuantiles)
-      }.toSeq
+    KVUtils.mapToSeq(store.view(classOf[StageDataWrapper]).index("stageId")
+      .first(stageId).last(stageId)) { s =>
+      newStageData(s.info, withDetail = details, taskStatus = taskStatus,
+        withSummaries = withSummaries, unsortedQuantiles = unsortedQuantiles)
+    }
   }
 
   def lastStageAttempt(stageId: Int): v1.StageData = {
@@ -523,8 +523,10 @@ private[spark] class AppStatusStore(
 
   def executorSummary(stageId: Int, attemptId: Int): Map[String, v1.ExecutorStageSummary] = {
     val stageKey = Array(stageId, attemptId)
-    store.view(classOf[ExecutorStageSummaryWrapper]).index("stage").first(stageKey).last(stageKey)
-      .asScala.map { exec => (exec.executorId -> exec.info) }.toMap
+    KVUtils.mapToSeq(store.view(classOf[ExecutorStageSummaryWrapper])
+      .index("stage").first(stageKey).last(stageKey)) { exec =>
+      (exec.executorId -> exec.info)
+    }.toMap
   }
 
   def speculationSummary(stageId: Int, attemptId: Int): Option[v1.SpeculationStageSummary] = {
@@ -533,9 +535,10 @@ private[spark] class AppStatusStore(
   }
 
   def rddList(cachedOnly: Boolean = true): Seq[v1.RDDStorageInfo] = {
-    store.view(classOf[RDDStorageInfoWrapper]).asScala.map(_.info).filter { rdd =>
-      !cachedOnly || rdd.numCachedPartitions > 0
-    }.toSeq
+    KVUtils.mapToSeq(store.view(classOf[RDDStorageInfoWrapper]))(_.info)
+      .filter { rdd =>
+        !cachedOnly || rdd.numCachedPartitions > 0
+      }
   }
 
   /**
