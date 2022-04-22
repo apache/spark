@@ -203,6 +203,7 @@ trait SQLInsertTestSuite extends QueryTest with SQLTestUtils {
         e1.getMessage.contains("not enough data columns") ||
         e1.getMessage.contains(v2Msg))
     }
+
     withTable("t1") {
       createTable("t1", cols, Seq.fill(4)("int"), cols.takeRight(2))
       val e1 = intercept[AnalysisException] {

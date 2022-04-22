@@ -124,6 +124,7 @@ abstract class InsertIntoTests(
     val exc = intercept[AnalysisException] {
       doInsert(t1, df)
     }
+
     verifyTable(t1, Seq.empty[(Long, String, String)].toDF("id", "data", "missing"))
     val tableName = if (catalogAndNamespace.isEmpty) s"default.$t1" else t1
     assert(exc.getMessage.contains(s"Cannot write to '$tableName', not enough data columns"))
