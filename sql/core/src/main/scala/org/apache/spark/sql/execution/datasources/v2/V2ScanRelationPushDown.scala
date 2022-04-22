@@ -184,9 +184,16 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper wit
                   // scalastyle:on
                   val newOutput = scan.readSchema().toAttributes
                   assert(newOutput.length == groupingExpressions.length + finalAggregates.length)
+                  val groupByExprToOutputOrdinal = mutable.HashMap.empty[Expression, Int]
+                  var ordinal = 0
                   val groupAttrs = normalizedGroupingExpressions.zip(newOutput).map {
                     case (a: Attribute, b: Attribute) => b.withExprId(a.exprId)
-                    case (_, b) => b
+                    case (expr, b) =>
+                      if (!groupByExprToOutputOrdinal.contains(expr.canonicalized)) {
+                        groupByExprToOutputOrdinal(expr.canonicalized) = ordinal
+                        ordinal += 1
+                      }
+                      b
                   }
                   val aggOutput = newOutput.drop(groupAttrs.length)
                   val output = groupAttrs ++ aggOutput
@@ -197,7 +204,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper wit
                        |Pushed Aggregate Functions:
                        | ${pushedAggregates.get.aggregateExpressions.mkString(", ")}
                        |Pushed Group by:
-                       | ${pushedAggregates.get.groupByColumns.mkString(", ")}
+                       | ${pushedAggregates.get.groupByExpressions.mkString(", ")}
                        |Output: ${output.mkString(", ")}
                       """.stripMargin)
 
@@ -206,14 +213,15 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper wit
                     DataSourceV2ScanRelation(sHolder.relation, wrappedScan, output)
                   if (r.supportCompletePushDown(pushedAggregates.get)) {
                     val projectExpressions = finalResultExpressions.map { expr =>
-                      // TODO At present, only push down group by attribute is supported.
-                      // In future, more attribute conversion is extended here. e.g. GetStructField
                       expr.transform {
                         case agg: AggregateExpression =>
                           val ordinal = aggExprToOutputOrdinal(agg.canonicalized)
                           val child =
                             addCastIfNeeded(aggOutput(ordinal), agg.resultAttribute.dataType)
                           Alias(child, agg.resultAttribute.name)(agg.resultAttribute.exprId)
+                        case expr if groupByExprToOutputOrdinal.contains(expr.canonicalized) =>
+                          val ordinal = groupByExprToOutputOrdinal(expr.canonicalized)
+                          addCastIfNeeded(groupAttrs(ordinal), expr.dataType)
                       }
                     }.asInstanceOf[Seq[NamedExpression]]
                     Project(projectExpressions, scanRelation)
@@ -256,6 +264,9 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper wit
                             case other => other
                           }
                         agg.copy(aggregateFunction = aggFunction)
+                      case expr if groupByExprToOutputOrdinal.contains(expr.canonicalized) =>
+                        val ordinal = groupByExprToOutputOrdinal(expr.canonicalized)
+                        addCastIfNeeded(groupAttrs(ordinal), expr.dataType)
                     }
                   }
                 }

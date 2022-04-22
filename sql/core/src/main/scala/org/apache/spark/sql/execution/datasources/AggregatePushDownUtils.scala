@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.datasources
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Expression, GenericInternalRow}
+import org.apache.spark.sql.connector.expressions.FieldReference
 import org.apache.spark.sql.connector.expressions.aggregate.{AggregateFunc, Aggregation, Count, CountStar, Max, Min}
 import org.apache.spark.sql.execution.RowToColumnConverter
 import org.apache.spark.sql.execution.datasources.v2.V2ColumnUtils
@@ -93,8 +94,8 @@ object AggregatePushDownUtils {
       return None
     }
 
-    if (aggregation.groupByColumns.nonEmpty &&
-      partitionNames.size != aggregation.groupByColumns.length) {
+    if (aggregation.groupByExpressions.nonEmpty &&
+      partitionNames.size != aggregation.groupByExpressions.length) {
       // If there are group by columns, we only push down if the group by columns are the same as
       // the partition columns. In theory, if group by columns are a subset of partition columns,
       // we should still be able to push down. e.g. if table t has partition columns p1, p2, and p3,
@@ -106,7 +107,9 @@ object AggregatePushDownUtils {
       // aggregate push down simple and don't handle this complicate case for now.
       return None
     }
-    aggregation.groupByColumns.foreach { col =>
+    aggregation.groupByExpressions.foreach { expr =>
+      assert(expr.isInstanceOf[FieldReference])
+      val col = expr.asInstanceOf[FieldReference]
       // don't push down if the group by columns are not the same as the partition columns (orders
       // doesn't matter because reorder can be done at data source layer)
       if (col.fieldNames.length != 1 || !isPartitionCol(col.fieldNames.head)) return None
@@ -137,7 +140,8 @@ object AggregatePushDownUtils {
   def equivalentAggregations(a: Aggregation, b: Aggregation): Boolean = {
     a.aggregateExpressions.sortBy(_.hashCode())
       .sameElements(b.aggregateExpressions.sortBy(_.hashCode())) &&
-      a.groupByColumns.sortBy(_.hashCode()).sameElements(b.groupByColumns.sortBy(_.hashCode()))
+      a.groupByExpressions.sortBy(_.hashCode())
+        .sameElements(b.groupByExpressions.sortBy(_.hashCode()))
   }
 
   /**
@@ -164,7 +168,7 @@ object AggregatePushDownUtils {
   def getSchemaWithoutGroupingExpression(
       aggSchema: StructType,
       aggregation: Aggregation): StructType = {
-    val numOfGroupByColumns = aggregation.groupByColumns.length
+    val numOfGroupByColumns = aggregation.groupByExpressions.length
     if (numOfGroupByColumns > 0) {
       new StructType(aggSchema.fields.drop(numOfGroupByColumns))
     } else {
@@ -179,7 +183,11 @@ object AggregatePushDownUtils {
       partitionSchema: StructType,
       aggregation: Aggregation,
       partitionValues: InternalRow): InternalRow = {
-    val groupByColNames = aggregation.groupByColumns.map(_.fieldNames.head)
+    val groupByColNames =
+      aggregation.groupByExpressions.map { expr =>
+        assert(expr.isInstanceOf[FieldReference])
+        expr.asInstanceOf[FieldReference].fieldNames.head
+      }
     assert(groupByColNames.length == partitionSchema.length &&
       groupByColNames.length == partitionValues.numFields, "The number of group by columns " +
       s"${groupByColNames.length} should be the same as partition schema length " +

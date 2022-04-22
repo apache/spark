@@ -736,11 +736,41 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
   }
 
   test("scan with aggregate push-down: SUM with group by") {
-    val df = sql("SELECT SUM(SALARY) FROM h2.test.employee GROUP BY DEPT")
-    checkAggregateRemoved(df)
-    checkPushedInfo(df, "PushedAggregates: [SUM(SALARY)], " +
+    val df1 = sql("SELECT SUM(SALARY) FROM h2.test.employee GROUP BY DEPT")
+    checkAggregateRemoved(df1)
+    checkPushedInfo(df1, "PushedAggregates: [SUM(SALARY)], " +
       "PushedFilters: [], PushedGroupByColumns: [DEPT], ")
-    checkAnswer(df, Seq(Row(19000), Row(22000), Row(12000)))
+    checkAnswer(df1, Seq(Row(19000), Row(22000), Row(12000)))
+
+    val df2 = sql(
+      """
+        |SELECT CASE WHEN SALARY > 8000 AND SALARY < 10000 THEN SALARY ELSE 0 END as key,
+        |  SUM(SALARY) FROM h2.test.employee GROUP BY key""".stripMargin)
+    checkAggregateRemoved(df2)
+    checkPushedInfo(df2,
+      """
+        |PushedAggregates: [SUM(SALARY)],
+        |PushedFilters: [],
+        |PushedGroupByColumns: [CASE WHEN (SALARY > 8000.00) AND (SALARY < 10000.00) THEN SALARY ELSE 0.00 END],
+        |""".stripMargin.replaceAll("\n", " "))
+    checkAnswer(df2, Seq(Row(0, 44000), Row(9000, 9000)))
+
+    val df3 = spark.read
+      .option("partitionColumn", "dept")
+      .option("lowerBound", "0")
+      .option("upperBound", "2")
+      .option("numPartitions", "2")
+      .table("h2.test.employee")
+      .groupBy(when(($"SALARY" > 8000).and($"SALARY" < 10000), $"SALARY").otherwise(0).as("key"))
+      .agg(sum($"SALARY"))
+    checkAggregateRemoved(df3, false)
+    checkPushedInfo(df3,
+      """
+        |PushedAggregates: [SUM(SALARY)],
+        |PushedFilters: [],
+        |PushedGroupByColumns: [CASE WHEN (SALARY > 8000.00) AND (SALARY < 10000.00) THEN SALARY ELSE 0.00 END],
+        |""".stripMargin.replaceAll("\n", " "))
+    checkAnswer(df3, Seq(Row(0, 44000), Row(9000, 9000)))
   }
 
   test("scan with aggregate push-down: DISTINCT SUM with group by") {
