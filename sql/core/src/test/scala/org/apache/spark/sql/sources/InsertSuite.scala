@@ -142,28 +142,15 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
     )
   }
 
-  test("SELECT clause generating a different number of columns: negative test.") {
+  test("SELECT clause generating a different number of columns is not allowed.") {
     val message = intercept[AnalysisException] {
       sql(
         s"""
-            |INSERT OVERWRITE TABLE jsonTable SELECT a FROM jt
-         """.stripMargin)
+        |INSERT OVERWRITE TABLE jsonTable SELECT a FROM jt
+      """.stripMargin)
     }.getMessage
     assert(message.contains("target table has 2 column(s) but the inserted data has 1 column(s)")
     )
-  }
-
-  test("SELECT clause generating a different number of columns: positive test.") {
-    withSQLConf(SQLConf.USE_NULLS_FOR_MISSING_DEFAULT_COLUMN_VALUES.key -> "true") {
-      sql(
-        s"""
-           |INSERT OVERWRITE TABLE jsonTable SELECT a FROM jt
-        """.stripMargin)
-      checkAnswer(
-        sql("SELECT a, b FROM jsonTable"),
-        (1 to 10).map(i => Row(i, null))
-      )
-    }
   }
 
   test("INSERT OVERWRITE a JSONRelation multiple times") {
@@ -871,6 +858,12 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
 
   test("Allow user to insert specified columns into insertable view") {
     withSQLConf(SQLConf.USE_NULLS_FOR_MISSING_DEFAULT_COLUMN_VALUES.key -> "true") {
+      sql("INSERT OVERWRITE TABLE jsonTable SELECT a FROM jt")
+      checkAnswer(
+        sql("SELECT a, b FROM jsonTable"),
+        (1 to 10).map(i => Row(i, null))
+      )
+
       sql("INSERT OVERWRITE TABLE jsonTable(a) SELECT a FROM jt")
       checkAnswer(
         sql("SELECT a, b FROM jsonTable"),
@@ -1663,13 +1656,13 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
   }
 
   test("SELECT clause with star wildcard") {
-    withSQLConf(SQLConf.USE_NULLS_FOR_MISSING_DEFAULT_COLUMN_VALUES.key -> "true") {
-      withTable("t1") {
-        sql("CREATE TABLE t1(c1 int, c2 string) using parquet")
-        sql("INSERT INTO TABLE t1 select * from jt where a=1")
-        checkAnswer(spark.table("t1"), Row(1, "str1"))
-      }
+    withTable("t1") {
+      sql("CREATE TABLE t1(c1 int, c2 string) using parquet")
+      sql("INSERT INTO TABLE t1 select * from jt where a=1")
+      checkAnswer(spark.table("t1"), Row(1, "str1"))
+    }
 
+    withSQLConf(SQLConf.USE_NULLS_FOR_MISSING_DEFAULT_COLUMN_VALUES.key -> "true") {
       withTable("t1") {
         sql("CREATE TABLE t1(c1 int, c2 string, c3 int) using parquet")
         sql("INSERT INTO TABLE t1 select * from jt where a=1")
