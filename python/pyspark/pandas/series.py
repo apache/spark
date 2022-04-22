@@ -2225,26 +2225,33 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         pad_tail = SF.lit(None)
         pad_tail_cond = SF.lit(False)
 
+        # inputs  -> NaN, NaN, 1.0, NaN, NaN, NaN, 5.0, NaN, NaN
         if limit_direction is None or limit_direction == "forward":
+            # outputs -> NaN, NaN, 1.0, 2.0, 3.0, 4.0, 5.0, 5.0, 5.0
             pad_tail = last_non_null_forward
             pad_tail_cond = F.isnull(last_non_null_backward) & ~F.isnull(last_non_null_forward)
             if limit is not None:
+                # outputs (limit=1) -> NaN, NaN, 1.0, 2.0, NaN, NaN, 5.0, 5.0, NaN
                 fill_cond = fill_cond & (null_index_forward <= F.lit(limit))
                 pad_tail_cond = pad_tail_cond & (null_index_forward <= F.lit(limit))
 
         elif limit_direction == "backward":
+            # outputs -> 1.0, 1.0, 1.0, 2.0, 3.0, 4.0, 5.0, NaN, NaN
             pad_head = last_non_null_backward
             pad_head_cond = ~F.isnull(last_non_null_backward) & F.isnull(last_non_null_forward)
             if limit is not None:
+                # outputs (limit=1) -> NaN, 1.0, 1.0, NaN, NaN, 4.0, 5.0, NaN, NaN
                 fill_cond = fill_cond & (null_index_backward <= F.lit(limit))
                 pad_head_cond = pad_head_cond & (null_index_backward <= F.lit(limit))
 
         else:
+            # outputs -> 1.0, 1.0, 1.0, 2.0, 3.0, 4.0, 5.0, 5.0, 5.0
             pad_head = last_non_null_backward
             pad_head_cond = ~F.isnull(last_non_null_backward) & F.isnull(last_non_null_forward)
             pad_tail = last_non_null_forward
             pad_tail_cond = F.isnull(last_non_null_backward) & ~F.isnull(last_non_null_forward)
             if limit is not None:
+                # outputs (limit=1) -> NaN, 1.0, 1.0, 2.0, NaN, 4.0, 5.0, 5.0, NaN
                 fill_cond = fill_cond & (
                     (null_index_forward <= F.lit(limit)) | (null_index_backward <= F.lit(limit))
                 )
