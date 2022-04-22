@@ -217,7 +217,7 @@ def plot_box(data: Union["ps.DataFrame", "ps.Series"], **kwargs):
                     y=None,  # todo: support y=fliers
                     boxpoints=boxpoints,
                     notched=notched,
-                    **kwargs,  # this is for workarounds. Box takes different options from express.box.
+                    **kwargs,
                 )
             )
             i += 1
