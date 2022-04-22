@@ -417,10 +417,13 @@ class QueryExecutionErrorsSuite
             | ))
             |""".stripMargin).collect()
       }
-      assert(e.getErrorClass === "INCOMPARABLE_PIVOT_COLUMN")
-      assert(e.getSqlState === "42000")
-      assert(e.getMessage.matches("Invalid pivot column 'map.*\\'. " +
-        "Pivot columns must be comparable."))
+      checkErrorClass(
+        exception = e,
+        errorClass = "INCOMPARABLE_PIVOT_COLUMN",
+        msg = "Invalid pivot column 'map.*\\'. Pivot columns must be comparable.",
+        sqlState = Some("42000"),
+        matchMsg = true
+      )
     }
   }
 }
