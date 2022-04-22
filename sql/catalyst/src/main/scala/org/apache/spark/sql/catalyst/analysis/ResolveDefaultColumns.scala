@@ -79,7 +79,8 @@ case class ResolveDefaultColumns(
           replaceExplicitDefaultColumnValues(analyzer, expanded).getOrElse(table)
         replaced
 
-      case i@InsertIntoStatement(_, _, _, project: Project, _, _) =>
+      case i@InsertIntoStatement(_, _, _, project: Project, _, _)
+        if !project.projectList.exists(_.isInstanceOf[Star]) =>
         enclosingInsert = Some(i)
         insertTableSchemaWithoutPartitionColumns = getInsertTableSchemaWithoutPartitionColumns
         val expanded: Project = addMissingDefaultColumnValues(project).getOrElse(project)
@@ -131,21 +132,17 @@ case class ResolveDefaultColumns(
    * Adds a new expressions to a projection to generate missing default column values.
    */
   private def addMissingDefaultColumnValues(project: Project): Option[Project] = {
-    if (project.projectList.exists(_.isInstanceOf[Star])) {
-      None
-    } else {
-      val numQueryOutputs: Int = project.projectList.size
-      val schema = insertTableSchemaWithoutPartitionColumns.getOrElse(return None)
-      val newDefaultExpressions: Seq[Expression] = getDefaultExpressions(numQueryOutputs, schema)
-      val newAliases: Seq[NamedExpression] =
-        newDefaultExpressions.zip(schema.fields).map {
-          case (expr, field) => Alias(expr, field.name)()
-        }
-      if (newDefaultExpressions.nonEmpty) {
-        Some(project.copy(projectList = project.projectList ++ newAliases))
-      } else {
-        None
+    val numQueryOutputs: Int = project.projectList.size
+    val schema = insertTableSchemaWithoutPartitionColumns.getOrElse(return None)
+    val newDefaultExpressions: Seq[Expression] = getDefaultExpressions(numQueryOutputs, schema)
+    val newAliases: Seq[NamedExpression] =
+      newDefaultExpressions.zip(schema.fields).map {
+        case (expr, field) => Alias(expr, field.name)()
       }
+    if (newDefaultExpressions.nonEmpty) {
+      Some(project.copy(projectList = project.projectList ++ newAliases))
+    } else {
+      None
     }
   }
 

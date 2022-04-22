@@ -375,8 +375,7 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
 
   testPartitionedTable("INSERT INTO a partitioned table (semantic and error handling)") {
     tableName =>
-      withSQLConf(("hive.exec.dynamic.partition.mode", "nonstrict"),
-        (SQLConf.USE_NULLS_FOR_MISSING_DEFAULT_COLUMN_VALUES.key, "false")) {
+      withSQLConf(("hive.exec.dynamic.partition.mode", "nonstrict")) {
         sql(s"INSERT INTO TABLE $tableName PARTITION (b=2, c=3) SELECT 1, 4")
 
         sql(s"INSERT INTO TABLE $tableName PARTITION (b=6, c=7) SELECT 5, 8")
@@ -980,8 +979,7 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
     withSQLConf(SQLConf.ENABLE_DEFAULT_COLUMNS.key -> "false") {
       testDefaultColumn
     }
-    withSQLConf(SQLConf.ENABLE_DEFAULT_COLUMNS.key -> "true",
-      SQLConf.USE_NULLS_FOR_MISSING_DEFAULT_COLUMN_VALUES.key -> "false") {
+    withSQLConf(SQLConf.ENABLE_DEFAULT_COLUMNS.key -> "true") {
       testDefaultColumn
     }
     withSQLConf(SQLConf.ENABLE_DEFAULT_COLUMNS.key -> "true",
