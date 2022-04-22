@@ -36,7 +36,6 @@ class _MissingPandasLikeDataFrame:
     # Functions
     asfreq = _unsupported_function("asfreq")
     asof = _unsupported_function("asof")
-    boxplot = _unsupported_function("boxplot")
     combine = _unsupported_function("combine")
     compare = _unsupported_function("compare")
     convert_dtypes = _unsupported_function("convert_dtypes")

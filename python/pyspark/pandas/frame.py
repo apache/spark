@@ -842,6 +842,12 @@ class DataFrame(Frame, Generic[T]):
     hist.__doc__ = PandasOnSparkPlotAccessor.hist.__doc__
 
     @no_type_check
+    def boxplot(self, **kwds):
+        return self.plot.box(**kwds)
+
+    boxplot.__doc__ = PandasOnSparkPlotAccessor.box.__doc__
+
+    @no_type_check
     def kde(self, bw_method=None, ind=None, **kwds):
         return self.plot.kde(bw_method, ind, **kwds)
 
