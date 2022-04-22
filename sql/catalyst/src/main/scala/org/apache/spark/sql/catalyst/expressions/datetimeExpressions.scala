@@ -1651,7 +1651,7 @@ trait TruncInstant extends BinaryExpression with ImplicitCastInputTypes {
     val level = if (format.foldable) {
       truncLevel
     } else {
-      DateTimeUtils.parseTruncLevel(format.eval().asInstanceOf[UTF8String])
+      DateTimeUtils.parseTruncLevel(format.eval(input).asInstanceOf[UTF8String])
     }
     if (level < minLevel) {
       // unknown format or too small level

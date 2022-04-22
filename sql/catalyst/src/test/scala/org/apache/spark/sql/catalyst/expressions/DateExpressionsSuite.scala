@@ -27,7 +27,7 @@ import java.util.concurrent.TimeUnit._
 import scala.reflect.ClassTag
 
 import org.apache.spark.{SparkFunSuite, SparkUpgradeException}
-import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.catalyst.util.{DateTimeUtils, IntervalUtils, TimestampFormatter}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
@@ -655,6 +655,15 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(
       TruncDate(Literal.create(input, DateType), NonFoldableLiteral.create(fmt, StringType)),
       expected)
+    // SPARK-38990: ensure that evaluation with input rows also works
+    val catalystInput = CatalystTypeConverters.convertToCatalyst(input)
+    val inputRow = InternalRow(catalystInput, UTF8String.fromString(fmt))
+    checkEvaluation(
+      TruncDate(
+        BoundReference(ordinal = 0, dataType = DateType, nullable = true),
+        BoundReference(ordinal = 1, dataType = StringType, nullable = true)),
+      expected,
+      inputRow)
   }
 
   test("TruncDate") {
@@ -681,6 +690,15 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       TruncTimestamp(
         NonFoldableLiteral.create(fmt, StringType), Literal.create(input, TimestampType)),
       expected)
+    // SPARK-38990: ensure that evaluation with input rows also works
+    val catalystInput = CatalystTypeConverters.convertToCatalyst(input)
+    val inputRow = InternalRow(UTF8String.fromString(fmt), catalystInput)
+    checkEvaluation(
+      TruncTimestamp(
+        BoundReference(ordinal = 0, dataType = StringType, nullable = true),
+        BoundReference(ordinal = 1, dataType = TimestampType, nullable = true)),
+      expected,
+      inputRow)
   }
 
   test("TruncTimestamp") {
