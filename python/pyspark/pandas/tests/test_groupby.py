@@ -1258,13 +1258,17 @@ class GroupByTest(PandasOnSparkTestCase, TestUtils):
             (pdf.groupby("A"), psdf.groupby("A")),
             (pdf.groupby("A")[["C"]], psdf.groupby("A")[["C"]]),
         ]:
-            self.assert_eq(func(p_groupby_obj).sort_index(), func(ps_groupby_obj).sort_index(), check_exact=check_exact)
+            self.assert_eq(
+                func(p_groupby_obj).sort_index(),
+                func(ps_groupby_obj).sort_index(),
+                check_exact=check_exact,
+            )
 
     def test_basic_stat_funcs(self):
-        self._test_stat_func(lambda groupby_obj: groupby_obj.mean())
-        self._test_stat_func(lambda groupby_obj: groupby_obj.std())
-        self._test_stat_func(lambda groupby_obj: groupby_obj.sum())
-        self._test_stat_func(lambda groupby_obj: groupby_obj.var())
+        self._test_stat_func(lambda groupby_obj: groupby_obj.mean(), check_exact=False)
+        self._test_stat_func(lambda groupby_obj: groupby_obj.std(), check_exact=False)
+        self._test_stat_func(lambda groupby_obj: groupby_obj.sum(), check_exact=False)
+        self._test_stat_func(lambda groupby_obj: groupby_obj.var(), check_exact=False)
 
         psdf = ps.DataFrame(
             {
@@ -1275,6 +1279,9 @@ class GroupByTest(PandasOnSparkTestCase, TestUtils):
             }
         )
 
+        # Unlike pandas', the median in pandas-on-Spark is an approximated median based upon
+        # approximate percentile computation because computing median across a large dataset
+        # is extremely expensive.
         self.assert_eq(
             psdf.groupby("A").median().sort_index(),
             ps.DataFrame({"B": [3.1, 3.1], "D": [0, 0]}, index=pd.Index([1, 2], name="A")),
