@@ -16,7 +16,7 @@
  */
 package org.apache.spark.sql.errors
 
-import org.apache.spark.{SparkArithmeticException, SparkConf, SparkDateTimeException}
+import org.apache.spark.{SparkArithmeticException, SparkArrayIndexOutOfBoundsException, SparkConf, SparkDateTimeException}
 import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -76,5 +76,24 @@ class QueryExecutionAnsiErrorsSuite extends QueryTest with SharedSparkSession {
           |select CAST('66666666666666.666' AS DECIMAL(8, 1))
           |       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
           |""".stripMargin)
+  }
+
+  test("INVALID_ARRAY_INDEX") {
+    val e = intercept[SparkArrayIndexOutOfBoundsException] {
+      sql("select array(1, 2, 3, 4, 5)[8]").collect()
+    }
+    assert(e.getErrorClass === "INVALID_ARRAY_INDEX")
+    assert(e.getMessage === "Invalid index: 8, numElements: 5. " +
+      "If necessary set spark.sql.ansi.enabled to false to bypass this error.")
+  }
+
+  test("INVALID_ARRAY_INDEX_IN_ELEMENT_AT") {
+    val e = intercept[SparkArrayIndexOutOfBoundsException] {
+      sql("select element_at(array(1, 2, 3, 4, 5), 8)").collect()
+    }
+    assert(e.getErrorClass === "INVALID_ARRAY_INDEX_IN_ELEMENT_AT")
+    assert(e.getMessage === "Invalid index: 8, numElements: 5. " +
+      "To return NULL instead, use 'try_element_at'. " +
+      "If necessary set spark.sql.ansi.enabled to false to bypass this error.")
   }
 }
