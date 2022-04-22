@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.util
 
-import org.apache.spark.sql.catalyst.expressions.{Abs, Add, And, BinaryComparison, BinaryOperator, BitwiseAnd, BitwiseNot, BitwiseOr, BitwiseXor, CaseWhen, Cast, Ceil, Coalesce, Contains, Divide, EndsWith, EqualTo, Exp, Expression, Floor, In, InSet, IsNotNull, IsNull, Literal, Log, Multiply, Not, Or, Pow, Predicate, Remainder, Sqrt, StartsWith, StringPredicate, Subtract, UnaryMinus, WidthBucket}
+import org.apache.spark.sql.catalyst.expressions.{Abs, Add, And, BinaryComparison, BinaryOperator, BitwiseAnd, BitwiseNot, BitwiseOr, BitwiseXor, CaseWhen, Cast, Ceil, Coalesce, Contains, Divide, EndsWith, EqualTo, Exp, Expression, Floor, In, InSet, IsNotNull, IsNull, Literal, Log, Lower, Multiply, Not, Or, Overlay, Pow, Predicate, Remainder, Sqrt, StartsWith, StringPredicate, StringTranslate, StringTrim, Substring, Subtract, UnaryMinus, Upper, WidthBucket}
 import org.apache.spark.sql.connector.expressions.{Cast => V2Cast, Expression => V2Expression, FieldReference, GeneralScalarExpression, LiteralValue}
 import org.apache.spark.sql.connector.expressions.filter.{AlwaysFalse, AlwaysTrue, And => V2And, Not => V2Not, Or => V2Or, Predicate => V2Predicate}
 import org.apache.spark.sql.execution.datasources.PushableColumn
@@ -197,6 +197,49 @@ class V2ExpressionBuilder(
           // The children looks like [condition1, value1, ..., conditionN, valueN]
           Some(new V2Predicate("CASE_WHEN", branchExpressions.toArray[V2Expression]))
         }
+      } else {
+        None
+      }
+    case Substring(str, pos, len) =>
+      val s = generateExpression(str)
+      val p = generateExpression(pos)
+      val l = generateExpression(len)
+      if (s.isDefined && p.isDefined && l.isDefined) {
+        Some(new GeneralScalarExpression("SUBSTRING", Array[V2Expression](s.get, p.get, l.get)))
+      } else {
+        None
+      }
+    case Upper(child) => generateExpression(child)
+      .map(v => new GeneralScalarExpression("UPPER", Array[V2Expression](v)))
+    case Lower(child) => generateExpression(child)
+      .map(v => new GeneralScalarExpression("LOWER", Array[V2Expression](v)))
+    case StringTranslate(str, matching, replace) =>
+      val s = generateExpression(str)
+      val m = generateExpression(matching)
+      val r = generateExpression(replace)
+      if (s.isDefined && m.isDefined && r.isDefined) {
+        Some(new GeneralScalarExpression("TRANSLATE",
+          Array[V2Expression](s.get, m.get, r.get)))
+      } else {
+        None
+      }
+    case StringTrim(str, trim) =>
+      val s = generateExpression(str)
+      if (trim.isDefined) {
+        trim.flatMap(generateExpression(_)).map { t =>
+          new GeneralScalarExpression("TRIM", Array[V2Expression](s.get, t))
+        }
+      } else {
+        Some(new GeneralScalarExpression("TRIM", Array[V2Expression](s.get)))
+      }
+    case Overlay(input, replace, pos, len) =>
+      val i = generateExpression(input)
+      val r = generateExpression(replace)
+      val p = generateExpression(pos)
+      val l = generateExpression(len)
+      if (i.isDefined && r.isDefined && p.isDefined && l.isDefined) {
+        Some(new GeneralScalarExpression("OVERLAY",
+          Array[V2Expression](i.get, r.get, p.get, l.get)))
       } else {
         None
       }

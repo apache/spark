@@ -35,7 +35,7 @@ private object H2Dialect extends JdbcDialect {
   class H2SQLBuilder extends JDBCSQLBuilder {
     override def visitSQLFunction(funcName: String, inputs: Array[String]): String = {
       funcName match {
-        case "WIDTH_BUCKET" =>
+        case "WIDTH_BUCKET" | "OVERLAY" =>
           val functionInfo = super.visitSQLFunction(funcName, inputs)
           throw QueryCompilationErrors.noSuchFunctionError("H2", functionInfo)
         case _ => super.visitSQLFunction(funcName, inputs)

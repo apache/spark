@@ -102,6 +102,12 @@ public class V2ExpressionSQLBuilder {
         case "FLOOR":
         case "CEIL":
         case "WIDTH_BUCKET":
+        case "SUBSTRING":
+        case "UPPER":
+        case "LOWER":
+        case "TRANSLATE":
+        case "TRIM":
+        case "OVERLAY":
           return visitSQLFunction(name,
             Arrays.stream(e.children()).map(c -> build(c)).toArray(String[]::new));
         case "CASE_WHEN": {
@@ -227,5 +233,14 @@ public class V2ExpressionSQLBuilder {
 
   protected String visitUnexpectedExpr(Expression expr) throws IllegalArgumentException {
     throw new IllegalArgumentException("Unexpected V2 expression: " + expr);
+  }
+
+  protected String visitLike(String name, String l, String r, char escape) throws IllegalArgumentException {
+    switch (escape) {
+      case '\\' :
+        return l + " " + name + " " + r;
+      default:
+        return l + " " + name + " " + r + " ESCAPE " + escape;
+    }
   }
 }

@@ -626,6 +626,34 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
     }
   }
 
+  test("scan with filter push-down with string functions") {
+    val df1 = sql("select * FROM h2.test.employee where " +
+      "substr(name, 2, 1) = 'e'" +
+      " AND upper(name) = 'JEN' AND lower(name) = 'jen' ")
+    checkFiltersRemoved(df1)
+    val expectedPlanFragment1 =
+      "PushedFilters: [NAME IS NOT NULL, (SUBSTRING(NAME, 2, 1)) = 'e', " +
+      "UPPER(NAME) = 'JEN', LOWER(NAME) = 'jen']"
+    checkPushedInfo(df1, expectedPlanFragment1)
+    checkAnswer(df1, Seq(Row(6, "jen", 12000, 1200, true)))
+
+    val df2 = sql("select * FROM h2.test.employee where " +
+      "trim(name) = 'jen'" +
+      "AND translate(name, 'e', 1) = 'j1n'")
+    checkFiltersRemoved(df2)
+    val expectedPlanFragment2 =
+      "PushedFilters: [NAME IS NOT NULL, TRIM(NAME) = 'jen', " +
+      "(TRANSLATE(NAME, 'e', '1')) = 'j1n']"
+    checkPushedInfo(df2, expectedPlanFragment2)
+    checkAnswer(df2, Seq(Row(6, "jen", 12000, 1200, true)))
+
+    // H2 does not support width_bucket
+    val df3 = sql("select * FROM h2.test.employee where(OVERLAY(NAME, '1', 2, -1)) = 'j1n'")
+    checkFiltersRemoved(df3, false)
+    checkPushedInfo(df3, "PushedFilters: [NAME IS NOT NULL]")
+    checkAnswer(df3, Seq(Row(6, "jen", 12000, 1200, true)))
+  }
+
   test("scan with aggregate push-down: MAX AVG with filter and group by") {
     val df = sql("select MAX(SaLaRY), AVG(BONUS) FROM h2.test.employee where dept > 0" +
       " group by DePt")

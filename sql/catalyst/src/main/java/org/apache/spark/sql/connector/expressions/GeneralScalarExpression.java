@@ -148,6 +148,42 @@ import org.apache.spark.sql.connector.util.V2ExpressionSQLBuilder;
  *    <li>Since version: 3.3.0</li>
  *   </ul>
  *  </li>
+ *  <li>Name: <code>SUBSTRING</code>
+ *   <ul>
+ *    <li>SQL semantic: <code>SUBSTRING(expr1, expr2, expr3)</code></li>
+ *    <li>Since version: 3.3.0</li>
+ *   </ul>
+ *  </li>
+ *  <li>Name: <code>UPPER</code>
+ *   <ul>
+ *    <li>SQL semantic: <code>UPPER(expr)</code></li>
+ *    <li>Since version: 3.3.0</li>
+ *   </ul>
+ *  </li>
+ *  <li>Name: <code>LOWER</code>
+ *   <ul>
+ *    <li>SQL semantic: <code>LOWER(expr)</code></li>
+ *    <li>Since version: 3.3.0</li>
+ *   </ul>
+ *  </li>
+ *  <li>Name: <code>TRANSLATE</code>
+ *   <ul>
+ *    <li>SQL semantic: <code>TRANSLATE(expr1, expr2, expr3)</code></li>
+ *    <li>Since version: 3.3.0</li>
+ *   </ul>
+ *  </li>
+ *  <li>Name: <code>TRIM</code>
+ *   <ul>
+ *    <li>SQL semantic: <code>TRIM(expr1, expr2)</code></li>
+ *    <li>Since version: 3.3.0</li>
+ *   </ul>
+ *  </li>
+ *  <li>Name: <code>OVERLAY</code>
+ *   <ul>
+ *    <li>SQL semantic: <code>OVERLAY(expr1, expr2, expr3, expr4)</code></li>
+ *    <li>Since version: 3.3.0</li>
+ *   </ul>
+ *  </li>
  * </ol>
  * Note: SQL semantic conforms ANSI standard, so some expressions are not supported when ANSI off,
  * including: add, subtract, multiply, divide, remainder, pmod.
