@@ -381,29 +381,42 @@ class QueryCompilationErrorsSuite
     }
   }
 
-  test("MISSING_COLUMN: SELECT distinct does not work correctly if order by missing attribute") {
+  test("MISSING_COLUMN: SELECT distinct does not work correctly " +
+    "if order by missing attribute") {
     checkAnswer(
-      sql("""select distinct struct.a, struct.b
-            |from (
-            |  select named_struct('a', 1, 'b', 2, 'c', 3) as struct
-            |  union all
-            |  select named_struct('a', 1, 'b', 2, 'c', 4) as struct) tmp
-            |order by a, b
-            |""".stripMargin),
-      Row(1, 2) :: Nil)
+      sql(
+        """select distinct struct.a, struct.b
+          |from (
+          |  select named_struct('a', 1, 'b', 2, 'c', 3) as struct
+          |  union all
+          |  select named_struct('a', 1, 'b', 2, 'c', 4) as struct) tmp
+          |order by a, b
+          |""".stripMargin), Row(1, 2) :: Nil)
 
-    val e = intercept[AnalysisException] {
-      sql("""select distinct struct.a, struct.b
+    checkErrorClass(
+      exception = intercept[AnalysisException] {
+        sql(
+          """select distinct struct.a, struct.b
             |from (
             |  select named_struct('a', 1, 'b', 2, 'c', 3) as struct
             |  union all
             |  select named_struct('a', 1, 'b', 2, 'c', 4) as struct) tmp
             |order by struct.a, struct.b
             |""".stripMargin)
-    }
-    assert(e.getErrorClass === "MISSING_COLUMN")
-    assert(e.message === "Column 'struct.a' does not exist. " +
-      "Did you mean one of the following? [a, b]")
+      },
+      errorClass = "MISSING_COLUMN",
+      msg = """Column 'struct.a' does not exist. """ +
+        """Did you mean one of the following? [a, b]; line 6 pos 9;
+          |'Sort ['struct.a ASC NULLS FIRST, 'struct.b ASC NULLS FIRST], true
+          |+- Distinct
+          |   +- Project [struct#14.a AS a#16, struct#14.b AS b#17]
+          |      +- SubqueryAlias tmp
+          |         +- Union false, false
+          |            :- Project [named_struct(a, 1, b, 2, c, 3) AS struct#14]
+          |            :  +- OneRowRelation
+          |            +- Project [named_struct(a, 1, b, 2, c, 4) AS struct#15]
+          |               +- OneRowRelation
+          |""".stripMargin)
   }
 
   test("MISSING_COLUMN - SPARK-21335: support un-aliased subquery") {
@@ -411,10 +424,20 @@ class QueryCompilationErrorsSuite
       Seq(1 -> "a").toDF("i", "j").createOrReplaceTempView("v")
       checkAnswer(sql("SELECT i from (SELECT i FROM v)"), Row(1))
 
-      val e = intercept[AnalysisException](sql("SELECT v.i from (SELECT i FROM v)"))
-      assert(e.getErrorClass === "MISSING_COLUMN")
-      assert(e.message === "Column 'v.i' does not exist. " +
-        "Did you mean one of the following? [__auto_generated_subquery_name.i]")
+      checkErrorClass(
+        exception = intercept[AnalysisException](sql("SELECT v.i from (SELECT i FROM v)")),
+        errorClass = "MISSING_COLUMN",
+        msg = """Column 'v.i' does not exist. Did you mean one of the following? """ +
+          """[__auto_generated_subquery_name.i]; line 1 pos 7;
+            |'Project ['v.i]
+            |+- SubqueryAlias __auto_generated_subquery_name
+            |   +- Project [i#7]
+            |      +- SubqueryAlias v
+            |         +- View (`v`, [i#7,j#8])
+            |            +- Project [_1#2 AS i#7, _2#3 AS j#8]
+            |               +- LocalRelation [_1#2, _2#3]
+            |""".stripMargin
+      )
 
       checkAnswer(sql("SELECT __auto_generated_subquery_name.i from (SELECT i FROM v)"), Row(1))
     }
