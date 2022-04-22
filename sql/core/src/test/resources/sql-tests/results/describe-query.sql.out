@@ -112,7 +112,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 
-Syntax error at or near 'desc_temp1'(line 1, pos 21)
+[PARSE_SYNTAX_ERROR] Syntax error at or near 'desc_temp1'(line 1, pos 21)
 
 == SQL ==
 DESCRIBE INSERT INTO desc_temp1 values (1, 'val1')
@@ -126,7 +126,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 
-Syntax error at or near 'desc_temp1'(line 1, pos 21)
+[PARSE_SYNTAX_ERROR] Syntax error at or near 'desc_temp1'(line 1, pos 21)
 
 == SQL ==
 DESCRIBE INSERT INTO desc_temp1 SELECT * FROM desc_temp2
@@ -143,7 +143,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 
-Syntax error at or near 'insert'(line 3, pos 5)
+[PARSE_SYNTAX_ERROR] Syntax error at or near 'insert'(line 3, pos 5)
 
 == SQL ==
 DESCRIBE

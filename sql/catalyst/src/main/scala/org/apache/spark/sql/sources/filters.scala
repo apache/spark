@@ -21,7 +21,7 @@ import org.apache.spark.annotation.{Evolving, Stable}
 import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.parseColumnPath
 import org.apache.spark.sql.connector.expressions.{FieldReference, LiteralValue}
-import org.apache.spark.sql.connector.expressions.filter.{AlwaysFalse => V2AlwaysFalse, AlwaysTrue => V2AlwaysTrue, Predicate}
+import org.apache.spark.sql.connector.expressions.filter.{AlwaysFalse => V2AlwaysFalse, AlwaysTrue => V2AlwaysTrue, And => V2And, Not => V2Not, Or => V2Or, Predicate}
 import org.apache.spark.sql.types.StringType
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -270,7 +270,7 @@ case class IsNotNull(attribute: String) extends Filter {
 @Stable
 case class And(left: Filter, right: Filter) extends Filter {
   override def references: Array[String] = left.references ++ right.references
-  override def toV2: Predicate = new Predicate("AND", Seq(left, right).map(_.toV2).toArray)
+  override def toV2: Predicate = new V2And(left.toV2, right.toV2)
 }
 
 /**
@@ -281,7 +281,7 @@ case class And(left: Filter, right: Filter) extends Filter {
 @Stable
 case class Or(left: Filter, right: Filter) extends Filter {
   override def references: Array[String] = left.references ++ right.references
-  override def toV2: Predicate = new Predicate("OR", Seq(left, right).map(_.toV2).toArray)
+  override def toV2: Predicate = new V2Or(left.toV2, right.toV2)
 }
 
 /**
@@ -292,7 +292,7 @@ case class Or(left: Filter, right: Filter) extends Filter {
 @Stable
 case class Not(child: Filter) extends Filter {
   override def references: Array[String] = child.references
-  override def toV2: Predicate = new Predicate("NOT", Array(child.toV2))
+  override def toV2: Predicate = new V2Not(child.toV2)
 }
 
 /**

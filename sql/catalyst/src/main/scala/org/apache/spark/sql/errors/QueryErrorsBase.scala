@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.errors
 
+import java.util.Locale
+
 import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.catalyst.util.quoteIdentifier
 import org.apache.spark.sql.types.{DataType, DoubleType, FloatType}
@@ -48,7 +50,7 @@ trait QueryErrorsBase {
 
   // Quote sql statements in error messages.
   def toSQLStmt(text: String): String = {
-    s"'$text'"
+    "\"" + text.toUpperCase(Locale.ROOT) + "\""
   }
 
   def toSQLId(parts: Seq[String]): String = {

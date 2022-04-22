@@ -22,7 +22,7 @@ import org.apache.spark.sql.catalyst.analysis.{AnsiTypeCoercion, MultiInstanceRe
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable}
 import org.apache.spark.sql.catalyst.catalog.CatalogTable.VIEW_STORING_ANALYZED_PLAN
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
+import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, TypedImperativeAggregate}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning, RangePartitioning, RoundRobinPartitioning, SinglePartition}
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
@@ -663,11 +663,14 @@ case class UnresolvedWith(
  *                                   predicates that have been pushed down into `child`. This is
  *                                   a temporary field used by optimization rules for CTE predicate
  *                                   pushdown to help ensure rule idempotency.
+ * @param underSubquery If true, it means we don't need to add a shuffle for this CTE relation as
+ *                      subquery reuse will be applied to reuse CTE relation output.
  */
 case class CTERelationDef(
     child: LogicalPlan,
     id: Long = CTERelationDef.newId,
-    originalPlanWithPredicates: Option[(LogicalPlan, Seq[Expression])] = None) extends UnaryNode {
+    originalPlanWithPredicates: Option[(LogicalPlan, Seq[Expression])] = None,
+    underSubquery: Boolean = false) extends UnaryNode {
 
   final override val nodePatterns: Seq[TreePattern] = Seq(CTE)
 
@@ -678,17 +681,19 @@ case class CTERelationDef(
 }
 
 object CTERelationDef {
-  private val curId = new java.util.concurrent.atomic.AtomicLong()
+  private[sql] val curId = new java.util.concurrent.atomic.AtomicLong()
   def newId: Long = curId.getAndIncrement()
 }
 
 /**
  * Represents the relation of a CTE reference.
- * @param cteId     The ID of the corresponding CTE definition.
- * @param _resolved Whether this reference is resolved.
- * @param output    The output attributes of this CTE reference, which can be different from
- *                  the output of its corresponding CTE definition after attribute de-duplication.
- * @param statsOpt  The optional statistics inferred from the corresponding CTE definition.
+ * @param cteId                The ID of the corresponding CTE definition.
+ * @param _resolved            Whether this reference is resolved.
+ * @param output               The output attributes of this CTE reference, which can be different
+ *                             from the output of its corresponding CTE definition after attribute
+ *                             de-duplication.
+ * @param statsOpt             The optional statistics inferred from the corresponding CTE
+ *                             definition.
  */
 case class CTERelationRef(
     cteId: Long,
@@ -1014,6 +1019,24 @@ case class Aggregate(
   }
 }
 
+object Aggregate {
+  def isAggregateBufferMutable(schema: StructType): Boolean = {
+    schema.forall(f => UnsafeRow.isMutable(f.dataType))
+  }
+
+  def supportsHashAggregate(aggregateBufferAttributes: Seq[Attribute]): Boolean = {
+    val aggregationBufferSchema = StructType.fromAttributes(aggregateBufferAttributes)
+    isAggregateBufferMutable(aggregationBufferSchema)
+  }
+
+  def supportsObjectHashAggregate(aggregateExpressions: Seq[AggregateExpression]): Boolean = {
+    aggregateExpressions.map(_.aggregateFunction).exists {
+      case _: TypedImperativeAggregate[_] => true
+      case _ => false
+    }
+  }
+}
+
 case class Window(
     windowExpressions: Seq[NamedExpression],
     partitionSpec: Seq[Expression],
@@ -1153,6 +1176,23 @@ case class Expand(
 }
 
 /**
+ * A logical offset, which may removing a specified number of rows from the beginning of the
+ * output of child logical plan.
+ */
+case class Offset(offsetExpr: Expression, child: LogicalPlan) extends OrderPreservingUnaryNode {
+  override def output: Seq[Attribute] = child.output
+  override def maxRows: Option[Long] = {
+    import scala.math.max
+    offsetExpr match {
+      case IntegerLiteral(offset) => child.maxRows.map { x => max(x - offset, 0) }
+      case _ => None
+    }
+  }
+  override protected def withNewChildInternal(newChild: LogicalPlan): Offset =
+    copy(child = newChild)
+}
+
+/**
  * A constructor for creating a pivot, which will later be converted to a [[Project]]
  * or an [[Aggregate]] during the query analysis.
  *
@@ -1260,6 +1300,37 @@ case class LocalLimit(limitExpr: Expression, child: LogicalPlan) extends OrderPr
   final override val nodePatterns: Seq[TreePattern] = Seq(LIMIT)
 
   override protected def withNewChildInternal(newChild: LogicalPlan): LocalLimit =
+    copy(child = newChild)
+}
+
+object LimitAndOffset {
+  def unapply(p: GlobalLimitAndOffset): Option[(Expression, Expression, LogicalPlan)] = {
+    p match {
+      case GlobalLimitAndOffset(le1, le2, LocalLimit(le3, child)) if le1.eval().asInstanceOf[Int]
+        + le2.eval().asInstanceOf[Int] == le3.eval().asInstanceOf[Int] =>
+        Some((le1, le2, child))
+      case _ => None
+    }
+  }
+}
+
+/**
+ * A global (coordinated) limit with offset. This operator can skip at most `offsetExpr` number and
+ * emit at most `limitExpr` number in total. For example, if we have LIMIT 10 OFFSET 5, we impose a
+ * total limit of 10 + 5 = 15 rows and then discard the first 5, leaving 10 rows remaining.
+ */
+case class GlobalLimitAndOffset(
+    limitExpr: Expression,
+    offsetExpr: Expression,
+    child: LogicalPlan) extends OrderPreservingUnaryNode {
+  override def output: Seq[Attribute] = child.output
+  override def maxRows: Option[Long] = {
+    limitExpr match {
+      case IntegerLiteral(limit) => Some(limit)
+      case _ => None
+    }
+  }
+  override protected def withNewChildInternal(newChild: LogicalPlan): GlobalLimitAndOffset =
     copy(child = newChild)
 }
 

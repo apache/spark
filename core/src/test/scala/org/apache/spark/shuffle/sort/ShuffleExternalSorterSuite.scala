@@ -110,7 +110,8 @@ class ShuffleExternalSorterSuite extends SparkFunSuite with LocalSparkContext wi
     val e = intercept[SparkOutOfMemoryError] {
       sorter.insertRecord(bytes, Platform.BYTE_ARRAY_OFFSET, 1, 0)
     }
-    assert(e.getMessage == "Unable to acquire 800 bytes of memory, got 400")
+    assert(e.getMessage ==
+      "[UNABLE_TO_ACQUIRE_MEMORY] Unable to acquire 800 bytes of memory, got 400")
     assert(e.getErrorClass == "UNABLE_TO_ACQUIRE_MEMORY")
     assert(e.getSqlState == null)
   }

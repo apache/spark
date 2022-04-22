@@ -125,7 +125,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 Cannot parse the data type: 
-Syntax error at or near 'InvalidType': extra input 'InvalidType'(line 1, pos 2)
+[PARSE_SYNTAX_ERROR] Syntax error at or near 'InvalidType': extra input 'InvalidType'(line 1, pos 2)
 
 == SQL ==
 a InvalidType
@@ -339,7 +339,7 @@ select from_json(
 struct<>
 -- !query output
 org.apache.spark.SparkUpgradeException
-You may get a different result due to the upgrading to Spark >= 3.0: Fail to parse '02-29' in the new parser. You can set spark.sql.legacy.timeParserPolicy to LEGACY to restore the behavior before Spark 3.0, or set to CORRECTED and treat it as an invalid datetime string.
+[INCONSISTENT_BEHAVIOR_CROSS_VERSION] You may get a different result due to the upgrading to Spark >= 3.0: Fail to parse '02-29' in the new parser. You can set spark.sql.legacy.timeParserPolicy to LEGACY to restore the behavior before Spark 3.0, or set to CORRECTED and treat it as an invalid datetime string.
 
 
 -- !query
@@ -351,7 +351,7 @@ select from_json(
 struct<>
 -- !query output
 org.apache.spark.SparkUpgradeException
-You may get a different result due to the upgrading to Spark >= 3.0: Fail to parse '02-29' in the new parser. You can set spark.sql.legacy.timeParserPolicy to LEGACY to restore the behavior before Spark 3.0, or set to CORRECTED and treat it as an invalid datetime string.
+[INCONSISTENT_BEHAVIOR_CROSS_VERSION] You may get a different result due to the upgrading to Spark >= 3.0: Fail to parse '02-29' in the new parser. You can set spark.sql.legacy.timeParserPolicy to LEGACY to restore the behavior before Spark 3.0, or set to CORRECTED and treat it as an invalid datetime string.
 
 
 -- !query
