@@ -139,7 +139,7 @@ case class RegrAvgY(
   group = "agg_funcs",
   since = "3.3.0")
 // scalastyle:on line.size.limit
-case class RegrR2(x: Expression, y: Expression) extends PearsonCorrelation(x, y, true) {
+case class RegrR2(y: Expression, x: Expression) extends PearsonCorrelation(y, x, true) {
   override def prettyName: String = "regr_r2"
   override val evaluateExpression: Expression = {
     val corr = ck / sqrt(xMk * yMk)
@@ -148,7 +148,7 @@ case class RegrR2(x: Expression, y: Expression) extends PearsonCorrelation(x, y,
   }
   override protected def withNewChildrenInternal(
       newLeft: Expression, newRight: Expression): RegrR2 =
-    this.copy(x = newLeft, y = newRight)
+    this.copy(y = newLeft, x = newRight)
 }
 
 // scalastyle:off line.size.limit
@@ -180,4 +180,29 @@ case class RegrSXX(
   override protected def withNewChildrenInternal(
       newLeft: Expression, newRight: Expression): RegrSXX =
     this.copy(left = newLeft, right = newRight)
+}
+
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = "_FUNC_(y, x) - Returns REGR_COUNT(y, x) * COVAR_POP(y, x) for non-null pairs in a group, where `y` is the dependent variable and `x` is the independent variable.",
+  examples = """
+    Examples:
+      > SELECT _FUNC_(y, x) FROM VALUES (1, 2), (2, 2), (2, 3), (2, 4) AS tab(y, x);
+       0.75
+      > SELECT _FUNC_(y, x) FROM VALUES (1, 2), (2, null), (2, 3), (2, 4) AS tab(y, x);
+       1.0
+      > SELECT _FUNC_(y, x) FROM VALUES (1, 2), (2, null), (null, 3), (2, 4) AS tab(y, x);
+       1.0
+  """,
+  group = "agg_funcs",
+  since = "3.4.0")
+// scalastyle:on line.size.limit
+case class RegrSXY(y: Expression, x: Expression) extends Covariance(y, x, true) {
+  override def prettyName: String = "regr_sxy"
+  override val evaluateExpression: Expression = {
+    If(n === 0.0, Literal.create(null, DoubleType), ck)
+  }
+  override protected def withNewChildrenInternal(
+      newLeft: Expression, newRight: Expression): RegrSXY =
+    this.copy(y = newLeft, x = newRight)
 }

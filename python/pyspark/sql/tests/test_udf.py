@@ -258,15 +258,16 @@ class UDFTests(ReusedSQLTestCase):
         def runWithJoinType(join_type, type_string):
             with self.assertRaisesRegex(
                 AnalysisException,
-                "Using PythonUDF in join condition of join type %s is not supported" % type_string,
+                """Using PythonUDF in join condition of join type "%s" is not supported"""
+                % type_string,
             ):
                 left.join(right, [f("a", "b"), left.a1 == right.b1], join_type).collect()
 
-        runWithJoinType("full", "FullOuter")
-        runWithJoinType("left", "LeftOuter")
-        runWithJoinType("right", "RightOuter")
-        runWithJoinType("leftanti", "LeftAnti")
-        runWithJoinType("leftsemi", "LeftSemi")
+        runWithJoinType("full", "FULL OUTER")
+        runWithJoinType("left", "LEFT OUTER")
+        runWithJoinType("right", "RIGHT OUTER")
+        runWithJoinType("leftanti", "LEFT ANTI")
+        runWithJoinType("leftsemi", "LEFT SEMI")
 
     def test_udf_as_join_condition(self):
         left = self.spark.createDataFrame([Row(a=1, a1=1, a2=1), Row(a=2, a1=2, a2=2)])
