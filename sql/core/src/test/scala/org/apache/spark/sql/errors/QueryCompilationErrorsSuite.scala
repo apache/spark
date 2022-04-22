@@ -364,6 +364,45 @@ class QueryCompilationErrorsSuite extends QueryTest with SharedSparkSession {
       }
     }
   }
+
+  test("INVALID_FUNCTION_ARGUMENTS: invalid function arguments") {
+    spark.udf.register("testFunc", (n: Int) => n.toString)
+    val e = intercept[AnalysisException](
+      sql(s"SELECT testFunc(123, 123) as value")
+    )
+    assert(e.getErrorClass === "INVALID_FUNCTION_ARGUMENTS")
+    assert(e.getSqlState === "22023")
+    assert(e.getMessage === "Invalid number of arguments for function testFunc. " +
+      "Expected: 1; Found: 2; line 1 pos 7")
+  }
+
+  test("INVALID_FUNCTION_ARGUMENTS: invalid function arguments number") {
+    val e = intercept[AnalysisException](
+      sql(s"SELECT to_timestamp_ntz()")
+    )
+    assert(e.getErrorClass === "INVALID_FUNCTION_ARGUMENTS")
+    assert(e.getSqlState === "22023")
+    assert(e.getMessage === "Invalid number of arguments for function to_timestamp_ntz. " +
+      "Expected: one of 1 and 2; Found: 0; line 1 pos 7")
+  }
+
+  test("INVALID_FUNCTION_ARGUMENTS: only accept one argument") {
+    val e = intercept[AnalysisException](
+      sql(s"SELECT int('1', '2')")
+    )
+    assert(e.getErrorClass === "INVALID_FUNCTION_ARGUMENTS")
+    assert(e.getSqlState === "22023")
+    assert(e.getMessage === "Invalid number of arguments for function int. " +
+      "It accepts only one argument; line 1 pos 7")
+  }
+
+  test("INVALID_FUNCTION_ARGUMENTS: only  one argument") {
+    val e = intercept[AnalysisException](
+      sql(s"SELECT approx_count_distinct(1,1) FROM VALUES (1), (1), (2), (2)").show(10)
+    )
+    assert(e.getErrorClass === "INVALID_FUNCTION_ARGUMENTS")
+    assert(e.getSqlState === "22023")
+  }
 }
 
 class MyCastToString extends SparkUserDefinedFunction(

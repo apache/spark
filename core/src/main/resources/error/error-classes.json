@@ -88,6 +88,10 @@
     "message" : [ "Index %s must be between 0 and the length of the ArrayData." ],
     "sqlState" : "22023"
   },
+  "INVALID_FUNCTION_ARGUMENTS": {
+    "message": [ "Invalid number of arguments for function %s. %s" ],
+    "sqlState" : "22023"
+  },
   "INTERNAL_ERROR" : {
     "message" : [ "%s" ]
   },

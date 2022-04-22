@@ -427,14 +427,17 @@ object QueryCompilationErrors extends QueryErrorsBase {
 
   def invalidFunctionArgumentsError(
       name: String, expectedInfo: String, actualNumber: Int): Throwable = {
-    new AnalysisException(s"Invalid number of arguments for function $name. " +
-      s"Expected: $expectedInfo; Found: $actualNumber")
+    new AnalysisException(
+      errorClass = "INVALID_FUNCTION_ARGUMENTS",
+      messageParameters = Array(name, s"Expected: $expectedInfo; Found: $actualNumber"))
   }
 
   def invalidFunctionArgumentNumberError(
       validParametersCount: Seq[Int], name: String, actualNumber: Int): Throwable = {
     if (validParametersCount.length == 0) {
-      new AnalysisException(s"Invalid arguments for function $name")
+      new AnalysisException(
+        errorClass = "INVALID_FUNCTION_ARGUMENTS",
+        messageParameters = Array(name, ""))
     } else {
       val expectedNumberOfParameters = if (validParametersCount.length == 1) {
         validParametersCount.head.toString
@@ -447,7 +450,9 @@ object QueryCompilationErrors extends QueryErrorsBase {
   }
 
   def functionAcceptsOnlyOneArgumentError(name: String): Throwable = {
-    new AnalysisException(s"Function $name accepts only one argument")
+    new AnalysisException(
+      errorClass = "INVALID_FUNCTION_ARGUMENTS",
+      messageParameters = Array(name, s"It accepts only one argument"))
   }
 
   def alterV2TableSetLocationWithPartitionNotSupportedError(): Throwable = {
@@ -751,7 +756,11 @@ object QueryCompilationErrors extends QueryErrorsBase {
   }
 
   def secondArgumentNotDoubleLiteralError(): Throwable = {
-    new AnalysisException("The second argument should be a double literal.")
+    new AnalysisException(
+      errorClass = "INVALID_FUNCTION_ARGUMENTS",
+      messageParameters = Array("approx_count_distinct",
+        "The second argument should be a double literal.")
+    )
   }
 
   def dataTypeUnsupportedByExtractValueError(
@@ -1464,7 +1473,8 @@ object QueryCompilationErrors extends QueryErrorsBase {
       unbound: UnboundFunction,
       arguments: Seq[Expression],
       unsupported: UnsupportedOperationException): Throwable = {
-    new AnalysisException(s"Function '${unbound.name}' cannot process " +
+    new AnalysisException(
+      s"Function '${unbound.name}' cannot process " +
       s"input: (${arguments.map(_.dataType.simpleString).mkString(", ")}): " +
       unsupported.getMessage, cause = Some(unsupported))
   }
