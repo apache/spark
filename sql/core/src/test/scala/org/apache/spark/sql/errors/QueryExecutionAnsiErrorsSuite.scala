@@ -78,7 +78,7 @@ class QueryExecutionAnsiErrorsSuite extends QueryTest with SharedSparkSession {
           |""".stripMargin)
   }
 
-  test("INVALID_ARRAY_INDEX") {
+  test("INVALID_ARRAY_INDEX: get element from array") {
     val e = intercept[SparkArrayIndexOutOfBoundsException] {
       sql("select array(1, 2, 3, 4, 5)[8]").collect()
     }
@@ -87,7 +87,7 @@ class QueryExecutionAnsiErrorsSuite extends QueryTest with SharedSparkSession {
       "If necessary set spark.sql.ansi.enabled to false to bypass this error.")
   }
 
-  test("INVALID_ARRAY_INDEX_IN_ELEMENT_AT") {
+  test("INVALID_ARRAY_INDEX_IN_ELEMENT_AT: element_at from array") {
     val e = intercept[SparkArrayIndexOutOfBoundsException] {
       sql("select element_at(array(1, 2, 3, 4, 5), 8)").collect()
     }
