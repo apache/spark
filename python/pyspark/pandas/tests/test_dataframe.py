@@ -5548,7 +5548,6 @@ class DataFrameTest(ComparisonTestBase, SQLTestUtils):
         self._test_corrwith(df_bool, df_bool.A)
         self._test_corrwith(df_bool, df_bool.B)
 
-    # the anchors of the input psdf and psobj should be the same
     def _test_corrwith(self, psdf, psobj):
         pdf = psdf.to_pandas()
         pobj = psobj.to_pandas()
