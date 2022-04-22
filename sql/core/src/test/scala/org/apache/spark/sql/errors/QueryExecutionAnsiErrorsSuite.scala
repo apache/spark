@@ -19,62 +19,66 @@ package org.apache.spark.sql.errors
 import org.apache.spark.{SparkArithmeticException, SparkConf, SparkDateTimeException}
 import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedSparkSession
 
 // Test suite for all the execution errors that requires enable ANSI SQL mode.
-class QueryExecutionAnsiErrorsSuite extends QueryTest with SharedSparkSession {
+class QueryExecutionAnsiErrorsSuite extends QueryTest with QueryErrorsSuiteBase {
   override def sparkConf: SparkConf = super.sparkConf.set(SQLConf.ANSI_ENABLED.key, "true")
 
   test("CAST_CAUSES_OVERFLOW: from timestamp to int") {
-    val e = intercept[SparkArithmeticException] {
-      sql("select CAST(TIMESTAMP '9999-12-31T12:13:14.56789Z' AS INT)").collect()
-    }
-    assert(e.getErrorClass === "CAST_CAUSES_OVERFLOW")
-    assert(e.getSqlState === "22005")
-    assert(e.getMessage === "Casting 253402258394567890L to INT causes overflow. " +
-      "To return NULL instead, use 'try_cast'. " +
-      "If necessary set spark.sql.ansi.enabled to false to bypass this error.")
+    checkErrorClass(
+      exception = intercept[SparkArithmeticException] {
+        sql("select CAST(TIMESTAMP '9999-12-31T12:13:14.56789Z' AS INT)").collect()
+      },
+      errorClass = "CAST_CAUSES_OVERFLOW",
+      msg =
+        "Casting 253402258394567890L to INT causes overflow. " +
+        "To return NULL instead, use 'try_cast'. " +
+        "If necessary set spark.sql.ansi.enabled to false to bypass this error.",
+      sqlState = Some("22005"))
   }
 
   test("DIVIDE_BY_ZERO: can't divide an integer by zero") {
-    val e = intercept[SparkArithmeticException] {
-      sql("select 6/0").collect()
-    }
-    assert(e.getErrorClass === "DIVIDE_BY_ZERO")
-    assert(e.getSqlState === "22012")
-    assert(e.getMessage ===
-      "divide by zero. To return NULL instead, use 'try_divide'. If necessary set " +
+    checkErrorClass(
+      exception = intercept[SparkArithmeticException] {
+        sql("select 6/0").collect()
+      },
+      errorClass = "DIVIDE_BY_ZERO",
+      msg =
+        "divide by zero. To return NULL instead, use 'try_divide'. If necessary set " +
         "spark.sql.ansi.enabled to false (except for ANSI interval type) to bypass this error." +
         """
           |== SQL(line 1, position 7) ==
           |select 6/0
           |       ^^^
-          |""".stripMargin)
+          |""".stripMargin,
+      sqlState = Some("22012"))
   }
 
   test("INVALID_FRACTION_OF_SECOND: in the function make_timestamp") {
-    val e = intercept[SparkDateTimeException] {
-      sql("select make_timestamp(2012, 11, 30, 9, 19, 60.66666666)").collect()
-    }
-    assert(e.getErrorClass === "INVALID_FRACTION_OF_SECOND")
-    assert(e.getSqlState === "22023")
-    assert(e.getMessage === "The fraction of sec must be zero. Valid range is [0, 60]. " +
-      "If necessary set spark.sql.ansi.enabled to false to bypass this error. ")
+    checkErrorClass(
+      exception = intercept[SparkDateTimeException] {
+        sql("select make_timestamp(2012, 11, 30, 9, 19, 60.66666666)").collect()
+      },
+      errorClass = "INVALID_FRACTION_OF_SECOND",
+      msg = "The fraction of sec must be zero. Valid range is [0, 60]. " +
+        "If necessary set spark.sql.ansi.enabled to false to bypass this error. ",
+      sqlState = Some("22023"))
   }
 
   test("CANNOT_CHANGE_DECIMAL_PRECISION: cast string to decimal") {
-    val e = intercept[SparkArithmeticException] {
-      sql("select CAST('66666666666666.666' AS DECIMAL(8, 1))").collect()
-    }
-    assert(e.getErrorClass === "CANNOT_CHANGE_DECIMAL_PRECISION")
-    assert(e.getSqlState === "22005")
-    assert(e.getMessage ===
-      "Decimal(expanded,66666666666666.666,17,3}) cannot be represented as Decimal(8, 1). " +
+    checkErrorClass(
+      exception = intercept[SparkArithmeticException] {
+        sql("select CAST('66666666666666.666' AS DECIMAL(8, 1))").collect()
+      },
+      errorClass = "CANNOT_CHANGE_DECIMAL_PRECISION",
+      msg =
+        "Decimal(expanded,66666666666666.666,17,3}) cannot be represented as Decimal(8, 1). " +
         "If necessary set spark.sql.ansi.enabled to false to bypass this error." +
         """
           |== SQL(line 1, position 7) ==
           |select CAST('66666666666666.666' AS DECIMAL(8, 1))
           |       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-          |""".stripMargin)
+          |""".stripMargin,
+      sqlState = Some("22005"))
   }
 }

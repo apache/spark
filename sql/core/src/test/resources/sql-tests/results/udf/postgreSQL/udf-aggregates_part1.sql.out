@@ -421,4 +421,4 @@ from tenk1 o
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Column 'o.unique1' does not exist. Did you mean one of the following? [i.unique1, i.unique2, i.hundred, i.even, i.four, i.stringu1, i.ten, i.odd, i.string4, i.stringu2, i.tenthous, i.twenty, i.two, i.thousand, i.fivethous, i.twothousand]; line 2 pos 67
+[MISSING_COLUMN] Column 'o.unique1' does not exist. Did you mean one of the following? [i.unique1, i.unique2, i.hundred, i.even, i.four, i.stringu1, i.ten, i.odd, i.string4, i.stringu2, i.tenthous, i.twenty, i.two, i.thousand, i.fivethous, i.twothousand]; line 2 pos 67

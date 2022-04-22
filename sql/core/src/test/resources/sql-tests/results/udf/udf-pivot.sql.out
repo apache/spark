@@ -232,7 +232,7 @@ PIVOT (
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Column 'year' does not exist. Did you mean one of the following? [__auto_generated_subquery_name.course, __auto_generated_subquery_name.earnings]; line 4 pos 0
+[MISSING_COLUMN] Column 'year' does not exist. Did you mean one of the following? [__auto_generated_subquery_name.course, __auto_generated_subquery_name.earnings]; line 4 pos 0
 
 
 -- !query
@@ -313,7 +313,7 @@ PIVOT (
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Invalid pivot value 'dotNET': value data type string does not match pivot column data type struct<course:string,year:int>
+[PIVOT_VALUE_DATA_TYPE_MISMATCH] Invalid pivot value 'dotNET': value data type string does not match pivot column data type struct<course:string,year:int>
 
 
 -- !query
@@ -326,7 +326,7 @@ PIVOT (
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Column 's' does not exist. Did you mean one of the following? [coursesales.year, coursesales.course, coursesales.earnings]; line 4 pos 15
+[MISSING_COLUMN] Column 's' does not exist. Did you mean one of the following? [coursesales.year, coursesales.course, coursesales.earnings]; line 4 pos 15
 
 
 -- !query
@@ -339,7 +339,7 @@ PIVOT (
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Literal expressions required for pivot values, found 'course#x'
+[NON_LITERAL_PIVOT_VALUES] Literal expressions required for pivot values, found 'course#x'
 
 
 -- !query
@@ -424,7 +424,7 @@ PIVOT (
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Invalid pivot column 'm#x'. Pivot columns must be comparable.
+[INCOMPARABLE_PIVOT_COLUMN] Invalid pivot column 'm#x'. Pivot columns must be comparable.
 
 
 -- !query
@@ -441,7 +441,7 @@ PIVOT (
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Invalid pivot column 'named_struct(course, course#x, m, m#x)'. Pivot columns must be comparable.
+[INCOMPARABLE_PIVOT_COLUMN] Invalid pivot column 'named_struct(course, course#x, m, m#x)'. Pivot columns must be comparable.
 
 
 -- !query

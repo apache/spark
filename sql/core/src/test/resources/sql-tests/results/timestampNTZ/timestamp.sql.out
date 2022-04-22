@@ -754,7 +754,7 @@ select unix_timestamp('22 05 2020 Friday', 'dd MM yyyy EEEEE')
 struct<>
 -- !query output
 org.apache.spark.SparkUpgradeException
-You may get a different result due to the upgrading to Spark >= 3.0: Fail to recognize 'dd MM yyyy EEEEE' pattern in the DateTimeFormatter. 1) You can set spark.sql.legacy.timeParserPolicy to LEGACY to restore the behavior before Spark 3.0. 2) You can form a valid datetime pattern with the guide from https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html
+[INCONSISTENT_BEHAVIOR_CROSS_VERSION] You may get a different result due to the upgrading to Spark >= 3.0: Fail to recognize 'dd MM yyyy EEEEE' pattern in the DateTimeFormatter. 1) You can set spark.sql.legacy.timeParserPolicy to LEGACY to restore the behavior before Spark 3.0. 2) You can form a valid datetime pattern with the guide from https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html
 
 
 -- !query
