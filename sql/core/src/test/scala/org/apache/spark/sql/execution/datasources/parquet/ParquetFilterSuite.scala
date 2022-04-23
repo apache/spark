@@ -81,7 +81,7 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
       datetimeRebaseSpec: RebaseSpec = RebaseSpec(LegacyBehaviorPolicy.CORRECTED)
     ): ParquetFilters =
     new ParquetFilters(schema, conf.parquetFilterPushDownDate, conf.parquetFilterPushDownTimestamp,
-      conf.parquetFilterPushDownDecimal, conf.parquetFilterPushDownStringStartWith,
+      conf.parquetFilterPushDownDecimal, conf.parquetFilterPushDownStringPredicate,
       conf.parquetFilterPushDownInFilterThreshold,
       caseSensitive.getOrElse(conf.caseSensitiveAnalysis),
       datetimeRebaseSpec)
@@ -1933,6 +1933,43 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
       checkAnswer(in, Seq())
       checkAnswer(notIn, Seq())
     }
+  }
+
+  private def testStringPredicateWithDictionaryFilter(
+      dataFrame: DataFrame, filter: String): Unit = {
+    Seq(true, false).foreach { enableDictionary =>
+      withTempPath { dir =>
+        val path = dir.getCanonicalPath
+        dataFrame.write
+          .option(ParquetOutputFormat.ENABLE_DICTIONARY, enableDictionary)
+          .parquet(path)
+        Seq(true, false).foreach { pushDown =>
+          withSQLConf(
+            SQLConf.PARQUET_FILTER_PUSHDOWN_STRING_PREDICATE_ENABLED.key -> pushDown.toString) {
+            val accu = new NumRowGroupsAcc
+            sparkContext.register(accu)
+
+            val df = spark.read.parquet(path).filter(filter)
+            df.foreachPartition((it: Iterator[Row]) => it.foreach(v => accu.add(0)))
+            if (enableDictionary && pushDown) {
+              assert(accu.value == 0)
+            } else {
+              assert(accu.value > 0)
+            }
+
+            AccumulatorContext.remove(accu.id)
+          }
+        }
+      }
+    }
+  }
+
+  test("filter pushdown - StringEndsWith/Contains") {
+    import testImplicits._
+    testStringPredicateWithDictionaryFilter(
+      spark.range(1024).map(t => (t % 10).toString).toDF(), "value like '%a'")
+    testStringPredicateWithDictionaryFilter(
+      spark.range(1024).map(t => (t % 10).toString).toDF(), "value like '%a%'")
   }
 }
 

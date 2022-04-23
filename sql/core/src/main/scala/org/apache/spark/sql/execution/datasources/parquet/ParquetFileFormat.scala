@@ -251,7 +251,7 @@ class ParquetFileFormat
     val pushDownDate = sqlConf.parquetFilterPushDownDate
     val pushDownTimestamp = sqlConf.parquetFilterPushDownTimestamp
     val pushDownDecimal = sqlConf.parquetFilterPushDownDecimal
-    val pushDownStringStartWith = sqlConf.parquetFilterPushDownStringStartWith
+    val pushDownStringPredicate = sqlConf.parquetFilterPushDownStringPredicate
     val pushDownInFilterThreshold = sqlConf.parquetFilterPushDownInFilterThreshold
     val isCaseSensitive = sqlConf.caseSensitiveAnalysis
     val parquetOptions = new ParquetOptions(options, sparkSession.sessionState.conf)
@@ -279,7 +279,7 @@ class ParquetFileFormat
           pushDownDate,
           pushDownTimestamp,
           pushDownDecimal,
-          pushDownStringStartWith,
+          pushDownStringPredicate,
           pushDownInFilterThreshold,
           isCaseSensitive,
           datetimeRebaseSpec)
