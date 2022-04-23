@@ -19,8 +19,6 @@ package org.apache.spark.sql.execution
 
 import java.util.concurrent.TimeUnit._
 
-import scala.collection.mutable.HashMap
-
 import org.apache.commons.lang3.StringUtils
 import org.apache.hadoop.fs.Path
 
