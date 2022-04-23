@@ -751,7 +751,8 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
       """
         |PushedAggregates: [SUM(SALARY)],
         |PushedFilters: [],
-        |PushedGroupByColumns: [CASE WHEN (SALARY > 8000.00) AND (SALARY < 10000.00) THEN SALARY ELSE 0.00 END],
+        |PushedGroupByColumns:
+        |[CASE WHEN (SALARY > 8000.00) AND (SALARY < 10000.00) THEN SALARY ELSE 0.00 END],
         |""".stripMargin.replaceAll("\n", " "))
     checkAnswer(df2, Seq(Row(0, 44000), Row(9000, 9000)))
 
@@ -768,7 +769,8 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
       """
         |PushedAggregates: [SUM(SALARY)],
         |PushedFilters: [],
-        |PushedGroupByColumns: [CASE WHEN (SALARY > 8000.00) AND (SALARY < 10000.00) THEN SALARY ELSE 0.00 END],
+        |PushedGroupByColumns:
+        |[CASE WHEN (SALARY > 8000.00) AND (SALARY < 10000.00) THEN SALARY ELSE 0.00 END],
         |""".stripMargin.replaceAll("\n", " "))
     checkAnswer(df3, Seq(Row(0, 44000), Row(9000, 9000)))
   }
