@@ -22,7 +22,7 @@ import java.util.Locale
 import test.org.apache.spark.sql.connector.JavaSimpleWritableDataSource
 
 import org.apache.spark.{SparkArithmeticException, SparkException, SparkIllegalStateException, SparkRuntimeException, SparkUnsupportedOperationException, SparkUpgradeException}
-import org.apache.spark.sql.{DataFrame, QueryTest}
+import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest}
 import org.apache.spark.sql.catalyst.util.BadRecordException
 import org.apache.spark.sql.connector.SimpleWritableDataSource
 import org.apache.spark.sql.execution.QueryExecutionException
@@ -161,7 +161,7 @@ class QueryExecutionErrorsSuite
       exception = e2,
       errorClass = "UNSUPPORTED_FEATURE",
       msg = "The feature is not supported: pivoting by the value" +
-        """ '[dotnet,Dummies]' of the column data type STRUCT<col1: STRING, training: STRING>.""",
+        """ '[dotnet,Dummies]' of the column data type "STRUCT<col1: STRING, training: STRING>".""",
       sqlState = Some("0A000"))
   }
 
@@ -262,8 +262,8 @@ class QueryExecutionErrorsSuite
         ArrowUtils.toArrowSchema(new StructType().add("value", TimestampType), null)
       },
       errorClass = "UNSUPPORTED_OPERATION",
-      msg = "The operation is not supported: " +
-        "TIMESTAMP must supply timeZoneId parameter while converting to the arrow timestamp type.")
+      msg = "The operation is not supported: \"TIMESTAMP\" must supply timeZoneId " +
+        "parameter while converting to the arrow timestamp type.")
   }
 
   test("UNSUPPORTED_OPERATION - SPARK-36346: can't read Timestamp as TimestampNTZ") {
@@ -276,7 +276,7 @@ class QueryExecutionErrorsSuite
           }.getCause.asInstanceOf[SparkUnsupportedOperationException],
           errorClass = "UNSUPPORTED_OPERATION",
           msg = "The operation is not supported: " +
-            "Unable to convert TIMESTAMP of Orc to data type TIMESTAMP_NTZ.")
+            "Unable to convert \"TIMESTAMP\" of Orc to data type \"TIMESTAMP_NTZ\".")
       }
     }
   }
@@ -291,7 +291,7 @@ class QueryExecutionErrorsSuite
           }.getCause.asInstanceOf[SparkUnsupportedOperationException],
           errorClass = "UNSUPPORTED_OPERATION",
           msg = "The operation is not supported: " +
-            "Unable to convert TIMESTAMP_NTZ of Orc to data type TIMESTAMP.")
+            "Unable to convert \"TIMESTAMP_NTZ\" of Orc to data type \"TIMESTAMP\".")
       }
     }
   }
@@ -397,5 +397,31 @@ class QueryExecutionErrorsSuite
       msg = "Failed to execute user defined function " +
         "\\(QueryExecutionErrorsSuite\\$\\$Lambda\\$\\d+/\\w+: \\(string, int\\) => string\\)",
       matchMsg = true)
+  }
+
+  test("INCOMPARABLE_PIVOT_COLUMN: an incomparable column of the map type") {
+    val e = intercept[AnalysisException] {
+      trainingSales
+      sql(
+        """
+          | select * from (
+          | select *,map(sales.course, sales.year) as map
+          | from trainingSales
+          | )
+          | pivot (
+          | sum(sales.earnings) as sum
+          | for map in (
+          | map("dotNET", 2012), map("JAVA", 2012),
+          | map("dotNet", 2013), map("Java", 2013)
+          | ))
+          |""".stripMargin).collect()
+    }
+    checkErrorClass(
+      exception = e,
+      errorClass = "INCOMPARABLE_PIVOT_COLUMN",
+      msg = "Invalid pivot column 'map.*\\'. Pivot columns must be comparable.",
+      sqlState = Some("42000"),
+      matchMsg = true
+    )
   }
 }

@@ -16,7 +16,7 @@
  */
 package org.apache.spark.sql.errors
 
-import org.apache.spark.{SparkArithmeticException, SparkConf, SparkDateTimeException}
+import org.apache.spark.{SparkArithmeticException, SparkArrayIndexOutOfBoundsException, SparkConf, SparkDateTimeException}
 import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.internal.SQLConf
 
@@ -31,7 +31,7 @@ class QueryExecutionAnsiErrorsSuite extends QueryTest with QueryErrorsSuiteBase 
       },
       errorClass = "CAST_CAUSES_OVERFLOW",
       msg =
-        "Casting 253402258394567890L to INT causes overflow. " +
+        "Casting 253402258394567890L to \"INT\" causes overflow. " +
         "To return NULL instead, use 'try_cast'. " +
         "If necessary set spark.sql.ansi.enabled to false to bypass this error.",
       sqlState = Some("22005"))
@@ -80,5 +80,28 @@ class QueryExecutionAnsiErrorsSuite extends QueryTest with QueryErrorsSuiteBase 
           |       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
           |""".stripMargin,
       sqlState = Some("22005"))
+  }
+
+  test("INVALID_ARRAY_INDEX: get element from array") {
+    checkErrorClass(
+      exception = intercept[SparkArrayIndexOutOfBoundsException] {
+        sql("select array(1, 2, 3, 4, 5)[8]").collect()
+      },
+      errorClass = "INVALID_ARRAY_INDEX",
+      msg = "Invalid index: 8, numElements: 5. " +
+        "If necessary set spark.sql.ansi.enabled to false to bypass this error."
+    )
+  }
+
+  test("INVALID_ARRAY_INDEX_IN_ELEMENT_AT: element_at from array") {
+    checkErrorClass(
+      exception = intercept[SparkArrayIndexOutOfBoundsException] {
+        sql("select element_at(array(1, 2, 3, 4, 5), 8)").collect()
+      },
+      errorClass = "INVALID_ARRAY_INDEX_IN_ELEMENT_AT",
+      msg = "Invalid index: 8, numElements: 5. " +
+        "To return NULL instead, use 'try_element_at'. " +
+        "If necessary set spark.sql.ansi.enabled to false to bypass this error."
+    )
   }
 }

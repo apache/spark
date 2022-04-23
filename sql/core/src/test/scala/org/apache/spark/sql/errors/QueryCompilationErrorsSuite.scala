@@ -44,7 +44,7 @@ class QueryCompilationErrorsSuite
       errorClass = "CANNOT_UP_CAST_DATATYPE",
       msg =
         s"""
-           |Cannot up cast b from BIGINT to INT.
+           |Cannot up cast b from "BIGINT" to "INT".
            |The type path of the target object is:
            |- field (class: "scala.Int", name: "b")
            |- root class: "org.apache.spark.sql.errors.StringIntClass"
@@ -61,7 +61,7 @@ class QueryCompilationErrorsSuite
       errorClass = "CANNOT_UP_CAST_DATATYPE",
       msg =
         s"""
-           |Cannot up cast b.`b` from DECIMAL(38,18) to BIGINT.
+           |Cannot up cast b.`b` from "DECIMAL(38,18)" to "BIGINT".
            |The type path of the target object is:
            |- field (class: "scala.Long", name: "b")
            |- field (class: "org.apache.spark.sql.errors.StringLongClass", name: "b")
@@ -378,6 +378,19 @@ class QueryCompilationErrorsSuite
           msg = s"""The operation "DESC PARTITION" is not allowed """ +
             s"on the view: `$viewName`")
       }
+    }
+  }
+
+  test("SECOND_FUNCTION_ARGUMENT_NOT_INTEGER: " +
+    "the second argument of 'date_add' function needs to be an integer") {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
+      checkErrorClass(
+        exception = intercept[AnalysisException] {
+          sql("select date_add('1982-08-15', 'x')").collect()
+        },
+        errorClass = "SECOND_FUNCTION_ARGUMENT_NOT_INTEGER",
+        msg = "The second argument of 'date_add' function needs to be an integer.",
+        sqlState = Some("22023"))
     }
   }
 
