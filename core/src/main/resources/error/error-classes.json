@@ -89,7 +89,7 @@
     "sqlState" : "22023"
   },
   "INVALID_FUNCTION_ARGUMENTS": {
-    "message": [ "Invalid %s of arguments for function %s. %s" ],
+    "message": [ "Invalid <invalidType> of arguments for function <functionName>. <message>" ],
     "sqlState" : "22023"
   },
   "INTERNAL_ERROR" : {
