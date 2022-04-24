@@ -42,7 +42,7 @@ class ShuffleDriverComponentsSuite
 
     sc = new SparkContext(testConf)
 
-    val out = sc.parallelize(Seq((1, "one"), (2, "two"), (3, "three")), 3)
+    sc.parallelize(Seq((1, "one"), (2, "two"), (3, "three")), 3)
       .groupByKey()
       .foreach { _ =>
         if (!TestShuffleExecutorComponentsInitialized.initialized.get()) {
