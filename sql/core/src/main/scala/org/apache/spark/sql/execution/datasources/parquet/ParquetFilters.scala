@@ -779,32 +779,30 @@ class ParquetFilters(
         }
 
       case sources.StringEndsWith(name, prefix)
-        if pushDownStringPredicate && canMakeFilterOn(name, prefix) =>
+          if pushDownStringPredicate && canMakeFilterOn(name, prefix) =>
         Option(prefix).map { v =>
           FilterApi.userDefined(binaryColumn(nameToParquetField(name).fieldNames),
             new UserDefinedPredicate[Binary] with Serializable {
-              private val strToBinary = Binary.fromReusedByteArray(v.getBytes)
+              private val suffixStr = UTF8String.fromBytes(v.getBytes)
               override def canDrop(statistics: Statistics[Binary]): Boolean = false
               override def inverseCanDrop(statistics: Statistics[Binary]): Boolean = false
               override def keep(value: Binary): Boolean = {
-                value != null && UTF8String.fromBytes(value.getBytes).endsWith(
-                  UTF8String.fromBytes(strToBinary.getBytes))
+                value != null && UTF8String.fromBytes(value.getBytes).endsWith(suffixStr)
               }
             }
           )
         }
 
       case sources.StringContains(name, value)
-        if pushDownStringPredicate && canMakeFilterOn(name, value) =>
+          if pushDownStringPredicate && canMakeFilterOn(name, value) =>
         Option(value).map { v =>
           FilterApi.userDefined(binaryColumn(nameToParquetField(name).fieldNames),
             new UserDefinedPredicate[Binary] with Serializable {
-              private val strToBinary = Binary.fromReusedByteArray(v.getBytes)
+              private val subStr = UTF8String.fromBytes(v.getBytes)
               override def canDrop(statistics: Statistics[Binary]): Boolean = false
               override def inverseCanDrop(statistics: Statistics[Binary]): Boolean = false
               override def keep(value: Binary): Boolean = {
-                value != null && UTF8String.fromBytes(value.getBytes).contains(
-                  UTF8String.fromBytes(strToBinary.getBytes))
+                value != null && UTF8String.fromBytes(value.getBytes).contains(subStr)
               }
             }
           )

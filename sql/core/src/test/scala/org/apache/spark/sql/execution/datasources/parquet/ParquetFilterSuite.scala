@@ -970,7 +970,12 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
     ))
 
     val parquetSchema = new SparkToParquetSchemaConverter(conf).convert(schema)
-    val parquetFilters = createParquetFilters(parquetSchema)
+    // Following tests are used to check one arm of AND/OR can't be pushed down,
+    // so we disable string predicate pushdown here
+    var parquetFilters: ParquetFilters = null
+    withSQLConf(SQLConf.PARQUET_FILTER_PUSHDOWN_STRING_PREDICATE_ENABLED.key -> "false") {
+      parquetFilters = createParquetFilters(parquetSchema)
+    }
     assertResult(Some(and(
       lt(intColumn("a"), 10: Integer),
       gt(doubleColumn("c"), 1.5: java.lang.Double)))
@@ -1114,7 +1119,12 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
     ))
 
     val parquetSchema = new SparkToParquetSchemaConverter(conf).convert(schema)
-    val parquetFilters = createParquetFilters(parquetSchema)
+    // Following tests are used to check one arm of AND/OR can't be pushed down,
+    // so we disable string predicate pushdown here
+    var parquetFilters: ParquetFilters = null
+    withSQLConf(SQLConf.PARQUET_FILTER_PUSHDOWN_STRING_PREDICATE_ENABLED.key -> "false") {
+      parquetFilters = createParquetFilters(parquetSchema)
+    }
     // Testing
     // case sources.Or(lhs, rhs) =>
     //   ...
@@ -1169,7 +1179,12 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
     ))
 
     val parquetSchema = new SparkToParquetSchemaConverter(conf).convert(schema)
-    val parquetFilters = createParquetFilters(parquetSchema)
+    // Following tests are used to check one arm of AND/OR can't be pushed down,
+    // so we disable string predicate pushdown here
+    var parquetFilters: ParquetFilters = null
+    withSQLConf(SQLConf.PARQUET_FILTER_PUSHDOWN_STRING_PREDICATE_ENABLED.key -> "false") {
+      parquetFilters = createParquetFilters(parquetSchema)
+    }
     assertResult(Seq(sources.And(sources.LessThan("a", 10), sources.GreaterThan("c", 1.5D)))) {
       parquetFilters.convertibleFilters(
         Seq(sources.And(

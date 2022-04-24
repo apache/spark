@@ -963,8 +963,8 @@ object SQLConf {
     buildConf("spark.sql.parquet.filterPushdown.stringPredicate")
       .doc("If true, enables Parquet filter push-down optimization for string predicate such " +
         "as startsWith/endsWith/contains function. This configuration only has an effect when " +
-        "'${PARQUET_FILTER_PUSHDOWN_ENABLED.key}' is enabled.")
-      .version("3.3.0")
+        s"'${PARQUET_FILTER_PUSHDOWN_ENABLED.key}' is enabled.")
+      .version("3.4.0")
       .internal()
       .fallbackConf(PARQUET_FILTER_PUSHDOWN_STRING_STARTSWITH_ENABLED)
 
