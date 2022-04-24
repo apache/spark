@@ -49,7 +49,7 @@ object ShuffleTestAccessor {
     resolver.registeredExecutorFile
   }
 
-  def shuffleServiceLocalDB(resolver: ExternalShuffleBlockResolver): DB = {
+  def shuffleServiceDB(resolver: ExternalShuffleBlockResolver): DB = {
     resolver.db
   }
 
