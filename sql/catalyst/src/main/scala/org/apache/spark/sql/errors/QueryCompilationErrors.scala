@@ -334,6 +334,21 @@ object QueryCompilationErrors extends QueryErrorsBase {
       "it cannot be used in aggregate functions")
   }
 
+  def nonBooleanFilterInAggregateError(): Throwable = {
+    new AnalysisException("FILTER expression is not of type boolean. " +
+      "It cannot be used in an aggregate function")
+  }
+
+  def aggregateInAggregateFilterError(): Throwable = {
+    new AnalysisException("FILTER expression contains aggregate. " +
+      "It cannot be used in an aggregate function")
+  }
+
+  def windowFunctionInAggregateFilterError(): Throwable = {
+    new AnalysisException("FILTER expression contains window function. " +
+      "It cannot be used in an aggregate function")
+  }
+
   def aliasNumberNotMatchColumnNumberError(
       columnSize: Int, outputSize: Int, t: TreeNode[_]): Throwable = {
     new AnalysisException("Number of column aliases does not match number of columns. " +

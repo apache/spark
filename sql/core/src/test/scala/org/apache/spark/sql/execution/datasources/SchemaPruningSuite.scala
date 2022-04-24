@@ -935,4 +935,106 @@ abstract class SchemaPruningSuite
       .count()
     assert(count == 0)
   }
+
+  testSchemaPruning("SPARK-38977: schema pruning with correlated EXISTS subquery") {
+
+    import testImplicits._
+
+    withTempView("ids", "first_names") {
+      val df1 = Seq(1, 2, 3).toDF("value")
+      df1.createOrReplaceTempView("ids")
+
+      val df2 = Seq("John", "Bob").toDF("value")
+      df2.createOrReplaceTempView("first_names")
+
+      val query = sql(
+        """SELECT name FROM contacts c
+          |WHERE
+          |  EXISTS (SELECT 1 FROM ids i WHERE i.value = c.id)
+          |  AND
+          |  EXISTS (SELECT 1 FROM first_names n WHERE c.name.first = n.value)
+          |""".stripMargin)
+
+      checkScan(query, "struct<id:int,name:struct<first:string,middle:string,last:string>>")
+
+      checkAnswer(query, Row(Row("John", "Y.", "Doe")) :: Nil)
+    }
+  }
+
+  testSchemaPruning("SPARK-38977: schema pruning with correlated NOT EXISTS subquery") {
+
+    import testImplicits._
+
+    withTempView("ids", "first_names") {
+      val df1 = Seq(1, 2, 3).toDF("value")
+      df1.createOrReplaceTempView("ids")
+
+      val df2 = Seq("John", "Bob").toDF("value")
+      df2.createOrReplaceTempView("first_names")
+
+      val query = sql(
+        """SELECT name FROM contacts c
+          |WHERE
+          |  NOT EXISTS (SELECT 1 FROM ids i WHERE i.value = c.id)
+          |  AND
+          |  NOT EXISTS (SELECT 1 FROM first_names n WHERE c.name.first = n.value)
+          |""".stripMargin)
+
+      checkScan(query, "struct<id:int,name:struct<first:string,middle:string,last:string>>")
+
+      checkAnswer(query, Row(Row("Jane", "X.", "Doe")) :: Nil)
+    }
+  }
+
+  testSchemaPruning("SPARK-38977: schema pruning with correlated IN subquery") {
+
+    import testImplicits._
+
+    withTempView("ids", "first_names") {
+      val df1 = Seq(1, 2, 3).toDF("value")
+      df1.createOrReplaceTempView("ids")
+
+      val df2 = Seq("John", "Bob").toDF("value")
+      df2.createOrReplaceTempView("first_names")
+
+      val query = sql(
+        """SELECT name FROM contacts c
+          |WHERE
+          |  id IN (SELECT * FROM ids i WHERE c.pets > i.value)
+          |  AND
+          |  name.first IN (SELECT * FROM first_names n WHERE c.name.last < n.value)
+          |""".stripMargin)
+
+      checkScan(query,
+        "struct<id:int,name:struct<first:string,middle:string,last:string>,pets:int>")
+
+      checkAnswer(query, Row(Row("John", "Y.", "Doe")) :: Nil)
+    }
+  }
+
+  testSchemaPruning("SPARK-38977: schema pruning with correlated NOT IN subquery") {
+
+    import testImplicits._
+
+    withTempView("ids", "first_names") {
+      val df1 = Seq(1, 2, 3).toDF("value")
+      df1.createOrReplaceTempView("ids")
+
+      val df2 = Seq("John", "Janet", "Jim", "Bob").toDF("value")
+      df2.createOrReplaceTempView("first_names")
+
+      val query = sql(
+        """SELECT name FROM contacts c
+          |WHERE
+          |  id NOT IN (SELECT * FROM ids i WHERE c.pets > i.value)
+          |  AND
+          |  name.first NOT IN (SELECT * FROM first_names n WHERE c.name.last > n.value)
+          |""".stripMargin)
+
+      checkScan(query,
+        "struct<id:int,name:struct<first:string,middle:string,last:string>,pets:int>")
+
+      checkAnswer(query, Row(Row("Jane", "X.", "Doe")) :: Nil)
+    }
+  }
 }

@@ -122,7 +122,7 @@ select interval 2 second * 'a'
 struct<>
 -- !query output
 org.apache.spark.SparkNumberFormatException
-Invalid input syntax for type DOUBLE: 'a'. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
+[INVALID_SYNTAX_FOR_CAST] Invalid input syntax for type "DOUBLE": 'a'. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
 == SQL(line 1, position 7) ==
 select interval 2 second * 'a'
        ^^^^^^^^^^^^^^^^^^^^^^^
@@ -134,7 +134,7 @@ select interval 2 second / 'a'
 struct<>
 -- !query output
 org.apache.spark.SparkNumberFormatException
-Invalid input syntax for type DOUBLE: 'a'. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
+[INVALID_SYNTAX_FOR_CAST] Invalid input syntax for type "DOUBLE": 'a'. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
 == SQL(line 1, position 7) ==
 select interval 2 second / 'a'
        ^^^^^^^^^^^^^^^^^^^^^^^
@@ -146,7 +146,7 @@ select interval 2 year * 'a'
 struct<>
 -- !query output
 org.apache.spark.SparkNumberFormatException
-Invalid input syntax for type DOUBLE: 'a'. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
+[INVALID_SYNTAX_FOR_CAST] Invalid input syntax for type "DOUBLE": 'a'. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
 == SQL(line 1, position 7) ==
 select interval 2 year * 'a'
        ^^^^^^^^^^^^^^^^^^^^^
@@ -158,7 +158,7 @@ select interval 2 year / 'a'
 struct<>
 -- !query output
 org.apache.spark.SparkNumberFormatException
-Invalid input syntax for type DOUBLE: 'a'. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
+[INVALID_SYNTAX_FOR_CAST] Invalid input syntax for type "DOUBLE": 'a'. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
 == SQL(line 1, position 7) ==
 select interval 2 year / 'a'
        ^^^^^^^^^^^^^^^^^^^^^
@@ -186,7 +186,7 @@ select 'a' * interval 2 second
 struct<>
 -- !query output
 org.apache.spark.SparkNumberFormatException
-Invalid input syntax for type DOUBLE: 'a'. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
+[INVALID_SYNTAX_FOR_CAST] Invalid input syntax for type "DOUBLE": 'a'. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
 == SQL(line 1, position 7) ==
 select 'a' * interval 2 second
        ^^^^^^^^^^^^^^^^^^^^^^^
@@ -198,7 +198,7 @@ select 'a' * interval 2 year
 struct<>
 -- !query output
 org.apache.spark.SparkNumberFormatException
-Invalid input syntax for type DOUBLE: 'a'. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
+[INVALID_SYNTAX_FOR_CAST] Invalid input syntax for type "DOUBLE": 'a'. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
 == SQL(line 1, position 7) ==
 select 'a' * interval 2 year
        ^^^^^^^^^^^^^^^^^^^^^
@@ -228,7 +228,7 @@ select interval '2 seconds' / 0
 struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
-divide by zero. To return NULL instead, use 'try_divide'. If necessary set spark.sql.ansi.enabled to false (except for ANSI interval type) to bypass this error.
+[DIVIDE_BY_ZERO] divide by zero. To return NULL instead, use 'try_divide'. If necessary set spark.sql.ansi.enabled to false (except for ANSI interval type) to bypass this error.
 == SQL(line 1, position 7) ==
 select interval '2 seconds' / 0
        ^^^^^^^^^^^^^^^^^^^^^^^^
@@ -264,7 +264,7 @@ select interval '2' year / 0
 struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
-divide by zero. To return NULL instead, use 'try_divide'. If necessary set spark.sql.ansi.enabled to false (except for ANSI interval type) to bypass this error.
+[DIVIDE_BY_ZERO] divide by zero. To return NULL instead, use 'try_divide'. If necessary set spark.sql.ansi.enabled to false (except for ANSI interval type) to bypass this error.
 == SQL(line 1, position 7) ==
 select interval '2' year / 0
        ^^^^^^^^^^^^^^^^^^^^^
@@ -664,7 +664,7 @@ select make_interval(0, 0, 0, 0, 0, 0, 1234567890123456789)
 struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
-Decimal(expanded,1234567890123456789,20,0}) cannot be represented as Decimal(18, 6). If necessary set spark.sql.ansi.enabled to false to bypass this error.
+[CANNOT_CHANGE_DECIMAL_PRECISION] Decimal(expanded,1234567890123456789,20,0}) cannot be represented as Decimal(18, 6). If necessary set spark.sql.ansi.enabled to false to bypass this error.
 == SQL(line 1, position 7) ==
 select make_interval(0, 0, 0, 0, 0, 0, 1234567890123456789)
        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -1370,7 +1370,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 
-Syntax error at or near 'day': extra input 'day'(line 1, pos 27)
+[PARSE_SYNTAX_ERROR] Syntax error at or near 'day': extra input 'day'(line 1, pos 27)
 
 == SQL ==
 select interval 30 day day day
@@ -1402,7 +1402,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 
-Syntax error at or near 'days': extra input 'days'(line 1, pos 29)
+[PARSE_SYNTAX_ERROR] Syntax error at or near 'days': extra input 'days'(line 1, pos 29)
 
 == SQL ==
 select interval 30 days days days
@@ -1516,7 +1516,7 @@ select '4 11:11' - interval '4 22:12' day to minute
 struct<>
 -- !query output
 java.time.DateTimeException
-Invalid input syntax for type TIMESTAMP: '4 11:11'. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
+Invalid input syntax for type "TIMESTAMP": '4 11:11'. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
 == SQL(line 1, position 7) ==
 select '4 11:11' - interval '4 22:12' day to minute
        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -1528,7 +1528,7 @@ select '4 12:12:12' + interval '4 22:12' day to minute
 struct<>
 -- !query output
 java.time.DateTimeException
-Invalid input syntax for type TIMESTAMP: '4 12:12:12'. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
+Invalid input syntax for type "TIMESTAMP": '4 12:12:12'. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
 == SQL(line 1, position 7) ==
 select '4 12:12:12' + interval '4 22:12' day to minute
        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -1566,7 +1566,7 @@ select str - interval '4 22:12' day to minute from interval_view
 struct<>
 -- !query output
 java.time.DateTimeException
-Invalid input syntax for type TIMESTAMP: '1'. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
+Invalid input syntax for type "TIMESTAMP": '1'. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
 == SQL(line 1, position 7) ==
 select str - interval '4 22:12' day to minute from interval_view
        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -1578,7 +1578,7 @@ select str + interval '4 22:12' day to minute from interval_view
 struct<>
 -- !query output
 java.time.DateTimeException
-Invalid input syntax for type TIMESTAMP: '1'. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
+Invalid input syntax for type "TIMESTAMP": '1'. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
 == SQL(line 1, position 7) ==
 select str + interval '4 22:12' day to minute from interval_view
        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -1789,7 +1789,7 @@ select -(a) from values (interval '-2147483648 months', interval '2147483647 mon
 struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
-integer overflow. If necessary set spark.sql.ansi.enabled to false (except for ANSI interval type) to bypass this error.
+[ARITHMETIC_OVERFLOW] integer overflow. If necessary set spark.sql.ansi.enabled to false (except for ANSI interval type) to bypass this error.
 
 
 -- !query
@@ -1798,7 +1798,7 @@ select a - b from values (interval '-2147483648 months', interval '2147483647 mo
 struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
-integer overflow. If necessary set spark.sql.ansi.enabled to false (except for ANSI interval type) to bypass this error.
+[ARITHMETIC_OVERFLOW] integer overflow. If necessary set spark.sql.ansi.enabled to false (except for ANSI interval type) to bypass this error.
 
 
 -- !query
@@ -1807,7 +1807,7 @@ select b + interval '1 month' from values (interval '-2147483648 months', interv
 struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
-integer overflow. If necessary set spark.sql.ansi.enabled to false (except for ANSI interval type) to bypass this error.
+[ARITHMETIC_OVERFLOW] integer overflow. If necessary set spark.sql.ansi.enabled to false (except for ANSI interval type) to bypass this error.
 
 
 -- !query
@@ -2036,7 +2036,7 @@ SELECT (INTERVAL '-178956970-8' YEAR TO MONTH) / -1
 struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
-Overflow in integral divide. To return NULL instead, use 'try_divide'. If necessary set spark.sql.ansi.enabled to false (except for ANSI interval type) to bypass this error.
+[ARITHMETIC_OVERFLOW] Overflow in integral divide. To return NULL instead, use 'try_divide'. If necessary set spark.sql.ansi.enabled to false (except for ANSI interval type) to bypass this error.
 == SQL(line 1, position 7) ==
 SELECT (INTERVAL '-178956970-8' YEAR TO MONTH) / -1
        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -2048,7 +2048,7 @@ SELECT (INTERVAL '-178956970-8' YEAR TO MONTH) / -1L
 struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
-Overflow in integral divide. To return NULL instead, use 'try_divide'. If necessary set spark.sql.ansi.enabled to false (except for ANSI interval type) to bypass this error.
+[ARITHMETIC_OVERFLOW] Overflow in integral divide. To return NULL instead, use 'try_divide'. If necessary set spark.sql.ansi.enabled to false (except for ANSI interval type) to bypass this error.
 == SQL(line 1, position 7) ==
 SELECT (INTERVAL '-178956970-8' YEAR TO MONTH) / -1L
        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -2094,7 +2094,7 @@ SELECT (INTERVAL '-106751991 04:00:54.775808' DAY TO SECOND) / -1
 struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
-Overflow in integral divide. To return NULL instead, use 'try_divide'. If necessary set spark.sql.ansi.enabled to false (except for ANSI interval type) to bypass this error.
+[ARITHMETIC_OVERFLOW] Overflow in integral divide. To return NULL instead, use 'try_divide'. If necessary set spark.sql.ansi.enabled to false (except for ANSI interval type) to bypass this error.
 == SQL(line 1, position 7) ==
 SELECT (INTERVAL '-106751991 04:00:54.775808' DAY TO SECOND) / -1
        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -2106,7 +2106,7 @@ SELECT (INTERVAL '-106751991 04:00:54.775808' DAY TO SECOND) / -1L
 struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
-Overflow in integral divide. To return NULL instead, use 'try_divide'. If necessary set spark.sql.ansi.enabled to false (except for ANSI interval type) to bypass this error.
+[ARITHMETIC_OVERFLOW] Overflow in integral divide. To return NULL instead, use 'try_divide'. If necessary set spark.sql.ansi.enabled to false (except for ANSI interval type) to bypass this error.
 == SQL(line 1, position 7) ==
 SELECT (INTERVAL '-106751991 04:00:54.775808' DAY TO SECOND) / -1L
        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^

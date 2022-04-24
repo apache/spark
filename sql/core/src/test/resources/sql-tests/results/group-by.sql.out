@@ -187,7 +187,7 @@ SELECT a AS k, COUNT(non_existing) FROM testData GROUP BY k
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Column 'non_existing' does not exist. Did you mean one of the following? [testdata.a, testdata.b]; line 1 pos 21
+[MISSING_COLUMN] Column 'non_existing' does not exist. Did you mean one of the following? [testdata.a, testdata.b]; line 1 pos 21
 
 
 -- !query
@@ -231,7 +231,7 @@ SELECT a AS k, COUNT(b) FROM testData GROUP BY k
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Column 'k' does not exist. Did you mean one of the following? [testdata.a, testdata.b]; line 1 pos 47
+[MISSING_COLUMN] Column 'k' does not exist. Did you mean one of the following? [testdata.a, testdata.b]; line 1 pos 47
 
 
 -- !query

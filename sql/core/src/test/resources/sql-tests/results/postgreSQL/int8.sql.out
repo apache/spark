@@ -392,7 +392,7 @@ SELECT '' AS three, q1, q2, q1 * q2 AS multiply FROM INT8_TBL
 struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
-long overflow. If necessary set spark.sql.ansi.enabled to false (except for ANSI interval type) to bypass this error.
+[ARITHMETIC_OVERFLOW] long overflow. If necessary set spark.sql.ansi.enabled to false (except for ANSI interval type) to bypass this error.
 == SQL(line 1, position 28) ==
 SELECT '' AS three, q1, q2, q1 * q2 AS multiply FROM INT8_TBL
                             ^^^^^^^
@@ -575,7 +575,7 @@ select bigint('9223372036854775800') / bigint('0')
 struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
-divide by zero. To return NULL instead, use 'try_divide'. If necessary set spark.sql.ansi.enabled to false (except for ANSI interval type) to bypass this error.
+[DIVIDE_BY_ZERO] divide by zero. To return NULL instead, use 'try_divide'. If necessary set spark.sql.ansi.enabled to false (except for ANSI interval type) to bypass this error.
 == SQL(line 1, position 7) ==
 select bigint('9223372036854775800') / bigint('0')
        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -587,7 +587,7 @@ select bigint('-9223372036854775808') / smallint('0')
 struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
-divide by zero. To return NULL instead, use 'try_divide'. If necessary set spark.sql.ansi.enabled to false (except for ANSI interval type) to bypass this error.
+[DIVIDE_BY_ZERO] divide by zero. To return NULL instead, use 'try_divide'. If necessary set spark.sql.ansi.enabled to false (except for ANSI interval type) to bypass this error.
 == SQL(line 1, position 7) ==
 select bigint('-9223372036854775808') / smallint('0')
        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -599,7 +599,7 @@ select smallint('100') / bigint('0')
 struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
-divide by zero. To return NULL instead, use 'try_divide'. If necessary set spark.sql.ansi.enabled to false (except for ANSI interval type) to bypass this error.
+[DIVIDE_BY_ZERO] divide by zero. To return NULL instead, use 'try_divide'. If necessary set spark.sql.ansi.enabled to false (except for ANSI interval type) to bypass this error.
 == SQL(line 1, position 7) ==
 select smallint('100') / bigint('0')
        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -619,7 +619,7 @@ SELECT CAST(q1 AS int) FROM int8_tbl WHERE q2 <> 456
 struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
-Casting 4567890123456789L to INT causes overflow. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
+[CAST_CAUSES_OVERFLOW] Casting 4567890123456789L to "INT" causes overflow. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
 
 
 -- !query
@@ -636,7 +636,7 @@ SELECT CAST(q1 AS smallint) FROM int8_tbl WHERE q2 <> 456
 struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
-Casting 4567890123456789L to SMALLINT causes overflow. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
+[CAST_CAUSES_OVERFLOW] Casting 4567890123456789L to "SMALLINT" causes overflow. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
 
 
 -- !query
@@ -673,7 +673,7 @@ SELECT CAST(double('922337203685477580700.0') AS bigint)
 struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
-Casting 9.223372036854776E20D to BIGINT causes overflow. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
+[CAST_CAUSES_OVERFLOW] Casting 9.223372036854776E20D to "BIGINT" causes overflow. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
 
 
 -- !query
@@ -745,7 +745,7 @@ SELECT string(int(shiftleft(bigint(-1), 63))+1)
 struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
-Casting -9223372036854775808L to INT causes overflow. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
+[CAST_CAUSES_OVERFLOW] Casting -9223372036854775808L to "INT" causes overflow. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
 
 
 -- !query
@@ -754,7 +754,7 @@ SELECT bigint((-9223372036854775808)) * bigint((-1))
 struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
-long overflow. If necessary set spark.sql.ansi.enabled to false (except for ANSI interval type) to bypass this error.
+[ARITHMETIC_OVERFLOW] long overflow. If necessary set spark.sql.ansi.enabled to false (except for ANSI interval type) to bypass this error.
 == SQL(line 1, position 7) ==
 SELECT bigint((-9223372036854775808)) * bigint((-1))
        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -782,7 +782,7 @@ SELECT bigint((-9223372036854775808)) * int((-1))
 struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
-long overflow. If necessary set spark.sql.ansi.enabled to false (except for ANSI interval type) to bypass this error.
+[ARITHMETIC_OVERFLOW] long overflow. If necessary set spark.sql.ansi.enabled to false (except for ANSI interval type) to bypass this error.
 == SQL(line 1, position 7) ==
 SELECT bigint((-9223372036854775808)) * int((-1))
        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -810,7 +810,7 @@ SELECT bigint((-9223372036854775808)) * smallint((-1))
 struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
-long overflow. If necessary set spark.sql.ansi.enabled to false (except for ANSI interval type) to bypass this error.
+[ARITHMETIC_OVERFLOW] long overflow. If necessary set spark.sql.ansi.enabled to false (except for ANSI interval type) to bypass this error.
 == SQL(line 1, position 7) ==
 SELECT bigint((-9223372036854775808)) * smallint((-1))
        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^

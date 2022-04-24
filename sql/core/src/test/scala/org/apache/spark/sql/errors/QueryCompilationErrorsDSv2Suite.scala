@@ -19,13 +19,12 @@ package org.apache.spark.sql.errors
 
 import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest}
 import org.apache.spark.sql.connector.{DatasourceV2SQLBase, FakeV2Provider, InsertIntoSQLOnlyTests}
-import org.apache.spark.sql.test.SharedSparkSession
 
 class QueryCompilationErrorsDSv2Suite
   extends QueryTest
-  with SharedSparkSession
   with DatasourceV2SQLBase
-  with InsertIntoSQLOnlyTests {
+  with InsertIntoSQLOnlyTests
+  with QueryErrorsSuiteBase {
 
   private val v2Source = classOf[FakeV2Provider].getName
   override protected val v2Format = v2Source
@@ -51,10 +50,12 @@ class QueryCompilationErrorsDSv2Suite
         }
 
         checkAnswer(spark.table(tbl), spark.emptyDataFrame)
-        assert(e.getMessage === "The feature is not supported: " +
-          s""""IF NOT EXISTS" for the table `testcat`.`ns1`.`ns2`.`tbl` by "INSERT INTO".""")
-        assert(e.getErrorClass === "UNSUPPORTED_FEATURE")
-        assert(e.getSqlState === "0A000")
+        checkErrorClass(
+          exception = e,
+          errorClass = "UNSUPPORTED_FEATURE",
+          msg = "The feature is not supported: " +
+            s""""IF NOT EXISTS" for the table `testcat`.`ns1`.`ns2`.`tbl` by "INSERT INTO".""",
+          sqlState = Some("0A000"))
       }
     }
   }
@@ -69,8 +70,10 @@ class QueryCompilationErrorsDSv2Suite
       }
 
       verifyTable(t1, spark.emptyDataFrame)
-      assert(e.getMessage === "PARTITION clause cannot contain a non-partition column name: `id`")
-      assert(e.getErrorClass === "NON_PARTITION_COLUMN")
+      checkErrorClass(
+        exception = e,
+        errorClass = "NON_PARTITION_COLUMN",
+        msg = "PARTITION clause cannot contain a non-partition column name: `id`")
     }
   }
 
@@ -84,8 +87,10 @@ class QueryCompilationErrorsDSv2Suite
       }
 
       verifyTable(t1, spark.emptyDataFrame)
-      assert(e.getMessage === "PARTITION clause cannot contain a non-partition column name: `data`")
-      assert(e.getErrorClass === "NON_PARTITION_COLUMN")
+      checkErrorClass(
+        exception = e,
+        errorClass = "NON_PARTITION_COLUMN",
+        msg = "PARTITION clause cannot contain a non-partition column name: `data`")
     }
   }
 }

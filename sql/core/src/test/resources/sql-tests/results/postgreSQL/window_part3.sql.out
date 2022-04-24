@@ -72,7 +72,7 @@ insert into datetimes values
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-failed to evaluate expression CAST('11:00 BST' AS TIMESTAMP): Invalid input syntax for type TIMESTAMP: '11:00 BST'. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
+failed to evaluate expression CAST('11:00 BST' AS TIMESTAMP): Invalid input syntax for type "TIMESTAMP": '11:00 BST'. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
 == SQL(line 2, position 23) ==
 (1, timestamp '11:00', cast ('11:00 BST' as timestamp), cast ('1 year' as timestamp), ...
                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -333,7 +333,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 
-Syntax error at or near 'BY'(line 1, pos 33)
+[PARSE_SYNTAX_ERROR] Syntax error at or near 'BY'(line 1, pos 33)
 
 == SQL ==
 SELECT * FROM rank() OVER (ORDER BY random())
@@ -365,7 +365,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 
-Syntax error at or near 'BY': extra input 'BY'(line 1, pos 45)
+[PARSE_SYNTAX_ERROR] Syntax error at or near 'BY': extra input 'BY'(line 1, pos 45)
 
 == SQL ==
 select rank() OVER (PARTITION BY four, ORDER BY ten) FROM tenk1

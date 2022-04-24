@@ -176,29 +176,29 @@ abstract class AnsiCastSuiteBase extends CastSuiteBase {
     // cast to IntegerType
     Seq(IntegerType, ShortType, ByteType, LongType).foreach { dataType =>
       checkExceptionInExpression[NumberFormatException](cast("string", dataType),
-        s"Invalid input syntax for type ${dataType.sql}: 'string'")
+        s"""Invalid input syntax for type "${dataType.sql}": 'string'""")
       checkExceptionInExpression[NumberFormatException](cast("123-string", dataType),
-        s"Invalid input syntax for type ${dataType.sql}: '123-string'")
+        s"""Invalid input syntax for type "${dataType.sql}": '123-string'""")
       checkExceptionInExpression[NumberFormatException](cast("2020-07-19", dataType),
-        s"Invalid input syntax for type ${dataType.sql}: '2020-07-19'")
+        s"""Invalid input syntax for type "${dataType.sql}": '2020-07-19'""")
       checkExceptionInExpression[NumberFormatException](cast("1.23", dataType),
-        s"Invalid input syntax for type ${dataType.sql}: '1.23'")
+        s"""Invalid input syntax for type "${dataType.sql}": '1.23'""")
     }
 
     Seq(DoubleType, FloatType, DecimalType.USER_DEFAULT).foreach { dataType =>
       checkExceptionInExpression[NumberFormatException](cast("string", dataType),
-        s"Invalid input syntax for type ${dataType.sql}: 'string'")
+        s"""Invalid input syntax for type "${dataType.sql}": 'string'""")
       checkExceptionInExpression[NumberFormatException](cast("123.000.00", dataType),
-        s"Invalid input syntax for type ${dataType.sql}: '123.000.00'")
+        s"""Invalid input syntax for type "${dataType.sql}": '123.000.00'""")
       checkExceptionInExpression[NumberFormatException](cast("abc.com", dataType),
-        s"Invalid input syntax for type ${dataType.sql}: 'abc.com'")
+        s"""Invalid input syntax for type "${dataType.sql}": 'abc.com'""")
     }
   }
 
   protected def checkCastToNumericError(l: Literal, to: DataType,
       expectedDataTypeInErrorMsg: DataType, tryCastResult: Any): Unit = {
     checkExceptionInExpression[NumberFormatException](
-      cast(l, to), s"Invalid input syntax for type ${expectedDataTypeInErrorMsg.sql}: 'true'")
+      cast(l, to), s"""Invalid input syntax for type "${expectedDataTypeInErrorMsg.sql}": 'true'""")
   }
 
   test("cast from invalid string array to numeric array should throw NumberFormatException") {
@@ -245,7 +245,7 @@ abstract class AnsiCastSuiteBase extends CastSuiteBase {
 
     checkExceptionInExpression[NumberFormatException](
       cast("abcd", DecimalType(38, 1)),
-      s"Invalid input syntax for type ${DecimalType(38, 1).sql}: 'abcd'")
+      s"""Invalid input syntax for type "${DecimalType(38, 1).sql}": 'abcd'""")
   }
 
   protected def checkCastToBooleanError(l: Literal, to: DataType, tryCastResult: Any): Unit = {
@@ -260,7 +260,7 @@ abstract class AnsiCastSuiteBase extends CastSuiteBase {
 
   protected def checkCastToTimestampError(l: Literal, to: DataType): Unit = {
     checkExceptionInExpression[DateTimeException](
-      cast(l, to), s"Invalid input syntax for type TIMESTAMP: ${toSQLValue(l)}")
+      cast(l, to), s"""Invalid input syntax for type "TIMESTAMP": ${toSQLValue(l)}""")
   }
 
   test("cast from timestamp II") {
@@ -281,7 +281,7 @@ abstract class AnsiCastSuiteBase extends CastSuiteBase {
       assert(negativeTs.getTime < 0)
       Seq(ByteType, ShortType, IntegerType).foreach { dt =>
         checkExceptionInExpression[SparkArithmeticException](
-          cast(negativeTs, dt), s"to ${dt.sql} causes overflow")
+          cast(negativeTs, dt), s"""to "${dt.sql}" causes overflow""")
       }
     }
   }
@@ -292,7 +292,7 @@ abstract class AnsiCastSuiteBase extends CastSuiteBase {
       assert(negativeTs.getTime < 0)
       Seq(ByteType, ShortType, IntegerType).foreach { dt =>
         checkExceptionInExpression[SparkArithmeticException](
-          cast(negativeTs, dt), s"to ${dt.sql} causes overflow")
+          cast(negativeTs, dt), s"""to "${dt.sql}" causes overflow""")
       }
       val expectedSecs = Math.floorDiv(negativeTs.getTime, MILLIS_PER_SECOND)
       checkEvaluation(cast(negativeTs, LongType), expectedSecs)
@@ -371,7 +371,7 @@ abstract class AnsiCastSuiteBase extends CastSuiteBase {
       assert(ret.resolved == !isTryCast)
       if (!isTryCast) {
         checkExceptionInExpression[NumberFormatException](
-          ret, s"Invalid input syntax for type ${IntegerType.sql}")
+          ret, s"""Invalid input syntax for type "${IntegerType.sql}"""")
       }
     }
 
@@ -389,7 +389,7 @@ abstract class AnsiCastSuiteBase extends CastSuiteBase {
       assert(ret.resolved == !isTryCast)
       if (!isTryCast) {
         checkExceptionInExpression[NumberFormatException](
-          ret, s"Invalid input syntax for type ${IntegerType.sql}")
+          ret, s"""Invalid input syntax for type "${IntegerType.sql}"""")
       }
     }
   }
@@ -514,7 +514,7 @@ abstract class AnsiCastSuiteBase extends CastSuiteBase {
     assert(ret.resolved === !isTryCast)
     if (!isTryCast) {
       checkExceptionInExpression[NumberFormatException](
-        ret, s"Invalid input syntax for type ${IntegerType.sql}")
+        ret, s"""Invalid input syntax for type "${IntegerType.sql}"""")
     }
   }
 
@@ -523,7 +523,7 @@ abstract class AnsiCastSuiteBase extends CastSuiteBase {
       def checkCastWithParseError(str: String): Unit = {
         checkExceptionInExpression[DateTimeException](
           cast(Literal(str), TimestampType, Option(zid.getId)),
-          s"Invalid input syntax for type TIMESTAMP: '$str'")
+          s"""Invalid input syntax for type "TIMESTAMP": '$str'""")
       }
 
       checkCastWithParseError("123")
@@ -544,7 +544,7 @@ abstract class AnsiCastSuiteBase extends CastSuiteBase {
       def checkCastWithParseError(str: String): Unit = {
         checkExceptionInExpression[DateTimeException](
           cast(Literal(str), DateType, Option(zid.getId)),
-          s"Invalid input syntax for type DATE: '$str'")
+          s"""Invalid input syntax for type "DATE": '$str'""")
       }
 
       checkCastWithParseError("2015-13-18")
@@ -572,7 +572,7 @@ abstract class AnsiCastSuiteBase extends CastSuiteBase {
       "2021-06-17 00:00:00ABC").foreach { invalidInput =>
       checkExceptionInExpression[DateTimeException](
         cast(invalidInput, TimestampNTZType),
-        s"Invalid input syntax for type TIMESTAMP_NTZ: '$invalidInput'")
+        s"""Invalid input syntax for type "TIMESTAMP_NTZ": '$invalidInput'""")
     }
   }
 }
