@@ -20,7 +20,7 @@ package org.apache.spark.network.shuffledb;
 import java.io.IOException;
 import java.util.Map;
 
-public interface LocalDB {
+public interface DB {
     void put(byte[] key, byte[] value) throws RuntimeException;
     void delete(byte[] key) throws RuntimeException;
     void close() throws IOException;

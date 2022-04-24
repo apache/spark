@@ -21,19 +21,18 @@ import java.io.IOException;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.annotations.VisibleForTesting;
-import org.iq80.leveldb.DB;
 
-import org.apache.spark.network.shuffledb.LevelDBImpl;
-import org.apache.spark.network.shuffledb.LocalDB;
+import org.apache.spark.network.shuffledb.LevelDB;
+import org.apache.spark.network.shuffledb.DB;
 import org.apache.spark.network.shuffledb.StoreVersion;
 
-public class LocalDBProvider {
-    public static LocalDB initLocalDB(File dbFile, StoreVersion version, ObjectMapper mapper)
+public class DBProvider {
+    public static DB initDB(File dbFile, StoreVersion version, ObjectMapper mapper)
         throws IOException {
         if (dbFile != null) {
             if (dbFile.getName().endsWith(".ldb")) {
-                DB levelDB = LevelDBProvider.initLevelDB(dbFile, version, mapper);
-                return levelDB != null ? new LevelDBImpl(levelDB) : null;
+                org.iq80.leveldb.DB levelDB = LevelDBProvider.initLevelDB(dbFile, version, mapper);
+                return levelDB != null ? new LevelDB(levelDB) : null;
             } else {
                 return null;
             }
@@ -42,9 +41,9 @@ public class LocalDBProvider {
     }
 
     @VisibleForTesting
-    public static LocalDB initLocalDB(String dbKind, File file) throws IOException {
+    public static DB initDB(String dbKind, File file) throws IOException {
         if(dbKind.equals("ldb")) {
-            return new LevelDBImpl(LevelDBProvider.initLevelDB(file));
+            return new LevelDB(LevelDBProvider.initLevelDB(file));
         } else {
             return null;
         }

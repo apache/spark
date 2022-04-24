@@ -44,9 +44,9 @@ import org.apache.hadoop.yarn.api.records.ContainerId;
 import org.apache.hadoop.yarn.server.api.*;
 import org.apache.spark.network.shuffle.MergedShuffleFileManager;
 import org.apache.spark.network.shuffle.NoOpMergedShuffleFileManager;
-import org.apache.spark.network.shuffledb.LocalDB;
+import org.apache.spark.network.shuffledb.DB;
 import org.apache.spark.network.shuffledb.StoreVersion;
-import org.apache.spark.network.util.LocalDBProvider;
+import org.apache.spark.network.util.DBProvider;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -173,7 +173,7 @@ public class YarnShuffleService extends AuxiliaryService {
   @VisibleForTesting
   File secretsFile;
 
-  private LocalDB db;
+  private DB db;
 
   public YarnShuffleService() {
     // The name of the auxiliary service configured within the NodeManager
@@ -309,7 +309,7 @@ public class YarnShuffleService extends AuxiliaryService {
     FileSystem fs = FileSystem.getLocal(_conf);
     fs.mkdirs(new Path(secretsFile.getPath()), new FsPermission((short) 0700));
 
-    db = LocalDBProvider.initLocalDB(secretsFile, CURRENT_VERSION, mapper);
+    db = DBProvider.initDB(secretsFile, CURRENT_VERSION, mapper);
     logger.info("Recovery location is: " + secretsFile.getPath());
     if (db != null) {
       logger.info("Going to reload spark shuffle data");

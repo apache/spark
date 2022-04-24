@@ -46,9 +46,9 @@ import org.apache.spark.network.buffer.ManagedBuffer;
 import org.apache.spark.network.shuffle.checksum.Cause;
 import org.apache.spark.network.shuffle.checksum.ShuffleChecksumHelper;
 import org.apache.spark.network.shuffle.protocol.ExecutorShuffleInfo;
-import org.apache.spark.network.shuffledb.LocalDB;
+import org.apache.spark.network.shuffledb.DB;
 import org.apache.spark.network.shuffledb.StoreVersion;
-import org.apache.spark.network.util.LocalDBProvider;
+import org.apache.spark.network.util.DBProvider;
 import org.apache.spark.network.util.JavaUtils;
 import org.apache.spark.network.util.NettyUtils;
 import org.apache.spark.network.util.TransportConf;
@@ -91,7 +91,7 @@ public class ExternalShuffleBlockResolver {
   @VisibleForTesting
   final File registeredExecutorFile;
   @VisibleForTesting
-  final LocalDB db;
+  final DB db;
 
   public ExternalShuffleBlockResolver(TransportConf conf, File registeredExecutorFile)
       throws IOException {
@@ -122,7 +122,7 @@ public class ExternalShuffleBlockResolver {
       .weigher((Weigher<String, ShuffleIndexInformation>)
         (filePath, indexInfo) -> indexInfo.getRetainedMemorySize())
       .build(indexCacheLoader);
-    db = LocalDBProvider.initLocalDB(this.registeredExecutorFile, CURRENT_VERSION, mapper);
+    db = DBProvider.initDB(this.registeredExecutorFile, CURRENT_VERSION, mapper);
     if (db != null) {
       executors = reloadRegisteredExecutors(db);
     } else {
@@ -451,7 +451,7 @@ public class ExternalShuffleBlockResolver {
   }
 
   @VisibleForTesting
-  static ConcurrentMap<AppExecId, ExecutorShuffleInfo> reloadRegisteredExecutors(LocalDB db)
+  static ConcurrentMap<AppExecId, ExecutorShuffleInfo> reloadRegisteredExecutors(DB db)
       throws IOException {
     ConcurrentMap<AppExecId, ExecutorShuffleInfo> registeredExecutors = Maps.newConcurrentMap();
     if (db != null) {

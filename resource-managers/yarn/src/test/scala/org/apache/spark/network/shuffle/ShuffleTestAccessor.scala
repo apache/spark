@@ -23,8 +23,8 @@ import org.apache.hadoop.yarn.api.records.ApplicationId
 
 import org.apache.spark.network.shuffle.ExternalShuffleBlockResolver.AppExecId
 import org.apache.spark.network.shuffle.protocol.ExecutorShuffleInfo
-import org.apache.spark.network.shuffledb.LocalDB
-import org.apache.spark.network.util.LocalDBProvider
+import org.apache.spark.network.shuffledb.DB
+import org.apache.spark.network.util.DBProvider
 
 
 /**
@@ -49,21 +49,21 @@ object ShuffleTestAccessor {
     resolver.registeredExecutorFile
   }
 
-  def shuffleServiceLocalDB(resolver: ExternalShuffleBlockResolver): LocalDB = {
+  def shuffleServiceLocalDB(resolver: ExternalShuffleBlockResolver): DB = {
     resolver.db
   }
 
   def reloadRegisteredExecutors(
     dbKind: String,
     file: File): ConcurrentMap[ExternalShuffleBlockResolver.AppExecId, ExecutorShuffleInfo] = {
-    val db = LocalDBProvider.initLocalDB(dbKind, file);
+    val db = DBProvider.initDB(dbKind, file);
     val result = ExternalShuffleBlockResolver.reloadRegisteredExecutors(db)
     db.close()
     result
   }
 
   def reloadRegisteredExecutors(
-      db: LocalDB): ConcurrentMap[ExternalShuffleBlockResolver.AppExecId, ExecutorShuffleInfo] = {
+      db: DB): ConcurrentMap[ExternalShuffleBlockResolver.AppExecId, ExecutorShuffleInfo] = {
     ExternalShuffleBlockResolver.reloadRegisteredExecutors(db)
   }
 }

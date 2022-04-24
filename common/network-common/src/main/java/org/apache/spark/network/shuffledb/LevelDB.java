@@ -17,7 +17,6 @@
 
 package org.apache.spark.network.shuffledb;
 
-import org.iq80.leveldb.DB;
 import org.iq80.leveldb.DBIterator;
 
 import java.io.IOException;
@@ -25,10 +24,10 @@ import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.Map;
 
-public class LevelDBImpl implements LocalDB {
-    private DB db;
+public class LevelDB implements DB {
+    private org.iq80.leveldb.DB db;
 
-    public LevelDBImpl(DB db) {
+    public LevelDB(org.iq80.leveldb.DB db) {
         this.db = db;
     }
 
