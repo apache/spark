@@ -70,7 +70,7 @@ case class HyperLogLogPlusPlus(
   def this(child: Expression, relativeSD: Expression) = {
     this(
       child = child,
-      relativeSD = HyperLogLogPlusPlus.validateDoubleLiteral(relativeSD),
+      relativeSD = HyperLogLogPlusPlus.validateDoubleLiteral("approx_count_distinct", relativeSD),
       mutableAggBufferOffset = 0,
       inputAggBufferOffset = 0)
   }
@@ -144,10 +144,10 @@ case class HyperLogLogPlusPlus(
 }
 
 object HyperLogLogPlusPlus {
-  def validateDoubleLiteral(exp: Expression): Double = exp match {
+  def validateDoubleLiteral(name: String, exp: Expression): Double = exp match {
     case Literal(d: Double, DoubleType) => d
     case Literal(dec: Decimal, _) => dec.toDouble
     case _ =>
-      throw QueryCompilationErrors.secondArgumentNotDoubleLiteralError
+      throw QueryCompilationErrors.secondArgumentNotDoubleLiteralError(name)
   }
 }

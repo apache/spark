@@ -153,6 +153,9 @@ object FunctionRegistryBase {
         } catch {
           // the exception is an invocation exception. To get a meaningful message, we need the
           // cause.
+          case e: Exception if e.getCause.isInstanceOf[AnalysisException] =>
+            if (e.getCause.asInstanceOf[AnalysisException].errorClass.isDefined) throw e.getCause
+            else throw new AnalysisException(e.getCause.getMessage)
           case e: Exception => throw new AnalysisException(e.getCause.getMessage)
         }
       }

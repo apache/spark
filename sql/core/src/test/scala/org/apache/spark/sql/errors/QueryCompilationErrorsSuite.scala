@@ -17,13 +17,15 @@
 
 package org.apache.spark.sql.errors
 
-import org.apache.spark.sql.{AnalysisException, IntegratedUDFTestUtils, QueryTest, Row}
+import org.apache.spark.sql.{AnalysisException, IntegratedUDFTestUtils, Row}
 import org.apache.spark.sql.api.java.{UDF1, UDF2, UDF23Test}
+import org.apache.spark.sql.connector.DatasourceV2SQLBase
+import org.apache.spark.sql.connector.catalog.{Identifier, InMemoryCatalog}
+import org.apache.spark.sql.connector.catalog.functions.{BoundFunction, ScalarFunction, UnboundFunction}
 import org.apache.spark.sql.expressions.SparkUserDefinedFunction
 import org.apache.spark.sql.functions.{grouping, grouping_id, sum, udf}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{IntegerType, StringType}
+import org.apache.spark.sql.types.{DataType, DataTypes, IntegerType, StringType, StructType}
 
 case class StringLongClass(a: String, b: Long)
 
@@ -31,7 +33,7 @@ case class StringIntClass(a: String, b: Int)
 
 case class ComplexClass(a: Long, b: StringLongClass)
 
-class QueryCompilationErrorsSuite extends QueryTest with SharedSparkSession {
+class QueryCompilationErrorsSuite extends DatasourceV2SQLBase {
   import testImplicits._
 
   test("CANNOT_UP_CAST_DATATYPE: invalid upcast data type") {
@@ -365,7 +367,7 @@ class QueryCompilationErrorsSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("INVALID_FUNCTION_ARGUMENTS: invalid function arguments") {
+  test("INVALID_FUNCTION_ARGUMENTS: invalid number of the function arguments") {
     spark.udf.register("testFunc", (n: Int) => n.toString)
     val e = intercept[AnalysisException](
       sql(s"SELECT testFunc(123, 123) as value")
@@ -396,12 +398,53 @@ class QueryCompilationErrorsSuite extends QueryTest with SharedSparkSession {
       "It accepts only one argument; line 1 pos 7")
   }
 
-  test("INVALID_FUNCTION_ARGUMENTS: only  one argument") {
+  test("INVALID_FUNCTION_ARGUMENTS: invalid the second argument of the int type") {
     val e = intercept[AnalysisException](
-      sql(s"SELECT approx_count_distinct(1,1) FROM VALUES (1), (1), (2), (2)").show(10)
+      sql(s"SELECT approx_count_distinct(1,1)")
     )
     assert(e.getErrorClass === "INVALID_FUNCTION_ARGUMENTS")
     assert(e.getSqlState === "22023")
+    assert(e.getMessage === "Invalid type of arguments for function approx_count_distinct. " +
+      "The second argument should be a double literal; line 1 pos 7")
+  }
+
+  test("INVALID_FUNCTION_ARGUMENTS: cannot process function input of the map type") {
+    withSQLConf(SQLConf.DEFAULT_CATALOG.key -> "testcat") {
+      catalog("testcat").asInstanceOf[InMemoryCatalog]
+        .createFunction(Identifier.of(Array("ns"), "strlen"), new StrLen)
+      val e = intercept[AnalysisException](
+        sql("SELECT testcat.ns.strlen(map('abc', 'abc'))")
+      )
+      assert(e.getErrorClass === "INVALID_FUNCTION_ARGUMENTS")
+      assert(e.getSqlState === "22023")
+      assert(e.getMessage === "Invalid operation of arguments for function strlen. " +
+        "It cannot process input: (map<string,string>): Expect StringType, " +
+        "but found MapType(StringType,StringType,false); line 1 pos 7")
+    }
+  }
+
+  test("INVALID_FUNCTION_ARGUMENTS: invalid input type length of the v2Function") {
+    withSQLConf(SQLConf.DEFAULT_CATALOG.key -> "testcat") {
+      catalog("testcat").asInstanceOf[InMemoryCatalog]
+        .createFunction(Identifier.of(Array("ns"), "strlen"), new StrLen)
+      val e = intercept[AnalysisException](
+        sql("SELECT testcat.ns.strlen('abc','abc')")
+      )
+      assert(e.getErrorClass === "INVALID_FUNCTION_ARGUMENTS")
+      assert(e.getSqlState === "22023")
+      assert(e.getMessage === "Invalid number of arguments for function strlen. " +
+        "There are 2 arguments but 1 parameters returned from 'inputTypes()'; line 1 pos 7")
+    }
+  }
+
+  test("INVALID_FUNCTION_ARGUMENTS: invalid the second argument of the string type") {
+    val e = intercept[AnalysisException](
+      sql(s"SELECT first(1, '1')")
+    )
+    assert(e.getErrorClass === "INVALID_FUNCTION_ARGUMENTS")
+    assert(e.getSqlState === "22023")
+    assert(e.getMessage === "Invalid type of arguments for function first. " +
+      "The second argument should be a boolean literal; line 1 pos 7")
   }
 }
 
@@ -432,4 +475,25 @@ class MultiIntSum extends
       t11 + t12 + t13 + t14 + t15 + t16 + t17 + t18 + t19 + t20 + t21 + t22 + t23
   }
   // scalastyle:on argcount
+}
+
+class StrLen extends UnboundFunction {
+  override def bind(inputType: StructType): BoundFunction = {
+    for (field <- inputType.fields) {
+      if (!field.dataType.isInstanceOf[StringType]) {
+        throw new UnsupportedOperationException(
+          "Expect StringType, but found " + field.dataType)
+      }
+    }
+    new ScalarFunction[Int] {
+      override def inputTypes(): Array[DataType] = Array[DataType](StringType)
+      override def resultType(): DataType = DataTypes.IntegerType
+      override def name(): String = "strlen"
+      def invoke(str: String): Int = str.length
+    }
+  }
+
+  override def description(): String = "strlen(string) -> int"
+
+  override def name(): String = "strlen"
 }

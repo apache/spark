@@ -55,7 +55,8 @@ case class ApproxCountDistinctForIntervals(
     this(
       child = child,
       endpointsExpression = endpointsExpression,
-      relativeSD = HyperLogLogPlusPlus.validateDoubleLiteral(relativeSD),
+      relativeSD = HyperLogLogPlusPlus
+        .validateDoubleLiteral("ApproxCountDistinctForIntervals", relativeSD),
       mutableAggBufferOffset = 0,
       inputAggBufferOffset = 0)
   }

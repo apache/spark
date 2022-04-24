@@ -429,7 +429,7 @@ object QueryCompilationErrors extends QueryErrorsBase {
       name: String, expectedInfo: String, actualNumber: Int): Throwable = {
     new AnalysisException(
       errorClass = "INVALID_FUNCTION_ARGUMENTS",
-      messageParameters = Array(name, s"Expected: $expectedInfo; Found: $actualNumber"))
+      messageParameters = Array("number", name, s"Expected: $expectedInfo; Found: $actualNumber"))
   }
 
   def invalidFunctionArgumentNumberError(
@@ -437,7 +437,7 @@ object QueryCompilationErrors extends QueryErrorsBase {
     if (validParametersCount.length == 0) {
       new AnalysisException(
         errorClass = "INVALID_FUNCTION_ARGUMENTS",
-        messageParameters = Array(name, ""))
+        messageParameters = Array("number", name, ""))
     } else {
       val expectedNumberOfParameters = if (validParametersCount.length == 1) {
         validParametersCount.head.toString
@@ -452,7 +452,7 @@ object QueryCompilationErrors extends QueryErrorsBase {
   def functionAcceptsOnlyOneArgumentError(name: String): Throwable = {
     new AnalysisException(
       errorClass = "INVALID_FUNCTION_ARGUMENTS",
-      messageParameters = Array(name, s"It accepts only one argument"))
+      messageParameters = Array("number", name, s"It accepts only one argument"))
   }
 
   def alterV2TableSetLocationWithPartitionNotSupportedError(): Throwable = {
@@ -755,11 +755,10 @@ object QueryCompilationErrors extends QueryErrorsBase {
     new AnalysisException(s"Unsupported component type $clz in arrays")
   }
 
-  def secondArgumentNotDoubleLiteralError(): Throwable = {
+  def secondArgumentNotDoubleLiteralError(name: String): Throwable = {
     new AnalysisException(
       errorClass = "INVALID_FUNCTION_ARGUMENTS",
-      messageParameters = Array("approx_count_distinct",
-        "The second argument should be a double literal.")
+      messageParameters = Array("type", name, "The second argument should be a double literal")
     )
   }
 
@@ -1474,16 +1473,23 @@ object QueryCompilationErrors extends QueryErrorsBase {
       arguments: Seq[Expression],
       unsupported: UnsupportedOperationException): Throwable = {
     new AnalysisException(
-      s"Function '${unbound.name}' cannot process " +
-      s"input: (${arguments.map(_.dataType.simpleString).mkString(", ")}): " +
-      unsupported.getMessage, cause = Some(unsupported))
+      errorClass = "INVALID_FUNCTION_ARGUMENTS",
+      messageParameters = Array("operation", unbound.name,
+        s"It cannot process " +
+        s"input: (${arguments.map(_.dataType.simpleString).mkString(", ")}): " +
+          unsupported.getMessage),
+      cause = Some(unsupported))
   }
 
   def v2FunctionInvalidInputTypeLengthError(
       bound: BoundFunction,
       args: Seq[Expression]): Throwable = {
-    new AnalysisException(s"Invalid bound function '${bound.name()}: there are ${args.length} " +
-        s"arguments but ${bound.inputTypes().length} parameters returned from 'inputTypes()'")
+    new AnalysisException(
+      errorClass = "INVALID_FUNCTION_ARGUMENTS",
+      messageParameters = Array("number", bound.name(),
+        s"There are ${args.length} arguments " +
+          s"but ${bound.inputTypes().length} parameters returned from 'inputTypes()'")
+    )
   }
 
   def ambiguousRelationAliasNameInNestedCTEError(name: String): Throwable = {
@@ -1563,7 +1569,11 @@ object QueryCompilationErrors extends QueryErrorsBase {
   }
 
   def secondArgumentInFunctionIsNotBooleanLiteralError(funcName: String): Throwable = {
-    new AnalysisException(s"The second argument in $funcName should be a boolean literal.")
+    new AnalysisException(
+      errorClass = "INVALID_FUNCTION_ARGUMENTS",
+      messageParameters = Array("type", funcName,
+        "The second argument should be a boolean literal")
+    )
   }
 
   def joinConditionMissingOrTrivialError(
