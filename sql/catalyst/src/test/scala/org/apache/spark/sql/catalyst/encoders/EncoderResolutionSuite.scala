@@ -88,7 +88,7 @@ class EncoderResolutionSuite extends PlanTest {
     val attrs = Seq($"arr".array(StringType))
     assert(intercept[AnalysisException](encoder.resolveAndBind(attrs)).message ==
       s"""
-         |Cannot up cast array element from STRING to BIGINT.
+         |[CANNOT_UP_CAST_DATATYPE] Cannot up cast array element from "STRING" to "BIGINT".
          |The type path of the target object is:
          |- array element class: "scala.Long"
          |- field (class: "scala.Array", name: "arr")
@@ -212,7 +212,7 @@ class EncoderResolutionSuite extends PlanTest {
         val attrs = Seq(attr)
         assert(intercept[AnalysisException](encoder.resolveAndBind(attrs)).message ==
         s"""
-           |Cannot up cast a from ${attr.dataType.sql} to STRING.
+           |[CANNOT_UP_CAST_DATATYPE] Cannot up cast a from "${attr.dataType.sql}" to "STRING".
            |The type path of the target object is:
            |- root class: "java.lang.String"
            |You can either add an explicit cast to the input data or choose a higher precision type
@@ -226,7 +226,7 @@ class EncoderResolutionSuite extends PlanTest {
     }.message
     assert(msg1 ==
       s"""
-         |Cannot up cast b from BIGINT to INT.
+         |[CANNOT_UP_CAST_DATATYPE] Cannot up cast b from "BIGINT" to "INT".
          |The type path of the target object is:
          |- field (class: "scala.Int", name: "b")
          |- root class: "org.apache.spark.sql.catalyst.encoders.StringIntClass"
@@ -239,7 +239,7 @@ class EncoderResolutionSuite extends PlanTest {
     }.message
     assert(msg2 ==
       s"""
-         |Cannot up cast b.`b` from DECIMAL(38,18) to BIGINT.
+         |[CANNOT_UP_CAST_DATATYPE] Cannot up cast b.`b` from "DECIMAL(38,18)" to "BIGINT".
          |The type path of the target object is:
          |- field (class: "scala.Long", name: "b")
          |- field (class: "org.apache.spark.sql.catalyst.encoders.StringLongClass", name: "b")

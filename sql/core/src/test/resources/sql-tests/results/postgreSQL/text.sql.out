@@ -65,7 +65,7 @@ select string('four: ') || 2+2
 struct<>
 -- !query output
 org.apache.spark.SparkNumberFormatException
-Invalid input syntax for type BIGINT: 'four: 2'. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
+[INVALID_SYNTAX_FOR_CAST] Invalid input syntax for type "BIGINT": 'four: 2'. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
 == SQL(line 1, position 7) ==
 select string('four: ') || 2+2
        ^^^^^^^^^^^^^^^^^^^^^^^
@@ -77,7 +77,7 @@ select 'four: ' || 2+2
 struct<>
 -- !query output
 org.apache.spark.SparkNumberFormatException
-Invalid input syntax for type BIGINT: 'four: 2'. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
+[INVALID_SYNTAX_FOR_CAST] Invalid input syntax for type "BIGINT": 'four: 2'. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
 == SQL(line 1, position 7) ==
 select 'four: ' || 2+2
        ^^^^^^^^^^^^^^^
@@ -285,7 +285,7 @@ select format_string('%0$s', 'Hello')
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-The argument_index of string format cannot contain position 0$.; line 1 pos 7
+[ILLEGAL_SUBSTRING] The argument_index of string format cannot contain position 0$.; line 1 pos 7
 
 
 -- !query

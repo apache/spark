@@ -37,15 +37,25 @@ trait LimitExec extends UnaryExecNode {
 }
 
 /**
- * Take the first `limit` elements and collect them to a single partition.
+ * Take the first `limit` + `offset` elements and collect them to a single partition and then to
+ * drop the first `offset` elements.
  *
  * This operator will be used when a logical `Limit` operation is the final operator in an
  * logical plan, which happens when the user is collecting results back to the driver.
  */
-case class CollectLimitExec(limit: Int, child: SparkPlan) extends LimitExec {
+case class CollectLimitExec(
+    limit: Int, child: SparkPlan, offsetOpt: Option[Int] = None) extends LimitExec {
   override def output: Seq[Attribute] = child.output
   override def outputPartitioning: Partitioning = SinglePartition
-  override def executeCollect(): Array[InternalRow] = child.executeTake(limit)
+  override def executeCollect(): Array[InternalRow] = {
+    // Because CollectLimitExec collect all the output of child to a single partition, so we need
+    // collect the first `limit` + `offset` elements and then to drop the first `offset` elements.
+    // For example: limit is 1 and offset is 2 and the child output two partition.
+    // The first partition output [1, 2] and the Second partition output [3, 4, 5].
+    // Then [1, 2, 3] will be taken and output [3].
+    offsetOpt.map(offset => child.executeTake(limit + offset).drop(offset))
+      .getOrElse(child.executeTake(limit))
+  }
   private val serializer: Serializer = new UnsafeRowSerializer(child.output.size)
   private lazy val writeMetrics =
     SQLShuffleWriteMetricsReporter.createShuffleWriteMetrics(sparkContext)
@@ -60,7 +70,9 @@ case class CollectLimitExec(limit: Int, child: SparkPlan) extends LimitExec {
       val singlePartitionRDD = if (childRDD.getNumPartitions == 1) {
         childRDD
       } else {
-        val locallyLimited = childRDD.mapPartitionsInternal(_.take(limit))
+        val locallyLimited =
+          offsetOpt.map(offset => childRDD.mapPartitionsInternal(_.take(limit + offset)))
+            .getOrElse(childRDD.mapPartitionsInternal(_.take(limit)))
         new ShuffledRowRDD(
           ShuffleExchangeExec.prepareShuffleDependency(
             locallyLimited,
@@ -70,8 +82,16 @@ case class CollectLimitExec(limit: Int, child: SparkPlan) extends LimitExec {
             writeMetrics),
           readMetrics)
       }
-      singlePartitionRDD.mapPartitionsInternal(_.take(limit))
+      offsetOpt.map(offset => singlePartitionRDD.mapPartitionsInternal(_.drop(offset).take(limit)))
+        .getOrElse(singlePartitionRDD.mapPartitionsInternal(_.take(limit)))
     }
+  }
+
+  override def stringArgs: Iterator[Any] = {
+    super.stringArgs.zipWithIndex.filter {
+      case (0, 1) => false
+      case _ => true
+    }.map(_._1)
   }
 
   override protected def withNewChildInternal(newChild: SparkPlan): SparkPlan =
@@ -135,7 +155,7 @@ trait BaseLimitExec extends LimitExec with CodegenSupport {
   // to the parent operator.
   override def usedInputs: AttributeSet = AttributeSet.empty
 
-  private lazy val countTerm = BaseLimitExec.newLimitCountTerm()
+  protected lazy val countTerm = BaseLimitExec.newLimitCountTerm()
 
   override lazy val limitNotReachedChecks: Seq[String] = {
     s"$countTerm < $limit" +: super.limitNotReachedChecks
@@ -183,6 +203,43 @@ case class GlobalLimitExec(limit: Int, child: SparkPlan) extends BaseLimitExec {
 }
 
 /**
+ * Skip the first `offset` elements then take the first `limit` of the following elements in
+ * the child's single output partition.
+ */
+case class GlobalLimitAndOffsetExec(
+    limit: Int,
+    offset: Int,
+    child: SparkPlan) extends BaseLimitExec {
+
+  override def requiredChildDistribution: List[Distribution] = AllTuples :: Nil
+
+  override def doExecute(): RDD[InternalRow] = child.execute().mapPartitions { iter =>
+    iter.take(limit + offset).drop(offset)
+  }
+
+  private lazy val skipTerm = BaseLimitExec.newLimitCountTerm()
+
+  override def doConsume(ctx: CodegenContext, input: Seq[ExprCode], row: ExprCode): String = {
+    // The counter name is already obtained by the upstream operators via `limitNotReachedChecks`.
+    // Here we have to inline it to not change its name. This is fine as we won't have many limit
+    // operators in one query.
+    ctx.addMutableState(CodeGenerator.JAVA_INT, countTerm, forceInline = true, useFreshName = false)
+    ctx.addMutableState(CodeGenerator.JAVA_INT, skipTerm, forceInline = true, useFreshName = false)
+    s"""
+       | if ($skipTerm < $offset) {
+       |   $skipTerm += 1;
+       | } else if ($countTerm < $limit) {
+       |   $countTerm += 1;
+       |   ${consume(ctx, input)}
+       | }
+      """.stripMargin
+  }
+
+  override protected def withNewChildInternal(newChild: SparkPlan): SparkPlan =
+    copy(child = newChild)
+}
+
+/**
  * Take the first limit elements as defined by the sortOrder, and do projection if needed.
  * This is logically equivalent to having a Limit operator after a [[SortExec]] operator,
  * or having a [[ProjectExec]] operator between them.
@@ -193,7 +250,7 @@ case class TakeOrderedAndProjectExec(
     limit: Int,
     sortOrder: Seq[SortOrder],
     projectList: Seq[NamedExpression],
-    child: SparkPlan) extends UnaryExecNode {
+    child: SparkPlan, offsetOpt: Option[Int] = None) extends UnaryExecNode {
 
   override def output: Seq[Attribute] = {
     projectList.map(_.toAttribute)
@@ -201,7 +258,9 @@ case class TakeOrderedAndProjectExec(
 
   override def executeCollect(): Array[InternalRow] = {
     val ord = new LazilyGeneratedOrdering(sortOrder, child.output)
-    val data = child.execute().map(_.copy()).takeOrdered(limit)(ord)
+    val data = offsetOpt
+      .map(offset => child.execute().map(_.copy()).takeOrdered(limit + offset)(ord).drop(offset))
+      .getOrElse(child.execute().map(_.copy()).takeOrdered(limit)(ord))
     if (projectList != child.output) {
       val proj = UnsafeProjection.create(projectList, child.output)
       data.map(r => proj(r).copy())
@@ -227,9 +286,11 @@ case class TakeOrderedAndProjectExec(
       val singlePartitionRDD = if (childRDD.getNumPartitions == 1) {
         childRDD
       } else {
-        val localTopK = childRDD.mapPartitions { iter =>
+        val localTopK = offsetOpt.map(offset => childRDD.mapPartitions { iter =>
+          Utils.takeOrdered(iter.map(_.copy()), limit + offset)(ord)
+        }).getOrElse(childRDD.mapPartitions { iter =>
           Utils.takeOrdered(iter.map(_.copy()), limit)(ord)
-        }
+        })
         new ShuffledRowRDD(
           ShuffleExchangeExec.prepareShuffleDependency(
             localTopK,
@@ -240,7 +301,9 @@ case class TakeOrderedAndProjectExec(
           readMetrics)
       }
       singlePartitionRDD.mapPartitions { iter =>
-        val topK = Utils.takeOrdered(iter.map(_.copy()), limit)(ord)
+        val topK = offsetOpt
+          .map(offset => Utils.takeOrdered(iter.map(_.copy()), limit + offset)(ord).drop(offset))
+          .getOrElse(Utils.takeOrdered(iter.map(_.copy()), limit)(ord))
         if (projectList != child.output) {
           val proj = UnsafeProjection.create(projectList, child.output)
           topK.map(r => proj(r))
@@ -260,6 +323,13 @@ case class TakeOrderedAndProjectExec(
     val outputString = truncatedString(output, "[", ",", "]", maxFields)
 
     s"TakeOrderedAndProject(limit=$limit, orderBy=$orderByString, output=$outputString)"
+  }
+
+  override def stringArgs: Iterator[Any] = {
+    super.stringArgs.zipWithIndex.filter {
+      case (0, 1) => false
+      case _ => true
+    }.map(_._1)
   }
 
   override protected def withNewChildInternal(newChild: SparkPlan): SparkPlan =

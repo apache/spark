@@ -95,6 +95,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
         CollapseWindow,
         CombineFilters,
         EliminateLimits,
+        RewriteOffsets,
         CombineUnions,
         // Constant folding and strength reduction
         OptimizeRepartition,
@@ -1865,6 +1866,25 @@ object EliminateLimits extends Rule[LogicalPlan] {
       LocalLimit(Literal(Least(Seq(ne, le)).eval().asInstanceOf[Int]), grandChild)
     case Limit(le, Limit(ne, grandChild)) =>
       Limit(Literal(Least(Seq(ne, le)).eval().asInstanceOf[Int]), grandChild)
+  }
+}
+
+/**
+ * Rewrite [[Offset]] as [[GlobalLimitAndOffset]] or [[LocalLimit]],
+ * merging the expressions into one single expression. See [[Limit]] for more information
+ * about the difference between [[LocalLimit]] and [[GlobalLimit]].
+ */
+object RewriteOffsets extends Rule[LogicalPlan] {
+  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+    case GlobalLimit(le, Offset(oe, grandChild)) =>
+      GlobalLimitAndOffset(le, oe, grandChild)
+    case localLimit @ LocalLimit(le, Offset(oe, grandChild)) =>
+      val offset = oe.eval().asInstanceOf[Int]
+      if (offset == 0) {
+        localLimit.withNewChildren(Seq(grandChild))
+      } else {
+        Offset(oe, LocalLimit(Add(le, oe), grandChild))
+      }
   }
 }
 

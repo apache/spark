@@ -95,7 +95,8 @@ object QueryCompilationErrors extends QueryErrorsBase {
     new AnalysisException(
       errorClass = "UNSUPPORTED_FEATURE",
       messageParameters = Array(
-        s"IF NOT EXISTS for the table ${toSQLId(tableName)} by INSERT INTO."))
+        s"${toSQLStmt("IF NOT EXISTS")} for the table ${toSQLId(tableName)} " +
+        s"by ${toSQLStmt("INSERT INTO")}."))
   }
 
   def nonPartitionColError(partitionName: String): Throwable = {
@@ -331,6 +332,21 @@ object QueryCompilationErrors extends QueryErrorsBase {
   def nonDeterministicFilterInAggregateError(): Throwable = {
     new AnalysisException("FILTER expression is non-deterministic, " +
       "it cannot be used in aggregate functions")
+  }
+
+  def nonBooleanFilterInAggregateError(): Throwable = {
+    new AnalysisException("FILTER expression is not of type boolean. " +
+      "It cannot be used in an aggregate function")
+  }
+
+  def aggregateInAggregateFilterError(): Throwable = {
+    new AnalysisException("FILTER expression contains aggregate. " +
+      "It cannot be used in an aggregate function")
+  }
+
+  def windowFunctionInAggregateFilterError(): Throwable = {
+    new AnalysisException("FILTER expression contains window function. " +
+      "It cannot be used in an aggregate function")
   }
 
   def aliasNumberNotMatchColumnNumberError(
@@ -1573,7 +1589,8 @@ object QueryCompilationErrors extends QueryErrorsBase {
     new AnalysisException(
       errorClass = "UNSUPPORTED_FEATURE",
       messageParameters = Array(
-        s"Using PythonUDF in join condition of join type $joinType is not supported"))
+        "Using PythonUDF in join condition of join type " +
+        s"${toSQLStmt(joinType.sql)} is not supported."))
   }
 
   def conflictingAttributesInJoinConditionError(

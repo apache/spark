@@ -974,9 +974,10 @@ object SQLConf {
       .createWithDefault(10)
 
   val PARQUET_AGGREGATE_PUSHDOWN_ENABLED = buildConf("spark.sql.parquet.aggregatePushdown")
-    .doc("If true, MAX/MIN/COUNT without filter and group by will be pushed" +
-      " down to Parquet for optimization. MAX/MIN/COUNT for complex types and timestamp" +
-      " can't be pushed down")
+    .doc("If true, aggregates will be pushed down to Parquet for optimization. Support MIN, MAX " +
+      "and COUNT as aggregate expression. For MIN/MAX, support boolean, integer, float and date " +
+      "type. For COUNT, support all data types. If statistics is missing from any Parquet file " +
+      "footer, exception would be thrown.")
     .version("3.3.0")
     .booleanConf
     .createWithDefault(false)
@@ -1110,7 +1111,8 @@ object SQLConf {
   val ORC_AGGREGATE_PUSHDOWN_ENABLED = buildConf("spark.sql.orc.aggregatePushdown")
     .doc("If true, aggregates will be pushed down to ORC for optimization. Support MIN, MAX and " +
       "COUNT as aggregate expression. For MIN/MAX, support boolean, integer, float and date " +
-      "type. For COUNT, support all data types.")
+      "type. For COUNT, support all data types. If statistics is missing from any ORC file " +
+      "footer, exception would be thrown.")
     .version("3.3.0")
     .booleanConf
     .createWithDefault(false)
@@ -2877,6 +2879,7 @@ object SQLConf {
     .createWithDefault(false)
 
   val ANSI_STRICT_INDEX_OPERATOR = buildConf("spark.sql.ansi.strictIndexOperator")
+    .internal()
     .doc(s"When true and '${ANSI_ENABLED.key}' is true, accessing complex SQL types via [] " +
       "operator will throw an exception if array index is out of bound, or map key does not " +
       "exist. Otherwise, Spark will return a null result when accessing an invalid index.")

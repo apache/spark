@@ -36,6 +36,8 @@ def _unsupported_property(property_name, deprecated=False, reason="", cls="Index
 
 
 class MissingPandasLikeIndex:
+    # NOTE: Please update the document "Supported pandas APIs" when implementing the new API.
+    # Documentation path: `python/docs/source/user_guide/pandas_on_spark/supported_pandas_api.rst`.
 
     # Properties
     nbytes = _unsupported_property("nbytes")
@@ -78,6 +80,8 @@ class MissingPandasLikeIndex:
 
 
 class MissingPandasLikeDatetimeIndex(MissingPandasLikeIndex):
+    # NOTE: Please update the document "Supported pandas APIs" when implementing the new API.
+    # Documentation path: `python/docs/source/user_guide/pandas_on_spark/supported_pandas_api.rst`.
 
     # Properties
     nanosecond = _unsupported_property("nanosecond", cls="DatetimeIndex")
@@ -101,6 +105,8 @@ class MissingPandasLikeDatetimeIndex(MissingPandasLikeIndex):
 
 
 class MissingPandasLikeTimedeltaIndex(MissingPandasLikeIndex):
+    # NOTE: Please update the document "Supported pandas APIs" when implementing the new API.
+    # Documentation path: `python/docs/source/user_guide/pandas_on_spark/supported_pandas_api.rst`.
 
     # Properties
     nanoseconds = _unsupported_property("nanoseconds", cls="TimedeltaIndex")
@@ -116,6 +122,8 @@ class MissingPandasLikeTimedeltaIndex(MissingPandasLikeIndex):
 
 
 class MissingPandasLikeMultiIndex:
+    # NOTE: Please update the document "Supported pandas APIs" when implementing the new API.
+    # Documentation path: `python/docs/source/user_guide/pandas_on_spark/supported_pandas_api.rst`.
 
     # Functions
     argsort = _unsupported_function("argsort")
