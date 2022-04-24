@@ -17,9 +17,8 @@
 
 package org.apache.spark.sql.errors
 
-import org.apache.spark.sql.{AnalysisException, IntegratedUDFTestUtils, Row}
+import org.apache.spark.sql.{AnalysisException, IntegratedUDFTestUtils, QueryTest, Row}
 import org.apache.spark.sql.api.java.{UDF1, UDF2, UDF23Test}
-import org.apache.spark.sql.connector.DatasourceV2SQLBase
 import org.apache.spark.sql.connector.catalog.{Identifier, InMemoryCatalog}
 import org.apache.spark.sql.connector.catalog.functions.{BoundFunction, ScalarFunction, UnboundFunction}
 import org.apache.spark.sql.expressions.SparkUserDefinedFunction
@@ -34,7 +33,7 @@ case class StringIntClass(a: String, b: Int)
 case class ComplexClass(a: Long, b: StringLongClass)
 
 class QueryCompilationErrorsSuite
-  extends DatasourceV2SQLBase
+  extends QueryTest
   with QueryErrorsSuiteBase {
   import testImplicits._
 
@@ -415,82 +414,98 @@ class QueryCompilationErrorsSuite
 
   test("INVALID_FUNCTION_ARGUMENTS: invalid number of the function arguments") {
     spark.udf.register("testFunc", (n: Int) => n.toString)
-    val e = intercept[AnalysisException](
-      sql(s"SELECT testFunc(123, 123) as value")
+    checkErrorClass(
+      exception = intercept[AnalysisException](
+        sql(s"SELECT testFunc(123, 123) as value")
+      ),
+      errorClass = "INVALID_FUNCTION_ARGUMENTS",
+      msg = "Invalid number of arguments for function testFunc. " +
+        "Expected: 1; Found: 2; line 1 pos 7",
+      sqlState = Some("22023")
     )
-    assert(e.getErrorClass === "INVALID_FUNCTION_ARGUMENTS")
-    assert(e.getSqlState === "22023")
-    assert(e.getMessage === "Invalid number of arguments for function testFunc. " +
-      "Expected: 1; Found: 2; line 1 pos 7")
   }
 
   test("INVALID_FUNCTION_ARGUMENTS: invalid function arguments number") {
-    val e = intercept[AnalysisException](
-      sql(s"SELECT to_timestamp_ntz()")
+    checkErrorClass(
+      exception = intercept[AnalysisException](
+        sql(s"SELECT to_timestamp_ntz()")
+      ),
+      errorClass = "INVALID_FUNCTION_ARGUMENTS",
+      msg = "Invalid number of arguments for function to_timestamp_ntz. " +
+        "Expected: one of 1 and 2; Found: 0; line 1 pos 7",
+      sqlState = Some("22023")
     )
-    assert(e.getErrorClass === "INVALID_FUNCTION_ARGUMENTS")
-    assert(e.getSqlState === "22023")
-    assert(e.getMessage === "Invalid number of arguments for function to_timestamp_ntz. " +
-      "Expected: one of 1 and 2; Found: 0; line 1 pos 7")
   }
 
   test("INVALID_FUNCTION_ARGUMENTS: only accept one argument") {
-    val e = intercept[AnalysisException](
-      sql(s"SELECT int('1', '2')")
+    checkErrorClass(
+      exception = intercept[AnalysisException](
+        sql(s"SELECT int('1', '2')")
+      ),
+      errorClass = "INVALID_FUNCTION_ARGUMENTS",
+      msg = "Invalid number of arguments for function int. " +
+        "It accepts only one argument; line 1 pos 7",
+      sqlState = Some("22023")
     )
-    assert(e.getErrorClass === "INVALID_FUNCTION_ARGUMENTS")
-    assert(e.getSqlState === "22023")
-    assert(e.getMessage === "Invalid number of arguments for function int. " +
-      "It accepts only one argument; line 1 pos 7")
   }
 
   test("INVALID_FUNCTION_ARGUMENTS: invalid the second argument of the int type") {
-    val e = intercept[AnalysisException](
-      sql(s"SELECT approx_count_distinct(1,1)")
+    checkErrorClass(
+      exception = intercept[AnalysisException](
+        sql(s"SELECT approx_count_distinct(1,1)")
+      ),
+      errorClass = "INVALID_FUNCTION_ARGUMENTS",
+      msg = "Invalid type of arguments for function approx_count_distinct. " +
+        "The second argument should be a double literal; line 1 pos 7",
+      sqlState = Some("22023")
     )
-    assert(e.getErrorClass === "INVALID_FUNCTION_ARGUMENTS")
-    assert(e.getSqlState === "22023")
-    assert(e.getMessage === "Invalid type of arguments for function approx_count_distinct. " +
-      "The second argument should be a double literal; line 1 pos 7")
   }
 
   test("INVALID_FUNCTION_ARGUMENTS: cannot process function input of the map type") {
     withSQLConf(SQLConf.DEFAULT_CATALOG.key -> "testcat") {
-      catalog("testcat").asInstanceOf[InMemoryCatalog]
+      spark.sessionState.catalogManager.catalog("testcat")
+        .asInstanceOf[InMemoryCatalog]
         .createFunction(Identifier.of(Array("ns"), "strlen"), new StrLen)
-      val e = intercept[AnalysisException](
-        sql("SELECT testcat.ns.strlen(map('abc', 'abc'))")
+      checkErrorClass(
+        exception = intercept[AnalysisException](
+          sql("SELECT testcat.ns.strlen(map('abc', 'abc'))")
+        ),
+        errorClass = "INVALID_FUNCTION_ARGUMENTS",
+        msg = "Invalid operation of arguments for function strlen. " +
+          "It cannot process input: (\"MAP<STRING, STRING>\"): Expect StringType, " +
+          "but found MapType(StringType,StringType,false); line 1 pos 7",
+        sqlState = Some("22023")
       )
-      assert(e.getErrorClass === "INVALID_FUNCTION_ARGUMENTS")
-      assert(e.getSqlState === "22023")
-      assert(e.getMessage === "Invalid operation of arguments for function strlen. " +
-        "It cannot process input: (map<string,string>): Expect StringType, " +
-        "but found MapType(StringType,StringType,false); line 1 pos 7")
     }
   }
 
   test("INVALID_FUNCTION_ARGUMENTS: invalid input type length of the v2Function") {
     withSQLConf(SQLConf.DEFAULT_CATALOG.key -> "testcat") {
-      catalog("testcat").asInstanceOf[InMemoryCatalog]
+      spark.sessionState.catalogManager.catalog("testcat")
+      .asInstanceOf[InMemoryCatalog]
         .createFunction(Identifier.of(Array("ns"), "strlen"), new StrLen)
-      val e = intercept[AnalysisException](
-        sql("SELECT testcat.ns.strlen('abc','abc')")
+      checkErrorClass(
+        exception = intercept[AnalysisException](
+          sql("SELECT testcat.ns.strlen('abc','abc')")
+        ),
+        errorClass = "INVALID_FUNCTION_ARGUMENTS",
+        msg = "Invalid number of arguments for function strlen. " +
+          "There are 2 arguments but 1 parameters returned from 'inputTypes()'; line 1 pos 7",
+        sqlState = Some("22023")
       )
-      assert(e.getErrorClass === "INVALID_FUNCTION_ARGUMENTS")
-      assert(e.getSqlState === "22023")
-      assert(e.getMessage === "Invalid number of arguments for function strlen. " +
-        "There are 2 arguments but 1 parameters returned from 'inputTypes()'; line 1 pos 7")
     }
   }
 
   test("INVALID_FUNCTION_ARGUMENTS: invalid the second argument of the string type") {
-    val e = intercept[AnalysisException](
-      sql(s"SELECT first(1, '1')")
+    checkErrorClass(
+      exception = intercept[AnalysisException](
+        sql(s"SELECT first(1, '1')")
+      ),
+      errorClass = "INVALID_FUNCTION_ARGUMENTS",
+      msg = "Invalid type of arguments for function first. " +
+        "The second argument should be a boolean literal; line 1 pos 7",
+      sqlState = Some("22023")
     )
-    assert(e.getErrorClass === "INVALID_FUNCTION_ARGUMENTS")
-    assert(e.getSqlState === "22023")
-    assert(e.getMessage === "Invalid type of arguments for function first. " +
-      "The second argument should be a boolean literal; line 1 pos 7")
   }
 }
 

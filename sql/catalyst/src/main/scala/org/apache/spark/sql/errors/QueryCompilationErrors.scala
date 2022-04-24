@@ -773,7 +773,8 @@ object QueryCompilationErrors extends QueryErrorsBase {
   def secondArgumentNotDoubleLiteralError(name: String): Throwable = {
     new AnalysisException(
       errorClass = "INVALID_FUNCTION_ARGUMENTS",
-      messageParameters = Array("type", name, "The second argument should be a double literal")
+      messageParameters = Array("type", name,
+        "The second argument should be a double literal")
     )
   }
 
@@ -1491,7 +1492,7 @@ object QueryCompilationErrors extends QueryErrorsBase {
       errorClass = "INVALID_FUNCTION_ARGUMENTS",
       messageParameters = Array("operation", unbound.name,
         s"It cannot process " +
-        s"input: (${arguments.map(_.dataType.simpleString).mkString(", ")}): " +
+        s"input: (${arguments.map(x => toSQLType(x.dataType)).mkString(", ")}): " +
           unsupported.getMessage),
       cause = Some(unsupported))
   }
