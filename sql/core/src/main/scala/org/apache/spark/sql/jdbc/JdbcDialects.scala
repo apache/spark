@@ -251,6 +251,11 @@ abstract class JdbcDialect extends Serializable with Logging{
           s"${this.getClass.getSimpleName} does not support function: $funcName")
       }
     }
+
+    override def visitOverlay(inputs: Array[String]): String = {
+      throw new UnsupportedOperationException(
+        s"${this.getClass.getSimpleName} does not support function: OVERLAY")
+    }
   }
 
   /**
