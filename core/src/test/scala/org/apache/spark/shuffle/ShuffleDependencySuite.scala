@@ -48,7 +48,7 @@ class ShuffleDependencySuite extends SparkFunSuite with LocalSparkContext {
     assert(dep.mapSideCombine && dep.aggregator.isDefined, "Test requires map-side aggregation")
     assert(dep.keyClassName == classOf[KeyClass].getName)
     assert(dep.valueClassName == classOf[ValueClass].getName)
-    assert(dep.combinerClassName == Some(classOf[CombinerClass].getName))
+    assert(dep.combinerClassName.contains(classOf[CombinerClass].getName))
   }
 
   test("combineByKey null combiner class tag handled correctly") {
@@ -61,7 +61,7 @@ class ShuffleDependencySuite extends SparkFunSuite with LocalSparkContext {
     val dep = rdd.dependencies.head.asInstanceOf[ShuffleDependency[_, _, _]]
     assert(dep.keyClassName == classOf[KeyClass].getName)
     assert(dep.valueClassName == classOf[ValueClass].getName)
-    assert(dep.combinerClassName == None)
+    assert(dep.combinerClassName.isEmpty)
   }
 
 }
