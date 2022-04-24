@@ -778,12 +778,12 @@ class ParquetFilters(
           )
         }
 
-      case sources.StringEndsWith(name, prefix)
-          if pushDownStringPredicate && canMakeFilterOn(name, prefix) =>
-        Option(prefix).map { v =>
+      case sources.StringEndsWith(name, suffix)
+          if pushDownStringPredicate && canMakeFilterOn(name, suffix) =>
+        Option(suffix).map { v =>
           FilterApi.userDefined(binaryColumn(nameToParquetField(name).fieldNames),
             new UserDefinedPredicate[Binary] with Serializable {
-              private val suffixStr = UTF8String.fromBytes(v.getBytes)
+              private val suffixStr = UTF8String.fromString(v)
               override def canDrop(statistics: Statistics[Binary]): Boolean = false
               override def inverseCanDrop(statistics: Statistics[Binary]): Boolean = false
               override def keep(value: Binary): Boolean = {
@@ -798,7 +798,7 @@ class ParquetFilters(
         Option(value).map { v =>
           FilterApi.userDefined(binaryColumn(nameToParquetField(name).fieldNames),
             new UserDefinedPredicate[Binary] with Serializable {
-              private val subStr = UTF8String.fromBytes(v.getBytes)
+              private val subStr = UTF8String.fromString(v)
               override def canDrop(statistics: Statistics[Binary]): Boolean = false
               override def inverseCanDrop(statistics: Statistics[Binary]): Boolean = false
               override def keep(value: Binary): Boolean = {
