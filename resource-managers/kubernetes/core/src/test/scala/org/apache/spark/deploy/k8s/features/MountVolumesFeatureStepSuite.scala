@@ -18,8 +18,9 @@ package org.apache.spark.deploy.k8s.features
 
 import scala.collection.JavaConverters._
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.k8s._
+import org.apache.spark.internal.config.EXECUTOR_INSTANCES
 
 class MountVolumesFeatureStepSuite extends SparkFunSuite {
   test("Mounts hostPath volumes") {
@@ -146,6 +147,23 @@ class MountVolumesFeatureStepSuite extends SparkFunSuite {
     assert(executorPod.pod.getSpec.getVolumes.size() === 1)
     val executorPVC = executorPod.pod.getSpec.getVolumes.get(0).getPersistentVolumeClaim
     assert(executorPVC.getClaimName.endsWith("-exec-1-pvc-0"))
+  }
+
+  test("SPARK-39006 PVC claimName must be onDemand when multiple executors") {
+    val volumeConf = KubernetesVolumeSpec(
+      "testVolume",
+      "/tmp",
+      "",
+      mountReadOnly = true,
+      KubernetesPVCVolumeConf("testClaimName")
+    )
+    val conf = new SparkConf().set(EXECUTOR_INSTANCES, 2)
+    val executorConf =
+      KubernetesTestConf.createExecutorConf(sparkConf = conf, volumes = Seq(volumeConf))
+    val executorStep = new MountVolumesFeatureStep(executorConf)
+    assertThrows[IllegalArgumentException] {
+      executorStep.configurePod(SparkPod.initialPod())
+    }
   }
 
   test("Mounts emptyDir") {
