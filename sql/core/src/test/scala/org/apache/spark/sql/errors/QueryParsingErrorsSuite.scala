@@ -236,7 +236,7 @@ class QueryParsingErrorsSuite extends QueryTest with QueryErrorsSuiteBase {
       errorClass = "INVALID_SQL_SYNTAX",
       sqlState = "42000",
       message =
-        """Invalid SQL syntax: Invalid pattern in "SHOW FUNCTIONS": `f1`. It must be a STRING literal.(line 1, pos 21)
+        """Invalid SQL syntax: Invalid pattern in "SHOW FUNCTIONS": `f1`. It must be a "STRING" literal.(line 1, pos 21)
           |
           |== SQL ==
           |SHOW FUNCTIONS IN db f1
@@ -247,7 +247,7 @@ class QueryParsingErrorsSuite extends QueryTest with QueryErrorsSuiteBase {
       errorClass = "INVALID_SQL_SYNTAX",
       sqlState = "42000",
       message =
-        """Invalid SQL syntax: Invalid pattern in "SHOW FUNCTIONS": `f1`. It must be a STRING literal.(line 1, pos 26)
+        """Invalid SQL syntax: Invalid pattern in "SHOW FUNCTIONS": `f1`. It must be a "STRING" literal.(line 1, pos 26)
           |
           |== SQL ==
           |SHOW FUNCTIONS IN db LIKE f1

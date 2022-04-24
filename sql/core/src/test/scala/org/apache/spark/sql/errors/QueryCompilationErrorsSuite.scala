@@ -22,7 +22,7 @@ import org.apache.spark.sql.api.java.{UDF1, UDF2, UDF23Test}
 import org.apache.spark.sql.expressions.SparkUserDefinedFunction
 import org.apache.spark.sql.functions.{grouping, grouping_id, sum, udf}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{IntegerType, StringType}
+import org.apache.spark.sql.types.{IntegerType, MapType, StringType, StructField, StructType}
 
 case class StringLongClass(a: String, b: Long)
 
@@ -44,7 +44,7 @@ class QueryCompilationErrorsSuite
       errorClass = "CANNOT_UP_CAST_DATATYPE",
       msg =
         s"""
-           |Cannot up cast b from BIGINT to INT.
+           |Cannot up cast b from "BIGINT" to "INT".
            |The type path of the target object is:
            |- field (class: "scala.Int", name: "b")
            |- root class: "org.apache.spark.sql.errors.StringIntClass"
@@ -61,7 +61,7 @@ class QueryCompilationErrorsSuite
       errorClass = "CANNOT_UP_CAST_DATATYPE",
       msg =
         s"""
-           |Cannot up cast b.`b` from DECIMAL(38,18) to BIGINT.
+           |Cannot up cast b.`b` from "DECIMAL(38,18)" to "BIGINT".
            |The type path of the target object is:
            |- field (class: "scala.Long", name: "b")
            |- field (class: "org.apache.spark.sql.errors.StringLongClass", name: "b")
@@ -381,6 +381,35 @@ class QueryCompilationErrorsSuite
     }
   }
 
+  test("SECOND_FUNCTION_ARGUMENT_NOT_INTEGER: " +
+    "the second argument of 'date_add' function needs to be an integer") {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
+      checkErrorClass(
+        exception = intercept[AnalysisException] {
+          sql("select date_add('1982-08-15', 'x')").collect()
+        },
+        errorClass = "SECOND_FUNCTION_ARGUMENT_NOT_INTEGER",
+        msg = "The second argument of 'date_add' function needs to be an integer.",
+        sqlState = Some("22023"))
+    }
+  }
+
+  test("INVALID_JSON_SCHEMA_MAPTYPE: " +
+    "Parse JSON rows can only contain StringType as a key type for a MapType.") {
+    val schema = StructType(
+      StructField("map", MapType(IntegerType, IntegerType, true), false) :: Nil)
+
+    checkErrorClass(
+      exception = intercept[AnalysisException] {
+        spark.read.schema(schema).json(spark.emptyDataset[String])
+      },
+      errorClass = "INVALID_JSON_SCHEMA_MAPTYPE",
+      msg = "Input schema " +
+        "StructType(StructField(map,MapType(IntegerType,IntegerType,true),false)) " +
+        "can only contain StringType as a key type for a MapType."
+    )
+  }
+
   test("MISSING_COLUMN: SELECT distinct does not work correctly " +
     "if order by missing attribute") {
     checkAnswer(
@@ -436,8 +465,7 @@ class QueryCompilationErrorsSuite
             |         +- View (`v`, [i#7,j#8])
             |            +- Project [_1#2 AS i#7, _2#3 AS j#8]
             |               +- LocalRelation [_1#2, _2#3]
-            |""".stripMargin
-      )
+            |""".stripMargin)
 
       checkAnswer(sql("SELECT __auto_generated_subquery_name.i from (SELECT i FROM v)"), Row(1))
     }
