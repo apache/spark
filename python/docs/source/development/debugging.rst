@@ -339,9 +339,9 @@ Common Exceptions / Errors
 PySpark SQL
 ~~~~~~~~~~~
 
-- **AnalysisException**
+**AnalysisException**
 
-AnalysisException is raised when failing to analyze a SQL query plan.
+``AnalysisException`` is raised when failing to analyze a SQL query plan.
 
 Example:
 
@@ -360,9 +360,9 @@ Solution:
     >>> df['id']
     Column<'id'>
 
-- **ParseException**
+**ParseException**
 
-ParseException is raised when failing to parse a SQL command.
+``ParseException`` is raised when failing to parse a SQL command.
 
 Example:
 
@@ -384,9 +384,9 @@ Solution:
     >>> spark.sql("select *")
     DataFrame[]
 
-- **IllegalArgumentException**
+**IllegalArgumentException**
 
-IllegalArgumentException is raised when passing an illegal or inappropriate argument.
+``IllegalArgumentException`` is raised when passing an illegal or inappropriate argument.
 
 Example:
 
@@ -404,11 +404,11 @@ Solution:
     >>> spark.range(1).sample(1.0)
     DataFrame[id: bigint]
 
-- **PythonException**
+**PythonException**
 
-PythonException is thrown from Python workers.
+``PythonException`` is thrown from Python workers.
 
-You can see the type of exception that was thrown from the Python worker and its stack trace, here “TypeError”.
+You can see the type of exception that was thrown from the Python worker and its stack trace, as ``TypeError`` below.
 
 Example:
 
@@ -434,9 +434,9 @@ Solution:
     >>> spark.range(-1, 1).withColumn("abs", udf(f)("id")).collect()
     [Row(id=-1, abs='1'), Row(id=0, abs='0')]
 
-- **StreamingQueryException**
+**StreamingQueryException**
 
-StreamingQueryException is raised when failing a StreamingQuery. Most often, it is thrown from Python workers, that wrap it as a PythonException.
+``StreamingQueryException`` is raised when failing a StreamingQuery. Most often, it is thrown from Python workers, that wrap it as a ``PythonException``.
 
 Example:
 
@@ -458,9 +458,9 @@ Solution:
 
 Fix the StreamingQuery and re-execute the workflow.
 
-- **SparkUpgradeException**
+**SparkUpgradeException**
 
-SparkUpgradeException is thrown because of Spark upgrade.
+``SparkUpgradeException`` is thrown because of Spark upgrade.
 
 Example:
 
@@ -488,9 +488,9 @@ pandas API on Spark
 
 There are specific common exceptions / errors in pandas API on Spark.
 
-- **ValueError: Cannot combine the series or dataframe because it comes from a different dataframe**
+**ValueError: Cannot combine the series or dataframe because it comes from a different dataframe**
 
-Operations involving more than one series or dataframes raises a ValueError if “compute.ops_on_diff_frames” is disabled (disabled by default). Such operations may be expensive due to joining of underlying Spark frames. So users should be aware of the cost and enable that flag only when necessary.
+Operations involving more than one series or dataframes raises a ``ValueError`` if “compute.ops_on_diff_frames” is disabled (disabled by default). Such operations may be expensive due to joining of underlying Spark frames. So users should be aware of the cost and enable that flag only when necessary.
 
 Exception:
 
@@ -513,7 +513,7 @@ Solution:
     1    6
     dtype: int64
 
-- **RuntimeError: Result vector from pandas_udf was not the required length**
+**RuntimeError: Result vector from pandas_udf was not the required length**
 
 Exception:
 
@@ -543,10 +543,10 @@ Solution:
 Py4j
 ~~~~
 
-- **Py4JJavaError**
+**Py4JJavaError**
 
-Py4JJavaError is raised when an exception occurs in the Java client code.
-You can see the type of exception that was thrown on the Java side and its stack trace, “java.lang.NullPointerException”.
+``Py4JJavaError`` is raised when an exception occurs in the Java client code.
+You can see the type of exception that was thrown on the Java side and its stack trace, as ``java.lang.NullPointerException`` below.
 
 Example:
 
@@ -566,9 +566,9 @@ Solution:
     >>> spark.sparkContext._jvm.java.lang.String("x")
     'x'
 
-- **Py4JError**
+**Py4JError**
 
-Py4JError is raised when any other error occurs such as when the Python client program tries to access an object that no longer exists on the Java side.
+``Py4JError`` is raised when any other error occurs such as when the Python client program tries to access an object that no longer exists on the Java side.
 
 Example:
 
@@ -598,7 +598,7 @@ Solution:
 
 Access an object that exists on the Java side.
 
-- **Py4JNetworkError**
+**Py4JNetworkError**
 
-Py4JNetworkError is raised when a problem occurs during network transfer (e.g., connection lost). In this case, we shall debug the network and rebuild the connection.
+``Py4JNetworkError`` is raised when a problem occurs during network transfer (e.g., connection lost). In this case, we shall debug the network and rebuild the connection.
 
