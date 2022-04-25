@@ -96,7 +96,7 @@ SELECT string(1, 2)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Function string accepts only one argument; line 1 pos 7
+[INVALID_FUNCTION_ARGUMENTS] Invalid number of arguments for function string. It accepts only one argument; line 1 pos 7
 
 
 -- !query

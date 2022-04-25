@@ -88,10 +88,6 @@
     "message" : [ "Index <indexValue> must be between 0 and the length of the ArrayData." ],
     "sqlState" : "22023"
   },
-  "INVALID_FUNCTION_ARGUMENTS": {
-    "message": [ "Invalid <invalidType> of arguments for function <functionName>. <message>" ],
-    "sqlState" : "22023"
-  },
   "INTERNAL_ERROR" : {
     "message" : [ "<message>" ]
   },
@@ -107,6 +103,10 @@
   },
   "INVALID_FRACTION_OF_SECOND" : {
     "message" : [ "The fraction of sec must be zero. Valid range is [0, 60]. If necessary set <config> to false to bypass this error. " ],
+    "sqlState" : "22023"
+  },
+  "INVALID_FUNCTION_ARGUMENTS" : {
+    "message" : [ "Invalid <invalidType> of arguments for function <functionName>. <message>" ],
     "sqlState" : "22023"
   },
   "INVALID_JSON_SCHEMA_MAPTYPE" : {

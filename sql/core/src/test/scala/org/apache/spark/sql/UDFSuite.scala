@@ -618,7 +618,7 @@ class UDFSuite extends QueryTest with SharedSparkSession {
     val e = intercept[AnalysisException] {
       spark.sql("SELECT CAST(1)")
     }
-    assert(e.getMessage.contains("Invalid arguments for function cast"))
+    assert(e.getMessage.contains("Invalid number of arguments for function cast"))
   }
 
   test("only one case class parameter") {

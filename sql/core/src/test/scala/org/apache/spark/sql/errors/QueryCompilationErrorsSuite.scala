@@ -462,7 +462,8 @@ class QueryCompilationErrorsSuite
   }
 
   test("INVALID_FUNCTION_ARGUMENTS: cannot process function input of the map type") {
-    withSQLConf(SQLConf.DEFAULT_CATALOG.key -> "testcat") {
+    withSQLConf(SQLConf.DEFAULT_CATALOG.key -> "testcat",
+      "spark.sql.catalog.testcat" -> classOf[InMemoryCatalog].getName) {
       spark.sessionState.catalogManager.catalog("testcat")
         .asInstanceOf[InMemoryCatalog]
         .createFunction(Identifier.of(Array("ns"), "strlen"), new StrLen)
@@ -476,11 +477,13 @@ class QueryCompilationErrorsSuite
           "but found MapType(StringType,StringType,false); line 1 pos 7",
         sqlState = Some("22023")
       )
+      spark.sessionState.conf.unsetConf("spark.sql.catalog.testcat")
     }
   }
 
   test("INVALID_FUNCTION_ARGUMENTS: invalid input type length of the v2Function") {
-    withSQLConf(SQLConf.DEFAULT_CATALOG.key -> "testcat") {
+    withSQLConf(SQLConf.DEFAULT_CATALOG.key -> "testcat",
+      "spark.sql.catalog.testcat" -> classOf[InMemoryCatalog].getName) {
       spark.sessionState.catalogManager.catalog("testcat")
       .asInstanceOf[InMemoryCatalog]
         .createFunction(Identifier.of(Array("ns"), "strlen"), new StrLen)
@@ -493,6 +496,7 @@ class QueryCompilationErrorsSuite
           "There are 2 arguments but 1 parameters returned from 'inputTypes()'; line 1 pos 7",
         sqlState = Some("22023")
       )
+      spark.sessionState.conf.unsetConf("spark.sql.catalog.testcat")
     }
   }
 

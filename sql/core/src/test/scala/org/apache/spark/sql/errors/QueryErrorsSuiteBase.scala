@@ -17,14 +17,11 @@
 
 package org.apache.spark.sql.errors
 
-import org.scalatest.BeforeAndAfter
-
 import org.apache.spark.SparkThrowable
 import org.apache.spark.sql.catalyst.parser.ParseException
-import org.apache.spark.sql.connector.catalog.InMemoryCatalog
 import org.apache.spark.sql.test.SharedSparkSession
 
-trait QueryErrorsSuiteBase extends SharedSparkSession with BeforeAndAfter {
+trait QueryErrorsSuiteBase extends SharedSparkSession {
   def checkErrorClass(
       exception: Exception with SparkThrowable,
       errorClass: String,
@@ -51,13 +48,5 @@ trait QueryErrorsSuiteBase extends SharedSparkSession with BeforeAndAfter {
     assert(e.getErrorClass === errorClass)
     assert(e.getSqlState === sqlState)
     assert(e.getMessage === s"""\n[$errorClass] """ + message)
-  }
-
-  before {
-    spark.conf.set("spark.sql.catalog.testcat", classOf[InMemoryCatalog].getName)
-  }
-
-  after {
-    spark.sessionState.conf.unsetConf("spark.sql.catalog.testcat")
   }
 }
