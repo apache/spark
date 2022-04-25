@@ -1951,7 +1951,7 @@ class DatasetSuite extends QueryTest
         .map(b => b - 1)
         .collect()
     }
-    assert(thrownException.message.contains("Cannot up cast id from BIGINT to TINYINT"))
+    assert(thrownException.message.contains("""Cannot up cast id from "BIGINT" to "TINYINT""""))
   }
 
   test("SPARK-26690: checkpoints should be executed with an execution id") {
