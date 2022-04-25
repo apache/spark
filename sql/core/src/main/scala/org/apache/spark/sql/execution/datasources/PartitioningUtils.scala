@@ -33,7 +33,7 @@ import org.apache.spark.sql.catalyst.{InternalRow, SQLConfHelper}
 import org.apache.spark.sql.catalyst.analysis.TypeCoercion
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.catalog.ExternalCatalogUtils.getPartitionValueString
-import org.apache.spark.sql.catalyst.expressions.{Attribute, Cast, Literal}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, Cast, Hex, Literal}
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateFormatter, DateTimeUtils, TimestampFormatter}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.types._
@@ -486,6 +486,12 @@ object PartitioningUtils extends SQLConfHelper{
       DateType
     }
 
+    val binaryTry = Try {
+      val binaryValue = Hex.unhex(raw.getBytes())
+      require(binaryValue != null)
+      BinaryType
+    }
+
     val timestampTry = Try {
       val unescapedRaw = unescapePathName(raw)
       // the inferred data type is consistent with the default timestamp type
@@ -514,6 +520,7 @@ object PartitioningUtils extends SQLConfHelper{
         // Then falls back to date/timestamp types
         .orElse(timestampTry)
         .orElse(dateTry)
+        .orElse(binaryTry)
         // Then falls back to string
         .getOrElse {
           if (raw == DEFAULT_PARTITION_NAME) NullType else StringType
@@ -545,6 +552,7 @@ object PartitioningUtils extends SQLConfHelper{
       }
     case it: AnsiIntervalType =>
       Cast(Literal(unescapePathName(value)), it).eval()
+    case BinaryType => value.getBytes()
     case dt => throw QueryExecutionErrors.typeUnsupportedError(dt)
   }
 
