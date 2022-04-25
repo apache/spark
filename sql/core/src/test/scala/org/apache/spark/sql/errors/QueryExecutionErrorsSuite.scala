@@ -206,7 +206,7 @@ class QueryExecutionErrorsSuite
       }.getCause.asInstanceOf[SparkUpgradeException]
 
       val format = "Parquet"
-      val config = SQLConf.PARQUET_REBASE_MODE_IN_READ.key
+      val config = "\"" + SQLConf.PARQUET_REBASE_MODE_IN_READ.key + "\""
       val option = "datetimeRebaseMode"
       checkErrorClass(
         exception = e,
@@ -218,10 +218,10 @@ class QueryExecutionErrorsSuite
             |from $format files can be ambiguous, as the files may be written by
             |Spark 2.x or legacy versions of Hive, which uses a legacy hybrid calendar
             |that is different from Spark 3.0+'s Proleptic Gregorian calendar.
-            |See more details in SPARK-31404. You can set the SQL config '$config' or
+            |See more details in SPARK-31404. You can set the SQL config $config or
             |the datasource option '$option' to 'LEGACY' to rebase the datetime values
             |w.r.t. the calendar difference during reading. To read the datetime values
-            |as it is, set the SQL config '$config' or the datasource option '$option'
+            |as it is, set the SQL config $config or the datasource option '$option'
             |to 'CORRECTED'.
             |""".stripMargin)
     }
@@ -235,7 +235,7 @@ class QueryExecutionErrorsSuite
         }.getCause.getCause.getCause.asInstanceOf[SparkUpgradeException]
 
         val format = "Parquet"
-        val config = SQLConf.PARQUET_REBASE_MODE_IN_WRITE.key
+        val config = "\"" + SQLConf.PARQUET_REBASE_MODE_IN_WRITE.key + "\""
         checkErrorClass(
           exception = e,
           errorClass = "INCONSISTENT_BEHAVIOR_CROSS_VERSION",
@@ -248,8 +248,8 @@ class QueryExecutionErrorsSuite
               |is different from Spark 3.0+'s Proleptic Gregorian calendar. See more
               |details in SPARK-31404. You can set $config to 'LEGACY' to rebase the
               |datetime values w.r.t. the calendar difference during writing, to get maximum
-              |interoperability. Or set $config to 'CORRECTED' to write the datetime values
-              |as it is, if you are 100% sure that the written files will only be read by
+              |interoperability. Or set $config to 'CORRECTED' to write the datetime
+              |values as it is, if you are 100% sure that the written files will only be read by
               |Spark 3.0+ or other systems that use Proleptic Gregorian calendar.
               |""".stripMargin)
       }
