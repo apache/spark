@@ -434,17 +434,17 @@ class QueryCompilationErrorsSuite
             |""".stripMargin)
       },
       errorClass = "MISSING_COLUMN",
-      msg = s"""Column 'struct.a' does not exist. """ +
-        s"""Did you mean one of the following\\? \\[a, b\\]; line 6 pos 9;
-           |'Sort \\['struct.a ASC NULLS FIRST, 'struct.b ASC NULLS FIRST\\], true
-           |\\+\\- Distinct
-           |   \\+\\- Project \\[struct\\#\\w+\\.a AS a\\#\\w+, struct\\#\\w+\\.b AS b\\#\\w+\\]
-           |      \\+\\- SubqueryAlias tmp
-           |         \\+\\- Union false, false
-           |            :\\- Project \\[named_struct\\(a, 1, b, 2, c, 3\\) AS struct\\#\\w+\\]
-           |            :  \\+\\- OneRowRelation
-           |            \\+\\- Project \\[named_struct\\(a, 1, b, 2, c, 4\\) AS struct\\#\\w+\\]
-           |               \\+\\- OneRowRelation
+      msg = """Column 'struct.a' does not exist. """ +
+        """Did you mean one of the following\? \[a, b\]; line 6 pos 9;
+           |'Sort \['struct.a ASC NULLS FIRST, 'struct.b ASC NULLS FIRST\], true
+           |\+\- Distinct
+           |   \+\- Project \[struct#\w+\.a AS a#\w+, struct#\w+\.b AS b#\w+\]
+           |      \+\- SubqueryAlias tmp
+           |         \+\- Union false, false
+           |            :\- Project \[named_struct\(a, 1, b, 2, c, 3\) AS struct#\w+\]
+           |            :  \+\- OneRowRelation
+           |            \+\- Project \[named_struct\(a, 1, b, 2, c, 4\) AS struct#\w+\]
+           |               \+\- OneRowRelation
            |""".stripMargin,
       matchMsg = true)
   }
@@ -457,15 +457,15 @@ class QueryCompilationErrorsSuite
       checkErrorClass(
         exception = intercept[AnalysisException](sql("SELECT v.i from (SELECT i FROM v)")),
         errorClass = "MISSING_COLUMN",
-        msg = s"""Column 'v.i' does not exist. Did you mean one of the following\\? """ +
-          s"""\\[__auto_generated_subquery_name.i\\]; line 1 pos 7;
-            |'Project \\['v.i\\]
-            |\\+\\- SubqueryAlias __auto_generated_subquery_name
-            |   \\+\\- Project \\[i#\\w+\\]
-            |      \\+\\- SubqueryAlias v
-            |         \\+\\- View \\(`v`, \\[i#\\w+,j#\\w+\\]\\)
-            |            \\+\\- Project \\[_\\w+#\\w+ AS i#\\w+, _\\w+#\\w+ AS j#\\w+\\]
-            |               \\+\\- LocalRelation \\[_\\w+#\\w+, _\\w+#\\w+\\]
+        msg = """Column 'v.i' does not exist. Did you mean one of the following\? """ +
+          """\[__auto_generated_subquery_name.i\]; line 1 pos 7;
+            |'Project \['v.i\]
+            |\+\- SubqueryAlias __auto_generated_subquery_name
+            |   \+\- Project \[i#\w+\]
+            |      \+\- SubqueryAlias v
+            |         \+\- View \(`v`, \[i#\w+,j#\w+\]\)
+            |            \+\- Project \[_\w+#\w+ AS i#\w+, _\w+#\w+ AS j#\w+\]
+            |               \+\- LocalRelation \[_\w+#\w+, _\w+#\w+\]
             |""".stripMargin,
         matchMsg = true)
 
