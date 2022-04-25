@@ -490,7 +490,7 @@ There are specific common exceptions / errors in pandas API on Spark.
 
 **ValueError: Cannot combine the series or dataframe because it comes from a different dataframe**
 
-Operations involving more than one series or dataframes raises a ``ValueError`` if “compute.ops_on_diff_frames” is disabled (disabled by default). Such operations may be expensive due to joining of underlying Spark frames. So users should be aware of the cost and enable that flag only when necessary.
+Operations involving more than one series or dataframes raises a ``ValueError`` if ``compute.ops_on_diff_frames`` is disabled (disabled by default). Such operations may be expensive due to joining of underlying Spark frames. So users should be aware of the cost and enable that flag only when necessary.
 
 Exception:
 
