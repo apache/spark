@@ -1403,6 +1403,7 @@ private[spark] class DAGScheduler(
     val mergerLocs = {
       def findMergerLocs() = sc.schedulerBackend.getShufflePushMergerLocations(
         stage.shuffleDep.partitioner.numPartitions, stage.resourceProfileId)
+
       if (reuseMergerLocations) {
         // Reuse merger locations for sibling stages (for eg: join cases) so that
         // both the RDD's output will be collocated giving better locality. Since this
@@ -1410,18 +1411,14 @@ private[spark] class DAGScheduler(
         // stages and set the merger locations accordingly in this way.
         val coPartitionedSiblingStages = findCoPartitionedSiblingMapStages(stage)
         val siblingMergerLocs = coPartitionedSiblingStages.collectFirst({
-          case s if s.shuffleDep.getMergerLocs.nonEmpty => s.shuffleDep.getMergerLocs}).get
-        if (siblingMergerLocs.isEmpty) {
-          val mergerLocs = findMergerLocs()
-          if (mergerLocs.nonEmpty) {
-            // set merger locations for sibling stages
-            coPartitionedSiblingStages.filter(_.shuffleDep.getMergerLocs.isEmpty)
-              .foreach(_.shuffleDep.setMergerLocs(mergerLocs))
-          }
-          mergerLocs
-        } else {
-          siblingMergerLocs
+          case s if s.shuffleDep.getMergerLocs.nonEmpty => s.shuffleDep.getMergerLocs
+        }).getOrElse(findMergerLocs())
+        if (siblingMergerLocs.nonEmpty) {
+          // set merger locations for sibling stages
+          coPartitionedSiblingStages.filter(_.shuffleDep.getMergerLocs.isEmpty)
+            .foreach(_.shuffleDep.setMergerLocs(siblingMergerLocs))
         }
+        siblingMergerLocs
       } else {
         findMergerLocs()
       }

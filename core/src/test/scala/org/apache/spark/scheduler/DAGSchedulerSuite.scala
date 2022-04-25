@@ -4303,6 +4303,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
   }
 
   test("SPARK-34826: Adaptively fetch shuffle mergers") {
+
     initPushBasedShuffleConfs(conf)
     conf.set(config.SHUFFLE_MERGER_LOCATIONS_MIN_STATIC_THRESHOLD, 2)
     DAGSchedulerSuite.clearMergerLocs()
@@ -4487,7 +4488,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     assert(shuffleStage1.shuffleDep.isShuffleMergeFinalizedMarked)
     val newMergerLocs =
       scheduler.stageIdToStage(0).asInstanceOf[ShuffleMapStage].shuffleDep.getMergerLocs
-    assert(mergerLocsBeforeRetry.sortBy(_.host) !== newMergerLocs.sortBy(_.host))
+    assert(mergerLocsBeforeRetry.sortBy(_.host) == newMergerLocs.sortBy(_.host))
     val shuffleStage2 = scheduler.stageIdToStage(1).asInstanceOf[ShuffleMapStage]
     complete(taskSets(1), taskSets(1).tasks.zipWithIndex.map {
       case (_, idx) =>
