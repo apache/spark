@@ -221,6 +221,10 @@ private[spark] class CoarseGrainedExecutorBackend(
       logInfo(s"Received tokens of ${tokenBytes.length} bytes")
       SparkHadoopUtil.get.addDelegationTokens(tokenBytes, env.conf)
 
+    case UpdateCloudCredentials(credentials) =>
+      logInfo(s"Received credentials")
+      SparkHadoopUtil.get.updateCloudCredentials(credentials, env.conf)
+
     case DecommissionExecutor =>
       decommissionSelf()
   }

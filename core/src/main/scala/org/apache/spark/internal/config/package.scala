@@ -775,6 +775,13 @@ package object config {
       .toSequence
       .createWithDefault(Nil)
 
+  private[spark] val CLOUD_CREDENTIALS_SHARING =
+    ConfigBuilder("spark.cloud.credentials.sharing.enabled")
+      .doc("Turn on cloud credentials sharing service.")
+      .version("3.4.0")
+      .booleanConf
+      .createWithDefault(false)
+
   private[spark] val EXECUTOR_INSTANCES = ConfigBuilder("spark.executor.instances")
     .version("1.0.0")
     .intConf

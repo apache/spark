@@ -17,7 +17,7 @@
 
 package org.apache.spark.deploy
 
-import java.io.{ByteArrayInputStream, ByteArrayOutputStream, DataInputStream, DataOutputStream, File, IOException}
+import java.io.{ByteArrayInputStream, ByteArrayOutputStream, DataInputStream, DataOutputStream, File, IOException, ObjectInputStream, ObjectOutputStream}
 import java.security.PrivilegedExceptionAction
 import java.text.DateFormat
 import java.util.{Arrays, Date, Locale}
@@ -37,6 +37,7 @@ import org.apache.hadoop.security.token.{Token, TokenIdentifier}
 import org.apache.hadoop.security.token.delegation.AbstractDelegationTokenIdentifier
 
 import org.apache.spark.{SparkConf, SparkException}
+import org.apache.spark.deploy.security.cloud.{CloudCredentials, CloudCredentialsManager}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.BUFFER_SIZE
 import org.apache.spark.util.Utils
@@ -157,6 +158,17 @@ private[spark] class SparkHadoopUtil extends Logging {
     logInfo("Updating delegation tokens for current user.")
     logDebug(s"Adding/updating delegation tokens ${dumpTokens(creds)}")
     addCurrentUserCredentials(creds)
+  }
+
+  /**
+   * Add or overwrite current cloud credentials
+   */
+  private[spark] def updateCloudCredentials(credentials: Array[Byte], sparkConf: SparkConf): Unit =
+  {
+    val creds = deserializeCloudCredentials(credentials)
+    logInfo("Updating cloud credentials for current user.")
+    sparkConf.set(CloudCredentialsManager.cloudCredentialsConfig.format(creds.serviceName),
+      creds.credentials)
   }
 
   /**
@@ -383,6 +395,21 @@ private[spark] class SparkHadoopUtil extends Logging {
 
     val creds = new Credentials()
     creds.readTokenStorageStream(new DataInputStream(tokensBuf))
+    creds
+  }
+
+  def serializeCloudCredentials(creds: CloudCredentials): Array[Byte] = {
+    val byteStream = new ByteArrayOutputStream
+    val objStream = new ObjectOutputStream(byteStream)
+    objStream.writeObject(creds)
+    objStream.close()
+    byteStream.toByteArray
+  }
+
+  def deserializeCloudCredentials(credentialsBytes: Array[Byte]): CloudCredentials = {
+    val objStream = new ObjectInputStream(new ByteArrayInputStream(credentialsBytes))
+    val creds = objStream.readObject().asInstanceOf[CloudCredentials]
+    objStream.close()
     creds
   }
 

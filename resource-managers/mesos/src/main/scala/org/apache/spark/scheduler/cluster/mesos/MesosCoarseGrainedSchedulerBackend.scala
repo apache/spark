@@ -33,6 +33,7 @@ import org.apache.mesos.SchedulerDriver
 import org.apache.spark.{SecurityManager, SparkConf, SparkContext, SparkException, TaskState}
 import org.apache.spark.deploy.mesos.config._
 import org.apache.spark.deploy.security.HadoopDelegationTokenManager
+import org.apache.spark.deploy.security.cloud.CloudCredentialsManager
 import org.apache.spark.internal.config
 import org.apache.spark.internal.config.Network
 import org.apache.spark.internal.config.Tests.IS_TESTING
@@ -800,6 +801,10 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
 
   override protected def createTokenManager(): Option[HadoopDelegationTokenManager] = {
     Some(new HadoopDelegationTokenManager(conf, sc.hadoopConfiguration, driverEndpoint))
+  }
+
+  override protected def createCloudCredentialsManager(): Option[CloudCredentialsManager] = {
+    Some(new CloudCredentialsManager(conf, sc.hadoopConfiguration, driverEndpoint))
   }
 
   private def numExecutors(): Int = {

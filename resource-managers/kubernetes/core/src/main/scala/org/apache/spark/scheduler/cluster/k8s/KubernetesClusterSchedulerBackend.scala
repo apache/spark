@@ -32,6 +32,7 @@ import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.submit.KubernetesClientUtils
 import org.apache.spark.deploy.security.HadoopDelegationTokenManager
+import org.apache.spark.deploy.security.cloud.CloudCredentialsManager
 import org.apache.spark.internal.config.SCHEDULER_MIN_REGISTERED_RESOURCES_RATIO
 import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.rpc.{RpcAddress, RpcCallContext}
@@ -285,6 +286,10 @@ private[spark] class KubernetesClusterSchedulerBackend(
 
   override protected def createTokenManager(): Option[HadoopDelegationTokenManager] = {
     Some(new HadoopDelegationTokenManager(conf, sc.hadoopConfiguration, driverEndpoint))
+  }
+
+  override protected def createCloudCredentialsManager(): Option[CloudCredentialsManager] = {
+    Some(new CloudCredentialsManager(conf, sc.hadoopConfiguration, driverEndpoint))
   }
 
   override protected def isExecutorExcluded(executorId: String, hostname: String): Boolean = {
