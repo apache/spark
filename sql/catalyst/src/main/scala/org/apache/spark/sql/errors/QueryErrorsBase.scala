@@ -48,9 +48,13 @@ trait QueryErrorsBase {
     litToErrorValue(Literal.create(v, t))
   }
 
+  private def quoteByDefault(elem: String): String = {
+    "\"" + elem + "\""
+  }
+
   // Quote sql statements in error messages.
   def toSQLStmt(text: String): String = {
-    "\"" + text.toUpperCase(Locale.ROOT) + "\""
+    quoteByDefault(text.toUpperCase(Locale.ROOT))
   }
 
   def toSQLId(parts: Seq[String]): String = {
@@ -62,6 +66,10 @@ trait QueryErrorsBase {
   }
 
   def toSQLType(t: DataType): String = {
-    "\"" + t.sql + "\""
+    quoteByDefault(t.sql)
+  }
+
+  def toSQLConf(conf: String): String = {
+    quoteByDefault(conf)
   }
 }
