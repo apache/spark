@@ -43,16 +43,10 @@
     <url>scm:git:git@github.com:apache/spark.git</url>
     <tag>HEAD</tag>
   </scm>
-  <developers>
-    <developer>
-      <id>matei</id>
-      <name>Matei Zaharia</name>
-      <email>matei.zaharia@gmail.com</email>
-      <url>https://cs.stanford.edu/people/matei</url>
-      <organization>Apache Software Foundation</organization>
-      <organizationUrl>https://spark.apache.org</organizationUrl>
-    </developer>
-  </developers>
+  <organization>
+    <name>Apache Software Foundation</name>
+    <url>https://www.apache.org</url>
+  </organization>
   <issueManagement>
     <system>JIRA</system>
     <url>https://issues.apache.org/jira/browse/SPARK</url>
