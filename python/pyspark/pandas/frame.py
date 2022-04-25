@@ -5500,11 +5500,20 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         else:
             return psdf
 
-    def interpolate(self, method: Optional[str] = None, limit: Optional[int] = None) -> "DataFrame":
-        if (method is not None) and (method not in ["linear"]):
+    def interpolate(
+        self,
+        method: str = "linear",
+        limit: Optional[int] = None,
+        limit_direction: Optional[str] = None,
+    ) -> "DataFrame":
+        if method not in ["linear"]:
             raise NotImplementedError("interpolate currently works only for method='linear'")
         if (limit is not None) and (not limit > 0):
             raise ValueError("limit must be > 0.")
+        if (limit_direction is not None) and (
+            limit_direction not in ["forward", "backward", "both"]
+        ):
+            raise ValueError("invalid limit_direction: '{}'".format(limit_direction))
 
         numeric_col_names = []
         for label in self._internal.column_labels:
@@ -5514,7 +5523,10 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         psdf = self[numeric_col_names]
         return psdf._apply_series_op(
-            lambda psser: psser._interpolate(method=method, limit=limit), should_resolve=True
+            lambda psser: psser._interpolate(
+                method=method, limit=limit, limit_direction=limit_direction
+            ),
+            should_resolve=True,
         )
 
     def replace(

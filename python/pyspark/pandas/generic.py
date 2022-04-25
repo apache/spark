@@ -3253,16 +3253,17 @@ class Frame(object, metaclass=ABCMeta):
 
     pad = ffill
 
-    # TODO: add 'axis', 'inplace', 'limit_direction', 'limit_area', 'downcast'
+    # TODO: add 'axis', 'inplace', 'limit_area', 'downcast'
     def interpolate(
         self: FrameLike,
-        method: Optional[str] = None,
+        method: str = "linear",
         limit: Optional[int] = None,
+        limit_direction: Optional[str] = None,
     ) -> FrameLike:
         """
         Fill NaN values using an interpolation method.
 
-        .. note:: the current implementation of rank uses Spark's Window without
+        .. note:: the current implementation of interpolate uses Spark's Window without
             specifying partition specification. This leads to move all data into
             single partition in single machine and could cause serious
             performance degradation. Avoid this method against very large dataset.
@@ -3280,6 +3281,10 @@ class Frame(object, metaclass=ABCMeta):
         limit : int, optional
             Maximum number of consecutive NaNs to fill. Must be greater than
             0.
+
+        limit_direction : str, default None
+            Consecutive NaNs will be filled in this direction.
+            One of {{'forward', 'backward', 'both'}}.
 
         Returns
         -------
@@ -3335,7 +3340,7 @@ class Frame(object, metaclass=ABCMeta):
         2  2.0  3.0 -3.0   9.0
         3  2.0  4.0 -4.0  16.0
         """
-        return self.interpolate(method=method, limit=limit)
+        return self.interpolate(method=method, limit=limit, limit_direction=limit_direction)
 
     @property
     def at(self) -> AtIndexer:

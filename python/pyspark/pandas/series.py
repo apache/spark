@@ -2169,18 +2169,28 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             )
         )._psser_for(self._column_label)
 
-    def interpolate(self, method: Optional[str] = None, limit: Optional[int] = None) -> "Series":
-        return self._interpolate(method=method, limit=limit)
+    def interpolate(
+        self,
+        method: str = "linear",
+        limit: Optional[int] = None,
+        limit_direction: Optional[str] = None,
+    ) -> "Series":
+        return self._interpolate(method=method, limit=limit, limit_direction=limit_direction)
 
     def _interpolate(
         self,
-        method: Optional[str] = None,
+        method: str = "linear",
         limit: Optional[int] = None,
+        limit_direction: Optional[str] = None,
     ) -> "Series":
-        if (method is not None) and (method not in ["linear"]):
+        if method not in ["linear"]:
             raise NotImplementedError("interpolate currently works only for method='linear'")
         if (limit is not None) and (not limit > 0):
             raise ValueError("limit must be > 0.")
+        if (limit_direction is not None) and (
+            limit_direction not in ["forward", "backward", "both"]
+        ):
+            raise ValueError("invalid limit_direction: '{}'".format(limit_direction))
 
         if not self.spark.nullable and not isinstance(
             self.spark.data_type, (FloatType, DoubleType)
@@ -2209,15 +2219,50 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         ) * null_index_forward + last_non_null_forward
 
         fill_cond = ~F.isnull(last_non_null_backward) & ~F.isnull(last_non_null_forward)
-        pad_cond = F.isnull(last_non_null_backward) & ~F.isnull(last_non_null_forward)
-        if limit is not None:
-            fill_cond = fill_cond & (null_index_forward <= F.lit(limit))
-            pad_cond = pad_cond & (null_index_forward <= F.lit(limit))
+
+        pad_head = SF.lit(None)
+        pad_head_cond = SF.lit(False)
+        pad_tail = SF.lit(None)
+        pad_tail_cond = SF.lit(False)
+
+        # inputs  -> NaN, NaN, 1.0, NaN, NaN, NaN, 5.0, NaN, NaN
+        if limit_direction is None or limit_direction == "forward":
+            # outputs -> NaN, NaN, 1.0, 2.0, 3.0, 4.0, 5.0, 5.0, 5.0
+            pad_tail = last_non_null_forward
+            pad_tail_cond = F.isnull(last_non_null_backward) & ~F.isnull(last_non_null_forward)
+            if limit is not None:
+                # outputs (limit=1) -> NaN, NaN, 1.0, 2.0, NaN, NaN, 5.0, 5.0, NaN
+                fill_cond = fill_cond & (null_index_forward <= F.lit(limit))
+                pad_tail_cond = pad_tail_cond & (null_index_forward <= F.lit(limit))
+
+        elif limit_direction == "backward":
+            # outputs -> 1.0, 1.0, 1.0, 2.0, 3.0, 4.0, 5.0, NaN, NaN
+            pad_head = last_non_null_backward
+            pad_head_cond = ~F.isnull(last_non_null_backward) & F.isnull(last_non_null_forward)
+            if limit is not None:
+                # outputs (limit=1) -> NaN, 1.0, 1.0, NaN, NaN, 4.0, 5.0, NaN, NaN
+                fill_cond = fill_cond & (null_index_backward <= F.lit(limit))
+                pad_head_cond = pad_head_cond & (null_index_backward <= F.lit(limit))
+
+        else:
+            # outputs -> 1.0, 1.0, 1.0, 2.0, 3.0, 4.0, 5.0, 5.0, 5.0
+            pad_head = last_non_null_backward
+            pad_head_cond = ~F.isnull(last_non_null_backward) & F.isnull(last_non_null_forward)
+            pad_tail = last_non_null_forward
+            pad_tail_cond = F.isnull(last_non_null_backward) & ~F.isnull(last_non_null_forward)
+            if limit is not None:
+                # outputs (limit=1) -> NaN, 1.0, 1.0, 2.0, NaN, 4.0, 5.0, 5.0, NaN
+                fill_cond = fill_cond & (
+                    (null_index_forward <= F.lit(limit)) | (null_index_backward <= F.lit(limit))
+                )
+                pad_head_cond = pad_head_cond & (null_index_backward <= F.lit(limit))
+                pad_tail_cond = pad_tail_cond & (null_index_forward <= F.lit(limit))
 
         cond = self.isnull().spark.column
         scol = (
             F.when(cond & fill_cond, fill)
-            .when(cond & pad_cond, last_non_null_forward)
+            .when(cond & pad_head_cond, pad_head)
+            .when(cond & pad_tail_cond, pad_tail)
             .otherwise(scol)
         )
 
