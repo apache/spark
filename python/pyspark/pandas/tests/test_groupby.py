@@ -1294,7 +1294,7 @@ class GroupByTest(PandasOnSparkTestCase, TestUtils):
         # self._test_stat_func(lambda groupby_obj: groupby_obj.sum(), check_exact=False)
         self.assert_eq(psdf.groupby("A").sum(), pdf.groupby("A").sum())
 
-def test_min(self):
+    def test_min(self):
         self._test_stat_func(lambda groupby_obj: groupby_obj.min())
         self._test_stat_func(lambda groupby_obj: groupby_obj.min(numeric_only=None))
         self._test_stat_func(lambda groupby_obj: groupby_obj.min(numeric_only=True))
