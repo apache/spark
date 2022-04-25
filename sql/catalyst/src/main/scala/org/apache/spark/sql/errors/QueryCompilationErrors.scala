@@ -2394,4 +2394,11 @@ object QueryCompilationErrors extends QueryErrorsBase {
   def noSuchFunctionError(database: String, funcInfo: String): Throwable = {
     new AnalysisException(s"$database does not support function: $funcInfo")
   }
+
+  def invalidOffsetError(reason: String): Throwable = {
+    new AnalysisException(
+      s"""
+         |The OFFSET clause is only allowed in the LIMIT clause, but the OFFSET
+         |clause is found $reason.""".stripMargin.replace("\n", " "))
+  }
 }

@@ -78,7 +78,7 @@ class OptimizerSuite extends PlanTest {
 
     val analyzed1 =
       Offset(Literal(2), Project(Alias(Literal(5), "attr")() :: Nil, OneRowRelation())).analyze
-    val message1 = intercept[RuntimeException] {
+    val message1 = intercept[AnalysisException] {
       optimizer.execute(analyzed1)
     }.getMessage
     assert(message1.equals(
@@ -88,12 +88,12 @@ class OptimizerSuite extends PlanTest {
 
     val analyzed2 =
       Filter(EqualTo(UnresolvedAttribute(Seq("attr")), Literal("alex")), analyzed1).analyze
-    val message2 = intercept[RuntimeException] {
+    val message2 = intercept[AnalysisException] {
       optimizer.execute(analyzed2)
     }.getMessage
     assert(message2.equals(
       s"""
          |The OFFSET clause is only allowed in the LIMIT clause, but the OFFSET
-         |clause found in: ${analyzed2.nodeName}.""".stripMargin.replace("\n", " ")))
+         |clause is found in: ${analyzed2.nodeName}.""".stripMargin.replace("\n", " ")))
   }
 }

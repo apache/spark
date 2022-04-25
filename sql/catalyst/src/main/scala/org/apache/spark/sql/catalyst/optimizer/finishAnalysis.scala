@@ -18,7 +18,6 @@
 package org.apache.spark.sql.catalyst.optimizer
 
 import scala.collection.mutable
-
 import org.apache.spark.sql.catalyst.CurrentUserContext.CURRENT_USER
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -26,6 +25,7 @@ import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.{convertSpecialDate, convertSpecialTimestamp, convertSpecialTimestampNTZ}
 import org.apache.spark.sql.connector.catalog.CatalogManager
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
@@ -140,25 +140,21 @@ object SpecialDatetimeValues extends Rule[LogicalPlan] {
 }
 
 /**
- * Validate whether the [[Offset]] is valid.
+ * Validate whether the [[Offset]] is valid. Dataset API eagerly analyzes the query plan, so a
+ * query plan may contains invalid [[Offset]] operators but it's not the final query plan that
+ * gets evaluated.
  */
 object CheckOffsetOperator extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = {
     plan.foreachUp {
       case o if !o.isInstanceOf[GlobalLimit] && !o.isInstanceOf[LocalLimit]
         && o.children.exists(_.isInstanceOf[Offset]) =>
-        throw new IllegalStateException(
-          s"""
-             |The OFFSET clause is only allowed in the LIMIT clause, but the OFFSET
-             |clause found in: ${o.nodeName}.""".stripMargin.replace("\n", " "))
+        throw QueryCompilationErrors.invalidOffsetError(s"in: ${o.nodeName}")
       case _ =>
     }
     plan match {
       case Offset(_, _) =>
-        throw new IllegalStateException(
-          s"""
-             |The OFFSET clause is only allowed in the LIMIT clause, but the OFFSET
-             |clause is found to be the outermost node.""".stripMargin.replace("\n", " "))
+        throw QueryCompilationErrors.invalidOffsetError("to be the outermost node")
       case _ =>
     }
     plan
