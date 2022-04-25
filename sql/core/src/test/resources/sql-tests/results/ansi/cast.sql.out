@@ -666,7 +666,7 @@ select cast('123.45' as decimal(4, 2))
 struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
-[CANNOT_CHANGE_DECIMAL_PRECISION] Decimal(expanded,123.45,5,2}) cannot be represented as Decimal(4, 2). If necessary set spark.sql.ansi.enabled to false to bypass this error.
+[CANNOT_CHANGE_DECIMAL_PRECISION] Decimal(expanded,123.45,5,2}) cannot be represented as Decimal(4, 2). If necessary set "spark.sql.ansi.enabled" to false to bypass this error.
 == SQL(line 1, position 7) ==
 select cast('123.45' as decimal(4, 2))
        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
