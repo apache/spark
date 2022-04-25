@@ -31,6 +31,7 @@ import org.apache.spark.sql.catalyst.{FunctionIdentifier, QualifiedTableName, Ta
 import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, TableFunctionRegistry, TempTableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
+import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.connector.catalog.SupportsNamespaces.PROP_OWNER
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf.CATALOG_IMPLEMENTATION
@@ -511,6 +512,13 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
           expectedPartitionCols = partitionCols.map(Seq(_)).getOrElse(Seq.empty[String]))
       }
     }
+  }
+
+  test("create table - needs () for empty schema") {
+    val e = intercept[ParseException] {
+      sql(s"CREATE TABLE t USING parquet")
+    }
+    assert(e.getMessage.contains("table with empty schema"))
   }
 
   test("create table - duplicate column names in the table definition") {
@@ -1354,7 +1362,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
         val e = intercept[AnalysisException] {
         sql(
           s"""
-             |CREATE TABLE jsonTable
+             |CREATE TABLE jsonTable ()
              |USING org.apache.spark.sql.json
              |OPTIONS (
              |  path '${tempDir.getCanonicalPath}'
