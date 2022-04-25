@@ -33,7 +33,7 @@ import org.apache.spark.internal.config._
 import org.apache.spark.launcher.SparkLauncher
 import org.apache.spark.network.buffer.{FileSegmentManagedBuffer, ManagedBuffer, NioManagedBuffer}
 import org.apache.spark.network.netty.SparkTransportConf
-import org.apache.spark.network.server.BlockPushNonFatalFailure
+import org.apache.spark.network.server.BlockPushResponse
 import org.apache.spark.network.shuffle.BlockPushingListener
 import org.apache.spark.network.shuffle.ErrorHandler.BlockPushErrorHandler
 import org.apache.spark.network.util.TransportConf
@@ -84,9 +84,9 @@ private[spark] class ShuffleBlockPusher(conf: SparkConf) extends Logging {
         }
         // If the block is too late or the invalid block push or the attempt is not the latest one,
         // there is no need to retry it
-        !(t.isInstanceOf[BlockPushNonFatalFailure] &&
-          BlockPushNonFatalFailure.
-            shouldNotRetryErrorCode(t.asInstanceOf[BlockPushNonFatalFailure].getReturnCode));
+        !(t.isInstanceOf[BlockPushResponse] &&
+          BlockPushResponse.
+            shouldNotRetryErrorCode(t.asInstanceOf[BlockPushResponse].getReturnCode));
       }
     }
   }

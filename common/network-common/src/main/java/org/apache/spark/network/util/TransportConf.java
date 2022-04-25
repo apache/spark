@@ -386,4 +386,13 @@ public class TransportConf {
   public int ioExceptionsThresholdDuringMerge() {
     return conf.getInt("spark.shuffle.push.server.ioExceptionsThresholdDuringMerge", 4);
   }
+
+  /**
+   * The maximum heap size which is used in push-based shuffle for cache pushed blocks before flush
+   * to final data files. Spill the cached data to temp file if pushed blocks data exceeds this.
+   */
+  public long mergedMemoryPoolSize() {
+    return JavaUtils.byteStringAsBytes(
+        conf.get("spark.shuffle.push.server.mergedMemoryPoolSize", "512m"));
+  }
 }

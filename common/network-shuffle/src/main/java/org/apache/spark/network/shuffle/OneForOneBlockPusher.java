@@ -29,10 +29,8 @@ import org.apache.spark.network.buffer.ManagedBuffer;
 import org.apache.spark.network.buffer.NioManagedBuffer;
 import org.apache.spark.network.client.RpcResponseCallback;
 import org.apache.spark.network.client.TransportClient;
-import org.apache.spark.network.server.BlockPushNonFatalFailure;
-import org.apache.spark.network.server.BlockPushNonFatalFailure.ReturnCode;
-import org.apache.spark.network.shuffle.protocol.BlockPushReturnCode;
-import org.apache.spark.network.shuffle.protocol.BlockTransferMessage;
+import org.apache.spark.network.server.BlockPushResponse;
+import org.apache.spark.network.server.BlockPushResponse.ReturnCode;
 import org.apache.spark.network.shuffle.protocol.PushBlockStream;
 
 /**
@@ -82,16 +80,12 @@ public class OneForOneBlockPusher {
 
     @Override
     public void onSuccess(ByteBuffer response) {
-      BlockPushReturnCode pushResponse =
-        (BlockPushReturnCode) BlockTransferMessage.Decoder.fromByteBuffer(response);
+      BlockPushResponse pushResponse = BlockPushResponse.fromByteBuffer(response);
       // If the return code is not SUCCESS, the server has responded some error code. Handle
       // the error accordingly.
-      ReturnCode returnCode = BlockPushNonFatalFailure.getReturnCode(pushResponse.returnCode);
-      if (returnCode != ReturnCode.SUCCESS) {
-        String blockId = pushResponse.failureBlockId;
-        Preconditions.checkArgument(!blockId.isEmpty());
-        checkAndFailRemainingBlocks(index, new BlockPushNonFatalFailure(returnCode,
-          BlockPushNonFatalFailure.getErrorMsg(blockId, returnCode)));
+      if (pushResponse.getReturnCode() != ReturnCode.SUCCESS) {
+        Preconditions.checkArgument(!pushResponse.getBlockId().isEmpty());
+        checkAndFailRemainingBlocks(index, pushResponse);
       } else {
         // On receipt of a successful block push
         listener.onBlockPushSuccess(blockId, new NioManagedBuffer(ByteBuffer.allocate(0)));

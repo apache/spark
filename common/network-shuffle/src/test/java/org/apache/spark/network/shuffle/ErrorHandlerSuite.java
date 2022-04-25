@@ -21,8 +21,8 @@ import java.net.ConnectException;
 
 import org.junit.Test;
 
-import org.apache.spark.network.server.BlockPushNonFatalFailure;
-import org.apache.spark.network.server.BlockPushNonFatalFailure.ReturnCode;
+import org.apache.spark.network.server.BlockPushResponse;
+import org.apache.spark.network.server.BlockPushResponse.ReturnCode;
 
 import static org.junit.Assert.*;
 
@@ -34,15 +34,11 @@ public class ErrorHandlerSuite {
   @Test
   public void testErrorRetry() {
     ErrorHandler.BlockPushErrorHandler pushHandler = new ErrorHandler.BlockPushErrorHandler();
-    assertFalse(pushHandler.shouldRetryError(new BlockPushNonFatalFailure(
-      ReturnCode.TOO_LATE_BLOCK_PUSH, "")));
-    assertFalse(pushHandler.shouldRetryError(new BlockPushNonFatalFailure(
-      ReturnCode.TOO_OLD_ATTEMPT_PUSH, "")));
-    assertFalse(pushHandler.shouldRetryError(new BlockPushNonFatalFailure(
-      ReturnCode.STALE_BLOCK_PUSH, "")));
+    assertFalse(pushHandler.shouldRetryError(
+      new BlockPushResponse(ReturnCode.TOO_LATE_BLOCK_PUSH, "")));
+    assertFalse(pushHandler.shouldRetryError(
+      new BlockPushResponse(ReturnCode.STALE_BLOCK_PUSH, "")));
     assertFalse(pushHandler.shouldRetryError(new RuntimeException(new ConnectException())));
-    assertTrue(pushHandler.shouldRetryError(new BlockPushNonFatalFailure(
-      ReturnCode.BLOCK_APPEND_COLLISION_DETECTED, "")));
     assertTrue(pushHandler.shouldRetryError(new Throwable()));
 
     ErrorHandler.BlockFetchErrorHandler fetchHandler = new ErrorHandler.BlockFetchErrorHandler();
@@ -53,14 +49,10 @@ public class ErrorHandlerSuite {
   @Test
   public void testErrorLogging() {
     ErrorHandler.BlockPushErrorHandler pushHandler = new ErrorHandler.BlockPushErrorHandler();
-    assertFalse(pushHandler.shouldLogError(new BlockPushNonFatalFailure(
-      ReturnCode.TOO_LATE_BLOCK_PUSH, "")));
-    assertFalse(pushHandler.shouldLogError(new BlockPushNonFatalFailure(
-      ReturnCode.TOO_OLD_ATTEMPT_PUSH, "")));
-    assertFalse(pushHandler.shouldLogError(new BlockPushNonFatalFailure(
-      ReturnCode.STALE_BLOCK_PUSH, "")));
-    assertFalse(pushHandler.shouldLogError(new BlockPushNonFatalFailure(
-      ReturnCode.BLOCK_APPEND_COLLISION_DETECTED, "")));
+    assertFalse(pushHandler.shouldLogError(
+      new BlockPushResponse(ReturnCode.TOO_LATE_BLOCK_PUSH, "")));
+    assertFalse(pushHandler.shouldLogError(
+      new BlockPushResponse(ReturnCode.STALE_BLOCK_PUSH, "")));
     assertTrue(pushHandler.shouldLogError(new Throwable()));
 
     ErrorHandler.BlockFetchErrorHandler fetchHandler = new ErrorHandler.BlockFetchErrorHandler();

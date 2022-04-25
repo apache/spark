@@ -36,10 +36,9 @@ import org.apache.spark.network.buffer.NettyManagedBuffer;
 import org.apache.spark.network.buffer.NioManagedBuffer;
 import org.apache.spark.network.client.RpcResponseCallback;
 import org.apache.spark.network.client.TransportClient;
-import org.apache.spark.network.server.BlockPushNonFatalFailure;
-import org.apache.spark.network.server.BlockPushNonFatalFailure.ReturnCode;
+import org.apache.spark.network.server.BlockPushResponse;
+import org.apache.spark.network.server.BlockPushResponse.ReturnCode;
 import org.apache.spark.network.shuffle.protocol.BlockTransferMessage;
-import org.apache.spark.network.shuffle.protocol.BlockPushReturnCode;
 import org.apache.spark.network.shuffle.protocol.PushBlockStream;
 
 
@@ -84,8 +83,8 @@ public class OneForOneBlockPusherSuite {
   public void testServerFailures() {
     LinkedHashMap<String, ManagedBuffer> blocks = Maps.newLinkedHashMap();
     blocks.put("shufflePush_0_0_0_0", new NioManagedBuffer(ByteBuffer.wrap(new byte[12])));
-    blocks.put("shufflePush_0_0_1_0", new NioManagedBuffer(ByteBuffer.wrap(new byte[0])));
-    blocks.put("shufflePush_0_0_2_0", new NioManagedBuffer(ByteBuffer.wrap(new byte[0])));
+    blocks.put("shufflePush_0_0_1_0", null);
+    blocks.put("shufflePush_0_0_2_0", null);
     String[] blockIds = blocks.keySet().toArray(new String[blocks.size()]);
 
     BlockPushingListener listener = pushBlocks(
@@ -97,7 +96,7 @@ public class OneForOneBlockPusherSuite {
 
     verify(listener, times(1)).onBlockPushSuccess(eq("shufflePush_0_0_0_0"), any());
     verify(listener, times(1)).onBlockPushFailure(eq("shufflePush_0_0_1_0"), any());
-    verify(listener, times(1)).onBlockPushFailure(eq("shufflePush_0_0_2_0"), any());
+    verify(listener, times(2)).onBlockPushFailure(eq("shufflePush_0_0_2_0"), any());
   }
 
   @Test
@@ -116,15 +115,15 @@ public class OneForOneBlockPusherSuite {
         new PushBlockStream("app-id", 0, 0, 0, 2, 0, 2)));
 
     verify(listener, times(1)).onBlockPushSuccess(eq("shufflePush_0_0_0_0"), any());
-    verify(listener, times(0)).onBlockPushSuccess(not(eq("shufflePush_0_0_0_0")), any());
+    verify(listener, times(1)).onBlockPushSuccess(eq("shufflePush_0_0_2_0"), any());
     verify(listener, times(0)).onBlockPushFailure(eq("shufflePush_0_0_0_0"), any());
     verify(listener, times(1)).onBlockPushFailure(eq("shufflePush_0_0_1_0"), any());
-    verify(listener, times(2)).onBlockPushFailure(eq("shufflePush_0_0_2_0"), any());
+    verify(listener, times(1)).onBlockPushFailure(eq("shufflePush_0_0_2_0"), any());
   }
 
   /**
    * Begins a push on the given set of blocks by mocking the response from server side.
-   * If a block is an empty byte, a server side retriable exception will be thrown.
+   * If a block is an empty byte, server side return success.
    * If a block is null, a non-retriable exception will be thrown.
    */
   private static BlockPushingListener pushBlocks(
@@ -145,14 +144,10 @@ public class OneForOneBlockPusherSuite {
       Map.Entry<String, ManagedBuffer> entry = blockIterator.next();
       String blockId = entry.getKey();
       ManagedBuffer block = entry.getValue();
-      if (block != null && block.nioByteBuffer().capacity() > 0) {
-        callback.onSuccess(new BlockPushReturnCode(ReturnCode.SUCCESS.id(), "").toByteBuffer());
-      } else if (block != null) {
-        callback.onSuccess(new BlockPushReturnCode(
-          ReturnCode.BLOCK_APPEND_COLLISION_DETECTED.id(), blockId).toByteBuffer());
+      if (block != null) {
+        callback.onSuccess(BlockPushResponse.SUCCESS_RESPONSE.toByteBuffer());
       } else {
-        callback.onFailure(new BlockPushNonFatalFailure(
-          ReturnCode.TOO_LATE_BLOCK_PUSH, ""));
+        callback.onFailure(new BlockPushResponse(ReturnCode.TOO_LATE_BLOCK_PUSH, blockId));
       }
       assertEquals(msgIterator.next(), message);
       return null;

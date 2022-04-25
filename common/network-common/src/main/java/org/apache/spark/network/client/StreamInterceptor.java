@@ -72,24 +72,29 @@ public class StreamInterceptor<T extends Message> implements TransportFrameDecod
 
   @Override
   public boolean handle(ByteBuf buf) throws Exception {
-    int toRead = (int) Math.min(buf.readableBytes(), byteCount - bytesRead);
-    ByteBuffer nioBuffer = buf.readSlice(toRead).nioBuffer();
+    try {
+      int toRead = (int) Math.min(buf.readableBytes(), byteCount - bytesRead);
+      ByteBuffer nioBuffer = buf.readSlice(toRead).nioBuffer();
 
-    int available = nioBuffer.remaining();
-    callback.onData(streamId, nioBuffer);
-    bytesRead += available;
-    if (bytesRead > byteCount) {
-      RuntimeException re = new IllegalStateException(String.format(
-        "Read too many bytes? Expected %d, but read %d.", byteCount, bytesRead));
-      callback.onFailure(streamId, re);
-      deactivateStream();
-      throw re;
-    } else if (bytesRead == byteCount) {
-      deactivateStream();
-      callback.onComplete(streamId);
+      int available = nioBuffer.remaining();
+      callback.onData(streamId, nioBuffer);
+      bytesRead += available;
+      if (bytesRead > byteCount) {
+        RuntimeException re = new IllegalStateException(String.format(
+            "Read too many bytes? Expected %d, but read %d.", byteCount, bytesRead));
+        throw re;
+      } else if (bytesRead == byteCount) {
+        callback.onComplete(streamId);
+      }
+      return bytesRead != byteCount;
+    } catch (Exception ex) {
+      callback.onFailure(streamId, ex);
+      throw ex;
+    } finally {
+      if (bytesRead >= byteCount) {
+        deactivateStream();
+      }
     }
-
-    return bytesRead != byteCount;
   }
 
 }

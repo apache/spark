@@ -19,7 +19,9 @@ package org.apache.spark.network.server;
 
 import java.nio.ByteBuffer;
 
-import com.google.common.base.Preconditions;
+import io.netty.buffer.ByteBuf;
+import io.netty.buffer.Unpooled;
+import org.apache.spark.network.protocol.Encoders;
 
 /**
  * A special RuntimeException thrown when shuffle service experiences a non-fatal failure
@@ -29,7 +31,7 @@ import com.google.common.base.Preconditions;
  * shuffle is merge finalized or when a pushed block experiences merge collision. Under these
  * scenarios, we throw this special RuntimeException.
  */
-public class BlockPushNonFatalFailure extends RuntimeException {
+public class BlockPushResponse extends RuntimeException {
   /**
    * String constant used for generating exception messages indicating a block to be merged
    * arrives too late on the server side. When we get a block push failure because of the
@@ -56,38 +58,14 @@ public class BlockPushNonFatalFailure extends RuntimeException {
   public static final String STALE_BLOCK_PUSH_MESSAGE_SUFFIX =
     " is a stale block push from an indeterminate stage retry";
 
-  /**
-   * String constant used for generating exception messages indicating the server couldn't
-   * append a block after all available attempts due to collision with other blocks belonging
-   * to the same shuffle partition. When we get a block push failure because of the block
-   * couldn't be written due to this reason, we will not log the exception on the client side.
-   */
-  public static final String BLOCK_APPEND_COLLISION_MSG_SUFFIX =
-    " experienced merge collision on the server side";
+  private String blockId;
 
-  /**
-   * The error code of the failure, encoded as a ByteBuffer to be responded back to the client.
-   * Instead of responding a RPCFailure with the exception stack trace as the payload,
-   * which makes checking the content of the exception very tedious on the client side,
-   * we can respond a proper RPCResponse to make it more robust and efficient. This
-   * field is only set on the shuffle server side when the exception is originally generated.
-   */
-  private ByteBuffer response;
-
-  /**
-   * The error code of the failure. This field is only set on the client side when a
-   * BlockPushNonFatalFailure is recreated from the error code received from the server.
-   */
   private ReturnCode returnCode;
 
-  public BlockPushNonFatalFailure(ByteBuffer response, String msg) {
-    super(msg);
-    this.response = response;
-  }
-
-  public BlockPushNonFatalFailure(ReturnCode returnCode, String msg) {
-    super(msg);
+  public BlockPushResponse(ReturnCode returnCode, String blockId) {
+    super("Block " + blockId + returnCode.errorMsgSuffix);
     this.returnCode = returnCode;
+    this.blockId = blockId;
   }
 
   /**
@@ -99,16 +77,27 @@ public class BlockPushNonFatalFailure extends RuntimeException {
     return this;
   }
 
-  public ByteBuffer getResponse() {
-    // Ensure we do not invoke this method if response is not set
-    Preconditions.checkNotNull(response);
-    return response;
+  public ReturnCode getReturnCode() {
+    return returnCode;
   }
 
-  public ReturnCode getReturnCode() {
-    // Ensure we do not invoke this method if returnCode is not set
-    Preconditions.checkNotNull(returnCode);
-    return returnCode;
+  public String getBlockId() {
+    return blockId;
+  }
+
+  public static BlockPushResponse fromByteBuffer(ByteBuffer msg) {
+    ByteBuf buf = Unpooled.wrappedBuffer(msg);
+    byte type = buf.readByte();
+    String blockId = Encoders.Strings.decode(buf);
+    return new BlockPushResponse(getReturnCode(type), blockId);
+  }
+
+  public ByteBuffer toByteBuffer() {
+    ByteBuf buf = Unpooled.buffer(1 + Encoders.Strings.encodedLength(blockId));
+    buf.writeByte(returnCode.id);
+    Encoders.Strings.encode(buf, blockId);
+    assert buf.writableBytes() == 0 : "Writable bytes remain: " + buf.writableBytes();
+    return buf.nioBuffer();
   }
 
   public enum ReturnCode {
@@ -122,11 +111,6 @@ public class BlockPushNonFatalFailure extends RuntimeException {
      * will not retry pushing the block.
      */
     TOO_LATE_BLOCK_PUSH(1, TOO_LATE_BLOCK_PUSH_MESSAGE_SUFFIX),
-    /**
-     * Indicating the server couldn't append a block after all available attempts due to
-     * collision with other blocks belonging to the same shuffle partition.
-     */
-    BLOCK_APPEND_COLLISION_DETECTED(2, BLOCK_APPEND_COLLISION_MSG_SUFFIX),
     /**
      * Indicate a block received on the server side is a stale block push in the case of
      * indeterminate stage retries. When the client receives this code, it will not retry
@@ -157,7 +141,6 @@ public class BlockPushNonFatalFailure extends RuntimeException {
     switch (id) {
       case 0: return ReturnCode.SUCCESS;
       case 1: return ReturnCode.TOO_LATE_BLOCK_PUSH;
-      case 2: return ReturnCode.BLOCK_APPEND_COLLISION_DETECTED;
       case 3: return ReturnCode.STALE_BLOCK_PUSH;
       case 4: return ReturnCode.TOO_OLD_ATTEMPT_PUSH;
       default: throw new IllegalArgumentException("Unknown block push return code: " + id);
@@ -165,13 +148,12 @@ public class BlockPushNonFatalFailure extends RuntimeException {
   }
 
   public static boolean shouldNotRetryErrorCode(ReturnCode returnCode) {
-    return returnCode == ReturnCode.TOO_LATE_BLOCK_PUSH ||
+    return returnCode == ReturnCode.SUCCESS ||
+      returnCode == ReturnCode.TOO_LATE_BLOCK_PUSH ||
       returnCode == ReturnCode.STALE_BLOCK_PUSH ||
       returnCode == ReturnCode.TOO_OLD_ATTEMPT_PUSH;
   }
 
-  public static String getErrorMsg(String blockId, ReturnCode errorCode) {
-    Preconditions.checkArgument(errorCode != ReturnCode.SUCCESS);
-    return "Block " + blockId + errorCode.errorMsgSuffix;
-  }
+  public static final BlockPushResponse SUCCESS_RESPONSE =
+      new BlockPushResponse(ReturnCode.SUCCESS, "");
 }

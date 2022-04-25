@@ -23,9 +23,7 @@ import java.net.ConnectException;
 import com.google.common.base.Throwables;
 
 import org.apache.spark.annotation.Evolving;
-import org.apache.spark.network.server.BlockPushNonFatalFailure;
-
-import static org.apache.spark.network.server.BlockPushNonFatalFailure.ReturnCode.*;
+import org.apache.spark.network.server.BlockPushResponse;
 
 /**
  * Plugs into {@link RetryingBlockTransferor} to further control when an exception should be retried
@@ -89,14 +87,13 @@ public interface ErrorHandler {
 
       // If the block is too late or the invalid block push or the attempt is not the latest one,
       // there is no need to retry it
-      return !(t instanceof BlockPushNonFatalFailure &&
-        BlockPushNonFatalFailure
-          .shouldNotRetryErrorCode(((BlockPushNonFatalFailure) t).getReturnCode()));
+      return !(t instanceof BlockPushResponse &&
+        BlockPushResponse.shouldNotRetryErrorCode(((BlockPushResponse) t).getReturnCode()));
     }
 
     @Override
     public boolean shouldLogError(Throwable t) {
-      return !(t instanceof BlockPushNonFatalFailure);
+      return !(t instanceof BlockPushResponse);
     }
   }
 

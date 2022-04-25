@@ -214,13 +214,13 @@ public class TransportRequestHandler extends MessageHandler<RequestMessage> {
            try {
              streamHandler.onComplete(streamId);
              callback.onSuccess(streamHandler.getCompletionResponse());
-           } catch (BlockPushNonFatalFailure ex) {
+           } catch (BlockPushResponse ex) {
              // Respond an RPC message with the error code to client instead of using exceptions
              // encoded in the RPCFailure. This type of exceptions gets thrown more frequently
              // than a regular exception on the shuffle server side due to the best-effort nature
              // of push-based shuffle and requires special handling on the client side. Using a
              // proper RPCResponse is more efficient.
-             callback.onSuccess(ex.getResponse());
+             callback.onSuccess(ex.toByteBuffer());
              streamHandler.onFailure(streamId, ex);
            } catch (Exception ex) {
              IOException ioExc = new IOException("Failure post-processing complete stream;" +
@@ -249,13 +249,13 @@ public class TransportRequestHandler extends MessageHandler<RequestMessage> {
         wrappedCallback.onComplete(wrappedCallback.getID());
       }
     } catch (Exception e) {
-      if (e instanceof BlockPushNonFatalFailure) {
+      if (e instanceof BlockPushResponse) {
         // Thrown by rpcHandler.receiveStream(reverseClient, meta, callback), the same as
         // onComplete method. Respond an RPC message with the error code to client instead of
         // using exceptions encoded in the RPCFailure. Using a proper RPCResponse is more
         // efficient, and now only include the too old attempt case here.
         respond(new RpcResponse(req.requestId,
-          new NioManagedBuffer(((BlockPushNonFatalFailure) e).getResponse())));
+          new NioManagedBuffer(((BlockPushResponse) e).toByteBuffer())));
       } else {
         logger.error("Error while invoking RpcHandler#receive() on RPC id " + req.requestId, e);
         respond(new RpcFailure(req.requestId, Throwables.getStackTraceAsString(e)));
