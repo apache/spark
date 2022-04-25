@@ -409,6 +409,69 @@ class QueryCompilationErrorsSuite
         "can only contain StringType as a key type for a MapType."
     )
   }
+
+  test("MISSING_COLUMN: SELECT distinct does not work correctly " +
+    "if order by missing attribute") {
+    checkAnswer(
+      sql(
+        """select distinct struct.a, struct.b
+          |from (
+          |  select named_struct('a', 1, 'b', 2, 'c', 3) as struct
+          |  union all
+          |  select named_struct('a', 1, 'b', 2, 'c', 4) as struct) tmp
+          |order by a, b
+          |""".stripMargin), Row(1, 2) :: Nil)
+
+    checkErrorClass(
+      exception = intercept[AnalysisException] {
+        sql(
+          """select distinct struct.a, struct.b
+            |from (
+            |  select named_struct('a', 1, 'b', 2, 'c', 3) as struct
+            |  union all
+            |  select named_struct('a', 1, 'b', 2, 'c', 4) as struct) tmp
+            |order by struct.a, struct.b
+            |""".stripMargin)
+      },
+      errorClass = "MISSING_COLUMN",
+      msg = """Column 'struct.a' does not exist. """ +
+        """Did you mean one of the following\? \[a, b\]; line 6 pos 9;
+           |'Sort \['struct.a ASC NULLS FIRST, 'struct.b ASC NULLS FIRST\], true
+           |\+\- Distinct
+           |   \+\- Project \[struct#\w+\.a AS a#\w+, struct#\w+\.b AS b#\w+\]
+           |      \+\- SubqueryAlias tmp
+           |         \+\- Union false, false
+           |            :\- Project \[named_struct\(a, 1, b, 2, c, 3\) AS struct#\w+\]
+           |            :  \+\- OneRowRelation
+           |            \+\- Project \[named_struct\(a, 1, b, 2, c, 4\) AS struct#\w+\]
+           |               \+\- OneRowRelation
+           |""".stripMargin,
+      matchMsg = true)
+  }
+
+  test("MISSING_COLUMN - SPARK-21335: support un-aliased subquery") {
+    withTempView("v") {
+      Seq(1 -> "a").toDF("i", "j").createOrReplaceTempView("v")
+      checkAnswer(sql("SELECT i from (SELECT i FROM v)"), Row(1))
+
+      checkErrorClass(
+        exception = intercept[AnalysisException](sql("SELECT v.i from (SELECT i FROM v)")),
+        errorClass = "MISSING_COLUMN",
+        msg = """Column 'v.i' does not exist. Did you mean one of the following\? """ +
+          """\[__auto_generated_subquery_name.i\]; line 1 pos 7;
+            |'Project \['v.i\]
+            |\+\- SubqueryAlias __auto_generated_subquery_name
+            |   \+\- Project \[i#\w+\]
+            |      \+\- SubqueryAlias v
+            |         \+\- View \(`v`, \[i#\w+,j#\w+\]\)
+            |            \+\- Project \[_\w+#\w+ AS i#\w+, _\w+#\w+ AS j#\w+\]
+            |               \+\- LocalRelation \[_\w+#\w+, _\w+#\w+\]
+            |""".stripMargin,
+        matchMsg = true)
+
+      checkAnswer(sql("SELECT __auto_generated_subquery_name.i from (SELECT i FROM v)"), Row(1))
+    }
+  }
 }
 
 class MyCastToString extends SparkUserDefinedFunction(
