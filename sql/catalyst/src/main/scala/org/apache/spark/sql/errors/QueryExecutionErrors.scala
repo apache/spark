@@ -91,7 +91,8 @@ object QueryExecutionErrors extends QueryErrorsBase {
 
   def castingCauseOverflowError(t: Any, dataType: DataType): ArithmeticException = {
     new SparkArithmeticException(errorClass = "CAST_CAUSES_OVERFLOW",
-      messageParameters = Array(toSQLValue(t), toSQLType(dataType), SQLConf.ANSI_ENABLED.key))
+      messageParameters = Array(
+        toSQLValue(t), toSQLType(dataType), toSQLConf(SQLConf.ANSI_ENABLED.key)))
   }
 
   def cannotChangeDecimalPrecisionError(
@@ -99,9 +100,14 @@ object QueryExecutionErrors extends QueryErrorsBase {
       decimalPrecision: Int,
       decimalScale: Int,
       context: String): ArithmeticException = {
-    new SparkArithmeticException(errorClass = "CANNOT_CHANGE_DECIMAL_PRECISION",
-      messageParameters = Array(value.toDebugString,
-        decimalPrecision.toString, decimalScale.toString, SQLConf.ANSI_ENABLED.key, context))
+    new SparkArithmeticException(
+      errorClass = "CANNOT_CHANGE_DECIMAL_PRECISION",
+      messageParameters = Array(
+        value.toDebugString,
+        decimalPrecision.toString,
+        decimalScale.toString,
+        toSQLConf(SQLConf.ANSI_ENABLED.key),
+        context))
   }
 
   def invalidInputSyntaxForNumericError(
@@ -148,7 +154,8 @@ object QueryExecutionErrors extends QueryErrorsBase {
 
   def divideByZeroError(context: String): ArithmeticException = {
     new SparkArithmeticException(
-      errorClass = "DIVIDE_BY_ZERO", messageParameters = Array(SQLConf.ANSI_ENABLED.key, context))
+      errorClass = "DIVIDE_BY_ZERO",
+      messageParameters = Array(toSQLConf(SQLConf.ANSI_ENABLED.key), context))
   }
 
   def invalidArrayIndexError(index: Int, numElements: Int): ArrayIndexOutOfBoundsException = {
@@ -163,8 +170,9 @@ object QueryExecutionErrors extends QueryErrorsBase {
       index: Int,
       numElements: Int,
       key: String): ArrayIndexOutOfBoundsException = {
-    new SparkArrayIndexOutOfBoundsException(errorClass = "INVALID_ARRAY_INDEX",
-      messageParameters = Array(toSQLValue(index), toSQLValue(numElements), key))
+    new SparkArrayIndexOutOfBoundsException(
+      errorClass = "INVALID_ARRAY_INDEX",
+      messageParameters = Array(toSQLValue(index), toSQLValue(numElements), toSQLConf(key)))
   }
 
   def invalidElementAtIndexError(
@@ -173,7 +181,7 @@ object QueryExecutionErrors extends QueryErrorsBase {
     new SparkArrayIndexOutOfBoundsException(
       errorClass = "INVALID_ARRAY_INDEX_IN_ELEMENT_AT",
       messageParameters =
-        Array(toSQLValue(index), toSQLValue(numElements), SQLConf.ANSI_ENABLED.key))
+        Array(toSQLValue(index), toSQLValue(numElements), toSQLConf(SQLConf.ANSI_ENABLED.key)))
   }
 
   def mapKeyNotExistError(key: Any, context: String): NoSuchElementException = {
@@ -182,8 +190,9 @@ object QueryExecutionErrors extends QueryErrorsBase {
   }
 
   def invalidFractionOfSecondError(): DateTimeException = {
-    new SparkDateTimeException(errorClass = "INVALID_FRACTION_OF_SECOND",
-      Array(SQLConf.ANSI_ENABLED.key))
+    new SparkDateTimeException(
+      errorClass = "INVALID_FRACTION_OF_SECOND",
+      Array(toSQLConf(SQLConf.ANSI_ENABLED.key)))
   }
 
   def ansiDateTimeParseError(e: DateTimeParseException): DateTimeParseException = {
@@ -521,10 +530,10 @@ object QueryExecutionErrors extends QueryErrorsBase {
            |from $format files can be ambiguous, as the files may be written by
            |Spark 2.x or legacy versions of Hive, which uses a legacy hybrid calendar
            |that is different from Spark 3.0+'s Proleptic Gregorian calendar.
-           |See more details in SPARK-31404. You can set the SQL config '$config' or
+           |See more details in SPARK-31404. You can set the SQL config ${toSQLConf(config)} or
            |the datasource option '$option' to 'LEGACY' to rebase the datetime values
            |w.r.t. the calendar difference during reading. To read the datetime values
-           |as it is, set the SQL config '$config' or the datasource option '$option'
+           |as it is, set the SQL config ${toSQLConf(config)} or the datasource option '$option'
            |to 'CORRECTED'.
            |""".stripMargin),
       cause = null
@@ -541,10 +550,10 @@ object QueryExecutionErrors extends QueryErrorsBase {
            |into $format files can be dangerous, as the files may be read by Spark 2.x
            |or legacy versions of Hive later, which uses a legacy hybrid calendar that
            |is different from Spark 3.0+'s Proleptic Gregorian calendar. See more
-           |details in SPARK-31404. You can set $config to 'LEGACY' to rebase the
+           |details in SPARK-31404. You can set ${toSQLConf(config)} to 'LEGACY' to rebase the
            |datetime values w.r.t. the calendar difference during writing, to get maximum
-           |interoperability. Or set $config to 'CORRECTED' to write the datetime values
-           |as it is, if you are 100% sure that the written files will only be read by
+           |interoperability. Or set ${toSQLConf(config)} to 'CORRECTED' to write the datetime
+           |values as it is, if you are 100% sure that the written files will only be read by
            |Spark 3.0+ or other systems that use Proleptic Gregorian calendar.
            |""".stripMargin),
       cause = null

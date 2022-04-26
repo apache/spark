@@ -24,6 +24,8 @@ import org.apache.spark.sql.internal.SQLConf
 class QueryExecutionAnsiErrorsSuite extends QueryTest with QueryErrorsSuiteBase {
   override def sparkConf: SparkConf = super.sparkConf.set(SQLConf.ANSI_ENABLED.key, "true")
 
+  private val ansiConf = "\"" + SQLConf.ANSI_ENABLED.key + "\""
+
   test("CAST_CAUSES_OVERFLOW: from timestamp to int") {
     checkErrorClass(
       exception = intercept[SparkArithmeticException] {
@@ -33,7 +35,7 @@ class QueryExecutionAnsiErrorsSuite extends QueryTest with QueryErrorsSuiteBase 
       msg =
         "Casting 253402258394567890L to \"INT\" causes overflow. " +
         "To return NULL instead, use 'try_cast'. " +
-        "If necessary set spark.sql.ansi.enabled to false to bypass this error.",
+        s"If necessary set $ansiConf to false to bypass this error.",
       sqlState = Some("22005"))
   }
 
@@ -45,7 +47,7 @@ class QueryExecutionAnsiErrorsSuite extends QueryTest with QueryErrorsSuiteBase 
       errorClass = "DIVIDE_BY_ZERO",
       msg =
         "divide by zero. To return NULL instead, use 'try_divide'. If necessary set " +
-        "spark.sql.ansi.enabled to false (except for ANSI interval type) to bypass this error." +
+        s"$ansiConf to false (except for ANSI interval type) to bypass this error." +
         """
           |== SQL(line 1, position 7) ==
           |select 6/0
@@ -61,7 +63,7 @@ class QueryExecutionAnsiErrorsSuite extends QueryTest with QueryErrorsSuiteBase 
       },
       errorClass = "INVALID_FRACTION_OF_SECOND",
       msg = "The fraction of sec must be zero. Valid range is [0, 60]. " +
-        "If necessary set spark.sql.ansi.enabled to false to bypass this error. ",
+        s"If necessary set $ansiConf to false to bypass this error. ",
       sqlState = Some("22023"))
   }
 
@@ -73,7 +75,7 @@ class QueryExecutionAnsiErrorsSuite extends QueryTest with QueryErrorsSuiteBase 
       errorClass = "CANNOT_CHANGE_DECIMAL_PRECISION",
       msg =
         "Decimal(expanded,66666666666666.666,17,3}) cannot be represented as Decimal(8, 1). " +
-        "If necessary set spark.sql.ansi.enabled to false to bypass this error." +
+        s"If necessary set $ansiConf to false to bypass this error." +
         """
           |== SQL(line 1, position 7) ==
           |select CAST('66666666666666.666' AS DECIMAL(8, 1))
@@ -89,7 +91,7 @@ class QueryExecutionAnsiErrorsSuite extends QueryTest with QueryErrorsSuiteBase 
       },
       errorClass = "INVALID_ARRAY_INDEX",
       msg = "Invalid index: 8, numElements: 5. " +
-        "If necessary set spark.sql.ansi.enabled to false to bypass this error."
+        s"If necessary set $ansiConf to false to bypass this error."
     )
   }
 
@@ -101,7 +103,7 @@ class QueryExecutionAnsiErrorsSuite extends QueryTest with QueryErrorsSuiteBase 
       errorClass = "INVALID_ARRAY_INDEX_IN_ELEMENT_AT",
       msg = "Invalid index: 8, numElements: 5. " +
         "To return NULL instead, use 'try_element_at'. " +
-        "If necessary set spark.sql.ansi.enabled to false to bypass this error."
+        s"If necessary set $ansiConf to false to bypass this error."
     )
   }
 }

@@ -3676,6 +3676,12 @@ class Analyzer(override val catalogManager: CatalogManager)
           case other => other
         })
 
+      case a: DropColumns if a.table.resolved && hasUnresolvedFieldName(a) && a.ifExists =>
+        // for DropColumn with IF EXISTS clause, we should resolve and ignore missing column errors
+        val table = a.table.asInstanceOf[ResolvedTable]
+        val columnsToDrop = a.columnsToDrop
+        a.copy(columnsToDrop = columnsToDrop.flatMap(c => resolveFieldNamesOpt(table, c.name, c)))
+
       case a: AlterTableCommand if a.table.resolved && hasUnresolvedFieldName(a) =>
         val table = a.table.asInstanceOf[ResolvedTable]
         a.transformExpressions {
@@ -3765,11 +3771,19 @@ class Analyzer(override val catalogManager: CatalogManager)
         table: ResolvedTable,
         fieldName: Seq[String],
         context: Expression): ResolvedFieldName = {
+      resolveFieldNamesOpt(table, fieldName, context)
+        .getOrElse(throw QueryCompilationErrors.missingFieldError(fieldName, table, context.origin))
+    }
+
+    private def resolveFieldNamesOpt(
+        table: ResolvedTable,
+        fieldName: Seq[String],
+        context: Expression): Option[ResolvedFieldName] = {
       table.schema.findNestedField(
         fieldName, includeCollections = true, conf.resolver, context.origin
       ).map {
         case (path, field) => ResolvedFieldName(path, field)
-      }.getOrElse(throw QueryCompilationErrors.missingFieldError(fieldName, table, context.origin))
+      }
     }
 
     private def hasUnresolvedFieldName(a: AlterTableCommand): Boolean = {

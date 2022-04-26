@@ -1814,8 +1814,12 @@ class DataFrameTest(ComparisonTestBase, SQLTestUtils):
             index=np.random.rand(7),
         )
         psdf = ps.from_pandas(pdf)
-        self.assert_eq(psdf.nlargest(5, columns="a"), pdf.nlargest(5, columns="a"))
-        self.assert_eq(psdf.nlargest(5, columns=["a", "b"]), pdf.nlargest(5, columns=["a", "b"]))
+        # see also: https://github.com/pandas-dev/pandas/issues/46589
+        if not (LooseVersion("1.4.0") <= LooseVersion(pd.__version__) <= LooseVersion("1.4.2")):
+            self.assert_eq(psdf.nlargest(5, columns="a"), pdf.nlargest(5, columns="a"))
+            self.assert_eq(
+                psdf.nlargest(5, columns=["a", "b"]), pdf.nlargest(5, columns=["a", "b"])
+            )
         self.assert_eq(psdf.nlargest(5, columns=["c"]), pdf.nlargest(5, columns=["c"]))
         self.assert_eq(
             psdf.nlargest(5, columns=["c"], keep="first"),
@@ -1838,10 +1842,12 @@ class DataFrameTest(ComparisonTestBase, SQLTestUtils):
             index=np.random.rand(7),
         )
         psdf = ps.from_pandas(pdf)
-        self.assert_eq(psdf.nsmallest(n=5, columns="a"), pdf.nsmallest(5, columns="a"))
-        self.assert_eq(
-            psdf.nsmallest(n=5, columns=["a", "b"]), pdf.nsmallest(5, columns=["a", "b"])
-        )
+        # see also: https://github.com/pandas-dev/pandas/issues/46589
+        if not (LooseVersion("1.4.0") <= LooseVersion(pd.__version__) <= LooseVersion("1.4.2")):
+            self.assert_eq(psdf.nsmallest(n=5, columns="a"), pdf.nsmallest(5, columns="a"))
+            self.assert_eq(
+                psdf.nsmallest(n=5, columns=["a", "b"]), pdf.nsmallest(5, columns=["a", "b"])
+            )
         self.assert_eq(psdf.nsmallest(n=5, columns=["c"]), pdf.nsmallest(5, columns=["c"]))
         self.assert_eq(
             psdf.nsmallest(n=5, columns=["c"], keep="first"),
@@ -2619,8 +2625,7 @@ class DataFrameTest(ComparisonTestBase, SQLTestUtils):
         self.assertRaisesRegex(TypeError, ks_err_msg, lambda: "literal" * psdf["a"])
 
     def test_sample(self):
-        pdf = pd.DataFrame({"A": [0, 2, 4]})
-        psdf = ps.from_pandas(pdf)
+        psdf = ps.DataFrame({"A": [0, 2, 4]}, index=["x", "y", "z"])
 
         # Make sure the tests run, but we can't check the result because they are non-deterministic.
         psdf.sample(frac=0.1)
@@ -2629,6 +2634,19 @@ class DataFrameTest(ComparisonTestBase, SQLTestUtils):
         psdf["A"].sample(frac=0.2)
         psdf["A"].sample(frac=0.2, replace=True)
         psdf["A"].sample(frac=0.2, random_state=5)
+
+        self.assert_eq(psdf.sample(frac=0.1, ignore_index=True).index.dtype, np.int64)
+        self.assert_eq(psdf.sample(frac=0.2, replace=True, ignore_index=True).index.dtype, np.int64)
+        self.assert_eq(
+            psdf.sample(frac=0.2, random_state=5, ignore_index=True).index.dtype, np.int64
+        )
+        self.assert_eq(psdf["A"].sample(frac=0.2, ignore_index=True).index.dtype, np.int64)
+        self.assert_eq(
+            psdf["A"].sample(frac=0.2, replace=True, ignore_index=True).index.dtype, np.int64
+        )
+        self.assert_eq(
+            psdf["A"].sample(frac=0.2, random_state=5, ignore_index=True).index.dtype, np.int64
+        )
 
         with self.assertRaises(ValueError):
             psdf.sample()

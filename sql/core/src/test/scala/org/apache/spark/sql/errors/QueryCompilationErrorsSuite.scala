@@ -22,7 +22,7 @@ import org.apache.spark.sql.api.java.{UDF1, UDF2, UDF23Test}
 import org.apache.spark.sql.expressions.SparkUserDefinedFunction
 import org.apache.spark.sql.functions.{grouping, grouping_id, sum, udf}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{IntegerType, StringType}
+import org.apache.spark.sql.types.{IntegerType, MapType, StringType, StructField, StructType}
 
 case class StringLongClass(a: String, b: Long)
 
@@ -227,7 +227,7 @@ class QueryCompilationErrorsSuite
         "2. use Java UDF APIs, e.g. `udf(new UDF1[String, Integer] { " +
         "override def call(s: String): Integer = s.length() }, IntegerType)`, " +
         "if input types are all non primitive\n" +
-        s"3. set ${SQLConf.LEGACY_ALLOW_UNTYPED_SCALA_UDF.key} to true and " +
+        s"""3. set "${SQLConf.LEGACY_ALLOW_UNTYPED_SCALA_UDF.key}" to true and """ +
         s"use this API with caution")
   }
 
@@ -391,6 +391,85 @@ class QueryCompilationErrorsSuite
         errorClass = "SECOND_FUNCTION_ARGUMENT_NOT_INTEGER",
         msg = "The second argument of 'date_add' function needs to be an integer.",
         sqlState = Some("22023"))
+    }
+  }
+
+  test("INVALID_JSON_SCHEMA_MAPTYPE: " +
+    "Parse JSON rows can only contain StringType as a key type for a MapType.") {
+    val schema = StructType(
+      StructField("map", MapType(IntegerType, IntegerType, true), false) :: Nil)
+
+    checkErrorClass(
+      exception = intercept[AnalysisException] {
+        spark.read.schema(schema).json(spark.emptyDataset[String])
+      },
+      errorClass = "INVALID_JSON_SCHEMA_MAPTYPE",
+      msg = "Input schema " +
+        "StructType(StructField(map,MapType(IntegerType,IntegerType,true),false)) " +
+        "can only contain StringType as a key type for a MapType."
+    )
+  }
+
+  test("MISSING_COLUMN: SELECT distinct does not work correctly " +
+    "if order by missing attribute") {
+    checkAnswer(
+      sql(
+        """select distinct struct.a, struct.b
+          |from (
+          |  select named_struct('a', 1, 'b', 2, 'c', 3) as struct
+          |  union all
+          |  select named_struct('a', 1, 'b', 2, 'c', 4) as struct) tmp
+          |order by a, b
+          |""".stripMargin), Row(1, 2) :: Nil)
+
+    checkErrorClass(
+      exception = intercept[AnalysisException] {
+        sql(
+          """select distinct struct.a, struct.b
+            |from (
+            |  select named_struct('a', 1, 'b', 2, 'c', 3) as struct
+            |  union all
+            |  select named_struct('a', 1, 'b', 2, 'c', 4) as struct) tmp
+            |order by struct.a, struct.b
+            |""".stripMargin)
+      },
+      errorClass = "MISSING_COLUMN",
+      msg = """Column 'struct.a' does not exist. """ +
+        """Did you mean one of the following\? \[a, b\]; line 6 pos 9;
+           |'Sort \['struct.a ASC NULLS FIRST, 'struct.b ASC NULLS FIRST\], true
+           |\+\- Distinct
+           |   \+\- Project \[struct#\w+\.a AS a#\w+, struct#\w+\.b AS b#\w+\]
+           |      \+\- SubqueryAlias tmp
+           |         \+\- Union false, false
+           |            :\- Project \[named_struct\(a, 1, b, 2, c, 3\) AS struct#\w+\]
+           |            :  \+\- OneRowRelation
+           |            \+\- Project \[named_struct\(a, 1, b, 2, c, 4\) AS struct#\w+\]
+           |               \+\- OneRowRelation
+           |""".stripMargin,
+      matchMsg = true)
+  }
+
+  test("MISSING_COLUMN - SPARK-21335: support un-aliased subquery") {
+    withTempView("v") {
+      Seq(1 -> "a").toDF("i", "j").createOrReplaceTempView("v")
+      checkAnswer(sql("SELECT i from (SELECT i FROM v)"), Row(1))
+
+      checkErrorClass(
+        exception = intercept[AnalysisException](sql("SELECT v.i from (SELECT i FROM v)")),
+        errorClass = "MISSING_COLUMN",
+        msg = """Column 'v.i' does not exist. Did you mean one of the following\? """ +
+          """\[__auto_generated_subquery_name.i\]; line 1 pos 7;
+            |'Project \['v.i\]
+            |\+\- SubqueryAlias __auto_generated_subquery_name
+            |   \+\- Project \[i#\w+\]
+            |      \+\- SubqueryAlias v
+            |         \+\- View \(`v`, \[i#\w+,j#\w+\]\)
+            |            \+\- Project \[_\w+#\w+ AS i#\w+, _\w+#\w+ AS j#\w+\]
+            |               \+\- LocalRelation \[_\w+#\w+, _\w+#\w+\]
+            |""".stripMargin,
+        matchMsg = true)
+
+      checkAnswer(sql("SELECT __auto_generated_subquery_name.i from (SELECT i FROM v)"), Row(1))
     }
   }
 }
