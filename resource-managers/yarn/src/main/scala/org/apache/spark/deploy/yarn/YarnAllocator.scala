@@ -428,7 +428,7 @@ private[yarn] class YarnAllocator(
 
   private def handleNodesInDecommissioningState(allocateResponse: AllocateResponse): Unit = {
     try {
-      // some of the nodes are put in decommissioning state where RM did allocate
+      // Some of the nodes are put in decommissioning state where RM did allocate
       // resources on those nodes for earlier allocateResource calls, so notifying driver
       // to put those executors in decommissioning state
       allocateResponse.getUpdatedNodes.asScala.filter(_.getNodeState == NodeState.DECOMMISSIONING).
@@ -445,7 +445,7 @@ private[yarn] class YarnAllocator(
       case (true, false) => true
       case (true, true) =>
         logWarning(s"Yarn Executor Decommissioning is supported only " +
-          s"when ${SHUFFLE_SERVICE_ENABLED.key} is set to false. See: SPARK-")
+          s"when ${SHUFFLE_SERVICE_ENABLED.key} is set to false. See: SPARK-39018.")
         false
       case (false, _) => false
     }
