@@ -237,7 +237,7 @@ object QueryExecutionErrors extends QueryErrorsBase {
   def pivotColumnUnsupportedError(v: Any, dataType: DataType): RuntimeException = {
     new SparkRuntimeException(
       errorClass = "UNSUPPORTED_FEATURE",
-      messageParameters = Array("PIVOT_UNSUPPORTED_TYPE",
+      messageParameters = Array("PIVOT_TYPE",
         s"${v.toString}", s"${toSQLType(dataType)}"))
   }
 
