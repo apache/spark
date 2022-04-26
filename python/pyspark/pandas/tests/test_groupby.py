@@ -1288,11 +1288,11 @@ class GroupByTest(PandasOnSparkTestCase, TestUtils):
 
         # TODO: fix bug of `std` and re-enable the test below
         # self._test_stat_func(lambda groupby_obj: groupby_obj.std(), check_exact=False)
-        self.assert_eq(psdf.groupby("A").std(), pdf.groupby("A").std())
+        self.assert_eq(psdf.groupby("A").std(), pdf.groupby("A").std(), check_exact=False)
 
         # TODO: fix bug of `sum` and re-enable the test below
         # self._test_stat_func(lambda groupby_obj: groupby_obj.sum(), check_exact=False)
-        self.assert_eq(psdf.groupby("A").sum(), pdf.groupby("A").sum())
+        self.assert_eq(psdf.groupby("A").sum(), pdf.groupby("A").sum(), check_exact=False)
 
     def test_min(self):
         self._test_stat_func(lambda groupby_obj: groupby_obj.min())
