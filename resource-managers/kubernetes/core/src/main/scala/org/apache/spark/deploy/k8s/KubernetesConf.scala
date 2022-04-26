@@ -24,6 +24,7 @@ import org.apache.commons.lang3.StringUtils
 import org.apache.spark.{SPARK_VERSION, SparkConf}
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
+import org.apache.spark.deploy.k8s.features.KubernetesTolerationSpec
 import org.apache.spark.deploy.k8s.submit._
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.ConfigEntry
@@ -43,6 +44,7 @@ private[spark] abstract class KubernetesConf(val sparkConf: SparkConf) {
   def secretNamesToMountPaths: Map[String, String]
   def volumes: Seq[KubernetesVolumeSpec]
   def schedulerName: Option[String]
+  def tolerations: Seq[KubernetesTolerationSpec]
   def appId: String
 
   def appName: String = get("spark.app.name", "spark")
@@ -139,6 +141,11 @@ private[spark] class KubernetesDriverConf(
   override def schedulerName: Option[String] = {
     Option(get(KUBERNETES_DRIVER_SCHEDULER_NAME).getOrElse(get(KUBERNETES_SCHEDULER_NAME).orNull))
   }
+
+  override def tolerations: Seq[KubernetesTolerationSpec] = {
+    KubernetesSchedulerUtils.parseTolerationsWithPrefix(sparkConf,
+      KUBERNETES_DRIVER_TOLERATIONS_PREFIX)
+  }
 }
 
 private[spark] class KubernetesExecutorConf(
@@ -199,6 +206,11 @@ private[spark] class KubernetesExecutorConf(
 
   override def schedulerName: Option[String] = {
     Option(get(KUBERNETES_EXECUTOR_SCHEDULER_NAME).getOrElse(get(KUBERNETES_SCHEDULER_NAME).orNull))
+  }
+
+  override def tolerations: Seq[KubernetesTolerationSpec] = {
+    KubernetesSchedulerUtils.parseTolerationsWithPrefix(sparkConf,
+      KUBERNETES_EXECUTOR_TOLERATIONS_PREFIX)
   }
 
   private def checkExecutorEnvKey(key: String): Boolean = {

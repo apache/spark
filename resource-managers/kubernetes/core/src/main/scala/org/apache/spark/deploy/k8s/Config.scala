@@ -690,12 +690,14 @@ private[spark] object Config extends Logging {
   val KUBERNETES_DRIVER_SECRETS_PREFIX = "spark.kubernetes.driver.secrets."
   val KUBERNETES_DRIVER_SECRET_KEY_REF_PREFIX = "spark.kubernetes.driver.secretKeyRef."
   val KUBERNETES_DRIVER_VOLUMES_PREFIX = "spark.kubernetes.driver.volumes."
+  val KUBERNETES_DRIVER_TOLERATIONS_PREFIX = "spark.kubernetes.driver.tolerations."
 
   val KUBERNETES_EXECUTOR_LABEL_PREFIX = "spark.kubernetes.executor.label."
   val KUBERNETES_EXECUTOR_ANNOTATION_PREFIX = "spark.kubernetes.executor.annotation."
   val KUBERNETES_EXECUTOR_SECRETS_PREFIX = "spark.kubernetes.executor.secrets."
   val KUBERNETES_EXECUTOR_SECRET_KEY_REF_PREFIX = "spark.kubernetes.executor.secretKeyRef."
   val KUBERNETES_EXECUTOR_VOLUMES_PREFIX = "spark.kubernetes.executor.volumes."
+  val KUBERNETES_EXECUTOR_TOLERATIONS_PREFIX = "spark.kubernetes.executor.tolerations."
 
   val KUBERNETES_VOLUMES_HOSTPATH_TYPE = "hostPath"
   val KUBERNETES_VOLUMES_PVC_TYPE = "persistentVolumeClaim"
@@ -710,6 +712,11 @@ private[spark] object Config extends Logging {
   val KUBERNETES_VOLUMES_OPTIONS_MEDIUM_KEY = "options.medium"
   val KUBERNETES_VOLUMES_OPTIONS_SIZE_LIMIT_KEY = "options.sizeLimit"
   val KUBERNETES_VOLUMES_OPTIONS_SERVER_KEY = "options.server"
+
+  val KUBERNETES_TOLERATIONS_VALUE = "value"
+  val KUBERNETES_TOLERATIONS_EFFECT = "effect"
+  val KUBERNETES_TOLERATIONS_OPTIONS_OPERATOR = "options.operator"
+  val KUBERNETES_TOLERATIONS_OPTIONS_TOLERATIONS_SECONDS = "options.tolerationSeconds"
 
   val KUBERNETES_DRIVER_ENV_PREFIX = "spark.kubernetes.driverEnv."
 

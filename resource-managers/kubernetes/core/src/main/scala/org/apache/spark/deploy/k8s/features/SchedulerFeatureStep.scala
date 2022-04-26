@@ -18,14 +18,14 @@ package org.apache.spark.deploy.k8s.features
 
 import org.apache.spark.deploy.k8s.{KubernetesConf, SparkPod}
 
-private[spark] class EvictionFeatureStep(conf: KubernetesConf)
+private[spark] class SchedulerFeatureStep(conf: KubernetesConf)
   extends KubernetesFeatureConfigStep {
-  import EvictionFeatureStep._
+  import SchedulerFeatureStep._
 
   override def configurePod(pod: SparkPod): SparkPod = {
   }
 }
 
-private[spark] object EvictionFeatureStep {
+private[spark] object SchedulerFeatureStep {
 
 }
