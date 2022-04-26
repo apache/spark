@@ -599,7 +599,7 @@ FROM INT8_TBL
 struct<>
 -- !query output
 java.lang.IllegalArgumentException
-The input string '4567890123456789' does not match the given number format: '9999999999999999.999PR'
+The input Decimal value '4567890123456789' does not match the given number format: '9999999999999999.999PR'
 
 
 -- !query
@@ -610,18 +610,21 @@ struct<to_char_4:string,to_char((q1 * -1), 9999999999999999S):string,to_char((q2
 -- !query output
 	             123-	-             456
 	             123-	-4567890123456789
-	4567890123456789-	+4567890123456789
 	4567890123456789-	-             123
 	4567890123456789-	-4567890123456789
+	4567890123456789-	4567890123456789
 
 
 -- !query
 SELECT '' AS to_char_5,  to_char(q2, 'MI9999999999999999')     FROM INT8_TBL
 -- !query schema
-struct<>
+struct<to_char_5:string,to_char(q2, MI9999999999999999):string>
 -- !query output
-java.lang.IllegalArgumentException
-The input string '4567890123456789' does not match the given number format: 'MI9999999999999999'
+	             123
+	             456
+	-4567890123456789
+	4567890123456789
+	4567890123456789
 
 
 -- !query
@@ -668,11 +671,11 @@ SELECT '' AS to_char_10, to_char(q2, 'S0999999999999999')      FROM INT8_TBL
 -- !query schema
 struct<to_char_10:string,to_char(q2, S0999999999999999):string>
 -- !query output
-	+0000000000000123
-	+0000000000000456
-	+4567890123456789
-	+4567890123456789
 	-4567890123456789
+	0000000000000123
+	0000000000000456
+	4567890123456789
+	4567890123456789
 
 
 -- !query

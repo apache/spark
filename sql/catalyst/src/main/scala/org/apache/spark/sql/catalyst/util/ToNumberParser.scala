@@ -572,13 +572,15 @@ class ToNumberParser(numberFormat: String, errorOnFail: Boolean) extends Seriali
    */
   private def formatMatchFailure(input: UTF8String, originNumberFormat: String): Decimal = {
     if (errorOnFail) {
-      throw QueryExecutionErrors.invalidNumberFormatError(input.toString, originNumberFormat)
+      throw QueryExecutionErrors.invalidNumberFormatError(
+        "string", input.toString, originNumberFormat)
     }
     null
   }
   private def formatMatchFailure(input: Decimal, originNumberFormat: String): UTF8String = {
     if (errorOnFail) {
-      throw QueryExecutionErrors.invalidNumberFormatError(input.toString, originNumberFormat)
+      throw QueryExecutionErrors.invalidNumberFormatError(
+        "Decimal value", input.toString, originNumberFormat)
     }
     null
   }
@@ -643,19 +645,10 @@ class ToNumberParser(numberFormat: String, errorOnFail: Boolean) extends Seriali
           reachedDecimalPoint = true
         case DollarSign() =>
           result.append('$')
-        case OptionalPlusOrMinusSign() =>
+        case _: OptionalPlusOrMinusSign | _: OptionalMinusSign =>
           if (input < Decimal.ZERO) {
             result.append('-')
-          } else {
-            result.append('+')
           }
-        case OptionalMinusSign() =>
-          if (input >= Decimal.ZERO) {
-            // The format string included "PR" to match a negative number, but the input value was
-            // not negative.
-            return formatMatchFailure(input, numberFormat)
-          }
-          result.append('-')
         case OpeningAngleBracket() =>
           if (input >= Decimal.ZERO) {
             // The format string included "PR" to match a negative number, but the input value was
