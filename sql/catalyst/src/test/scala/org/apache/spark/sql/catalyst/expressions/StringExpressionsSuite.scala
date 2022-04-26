@@ -1007,7 +1007,7 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
-  test("ToNumber: negative tests (the format string is invalid)") {
+  test("ToNumber and ToCharacter: negative tests (the format string is invalid)") {
     val unexpectedCharacter = "the structure of the format string must match: " +
       "[MI|S] [$] [0|9|G|,]* [.|D] [0|9]* [$] [PR|MI|S]"
     val thousandsSeparatorDigitsBetween =
@@ -1066,6 +1066,22 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         case TypeCheckResult.TypeCheckFailure(message) =>
           assert(message.contains(expectedErrMsg))
       }
+
+      val toCharResult = ToCharacter(Decimal(456), Literal(format)).checkInputDataTypes()
+      assert(toCharResult != TypeCheckResult.TypeCheckSuccess,
+        s"The format string should have been invalid: $format")
+      toCharResult match {
+        case TypeCheckResult.TypeCheckFailure(message) =>
+          assert(message.contains(expectedErrMsg))
+      }
+
+      val tryToCharResult = TryToCharacter(Decimal(456), Literal(format)).checkInputDataTypes()
+      assert(tryToCharResult != TypeCheckResult.TypeCheckSuccess,
+        s"The format string should have been invalid: $format")
+      tryToCharResult match {
+        case TypeCheckResult.TypeCheckFailure(message) =>
+          assert(message.contains(expectedErrMsg))
+      }
     }
   }
 
@@ -1105,6 +1121,233 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       val tryToNumberExpr = TryToNumber(Literal(str), Literal(format))
       assert(tryToNumberExpr.checkInputDataTypes() == TypeCheckResult.TypeCheckSuccess)
       checkEvaluation(tryToNumberExpr, null)
+    }
+  }
+
+  test("ToCharacter: positive tests") {
+    // Test '0' and '9'
+    Seq(
+      (Decimal(4), "0") -> "4",
+      (Decimal(45), "00") -> "45",
+      (Decimal(454), "000") -> "454",
+      (Decimal(454), "0000") -> "0454",
+      (Decimal(454), "00000") -> "00454",
+      (Decimal(454), "9999") -> " 454",
+      (Decimal(454), "99999") -> "  454"
+    ).foreach { case ((decimal, format), expected) =>
+      var expr: Expression = ToCharacter(Literal(decimal), Literal(format))
+      assert(expr.checkInputDataTypes() == TypeCheckResult.TypeCheckSuccess)
+      checkEvaluation(expr, expected)
+
+      expr = TryToCharacter(Literal(decimal), Literal(format))
+      assert(expr.checkInputDataTypes() == TypeCheckResult.TypeCheckSuccess)
+      checkEvaluation(expr, expected)
+    }
+
+    // Test '.' and 'D'
+    Seq(
+      (Decimal(0.4542), ".00000") -> ".45420",
+      (Decimal(454.2), "000.0") -> "454.2",
+      (Decimal(454), "000.0") -> "454.0",
+      (Decimal(454.2), "000.00") -> "454.20",
+      (Decimal(454), "000.00") -> "454.00",
+      (Decimal(0.4542), ".0000") -> ".4542",
+      (Decimal(4542), "0000.") -> "4542."
+    ).foreach { case ((decimal, format), expected) =>
+      val format2 = format.replace('0', '9')
+      val format3 = format.replace('.', 'D')
+      var expr: Expression = ToCharacter(Literal(decimal), Literal(format))
+      assert(expr.checkInputDataTypes() == TypeCheckResult.TypeCheckSuccess)
+      checkEvaluation(expr, expected)
+
+      expr = ToCharacter(Literal(decimal), Literal(format2))
+      assert(expr.checkInputDataTypes() == TypeCheckResult.TypeCheckSuccess)
+      checkEvaluation(expr, expected)
+
+      expr = ToCharacter(Literal(decimal), Literal(format3))
+      assert(expr.checkInputDataTypes() == TypeCheckResult.TypeCheckSuccess)
+      checkEvaluation(expr, expected)
+
+      expr = TryToCharacter(Literal(decimal), Literal(format))
+      assert(expr.checkInputDataTypes() == TypeCheckResult.TypeCheckSuccess)
+      checkEvaluation(expr, expected)
+
+      expr = TryToCharacter(Literal(decimal), Literal(format2))
+      assert(expr.checkInputDataTypes() == TypeCheckResult.TypeCheckSuccess)
+      checkEvaluation(expr, expected)
+
+      expr = TryToCharacter(Literal(decimal), Literal(format3))
+      assert(expr.checkInputDataTypes() == TypeCheckResult.TypeCheckSuccess)
+      checkEvaluation(expr, expected)
+    }
+
+    Seq(
+      (Decimal(454.2), "0000.00") -> "0454.20",
+      (Decimal(454), "0000.00") -> "0454.00",
+      (Decimal(4542), "00000.") -> "04542.",
+      (Decimal(454.2), "9999.99") -> " 454.20",
+      (Decimal(454), "9999.99") -> " 454.00",
+      (Decimal(4542), "99999.") -> " 4542."
+    ).foreach { case ((decimal, format), expected) =>
+      var expr: Expression = ToCharacter(Literal(decimal), Literal(format))
+      assert(expr.checkInputDataTypes() == TypeCheckResult.TypeCheckSuccess)
+      checkEvaluation(expr, expected)
+
+      expr = TryToCharacter(Literal(decimal), Literal(format))
+      assert(expr.checkInputDataTypes() == TypeCheckResult.TypeCheckSuccess)
+      checkEvaluation(expr, expected)
+    }
+
+    // Test ',' and 'G'
+    Seq(
+      (Decimal(12454), "0,0000") -> "1,2454",
+      (Decimal(12454), "00,000") -> "12,454",
+      (Decimal(124543), "000,000") -> "124,543",
+      (Decimal(1245436), "0,000,000") -> "1,245,436",
+      (Decimal(12454367), "00,000,000") -> "12,454,367",
+      (Decimal(12454), "0,0000") -> "1,2454",
+      (Decimal(12454), "00,000") -> "12,454",
+      (Decimal(454367), "000,000") -> "454,367"
+    ).foreach { case ((decimal, format), expected) =>
+      val format2 = format.replace('0', '9')
+      val format3 = format.replace(',', 'G')
+      var expr: Expression = ToCharacter(Literal(decimal), Literal(format))
+      assert(expr.checkInputDataTypes() == TypeCheckResult.TypeCheckSuccess)
+      checkEvaluation(expr, expected)
+
+      expr = ToCharacter(Literal(decimal), Literal(format2))
+      assert(expr.checkInputDataTypes() == TypeCheckResult.TypeCheckSuccess)
+      checkEvaluation(expr, expected)
+
+      expr = ToCharacter(Literal(decimal), Literal(format3))
+      assert(expr.checkInputDataTypes() == TypeCheckResult.TypeCheckSuccess)
+      checkEvaluation(expr, expected)
+
+      expr = TryToCharacter(Literal(decimal), Literal(format))
+      assert(expr.checkInputDataTypes() == TypeCheckResult.TypeCheckSuccess)
+      checkEvaluation(expr, expected)
+
+      expr = TryToCharacter(Literal(decimal), Literal(format2))
+      assert(expr.checkInputDataTypes() == TypeCheckResult.TypeCheckSuccess)
+      checkEvaluation(expr, expected)
+
+      expr = TryToCharacter(Literal(decimal), Literal(format3))
+      assert(expr.checkInputDataTypes() == TypeCheckResult.TypeCheckSuccess)
+      checkEvaluation(expr, expected)
+    }
+
+    Seq(
+      (Decimal(12454), "000,000") -> "012,454",
+      (Decimal(12454), "00,0000") -> "01,2454",
+      (Decimal(12454), "000,0000") -> "001,2454",
+      (Decimal(12454), "0000,0000") -> "0001,2454",
+      (Decimal(12454), "00,0000") -> "01,2454",
+      (Decimal(12454), "000,0000") -> "001,2454",
+      (Decimal(12454), "0000,0000") -> "0001,2454",
+      (Decimal(12454367), "000,000,000") -> "012,454,367",
+      (Decimal(12454), "000,000") -> "012,454",
+      (Decimal(12454), "999,999") -> " 12,454",
+      (Decimal(12454), "9,9999") -> "1,2454",
+      (Decimal(12454), "99,9999") -> " 1,2454",
+      (Decimal(12454), "999,9999") -> "  1,2454",
+      (Decimal(12454), "9999,9999") -> "   1,2454",
+      (Decimal(12454367), "999,999,999") -> " 12,454,367",
+      (Decimal(12454), "999,999") -> " 12,454"
+    ).foreach { case ((decimal, format), expected) =>
+      var expr: Expression = ToCharacter(Literal(decimal), Literal(format))
+      assert(expr.checkInputDataTypes() == TypeCheckResult.TypeCheckSuccess)
+      checkEvaluation(expr, expected)
+
+      expr = TryToCharacter(Literal(decimal), Literal(format))
+      assert(expr.checkInputDataTypes() == TypeCheckResult.TypeCheckSuccess)
+      checkEvaluation(expr, expected)
+    }
+
+    // Test '$'
+    Seq(
+      (Decimal(78.12), "$99.99") -> "$78.12",
+      (Decimal(78.12), "$00.00") -> "$78.12"
+    ).foreach { case ((decimal, format), expected) =>
+      var expr: Expression = ToCharacter(Literal(decimal), Literal(format))
+      assert(expr.checkInputDataTypes() == TypeCheckResult.TypeCheckSuccess)
+      checkEvaluation(expr, expected)
+
+      expr = TryToCharacter(Literal(decimal), Literal(format))
+      assert(expr.checkInputDataTypes() == TypeCheckResult.TypeCheckSuccess)
+      checkEvaluation(expr, expected)
+    }
+
+    // Test 'S'
+    Seq(
+      (Decimal(-454.8), "99G999.9S") -> "  ,454.8-",
+      (Decimal(-454.8), "00G000.0S") -> "00,454.8-",
+      (Decimal(-454), "S999") -> "-454",
+      (Decimal(-454), "999S") -> "454-",
+      (Decimal(-12454.8), "99G999D9S") -> "12,454.8-"
+    ).foreach { case ((decimal, format), expected) =>
+      var expr: Expression = ToCharacter(Literal(decimal), Literal(format))
+      assert(expr.checkInputDataTypes() == TypeCheckResult.TypeCheckSuccess)
+      checkEvaluation(expr, expected)
+
+      expr = TryToCharacter(Literal(decimal), Literal(format))
+      assert(expr.checkInputDataTypes() == TypeCheckResult.TypeCheckSuccess)
+      checkEvaluation(expr, expected)
+    }
+
+    // Test 'MI'
+    Seq(
+      (Decimal(-454.8), "99G999.9MI") -> "  ,454.8-",
+      (Decimal(-454.8), "00G000.0MI") -> "00,454.8-",
+      (Decimal(-454), "999MI") -> "454-",
+      (Decimal(-12454.8), "99G999D9MI") -> "12,454.8-"
+    ).foreach { case ((decimal, format), expected) =>
+      var expr: Expression = ToCharacter(Literal(decimal), Literal(format))
+      assert(expr.checkInputDataTypes() == TypeCheckResult.TypeCheckSuccess)
+      checkEvaluation(expr, expected)
+
+      expr = TryToCharacter(Literal(decimal), Literal(format))
+      assert(expr.checkInputDataTypes() == TypeCheckResult.TypeCheckSuccess)
+      checkEvaluation(expr, expected)
+    }
+
+    // Test 'PR'
+    Seq(
+      (Decimal(-454.8), "99G999.9PR") -> "<  ,454.8>",
+      (Decimal(-454.8), "00G000.0PR") -> "<00,454.8>",
+      (Decimal(-454), "999PR") -> "<454>",
+      (Decimal(-12454.8), "99G999D9PR") -> "<12,454.8>"
+    ).foreach { case ((decimal, format), expected) =>
+      var expr: Expression = ToCharacter(Literal(decimal), Literal(format))
+      assert(expr.checkInputDataTypes() == TypeCheckResult.TypeCheckSuccess)
+      checkEvaluation(expr, expected)
+
+      expr = TryToCharacter(Literal(decimal), Literal(format))
+      assert(expr.checkInputDataTypes() == TypeCheckResult.TypeCheckSuccess)
+      checkEvaluation(expr, expected)
+    }
+  }
+
+  test("ToCharacter: negative tests (the input decimal value does not match the format string)") {
+    // Test '0' and '9'
+    Seq(
+      // If there were more digits in the provided input string (before or after the decimal point)
+      // than specified in the format string, the input string does not match the format.
+      (Decimal(454), "0"),
+      (Decimal(454), "00"),
+      (Decimal(4.67), "9.9"),
+      (Decimal(4.67), "99.9"),
+      // The format string included "PR" to match a negative number, but the input value was
+      // not negative.
+      (Decimal(467), "999PR")
+    ).foreach { case (decimal, format) =>
+      val toCharExpr = ToCharacter(Literal(decimal), Literal(format))
+      assert(toCharExpr.checkInputDataTypes() == TypeCheckResult.TypeCheckSuccess)
+      checkExceptionInExpression[IllegalArgumentException](
+        toCharExpr, "does not match the given number format")
+
+      val tryToCharExpr = TryToCharacter(Literal(decimal), Literal(format))
+      assert(tryToCharExpr.checkInputDataTypes() == TypeCheckResult.TypeCheckSuccess)
+      checkEvaluation(expression = tryToCharExpr, null)
     }
   }
 
