@@ -973,13 +973,12 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
       // request is too late, i.e. received after shuffle merge finalize or stale block push,
       // #onFailure will also be triggered, and we can just ignore. Also, if we couldn't find
       // an opportunity to write the block data to disk, we should also ignore here.
-        synchronized (partitionInfo) {
-          AppShuffleMergePartitionsInfo info =
-            appShuffleInfo.shuffles.get(partitionInfo.shuffleId);
-          if (!isTooLate(info) && !isStale(info)) {
-            logger.debug("{} encountered failure", partitionInfo);
-          }
+      synchronized (partitionInfo) {
+        AppShuffleMergePartitionsInfo info = appShuffleInfo.shuffles.get(partitionInfo.shuffleId);
+        if (!isTooLate(info) && !isStale(info)) {
+          logger.debug("{} encountered failure", partitionInfo);
         }
+      }
     }
 
     @VisibleForTesting
