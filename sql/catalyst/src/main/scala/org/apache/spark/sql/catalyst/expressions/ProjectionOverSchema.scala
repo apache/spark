@@ -30,12 +30,13 @@ import org.apache.spark.sql.types._
  *               attributes in the schema that do not belong to the current relation.
  */
 case class ProjectionOverSchema(schema: StructType, output: AttributeSet) {
+  private val fieldNames = schema.fieldNames.toSet
 
   def unapply(expr: Expression): Option[Expression] = getProjection(expr)
 
   private def getProjection(expr: Expression): Option[Expression] =
     expr match {
-      case a: AttributeReference if output.contains(a) =>
+      case a: AttributeReference if fieldNames.contains(a.name) && output.contains(a) =>
         Some(a.copy(dataType = schema(a.name).dataType)(a.exprId, a.qualifier))
       case GetArrayItem(child, arrayItemOrdinal, failOnError) =>
         getProjection(child).map {
