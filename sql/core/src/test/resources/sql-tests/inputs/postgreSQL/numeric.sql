@@ -840,56 +840,54 @@ SELECT width_bucket(double('Infinity'), 1, 10, 10),
 
 DROP TABLE width_bucket_test;
 
--- [SPARK-28137] Missing Data Type Formatting Functions: TO_CHAR
 -- TO_CHAR()
---
--- SELECT '' AS to_char_1, to_char(val, '9G999G999G999G999G999')
--- 	FROM num_data;
+SELECT '' AS to_char_1, to_char(val, '9G999G999G999G999G999')
+FROM num_data;
 
--- SELECT '' AS to_char_2, to_char(val, '9G999G999G999G999G999D999G999G999G999G999')
--- 	FROM num_data;
+SELECT '' AS to_char_2, to_char(val, '9G999G999G999G999G999D999G999G999G999G999')
+FROM num_data;
 
--- SELECT '' AS to_char_3, to_char(val, '9999999999999999.999999999999999PR')
--- 	FROM num_data;
+SELECT '' AS to_char_3, to_char(val, '9999999999999999.999999999999999PR')
+FROM num_data;
 
--- SELECT '' AS to_char_4, to_char(val, '9999999999999999.999999999999999S')
--- 	FROM num_data;
+SELECT '' AS to_char_4, to_char(val, '9999999999999999.999999999999999S')
+FROM num_data;
 
--- SELECT '' AS to_char_5,  to_char(val, 'MI9999999999999999.999999999999999')     FROM num_data;
--- SELECT '' AS to_char_6,  to_char(val, 'FMS9999999999999999.999999999999999')    FROM num_data;
--- SELECT '' AS to_char_7,  to_char(val, 'FM9999999999999999.999999999999999THPR') FROM num_data;
--- SELECT '' AS to_char_8,  to_char(val, 'SG9999999999999999.999999999999999th')   FROM num_data;
--- SELECT '' AS to_char_9,  to_char(val, '0999999999999999.999999999999999')       FROM num_data;
--- SELECT '' AS to_char_10, to_char(val, 'S0999999999999999.999999999999999')      FROM num_data;
--- SELECT '' AS to_char_11, to_char(val, 'FM0999999999999999.999999999999999')     FROM num_data;
--- SELECT '' AS to_char_12, to_char(val, 'FM9999999999999999.099999999999999') 	FROM num_data;
--- SELECT '' AS to_char_13, to_char(val, 'FM9999999999990999.990999999999999') 	FROM num_data;
--- SELECT '' AS to_char_14, to_char(val, 'FM0999999999999999.999909999999999') 	FROM num_data;
--- SELECT '' AS to_char_15, to_char(val, 'FM9999999990999999.099999999999999') 	FROM num_data;
--- SELECT '' AS to_char_16, to_char(val, 'L9999999999999999.099999999999999')	FROM num_data;
--- SELECT '' AS to_char_17, to_char(val, 'FM9999999999999999.99999999999999')	FROM num_data;
--- SELECT '' AS to_char_18, to_char(val, 'S 9 9 9 9 9 9 9 9 9 9 9 9 9 9 9 9 . 9 9 9 9 9 9 9 9 9 9 9 9 9 9 9 9 9') FROM num_data;
--- SELECT '' AS to_char_19, to_char(val, 'FMS 9 9 9 9 9 9 9 9 9 9 9 9 9 9 9 9 . 9 9 9 9 9 9 9 9 9 9 9 9 9 9 9 9 9') FROM num_data;
--- SELECT '' AS to_char_20, to_char(val, E'99999 "text" 9999 "9999" 999 "\\"text between quote marks\\"" 9999') FROM num_data;
--- SELECT '' AS to_char_21, to_char(val, '999999SG9999999999')			FROM num_data;
--- SELECT '' AS to_char_22, to_char(val, 'FM9999999999999999.999999999999999')	FROM num_data;
--- SELECT '' AS to_char_23, to_char(val, '9.999EEEE')				FROM num_data;
+SELECT '' AS to_char_5,  to_char(val, 'MI9999999999999999.999999999999999')     FROM num_data;
+SELECT '' AS to_char_6,  to_char(val, 'FMS9999999999999999.999999999999999')    FROM num_data;
+SELECT '' AS to_char_7,  to_char(val, 'FM9999999999999999.999999999999999THPR') FROM num_data;
+SELECT '' AS to_char_8,  to_char(val, 'SG9999999999999999.999999999999999th')   FROM num_data;
+SELECT '' AS to_char_9,  to_char(val, '0999999999999999.999999999999999')       FROM num_data;
+SELECT '' AS to_char_10, to_char(val, 'S0999999999999999.999999999999999')      FROM num_data;
+SELECT '' AS to_char_11, to_char(val, 'FM0999999999999999.999999999999999')     FROM num_data;
+SELECT '' AS to_char_12, to_char(val, 'FM9999999999999999.099999999999999') 	FROM num_data;
+SELECT '' AS to_char_13, to_char(val, 'FM9999999999990999.990999999999999') 	FROM num_data;
+SELECT '' AS to_char_14, to_char(val, 'FM0999999999999999.999909999999999') 	FROM num_data;
+SELECT '' AS to_char_15, to_char(val, 'FM9999999990999999.099999999999999') 	FROM num_data;
+SELECT '' AS to_char_16, to_char(val, 'L9999999999999999.099999999999999')	FROM num_data;
+SELECT '' AS to_char_17, to_char(val, 'FM9999999999999999.99999999999999')	FROM num_data;
+SELECT '' AS to_char_18, to_char(val, 'S 9 9 9 9 9 9 9 9 9 9 9 9 9 9 9 9 . 9 9 9 9 9 9 9 9 9 9 9 9 9 9 9 9 9') FROM num_data;
+SELECT '' AS to_char_19, to_char(val, 'FMS 9 9 9 9 9 9 9 9 9 9 9 9 9 9 9 9 . 9 9 9 9 9 9 9 9 9 9 9 9 9 9 9 9 9') FROM num_data;
+SELECT '' AS to_char_20, to_char(val, E'99999 "text" 9999 "9999" 999 "\\"text between quote marks\\"" 9999') FROM num_data;
+SELECT '' AS to_char_21, to_char(val, '999999SG9999999999')			FROM num_data;
+SELECT '' AS to_char_22, to_char(val, 'FM9999999999999999.999999999999999')	FROM num_data;
+SELECT '' AS to_char_23, to_char(val, '9.999EEEE')				FROM num_data;
 
--- SELECT '' AS to_char_24, to_char('100'::numeric, 'FM999.9');
--- SELECT '' AS to_char_25, to_char('100'::numeric, 'FM999.');
--- SELECT '' AS to_char_26, to_char('100'::numeric, 'FM999');
+SELECT '' AS to_char_24, to_char('100'::numeric, 'FM999.9');
+SELECT '' AS to_char_25, to_char('100'::numeric, 'FM999.');
+SELECT '' AS to_char_26, to_char('100'::numeric, 'FM999');
 
 -- Check parsing of literal text in a format string
--- SELECT '' AS to_char_27, to_char('100'::numeric, 'foo999');
--- SELECT '' AS to_char_28, to_char('100'::numeric, 'f\oo999');
--- SELECT '' AS to_char_29, to_char('100'::numeric, 'f\\oo999');
--- SELECT '' AS to_char_30, to_char('100'::numeric, 'f\"oo999');
--- SELECT '' AS to_char_31, to_char('100'::numeric, 'f\\"oo999');
--- SELECT '' AS to_char_32, to_char('100'::numeric, 'f"ool"999');
--- SELECT '' AS to_char_33, to_char('100'::numeric, 'f"\ool"999');
--- SELECT '' AS to_char_34, to_char('100'::numeric, 'f"\\ool"999');
--- SELECT '' AS to_char_35, to_char('100'::numeric, 'f"ool\"999');
--- SELECT '' AS to_char_36, to_char('100'::numeric, 'f"ool\\"999');
+SELECT '' AS to_char_27, to_char('100'::numeric, 'foo999');
+SELECT '' AS to_char_28, to_char('100'::numeric, 'f\oo999');
+SELECT '' AS to_char_29, to_char('100'::numeric, 'f\\oo999');
+SELECT '' AS to_char_30, to_char('100'::numeric, 'f\"oo999');
+SELECT '' AS to_char_31, to_char('100'::numeric, 'f\\"oo999');
+SELECT '' AS to_char_32, to_char('100'::numeric, 'f"ool"999');
+SELECT '' AS to_char_33, to_char('100'::numeric, 'f"\ool"999');
+SELECT '' AS to_char_34, to_char('100'::numeric, 'f"\\ool"999');
+SELECT '' AS to_char_35, to_char('100'::numeric, 'f"ool\"999');
+SELECT '' AS to_char_36, to_char('100'::numeric, 'f"ool\\"999');
 
 -- [SPARK-28137] Missing Data Type Formatting Functions: TO_NUMBER
 -- TO_NUMBER()
