@@ -660,7 +660,6 @@ class ToNumberParser(numberFormat: String, errorOnFail: Boolean) extends Seriali
         case ClosingAngleBracket() =>
           if (input < Decimal.ZERO) {
             if (result.nonEmpty && result.last == ' ') {
-              // If the string ends with a space, add the '>' before the space.
               result.setCharAt(result.length - 1, '>')
               result.append(' ')
             } else {
@@ -793,11 +792,9 @@ class ToNumberParser(numberFormat: String, errorOnFail: Boolean) extends Seriali
                   // The format string started with a 9 and had more digits than the provided
                   // input string, so we prepend a space to the result.
                   if (result.nonEmpty && result.last == '<') {
-                    // If the string starts with a space, add the '<' after the space.
                     result.setCharAt(result.length - 1, ' ')
                     result.append('<')
                   } else if (result.nonEmpty && result.last == '-') {
-                    // If the string starts with a space, add the '-' after the space.
                     result.setCharAt(result.length - 1, ' ')
                     result.append('-')
                   } else {
@@ -826,6 +823,12 @@ class ToNumberParser(numberFormat: String, errorOnFail: Boolean) extends Seriali
         case _: ThousandsSeparator =>
           if (result.nonEmpty && result.last >= ZERO_DIGIT && result.last <= NINE_DIGIT) {
             result.append(',')
+          } else if (result.nonEmpty && result.last == '<') {
+            result.setCharAt(result.length - 1, ' ')
+            result.append('<')
+          } else if (result.nonEmpty && result.last == '-') {
+            result.setCharAt(result.length - 1, ' ')
+            result.append('-')
           } else {
             result.append(' ')
           }
