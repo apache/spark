@@ -20,24 +20,21 @@ from pyspark.rddsampler import RDDSampler, RDDStratifiedSampler
 
 class RDDSamplerTests(ReusedPySparkTestCase):
     def test_rdd_sampler_func(self):
-        # SPARK-38879:Test case to improve test coverage for RDDSampler
+        # SPARK-38879: Test case to improve test coverage for RDDSampler
         # RDDSampler.func
         rdd = self.sc.parallelize(range(20), 2)
         sample_count = rdd.mapPartitionsWithIndex(RDDSampler(False, 0.4, 10).func).count()
-        self.assertGreater(sample_count, 4)
+        self.assertGreater(sample_count, 3)
         self.assertLess(sample_count, 10)
-        sample_data = rdd.mapPartitionsWithIndex(RDDSampler(True, 0.4, 10).func).collect()
+        sample_data = rdd.mapPartitionsWithIndex(RDDSampler(True, 1, 10).func).collect()
         sample_data.sort()
-        is_repetition_contain = False
         # check if at least one element is repeated.
-        for index in range(1, len(sample_data)):
-            if sample_data[index] == sample_data[index - 1]:
-                is_repetition_contain = True
-                break
-        self.assertTrue(is_repetition_contain)
+        self.assertTrue(
+            any(sample_data[i] == sample_data[i - 1] for i in range(1, len(sample_data)))
+        )
 
     def test_rdd_stratified_sampler_func(self):
-        # SPARK-38879:Test case to improve test coverage for RDDSampler
+        # SPARK-38879: Test case to improve test coverage for RDDSampler
         # RDDStratifiedSampler.func
 
         fractions = {"a": 0.8, "b": 0.2}
@@ -47,6 +44,8 @@ class RDDSamplerTests(ReusedPySparkTestCase):
                 RDDStratifiedSampler(False, fractions, 10).func, True
             ).countByKey()
         )
+        # Since a have higher sampling rate (0.8),
+        # it will occur more number of times than b.
         self.assertGreater(sample_data["a"], sample_data["b"])
         self.assertGreater(sample_data["a"], 60)
         self.assertLess(sample_data["a"], 90)
