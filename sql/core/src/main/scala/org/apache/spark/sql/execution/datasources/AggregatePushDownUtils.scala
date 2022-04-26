@@ -108,7 +108,7 @@ object AggregatePushDownUtils {
       return None
     }
     aggregation.groupByExpressions.foreach { expr =>
-      assert(expr.isInstanceOf[FieldReference])
+      if (!expr.isInstanceOf[FieldReference]) return None
       val col = expr.asInstanceOf[FieldReference]
       // don't push down if the group by columns are not the same as the partition columns (orders
       // doesn't matter because reorder can be done at data source layer)

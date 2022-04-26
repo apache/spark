@@ -213,7 +213,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper wit
                     DataSourceV2ScanRelation(sHolder.relation, wrappedScan, output)
                   if (r.supportCompletePushDown(pushedAggregates.get)) {
                     val projectExpressions = finalResultExpressions.map { expr =>
-                      expr.transform {
+                      expr.transformDown {
                         case agg: AggregateExpression =>
                           val ordinal = aggExprToOutputOrdinal(agg.canonicalized)
                           val child =
