@@ -207,20 +207,24 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
     }
   }
 
-  // This function tests that exactly go through the `canDrop` and `inverseCanDrop`.
-  private def testStringStartsWith(dataFrame: DataFrame, filter: String): Unit = {
+  // This function tests that exactly go through the `keep`, `canDrop` and `inverseCanDrop`.
+  private def testStringPredicate(dataFrame: DataFrame, filter: String,
+      shouldFilterOut: Boolean, enableDictionary: Boolean = true): Unit = {
     withTempPath { dir =>
       val path = dir.getCanonicalPath
-      dataFrame.write.option("parquet.block.size", 512).parquet(path)
+      dataFrame.write
+        .option("parquet.block.size", 512)
+        .option(ParquetOutputFormat.ENABLE_DICTIONARY, enableDictionary)
+        .parquet(path)
       Seq(true, false).foreach { pushDown =>
         withSQLConf(
-          SQLConf.PARQUET_FILTER_PUSHDOWN_STRING_STARTSWITH_ENABLED.key -> pushDown.toString) {
+          SQLConf.PARQUET_FILTER_PUSHDOWN_STRING_PREDICATE_ENABLED.key -> pushDown.toString) {
           val accu = new NumRowGroupsAcc
           sparkContext.register(accu)
 
           val df = spark.read.parquet(path).filter(filter)
           df.foreachPartition((it: Iterator[Row]) => it.foreach(v => accu.add(0)))
-          if (pushDown) {
+          if (pushDown && shouldFilterOut) {
             assert(accu.value == 0)
           } else {
             assert(accu.value > 0)
@@ -1491,12 +1495,50 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
         classOf[UserDefinedByInstance[_, _]],
         Seq.empty[Row])
     }
+  }
 
+  test("filter pushdown - StringPredicate") {
     import testImplicits._
-    // Test canDrop() has taken effect
-    testStringStartsWith(spark.range(1024).map(_.toString).toDF(), "value like 'a%'")
-    // Test inverseCanDrop() has taken effect
-    testStringStartsWith(spark.range(1024).map(c => "100").toDF(), "value not like '10%'")
+    // keep() should take effect on StartsWith/EndsWith/Contains
+    Seq(
+      "value like 'a%'", // StartsWith
+      "value like '%a'", // EndsWith
+      "value like '%a%'" // Contains
+    ).foreach { filter =>
+      testStringPredicate(
+        // dictionary will be generated since there are duplicated values
+        spark.range(1000).map(t => (t % 10).toString).toDF(),
+        filter,
+        true)
+    }
+
+    // canDrop() should take effect on StartsWith,
+    // and has no effect on EndsWith/Contains
+    Seq(
+      ("value like 'a%'", true),      // StartsWith
+      ("value like '%a'", false),     // EndsWith
+      ("value like '%a%'", false)     // Contains
+    ).foreach { case (filter, shouldFilterOut) =>
+      testStringPredicate(
+        spark.range(1024).map(_.toString).toDF(),
+        filter,
+        shouldFilterOut,
+        enableDictionary = false)
+    }
+
+    // inverseCanDrop() should take effect on StartsWith,
+    // and has no effect on EndsWith/Contains
+    Seq(
+      ("value not like '10%'", true),  // StartsWith
+      ("value not like '%10'", false), // EndsWith
+      ("value not like '%10%'", false) // Contains
+    ).foreach { case (filter, shouldFilterOut) =>
+      testStringPredicate(
+        spark.range(1024).map(c => "100").toDF(),
+        filter,
+        shouldFilterOut,
+        enableDictionary = false)
+    }
   }
 
   test("SPARK-17091: Convert IN predicate to Parquet filter push-down") {
@@ -1948,43 +1990,6 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
       checkAnswer(in, Seq())
       checkAnswer(notIn, Seq())
     }
-  }
-
-  private def testStringPredicateWithDictionaryFilter(
-      dataFrame: DataFrame, filter: String): Unit = {
-    Seq(true, false).foreach { enableDictionary =>
-      withTempPath { dir =>
-        val path = dir.getCanonicalPath
-        dataFrame.write
-          .option(ParquetOutputFormat.ENABLE_DICTIONARY, enableDictionary)
-          .parquet(path)
-        Seq(true, false).foreach { pushDown =>
-          withSQLConf(
-            SQLConf.PARQUET_FILTER_PUSHDOWN_STRING_PREDICATE_ENABLED.key -> pushDown.toString) {
-            val accu = new NumRowGroupsAcc
-            sparkContext.register(accu)
-
-            val df = spark.read.parquet(path).filter(filter)
-            df.foreachPartition((it: Iterator[Row]) => it.foreach(v => accu.add(0)))
-            if (enableDictionary && pushDown) {
-              assert(accu.value == 0)
-            } else {
-              assert(accu.value > 0)
-            }
-
-            AccumulatorContext.remove(accu.id)
-          }
-        }
-      }
-    }
-  }
-
-  test("filter pushdown - StringEndsWith/Contains") {
-    import testImplicits._
-    testStringPredicateWithDictionaryFilter(
-      spark.range(1024).map(t => (t % 10).toString).toDF(), "value like '%a'")
-    testStringPredicateWithDictionaryFilter(
-      spark.range(1024).map(t => (t % 10).toString).toDF(), "value like '%a%'")
   }
 }
 
