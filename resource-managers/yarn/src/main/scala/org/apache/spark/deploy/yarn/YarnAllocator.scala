@@ -163,8 +163,6 @@ private[yarn] class YarnAllocator(
 
   private val isPythonApp = sparkConf.get(IS_PYTHON_APP)
 
-  private val isYarnExecutorDecommissionEnabled = sparkConf.get(YARN_EXECUTOR_DECOMMISSION_ENABLED)
-
   private val memoryOverheadFactor = sparkConf.get(EXECUTOR_MEMORY_OVERHEAD_FACTOR)
 
   private val launcherPool = ThreadUtils.newDaemonCachedThreadPool(
@@ -438,6 +436,18 @@ private[yarn] class YarnAllocator(
     } catch {
       case e: Exception => logError("Sending Message to Driver to Decommission Executors" +
         "on Decommissioning Nodes failed", e)
+    }
+  }
+
+  private def isYarnExecutorDecommissionEnabled: Boolean = {
+    (sparkConf.get(YARN_EXECUTOR_DECOMMISSION_ENABLED),
+      sparkConf.get(SHUFFLE_SERVICE_ENABLED)) match {
+      case (true, false) => true
+      case (true, true) =>
+        logWarning(s"Yarn Executor Decommissioning is supported only " +
+          s"when ${SHUFFLE_SERVICE_ENABLED.key} is set to false. See: SPARK-")
+        false
+      case (false, _) => false
     }
   }
 
