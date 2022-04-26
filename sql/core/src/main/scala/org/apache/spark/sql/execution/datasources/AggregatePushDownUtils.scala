@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.datasources
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Expression, GenericInternalRow}
-import org.apache.spark.sql.connector.expressions.FieldReference
+import org.apache.spark.sql.connector.expressions.{Expression => V2Expression, FieldReference}
 import org.apache.spark.sql.connector.expressions.aggregate.{AggregateFunc, Aggregation, Count, CountStar, Max, Min}
 import org.apache.spark.sql.execution.RowToColumnConverter
 import org.apache.spark.sql.execution.datasources.v2.V2ColumnUtils
@@ -107,13 +107,11 @@ object AggregatePushDownUtils {
       // aggregate push down simple and don't handle this complicate case for now.
       return None
     }
-    aggregation.groupByExpressions.foreach { expr =>
-      if (!expr.isInstanceOf[FieldReference]) return None
-      val col = expr.asInstanceOf[FieldReference]
+    aggregation.groupByExpressions.flatMap(extractColName).foreach { fieldName =>
       // don't push down if the group by columns are not the same as the partition columns (orders
       // doesn't matter because reorder can be done at data source layer)
-      if (col.fieldNames.length != 1 || !isPartitionCol(col.fieldNames.head)) return None
-      finalSchema = finalSchema.add(getStructFieldForCol(col.fieldNames.head))
+      if (!isPartitionCol(fieldName)) return None
+      finalSchema = finalSchema.add(getStructFieldForCol(fieldName))
     }
 
     aggregation.aggregateExpressions.foreach {
@@ -183,11 +181,7 @@ object AggregatePushDownUtils {
       partitionSchema: StructType,
       aggregation: Aggregation,
       partitionValues: InternalRow): InternalRow = {
-    val groupByColNames =
-      aggregation.groupByExpressions.map { expr =>
-        assert(expr.isInstanceOf[FieldReference])
-        expr.asInstanceOf[FieldReference].fieldNames.head
-      }
+    val groupByColNames = aggregation.groupByExpressions.flatMap(extractColName)
     assert(groupByColNames.length == partitionSchema.length &&
       groupByColNames.length == partitionValues.numFields, "The number of group by columns " +
       s"${groupByColNames.length} should be the same as partition schema length " +
@@ -204,5 +198,10 @@ object AggregatePushDownUtils {
     } else {
       partitionValues
     }
+  }
+
+  private def extractColName(v2Expr: V2Expression): Option[String] = v2Expr match {
+    case f: FieldReference if f.fieldNames.length == 1 => Some(f.fieldNames.head)
+    case _ => None
   }
 }

@@ -186,12 +186,11 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper wit
                   assert(newOutput.length == groupingExpressions.length + finalAggregates.length)
                   val groupByExprToOutputOrdinal = mutable.HashMap.empty[Expression, Int]
                   var ordinal = 0
-                  val groupAttrs = normalizedGroupingExpressions.zip(newOutput).map {
-                    case (a: Attribute, b: Attribute) => b.withExprId(a.exprId)
-                    case (expr, b) =>
+                  val groupAttrs = normalizedGroupingExpressions.zip(newOutput).zipWithIndex.map {
+                    case ((a: Attribute, b: Attribute), _) => b.withExprId(a.exprId)
+                    case ((expr, b), idx) =>
                       if (!groupByExprToOutputOrdinal.contains(expr.canonicalized)) {
-                        groupByExprToOutputOrdinal(expr.canonicalized) = ordinal
-                        ordinal += 1
+                        groupByExprToOutputOrdinal(expr.canonicalized) = idx
                       }
                       b
                   }
@@ -220,8 +219,8 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper wit
                             addCastIfNeeded(aggOutput(ordinal), agg.resultAttribute.dataType)
                           Alias(child, agg.resultAttribute.name)(agg.resultAttribute.exprId)
                         case expr if groupByExprToOutputOrdinal.contains(expr.canonicalized) =>
-                          val ordinal = groupByExprToOutputOrdinal(expr.canonicalized)
-                          addCastIfNeeded(groupAttrs(ordinal), expr.dataType)
+                          val idx = groupByExprToOutputOrdinal(expr.canonicalized)
+                          addCastIfNeeded(groupAttrs(idx), expr.dataType)
                       }
                     }.asInstanceOf[Seq[NamedExpression]]
                     Project(projectExpressions, scanRelation)

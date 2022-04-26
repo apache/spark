@@ -773,6 +773,40 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
         |[CASE WHEN (SALARY > 8000.00) AND (SALARY < 10000.00) THEN SALARY ELSE 0.00 END],
         |""".stripMargin.replaceAll("\n", " "))
     checkAnswer(df3, Seq(Row(0, 44000), Row(9000, 9000)))
+
+    val df4 = sql(
+      """
+        |SELECT DEPT, CASE WHEN SALARY > 8000 AND SALARY < 10000 THEN SALARY ELSE 0 END as key,
+        |  SUM(SALARY) FROM h2.test.employee GROUP BY DEPT, key""".stripMargin)
+    checkAggregateRemoved(df4)
+    checkPushedInfo(df4,
+      """
+        |PushedAggregates: [SUM(SALARY)],
+        |PushedFilters: [],
+        |PushedGroupByExpressions:
+        |[DEPT, CASE WHEN (SALARY > 8000.00) AND (SALARY < 10000.00) THEN SALARY ELSE 0.00 END],
+        |""".stripMargin.replaceAll("\n", " "))
+    checkAnswer(df4, Seq(Row(1, 0, 10000), Row(1, 9000, 9000), Row(2, 0, 22000), Row(6, 0, 12000)))
+
+    val df5 = spark.read
+      .option("partitionColumn", "dept")
+      .option("lowerBound", "0")
+      .option("upperBound", "2")
+      .option("numPartitions", "2")
+      .table("h2.test.employee")
+      .groupBy($"DEPT",
+        when(($"SALARY" > 8000).and($"SALARY" < 10000), $"SALARY").otherwise(0)
+          .as("key"))
+      .agg(sum($"SALARY"))
+    checkAggregateRemoved(df5, false)
+    checkPushedInfo(df5,
+      """
+        |PushedAggregates: [SUM(SALARY)],
+        |PushedFilters: [],
+        |PushedGroupByExpressions:
+        |[DEPT, CASE WHEN (SALARY > 8000.00) AND (SALARY < 10000.00) THEN SALARY ELSE 0.00 END],
+        |""".stripMargin.replaceAll("\n", " "))
+    checkAnswer(df5, Seq(Row(1, 0, 10000), Row(1, 9000, 9000), Row(2, 0, 22000), Row(6, 0, 12000)))
   }
 
   test("scan with aggregate push-down: DISTINCT SUM with group by") {
