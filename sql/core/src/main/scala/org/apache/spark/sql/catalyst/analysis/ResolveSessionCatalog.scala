@@ -93,7 +93,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
     case RenameColumn(ResolvedV1TableIdentifier(_), _, _) =>
       throw QueryCompilationErrors.operationOnlySupportedWithV2TableError("RENAME COLUMN")
 
-    case DropColumns(ResolvedV1TableIdentifier(_), _) =>
+    case DropColumns(ResolvedV1TableIdentifier(_), _, _) =>
       throw QueryCompilationErrors.operationOnlySupportedWithV2TableError("DROP COLUMN")
 
     case SetTableProperties(ResolvedV1TableIdentifier(ident), props) =>
