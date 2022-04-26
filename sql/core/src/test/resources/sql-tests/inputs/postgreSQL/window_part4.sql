@@ -376,8 +376,9 @@ FROM (VALUES(1,1),(2,2),(3,(cast('nan' as int))),(4,3),(5,4)) t(a,b);
 -- float and double precision. This should not be done as it can give incorrect
 -- results. This test should fail if anyone ever does this without thinking too
 -- hard about it.
-SELECT to_char(SUM(n) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND 1 FOLLOWING),'999999999999999999999D9')
-FROM (VALUES(1,1e20),(2,1)) n(i,n);
+-- [SPARK-28516] adds `to_char`
+-- SELECT to_char(SUM(n) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND 1 FOLLOWING),'999999999999999999999D9')
+--   FROM (VALUES(1,1e20),(2,1)) n(i,n);
 
 -- [SPARK-27880] Implement boolean aggregates(BOOL_AND, BOOL_OR and EVERY)
 -- SELECT i, b, bool_and(b) OVER w, bool_or(b) OVER w

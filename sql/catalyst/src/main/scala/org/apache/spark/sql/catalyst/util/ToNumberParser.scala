@@ -323,7 +323,7 @@ class ToNumberParser(numberFormat: String, errorOnFail: Boolean) extends Seriali
             false
         })
     }) {
-      return "Thousands separators (,) must have digits in between them " +
+      return "Thousands separators (, or G) must have digits in between them " +
         s"in the number format: '$numberFormat'"
     }
     // Make sure that thousands separators does not appear after the decimal point, if any.
@@ -331,7 +331,7 @@ class ToNumberParser(numberFormat: String, errorOnFail: Boolean) extends Seriali
       case DigitGroups(tokens, digits) =>
         tokens.length > digits.length
     }) {
-      return "Thousands separators (,) may not appear after the decimal point " +
+      return "Thousands separators (, or G) may not appear after the decimal point " +
         s"in the number format: '$numberFormat'"
     }
     // Make sure that the format string does not contain any prohibited duplicate tokens.
@@ -650,14 +650,13 @@ class ToNumberParser(numberFormat: String, errorOnFail: Boolean) extends Seriali
             result.append('-')
           }
         case OpeningAngleBracket() =>
-          if (input >= Decimal.ZERO) {
-            // The format string included "PR" to match a negative number, but the input value was
-            // not negative.
-            return formatMatchFailure(input, numberFormat)
+          if (input < Decimal.ZERO) {
+            result.append('<')
           }
-          result.append('<')
         case ClosingAngleBracket() =>
-          result.append('>')
+          if (input < Decimal.ZERO) {
+            result.append('>')
+          }
       }
     }
 

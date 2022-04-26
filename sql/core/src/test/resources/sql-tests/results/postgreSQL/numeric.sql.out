@@ -4601,7 +4601,7 @@ FROM num_data
 struct<>
 -- !query output
 java.lang.IllegalArgumentException
-The input Decimal value '16397.0384910000' does not match the given number format: '9G999G999G999G999G999'
+The input Decimal value '7799461.4119000000' does not match the given number format: '9G999G999G999G999G999'
 
 
 -- !query
@@ -4611,17 +4611,25 @@ FROM num_data
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'to_char(spark_catalog.default.num_data.val, '9G999G999G999G999G999D999G999G999G999G999')' due to data type mismatch: Thousands separators (,) may not appear after the decimal point in the number format: '9G999G999G999G999G999D999G999G999G999G999'; line 1 pos 24
+cannot resolve 'to_char(spark_catalog.default.num_data.val, '9G999G999G999G999G999D999G999G999G999G999')' due to data type mismatch: Thousands separators (, or G) may not appear after the decimal point in the number format: '9G999G999G999G999G999D999G999G999G999G999'; line 1 pos 24
 
 
 -- !query
 SELECT '' AS to_char_3, to_char(val, '9999999999999999.999999999999999PR')
 FROM num_data
 -- !query schema
-struct<>
+struct<to_char_3:string,to_char(val, 9999999999999999.999999999999999PR):string>
 -- !query output
-java.lang.IllegalArgumentException
-The input Decimal value '74881.0000000000' does not match the given number format: '9999999999999999.999999999999999PR'
+	                .000000000000000
+	                .000000000000000
+	               4.310000000000000
+	           16397.038491000000000
+	           74881.000000000000000
+	           93901.577630260000000
+	         7799461.411900000000000
+	<        24926804.045047420000000>
+	<        34338492.215397047000000>
+	<        83028485.000000000000000>
 
 
 -- !query
@@ -4683,7 +4691,7 @@ SELECT '' AS to_char_8,  to_char(val, 'SG9999999999999999.999999999999999th')   
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'to_char(spark_catalog.default.num_data.val, 'SG9999999999999999.999999999999999th')' due to data type mismatch: Thousands separators (,) must have digits in between them in the number format: 'SG9999999999999999.999999999999999TH'; line 1 pos 25
+cannot resolve 'to_char(spark_catalog.default.num_data.val, 'SG9999999999999999.999999999999999th')' due to data type mismatch: Thousands separators (, or G) must have digits in between them in the number format: 'SG9999999999999999.999999999999999TH'; line 1 pos 25
 
 
 -- !query
@@ -4821,7 +4829,7 @@ SELECT '' AS to_char_21, to_char(val, '999999SG9999999999')			FROM num_data
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'to_char(spark_catalog.default.num_data.val, '999999SG9999999999')' due to data type mismatch: Thousands separators (,) must have digits in between them in the number format: '999999SG9999999999'; line 1 pos 25
+cannot resolve 'to_char(spark_catalog.default.num_data.val, '999999SG9999999999')' due to data type mismatch: Thousands separators (, or G) must have digits in between them in the number format: '999999SG9999999999'; line 1 pos 25
 
 
 -- !query
@@ -5039,7 +5047,7 @@ SELECT '' AS to_number_2,  to_number('-34,338,492.654,878', '99G999G999D999G999'
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'to_number('-34,338,492.654,878', '99G999G999D999G999')' due to data type mismatch: Thousands separators (,) may not appear after the decimal point in the number format: '99G999G999D999G999'; line 1 pos 27
+cannot resolve 'to_number('-34,338,492.654,878', '99G999G999D999G999')' due to data type mismatch: Thousands separators (, or G) may not appear after the decimal point in the number format: '99G999G999D999G999'; line 1 pos 27
 
 
 -- !query
@@ -5088,7 +5096,7 @@ SELECT '' AS to_number_15, to_number('123,000','999G')
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'to_number('123,000', '999G')' due to data type mismatch: Thousands separators (,) must have digits in between them in the number format: '999G'; line 1 pos 27
+cannot resolve 'to_number('123,000', '999G')' due to data type mismatch: Thousands separators (, or G) must have digits in between them in the number format: '999G'; line 1 pos 27
 
 
 -- !query
