@@ -1019,9 +1019,8 @@ object QueryExecutionErrors extends QueryErrorsBase {
     } else {
       toSQLValue(value)
     }
-    new DateTimeException(s"Invalid input syntax for type ${toSQLType(to)}: $valueString. " +
-      s"To return NULL instead, use 'try_cast'. If necessary set ${SQLConf.ANSI_ENABLED.key} " +
-      s"to false to bypass this error." + errorContext)
+    new SparkDateTimeException("INVALID_SYNTAX_FOR_CAST",
+      Array(toSQLType(to), valueString, SQLConf.ANSI_ENABLED.key, errorContext))
   }
 
   def registeringStreamingQueryListenerError(e: Exception): Throwable = {

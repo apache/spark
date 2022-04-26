@@ -697,8 +697,8 @@ select cast('a' as date)
 -- !query schema
 struct<>
 -- !query output
-java.time.DateTimeException
-Invalid input syntax for type "DATE": 'a'. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
+org.apache.spark.SparkDateTimeException
+[INVALID_SYNTAX_FOR_CAST] Invalid input syntax for type "DATE": 'a'. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
 == SQL(line 1, position 7) ==
 select cast('a' as date)
        ^^^^^^^^^^^^^^^^^
@@ -717,8 +717,8 @@ select cast('a' as timestamp)
 -- !query schema
 struct<>
 -- !query output
-java.time.DateTimeException
-Invalid input syntax for type "TIMESTAMP": 'a'. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
+org.apache.spark.SparkDateTimeException
+[INVALID_SYNTAX_FOR_CAST] Invalid input syntax for type "TIMESTAMP": 'a'. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
 == SQL(line 1, position 7) ==
 select cast('a' as timestamp)
        ^^^^^^^^^^^^^^^^^^^^^^
@@ -737,8 +737,8 @@ select cast('a' as timestamp_ntz)
 -- !query schema
 struct<>
 -- !query output
-java.time.DateTimeException
-Invalid input syntax for type "TIMESTAMP_NTZ": 'a'. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
+org.apache.spark.SparkDateTimeException
+[INVALID_SYNTAX_FOR_CAST] Invalid input syntax for type "TIMESTAMP_NTZ": 'a'. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
 == SQL(line 1, position 7) ==
 select cast('a' as timestamp_ntz)
        ^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -749,8 +749,8 @@ select cast(cast('inf' as double) as timestamp)
 -- !query schema
 struct<>
 -- !query output
-java.time.DateTimeException
-Invalid input syntax for type "TIMESTAMP": Infinity. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
+org.apache.spark.SparkDateTimeException
+[INVALID_SYNTAX_FOR_CAST] Invalid input syntax for type "TIMESTAMP": Infinity. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
 == SQL(line 1, position 7) ==
 select cast(cast('inf' as double) as timestamp)
        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -761,8 +761,8 @@ select cast(cast('inf' as float) as timestamp)
 -- !query schema
 struct<>
 -- !query output
-java.time.DateTimeException
-Invalid input syntax for type "TIMESTAMP": Infinity. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
+org.apache.spark.SparkDateTimeException
+[INVALID_SYNTAX_FOR_CAST] Invalid input syntax for type "TIMESTAMP": Infinity. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
 == SQL(line 1, position 7) ==
 select cast(cast('inf' as float) as timestamp)
        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
