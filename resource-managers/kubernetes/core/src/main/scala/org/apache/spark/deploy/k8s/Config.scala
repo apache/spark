@@ -684,6 +684,15 @@ private[spark] object Config extends Logging {
       .checkValue(value => value > 0, "Maximum number of pending pods should be a positive integer")
       .createWithDefault(Int.MaxValue)
 
+  private [spark] val KUBERNETES_EXECUTOR_POD_ANTI_AFFINITY =
+    ConfigBuilder("spark.kubernetes.executor.pod.antiAffinity.enable")
+      .doc("If enable, register executor with anti affinity. This anti affinity will help " +
+        "Kubernetes assign executors of the same Application to different nodes " +
+        "as much as possible")
+      .version("3.2.1")
+      .booleanConf
+      .createWithDefault(false)
+
   val KUBERNETES_DRIVER_LABEL_PREFIX = "spark.kubernetes.driver.label."
   val KUBERNETES_DRIVER_ANNOTATION_PREFIX = "spark.kubernetes.driver.annotation."
   val KUBERNETES_DRIVER_SERVICE_ANNOTATION_PREFIX = "spark.kubernetes.driver.service.annotation."
