@@ -162,7 +162,7 @@ class QueryExecutionErrorsSuite
     checkErrorClass(
       exception = e2,
       errorClass = "UNSUPPORTED_FEATURE",
-      errorSubClass = Some("PIVOT_UNSUPPORTED_TYPE"),
+      errorSubClass = Some("PIVOT_TYPE"),
       msg = "The feature is not supported: Pivoting by the value" +
         """ '[dotnet,Dummies]' of the column data type "STRUCT<col1: STRING, training: STRING>".""",
       sqlState = Some("0A000"))
