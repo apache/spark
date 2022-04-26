@@ -1664,7 +1664,7 @@ class DataSourceV2SQLSuite
     spark.conf.unset(V2_SESSION_CATALOG_IMPLEMENTATION.key)
     val v1Table = "tbl"
     withTable(v1Table) {
-      sql(s"CREATE TABLE $v1Table" +
+      sql(s"CREATE TABLE $v1Table ()" +
           s" USING ${classOf[SimpleScanSource].getName} OPTIONS (from=0,to=1)")
       val exc = intercept[AnalysisException] {
         sql(s"DELETE FROM $v1Table WHERE i = 2")

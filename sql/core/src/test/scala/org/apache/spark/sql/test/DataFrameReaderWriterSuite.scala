@@ -922,7 +922,7 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSparkSession with 
 
   test("SPARK-18912: number of columns mismatch for non-file-based data source table") {
     withTable("t") {
-      sql("CREATE TABLE t USING org.apache.spark.sql.test.DefaultSource")
+      sql("CREATE TABLE t () USING org.apache.spark.sql.test.DefaultSource")
 
       val e = intercept[AnalysisException] {
         Seq(1 -> "a").toDF("a", "b").write

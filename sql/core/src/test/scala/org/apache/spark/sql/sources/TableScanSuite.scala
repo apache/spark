@@ -386,7 +386,7 @@ class TableScanSuite extends DataSourceTest with SharedSparkSession {
       val schemaNeeded = intercept[Exception] {
         sql(
           s"""
-             |CREATE $tableType schemaRelationProviderWithoutSchema
+             |CREATE $tableType schemaRelationProviderWithoutSchema ()
              |USING org.apache.spark.sql.sources.AllDataTypesScanSource
              |OPTIONS (
              |  From '1',
@@ -404,7 +404,7 @@ class TableScanSuite extends DataSourceTest with SharedSparkSession {
       withTable (tableName) {
         sql(
           s"""
-             |CREATE $tableType $tableName
+             |CREATE $tableType $tableName ()
              |USING org.apache.spark.sql.sources.SimpleScanSource
              |OPTIONS (
              |  From '1',

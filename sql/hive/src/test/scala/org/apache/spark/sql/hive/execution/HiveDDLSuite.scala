@@ -443,12 +443,12 @@ class HiveDDLSuite
         (("a", "b") :: Nil).toDF().write.json(tempDir.getCanonicalPath)
 
         assertAnalysisError(
-          "CREATE TABLE tab1 USING hive",
+          "CREATE TABLE tab1 () USING hive",
           "Unable to infer the schema. The schema specification is required to " +
             "create the table `default`.`tab1`")
 
         assertAnalysisError(
-          s"CREATE TABLE tab2 USING hive location '${tempDir.getCanonicalPath}'",
+          s"CREATE TABLE tab2 () USING hive location '${tempDir.getCanonicalPath}'",
           "Unable to infer the schema. The schema specification is required to " +
             "create the table `default`.`tab2`")
       }
@@ -1903,7 +1903,7 @@ class HiveDDLSuite
     withTable("t") {
       sql(
         s"""
-          |CREATE TABLE t PARTITIONED BY (ds string)
+          |CREATE TABLE t () PARTITIONED BY (ds string)
           |ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.avro.AvroSerDe'
           |WITH SERDEPROPERTIES ($originalSerdeProperties)
           |STORED AS
@@ -1969,7 +1969,7 @@ class HiveDDLSuite
     withTable("t") {
       sql(
         s"""
-          |CREATE TABLE t PARTITIONED BY (ds string)
+          |CREATE TABLE t () PARTITIONED BY (ds string)
           |ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.avro.AvroSerDe'
           |WITH SERDEPROPERTIES ($originalSerdeProperties)
           |STORED AS

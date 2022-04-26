@@ -399,7 +399,7 @@ class PlanResolutionSuite extends AnalysisTest {
   test("support for other types in OPTIONS") {
     val sql =
       """
-        |CREATE TABLE table_name USING json
+        |CREATE TABLE table_name () USING json
         |OPTIONS (a 1, b 0.1, c TRUE)
       """.stripMargin
 
@@ -1758,7 +1758,7 @@ class PlanResolutionSuite extends AnalysisTest {
       "sequencefile", "rcfile", "textfile")
 
     allSources.foreach { s =>
-      val query = s"CREATE TABLE my_tab STORED AS $s"
+      val query = s"CREATE TABLE my_tab () STORED AS $s"
       parseAndResolve(query) match {
         case ct: CreateTableV1 =>
           val hiveSerde = HiveSerDe.sourceToSerDe(s)
@@ -1772,7 +1772,7 @@ class PlanResolutionSuite extends AnalysisTest {
   }
 
   test("create hive table - row format and table file format") {
-    val createTableStart = "CREATE TABLE my_tab ROW FORMAT"
+    val createTableStart = "CREATE TABLE my_tab () ROW FORMAT"
     val fileFormat = s"STORED AS INPUTFORMAT 'inputfmt' OUTPUTFORMAT 'outputfmt'"
     val query1 = s"$createTableStart SERDE 'anything' $fileFormat"
     val query2 = s"$createTableStart DELIMITED FIELDS TERMINATED BY ' ' $fileFormat"
@@ -1799,7 +1799,7 @@ class PlanResolutionSuite extends AnalysisTest {
     val supportedSources = Set("sequencefile", "rcfile", "textfile")
 
     allSources.foreach { s =>
-      val query = s"CREATE TABLE my_tab ROW FORMAT SERDE 'anything' STORED AS $s"
+      val query = s"CREATE TABLE my_tab () ROW FORMAT SERDE 'anything' STORED AS $s"
       if (supportedSources.contains(s)) {
         parseAndResolve(query) match {
           case ct: CreateTableV1 =>
@@ -1820,7 +1820,8 @@ class PlanResolutionSuite extends AnalysisTest {
     val supportedSources = Set("textfile")
 
     allSources.foreach { s =>
-      val query = s"CREATE TABLE my_tab ROW FORMAT DELIMITED FIELDS TERMINATED BY ' ' STORED AS $s"
+      val query = s"CREATE TABLE my_tab () " +
+        s"ROW FORMAT DELIMITED FIELDS TERMINATED BY ' ' STORED AS $s"
       if (supportedSources.contains(s)) {
         parseAndResolve(query) match {
           case ct: CreateTableV1 =>
@@ -1838,7 +1839,7 @@ class PlanResolutionSuite extends AnalysisTest {
   }
 
   test("create hive external table") {
-    val withoutLoc = "CREATE EXTERNAL TABLE my_tab STORED AS parquet"
+    val withoutLoc = "CREATE EXTERNAL TABLE my_tab () STORED AS parquet"
     parseAndResolve(withoutLoc) match {
       case ct: CreateTableV1 =>
         assert(ct.tableDesc.tableType == CatalogTableType.EXTERNAL)

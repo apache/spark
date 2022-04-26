@@ -1,6 +1,6 @@
 -- Ensure Enum fields are converted to strings (instead of struct<value:int>)
 
-create table convert_enum_to_string
+create table convert_enum_to_string ()
   partitioned by (b string)
   row format serde "org.apache.hadoop.hive.serde2.thrift.ThriftDeserializer"
     with serdeproperties (

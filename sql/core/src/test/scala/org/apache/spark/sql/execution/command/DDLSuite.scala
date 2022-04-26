@@ -1344,7 +1344,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
       withTable("tab1", "tab2") {
         (("a", "b") :: Nil).toDF().write.json(tempDir.getCanonicalPath)
 
-        val e = intercept[AnalysisException] { sql("CREATE TABLE tab1 USING json") }.getMessage
+        val e = intercept[AnalysisException] { sql("CREATE TABLE tab1 () USING json") }.getMessage
         assert(e.contains("Unable to infer schema for JSON. It must be specified manually"))
 
         sql(s"CREATE TABLE tab2 using json location '${tempDir.toURI}'")
