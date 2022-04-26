@@ -267,7 +267,6 @@ class InjectRuntimeFilterSuite extends QueryTest with SQLTestUtils with SharedSp
   // `MergeScalarSubqueries` can duplicate subqueries in the optimized plan, but the subqueries will
   // be reused in the physical plan.
   def getNumBloomFilters(plan: LogicalPlan, scalarSubqueryCTEMultiplicator: Int = 1): Integer = {
-    print(plan)
     val numBloomFilterAggs = plan.collectWithSubqueries {
       case Aggregate(_, aggregateExpressions, _) =>
         aggregateExpressions.collect {
