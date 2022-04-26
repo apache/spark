@@ -1515,8 +1515,8 @@ select '4 11:11' - interval '4 22:12' day to minute
 -- !query schema
 struct<>
 -- !query output
-java.time.DateTimeException
-Invalid input syntax for type "TIMESTAMP": '4 11:11'. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
+org.apache.spark.SparkDateTimeException
+[INVALID_SYNTAX_FOR_CAST] Invalid input syntax for type "TIMESTAMP": '4 11:11'. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
 == SQL(line 1, position 7) ==
 select '4 11:11' - interval '4 22:12' day to minute
        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -1527,8 +1527,8 @@ select '4 12:12:12' + interval '4 22:12' day to minute
 -- !query schema
 struct<>
 -- !query output
-java.time.DateTimeException
-Invalid input syntax for type "TIMESTAMP": '4 12:12:12'. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
+org.apache.spark.SparkDateTimeException
+[INVALID_SYNTAX_FOR_CAST] Invalid input syntax for type "TIMESTAMP": '4 12:12:12'. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
 == SQL(line 1, position 7) ==
 select '4 12:12:12' + interval '4 22:12' day to minute
        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -1565,8 +1565,8 @@ select str - interval '4 22:12' day to minute from interval_view
 -- !query schema
 struct<>
 -- !query output
-java.time.DateTimeException
-Invalid input syntax for type "TIMESTAMP": '1'. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
+org.apache.spark.SparkDateTimeException
+[INVALID_SYNTAX_FOR_CAST] Invalid input syntax for type "TIMESTAMP": '1'. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
 == SQL(line 1, position 7) ==
 select str - interval '4 22:12' day to minute from interval_view
        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -1577,8 +1577,8 @@ select str + interval '4 22:12' day to minute from interval_view
 -- !query schema
 struct<>
 -- !query output
-java.time.DateTimeException
-Invalid input syntax for type "TIMESTAMP": '1'. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
+org.apache.spark.SparkDateTimeException
+[INVALID_SYNTAX_FOR_CAST] Invalid input syntax for type "TIMESTAMP": '1'. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
 == SQL(line 1, position 7) ==
 select str + interval '4 22:12' day to minute from interval_view
        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
