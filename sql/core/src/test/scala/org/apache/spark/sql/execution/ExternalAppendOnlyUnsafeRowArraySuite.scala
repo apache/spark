@@ -59,7 +59,7 @@ class ExternalAppendOnlyUnsafeRowArraySuite extends SparkFunSuite with LocalSpar
   private def insertRow(array: ExternalAppendOnlyUnsafeRowArray): Long = {
     val valueInserted = random.nextLong()
 
-    val row = new UnsafeRow(  1)
+    val row = new UnsafeRow(1)
     row.pointTo(new Array[Byte](64), 16)
     row.setLong(0, valueInserted)
     array.add(row)

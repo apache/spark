@@ -194,13 +194,13 @@ private[sql] class ExternalAppendOnlyUnsafeRowArray(
 
     protected def throwExceptionIfModified(): Unit = {
       if (expectedModificationsCount != modificationsCount) {
-        closeIfNeed()
+        closeIfNeeded()
         throw QueryExecutionErrors.concurrentModificationOnExternalAppendOnlyUnsafeRowArrayError(
           classOf[ExternalAppendOnlyUnsafeRowArray].getName)
       }
     }
 
-    protected def closeIfNeed(): Unit = {}
+    protected def closeIfNeeded(): Unit = {}
 
   }
 
@@ -235,7 +235,7 @@ private[sql] class ExternalAppendOnlyUnsafeRowArray(
       currentRow
     }
 
-    override protected def closeIfNeed(): Unit = iterator match {
+    override protected def closeIfNeeded(): Unit = iterator match {
       case c: Closeable => c.close()
       case _ => // do nothing
     }
