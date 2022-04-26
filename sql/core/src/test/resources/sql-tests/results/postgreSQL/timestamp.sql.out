@@ -266,16 +266,6 @@ struct<54:string,timestamp:timestamp,year:int,month:int,day:int,hour:int,minute:
 
 
 -- !query
-SELECT '' AS to_char_1, to_char(d1, 'DAY Day day DY Dy dy MONTH Month month RM MON Mon mon')
-FROM TIMESTAMP_TBL
--- !query schema
-struct<>
--- !query output
-org.apache.spark.sql.AnalysisException
-cannot resolve 'to_char(spark_catalog.default.timestamp_tbl.d1, 'DAY Day day DY Dy dy MONTH Month month RM MON Mon mon')' due to data type mismatch: argument 1 requires decimal type, however, 'spark_catalog.default.timestamp_tbl.d1' is of timestamp type.; line 1 pos 24
-
-
--- !query
 SELECT make_timestamp(2014,12,28,6,30,45.887)
 -- !query schema
 struct<make_timestamp(2014, 12, 28, 6, 30, 45.887):timestamp>
