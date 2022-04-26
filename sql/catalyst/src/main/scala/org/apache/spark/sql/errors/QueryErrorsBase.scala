@@ -52,9 +52,8 @@ trait QueryErrorsBase {
     "\"" + elem + "\""
   }
 
-  // Quote sql statements in error messages.
   def toSQLStmt(text: String): String = {
-    quoteByDefault(text.toUpperCase(Locale.ROOT))
+    text.toUpperCase(Locale.ROOT)
   }
 
   def toSQLId(parts: Seq[String]): String = {
