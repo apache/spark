@@ -43,7 +43,6 @@ import org.apache.spark.util.Utils
 private[hive] case class DownloadDataBlock(
     path: Option[Path] = None,
     offset: Option[Long] = None,
-    schema: Option[String] = None,
     dataSize: Long)
 
 private[hive] class SparkDownloadDataOperation(
@@ -74,17 +73,13 @@ private[hive] class SparkDownloadDataOperation(
     "compression" -> "gzip",
     "header" -> "true",
     "maxRecordsPerFile" ->"0",
-    // To avoid Zeta client timeout
-    "fetchBlockSize" -> "10485760",
-    "maxFetchBlockTime" -> "30000")
+    "fetchBlockSize" -> "10485760")
 
   private val writeOptions =
     defaultOptions ++ Option(options).map(_.asScala).getOrElse(Map.empty[String, String]).toMap
   private val numFiles = writeOptions.get("numFiles").map(_.toInt)
 
   private val fetchSize = writeOptions("fetchBlockSize").toLong
-
-  private val maxFetchBlockTime = writeOptions("maxFetchBlockTime").toLong
 
   private val downloadQuery = s"Generating download files with arguments " +
     s"[${tableName}, ${query}, ${format}, ${writeOptions}]"
@@ -197,7 +192,7 @@ private[hive] class SparkDownloadDataOperation(
 
       val list: JList[DownloadDataBlock] = new JArrayList[DownloadDataBlock]()
       // Add total data size to first row.
-      list.add(DownloadDataBlock(schema = Some(schemaStr), dataSize = dataSize))
+      list.add(DownloadDataBlock(dataSize = dataSize))
       // and then add data.
       fs.listStatus(resultPath, pathFilter).map(_.getPath).foreach { path =>
         val dataLen = fs.getFileStatus(path).getLen
@@ -222,7 +217,7 @@ private[hive] class SparkDownloadDataOperation(
       setState(OperationState.FINISHED)
     } catch {
       case NonFatal(e) =>
-        logError(s"Error download file", e)
+        logError("Error download file", e)
         setState(OperationState.ERROR)
         HiveThriftServer2.eventManager.onStatementError(
           statementId,
@@ -269,15 +264,15 @@ private[hive] class SparkDownloadDataOperation(
                 is.readFully(buffer)
               }
               // data row
-              rowSet.addRow(Array[AnyRef](path.getName, buffer, null, Long.box(dataSize)))
+              rowSet.addRow(Array[AnyRef](path.getName, buffer, Long.box(dataSize)))
               downloadedDataSize = dataSize
             } else {
               // End of file row
-              rowSet.addRow(Array[AnyRef](path.getName, null, null, Long.box(dataSize)))
+              rowSet.addRow(Array[AnyRef](path.getName, null, Long.box(dataSize)))
             }
           case _ =>
             // Schema row and total data size row
-            rowSet.addRow(Array[AnyRef](null, null, dataBlock.schema.get, Long.box(dataSize)))
+            rowSet.addRow(Array[AnyRef](null, null, Long.box(dataSize)))
         }
         curRow += 1
       }
@@ -289,7 +284,6 @@ private[hive] class SparkDownloadDataOperation(
     new TableSchema()
       .addPrimitiveColumn("FILE_NAME", Type.STRING_TYPE, "The file name to be transferred.")
       .addPrimitiveColumn("DATA", Type.BINARY_TYPE, "The data to be transferred.")
-      .addPrimitiveColumn("SCHEMA", Type.STRING_TYPE, "The data schema to be transferred.")
       .addPrimitiveColumn("SIZE", Type.BIGINT_TYPE, "The size to be transferred in this fetch.")
   }
 
