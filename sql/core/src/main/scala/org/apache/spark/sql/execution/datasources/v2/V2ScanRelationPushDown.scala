@@ -185,7 +185,6 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper wit
                   val newOutput = scan.readSchema().toAttributes
                   assert(newOutput.length == groupingExpressions.length + finalAggregates.length)
                   val groupByExprToOutputOrdinal = mutable.HashMap.empty[Expression, Int]
-                  var ordinal = 0
                   val groupAttrs = normalizedGroupingExpressions.zip(newOutput).zipWithIndex.map {
                     case ((a: Attribute, b: Attribute), _) => b.withExprId(a.exprId)
                     case ((expr, b), idx) =>
