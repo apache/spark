@@ -149,7 +149,7 @@ class QueryCompilationErrorsSuite extends QueryTest with SharedSparkSession {
     assert(e.getSqlState === "0A000")
     assert(e.message ===
       "The feature is not supported: " +
-      "Using PythonUDF in join condition of join type \"LEFT OUTER\" is not supported.")
+      "Using PythonUDF in join condition of join type LEFT OUTER is not supported.")
   }
 
   test("UNSUPPORTED_FEATURE: Using pandas UDF aggregate expression with pivot") {
