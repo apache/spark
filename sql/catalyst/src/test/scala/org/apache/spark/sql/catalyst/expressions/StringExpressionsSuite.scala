@@ -1280,7 +1280,7 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
     // Test 'S'
     Seq(
-      (Decimal(-454.8), "99G999.9S") -> "  ,454.8-",
+      (Decimal(-454.8), "99G999.9S") -> "   454.8-",
       (Decimal(-454.8), "00G000.0S") -> "00,454.8-",
       (Decimal(-454), "S999") -> "-454",
       (Decimal(-454), "999S") -> "454-",
@@ -1297,7 +1297,7 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
     // Test 'MI'
     Seq(
-      (Decimal(-454.8), "99G999.9MI") -> "  ,454.8-",
+      (Decimal(-454.8), "99G999.9MI") -> "   454.8-",
       (Decimal(-454.8), "00G000.0MI") -> "00,454.8-",
       (Decimal(-454), "999MI") -> "454-",
       (Decimal(-12454.8), "99G999D9MI") -> "12,454.8-"
@@ -1313,7 +1313,7 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
     // Test 'PR'
     Seq(
-      (Decimal(-454.8), "99G999.9PR") -> "<  ,454.8>",
+      (Decimal(-454.8), "99G999.9PR") -> "   <454.8>",
       (Decimal(-454.8), "00G000.0PR") -> "<00,454.8>",
       (Decimal(-454), "999PR") -> "<454>",
       (Decimal(-12454.8), "99G999D9PR") -> "<12,454.8>"

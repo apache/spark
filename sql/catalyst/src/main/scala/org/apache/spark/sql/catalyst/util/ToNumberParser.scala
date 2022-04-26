@@ -648,14 +648,26 @@ class ToNumberParser(numberFormat: String, errorOnFail: Boolean) extends Seriali
         case _: OptionalPlusOrMinusSign | _: OptionalMinusSign =>
           if (input < Decimal.ZERO) {
             result.append('-')
+          } else {
+            result.append(' ')
           }
         case OpeningAngleBracket() =>
           if (input < Decimal.ZERO) {
             result.append('<')
+          } else {
+            result.append(' ')
           }
         case ClosingAngleBracket() =>
           if (input < Decimal.ZERO) {
-            result.append('>')
+            if (result.nonEmpty && result.last == ' ') {
+              // If the string ends with a space, add the '>' before the space.
+              result.setCharAt(result.length - 1, '>')
+              result.append(' ')
+            } else {
+              result.append('>')
+            }
+          } else {
+            result.append(' ')
           }
       }
     }
@@ -780,7 +792,17 @@ class ToNumberParser(numberFormat: String, errorOnFail: Boolean) extends Seriali
                 case _: AtMostAsManyDigits =>
                   // The format string started with a 9 and had more digits than the provided
                   // input string, so we prepend a space to the result.
-                  result.append(' ')
+                  if (result.nonEmpty && result.last == '<') {
+                    // If the string starts with a space, add the '<' after the space.
+                    result.setCharAt(result.length - 1, ' ')
+                    result.append('<')
+                  } else if (result.nonEmpty && result.last == '-') {
+                    // If the string starts with a space, add the '-' after the space.
+                    result.setCharAt(result.length - 1, ' ')
+                    result.append('-')
+                  } else {
+                    result.append(' ')
+                  }
               }
             }
             formattingBeforeDecimalPointIndex += 1
@@ -802,7 +824,11 @@ class ToNumberParser(numberFormat: String, errorOnFail: Boolean) extends Seriali
             formattingAfterDecimalPointIndex += 1
           }
         case _: ThousandsSeparator =>
-          result.append(',')
+          if (result.nonEmpty && result.last >= ZERO_DIGIT && result.last <= NINE_DIGIT) {
+            result.append(',')
+          } else {
+            result.append(' ')
+          }
       }
     }
   }
