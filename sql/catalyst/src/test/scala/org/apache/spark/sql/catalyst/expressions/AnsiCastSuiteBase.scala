@@ -260,7 +260,8 @@ abstract class AnsiCastSuiteBase extends CastSuiteBase {
 
   protected def checkCastToTimestampError(l: Literal, to: DataType): Unit = {
     checkExceptionInExpression[DateTimeException](
-      cast(l, to), s"""Invalid input syntax for type "TIMESTAMP": ${toSQLValue(l)}""")
+      cast(l, to),
+      s"""Invalid input syntax for type "TIMESTAMP": ${toSQLValue(l.eval(), l.dataType)}""")
   }
 
   test("cast from timestamp II") {
