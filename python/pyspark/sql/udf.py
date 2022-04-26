@@ -49,7 +49,7 @@ def _wrap_function(
     command = (func, returnType)
     pickled_command, broadcast_vars, env, includes = _prepare_for_python_RDD(sc, command)
     assert sc._jvm is not None
-    return sc._jvm.PythonFunction(
+    return sc._jvm.SimplePythonFunction(
         bytearray(pickled_command),
         env,
         includes,

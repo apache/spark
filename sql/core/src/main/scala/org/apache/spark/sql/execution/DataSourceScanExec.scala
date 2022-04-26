@@ -148,7 +148,7 @@ case class RowDataSourceScanExec(
         val pushedTopN =
           s"ORDER BY ${seqToString(pushedDownOperators.sortValues.map(_.describe()))}" +
           s" LIMIT ${pushedDownOperators.limit.get}"
-        Some("pushedTopN" -> pushedTopN)
+        Some("PushedTopN" -> pushedTopN)
     } else {
       pushedDownOperators.limit.map(value => "PushedLimit" -> s"LIMIT $value")
     }

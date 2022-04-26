@@ -111,6 +111,12 @@ class BypassMergeSortShuffleWriterSuite
           blockId = args(0).asInstanceOf[BlockId])
       }
 
+    when(blockResolver.createTempFile(any(classOf[File])))
+      .thenAnswer { invocationOnMock =>
+        val file = invocationOnMock.getArguments()(0).asInstanceOf[File]
+        Utils.tempFileWith(file)
+      }
+
     when(diskBlockManager.createTempShuffleBlock())
       .thenAnswer { _ =>
         val blockId = new TempShuffleBlockId(UUID.randomUUID)
@@ -265,6 +271,11 @@ class BypassMergeSortShuffleWriterSuite
         val file = new File(tempDir, blockId.name)
         temporaryFilesCreated += file
         (blockId, file)
+      }
+    when(diskBlockManager.createTempFileWith(any(classOf[File])))
+      .thenAnswer { invocationOnMock =>
+        val file = invocationOnMock.getArguments()(0).asInstanceOf[File]
+        Utils.tempFileWith(file)
       }
 
     val numPartition = shuffleHandle.dependency.partitioner.numPartitions

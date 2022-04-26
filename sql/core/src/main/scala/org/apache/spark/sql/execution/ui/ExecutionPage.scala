@@ -21,11 +21,17 @@ import javax.servlet.http.HttpServletRequest
 
 import scala.xml.Node
 
+import org.json4s.JNull
+import org.json4s.JsonAST.{JBool, JString}
+import org.json4s.jackson.JsonMethods.parse
+
 import org.apache.spark.JobExecutionStatus
 import org.apache.spark.internal.Logging
 import org.apache.spark.ui.{UIUtils, WebUIPage}
 
 class ExecutionPage(parent: SQLTab) extends WebUIPage("execution") with Logging {
+
+  private val pandasOnSparkConfPrefix = "pandas_on_Spark."
 
   private val sqlStore = parent.sqlStore
 
@@ -82,7 +88,11 @@ class ExecutionPage(parent: SQLTab) extends WebUIPage("execution") with Logging 
       summary ++
         planVisualization(request, metrics, graph) ++
         physicalPlanDescription(executionUIData.physicalPlanDescription) ++
-        modifiedConfigs(executionUIData.modifiedConfigs)
+        modifiedConfigs(
+          executionUIData.modifiedConfigs.filterKeys(
+            !_.startsWith(pandasOnSparkConfPrefix)).toMap) ++
+        modifiedPandasOnSparkConfigs(
+          executionUIData.modifiedConfigs.filterKeys(_.startsWith(pandasOnSparkConfPrefix)).toMap)
     }.getOrElse {
       <div>No information to display for query {executionId}</div>
     }
@@ -148,6 +158,8 @@ class ExecutionPage(parent: SQLTab) extends WebUIPage("execution") with Logging 
   }
 
   private def modifiedConfigs(modifiedConfigs: Map[String, String]): Seq[Node] = {
+    if (Option(modifiedConfigs).exists(_.isEmpty)) return Nil
+
     val configs = UIUtils.listingTable(
       propertyHeader,
       propertyRow,
@@ -159,9 +171,48 @@ class ExecutionPage(parent: SQLTab) extends WebUIPage("execution") with Logging 
       <span class="collapse-sql-properties collapse-table"
             onClick="collapseTable('collapse-sql-properties', 'sql-properties')">
         <span class="collapse-table-arrow arrow-closed"></span>
-        <a>SQL Properties</a>
+        <a>SQL / DataFrame Properties</a>
       </span>
       <div class="sql-properties collapsible-table collapsed">
+        {configs}
+      </div>
+    </div>
+    <br/>
+  }
+
+  private def modifiedPandasOnSparkConfigs(
+      modifiedPandasOnSparkConfigs: Map[String, String]): Seq[Node] = {
+    if (Option(modifiedPandasOnSparkConfigs).exists(_.isEmpty)) return Nil
+
+    val modifiedOptions = modifiedPandasOnSparkConfigs.toSeq.map { case (k, v) =>
+      // Remove prefix.
+      val key = k.slice(pandasOnSparkConfPrefix.length, k.length)
+      // The codes below is a simple version of Python's repr().
+      // Pandas API on Spark does not support other types in the options yet.
+      val pyValue = parse(v) match {
+        case JNull => "None"
+        case JBool(v) => v.toString.capitalize
+        case JString(s) => s"'$s'"
+        case _ => v
+      }
+      (key, pyValue)
+    }
+
+    val configs = UIUtils.listingTable(
+      propertyHeader,
+      propertyRow,
+      modifiedOptions.sorted,
+      fixedWidth = true
+    )
+
+    <div>
+      <span class="collapse-pandas-on-spark-properties collapse-table"
+            onClick="collapseTable('collapse-pandas-on-spark-properties',
+             'pandas-on-spark-properties')">
+        <span class="collapse-table-arrow arrow-closed"></span>
+        <a>Pandas API Properties</a>
+      </span>
+      <div class="pandas-on-spark-properties collapsible-table collapsed">
         {configs}
       </div>
     </div>
