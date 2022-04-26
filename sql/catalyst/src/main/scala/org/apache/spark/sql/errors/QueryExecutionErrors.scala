@@ -582,8 +582,9 @@ object QueryExecutionErrors extends QueryErrorsBase {
        """.stripMargin)
   }
 
-  def unsupportedSaveModeError(saveMode: String, pathExists: Boolean): Throwable = {
-    new IllegalStateException(s"unsupported save mode $saveMode ($pathExists)")
+  def saveModeUnsupportedError(saveMode: Any, pathExists: Boolean): Throwable = {
+    new SparkIllegalStateException(errorClass = "UNSUPPORTED_SAVE_MODE",
+      messageParameters = Array(toSQLValue(saveMode), toSQLValue(pathExists)))
   }
 
   def cannotClearOutputDirectoryError(staticPrefixPath: Path): Throwable = {

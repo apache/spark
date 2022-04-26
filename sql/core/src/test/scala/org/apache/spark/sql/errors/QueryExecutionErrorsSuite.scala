@@ -22,7 +22,7 @@ import java.util.Locale
 import test.org.apache.spark.sql.connector.JavaSimpleWritableDataSource
 
 import org.apache.spark.{SparkArithmeticException, SparkException, SparkIllegalStateException, SparkRuntimeException, SparkUnsupportedOperationException, SparkUpgradeException}
-import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest}
+import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, SaveMode}
 import org.apache.spark.sql.catalyst.util.BadRecordException
 import org.apache.spark.sql.connector.SimpleWritableDataSource
 import org.apache.spark.sql.execution.QueryExecutionException
@@ -423,5 +423,18 @@ class QueryExecutionErrorsSuite
       sqlState = Some("42000"),
       matchMsg = true
     )
+  }
+
+  test("UNSUPPORTED_SAVE_MODE: unsupported null saveMode") {
+    withTempPath { path =>
+      val e = intercept[SparkIllegalStateException] {
+        val saveMode: SaveMode = null
+        Seq(1, 2).toDS().write.mode(saveMode).parquet(path.getAbsolutePath)
+      }
+      checkErrorClass(
+        exception = e,
+        errorClass = "UNSUPPORTED_SAVE_MODE",
+        msg = "The saveMode is not supported: NULL (false)")
+    }
   }
 }
