@@ -166,7 +166,7 @@ class QueryCompilationErrorsSuite
       exception = e,
       errorClass = "UNSUPPORTED_FEATURE",
       msg = "The feature is not supported: " +
-        "Using PythonUDF in join condition of join type \"LEFT OUTER\" is not supported.",
+        "Using PythonUDF in join condition of join type LEFT OUTER is not supported.",
       sqlState = Some("0A000"))
   }
 
@@ -349,7 +349,7 @@ class QueryCompilationErrorsSuite
             sql(s"DESC TABLE $tempViewName PARTITION (c='Us', d=1)")
           },
           errorClass = "FORBIDDEN_OPERATION",
-          msg = s"""The operation "DESC PARTITION" is not allowed """ +
+          msg = s"""The operation DESC PARTITION is not allowed """ +
             s"on the temporary view: `$tempViewName`")
       }
     }
@@ -375,7 +375,7 @@ class QueryCompilationErrorsSuite
             sql(s"DESC TABLE $viewName PARTITION (c='Us', d=1)")
           },
           errorClass = "FORBIDDEN_OPERATION",
-          msg = s"""The operation "DESC PARTITION" is not allowed """ +
+          msg = s"""The operation DESC PARTITION is not allowed """ +
             s"on the view: `$viewName`")
       }
     }

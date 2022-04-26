@@ -54,7 +54,7 @@ class QueryCompilationErrorsDSv2Suite
           exception = e,
           errorClass = "UNSUPPORTED_FEATURE",
           msg = "The feature is not supported: " +
-            s""""IF NOT EXISTS" for the table `testcat`.`ns1`.`ns2`.`tbl` by "INSERT INTO".""",
+            s"""IF NOT EXISTS for the table `testcat`.`ns1`.`ns2`.`tbl` by INSERT INTO.""",
           sqlState = Some("0A000"))
       }
     }

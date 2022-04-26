@@ -177,7 +177,7 @@ class QueryExecutionErrorsSuite
     checkErrorClass(
       exception = e1,
       errorClass = "UNSUPPORTED_FEATURE",
-      msg = """The feature is not supported: Repeated "PIVOT"s.""",
+      msg = """The feature is not supported: Repeated PIVOTs.""",
       sqlState = Some("0A000"))
 
     val e2 = intercept[SparkUnsupportedOperationException] {
@@ -190,7 +190,7 @@ class QueryExecutionErrorsSuite
     checkErrorClass(
       exception = e2,
       errorClass = "UNSUPPORTED_FEATURE",
-      msg = """The feature is not supported: "PIVOT" not after a "GROUP BY".""",
+      msg = """The feature is not supported: PIVOT not after a GROUP BY.""",
       sqlState = Some("0A000"))
   }
 
