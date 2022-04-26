@@ -129,7 +129,7 @@ private[spark] class MountVolumesFeatureStep(conf: KubernetesConf)
     if (claimName != PVC_ON_DEMAND && executorInstances.get > 1) {
       throw new IllegalArgumentException("ClaimName of PVC must be " +
         PVC_ON_DEMAND +
-        " when multiple executors required")
+        " when multiple executors are required")
     }
   }
 }
