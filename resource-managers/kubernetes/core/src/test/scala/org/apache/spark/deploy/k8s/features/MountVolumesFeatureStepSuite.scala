@@ -164,6 +164,9 @@ class MountVolumesFeatureStepSuite extends SparkFunSuite {
     assertThrows[IllegalArgumentException] {
       executorStep.configurePod(SparkPod.initialPod())
     }
+    assert(intercept[IllegalArgumentException] {
+      executorStep.configurePod(SparkPod.initialPod())
+    }.getMessage.contains("ClaimName of PVC must be OnDemand"))
   }
 
   test("Mounts emptyDir") {
