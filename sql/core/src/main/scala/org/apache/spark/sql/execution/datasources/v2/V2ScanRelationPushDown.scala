@@ -187,9 +187,9 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper wit
                   val groupByExprToOutputOrdinal = mutable.HashMap.empty[Expression, Int]
                   val groupAttrs = normalizedGroupingExpressions.zip(newOutput).zipWithIndex.map {
                     case ((a: Attribute, b: Attribute), _) => b.withExprId(a.exprId)
-                    case ((expr, attr), idx) =>
+                    case ((expr, attr), ordinal) =>
                       if (!groupByExprToOutputOrdinal.contains(expr.canonicalized)) {
-                        groupByExprToOutputOrdinal(expr.canonicalized) = idx
+                        groupByExprToOutputOrdinal(expr.canonicalized) = ordinal
                       }
                       attr
                   }
@@ -218,8 +218,8 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper wit
                             addCastIfNeeded(aggOutput(ordinal), agg.resultAttribute.dataType)
                           Alias(child, agg.resultAttribute.name)(agg.resultAttribute.exprId)
                         case expr if groupByExprToOutputOrdinal.contains(expr.canonicalized) =>
-                          val idx = groupByExprToOutputOrdinal(expr.canonicalized)
-                          addCastIfNeeded(groupAttrs(idx), expr.dataType)
+                          val ordinal = groupByExprToOutputOrdinal(expr.canonicalized)
+                          addCastIfNeeded(groupAttrs(ordinal), expr.dataType)
                       }
                     }.asInstanceOf[Seq[NamedExpression]]
                     Project(projectExpressions, scanRelation)
