@@ -1814,8 +1814,12 @@ class DataFrameTest(ComparisonTestBase, SQLTestUtils):
             index=np.random.rand(7),
         )
         psdf = ps.from_pandas(pdf)
-        self.assert_eq(psdf.nlargest(5, columns="a"), pdf.nlargest(5, columns="a"))
-        self.assert_eq(psdf.nlargest(5, columns=["a", "b"]), pdf.nlargest(5, columns=["a", "b"]))
+        # see also: https://github.com/pandas-dev/pandas/issues/46589
+        if not (LooseVersion("1.4.0") <= LooseVersion(pd.__version__) <= LooseVersion("1.4.2")):
+            self.assert_eq(psdf.nlargest(5, columns="a"), pdf.nlargest(5, columns="a"))
+            self.assert_eq(
+                psdf.nlargest(5, columns=["a", "b"]), pdf.nlargest(5, columns=["a", "b"])
+            )
         self.assert_eq(psdf.nlargest(5, columns=["c"]), pdf.nlargest(5, columns=["c"]))
         self.assert_eq(
             psdf.nlargest(5, columns=["c"], keep="first"),
@@ -1838,10 +1842,12 @@ class DataFrameTest(ComparisonTestBase, SQLTestUtils):
             index=np.random.rand(7),
         )
         psdf = ps.from_pandas(pdf)
-        self.assert_eq(psdf.nsmallest(n=5, columns="a"), pdf.nsmallest(5, columns="a"))
-        self.assert_eq(
-            psdf.nsmallest(n=5, columns=["a", "b"]), pdf.nsmallest(5, columns=["a", "b"])
-        )
+        # see also: https://github.com/pandas-dev/pandas/issues/46589
+        if not (LooseVersion("1.4.0") <= LooseVersion(pd.__version__) <= LooseVersion("1.4.2")):
+            self.assert_eq(psdf.nsmallest(n=5, columns="a"), pdf.nsmallest(5, columns="a"))
+            self.assert_eq(
+                psdf.nsmallest(n=5, columns=["a", "b"]), pdf.nsmallest(5, columns=["a", "b"])
+            )
         self.assert_eq(psdf.nsmallest(n=5, columns=["c"]), pdf.nsmallest(5, columns=["c"]))
         self.assert_eq(
             psdf.nsmallest(n=5, columns=["c"], keep="first"),
