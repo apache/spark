@@ -210,40 +210,40 @@ SELECT '' AS `54`, d1 as `timestamp`,
 --     date_part( 'dow', d1) AS dow
 --     FROM TIMESTAMP_TBL WHERE d1 BETWEEN '1902-01-01' AND '2038-01-01';
 
--- Data Type Formatting Functions
+-- [SPARK-28137] Data Type Formatting Functions
 -- TO_CHAR()
-SELECT '' AS to_char_1, to_char(d1, 'DAY Day day DY Dy dy MONTH Month month RM MON Mon mon')
-FROM TIMESTAMP_TBL;
+-- SELECT '' AS to_char_1, to_char(d1, 'DAY Day day DY Dy dy MONTH Month month RM MON Mon mon')
+--    FROM TIMESTAMP_TBL;
 
-SELECT '' AS to_char_2, to_char(d1, 'FMDAY FMDay FMday FMMONTH FMMonth FMmonth FMRM')
-FROM TIMESTAMP_TBL;
+-- SELECT '' AS to_char_2, to_char(d1, 'FMDAY FMDay FMday FMMONTH FMMonth FMmonth FMRM')
+--    FROM TIMESTAMP_TBL;
 
-SELECT '' AS to_char_3, to_char(d1, 'Y,YYY YYYY YYY YY Y CC Q MM WW DDD DD D J')
-FROM TIMESTAMP_TBL;
+-- SELECT '' AS to_char_3, to_char(d1, 'Y,YYY YYYY YYY YY Y CC Q MM WW DDD DD D J')
+--    FROM TIMESTAMP_TBL;
 
-SELECT '' AS to_char_4, to_char(d1, 'FMY,YYY FMYYYY FMYYY FMYY FMY FMCC FMQ FMMM FMWW FMDDD FMDD FMD FMJ')
-FROM TIMESTAMP_TBL;
+-- SELECT '' AS to_char_4, to_char(d1, 'FMY,YYY FMYYYY FMYYY FMYY FMY FMCC FMQ FMMM FMWW FMDDD FMDD FMD FMJ')
+--    FROM TIMESTAMP_TBL;
 
-SELECT '' AS to_char_5, to_char(d1, 'HH HH12 HH24 MI SS SSSS')
-FROM TIMESTAMP_TBL;
+-- SELECT '' AS to_char_5, to_char(d1, 'HH HH12 HH24 MI SS SSSS')
+--    FROM TIMESTAMP_TBL;
 
-SELECT '' AS to_char_6, to_char(d1, E'"HH:MI:SS is" HH:MI:SS "\\"text between quote marks\\""')
-FROM TIMESTAMP_TBL;
+-- SELECT '' AS to_char_6, to_char(d1, E'"HH:MI:SS is" HH:MI:SS "\\"text between quote marks\\""')
+--    FROM TIMESTAMP_TBL;
 
-SELECT '' AS to_char_7, to_char(d1, 'HH24--text--MI--text--SS')
-FROM TIMESTAMP_TBL;
+-- SELECT '' AS to_char_7, to_char(d1, 'HH24--text--MI--text--SS')
+--    FROM TIMESTAMP_TBL;
 
-SELECT '' AS to_char_8, to_char(d1, 'YYYYTH YYYYth Jth')
-FROM TIMESTAMP_TBL;
+-- SELECT '' AS to_char_8, to_char(d1, 'YYYYTH YYYYth Jth')
+--    FROM TIMESTAMP_TBL;
 
-SELECT '' AS to_char_9, to_char(d1, 'YYYY A.D. YYYY a.d. YYYY bc HH:MI:SS P.M. HH:MI:SS p.m. HH:MI:SS pm')
-FROM TIMESTAMP_TBL;
+-- SELECT '' AS to_char_9, to_char(d1, 'YYYY A.D. YYYY a.d. YYYY bc HH:MI:SS P.M. HH:MI:SS p.m. HH:MI:SS pm')
+--    FROM TIMESTAMP_TBL;
 
-SELECT '' AS to_char_10, to_char(d1, 'IYYY IYY IY I IW IDDD ID')
-FROM TIMESTAMP_TBL;
+-- SELECT '' AS to_char_10, to_char(d1, 'IYYY IYY IY I IW IDDD ID')
+--    FROM TIMESTAMP_TBL;
 
-SELECT '' AS to_char_11, to_char(d1, 'FMIYYY FMIYY FMIY FMI FMIW FMIDDD FMID')
-FROM TIMESTAMP_TBL;
+-- SELECT '' AS to_char_11, to_char(d1, 'FMIYYY FMIYY FMIY FMI FMIW FMIDDD FMID')
+--    FROM TIMESTAMP_TBL;
 
 
 -- timestamp numeric fields constructor

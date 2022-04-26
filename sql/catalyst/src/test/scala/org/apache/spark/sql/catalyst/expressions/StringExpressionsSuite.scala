@@ -1011,7 +1011,7 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     val unexpectedCharacter = "the structure of the format string must match: " +
       "[MI|S] [$] [0|9|G|,]* [.|D] [0|9]* [$] [PR|MI|S]"
     val thousandsSeparatorDigitsBetween =
-      "Thousands separators (,) must have digits in between them"
+      "Thousands separators (, or G) must have digits in between them"
     val mustBeAtEnd = "must be at the end of the number format"
     val atMostOne = "At most one"
     Seq(
@@ -1049,7 +1049,8 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       (",,345", "9,99,") -> thousandsSeparatorDigitsBetween,
       (",,345", ",,999,099.99") -> thousandsSeparatorDigitsBetween,
       // Thousands separators must not appear after the decimal point.
-      ("123.45,6", "099.99,9") -> "Thousands separators (,) may not appear after the decimal point"
+      ("123.45,6", "099.99,9") ->
+        "Thousands separators (, or G) may not appear after the decimal point"
     ).foreach { case ((str: String, format: String), expectedErrMsg: String) =>
       val toNumberResult = ToNumber(Literal(str), Literal(format)).checkInputDataTypes()
       assert(toNumberResult != TypeCheckResult.TypeCheckSuccess,
@@ -1328,17 +1329,13 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("ToCharacter: negative tests (the input decimal value does not match the format string)") {
-    // Test '0' and '9'
     Seq(
       // If there were more digits in the provided input string (before or after the decimal point)
       // than specified in the format string, the input string does not match the format.
       (Decimal(454), "0"),
       (Decimal(454), "00"),
       (Decimal(4.67), "9.9"),
-      (Decimal(4.67), "99.9"),
-      // The format string included "PR" to match a negative number, but the input value was
-      // not negative.
-      (Decimal(467), "999PR")
+      (Decimal(4.67), "99.9")
     ).foreach { case (decimal, format) =>
       val toCharExpr = ToCharacter(Literal(decimal), Literal(format))
       assert(toCharExpr.checkInputDataTypes() == TypeCheckResult.TypeCheckSuccess)

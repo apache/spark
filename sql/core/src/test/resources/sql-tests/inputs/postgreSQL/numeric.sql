@@ -873,21 +873,21 @@ SELECT '' AS to_char_21, to_char(val, '999999SG9999999999')			FROM num_data;
 SELECT '' AS to_char_22, to_char(val, 'FM9999999999999999.999999999999999')	FROM num_data;
 SELECT '' AS to_char_23, to_char(val, '9.999EEEE')				FROM num_data;
 
-SELECT '' AS to_char_24, to_char('100'::numeric, 'FM999.9');
-SELECT '' AS to_char_25, to_char('100'::numeric, 'FM999.');
-SELECT '' AS to_char_26, to_char('100'::numeric, 'FM999');
+-- SELECT '' AS to_char_24, to_char('100'::numeric, 'FM999.9');
+-- SELECT '' AS to_char_25, to_char('100'::numeric, 'FM999.');
+-- SELECT '' AS to_char_26, to_char('100'::numeric, 'FM999');
 
 -- Check parsing of literal text in a format string
-SELECT '' AS to_char_27, to_char('100'::numeric, 'foo999');
-SELECT '' AS to_char_28, to_char('100'::numeric, 'f\oo999');
-SELECT '' AS to_char_29, to_char('100'::numeric, 'f\\oo999');
-SELECT '' AS to_char_30, to_char('100'::numeric, 'f\"oo999');
-SELECT '' AS to_char_31, to_char('100'::numeric, 'f\\"oo999');
-SELECT '' AS to_char_32, to_char('100'::numeric, 'f"ool"999');
-SELECT '' AS to_char_33, to_char('100'::numeric, 'f"\ool"999');
-SELECT '' AS to_char_34, to_char('100'::numeric, 'f"\\ool"999');
-SELECT '' AS to_char_35, to_char('100'::numeric, 'f"ool\"999');
-SELECT '' AS to_char_36, to_char('100'::numeric, 'f"ool\\"999');
+-- SELECT '' AS to_char_27, to_char('100'::numeric, 'foo999');
+-- SELECT '' AS to_char_28, to_char('100'::numeric, 'f\oo999');
+-- SELECT '' AS to_char_29, to_char('100'::numeric, 'f\\oo999');
+-- SELECT '' AS to_char_30, to_char('100'::numeric, 'f\"oo999');
+-- SELECT '' AS to_char_31, to_char('100'::numeric, 'f\\"oo999');
+-- SELECT '' AS to_char_32, to_char('100'::numeric, 'f"ool"999');
+-- SELECT '' AS to_char_33, to_char('100'::numeric, 'f"\ool"999');
+-- SELECT '' AS to_char_34, to_char('100'::numeric, 'f"\\ool"999');
+-- SELECT '' AS to_char_35, to_char('100'::numeric, 'f"ool\"999');
+-- SELECT '' AS to_char_36, to_char('100'::numeric, 'f"ool\\"999');
 
 -- [SPARK-28137] Missing Data Type Formatting Functions: TO_NUMBER
 -- TO_NUMBER()
