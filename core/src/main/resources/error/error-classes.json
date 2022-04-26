@@ -222,7 +222,7 @@
       "PIVOT_AFTER_GROUP_BY" : {
         "message" : [ "PIVOT clause following a GROUP BY clause." ]
       },
-      "PIVOT_UNSUPPORTED_TYPE" : {
+      "PIVOT_TYPE" : {
         "message" : [ "Pivoting by the value '<value>' of the column data type <type>." ]
       },
       "PYTHON_UDF_IN_ON_CLAUSE" : {
