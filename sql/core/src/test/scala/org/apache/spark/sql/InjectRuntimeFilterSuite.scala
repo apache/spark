@@ -267,14 +267,20 @@ class InjectRuntimeFilterSuite extends QueryTest with SQLTestUtils with SharedSp
   // `MergeScalarSubqueries` can duplicate subqueries in the optimized plan, but the subqueries will
   // be reused in the physical plan.
   def getNumBloomFilters(plan: LogicalPlan, scalarSubqueryCTEMultiplicator: Int = 1): Integer = {
-    val numBloomFilterAggs = plan.collectWithSubqueries {
-      case Aggregate(_, aggregateExpressions, _) =>
-        aggregateExpressions.collect {
-          case Alias(AggregateExpression(bfAgg: BloomFilterAggregate, _, _, _, _), _) =>
-            assert(bfAgg.estimatedNumItemsExpression.isInstanceOf[Literal])
-            assert(bfAgg.numBitsExpression.isInstanceOf[Literal])
-            1
+    val numBloomFilterAggs = plan.collect {
+      case Filter(condition, _) => condition.collect {
+        case subquery: org.apache.spark.sql.catalyst.expressions.ScalarSubquery
+        => subquery.plan.collect {
+          case Aggregate(_, aggregateExpressions, _) =>
+            aggregateExpressions.map {
+              case Alias(AggregateExpression(bfAgg : BloomFilterAggregate, _, _, _, _),
+              _) =>
+                assert(bfAgg.estimatedNumItemsExpression.isInstanceOf[Literal])
+                assert(bfAgg.numBitsExpression.isInstanceOf[Literal])
+                1
+            }.sum
         }.sum
+      }.sum
     }.sum
     val numMightContains = plan.collect {
       case Filter(condition, _) => condition.collect {
