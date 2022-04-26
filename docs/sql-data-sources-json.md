@@ -127,13 +127,13 @@ Data source options of JSON can be set via:
   <tr>
     <td><code>primitivesAsString</code></td>
     <td><code>false</code></td>
-    <td>Infers all primitive values as a string type. JSON built-in functions ignore this option.</td>
+    <td>Infers all primitive values as a string type.</td>
     <td>read</td>
   </tr>
   <tr>
     <td><code>prefersDecimal</code></td>
     <td><code>false</code></td>
-    <td>Infers all floating-point values as a decimal type. If the values do not fit in decimal, then it infers them as doubles. JSON built-in functions ignore this option.</td>
+    <td>Infers all floating-point values as a decimal type. If the values do not fit in decimal, then it infers them as doubles.</td>
     <td>read</td>
   </tr>
   <tr>
@@ -235,7 +235,7 @@ Data source options of JSON can be set via:
   <tr>
     <td><code>dropFieldIfAllNull</code></td>
     <td><code>false</code></td>
-    <td>Whether to ignore column of all null values or empty array during schema inference. JSON built-in functions ignore this option.</td>
+    <td>Whether to ignore column of all null values or empty array during schema inference.</td>
     <td>read</td>
   </tr>
   <tr>
