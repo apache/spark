@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources.v2
 
-import org.apache.spark.sql.catalyst.expressions.{And, Expression, NamedExpression, ProjectionOverSchema, SubqueryExpression}
+import org.apache.spark.sql.catalyst.expressions.{And, AttributeSet, Expression, NamedExpression, ProjectionOverSchema, SubqueryExpression}
 import org.apache.spark.sql.catalyst.planning.ScanOperation
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.rules.Rule
@@ -67,7 +67,8 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] {
 
       val scanRelation = DataSourceV2ScanRelation(relation, wrappedScan, output)
 
-      val projectionOverSchema = ProjectionOverSchema(output.toStructType)
+      val projectionOverSchema =
+        ProjectionOverSchema(output.toStructType, AttributeSet(output))
       val projectionFunc = (expr: Expression) => expr transformDown {
         case projectionOverSchema(newExpr) => newExpr
       }
