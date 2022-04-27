@@ -70,7 +70,7 @@ case class JDBCScanBuilder(
 
   private var pushedAggregateList: Array[String] = Array()
 
-  private var pushedGroupByCols: Option[Array[String]] = None
+  private var pushedGroupBys: Option[Array[String]] = None
 
   override def supportCompletePushDown(aggregation: Aggregation): Boolean = {
     lazy val fieldNames = aggregation.groupByExpressions()(0) match {
@@ -108,7 +108,7 @@ case class JDBCScanBuilder(
     try {
       finalSchema = JDBCRDD.getQueryOutputSchema(aggQuery, jdbcOptions, dialect)
       pushedAggregateList = selectList
-      pushedGroupByCols = Some(compiledGroupBys)
+      pushedGroupBys = Some(compiledGroupBys)
       true
     } catch {
       case NonFatal(e) =>
@@ -174,6 +174,6 @@ case class JDBCScanBuilder(
     // prunedSchema and quote them (will become "MAX(SALARY)", "MIN(BONUS)" and can't
     // be used in sql string.
     JDBCScan(JDBCRelation(schema, parts, jdbcOptions)(session), finalSchema, pushedPredicate,
-      pushedAggregateList, pushedGroupByCols, tableSample, pushedLimit, sortOrders)
+      pushedAggregateList, pushedGroupBys, tableSample, pushedLimit, sortOrders)
   }
 }
