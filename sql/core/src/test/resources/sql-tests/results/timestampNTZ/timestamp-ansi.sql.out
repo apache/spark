@@ -331,8 +331,8 @@ select to_timestamp(1)
 -- !query schema
 struct<>
 -- !query output
-java.time.DateTimeException
-Invalid input syntax for type "TIMESTAMP_NTZ": '1'. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
+org.apache.spark.SparkDateTimeException
+[INVALID_SYNTAX_FOR_CAST] Invalid input syntax for type "TIMESTAMP_NTZ": '1'. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
 
 
 -- !query
