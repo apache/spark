@@ -33,10 +33,11 @@ class QueryExecutionAnsiErrorsSuite extends QueryTest with QueryErrorsSuiteBase 
       },
       errorClass = "CAST_CAUSES_OVERFLOW",
       msg =
-        "Casting 253402258394567890L to \"INT\" causes overflow. " +
+        "Casting TIMESTAMP '9999-12-.*.56789' to \"INT\" causes overflow. " +
         "To return NULL instead, use 'try_cast'. " +
         s"If necessary set $ansiConf to false to bypass this error.",
-      sqlState = Some("22005"))
+      sqlState = Some("22005"),
+      matchMsg = true)
   }
 
   test("DIVIDE_BY_ZERO: can't divide an integer by zero") {

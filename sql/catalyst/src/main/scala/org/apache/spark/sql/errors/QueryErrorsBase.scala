@@ -24,28 +24,20 @@ import org.apache.spark.sql.catalyst.util.quoteIdentifier
 import org.apache.spark.sql.types.{DataType, DoubleType, FloatType}
 
 trait QueryErrorsBase {
-  private def litToErrorValue(l: Literal): String = l match {
+  // Converts an error class parameter to its SQL representation
+  def toSQLValue(v: Any, t: DataType): String = Literal.create(v, t) match {
     case Literal(null, _) => "NULL"
     case Literal(v: Float, FloatType) =>
       if (v.isNaN) "NaN"
       else if (v.isPosInfinity) "Infinity"
       else if (v.isNegInfinity) "-Infinity"
       else v.toString
-    case Literal(v: Double, DoubleType) =>
+    case l @ Literal(v: Double, DoubleType) =>
       if (v.isNaN) "NaN"
       else if (v.isPosInfinity) "Infinity"
       else if (v.isNegInfinity) "-Infinity"
       else l.sql
     case l => l.sql
-  }
-
-  // Converts an error class parameter to its SQL representation
-  def toSQLValue(v: Any): String = {
-    litToErrorValue(Literal(v))
-  }
-
-  def toSQLValue(v: Any, t: DataType): String = {
-    litToErrorValue(Literal.create(v, t))
   }
 
   private def quoteByDefault(elem: String): String = {
