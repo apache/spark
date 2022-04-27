@@ -856,6 +856,33 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
     }
   }
 
+  test("Allow user to insert specified columns into insertable view") {
+    withSQLConf(SQLConf.USE_NULLS_FOR_MISSING_DEFAULT_COLUMN_VALUES.key -> "true") {
+      sql("INSERT OVERWRITE TABLE jsonTable SELECT a FROM jt")
+      checkAnswer(
+        sql("SELECT a, b FROM jsonTable"),
+        (1 to 10).map(i => Row(i, null))
+      )
+
+      sql("INSERT OVERWRITE TABLE jsonTable(a) SELECT a FROM jt")
+      checkAnswer(
+        sql("SELECT a, b FROM jsonTable"),
+        (1 to 10).map(i => Row(i, null))
+      )
+
+      sql("INSERT OVERWRITE TABLE jsonTable(b) SELECT b FROM jt")
+      checkAnswer(
+        sql("SELECT a, b FROM jsonTable"),
+        (1 to 10).map(i => Row(null, s"str$i"))
+      )
+    }
+
+    val message = intercept[AnalysisException] {
+      sql("INSERT OVERWRITE TABLE jsonTable(a) SELECT a FROM jt")
+    }.getMessage
+    assert(message.contains("target table has 2 column(s) but the inserted data has 1 column(s)"))
+  }
+
   test("SPARK-38336 INSERT INTO statements with tables with default columns: positive tests") {
     // When the USE_NULLS_FOR_MISSING_DEFAULT_COLUMN_VALUES configuration is enabled, and no
     // explicit DEFAULT value is available when the INSERT INTO statement provides fewer
@@ -1629,6 +1656,24 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
       sql("CREATE TABLE t(i int, part1 int, part2 int) using parquet")
       sql("INSERT INTO t WITH v1(c1) as (values (1)) select 1, 2, 3 from v1")
       checkAnswer(spark.table("t"), Row(1, 2, 3))
+    }
+  }
+
+  test("SELECT clause with star wildcard") {
+    withTable("t1") {
+      sql("CREATE TABLE t1(c1 int, c2 string) using parquet")
+      sql("INSERT INTO TABLE t1 select * from jt where a=1")
+      checkAnswer(spark.table("t1"), Row(1, "str1"))
+    }
+
+    withSQLConf(SQLConf.USE_NULLS_FOR_MISSING_DEFAULT_COLUMN_VALUES.key -> "true") {
+      withTable("t1") {
+        sql("CREATE TABLE t1(c1 int, c2 string, c3 int) using parquet")
+        sql("INSERT INTO TABLE t1 select * from jt where a=1")
+        checkAnswer(spark.table("t1"), Row(1, "str1", null))
+        sql("INSERT INTO TABLE t1 select *, 2 from jt where a=2")
+        checkAnswer(spark.table("t1"), Seq(Row(1, "str1", null), Row(2, "str2", 2)))
+      }
     }
   }
 
