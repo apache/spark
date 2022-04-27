@@ -229,7 +229,7 @@ class PandasConversionMixin:
             if isinstance(field.dataType, IntegralType) and pandas_col.isnull().any():
                 corrected_dtypes[index] = np.float64
             if isinstance(field.dataType, BooleanType) and pandas_col.isnull().any():
-                corrected_dtypes[fieldIdx] = np.object  # type: ignore[attr-defined]
+                corrected_dtypes[index] = np.object  # type: ignore[attr-defined]
 
         df = pd.DataFrame()
         for index, t in enumerate(corrected_dtypes):
