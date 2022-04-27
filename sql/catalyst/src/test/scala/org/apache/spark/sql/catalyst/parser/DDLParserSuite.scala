@@ -2280,6 +2280,25 @@ class DDLParserSuite extends AnalysisTest {
         None,
         None,
         Some("42")))
+    // It is possible to pass an empty string default value using quotes.
+    comparePlans(
+      parsePlan("ALTER TABLE t1 ALTER COLUMN a.b.c SET DEFAULT ''"),
+      AlterColumn(
+        UnresolvedTable(Seq("t1"), "ALTER TABLE ... ALTER COLUMN", None),
+        UnresolvedFieldName(Seq("a", "b", "c")),
+        None,
+        None,
+        None,
+        None,
+        Some("''")))
+    // It is not possible to pass an empty string default value without using quotes.
+    // This results in a parsing error.
+    intercept("ALTER TABLE t1 ALTER COLUMN a.b.c SET DEFAULT ",
+      "Syntax error at or near end of input")
+    // It is not possible to both SET DEFAULT and DROP DEFAULT at the same time.
+    // This results in a parsing error.
+    intercept("ALTER TABLE t1 ALTER COLUMN a.b.c DROP DEFAULT SET DEFAULT 42",
+      "Syntax error at or near 'SET'")
     comparePlans(
       parsePlan("ALTER TABLE t1 ALTER COLUMN a.b.c DROP DEFAULT"),
       AlterColumn(
