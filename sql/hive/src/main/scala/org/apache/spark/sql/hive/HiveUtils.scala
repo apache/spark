@@ -198,6 +198,12 @@ private[spark] object HiveUtils extends Logging {
     .booleanConf
     .createWithDefault(true)
 
+  val HIVE_STATS_AUTOGATHER = buildConf("spark.sql.hive.stats.autogather")
+    .doc("When set to false, Hive client won't write default statitic metadata.")
+    .version("3.3.0")
+    .booleanConf
+    .createWithDefault(false)
+
   /**
    * The version of the hive client that will be used to communicate with the metastore.  Note that
    * this does not necessarily need to be the same version of Hive that is used internally by
