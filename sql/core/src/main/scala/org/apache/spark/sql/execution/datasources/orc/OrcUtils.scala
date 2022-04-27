@@ -407,6 +407,8 @@ object OrcUtils extends Logging {
    * (Max/Min/Count) result using the statistics information from ORC file footer, and then
    * construct an InternalRow from these aggregate results.
    *
+   * NOTE: if statistics is missing from ORC file footer, exception would be thrown.
+   *
    * @return Aggregate results in the format of InternalRow
    */
   def createAggInternalRowFromFooter(

@@ -25,28 +25,41 @@ trait QueryErrorsSuiteBase extends SharedSparkSession {
   def checkErrorClass(
       exception: Exception with SparkThrowable,
       errorClass: String,
+      errorSubClass: Option[String] = None,
       msg: String,
       sqlState: Option[String] = None,
       matchMsg: Boolean = false): Unit = {
     assert(exception.getErrorClass === errorClass)
     sqlState.foreach(state => exception.getSqlState === state)
-    if (matchMsg) {
-      assert(exception.getMessage.matches(s"""\\[$errorClass\\] """ + msg))
+    val fullErrorClass = if (errorSubClass.isDefined) {
+      errorClass + "." + errorSubClass.get
     } else {
-      assert(exception.getMessage === s"""[$errorClass] """ + msg)
+     errorClass
+    }
+    if (matchMsg) {
+      assert(exception.getMessage.matches(s"""\\[$fullErrorClass\\] """ + msg))
+    } else {
+      assert(exception.getMessage === s"""[$fullErrorClass] """ + msg)
     }
   }
 
   def validateParsingError(
       sqlText: String,
       errorClass: String,
+      errorSubClass: Option[String] = None,
       sqlState: String,
       message: String): Unit = {
     val e = intercept[ParseException] {
       sql(sqlText)
     }
+
+    val fullErrorClass = if (errorSubClass.isDefined) {
+      errorClass + "." + errorSubClass.get
+    } else {
+      errorClass
+    }
     assert(e.getErrorClass === errorClass)
     assert(e.getSqlState === sqlState)
-    assert(e.getMessage === s"""\n[$errorClass] """ + message)
+    assert(e.getMessage === s"""\n[$fullErrorClass] """ + message)
   }
 }

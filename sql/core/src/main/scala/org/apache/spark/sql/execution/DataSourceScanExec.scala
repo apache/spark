@@ -19,8 +19,6 @@ package org.apache.spark.sql.execution
 
 import java.util.concurrent.TimeUnit._
 
-import scala.collection.mutable.HashMap
-
 import org.apache.commons.lang3.StringUtils
 import org.apache.hadoop.fs.Path
 
@@ -179,47 +177,33 @@ case class RowDataSourceScanExec(
 }
 
 /**
- * Physical plan node for scanning data from HadoopFsRelations.
- *
- * @param relation The file-based relation to scan.
- * @param output Output attributes of the scan, including data attributes and partition attributes.
- * @param requiredSchema Required schema of the underlying relation, excluding partition columns.
- * @param partitionFilters Predicates to use for partition pruning.
- * @param optionalBucketSet Bucket ids for bucket pruning.
- * @param optionalNumCoalescedBuckets Number of coalesced buckets.
- * @param dataFilters Filters on non-partition columns.
- * @param tableIdentifier Identifier for the table in the metastore.
- * @param disableBucketedScan Disable bucketed scan based on physical query plan, see rule
- *                            [[DisableUnnecessaryBucketedScan]] for details.
+ * A base trait for file scans containing file listing and metrics code.
  */
-case class FileSourceScanExec(
-    @transient relation: HadoopFsRelation,
-    output: Seq[Attribute],
-    requiredSchema: StructType,
-    partitionFilters: Seq[Expression],
-    optionalBucketSet: Option[BitSet],
-    optionalNumCoalescedBuckets: Option[Int],
-    dataFilters: Seq[Expression],
-    tableIdentifier: Option[TableIdentifier],
-    disableBucketedScan: Boolean = false)
-  extends DataSourceScanExec {
+trait FileSourceScanLike extends DataSourceScanExec {
+
+  // Filters on non-partition columns.
+  def dataFilters: Seq[Expression]
+  // Disable bucketed scan based on physical query plan, see rule
+  // [[DisableUnnecessaryBucketedScan]] for details.
+  def disableBucketedScan: Boolean
+  // Bucket ids for bucket pruning.
+  def optionalBucketSet: Option[BitSet]
+  // Number of coalesced buckets.
+  def optionalNumCoalescedBuckets: Option[Int]
+  // Output attributes of the scan, including data attributes and partition attributes.
+  def output: Seq[Attribute]
+  // Predicates to use for partition pruning.
+  def partitionFilters: Seq[Expression]
+  // The file-based relation to scan.
+  def relation: HadoopFsRelation
+  // Required schema of the underlying relation, excluding partition columns.
+  def requiredSchema: StructType
+  // Identifier for the table in the metastore.
+  def tableIdentifier: Option[TableIdentifier]
+
 
   lazy val metadataColumns: Seq[AttributeReference] =
     output.collect { case FileSourceMetadataAttribute(attr) => attr }
-
-  // Note that some vals referring the file-based relation are lazy intentionally
-  // so that this plan can be canonicalized on executor side too. See SPARK-23731.
-  override lazy val supportsColumnar: Boolean = {
-    relation.fileFormat.supportBatch(relation.sparkSession, schema)
-  }
-
-  private lazy val needsUnsafeRowConversion: Boolean = {
-    if (relation.fileFormat.isInstanceOf[ParquetSource]) {
-      conf.parquetVectorizedReaderEnabled
-    } else {
-      false
-    }
-  }
 
   override def vectorTypes: Option[Seq[String]] =
     relation.fileFormat.vectorTypes(
@@ -230,17 +214,28 @@ case class FileSourceScanExec(
         vectorTypes ++ Seq.fill(metadataColumns.size)(classOf[ConstantColumnVector].getName)
       }
 
-  private lazy val driverMetrics: HashMap[String, Long] = HashMap.empty
+  lazy val driverMetrics = Map(
+    "numFiles" -> SQLMetrics.createMetric(sparkContext, "number of files read"),
+    "metadataTime" -> SQLMetrics.createTimingMetric(sparkContext, "metadata time"),
+    "filesSize" -> SQLMetrics.createSizeMetric(sparkContext, "size of files read")
+  ) ++ {
+    if (relation.partitionSchema.nonEmpty) {
+      Map(
+        "numPartitions" -> SQLMetrics.createMetric(sparkContext, "number of partitions read"),
+        "pruningTime" ->
+          SQLMetrics.createTimingMetric(sparkContext, "dynamic partition pruning time"))
+    } else {
+      Map.empty[String, SQLMetric]
+    }
+  } ++ staticMetrics
 
   /**
    * Send the driver-side metrics. Before calling this function, selectedPartitions has
    * been initialized. See SPARK-26327 for more details.
    */
-  private def sendDriverMetrics(): Unit = {
-    driverMetrics.foreach(e => metrics(e._1).add(e._2))
+  protected def sendDriverMetrics(): Unit = {
     val executionId = sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)
-    SQLMetrics.postDriverMetricUpdates(sparkContext, executionId,
-      metrics.filter(e => driverMetrics.contains(e._1)).values.toSeq)
+    SQLMetrics.postDriverMetricUpdates(sparkContext, executionId, driverMetrics.values.toSeq)
   }
 
   private def isDynamicPruningFilter(e: Expression): Boolean =
@@ -255,14 +250,14 @@ case class FileSourceScanExec(
     setFilesNumAndSizeMetric(ret, true)
     val timeTakenMs = NANOSECONDS.toMillis(
       (System.nanoTime() - startTime) + optimizerMetadataTimeNs)
-    driverMetrics("metadataTime") = timeTakenMs
+    driverMetrics("metadataTime").set(timeTakenMs)
     ret
   }.toArray
 
   // We can only determine the actual partitions at runtime when a dynamic partition filter is
   // present. This is because such a filter relies on information that is only available at run
   // time (for instance the keys used in the other side of a join).
-  @transient private lazy val dynamicallySelectedPartitions: Array[PartitionDirectory] = {
+  @transient protected lazy val dynamicallySelectedPartitions: Array[PartitionDirectory] = {
     val dynamicPartitionFilters = partitionFilters.filter(isDynamicPruningFilter)
 
     if (dynamicPartitionFilters.nonEmpty) {
@@ -278,7 +273,7 @@ case class FileSourceScanExec(
       val ret = selectedPartitions.filter(p => boundPredicate.eval(p.values))
       setFilesNumAndSizeMetric(ret, false)
       val timeTakenMs = (System.nanoTime() - startTime) / 1000 / 1000
-      driverMetrics("pruningTime") = timeTakenMs
+      driverMetrics("pruningTime").set(timeTakenMs)
       ret
     } else {
       selectedPartitions
@@ -369,7 +364,7 @@ case class FileSourceScanExec(
   }
 
   @transient
-  private lazy val pushedDownFilters = {
+  protected lazy val pushedDownFilters = {
     val supportNestedPredicatePushdown = DataSourceUtils.supportNestedPredicatePushdown(relation)
     // `dataFilters` should not include any metadata col filters
     // because the metadata struct has been flatted in FileSourceStrategy
@@ -445,6 +440,87 @@ case class FileSourceScanExec(
        |""".stripMargin
   }
 
+  override def metrics: Map[String, SQLMetric] = scanMetrics
+
+  /** SQL metrics generated only for scans using dynamic partition pruning. */
+  protected lazy val staticMetrics = if (partitionFilters.exists(isDynamicPruningFilter)) {
+    Map("staticFilesNum" -> SQLMetrics.createMetric(sparkContext, "static number of files read"),
+      "staticFilesSize" -> SQLMetrics.createSizeMetric(sparkContext, "static size of files read"))
+  } else {
+    Map.empty[String, SQLMetric]
+  }
+
+  /** Helper for computing total number and size of files in selected partitions. */
+  private def setFilesNumAndSizeMetric(
+      partitions: Seq[PartitionDirectory],
+      static: Boolean): Unit = {
+    val filesNum = partitions.map(_.files.size.toLong).sum
+    val filesSize = partitions.map(_.files.map(_.getLen).sum).sum
+    if (!static || !partitionFilters.exists(isDynamicPruningFilter)) {
+      driverMetrics("numFiles").set(filesNum)
+      driverMetrics("filesSize").set(filesSize)
+    } else {
+      driverMetrics("staticFilesNum").set(filesNum)
+      driverMetrics("staticFilesSize").set(filesSize)
+    }
+    if (relation.partitionSchema.nonEmpty) {
+      driverMetrics("numPartitions").set(partitions.length)
+    }
+  }
+
+  private lazy val scanMetrics = Map(
+    "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows")
+  ) ++ {
+    // Tracking scan time has overhead, we can't afford to do it for each row, and can only do
+    // it for each batch.
+    if (supportsColumnar) {
+      Some("scanTime" -> SQLMetrics.createTimingMetric(sparkContext, "scan time"))
+    } else {
+      None
+    }
+  } ++ driverMetrics
+}
+
+/**
+ * Physical plan node for scanning data from HadoopFsRelations.
+ *
+ * @param relation The file-based relation to scan.
+ * @param output Output attributes of the scan, including data attributes and partition attributes.
+ * @param requiredSchema Required schema of the underlying relation, excluding partition columns.
+ * @param partitionFilters Predicates to use for partition pruning.
+ * @param optionalBucketSet Bucket ids for bucket pruning.
+ * @param optionalNumCoalescedBuckets Number of coalesced buckets.
+ * @param dataFilters Filters on non-partition columns.
+ * @param tableIdentifier Identifier for the table in the metastore.
+ * @param disableBucketedScan Disable bucketed scan based on physical query plan, see rule
+ *                            [[DisableUnnecessaryBucketedScan]] for details.
+ */
+case class FileSourceScanExec(
+    @transient override val relation: HadoopFsRelation,
+    override val output: Seq[Attribute],
+    override val requiredSchema: StructType,
+    override val partitionFilters: Seq[Expression],
+    override val optionalBucketSet: Option[BitSet],
+    override val optionalNumCoalescedBuckets: Option[Int],
+    override val dataFilters: Seq[Expression],
+    override val tableIdentifier: Option[TableIdentifier],
+    override val disableBucketedScan: Boolean = false)
+  extends FileSourceScanLike {
+
+  // Note that some vals referring the file-based relation are lazy intentionally
+  // so that this plan can be canonicalized on executor side too. See SPARK-23731.
+  override lazy val supportsColumnar: Boolean = {
+    relation.fileFormat.supportBatch(relation.sparkSession, schema)
+  }
+
+  private lazy val needsUnsafeRowConversion: Boolean = {
+    if (relation.fileFormat.isInstanceOf[ParquetSource]) {
+      conf.parquetVectorizedReaderEnabled
+    } else {
+      false
+    }
+  }
+
   lazy val inputRDD: RDD[InternalRow] = {
     val readFile: (PartitionedFile) => Iterator[InternalRow] =
       relation.fileFormat.buildReaderWithPartitionValues(
@@ -469,56 +545,6 @@ case class FileSourceScanExec(
   override def inputRDDs(): Seq[RDD[InternalRow]] = {
     inputRDD :: Nil
   }
-
-  /** SQL metrics generated only for scans using dynamic partition pruning. */
-  private lazy val staticMetrics = if (partitionFilters.exists(isDynamicPruningFilter)) {
-    Map("staticFilesNum" -> SQLMetrics.createMetric(sparkContext, "static number of files read"),
-      "staticFilesSize" -> SQLMetrics.createSizeMetric(sparkContext, "static size of files read"))
-  } else {
-    Map.empty[String, SQLMetric]
-  }
-
-  /** Helper for computing total number and size of files in selected partitions. */
-  private def setFilesNumAndSizeMetric(
-      partitions: Seq[PartitionDirectory],
-      static: Boolean): Unit = {
-    val filesNum = partitions.map(_.files.size.toLong).sum
-    val filesSize = partitions.map(_.files.map(_.getLen).sum).sum
-    if (!static || !partitionFilters.exists(isDynamicPruningFilter)) {
-      driverMetrics("numFiles") = filesNum
-      driverMetrics("filesSize") = filesSize
-    } else {
-      driverMetrics("staticFilesNum") = filesNum
-      driverMetrics("staticFilesSize") = filesSize
-    }
-    if (relation.partitionSchema.nonEmpty) {
-      driverMetrics("numPartitions") = partitions.length
-    }
-  }
-
-  override lazy val metrics = Map(
-    "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"),
-    "numFiles" -> SQLMetrics.createMetric(sparkContext, "number of files read"),
-    "metadataTime" -> SQLMetrics.createTimingMetric(sparkContext, "metadata time"),
-    "filesSize" -> SQLMetrics.createSizeMetric(sparkContext, "size of files read")
-  ) ++ {
-    // Tracking scan time has overhead, we can't afford to do it for each row, and can only do
-    // it for each batch.
-    if (supportsColumnar) {
-      Some("scanTime" -> SQLMetrics.createTimingMetric(sparkContext, "scan time"))
-    } else {
-      None
-    }
-  } ++ {
-    if (relation.partitionSchema.nonEmpty) {
-      Map(
-        "numPartitions" -> SQLMetrics.createMetric(sparkContext, "number of partitions read"),
-        "pruningTime" ->
-          SQLMetrics.createTimingMetric(sparkContext, "dynamic partition pruning time"))
-    } else {
-      Map.empty[String, SQLMetric]
-    }
-  } ++ staticMetrics
 
   protected override def doExecute(): RDD[InternalRow] = {
     val numOutputRows = longMetric("numOutputRows")

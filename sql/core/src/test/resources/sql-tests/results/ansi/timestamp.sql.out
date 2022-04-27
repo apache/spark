@@ -98,7 +98,7 @@ SELECT make_timestamp(2021, 07, 11, 6, 30, 60.007)
 struct<>
 -- !query output
 org.apache.spark.SparkDateTimeException
-[INVALID_FRACTION_OF_SECOND] The fraction of sec must be zero. Valid range is [0, 60]. If necessary set spark.sql.ansi.enabled to false to bypass this error.
+[INVALID_FRACTION_OF_SECOND] The fraction of sec must be zero. Valid range is [0, 60]. If necessary set "spark.sql.ansi.enabled" to false to bypass this error.
 
 
 -- !query

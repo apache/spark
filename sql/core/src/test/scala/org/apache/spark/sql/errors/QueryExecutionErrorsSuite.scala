@@ -22,7 +22,7 @@ import java.util.Locale
 import test.org.apache.spark.sql.connector.JavaSimpleWritableDataSource
 
 import org.apache.spark.{SparkArithmeticException, SparkException, SparkIllegalStateException, SparkRuntimeException, SparkUnsupportedOperationException, SparkUpgradeException}
-import org.apache.spark.sql.{DataFrame, QueryTest}
+import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest}
 import org.apache.spark.sql.catalyst.util.BadRecordException
 import org.apache.spark.sql.connector.SimpleWritableDataSource
 import org.apache.spark.sql.execution.QueryExecutionException
@@ -121,6 +121,7 @@ class QueryExecutionErrorsSuite
           df.collect
         }.getCause.asInstanceOf[SparkRuntimeException],
         errorClass = "UNSUPPORTED_FEATURE",
+        errorSubClass = Some("AES_MODE"),
         msg =
           """The feature is not supported: AES-\w+ with the padding \w+""" +
           " by the `aes_encrypt`/`aes_decrypt` function.",
@@ -143,7 +144,8 @@ class QueryExecutionErrorsSuite
       checkErrorClass(
         exception = intercept[SparkRuntimeException] { lit(v) },
         errorClass = "UNSUPPORTED_FEATURE",
-        msg = """The feature is not supported: literal for '.+' of .+\.""",
+        errorSubClass = Some("LITERAL_TYPE"),
+        msg = """The feature is not supported: Literal for '.+' of .+\.""",
         sqlState = Some("0A000"),
         matchMsg = true)
     }
@@ -160,8 +162,9 @@ class QueryExecutionErrorsSuite
     checkErrorClass(
       exception = e2,
       errorClass = "UNSUPPORTED_FEATURE",
-      msg = "The feature is not supported: pivoting by the value" +
-        """ '[dotnet,Dummies]' of the column data type STRUCT<col1: STRING, training: STRING>.""",
+      errorSubClass = Some("PIVOT_TYPE"),
+      msg = "The feature is not supported: Pivoting by the value" +
+        """ '[dotnet,Dummies]' of the column data type "STRUCT<col1: STRING, training: STRING>".""",
       sqlState = Some("0A000"))
   }
 
@@ -177,7 +180,8 @@ class QueryExecutionErrorsSuite
     checkErrorClass(
       exception = e1,
       errorClass = "UNSUPPORTED_FEATURE",
-      msg = """The feature is not supported: Repeated "PIVOT"s.""",
+      errorSubClass = Some("REPEATED_PIVOT"),
+      msg = "The feature is not supported: Repeated PIVOT operation.",
       sqlState = Some("0A000"))
 
     val e2 = intercept[SparkUnsupportedOperationException] {
@@ -190,7 +194,8 @@ class QueryExecutionErrorsSuite
     checkErrorClass(
       exception = e2,
       errorClass = "UNSUPPORTED_FEATURE",
-      msg = """The feature is not supported: "PIVOT" not after a "GROUP BY".""",
+      errorSubClass = Some("PIVOT_AFTER_GROUP_BY"),
+      msg = "The feature is not supported: PIVOT clause following a GROUP BY clause.",
       sqlState = Some("0A000"))
   }
 
@@ -206,7 +211,7 @@ class QueryExecutionErrorsSuite
       }.getCause.asInstanceOf[SparkUpgradeException]
 
       val format = "Parquet"
-      val config = SQLConf.PARQUET_REBASE_MODE_IN_READ.key
+      val config = "\"" + SQLConf.PARQUET_REBASE_MODE_IN_READ.key + "\""
       val option = "datetimeRebaseMode"
       checkErrorClass(
         exception = e,
@@ -218,10 +223,10 @@ class QueryExecutionErrorsSuite
             |from $format files can be ambiguous, as the files may be written by
             |Spark 2.x or legacy versions of Hive, which uses a legacy hybrid calendar
             |that is different from Spark 3.0+'s Proleptic Gregorian calendar.
-            |See more details in SPARK-31404. You can set the SQL config '$config' or
+            |See more details in SPARK-31404. You can set the SQL config $config or
             |the datasource option '$option' to 'LEGACY' to rebase the datetime values
             |w.r.t. the calendar difference during reading. To read the datetime values
-            |as it is, set the SQL config '$config' or the datasource option '$option'
+            |as it is, set the SQL config $config or the datasource option '$option'
             |to 'CORRECTED'.
             |""".stripMargin)
     }
@@ -235,7 +240,7 @@ class QueryExecutionErrorsSuite
         }.getCause.getCause.getCause.asInstanceOf[SparkUpgradeException]
 
         val format = "Parquet"
-        val config = SQLConf.PARQUET_REBASE_MODE_IN_WRITE.key
+        val config = "\"" + SQLConf.PARQUET_REBASE_MODE_IN_WRITE.key + "\""
         checkErrorClass(
           exception = e,
           errorClass = "INCONSISTENT_BEHAVIOR_CROSS_VERSION",
@@ -248,8 +253,8 @@ class QueryExecutionErrorsSuite
               |is different from Spark 3.0+'s Proleptic Gregorian calendar. See more
               |details in SPARK-31404. You can set $config to 'LEGACY' to rebase the
               |datetime values w.r.t. the calendar difference during writing, to get maximum
-              |interoperability. Or set $config to 'CORRECTED' to write the datetime values
-              |as it is, if you are 100% sure that the written files will only be read by
+              |interoperability. Or set $config to 'CORRECTED' to write the datetime
+              |values as it is, if you are 100% sure that the written files will only be read by
               |Spark 3.0+ or other systems that use Proleptic Gregorian calendar.
               |""".stripMargin)
       }
@@ -262,8 +267,8 @@ class QueryExecutionErrorsSuite
         ArrowUtils.toArrowSchema(new StructType().add("value", TimestampType), null)
       },
       errorClass = "UNSUPPORTED_OPERATION",
-      msg = "The operation is not supported: " +
-        "TIMESTAMP must supply timeZoneId parameter while converting to the arrow timestamp type.")
+      msg = "The operation is not supported: \"TIMESTAMP\" must supply timeZoneId " +
+        "parameter while converting to the arrow timestamp type.")
   }
 
   test("UNSUPPORTED_OPERATION - SPARK-36346: can't read Timestamp as TimestampNTZ") {
@@ -276,7 +281,7 @@ class QueryExecutionErrorsSuite
           }.getCause.asInstanceOf[SparkUnsupportedOperationException],
           errorClass = "UNSUPPORTED_OPERATION",
           msg = "The operation is not supported: " +
-            "Unable to convert TIMESTAMP of Orc to data type TIMESTAMP_NTZ.")
+            "Unable to convert \"TIMESTAMP\" of Orc to data type \"TIMESTAMP_NTZ\".")
       }
     }
   }
@@ -291,7 +296,7 @@ class QueryExecutionErrorsSuite
           }.getCause.asInstanceOf[SparkUnsupportedOperationException],
           errorClass = "UNSUPPORTED_OPERATION",
           msg = "The operation is not supported: " +
-            "Unable to convert TIMESTAMP_NTZ of Orc to data type TIMESTAMP.")
+            "Unable to convert \"TIMESTAMP_NTZ\" of Orc to data type \"TIMESTAMP\".")
       }
     }
   }
@@ -397,5 +402,31 @@ class QueryExecutionErrorsSuite
       msg = "Failed to execute user defined function " +
         "\\(QueryExecutionErrorsSuite\\$\\$Lambda\\$\\d+/\\w+: \\(string, int\\) => string\\)",
       matchMsg = true)
+  }
+
+  test("INCOMPARABLE_PIVOT_COLUMN: an incomparable column of the map type") {
+    val e = intercept[AnalysisException] {
+      trainingSales
+      sql(
+        """
+          | select * from (
+          | select *,map(sales.course, sales.year) as map
+          | from trainingSales
+          | )
+          | pivot (
+          | sum(sales.earnings) as sum
+          | for map in (
+          | map("dotNET", 2012), map("JAVA", 2012),
+          | map("dotNet", 2013), map("Java", 2013)
+          | ))
+          |""".stripMargin).collect()
+    }
+    checkErrorClass(
+      exception = e,
+      errorClass = "INCOMPARABLE_PIVOT_COLUMN",
+      msg = "Invalid pivot column 'map.*\\'. Pivot columns must be comparable.",
+      sqlState = Some("42000"),
+      matchMsg = true
+    )
   }
 }
