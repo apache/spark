@@ -279,6 +279,9 @@ case class ResolveDefaultColumns(analyzer: Analyzer) extends Rule[LogicalPlan] {
       case SubqueryAlias(_, r: DataSourceV2Relation) =>
         StructType(r.schema.fields.dropRight(
           enclosingInsert.get.partitionSpec.size))
+      case SubqueryAlias(_, r: View) if r.isTempView =>
+        StructType(r.schema.fields.dropRight(
+          enclosingInsert.get.partitionSpec.size))
       case _ => return None
     }
     // Rearrange the columns in the result schema to match the order of the explicit column list,
