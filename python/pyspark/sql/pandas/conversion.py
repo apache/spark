@@ -251,9 +251,10 @@ class PandasConversionMixin:
 
             with catch_warnings():
                 simplefilter(action="ignore", category=PerformanceWarning)
-                # `insert` API makes copy of data, we only do it for Series of duplicate column names.
-                # `pdf.iloc[:, index] = pdf.iloc[:, index]...` doesn't always work because `iloc` could
-                # return a view or a copy depending by context.
+                # `insert` API makes copy of data,
+                # we only do it for Series of duplicate column names.
+                # `pdf.iloc[:, index] = pdf.iloc[:, index]...` doesn't always work
+                # because `iloc` could return a view or a copy depending by context.
                 if column_counter[column_name] > 1:
                     df.insert(index, column_name, series, allow_duplicates=True)
                 else:
