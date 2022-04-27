@@ -273,11 +273,11 @@ case class ResolveDefaultColumns(analyzer: Analyzer) extends Rule[LogicalPlan] {
       case _: AnalysisException => return None
     }
     val schema: StructType = lookup match {
-      case SubqueryAlias(_, r: UnresolvedCatalogRelation) =>
-        StructType(r.tableMeta.schema.fields.dropRight(
-          enclosingInsert.get.partitionSpec.size))
       case SubqueryAlias(_, r: DataSourceV2Relation) =>
         StructType(r.schema.fields.dropRight(
+          enclosingInsert.get.partitionSpec.size))
+      case SubqueryAlias(_, r: UnresolvedCatalogRelation) =>
+        StructType(r.tableMeta.schema.fields.dropRight(
           enclosingInsert.get.partitionSpec.size))
       case SubqueryAlias(_, r: View) if r.isTempView =>
         StructType(r.schema.fields.dropRight(
