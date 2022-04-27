@@ -1814,8 +1814,12 @@ class DataFrameTest(ComparisonTestBase, SQLTestUtils):
             index=np.random.rand(7),
         )
         psdf = ps.from_pandas(pdf)
-        self.assert_eq(psdf.nlargest(5, columns="a"), pdf.nlargest(5, columns="a"))
-        self.assert_eq(psdf.nlargest(5, columns=["a", "b"]), pdf.nlargest(5, columns=["a", "b"]))
+        # see also: https://github.com/pandas-dev/pandas/issues/46589
+        if not (LooseVersion("1.4.0") <= LooseVersion(pd.__version__) <= LooseVersion("1.4.2")):
+            self.assert_eq(psdf.nlargest(5, columns="a"), pdf.nlargest(5, columns="a"))
+            self.assert_eq(
+                psdf.nlargest(5, columns=["a", "b"]), pdf.nlargest(5, columns=["a", "b"])
+            )
         self.assert_eq(psdf.nlargest(5, columns=["c"]), pdf.nlargest(5, columns=["c"]))
         self.assert_eq(
             psdf.nlargest(5, columns=["c"], keep="first"),
@@ -1838,10 +1842,12 @@ class DataFrameTest(ComparisonTestBase, SQLTestUtils):
             index=np.random.rand(7),
         )
         psdf = ps.from_pandas(pdf)
-        self.assert_eq(psdf.nsmallest(n=5, columns="a"), pdf.nsmallest(5, columns="a"))
-        self.assert_eq(
-            psdf.nsmallest(n=5, columns=["a", "b"]), pdf.nsmallest(5, columns=["a", "b"])
-        )
+        # see also: https://github.com/pandas-dev/pandas/issues/46589
+        if not (LooseVersion("1.4.0") <= LooseVersion(pd.__version__) <= LooseVersion("1.4.2")):
+            self.assert_eq(psdf.nsmallest(n=5, columns="a"), pdf.nsmallest(5, columns="a"))
+            self.assert_eq(
+                psdf.nsmallest(n=5, columns=["a", "b"]), pdf.nsmallest(5, columns=["a", "b"])
+            )
         self.assert_eq(psdf.nsmallest(n=5, columns=["c"]), pdf.nsmallest(5, columns=["c"]))
         self.assert_eq(
             psdf.nsmallest(n=5, columns=["c"], keep="first"),
@@ -5540,6 +5546,33 @@ class DataFrameTest(ComparisonTestBase, SQLTestUtils):
 
         self.assert_eq(abs(psdf), abs(pdf))
         self.assert_eq(np.abs(psdf), np.abs(pdf))
+
+    def test_corrwith(self):
+        df1 = ps.DataFrame({"A": [1, np.nan, 7, 8], "X": [5, 8, np.nan, 3], "C": [10, 4, 9, 3]})
+        df2 = df1[["A", "C"]]
+        self._test_corrwith(df1, df2)
+        self._test_corrwith((df1 + 1), df2.A)
+        self._test_corrwith((df1 + 1), (df2.C + 2))
+
+        with self.assertRaisesRegex(
+            NotImplementedError, "corrwith currently works only for method='pearson'"
+        ):
+            df1.corrwith(df2, method="kendall")
+
+        with self.assertRaisesRegex(TypeError, "unsupported type"):
+            df1.corrwith(123)
+
+        df_bool = ps.DataFrame({"A": [True, True, False, False], "B": [True, False, False, True]})
+        self._test_corrwith(df_bool, df_bool.A)
+        self._test_corrwith(df_bool, df_bool.B)
+
+    def _test_corrwith(self, psdf, psobj):
+        pdf = psdf.to_pandas()
+        pobj = psobj.to_pandas()
+        for drop in [True, False]:
+            p_corr = pdf.corrwith(pobj, drop=drop)
+            ps_corr = psdf.corrwith(psobj, drop=drop)
+            self.assert_eq(p_corr.sort_index(), ps_corr.sort_index(), almost=True)
 
     def test_iteritems(self):
         pdf = pd.DataFrame(

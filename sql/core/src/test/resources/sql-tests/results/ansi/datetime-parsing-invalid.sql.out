@@ -241,8 +241,8 @@ select cast("Unparseable" as timestamp)
 -- !query schema
 struct<>
 -- !query output
-java.time.DateTimeException
-Invalid input syntax for type "TIMESTAMP": 'Unparseable'. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
+org.apache.spark.SparkDateTimeException
+[INVALID_SYNTAX_FOR_CAST] Invalid input syntax for type "TIMESTAMP": 'Unparseable'. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
 == SQL(line 1, position 7) ==
 select cast("Unparseable" as timestamp)
        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -253,8 +253,8 @@ select cast("Unparseable" as date)
 -- !query schema
 struct<>
 -- !query output
-java.time.DateTimeException
-Invalid input syntax for type "DATE": 'Unparseable'. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
+org.apache.spark.SparkDateTimeException
+[INVALID_SYNTAX_FOR_CAST] Invalid input syntax for type "DATE": 'Unparseable'. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
 == SQL(line 1, position 7) ==
 select cast("Unparseable" as date)
        ^^^^^^^^^^^^^^^^^^^^^^^^^^^

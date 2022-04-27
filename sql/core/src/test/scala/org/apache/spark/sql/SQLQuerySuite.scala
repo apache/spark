@@ -3034,7 +3034,8 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     }
 
     Seq("orc", "parquet").foreach { format =>
-      withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> "") {
+      withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> "",
+        SQLConf.PARQUET_FILTER_PUSHDOWN_STRING_PREDICATE_ENABLED.key -> "false") {
         withTempPath { dir =>
           spark.range(10).map(i => (i, i.toString)).toDF("id", "s")
             .write

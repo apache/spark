@@ -132,7 +132,7 @@ public final class OffHeapColumnVector extends WritableColumnVector {
 
   @Override
   public boolean isNullAt(int rowId) {
-    return Platform.getByte(null, nulls + rowId) == 1;
+    return isAllNull || Platform.getByte(null, nulls + rowId) == 1;
   }
 
   //
