@@ -660,6 +660,7 @@ class ToNumberParser(numberFormat: String, errorOnFail: Boolean) extends Seriali
         case ClosingAngleBracket() =>
           if (input < Decimal.ZERO) {
             result.append('>')
+            // If we just added a '>' after a ' ', swap the characters.
             var i = result.size - 1
             while (i > 1 && result(i - 1) == ' ' && result(i) == '>') {
               result(i - 1) = '>'
