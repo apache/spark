@@ -18,11 +18,13 @@ package org.apache.spark.deploy.k8s
 
 import java.io.{File, IOException}
 import java.net.URI
+import java.nio.charset.StandardCharsets
 import java.security.SecureRandom
 import java.util.{Collections, UUID}
 
 import scala.collection.JavaConverters._
 
+import com.google.common.io.Files
 import io.fabric8.kubernetes.api.model.{Container, ContainerBuilder, ContainerStateRunning, ContainerStateTerminated, ContainerStateWaiting, ContainerStatus, HasMetadata, OwnerReferenceBuilder, Pod, PodBuilder, Quantity}
 import io.fabric8.kubernetes.client.KubernetesClient
 import org.apache.commons.codec.binary.Hex
@@ -102,7 +104,8 @@ object KubernetesUtils extends Logging {
       val hadoopConf = SparkHadoopUtil.get.newConfiguration(conf)
       val localFile = downloadFile(templateFileName, Utils.createTempDir(), conf, hadoopConf)
       val templateFile = new File(new java.net.URI(localFile).getPath)
-      val pod = kubernetesClient.pods().load(templateFile).get()
+      val podTemplateString = Files.toString(templateFile, StandardCharsets.UTF_8)
+      val pod = kubernetesClient.pods().load(podTemplateString).get()
       selectSparkContainer(pod, containerName)
     } catch {
       case e: Exception =>
