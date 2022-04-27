@@ -1271,7 +1271,9 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
     // Test 'S'
     Seq(
-      (Decimal(4.31), "9999999999999999.999999999999999S") -> "               4.31              ",
+      (Decimal(unscaled = 43100000000L, precision = 38, scale = 10),
+        "9999999999999999.999999999999999S") ->
+        "               4.31              ",
       (Decimal(0), "9999999999999999.999999999999999S") -> "               0                 ",
       (Decimal(-454.8), "99G999.9S") -> "   454.8-",
       (Decimal(-454.8), "00G000.0S") -> "00,454.8-",
@@ -1294,6 +1296,9 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     Seq(
       (Decimal(4.31), "9999999999999999.999999999999999MI") -> "               4.31              ",
       (Decimal(0), "9999999999999999.999999999999999MI") -> "               0                 ",
+      (Decimal(unscaled = 43100000000L, precision = 38, scale = 10),
+        "9999999999999999.999999999999999MI") ->
+        "               4.31              ",
       (Decimal(-454.8), "99G999.9MI") -> "   454.8-",
       (Decimal(-454.8), "00G000.0MI") -> "00,454.8-",
       (Decimal(-454), "999MI") -> "454-",
@@ -1312,6 +1317,9 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     Seq(
       (Decimal(4.31), "9999999999999999.999999999999999PR") -> "                4.31              ",
       (Decimal(0), "9999999999999999.999999999999999PR") -> "                0                 ",
+      (Decimal(unscaled = 43100000000L, precision = 38, scale = 10),
+        "9999999999999999.999999999999999PR") ->
+        "                4.31              ",
       (Decimal(-123), "9999999999999999.999PR") -> "             <123>    ",
       (Decimal(-123.4), "9999999999999999.999PR") -> "             <123.4>  ",
       (Decimal(-454.8), "99G999.9PR") -> "   <454.8>",

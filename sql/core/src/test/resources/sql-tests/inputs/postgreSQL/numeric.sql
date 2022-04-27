@@ -841,37 +841,37 @@ SELECT width_bucket(double('Infinity'), 1, 10, 10),
 DROP TABLE width_bucket_test;
 
 -- TO_CHAR()
-SELECT '' AS to_char_1, to_char(val, '9G999G999G999G999G999')
+SELECT '' AS to_char_1, val, to_char(val, '9G999G999G999G999G999')
 FROM num_data;
 
-SELECT '' AS to_char_2, to_char(val, '9G999G999G999G999G999D999G999G999G999G999')
+SELECT '' AS to_char_2, val, to_char(val, '9G999G999G999G999G999D999G999G999G999G999')
 FROM num_data;
 
-SELECT '' AS to_char_3, to_char(val, '9999999999999999.999999999999999PR')
+SELECT '' AS to_char_3, val, to_char(val, '9999999999999999.999999999999999PR')
 FROM num_data;
 
-SELECT '' AS to_char_4, to_char(val, '9999999999999999.999999999999999S')
+SELECT '' AS to_char_4, val, to_char(val, '9999999999999999.999999999999999S')
 FROM num_data;
 
-SELECT '' AS to_char_5,  to_char(val, 'MI9999999999999999.999999999999999')     FROM num_data;
-SELECT '' AS to_char_6,  to_char(val, 'FMS9999999999999999.999999999999999')    FROM num_data;
-SELECT '' AS to_char_7,  to_char(val, 'FM9999999999999999.999999999999999THPR') FROM num_data;
-SELECT '' AS to_char_8,  to_char(val, 'SG9999999999999999.999999999999999th')   FROM num_data;
-SELECT '' AS to_char_9,  to_char(val, '0999999999999999.999999999999999')       FROM num_data;
-SELECT '' AS to_char_10, to_char(val, 'S0999999999999999.999999999999999')      FROM num_data;
-SELECT '' AS to_char_11, to_char(val, 'FM0999999999999999.999999999999999')     FROM num_data;
-SELECT '' AS to_char_12, to_char(val, 'FM9999999999999999.099999999999999') 	FROM num_data;
-SELECT '' AS to_char_13, to_char(val, 'FM9999999999990999.990999999999999') 	FROM num_data;
-SELECT '' AS to_char_14, to_char(val, 'FM0999999999999999.999909999999999') 	FROM num_data;
-SELECT '' AS to_char_15, to_char(val, 'FM9999999990999999.099999999999999') 	FROM num_data;
-SELECT '' AS to_char_16, to_char(val, 'L9999999999999999.099999999999999')	FROM num_data;
-SELECT '' AS to_char_17, to_char(val, 'FM9999999999999999.99999999999999')	FROM num_data;
-SELECT '' AS to_char_18, to_char(val, 'S 9 9 9 9 9 9 9 9 9 9 9 9 9 9 9 9 . 9 9 9 9 9 9 9 9 9 9 9 9 9 9 9 9 9') FROM num_data;
-SELECT '' AS to_char_19, to_char(val, 'FMS 9 9 9 9 9 9 9 9 9 9 9 9 9 9 9 9 . 9 9 9 9 9 9 9 9 9 9 9 9 9 9 9 9 9') FROM num_data;
-SELECT '' AS to_char_20, to_char(val, E'99999 "text" 9999 "9999" 999 "\\"text between quote marks\\"" 9999') FROM num_data;
-SELECT '' AS to_char_21, to_char(val, '999999SG9999999999')			FROM num_data;
-SELECT '' AS to_char_22, to_char(val, 'FM9999999999999999.999999999999999')	FROM num_data;
-SELECT '' AS to_char_23, to_char(val, '9.999EEEE')				FROM num_data;
+SELECT '' AS to_char_5,  val, to_char(val, 'MI9999999999999999.999999999999999')     FROM num_data;
+SELECT '' AS to_char_6,  val, to_char(val, 'FMS9999999999999999.999999999999999')    FROM num_data;
+SELECT '' AS to_char_7,  val, to_char(val, 'FM9999999999999999.999999999999999THPR') FROM num_data;
+SELECT '' AS to_char_8,  val, to_char(val, 'SG9999999999999999.999999999999999th')   FROM num_data;
+SELECT '' AS to_char_9,  val, to_char(val, '0999999999999999.999999999999999')       FROM num_data;
+SELECT '' AS to_char_10, val, to_char(val, 'S0999999999999999.999999999999999')      FROM num_data;
+SELECT '' AS to_char_11, val, to_char(val, 'FM0999999999999999.999999999999999')     FROM num_data;
+SELECT '' AS to_char_12, val, to_char(val, 'FM9999999999999999.099999999999999') 	FROM num_data;
+SELECT '' AS to_char_13, val, to_char(val, 'FM9999999999990999.990999999999999') 	FROM num_data;
+SELECT '' AS to_char_14, val, to_char(val, 'FM0999999999999999.999909999999999') 	FROM num_data;
+SELECT '' AS to_char_15, val, to_char(val, 'FM9999999990999999.099999999999999') 	FROM num_data;
+SELECT '' AS to_char_16, val, to_char(val, 'L9999999999999999.099999999999999')	FROM num_data;
+SELECT '' AS to_char_17, val, to_char(val, 'FM9999999999999999.99999999999999')	FROM num_data;
+SELECT '' AS to_char_18, val, to_char(val, 'S 9 9 9 9 9 9 9 9 9 9 9 9 9 9 9 9 . 9 9 9 9 9 9 9 9 9 9 9 9 9 9 9 9 9') FROM num_data;
+SELECT '' AS to_char_19, val, to_char(val, 'FMS 9 9 9 9 9 9 9 9 9 9 9 9 9 9 9 9 . 9 9 9 9 9 9 9 9 9 9 9 9 9 9 9 9 9') FROM num_data;
+SELECT '' AS to_char_20, val, to_char(val, E'99999 "text" 9999 "9999" 999 "\\"text between quote marks\\"" 9999') FROM num_data;
+SELECT '' AS to_char_21, val, to_char(val, '999999SG9999999999')			FROM num_data;
+SELECT '' AS to_char_22, val, to_char(val, 'FM9999999999999999.999999999999999')	FROM num_data;
+SELECT '' AS to_char_23, val, to_char(val, '9.999EEEE')				FROM num_data;
 
 -- SELECT '' AS to_char_24, to_char('100'::numeric, 'FM999.9');
 -- SELECT '' AS to_char_25, to_char('100'::numeric, 'FM999.');

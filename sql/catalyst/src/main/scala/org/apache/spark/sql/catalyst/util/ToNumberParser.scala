@@ -698,14 +698,15 @@ class ToNumberParser(numberFormat: String, errorOnFail: Boolean) extends Seriali
       input: Decimal): Option[(String, String)] = {
     // Convert the input Decimal value to a string (without exponent notation).
     val inputString = input.toJavaBigDecimal.toPlainString
-    // Strip leading zeros to match cases when the format string begins with a decimal point.
-    val skipLeadingZeros = inputString.dropWhile(_ == ZERO_DIGIT)
-    // Strip any leading minus sign to consider the digits only.
-    val removeMinusSign = skipLeadingZeros.dropWhile(_ == MINUS_SIGN)
     // Split the digits before and after the decimal point.
-    val tokens = removeMinusSign.split(POINT_SIGN)
-    val beforeDecimalPoint = tokens(0)
-    val afterDecimalPoint = if (tokens.length > 1) tokens(1) else ""
+    val tokens = inputString.split(POINT_SIGN)
+    var beforeDecimalPoint = tokens(0)
+    var afterDecimalPoint = if (tokens.length > 1) tokens(1) else ""
+    // Strip any leading minus sign to consider the digits only.
+    // Strip leading and trailing zeros to match cases when the format string begins with a decimal
+    // point.
+    beforeDecimalPoint = beforeDecimalPoint.dropWhile(c => c == MINUS_SIGN || c == ZERO_DIGIT)
+    afterDecimalPoint = afterDecimalPoint.reverse.dropWhile(_ == ZERO_DIGIT).reverse
 
     // If the format string specifies more digits than the 'beforeDecimalPoint', prepend leading
     // spaces to make them the same length. Likewise, if the format string specifies more digits
