@@ -128,14 +128,14 @@ trait ThriftServerWithSparkContextSuite extends SharedThriftServer {
 
       val opHandle1 = exec("select current_user(), current_user")
       val rowSet1 = client.fetchResults(opHandle1)
-      rowSet1.toTRowSet.getColumns.forEach { col =>
+      rowSet1.getColumns.forEach { col =>
         assert(col.getStringVal.getValues.get(0) === clientUser)
       }
 
       exec(s"set ${SQLConf.ANSI_ENABLED.key}=true")
       exec(s"set ${SQLConf.ENFORCE_RESERVED_KEYWORDS.key}=true")
       val opHandle2 = exec("select current_user")
-      assert(client.fetchResults(opHandle2).toTRowSet.getColumns.get(0)
+      assert(client.fetchResults(opHandle2).getColumns.get(0)
         .getStringVal.getValues.get(0) === clientUser)
 
       val e = intercept[HiveSQLException](exec("select current_user()"))
