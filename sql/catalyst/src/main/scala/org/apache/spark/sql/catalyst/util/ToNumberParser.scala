@@ -659,11 +659,12 @@ class ToNumberParser(numberFormat: String, errorOnFail: Boolean) extends Seriali
           }
         case ClosingAngleBracket() =>
           if (input < Decimal.ZERO) {
-            if (result.nonEmpty && result.last == ' ') {
-              result.setCharAt(result.length - 1, '>')
-              result.append(' ')
-            } else {
-              result.append('>')
+            result.append('>')
+            var i = result.size - 1
+            while (i > 1 && result(i - 1) == ' ' && result(i) == '>') {
+              result(i - 1) = '>'
+              result(i) = ' '
+              i -= 1
             }
           } else {
             result.append(' ')
@@ -677,6 +678,11 @@ class ToNumberParser(numberFormat: String, errorOnFail: Boolean) extends Seriali
       // the format string.
       formatMatchFailure(input, numberFormat)
     } else {
+      // If the result string ends with a decimal point, strip it.
+      val i = result.indexOf('.')
+      if (i != -1 && (i == result.length - 1 || result(i + 1) == ' ')) {
+        result(i) = ' '
+      }
       UTF8String.fromString(result.toString())
     }
   }
@@ -689,38 +695,24 @@ class ToNumberParser(numberFormat: String, errorOnFail: Boolean) extends Seriali
    */
   private def formatSplitInputBeforeAndAfterDecimalPoint(
       input: Decimal): Option[(String, String)] = {
-    val beforeDecimalPointBuilder = new StringBuilder()
-    val afterDecimalPointBuilder = new StringBuilder()
-    var numInputDigitsBeforeDecimalPoint: Int = 0
-    var numInputDigitsAfterDecimalPoint: Int = 0
+    // Convert the input Decimal value to a string (without exponent notation).
+    val inputString = input.toJavaBigDecimal.toPlainString
+    // Strip leading zeros to match cases when the format string begins with a decimal point.
+    val skipLeadingZeros = inputString.dropWhile(_ == '0')
+    // Strip any leading minus sign to consider the digits only.
+    val removeMinusSign = skipLeadingZeros.dropWhile(_ == '-')
+    // Split the digits before and after the decimal point.
+    val tokens = removeMinusSign.split('.')
+    val beforeDecimalPoint = tokens(0)
+    val afterDecimalPoint = if (tokens.length > 1) tokens(1) else ""
+
+    // If the format string specifies more digits than the 'beforeDecimalPoint', prepend leading
+    // spaces to make them the same length. Likewise, if the format string specifies more digits
+    // than the 'afterDecimalPoint', append trailing spaces to make them the same length. This step
+    // simplifies logic consuming the format tokens later.
     var reachedDecimalPoint = false
-    var negateResult = false
-    // Convert the input Decimal value to a string (without exponent notation). Strip leading zeros
-    // in order to match cases when the format string begins with a decimal point.
-    val inputString = input.toJavaBigDecimal.toPlainString.dropWhile(_ == '0')
-    for (c: Char <- inputString) {
-      c match {
-        case _ if c >= ZERO_DIGIT && c <= NINE_DIGIT =>
-          if (reachedDecimalPoint) {
-            afterDecimalPointBuilder.append(c)
-            numInputDigitsAfterDecimalPoint += 1
-          } else {
-            beforeDecimalPointBuilder.append(c)
-            numInputDigitsBeforeDecimalPoint += 1
-          }
-        case POINT_SIGN =>
-          reachedDecimalPoint = true
-        case MINUS_SIGN =>
-          negateResult = true
-      }
-    }
-    // If the format string specifies more digits than the 'beforeDecimalPointBuilder', prepend
-    // leading spaces to make them the same length. Likewise, if the format string specifies more
-    // digits than the 'afterDecimalPointBuilder', append trailing spaces to make them the same
-    // length. This step simplifies logic consuming the format tokens later.
-    reachedDecimalPoint = false
-    var numFormatDigitsBeforeDecimalPoint: Int = 0
-    var numFormatDigitsAfterDecimalPoint: Int = 0
+    var numFormatDigitsBeforeDecimalPoint = 0
+    var numFormatDigitsAfterDecimalPoint = 0
     formatTokens.foreach {
       case digitGroups: DigitGroups =>
         digitGroups.digits.foreach { digits =>
@@ -742,14 +734,13 @@ class ToNumberParser(numberFormat: String, errorOnFail: Boolean) extends Seriali
     }
     // If there were more digits in the provided input string (before or after the decimal point)
     // than specified in the format string, the input string does not match the format.
-    if (numFormatDigitsBeforeDecimalPoint < numInputDigitsBeforeDecimalPoint ||
-        numFormatDigitsAfterDecimalPoint < numInputDigitsAfterDecimalPoint) {
+    if (numFormatDigitsBeforeDecimalPoint < beforeDecimalPoint.length ||
+        numFormatDigitsAfterDecimalPoint < afterDecimalPoint.length) {
       return None
     }
-    val leadingSpaces = " " * (numFormatDigitsBeforeDecimalPoint - numInputDigitsBeforeDecimalPoint)
-    val trailingSpaces = " " * (numFormatDigitsAfterDecimalPoint - numInputDigitsAfterDecimalPoint)
-    Some((leadingSpaces + beforeDecimalPointBuilder.toString,
-      afterDecimalPointBuilder.toString + trailingSpaces))
+    val leadingSpaces = " " * (numFormatDigitsBeforeDecimalPoint - beforeDecimalPoint.length)
+    val trailingSpaces = " " * (numFormatDigitsAfterDecimalPoint - afterDecimalPoint.length)
+    Some((leadingSpaces + beforeDecimalPoint, afterDecimalPoint + trailingSpaces))
   }
 
   /**
@@ -763,7 +754,7 @@ class ToNumberParser(numberFormat: String, errorOnFail: Boolean) extends Seriali
    * @param reachedDecimalPoint true if we have reached the decimal point so far during processing
    * @param result the result of formatting is built here as a string during iteration
    */
-  def formatDigitGroups(
+  private def formatDigitGroups(
       groups: DigitGroups,
       inputBeforeDecimalPoint: String,
       inputAfterDecimalPoint: String,
@@ -791,15 +782,7 @@ class ToNumberParser(numberFormat: String, errorOnFail: Boolean) extends Seriali
                 case _: AtMostAsManyDigits =>
                   // The format string started with a 9 and had more digits than the provided
                   // input string, so we prepend a space to the result.
-                  if (result.nonEmpty && result.last == '<') {
-                    result.setCharAt(result.length - 1, ' ')
-                    result.append('<')
-                  } else if (result.nonEmpty && result.last == '-') {
-                    result.setCharAt(result.length - 1, ' ')
-                    result.append('-')
-                  } else {
-                    result.append(' ')
-                  }
+                  addSpaceCheckingOpenBracketOrMinusSign(result)
               }
             }
             formattingBeforeDecimalPointIndex += 1
@@ -814,25 +797,34 @@ class ToNumberParser(numberFormat: String, errorOnFail: Boolean) extends Seriali
               case c: Char if c != ' ' =>
                 result.append(c)
               case _ =>
-                // The format string had more digits after the decimal point than the provided
-                // input string, so we append a zero to the result.
-                result.append('0')
+                // The format string had more digits after the decimal point than the provided input
+                // string, so we append a space to the result.
+                result.append(' ')
             }
             formattingAfterDecimalPointIndex += 1
           }
         case _: ThousandsSeparator =>
           if (result.nonEmpty && result.last >= ZERO_DIGIT && result.last <= NINE_DIGIT) {
             result.append(',')
-          } else if (result.nonEmpty && result.last == '<') {
-            result.setCharAt(result.length - 1, ' ')
-            result.append('<')
-          } else if (result.nonEmpty && result.last == '-') {
-            result.setCharAt(result.length - 1, ' ')
-            result.append('-')
           } else {
-            result.append(' ')
+            addSpaceCheckingOpenBracketOrMinusSign(result)
           }
       }
+    }
+  }
+
+  /**
+   * Adds a space to the end of the string builder. After doing so, if we just added a space after a
+   * '<', or '-', swaps the characters.
+   */
+  private def addSpaceCheckingOpenBracketOrMinusSign(result: StringBuilder): Unit = {
+    result.append(' ')
+    if (result.length > 1 && result(result.length - 2) == '<') {
+      result.setCharAt(result.length - 2, ' ')
+      result.setCharAt(result.length - 1, '<')
+    } else if (result.length > 1 && result(result.length - 2) == '-') {
+      result.setCharAt(result.length - 2, ' ')
+      result.setCharAt(result.length - 1, '-')
     }
   }
 }

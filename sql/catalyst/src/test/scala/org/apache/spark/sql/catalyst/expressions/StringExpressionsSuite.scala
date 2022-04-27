@@ -1128,13 +1128,13 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   test("ToCharacter: positive tests") {
     // Test '0' and '9'
     Seq(
+      (Decimal(454), "9999") -> " 454",
+      (Decimal(454), "99999") -> "  454",
       (Decimal(4), "0") -> "4",
       (Decimal(45), "00") -> "45",
       (Decimal(454), "000") -> "454",
       (Decimal(454), "0000") -> "0454",
-      (Decimal(454), "00000") -> "00454",
-      (Decimal(454), "9999") -> " 454",
-      (Decimal(454), "99999") -> "  454"
+      (Decimal(454), "00000") -> "00454"
     ).foreach { case ((decimal, format), expected) =>
       var expr: Expression = ToCharacter(Literal(decimal), Literal(format))
       assert(expr.checkInputDataTypes() == TypeCheckResult.TypeCheckSuccess)
@@ -1147,25 +1147,20 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
     // Test '.' and 'D'
     Seq(
-      (Decimal(0.4542), ".00000") -> ".45420",
+      (Decimal(0.4542), ".00000") -> ".4542 ",
       (Decimal(454.2), "000.0") -> "454.2",
-      (Decimal(454), "000.0") -> "454.0",
-      (Decimal(454.2), "000.00") -> "454.20",
-      (Decimal(454), "000.00") -> "454.00",
+      (Decimal(454), "000.0") -> "454  ",
+      (Decimal(454.2), "000.00") -> "454.2 ",
+      (Decimal(454), "000.00") -> "454   ",
       (Decimal(0.4542), ".0000") -> ".4542",
-      (Decimal(4542), "0000.") -> "4542."
+      (Decimal(4542), "0000.") -> "4542 "
     ).foreach { case ((decimal, format), expected) =>
-      val format2 = format.replace('0', '9')
-      val format3 = format.replace('.', 'D')
+      val format2 = format.replace('.', 'D')
       var expr: Expression = ToCharacter(Literal(decimal), Literal(format))
       assert(expr.checkInputDataTypes() == TypeCheckResult.TypeCheckSuccess)
       checkEvaluation(expr, expected)
 
       expr = ToCharacter(Literal(decimal), Literal(format2))
-      assert(expr.checkInputDataTypes() == TypeCheckResult.TypeCheckSuccess)
-      checkEvaluation(expr, expected)
-
-      expr = ToCharacter(Literal(decimal), Literal(format3))
       assert(expr.checkInputDataTypes() == TypeCheckResult.TypeCheckSuccess)
       checkEvaluation(expr, expected)
 
@@ -1176,19 +1171,15 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       expr = TryToCharacter(Literal(decimal), Literal(format2))
       assert(expr.checkInputDataTypes() == TypeCheckResult.TypeCheckSuccess)
       checkEvaluation(expr, expected)
-
-      expr = TryToCharacter(Literal(decimal), Literal(format3))
-      assert(expr.checkInputDataTypes() == TypeCheckResult.TypeCheckSuccess)
-      checkEvaluation(expr, expected)
     }
 
     Seq(
-      (Decimal(454.2), "0000.00") -> "0454.20",
-      (Decimal(454), "0000.00") -> "0454.00",
-      (Decimal(4542), "00000.") -> "04542.",
-      (Decimal(454.2), "9999.99") -> " 454.20",
-      (Decimal(454), "9999.99") -> " 454.00",
-      (Decimal(4542), "99999.") -> " 4542."
+      (Decimal(454.2), "0000.00") -> "0454.2 ",
+      (Decimal(454), "0000.00") -> "0454   ",
+      (Decimal(4542), "00000.") -> "04542 ",
+      (Decimal(454.2), "9999.99") -> " 454.2 ",
+      (Decimal(454), "9999.99") -> " 454   ",
+      (Decimal(4542), "99999.") -> " 4542 "
     ).foreach { case ((decimal, format), expected) =>
       var expr: Expression = ToCharacter(Literal(decimal), Literal(format))
       assert(expr.checkInputDataTypes() == TypeCheckResult.TypeCheckSuccess)

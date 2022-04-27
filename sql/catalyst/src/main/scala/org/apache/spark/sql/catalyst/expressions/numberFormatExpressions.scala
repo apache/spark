@@ -175,9 +175,9 @@ case class TryToNumber(left: Expression, right: Expression)
  */
 @ExpressionDescription(
   usage = """
-     _FUNC_(numberExpr, formatExpr) - Convert `numberExpr` to a string based on the `formatExpr`.
-       Throws an exception if the conversion fails. The format follows the same semantics as the
-       to_number function.
+    _FUNC_(numberExpr, formatExpr) - Convert `numberExpr` to a string based on the `formatExpr`.
+      Throws an exception if the conversion fails. The format follows the same semantics as the
+      to_number function.
   """,
   examples = """
     Examples:
@@ -224,12 +224,12 @@ case class ToCharacter(left: Expression, right: Expression)
     val eval = left.genCode(ctx)
     val result =
       code"""
-        |${eval.code}
-        |boolean ${ev.isNull} = ${eval.isNull};
-        |${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
-        |if (!${ev.isNull}) {
-        |  ${ev.value} = $builder.format(${eval.value});
-        |}
+         |${eval.code}
+         |boolean ${ev.isNull} = ${eval.isNull};
+         |${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
+         |if (!${ev.isNull}) {
+         |  ${ev.value} = $builder.format(${eval.value});
+         |}
       """
     val stripped = result.stripMargin
     ev.copy(code = stripped)
@@ -245,9 +245,10 @@ case class ToCharacter(left: Expression, right: Expression)
  */
 @ExpressionDescription(
   usage = """
-     _FUNC_(numberExpr, formatExpr) - Convert `numberExpr` to a string based on the `formatExpr`.
-       Returns NULL if the conversion fails. The format follows the same semantics as the
-       to_number function.
+
+    _FUNC_(numberExpr, formatExpr) - Convert `numberExpr` to a string based on the `formatExpr`.
+      Returns NULL if the conversion fails. The format follows the same semantics as the
+      to_number function.
   """,
   examples = """
     Examples:
@@ -285,19 +286,19 @@ case class TryToCharacter(left: Expression, right: Expression)
     val eval = left.genCode(ctx)
     ev.copy(code =
       code"""
-        |${eval.code}
-        |boolean ${ev.isNull} = ${eval.isNull};
-        |${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
-        |if (!${ev.isNull}) {
-        |  UTF8String result = $builder.format(${eval.value});
-        |  if (result == null) {
-        |    ${ev.isNull} = true;
-        |    ${ev.value} = null;
-        |  } else {
-        |    ${ev.isNull} = false;
-        |    ${ev.value} = result;
-        |  }
-        |}
+         |${eval.code}
+         |boolean ${ev.isNull} = ${eval.isNull};
+         |${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
+         |if (!${ev.isNull}) {
+         |  UTF8String result = $builder.format(${eval.value});
+         |  if (result == null) {
+         |    ${ev.isNull} = true;
+         |    ${ev.value} = null;
+         |  } else {
+         |    ${ev.isNull} = false;
+         |    ${ev.value} = result;
+         |  }
+         |}
       """.stripMargin)
   }
 
