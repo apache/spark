@@ -1616,10 +1616,8 @@ object QueryExecutionErrors extends QueryErrorsBase {
 
   def timeZoneIdNotSpecifiedForTimestampTypeError(): Throwable = {
     new SparkUnsupportedOperationException(
-      errorClass = "UNSUPPORTED_OPERATION",
-      messageParameters = Array(
-        s"${toSQLType(TimestampType)} must supply timeZoneId parameter " +
-          s"while converting to the arrow timestamp type.")
+      errorClass = "UNSUPPORTED_FEATURE",
+      messageParameters = Array("ARROW_TIMESTAMP_WITHOUT_TIMEZONE")
     )
   }
 
@@ -1936,18 +1934,18 @@ object QueryExecutionErrors extends QueryErrorsBase {
 
   def cannotConvertOrcTimestampToTimestampNTZError(): Throwable = {
     new SparkUnsupportedOperationException(
-      errorClass = "UNSUPPORTED_OPERATION",
-      messageParameters = Array(
-        s"Unable to convert ${toSQLType(TimestampType)} of Orc to " +
-        s"data type ${toSQLType(TimestampNTZType)}."))
+      errorClass = "UNSUPPORTED_FEATURE",
+      messageParameters = Array("ORC_TYPE_CAST",
+        toSQLType(TimestampType),
+        toSQLType(TimestampNTZType)))
   }
 
   def cannotConvertOrcTimestampNTZToTimestampLTZError(): Throwable = {
     new SparkUnsupportedOperationException(
-      errorClass = "UNSUPPORTED_OPERATION",
-      messageParameters = Array(
-        s"Unable to convert ${toSQLType(TimestampNTZType)} of Orc to " +
-        s"data type ${toSQLType(TimestampType)}."))
+      errorClass = "UNSUPPORTED_FEATURE",
+      messageParameters = Array("ORC_TYPE_CAST",
+        toSQLType(TimestampNTZType),
+        toSQLType(TimestampType)))
   }
 
   def writePartitionExceedConfigSizeWhenDynamicPartitionError(
