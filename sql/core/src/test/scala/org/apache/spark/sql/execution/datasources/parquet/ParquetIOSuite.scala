@@ -120,10 +120,12 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
   }
 
   test("SPARK-36182: TimestampNTZ") {
-    val data = Seq("2021-01-01T00:00:00", "1970-07-15T01:02:03.456789")
-      .map(ts => Tuple1(LocalDateTime.parse(ts)))
-    withAllParquetReaders {
-      checkParquetFile(data)
+    withSQLConf(SQLConf.PARQUET_TIMESTAMP_NTZ_ENABLED.key -> "true") {
+      val data = Seq("2021-01-01T00:00:00", "1970-07-15T01:02:03.456789")
+        .map(ts => Tuple1(LocalDateTime.parse(ts)))
+      withAllParquetReaders {
+        checkParquetFile(data)
+      }
     }
   }
 
@@ -155,27 +157,66 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
         }
         writer.close
 
-        withAllParquetReaders {
-          val df = spark.read.parquet(tablePath.toString)
-          assertResult(df.schema) {
-            StructType(
-              StructField("timestamp_ltz_millis_depr", TimestampType, nullable = true) ::
-              StructField("timestamp_ltz_micros_depr", TimestampType, nullable = true) ::
-              StructField("timestamp_ltz_millis", TimestampType, nullable = true) ::
-              StructField("timestamp_ltz_micros", TimestampType, nullable = true) ::
-              StructField("timestamp_ntz_millis", TimestampNTZType, nullable = true) ::
-              StructField("timestamp_ntz_micros", TimestampNTZType, nullable = true) ::
-              Nil
-            )
+        for (timestampNTZEnabled <- Seq(true, false)) {
+          withSQLConf(SQLConf.PARQUET_TIMESTAMP_NTZ_ENABLED.key -> s"$timestampNTZEnabled") {
+            val timestampNTZType = if (timestampNTZEnabled) TimestampNTZType else TimestampType
+
+            withAllParquetReaders {
+              val df = spark.read.parquet(tablePath.toString)
+              assertResult(df.schema) {
+                StructType(
+                  StructField("timestamp_ltz_millis_depr", TimestampType, nullable = true) ::
+                  StructField("timestamp_ltz_micros_depr", TimestampType, nullable = true) ::
+                  StructField("timestamp_ltz_millis", TimestampType, nullable = true) ::
+                  StructField("timestamp_ltz_micros", TimestampType, nullable = true) ::
+                  StructField("timestamp_ntz_millis", timestampNTZType, nullable = true) ::
+                  StructField("timestamp_ntz_micros", timestampNTZType, nullable = true) ::
+                  Nil
+                )
+              }
+
+              val ltz_value = new java.sql.Timestamp(1000L)
+              val ntz_value = LocalDateTime.of(1970, 1, 1, 0, 0, 1)
+
+              val exp = if (timestampNTZEnabled) {
+                (0 until numRecords).map { _ =>
+                  (ltz_value, ltz_value, ltz_value, ltz_value, ntz_value, ntz_value)
+                }.toDF()
+              } else {
+                (0 until numRecords).map { _ =>
+                  (ltz_value, ltz_value, ltz_value, ltz_value, ltz_value, ltz_value)
+                }.toDF()
+              }
+
+              checkAnswer(df, exp)
+            }
           }
+        }
+      }
+    }
+  }
 
-          val exp = (0 until numRecords).map { _ =>
-            val ltz_value = new java.sql.Timestamp(1000L)
-            val ntz_value = LocalDateTime.of(1970, 1, 1, 0, 0, 1)
-            (ltz_value, ltz_value, ltz_value, ltz_value, ntz_value, ntz_value)
-          }.toDF()
+  test("Write TimestampNTZ type") {
+    // Writes should fail if timestamp_ntz support is disabled.
+    withSQLConf(SQLConf.PARQUET_TIMESTAMP_NTZ_ENABLED.key -> "false") {
+      withTempPath { dir =>
+        val data = Seq(LocalDateTime.parse("2021-01-01T00:00:00")).toDF("col")
+        val err = intercept[Exception] {
+          data.write.parquet(dir.getCanonicalPath)
+        }.getCause
+        assert(err.getMessage.contains("Unsupported data type timestamp_ntz"))
+      }
+    }
 
-          checkAnswer(df, exp)
+    withSQLConf(SQLConf.PARQUET_TIMESTAMP_NTZ_ENABLED.key -> "true") {
+      withTempPath { dir =>
+        val data = Seq(LocalDateTime.parse("2021-01-01T00:00:00")).toDF("col")
+        data.write.parquet(dir.getCanonicalPath)
+        assertResult(spark.read.parquet(dir.getCanonicalPath).schema) {
+          StructType(
+            StructField("col", TimestampNTZType, nullable = true) ::
+            Nil
+          )
         }
       }
     }
