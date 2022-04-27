@@ -646,6 +646,10 @@ class ToNumberParser(numberFormat: String, errorOnFail: Boolean) extends Seriali
           formatDigitGroups(
             groups, inputBeforeDecimalPoint, inputAfterDecimalPoint, reachedDecimalPoint, result)
         case DecimalPoint() =>
+          // If the last character so far is a space, change it to a zero.
+          if (result.nonEmpty && result.last == SPACE) {
+            result(result.length - 1) = ZERO_DIGIT
+          }
           result.append(POINT_SIGN)
           reachedDecimalPoint = true
         case DollarSign() =>
@@ -665,6 +669,7 @@ class ToNumberParser(numberFormat: String, errorOnFail: Boolean) extends Seriali
           }
         case ClosingAngleBracket() =>
           if (input < Decimal.ZERO) {
+            stripTrailingLoneDecimalPoint(result)
             addCharacterCheckingTrailingSpaces(result, ANGLE_BRACKET_CLOSE)
           } else {
             result.append(SPACE)

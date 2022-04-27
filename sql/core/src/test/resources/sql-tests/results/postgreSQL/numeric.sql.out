@@ -4601,7 +4601,7 @@ FROM num_data
 struct<>
 -- !query output
 java.lang.IllegalArgumentException
-The input Decimal value '74881.0000000000' does not match the given number format: '9G999G999G999G999G999'
+The input Decimal value '0E-10' does not match the given number format: '9G999G999G999G999G999'
 
 
 -- !query
@@ -4620,8 +4620,8 @@ FROM num_data
 -- !query schema
 struct<to_char_3:string,to_char(val, 9999999999999999.999999999999999PR):string>
 -- !query output
-	                 .0000000000      
-	                 .0000000000      
+	                0.0000000000      
+	                0.0000000000      
 	                4.3100000000      
 	            16397.0384910000      
 	            74881.0000000000      
@@ -4638,8 +4638,8 @@ FROM num_data
 -- !query schema
 struct<to_char_4:string,to_char(val, 9999999999999999.999999999999999S):string>
 -- !query output
-	                .0000000000      
-	                .0000000000      
+	               0.0000000000      
+	               0.0000000000      
 	               4.3100000000      
 	           16397.0384910000      
 	           74881.0000000000      
@@ -4655,8 +4655,8 @@ SELECT '' AS to_char_5,  to_char(val, 'MI9999999999999999.999999999999999')     
 -- !query schema
 struct<to_char_5:string,to_char(val, MI9999999999999999.999999999999999):string>
 -- !query output
-	                 .0000000000     
-	                 .0000000000     
+	                0.0000000000     
+	                0.0000000000     
 	                4.3100000000     
 	            16397.0384910000     
 	            74881.0000000000     
@@ -4796,8 +4796,8 @@ SELECT '' AS to_char_18, to_char(val, 'S 9 9 9 9 9 9 9 9 9 9 9 9 9 9 9 9 . 9 9 9
 -- !query schema
 struct<to_char_18:string,to_char(val, S 9 9 9 9 9 9 9 9 9 9 9 9 9 9 9 9 . 9 9 9 9 9 9 9 9 9 9 9 9 9 9 9 9 9):string>
 -- !query output
-	                 .0000000000       
-	                 .0000000000       
+	                0.0000000000       
+	                0.0000000000       
 	                4.3100000000       
 	            16397.0384910000       
 	            74881.0000000000       
