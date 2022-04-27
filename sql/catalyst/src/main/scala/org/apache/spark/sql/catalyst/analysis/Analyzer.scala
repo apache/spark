@@ -297,6 +297,7 @@ class Analyzer(override val catalogManager: CatalogManager)
       ResolveOrdinalInOrderByAndGroupBy ::
       ResolveAggAliasInGroupBy ::
       ResolveMissingReferences ::
+      PreventPrematureProjections ::
       ExtractGenerator ::
       ResolveGenerate ::
       ResolveFunctions ::
@@ -2022,6 +2023,55 @@ class Analyzer(override val catalogManager: CatalogManager)
   }
 
   /**
+   * In case sorting is applied after HAVING, the Analyzer rules introduce a
+   * premature [[Project]] when trying to resolve the [[Filter]] introduced by resolving
+   * [[UnresolvedHaving]] (i.e., [[Project]] between the [[Filter]] and [[Sort]]).
+   *
+   * We then apply the following transformation:
+   * {{{Sort(_, _, Project(_, Filter(_, Aggregate(_, _, _))))}}}
+   * becomes
+   * {{{Project(_, Sort(_, _, Filter(_, Aggregate(_, _, _))))}}}
+   *
+   * By doing this, [[Sort]] can then subsequently be resolved correclty by other rules.
+   *
+   * NOTE: Since [[Filter]] in this plan is already resolved, the premature [[Project]]
+   * will not be reintroduced by the corresponding resolution rule.
+   */
+  object PreventPrematureProjections extends Rule[LogicalPlan] {
+    def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
+      case sort@Sort(_, _,
+        project@Project(_,
+          filter@Filter(_,
+            aggregate: Aggregate
+          )
+        )
+      ) if filter.resolved && aggregate.resolved =>
+        // We detected that a Project is between a Sort and a Filter
+        // This means that attributes present in Sort are potentially removed by Project
+        // and can therefore not be resolved properly.
+        // To fix this, we build a new plan where the Project is moved outside of the Sort.
+        //
+        // NOTE: Since filter in this plan is already resolved, the premature Project
+        // will not be reintroduced by the resolution rules.
+        val newSort = sort.copy(
+          child = filter.copy(
+            child = aggregate
+          )
+        )
+
+        val newSortMaybeResolved = ResolveAggregateFunctions.apply(newSort).asInstanceOf[Sort]
+
+        if (!newSortMaybeResolved.equals(newSort)) {
+          project.copy(
+            child = newSortMaybeResolved
+          )
+        } else {
+          sort
+        }
+    }
+  }
+
+  /**
    * Checks whether a function identifier referenced by an [[UnresolvedFunction]] is defined in the
    * function registry. Note that this rule doesn't try to resolve the [[UnresolvedFunction]]. It
    * only performs simple existence check according to the function identifier to quickly identify
@@ -2577,6 +2627,20 @@ class Analyzer(override val catalogManager: CatalogManager)
             case (sortOrder, expr) => sortOrder.copy(child = expr)
           }
           Sort(newSortOrder, global, newChild)
+        })
+
+      // Resolve aggregates in Sort which appear in aggregate that is child of a child Filter.
+      // This case is introduced by resolving UnresolvedHaving (introduced by HAVING) to Filter.
+      // Doing this ensures that the aggregates are resolved correctly even if the corresponding
+      // attributes are removed by Project later in the plan.
+      case Sort(sortOrder, global, filter@Filter(_, agg: Aggregate)) =>
+        // We should resolve the references normally based on descendants (agg.output) first.
+        val maybeResolved = sortOrder.map(_.child).map(resolveExpressionByPlanOutput(_, agg))
+        resolveOperatorWithAggregate(maybeResolved, agg, (newExprs, newChild) => {
+          val newSortOrder = sortOrder.zip(newExprs).map {
+            case (sortOrder, expr) => sortOrder.copy(child = expr)
+          }
+          Sort(newSortOrder, global, filter.copy(child = newChild))
         })
     }
 

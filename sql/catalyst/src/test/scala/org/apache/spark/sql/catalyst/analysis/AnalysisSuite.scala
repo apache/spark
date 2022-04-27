@@ -1176,4 +1176,24 @@ class AnalysisSuite extends AnalysisTest with Matchers {
         false)
     }
   }
+
+  test("SPARK-39022: Combination of HAVING and SORT not resolved correctly") {
+    assertAnalysisSuccess(parsePlan(
+      """
+        | SELECT t.a
+        | FROM TaBlE2 as t
+        | GROUP BY t.a
+        | HAVING sum(t.c) > 150
+        | ORDER BY sum(t.c)
+      """.stripMargin), false)
+
+    assertAnalysisSuccess(parsePlan(
+      """
+        | SELECT t.a, sum(t.c)
+        | FROM TaBlE2 as t
+        | GROUP BY t.a
+        | HAVING sum(t.c) > 150
+        | ORDER BY sum(t.c)
+      """.stripMargin), false)
+  }
 }

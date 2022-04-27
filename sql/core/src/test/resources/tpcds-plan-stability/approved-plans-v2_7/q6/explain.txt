@@ -213,15 +213,15 @@ Input [2]: [ca_state#2, count#27]
 Keys [1]: [ca_state#2]
 Functions [1]: [count(1)]
 Aggregate Attributes [1]: [count(1)#29]
-Results [3]: [ca_state#2 AS state#30, count(1)#29 AS cnt#31, ca_state#2]
+Results [2]: [ca_state#2 AS state#30, count(1)#29 AS cnt#31]
 
 (38) Filter [codegen id : 8]
-Input [3]: [state#30, cnt#31, ca_state#2]
+Input [2]: [state#30, cnt#31]
 Condition : (cnt#31 >= 10)
 
 (39) TakeOrderedAndProject
-Input [3]: [state#30, cnt#31, ca_state#2]
-Arguments: 100, [cnt#31 ASC NULLS FIRST, ca_state#2 ASC NULLS FIRST], [state#30, cnt#31]
+Input [2]: [state#30, cnt#31]
+Arguments: 100, [cnt#31 ASC NULLS FIRST, state#30 ASC NULLS FIRST], [state#30, cnt#31]
 
 ===== Subqueries =====
 
