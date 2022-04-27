@@ -1444,7 +1444,7 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
 
   private def checkStringFilterPushdown(
       stringPredicate: String => Expression,
-      sourceFilter: (String, String) => sources.Filter) {
+      sourceFilter: (String, String) => sources.Filter): Unit = {
     withParquetDataFrame((1 to 4).map(i => Tuple1(i + "str" + i))) { implicit df =>
       checkFilterPredicate(
         stringPredicate("").asInstanceOf[Predicate],
