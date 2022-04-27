@@ -780,8 +780,6 @@ def when(condition, value):
     :param condition: a boolean :class:`Column` expression.
     :param value: a literal value, or a :class:`Column` expression.
 
-    Examples
-    --------
     >>> df.select(when(df['age'] == 2, 3).otherwise(4).alias("age")).collect()
     [Row(age=3), Row(age=4)]
 
