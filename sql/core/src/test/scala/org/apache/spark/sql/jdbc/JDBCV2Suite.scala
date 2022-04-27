@@ -222,7 +222,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
     checkSortRemoved(df1)
     checkLimitRemoved(df1)
     checkPushedInfo(df1,
-      "PushedFilters: [], PushedTopN: ORDER BY [salary ASC NULLS FIRST] LIMIT 1, ")
+      "PushedFilters: [], PushedTopN: ORDER BY [SALARY ASC NULLS FIRST] LIMIT 1, ")
     checkAnswer(df1, Seq(Row(1, "cathy", 9000.00, 1200.0, false)))
 
     val df2 = spark.read
@@ -237,7 +237,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
     checkSortRemoved(df2)
     checkLimitRemoved(df2)
     checkPushedInfo(df2, "PushedFilters: [DEPT IS NOT NULL, DEPT = 1], " +
-      "PushedTopN: ORDER BY [salary ASC NULLS FIRST] LIMIT 1, ")
+      "PushedTopN: ORDER BY [SALARY ASC NULLS FIRST] LIMIT 1, ")
     checkAnswer(df2, Seq(Row(1, "cathy", 9000.00, 1200.0, false)))
 
     val df3 = spark.read
@@ -252,7 +252,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
     checkSortRemoved(df3, false)
     checkLimitRemoved(df3, false)
     checkPushedInfo(df3, "PushedFilters: [DEPT IS NOT NULL, DEPT > 1], " +
-      "PushedTopN: ORDER BY [salary DESC NULLS LAST] LIMIT 1, ")
+      "PushedTopN: ORDER BY [SALARY DESC NULLS LAST] LIMIT 1, ")
     checkAnswer(df3, Seq(Row(2, "alex", 12000.00, 1200.0, false)))
 
     val df4 =
@@ -261,7 +261,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
     checkSortRemoved(df4)
     checkLimitRemoved(df4)
     checkPushedInfo(df4, "PushedFilters: [DEPT IS NOT NULL, DEPT > 1], " +
-      "PushedTopN: ORDER BY [salary ASC NULLS LAST] LIMIT 1, ")
+      "PushedTopN: ORDER BY [SALARY ASC NULLS LAST] LIMIT 1, ")
     checkAnswer(df4, Seq(Row("david")))
 
     val df5 = spark.read.table("h2.test.employee")
@@ -304,6 +304,38 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
     checkLimitRemoved(df8, false)
     checkPushedInfo(df8, "PushedFilters: [], ")
     checkAnswer(df8, Seq(Row(2, "alex", 12000.00, 1200.0, false)))
+
+    val df9 = spark.read
+      .table("h2.test.employee")
+      .select($"DEPT", $"name", $"SALARY",
+        when(($"SALARY" > 8000).and($"SALARY" < 10000), $"salary").otherwise(0).as("key"))
+      .sort("key", "dept", "SALARY")
+      .limit(3)
+    checkSortRemoved(df9)
+    checkLimitRemoved(df9)
+    checkPushedInfo(df9, "PushedFilters: [], " +
+      "PushedTopN: ORDER BY [CASE WHEN (SALARY > 8000.00) AND " +
+      "(SALARY < 10000.00) THEN SALARY ELSE 0.00 END ASC NULL..., ")
+    checkAnswer(df9,
+      Seq(Row(1, "amy", 10000, 0), Row(2, "david", 10000, 0), Row(2, "alex", 12000, 0)))
+
+    val df10 = spark.read
+      .option("partitionColumn", "dept")
+      .option("lowerBound", "0")
+      .option("upperBound", "2")
+      .option("numPartitions", "2")
+      .table("h2.test.employee")
+      .select($"DEPT", $"name", $"SALARY",
+        when(($"SALARY" > 8000).and($"SALARY" < 10000), $"salary").otherwise(0).as("key"))
+      .orderBy($"key", $"dept", $"SALARY")
+      .limit(3)
+    checkSortRemoved(df10, false)
+    checkLimitRemoved(df10, false)
+    checkPushedInfo(df10, "PushedFilters: [], " +
+      "PushedTopN: ORDER BY [CASE WHEN (SALARY > 8000.00) AND " +
+      "(SALARY < 10000.00) THEN SALARY ELSE 0.00 END ASC NULL..., ")
+    checkAnswer(df10,
+      Seq(Row(1, "amy", 10000, 0), Row(2, "david", 10000, 0), Row(2, "alex", 12000, 0)))
   }
 
   test("simple scan with top N: order by with alias") {
