@@ -1275,7 +1275,9 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       (Decimal(-454.8), "00G000.0S") -> "00,454.8-",
       (Decimal(-454), "S999") -> "-454",
       (Decimal(-454), "999S") -> "454-",
-      (Decimal(-12454.8), "99G999D9S") -> "12,454.8-"
+      (Decimal(-12454.8), "99G999D9S") -> "12,454.8-",
+      (Decimal(-83028485), "9999999999999999.999999999999999S") ->
+        "        83028485-                "
     ).foreach { case ((decimal, format), expected) =>
       var expr: Expression = ToCharacter(Literal(decimal), Literal(format))
       assert(expr.checkInputDataTypes() == TypeCheckResult.TypeCheckSuccess)

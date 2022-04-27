@@ -38,6 +38,7 @@ object ToNumberParser {
   final val POINT_LETTER = 'D'
   final val POINT_SIGN = '.'
   final val ZERO_DIGIT = '0'
+  final val SPACE = ' '
 
   final val OPTIONAL_MINUS_STRING = "MI"
   final val WRAPPING_ANGLE_BRACKETS_TO_NEGATIVE_NUMBER = "PR"
@@ -165,6 +166,10 @@ class ToNumberParser(numberFormat: String, errorOnFail: Boolean) extends Seriali
           tokens.prepend(OpeningAngleBracket())
           tokens.append(ClosingAngleBracket())
           i += 2
+        case SPACE =>
+          // Add no tokens to the list of format tokens. Keep consuming characters from the format
+          // string.
+          i += 1
         case c: Char =>
           tokens.append(InvalidUnrecognizedCharacter(c))
           i += 1
@@ -641,34 +646,28 @@ class ToNumberParser(numberFormat: String, errorOnFail: Boolean) extends Seriali
           formatDigitGroups(
             groups, inputBeforeDecimalPoint, inputAfterDecimalPoint, reachedDecimalPoint, result)
         case DecimalPoint() =>
-          result.append('.')
+          result.append(POINT_SIGN)
           reachedDecimalPoint = true
         case DollarSign() =>
-          result.append('$')
+          result.append(DOLLAR_SIGN)
         case _: OptionalPlusOrMinusSign | _: OptionalMinusSign =>
           if (input < Decimal.ZERO) {
-            result.append('-')
+            stripTrailingLoneDecimalPoint(result)
+            addCharacterCheckingTrailingSpaces(result, MINUS_SIGN)
           } else {
-            result.append(' ')
+            result.append(SPACE)
           }
         case OpeningAngleBracket() =>
           if (input < Decimal.ZERO) {
-            result.append('<')
+            result.append(ANGLE_BRACKET_OPEN)
           } else {
-            result.append(' ')
+            result.append(SPACE)
           }
         case ClosingAngleBracket() =>
           if (input < Decimal.ZERO) {
-            result.append('>')
-            // If we just added a '>' after a ' ', swap the characters.
-            var i = result.size - 1
-            while (i > 1 && result(i - 1) == ' ' && result(i) == '>') {
-              result(i - 1) = '>'
-              result(i) = ' '
-              i -= 1
-            }
+            addCharacterCheckingTrailingSpaces(result, ANGLE_BRACKET_CLOSE)
           } else {
-            result.append(' ')
+            result.append(SPACE)
           }
       }
     }
@@ -679,11 +678,7 @@ class ToNumberParser(numberFormat: String, errorOnFail: Boolean) extends Seriali
       // the format string.
       formatMatchFailure(input, numberFormat)
     } else {
-      // If the result string ends with a decimal point, strip it.
-      val i = result.indexOf('.')
-      if (i != -1 && (i == result.length - 1 || result(i + 1) == ' ')) {
-        result(i) = ' '
-      }
+      stripTrailingLoneDecimalPoint(result)
       UTF8String.fromString(result.toString())
     }
   }
@@ -699,11 +694,11 @@ class ToNumberParser(numberFormat: String, errorOnFail: Boolean) extends Seriali
     // Convert the input Decimal value to a string (without exponent notation).
     val inputString = input.toJavaBigDecimal.toPlainString
     // Strip leading zeros to match cases when the format string begins with a decimal point.
-    val skipLeadingZeros = inputString.dropWhile(_ == '0')
+    val skipLeadingZeros = inputString.dropWhile(_ == ZERO_DIGIT)
     // Strip any leading minus sign to consider the digits only.
-    val removeMinusSign = skipLeadingZeros.dropWhile(_ == '-')
+    val removeMinusSign = skipLeadingZeros.dropWhile(_ == MINUS_SIGN)
     // Split the digits before and after the decimal point.
-    val tokens = removeMinusSign.split('.')
+    val tokens = removeMinusSign.split(POINT_SIGN)
     val beforeDecimalPoint = tokens(0)
     val afterDecimalPoint = if (tokens.length > 1) tokens(1) else ""
 
@@ -751,7 +746,7 @@ class ToNumberParser(numberFormat: String, errorOnFail: Boolean) extends Seriali
    * @param inputBeforeDecimalPoint string representation of the input decimal value before the
    *                                decimal point
    * @param inputAfterDecimalPoint string representation of the input decimal value after the
-   *                                decimal point
+   *                               decimal point
    * @param reachedDecimalPoint true if we have reached the decimal point so far during processing
    * @param result the result of formatting is built here as a string during iteration
    */
@@ -773,13 +768,13 @@ class ToNumberParser(numberFormat: String, errorOnFail: Boolean) extends Seriali
           }
           for (_ <- 0 until numDigits) {
             inputBeforeDecimalPoint(formattingBeforeDecimalPointIndex) match {
-              case c: Char if c != ' ' =>
+              case c: Char if c != SPACE =>
                 result.append(c)
               case _ => digits match {
                 case _: ExactlyAsManyDigits =>
                   // The format string started with a 0 and had more digits than the provided
                   // input string, so we prepend a 0 to the result.
-                  result.append('0')
+                  result.append(ZERO_DIGIT)
                 case _: AtMostAsManyDigits =>
                   // The format string started with a 9 and had more digits than the provided
                   // input string, so we prepend a space to the result.
@@ -795,18 +790,18 @@ class ToNumberParser(numberFormat: String, errorOnFail: Boolean) extends Seriali
           }
           for (_ <- 0 until numDigits) {
             inputAfterDecimalPoint(formattingAfterDecimalPointIndex) match {
-              case c: Char if c != ' ' =>
+              case c: Char if c != SPACE =>
                 result.append(c)
               case _ =>
                 // The format string had more digits after the decimal point than the provided input
                 // string, so we append a space to the result.
-                result.append(' ')
+                result.append(SPACE)
             }
             formattingAfterDecimalPointIndex += 1
           }
         case _: ThousandsSeparator =>
           if (result.nonEmpty && result.last >= ZERO_DIGIT && result.last <= NINE_DIGIT) {
-            result.append(',')
+            result.append(COMMA_SIGN)
           } else {
             addSpaceCheckingOpenBracketOrMinusSign(result)
           }
@@ -815,17 +810,41 @@ class ToNumberParser(numberFormat: String, errorOnFail: Boolean) extends Seriali
   }
 
   /**
+   * Adds a character to the end of the string builder. After doing so, if we just added the
+   * character after a space, swap the characters.
+   */
+  private def addCharacterCheckingTrailingSpaces(result: StringBuilder, char: Char): Unit = {
+    result.append(char)
+    var i = result.size - 1
+    while (i > 1 && result(i - 1) == SPACE && result(i) == char) {
+      result(i - 1) = char
+      result(i) = SPACE
+      i -= 1
+    }
+  }
+
+  /**
    * Adds a space to the end of the string builder. After doing so, if we just added a space after a
    * '<', or '-', swaps the characters.
    */
   private def addSpaceCheckingOpenBracketOrMinusSign(result: StringBuilder): Unit = {
-    result.append(' ')
-    if (result.length > 1 && result(result.length - 2) == '<') {
-      result.setCharAt(result.length - 2, ' ')
-      result.setCharAt(result.length - 1, '<')
-    } else if (result.length > 1 && result(result.length - 2) == '-') {
-      result.setCharAt(result.length - 2, ' ')
-      result.setCharAt(result.length - 1, '-')
+    result.append(SPACE)
+    if (result.length > 1 && result(result.length - 2) == ANGLE_BRACKET_OPEN) {
+      result.setCharAt(result.length - 2, SPACE)
+      result.setCharAt(result.length - 1, ANGLE_BRACKET_OPEN)
+    } else if (result.length > 1 && result(result.length - 2) == MINUS_SIGN) {
+      result.setCharAt(result.length - 2, SPACE)
+      result.setCharAt(result.length - 1, MINUS_SIGN)
+    }
+  }
+
+  /**
+   * If the result string ends with a decimal point, strip it.
+   */
+  private def stripTrailingLoneDecimalPoint(result: StringBuilder): Unit = {
+    val i = result.indexOf(POINT_SIGN)
+    if (i != -1 && (i == result.length - 1 || result(i + 1) == SPACE)) {
+      result(i) = SPACE
     }
   }
 }

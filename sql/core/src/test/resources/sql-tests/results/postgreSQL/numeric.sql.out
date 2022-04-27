@@ -4601,7 +4601,7 @@ FROM num_data
 struct<>
 -- !query output
 java.lang.IllegalArgumentException
-The input Decimal value '0E-10' does not match the given number format: '9G999G999G999G999G999'
+The input Decimal value '74881.0000000000' does not match the given number format: '9G999G999G999G999G999'
 
 
 -- !query
@@ -4645,9 +4645,9 @@ struct<to_char_4:string,to_char(val, 9999999999999999.999999999999999S):string>
 	           74881.0000000000      
 	           93901.5776302600      
 	         7799461.4119000000      
-	        24926804.0450474200     -
-	        34338492.2153970470     -
-	        83028485.0000000000     -
+	        24926804.0450474200-     
+	        34338492.2153970470-     
+	        83028485.0000000000-
 
 
 -- !query
@@ -4794,10 +4794,18 @@ cannot resolve 'to_char(spark_catalog.default.num_data.val, 'FM9999999999999999.
 -- !query
 SELECT '' AS to_char_18, to_char(val, 'S 9 9 9 9 9 9 9 9 9 9 9 9 9 9 9 9 . 9 9 9 9 9 9 9 9 9 9 9 9 9 9 9 9 9') FROM num_data
 -- !query schema
-struct<>
+struct<to_char_18:string,to_char(val, S 9 9 9 9 9 9 9 9 9 9 9 9 9 9 9 9 . 9 9 9 9 9 9 9 9 9 9 9 9 9 9 9 9 9):string>
 -- !query output
-org.apache.spark.sql.AnalysisException
-cannot resolve 'to_char(spark_catalog.default.num_data.val, 'S 9 9 9 9 9 9 9 9 9 9 9 9 9 9 9 9 . 9 9 9 9 9 9 9 9 9 9 9 9 9 9 9 9 9')' due to data type mismatch: Unexpected character ' '' found in the format string 'S 9 9 9 9 9 9 9 9 9 9 9 9 9 9 9 9 . 9 9 9 9 9 9 9 9 9 9 9 9 9 9 9 9 9'; the structure of the format string must match: [MI|S] [$] [0|9|G|,]* [.|D] [0|9]* [$] [PR|MI|S]; line 1 pos 25
+	                 .0000000000       
+	                 .0000000000       
+	                4.3100000000       
+	            16397.0384910000       
+	            74881.0000000000       
+	            93901.5776302600       
+	          7799461.4119000000       
+	        -24926804.0450474200       
+	        -34338492.2153970470       
+	        -83028485.0000000000
 
 
 -- !query
