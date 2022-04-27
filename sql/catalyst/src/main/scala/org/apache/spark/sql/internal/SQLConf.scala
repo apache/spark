@@ -959,6 +959,15 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
+  val PARQUET_FILTER_PUSHDOWN_STRING_PREDICATE_ENABLED =
+    buildConf("spark.sql.parquet.filterPushdown.stringPredicate")
+      .doc("If true, enables Parquet filter push-down optimization for string predicate such " +
+        "as startsWith/endsWith/contains function. This configuration only has an effect when " +
+        s"'${PARQUET_FILTER_PUSHDOWN_ENABLED.key}' is enabled.")
+      .version("3.4.0")
+      .internal()
+      .fallbackConf(PARQUET_FILTER_PUSHDOWN_STRING_STARTSWITH_ENABLED)
+
   val PARQUET_FILTER_PUSHDOWN_INFILTERTHRESHOLD =
     buildConf("spark.sql.parquet.pushdown.inFilterThreshold")
       .doc("For IN predicate, Parquet filter will push-down a set of OR clauses if its " +
@@ -1061,6 +1070,17 @@ object SQLConf {
       .version("3.3.0")
       .booleanConf
       .createWithDefault(false)
+
+  val PARQUET_TIMESTAMP_NTZ_ENABLED =
+    buildConf("spark.sql.parquet.timestampNTZ.enabled")
+      .doc(s"Enables ${TimestampTypes.TIMESTAMP_NTZ} support for Parquet reads and writes. " +
+        s"When enabled, ${TimestampTypes.TIMESTAMP_NTZ} values are written as Parquet timestamp " +
+        "columns with annotation isAdjustedToUTC = false and are inferred in a similar way. " +
+        s"When disabled, such values are read as ${TimestampTypes.TIMESTAMP_LTZ} and have to be " +
+        s"converted to ${TimestampTypes.TIMESTAMP_LTZ} for writes.")
+      .version("3.4.0")
+      .booleanConf
+      .createWithDefault(true)
 
   val ORC_COMPRESSION = buildConf("spark.sql.orc.compression.codec")
     .doc("Sets the compression codec used when writing ORC files. If either `compression` or " +
@@ -4050,8 +4070,8 @@ class SQLConf extends Serializable with Logging {
 
   def parquetFilterPushDownDecimal: Boolean = getConf(PARQUET_FILTER_PUSHDOWN_DECIMAL_ENABLED)
 
-  def parquetFilterPushDownStringStartWith: Boolean =
-    getConf(PARQUET_FILTER_PUSHDOWN_STRING_STARTSWITH_ENABLED)
+  def parquetFilterPushDownStringPredicate: Boolean =
+    getConf(PARQUET_FILTER_PUSHDOWN_STRING_PREDICATE_ENABLED)
 
   def parquetFilterPushDownInFilterThreshold: Int =
     getConf(PARQUET_FILTER_PUSHDOWN_INFILTERTHRESHOLD)
@@ -4526,6 +4546,8 @@ class SQLConf extends Serializable with Logging {
   def parquetFieldIdWriteEnabled: Boolean = getConf(SQLConf.PARQUET_FIELD_ID_WRITE_ENABLED)
 
   def ignoreMissingParquetFieldId: Boolean = getConf(SQLConf.IGNORE_MISSING_PARQUET_FIELD_ID)
+
+  def parquetTimestampNTZEnabled: Boolean = getConf(PARQUET_TIMESTAMP_NTZ_ENABLED)
 
   def useV1Command: Boolean = getConf(SQLConf.LEGACY_USE_V1_COMMAND)
 

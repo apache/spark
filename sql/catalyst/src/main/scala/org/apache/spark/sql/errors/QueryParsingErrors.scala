@@ -92,16 +92,14 @@ object QueryParsingErrors extends QueryErrorsBase {
   def transformNotSupportQuantifierError(ctx: ParserRuleContext): Throwable = {
     new ParseException(
       errorClass = "UNSUPPORTED_FEATURE",
-      messageParameters = Array(s"${toSQLStmt("TRANSFORM")} does not support" +
-        s" ${toSQLStmt("DISTINCT")}/${toSQLStmt("ALL")} in inputs"),
+      messageParameters = Array("TRANSFORM_DISTINCT_ALL"),
       ctx)
   }
 
   def transformWithSerdeUnsupportedError(ctx: ParserRuleContext): Throwable = {
     new ParseException(
       errorClass = "UNSUPPORTED_FEATURE",
-      messageParameters = Array(
-        s"${toSQLStmt("TRANSFORM")} with serde is only supported in hive mode"),
+      messageParameters = Array("TRANSFORM_NON_HIVE"),
       ctx)
   }
 
@@ -112,21 +110,21 @@ object QueryParsingErrors extends QueryErrorsBase {
   def lateralJoinWithNaturalJoinUnsupportedError(ctx: ParserRuleContext): Throwable = {
     new ParseException(
       errorClass = "UNSUPPORTED_FEATURE",
-      messageParameters = Array(s"${toSQLStmt("LATERAL")} join with ${toSQLStmt("NATURAL")} join."),
+      messageParameters = Array("LATERAL_NATURAL_JOIN"),
       ctx)
   }
 
   def lateralJoinWithUsingJoinUnsupportedError(ctx: ParserRuleContext): Throwable = {
     new ParseException(
       errorClass = "UNSUPPORTED_FEATURE",
-      messageParameters = Array(s"${toSQLStmt("LATERAL")} join with ${toSQLStmt("USING")} join."),
+      messageParameters = Array("LATERAL_JOIN_USING"),
       ctx)
   }
 
   def unsupportedLateralJoinTypeError(ctx: ParserRuleContext, joinType: String): Throwable = {
     new ParseException(
       errorClass = "UNSUPPORTED_FEATURE",
-      messageParameters = Array(s"${toSQLStmt("LATERAL")} join type ${toSQLStmt(joinType)}."),
+      messageParameters = Array("LATERAL_JOIN_OF_TYPE", s"${toSQLStmt(joinType)}"),
       ctx)
   }
 
@@ -153,7 +151,7 @@ object QueryParsingErrors extends QueryErrorsBase {
   }
 
   def naturalCrossJoinUnsupportedError(ctx: RelationContext): Throwable = {
-    new ParseException("UNSUPPORTED_FEATURE", Array(toSQLStmt("NATURAL CROSS JOIN") + "."), ctx)
+    new ParseException("UNSUPPORTED_FEATURE", Array("NATURAL_CROSS_JOIN"), ctx)
   }
 
   def emptyInputForTableSampleError(ctx: ParserRuleContext): Throwable = {

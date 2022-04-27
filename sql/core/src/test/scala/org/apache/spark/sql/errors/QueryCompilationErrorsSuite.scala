@@ -165,8 +165,9 @@ class QueryCompilationErrorsSuite
     checkErrorClass(
       exception = e,
       errorClass = "UNSUPPORTED_FEATURE",
+      errorSubClass = Some("PYTHON_UDF_IN_ON_CLAUSE"),
       msg = "The feature is not supported: " +
-        "Using PythonUDF in join condition of join type \"LEFT OUTER\" is not supported.",
+        "Python UDF in the ON clause of a LEFT OUTER JOIN.",
       sqlState = Some("0A000"))
   }
 
@@ -188,8 +189,9 @@ class QueryCompilationErrorsSuite
     checkErrorClass(
       exception = e,
       errorClass = "UNSUPPORTED_FEATURE",
+      errorSubClass = Some("PANDAS_UDAF_IN_PIVOT"),
       msg = "The feature is not supported: " +
-        "Pandas UDF aggregate expressions don't support pivot.",
+        "Pandas user defined aggregate function in the PIVOT clause.",
       sqlState = Some("0A000"))
   }
 
@@ -270,7 +272,8 @@ class QueryCompilationErrorsSuite
     checkErrorClass(
       exception = e,
       errorClass = "UNSUPPORTED_FEATURE",
-      msg = "The feature is not supported: UDF class with 24 type arguments",
+      errorSubClass = Some("TOO_MANY_TYPE_ARGUMENTS_FOR_UDF_CLASS"),
+      msg = "The feature is not supported: UDF class with 24 type arguments.",
       sqlState = Some("0A000"))
   }
 
@@ -349,7 +352,7 @@ class QueryCompilationErrorsSuite
             sql(s"DESC TABLE $tempViewName PARTITION (c='Us', d=1)")
           },
           errorClass = "FORBIDDEN_OPERATION",
-          msg = s"""The operation "DESC PARTITION" is not allowed """ +
+          msg = s"""The operation DESC PARTITION is not allowed """ +
             s"on the temporary view: `$tempViewName`")
       }
     }
@@ -375,7 +378,7 @@ class QueryCompilationErrorsSuite
             sql(s"DESC TABLE $viewName PARTITION (c='Us', d=1)")
           },
           errorClass = "FORBIDDEN_OPERATION",
-          msg = s"""The operation "DESC PARTITION" is not allowed """ +
+          msg = s"""The operation DESC PARTITION is not allowed """ +
             s"on the view: `$viewName`")
       }
     }
