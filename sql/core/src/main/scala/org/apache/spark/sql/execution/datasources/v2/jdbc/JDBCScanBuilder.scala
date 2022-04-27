@@ -20,7 +20,7 @@ import scala.util.control.NonFatal
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.connector.expressions.SortOrder
+import org.apache.spark.sql.connector.expressions.{FieldReference, SortOrder}
 import org.apache.spark.sql.connector.expressions.aggregate.Aggregation
 import org.apache.spark.sql.connector.expressions.filter.Predicate
 import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownAggregates, SupportsPushDownLimit, SupportsPushDownRequiredColumns, SupportsPushDownTableSample, SupportsPushDownTopN, SupportsPushDownV2Filters}
@@ -70,12 +70,15 @@ case class JDBCScanBuilder(
 
   private var pushedAggregateList: Array[String] = Array()
 
-  private var pushedGroupByCols: Option[Array[String]] = None
+  private var pushedGroupBys: Option[Array[String]] = None
 
   override def supportCompletePushDown(aggregation: Aggregation): Boolean = {
-    lazy val fieldNames = aggregation.groupByColumns()(0).fieldNames()
+    lazy val fieldNames = aggregation.groupByExpressions()(0) match {
+      case field: FieldReference => field.fieldNames
+      case _ => Array.empty[String]
+    }
     jdbcOptions.numPartitions.map(_ == 1).getOrElse(true) ||
-      (aggregation.groupByColumns().length == 1 && fieldNames.length == 1 &&
+      (aggregation.groupByExpressions().length == 1 && fieldNames.length == 1 &&
         jdbcOptions.partitionColumn.exists(fieldNames(0).equalsIgnoreCase(_)))
   }
 
@@ -86,20 +89,18 @@ case class JDBCScanBuilder(
     val compiledAggs = aggregation.aggregateExpressions.flatMap(dialect.compileAggregate)
     if (compiledAggs.length != aggregation.aggregateExpressions.length) return false
 
-    val groupByCols = aggregation.groupByColumns.map { col =>
-      if (col.fieldNames.length != 1) return false
-      dialect.quoteIdentifier(col.fieldNames.head)
-    }
+    val compiledGroupBys = aggregation.groupByExpressions.flatMap(dialect.compileExpression)
+    if (compiledGroupBys.length != aggregation.groupByExpressions.length) return false
 
     // The column names here are already quoted and can be used to build sql string directly.
     // e.g. "DEPT","NAME",MAX("SALARY"),MIN("BONUS") =>
     // SELECT "DEPT","NAME",MAX("SALARY"),MIN("BONUS") FROM "test"."employee"
     //   GROUP BY "DEPT", "NAME"
-    val selectList = groupByCols ++ compiledAggs
-    val groupByClause = if (groupByCols.isEmpty) {
+    val selectList = compiledGroupBys ++ compiledAggs
+    val groupByClause = if (compiledGroupBys.isEmpty) {
       ""
     } else {
-      "GROUP BY " + groupByCols.mkString(",")
+      "GROUP BY " + compiledGroupBys.mkString(",")
     }
 
     val aggQuery = s"SELECT ${selectList.mkString(",")} FROM ${jdbcOptions.tableOrQuery} " +
@@ -107,7 +108,7 @@ case class JDBCScanBuilder(
     try {
       finalSchema = JDBCRDD.getQueryOutputSchema(aggQuery, jdbcOptions, dialect)
       pushedAggregateList = selectList
-      pushedGroupByCols = Some(groupByCols)
+      pushedGroupBys = Some(compiledGroupBys)
       true
     } catch {
       case NonFatal(e) =>
@@ -173,6 +174,6 @@ case class JDBCScanBuilder(
     // prunedSchema and quote them (will become "MAX(SALARY)", "MIN(BONUS)" and can't
     // be used in sql string.
     JDBCScan(JDBCRelation(schema, parts, jdbcOptions)(session), finalSchema, pushedPredicate,
-      pushedAggregateList, pushedGroupByCols, tableSample, pushedLimit, sortOrders)
+      pushedAggregateList, pushedGroupBys, tableSample, pushedLimit, sortOrders)
   }
 }
