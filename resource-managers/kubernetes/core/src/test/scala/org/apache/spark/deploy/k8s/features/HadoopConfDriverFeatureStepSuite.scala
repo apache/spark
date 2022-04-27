@@ -26,6 +26,7 @@ import io.fabric8.kubernetes.api.model.ConfigMap
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.k8s._
+import org.apache.spark.deploy.k8s.Config.CONFIG_MAP_MAXSIZE
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.util.{SparkConfWithEnv, Utils}
 
@@ -59,6 +60,29 @@ class HadoopConfDriverFeatureStepSuite extends SparkFunSuite {
 
     val hadoopConfMap = filter[ConfigMap](step.getAdditionalKubernetesResources()).head
     assert(hadoopConfMap.getData().keySet().asScala === confFiles)
+  }
+
+  test(s"load files from small to large when ${CONFIG_MAP_MAXSIZE.key} is less than the size of" +
+    s" total file.") {
+    val confDir = Utils.createTempDir()
+    val confFiles = Map("large.txt" -> "large content", "middle.txt" -> "middle",
+      "small.txt" -> "small")
+
+    confFiles.foreach { f =>
+      Files.write(f._2, new File(confDir, f._1), UTF_8)
+    }
+
+    val sparkConf = new SparkConfWithEnv(Map(ENV_HADOOP_CONF_DIR -> confDir.getAbsolutePath()))
+    sparkConf.set(CONFIG_MAP_MAXSIZE.key, "40")
+    val conf = KubernetesTestConf.createDriverConf(sparkConf = sparkConf)
+
+    val step = new HadoopConfDriverFeatureStep(conf)
+    checkPod(step.configurePod(SparkPod.initialPod()))
+    val hadoopConfMap = filter[ConfigMap](step.getAdditionalKubernetesResources()).head
+
+    // the size of three files is 22 16 14, so only the smallest two files will be loaded
+    val expectedFiles = Set("small.txt", "middle.txt")
+    assert(hadoopConfMap.getData().keySet().asScala === expectedFiles)
   }
 
   private def checkPod(pod: SparkPod): Unit = {
