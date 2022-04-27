@@ -19,10 +19,12 @@ package org.apache.spark.sql.errors
 
 import org.apache.spark.sql.{AnalysisException, IntegratedUDFTestUtils, QueryTest, Row}
 import org.apache.spark.sql.api.java.{UDF1, UDF2, UDF23Test}
+import org.apache.spark.sql.execution.datasources.v2.jdbc.JDBCTableCatalog
 import org.apache.spark.sql.expressions.SparkUserDefinedFunction
 import org.apache.spark.sql.functions.{grouping, grouping_id, sum, udf}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{IntegerType, MapType, StringType, StructField, StructType}
+import org.apache.spark.util.Utils
 
 case class StringLongClass(a: String, b: Long)
 
@@ -474,6 +476,34 @@ class QueryCompilationErrorsSuite
 
       checkAnswer(sql("SELECT __auto_generated_subquery_name.i from (SELECT i FROM v)"), Row(1))
     }
+  }
+
+  test("NOT_SUPPORTED_FEATURE: command with property is not supported in JDBC catalog") {
+    val tempDir = Utils.createTempDir()
+    val url = s"jdbc:h2:${tempDir.getCanonicalPath};user=testUser;password=testPass"
+    withSQLConf(
+      "spark.sql.catalog.h2" -> classOf[JDBCTableCatalog].getName,
+      "spark.sql.catalog.h2.url" -> url,
+      "spark.sql.catalog.h2.driver" -> "org.h2.Driver") {
+      checkErrorClass(
+        exception = intercept[AnalysisException](sql("CREATE NAMESPACE test.ns1" +
+          " WITH PROPERTIES (a=b)")),
+        errorClass = "UNSUPPORTED_FEATURE",
+        msg = "is not supported in JDBC catalog.",
+        sqlState = Some("0A000")
+      )
+    }
+    Utils.deleteRecursively(tempDir)
+  }
+
+  test("UNSET_NON_EXISTENT_PROPERTY: Attempted to unset non-existent property in table") {
+    checkErrorClass(
+      exception = intercept[AnalysisException](sql("ALTER TABLE table1 UNSET " +
+        "TBLPROPERTIES ('key1)")),
+      errorClass = "UNSET_NON_EXISTENT_PROPERTY",
+      msg = "",
+      sqlState = Some("42000")
+    )
   }
 }
 

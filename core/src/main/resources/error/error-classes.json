@@ -19,10 +19,6 @@
     "message" : [ "Cannot parse decimal" ],
     "sqlState" : "42000"
   },
-  "CANNOT_READ_CORRUPTED_TABLE_PROPERTY" : {
-    "message" : [ "Cannot read table property '%s' as it's corrupted.%s" ],
-    "sqlState" : "42000"
-  },
   "CANNOT_UP_CAST_DATATYPE" : {
     "message" : [ "Cannot up cast <value> from <sourceType> to <targetType>.\n<details>" ]
   },

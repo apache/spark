@@ -499,12 +499,12 @@ object CatalogTable {
       } else {
         val numParts = props.get(s"$key.numParts")
         if (numParts.isEmpty) {
-          throw QueryCompilationErrors.cannotReadCorruptedTablePropertyError(key)
+          throw new IllegalStateException(s"Cannot read table property '$key' as it's corrupted.");
         } else {
           val parts = (0 until numParts.get.toInt).map { index =>
             props.getOrElse(s"$key.part.$index", {
-              throw QueryCompilationErrors.cannotReadCorruptedTablePropertyError(
-                key, s"Missing part $index, $numParts parts are expected.")
+              throw new IllegalStateException(s"Cannot read table property '$key' as " +
+                s"it's corrupted. Missing part $index, $numParts parts are expected.")
             })
           }
           Some(parts.mkString)
