@@ -110,7 +110,6 @@ class Estimator(Params, Generic[M], metaclass=ABCMeta):
     .. versionadded:: 1.3.0
     """
 
-
     @abstractmethod
     def _fit(self, dataset: DataFrame) -> M:
         """
@@ -218,7 +217,6 @@ class Transformer(Params, metaclass=ABCMeta):
 
     .. versionadded:: 1.3.0
     """
-
 
     @abstractmethod
     def _transform(self, dataset: DataFrame) -> DataFrame:
