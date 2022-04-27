@@ -446,7 +446,6 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         1   True  3
         2  False  3
         """
-        accepted_spark_types = [NumericType, BooleanType] if numeric_only else []
         return self._reduce_for_stat_function(
             F.first, accepted_spark_types=(NumericType, BooleanType) if numeric_only else None
         )
@@ -2757,7 +2756,8 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         Parameters
         ----------
         sfun : The aggregate function to apply per column
-        accepted_spark_types: Accepted spark types of columns to be aggregated; default None, means all spark types are accepted
+        accepted_spark_types: Accepted spark types of columns to be aggregated;
+                              default None means all spark types are accepted
         bool_to_numeric: If True, boolean columns are converted to numeric columns
         """
         groupkey_names = [SPARK_INDEX_NAME_FORMAT(i) for i in range(len(self._groupkeys))]
