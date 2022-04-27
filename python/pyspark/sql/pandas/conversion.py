@@ -19,8 +19,6 @@ from collections import Counter
 from typing import List, Optional, Type, Union, no_type_check, overload, TYPE_CHECKING
 from warnings import catch_warnings, simplefilter, warn
 
-from pandas.errors import PerformanceWarning
-
 from pyspark.rdd import _load_from_socket
 from pyspark.sql.pandas.serializers import ArrowCollectSerializer
 from pyspark.sql.types import (
@@ -250,6 +248,8 @@ class PandasConversionMixin:
                 series = series.astype(t, copy=False)
 
             with catch_warnings():
+                from pandas.errors import PerformanceWarning
+
                 simplefilter(action="ignore", category=PerformanceWarning)
                 # `insert` API makes copy of data,
                 # we only do it for Series of duplicate column names.
