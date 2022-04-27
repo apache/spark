@@ -107,11 +107,11 @@ object AggregatePushDownUtils {
       // aggregate push down simple and don't handle this complicate case for now.
       return None
     }
-    aggregation.groupByExpressions.flatMap(extractColName).foreach { fieldName =>
+    aggregation.groupByExpressions.map(extractColName).foreach { colName =>
       // don't push down if the group by columns are not the same as the partition columns (orders
       // doesn't matter because reorder can be done at data source layer)
-      if (!isPartitionCol(fieldName)) return None
-      finalSchema = finalSchema.add(getStructFieldForCol(fieldName))
+      if (colName.isEmpty || !isPartitionCol(colName.get)) return None
+      finalSchema = finalSchema.add(getStructFieldForCol(colName.get))
     }
 
     aggregation.aggregateExpressions.foreach {
