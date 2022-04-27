@@ -140,6 +140,7 @@ class EquivalentExpressions {
     case i: If => i.predicate :: Nil
     case c: CaseWhen => c.children.head :: Nil
     case c: Coalesce => c.children.head :: Nil
+    case n: NaNvl => n.left :: Nil
     case other => other.children
   }
 
@@ -173,6 +174,7 @@ class EquivalentExpressions {
     // If there is only one child, the first child is already covered by
     // `childrenToRecurse` and we should exclude it here.
     case c: Coalesce if c.children.length > 1 => Seq(c.children)
+    case n: NaNvl => Seq(n.children)
     case _ => Nil
   }
 
