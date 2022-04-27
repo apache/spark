@@ -30,6 +30,8 @@ def _unsupported_property(property_name, deprecated=False, reason=""):
 
 
 class _MissingPandasLikeDataFrame:
+    # NOTE: Please update the document "Supported pandas APIs" when implementing the new API.
+    # Documentation path: `python/docs/source/user_guide/pandas_on_spark/supported_pandas_api.rst`.
 
     # Functions
     asfreq = _unsupported_function("asfreq")
@@ -38,7 +40,6 @@ class _MissingPandasLikeDataFrame:
     combine = _unsupported_function("combine")
     compare = _unsupported_function("compare")
     convert_dtypes = _unsupported_function("convert_dtypes")
-    corrwith = _unsupported_function("corrwith")
     infer_objects = _unsupported_function("infer_objects")
     mode = _unsupported_function("mode")
     reorder_levels = _unsupported_function("reorder_levels")

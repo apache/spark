@@ -85,6 +85,9 @@ case class ParquetScan(
     hadoopConf.setBoolean(
       SQLConf.PARQUET_INT96_AS_TIMESTAMP.key,
       sparkSession.sessionState.conf.isParquetINT96AsTimestamp)
+    hadoopConf.setBoolean(
+      SQLConf.PARQUET_TIMESTAMP_NTZ_ENABLED.key,
+      sparkSession.sessionState.conf.parquetTimestampNTZEnabled)
 
     val broadcastedConf = sparkSession.sparkContext.broadcast(
       new SerializableConfiguration(hadoopConf))

@@ -6,3 +6,4 @@ set spark.sql.ansi.strictIndexOperator=false;
 select map(1, 'a', 2, 'b')[5];
 -- the configuration spark.sql.ansi.strictIndexOperator doesn't affect the function element_at
 select element_at(map(1, 'a', 2, 'b'), 5);
+select element_at(map('a', 1, 'b', 2), 'c');

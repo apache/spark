@@ -276,6 +276,12 @@ SELECT regr_sxx(y, x) FROM testRegression WHERE x IS NOT NULL AND y IS NOT NULL;
 SELECT k, regr_sxx(y, x) FROM testRegression GROUP BY k;
 SELECT k, regr_sxx(y, x) FROM testRegression WHERE x IS NOT NULL AND y IS NOT NULL GROUP BY k;
 
+-- SPARK-37681: Support ANSI Aggregate Function: regr_sxy
+SELECT regr_sxy(y, x) FROM testRegression;
+SELECT regr_sxy(y, x) FROM testRegression WHERE x IS NOT NULL AND y IS NOT NULL;
+SELECT k, regr_sxy(y, x) FROM testRegression GROUP BY k;
+SELECT k, regr_sxy(y, x) FROM testRegression WHERE x IS NOT NULL AND y IS NOT NULL GROUP BY k;
+
 -- SPARK-37676: Support ANSI Aggregation Function: percentile_cont
 SELECT
   percentile_cont(0.25) WITHIN GROUP (ORDER BY v),

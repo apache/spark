@@ -217,7 +217,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 
-Syntax error at or near '.'(line 1, pos 7)
+[PARSE_SYNTAX_ERROR] Syntax error at or near '.'(line 1, pos 7)
 
 == SQL ==
 select .e3

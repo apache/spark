@@ -94,8 +94,8 @@ object QueryCompilationErrors extends QueryErrorsBase {
   def unsupportedIfNotExistsError(tableName: String): Throwable = {
     new AnalysisException(
       errorClass = "UNSUPPORTED_FEATURE",
-      messageParameters = Array(
-        s"IF NOT EXISTS for the table ${toSQLId(tableName)} by INSERT INTO."))
+      messageParameters = Array("INSERT_PARTITION_SPEC_IF_NOT_EXISTS",
+        toSQLId(tableName)))
   }
 
   def nonPartitionColError(partitionName: String): Throwable = {
@@ -201,7 +201,7 @@ object QueryCompilationErrors extends QueryErrorsBase {
   def pandasUDFAggregateNotSupportedInPivotError(): Throwable = {
     new AnalysisException(
       errorClass = "UNSUPPORTED_FEATURE",
-      messageParameters = Array("Pandas UDF aggregate expressions don't support pivot."))
+      messageParameters = Array("PANDAS_UDAF_IN_PIVOT"))
   }
 
   def aggregateExpressionRequiredForPivotError(sql: String): Throwable = {
@@ -331,6 +331,21 @@ object QueryCompilationErrors extends QueryErrorsBase {
   def nonDeterministicFilterInAggregateError(): Throwable = {
     new AnalysisException("FILTER expression is non-deterministic, " +
       "it cannot be used in aggregate functions")
+  }
+
+  def nonBooleanFilterInAggregateError(): Throwable = {
+    new AnalysisException("FILTER expression is not of type boolean. " +
+      "It cannot be used in an aggregate function")
+  }
+
+  def aggregateInAggregateFilterError(): Throwable = {
+    new AnalysisException("FILTER expression contains aggregate. " +
+      "It cannot be used in an aggregate function")
+  }
+
+  def windowFunctionInAggregateFilterError(): Throwable = {
+    new AnalysisException("FILTER expression contains window function. " +
+      "It cannot be used in an aggregate function")
   }
 
   def aliasNumberNotMatchColumnNumberError(
@@ -1572,8 +1587,7 @@ object QueryCompilationErrors extends QueryErrorsBase {
   def usePythonUDFInJoinConditionUnsupportedError(joinType: JoinType): Throwable = {
     new AnalysisException(
       errorClass = "UNSUPPORTED_FEATURE",
-      messageParameters = Array(
-        s"Using PythonUDF in join condition of join type $joinType is not supported"))
+      messageParameters = Array("PYTHON_UDF_IN_ON_CLAUSE", s"${toSQLStmt(joinType.sql)}"))
   }
 
   def conflictingAttributesInJoinConditionError(
@@ -2319,7 +2333,7 @@ object QueryCompilationErrors extends QueryErrorsBase {
   def udfClassWithTooManyTypeArgumentsError(n: Int): Throwable = {
     new AnalysisException(
       errorClass = "UNSUPPORTED_FEATURE",
-      messageParameters = Array(s"UDF class with $n type arguments"))
+      messageParameters = Array("TOO_MANY_TYPE_ARGUMENTS_FOR_UDF_CLASS", s"$n"))
   }
 
   def classWithoutPublicNonArgumentConstructorError(className: String): Throwable = {
