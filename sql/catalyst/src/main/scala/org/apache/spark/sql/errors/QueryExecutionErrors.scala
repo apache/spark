@@ -240,14 +240,14 @@ object QueryExecutionErrors extends QueryErrorsBase {
   def literalTypeUnsupportedError(v: Any): RuntimeException = {
     new SparkRuntimeException(
       errorClass = "UNSUPPORTED_FEATURE",
-      messageParameters = Array(s"literal for '${v.toString}' of ${v.getClass.toString}."))
+      messageParameters = Array("LITERAL_TYPE", s"${v.toString}", s"${v.getClass.toString}"))
   }
 
   def pivotColumnUnsupportedError(v: Any, dataType: DataType): RuntimeException = {
     new SparkRuntimeException(
       errorClass = "UNSUPPORTED_FEATURE",
-      messageParameters = Array(
-        s"pivoting by the value '${v.toString}' of the column data type ${toSQLType(dataType)}."))
+      messageParameters = Array("PIVOT_TYPE",
+        s"${v.toString}", s"${toSQLType(dataType)}"))
   }
 
   def noDefaultForDataTypeError(dataType: DataType): RuntimeException = {
@@ -766,8 +766,7 @@ object QueryExecutionErrors extends QueryErrorsBase {
   def transactionUnsupportedByJdbcServerError(): Throwable = {
     new SparkSQLFeatureNotSupportedException(
       errorClass = "UNSUPPORTED_FEATURE",
-      messageParameters = Array("the target JDBC server does not support transaction and " +
-        "can only support ALTER TABLE with a single action."))
+      messageParameters = Array("JDBC_TRANSACTION"))
   }
 
   def dataTypeUnsupportedYetError(dataType: DataType): Throwable = {
@@ -1892,13 +1891,13 @@ object QueryExecutionErrors extends QueryErrorsBase {
   def repeatedPivotsUnsupportedError(): Throwable = {
     new SparkUnsupportedOperationException(
       errorClass = "UNSUPPORTED_FEATURE",
-      messageParameters = Array(s"Repeated ${toSQLStmt("pivot")}s."))
+      messageParameters = Array("REPEATED_PIVOT"))
   }
 
   def pivotNotAfterGroupByUnsupportedError(): Throwable = {
     new SparkUnsupportedOperationException(
       errorClass = "UNSUPPORTED_FEATURE",
-      messageParameters = Array(s"${toSQLStmt("pivot")} not after a ${toSQLStmt("group by")}."))
+      messageParameters = Array("PIVOT_AFTER_GROUP_BY"))
   }
 
   private val aesFuncName = toSQLId("aes_encrypt") + "/" + toSQLId("aes_decrypt")
@@ -1915,8 +1914,7 @@ object QueryExecutionErrors extends QueryErrorsBase {
   def aesModeUnsupportedError(mode: String, padding: String): RuntimeException = {
     new SparkRuntimeException(
       errorClass = "UNSUPPORTED_FEATURE",
-      messageParameters = Array(
-        s"AES-$mode with the padding $padding by the $aesFuncName function."))
+      messageParameters = Array("AES_MODE", mode, padding, aesFuncName))
   }
 
   def aesCryptoError(detailMessage: String): RuntimeException = {

@@ -187,7 +187,60 @@
     "sqlState" : "0A000"
   },
   "UNSUPPORTED_FEATURE" : {
-    "message" : [ "The feature is not supported: <feature>" ],
+    "message" : [ "The feature is not supported: " ],
+    "subClass" : {
+      "AES_MODE" : {
+        "message" : [ "AES-<mode> with the padding <padding> by the <functionName> function." ]
+      },
+      "DISTRIBUTE_BY" : {
+        "message" : [ "DISTRIBUTE BY clause." ]
+      },
+      "INSERT_PARTITION_SPEC_IF_NOT_EXISTS" : {
+        "message" : [ "INSERT INTO <tableName> IF NOT EXISTS in the PARTITION spec." ]
+      },
+      "JDBC_TRANSACTION" : {
+        "message" : [ "The target JDBC server does not support transactions and can only support ALTER TABLE with a single action." ]
+      },
+      "LATERAL_JOIN_OF_TYPE" : {
+        "message" : [ "<joinType> JOIN with LATERAL correlation." ]
+      },
+      "LATERAL_JOIN_USING" : {
+        "message" : [ "JOIN USING with LATERAL correlation." ]
+      },
+      "LATERAL_NATURAL_JOIN" : {
+        "message" : [ "NATURAL join with LATERAL correlation." ]
+      },
+      "LITERAL_TYPE" : {
+        "message" : [ "Literal for '<value>' of <type>." ]
+      },
+      "NATURAL_CROSS_JOIN" : {
+        "message" : [ "NATURAL CROSS JOIN." ]
+      },
+      "PANDAS_UDAF_IN_PIVOT" : {
+        "message" : [ "Pandas user defined aggregate function in the PIVOT clause." ]
+      },
+      "PIVOT_AFTER_GROUP_BY" : {
+        "message" : [ "PIVOT clause following a GROUP BY clause." ]
+      },
+      "PIVOT_TYPE" : {
+        "message" : [ "Pivoting by the value '<value>' of the column data type <type>." ]
+      },
+      "PYTHON_UDF_IN_ON_CLAUSE" : {
+        "message" : [ "Python UDF in the ON clause of a <joinType> JOIN." ]
+      },
+      "REPEATED_PIVOT" : {
+        "message" : [ "Repeated PIVOT operation." ]
+      },
+      "TOO_MANY_TYPE_ARGUMENTS_FOR_UDF_CLASS" : {
+        "message" : [ "UDF class with <n> type arguments." ]
+      },
+      "TRANSFORM_DISTINCT_ALL" : {
+        "message" : [ "TRANSFORM with the DISTINCT/ALL clause." ]
+      },
+      "TRANSFORM_NON_HIVE" : {
+        "message" : [ "TRANSFORM with SERDE is only supported in hive mode." ]
+      }
+    },
     "sqlState" : "0A000"
   },
   "UNSUPPORTED_GROUPING_EXPRESSION" : {
