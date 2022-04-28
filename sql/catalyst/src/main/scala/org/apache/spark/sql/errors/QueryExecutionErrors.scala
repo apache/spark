@@ -589,9 +589,9 @@ object QueryExecutionErrors extends QueryErrorsBase {
 
   def saveModeUnsupportedError(saveMode: Any, pathExists: Boolean): Throwable = {
     pathExists match {
-      case true => new SparkIllegalStateException(errorClass = "UNSUPPORTED_SAVE_MODE",
+      case true => new SparkIllegalArgumentException(errorClass = "UNSUPPORTED_SAVE_MODE",
         messageParameters = Array("EXISTENT_PATH", toSQLValue(saveMode, StringType)))
-      case _ => new SparkIllegalStateException(errorClass = "UNSUPPORTED_SAVE_MODE",
+      case _ => new SparkIllegalArgumentException(errorClass = "UNSUPPORTED_SAVE_MODE",
         messageParameters = Array("NON_EXISTENT_PATH", toSQLValue(saveMode, StringType)))
     }
   }

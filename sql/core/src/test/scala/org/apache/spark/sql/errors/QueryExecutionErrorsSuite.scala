@@ -21,7 +21,7 @@ import java.util.Locale
 
 import test.org.apache.spark.sql.connector.JavaSimpleWritableDataSource
 
-import org.apache.spark.{SparkArithmeticException, SparkException, SparkIllegalStateException, SparkRuntimeException, SparkUnsupportedOperationException, SparkUpgradeException}
+import org.apache.spark.{SparkArithmeticException, SparkException, SparkIllegalArgumentException, SparkIllegalStateException, SparkRuntimeException, SparkUnsupportedOperationException, SparkUpgradeException}
 import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, SaveMode}
 import org.apache.spark.sql.catalyst.util.BadRecordException
 import org.apache.spark.sql.connector.SimpleWritableDataSource
@@ -433,7 +433,7 @@ class QueryExecutionErrorsSuite
 
   test("UNSUPPORTED_SAVE_MODE: unsupported null saveMode whether the path exists or not") {
     withTempPath { path =>
-      val e1 = intercept[SparkIllegalStateException] {
+      val e1 = intercept[SparkIllegalArgumentException] {
         val saveMode: SaveMode = null
         Seq(1, 2).toDS().write.mode(saveMode).parquet(path.getAbsolutePath)
       }
@@ -445,7 +445,7 @@ class QueryExecutionErrorsSuite
 
       Utils.createDirectory(path)
 
-      val e2 = intercept[SparkIllegalStateException] {
+      val e2 = intercept[SparkIllegalArgumentException] {
         val saveMode: SaveMode = null
         Seq(1, 2).toDS().write.mode(saveMode).parquet(path.getAbsolutePath)
       }
