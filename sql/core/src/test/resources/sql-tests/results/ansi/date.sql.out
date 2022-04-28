@@ -231,8 +231,8 @@ select next_day("xx", "Mon")
 -- !query schema
 struct<>
 -- !query output
-java.time.DateTimeException
-Invalid input syntax for type "DATE": 'xx'. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
+org.apache.spark.SparkDateTimeException
+[INVALID_SYNTAX_FOR_CAST] Invalid input syntax for type "DATE": 'xx'. To return NULL instead, use 'try_cast'. If necessary set spark.sql.ansi.enabled to false to bypass this error.
 == SQL(line 1, position 7) ==
 select next_day("xx", "Mon")
        ^^^^^^^^^^^^^^^^^^^^^

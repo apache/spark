@@ -147,6 +147,7 @@ Computations / Descriptive Stats
    DataFrame.any
    DataFrame.clip
    DataFrame.corr
+   DataFrame.corrwith
    DataFrame.count
    DataFrame.cov
    DataFrame.describe

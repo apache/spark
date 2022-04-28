@@ -165,8 +165,9 @@ class QueryCompilationErrorsSuite
     checkErrorClass(
       exception = e,
       errorClass = "UNSUPPORTED_FEATURE",
+      errorSubClass = Some("PYTHON_UDF_IN_ON_CLAUSE"),
       msg = "The feature is not supported: " +
-        "Using PythonUDF in join condition of join type \"LEFT OUTER\" is not supported.",
+        "Python UDF in the ON clause of a LEFT OUTER JOIN.",
       sqlState = Some("0A000"))
   }
 
@@ -188,8 +189,9 @@ class QueryCompilationErrorsSuite
     checkErrorClass(
       exception = e,
       errorClass = "UNSUPPORTED_FEATURE",
+      errorSubClass = Some("PANDAS_UDAF_IN_PIVOT"),
       msg = "The feature is not supported: " +
-        "Pandas UDF aggregate expressions don't support pivot.",
+        "Pandas user defined aggregate function in the PIVOT clause.",
       sqlState = Some("0A000"))
   }
 
@@ -270,7 +272,8 @@ class QueryCompilationErrorsSuite
     checkErrorClass(
       exception = e,
       errorClass = "UNSUPPORTED_FEATURE",
-      msg = "The feature is not supported: UDF class with 24 type arguments",
+      errorSubClass = Some("TOO_MANY_TYPE_ARGUMENTS_FOR_UDF_CLASS"),
+      msg = "The feature is not supported: UDF class with 24 type arguments.",
       sqlState = Some("0A000"))
   }
 
@@ -349,7 +352,7 @@ class QueryCompilationErrorsSuite
             sql(s"DESC TABLE $tempViewName PARTITION (c='Us', d=1)")
           },
           errorClass = "FORBIDDEN_OPERATION",
-          msg = s"""The operation "DESC PARTITION" is not allowed """ +
+          msg = s"""The operation DESC PARTITION is not allowed """ +
             s"on the temporary view: `$tempViewName`")
       }
     }
@@ -375,7 +378,7 @@ class QueryCompilationErrorsSuite
             sql(s"DESC TABLE $viewName PARTITION (c='Us', d=1)")
           },
           errorClass = "FORBIDDEN_OPERATION",
-          msg = s"""The operation "DESC PARTITION" is not allowed """ +
+          msg = s"""The operation DESC PARTITION is not allowed """ +
             s"on the view: `$viewName`")
       }
     }
@@ -408,6 +411,69 @@ class QueryCompilationErrorsSuite
         "StructType(StructField(map,MapType(IntegerType,IntegerType,true),false)) " +
         "can only contain StringType as a key type for a MapType."
     )
+  }
+
+  test("MISSING_COLUMN: SELECT distinct does not work correctly " +
+    "if order by missing attribute") {
+    checkAnswer(
+      sql(
+        """select distinct struct.a, struct.b
+          |from (
+          |  select named_struct('a', 1, 'b', 2, 'c', 3) as struct
+          |  union all
+          |  select named_struct('a', 1, 'b', 2, 'c', 4) as struct) tmp
+          |order by a, b
+          |""".stripMargin), Row(1, 2) :: Nil)
+
+    checkErrorClass(
+      exception = intercept[AnalysisException] {
+        sql(
+          """select distinct struct.a, struct.b
+            |from (
+            |  select named_struct('a', 1, 'b', 2, 'c', 3) as struct
+            |  union all
+            |  select named_struct('a', 1, 'b', 2, 'c', 4) as struct) tmp
+            |order by struct.a, struct.b
+            |""".stripMargin)
+      },
+      errorClass = "MISSING_COLUMN",
+      msg = """Column 'struct.a' does not exist. """ +
+        """Did you mean one of the following\? \[a, b\]; line 6 pos 9;
+           |'Sort \['struct.a ASC NULLS FIRST, 'struct.b ASC NULLS FIRST\], true
+           |\+\- Distinct
+           |   \+\- Project \[struct#\w+\.a AS a#\w+, struct#\w+\.b AS b#\w+\]
+           |      \+\- SubqueryAlias tmp
+           |         \+\- Union false, false
+           |            :\- Project \[named_struct\(a, 1, b, 2, c, 3\) AS struct#\w+\]
+           |            :  \+\- OneRowRelation
+           |            \+\- Project \[named_struct\(a, 1, b, 2, c, 4\) AS struct#\w+\]
+           |               \+\- OneRowRelation
+           |""".stripMargin,
+      matchMsg = true)
+  }
+
+  test("MISSING_COLUMN - SPARK-21335: support un-aliased subquery") {
+    withTempView("v") {
+      Seq(1 -> "a").toDF("i", "j").createOrReplaceTempView("v")
+      checkAnswer(sql("SELECT i from (SELECT i FROM v)"), Row(1))
+
+      checkErrorClass(
+        exception = intercept[AnalysisException](sql("SELECT v.i from (SELECT i FROM v)")),
+        errorClass = "MISSING_COLUMN",
+        msg = """Column 'v.i' does not exist. Did you mean one of the following\? """ +
+          """\[__auto_generated_subquery_name.i\]; line 1 pos 7;
+            |'Project \['v.i\]
+            |\+\- SubqueryAlias __auto_generated_subquery_name
+            |   \+\- Project \[i#\w+\]
+            |      \+\- SubqueryAlias v
+            |         \+\- View \(`v`, \[i#\w+,j#\w+\]\)
+            |            \+\- Project \[_\w+#\w+ AS i#\w+, _\w+#\w+ AS j#\w+\]
+            |               \+\- LocalRelation \[_\w+#\w+, _\w+#\w+\]
+            |""".stripMargin,
+        matchMsg = true)
+
+      checkAnswer(sql("SELECT __auto_generated_subquery_name.i from (SELECT i FROM v)"), Row(1))
+    }
   }
 }
 

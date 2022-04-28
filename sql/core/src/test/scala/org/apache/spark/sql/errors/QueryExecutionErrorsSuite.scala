@@ -121,6 +121,7 @@ class QueryExecutionErrorsSuite
           df.collect
         }.getCause.asInstanceOf[SparkRuntimeException],
         errorClass = "UNSUPPORTED_FEATURE",
+        errorSubClass = Some("AES_MODE"),
         msg =
           """The feature is not supported: AES-\w+ with the padding \w+""" +
           " by the `aes_encrypt`/`aes_decrypt` function.",
@@ -143,7 +144,8 @@ class QueryExecutionErrorsSuite
       checkErrorClass(
         exception = intercept[SparkRuntimeException] { lit(v) },
         errorClass = "UNSUPPORTED_FEATURE",
-        msg = """The feature is not supported: literal for '.+' of .+\.""",
+        errorSubClass = Some("LITERAL_TYPE"),
+        msg = """The feature is not supported: Literal for '.+' of .+\.""",
         sqlState = Some("0A000"),
         matchMsg = true)
     }
@@ -160,7 +162,8 @@ class QueryExecutionErrorsSuite
     checkErrorClass(
       exception = e2,
       errorClass = "UNSUPPORTED_FEATURE",
-      msg = "The feature is not supported: pivoting by the value" +
+      errorSubClass = Some("PIVOT_TYPE"),
+      msg = "The feature is not supported: Pivoting by the value" +
         """ '[dotnet,Dummies]' of the column data type "STRUCT<col1: STRING, training: STRING>".""",
       sqlState = Some("0A000"))
   }
@@ -177,7 +180,8 @@ class QueryExecutionErrorsSuite
     checkErrorClass(
       exception = e1,
       errorClass = "UNSUPPORTED_FEATURE",
-      msg = """The feature is not supported: Repeated "PIVOT"s.""",
+      errorSubClass = Some("REPEATED_PIVOT"),
+      msg = "The feature is not supported: Repeated PIVOT operation.",
       sqlState = Some("0A000"))
 
     val e2 = intercept[SparkUnsupportedOperationException] {
@@ -190,7 +194,8 @@ class QueryExecutionErrorsSuite
     checkErrorClass(
       exception = e2,
       errorClass = "UNSUPPORTED_FEATURE",
-      msg = """The feature is not supported: "PIVOT" not after a "GROUP BY".""",
+      errorSubClass = Some("PIVOT_AFTER_GROUP_BY"),
+      msg = "The feature is not supported: PIVOT clause following a GROUP BY clause.",
       sqlState = Some("0A000"))
   }
 

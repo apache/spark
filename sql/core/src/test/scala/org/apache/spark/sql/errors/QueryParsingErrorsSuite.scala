@@ -27,9 +27,10 @@ class QueryParsingErrorsSuite extends QueryTest with QueryErrorsSuiteBase {
     validateParsingError(
       sqlText = "SELECT * FROM t1 NATURAL JOIN LATERAL (SELECT c1 + c2 AS c2)",
       errorClass = "UNSUPPORTED_FEATURE",
+      errorSubClass = Some("LATERAL_NATURAL_JOIN"),
       sqlState = "0A000",
       message =
-        """The feature is not supported: "LATERAL" join with "NATURAL" join.(line 1, pos 14)
+        """The feature is not supported: NATURAL join with LATERAL correlation.(line 1, pos 14)
           |
           |== SQL ==
           |SELECT * FROM t1 NATURAL JOIN LATERAL (SELECT c1 + c2 AS c2)
@@ -41,9 +42,10 @@ class QueryParsingErrorsSuite extends QueryTest with QueryErrorsSuiteBase {
     validateParsingError(
       sqlText = "SELECT * FROM t1 JOIN LATERAL (SELECT c1 + c2 AS c2) USING (c2)",
       errorClass = "UNSUPPORTED_FEATURE",
+      errorSubClass = Some("LATERAL_JOIN_USING"),
       sqlState = "0A000",
       message =
-        """The feature is not supported: "LATERAL" join with "USING" join.(line 1, pos 14)
+        """The feature is not supported: JOIN USING with LATERAL correlation.(line 1, pos 14)
           |
           |== SQL ==
           |SELECT * FROM t1 JOIN LATERAL (SELECT c1 + c2 AS c2) USING (c2)
@@ -56,9 +58,10 @@ class QueryParsingErrorsSuite extends QueryTest with QueryErrorsSuiteBase {
       validateParsingError(
         sqlText = s"SELECT * FROM t1 $joinType JOIN LATERAL (SELECT c1 + c2 AS c3) ON c2 = c3",
         errorClass = "UNSUPPORTED_FEATURE",
+        errorSubClass = Some("LATERAL_JOIN_OF_TYPE"),
         sqlState = "0A000",
         message =
-          s"""The feature is not supported: "LATERAL" join type "$joinType".(line 1, pos 14)
+          s"""The feature is not supported: $joinType JOIN with LATERAL correlation.(line 1, pos 14)
             |
             |== SQL ==
             |SELECT * FROM t1 $joinType JOIN LATERAL (SELECT c1 + c2 AS c3) ON c2 = c3
@@ -81,7 +84,7 @@ class QueryParsingErrorsSuite extends QueryTest with QueryErrorsSuiteBase {
         errorClass = "INVALID_SQL_SYNTAX",
         sqlState = "42000",
         message =
-          s"""Invalid SQL syntax: "LATERAL" can only be used with subquery.(line 1, pos $pos)
+          s"""Invalid SQL syntax: LATERAL can only be used with subquery.(line 1, pos $pos)
             |
             |== SQL ==
             |$sqlText
@@ -94,9 +97,10 @@ class QueryParsingErrorsSuite extends QueryTest with QueryErrorsSuiteBase {
     validateParsingError(
       sqlText = "SELECT * FROM a NATURAL CROSS JOIN b",
       errorClass = "UNSUPPORTED_FEATURE",
+      errorSubClass = Some("NATURAL_CROSS_JOIN"),
       sqlState = "0A000",
       message =
-        """The feature is not supported: "NATURAL CROSS JOIN".(line 1, pos 14)
+        """The feature is not supported: NATURAL CROSS JOIN.(line 1, pos 14)
           |
           |== SQL ==
           |SELECT * FROM a NATURAL CROSS JOIN b
@@ -150,9 +154,10 @@ class QueryParsingErrorsSuite extends QueryTest with QueryErrorsSuiteBase {
     validateParsingError(
       sqlText = "SELECT TRANSFORM(DISTINCT a) USING 'a' FROM t",
       errorClass = "UNSUPPORTED_FEATURE",
+      errorSubClass = Some("TRANSFORM_DISTINCT_ALL"),
       sqlState = "0A000",
       message =
-        """The feature is not supported: "TRANSFORM" does not support "DISTINCT"/"ALL" in inputs(line 1, pos 17)
+        """The feature is not supported: TRANSFORM with the DISTINCT/ALL clause.(line 1, pos 17)
           |
           |== SQL ==
           |SELECT TRANSFORM(DISTINCT a) USING 'a' FROM t
@@ -165,9 +170,10 @@ class QueryParsingErrorsSuite extends QueryTest with QueryErrorsSuiteBase {
       sqlText = "SELECT TRANSFORM(a) ROW FORMAT SERDE " +
         "'org.apache.hadoop.hive.serde2.OpenCSVSerde' USING 'a' FROM t",
       errorClass = "UNSUPPORTED_FEATURE",
+      errorSubClass = Some("TRANSFORM_NON_HIVE"),
       sqlState = "0A000",
       message =
-        """The feature is not supported: "TRANSFORM" with serde is only supported in hive mode(line 1, pos 0)
+        """The feature is not supported: TRANSFORM with SERDE is only supported in hive mode.(line 1, pos 0)
           |
           |== SQL ==
           |SELECT TRANSFORM(a) ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.OpenCSVSerde' USING 'a' FROM t
@@ -222,7 +228,7 @@ class QueryParsingErrorsSuite extends QueryTest with QueryErrorsSuiteBase {
       errorClass = "INVALID_SQL_SYNTAX",
       sqlState = "42000",
       message =
-        """Invalid SQL syntax: "SHOW" `sys` "FUNCTIONS" not supported(line 1, pos 5)
+        """Invalid SQL syntax: SHOW `sys` FUNCTIONS not supported(line 1, pos 5)
           |
           |== SQL ==
           |SHOW sys FUNCTIONS
@@ -236,7 +242,7 @@ class QueryParsingErrorsSuite extends QueryTest with QueryErrorsSuiteBase {
       errorClass = "INVALID_SQL_SYNTAX",
       sqlState = "42000",
       message =
-        """Invalid SQL syntax: Invalid pattern in "SHOW FUNCTIONS": `f1`. It must be a "STRING" literal.(line 1, pos 21)
+        """Invalid SQL syntax: Invalid pattern in SHOW FUNCTIONS: `f1`. It must be a "STRING" literal.(line 1, pos 21)
           |
           |== SQL ==
           |SHOW FUNCTIONS IN db f1
@@ -247,7 +253,7 @@ class QueryParsingErrorsSuite extends QueryTest with QueryErrorsSuiteBase {
       errorClass = "INVALID_SQL_SYNTAX",
       sqlState = "42000",
       message =
-        """Invalid SQL syntax: Invalid pattern in "SHOW FUNCTIONS": `f1`. It must be a "STRING" literal.(line 1, pos 26)
+        """Invalid SQL syntax: Invalid pattern in SHOW FUNCTIONS: `f1`. It must be a "STRING" literal.(line 1, pos 26)
           |
           |== SQL ==
           |SHOW FUNCTIONS IN db LIKE f1
@@ -263,7 +269,7 @@ class QueryParsingErrorsSuite extends QueryTest with QueryErrorsSuiteBase {
         |JAR '/path/to/jar2'
         |""".stripMargin
     val errorDesc =
-      """"CREATE FUNCTION" with both "IF NOT EXISTS" and "REPLACE" is not allowed.(line 2, pos 0)"""
+      """CREATE FUNCTION with both IF NOT EXISTS and REPLACE is not allowed.(line 2, pos 0)"""
 
     validateParsingError(
       sqlText = sqlText,
@@ -289,7 +295,7 @@ class QueryParsingErrorsSuite extends QueryTest with QueryErrorsSuiteBase {
         |JAR '/path/to/jar2'
         |""".stripMargin
     val errorDesc =
-      """It is not allowed to define a "TEMPORARY FUNCTION" with "IF NOT EXISTS".(line 2, pos 0)"""
+      """It is not allowed to define a TEMPORARY FUNCTION with IF NOT EXISTS.(line 2, pos 0)"""
 
     validateParsingError(
       sqlText = sqlText,
@@ -339,7 +345,7 @@ class QueryParsingErrorsSuite extends QueryTest with QueryErrorsSuiteBase {
         |JAR '/path/to/jar2'
         |""".stripMargin
     val errorDesc =
-      """Specifying a database in "CREATE TEMPORARY FUNCTION" is not allowed: `db`(line 2, pos 0)"""
+      """Specifying a database in CREATE TEMPORARY FUNCTION is not allowed: `db`(line 2, pos 0)"""
 
     validateParsingError(
       sqlText = sqlText,
@@ -359,7 +365,7 @@ class QueryParsingErrorsSuite extends QueryTest with QueryErrorsSuiteBase {
 
   test("INVALID_SQL_SYNTAX: Drop temporary function requires a single part name") {
     val errorDesc =
-      "\"DROP TEMPORARY FUNCTION\" requires a single part name but got: `db`.`func`(line 1, pos 0)"
+      "DROP TEMPORARY FUNCTION requires a single part name but got: `db`.`func`(line 1, pos 0)"
 
     validateParsingError(
       sqlText = "DROP TEMPORARY FUNCTION db.func",

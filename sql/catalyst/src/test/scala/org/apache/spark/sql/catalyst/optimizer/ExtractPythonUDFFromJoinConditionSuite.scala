@@ -188,8 +188,8 @@ class ExtractPythonUDFFromJoinConditionSuite extends PlanTest {
         Optimize.execute(query.analyze)
       }
       assert(e.message ==
-        "[UNSUPPORTED_FEATURE] The feature is not supported: " +
-        s"""Using PythonUDF in join condition of join type "${joinType.sql}" is not supported.""")
+        "[UNSUPPORTED_FEATURE.PYTHON_UDF_IN_ON_CLAUSE] The feature is not supported: " +
+        s"""Python UDF in the ON clause of a ${joinType.sql} JOIN.""")
 
       val query2 = testRelationLeft.join(
         testRelationRight,
