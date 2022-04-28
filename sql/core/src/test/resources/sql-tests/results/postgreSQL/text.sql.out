@@ -285,7 +285,7 @@ select format_string('%0$s', 'Hello')
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-[ILLEGAL_SUBSTRING] The argument_index of string format cannot contain position 0$.; line 1 pos 7
+[INVALID_PARAMETER_VALUE] The value of parameter(s) 'strfmt' in `format_string` is invalid: expects %1$, %2$ and so on, but got %0$.; line 1 pos 7
 
 
 -- !query

@@ -53,7 +53,7 @@ case class JDBCScanBuilder(
 
   private var pushedLimit = 0
 
-  private var sortOrders: Array[SortOrder] = Array.empty[SortOrder]
+  private var sortOrders: Array[String] = Array.empty[String]
 
   override def pushPredicates(predicates: Array[Predicate]): Array[Predicate] = {
     if (jdbcOptions.pushDownPredicate) {
@@ -140,8 +140,14 @@ case class JDBCScanBuilder(
 
   override def pushTopN(orders: Array[SortOrder], limit: Int): Boolean = {
     if (jdbcOptions.pushDownLimit) {
+      val dialect = JdbcDialects.get(jdbcOptions.url)
+      val compiledOrders = orders.flatMap { order =>
+        dialect.compileExpression(order.expression())
+          .map(sortKey => s"$sortKey ${order.direction()} ${order.nullOrdering()}")
+      }
+      if (orders.length != compiledOrders.length) return false
       pushedLimit = limit
-      sortOrders = orders
+      sortOrders = compiledOrders
       return true
     }
     false
