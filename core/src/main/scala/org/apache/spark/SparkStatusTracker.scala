@@ -17,7 +17,7 @@
 
 package org.apache.spark
 
-import java.util.Arrays
+import java.util.Collections
 
 import org.apache.spark.status.AppStatusStore
 import org.apache.spark.status.api.v1.StageStatus
@@ -58,7 +58,7 @@ class SparkStatusTracker private[spark] (sc: SparkContext, store: AppStatusStore
    * This method does not guarantee the order of the elements in its result.
    */
   def getActiveStageIds(): Array[Int] = {
-    store.stageList(Arrays.asList(StageStatus.ACTIVE)).map(_.stageId).toArray
+    store.stageList(Collections.singletonList(StageStatus.ACTIVE)).map(_.stageId).toArray
   }
 
   /**
@@ -67,7 +67,7 @@ class SparkStatusTracker private[spark] (sc: SparkContext, store: AppStatusStore
    * This method does not guarantee the order of the elements in its result.
    */
   def getActiveJobIds(): Array[Int] = {
-    store.jobsList(Arrays.asList(JobExecutionStatus.RUNNING)).map(_.jobId).toArray
+    store.jobsList(Collections.singletonList(JobExecutionStatus.RUNNING)).map(_.jobId).toArray
   }
 
   /**

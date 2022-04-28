@@ -24,7 +24,7 @@ import java.nio.file.{Files => JavaFiles, Paths}
 import java.nio.file.attribute.PosixFilePermission.{OWNER_EXECUTE, OWNER_READ, OWNER_WRITE}
 import java.security.SecureRandom
 import java.security.cert.X509Certificate
-import java.util.{Arrays, EnumSet, Locale}
+import java.util.{Collections, EnumSet, Locale}
 import java.util.concurrent.{TimeoutException, TimeUnit}
 import java.util.jar.{JarEntry, JarOutputStream, Manifest}
 import java.util.regex.Pattern
@@ -170,7 +170,8 @@ private[spark] object TestUtils {
     } else {
       Seq.empty
     }
-    compiler.getTask(null, null, null, options.asJava, null, Arrays.asList(sourceFile)).call()
+    compiler.getTask(null, null, null, options.asJava, null,
+      Collections.singletonList(sourceFile)).call()
 
     val fileName = className + ".class"
     val result = new File(fileName)

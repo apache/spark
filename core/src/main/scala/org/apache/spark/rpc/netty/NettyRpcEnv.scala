@@ -67,7 +67,7 @@ private[netty] class NettyRpcEnv(
 
   private def createClientBootstraps(): java.util.List[TransportClientBootstrap] = {
     if (securityManager.isAuthenticationEnabled()) {
-      java.util.Arrays.asList(new AuthClientBootstrap(transportConf,
+      java.util.Collections.singletonList(new AuthClientBootstrap(transportConf,
         securityManager.getSaslUser(), securityManager))
     } else {
       java.util.Collections.emptyList[TransportClientBootstrap]
@@ -118,7 +118,7 @@ private[netty] class NettyRpcEnv(
   def startServer(bindAddress: String, port: Int): Unit = {
     val bootstraps: java.util.List[TransportServerBootstrap] =
       if (securityManager.isAuthenticationEnabled()) {
-        java.util.Arrays.asList(new AuthServerBootstrap(transportConf, securityManager))
+        java.util.Collections.singletonList(new AuthServerBootstrap(transportConf, securityManager))
       } else {
         java.util.Collections.emptyList()
       }

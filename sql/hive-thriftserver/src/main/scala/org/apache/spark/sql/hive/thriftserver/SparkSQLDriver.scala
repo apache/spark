@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.hive.thriftserver
 
-import java.util.{ArrayList => JArrayList, Arrays, List => JList}
+import java.util.{ArrayList => JArrayList, Collections, List => JList}
 
 import scala.collection.JavaConverters._
 
@@ -48,7 +48,7 @@ private[hive] class SparkSQLDriver(val context: SQLContext = SparkSQLEnv.sqlCont
     val analyzed = query.analyzed
     logDebug(s"Result Schema: ${analyzed.output}")
     if (analyzed.output.isEmpty) {
-      new Schema(Arrays.asList(new FieldSchema("Response code", "string", "")), null)
+      new Schema(Collections.singletonList(new FieldSchema("Response code", "string", "")), null)
     } else {
       val fieldSchemas = analyzed.output.map { attr =>
         new FieldSchema(attr.name, attr.dataType.catalogString, "")

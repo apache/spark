@@ -18,7 +18,7 @@
 package org.apache.spark.sql.hive.thriftserver
 
 import java.security.PrivilegedExceptionAction
-import java.util.{Arrays, Map => JMap}
+import java.util.{Collections, Map => JMap}
 import java.util.concurrent.{Executors, RejectedExecutionException, TimeUnit}
 
 import scala.collection.JavaConverters._
@@ -76,7 +76,7 @@ private[hive] class SparkExecuteStatementOperation(
 
   private lazy val resultSchema: TableSchema = {
     if (result == null || result.schema.isEmpty) {
-      new TableSchema(Arrays.asList(new FieldSchema("Result", "string", "")))
+      new TableSchema(Collections.singletonList(new FieldSchema("Result", "string", "")))
     } else {
       logInfo(s"Result Schema: ${result.schema}")
       SparkExecuteStatementOperation.getTableSchema(result.schema)

@@ -117,7 +117,7 @@ private[kafka010] class InternalKafkaConsumer[K, V](
       .setAuthenticationConfigIfNeeded()
       .build()
     val c = new KafkaConsumer[K, V](updatedKafkaParams)
-    val topics = ju.Arrays.asList(topicPartition)
+    val topics = ju.Collections.singletonList(topicPartition)
     c.assign(topics)
     c
   }

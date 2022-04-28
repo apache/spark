@@ -306,9 +306,9 @@ private[kafka010] class KafkaOffsetReaderConsumer(
 
         partitionOffsets.foreach {
           case (tp, KafkaOffsetRangeLimit.LATEST) =>
-            consumer.seekToEnd(ju.Arrays.asList(tp))
+            consumer.seekToEnd(ju.Collections.singletonList(tp))
           case (tp, KafkaOffsetRangeLimit.EARLIEST) =>
-            consumer.seekToBeginning(ju.Arrays.asList(tp))
+            consumer.seekToBeginning(ju.Collections.singletonList(tp))
           case (tp, off) => consumer.seek(tp, off)
         }
 

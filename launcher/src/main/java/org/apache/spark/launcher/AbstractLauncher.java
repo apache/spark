@@ -19,6 +19,7 @@ package org.apache.spark.launcher;
 
 import java.io.IOException;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 
 import static org.apache.spark.launcher.CommandBuilderUtils.*;
@@ -138,7 +139,7 @@ public abstract class AbstractLauncher<T extends AbstractLauncher<T>> {
    */
   public T addSparkArg(String arg) {
     SparkSubmitOptionParser validator = new ArgumentValidator(false);
-    validator.parse(Arrays.asList(arg));
+    validator.parse(Collections.singletonList(arg));
     builder.userArgs.add(arg);
     return self();
   }
