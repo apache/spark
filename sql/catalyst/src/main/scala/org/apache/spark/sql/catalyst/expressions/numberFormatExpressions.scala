@@ -182,8 +182,7 @@ case class TryToNumber(left: Expression, right: Expression)
           string matches a sequence of digits in the input value, generating a result string of the
           same length as the corresponding sequence in the format string. The result string is
           left-padded with zeros if the 0/9 sequence comprises more digits than the matching part of
-          the decimal value, starts with 0, and is before the decimal point. Otherwise, if the
-          sequence starts with 9 or is after the decimal point, it is left-padded with spaces.
+          the decimal value, starts with 0, and is before the decimal point.
         '.' or 'D': Specifies the position of the decimal point (optional, only allowed once).
         ',' or 'G': Specifies the position of the grouping (thousands) separator (,). There must be
           a 0 or 9 to the left and right of each grouping separator.
@@ -264,7 +263,7 @@ case class ToCharacter(left: Expression, right: Expression)
 
     _FUNC_(numberExpr, formatExpr) - Convert `numberExpr` to a string based on the `formatExpr`.
       Returns NULL if the conversion fails. The format follows the same semantics as the
-      to_number function.
+      to_char function.
   """,
   examples = """
     Examples:
