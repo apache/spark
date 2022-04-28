@@ -33,6 +33,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy.EXCEPTION
 import org.apache.spark.sql.types.{DecimalType, StructType, TimestampType}
 import org.apache.spark.sql.util.ArrowUtils
+import org.apache.spark.util.Utils
 
 class QueryExecutionErrorsSuite
   extends QueryTest
@@ -430,16 +431,29 @@ class QueryExecutionErrorsSuite
     )
   }
 
-  test("UNSUPPORTED_SAVE_MODE: unsupported null saveMode") {
+  test("UNSUPPORTED_SAVE_MODE: unsupported null saveMode whether the path exists or not") {
     withTempPath { path =>
-      val e = intercept[SparkIllegalStateException] {
+      val e1 = intercept[SparkIllegalStateException] {
         val saveMode: SaveMode = null
         Seq(1, 2).toDS().write.mode(saveMode).parquet(path.getAbsolutePath)
       }
       checkErrorClass(
-        exception = e,
+        exception = e1,
         errorClass = "UNSUPPORTED_SAVE_MODE",
-        msg = "The saveMode is not supported: NULL (false)")
+        errorSubClass = Some("NON_EXISTENT_PATH"),
+        msg = "The save mode NULL is not supported for: a not existent path.")
+
+      Utils.createDirectory(path)
+
+      val e2 = intercept[SparkIllegalStateException] {
+        val saveMode: SaveMode = null
+        Seq(1, 2).toDS().write.mode(saveMode).parquet(path.getAbsolutePath)
+      }
+      checkErrorClass(
+        exception = e2,
+        errorClass = "UNSUPPORTED_SAVE_MODE",
+        errorSubClass = Some("EXISTENT_PATH"),
+        msg = "The save mode NULL is not supported for: an existent path.")
     }
   }
 }
