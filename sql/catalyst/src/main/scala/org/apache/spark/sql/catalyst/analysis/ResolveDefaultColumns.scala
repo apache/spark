@@ -55,11 +55,14 @@ case class ResolveDefaultColumns(
   var enclosingInsert: Option[InsertIntoStatement] = None
   // This field stores the schema of the target table of the above command.
   var insertTableSchemaWithoutPartitionColumns: Option[StructType] = None
+  // This field records if we've replaced an expression, useful for skipping unneeded copies.
+  var updated: Boolean = false
 
   override def apply(plan: LogicalPlan): LogicalPlan = {
     // Initialize by clearing our reference to the enclosing INSERT INTO command.
     enclosingInsert = None
     insertTableSchemaWithoutPartitionColumns = None
+    updated = false
     // Traverse the logical query plan in preorder (top-down).
     plan.resolveOperatorsWithPruning(
       (_ => SQLConf.get.enableDefaultColumns), ruleId) {
@@ -70,24 +73,33 @@ case class ResolveDefaultColumns(
         enclosingInsert = Some(i)
         insertTableSchemaWithoutPartitionColumns = getInsertTableSchemaWithoutPartitionColumns
         val regenerated: InsertIntoStatement = regenerateUserSpecifiedCols(i)
-        regenerated
+        if (updated) {
+          regenerated
+        } else {
+          i
+        }
 
       case table: UnresolvedInlineTable
         if enclosingInsert.isDefined =>
-        val expanded: UnresolvedInlineTable = addMissingDefaultColumnValues(table).getOrElse(table)
-        val replaced: LogicalPlan =
-          replaceExplicitDefaultColumnValues(analyzer, expanded).getOrElse(table)
-        replaced
+        val expanded: UnresolvedInlineTable = addMissingDefaultValuesForInsertFromInlineTable(table)
+        val replaced: LogicalPlan = replaceExplicitDefaultValuesForLogicalPlan(analyzer, expanded)
+        if (updated) {
+          replaced
+        } else {
+          table
+        }
 
       case i@InsertIntoStatement(_, _, _, project: Project, _, _) =>
         enclosingInsert = Some(i)
         insertTableSchemaWithoutPartitionColumns = getInsertTableSchemaWithoutPartitionColumns
-        val expanded: Project = addMissingDefaultColumnValues(project).getOrElse(project)
-        val replaced: Option[LogicalPlan] = replaceExplicitDefaultColumnValues(analyzer, expanded)
-        val updated: InsertIntoStatement =
-          if (replaced.isDefined) i.copy(query = replaced.get) else i
-        val regenerated: InsertIntoStatement = regenerateUserSpecifiedCols(updated)
-        regenerated
+        val expanded: Project = addMissingDefaultValuesForInsertFromProject(project)
+        val replaced: LogicalPlan = replaceExplicitDefaultValuesForLogicalPlan(analyzer, expanded)
+        val regenerated: InsertIntoStatement = regenerateUserSpecifiedCols(i.copy(query = replaced))
+        if (updated) {
+          regenerated
+        } else {
+          i
+        }
     }
   }
 
@@ -111,51 +123,49 @@ case class ResolveDefaultColumns(
   /**
    * Updates an inline table to generate missing default column values.
    */
-  private def addMissingDefaultColumnValues(
-    table: UnresolvedInlineTable): Option[UnresolvedInlineTable] = {
+  private def addMissingDefaultValuesForInsertFromInlineTable(
+      table: UnresolvedInlineTable): UnresolvedInlineTable = {
     assert(enclosingInsert.isDefined)
     val numQueryOutputs: Int = table.rows(0).size
-    val schema = insertTableSchemaWithoutPartitionColumns.getOrElse(return None)
-    val newDefaultExpressions: Seq[Expression] = getDefaultExpressions(numQueryOutputs, schema)
+    val schema = insertTableSchemaWithoutPartitionColumns.getOrElse(return table)
+    val newDefaultExpressions: Seq[Expression] =
+      getDefaultExpressionsForInsert(numQueryOutputs, schema)
     val newNames: Seq[String] = schema.fields.drop(numQueryOutputs).map { _.name }
-    if (newDefaultExpressions.nonEmpty) {
-      Some(table.copy(
-        names = table.names ++ newNames,
-        rows = table.rows.map { row => row ++ newDefaultExpressions }))
-    } else {
-      None
-    }
+    if (newDefaultExpressions.nonEmpty) updated = true
+    table.copy(
+      names = table.names ++ newNames,
+      rows = table.rows.map { row => row ++ newDefaultExpressions })
   }
 
   /**
    * Adds a new expressions to a projection to generate missing default column values.
    */
-  private def addMissingDefaultColumnValues(project: Project): Option[Project] = {
+  private def addMissingDefaultValuesForInsertFromProject(project: Project): Project = {
     val numQueryOutputs: Int = project.projectList.size
-    val schema = insertTableSchemaWithoutPartitionColumns.getOrElse(return None)
-    val newDefaultExpressions: Seq[Expression] = getDefaultExpressions(numQueryOutputs, schema)
+    val schema = insertTableSchemaWithoutPartitionColumns.getOrElse(return project)
+    val newDefaultExpressions: Seq[Expression] =
+      getDefaultExpressionsForInsert(numQueryOutputs, schema)
     val newAliases: Seq[NamedExpression] =
       newDefaultExpressions.zip(schema.fields).map {
         case (expr, field) => Alias(expr, field.name)()
       }
-    if (newDefaultExpressions.nonEmpty) {
-      Some(project.copy(projectList = project.projectList ++ newAliases))
-    } else {
-      None
-    }
+    if (newDefaultExpressions.nonEmpty) updated = true
+    project.copy(projectList = project.projectList ++ newAliases)
   }
 
   /**
-   * This is a helper for the addMissingDefaultColumnValues methods above.
+   * This is a helper for the addMissingDefaultValuesForInsertFromInlineTable methods above.
    */
-  private def getDefaultExpressions(numQueryOutputs: Int, schema: StructType): Seq[Expression] = {
+  private def getDefaultExpressionsForInsert(
+      numQueryOutputs: Int,
+      schema: StructType): Seq[Expression] = {
     val remainingFields: Seq[StructField] = schema.fields.drop(numQueryOutputs)
     val numDefaultExpressionsToAdd = getStructFieldsForDefaultExpressions(remainingFields).size
     Seq.fill(numDefaultExpressionsToAdd)(UnresolvedAttribute(CURRENT_DEFAULT_COLUMN_NAME))
   }
 
   /**
-   * This is a helper for the getDefaultExpressions methods above.
+   * This is a helper for the getDefaultExpressionsForInsert methods above.
    */
   private def getStructFieldsForDefaultExpressions(fields: Seq[StructField]): Seq[StructField] = {
     if (SQLConf.get.useNullsForMissingDefaultColumnValues) {
@@ -168,11 +178,11 @@ case class ResolveDefaultColumns(
   /**
    * Replaces unresolved DEFAULT column references with corresponding values in a logical plan.
    */
-  private def replaceExplicitDefaultColumnValues(
-    analyzer: Analyzer,
-    input: LogicalPlan): Option[LogicalPlan] = {
+  private def replaceExplicitDefaultValuesForLogicalPlan(
+      analyzer: Analyzer,
+      input: LogicalPlan): LogicalPlan = {
     assert(enclosingInsert.isDefined)
-    val schema = insertTableSchemaWithoutPartitionColumns.getOrElse(return None)
+    val schema = insertTableSchemaWithoutPartitionColumns.getOrElse(return input)
     val columnNames: Seq[String] = schema.fields.map { _.name }
     val defaultExpressions: Seq[Expression] = schema.fields.map {
       case f if f.metadata.contains(CURRENT_DEFAULT_COLUMN_METADATA_KEY) =>
@@ -183,25 +193,24 @@ case class ResolveDefaultColumns(
     // If necessary, return a more descriptive error message if the user tries to nest the DEFAULT
     // column reference inside some other expression, such as DEFAULT + 1 (this is not allowed).
     //
-    // Note that we don't need to check if "SQLConf.get.useNullsForMissingDefaultColumnValues"
-    // after this point because this method only takes responsibility to replace *existing*
-    // DEFAULT references. In contrast, the "getDefaultExpressions" method will check that config
+    // Note that we don't need to check if "SQLConf.get.useNullsForMissingDefaultColumnValues" after
+    // this point because this method only takes responsibility to replace *existing* DEFAULT
+    // references. In contrast, the "getDefaultExpressionsForInsert" method will check that config
     // and add new NULLs if needed.
     input match {
       case table: UnresolvedInlineTable =>
-        replaceExplicitDefaultColumnValues(defaultExpressions, table)
+        replaceExplicitDefaultValuesForInlineTable(defaultExpressions, table)
       case project: Project =>
-        replaceExplicitDefaultColumnValues(defaultExpressions, columnNames, project)
+        replaceExplicitDefaultValuesForProject(defaultExpressions, columnNames, project)
     }
   }
 
   /**
    * Replaces unresolved DEFAULT column references with corresponding values in an inline table.
    */
-  private def replaceExplicitDefaultColumnValues(
-    defaultExpressions: Seq[Expression],
-    table: UnresolvedInlineTable): Option[LogicalPlan] = {
-    var replaced = false
+  private def replaceExplicitDefaultValuesForInlineTable(
+      defaultExpressions: Seq[Expression],
+      table: UnresolvedInlineTable): LogicalPlan = {
     val newRows: Seq[Seq[Expression]] = {
       table.rows.map { row: Seq[Expression] =>
         for {
@@ -210,7 +219,7 @@ case class ResolveDefaultColumns(
           defaultExpr = if (i < defaultExpressions.size) defaultExpressions(i) else Literal(null)
         } yield expr match {
           case u: UnresolvedAttribute if isExplicitDefaultColumn(u) =>
-            replaced = true
+            updated = true
             defaultExpr
           case expr@_ if expr.find { isExplicitDefaultColumn }.isDefined =>
             throw new AnalysisException(DEFAULTS_IN_EXPRESSIONS_ERROR)
@@ -218,22 +227,17 @@ case class ResolveDefaultColumns(
         }
       }
     }
-    if (replaced) {
-      Some(table.copy(rows = newRows))
-    } else {
-      None
-    }
+    table.copy(rows = newRows)
   }
 
   /**
    * Replaces unresolved DEFAULT column references with corresponding values in a projection.
    */
-  private def replaceExplicitDefaultColumnValues(
-    defaultExpressions: Seq[Expression],
-    colNames: Seq[String],
-    project: Project): Option[LogicalPlan] = {
-    var replaced = false
-    val updated: Seq[NamedExpression] = {
+  private def replaceExplicitDefaultValuesForProject(
+      defaultExpressions: Seq[Expression],
+      colNames: Seq[String],
+      project: Project): LogicalPlan = {
+    val updatedProjectList: Seq[NamedExpression] = {
       for {
         i <- 0 until project.projectList.size
         projectExpr = project.projectList(i)
@@ -241,21 +245,17 @@ case class ResolveDefaultColumns(
         colName = if (i < colNames.size) colNames(i) else ""
       } yield projectExpr match {
         case Alias(u: UnresolvedAttribute, _) if isExplicitDefaultColumn(u) =>
-          replaced = true
+          updated = true
           Alias(defaultExpr, colName)()
         case u: UnresolvedAttribute if isExplicitDefaultColumn(u) =>
-          replaced = true
+          updated = true
           Alias(defaultExpr, colName)()
         case expr@_ if expr.find { isExplicitDefaultColumn }.isDefined =>
           throw new AnalysisException(DEFAULTS_IN_EXPRESSIONS_ERROR)
         case _ => projectExpr
       }
     }
-    if (replaced) {
-      Some(project.copy(projectList = updated))
-    } else {
-      None
-    }
+    project.copy(projectList = updatedProjectList)
   }
 
   /**
