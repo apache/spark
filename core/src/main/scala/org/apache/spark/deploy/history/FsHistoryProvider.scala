@@ -325,18 +325,8 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
 
   override def getListing(): Iterator[ApplicationInfo] = {
     // Return the listing in end time descending order.
-    // SPARK-38896: tryWithResource cannot be used here
-    // because this method needs to return an `Iterator`.
-    val closeableIter = listing.view(classOf[ApplicationInfoWrapper])
-      .index("endTime")
-      .reverse()
-      .closeableIterator()
-    val dataIter = closeableIter.asScala.map(_.toApplicationInfo())
-    new Iterator[ApplicationInfo] with Closeable {
-      override def hasNext: Boolean = dataIter.hasNext
-      override def next(): ApplicationInfo = dataIter.next()
-      override def close(): Unit = closeableIter.close()
-    }
+    KVUtils.mapToSeq(listing.view(classOf[ApplicationInfoWrapper])
+      .index("endTime") .reverse())(_.toApplicationInfo()).iterator
   }
 
   override def getApplicationInfo(appId: String): Option[ApplicationInfo] = {
