@@ -608,7 +608,6 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
         }
     }
     checkCollectedMetrics(plan)
-    checkOffsetOperator(plan)
     extendedCheckRules.foreach(_(plan))
     plan.foreachUp {
       case o if !o.resolved =>
@@ -849,30 +848,6 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
       })
     }
     check(plan)
-  }
-
-  /**
-   * Validate whether the [[Offset]] is valid.
-   */
-  private def checkOffsetOperator(plan: LogicalPlan): Unit = {
-    plan.foreachUp {
-      case o if !o.isInstanceOf[GlobalLimit] && !o.isInstanceOf[LocalLimit]
-        && o.children.exists(_.isInstanceOf[Offset]) =>
-        failAnalysis(
-          s"""
-             |The OFFSET clause is only allowed in the LIMIT clause, but the OFFSET
-             |clause found in: ${o.nodeName}.""".stripMargin.replace("\n", " "))
-      case _ =>
-    }
-    plan match {
-      case Offset(offsetExpr, _) =>
-        checkLimitLikeClause("offset", offsetExpr)
-        failAnalysis(
-          s"""
-             |The OFFSET clause is only allowed in the LIMIT clause, but the OFFSET
-             |clause is found to be the outermost node.""".stripMargin.replace("\n", " "))
-      case _ =>
-    }
   }
 
   /**

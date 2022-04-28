@@ -21,9 +21,9 @@ SELECT '' AS three, unique1, unique2, stringu1
  SELECT '' AS eleven, unique1, unique2, stringu1
  		FROM onek WHERE unique1 < 50
   		ORDER BY unique1 DESC LIMIT 20 OFFSET 39;
--- SELECT '' AS ten, unique1, unique2, stringu1
--- 		FROM onek
--- 		ORDER BY unique1 OFFSET 990;
+SELECT '' AS ten, unique1, unique2, stringu1
+		FROM onek
+		ORDER BY unique1 OFFSET 990;
 -- SELECT '' AS five, unique1, unique2, stringu1
 -- 		FROM onek
 -- 		ORDER BY unique1 OFFSET 990 LIMIT 5;

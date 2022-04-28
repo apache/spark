@@ -123,6 +123,55 @@ case class CollectTailExec(limit: Int, child: SparkPlan) extends LimitExec {
     copy(child = newChild)
 }
 
+/**
+ * Take all elements and collect them to a single partition and then to
+ * drop the first `offset` elements.
+ *
+ * This operator will be used when a logical `Offset` operation is the final operator in an
+ * logical plan, which happens when the user is collecting results back to the driver.
+ */
+case class CollectOffsetExec(offset: Int, child: SparkPlan) extends UnaryExecNode {
+  override def output: Seq[Attribute] = child.output
+  override def outputPartitioning: Partitioning = SinglePartition
+  override def executeCollect(): Array[InternalRow] = {
+    // Because CollectOffsetExec collect all the output of child to a single partition, so we need
+    // collect all elements and then to drop the first `offset` elements.
+    // For example: offset is 2 and the child output two partition.
+    // The first partition output [1, 2] and the Second partition output [3, 4, 5].
+    // Then [1, 2, 3, 4, 5] will be taken and output [3, 4, 5].
+    child.executeCollect().drop(offset)
+  }
+  private val serializer: Serializer = new UnsafeRowSerializer(child.output.size)
+  private lazy val writeMetrics =
+    SQLShuffleWriteMetricsReporter.createShuffleWriteMetrics(sparkContext)
+  private lazy val readMetrics =
+    SQLShuffleReadMetricsReporter.createShuffleReadMetrics(sparkContext)
+  override lazy val metrics = readMetrics ++ writeMetrics
+  protected override def doExecute(): RDD[InternalRow] = {
+    val childRDD = child.execute()
+    if (childRDD.getNumPartitions == 0) {
+      new ParallelCollectionRDD(sparkContext, Seq.empty[InternalRow], 1, Map.empty)
+    } else {
+      val singlePartitionRDD = if (childRDD.getNumPartitions == 1) {
+        childRDD
+      } else {
+        new ShuffledRowRDD(
+          ShuffleExchangeExec.prepareShuffleDependency(
+            childRDD,
+            child.output,
+            SinglePartition,
+            serializer,
+            writeMetrics),
+          readMetrics)
+      }
+      singlePartitionRDD.mapPartitionsInternal(_.drop(offset))
+    }
+  }
+
+  override protected def withNewChildInternal(newChild: SparkPlan): SparkPlan =
+    copy(child = newChild)
+}
+
 object BaseLimitExec {
   private val curId = new java.util.concurrent.atomic.AtomicInteger()
 
@@ -197,6 +246,53 @@ case class LocalLimitExec(limit: Int, child: SparkPlan) extends BaseLimitExec {
 case class GlobalLimitExec(limit: Int, child: SparkPlan) extends BaseLimitExec {
 
   override def requiredChildDistribution: List[Distribution] = AllTuples :: Nil
+
+  override protected def withNewChildInternal(newChild: SparkPlan): SparkPlan =
+    copy(child = newChild)
+}
+
+/**
+ * Skip the first `offset` elements of the child's single output partition.
+ */
+case class GlobalOffsetExec(offset: Int, child: SparkPlan)
+  extends UnaryExecNode with CodegenSupport {
+
+  override def output: Seq[Attribute] = child.output
+
+  override def outputPartitioning: Partitioning = child.outputPartitioning
+
+  override def outputOrdering: Seq[SortOrder] = child.outputOrdering
+
+  override def requiredChildDistribution: List[Distribution] = AllTuples :: Nil
+
+  protected override def doExecute(): RDD[InternalRow] = child.execute().mapPartitions { iter =>
+    iter.drop(offset)
+  }
+
+  override def inputRDDs(): Seq[RDD[InternalRow]] = {
+    child.asInstanceOf[CodegenSupport].inputRDDs()
+  }
+
+  // Mark this as empty. This plan doesn't need to evaluate any inputs and can defer the evaluation
+  // to the parent operator.
+  override def usedInputs: AttributeSet = AttributeSet.empty
+
+  private lazy val skipTerm = BaseLimitExec.newLimitCountTerm()
+
+  protected override def doProduce(ctx: CodegenContext): String = {
+    child.asInstanceOf[CodegenSupport].produce(ctx, this)
+  }
+
+  override def doConsume(ctx: CodegenContext, input: Seq[ExprCode], row: ExprCode): String = {
+    ctx.addMutableState(CodeGenerator.JAVA_INT, skipTerm, forceInline = true, useFreshName = false)
+    s"""
+       | if ($skipTerm < $offset) {
+       |   $skipTerm += 1;
+       | } else {
+       |   ${consume(ctx, input)}
+       | }
+      """.stripMargin
+  }
 
   override protected def withNewChildInternal(newChild: SparkPlan): SparkPlan =
     copy(child = newChild)
