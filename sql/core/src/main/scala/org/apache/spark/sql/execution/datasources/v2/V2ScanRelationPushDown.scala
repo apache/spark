@@ -381,7 +381,9 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper wit
           order, project, alwaysInline = true) =>
       val aliasMap = getAliasMap(project)
       val newOrder = order.map(replaceAlias(_, aliasMap)).asInstanceOf[Seq[SortOrder]]
-      val orders = DataSourceStrategy.translateSortOrders(newOrder)
+      val normalizedOrders = DataSourceStrategy.normalizeExprs(
+        newOrder, sHolder.relation.output).asInstanceOf[Seq[SortOrder]]
+      val orders = DataSourceStrategy.translateSortOrders(normalizedOrders)
       if (orders.length == order.length) {
         val (isPushed, isPartiallyPushed) =
           PushDownUtils.pushTopN(sHolder.builder, orders.toArray, limit)
