@@ -198,7 +198,7 @@ class LibSVMRelationSuite
   test("create libsvmTable table without schema and path") {
     try {
       val e = intercept[IllegalArgumentException] {
-        spark.sql("CREATE TABLE libsvmTable USING libsvm")
+        spark.sql("CREATE TABLE libsvmTable () USING libsvm")
       }
       assert(e.getMessage.contains("No input path specified for libsvm data"))
     } finally {

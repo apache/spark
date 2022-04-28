@@ -3577,6 +3577,17 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
           partitioning, query, tableSpec, Map.empty, ifNotExists)
 
       case _ =>
+        if ((ctx.LEFT_PAREN() == null || ctx.RIGHT_PAREN() == null) &&
+            location.isEmpty && columns.isEmpty) {
+          // Create table (non-CTAS) without data columns is not allowed when () are not specified.
+          // However, if this is an external table, it is possible that the target location contains
+          // a valid table and in that case, we don't need to enforce the () constraint; and
+          // when it does not contain a valid table, another guard will kick in during analysis.
+          operationNotAllowed(
+            "Please use `CREATE TABLE table ()` if you would like to create a " +
+              "table with empty schema.", ctx)
+        }
+
         // Note: table schema includes both the table columns list and the partition columns
         // with data type.
         val schema = StructType(columns ++ partCols)

@@ -287,7 +287,7 @@ class DDLParserSuite extends AnalysisTest {
   }
 
   test("create/replace table - empty columns list") {
-    val createSql = "CREATE TABLE my_tab PARTITIONED BY (part string)"
+    val createSql = "CREATE TABLE my_tab () PARTITIONED BY (part string)"
     val replaceSql = "REPLACE TABLE my_tab PARTITIONED BY (part string)"
     val expectedTableSpec = TableSpec(
       Seq("my_tab"),
@@ -600,7 +600,7 @@ class DDLParserSuite extends AnalysisTest {
   test("support for other types in OPTIONS") {
     val createSql =
       """
-        |CREATE TABLE table_name USING json
+        |CREATE TABLE table_name () USING json
         |OPTIONS (a 1, b 0.1, c TRUE)
       """.stripMargin
     val replaceSql =

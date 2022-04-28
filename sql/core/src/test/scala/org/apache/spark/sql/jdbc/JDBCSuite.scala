@@ -1102,7 +1102,7 @@ class JDBCSuite extends QueryTest
       withTable(tableName) {
         val df = sql(
           s"""
-             |CREATE $tableType $tableName
+             |CREATE $tableType $tableName ()
              |USING org.apache.spark.sql.jdbc
              |OPTIONS (
              | url '$urlWithUserAndPass',
@@ -1131,7 +1131,7 @@ class JDBCSuite extends QueryTest
     withTable(tableName) {
       sql(
         s"""
-           |CREATE TABLE $tableName
+           |CREATE TABLE $tableName ()
            |USING org.apache.spark.sql.jdbc
            |OPTIONS (
            | url '$urlWithUserAndPass',
@@ -1169,7 +1169,7 @@ class JDBCSuite extends QueryTest
     withTable(tableName) {
       sql(
         s"""
-           |CREATE TABLE $tableName
+           |CREATE TABLE $tableName ()
            |USING org.apache.spark.sql.jdbc
            |OPTIONS (
            | url '$urlWithUserAndPass',

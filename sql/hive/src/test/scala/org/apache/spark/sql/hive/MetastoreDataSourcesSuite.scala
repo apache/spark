@@ -1380,7 +1380,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
         // Creates the (non-)partitioned Avro table
         val plan = sql(
           s"""
-             |CREATE TABLE $tableName
+             |CREATE TABLE $tableName ()
              |$partitionClause
              |ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.avro.AvroSerDe'
              |STORED AS

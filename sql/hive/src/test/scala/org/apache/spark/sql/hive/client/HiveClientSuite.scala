@@ -921,7 +921,7 @@ class HiveClientSuite(version: String, allVersions: Seq[String])
         // Creates the (non-)partitioned Avro table
         versionSpark.sql(
           s"""
-             |CREATE TABLE $tableName
+             |CREATE TABLE $tableName ()
              |$partitionClause
              |ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.avro.AvroSerDe'
              |STORED AS
@@ -1049,7 +1049,7 @@ class HiveClientSuite(version: String, allVersions: Seq[String])
 
         versionSpark.sql(
           s"""
-             |CREATE TABLE $destTableName
+             |CREATE TABLE $destTableName ()
              |ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.avro.AvroSerDe'
              |WITH SERDEPROPERTIES ('respectSparkSchema' = 'true')
              |STORED AS
