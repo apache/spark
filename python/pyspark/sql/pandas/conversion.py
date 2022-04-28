@@ -15,9 +15,9 @@
 # limitations under the License.
 #
 import sys
-import warnings
 from collections import Counter
 from typing import List, Optional, Type, Union, no_type_check, overload, TYPE_CHECKING
+from warnings import catch_warnings, simplefilter, warn
 
 from pyspark.rdd import _load_from_socket
 from pyspark.sql.pandas.serializers import ArrowCollectSerializer
@@ -111,7 +111,7 @@ class PandasConversionMixin:
                         "'spark.sql.execution.arrow.pyspark.fallback.enabled' is set to "
                         "true." % str(e)
                     )
-                    warnings.warn(msg)
+                    warn(msg)
                     use_arrow = False
                 else:
                     msg = (
@@ -121,7 +121,7 @@ class PandasConversionMixin:
                         "with 'spark.sql.execution.arrow.pyspark.fallback.enabled' has been set to "
                         "false.\n  %s" % str(e)
                     )
-                    warnings.warn(msg)
+                    warn(msg)
                     raise
 
             # Try to use Arrow optimization when the schema is supported and the required version
@@ -198,7 +198,7 @@ class PandasConversionMixin:
                         "effect on failures in the middle of "
                         "computation.\n  %s" % str(e)
                     )
-                    warnings.warn(msg)
+                    warn(msg)
                     raise
 
         # Below is toPandas without Arrow optimization.
@@ -247,13 +247,18 @@ class PandasConversionMixin:
             if (t is not None and not is_timedelta64_dtype(t)) or should_check_timedelta:
                 series = series.astype(t, copy=False)
 
-            # `insert` API makes copy of data, we only do it for Series of duplicate column names.
-            # `pdf.iloc[:, index] = pdf.iloc[:, index]...` doesn't always work because `iloc` could
-            # return a view or a copy depending by context.
-            if column_counter[column_name] > 1:
-                df.insert(index, column_name, series, allow_duplicates=True)
-            else:
-                df[column_name] = series
+            with catch_warnings():
+                from pandas.errors import PerformanceWarning
+
+                simplefilter(action="ignore", category=PerformanceWarning)
+                # `insert` API makes copy of data,
+                # we only do it for Series of duplicate column names.
+                # `pdf.iloc[:, index] = pdf.iloc[:, index]...` doesn't always work
+                # because `iloc` could return a view or a copy depending by context.
+                if column_counter[column_name] > 1:
+                    df.insert(index, column_name, series, allow_duplicates=True)
+                else:
+                    df[column_name] = series
 
         if timezone is None:
             return df
@@ -417,7 +422,7 @@ class SparkConversionMixin:
                         "'spark.sql.execution.arrow.pyspark.fallback.enabled' is set to "
                         "true." % str(e)
                     )
-                    warnings.warn(msg)
+                    warn(msg)
                 else:
                     msg = (
                         "createDataFrame attempted Arrow optimization because "
@@ -426,7 +431,7 @@ class SparkConversionMixin:
                         "fallback with 'spark.sql.execution.arrow.pyspark.fallback.enabled' "
                         "has been set to false.\n  %s" % str(e)
                     )
-                    warnings.warn(msg)
+                    warn(msg)
                     raise
         converted_data = self._convert_from_pandas(data, schema, timezone)
         return self._create_dataframe(converted_data, schema, samplingRatio, verifySchema)
