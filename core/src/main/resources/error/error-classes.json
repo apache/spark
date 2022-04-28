@@ -71,9 +71,6 @@
   "GROUPING_SIZE_LIMIT_EXCEEDED" : {
     "message" : [ "Grouping sets size cannot be greater than <maxSize>" ]
   },
-  "ILLEGAL_SUBSTRING" : {
-    "message" : [ "<subject> cannot contain <content>." ]
-  },
   "INCOMPARABLE_PIVOT_COLUMN" : {
     "message" : [ "Invalid pivot column '<columnName>'. Pivot columns must be comparable." ],
     "sqlState" : "42000"

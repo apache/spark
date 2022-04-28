@@ -94,14 +94,14 @@ class QueryCompilationErrorsSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("ILLEGAL_SUBSTRING: the argument_index of string format is invalid") {
+  test("INVALID_PARAMETER_VALUE: the argument_index of string format is invalid") {
     withSQLConf(SQLConf.ALLOW_ZERO_INDEX_IN_FORMAT_STRING.key -> "false") {
       val e = intercept[AnalysisException] {
         sql("select format_string('%0$s', 'Hello')")
       }
-      assert(e.errorClass === Some("ILLEGAL_SUBSTRING"))
-      assert(e.message ===
-        "The argument_index of string format cannot contain position 0$.")
+      assert(e.errorClass === Some("INVALID_PARAMETER_VALUE"))
+      assert(e.message === "The value of parameter(s) 'strfmt' in `format_string` is invalid: " +
+        "expects %1$, %2$ and so on, but got %0$.")
     }
   }
 
