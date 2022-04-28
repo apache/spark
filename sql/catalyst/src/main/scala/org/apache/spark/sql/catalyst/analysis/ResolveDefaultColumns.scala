@@ -73,14 +73,11 @@ case class ResolveDefaultColumns(
         enclosingInsert = Some(i)
         insertTableSchemaWithoutPartitionColumns = getInsertTableSchemaWithoutPartitionColumns
         val regenerated: InsertIntoStatement = regenerateUserSpecifiedCols(i)
-        if (updated) {
-          regenerated
-        } else {
-          i
-        }
+        regenerated
 
       case table: UnresolvedInlineTable
         if enclosingInsert.isDefined =>
+        updated = false
         val expanded: UnresolvedInlineTable = addMissingDefaultValuesForInsertFromInlineTable(table)
         val replaced: LogicalPlan = replaceExplicitDefaultValuesForLogicalPlan(analyzer, expanded)
         if (updated) {
@@ -92,9 +89,11 @@ case class ResolveDefaultColumns(
       case i@InsertIntoStatement(_, _, _, project: Project, _, _) =>
         enclosingInsert = Some(i)
         insertTableSchemaWithoutPartitionColumns = getInsertTableSchemaWithoutPartitionColumns
+        updated = false
         val expanded: Project = addMissingDefaultValuesForInsertFromProject(project)
         val replaced: LogicalPlan = replaceExplicitDefaultValuesForLogicalPlan(analyzer, expanded)
         val regenerated: InsertIntoStatement = regenerateUserSpecifiedCols(i.copy(query = replaced))
+        enclosingInsert = None
         if (updated) {
           regenerated
         } else {
