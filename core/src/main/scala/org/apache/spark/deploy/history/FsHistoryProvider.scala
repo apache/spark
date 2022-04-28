@@ -17,7 +17,7 @@
 
 package org.apache.spark.deploy.history
 
-import java.io.{Closeable, File, FileNotFoundException, IOException}
+import java.io.{File, FileNotFoundException, IOException}
 import java.lang.{Long => JLong}
 import java.nio.file.Files
 import java.util.{Date, NoSuchElementException, ServiceLoader}
