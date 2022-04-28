@@ -664,7 +664,7 @@ select make_interval(0, 0, 0, 0, 0, 0, 1234567890123456789)
 struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
-[CANNOT_CHANGE_DECIMAL_PRECISION] Decimal(expanded,1234567890123456789,20,0}) cannot be represented as Decimal(18, 6). If necessary set "spark.sql.ansi.enabled" to false to bypass this error.
+[CANNOT_CHANGE_DECIMAL_PRECISION] Decimal(expanded, 1234567890123456789, 20, 0) cannot be represented as Decimal(18, 6). If necessary set "spark.sql.ansi.enabled" to false to bypass this error.
 == SQL(line 1, position 7) ==
 select make_interval(0, 0, 0, 0, 0, 0, 1234567890123456789)
        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
