@@ -261,16 +261,13 @@ class QueryExecutionErrorsSuite
     }
   }
 
-  test("UNSUPPORTED_FEATURE: timeZoneId not specified while converting TimestampType to Arrow") {
+  test("INTERNAL_ERROR: timeZoneId not specified while converting TimestampType to Arrow") {
     checkErrorClass(
-      exception = intercept[SparkUnsupportedOperationException] {
+      exception = intercept[SparkIllegalStateException] {
         ArrowUtils.toArrowSchema(new StructType().add("value", TimestampType), null)
       },
-      errorClass = "UNSUPPORTED_FEATURE",
-      errorSubClass = Some("ARROW_TIMESTAMP_WITHOUT_TIMEZONE"),
-      msg = "The feature is not supported: " +
-        "TIMESTAMP must supply timeZoneId parameter while " +
-        "converting to the arrow timestamp type.")
+      errorClass = "INTERNAL_ERROR",
+      msg = "Missing timezoneId where it is mandatory.")
   }
 
   test("UNSUPPORTED_FEATURE - SPARK-36346: can't read Timestamp as TimestampNTZ") {

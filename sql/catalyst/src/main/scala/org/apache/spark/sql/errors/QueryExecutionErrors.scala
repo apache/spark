@@ -68,6 +68,11 @@ import org.apache.spark.util.CircularBuffer
  */
 object QueryExecutionErrors extends QueryErrorsBase {
 
+  def internalMissingTimezoneIdError(): Throwable = {
+    new SparkIllegalStateException(errorClass = "INTERNAL_ERROR",
+      messageParameters = Array("Missing timezoneId where it is mandatory."))
+  }
+
   def logicalHintOperatorNotRemovedDuringAnalysisError(): Throwable = {
     new SparkIllegalStateException(errorClass = "INTERNAL_ERROR",
       messageParameters = Array(
