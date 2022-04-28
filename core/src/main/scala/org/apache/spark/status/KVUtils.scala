@@ -93,6 +93,16 @@ private[spark] object KVUtils extends Logging {
     }
   }
 
+  /** Turns an interval of KVStoreView into a Scala sequence, applying a filter. */
+  def viewToSeq[T](
+      view: KVStoreView[T],
+      from: Int,
+      until: Int)(filter: T => Boolean): Seq[T] = {
+    Utils.tryWithResource(view.closeableIterator()) { iter =>
+      iter.asScala.filter(filter).slice(from, until).toList
+    }
+  }
+
   /** Turns a KVStoreView into a Scala sequence. */
   def viewToSeq[T](view: KVStoreView[T]): Seq[T] = {
     Utils.tryWithResource(view.closeableIterator()) { iter =>

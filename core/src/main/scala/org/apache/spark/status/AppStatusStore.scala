@@ -469,11 +469,9 @@ private[spark] class AppStatusStore(
 
   def taskList(stageId: Int, stageAttemptId: Int, maxTasks: Int): Seq[v1.TaskData] = {
     val stageKey = Array(stageId, stageAttemptId)
-    val taskDataWrapperView = store.view(classOf[TaskDataWrapper]).index("stage")
-      .first(stageKey).last(stageKey).reverse().max(maxTasks)
-    Utils.tryWithResource(taskDataWrapperView.closeableIterator()) { taskDataWrapperIter =>
-      constructTaskDataList(taskDataWrapperIter.asScala.toIterable).reverse
-    }
+    val taskDataWrapperSeq = KVUtils.viewToSeq(store.view(classOf[TaskDataWrapper]).index("stage")
+      .first(stageKey).last(stageKey).reverse().max(maxTasks))
+    constructTaskDataList(taskDataWrapperSeq).reverse
   }
 
   def taskList(
@@ -514,18 +512,14 @@ private[spark] class AppStatusStore(
     }
 
     val ordered = if (ascending) indexed else indexed.reverse()
-    if (statuses != null && !statuses.isEmpty) {
+    val taskDataWrapperSeq = if (statuses != null && !statuses.isEmpty) {
       val statusesStr = statuses.asScala.map(_.toString).toSet
-      Utils.tryWithResource(ordered.closeableIterator()) { iterator =>
-        val filtered = iterator.asScala
-          .filter(s => statusesStr.contains(s.status)).slice(offset, offset + length)
-        constructTaskDataList(filtered.toIterable)
-      }
+      KVUtils.viewToSeq(ordered, offset, offset + length)(s => statusesStr.contains(s.status))
     } else {
-      Utils.tryWithResource(ordered.skip(offset).max(length).closeableIterator()) { iterator =>
-        constructTaskDataList(iterator.asScala.toIterable)
-      }
+      KVUtils.viewToSeq(ordered.skip(offset).max(length))
     }
+
+    constructTaskDataList(taskDataWrapperSeq)
   }
 
   def executorSummary(stageId: Int, attemptId: Int): Map[String, v1.ExecutorStageSummary] = {
@@ -767,7 +761,7 @@ private[spark] class AppStatusStore(
         executorLogs,
         AppStatusUtils.schedulerDelay(taskDataOld),
         AppStatusUtils.gettingResultTime(taskDataOld))
-    }.toList
+    }.toSeq
   }
 }
 
