@@ -166,10 +166,6 @@ class ToNumberParser(numberFormat: String, errorOnFail: Boolean) extends Seriali
           tokens.prepend(OpeningAngleBracket())
           tokens.append(ClosingAngleBracket())
           i += 2
-        case SPACE =>
-          // Add no tokens to the list of format tokens. Keep consuming characters from the format
-          // string.
-          i += 1
         case c: Char =>
           tokens.append(InvalidUnrecognizedCharacter(c))
           i += 1
@@ -646,7 +642,8 @@ class ToNumberParser(numberFormat: String, errorOnFail: Boolean) extends Seriali
           formatDigitGroups(
             groups, inputBeforeDecimalPoint, inputAfterDecimalPoint, reachedDecimalPoint, result)
         case DecimalPoint() =>
-          // If the last character so far is a space, change it to a zero.
+          // If the last character so far is a space, change it to a zero. This means the input
+          // decimal does not have an integer part.
           if (result.nonEmpty && result.last == SPACE) {
             result(result.length - 1) = ZERO_DIGIT
           }
@@ -654,25 +651,26 @@ class ToNumberParser(numberFormat: String, errorOnFail: Boolean) extends Seriali
           reachedDecimalPoint = true
         case DollarSign() =>
           result.append(DOLLAR_SIGN)
-        case _: OptionalPlusOrMinusSign | _: OptionalMinusSign =>
+        case _: OptionalPlusOrMinusSign =>
+          stripTrailingLoneDecimalPoint(result)
+          if (input < Decimal.ZERO) {
+            addCharacterCheckingTrailingSpaces(result, MINUS_SIGN)
+          } else {
+            addCharacterCheckingTrailingSpaces(result, PLUS_SIGN)
+          }
+        case _: OptionalMinusSign =>
           if (input < Decimal.ZERO) {
             stripTrailingLoneDecimalPoint(result)
             addCharacterCheckingTrailingSpaces(result, MINUS_SIGN)
-          } else {
-            result.append(SPACE)
           }
         case OpeningAngleBracket() =>
           if (input < Decimal.ZERO) {
             result.append(ANGLE_BRACKET_OPEN)
-          } else {
-            result.append(SPACE)
           }
         case ClosingAngleBracket() =>
           if (input < Decimal.ZERO) {
             stripTrailingLoneDecimalPoint(result)
             addCharacterCheckingTrailingSpaces(result, ANGLE_BRACKET_CLOSE)
-          } else {
-            result.append(SPACE)
           }
       }
     }
@@ -684,6 +682,10 @@ class ToNumberParser(numberFormat: String, errorOnFail: Boolean) extends Seriali
       formatMatchFailure(input, numberFormat)
     } else {
       stripTrailingLoneDecimalPoint(result)
+      if (result.isEmpty || result.toString == "+" || result.toString == "-") {
+        result.clear()
+        result.append('0')
+      }
       UTF8String.fromString(result.toString())
     }
   }
@@ -783,8 +785,7 @@ class ToNumberParser(numberFormat: String, errorOnFail: Boolean) extends Seriali
                   result.append(ZERO_DIGIT)
                 case _: AtMostAsManyDigits =>
                   // The format string started with a 9 and had more digits than the provided
-                  // input string, so we prepend a space to the result.
-                  addSpaceCheckingOpenBracketOrMinusSign(result)
+                  // input string, so we prepend nothing to the result.
               }
             }
             formattingBeforeDecimalPointIndex += 1
@@ -800,16 +801,13 @@ class ToNumberParser(numberFormat: String, errorOnFail: Boolean) extends Seriali
                 result.append(c)
               case _ =>
                 // The format string had more digits after the decimal point than the provided input
-                // string, so we append a space to the result.
-                result.append(SPACE)
+                // string, so we append nothing to the result.
             }
             formattingAfterDecimalPointIndex += 1
           }
         case _: ThousandsSeparator =>
           if (result.nonEmpty && result.last >= ZERO_DIGIT && result.last <= NINE_DIGIT) {
             result.append(COMMA_SIGN)
-          } else {
-            addSpaceCheckingOpenBracketOrMinusSign(result)
           }
       }
     }
@@ -824,23 +822,8 @@ class ToNumberParser(numberFormat: String, errorOnFail: Boolean) extends Seriali
     var i = result.size - 1
     while (i > 1 && result(i - 1) == SPACE && result(i) == char) {
       result(i - 1) = char
-      result(i) = SPACE
+      result.deleteCharAt(i)
       i -= 1
-    }
-  }
-
-  /**
-   * Adds a space to the end of the string builder. After doing so, if we just added a space after a
-   * '<', or '-', swaps the characters.
-   */
-  private def addSpaceCheckingOpenBracketOrMinusSign(result: StringBuilder): Unit = {
-    result.append(SPACE)
-    if (result.length > 1 && result(result.length - 2) == ANGLE_BRACKET_OPEN) {
-      result.setCharAt(result.length - 2, SPACE)
-      result.setCharAt(result.length - 1, ANGLE_BRACKET_OPEN)
-    } else if (result.length > 1 && result(result.length - 2) == MINUS_SIGN) {
-      result.setCharAt(result.length - 2, SPACE)
-      result.setCharAt(result.length - 1, MINUS_SIGN)
     }
   }
 
@@ -850,7 +833,7 @@ class ToNumberParser(numberFormat: String, errorOnFail: Boolean) extends Seriali
   private def stripTrailingLoneDecimalPoint(result: StringBuilder): Unit = {
     val i = result.indexOf(POINT_SIGN)
     if (i != -1 && (i == result.length - 1 || result(i + 1) == SPACE)) {
-      result(i) = SPACE
+      result.deleteCharAt(i)
     }
   }
 }

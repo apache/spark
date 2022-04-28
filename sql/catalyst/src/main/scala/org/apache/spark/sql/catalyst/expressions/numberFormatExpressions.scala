@@ -38,11 +38,11 @@ import org.apache.spark.unsafe.types.UTF8String
          '0' or '9': Specifies an expected digit between 0 and 9. A sequence of 0 or 9 in the format
            string matches a sequence of digits in the input string. If the 0/9 sequence starts with
            0 and is before the decimal point, it can only match a digit sequence of the same size.
-           Otherwise, if the sequence starts with 9 or is after the decimal poin, it can match a
+           Otherwise, if the sequence starts with 9 or is after the decimal point, it can match a
            digit sequence that has the same or smaller size.
          '.' or 'D': Specifies the position of the decimal point (optional, only allowed once).
          ',' or 'G': Specifies the position of the grouping (thousands) separator (,). There must be
-           one or more 0 or 9 to the left of the rightmost grouping separator. 'expr' must match the
+           a 0 or 9 to the left and right of each grouping separator. 'expr' must match the
            grouping separator relevant for the size of the number.
          '$': Specifies the location of the $ currency sign. This character may only be specified
            once.
@@ -176,8 +176,24 @@ case class TryToNumber(left: Expression, right: Expression)
 @ExpressionDescription(
   usage = """
     _FUNC_(numberExpr, formatExpr) - Convert `numberExpr` to a string based on the `formatExpr`.
-      Throws an exception if the conversion fails. The format follows the same semantics as the
-      to_number function.
+      Throws an exception if the conversion fails. The format can consist of the following
+      characters, case insensitive:
+        '0' or '9': Specifies an expected digit between 0 and 9. A sequence of 0 or 9 in the format
+          string matches a sequence of digits in the input value, generating a result string of the
+          same length as the corresponding sequence in the format string. The result string is
+          left-padded with zeros if the 0/9 sequence comprises more digits than the matching part of
+          the decimal value, starts with 0, and is before the decimal point. Otherwise, if the
+          sequence starts with 9 or is after the decimal point, it is left-padded with spaces.
+        '.' or 'D': Specifies the position of the decimal point (optional, only allowed once).
+        ',' or 'G': Specifies the position of the grouping (thousands) separator (,). There must be
+          a 0 or 9 to the left and right of each grouping separator.
+        '$': Specifies the location of the $ currency sign. This character may only be specified
+          once.
+        'S' or 'MI': Specifies the position of a '-' or '+' sign (optional, only allowed once at
+          the beginning or end of the format string). Note that 'S' allows '-' but 'MI' does not.
+        'PR': Only allowed at the end of the format string; specifies that 'expr' indicates a
+          negative number with wrapping angled brackets.
+          ('<1>').
   """,
   examples = """
     Examples:
