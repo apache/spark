@@ -36,4 +36,19 @@ class RDDOperationGraphSuite extends SparkFunSuite {
 
     assert(c1 == c1copy)
   }
+
+  test("Test formatting DeterministicLevel") {
+    val n1 = new RDDOperationNode(3, "Marvin", false, false, "collect!",
+      DeterministicLevel.INDETERMINATE)
+    val n2 = new RDDOperationNode(3, "Marvin", false, false, "collect!",
+      DeterministicLevel.UNORDERED)
+    val n3 = new RDDOperationNode(3, "Marvin", false, false, "collect!",
+      DeterministicLevel.DETERMINATE)
+    val n4 = new RDDOperationNode(3, "Marvin", false, false, "collect!")
+
+    assert( " [Indeterminate]" === RDDOperationGraph.formatDeterministicLevel(n1))
+    assert( " [Unordered]" === RDDOperationGraph.formatDeterministicLevel(n2))
+    assert( "" === RDDOperationGraph.formatDeterministicLevel(n3))
+    assert( "" === RDDOperationGraph.formatDeterministicLevel(n4))
+  }
 }

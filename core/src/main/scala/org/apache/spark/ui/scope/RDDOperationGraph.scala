@@ -50,7 +50,7 @@ private[spark] case class RDDOperationNode(
     cached: Boolean,
     barrier: Boolean,
     callsite: String,
-    outputDeterministicLevel: DeterministicLevel.Value)
+    outputDeterministicLevel: DeterministicLevel.Value = DeterministicLevel.DETERMINATE)
 
 /**
  * A directed edge connecting two nodes in an RDDOperationGraph.
@@ -254,11 +254,7 @@ private[spark] object RDDOperationGraph extends Logging {
     } else {
       ""
     }
-    val outputDeterministicLevel = node.outputDeterministicLevel match {
-      case DeterministicLevel.DETERMINATE => ""
-      case DeterministicLevel.INDETERMINATE => " [Indeterminate]"
-      case DeterministicLevel.UNORDERED => " [Unordered]"
-    }
+    val outputDeterministicLevel = formatDeterministicLevel(node)
     val escapedCallsite = Utility.escape(node.callsite)
     val label = s"${node.name} [${node.id}]$isCached$isBarrier$outputDeterministicLevel" +
       s"<br>${escapedCallsite}"
@@ -279,5 +275,13 @@ private[spark] object RDDOperationGraph extends Logging {
       makeDotSubgraph(subgraph, cscope, indent + "  ")
     }
     subgraph.append(indent).append("}\n")
+  }
+
+  def formatDeterministicLevel(node: RDDOperationNode): String = {
+    node.outputDeterministicLevel match {
+      case DeterministicLevel.INDETERMINATE => " [Indeterminate]"
+      case DeterministicLevel.UNORDERED => " [Unordered]"
+      case _ => ""
+    }
   }
 }
