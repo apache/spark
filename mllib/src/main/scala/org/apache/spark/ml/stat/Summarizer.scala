@@ -596,7 +596,7 @@ private[spark] class SummarizerBuffer(
         // merge max and min
         if (currMax != null) { currMax(i) = math.max(currMax(i), other.currMax(i)) }
         if (currMin != null) { currMin(i) = math.min(currMin(i), other.currMin(i)) }
-        if (nnz != null) { nnz(i) = nnz(i) + other.nnz(i) }
+        if (nnz != null) { nnz(i) += other.nnz(i) }
         i += 1
       }
     } else if (totalWeightSum == 0.0 && other.totalWeightSum != 0.0) {
