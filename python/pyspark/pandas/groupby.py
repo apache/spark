@@ -2759,19 +2759,21 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         sfun : The aggregate function to apply per column
         accepted_spark_types: Accepted spark types of columns to be aggregated;
                               default None means all spark types are accepted
-        bool_to_numeric: If True, boolean columns are converted to numeric columns
+        bool_to_numeric: If True, boolean columns are converted to numeric columns, which
+                         are accepted for all statistical functions regardless of
+                         `accepted_spark_types`.
         """
         groupkey_names = [SPARK_INDEX_NAME_FORMAT(i) for i in range(len(self._groupkeys))]
         groupkey_scols = [s.alias(name) for s, name in zip(self._groupkeys_scols, groupkey_names)]
 
         agg_columns = []
         for psser in self._agg_columns:
-            if (accepted_spark_types is None) or isinstance(
+            if bool_to_numeric and isinstance(psser.spark.data_type, BooleanType):
+                agg_columns.append(psser.astype(int))
+            elif (accepted_spark_types is None) or isinstance(
                 psser.spark.data_type, accepted_spark_types
             ):
                 agg_columns.append(psser)
-            elif bool_to_numeric and isinstance(psser.spark.data_type, BooleanType):
-                agg_columns.append(psser.astype(int))
 
         sdf = self._psdf._internal.spark_frame.select(
             *groupkey_scols, *[psser.spark.column for psser in agg_columns]
