@@ -476,6 +476,21 @@ class QueryCompilationErrorsSuite
       checkAnswer(sql("SELECT __auto_generated_subquery_name.i from (SELECT i FROM v)"), Row(1))
     }
   }
+
+  test("AMBIGUOUS_FIELD_NAME: alter column matching multi fields in the struct") {
+    withTable("t") {
+      withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+        sql("CREATE TABLE t(c struct<X:String, x:String>) USING parquet")
+      }
+
+      checkErrorClass(
+        exception = intercept[AnalysisException] {
+          sql("ALTER TABLE t CHANGE COLUMN c.X COMMENT 'new comment'")
+        },
+        errorClass = "AMBIGUOUS_FIELD_NAME",
+        msg = "Field name c.X is ambiguous and has 2 matching fields in the struct.; line 1 pos 0")
+    }
+  }
 }
 
 class MyCastToString extends SparkUserDefinedFunction(
