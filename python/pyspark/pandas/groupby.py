@@ -37,6 +37,7 @@ from typing import (
     Sequence,
     Set,
     Tuple,
+    Type,
     Union,
     cast,
     TYPE_CHECKING,
@@ -2748,7 +2749,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
     def _reduce_for_stat_function(
         self,
         sfun: Callable[[Column], Column],
-        accepted_spark_types: Optional[Tuple[DataType, ...]] = None,
+        accepted_spark_types: Optional[Tuple[Type[DataType], ...]] = None,
         bool_to_numeric: bool = False,
     ) -> FrameLike:
         """Apply an aggregate function `sfun` per column and reduce to a FrameLike.
