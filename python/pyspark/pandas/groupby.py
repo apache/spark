@@ -2766,7 +2766,9 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
 
         agg_columns = []
         for psser in self._agg_columns:
-            if isinstance(psser.spark.data_type, accepted_spark_types):
+            if (accepted_spark_types is None) or isinstance(
+                psser.spark.data_type, accepted_spark_types
+            ):
                 agg_columns.append(psser)
             elif bool_to_numeric and isinstance(psser.spark.data_type, BooleanType):
                 agg_columns.append(psser.astype(int))
