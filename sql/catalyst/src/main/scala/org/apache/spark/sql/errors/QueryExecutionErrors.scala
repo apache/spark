@@ -1619,13 +1619,6 @@ object QueryExecutionErrors extends QueryErrorsBase {
     new SparkException(s"Can not load in UserDefinedType ${name} for user class ${userClass}.")
   }
 
-  def timeZoneIdNotSpecifiedForTimestampTypeError(): Throwable = {
-    new SparkUnsupportedOperationException(
-      errorClass = "UNSUPPORTED_FEATURE",
-      messageParameters = Array("ARROW_TIMESTAMP_WITHOUT_TIMEZONE")
-    )
-  }
-
   def notPublicClassError(name: String): Throwable = {
     new UnsupportedOperationException(
       s"$name is not a public class. Only public classes are supported.")

@@ -192,9 +192,6 @@
       "AES_MODE" : {
         "message" : [ "AES-<mode> with the padding <padding> by the <functionName> function." ]
       },
-      "ARROW_TIMESTAMP_WITHOUT_TIMEZONE" : {
-        "message" : [ "TIMESTAMP must supply timeZoneId parameter while converting to the arrow timestamp type." ]
-      },
       "DISTRIBUTE_BY" : {
         "message" : [ "DISTRIBUTE BY clause." ]
       },
