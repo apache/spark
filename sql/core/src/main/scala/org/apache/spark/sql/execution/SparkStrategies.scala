@@ -101,7 +101,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
             limit, order, projectList, planLater(child), Some(offset)) :: Nil
         case LimitAndOffset(IntegerLiteral(limit), IntegerLiteral(offset), child) =>
           CollectLimitExec(limit, planLater(child), Some(offset)) :: Nil
-        case Offset(IntegerLiteral(offset), child) =>
+        case logical.Offset(IntegerLiteral(offset), child) =>
           CollectOffsetExec(offset, planLater(child)) :: Nil
         case Tail(IntegerLiteral(limit), child) =>
           CollectTailExec(limit, planLater(child)) :: Nil
