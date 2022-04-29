@@ -4601,7 +4601,7 @@ FROM num_data
 struct<>
 -- !query output
 java.lang.IllegalArgumentException
-The input Decimal value '7799461.4119000000' does not match the given number format: '9G999G999G999G999G999'
+The input Decimal value '16397.0384910000' does not match the given number format: '9G999G999G999G999G999'
 
 
 -- !query
