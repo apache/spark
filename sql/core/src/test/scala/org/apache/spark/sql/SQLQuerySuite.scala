@@ -4323,7 +4323,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     }
   }
 
-  test("SPARK-39012: SparkSQL infer schema does not support all data types") {
+  test("SPARK-39012: SparkSQL cast partition value does not support all data types") {
     withTempDir { dir =>
       val binary1 = Hex.hex(UTF8String.fromString("Spark").getBytes).getBytes
       val binary2 = Hex.hex(UTF8String.fromString("SQL").getBytes).getBytes
