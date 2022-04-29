@@ -52,9 +52,6 @@ object RewriteDeleteFromTable extends RewriteRowLevelCommand {
           // don't rewrite as the table supports deletes only with filters
           d
 
-        case DataSourceV2Relation(t, _, _, _, _) =>
-          throw QueryCompilationErrors.tableDoesNotSupportDeletesError(t)
-
         case _ =>
           d
       }
