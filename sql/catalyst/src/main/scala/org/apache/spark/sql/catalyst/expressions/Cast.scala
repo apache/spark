@@ -2363,4 +2363,8 @@ case class UnwrapUDT(child: Expression) extends UnaryExpression with NonSQLExpre
   override def nullSafeEval(input: Any): Any = input
 
   override def prettyName: String = "unwrap_udt"
+
+  override protected def withNewChildInternal(newChild: Expression): UnwrapUDT = {
+    copy(child = newChild)
+  }
 }
