@@ -206,6 +206,14 @@ object RowSetUtils {
       case FloatType =>
         val tDoubleValue = new TDoubleValue
         if (!row.isNullAt(ordinal)) {
+          // Floats are converted to doubles during thrift transportation.
+          // Passing float to Double.valueOf causes precision loss, e.g.
+          // scala> java.lang.Double.valueOf(0.1f)
+          // res0: Double = 0.10000000149011612
+          //
+          // hereby toString is called ahead.
+          // scala> java.lang.Double.valueOf(0.1f.toString)
+          // res1: Double = 0.1
           val doubleValue = java.lang.Double.valueOf(row.getFloat(ordinal).toString)
           tDoubleValue.setValue(doubleValue)
         }
