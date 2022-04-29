@@ -169,7 +169,7 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
 
     checkAnswer(
       df.select(from_json($"value", schema, options)),
-      Row(Row("18")) :: Nil)
+      Row(Row(18)) :: Nil)
   }
 
   test("from_json with option (allowBackslashEscapingAnyCharacter)") {
