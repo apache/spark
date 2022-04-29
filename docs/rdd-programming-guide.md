@@ -101,11 +101,11 @@ import org.apache.spark.SparkConf;
 
 <div data-lang="python"  markdown="1">
 
-Spark {{site.SPARK_VERSION}} works with Python 3.6+. It can use the standard CPython interpreter,
-so C libraries like NumPy can be used. It also works with PyPy 2.3+.
+Spark {{site.SPARK_VERSION}} works with Python 3.7+. It can use the standard CPython interpreter,
+so C libraries like NumPy can be used. It also works with PyPy 7.3.6+.
 
 Python 2, 3.4 and 3.5 supports were removed in Spark 3.1.0.
-Python 3.6 support is deprecated in Spark 3.2.0.
+Python 3.6 support was removed in Spark 3.3.0.
 
 Spark applications in Python can either be run with the `bin/spark-submit` script which includes Spark at runtime, or by including it in your setup.py as:
 
@@ -241,12 +241,12 @@ For a complete list of options, run `spark-shell --help`. Behind the scenes,
 In the PySpark shell, a special interpreter-aware SparkContext is already created for you, in the
 variable called `sc`. Making your own SparkContext will not work. You can set which master the
 context connects to using the `--master` argument, and you can add Python .zip, .egg or .py files
-to the runtime path by passing a comma-separated list to `--py-files`. You can also add dependencies
+to the runtime path by passing a comma-separated list to `--py-files`. For third-party Python dependencies,
+see [Python Package Management](api/python/user_guide/python_packaging.html). You can also add dependencies
 (e.g. Spark Packages) to your shell session by supplying a comma-separated list of Maven coordinates
 to the `--packages` argument. Any additional repositories where dependencies might exist (e.g. Sonatype)
-can be passed to the `--repositories` argument. Any Python dependencies a Spark package has (listed in
-the requirements.txt of that package) must be manually installed using `pip` when necessary.
-For example, to run `bin/pyspark` on exactly four cores, use:
+can be passed to the `--repositories` argument. For example, to run
+`bin/pyspark` on exactly four cores, use:
 
 {% highlight bash %}
 $ ./bin/pyspark --master local[4]
@@ -442,7 +442,7 @@ Apart from text files, Spark's Python API also supports several other data forma
 **Writable Support**
 
 PySpark SequenceFile support loads an RDD of key-value pairs within Java, converts Writables to base Java types, and pickles the
-resulting Java objects using [Pyrolite](https://github.com/irmen/Pyrolite/). When saving an RDD of key-value pairs to SequenceFile,
+resulting Java objects using [pickle](https://github.com/irmen/pickle/). When saving an RDD of key-value pairs to SequenceFile,
 PySpark does the reverse. It unpickles Python objects into Java objects and then converts them to Writables. The following
 Writables are automatically converted:
 
@@ -500,7 +500,7 @@ the key and value classes can easily be converted according to the above table,
 then this approach should work well for such cases.
 
 If you have custom serialized binary data (such as loading data from Cassandra / HBase), then you will first need to
-transform that data on the Scala/Java side to something which can be handled by Pyrolite's pickler.
+transform that data on the Scala/Java side to something which can be handled by pickle's pickler.
 A [Converter](api/scala/org/apache/spark/api/python/Converter.html) trait is provided
 for this. Simply extend this trait and implement your transformation code in the ```convert```
 method. Remember to ensure that this class, along with any dependencies required to access your ```InputFormat```, are packaged into your Spark job jar and included on the PySpark

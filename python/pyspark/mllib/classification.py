@@ -677,7 +677,7 @@ class NaiveBayesModel(Saveable, Loader):
         """
         java_model = sc._jvm.org.apache.spark.mllib.classification.NaiveBayesModel.load(
             sc._jsc.sc(), path)
-        # Can not unpickle array.array from Pyrolite in Python3 with "bytes"
+        # Can not unpickle array.array from Pickle in Python3 with "bytes"
         py_labels = _java2py(sc, java_model.labels(), "latin1")
         py_pi = _java2py(sc, java_model.pi(), "latin1")
         py_theta = _java2py(sc, java_model.theta(), "latin1")

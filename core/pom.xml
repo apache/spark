@@ -421,14 +421,8 @@
     </dependency>
     <dependency>
       <groupId>net.razorvine</groupId>
-      <artifactId>pyrolite</artifactId>
-      <version>4.30</version>
-      <exclusions>
-        <exclusion>
-          <groupId>net.razorvine</groupId>
-          <artifactId>serpent</artifactId>
-        </exclusion>
-      </exclusions>
+      <artifactId>pickle</artifactId>
+      <version>1.2</version>
     </dependency>
     <dependency>
       <groupId>net.sf.py4j</groupId>

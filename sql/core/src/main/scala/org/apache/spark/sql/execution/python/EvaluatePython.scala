@@ -45,7 +45,7 @@ object EvaluatePython {
   }
 
   /**
-   * Helper for converting from Catalyst type to java type suitable for Pyrolite.
+   * Helper for converting from Catalyst type to java type suitable for Pickle.
    */
   def toJava(obj: Any, dataType: DataType): Any = (obj, dataType) match {
     case (null, _) => null

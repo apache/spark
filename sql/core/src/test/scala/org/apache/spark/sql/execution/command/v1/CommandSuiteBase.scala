@@ -28,7 +28,8 @@ import org.apache.spark.sql.test.SharedSparkSession
  * settings for all unified datasource V1 and V2 test suites.
  */
 trait CommandSuiteBase extends SharedSparkSession {
-  def version: String = "V1" // The prefix is added to test names
+  def catalogVersion: String = "V1" // The catalog version is added to test names
+  def commandVersion: String = "V1" // The command version is added to test names
   def catalog: String = CatalogManager.SESSION_CATALOG_NAME
   def defaultUsing: String = "USING parquet" // The clause is used in creating tables under testing
 

@@ -52,6 +52,32 @@ package object config extends Logging {
       .timeConf(TimeUnit.MILLISECONDS)
       .createOptional
 
+  private[spark] val AM_CLIENT_MODE_TREAT_DISCONNECT_AS_FAILED =
+    ConfigBuilder("spark.yarn.am.clientModeTreatDisconnectAsFailed")
+      .doc("Treat yarn-client unclean disconnects as failures. In yarn-client mode, normally the " +
+        "application will always finish with a final status of SUCCESS because in some cases, " +
+        "it is not possible to know if the Application was terminated intentionally by the user " +
+        "or if there was a real error. This config changes that behavior such that " +
+        "if the Application Master disconnects from the driver uncleanly (ie without the proper" +
+        " shutdown handshake) the application will terminate with a final status of FAILED. " +
+        "This will allow the caller to decide if it was truly a failure. Note that " +
+        "if this config is set and the user just terminate the client application badly " +
+        "it may show a status of FAILED when it wasn't really FAILED.")
+      .version("3.3.0")
+      .booleanConf
+      .createWithDefault(false)
+
+  private[spark] val AM_CLIENT_MODE_EXIT_ON_ERROR =
+    ConfigBuilder("spark.yarn.am.clientModeExitOnError")
+      .doc("In yarn-client mode, when this is true, if driver got " +
+        "application report with final status of KILLED or FAILED, " +
+        "driver will stop corresponding SparkContext and exit program with code 1. " +
+        "Note, if this is true and called from another application, it will terminate " +
+        "the parent application as well.")
+      .version("3.3.0")
+      .booleanConf
+      .createWithDefault(false)
+
   private[spark] val EXECUTOR_ATTEMPT_FAILURE_VALIDITY_INTERVAL_MS =
     ConfigBuilder("spark.yarn.executor.failuresValidityInterval")
       .doc("Interval after which Executor failures will be considered independent and not " +

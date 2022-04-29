@@ -22,6 +22,7 @@ import scala.util.Random
 import org.apache.spark.AccumulatorSuite
 import org.apache.spark.sql.{RandomDataGenerator, Row}
 import org.apache.spark.sql.catalyst.dsl.expressions._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 
@@ -124,12 +125,16 @@ class SortSuite extends SparkPlanTest with SharedSparkSession {
         sparkContext.parallelize(Random.shuffle(inputData).map(v => Row(v))),
         StructType(StructField("a", dataType, nullable = true) :: Nil)
       )
-      checkThatPlansAgree(
-        inputDf,
-        p => SortExec(sortOrder, global = true, p: SparkPlan, testSpillFrequency = 23),
-        ReferenceSort(sortOrder, global = true, _: SparkPlan),
-        sortAnswers = false
-      )
+      Seq(true, false).foreach { enableRadix =>
+        withSQLConf(SQLConf.RADIX_SORT_ENABLED.key -> enableRadix.toString) {
+          checkThatPlansAgree(
+            inputDf,
+            p => SortExec(sortOrder, global = true, p: SparkPlan, testSpillFrequency = 23),
+            ReferenceSort(sortOrder, global = true, _: SparkPlan),
+            sortAnswers = false
+          )
+        }
+      }
     }
   }
 }

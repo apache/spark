@@ -19,7 +19,7 @@
 from typing import List, Optional, overload, Union
 from typing_extensions import Literal
 
-from numpy import ndarray  # type: ignore[import]
+from numpy import ndarray
 
 from pyspark.mllib.common import JavaModelWrapper
 from pyspark.mllib.linalg import Vector, Matrix

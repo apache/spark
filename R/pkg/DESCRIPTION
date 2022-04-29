@@ -13,7 +13,7 @@ Authors@R: c(person("Shivaram", "Venkataraman", role = "aut",
 License: Apache License (== 2.0)
 URL: https://www.apache.org https://spark.apache.org
 BugReports: https://spark.apache.org/contributing.html
-SystemRequirements: Java (>= 8, < 12)
+SystemRequirements: Java (>= 8, < 18)
 Depends:
     R (>= 3.5),
     methods

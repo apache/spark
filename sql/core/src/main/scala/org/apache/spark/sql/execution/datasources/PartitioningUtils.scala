@@ -29,14 +29,13 @@ import scala.util.control.NonFatal
 
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.{InternalRow, SQLConfHelper}
 import org.apache.spark.sql.catalyst.analysis.TypeCoercion
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.catalog.ExternalCatalogUtils.getPartitionValueString
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Cast, Literal}
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateFormatter, DateTimeUtils, TimestampFormatter}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.SchemaUtils
 import org.apache.spark.unsafe.types.UTF8String
@@ -62,7 +61,7 @@ object PartitionSpec {
   val emptySpec = PartitionSpec(StructType(Seq.empty[StructField]), Seq.empty[PartitionPath])
 }
 
-object PartitioningUtils {
+object PartitioningUtils extends SQLConfHelper{
 
   val timestampPartitionPattern = "yyyy-MM-dd HH:mm:ss[.S]"
 
@@ -491,7 +490,7 @@ object PartitioningUtils {
     val timestampTry = Try {
       val unescapedRaw = unescapePathName(raw)
       // the inferred data type is consistent with the default timestamp type
-      val timestampType = SQLConf.get.timestampType
+      val timestampType = conf.timestampType
       // try and parse the date, if no exception occurs this is a candidate to be resolved as
       // TimestampType or TimestampNTZType
       timestampType match {
@@ -556,7 +555,7 @@ object PartitioningUtils {
     SchemaUtils.checkColumnNameDuplication(
       partitionColumns, partitionColumns.mkString(", "), caseSensitive)
 
-    partitionColumnsSchema(schema, partitionColumns, caseSensitive).foreach {
+    partitionColumnsSchema(schema, partitionColumns).foreach {
       field => field.dataType match {
         case _: AtomicType => // OK
         case _ => throw QueryCompilationErrors.cannotUseDataTypeForPartitionColumnError(field)
@@ -570,11 +569,9 @@ object PartitioningUtils {
 
   def partitionColumnsSchema(
       schema: StructType,
-      partitionColumns: Seq[String],
-      caseSensitive: Boolean): StructType = {
-    val equality = columnNameEquality(caseSensitive)
+      partitionColumns: Seq[String]): StructType = {
     StructType(partitionColumns.map { col =>
-      schema.find(f => equality(f.name, col)).getOrElse {
+      schema.find(f => conf.resolver(f.name, col)).getOrElse {
         val schemaCatalog = schema.catalogString
         throw QueryCompilationErrors.partitionColumnNotFoundInSchemaError(col, schemaCatalog)
       }
@@ -607,14 +604,6 @@ object PartitioningUtils {
       f.name
     } else {
       f.name.toLowerCase(Locale.ROOT)
-    }
-  }
-
-  private def columnNameEquality(caseSensitive: Boolean): (String, String) => Boolean = {
-    if (caseSensitive) {
-      org.apache.spark.sql.catalyst.analysis.caseSensitiveResolution
-    } else {
-      org.apache.spark.sql.catalyst.analysis.caseInsensitiveResolution
     }
   }
 

@@ -606,7 +606,7 @@ SELECT CAST(q1 AS int) FROM int8_tbl WHERE q2 <> 456
 -- !query schema
 struct<>
 -- !query output
-java.lang.ArithmeticException
+org.apache.spark.SparkArithmeticException
 Casting 4567890123456789 to int causes overflow
 
 
@@ -623,7 +623,7 @@ SELECT CAST(q1 AS smallint) FROM int8_tbl WHERE q2 <> 456
 -- !query schema
 struct<>
 -- !query output
-java.lang.ArithmeticException
+org.apache.spark.SparkArithmeticException
 Casting 4567890123456789 to smallint causes overflow
 
 
@@ -660,7 +660,7 @@ SELECT CAST(double('922337203685477580700.0') AS bigint)
 -- !query schema
 struct<>
 -- !query output
-java.lang.ArithmeticException
+org.apache.spark.SparkArithmeticException
 Casting 9.223372036854776E20 to long causes overflow
 
 
@@ -732,7 +732,7 @@ SELECT string(int(shiftleft(bigint(-1), 63))+1)
 -- !query schema
 struct<>
 -- !query output
-java.lang.ArithmeticException
+org.apache.spark.SparkArithmeticException
 Casting -9223372036854775808 to int causes overflow
 
 

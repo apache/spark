@@ -503,6 +503,12 @@ class OpsOnDiffFramesEnabledTest(PandasOnSparkTestCase, SQLTestUtils):
             (pdf1.A + 1).loc[pdf2.A > -3].sort_index(), (psdf1.A + 1).loc[psdf2.A > -3].sort_index()
         )
 
+        pser = pd.Series([0, 1, 2, 3, 4], index=[20, 10, 30, 0, 50])
+        psser = ps.from_pandas(pser)
+        self.assert_eq(pser.loc[pdf2.A > -3].sort_index(), psser.loc[psdf2.A > -3].sort_index())
+        pser.name = psser.name = "B"
+        self.assert_eq(pser.loc[pdf2.A > -3].sort_index(), psser.loc[psdf2.A > -3].sort_index())
+
     def test_bitwise(self):
         pser1 = pd.Series([True, False, True, False, np.nan, np.nan, True, False, np.nan])
         pser2 = pd.Series([True, False, False, True, True, False, np.nan, np.nan, np.nan])
@@ -1358,6 +1364,15 @@ class OpsOnDiffFramesEnabledTest(PandasOnSparkTestCase, SQLTestUtils):
         self.assert_eq(psser.sort_index(), pser.sort_index())
         self.assert_eq(psdf.sort_index(), pdf.sort_index())
 
+        pser1 = pd.Series([None, 2, 3, 4, 5, 6, 7, 8, None])
+        pser2 = pd.Series([None, 5, None, 3, 2, 1, None, 0, 0])
+        psser1 = ps.from_pandas(pser1)
+        psser2 = ps.from_pandas(pser2)
+
+        pser1.update(pser2)
+        psser1.update(psser2)
+        self.assert_eq(psser1, pser1)
+
     def test_where(self):
         pdf1 = pd.DataFrame({"A": [0, 1, 2, 3, 4], "B": [100, 200, 300, 400, 500]})
         pdf2 = pd.DataFrame({"A": [0, -1, -2, -3, -4], "B": [-100, -200, -300, -400, -500]})
@@ -1501,6 +1516,23 @@ class OpsOnDiffFramesEnabledTest(PandasOnSparkTestCase, SQLTestUtils):
         psdf = ps.DataFrame({"c": [7, 8, 9]})
         pdf = psdf.to_pandas()
         self.assert_eq(psser.dot(psdf), pser.dot(pdf))
+
+        # SPARK-36968: ps.Series.dot raise "matrices are not aligned" if index is not same
+        pser = pd.Series([90, 91, 85], index=[0, 1, 2])
+        psser = ps.from_pandas(pser)
+        pser_other = pd.Series([90, 91, 85], index=[0, 1, 3])
+        psser_other = ps.from_pandas(pser_other)
+
+        with self.assertRaisesRegex(ValueError, "matrices are not aligned"):
+            psser.dot(psser_other)
+
+        with ps.option_context("compute.eager_check", True), self.assertRaisesRegex(
+            ValueError, "matrices are not aligned"
+        ):
+            psser.dot(psser_other)
+
+        with ps.option_context("compute.eager_check", False):
+            self.assert_eq(psser.dot(psser_other), 16381)
 
     def test_frame_dot(self):
         pdf = pd.DataFrame([[0, 1, -2, -1], [1, 1, 1, 1]])
@@ -1830,6 +1862,29 @@ class OpsOnDiffFramesEnabledTest(PandasOnSparkTestCase, SQLTestUtils):
         pscov = psser1.cov(psser2, min_periods=3)
         self.assert_eq(pcov, pscov, almost=True)
 
+    def test_series_eq(self):
+        pser = pd.Series([1, 2, 3, 4, 5, 6], name="x")
+        psser = ps.from_pandas(pser)
+
+        # other = Series
+        pandas_other = pd.Series([np.nan, 1, 3, 4, np.nan, 6], name="x")
+        pandas_on_spark_other = ps.from_pandas(pandas_other)
+        self.assert_eq(pser.eq(pandas_other), psser.eq(pandas_on_spark_other).sort_index())
+        self.assert_eq(pser == pandas_other, (psser == pandas_on_spark_other).sort_index())
+
+        # other = Series with different Index
+        pandas_other = pd.Series(
+            [np.nan, 1, 3, 4, np.nan, 6], index=[10, 20, 30, 40, 50, 60], name="x"
+        )
+        pandas_on_spark_other = ps.from_pandas(pandas_other)
+        self.assert_eq(pser.eq(pandas_other), psser.eq(pandas_on_spark_other).sort_index())
+
+        # other = Index
+        pandas_other = pd.Index([np.nan, 1, 3, 4, np.nan, 6], name="x")
+        pandas_on_spark_other = ps.from_pandas(pandas_other)
+        self.assert_eq(pser.eq(pandas_other), psser.eq(pandas_on_spark_other).sort_index())
+        self.assert_eq(pser == pandas_other, (psser == pandas_on_spark_other).sort_index())
+
 
 class OpsOnDiffFramesDisabledTest(PandasOnSparkTestCase, SQLTestUtils):
     @classmethod
@@ -1997,6 +2052,13 @@ class OpsOnDiffFramesDisabledTest(PandasOnSparkTestCase, SQLTestUtils):
         with self.assertRaisesRegex(ValueError, "Cannot combine the series or dataframe"):
             psser.rpow(psser_other)
 
+    def test_equals(self):
+        psidx1 = ps.Index([1, 2, 3, 4])
+        psidx2 = ps.Index([1, 2, 3, 4])
+
+        with self.assertRaisesRegex(ValueError, "Cannot combine the series or dataframe"):
+            psidx1.equals(psidx2)
+
     def test_combine_first(self):
         pdf1 = pd.DataFrame({"A": [None, 0], "B": [4, None]})
         psdf1 = ps.from_pandas(pdf1)
@@ -2016,6 +2078,20 @@ class OpsOnDiffFramesDisabledTest(PandasOnSparkTestCase, SQLTestUtils):
         psdf2 = ps.from_pandas(pdf2)
         with self.assertRaisesRegex(ValueError, "Cannot combine the series or dataframe"):
             psdf1.combine_first(psdf2)
+
+    def test_series_eq(self):
+        pser = pd.Series([1, 2, 3, 4, 5, 6], name="x")
+        psser = ps.from_pandas(pser)
+
+        others = (
+            ps.Series([np.nan, 1, 3, 4, np.nan, 6], name="x"),
+            ps.Index([np.nan, 1, 3, 4, np.nan, 6], name="x"),
+        )
+        for other in others:
+            with self.assertRaisesRegex(ValueError, "Cannot combine the series or dataframe"):
+                psser.eq(other)
+            with self.assertRaisesRegex(ValueError, "Cannot combine the series or dataframe"):
+                psser == other
 
 
 if __name__ == "__main__":

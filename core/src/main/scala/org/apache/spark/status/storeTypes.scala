@@ -95,7 +95,7 @@ private[spark] class StageDataWrapper(
   private def active: Boolean = info.status == StageStatus.ACTIVE
 
   @JsonIgnore @KVIndex("completionTime")
-  private def completionTime: Long = info.completionTime.map(_.getTime).getOrElse(-1L)
+  def completionTime: Long = info.completionTime.map(_.getTime).getOrElse(-1L)
 }
 
 /**
@@ -397,6 +397,20 @@ private[spark] class ExecutorStageSummaryWrapper(
   @JsonIgnore
   def id: Array[Any] = _id
 
+}
+
+private[spark] class SpeculationStageSummaryWrapper(
+    val stageId: Int,
+    val stageAttemptId: Int,
+    val info: SpeculationStageSummary) {
+
+  @JsonIgnore @KVIndex
+  private val _id: Array[Int] = Array(stageId, stageAttemptId)
+
+  @JsonIgnore @KVIndex("stage")
+  private def stage: Array[Int] = Array(stageId, stageAttemptId)
+
+  private[this] val id: Array[Int] = _id
 }
 
 private[spark] class StreamBlockData(

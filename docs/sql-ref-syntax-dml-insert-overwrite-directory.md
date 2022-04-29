@@ -21,22 +21,33 @@ license: |
 
 ### Description
 
-The `INSERT OVERWRITE DIRECTORY` statement overwrites the existing data in the directory with the new values using a given Spark file format. The inserted rows can be specified by value expressions or result from a query.
+The `INSERT OVERWRITE DIRECTORY` statement overwrites the existing data in the directory with the new values using either spark file format or Hive Serde. 
+Hive support must be enabled to use Hive Serde. The inserted rows can be specified by value expressions or result from a query.
 
 ### Syntax
 
 ```sql
 INSERT OVERWRITE [ LOCAL ] DIRECTORY [ directory_path ]
-    USING file_format [ OPTIONS ( key = val [ , ... ] ) ]
+    { spark_format | hive_format }
     { VALUES ( { value | NULL } [ , ... ] ) [ , ( ... ) ] | query }
+```
+
+While `spark_format` is defined as
+```sql
+USING file_format [ OPTIONS ( key = val [ , ... ] ) ]
+```
+
+`hive_format` is defined as
+```sql
+[ ROW FORMAT row_format ] [ STORED AS hive_serde ]
 ```
 
 ### Parameters
 
 * **directory_path**
 
-    Specifies the destination directory. It can also be specified in `OPTIONS` using `path`.
-    The `LOCAL` keyword is used to specify that the directory is on the local file system.
+    Specifies the destination directory. The `LOCAL` keyword is used to specify that the directory is on the local file system.
+    In spark file format, it can also be specified in `OPTIONS` using `path`, but `directory_path` and `path` option can not be both specified.
 
 * **file_format**
 
@@ -46,6 +57,18 @@ INSERT OVERWRITE [ LOCAL ] DIRECTORY [ directory_path ]
 
     Specifies one or more options for the writing of the file format.
 
+* **hive_format**
+
+    Specifies the file format to use for the insert. Both `row_format` and `hive_serde` are optional. `ROW FORMAT SERDE` can only be used with `TEXTFILE`, `SEQUENCEFILE`, or `RCFILE`, while `ROW FORMAT DELIMITED` can only be used with `TEXTFILE`. If both are not defined, spark uses `TEXTFILE`.
+
+* **row_format**
+
+    Specifies the row format for this insert. Valid options are `SERDE` clause and `DELIMITED` clause. `SERDE` clause can be used to specify a custom `SerDe` for this insert. Alternatively, `DELIMITED` clause can be used to specify the native `SerDe` and state the delimiter, escape character, null character, and so on.
+
+* **hive_serde**
+
+    Specifies the file format for this insert. Valid options are `TEXTFILE`, `SEQUENCEFILE`, `RCFILE`, `ORC`, `PARQUET`, and `AVRO`. You can also specify your own input and output format using `INPUTFORMAT` and `OUTPUTFORMAT`.
+
 * **VALUES ( { value `|` NULL } [ , ... ] ) [ , ( ... ) ]**
 
     Specifies the values to be inserted. Either an explicitly specified value or a NULL can be inserted.
@@ -54,12 +77,13 @@ INSERT OVERWRITE [ LOCAL ] DIRECTORY [ directory_path ]
 * **query**
 
     A query that produces the rows to be inserted. It can be in one of following formats:
-    * a `SELECT` statement
-    * a `TABLE` statement
+    * a [SELECT](sql-ref-syntax-qry-select.html) statement
+    * a [Inline Table](sql-ref-syntax-qry-select-inline-table.html) statement
     * a `FROM` statement
 
 ### Examples
 
+#### Spark format
 ```sql
 INSERT OVERWRITE DIRECTORY '/tmp/destination'
     USING parquet
@@ -72,8 +96,18 @@ INSERT OVERWRITE DIRECTORY
     SELECT * FROM test_table;
 ```
 
+#### Hive format
+
+```sql
+INSERT OVERWRITE LOCAL DIRECTORY '/tmp/destination'
+    STORED AS orc
+    SELECT * FROM test_table;
+
+INSERT OVERWRITE LOCAL DIRECTORY '/tmp/destination'
+    ROW FORMAT DELIMITED FIELDS TERMINATED BY ','
+    SELECT * FROM test_table;
+```
+
 ### Related Statements
 
-* [INSERT INTO statement](sql-ref-syntax-dml-insert-into.html)
-* [INSERT OVERWRITE statement](sql-ref-syntax-dml-insert-overwrite-table.html)
-* [INSERT OVERWRITE DIRECTORY with Hive format statement](sql-ref-syntax-dml-insert-overwrite-directory-hive.html)
+* [INSERT TABLE statement](sql-ref-syntax-dml-insert-table.html)

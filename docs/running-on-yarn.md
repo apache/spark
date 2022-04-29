@@ -442,6 +442,29 @@ To use a custom metrics.properties for the application master and executors, upd
   <td>1.6.0</td>
 </tr>
 <tr>
+  <td><code>spark.yarn.am.clientModeTreatDisconnectAsFailed</code></td>
+  <td>false</td>
+  <td>
+  Treat yarn-client unclean disconnects as failures. In yarn-client mode, normally the application will always finish
+  with a final status of SUCCESS because in some cases, it is not possible to know if the Application was terminated
+  intentionally by the user or if there was a real error. This config changes that behavior such that if the Application
+  Master disconnects from the driver uncleanly (ie without the proper shutdown handshake) the application will
+  terminate with a final status of FAILED. This will allow the caller to decide if it was truly a failure. Note that if
+  this config is set and the user just terminate the client application badly it may show a status of FAILED when it wasn't really FAILED.
+  </td>
+  <td>3.3.0</td>
+</tr>
+<tr>
+  <td><code>spark.yarn.am.clientModeExitOnError</code></td>
+  <td>false</td>
+  <td>
+  In yarn-client mode, when this is true, if driver got application report with final status of KILLED or FAILED,
+  driver will stop corresponding SparkContext and exit program with code 1.
+  Note, if this is true and called from another application, it will terminate the parent application as well.
+  </td>
+  <td>3.3.0</td>
+</tr>
+<tr>
   <td><code>spark.yarn.executor.failuresValidityInterval</code></td>
   <td>(none)</td>
   <td>
@@ -627,7 +650,7 @@ For example, suppose you would like to point log url link to Job History Server 
 
 <code>&#123;&#123;HTTP_SCHEME&#125;&#125;&lt;JHS_HOST&gt;:&lt;JHS_PORT&gt;/jobhistory/logs/&#123;&#123;NM_HOST&#125;&#125;:&#123;&#123;NM_PORT&#125;&#125;/&#123;&#123;CONTAINER_ID&#125;&#125;/&#123;&#123;CONTAINER_ID&#125;&#125;/&#123;&#123;USER&#125;&#125;/&#123;&#123;FILE_NAME&#125;&#125;?start=-4096</code>
 
-NOTE: you need to replace `<JHS_POST>` and `<JHS_PORT>` with actual value.
+NOTE: you need to replace `<JHS_HOST>` and `<JHS_PORT>` with actual value.
 
 # Resource Allocation and Configuration Overview
 
@@ -781,6 +804,17 @@ The following extra configuration options are available when the shuffle service
   <td>
     The namespace to use when emitting shuffle service metrics into Hadoop metrics2 system of the
     NodeManager.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.yarn.shuffle.service.logs.namespace</code></td>
+  <td><code>(not set)</code></td>
+  <td>
+    A namespace which will be appended to the class name when forming the logger name to use for
+    emitting logs from the YARN shuffle service, like
+    <code>org.apache.spark.network.yarn.YarnShuffleService.logsNamespaceValue</code>. Since some logging frameworks
+    may expect the logger name to look like a class name, it's generally recommended to provide a value which
+    would be a valid Java package or class name and not include spaces.
   </td>
 </tr>
 </table>

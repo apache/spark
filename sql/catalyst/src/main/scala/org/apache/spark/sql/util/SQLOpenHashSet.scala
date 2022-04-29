@@ -20,6 +20,7 @@ package org.apache.spark.sql.util
 import scala.reflect._
 
 import org.apache.spark.annotation.Private
+import org.apache.spark.sql.catalyst.util.ArrayData
 import org.apache.spark.sql.types.{DataType, DoubleType, FloatType}
 import org.apache.spark.util.collection.OpenHashSet
 
@@ -60,13 +61,104 @@ class SQLOpenHashSet[@specialized(Long, Int, Double, Float) T: ClassTag](
 }
 
 object SQLOpenHashSet {
-  def isNaN(dataType: DataType): Any => Boolean = {
-    dataType match {
-      case DoubleType =>
-        (value: Any) => java.lang.Double.isNaN(value.asInstanceOf[java.lang.Double])
-      case FloatType =>
-        (value: Any) => java.lang.Float.isNaN(value.asInstanceOf[java.lang.Float])
-      case _ => (_: Any) => false
+  def withNullCheckFunc(
+      dataType: DataType,
+      hashSet: SQLOpenHashSet[Any],
+      handleNotNull: Any => Unit,
+      handleNull: () => Unit): (ArrayData, Int) => Unit = {
+    (array: ArrayData, index: Int) =>
+      if (array.isNullAt(index)) {
+        if (!hashSet.containsNull) {
+          hashSet.addNull()
+          handleNull()
+        }
+      } else {
+        val elem = array.get(index, dataType)
+        handleNotNull(elem)
+      }
+  }
+
+  def withNullCheckCode(
+      arrayContainsNull: Boolean,
+      setContainsNull: Boolean,
+      array: String,
+      index: String,
+      hashSet: String,
+      handleNotNull: (String, String) => String,
+      handleNull: String): String = {
+    if (arrayContainsNull) {
+      if (setContainsNull) {
+        s"""
+           |if ($array.isNullAt($index)) {
+           |  if (!$hashSet.containsNull()) {
+           |    $hashSet.addNull();
+           |    $handleNull
+           |  }
+           |} else {
+           |  ${handleNotNull(array, index)}
+           |}
+         """.stripMargin
+      } else {
+        s"""
+           |if (!$array.isNullAt($index)) {
+           | ${handleNotNull(array, index)}
+           |}
+         """.stripMargin
+      }
+    } else {
+      handleNotNull(array, index)
     }
+  }
+
+  def withNaNCheckFunc(
+      dataType: DataType,
+      hashSet: SQLOpenHashSet[Any],
+      handleNotNaN: Any => Unit,
+      handleNaN: Any => Unit): Any => Unit = {
+    val (isNaN, valueNaN) = dataType match {
+      case DoubleType =>
+        ((value: Any) => java.lang.Double.isNaN(value.asInstanceOf[java.lang.Double]),
+          java.lang.Double.NaN)
+      case FloatType =>
+        ((value: Any) => java.lang.Float.isNaN(value.asInstanceOf[java.lang.Float]),
+          java.lang.Float.NaN)
+      case _ => ((_: Any) => false, null)
+    }
+    (value: Any) =>
+      if (isNaN(value)) {
+        if (!hashSet.containsNaN) {
+          hashSet.addNaN()
+          handleNaN(valueNaN)
+        }
+      } else {
+        handleNotNaN(value)
+      }
+  }
+
+  def withNaNCheckCode(
+      dataType: DataType,
+      valueName: String,
+      hashSet: String,
+      handleNotNaN: String,
+      handleNaN: String => String): String = {
+    val ret = dataType match {
+      case DoubleType =>
+        Some((s"java.lang.Double.isNaN((double)$valueName)", "java.lang.Double.NaN"))
+      case FloatType =>
+        Some((s"java.lang.Float.isNaN((float)$valueName)", "java.lang.Float.NaN"))
+      case _ => None
+    }
+    ret.map { case (isNaN, valueNaN) =>
+      s"""
+         |if ($isNaN) {
+         |  if (!$hashSet.containsNaN()) {
+         |     $hashSet.addNaN();
+         |     ${handleNaN(valueNaN)}
+         |  }
+         |} else {
+         |  $handleNotNaN
+         |}
+       """.stripMargin
+    }.getOrElse(handleNotNaN)
   }
 }

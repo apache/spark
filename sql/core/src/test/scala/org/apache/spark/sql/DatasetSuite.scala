@@ -320,23 +320,25 @@ class DatasetSuite extends QueryTest
     withSQLConf(SQLConf.SUPPORT_QUOTED_REGEX_COLUMN_NAME.key -> "false") {
       var e = intercept[AnalysisException] {
         ds.select(expr("`(_1)?+.+`").as[Int])
-      }.getMessage
-      assert(e.contains("cannot resolve '`(_1)?+.+`'"))
+      }
+      assert(e.getErrorClass == "MISSING_COLUMN")
+      assert(e.messageParameters.head == "`(_1)?+.+`")
 
       e = intercept[AnalysisException] {
         ds.select(expr("`(_1|_2)`").as[Int])
-      }.getMessage
-      assert(e.contains("cannot resolve '`(_1|_2)`'"))
+      }
+      assert(e.getErrorClass == "MISSING_COLUMN")
+      assert(e.messageParameters.head == "`(_1|_2)`")
 
       e = intercept[AnalysisException] {
         ds.select(ds("`(_1)?+.+`"))
-      }.getMessage
-      assert(e.contains("Cannot resolve column name \"`(_1)?+.+`\""))
+      }
+      assert(e.getMessage.contains("Cannot resolve column name \"`(_1)?+.+`\""))
 
       e = intercept[AnalysisException] {
         ds.select(ds("`(_1|_2)`"))
-      }.getMessage
-      assert(e.contains("Cannot resolve column name \"`(_1|_2)`\""))
+      }
+      assert(e.getMessage.contains("Cannot resolve column name \"`(_1|_2)`\""))
     }
 
     withSQLConf(SQLConf.SUPPORT_QUOTED_REGEX_COLUMN_NAME.key -> "true") {
@@ -915,7 +917,8 @@ class DatasetSuite extends QueryTest
     val e = intercept[AnalysisException] {
       ds.as[ClassData2]
     }
-    assert(e.getMessage.contains("cannot resolve 'c' given input columns: [a, b]"), e.getMessage)
+    assert(e.getErrorClass == "MISSING_COLUMN")
+    assert(e.messageParameters.sameElements(Array("c", "a, b")))
   }
 
   test("runtime nullability check") {

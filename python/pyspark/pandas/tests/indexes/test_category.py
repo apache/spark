@@ -118,7 +118,7 @@ class CategoricalIndexTest(PandasOnSparkTestCase, TestUtils):
         self.assert_eq(pidx.remove_categories(None), psidx.remove_categories(None))
         self.assert_eq(pidx.remove_categories([None]), psidx.remove_categories([None]))
 
-        self.assertRaises(ValueError, lambda: pidx.remove_categories(4, inplace=True))
+        self.assertRaises(ValueError, lambda: psidx.remove_categories(4, inplace=True))
         self.assertRaises(ValueError, lambda: psidx.remove_categories(4))
         self.assertRaises(ValueError, lambda: psidx.remove_categories([4, None]))
 
@@ -145,7 +145,7 @@ class CategoricalIndexTest(PandasOnSparkTestCase, TestUtils):
             psidx.reorder_categories([3, 2, 1], ordered=True),
         )
 
-        self.assertRaises(ValueError, lambda: pidx.reorder_categories([1, 2, 3], inplace=True))
+        self.assertRaises(ValueError, lambda: psidx.reorder_categories([1, 2, 3], inplace=True))
         self.assertRaises(ValueError, lambda: psidx.reorder_categories([1, 2]))
         self.assertRaises(ValueError, lambda: psidx.reorder_categories([1, 2, 4]))
         self.assertRaises(ValueError, lambda: psidx.reorder_categories([1, 2, 2]))
@@ -310,6 +310,10 @@ class CategoricalIndexTest(PandasOnSparkTestCase, TestUtils):
         self.assertRaises(
             TypeError,
             lambda: psidx.rename_categories("x"),
+        )
+        self.assertRaises(
+            ValueError,
+            lambda: psidx.rename_categories({"b": "B", "c": "C"}, inplace=True),
         )
 
     def test_set_categories(self):

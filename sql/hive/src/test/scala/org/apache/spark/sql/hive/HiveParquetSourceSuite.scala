@@ -23,13 +23,14 @@ import java.io.IOException
 import org.apache.spark.sql.{Row, SaveMode}
 import org.apache.spark.sql.catalyst.catalog.HiveTableRelation
 import org.apache.spark.sql.execution.datasources.LogicalRelation
+import org.apache.spark.sql.execution.datasources.parquet.ParquetTest
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 /**
  * A suite of tests for the Parquet support through the data sources API.
  */
-class HiveParquetSourceSuite extends ParquetPartitioningTest {
+class HiveParquetSourceSuite extends ParquetPartitioningTest with ParquetTest {
   import testImplicits._
   import spark._
 
@@ -379,6 +380,18 @@ class HiveParquetSourceSuite extends ParquetPartitioningTest {
             checkAnswer(sql("SELECT * FROM tbl6"), (3 to 6).map(i => Row(i, i, s"parq$i")))
           }
         }
+      }
+    }
+  }
+
+  test("SPARK-36941: Save/load ANSI intervals to Hive Parquet table") {
+    val tableName = "tbl_ansi_intervals"
+    withTable(tableName) {
+      val (ym, dt) = (java.time.Period.ofMonths(10), java.time.Duration.ofDays(1))
+      val df = Seq((ym, dt)).toDF("ym", "dt")
+      df.write.mode(SaveMode.Overwrite).format("parquet").saveAsTable(tableName)
+      withAllParquetReaders {
+        checkAnswer(sql(s"select * from $tableName"), Row(ym, dt))
       }
     }
   }

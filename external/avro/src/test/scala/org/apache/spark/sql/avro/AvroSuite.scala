@@ -1071,7 +1071,8 @@ abstract class AvroSuite
           .write.format("avro").option("avroSchema", avroSchema)
           .save(s"$tempDir/${UUID.randomUUID()}")
       }.getCause.getMessage
-      assert(message.contains("Caused by: java.lang.NullPointerException: " +
+      assert(message.contains("Caused by: java.lang.NullPointerException: "))
+      assert(message.contains(
         "null of string in string in field Name of test_schema in test_schema"))
     }
   }

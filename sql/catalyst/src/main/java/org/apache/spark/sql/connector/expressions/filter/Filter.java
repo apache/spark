@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.connector.expressions.filter;
 
+import java.io.Serializable;
+
 import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.connector.expressions.Expression;
 import org.apache.spark.sql.connector.expressions.NamedReference;
@@ -27,7 +29,7 @@ import org.apache.spark.sql.connector.expressions.NamedReference;
  * @since 3.3.0
  */
 @Evolving
-public abstract class Filter implements Expression {
+public abstract class Filter implements Expression, Serializable {
 
   protected static final NamedReference[] EMPTY_REFERENCE = new NamedReference[0];
 

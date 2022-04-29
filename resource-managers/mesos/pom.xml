@@ -29,7 +29,7 @@
   <name>Spark Project Mesos</name>
   <properties>
     <sbt.project.name>mesos</sbt.project.name>
-    <mesos.version>1.4.0</mesos.version>
+    <mesos.version>1.4.3</mesos.version>
     <mesos.classifier>shaded-protobuf</mesos.classifier>
   </properties>
 

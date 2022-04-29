@@ -19,14 +19,17 @@ package org.apache.spark.deploy.yarn
 
 import scala.collection.mutable.ArrayBuffer
 
+import org.apache.spark.internal.Logging
+
 // TODO: Add code and support for ensuring that yarn resource 'tasks' are location aware !
-private[spark] class ClientArguments(args: Array[String]) {
+private[spark] class ClientArguments(args: Array[String]) extends Logging {
 
   var userJar: String = null
   var userClass: String = null
   var primaryPyFile: String = null
   var primaryRFile: String = null
   var userArgs: ArrayBuffer[String] = new ArrayBuffer[String]()
+  var verbose: Boolean = false
 
   parseArgs(args.toList)
 
@@ -55,6 +58,10 @@ private[spark] class ClientArguments(args: Array[String]) {
           userArgs += value
           args = tail
 
+        case ("--verbose" | "-v") :: tail =>
+          verbose = true
+          args = tail
+
         case Nil =>
 
         case _ =>
@@ -65,6 +72,10 @@ private[spark] class ClientArguments(args: Array[String]) {
     if (primaryPyFile != null && primaryRFile != null) {
       throw new IllegalArgumentException("Cannot have primary-py-file and primary-r-file" +
         " at the same time")
+    }
+
+    if (verbose) {
+      logInfo(s"Parsed user args for YARN application: [${userArgs.mkString(" ")}]")
     }
   }
 
@@ -81,6 +92,7 @@ private[spark] class ClientArguments(args: Array[String]) {
       |  --primary-r-file         A main R file
       |  --arg ARG                Argument to be passed to your application's main class.
       |                           Multiple invocations are possible, each will be passed in order.
+      |  --verbose, -v            Print additional debug output.
       """.stripMargin
   }
 }

@@ -39,7 +39,9 @@ import org.apache.spark.sql.test.SQLTestUtils
  */
 trait DDLCommandTestUtils extends SQLTestUtils {
   // The version of the catalog under testing such as "V1", "V2", "Hive V1".
-  protected def version: String
+  protected def catalogVersion: String
+  // The version of the SQL command under testing such as "V1", "V2".
+  protected def commandVersion: String
   // Name of the command as SQL statement, for instance "SHOW PARTITIONS"
   protected def command: String
   // The catalog name which can be used in SQL statements under testing
@@ -51,7 +53,8 @@ trait DDLCommandTestUtils extends SQLTestUtils {
   // the failed test in logs belongs to.
   override def test(testName: String, testTags: Tag*)(testFun: => Any)
     (implicit pos: Position): Unit = {
-    super.test(s"$command $version: " + testName, testTags: _*)(testFun)
+    val testNamePrefix = s"$command using $catalogVersion catalog $commandVersion command"
+    super.test(s"$testNamePrefix: $testName", testTags: _*)(testFun)
   }
 
   protected def withNamespaceAndTable(ns: String, tableName: String, cat: String = catalog)

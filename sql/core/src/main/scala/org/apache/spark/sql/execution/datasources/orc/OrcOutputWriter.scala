@@ -44,6 +44,7 @@ private[sql] class OrcOutputWriter(
     }
     val filename = orcOutputFormat.getDefaultWorkFile(context, ".orc")
     val options = OrcMapRedOutputFormat.buildOptions(context.getConfiguration)
+    options.setSchema(OrcUtils.orcTypeDescription(dataSchema))
     val writer = OrcFile.createWriter(filename, options)
     val recordWriter = new OrcMapreduceRecordWriter[OrcStruct](writer)
     OrcUtils.addSparkVersionMetadata(writer)

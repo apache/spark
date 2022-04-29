@@ -168,27 +168,6 @@ case class InsertIntoHiveTable(
       }
     }
 
-    table.bucketSpec match {
-      case Some(bucketSpec) =>
-        // Writes to bucketed hive tables are allowed only if user does not care about maintaining
-        // table's bucketing i.e. both "hive.enforce.bucketing" and "hive.enforce.sorting" are
-        // set to false
-        val enforceBucketingConfig = "hive.enforce.bucketing"
-        val enforceSortingConfig = "hive.enforce.sorting"
-
-        val message = s"Output Hive table ${table.identifier} is bucketed but Spark " +
-          "currently does NOT populate bucketed output which is compatible with Hive."
-
-        if (hadoopConf.get(enforceBucketingConfig, "true").toBoolean ||
-          hadoopConf.get(enforceSortingConfig, "true").toBoolean) {
-          throw new AnalysisException(message)
-        } else {
-          logWarning(message + s" Inserting data anyways since both $enforceBucketingConfig and " +
-            s"$enforceSortingConfig are set to false.")
-        }
-      case _ => // do nothing since table has no bucketing
-    }
-
     val partitionAttributes = partitionColumnNames.takeRight(numDynamicPartitions).map { name =>
       val attr = query.resolve(name :: Nil, sparkSession.sessionState.analyzer.resolver).getOrElse {
         throw QueryCompilationErrors.cannotResolveAttributeError(
@@ -207,7 +186,8 @@ case class InsertIntoHiveTable(
       hadoopConf = hadoopConf,
       fileSinkConf = fileSinkConf,
       outputLocation = tmpLocation.toString,
-      partitionAttributes = partitionAttributes)
+      partitionAttributes = partitionAttributes,
+      bucketSpec = table.bucketSpec)
 
     if (partition.nonEmpty) {
       if (numDynamicPartitions > 0) {

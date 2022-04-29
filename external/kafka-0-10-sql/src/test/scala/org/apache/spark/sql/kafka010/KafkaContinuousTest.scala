@@ -91,6 +91,7 @@ trait KafkaContinuousTest extends KafkaSourceTest {
       .load()
 
     testStream(query)(
+      makeSureGetOffsetCalled,
       Execute(q => assert(q.isInstanceOf[ContinuousExecution]))
     )
   }

@@ -1402,4 +1402,42 @@ class JoinSuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlan
       assertJoin(sql, classOf[ShuffledHashJoinExec])
     }
   }
+
+  test("SPARK-36794: Ignore duplicated key when building relation for semi/anti hash join") {
+    withTable("t1", "t2") {
+      spark.range(10).map(i => (i.toString, i + 1)).toDF("c1", "c2").write.saveAsTable("t1")
+      spark.range(10).map(i => ((i % 5).toString, i % 3)).toDF("c1", "c2").write.saveAsTable("t2")
+
+      val semiJoinQueries = Seq(
+        // No join condition, ignore duplicated key.
+        (s"SELECT /*+ SHUFFLE_HASH(t2) */ t1.c1 FROM t1 LEFT SEMI JOIN t2 ON t1.c1 = t2.c1",
+          true),
+        // Have join condition on build join key only, ignore duplicated key.
+        (s"""
+            |SELECT /*+ SHUFFLE_HASH(t2) */ t1.c1 FROM t1 LEFT SEMI JOIN t2
+            |ON t1.c1 = t2.c1 AND CAST(t1.c2 * 2 AS STRING) != t2.c1
+          """.stripMargin,
+          true),
+        // Have join condition on other build attribute beside join key, do not ignore
+        // duplicated key.
+        (s"""
+            |SELECT /*+ SHUFFLE_HASH(t2) */ t1.c1 FROM t1 LEFT SEMI JOIN t2
+            |ON t1.c1 = t2.c1 AND t1.c2 * 100 != t2.c2
+          """.stripMargin,
+          false)
+      )
+      semiJoinQueries.foreach {
+        case (query, ignoreDuplicatedKey) =>
+          val semiJoinDF = sql(query)
+          val antiJoinDF = sql(query.replaceAll("SEMI", "ANTI"))
+          checkAnswer(semiJoinDF, Seq(Row("0"), Row("1"), Row("2"), Row("3"), Row("4")))
+          checkAnswer(antiJoinDF, Seq(Row("5"), Row("6"), Row("7"), Row("8"), Row("9")))
+          Seq(semiJoinDF, antiJoinDF).foreach { df =>
+            assert(collect(df.queryExecution.executedPlan) {
+              case j: ShuffledHashJoinExec if j.ignoreDuplicatedKey == ignoreDuplicatedKey => true
+            }.size == 1)
+          }
+      }
+    }
+  }
 }

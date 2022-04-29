@@ -167,7 +167,7 @@ select element_at(array(1, 2, 3), 5)
 -- !query schema
 struct<>
 -- !query output
-java.lang.ArrayIndexOutOfBoundsException
+org.apache.spark.SparkArrayIndexOutOfBoundsException
 Invalid index: 5, numElements: 3
 
 
@@ -176,7 +176,7 @@ select element_at(array(1, 2, 3), -5)
 -- !query schema
 struct<>
 -- !query output
-java.lang.ArrayIndexOutOfBoundsException
+org.apache.spark.SparkArrayIndexOutOfBoundsException
 Invalid index: -5, numElements: 3
 
 
@@ -194,7 +194,7 @@ select elt(4, '123', '456')
 -- !query schema
 struct<>
 -- !query output
-java.lang.ArrayIndexOutOfBoundsException
+org.apache.spark.SparkArrayIndexOutOfBoundsException
 Invalid index: 4, numElements: 2
 
 
@@ -203,7 +203,7 @@ select elt(0, '123', '456')
 -- !query schema
 struct<>
 -- !query output
-java.lang.ArrayIndexOutOfBoundsException
+org.apache.spark.SparkArrayIndexOutOfBoundsException
 Invalid index: 0, numElements: 2
 
 
@@ -212,7 +212,7 @@ select elt(-1, '123', '456')
 -- !query schema
 struct<>
 -- !query output
-java.lang.ArrayIndexOutOfBoundsException
+org.apache.spark.SparkArrayIndexOutOfBoundsException
 Invalid index: -1, numElements: 2
 
 
@@ -221,7 +221,7 @@ select array(1, 2, 3)[5]
 -- !query schema
 struct<>
 -- !query output
-java.lang.ArrayIndexOutOfBoundsException
+org.apache.spark.SparkArrayIndexOutOfBoundsException
 Invalid index: 5, numElements: 3
 
 
@@ -230,5 +230,5 @@ select array(1, 2, 3)[-1]
 -- !query schema
 struct<>
 -- !query output
-java.lang.ArrayIndexOutOfBoundsException
+org.apache.spark.SparkArrayIndexOutOfBoundsException
 Invalid index: -1, numElements: 3

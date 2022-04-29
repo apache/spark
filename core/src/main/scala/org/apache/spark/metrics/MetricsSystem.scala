@@ -25,7 +25,7 @@ import scala.collection.mutable
 import com.codahale.metrics.{Metric, MetricRegistry}
 import org.eclipse.jetty.servlet.ServletContextHandler
 
-import org.apache.spark.SparkConf
+import org.apache.spark.{SecurityManager, SparkConf}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.metrics.sink.{MetricsServlet, PrometheusServlet, Sink}
@@ -211,9 +211,18 @@ private[spark] class MetricsSystem private (
               .newInstance(kv._2, registry)
             prometheusServlet = Some(servlet)
           } else {
-            val sink = Utils.classForName[Sink](classPath)
-              .getConstructor(classOf[Properties], classOf[MetricRegistry])
-              .newInstance(kv._2, registry)
+            val sink = try {
+              Utils.classForName[Sink](classPath)
+                .getConstructor(classOf[Properties], classOf[MetricRegistry])
+                .newInstance(kv._2, registry)
+            } catch {
+              case _: NoSuchMethodException =>
+                // Fallback to three-parameters constructor having SecurityManager
+                Utils.classForName[Sink](classPath)
+                  .getConstructor(
+                    classOf[Properties], classOf[MetricRegistry], classOf[SecurityManager])
+                  .newInstance(kv._2, registry, null)
+            }
             sinks += sink
           }
         } catch {

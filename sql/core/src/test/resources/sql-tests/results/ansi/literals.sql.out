@@ -436,7 +436,7 @@ select +date '1999-01-01'
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(+ DATE '1999-01-01')' due to data type mismatch: argument 1 requires (numeric or interval or interval day to second or interval year to month) type, however, 'DATE '1999-01-01'' is of date type.; line 1 pos 7
+cannot resolve '(+ DATE '1999-01-01')' due to data type mismatch: argument 1 requires (numeric or interval day to second or interval year to month or interval) type, however, 'DATE '1999-01-01'' is of date type.; line 1 pos 7
 
 
 -- !query
@@ -445,7 +445,7 @@ select +timestamp '1999-01-01'
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(+ TIMESTAMP '1999-01-01 00:00:00')' due to data type mismatch: argument 1 requires (numeric or interval or interval day to second or interval year to month) type, however, 'TIMESTAMP '1999-01-01 00:00:00'' is of timestamp type.; line 1 pos 7
+cannot resolve '(+ TIMESTAMP '1999-01-01 00:00:00')' due to data type mismatch: argument 1 requires (numeric or interval day to second or interval year to month or interval) type, however, 'TIMESTAMP '1999-01-01 00:00:00'' is of timestamp type.; line 1 pos 7
 
 
 -- !query
@@ -462,7 +462,7 @@ select +map(1, 2)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(+ map(1, 2))' due to data type mismatch: argument 1 requires (numeric or interval or interval day to second or interval year to month) type, however, 'map(1, 2)' is of map<int,int> type.; line 1 pos 7
+cannot resolve '(+ map(1, 2))' due to data type mismatch: argument 1 requires (numeric or interval day to second or interval year to month or interval) type, however, 'map(1, 2)' is of map<int,int> type.; line 1 pos 7
 
 
 -- !query
@@ -471,7 +471,7 @@ select +array(1,2)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(+ array(1, 2))' due to data type mismatch: argument 1 requires (numeric or interval or interval day to second or interval year to month) type, however, 'array(1, 2)' is of array<int> type.; line 1 pos 7
+cannot resolve '(+ array(1, 2))' due to data type mismatch: argument 1 requires (numeric or interval day to second or interval year to month or interval) type, however, 'array(1, 2)' is of array<int> type.; line 1 pos 7
 
 
 -- !query
@@ -480,7 +480,7 @@ select +named_struct('a', 1, 'b', 'spark')
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(+ named_struct('a', 1, 'b', 'spark'))' due to data type mismatch: argument 1 requires (numeric or interval or interval day to second or interval year to month) type, however, 'named_struct('a', 1, 'b', 'spark')' is of struct<a:int,b:string> type.; line 1 pos 7
+cannot resolve '(+ named_struct('a', 1, 'b', 'spark'))' due to data type mismatch: argument 1 requires (numeric or interval day to second or interval year to month or interval) type, however, 'named_struct('a', 1, 'b', 'spark')' is of struct<a:int,b:string> type.; line 1 pos 7
 
 
 -- !query
@@ -489,7 +489,7 @@ select +X'1'
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(+ X'01')' due to data type mismatch: argument 1 requires (numeric or interval or interval day to second or interval year to month) type, however, 'X'01'' is of binary type.; line 1 pos 7
+cannot resolve '(+ X'01')' due to data type mismatch: argument 1 requires (numeric or interval day to second or interval year to month or interval) type, however, 'X'01'' is of binary type.; line 1 pos 7
 
 
 -- !query
@@ -498,7 +498,7 @@ select -date '1999-01-01'
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(- DATE '1999-01-01')' due to data type mismatch: argument 1 requires (numeric or interval or interval day to second or interval year to month) type, however, 'DATE '1999-01-01'' is of date type.; line 1 pos 7
+cannot resolve '(- DATE '1999-01-01')' due to data type mismatch: argument 1 requires (numeric or interval day to second or interval year to month or interval) type, however, 'DATE '1999-01-01'' is of date type.; line 1 pos 7
 
 
 -- !query
@@ -507,7 +507,7 @@ select -timestamp '1999-01-01'
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(- TIMESTAMP '1999-01-01 00:00:00')' due to data type mismatch: argument 1 requires (numeric or interval or interval day to second or interval year to month) type, however, 'TIMESTAMP '1999-01-01 00:00:00'' is of timestamp type.; line 1 pos 7
+cannot resolve '(- TIMESTAMP '1999-01-01 00:00:00')' due to data type mismatch: argument 1 requires (numeric or interval day to second or interval year to month or interval) type, however, 'TIMESTAMP '1999-01-01 00:00:00'' is of timestamp type.; line 1 pos 7
 
 
 -- !query
@@ -516,4 +516,4 @@ select -x'2379ACFe'
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(- X'2379ACFE')' due to data type mismatch: argument 1 requires (numeric or interval or interval day to second or interval year to month) type, however, 'X'2379ACFE'' is of binary type.; line 1 pos 7
+cannot resolve '(- X'2379ACFE')' due to data type mismatch: argument 1 requires (numeric or interval day to second or interval year to month or interval) type, however, 'X'2379ACFE'' is of binary type.; line 1 pos 7

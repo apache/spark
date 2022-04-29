@@ -51,6 +51,7 @@ class CombiningLimitsSuite extends PlanTest {
   )
   val testRelation3 = RelationWithoutMaxRows(Seq("i".attr.int))
   val testRelation4 = LongMaxRelation(Seq("j".attr.int))
+  val testRelation5 = EmptyRelation(Seq("k".attr.int))
 
   test("limits: combines two limits") {
     val originalQuery =
@@ -235,6 +236,44 @@ class CombiningLimitsSuite extends PlanTest {
     comparePlans(optimized, testRelation)
   }
 
+  test("SPARK-37064: Fix outer join return the wrong max rows if other side is empty") {
+    Seq(LeftOuter, FullOuter).foreach { joinType =>
+      checkPlanAndMaxRow(
+        testRelation.join(testRelation5, joinType).limit(9),
+        testRelation.join(testRelation5, joinType).limit(9),
+        9
+      )
+
+      checkPlanAndMaxRow(
+        testRelation.join(testRelation5, joinType).limit(10),
+        testRelation.join(testRelation5, joinType),
+        10
+      )
+    }
+
+    Seq(RightOuter, FullOuter).foreach { joinType =>
+      checkPlanAndMaxRow(
+        testRelation5.join(testRelation, joinType).limit(9),
+        testRelation5.join(testRelation, joinType).limit(9),
+        9
+      )
+
+      checkPlanAndMaxRow(
+        testRelation5.join(testRelation, joinType).limit(10),
+        testRelation5.join(testRelation, joinType),
+        10
+      )
+    }
+
+    Seq(Inner, Cross).foreach { joinType =>
+      checkPlanAndMaxRow(
+        testRelation.join(testRelation5, joinType).limit(9),
+        testRelation.join(testRelation5, joinType),
+        0
+      )
+    }
+  }
+
   private def checkPlanAndMaxRow(
       optimized: LogicalPlan, expected: LogicalPlan, expectedMaxRow: Long): Unit = {
     comparePlans(Optimize.execute(optimized.analyze), expected.analyze)
@@ -248,4 +287,8 @@ case class RelationWithoutMaxRows(output: Seq[Attribute]) extends LeafNode {
 
 case class LongMaxRelation(output: Seq[Attribute]) extends LeafNode {
   override def maxRows: Option[Long] = Some(Long.MaxValue)
+}
+
+case class EmptyRelation(output: Seq[Attribute]) extends LeafNode {
+  override def maxRows: Option[Long] = Some(0)
 }

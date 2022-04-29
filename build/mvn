@@ -21,7 +21,14 @@ SELF=$(cd $(dirname $0) && pwd)
 . "$SELF/util.sh"
 
 if [ -z "${JAVA_HOME}" -a "$(command -v javac)" ]; then
-  export JAVA_HOME="$(dirname $(dirname $(realpath $(command -v javac))))"
+  if [ "$(uname -s)" = "Darwin" ]; then
+    # For some versions of macOS, "/usr/bin/javac" is a real file instead of a symbolic link,
+    # so the JAVA_HOME may be set to path "/usr" improperly.
+    # The following command is an appropriate way of setting JAVA_HOME on macOS.
+    export JAVA_HOME="$(/usr/libexec/java_home)"
+  else
+    export JAVA_HOME="$(dirname $(dirname $(realpath $(command -v javac))))"
+  fi
 fi
 
 # Determine the current working directory

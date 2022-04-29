@@ -54,7 +54,7 @@ case class EnsureRequirements(
     assert(requiredChildDistributions.length == originalChildren.length)
     assert(requiredChildOrderings.length == originalChildren.length)
     // Ensure that the operator's children satisfy their output distribution requirements.
-    var newChildren = originalChildren.zip(requiredChildDistributions).map {
+    var children = originalChildren.zip(requiredChildDistributions).map {
       case (child, distribution) if child.outputPartitioning.satisfies(distribution) =>
         child
       case (child, BroadcastDistribution(mode)) =>
@@ -74,7 +74,7 @@ case class EnsureRequirements(
     }.map(_._2)
 
     val childrenNumPartitions =
-      childrenIndexes.map(newChildren(_).outputPartitioning.numPartitions).toSet
+      childrenIndexes.map(children(_).outputPartitioning.numPartitions).toSet
 
     if (childrenNumPartitions.size > 1) {
       // Get the number of partitions which is explicitly required by the distributions.
@@ -92,7 +92,7 @@ case class EnsureRequirements(
       // 1. We should avoid shuffling these children.
       // 2. We should have a reasonable parallelism.
       val nonShuffleChildrenNumPartitions =
-        childrenIndexes.map(newChildren).filterNot(_.isInstanceOf[ShuffleExchangeExec])
+        childrenIndexes.map(children).filterNot(_.isInstanceOf[ShuffleExchangeExec])
           .map(_.outputPartitioning.numPartitions)
       val expectedChildrenNumPartitions = if (nonShuffleChildrenNumPartitions.nonEmpty) {
         if (nonShuffleChildrenNumPartitions.length == childrenIndexes.length) {
@@ -111,7 +111,7 @@ case class EnsureRequirements(
 
       val targetNumPartitions = requiredNumPartitions.getOrElse(expectedChildrenNumPartitions)
 
-      newChildren = newChildren.zip(requiredChildDistributions).zipWithIndex.map {
+      children = children.zip(requiredChildDistributions).zipWithIndex.map {
         case ((child, distribution), index) if childrenIndexes.contains(index) =>
           if (child.outputPartitioning.numPartitions == targetNumPartitions) {
             child
@@ -129,7 +129,7 @@ case class EnsureRequirements(
     }
 
     // Now that we've performed any necessary shuffles, add sorts to guarantee output orderings:
-    newChildren = newChildren.zip(requiredChildOrderings).map { case (child, requiredOrdering) =>
+    children = children.zip(requiredChildOrderings).map { case (child, requiredOrdering) =>
       // If child.outputOrdering already satisfies the requiredOrdering, we do not need to sort.
       if (SortOrder.orderingSatisfies(child.outputOrdering, requiredOrdering)) {
         child
@@ -138,7 +138,7 @@ case class EnsureRequirements(
       }
     }
 
-    newChildren
+    children
   }
 
   private def reorder(

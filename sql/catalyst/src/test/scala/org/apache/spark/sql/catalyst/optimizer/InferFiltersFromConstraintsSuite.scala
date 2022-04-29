@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{IntegerType, LongType}
+import org.apache.spark.sql.types._
 
 class InferFiltersFromConstraintsSuite extends PlanTest {
 
@@ -315,5 +315,50 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
         Inner,
         condition)
     }
+  }
+
+  test("SPARK-36978: IsNotNull constraints on structs should apply at the member field " +
+    "instead of the root level nested type") {
+    val structTestRelation = LocalRelation('a.struct(StructType(
+      StructField("cstruct", StructType(StructField("cstr", StringType) :: Nil))
+        :: StructField("cint", IntegerType) :: Nil)))
+    val originalQuery = structTestRelation
+      .where('a.getField("cint") === 1 && 'a.getField("cstruct").getField("cstr") === "abc").analyze
+
+    val correctAnswer = structTestRelation
+      .where(IsNotNull('a.getField("cint")) && IsNotNull('a.getField("cstruct").getField("cstr"))
+        && 'a.getField("cint") === 1 && 'a.getField("cstruct").getField("cstr") === "abc")
+      .analyze
+    val optimized = Optimize.execute(originalQuery)
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("SPARK-36978: IsNotNull constraints on array of structs should apply at the member field " +
+    "instead of the root level nested type") {
+    val intStructField = StructField("cint", IntegerType)
+    val arrayOfStructsTestRelation = LocalRelation('a.array(StructType(intStructField :: Nil)))
+    val getArrayStructField = GetArrayStructFields('a, intStructField, 0, 1, containsNull = true)
+    val originalQuery = arrayOfStructsTestRelation
+      .where(GetArrayItem(getArrayStructField, 0) === 1).analyze
+
+    val correctAnswer = arrayOfStructsTestRelation
+      .where(IsNotNull(getArrayStructField) && GetArrayItem(getArrayStructField, 0) === 1)
+      .analyze
+    val optimized = Optimize.execute(originalQuery)
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("SPARK-36978: IsNotNull constraints for nested types apply to the ExtractValue which " +
+    "only has ExtractValue/Attribute children") {
+    val arrayTestRelation = LocalRelation('a.array(IntegerType))
+    val originalQuery = arrayTestRelation
+      .where(GetArrayItem(ArrayDistinct('a), 0) === 1 && GetArrayItem('a, 1) === 1)
+      .analyze
+
+    val correctAnswer = arrayTestRelation
+      .where(IsNotNull('a) && GetArrayItem(ArrayDistinct('a), 0) === 1 && GetArrayItem('a, 1) === 1)
+      .analyze
+    val optimized = Optimize.execute(originalQuery)
+    comparePlans(optimized, correctAnswer)
   }
 }

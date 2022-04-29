@@ -16,6 +16,7 @@
 #
 
 import datetime
+import math
 import os
 import shutil
 import tempfile
@@ -242,6 +243,13 @@ class SQLTestUtils(object):
         finally:
             for f in functions:
                 self.spark.sql("DROP FUNCTION IF EXISTS %s" % f)
+
+    @staticmethod
+    def assert_close(a, b):
+        c = [j[0] for j in b]
+        diff = [abs(v - c[k]) < 1e-6 if math.isfinite(v) else v == c[k]
+                for k, v in enumerate(a)]
+        return sum(diff) == len(a)
 
 
 class ReusedSQLTestCase(ReusedPySparkTestCase, SQLTestUtils):

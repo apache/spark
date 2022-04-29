@@ -58,12 +58,18 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
       // `postScanFilters` and `pushedFilters` can overlap, e.g. the parquet row group filter.
       val (pushedFilters, postScanFiltersWithoutSubquery) = PushDownUtils.pushFilters(
         sHolder.builder, normalizedFiltersWithoutSubquery)
+      val pushedFiltersStr = if (pushedFilters.isLeft) {
+        pushedFilters.left.get.mkString(", ")
+      } else {
+        pushedFilters.right.get.mkString(", ")
+      }
+
       val postScanFilters = postScanFiltersWithoutSubquery ++ normalizedFiltersWithSubquery
 
       logInfo(
         s"""
            |Pushing operators to ${sHolder.relation.name}
-           |Pushed Filters: ${pushedFilters.mkString(", ")}
+           |Pushed Filters: $pushedFiltersStr
            |Post-Scan Filters: ${postScanFilters.mkString(",")}
          """.stripMargin)
 

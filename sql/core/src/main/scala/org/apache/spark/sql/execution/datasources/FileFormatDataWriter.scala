@@ -22,7 +22,7 @@ import org.apache.hadoop.fs.Path
 import org.apache.hadoop.mapreduce.TaskAttemptContext
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.io.FileCommitProtocol
+import org.apache.spark.internal.io.{FileCommitProtocol, FileNameSpec}
 import org.apache.spark.internal.io.FileCommitProtocol.TaskCommitMessage
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
@@ -193,7 +193,7 @@ abstract class BaseDynamicPartitionDataWriter(
   protected val isPartitioned = description.partitionColumns.nonEmpty
 
   /** Flag saying whether or not the data to be written out is bucketed. */
-  protected val isBucketed = description.bucketIdExpression.isDefined
+  protected val isBucketed = description.bucketSpec.isDefined
 
   assert(isPartitioned || isBucketed,
     s"""DynamicPartitionWriteTask should be used for writing out data that's either
@@ -238,7 +238,8 @@ abstract class BaseDynamicPartitionDataWriter(
   /** Given an input row, returns the corresponding `bucketId` */
   protected lazy val getBucketId: InternalRow => Int = {
     val proj =
-      UnsafeProjection.create(description.bucketIdExpression.toSeq, description.allColumns)
+      UnsafeProjection.create(Seq(description.bucketSpec.get.bucketIdExpression),
+        description.allColumns)
     row => proj(row).getInt(0)
   }
 
@@ -271,17 +272,24 @@ abstract class BaseDynamicPartitionDataWriter(
 
     val bucketIdStr = bucketId.map(BucketingUtils.bucketIdToString).getOrElse("")
 
-    // This must be in a form that matches our bucketing format. See BucketingUtils.
-    val ext = f"$bucketIdStr.c$fileCounter%03d" +
+    // The prefix and suffix must be in a form that matches our bucketing format. See BucketingUtils
+    // for details. The prefix is required to represent bucket id when writing Hive-compatible
+    // bucketed table.
+    val prefix = bucketId match {
+      case Some(id) => description.bucketSpec.get.bucketFileNamePrefix(id)
+      case _ => ""
+    }
+    val suffix = f"$bucketIdStr.c$fileCounter%03d" +
       description.outputWriterFactory.getFileExtension(taskAttemptContext)
+    val fileNameSpec = FileNameSpec(prefix, suffix)
 
     val customPath = partDir.flatMap { dir =>
       description.customPartitionLocations.get(PartitioningUtils.parsePathFragment(dir))
     }
     val currentPath = if (customPath.isDefined) {
-      committer.newTaskTempFileAbsPath(taskAttemptContext, customPath.get, ext)
+      committer.newTaskTempFileAbsPath(taskAttemptContext, customPath.get, fileNameSpec)
     } else {
-      committer.newTaskTempFile(taskAttemptContext, partDir, ext)
+      committer.newTaskTempFile(taskAttemptContext, partDir, fileNameSpec)
     }
 
     currentWriter = description.outputWriterFactory.newInstance(
@@ -554,6 +562,16 @@ class DynamicPartitionDataConcurrentWriter(
   }
 }
 
+/**
+ * Bucketing specification for all the write tasks.
+ *
+ * @param bucketIdExpression Expression to calculate bucket id based on bucket column(s).
+ * @param bucketFileNamePrefix Prefix of output file name based on bucket id.
+ */
+case class WriterBucketSpec(
+  bucketIdExpression: Expression,
+  bucketFileNamePrefix: Int => String)
+
 /** A shared job description for all the write tasks. */
 class WriteJobDescription(
     val uuid: String, // prevent collision between different (appending) write jobs
@@ -562,7 +580,7 @@ class WriteJobDescription(
     val allColumns: Seq[Attribute],
     val dataColumns: Seq[Attribute],
     val partitionColumns: Seq[Attribute],
-    val bucketIdExpression: Option[Expression],
+    val bucketSpec: Option[WriterBucketSpec],
     val path: String,
     val customPartitionLocations: Map[TablePartitionSpec, String],
     val maxRecordsPerFile: Long,

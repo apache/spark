@@ -471,6 +471,11 @@ private[spark] class AppStatusStore(
       .asScala.map { exec => (exec.executorId -> exec.info) }.toMap
   }
 
+  def speculationSummary(stageId: Int, attemptId: Int): Option[v1.SpeculationStageSummary] = {
+    val stageKey = Array(stageId, attemptId)
+    asOption(store.read(classOf[SpeculationStageSummaryWrapper], stageKey).info)
+  }
+
   def rddList(cachedOnly: Boolean = true): Seq[v1.RDDStorageInfo] = {
     store.view(classOf[RDDStorageInfoWrapper]).asScala.map(_.info).filter { rdd =>
       !cachedOnly || rdd.numCachedPartitions > 0
@@ -524,6 +529,11 @@ private[spark] class AppStatusStore(
         } else {
           None
         }
+      val speculationStageSummary: Option[v1.SpeculationStageSummary] = if (withDetail) {
+        speculationSummary(stage.stageId, stage.attemptId)
+      } else {
+        None
+      }
 
       new v1.StageData(
         status = stage.status,
@@ -572,6 +582,7 @@ private[spark] class AppStatusStore(
         accumulatorUpdates = stage.accumulatorUpdates,
         tasks = tasks,
         executorSummary = executorSummaries,
+        speculationSummary = speculationStageSummary,
         killedTasksSummary = stage.killedTasksSummary,
         resourceProfileId = stage.resourceProfileId,
         peakExecutorMetrics = stage.peakExecutorMetrics,

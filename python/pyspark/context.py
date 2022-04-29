@@ -755,7 +755,7 @@ class SparkContext(object):
 
             1. A Java RDD is created from the SequenceFile or other InputFormat, and the key
                and value Writable classes
-            2. Serialization is attempted via Pyrolite pickling
+            2. Serialization is attempted via Pickle pickling
             3. If this fails, the fallback is to call 'toString' on each key and value
             4. :class:`PickleSerializer` is used to deserialize pickled objects on the Python side
 

@@ -36,36 +36,6 @@ case class SimpleCost(value: Long) extends Cost {
 }
 
 /**
- * A skew join aware implementation of [[Cost]], which consider shuffle number and skew join number.
- *
- * We always pick the cost which has more skew join even if it introduces one or more extra shuffle.
- * Otherwise, if two costs have the same number of skew join or no skew join, we will pick the one
- * with small number of shuffle.
- */
-case class SkewJoinAwareCost(
-    numShuffles: Int,
-    numSkewJoins: Int) extends Cost {
-  override def compare(that: Cost): Int = that match {
-    case other: SkewJoinAwareCost =>
-      // If more skew joins are optimized or less shuffle nodes, it means the cost is lower
-      if (numSkewJoins > other.numSkewJoins) {
-        -1
-      } else if (numSkewJoins < other.numSkewJoins) {
-        1
-      } else if (numShuffles < other.numShuffles) {
-        -1
-      } else if (numShuffles > other.numShuffles) {
-        1
-      } else {
-        0
-      }
-
-    case _ =>
-      throw QueryExecutionErrors.cannotCompareCostWithTargetCostError(that.toString)
-  }
-}
-
-/**
  * A skew join aware implementation of [[CostEvaluator]], which counts the number of
  * [[ShuffleExchangeLike]] nodes and skew join nodes in the plan.
  */
@@ -79,7 +49,9 @@ case class SimpleCostEvaluator(forceOptimizeSkewedJoin: Boolean) extends CostEva
       val numSkewJoins = plan.collect {
         case j: ShuffledJoin if j.isSkewJoin => j
       }.size
-      SkewJoinAwareCost(numShuffles, numSkewJoins)
+      // We put `-numSkewJoins` in the first 32 bits of the long value, so that it's compared first
+      // when comparing the cost, and larger `numSkewJoins` means lower cost.
+      SimpleCost(-numSkewJoins.toLong << 32 | numShuffles)
     } else {
       SimpleCost(numShuffles)
     }

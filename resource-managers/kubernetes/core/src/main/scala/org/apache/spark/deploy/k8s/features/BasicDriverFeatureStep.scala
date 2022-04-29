@@ -152,6 +152,9 @@ private[spark] class BasicDriverFeatureStep(conf: KubernetesDriverConf)
         .endSpec()
       .build()
 
+    conf.get(KUBERNETES_DRIVER_SCHEDULER_NAME)
+      .foreach(driverPod.getSpec.setSchedulerName)
+
     SparkPod(driverPod, driverContainer)
   }
 

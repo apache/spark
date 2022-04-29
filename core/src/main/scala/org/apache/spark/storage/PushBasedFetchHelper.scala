@@ -142,7 +142,7 @@ private class PushBasedFetchHelper(
     val mergedBlocksMetaListener = new MergedBlocksMetaListener {
       override def onSuccess(shuffleId: Int, shuffleMergeId: Int, reduceId: Int,
           meta: MergedBlockMeta): Unit = {
-        logInfo(s"Received the meta of push-merged block for ($shuffleId, $shuffleMergeId," +
+        logDebug(s"Received the meta of push-merged block for ($shuffleId, $shuffleMergeId," +
           s" $reduceId) from ${req.address.host}:${req.address.port}")
         try {
           iterator.addToResultsQueue(PushMergedRemoteMetaFetchResult(shuffleId, shuffleMergeId,

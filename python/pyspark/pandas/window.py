@@ -16,13 +16,7 @@
 #
 from abc import ABCMeta, abstractmethod
 from functools import partial
-from typing import (  # noqa: F401 (SPARK-34943)
-    Any,
-    Callable,
-    Generic,
-    List,
-    Optional,
-)
+from typing import Any, Callable, Generic, List, Optional
 
 from pyspark.sql import Window
 from pyspark.sql import functions as F
@@ -146,7 +140,7 @@ class RollingLike(RollingAndExpanding[FrameLike]):
         def count(scol: Column) -> Column:
             return F.count(scol).over(self._window)
 
-        return self._apply_as_series_or_frame(count).astype("float64")  # type: ignore
+        return self._apply_as_series_or_frame(count).astype("float64")  # type: ignore[attr-defined]
 
 
 class Rolling(RollingLike[FrameLike]):
@@ -161,18 +155,19 @@ class Rolling(RollingLike[FrameLike]):
 
         super().__init__(window, min_periods)
 
+        self._psdf_or_psser = psdf_or_psser
+
         if not isinstance(psdf_or_psser, (DataFrame, Series)):
             raise TypeError(
                 "psdf_or_psser must be a series or dataframe; however, got: %s"
                 % type(psdf_or_psser)
             )
-        self._psdf_or_psser = psdf_or_psser
 
     def __getattr__(self, item: str) -> Any:
         if hasattr(MissingPandasLikeRolling, item):
             property_or_func = getattr(MissingPandasLikeRolling, item)
             if isinstance(property_or_func, property):
-                return property_or_func.fget(self)  # type: ignore
+                return property_or_func.fget(self)
             else:
                 return partial(property_or_func, self)
         raise AttributeError(item)
@@ -663,7 +658,7 @@ class RollingGroupby(RollingLike[FrameLike]):
         if hasattr(MissingPandasLikeRollingGroupby, item):
             property_or_func = getattr(MissingPandasLikeRollingGroupby, item)
             if isinstance(property_or_func, property):
-                return property_or_func.fget(self)  # type: ignore
+                return property_or_func.fget(self)
             else:
                 return partial(property_or_func, self)
         raise AttributeError(item)
@@ -681,7 +676,7 @@ class RollingGroupby(RollingLike[FrameLike]):
 
         # Here we need to include grouped key as an index, and shift previous index.
         #   [index_column0, index_column1] -> [grouped key, index_column0, index_column1]
-        new_index_scols = []  # type: List[Column]
+        new_index_scols: List[Column] = []
         new_index_spark_column_names = []
         new_index_names = []
         new_index_fields = []
@@ -709,7 +704,7 @@ class RollingGroupby(RollingLike[FrameLike]):
             # pandas doesn't keep the groupkey as a column from 1.3 for DataFrameGroupBy
             column_labels_to_exclude = groupby._column_labels_to_exclude.copy()
             if isinstance(groupby, DataFrameGroupBy):
-                for groupkey in groupby._groupkeys:  # type: ignore
+                for groupkey in groupby._groupkeys:  # type: ignore[attr-defined]
                     column_labels_to_exclude.add(groupkey._internal.column_labels[0])
             agg_columns = [
                 psdf._psser_for(label)
@@ -1071,7 +1066,7 @@ class ExpandingLike(RollingAndExpanding[FrameLike]):
                 F.count(scol).over(self._window),
             ).otherwise(F.lit(None))
 
-        return self._apply_as_series_or_frame(count).astype("float64")  # type: ignore
+        return self._apply_as_series_or_frame(count).astype("float64")  # type: ignore[attr-defined]
 
 
 class Expanding(ExpandingLike[FrameLike]):
@@ -1092,7 +1087,7 @@ class Expanding(ExpandingLike[FrameLike]):
         if hasattr(MissingPandasLikeExpanding, item):
             property_or_func = getattr(MissingPandasLikeExpanding, item)
             if isinstance(property_or_func, property):
-                return property_or_func.fget(self)  # type: ignore
+                return property_or_func.fget(self)
             else:
                 return partial(property_or_func, self)
         raise AttributeError(item)
@@ -1438,7 +1433,7 @@ class ExpandingGroupby(ExpandingLike[FrameLike]):
         if hasattr(MissingPandasLikeExpandingGroupby, item):
             property_or_func = getattr(MissingPandasLikeExpandingGroupby, item)
             if isinstance(property_or_func, property):
-                return property_or_func.fget(self)  # type: ignore
+                return property_or_func.fget(self)
             else:
                 return partial(property_or_func, self)
         raise AttributeError(item)

@@ -28,8 +28,10 @@ export LC_ALL=C
 
 # TODO: This would be much nicer to do in SBT, once SBT supports Maven-style resolution.
 
-# NOTE: These should match those in the release publishing script
-HADOOP_MODULE_PROFILES="-Phive-thriftserver -Pmesos -Pkubernetes -Pyarn -Phive"
+# NOTE: These should match those in the release publishing script, and be kept in sync with
+#   dev/create-release/release-build.sh
+HADOOP_MODULE_PROFILES="-Phive-thriftserver -Pmesos -Pkubernetes -Pyarn -Phive \
+    -Pspark-ganglia-lgpl -Pkinesis-asl -Phadoop-cloud"
 MVN="build/mvn"
 HADOOP_HIVE_PROFILES=(
     hadoop-2.7-hive-2.3

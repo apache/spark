@@ -99,12 +99,22 @@ class BlockManagerDecommissionIntegrationSuite extends SparkFunSuite with LocalS
     runDecomTest(true, true, JobEnded)
   }
 
+  test(s"SPARK-36782 not deadlock if MapOutput uses broadcast") {
+    runDecomTest(false, true, JobEnded, forceMapOutputBroadcast = true)
+  }
+
   private def runDecomTest(
       persist: Boolean,
       shuffle: Boolean,
-      whenToDecom: String): Unit = {
+      whenToDecom: String,
+      forceMapOutputBroadcast: Boolean = false): Unit = {
     val migrateDuring = whenToDecom != JobEnded
     val master = s"local-cluster[${numExecs}, 1, 1024]"
+    val minBroadcastSize = if (forceMapOutputBroadcast) {
+      0
+    } else {
+      config.SHUFFLE_MAPOUTPUT_MIN_SIZE_FOR_BROADCAST.defaultValue.get
+    }
     val conf = new SparkConf().setAppName("test").setMaster(master)
       .set(config.DECOMMISSION_ENABLED, true)
       .set(config.STORAGE_DECOMMISSION_ENABLED, true)
@@ -115,6 +125,7 @@ class BlockManagerDecommissionIntegrationSuite extends SparkFunSuite with LocalS
       // Just replicate blocks quickly during testing, there isn't another
       // workload we need to worry about.
       .set(config.STORAGE_DECOMMISSION_REPLICATION_REATTEMPT_INTERVAL, 10L)
+      .set(config.SHUFFLE_MAPOUTPUT_MIN_SIZE_FOR_BROADCAST, minBroadcastSize)
 
     if (whenToDecom == TaskStarted) {
       // We are using accumulators below, make sure those are reported frequently.

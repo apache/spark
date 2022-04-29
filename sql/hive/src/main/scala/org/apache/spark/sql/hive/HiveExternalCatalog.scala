@@ -567,7 +567,8 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     verifyTableProperties(tableDefinition)
 
     if (tableDefinition.tableType == VIEW) {
-      client.alterTable(tableDefinition)
+      val newTableProps = tableDefinition.properties ++ tableMetaToTableProps(tableDefinition).toMap
+      client.alterTable(tableDefinition.copy(properties = newTableProps))
     } else {
       val oldTableDef = getRawTable(db, tableDefinition.identifier.table)
 

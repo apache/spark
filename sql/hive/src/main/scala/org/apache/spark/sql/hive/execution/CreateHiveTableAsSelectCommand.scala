@@ -161,7 +161,7 @@ case class OptimizedCreateHiveTableAsSelectCommand(
     val metastoreCatalog = catalog.asInstanceOf[HiveSessionCatalog].metastoreCatalog
     val hiveTable = DDLUtils.readHiveTable(tableDesc)
 
-    val hadoopRelation = metastoreCatalog.convert(hiveTable) match {
+    val hadoopRelation = metastoreCatalog.convert(hiveTable, isWrite = true) match {
       case LogicalRelation(t: HadoopFsRelation, _, _, _) => t
       case _ => throw QueryCompilationErrors.tableIdentifierNotConvertedToHadoopFsRelationError(
         tableIdentifier)

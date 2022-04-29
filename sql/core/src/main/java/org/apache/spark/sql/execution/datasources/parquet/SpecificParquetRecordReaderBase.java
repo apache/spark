@@ -18,6 +18,7 @@
 
 package org.apache.spark.sql.execution.datasources.parquet;
 
+import java.io.Closeable;
 import java.io.File;
 import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
@@ -29,6 +30,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import com.google.common.annotations.VisibleForTesting;
+import org.apache.parquet.column.page.PageReadStore;
 import scala.Option;
 
 import org.apache.hadoop.conf.Configuration;
@@ -75,7 +78,7 @@ public abstract class SpecificParquetRecordReaderBase<T> extends RecordReader<Vo
    */
   protected long totalRowCount;
 
-  protected ParquetFileReader reader;
+  protected ParquetRowGroupReader reader;
 
   @Override
   public void initialize(InputSplit inputSplit, TaskAttemptContext taskAttemptContext)
@@ -88,18 +91,20 @@ public abstract class SpecificParquetRecordReaderBase<T> extends RecordReader<Vo
       .builder(configuration)
       .withRange(split.getStart(), split.getStart() + split.getLength())
       .build();
-    this.reader = new ParquetFileReader(HadoopInputFile.fromPath(file, configuration), options);
-    this.fileSchema = reader.getFileMetaData().getSchema();
-    Map<String, String> fileMetadata = reader.getFileMetaData().getKeyValueMetaData();
+    ParquetFileReader fileReader = new ParquetFileReader(
+        HadoopInputFile.fromPath(file, configuration), options);
+    this.reader = new ParquetRowGroupReaderImpl(fileReader);
+    this.fileSchema = fileReader.getFileMetaData().getSchema();
+    Map<String, String> fileMetadata = fileReader.getFileMetaData().getKeyValueMetaData();
     ReadSupport<T> readSupport = getReadSupportInstance(getReadSupportClass(configuration));
     ReadSupport.ReadContext readContext = readSupport.init(new InitContext(
         taskAttemptContext.getConfiguration(), toSetMultiMap(fileMetadata), fileSchema));
     this.requestedSchema = readContext.getRequestedSchema();
-    reader.setRequestedSchema(requestedSchema);
+    fileReader.setRequestedSchema(requestedSchema);
     String sparkRequestedSchemaString =
         configuration.get(ParquetReadSupport$.MODULE$.SPARK_ROW_REQUESTED_SCHEMA());
     this.sparkSchema = StructType$.MODULE$.fromString(sparkRequestedSchemaString);
-    this.totalRowCount = reader.getFilteredRecordCount();
+    this.totalRowCount = fileReader.getFilteredRecordCount();
 
     // For test purpose.
     // If the last external accumulator is `NumRowGroupsAccumulator`, the row group number to read
@@ -111,7 +116,7 @@ public abstract class SpecificParquetRecordReaderBase<T> extends RecordReader<Vo
       if (accu.isDefined() && accu.get().getClass().getSimpleName().equals("NumRowGroupsAcc")) {
         @SuppressWarnings("unchecked")
         AccumulatorV2<Integer, Integer> intAccum = (AccumulatorV2<Integer, Integer>) accu.get();
-        intAccum.add(reader.getRowGroups().size());
+        intAccum.add(fileReader.getRowGroups().size());
       }
     }
   }
@@ -155,8 +160,10 @@ public abstract class SpecificParquetRecordReaderBase<T> extends RecordReader<Vo
       .builder(config)
       .withRange(0, length)
       .build();
-    this.reader = ParquetFileReader.open(HadoopInputFile.fromPath(file, config), options);
-    this.fileSchema = reader.getFooter().getFileMetaData().getSchema();
+    ParquetFileReader fileReader = ParquetFileReader.open(
+      HadoopInputFile.fromPath(file, config), options);
+    this.reader = new ParquetRowGroupReaderImpl(fileReader);
+    this.fileSchema = fileReader.getFooter().getFileMetaData().getSchema();
 
     if (columns == null) {
       this.requestedSchema = fileSchema;
@@ -175,9 +182,25 @@ public abstract class SpecificParquetRecordReaderBase<T> extends RecordReader<Vo
         this.requestedSchema = ParquetSchemaConverter.EMPTY_MESSAGE();
       }
     }
-    reader.setRequestedSchema(requestedSchema);
+    fileReader.setRequestedSchema(requestedSchema);
     this.sparkSchema = new ParquetToSparkSchemaConverter(config).convert(requestedSchema);
-    this.totalRowCount = reader.getFilteredRecordCount();
+    this.totalRowCount = fileReader.getFilteredRecordCount();
+  }
+
+  @VisibleForTesting
+  protected void initialize(
+      MessageType fileSchema,
+      MessageType requestedSchema,
+      ParquetRowGroupReader rowGroupReader,
+      int totalRowCount) throws IOException {
+    this.reader = rowGroupReader;
+    this.fileSchema = fileSchema;
+    this.requestedSchema = requestedSchema;
+    Configuration config = new Configuration();
+    config.setBoolean(SQLConf.PARQUET_BINARY_AS_STRING().key() , false);
+    config.setBoolean(SQLConf.PARQUET_INT96_AS_TIMESTAMP().key(), false);
+    this.sparkSchema = new ParquetToSparkSchemaConverter(config).convert(requestedSchema);
+    this.totalRowCount = totalRowCount;
   }
 
   @Override
@@ -220,6 +243,33 @@ public abstract class SpecificParquetRecordReaderBase<T> extends RecordReader<Vo
     } catch (InstantiationException | IllegalAccessException |
              NoSuchMethodException | InvocationTargetException e) {
       throw new BadConfigurationException("could not instantiate read support class", e);
+    }
+  }
+
+  interface ParquetRowGroupReader extends Closeable {
+    /**
+     * Reads the next row group from this reader. Returns null if there is no more row group.
+     */
+    PageReadStore readNextRowGroup() throws IOException;
+  }
+
+  private static class ParquetRowGroupReaderImpl implements ParquetRowGroupReader {
+    private final ParquetFileReader reader;
+
+    ParquetRowGroupReaderImpl(ParquetFileReader reader) {
+      this.reader = reader;
+    }
+
+    @Override
+    public PageReadStore readNextRowGroup() throws IOException {
+      return reader.readNextFilteredRowGroup();
+    }
+
+    @Override
+    public void close() throws IOException {
+      if (reader != null) {
+        reader.close();
+      }
     }
   }
 }

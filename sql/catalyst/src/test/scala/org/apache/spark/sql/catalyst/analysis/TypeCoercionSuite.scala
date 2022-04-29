@@ -1362,7 +1362,8 @@ class TypeCoercionSuite extends AnalysisTest {
 
     assert(unionRelation.children.head.isInstanceOf[Project])
     assert(unionRelation.children(1).isInstanceOf[Project])
-    assert(unionRelation.children(2).isInstanceOf[Project])
+    // thirdTable has same datatypes as expected ones, so no need to add extra Project.
+    assert(unionRelation.children(2).isInstanceOf[LocalRelation])
     assert(unionRelation.children(3).isInstanceOf[Project])
   }
 

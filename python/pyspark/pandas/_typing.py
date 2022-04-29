@@ -22,11 +22,11 @@ import numpy as np
 from pandas.api.extensions import ExtensionDtype
 
 if TYPE_CHECKING:
-    from pyspark.pandas.base import IndexOpsMixin  # noqa: F401 (SPARK-34943)
-    from pyspark.pandas.frame import DataFrame  # noqa: F401 (SPARK-34943)
-    from pyspark.pandas.generic import Frame  # noqa: F401 (SPARK-34943)
-    from pyspark.pandas.indexes.base import Index  # noqa: F401 (SPARK-34943)
-    from pyspark.pandas.series import Series  # noqa: F401 (SPARK-34943)
+    from pyspark.pandas.base import IndexOpsMixin  # noqa: F401 (SPARK-37011)
+    from pyspark.pandas.frame import DataFrame
+    from pyspark.pandas.generic import Frame  # noqa: F401 (SPARK-37011)
+    from pyspark.pandas.indexes.base import Index
+    from pyspark.pandas.series import Series
 
 
 # TypeVars

@@ -64,4 +64,8 @@ private[spark] object SparkThrowableHelper {
   def getSqlState(errorClass: String): String = {
     Option(errorClass).flatMap(errorClassToInfoMap.get).flatMap(_.sqlState).orNull
   }
+
+  def isInternalError(errorClass: String): Boolean = {
+    errorClass == "INTERNAL_ERROR"
+  }
 }

@@ -15,6 +15,7 @@
 # limitations under the License.
 #
 
+from decimal import Decimal
 import os
 import pydoc
 import shutil
@@ -949,6 +950,13 @@ class DataFrameTests(ReusedSQLTestCase):
 
         assert_frame_equal(pdf, psdf_from_sdf.to_pandas())
         assert_frame_equal(pdf_with_index, psdf_from_sdf_with_index.to_pandas())
+
+    # test for SPARK-36337
+    def test_create_nan_decimal_dataframe(self):
+        self.assertEqual(
+            self.spark.createDataFrame(data=[Decimal('NaN')], schema='decimal').collect(),
+            [Row(value=None)]
+        )
 
 
 class QueryExecutionListenerTests(unittest.TestCase, SQLTestUtils):

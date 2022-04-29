@@ -428,6 +428,32 @@ object DataType {
     }
   }
 
+  /**
+   * Returns true if the two data types have the same field names in order recursively.
+   */
+  def equalsStructurallyByName(
+      from: DataType,
+      to: DataType,
+      resolver: Resolver): Boolean = {
+    (from, to) match {
+      case (left: ArrayType, right: ArrayType) =>
+        equalsStructurallyByName(left.elementType, right.elementType, resolver)
+
+      case (left: MapType, right: MapType) =>
+        equalsStructurallyByName(left.keyType, right.keyType, resolver) &&
+          equalsStructurallyByName(left.valueType, right.valueType, resolver)
+
+      case (StructType(fromFields), StructType(toFields)) =>
+        fromFields.length == toFields.length &&
+          fromFields.zip(toFields)
+            .forall { case (l, r) =>
+              resolver(l.name, r.name) && equalsStructurallyByName(l.dataType, r.dataType, resolver)
+            }
+
+      case _ => true
+    }
+  }
+
   private val SparkGeneratedName = """col\d+""".r
   private def isSparkGeneratedName(name: String): Boolean = name match {
     case SparkGeneratedName(_*) => true

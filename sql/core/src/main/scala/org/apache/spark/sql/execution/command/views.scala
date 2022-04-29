@@ -25,7 +25,7 @@ import org.json4s.jackson.JsonMethods._
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, SQLConfHelper, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.{GlobalTempView, LocalTempView, PersistedView, ViewType}
+import org.apache.spark.sql.catalyst.analysis.{GlobalTempView, LocalTempView, ViewType}
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType, SessionCatalog, TemporaryViewRelation}
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, SubqueryExpression, UserDefinedExpression}
 import org.apache.spark.sql.catalyst.plans.logical.{AnalysisOnlyCommand, LogicalPlan, Project, View}
@@ -82,26 +82,7 @@ case class CreateViewCommand(
 
   def markAsAnalyzed(): LogicalPlan = copy(isAnalyzed = true)
 
-  if (viewType == PersistedView) {
-    require(originalText.isDefined, "'originalText' must be provided to create permanent view")
-  }
-
-  if (allowExisting && replace) {
-    throw QueryCompilationErrors.createViewWithBothIfNotExistsAndReplaceError()
-  }
-
   private def isTemporary = viewType == LocalTempView || viewType == GlobalTempView
-
-  // Disallows 'CREATE TEMPORARY VIEW IF NOT EXISTS' to be consistent with 'CREATE TEMPORARY TABLE'
-  if (allowExisting && isTemporary) {
-    throw QueryCompilationErrors.defineTempViewWithIfNotExistsError()
-  }
-
-  // Temporary view names should NOT contain database prefix like "database.table"
-  if (isTemporary && name.database.isDefined) {
-    val database = name.database.get
-    throw QueryCompilationErrors.notAllowedToAddDBPrefixForTempViewError(database)
-  }
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     if (!isAnalyzed) {

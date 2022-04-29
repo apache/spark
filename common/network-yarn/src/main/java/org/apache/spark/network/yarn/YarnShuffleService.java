@@ -93,7 +93,8 @@ import org.apache.spark.network.yarn.util.HadoopConfigProvider;
  * This {@code classpath} configuration is only supported on YARN versions >= 2.9.0.
  */
 public class YarnShuffleService extends AuxiliaryService {
-  private static final Logger logger = LoggerFactory.getLogger(YarnShuffleService.class);
+  private static final Logger defaultLogger = LoggerFactory.getLogger(YarnShuffleService.class);
+  private Logger logger = defaultLogger;
 
   // Port on which the shuffle server listens for fetch requests
   private static final String SPARK_SHUFFLE_SERVICE_PORT_KEY = "spark.shuffle.service.port";
@@ -106,6 +107,12 @@ public class YarnShuffleService extends AuxiliaryService {
   static final String SPARK_SHUFFLE_SERVICE_METRICS_NAMESPACE_KEY =
       "spark.yarn.shuffle.service.metrics.namespace";
   private static final String DEFAULT_SPARK_SHUFFLE_SERVICE_METRICS_NAME = "sparkShuffleService";
+
+  /**
+   * The namespace to use for the logs produced by the shuffle service
+   */
+  static final String SPARK_SHUFFLE_SERVICE_LOGS_NAMESPACE_KEY =
+      "spark.yarn.shuffle.service.logs.namespace";
 
   // Whether the shuffle server should authenticate fetch requests
   private static final String SPARK_AUTHENTICATE_KEY = "spark.authenticate";
@@ -204,6 +211,13 @@ public class YarnShuffleService extends AuxiliaryService {
           confOverlayUrl);
       _conf.addResource(confOverlayUrl);
     }
+
+    String logsNamespace = _conf.get(SPARK_SHUFFLE_SERVICE_LOGS_NAMESPACE_KEY, "");
+    if (!logsNamespace.isEmpty()) {
+      String className = YarnShuffleService.class.getName();
+      logger = LoggerFactory.getLogger(className + "." + logsNamespace);
+    }
+
     super.serviceInit(_conf);
 
     boolean stopOnFailure = _conf.getBoolean(STOP_ON_FAILURE_KEY, DEFAULT_STOP_ON_FAILURE);
@@ -284,7 +298,7 @@ public class YarnShuffleService extends AuxiliaryService {
       // will also need the transport configuration.
       return mergeManagerSubClazz.getConstructor(TransportConf.class).newInstance(conf);
     } catch (Exception e) {
-      logger.error("Unable to create an instance of {}", mergeManagerImplClassName);
+      defaultLogger.error("Unable to create an instance of {}", mergeManagerImplClassName);
       return new NoOpMergedShuffleFileManager(conf);
     }
   }

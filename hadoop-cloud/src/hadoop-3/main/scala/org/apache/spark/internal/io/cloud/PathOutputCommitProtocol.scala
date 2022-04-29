@@ -23,6 +23,7 @@ import org.apache.hadoop.fs.Path
 import org.apache.hadoop.mapreduce.TaskAttemptContext
 import org.apache.hadoop.mapreduce.lib.output.{FileOutputCommitter, PathOutputCommitter, PathOutputCommitterFactory}
 
+import org.apache.spark.internal.io.FileNameSpec
 import org.apache.spark.internal.io.HadoopMapReduceCommitProtocol
 
 /**
@@ -122,20 +123,20 @@ class PathOutputCommitProtocol(
    *
    * @param taskContext task context
    * @param dir         optional subdirectory
-   * @param ext         file extension
+   * @param spec        file naming specification
    * @return a path as a string
    */
   override def newTaskTempFile(
       taskContext: TaskAttemptContext,
       dir: Option[String],
-      ext: String): String = {
+      spec: FileNameSpec): String = {
 
     val workDir = committer.getWorkPath
     val parent = dir.map {
       d => new Path(workDir, d)
     }.getOrElse(workDir)
-    val file = new Path(parent, getFilename(taskContext, ext))
-    logTrace(s"Creating task file $file for dir $dir and ext $ext")
+    val file = new Path(parent, getFilename(taskContext, spec))
+    logTrace(s"Creating task file $file for dir $dir and spec $spec")
     file.toString
   }
 

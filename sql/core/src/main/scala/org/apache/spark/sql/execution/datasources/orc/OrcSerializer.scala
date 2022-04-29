@@ -88,7 +88,7 @@ class OrcSerializer(dataSchema: StructType) {
         (getter, ordinal) => new ShortWritable(getter.getShort(ordinal))
       }
 
-    case IntegerType =>
+    case IntegerType | _: YearMonthIntervalType =>
       if (reuseObj) {
         val result = new IntWritable()
         (getter, ordinal) =>
@@ -99,7 +99,7 @@ class OrcSerializer(dataSchema: StructType) {
       }
 
 
-    case LongType =>
+    case LongType | _: DayTimeIntervalType =>
       if (reuseObj) {
         val result = new LongWritable()
         (getter, ordinal) =>

@@ -679,7 +679,7 @@ select timestamp'2011-11-11 11:11:11' + '1'
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(TIMESTAMP_NTZ '2011-11-11 11:11:11' + CAST('1' AS TIMESTAMP_NTZ))' due to data type mismatch: '(TIMESTAMP_NTZ '2011-11-11 11:11:11' + CAST('1' AS TIMESTAMP_NTZ))' requires (numeric or interval or interval day to second or interval year to month) type, not timestamp_ntz; line 1 pos 7
+cannot resolve '(TIMESTAMP_NTZ '2011-11-11 11:11:11' + CAST('1' AS TIMESTAMP_NTZ))' due to data type mismatch: '(TIMESTAMP_NTZ '2011-11-11 11:11:11' + CAST('1' AS TIMESTAMP_NTZ))' requires (numeric or interval day to second or interval year to month or interval) type, not timestamp_ntz; line 1 pos 7
 
 
 -- !query
@@ -688,7 +688,7 @@ select '1' + timestamp'2011-11-11 11:11:11'
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST('1' AS TIMESTAMP_NTZ) + TIMESTAMP_NTZ '2011-11-11 11:11:11')' due to data type mismatch: '(CAST('1' AS TIMESTAMP_NTZ) + TIMESTAMP_NTZ '2011-11-11 11:11:11')' requires (numeric or interval or interval day to second or interval year to month) type, not timestamp_ntz; line 1 pos 7
+cannot resolve '(CAST('1' AS TIMESTAMP_NTZ) + TIMESTAMP_NTZ '2011-11-11 11:11:11')' due to data type mismatch: '(CAST('1' AS TIMESTAMP_NTZ) + TIMESTAMP_NTZ '2011-11-11 11:11:11')' requires (numeric or interval day to second or interval year to month or interval) type, not timestamp_ntz; line 1 pos 7
 
 
 -- !query

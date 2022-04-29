@@ -191,27 +191,27 @@ class FPGrowth(JavaEstimator, _FPGrowthParams, JavaMLWritable, JavaMLReadable):
     >>> fpm = fp.fit(data)
     >>> fpm.setPredictionCol("newPrediction")
     FPGrowthModel...
-    >>> fpm.freqItemsets.show(5)
+    >>> fpm.freqItemsets.sort("items").show(5)
     +---------+----+
     |    items|freq|
     +---------+----+
-    |      [s]|   3|
-    |   [s, x]|   3|
-    |[s, x, z]|   2|
-    |   [s, z]|   2|
-    |      [r]|   3|
+    |      [p]|   2|
+    |   [p, r]|   2|
+    |[p, r, z]|   2|
+    |   [p, z]|   2|
+    |      [q]|   2|
     +---------+----+
     only showing top 5 rows
     ...
-    >>> fpm.associationRules.show(5)
+    >>> fpm.associationRules.sort("antecedent", "consequent").show(5)
     +----------+----------+----------+----+------------------+
     |antecedent|consequent|confidence|lift|           support|
     +----------+----------+----------+----+------------------+
-    |    [t, s]|       [y]|       1.0| 2.0|0.3333333333333333|
-    |    [t, s]|       [x]|       1.0| 1.5|0.3333333333333333|
-    |    [t, s]|       [z]|       1.0| 1.2|0.3333333333333333|
     |       [p]|       [r]|       1.0| 2.0|0.3333333333333333|
     |       [p]|       [z]|       1.0| 1.2|0.3333333333333333|
+    |    [p, r]|       [z]|       1.0| 1.2|0.3333333333333333|
+    |    [p, z]|       [r]|       1.0| 2.0|0.3333333333333333|
+    |       [q]|       [t]|       1.0| 2.0|0.3333333333333333|
     +----------+----------+----------+----+------------------+
     only showing top 5 rows
     ...

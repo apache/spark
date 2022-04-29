@@ -198,4 +198,19 @@ class KubernetesConfSuite extends SparkFunSuite {
     assert(driverConf.nodeSelector === CUSTOM_NODE_SELECTOR)
     assert(driverConf.driverNodeSelector === CUSTOM_DRIVER_NODE_SELECTOR)
   }
+
+  test("SPARK-36059: Set driver.scheduler and executor.scheduler") {
+    val sparkConf = new SparkConf(false)
+    val execUnsetConf = KubernetesTestConf.createExecutorConf(sparkConf)
+    val driverUnsetConf = KubernetesTestConf.createExecutorConf(sparkConf)
+    assert(execUnsetConf.schedulerName === "")
+    assert(driverUnsetConf.schedulerName === "")
+
+    sparkConf.set(KUBERNETES_DRIVER_SCHEDULER_NAME, "driverScheduler")
+    sparkConf.set(KUBERNETES_EXECUTOR_SCHEDULER_NAME, "executorScheduler")
+    val execConf = KubernetesTestConf.createExecutorConf(sparkConf)
+    assert(execConf.schedulerName === "executorScheduler")
+    val driverConf = KubernetesTestConf.createDriverConf(sparkConf)
+    assert(driverConf.schedulerName === "driverScheduler")
+  }
 }

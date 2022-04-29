@@ -41,6 +41,7 @@ private[spark] abstract class KubernetesConf(val sparkConf: SparkConf) {
   def secretEnvNamesToKeyRefs: Map[String, String]
   def secretNamesToMountPaths: Map[String, String]
   def volumes: Seq[KubernetesVolumeSpec]
+  def schedulerName: String
 
   def appName: String = get("spark.app.name", "spark")
 
@@ -130,6 +131,8 @@ private[spark] class KubernetesDriverConf(
   override def volumes: Seq[KubernetesVolumeSpec] = {
     KubernetesVolumeUtils.parseVolumesWithPrefix(sparkConf, KUBERNETES_DRIVER_VOLUMES_PREFIX)
   }
+
+  override def schedulerName: String = get(KUBERNETES_DRIVER_SCHEDULER_NAME).getOrElse("")
 }
 
 private[spark] class KubernetesExecutorConf(
@@ -185,6 +188,8 @@ private[spark] class KubernetesExecutorConf(
   override def volumes: Seq[KubernetesVolumeSpec] = {
     KubernetesVolumeUtils.parseVolumesWithPrefix(sparkConf, KUBERNETES_EXECUTOR_VOLUMES_PREFIX)
   }
+
+  override def schedulerName: String = get(KUBERNETES_EXECUTOR_SCHEDULER_NAME).getOrElse("")
 
   private def checkExecutorEnvKey(key: String): Boolean = {
     // Pattern for matching an executorEnv key, which meets certain naming rules.

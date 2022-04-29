@@ -16,6 +16,7 @@
 #
 
 from distutils.version import LooseVersion
+from typing import no_type_check
 
 import numpy as np
 import pandas as pd
@@ -437,7 +438,8 @@ class CategoricalTest(PandasOnSparkTestCase, TestUtils):
 
         pdf, psdf = self.df_pair
 
-        def identity(x) -> ps.Series[psdf.b.dtype]:  # type: ignore
+        @no_type_check
+        def identity(x) -> ps.Series[psdf.b.dtype]:
             return x
 
         self.assert_eq(

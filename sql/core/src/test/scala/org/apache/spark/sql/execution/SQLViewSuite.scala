@@ -869,9 +869,9 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
           withSQLConf(CASE_SENSITIVE.key -> "true") {
             val e = intercept[AnalysisException] {
               sql("SELECT * FROM v1")
-            }.getMessage
-            assert(e.contains("cannot resolve 'C1' given input columns: " +
-              "[spark_catalog.default.t.c1]"))
+            }
+            assert(e.getErrorClass == "MISSING_COLUMN")
+            assert(e.messageParameters.sameElements(Array("C1", "spark_catalog.default.t.c1")))
           }
           withSQLConf(ORDER_BY_ORDINAL.key -> "false") {
             checkAnswer(sql("SELECT * FROM v2"), Seq(Row(3), Row(2), Row(1)))
@@ -888,9 +888,9 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
           withSQLConf(GROUP_BY_ALIASES.key -> "false") {
             val e = intercept[AnalysisException] {
               sql("SELECT * FROM v4")
-            }.getMessage
-            assert(e.contains("cannot resolve 'a' given input columns: " +
-              "[spark_catalog.default.t.c1]"))
+            }
+            assert(e.getErrorClass == "MISSING_COLUMN")
+            assert(e.messageParameters.sameElements(Array("a", "spark_catalog.default.t.c1")))
           }
           withSQLConf(ANSI_ENABLED.key -> "true") {
             val e = intercept[ArithmeticException] {

@@ -128,4 +128,10 @@ trait ShowNamespacesSuiteBase extends QueryTest with DDLCommandTestUtils {
       spark.sessionState.catalogManager.reset()
     }
   }
+
+  test("SPARK-34359: keep the legacy output schema") {
+    withSQLConf(SQLConf.LEGACY_KEEP_COMMAND_OUTPUT_SCHEMA.key -> "true") {
+      assert(sql("SHOW NAMESPACES").schema.fieldNames.toSeq == Seq("databaseName"))
+    }
+  }
 }

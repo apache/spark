@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.datasources.parquet
 
 import java.io.File
+import java.time.{Duration, Period}
 import java.util.concurrent.TimeUnit
 
 import org.apache.hadoop.fs.{FileSystem, Path}
@@ -899,6 +900,20 @@ abstract class ParquetQuerySuite extends QueryTest with ParquetTest with SharedS
           assert(e.isInstanceOf[SchemaColumnConvertNotSupportedException])
         }
       }
+    }
+  }
+
+  test("SPARK-36825, SPARK-36852: create table with ANSI intervals") {
+    withTable("tbl") {
+      sql("create table tbl (c1 interval day, c2 interval year to month) using parquet")
+      sql("insert into tbl values (interval '100' day, interval '1-11' year to month)")
+      sql("insert into tbl values (null, null)")
+      sql("insert into tbl values (interval '-100' day, interval -'1-11' year to month)")
+      val expected = Seq(
+        (Duration.ofDays(100), Period.ofYears(1).plusMonths(11)),
+        (null, null),
+        (Duration.ofDays(100).negated(), Period.ofYears(1).plusMonths(11).negated())).toDF()
+      checkAnswer(sql("select * from tbl"), expected)
     }
   }
 }

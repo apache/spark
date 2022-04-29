@@ -21,7 +21,7 @@ from typing import List, NamedTuple, Optional, Tuple, TypeVar
 
 import array
 
-from numpy import float64, int64, ndarray  # type: ignore[import]
+from numpy import float64, int64, ndarray
 from py4j.java_gateway import JavaObject  # type: ignore[import]
 
 from pyspark.mllib._typing import VectorLike

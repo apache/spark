@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.datasources
 import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.{SharedSparkSession, SQLTestUtils}
+import org.apache.spark.util.VersionUtils
 
 trait FileSourceCodecSuite extends QueryTest with SQLTestUtils with SharedSparkSession {
 
@@ -56,13 +57,14 @@ class ParquetCodecSuite extends FileSourceCodecSuite {
   override def format: String = "parquet"
   override val codecConfigName: String = SQLConf.PARQUET_COMPRESSION.key
   // Exclude "lzo" because it is GPL-licenced so not included in Hadoop.
-  override protected def availableCodecs: Seq[String] =
-    if (System.getProperty("os.arch") == "aarch64") {
-      // Exclude "brotli" due to PARQUET-1975.
-      Seq("none", "uncompressed", "snappy", "lz4", "gzip", "zstd")
-    } else {
-      Seq("none", "uncompressed", "snappy", "lz4", "gzip", "brotli", "zstd")
+  // Exclude "brotli" because the com.github.rdblue:brotli-codec dependency is not available
+  // on Maven Central.
+  override protected def availableCodecs: Seq[String] = {
+    Seq("none", "uncompressed", "snappy", "gzip", "zstd") ++ {
+      // Exclude "lz4" for Hadoop 2.x profile since the lz4-java support is only in 3.x
+      if (VersionUtils.isHadoop3) Seq("lz4") else Seq()
     }
+  }
 }
 
 class OrcCodecSuite extends FileSourceCodecSuite {

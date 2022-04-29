@@ -274,9 +274,10 @@ Format specifier '%13$s'
 -- !query
 select format_string('%0$s', 'Hello')
 -- !query schema
-struct<format_string(%0$s, Hello):string>
+struct<>
 -- !query output
-Hello
+org.apache.spark.sql.AnalysisException
+requirement failed: Illegal format argument index = 0; line 1 pos 7
 
 
 -- !query

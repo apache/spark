@@ -94,6 +94,8 @@ class ConfigEntrySuite extends SparkFunSuite {
     assert(conf.get(bytes) === 1024L)
     conf.set(bytes.key, "1k")
     assert(conf.get(bytes) === 1L)
+    conf.set(bytes.key, "2048")
+    assert(conf.get(bytes) === 2048)
   }
 
   test("conf entry: regex") {

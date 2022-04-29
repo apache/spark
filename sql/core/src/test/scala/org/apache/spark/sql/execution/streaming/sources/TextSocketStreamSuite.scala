@@ -34,7 +34,6 @@ import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.execution.datasources.v2.StreamingDataSourceV2Relation
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.continuous._
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.{StreamingQueryException, StreamTest}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
@@ -96,80 +95,76 @@ class TextSocketStreamSuite extends StreamTest with SharedSparkSession {
     serverThread = new ServerThread()
     serverThread.start()
 
-    withSQLConf(SQLConf.UNSUPPORTED_OPERATION_CHECK_ENABLED.key -> "false") {
-      val ref = spark
-      import ref.implicits._
+    val ref = spark
+    import ref.implicits._
 
-      val socket = spark
-        .readStream
-        .format("socket")
-        .options(Map("host" -> "localhost", "port" -> serverThread.port.toString))
-        .load()
-        .as[String]
+    val socket = spark
+      .readStream
+      .format("socket")
+      .options(Map("host" -> "localhost", "port" -> serverThread.port.toString))
+      .load()
+      .as[String]
 
-      assert(socket.schema === StructType(StructField("value", StringType) :: Nil))
+    assert(socket.schema === StructType(StructField("value", StringType) :: Nil))
 
-      testStream(socket)(
-        StartStream(),
-        AddSocketData("hello"),
-        CheckAnswer("hello"),
-        AddSocketData("world"),
-        CheckLastBatch("world"),
-        CheckAnswer("hello", "world"),
-        StopStream
-      )
-    }
+    testStream(socket)(
+      StartStream(),
+      AddSocketData("hello"),
+      CheckAnswer("hello"),
+      AddSocketData("world"),
+      CheckLastBatch("world"),
+      CheckAnswer("hello", "world"),
+      StopStream
+    )
   }
 
   test("timestamped usage") {
     serverThread = new ServerThread()
     serverThread.start()
 
-    withSQLConf(SQLConf.UNSUPPORTED_OPERATION_CHECK_ENABLED.key -> "false") {
-      val socket = spark
-        .readStream
-        .format("socket")
-        .options(Map(
-          "host" -> "localhost",
-          "port" -> serverThread.port.toString,
-          "includeTimestamp" -> "true"))
-        .load()
+    val socket = spark
+      .readStream
+      .format("socket")
+      .options(Map(
+        "host" -> "localhost",
+        "port" -> serverThread.port.toString,
+        "includeTimestamp" -> "true"))
+      .load()
 
-      assert(socket.schema === StructType(StructField("value", StringType) ::
-        StructField("timestamp", TimestampType) :: Nil))
+    assert(socket.schema === StructType(StructField("value", StringType) ::
+      StructField("timestamp", TimestampType) :: Nil))
 
-      var batch1Stamp: Timestamp = null
-      var batch2Stamp: Timestamp = null
+    var batch1Stamp: Timestamp = null
+    var batch2Stamp: Timestamp = null
 
-      val curr = System.currentTimeMillis()
-      testStream(socket)(
-        StartStream(),
-        AddSocketData("hello"),
-        CheckAnswerRowsByFunc(
-          rows => {
-            assert(rows.size === 1)
-            assert(rows.head.getAs[String](0) === "hello")
-            batch1Stamp = rows.head.getAs[Timestamp](1)
-            Thread.sleep(10)
-          },
-          true),
-        AddSocketData("world"),
-        CheckAnswerRowsByFunc(
-          rows => {
-            assert(rows.size === 1)
-            assert(rows.head.getAs[String](0) === "world")
-            batch2Stamp = rows.head.getAs[Timestamp](1)
-          },
-          true),
-        StopStream
-      )
+    val curr = System.currentTimeMillis()
+    testStream(socket)(
+      StartStream(),
+      AddSocketData("hello"),
+      CheckAnswerRowsByFunc(
+        rows => {
+          assert(rows.size === 1)
+          assert(rows.head.getAs[String](0) === "hello")
+          batch1Stamp = rows.head.getAs[Timestamp](1)
+          Thread.sleep(10)
+        },
+        true),
+      AddSocketData("world"),
+      CheckAnswerRowsByFunc(
+        rows => {
+          assert(rows.size === 1)
+          assert(rows.head.getAs[String](0) === "world")
+          batch2Stamp = rows.head.getAs[Timestamp](1)
+        },
+        true),
+      StopStream
+    )
 
-      // Timestamp for rate stream is round to second which leads to milliseconds lost, that will
-      // make batch1stamp smaller than current timestamp if both of them are in the same second.
-      // Comparing by second to make sure the correct behavior.
-      assert(batch1Stamp.getTime >= SECONDS.toMillis(MILLISECONDS.toSeconds(curr)))
-      assert(!batch2Stamp.before(batch1Stamp))
-    }
+    // Timestamp for rate stream is round to second which leads to milliseconds lost, that will
+    // make batch1stamp smaller than current timestamp if both of them are in the same second.
+    // Comparing by second to make sure the correct behavior.
+    assert(batch1Stamp.getTime >= SECONDS.toMillis(MILLISECONDS.toSeconds(curr)))
+    assert(!batch2Stamp.before(batch1Stamp))
   }
 
   test("params not given") {
@@ -209,51 +204,67 @@ class TextSocketStreamSuite extends StreamTest with SharedSparkSession {
     serverThread = new ServerThread()
     serverThread.start()
 
-    withSQLConf(SQLConf.UNSUPPORTED_OPERATION_CHECK_ENABLED.key -> "false") {
-      val ref = spark
-      import ref.implicits._
+    val ref = spark
+    import ref.implicits._
 
-      val socket = spark
-        .readStream
-        .format("socket")
-        .options(Map("host" -> "localhost", "port" -> serverThread.port.toString))
-        .load()
-        .as[String]
+    val socket = spark
+      .readStream
+      .format("socket")
+      .options(Map("host" -> "localhost", "port" -> serverThread.port.toString))
+      .load()
+      .as[String]
 
-      assert(socket.schema === StructType(StructField("value", StringType) :: Nil))
+    assert(socket.schema === StructType(StructField("value", StringType) :: Nil))
 
-      testStream(socket)(
-        StartStream(),
-        AddSocketData("hello"),
-        CheckAnswer("hello"),
-        AssertOnQuery { q =>
-          val numRowMetric =
-            q.lastExecution.executedPlan.collectLeaves().head.metrics.get("numOutputRows")
-          numRowMetric.nonEmpty && numRowMetric.get.value == 1
-        },
-        StopStream
-      )
-    }
+    testStream(socket)(
+      StartStream(),
+      AddSocketData("hello"),
+      CheckAnswer("hello"),
+      AssertOnQuery { q =>
+        val numRowMetric =
+          q.lastExecution.executedPlan.collectLeaves().head.metrics.get("numOutputRows")
+        numRowMetric.nonEmpty && numRowMetric.get.value == 1
+      },
+      StopStream
+    )
   }
 
   test("verify ServerThread only accepts the first connection") {
     serverThread = new ServerThread()
     serverThread.start()
 
-    withSQLConf(SQLConf.UNSUPPORTED_OPERATION_CHECK_ENABLED.key -> "false") {
-      val ref = spark
-      import ref.implicits._
+    val ref = spark
+    import ref.implicits._
 
-      val socket = spark
+    val socket = spark
+      .readStream
+      .format("socket")
+      .options(Map("host" -> "localhost", "port" -> serverThread.port.toString))
+      .load()
+      .as[String]
+
+    assert(socket.schema === StructType(StructField("value", StringType) :: Nil))
+
+    testStream(socket)(
+      StartStream(),
+      AddSocketData("hello"),
+      CheckAnswer("hello"),
+      AddSocketData("world"),
+      CheckLastBatch("world"),
+      CheckAnswer("hello", "world"),
+      StopStream
+    )
+
+    // we are trying to connect to the server once again which should fail
+    try {
+      val socket2 = spark
         .readStream
         .format("socket")
         .options(Map("host" -> "localhost", "port" -> serverThread.port.toString))
         .load()
         .as[String]
 
-      assert(socket.schema === StructType(StructField("value", StringType) :: Nil))
-
-      testStream(socket)(
+      testStream(socket2)(
         StartStream(),
         AddSocketData("hello"),
         CheckAnswer("hello"),
@@ -263,29 +274,9 @@ class TextSocketStreamSuite extends StreamTest with SharedSparkSession {
         StopStream
       )
 
-      // we are trying to connect to the server once again which should fail
-      try {
-        val socket2 = spark
-          .readStream
-          .format("socket")
-          .options(Map("host" -> "localhost", "port" -> serverThread.port.toString))
-          .load()
-          .as[String]
-
-        testStream(socket2)(
-          StartStream(),
-          AddSocketData("hello"),
-          CheckAnswer("hello"),
-          AddSocketData("world"),
-          CheckLastBatch("world"),
-          CheckAnswer("hello", "world"),
-          StopStream
-        )
-
-        fail("StreamingQueryException is expected!")
-      } catch {
-        case e: StreamingQueryException if e.cause.isInstanceOf[SocketException] => // pass
-      }
+      fail("StreamingQueryException is expected!")
+    } catch {
+      case e: StreamingQueryException if e.cause.isInstanceOf[SocketException] => // pass
     }
   }
 

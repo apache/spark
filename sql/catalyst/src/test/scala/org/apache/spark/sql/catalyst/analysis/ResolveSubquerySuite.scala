@@ -131,31 +131,36 @@ class ResolveSubquerySuite extends AnalysisTest {
 
     // SELECT * FROM t1, LATERAL (SELECT * FROM t2, LATERAL (SELECT a, b, c))
     // TODO: support accessing columns from outer outer query.
-    assertAnalysisError(
+    assertAnalysisErrorClass(
       lateralJoin(t1, lateralJoin(t2, t0.select('a, 'b, 'c))),
-      Seq("cannot resolve 'a' given input columns: []"))
+      "MISSING_COLUMN",
+      Array("a", ""))
   }
 
   test("lateral subquery with unresolvable attributes") {
     // SELECT * FROM t1, LATERAL (SELECT a, c)
-    assertAnalysisError(
+    assertAnalysisErrorClass(
       lateralJoin(t1, t0.select('a, 'c)),
-      Seq("cannot resolve 'c' given input columns: []")
+      "MISSING_COLUMN",
+      Array("c", "")
     )
     // SELECT * FROM t1, LATERAL (SELECT a, b, c, d FROM t2)
-    assertAnalysisError(
+    assertAnalysisErrorClass(
       lateralJoin(t1, t2.select('a, 'b, 'c, 'd)),
-      Seq("cannot resolve 'd' given input columns: [b, c]")
+      "MISSING_COLUMN",
+      Array("d", "b, c")
     )
     // SELECT * FROM t1, LATERAL (SELECT * FROM t2, LATERAL (SELECT t1.a))
-    assertAnalysisError(
+    assertAnalysisErrorClass(
       lateralJoin(t1, lateralJoin(t2, t0.select($"t1.a"))),
-      Seq("cannot resolve 't1.a' given input columns: []")
+      "MISSING_COLUMN",
+      Array("t1.a", "")
     )
     // SELECT * FROM t1, LATERAL (SELECT * FROM t2, LATERAL (SELECT a, b))
-    assertAnalysisError(
+    assertAnalysisErrorClass(
       lateralJoin(t1, lateralJoin(t2, t0.select('a, 'b))),
-      Seq("cannot resolve 'a' given input columns: []")
+      "MISSING_COLUMN",
+      Array("a", "")
     )
   }
 

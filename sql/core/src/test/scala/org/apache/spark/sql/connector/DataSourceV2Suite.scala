@@ -29,6 +29,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.connector.catalog.{SupportsRead, Table, TableCapability, TableProvider}
 import org.apache.spark.sql.connector.catalog.TableCapability._
 import org.apache.spark.sql.connector.expressions.Transform
+import org.apache.spark.sql.connector.expressions.filter.{Filter => V2Filter, GreaterThan => V2GreaterThan}
 import org.apache.spark.sql.connector.read._
 import org.apache.spark.sql.connector.read.partitioning.{ClusteredDistribution, Distribution, Partitioning}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
@@ -52,10 +53,25 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
     }.head
   }
 
+  private def getBatchWithV2Filter(query: DataFrame): AdvancedBatchWithV2Filter = {
+    query.queryExecution.executedPlan.collect {
+      case d: BatchScanExec =>
+        d.batch.asInstanceOf[AdvancedBatchWithV2Filter]
+    }.head
+  }
+
   private def getJavaBatch(query: DataFrame): JavaAdvancedDataSourceV2.AdvancedBatch = {
     query.queryExecution.executedPlan.collect {
       case d: BatchScanExec =>
         d.batch.asInstanceOf[JavaAdvancedDataSourceV2.AdvancedBatch]
+    }.head
+  }
+
+  private def getJavaBatchWithV2Filter(
+      query: DataFrame): JavaAdvancedDataSourceV2WithV2Filter.AdvancedBatchWithV2Filter = {
+    query.queryExecution.executedPlan.collect {
+      case d: BatchScanExec =>
+        d.batch.asInstanceOf[JavaAdvancedDataSourceV2WithV2Filter.AdvancedBatchWithV2Filter]
     }.head
   }
 
@@ -121,6 +137,66 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
           assert(batch.requiredSchema.fieldNames === Seq("j"))
         } else {
           val batch = getJavaBatch(q4)
+          // 'j < 10 is not supported by the testing data source.
+          assert(batch.filters.isEmpty)
+          assert(batch.requiredSchema.fieldNames === Seq("j"))
+        }
+      }
+    }
+  }
+
+  test("advanced implementation with V2 Filter") {
+    Seq(classOf[AdvancedDataSourceV2WithV2Filter], classOf[JavaAdvancedDataSourceV2WithV2Filter])
+      .foreach { cls =>
+      withClue(cls.getName) {
+        val df = spark.read.format(cls.getName).load()
+        checkAnswer(df, (0 until 10).map(i => Row(i, -i)))
+
+        val q1 = df.select('j)
+        checkAnswer(q1, (0 until 10).map(i => Row(-i)))
+        if (cls == classOf[AdvancedDataSourceV2WithV2Filter]) {
+          val batch = getBatchWithV2Filter(q1)
+          assert(batch.filters.isEmpty)
+          assert(batch.requiredSchema.fieldNames === Seq("j"))
+        } else {
+          val batch = getJavaBatchWithV2Filter(q1)
+          assert(batch.filters.isEmpty)
+          assert(batch.requiredSchema.fieldNames === Seq("j"))
+        }
+
+        val q2 = df.filter('i > 3)
+        checkAnswer(q2, (4 until 10).map(i => Row(i, -i)))
+        if (cls == classOf[AdvancedDataSourceV2WithV2Filter]) {
+          val batch = getBatchWithV2Filter(q2)
+          assert(batch.filters.flatMap(_.references.map(_.describe)).toSet == Set("i"))
+          assert(batch.requiredSchema.fieldNames === Seq("i", "j"))
+        } else {
+          val batch = getJavaBatchWithV2Filter(q2)
+          assert(batch.filters.flatMap(_.references.map(_.describe)).toSet == Set("i"))
+          assert(batch.requiredSchema.fieldNames === Seq("i", "j"))
+        }
+
+        val q3 = df.select('i).filter('i > 6)
+        checkAnswer(q3, (7 until 10).map(i => Row(i)))
+        if (cls == classOf[AdvancedDataSourceV2WithV2Filter]) {
+          val batch = getBatchWithV2Filter(q3)
+          assert(batch.filters.flatMap(_.references.map(_.describe)).toSet == Set("i"))
+          assert(batch.requiredSchema.fieldNames === Seq("i"))
+        } else {
+          val batch = getJavaBatchWithV2Filter(q3)
+          assert(batch.filters.flatMap(_.references.map(_.describe)).toSet == Set("i"))
+          assert(batch.requiredSchema.fieldNames === Seq("i"))
+        }
+
+        val q4 = df.select('j).filter('j < -10)
+        checkAnswer(q4, Nil)
+        if (cls == classOf[AdvancedDataSourceV2WithV2Filter]) {
+          val batch = getBatchWithV2Filter(q4)
+          // 'j < 10 is not supported by the testing data source.
+          assert(batch.filters.isEmpty)
+          assert(batch.requiredSchema.fieldNames === Seq("j"))
+        } else {
+          val batch = getJavaBatchWithV2Filter(q4)
           // 'j < 10 is not supported by the testing data source.
           assert(batch.filters.isEmpty)
           assert(batch.requiredSchema.fieldNames === Seq("j"))
@@ -597,6 +673,72 @@ class AdvancedBatch(val filters: Array[Filter], val requiredSchema: StructType) 
       res.append(RangeInputPartition(5, 10))
     } else if (lowerBound.get < 9) {
       res.append(RangeInputPartition(lowerBound.get + 1, 10))
+    }
+
+    res.toArray
+  }
+
+  override def createReaderFactory(): PartitionReaderFactory = {
+    new AdvancedReaderFactory(requiredSchema)
+  }
+}
+
+class AdvancedDataSourceV2WithV2Filter extends TestingV2Source {
+
+  override def getTable(options: CaseInsensitiveStringMap): Table = new SimpleBatchTable {
+    override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
+      new AdvancedScanBuilderWithV2Filter()
+    }
+  }
+}
+
+class AdvancedScanBuilderWithV2Filter extends ScanBuilder
+  with Scan with SupportsPushDownV2Filters with SupportsPushDownRequiredColumns {
+
+  var requiredSchema = TestingV2Source.schema
+  var filters = Array.empty[V2Filter]
+
+  override def pruneColumns(requiredSchema: StructType): Unit = {
+    this.requiredSchema = requiredSchema
+  }
+
+  override def readSchema(): StructType = requiredSchema
+
+  override def pushFilters(filters: Array[V2Filter]): Array[V2Filter] = {
+    val (supported, unsupported) = filters.partition {
+      case _: V2GreaterThan => true
+      case _ => false
+    }
+    this.filters = supported
+    unsupported
+  }
+
+  override def pushedFilters(): Array[V2Filter] = filters
+
+  override def build(): Scan = this
+
+  override def toBatch: Batch = new AdvancedBatchWithV2Filter(filters, requiredSchema)
+}
+
+class AdvancedBatchWithV2Filter(
+    val filters: Array[V2Filter],
+    val requiredSchema: StructType) extends Batch {
+
+  override def planInputPartitions(): Array[InputPartition] = {
+    val lowerBound = filters.collectFirst {
+      case gt: V2GreaterThan => gt.value
+    }
+
+    val res = scala.collection.mutable.ArrayBuffer.empty[InputPartition]
+
+    if (lowerBound.isEmpty) {
+      res.append(RangeInputPartition(0, 5))
+      res.append(RangeInputPartition(5, 10))
+    } else if (lowerBound.get.value.asInstanceOf[Integer] < 4) {
+      res.append(RangeInputPartition(lowerBound.get.value.asInstanceOf[Integer] + 1, 5))
+      res.append(RangeInputPartition(5, 10))
+    } else if (lowerBound.get.value.asInstanceOf[Integer] < 9) {
+      res.append(RangeInputPartition(lowerBound.get.value.asInstanceOf[Integer] + 1, 10))
     }
 
     res.toArray

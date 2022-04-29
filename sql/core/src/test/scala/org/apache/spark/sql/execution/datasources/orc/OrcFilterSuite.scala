@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.datasources.orc
 import java.math.MathContext
 import java.nio.charset.StandardCharsets
 import java.sql.{Date, Timestamp}
+import java.time.{Duration, Period}
 
 import scala.collection.JavaConverters._
 
@@ -33,6 +34,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2ScanRelation
 import org.apache.spark.sql.execution.datasources.v2.orc.OrcScan
+import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
@@ -379,6 +381,101 @@ class OrcFilterSuite extends OrcTest with SharedSparkSession {
             checkFilterPredicate(dates(3) <= $"_1", PredicateLeaf.Operator.LESS_THAN)
           }
         }
+      }
+    }
+  }
+
+  test("SPARK-36960: filter pushdown - year-month interval") {
+    DataTypeTestUtils.yearMonthIntervalTypes.foreach { ymIntervalType =>
+
+      def periods(i: Int): Expression = Literal(Period.of(i, i, 0)).cast(ymIntervalType)
+
+      val baseDF = spark.createDataFrame((1 to 4).map { i =>
+        Tuple1.apply(Period.of(i, i, 0))
+      }).select(col("_1").cast(ymIntervalType))
+
+      withNestedOrcDataFrame(baseDF) {
+        case (inputDF, colName, _) =>
+          implicit val df: DataFrame = inputDF
+
+          val ymIntervalAttr = df(colName).expr
+          assert(df(colName).expr.dataType === ymIntervalType)
+
+         checkFilterPredicate(ymIntervalAttr.isNull, PredicateLeaf.Operator.IS_NULL)
+
+          checkFilterPredicate(ymIntervalAttr === periods(1),
+            PredicateLeaf.Operator.EQUALS)
+          checkFilterPredicate(ymIntervalAttr <=> periods(1),
+            PredicateLeaf.Operator.NULL_SAFE_EQUALS)
+          checkFilterPredicate(ymIntervalAttr < periods(2),
+            PredicateLeaf.Operator.LESS_THAN)
+          checkFilterPredicate(ymIntervalAttr > periods(3),
+            PredicateLeaf.Operator.LESS_THAN_EQUALS)
+          checkFilterPredicate(ymIntervalAttr <= periods(1),
+            PredicateLeaf.Operator.LESS_THAN_EQUALS)
+          checkFilterPredicate(ymIntervalAttr >= periods(4),
+            PredicateLeaf.Operator.LESS_THAN)
+
+          checkFilterPredicate(periods(1) === ymIntervalAttr,
+            PredicateLeaf.Operator.EQUALS)
+          checkFilterPredicate(periods(1) <=> ymIntervalAttr,
+            PredicateLeaf.Operator.NULL_SAFE_EQUALS)
+          checkFilterPredicate(periods(2) > ymIntervalAttr,
+            PredicateLeaf.Operator.LESS_THAN)
+          checkFilterPredicate(periods(3) < ymIntervalAttr,
+            PredicateLeaf.Operator.LESS_THAN_EQUALS)
+          checkFilterPredicate(periods(1) >= ymIntervalAttr,
+            PredicateLeaf.Operator.LESS_THAN_EQUALS)
+          checkFilterPredicate(periods(4) <= ymIntervalAttr,
+            PredicateLeaf.Operator.LESS_THAN)
+      }
+    }
+  }
+
+  test("SPARK-36960: filter pushdown - day-time interval") {
+    DataTypeTestUtils.dayTimeIntervalTypes.foreach { dtIntervalType =>
+
+      def durations(i: Int): Expression =
+        Literal(Duration.ofDays(i).plusHours(i).plusMinutes(i).plusSeconds(i)).cast(dtIntervalType)
+
+      val baseDF = spark.createDataFrame((1 to 4).map { i =>
+        Tuple1.apply(Duration.ofDays(i).plusHours(i).plusMinutes(i).plusSeconds(i))
+      }).select(col("_1").cast(dtIntervalType))
+
+      withNestedOrcDataFrame(baseDF) {
+        case (inputDF, colName, _) =>
+          implicit val df: DataFrame = inputDF
+
+          val ymIntervalAttr = df(colName).expr
+          assert(df(colName).expr.dataType === dtIntervalType)
+
+          checkFilterPredicate(ymIntervalAttr.isNull, PredicateLeaf.Operator.IS_NULL)
+
+          checkFilterPredicate(ymIntervalAttr === durations(1),
+            PredicateLeaf.Operator.EQUALS)
+          checkFilterPredicate(ymIntervalAttr <=> durations(1),
+            PredicateLeaf.Operator.NULL_SAFE_EQUALS)
+          checkFilterPredicate(ymIntervalAttr < durations(2),
+            PredicateLeaf.Operator.LESS_THAN)
+          checkFilterPredicate(ymIntervalAttr > durations(3),
+            PredicateLeaf.Operator.LESS_THAN_EQUALS)
+          checkFilterPredicate(ymIntervalAttr <= durations(1),
+            PredicateLeaf.Operator.LESS_THAN_EQUALS)
+          checkFilterPredicate(ymIntervalAttr >= durations(4),
+            PredicateLeaf.Operator.LESS_THAN)
+
+          checkFilterPredicate(durations(1) === ymIntervalAttr,
+            PredicateLeaf.Operator.EQUALS)
+          checkFilterPredicate(durations(1) <=> ymIntervalAttr,
+            PredicateLeaf.Operator.NULL_SAFE_EQUALS)
+          checkFilterPredicate(durations(2) > ymIntervalAttr,
+            PredicateLeaf.Operator.LESS_THAN)
+          checkFilterPredicate(durations(3) < ymIntervalAttr,
+            PredicateLeaf.Operator.LESS_THAN_EQUALS)
+          checkFilterPredicate(durations(1) >= ymIntervalAttr,
+            PredicateLeaf.Operator.LESS_THAN_EQUALS)
+          checkFilterPredicate(durations(4) <= ymIntervalAttr,
+            PredicateLeaf.Operator.LESS_THAN)
       }
     }
   }

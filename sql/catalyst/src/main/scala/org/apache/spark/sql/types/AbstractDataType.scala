@@ -80,14 +80,18 @@ private[sql] class TypeCollection(private val types: Seq[AbstractDataType])
 private[sql] object TypeCollection {
 
   /**
-   * Types that include numeric types and interval type. They are only used in unary_minus,
-   * unary_positive, add and subtract operations.
+   * Types that include numeric types and ANSI interval types.
    */
-  val NumericAndInterval = TypeCollection(
+  val NumericAndAnsiInterval = TypeCollection(
     NumericType,
-    CalendarIntervalType,
     DayTimeIntervalType,
     YearMonthIntervalType)
+
+  /**
+   * Types that include numeric and ANSI interval types, and additionally the legacy interval type.
+   * They are only used in unary_minus, unary_positive, add and subtract operations.
+   */
+  val NumericAndInterval = new TypeCollection(NumericAndAnsiInterval.types :+ CalendarIntervalType)
 
   def apply(types: AbstractDataType*): TypeCollection = new TypeCollection(types)
 
