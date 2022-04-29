@@ -31,7 +31,6 @@ import org.apache.spark.SparkConf
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.catalog.ExternalCatalogUtils
-import org.apache.spark.sql.catalyst.expressions.Hex
 import org.apache.spark.sql.catalyst.util.{DateFormatter, DateTimeUtils, TimestampFormatter}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.localDateTimeToMicros
 import org.apache.spark.sql.execution.datasources._
@@ -83,7 +82,6 @@ abstract class ParquetPartitionDiscoverySuite
     check("1" * 20, DecimalType(decimal.precision, decimal.scale))
     check("1.5", DoubleType)
     check("hello", StringType)
-    check(Hex.hex(UTF8String.fromString("hello").getBytes).toString, BinaryType)
     check("1990-02-24", DateType)
     // The inferred timestmap type is consistent with the value of `SQLConf.TIMESTAMP_TYPE`
     Seq(TimestampTypes.TIMESTAMP_LTZ, TimestampTypes.TIMESTAMP_NTZ).foreach { tsType =>
