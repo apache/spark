@@ -287,6 +287,15 @@ abstract class JdbcDialect extends Serializable with Logging{
   }
 
   /**
+   * Return the maximum value that pushing down LIMIT into V2 JDBC data source.
+   */
+  @Since("3.4.0")
+  def canPushDownLimit(options: JDBCOptions, limit: Int): Boolean = {
+    val maxPushDownLimit = options.maxPushDownLimit.getOrElse("-1").toInt
+    maxPushDownLimit == -1 || limit <= maxPushDownLimit
+  }
+
+  /**
    * Create schema with an optional comment. Empty string means no comment.
    */
   def createSchema(statement: Statement, schema: String, comment: String): Unit = {

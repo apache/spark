@@ -196,6 +196,10 @@ class JDBCOptions(
   // This only applies to Data Source V2 JDBC
   val pushDownLimit = parameters.getOrElse(JDBC_PUSHDOWN_LIMIT, "false").toBoolean
 
+  // An option to specify the maximum value that pushing down LIMIT into V2 JDBC data source
+  // This only applies to Data Source V2 JDBC
+  val maxPushDownLimit = parameters.get(JDBC_MAX_PUSHDOWN_LIMIT)
+
   // An option to allow/disallow pushing down TABLESAMPLE into JDBC data source
   // This only applies to Data Source V2 JDBC
   val pushDownTableSample = parameters.getOrElse(JDBC_PUSHDOWN_TABLESAMPLE, "false").toBoolean
@@ -280,6 +284,7 @@ object JDBCOptions {
   val JDBC_PUSHDOWN_PREDICATE = newOption("pushDownPredicate")
   val JDBC_PUSHDOWN_AGGREGATE = newOption("pushDownAggregate")
   val JDBC_PUSHDOWN_LIMIT = newOption("pushDownLimit")
+  val JDBC_MAX_PUSHDOWN_LIMIT = newOption("maxPushDownLimit")
   val JDBC_PUSHDOWN_TABLESAMPLE = newOption("pushDownTableSample")
   val JDBC_KEYTAB = newOption("keytab")
   val JDBC_PRINCIPAL = newOption("principal")

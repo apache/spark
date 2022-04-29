@@ -132,7 +132,8 @@ case class JDBCScanBuilder(
   }
 
   override def pushLimit(limit: Int): Boolean = {
-    if (jdbcOptions.pushDownLimit) {
+    if (jdbcOptions.pushDownLimit &&
+      JdbcDialects.get(jdbcOptions.url).canPushDownLimit(jdbcOptions, limit)) {
       pushedLimit = limit
       return true
     }
