@@ -2880,7 +2880,7 @@ object SQLConf {
       .createWithDefault(true)
 
   val USE_NULLS_FOR_MISSING_DEFAULT_COLUMN_VALUES =
-    buildConf("spark.sql.defaultColumn.useNullsForMissingDefautValues")
+    buildConf("spark.sql.defaultColumn.useNullsForMissingDefaultValues")
       .internal()
       .doc("When true, and DEFAULT columns are enabled, allow column definitions lacking " +
         "explicit default values to behave as if they had specified DEFAULT NULL instead. " +

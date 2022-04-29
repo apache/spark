@@ -17,10 +17,9 @@
 
 package org.apache.spark.sql.diagnostic
 
-import scala.collection.JavaConverters._
-
 import com.fasterxml.jackson.annotation.JsonIgnore
 
+import org.apache.spark.status.KVUtils
 import org.apache.spark.status.KVUtils.KVIndexParam
 import org.apache.spark.util.kvstore.{KVIndex, KVStore}
 
@@ -32,7 +31,7 @@ import org.apache.spark.util.kvstore.{KVIndex, KVStore}
 class DiagnosticStore(store: KVStore) {
 
   def diagnosticsList(offset: Int, length: Int): Seq[ExecutionDiagnosticData] = {
-    store.view(classOf[ExecutionDiagnosticData]).skip(offset).max(length).asScala.toSeq
+    KVUtils.viewToSeq(store.view(classOf[ExecutionDiagnosticData]).skip(offset).max(length))
   }
 
   def diagnostic(executionId: Long): Option[ExecutionDiagnosticData] = {
@@ -44,11 +43,10 @@ class DiagnosticStore(store: KVStore) {
   }
 
   def adaptiveExecutionUpdates(executionId: Long): Seq[AdaptiveExecutionUpdate] = {
+    KVUtils.viewToSeq(
     store.view(classOf[AdaptiveExecutionUpdate])
       .index("updateTime")
-      .parent(executionId)
-      .asScala
-      .toSeq
+      .parent(executionId))
   }
 }
 

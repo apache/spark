@@ -20,7 +20,7 @@ package org.apache.spark.sql.errors
 import org.apache.spark.sql.{AnalysisException, IntegratedUDFTestUtils, QueryTest, Row}
 import org.apache.spark.sql.api.java.{UDF1, UDF2, UDF23Test}
 import org.apache.spark.sql.expressions.SparkUserDefinedFunction
-import org.apache.spark.sql.functions.{grouping, grouping_id, sum, udf}
+import org.apache.spark.sql.functions.{grouping, grouping_id, lit, struct, sum, udf}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{IntegerType, MapType, StringType, StructField, StructType}
 
@@ -106,15 +106,16 @@ class QueryCompilationErrorsSuite
     }
   }
 
-  test("ILLEGAL_SUBSTRING: the argument_index of string format is invalid") {
+  test("INVALID_PARAMETER_VALUE: the argument_index of string format is invalid") {
     withSQLConf(SQLConf.ALLOW_ZERO_INDEX_IN_FORMAT_STRING.key -> "false") {
       val e = intercept[AnalysisException] {
         sql("select format_string('%0$s', 'Hello')")
       }
       checkErrorClass(
         exception = e,
-        errorClass = "ILLEGAL_SUBSTRING",
-        msg = "The argument_index of string format cannot contain position 0$.; line 1 pos 7")
+        errorClass = "INVALID_PARAMETER_VALUE",
+        msg = "The value of parameter(s) 'strfmt' in `format_string` is invalid: " +
+          "expects %1$, %2$ and so on, but got %0$.; line 1 pos 7")
     }
   }
 
@@ -474,6 +475,43 @@ class QueryCompilationErrorsSuite
 
       checkAnswer(sql("SELECT __auto_generated_subquery_name.i from (SELECT i FROM v)"), Row(1))
     }
+  }
+
+  test("AMBIGUOUS_FIELD_NAME: alter column matching multi fields in the struct") {
+    withTable("t") {
+      withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+        sql("CREATE TABLE t(c struct<X:String, x:String>) USING parquet")
+      }
+
+      checkErrorClass(
+        exception = intercept[AnalysisException] {
+          sql("ALTER TABLE t CHANGE COLUMN c.X COMMENT 'new comment'")
+        },
+        errorClass = "AMBIGUOUS_FIELD_NAME",
+        msg = "Field name c.X is ambiguous and has 2 matching fields in the struct.; line 1 pos 0")
+    }
+  }
+
+  test("PIVOT_VALUE_DATA_TYPE_MISMATCH: can't cast pivot value data type (struct) " +
+    "to pivot column data type (int)") {
+    val df = Seq(
+      ("dotNET", 2012, 10000),
+      ("Java", 2012, 20000),
+      ("dotNET", 2012, 5000),
+      ("dotNET", 2013, 48000),
+      ("Java", 2013, 30000)
+    ).toDF("course", "year", "earnings")
+
+    checkErrorClass(
+      exception = intercept[AnalysisException] {
+        df.groupBy(df("course")).pivot(df("year"), Seq(
+          struct(lit("dotnet"), lit("Experts")),
+          struct(lit("java"), lit("Dummies")))).
+          agg(sum($"earnings")).collect()
+      },
+      errorClass = "PIVOT_VALUE_DATA_TYPE_MISMATCH",
+      msg = "Invalid pivot value 'struct(col1, dotnet, col2, Experts)': value data type " +
+        "struct<col1:string,col2:string> does not match pivot column data type int")
   }
 }
 

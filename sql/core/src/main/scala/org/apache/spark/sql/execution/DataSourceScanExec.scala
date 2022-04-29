@@ -161,7 +161,7 @@ case class RowDataSourceScanExec(
       "PushedFilters" -> pushedFilters) ++
       pushedDownOperators.aggregation.fold(Map[String, String]()) { v =>
         Map("PushedAggregates" -> seqToString(v.aggregateExpressions.map(_.describe())),
-          "PushedGroupByColumns" -> seqToString(v.groupByColumns.map(_.describe())))} ++
+          "PushedGroupByExpressions" -> seqToString(v.groupByExpressions.map(_.describe())))} ++
       topNOrLimitInfo ++
       pushedDownOperators.sample.map(v => "PushedSample" ->
         s"SAMPLE (${(v.upperBound - v.lowerBound) * 100}) ${v.withReplacement} SEED(${v.seed})"
