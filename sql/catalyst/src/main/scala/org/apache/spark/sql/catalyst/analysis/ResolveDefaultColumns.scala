@@ -50,70 +50,99 @@ import org.apache.spark.sql.types._
 case class ResolveDefaultColumns(
   analyzer: Analyzer,
   catalog: SessionCatalog) extends Rule[LogicalPlan] {
-
-  // This field stores the enclosing INSERT INTO command, once we find one.
-  var enclosingInsert: Option[InsertIntoStatement] = None
-  // This field stores the schema of the target table of the above command.
-  var insertTableSchemaWithoutPartitionColumns: Option[StructType] = None
-  // This field records if we've replaced an expression, useful for skipping unneeded copies.
-  var updated: Boolean = false
-
   override def apply(plan: LogicalPlan): LogicalPlan = {
-    // Initialize by clearing our reference to the enclosing INSERT INTO command.
-    enclosingInsert = None
-    insertTableSchemaWithoutPartitionColumns = None
-    updated = false
-    // Traverse the logical query plan in preorder (top-down).
     plan.resolveOperatorsWithPruning(
       (_ => SQLConf.get.enableDefaultColumns), ruleId) {
-      case i@InsertIntoStatement(_, _, _, _, _, _)
-        if i.query.collectFirst { case u: UnresolvedInlineTable
-          if u.rows.nonEmpty && u.rows.forall(_.size == u.rows(0).size) => u
-        }.isDefined =>
-        enclosingInsert = Some(i)
-        insertTableSchemaWithoutPartitionColumns = getInsertTableSchemaWithoutPartitionColumns
-        val regenerated: InsertIntoStatement = regenerateUserSpecifiedCols(i)
-        regenerated
-
-      case table: UnresolvedInlineTable
-        if enclosingInsert.isDefined =>
-        updated = false
-        val expanded: UnresolvedInlineTable = addMissingDefaultValuesForInsertFromInlineTable(table)
-        val replaced: LogicalPlan = replaceExplicitDefaultValuesForLogicalPlan(analyzer, expanded)
-        if (updated) {
-          replaced
-        } else {
-          table
-        }
-
-      case i@InsertIntoStatement(_, _, _, project: Project, _, _) =>
-        enclosingInsert = Some(i)
-        insertTableSchemaWithoutPartitionColumns = getInsertTableSchemaWithoutPartitionColumns
-        updated = false
-        val expanded: Project = addMissingDefaultValuesForInsertFromProject(project)
-        val replaced: LogicalPlan = replaceExplicitDefaultValuesForLogicalPlan(analyzer, expanded)
-        val regenerated: InsertIntoStatement = regenerateUserSpecifiedCols(i.copy(query = replaced))
-        enclosingInsert = None
-        if (updated) {
-          regenerated
-        } else {
-          i
-        }
+      case i: InsertIntoStatement if insertsFromInlineTable(i) =>
+        resolveDefaultColumnsForInsertFromInlineTable(i)
+      case i@InsertIntoStatement(_, _, _, _: Project, _, _) =>
+        resolveDefaultColumnsForInsertFromProject(i)
     }
   }
 
-  // Helper method to regenerate user-specified columns of an InsertIntoStatement based on the names
-  // in the insertTableSchemaWithoutPartitionColumns field of this class.
-  private def regenerateUserSpecifiedCols(i: InsertIntoStatement): InsertIntoStatement = {
-    if (i.userSpecifiedCols.nonEmpty && insertTableSchemaWithoutPartitionColumns.isDefined) {
+  /**
+   * Checks if a logical plan is an INSERT INTO command where the inserted data comes from a VALUES
+   * list, with possible projection(s) and/or alias(es) in between.
+   */
+  private def insertsFromInlineTable(i: InsertIntoStatement): Boolean = {
+    var query = i.query
+    while (query.children.size == 1) {
+      query match {
+        case _: Project | _: SubqueryAlias =>
+          query = query.children(0)
+        case _ =>
+          return false
+      }
+    }
+    query match {
+      case u: UnresolvedInlineTable
+        if u.rows.nonEmpty && u.rows.forall(_.size == u.rows(0).size) =>
+        true
+      case _ =>
+        false
+    }
+  }
+
+  /**
+   * Resolves DEFAULT column references for an INSERT INTO command satisfying the
+   * [[insertsFromInlineTable]] method.
+   */
+  private def resolveDefaultColumnsForInsertFromInlineTable(i: InsertIntoStatement): LogicalPlan = {
+    val insertTableSchemaWithoutPartitionColumns: StructType =
+      getInsertTableSchemaWithoutPartitionColumns(i)
+        .getOrElse(return i)
+    val regenerated: InsertIntoStatement =
+      regenerateUserSpecifiedCols(i, insertTableSchemaWithoutPartitionColumns)
+    val table = i.query.collectFirst { case u: UnresolvedInlineTable => u }.get
+    val expanded: UnresolvedInlineTable =
+      addMissingDefaultValuesForInsertFromInlineTable(
+        table, insertTableSchemaWithoutPartitionColumns)
+    val replaced: LogicalPlan =
+      replaceExplicitDefaultValuesForLogicalPlan(
+        analyzer, insertTableSchemaWithoutPartitionColumns, expanded)
+        .getOrElse(return i)
+    regenerated.copy(query = replaced)
+  }
+
+  /**
+   * Resolves DEFAULT column references for an INSERT INTO command whose query is a general
+   * projection.
+   */
+  private def resolveDefaultColumnsForInsertFromProject(i: InsertIntoStatement): LogicalPlan = {
+    val insertTableSchemaWithoutPartitionColumns: StructType =
+      getInsertTableSchemaWithoutPartitionColumns(i)
+        .getOrElse(return i)
+    val regenerated: InsertIntoStatement =
+      regenerateUserSpecifiedCols(i, insertTableSchemaWithoutPartitionColumns)
+    val project: Project = i.query.asInstanceOf[Project]
+    val expanded: Project =
+      addMissingDefaultValuesForInsertFromProject(
+        project, insertTableSchemaWithoutPartitionColumns)
+    val replaced: LogicalPlan =
+      replaceExplicitDefaultValuesForLogicalPlan(
+        analyzer, insertTableSchemaWithoutPartitionColumns, expanded)
+        .getOrElse(return i)
+    regenerated.copy(query = replaced)
+  }
+
+  /**
+   * Regenerates user-specified columns of an InsertIntoStatement based on the names in the
+   * insertTableSchemaWithoutPartitionColumns field of this class.
+   */
+  private def regenerateUserSpecifiedCols(
+      i: InsertIntoStatement,
+      insertTableSchemaWithoutPartitionColumns: StructType): InsertIntoStatement = {
+    if (i.userSpecifiedCols.nonEmpty) {
       i.copy(
-        userSpecifiedCols = insertTableSchemaWithoutPartitionColumns.get.fields.map(_.name))
+        userSpecifiedCols = insertTableSchemaWithoutPartitionColumns.fields.map(_.name))
     } else {
       i
     }
   }
 
-  // Helper method to check if an expression is an explicit DEFAULT column reference.
+  /**
+   * Returns true if an expression is an explicit DEFAULT column reference.
+   */
   private def isExplicitDefaultColumn(expr: Expression): Boolean = expr match {
     case u: UnresolvedAttribute if u.name.equalsIgnoreCase(CURRENT_DEFAULT_COLUMN_NAME) => true
     case _ => false
@@ -123,14 +152,13 @@ case class ResolveDefaultColumns(
    * Updates an inline table to generate missing default column values.
    */
   private def addMissingDefaultValuesForInsertFromInlineTable(
-      table: UnresolvedInlineTable): UnresolvedInlineTable = {
-    assert(enclosingInsert.isDefined)
+      table: UnresolvedInlineTable,
+      insertTableSchemaWithoutPartitionColumns: StructType): UnresolvedInlineTable = {
     val numQueryOutputs: Int = table.rows(0).size
-    val schema = insertTableSchemaWithoutPartitionColumns.getOrElse(return table)
+    val schema = insertTableSchemaWithoutPartitionColumns
     val newDefaultExpressions: Seq[Expression] =
       getDefaultExpressionsForInsert(numQueryOutputs, schema)
     val newNames: Seq[String] = schema.fields.drop(numQueryOutputs).map { _.name }
-    if (newDefaultExpressions.nonEmpty) updated = true
     table.copy(
       names = table.names ++ newNames,
       rows = table.rows.map { row => row ++ newDefaultExpressions })
@@ -139,16 +167,17 @@ case class ResolveDefaultColumns(
   /**
    * Adds a new expressions to a projection to generate missing default column values.
    */
-  private def addMissingDefaultValuesForInsertFromProject(project: Project): Project = {
+  private def addMissingDefaultValuesForInsertFromProject(
+      project: Project,
+      insertTableSchemaWithoutPartitionColumns: StructType): Project = {
     val numQueryOutputs: Int = project.projectList.size
-    val schema = insertTableSchemaWithoutPartitionColumns.getOrElse(return project)
+    val schema = insertTableSchemaWithoutPartitionColumns
     val newDefaultExpressions: Seq[Expression] =
       getDefaultExpressionsForInsert(numQueryOutputs, schema)
     val newAliases: Seq[NamedExpression] =
       newDefaultExpressions.zip(schema.fields).map {
         case (expr, field) => Alias(expr, field.name)()
       }
-    if (newDefaultExpressions.nonEmpty) updated = true
     project.copy(projectList = project.projectList ++ newAliases)
   }
 
@@ -179,9 +208,9 @@ case class ResolveDefaultColumns(
    */
   private def replaceExplicitDefaultValuesForLogicalPlan(
       analyzer: Analyzer,
-      input: LogicalPlan): LogicalPlan = {
-    assert(enclosingInsert.isDefined)
-    val schema = insertTableSchemaWithoutPartitionColumns.getOrElse(return input)
+      insertTableSchemaWithoutPartitionColumns: StructType,
+      input: LogicalPlan): Option[LogicalPlan] = {
+    val schema = insertTableSchemaWithoutPartitionColumns
     val columnNames: Seq[String] = schema.fields.map { _.name }
     val defaultExpressions: Seq[Expression] = schema.fields.map {
       case f if f.metadata.contains(CURRENT_DEFAULT_COLUMN_METADATA_KEY) =>
@@ -209,7 +238,8 @@ case class ResolveDefaultColumns(
    */
   private def replaceExplicitDefaultValuesForInlineTable(
       defaultExpressions: Seq[Expression],
-      table: UnresolvedInlineTable): LogicalPlan = {
+      table: UnresolvedInlineTable): Option[LogicalPlan] = {
+    var replaced = false
     val newRows: Seq[Seq[Expression]] = {
       table.rows.map { row: Seq[Expression] =>
         for {
@@ -218,7 +248,7 @@ case class ResolveDefaultColumns(
           defaultExpr = if (i < defaultExpressions.size) defaultExpressions(i) else Literal(null)
         } yield expr match {
           case u: UnresolvedAttribute if isExplicitDefaultColumn(u) =>
-            updated = true
+            replaced = true
             defaultExpr
           case expr@_ if expr.find { isExplicitDefaultColumn }.isDefined =>
             throw new AnalysisException(DEFAULTS_IN_EXPRESSIONS_ERROR)
@@ -226,7 +256,11 @@ case class ResolveDefaultColumns(
         }
       }
     }
-    table.copy(rows = newRows)
+    if (replaced) {
+      Some(table.copy(rows = newRows))
+    } else {
+      None
+    }
   }
 
   /**
@@ -235,8 +269,9 @@ case class ResolveDefaultColumns(
   private def replaceExplicitDefaultValuesForProject(
       defaultExpressions: Seq[Expression],
       colNames: Seq[String],
-      project: Project): LogicalPlan = {
-    val updatedProjectList: Seq[NamedExpression] = {
+      project: Project): Option[LogicalPlan] = {
+    var replaced = false
+    val updated: Seq[NamedExpression] = {
       for {
         i <- 0 until project.projectList.size
         projectExpr = project.projectList(i)
@@ -244,25 +279,29 @@ case class ResolveDefaultColumns(
         colName = if (i < colNames.size) colNames(i) else ""
       } yield projectExpr match {
         case Alias(u: UnresolvedAttribute, _) if isExplicitDefaultColumn(u) =>
-          updated = true
+          replaced = true
           Alias(defaultExpr, colName)()
         case u: UnresolvedAttribute if isExplicitDefaultColumn(u) =>
-          updated = true
+          replaced = true
           Alias(defaultExpr, colName)()
         case expr@_ if expr.find { isExplicitDefaultColumn }.isDefined =>
           throw new AnalysisException(DEFAULTS_IN_EXPRESSIONS_ERROR)
         case _ => projectExpr
       }
     }
-    project.copy(projectList = updatedProjectList)
+    if (replaced) {
+      Some(project.copy(projectList = updated))
+    } else {
+      None
+    }
   }
 
   /**
    * Looks up the schema for the table object of an INSERT INTO statement from the catalog.
    */
-  private def getInsertTableSchemaWithoutPartitionColumns: Option[StructType] = {
-    assert(enclosingInsert.isDefined)
-    val tableName = enclosingInsert.get.table match {
+  private def getInsertTableSchemaWithoutPartitionColumns(
+      enclosingInsert: InsertIntoStatement): Option[StructType] = {
+    val tableName = enclosingInsert.table match {
       case r: UnresolvedRelation => TableIdentifier(r.name)
       case r: UnresolvedCatalogRelation => r.tableMeta.identifier
       case _ => return None
@@ -278,12 +317,12 @@ case class ResolveDefaultColumns(
     val schema: StructType = lookup match {
       case SubqueryAlias(_, r: UnresolvedCatalogRelation) =>
         StructType(r.tableMeta.schema.fields.dropRight(
-          enclosingInsert.get.partitionSpec.size))
+          enclosingInsert.partitionSpec.size))
       case _ => return None
     }
     // Rearrange the columns in the result schema to match the order of the explicit column list,
     // if any.
-    val userSpecifiedCols: Seq[String] = enclosingInsert.get.userSpecifiedCols
+    val userSpecifiedCols: Seq[String] = enclosingInsert.userSpecifiedCols
     if (userSpecifiedCols.isEmpty) {
       return Some(schema)
     }
