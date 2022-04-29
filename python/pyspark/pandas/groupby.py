@@ -2742,7 +2742,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
 
         return self._reduce_for_stat_function(
             stat_function,
-            accepted_spark_types=(NumericType, BooleanType) if numeric_only else None,
+            accepted_spark_types=(NumericType,) if numeric_only else None,
             bool_to_numeric=True,
         )
 
