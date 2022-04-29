@@ -213,6 +213,9 @@
       "NATURAL_CROSS_JOIN" : {
         "message" : [ "NATURAL CROSS JOIN." ]
       },
+      "ORC_TYPE_CAST" : {
+        "message" : [ "Unable to convert <orcType> of Orc to data type <toType>." ]
+      },
       "PANDAS_UDAF_IN_PIVOT" : {
         "message" : [ "Pandas user defined aggregate function in the PIVOT clause." ]
       },
