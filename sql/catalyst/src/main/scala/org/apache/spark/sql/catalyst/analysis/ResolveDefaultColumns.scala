@@ -31,7 +31,7 @@ import org.apache.spark.sql.types._
  * This is a rule to process DEFAULT columns in statements such as CREATE/REPLACE TABLE.
  *
  * Background: CREATE TABLE and ALTER TABLE invocations support setting column default values for
- * later operations. Following INSERT, and INSERT MERGE commands may then reference the value
+ * later operations. Following INSERT, UPDATE, and MERGE commands may then reference the value
  * using the DEFAULT keyword as needed.
  *
  * Example:
@@ -57,6 +57,8 @@ case class ResolveDefaultColumns(
         resolveDefaultColumnsForInsertFromInlineTable(i)
       case i@InsertIntoStatement(_, _, _, _: Project, _, _) =>
         resolveDefaultColumnsForInsertFromProject(i)
+      case u: UpdateTable =>
+        resolveDefaultColumnsForUpdate(u)
     }
   }
 
@@ -123,6 +125,39 @@ case class ResolveDefaultColumns(
         analyzer, insertTableSchemaWithoutPartitionColumns, expanded)
         .getOrElse(return i)
     regenerated.copy(query = replaced)
+  }
+
+  /**
+   * Resolves DEFAULT column references for an UPDATE command.
+   */
+  private def resolveDefaultColumnsForUpdate(u: UpdateTable): LogicalPlan = {
+    // Return a more descriptive error message if the user tries to use a DEFAULT column reference
+    // inside an UPDATE command's WHERE clause; this is not allowed.
+    u.condition.map { c: Expression =>
+      if (c.find(isExplicitDefaultColumn).isDefined) {
+        throw new AnalysisException(DEFAULTS_IN_UPDATE_WHERE_CLAUSE)
+      }
+    }
+    val schema: StructType = u.table match {
+      case r: NamedRelation => r.schema
+      case SubqueryAlias(_, child: NamedRelation) => child.schema
+      case _ => return u
+    }
+    val defaultExpressions: Seq[Expression] = schema.fields.map {
+      case f if f.metadata.contains(CURRENT_DEFAULT_COLUMN_METADATA_KEY) =>
+        analyze(analyzer, f, "UPDATE")
+      case _ => Literal(null)
+    }
+    // Create a map from each column name in the target table to its DEFAULT expression.
+    val columnNamesToExpressions: Map[String, Expression] =
+      schema.fields.zip(defaultExpressions).map {
+        case (field, expr) => field.name -> expr
+      }.toMap
+    // For each assignment in the UPDATE command's SET clause with a DEFAULT column reference on the
+    // right-hand side, look up the corresponding expression from the above map.
+    val newAssignments: Seq[Assignment] =
+    replaceExplicitDefaultValuesForUpdateAssignments(u.assignments, columnNamesToExpressions)
+    u.copy(assignments = newAssignments)
   }
 
   /**
@@ -344,5 +379,62 @@ case class ResolveDefaultColumns(
       }
     Some(StructType(userSpecifiedFields ++
       getStructFieldsForDefaultExpressions(nonUserSpecifiedFields)))
+  }
+
+  /**
+   * Replaces unresolved DEFAULT column references with corresponding values in a series of
+   * assignments in an UPDATE command.
+   */
+  private def replaceExplicitDefaultValuesForUpdateAssignments(
+      assignments: Seq[Assignment],
+      columnNamesToExpressions: Map[String, Expression]): Seq[Assignment] = {
+    for {
+      assignment <- assignments
+      destColName = assignment.key match {
+        case a: AttributeReference => a.name
+        case _ => ""
+      }
+      adjusted = if (SQLConf.get.caseSensitiveAnalysis) destColName else destColName.toLowerCase()
+      defaultExpr = columnNamesToExpressions.get(adjusted)
+      newValue =
+        if (defaultExpr.isDefined) {
+          replaceExplicitDefaultReferenceInExpression(assignment.value, defaultExpr.get)
+        } else {
+          assignment.value
+        }
+    } yield assignment.copy(value = newValue)
+  }
+
+  /**
+   * If the given input expression is an unresolved "DEFAULT" attribute reference, returns its
+   * corresponding analyzed default expression counterpart. Otherwise, returns the original input
+   * expression unchanged. If the addAlias argument is true, wraps the replaced expression with an
+   * alias of the original default column name.
+   */
+  private def replaceExplicitDefaultReferenceInExpression(
+      input: Expression,
+      defaultExpr: Expression,
+      addAlias: Boolean = false): Expression = {
+    var updated = false
+    input match {
+      case a@Alias(u: UnresolvedAttribute, _) if isExplicitDefaultColumn(u) =>
+        updated = true
+        Alias(defaultExpr, a.name)()
+      case u: UnresolvedAttribute if isExplicitDefaultColumn(u) =>
+        updated = true
+        if (addAlias) {
+          Alias(defaultExpr, u.name)()
+        } else {
+          defaultExpr
+        }
+      case expr@_ if expr.find(isExplicitDefaultColumn).isDefined =>
+        val message = if (enclosingInsert.isDefined) {
+          DEFAULTS_IN_COMPLEX_EXPRESSIONS_IN_INSERT_VALUES
+        } else {
+          DEFAULTS_IN_COMPLEX_EXPRESSIONS_IN_UPDATE_SET_CLAUSE
+        }
+        throw new AnalysisException(message)
+      case _ => input
+    }
   }
 }
