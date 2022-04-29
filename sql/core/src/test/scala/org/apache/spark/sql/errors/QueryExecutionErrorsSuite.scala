@@ -19,9 +19,11 @@ package org.apache.spark.sql.errors
 
 import java.io.IOException
 import java.util.Locale
+
 import org.apache.hadoop.fs.{LocalFileSystem, Path}
 import org.apache.hadoop.fs.permission.FsPermission
 import test.org.apache.spark.sql.connector.JavaSimpleWritableDataSource
+
 import org.apache.spark.{SparkArithmeticException, SparkException, SparkIllegalStateException, SparkRuntimeException, SparkSecurityException, SparkUnsupportedOperationException, SparkUpgradeException}
 import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest}
 import org.apache.spark.sql.catalyst.util.BadRecordException
