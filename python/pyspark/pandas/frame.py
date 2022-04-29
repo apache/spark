@@ -583,7 +583,6 @@ class DataFrame(Frame, Generic[T]):
         name: str,
         axis: Optional[Axis] = None,
         numeric_only: bool = True,
-        skipna: bool = False,
         **kwargs: Any,
     ) -> "Series":
         """
@@ -601,7 +600,6 @@ class DataFrame(Frame, Generic[T]):
             Include only float, int, boolean columns. False is not supported. This parameter
             is mainly for pandas compatibility. Only 'DataFrame.count' uses this parameter
             currently.
-        skipna : if True, exclude NA/null values when computing the result.
         """
         from pyspark.pandas.series import Series, first_series
 
@@ -623,9 +621,6 @@ class DataFrame(Frame, Generic[T]):
 
                     if min_count > 0:
                         scol = F.when(Frame._count_expr(psser) >= min_count, scol)
-
-                    if skipna:
-                        scol = F.when(scol.isNotNull(), scol)
 
                     exprs.append(scol.alias(name_like_string(label)))
                     new_column_labels.append(label)
