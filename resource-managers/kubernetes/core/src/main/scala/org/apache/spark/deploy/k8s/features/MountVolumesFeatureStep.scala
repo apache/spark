@@ -72,7 +72,7 @@ private[spark] class MountVolumesFeatureStep(conf: KubernetesConf)
         case KubernetesPVCVolumeConf(claimNameTemplate, storageClass, size) =>
           val claimName = conf match {
             case c: KubernetesExecutorConf =>
-              checkPVCClaimNameWhenMultiExecutors(claimNameTemplate)
+              checkPVCClaimName(claimNameTemplate)
               claimNameTemplate
                 .replaceAll(PVC_ON_DEMAND,
                   s"${conf.resourceNamePrefix}-exec-${c.executorId}$PVC_POSTFIX-$i")
@@ -123,17 +123,17 @@ private[spark] class MountVolumesFeatureStep(conf: KubernetesConf)
     additionalResources.toSeq
   }
 
-  private def checkPVCClaimNameWhenMultiExecutors(claimName: String): Unit = {
-    val invalidClaimName =
-      if (!claimName.contains(PVC_ON_DEMAND) && !claimName.contains(ENV_EXECUTOR_ID)) true
-      else false
-
+  private def checkPVCClaimName(claimName: String): Unit = {
     val executorInstances = conf.get(EXECUTOR_INSTANCES)
-    if (executorInstances.isEmpty) return
-    if (invalidClaimName && executorInstances.get > 1) {
-      throw new IllegalArgumentException("PVC ClaimName should contain " +
-        PVC_ON_DEMAND + " or " + ENV_EXECUTOR_ID +
-        " when multiple executors are required")
+    if (executorInstances.isDefined && executorInstances.get > 1) {
+      // PVC ClaimName should contain OnDemand or SPARK_EXECUTOR_ID
+      // when requiring multiple executors.
+      // Else, spark continues to try to create the executor pod.
+      if (!claimName.contains(PVC_ON_DEMAND) && !claimName.contains(ENV_EXECUTOR_ID)) {
+        throw new IllegalArgumentException(s"PVC ClaimName: $claimName " +
+          s"should contain $PVC_ON_DEMAND or $ENV_EXECUTOR_ID " +
+          "when requiring multiple executors")
+      }
     }
   }
 }
