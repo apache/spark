@@ -178,7 +178,8 @@ class CsvFunctionsSuite extends QueryTest with SharedSparkSession {
       df.select(from_csv($"value", schema, options)).collect()
     }.getMessage
     assert(exception.contains(
-      "Number of characters processed may have exceeded limit of 2 characters per column."))
+      "Length of parsed input (3) exceeds the maximum number of " +
+      "characters defined in your parser settings (2)."))
   }
 
   test("schema_of_csv - infers schemas") {
