@@ -63,7 +63,6 @@ public class JavaStatefulNetworkWordCount {
     ssc.checkpoint(".");
 
     // Initial state RDD input to mapWithState
-    @SuppressWarnings("unchecked")
     List<Tuple2<String, Integer>> tuples =
         Arrays.asList(new Tuple2<>("hello", 1), new Tuple2<>("world", 1));
     JavaPairRDD<String, Integer> initialRDD = ssc.sparkContext().parallelizePairs(tuples);

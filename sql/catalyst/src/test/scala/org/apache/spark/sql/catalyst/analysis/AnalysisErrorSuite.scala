@@ -31,6 +31,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, GenericArrayData, MapData}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.UTF8String
 
 private[sql] case class GroupableData(data: Int) {
   def getData: Int = data
@@ -218,7 +219,7 @@ class AnalysisErrorSuite extends AnalysisTest {
     "higher order function with filter predicate",
     CatalystSqlParser.parsePlan("SELECT aggregate(array(1, 2, 3), 0, (acc, x) -> acc + x) " +
       "FILTER (WHERE c > 1)"),
-    "FILTER predicate specified, but aggregate is not an aggregate function" :: Nil)
+    "Function aggregate does not support FILTER clause" :: Nil)
 
   errorTest(
     "non-deterministic filter predicate in aggregate functions",
@@ -305,7 +306,7 @@ class AnalysisErrorSuite extends AnalysisTest {
       .where(sum($"b") > 0)
       .orderBy($"havingCondition".asc),
     "MISSING_COLUMN",
-    Array("havingCondition", "max('b)"))
+    Array("havingCondition", "max(b)"))
 
   errorTest(
     "unresolved star expansion in max",
@@ -532,6 +533,52 @@ class AnalysisErrorSuite extends AnalysisTest {
   )
 
   errorTest(
+    "an evaluated offset class must not be string",
+    testRelation.offset(Literal(UTF8String.fromString("abc"), StringType)),
+    "The offset expression must be integer type, but got string" :: Nil
+  )
+
+  errorTest(
+    "an evaluated offset class must not be long",
+    testRelation.offset(Literal(10L, LongType)),
+    "The offset expression must be integer type, but got bigint" :: Nil
+  )
+
+  errorTest(
+    "an evaluated offset class must not be null",
+    testRelation.offset(Literal(null, IntegerType)),
+    "The evaluated offset expression must not be null, but got " :: Nil
+  )
+
+  errorTest(
+    "num_rows in offset clause must be equal to or greater than 0",
+    testRelation.offset(-1),
+    "The offset expression must be equal to or greater than 0, but got -1" :: Nil
+  )
+
+  errorTest(
+    "OFFSET clause is outermost node",
+    testRelation.offset(Literal(10, IntegerType)),
+    "The OFFSET clause is only allowed in the LIMIT clause, but the OFFSET" +
+      " clause is found to be the outermost node." :: Nil
+  )
+
+  errorTest(
+    "OFFSET clause in other node",
+    testRelation2.offset(Literal(10, IntegerType)).where('b > 1),
+    "The OFFSET clause is only allowed in the LIMIT clause, but the OFFSET" +
+      " clause found in: Filter." :: Nil
+  )
+
+  errorTest(
+    "the sum of num_rows in limit clause and num_rows in offset clause less than Int.MaxValue",
+    testRelation.offset(Literal(2000000000, IntegerType)).limit(Literal(1000000000, IntegerType)),
+    "The sum of the LIMIT clause and the OFFSET clause must not be greater than" +
+      " the maximum 32-bit integer value (2,147,483,647)," +
+      " but found limit = 1000000000, offset = 2000000000." :: Nil
+  )
+
+  errorTest(
     "more than one generators in SELECT",
     listRelation.select(Explode($"list"), Explode($"list")),
     "Only one generator allowed per select clause but found 2: explode(list), explode(list)" :: Nil
@@ -544,6 +591,22 @@ class AnalysisErrorSuite extends AnalysisTest {
     "Only one generator allowed per select clause but found 2: " +
       "explode(array(min(a))), explode(array(max(a)))" :: Nil
   )
+
+  errorTest(
+    "SPARK-38666: non-boolean aggregate filter",
+    CatalystSqlParser.parsePlan("SELECT sum(c) filter (where e) FROM TaBlE2"),
+    "FILTER expression is not of type boolean" :: Nil)
+
+  errorTest(
+    "SPARK-38666: aggregate in aggregate filter",
+    CatalystSqlParser.parsePlan("SELECT sum(c) filter (where max(e) > 1) FROM TaBlE2"),
+    "FILTER expression contains aggregate" :: Nil)
+
+  errorTest(
+    "SPARK-38666: window function in aggregate filter",
+    CatalystSqlParser.parsePlan("SELECT sum(c) " +
+       "filter (where nth_value(e, 2) over(order by b) > 1) FROM TaBlE2"),
+    "FILTER expression contains window function" :: Nil)
 
   test("SPARK-6452 regression test") {
     // CheckAnalysis should throw AnalysisException when Aggregate contains missing attribute(s)
@@ -641,31 +704,31 @@ class AnalysisErrorSuite extends AnalysisTest {
   }
 
   test("Join can work on binary types but can't work on map types") {
-    val left = LocalRelation(Symbol("a").binary, Symbol("b").map(StringType, StringType))
-    val right = LocalRelation(Symbol("c").binary, Symbol("d").map(StringType, StringType))
+    val left = LocalRelation($"a".binary, Symbol("b").map(StringType, StringType))
+    val right = LocalRelation($"c".binary, Symbol("d").map(StringType, StringType))
 
     val plan1 = left.join(
       right,
       joinType = Cross,
-      condition = Some(Symbol("a") === Symbol("c")))
+      condition = Some($"a" === $"c"))
 
     assertAnalysisSuccess(plan1)
 
     val plan2 = left.join(
       right,
       joinType = Cross,
-      condition = Some(Symbol("b") === Symbol("d")))
+      condition = Some($"b" === $"d"))
     assertAnalysisError(plan2, "EqualTo does not support ordering on type map" :: Nil)
   }
 
-  test("PredicateSubQuery is used outside of a filter") {
+  test("PredicateSubQuery is used outside of a allowed nodes") {
     val a = AttributeReference("a", IntegerType)()
     val b = AttributeReference("b", IntegerType)()
-    val plan = Project(
-      Seq(a, Alias(InSubquery(Seq(a), ListQuery(LocalRelation(b))), "c")()),
+    val plan = Sort(
+      Seq(SortOrder(InSubquery(Seq(a), ListQuery(LocalRelation(b))), Ascending)),
+      global = true,
       LocalRelation(a))
-    assertAnalysisError(plan, "Predicate sub-queries can only be used" +
-        " in Filter" :: Nil)
+    assertAnalysisError(plan, "Predicate sub-queries can only be used in " :: Nil)
   }
 
   test("PredicateSubQuery correlated predicate is nested in an illegal plan") {
@@ -722,7 +785,7 @@ class AnalysisErrorSuite extends AnalysisTest {
   test("Error on filter condition containing aggregate expressions") {
     val a = AttributeReference("a", IntegerType)()
     val b = AttributeReference("b", IntegerType)()
-    val plan = Filter(Symbol("a") === UnresolvedFunction("max", Seq(b), true), LocalRelation(a, b))
+    val plan = Filter($"a" === UnresolvedFunction("max", Seq(b), true), LocalRelation(a, b))
     assertAnalysisError(plan,
       "Aggregate/Window/Generate expressions are not valid in where clause of the query" :: Nil)
   }
@@ -793,7 +856,8 @@ class AnalysisErrorSuite extends AnalysisTest {
     val a = AttributeReference("a", IntegerType)()
     val b = AttributeReference("b", IntegerType)()
     val c = AttributeReference("c", IntegerType)()
-    val t1 = LocalRelation(a, b)
+    val d = AttributeReference("d", DoubleType)()
+    val t1 = LocalRelation(a, b, d)
     val t2 = LocalRelation(c)
     val conditions = Seq(
       (abs($"a") === $"c", "abs(a) = outer(c)"),
@@ -801,7 +865,7 @@ class AnalysisErrorSuite extends AnalysisTest {
       ($"a" + 1 === $"c", "(a + 1) = outer(c)"),
       ($"a" + $"b" === $"c", "(a + b) = outer(c)"),
       ($"a" + $"c" === $"b", "(a + outer(c)) = b"),
-      (And($"a" === $"c", Cast($"a", IntegerType) === $"c"), "CAST(a AS INT) = outer(c)"))
+      (And($"a" === $"c", Cast($"d", IntegerType) === $"c"), "CAST(d AS INT) = outer(c)"))
     conditions.foreach { case (cond, msg) =>
       val plan = Project(
         ScalarSubquery(

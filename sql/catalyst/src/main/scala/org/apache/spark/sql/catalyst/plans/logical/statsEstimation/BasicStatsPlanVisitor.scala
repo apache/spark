@@ -60,6 +60,8 @@ object BasicStatsPlanVisitor extends LogicalPlanVisitor[Statistics] {
 
   override def visitGlobalLimit(p: GlobalLimit): Statistics = fallback(p)
 
+  override def visitOffset(p: Offset): Statistics = fallback(p)
+
   override def visitIntersect(p: Intersect): Statistics = {
     val leftStats = p.left.stats
     val rightStats = p.right.stats
@@ -87,6 +89,8 @@ object BasicStatsPlanVisitor extends LogicalPlanVisitor[Statistics] {
   override def visitRepartition(p: Repartition): Statistics = fallback(p)
 
   override def visitRepartitionByExpr(p: RepartitionByExpression): Statistics = fallback(p)
+
+  override def visitRebalancePartitions(p: RebalancePartitions): Statistics = fallback(p)
 
   override def visitSample(p: Sample): Statistics = fallback(p)
 

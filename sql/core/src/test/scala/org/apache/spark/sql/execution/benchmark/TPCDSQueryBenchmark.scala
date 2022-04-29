@@ -50,7 +50,7 @@ object TPCDSQueryBenchmark extends SqlBasedBenchmark with Logging {
       .setMaster(System.getProperty("spark.sql.test.master", "local[1]"))
       .setAppName("test-sql-context")
       .set("spark.sql.parquet.compression.codec", "snappy")
-      .set("spark.sql.shuffle.partitions", "4")
+      .set("spark.sql.shuffle.partitions", System.getProperty("spark.sql.shuffle.partitions", "4"))
       .set("spark.driver.memory", "3g")
       .set("spark.executor.memory", "3g")
       .set("spark.sql.autoBroadcastJoinThreshold", (20 * 1024 * 1024).toString)

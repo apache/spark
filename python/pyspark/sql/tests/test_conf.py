@@ -19,7 +19,6 @@ from pyspark.testing.sqlutils import ReusedSQLTestCase
 
 
 class ConfTests(ReusedSQLTestCase):
-
     def test_conf(self):
         spark = self.spark
         spark.conf.set("bogo", "sipeo")
@@ -50,7 +49,8 @@ if __name__ == "__main__":
 
     try:
         import xmlrunner  # type: ignore[import]
-        testRunner = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2)
+
+        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:
         testRunner = None
     unittest.main(testRunner=testRunner, verbosity=2)

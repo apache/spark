@@ -210,6 +210,7 @@ object NestedColumnAliasing {
     case _: Repartition => true
     case _: Sample => true
     case _: RepartitionByExpression => true
+    case _: RebalancePartitions => true
     case _: Join => true
     case _: Window => true
     case _: Sort => true
@@ -239,17 +240,21 @@ object NestedColumnAliasing {
    */
   def getAttributeToExtractValues(
       exprList: Seq[Expression],
-      exclusiveAttrs: Seq[Attribute]): Map[Attribute, Seq[ExtractValue]] = {
+      exclusiveAttrs: Seq[Attribute],
+      extractor: (Expression) => Seq[Expression] = collectRootReferenceAndExtractValue)
+    : Map[Attribute, Seq[ExtractValue]] = {
 
     val nestedFieldReferences = new mutable.ArrayBuffer[ExtractValue]()
     val otherRootReferences = new mutable.ArrayBuffer[AttributeReference]()
     exprList.foreach { e =>
-      collectRootReferenceAndExtractValue(e).foreach {
-        case ev: ExtractValue =>
+      extractor(e).foreach {
+        // we can not alias the attr from lambda variable whose expr id is not available
+        case ev: ExtractValue if !ev.exists(_.isInstanceOf[NamedLambdaVariable]) =>
           if (ev.references.size == 1) {
             nestedFieldReferences.append(ev)
           }
         case ar: AttributeReference => otherRootReferences.append(ar)
+        case _ => // ignore
       }
     }
     val exclusiveAttrSet = AttributeSet(exclusiveAttrs ++ otherRootReferences)
@@ -264,7 +269,7 @@ object NestedColumnAliasing {
         // that do should not have an alias generated as it can lead to pushing the aggregate down
         // into a projection.
         def containsAggregateFunction(ev: ExtractValue): Boolean =
-          ev.find(_.isInstanceOf[AggregateFunction]).isDefined
+          ev.exists(_.isInstanceOf[AggregateFunction])
 
         // Remove redundant [[ExtractValue]]s if they share the same parent nest field.
         // For example, when `a.b` and `a.b.c` are in project list, we only need to alias `a.b`.
@@ -274,7 +279,7 @@ object NestedColumnAliasing {
           // [[GetStructField]]
           case e @ (_: GetStructField | _: GetArrayStructFields) =>
             val child = e.children.head
-            nestedFields.forall(f => child.find(_.semanticEquals(f)).isEmpty)
+            nestedFields.forall(f => !child.exists(_.semanticEquals(f)))
           case _ => true
         }
           .distinct
@@ -309,6 +314,25 @@ object NestedColumnAliasing {
   }
 }
 
+object GeneratorUnrequiredChildrenPruning {
+  def unapply(plan: LogicalPlan): Option[LogicalPlan] = plan match {
+    case p @ Project(_, g: Generate) =>
+      val requiredAttrs = p.references ++ g.generator.references
+      val newChild = ColumnPruning.prunedChild(g.child, requiredAttrs)
+      val unrequired = g.generator.references -- p.references
+      val unrequiredIndices = newChild.output.zipWithIndex.filter(t => unrequired.contains(t._1))
+        .map(_._2)
+      if (!newChild.fastEquals(g.child) ||
+        unrequiredIndices.toSet != g.unrequiredChildIndex.toSet) {
+        Some(p.copy(child = g.copy(child = newChild, unrequiredChildIndex = unrequiredIndices)))
+      } else {
+        None
+      }
+    case _ => None
+  }
+}
+
+
 /**
  * This prunes unnecessary nested columns from [[Generate]], or [[Project]] -> [[Generate]]
  */
@@ -328,22 +352,43 @@ object GeneratorNestedColumnAliasing {
         return None
       }
       val generatorOutputSet = AttributeSet(g.qualifiedGeneratorOutput)
-      val (attrToExtractValuesOnGenerator, attrToExtractValuesNotOnGenerator) =
+      var (attrToExtractValuesOnGenerator, attrToExtractValuesNotOnGenerator) =
         attrToExtractValues.partition { case (attr, _) =>
           attr.references.subsetOf(generatorOutputSet) }
 
       val pushedThrough = NestedColumnAliasing.rewritePlanWithAliases(
         plan, attrToExtractValuesNotOnGenerator)
 
-      // If the generator output is `ArrayType`, we cannot push through the extractor.
-      // It is because we don't allow field extractor on two-level array,
-      // i.e., attr.field when attr is a ArrayType(ArrayType(...)).
-      // Similarily, we also cannot push through if the child of generator is `MapType`.
+      // We cannot push through if the child of generator is `MapType`.
       g.generator.children.head.dataType match {
         case _: MapType => return Some(pushedThrough)
         case ArrayType(_: ArrayType, _) => return Some(pushedThrough)
         case _ =>
       }
+
+      // This function collects all GetStructField*(attribute) from the passed in expression.
+      // GetStructField* means arbitrary levels of nesting.
+      def collectNestedGetStructFields(e: Expression): Seq[Expression] = {
+        // The helper function returns a tuple of
+        // (nested GetStructField including the current level, all other nested GetStructField)
+        def helper(e: Expression): (Seq[Expression], Seq[Expression]) = e match {
+          case _: AttributeReference => (Seq(e), Seq.empty)
+          case gsf: GetStructField =>
+            val child_res = helper(gsf.child)
+            (child_res._1.map(p => gsf.withNewChildren(Seq(p))), child_res._2)
+          case other =>
+            val child_res = other.children.map(helper)
+            val child_res_combined = (child_res.flatMap(_._1), child_res.flatMap(_._2))
+            (Seq.empty, child_res_combined._1 ++ child_res_combined._2)
+        }
+
+        val res = helper(e)
+        (res._1 ++ res._2).filterNot(_.isInstanceOf[Attribute])
+      }
+
+      attrToExtractValuesOnGenerator = NestedColumnAliasing.getAttributeToExtractValues(
+        attrToExtractValuesOnGenerator.flatMap(_._2).toSeq, Seq.empty,
+        collectNestedGetStructFields)
 
       // Pruning on `Generator`'s output. We only process single field case.
       // For multiple field case, we cannot directly move field extractor into
@@ -365,12 +410,7 @@ object GeneratorNestedColumnAliasing {
             //       df.select(explode($"items.a").as("item.a"))
             val rewrittenG = newG.transformExpressions {
               case e: ExplodeBase =>
-                val extractor = nestedFieldOnGenerator.transformUp {
-                  case _: Attribute =>
-                    e.child
-                  case g: GetStructField =>
-                    ExtractValue(g.child, Literal(g.extractFieldName), SQLConf.get.resolver)
-                }
+                val extractor = replaceGenerator(e, nestedFieldOnGenerator)
                 e.withNewChildren(Seq(extractor))
             }
 
@@ -388,7 +428,7 @@ object GeneratorNestedColumnAliasing {
             // Replace nested column accessor with generator output.
             val attrExprIdsOnGenerator = attrToExtractValuesOnGenerator.keys.map(_.exprId).toSet
             val updatedProject = p.withNewChildren(Seq(updatedGenerate)).transformExpressions {
-              case f: ExtractValue if nestedFieldsOnGenerator.contains(f) =>
+              case f: GetStructField if nestedFieldsOnGenerator.contains(f) =>
                 updatedGenerate.output
                   .find(a => attrExprIdsOnGenerator.contains(a.exprId))
                   .getOrElse(f)
@@ -412,6 +452,25 @@ object GeneratorNestedColumnAliasing {
 
     case _ =>
       None
+  }
+
+  /**
+   * Replace the reference attribute of extractor expression with generator input.
+   */
+  private def replaceGenerator(generator: ExplodeBase, expr: Expression): Expression = {
+    expr match {
+      case a: Attribute if expr.references.contains(a) =>
+        generator.child
+      case g: GetStructField =>
+        // We cannot simply do a transformUp instead because if we replace the attribute
+        // `extractFieldName` could cause `ClassCastException` error. We need to get the
+        // field name before replacing down the attribute/other extractor.
+        val fieldName = g.extractFieldName
+        val newChild = replaceGenerator(generator, g.child)
+        ExtractValue(newChild, Literal(fieldName), SQLConf.get.resolver)
+      case other =>
+        other.mapChildren(replaceGenerator(generator, _))
+    }
   }
 
   /**

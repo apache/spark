@@ -37,6 +37,7 @@ import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.vectorized.ColumnarBatch
+import org.apache.spark.util.NextIterator
 
 object SparkPlan {
   /** The original [[LogicalPlan]] from which this [[SparkPlan]] is converted. */
@@ -72,7 +73,16 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
   val id: Int = SparkPlan.newPlanId()
 
   /**
-   * Return true if this stage of the plan supports columnar execution.
+   * Return true if this stage of the plan supports row-based execution. A plan
+   * can also support columnar execution (see `supportsColumnar`). Spark will decide
+   * which execution to be called during query planning.
+   */
+  def supportsRowBased: Boolean = !supportsColumnar
+
+  /**
+   * Return true if this stage of the plan supports columnar execution. A plan
+   * can also support row-based execution (see `supportsRowBased`). Spark will decide
+   * which execution to be called during query planning.
    */
   def supportsColumnar: Boolean = false
 
@@ -313,6 +323,11 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
   }
 
   /**
+   * Converts the output of this plan to row-based if it is columnar plan.
+   */
+  def toRowBased: SparkPlan = if (supportsColumnar) ColumnarToRowExec(this) else this
+
+  /**
    * Packing the UnsafeRows into byte array for faster serialization.
    * The byte arrays are in the following format:
    * [size] [bytes of UnsafeRow] [size] [bytes of UnsafeRow] ... [-1]
@@ -370,10 +385,9 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
     val bis = new ByteArrayInputStream(bytes)
     val ins = new DataInputStream(codec.compressedInputStream(bis))
 
-    new Iterator[InternalRow] {
+    new NextIterator[InternalRow] {
       private var sizeOfNextRow = ins.readInt()
-      override def hasNext: Boolean = sizeOfNextRow >= 0
-      override def next(): InternalRow = {
+      private def _next(): InternalRow = {
         val bs = new Array[Byte](sizeOfNextRow)
         ins.readFully(bs)
         val row = new UnsafeRow(nFields)
@@ -381,6 +395,22 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
         sizeOfNextRow = ins.readInt()
         row
       }
+
+      override def getNext(): InternalRow = {
+        if (sizeOfNextRow >= 0) {
+          try {
+            _next()
+          } catch {
+            case t: Throwable if ins != null =>
+              ins.close()
+              throw t
+          }
+        } else {
+          finished = true
+          null
+        }
+      }
+      override def close(): Unit = ins.close()
     }
   }
 

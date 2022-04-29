@@ -24,7 +24,7 @@ from contextlib import contextmanager
 from distutils.version import LooseVersion
 
 import pandas as pd
-from pandas.api.types import is_list_like
+from pandas.api.types import is_list_like  # type: ignore[attr-defined]
 from pandas.core.dtypes.common import is_numeric_dtype
 from pandas.testing import assert_frame_equal, assert_index_equal, assert_series_equal
 
@@ -46,7 +46,7 @@ have_tabulate = tabulate_requirement_message is None
 
 matplotlib_requirement_message = None
 try:
-    import matplotlib  # type: ignore # noqa: F401
+    import matplotlib  # noqa: F401
 except ImportError as e:
     # If matplotlib requirement is not satisfied, skip related tests.
     matplotlib_requirement_message = str(e)
@@ -54,7 +54,7 @@ have_matplotlib = matplotlib_requirement_message is None
 
 plotly_requirement_message = None
 try:
-    import plotly  # type: ignore # noqa: F401
+    import plotly  # noqa: F401
 except ImportError as e:
     # If plotly requirement is not satisfied, skip related tests.
     plotly_requirement_message = str(e)
@@ -84,9 +84,11 @@ class PandasOnSparkTestCase(unittest.TestCase, SQLTestUtils):
 
                 if LooseVersion(pd.__version__) < LooseVersion("1.1.1"):
                     # Due to https://github.com/pandas-dev/pandas/issues/35446
-                    check_exact = check_exact \
-                        and all([is_numeric_dtype(dtype) for dtype in left.dtypes]) \
+                    check_exact = (
+                        check_exact
+                        and all([is_numeric_dtype(dtype) for dtype in left.dtypes])
                         and all([is_numeric_dtype(dtype) for dtype in right.dtypes])
+                    )
 
                 assert_frame_equal(
                     left,
@@ -94,7 +96,7 @@ class PandasOnSparkTestCase(unittest.TestCase, SQLTestUtils):
                     check_index_type=("equiv" if len(left.index) > 0 else False),
                     check_column_type=("equiv" if len(left.columns) > 0 else False),
                     check_exact=check_exact,
-                    **kwargs
+                    **kwargs,
                 )
             except AssertionError as e:
                 msg = (
@@ -111,15 +113,17 @@ class PandasOnSparkTestCase(unittest.TestCase, SQLTestUtils):
                     kwargs = dict()
                 if LooseVersion(pd.__version__) < LooseVersion("1.1.1"):
                     # Due to https://github.com/pandas-dev/pandas/issues/35446
-                    check_exact = check_exact \
-                        and is_numeric_dtype(left.dtype) \
+                    check_exact = (
+                        check_exact
+                        and is_numeric_dtype(left.dtype)
                         and is_numeric_dtype(right.dtype)
+                    )
                 assert_series_equal(
                     left,
                     right,
                     check_index_type=("equiv" if len(left.index) > 0 else False),
                     check_exact=check_exact,
-                    **kwargs
+                    **kwargs,
                 )
             except AssertionError as e:
                 msg = (
@@ -132,9 +136,11 @@ class PandasOnSparkTestCase(unittest.TestCase, SQLTestUtils):
             try:
                 if LooseVersion(pd.__version__) < LooseVersion("1.1.1"):
                     # Due to https://github.com/pandas-dev/pandas/issues/35446
-                    check_exact = check_exact \
-                        and is_numeric_dtype(left.dtype) \
+                    check_exact = (
+                        check_exact
+                        and is_numeric_dtype(left.dtype)
                         and is_numeric_dtype(right.dtype)
+                    )
                 assert_index_equal(left, right, check_exact=check_exact)
             except AssertionError as e:
                 msg = (
@@ -241,7 +247,7 @@ class PandasOnSparkTestCase(unittest.TestCase, SQLTestUtils):
             return obj
 
 
-class TestUtils(object):
+class TestUtils:
     @contextmanager
     def temp_dir(self):
         tmp = tempfile.mkdtemp()
@@ -253,7 +259,7 @@ class TestUtils(object):
     @contextmanager
     def temp_file(self):
         with self.temp_dir() as tmp:
-            yield tempfile.mktemp(dir=tmp)
+            yield tempfile.mkstemp(dir=tmp)[1]
 
 
 class ComparisonTestBase(PandasOnSparkTestCase):

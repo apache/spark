@@ -90,6 +90,15 @@ object SizeInBytesOnlyStatsPlanVisitor extends LogicalPlanVisitor[Statistics] {
       rowCount = Some(rowCount))
   }
 
+  override def visitOffset(p: Offset): Statistics = {
+    val offset = p.offsetExpr.eval().asInstanceOf[Int]
+    val childStats = p.child.stats
+    val rowCount: BigInt = childStats.rowCount.map(c => c - offset).map(_.max(0)).getOrElse(0)
+    Statistics(
+      sizeInBytes = EstimationUtils.getOutputSize(p.output, rowCount, childStats.attributeStats),
+      rowCount = Some(rowCount))
+  }
+
   override def visitIntersect(p: Intersect): Statistics = {
     val leftSize = p.left.stats.sizeInBytes
     val rightSize = p.right.stats.sizeInBytes
@@ -131,6 +140,8 @@ object SizeInBytesOnlyStatsPlanVisitor extends LogicalPlanVisitor[Statistics] {
   override def visitRepartition(p: Repartition): Statistics = p.child.stats
 
   override def visitRepartitionByExpr(p: RepartitionByExpression): Statistics = p.child.stats
+
+  override def visitRebalancePartitions(p: RebalancePartitions): Statistics = p.child.stats
 
   override def visitSample(p: Sample): Statistics = {
     val ratio = p.upperBound - p.lowerBound

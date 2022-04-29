@@ -24,6 +24,7 @@ import java.util.Locale
 import com.univocity.parsers.csv.{CsvParserSettings, CsvWriterSettings, UnescapedQuoteHandling}
 
 import org.apache.spark.internal.Logging
+import org.apache.spark.sql.catalyst.FileSourceOptions
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
@@ -34,7 +35,7 @@ class CSVOptions(
     val columnPruning: Boolean,
     defaultTimeZoneId: String,
     defaultColumnNameOfCorruptRecord: String)
-  extends Logging with Serializable {
+  extends FileSourceOptions(parameters) with Logging {
 
   def this(
     parameters: Map[String, String],
@@ -163,6 +164,10 @@ class CSVOptions(
     } else {
       s"${DateFormatter.defaultPattern}'T'HH:mm:ss[.SSS][XXX]"
     })
+
+  val timestampNTZFormatInRead: Option[String] = parameters.get("timestampNTZFormat")
+  val timestampNTZFormatInWrite: String = parameters.getOrElse("timestampNTZFormat",
+    s"${DateFormatter.defaultPattern}'T'HH:mm:ss[.SSS]")
 
   val multiLine = parameters.get("multiLine").map(_.toBoolean).getOrElse(false)
 

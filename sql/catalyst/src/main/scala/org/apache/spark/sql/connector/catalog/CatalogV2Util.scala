@@ -22,9 +22,10 @@ import java.util.Collections
 
 import scala.collection.JavaConverters._
 
-import org.apache.spark.sql.catalyst.analysis.{NamedRelation, NoSuchDatabaseException, NoSuchNamespaceException, NoSuchTableException}
-import org.apache.spark.sql.catalyst.plans.logical.{CreateTableAsSelectStatement, CreateTableStatement, ReplaceTableAsSelectStatement, ReplaceTableStatement, SerdeInfo}
+import org.apache.spark.sql.catalyst.analysis.{AsOfTimestamp, AsOfVersion, NamedRelation, NoSuchDatabaseException, NoSuchFunctionException, NoSuchNamespaceException, NoSuchTableException, TimeTravelSpec}
+import org.apache.spark.sql.catalyst.plans.logical.{SerdeInfo, TableSpec}
 import org.apache.spark.sql.connector.catalog.TableChange._
+import org.apache.spark.sql.connector.catalog.functions.UnboundFunction
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.types.{ArrayType, MapType, StructField, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -46,7 +47,8 @@ private[sql] object CatalogV2Util {
     Seq(TableCatalog.PROP_COMMENT,
       TableCatalog.PROP_LOCATION,
       TableCatalog.PROP_PROVIDER,
-      TableCatalog.PROP_OWNER)
+      TableCatalog.PROP_OWNER,
+      TableCatalog.PROP_EXTERNAL)
 
   /**
    * The list of reserved namespace properties, which can not be removed or changed directly by
@@ -189,7 +191,7 @@ private[sql] object CatalogV2Util {
           }
 
         case delete: DeleteColumn =>
-          replace(schema, delete.fieldNames, _ => None)
+          replace(schema, delete.fieldNames, _ => None, delete.ifExists)
 
         case _ =>
           // ignore non-schema changes
@@ -220,17 +222,28 @@ private[sql] object CatalogV2Util {
   private def replace(
       struct: StructType,
       fieldNames: Seq[String],
-      update: StructField => Option[StructField]): StructType = {
+      update: StructField => Option[StructField],
+      ifExists: Boolean = false): StructType = {
 
-    val pos = struct.getFieldIndex(fieldNames.head)
-        .getOrElse(throw new IllegalArgumentException(s"Cannot find field: ${fieldNames.head}"))
+    val posOpt = struct.getFieldIndex(fieldNames.head)
+    if (posOpt.isEmpty) {
+      if (ifExists) {
+        // We couldn't find the column to replace, but with IF EXISTS, we will silence the error
+        // Currently only DROP COLUMN may pass down the IF EXISTS parameter
+        return struct
+      } else {
+        throw new IllegalArgumentException(s"Cannot find field: ${fieldNames.head}")
+      }
+    }
+
+    val pos = posOpt.get
     val field = struct.fields(pos)
     val replacement: Option[StructField] = (fieldNames.tail, field.dataType) match {
       case (Seq(), _) =>
         update(field)
 
       case (names, struct: StructType) =>
-        val updatedType: StructType = replace(struct, names, update)
+        val updatedType: StructType = replace(struct, names, update, ifExists)
         Some(StructField(field.name, updatedType, field.nullable, field.metadata))
 
       case (Seq("key"), map @ MapType(keyType, _, _)) =>
@@ -239,7 +252,7 @@ private[sql] object CatalogV2Util {
         Some(field.copy(dataType = map.copy(keyType = updated.dataType)))
 
       case (Seq("key", names @ _*), map @ MapType(keyStruct: StructType, _, _)) =>
-        Some(field.copy(dataType = map.copy(keyType = replace(keyStruct, names, update))))
+        Some(field.copy(dataType = map.copy(keyType = replace(keyStruct, names, update, ifExists))))
 
       case (Seq("value"), map @ MapType(_, mapValueType, isNullable)) =>
         val updated = update(StructField("value", mapValueType, nullable = isNullable))
@@ -249,7 +262,8 @@ private[sql] object CatalogV2Util {
           valueContainsNull = updated.nullable)))
 
       case (Seq("value", names @ _*), map @ MapType(_, valueStruct: StructType, _)) =>
-        Some(field.copy(dataType = map.copy(valueType = replace(valueStruct, names, update))))
+        Some(field.copy(dataType = map.copy(valueType =
+          replace(valueStruct, names, update, ifExists))))
 
       case (Seq("element"), array @ ArrayType(elementType, isNullable)) =>
         val updated = update(StructField("element", elementType, nullable = isNullable))
@@ -259,11 +273,15 @@ private[sql] object CatalogV2Util {
           containsNull = updated.nullable)))
 
       case (Seq("element", names @ _*), array @ ArrayType(elementStruct: StructType, _)) =>
-        Some(field.copy(dataType = array.copy(elementType = replace(elementStruct, names, update))))
+        Some(field.copy(dataType = array.copy(elementType =
+          replace(elementStruct, names, update, ifExists))))
 
       case (names, dataType) =>
-        throw new IllegalArgumentException(
-          s"Cannot find field: ${names.head} in ${dataType.simpleString}")
+        if (!ifExists) {
+          throw new IllegalArgumentException(
+            s"Cannot find field: ${names.head} in ${dataType.simpleString}")
+        }
+        None
     }
 
     val newFields = struct.fields.zipWithIndex.flatMap {
@@ -276,14 +294,36 @@ private[sql] object CatalogV2Util {
     new StructType(newFields)
   }
 
-  def loadTable(catalog: CatalogPlugin, ident: Identifier): Option[Table] =
+  def loadTable(
+      catalog: CatalogPlugin,
+      ident: Identifier,
+      timeTravelSpec: Option[TimeTravelSpec] = None): Option[Table] =
     try {
-      Option(catalog.asTableCatalog.loadTable(ident))
+      if (timeTravelSpec.nonEmpty) {
+        timeTravelSpec.get match {
+          case v: AsOfVersion =>
+            Option(catalog.asTableCatalog.loadTable(ident, v.version))
+          case ts: AsOfTimestamp =>
+            Option(catalog.asTableCatalog.loadTable(ident, ts.timestamp))
+        }
+      } else {
+        Option(catalog.asTableCatalog.loadTable(ident))
+      }
     } catch {
       case _: NoSuchTableException => None
       case _: NoSuchDatabaseException => None
       case _: NoSuchNamespaceException => None
     }
+
+  def loadFunction(catalog: CatalogPlugin, ident: Identifier): Option[UnboundFunction] = {
+    try {
+      Option(catalog.asFunctionCatalog.loadFunction(ident))
+    } catch {
+      case _: NoSuchFunctionException => None
+      case _: NoSuchDatabaseException => None
+      case _: NoSuchNamespaceException => None
+    }
+  }
 
   def loadRelation(catalog: CatalogPlugin, ident: Identifier): Option[NamedRelation] = {
     loadTable(catalog, ident).map(DataSourceV2Relation.create(_, Some(catalog), Some(ident)))
@@ -293,22 +333,10 @@ private[sql] object CatalogV2Util {
     catalog.name().equalsIgnoreCase(CatalogManager.SESSION_CATALOG_NAME)
   }
 
-  def convertTableProperties(c: CreateTableStatement): Map[String, String] = {
-    convertTableProperties(
-      c.properties, c.options, c.serde, c.location, c.comment, c.provider, c.external)
-  }
-
-  def convertTableProperties(c: CreateTableAsSelectStatement): Map[String, String] = {
-    convertTableProperties(
-      c.properties, c.options, c.serde, c.location, c.comment, c.provider, c.external)
-  }
-
-  def convertTableProperties(r: ReplaceTableStatement): Map[String, String] = {
-    convertTableProperties(r.properties, r.options, r.serde, r.location, r.comment, r.provider)
-  }
-
-  def convertTableProperties(r: ReplaceTableAsSelectStatement): Map[String, String] = {
-    convertTableProperties(r.properties, r.options, r.serde, r.location, r.comment, r.provider)
+  def convertTableProperties(t: TableSpec): Map[String, String] = {
+    val props = convertTableProperties(
+      t.properties, t.options, t.serde, t.location, t.comment, t.provider, t.external)
+    withDefaultOwnership(props)
   }
 
   private def convertTableProperties(

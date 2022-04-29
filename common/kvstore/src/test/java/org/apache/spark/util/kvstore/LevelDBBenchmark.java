@@ -197,9 +197,15 @@ public class LevelDBBenchmark {
       }
     }
 
-    while (it.hasNext()) {
-      try(Timer.Context ctx = iter.time()) {
-        it.next();
+    try {
+      while (it.hasNext()) {
+        try (Timer.Context ctx = iter.time()) {
+          it.next();
+        }
+      }
+    } finally {
+      if (it != null) {
+        it.close();
       }
     }
   }

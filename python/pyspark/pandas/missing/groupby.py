@@ -36,7 +36,9 @@ def _unsupported_property(property_name, deprecated=False, reason=""):
     )
 
 
-class MissingPandasLikeDataFrameGroupBy(object):
+class MissingPandasLikeDataFrameGroupBy:
+    # NOTE: Please update the document "Supported pandas APIs" when implementing the new API.
+    # Documentation path: `python/docs/source/user_guide/pandas_on_spark/supported_pandas_api.rst`.
 
     # Properties
     corr = _unsupported_property("corr")
@@ -68,7 +70,9 @@ class MissingPandasLikeDataFrameGroupBy(object):
     sem = _unsupported_function("sem")
 
 
-class MissingPandasLikeSeriesGroupBy(object):
+class MissingPandasLikeSeriesGroupBy:
+    # NOTE: Please update the document "Supported pandas APIs" when implementing the new API.
+    # Documentation path: `python/docs/source/user_guide/pandas_on_spark/supported_pandas_api.rst`.
 
     # Properties
     corr = _unsupported_property("corr")

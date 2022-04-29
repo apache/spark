@@ -417,7 +417,8 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
         min($"value").as("min_val"),
         max($"value").as("max_val"),
         sum($"value").as("sum_val"),
-        count(when($"value" % 2 === 0, 1)).as("num_even"))
+        count(when($"value" % 2 === 0, 1)).as("num_even"),
+        percentile_approx($"value", lit(0.5), lit(100)).as("percentile_approx_val"))
       .observe(
         name = "other_event",
         avg($"value").cast("int").as("avg_val"))
@@ -444,7 +445,7 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
         AddData(inputData, 1, 2),
         AdvanceManualClock(100),
         checkMetrics { metrics =>
-          assert(metrics.get("my_event") === Row(1, 2, 3L, 1L))
+          assert(metrics.get("my_event") === Row(1, 2, 3L, 1L, 1))
           assert(metrics.get("other_event") === Row(1))
         },
 
@@ -452,7 +453,7 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
         AddData(inputData, 10, 30, -10, 5),
         AdvanceManualClock(100),
         checkMetrics { metrics =>
-          assert(metrics.get("my_event") === Row(-10, 30, 35L, 3L))
+          assert(metrics.get("my_event") === Row(-10, 30, 35L, 3L, 5))
           assert(metrics.get("other_event") === Row(8))
         },
 

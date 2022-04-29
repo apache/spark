@@ -171,12 +171,14 @@ DataFrame APIs
     DataFrame.inputFiles
     DataFrame.intersect
     DataFrame.intersectAll
+    DataFrame.isEmpty
     DataFrame.isLocal
     DataFrame.isStreaming
     DataFrame.join
     DataFrame.limit
     DataFrame.localCheckpoint
     DataFrame.mapInPandas
+    DataFrame.mapInArrow
     DataFrame.na
     DataFrame.observe
     DataFrame.orderBy
@@ -199,6 +201,7 @@ DataFrame APIs
     DataFrame.show
     DataFrame.sort
     DataFrame.sortWithinPartitions
+    DataFrame.sparkSession
     DataFrame.stat
     DataFrame.storageLevel
     DataFrame.subtract
@@ -221,7 +224,7 @@ DataFrame APIs
     DataFrame.write
     DataFrame.writeStream
     DataFrame.writeTo
-    DataFrame.to_pandas_on_spark
+    DataFrame.pandas_api
     DataFrameNaFunctions.drop
     DataFrameNaFunctions.fill
     DataFrameNaFunctions.replace
@@ -299,8 +302,8 @@ Data Types
     StringType
     StructField
     StructType
-    TimestampNTZType
     TimestampType
+    DayTimeIntervalType
 
 
 Observation
@@ -466,6 +469,7 @@ Functions
     lower
     lpad
     ltrim
+    make_date
     map_concat
     map_entries
     map_filter

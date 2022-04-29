@@ -79,7 +79,8 @@ object MetricsAggregationBenchmark extends BenchmarkBase {
       getClass().getName(),
       getClass().getName(),
       planInfo,
-      System.currentTimeMillis())
+      System.currentTimeMillis(),
+      Map.empty)
 
     val executionEnd = SparkListenerSQLExecutionEnd(executionId, System.currentTimeMillis())
 
@@ -109,6 +110,7 @@ object MetricsAggregationBenchmark extends BenchmarkBase {
           taskId = taskOffset + i.toLong,
           index = i,
           attemptNumber = 0,
+          partitionId = i,
           // The following fields are not used.
           launchTime = 0,
           executorId = "",

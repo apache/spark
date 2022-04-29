@@ -234,9 +234,11 @@ class MLEventsSuite
         }
       }
       // Test if they can be ser/de via JSON protocol.
-      assert(events.nonEmpty)
-      events.map(JsonProtocol.sparkEventToJson).foreach { event =>
-        assert(JsonProtocol.sparkEventFromJson(event).isInstanceOf[MLEvent])
+      eventually(timeout(10.seconds), interval(1.second)) {
+        assert(events.nonEmpty)
+        events.map(JsonProtocol.sparkEventToJson).foreach { event =>
+          assert(JsonProtocol.sparkEventFromJson(event).isInstanceOf[MLEvent])
+        }
       }
       sc.listenerBus.waitUntilEmpty(timeoutMillis = 10000)
 
@@ -260,9 +262,11 @@ class MLEventsSuite
         }
       }
       // Test if they can be ser/de via JSON protocol.
-      assert(events.nonEmpty)
-      events.map(JsonProtocol.sparkEventToJson).foreach { event =>
-        assert(JsonProtocol.sparkEventFromJson(event).isInstanceOf[MLEvent])
+      eventually(timeout(10.seconds), interval(1.second)) {
+        assert(events.nonEmpty)
+        events.map(JsonProtocol.sparkEventToJson).foreach { event =>
+          assert(JsonProtocol.sparkEventFromJson(event).isInstanceOf[MLEvent])
+        }
       }
     }
   }
@@ -293,9 +297,11 @@ class MLEventsSuite
         }
       }
       // Test if they can be ser/de via JSON protocol.
-      assert(events.nonEmpty)
-      events.map(JsonProtocol.sparkEventToJson).foreach { event =>
-        assert(JsonProtocol.sparkEventFromJson(event).isInstanceOf[MLEvent])
+      eventually(timeout(10.seconds), interval(1.second)) {
+        assert(events.nonEmpty)
+        events.map(JsonProtocol.sparkEventToJson).foreach { event =>
+          assert(JsonProtocol.sparkEventFromJson(event).isInstanceOf[MLEvent])
+        }
       }
       sc.listenerBus.waitUntilEmpty(timeoutMillis = 10000)
 
@@ -319,9 +325,11 @@ class MLEventsSuite
         }
       }
       // Test if they can be ser/de via JSON protocol.
-      assert(events.nonEmpty)
-      events.map(JsonProtocol.sparkEventToJson).foreach { event =>
-        assert(JsonProtocol.sparkEventFromJson(event).isInstanceOf[MLEvent])
+      eventually(timeout(10.seconds), interval(1.second)) {
+        assert(events.nonEmpty)
+        events.map(JsonProtocol.sparkEventToJson).foreach { event =>
+          assert(JsonProtocol.sparkEventFromJson(event).isInstanceOf[MLEvent])
+        }
       }
     }
   }

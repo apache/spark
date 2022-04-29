@@ -17,17 +17,61 @@
 
 package org.apache.spark.sql.jdbc
 
-import java.sql.{Connection, Types}
+import java.sql.{Connection, SQLException, Types}
+import java.util
 import java.util.Locale
 
+import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.SQLConfHelper
+import org.apache.spark.sql.catalyst.analysis.{IndexAlreadyExistsException, NonEmptyNamespaceException, NoSuchIndexException}
+import org.apache.spark.sql.connector.expressions.NamedReference
+import org.apache.spark.sql.connector.expressions.aggregate.{AggregateFunc, GeneralAggregateFunc}
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JdbcUtils}
+import org.apache.spark.sql.execution.datasources.v2.TableSampleInfo
 import org.apache.spark.sql.types._
 
 
-private object PostgresDialect extends JdbcDialect {
+private object PostgresDialect extends JdbcDialect with SQLConfHelper {
 
   override def canHandle(url: String): Boolean =
     url.toLowerCase(Locale.ROOT).startsWith("jdbc:postgresql")
+
+  // See https://www.postgresql.org/docs/8.4/functions-aggregate.html
+  override def compileAggregate(aggFunction: AggregateFunc): Option[String] = {
+    super.compileAggregate(aggFunction).orElse(
+      aggFunction match {
+        case f: GeneralAggregateFunc if f.name() == "VAR_POP" =>
+          assert(f.children().length == 1)
+          val distinct = if (f.isDistinct) "DISTINCT " else ""
+          Some(s"VAR_POP($distinct${f.children().head})")
+        case f: GeneralAggregateFunc if f.name() == "VAR_SAMP" =>
+          assert(f.children().length == 1)
+          val distinct = if (f.isDistinct) "DISTINCT " else ""
+          Some(s"VAR_SAMP($distinct${f.children().head})")
+        case f: GeneralAggregateFunc if f.name() == "STDDEV_POP" =>
+          assert(f.children().length == 1)
+          val distinct = if (f.isDistinct) "DISTINCT " else ""
+          Some(s"STDDEV_POP($distinct${f.children().head})")
+        case f: GeneralAggregateFunc if f.name() == "STDDEV_SAMP" =>
+          assert(f.children().length == 1)
+          val distinct = if (f.isDistinct) "DISTINCT " else ""
+          Some(s"STDDEV_SAMP($distinct${f.children().head})")
+        case f: GeneralAggregateFunc if f.name() == "COVAR_POP" =>
+          assert(f.children().length == 2)
+          val distinct = if (f.isDistinct) "DISTINCT " else ""
+          Some(s"COVAR_POP($distinct${f.children().head}, ${f.children().last})")
+        case f: GeneralAggregateFunc if f.name() == "COVAR_SAMP" =>
+          assert(f.children().length == 2)
+          val distinct = if (f.isDistinct) "DISTINCT " else ""
+          Some(s"COVAR_SAMP($distinct${f.children().head}, ${f.children().last})")
+        case f: GeneralAggregateFunc if f.name() == "CORR" =>
+          assert(f.children().length == 2)
+          val distinct = if (f.isDistinct) "DISTINCT " else ""
+          Some(s"CORR($distinct${f.children().head}, ${f.children().last})")
+        case _ => None
+      }
+    )
+  }
 
   override def getCatalystType(
       sqlType: Int, typeName: String, size: Int, md: MetadataBuilder): Option[DataType] = {
@@ -153,5 +197,67 @@ private object PostgresDialect extends JdbcDialect {
       isNullable: Boolean): String = {
     val nullable = if (isNullable) "DROP NOT NULL" else "SET NOT NULL"
     s"ALTER TABLE $tableName ALTER COLUMN ${quoteIdentifier(columnName)} $nullable"
+  }
+
+  override def supportsTableSample: Boolean = true
+
+  override def getTableSample(sample: TableSampleInfo): String = {
+    // hard-coded to BERNOULLI for now because Spark doesn't have a way to specify sample
+    // method name
+    s"TABLESAMPLE BERNOULLI" +
+      s" (${(sample.upperBound - sample.lowerBound) * 100}) REPEATABLE (${sample.seed})"
+  }
+
+  // CREATE INDEX syntax
+  // https://www.postgresql.org/docs/14/sql-createindex.html
+  override def createIndex(
+      indexName: String,
+      tableName: String,
+      columns: Array[NamedReference],
+      columnsProperties: util.Map[NamedReference, util.Map[String, String]],
+      properties: util.Map[String, String]): String = {
+    val columnList = columns.map(col => quoteIdentifier(col.fieldNames.head))
+    var indexProperties = ""
+    val (indexType, indexPropertyList) = JdbcUtils.processIndexProperties(properties, "postgresql")
+
+    if (indexPropertyList.nonEmpty) {
+      indexProperties = "WITH (" + indexPropertyList.mkString(", ") + ")"
+    }
+
+    s"CREATE INDEX ${quoteIdentifier(indexName)} ON ${quoteIdentifier(tableName)}" +
+      s" $indexType (${columnList.mkString(", ")}) $indexProperties"
+  }
+
+  // SHOW INDEX syntax
+  // https://www.postgresql.org/docs/14/view-pg-indexes.html
+  override def indexExists(
+      conn: Connection,
+      indexName: String,
+      tableName: String,
+      options: JDBCOptions): Boolean = {
+    val sql = s"SELECT * FROM pg_indexes WHERE tablename = '$tableName' AND" +
+      s" indexname = '$indexName'"
+    JdbcUtils.checkIfIndexExists(conn, sql, options)
+  }
+
+  // DROP INDEX syntax
+  // https://www.postgresql.org/docs/14/sql-dropindex.html
+  override def dropIndex(indexName: String, tableName: String): String = {
+    s"DROP INDEX ${quoteIdentifier(indexName)}"
+  }
+
+  override def classifyException(message: String, e: Throwable): AnalysisException = {
+    e match {
+      case sqlException: SQLException =>
+        sqlException.getSQLState match {
+          // https://www.postgresql.org/docs/14/errcodes-appendix.html
+          case "42P07" => throw new IndexAlreadyExistsException(message, cause = Some(e))
+          case "42704" => throw new NoSuchIndexException(message, cause = Some(e))
+          case "2BP01" => throw NonEmptyNamespaceException(message, cause = Some(e))
+          case _ => super.classifyException(message, e)
+        }
+      case unsupported: UnsupportedOperationException => throw unsupported
+      case _ => super.classifyException(message, e)
+    }
   }
 }

@@ -106,6 +106,10 @@ case class GetStructField(child: Expression, ordinal: Int, name: Option[String] 
 
   lazy val childSchema = child.dataType.asInstanceOf[StructType]
 
+  override lazy val preCanonicalized: Expression = {
+    copy(child = child.preCanonicalized, name = None)
+  }
+
   override def dataType: DataType = childSchema(ordinal).dataType
   override def nullable: Boolean = child.nullable || childSchema(ordinal).nullable
 
@@ -142,6 +146,8 @@ case class GetStructField(child: Expression, ordinal: Int, name: Option[String] 
 
   override protected def withNewChildInternal(newChild: Expression): GetStructField =
     copy(child = newChild)
+
+  def metadata: Metadata = childSchema(ordinal).metadata
 }
 
 /**
@@ -229,10 +235,8 @@ case class GetArrayStructFields(
 case class GetArrayItem(
     child: Expression,
     ordinal: Expression,
-    failOnError: Boolean = SQLConf.get.ansiEnabled)
+    failOnError: Boolean = SQLConf.get.strictIndexOperator)
   extends BinaryExpression with GetArrayItemUtil with ExpectsInputTypes with ExtractValue {
-
-  def this(child: Expression, ordinal: Expression) = this(child, ordinal, SQLConf.get.ansiEnabled)
 
   // We have done type checking for child in `ExtractValue`, so only need to check the `ordinal`.
   override def inputTypes: Seq[AbstractDataType] = Seq(AnyDataType, IntegralType)
@@ -361,7 +365,7 @@ trait GetMapValueUtil extends BinaryExpression with ImplicitCastInputTypes {
 
     if (!found) {
       if (failOnError) {
-        throw QueryExecutionErrors.mapKeyNotExistError(ordinal)
+        throw QueryExecutionErrors.mapKeyNotExistError(ordinal, keyType, origin.context)
       } else {
         null
       }
@@ -394,9 +398,11 @@ trait GetMapValueUtil extends BinaryExpression with ImplicitCastInputTypes {
     }
 
     val keyJavaType = CodeGenerator.javaType(keyType)
+    lazy val errorContext = ctx.addReferenceObj("errCtx", origin.context)
+    val keyDt = ctx.addReferenceObj("keyType", keyType, keyType.getClass.getName)
     nullSafeCodeGen(ctx, ev, (eval1, eval2) => {
       val keyNotFoundBranch = if (failOnError) {
-        s"throw QueryExecutionErrors.mapKeyNotExistError($eval2);"
+        s"throw QueryExecutionErrors.mapKeyNotExistError($eval2, $keyDt, $errorContext);"
       } else {
         s"${ev.isNull} = true;"
       }
@@ -435,10 +441,8 @@ trait GetMapValueUtil extends BinaryExpression with ImplicitCastInputTypes {
 case class GetMapValue(
     child: Expression,
     key: Expression,
-    failOnError: Boolean = SQLConf.get.ansiEnabled)
+    failOnError: Boolean = SQLConf.get.strictIndexOperator)
   extends GetMapValueUtil with ExtractValue {
-
-  def this(child: Expression, key: Expression) = this(child, key, SQLConf.get.ansiEnabled)
 
   @transient private lazy val ordering: Ordering[Any] =
     TypeUtils.getInterpretedOrdering(keyType)

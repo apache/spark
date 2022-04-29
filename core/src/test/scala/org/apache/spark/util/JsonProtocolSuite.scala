@@ -45,23 +45,26 @@ class JsonProtocolSuite extends SparkFunSuite {
     val stageSubmitted =
       SparkListenerStageSubmitted(makeStageInfo(100, 200, 300, 400L, 500L), properties)
     val stageCompleted = SparkListenerStageCompleted(makeStageInfo(101, 201, 301, 401L, 501L))
-    val taskStart = SparkListenerTaskStart(111, 0, makeTaskInfo(222L, 333, 1, 444L, false))
+    val taskStart = SparkListenerTaskStart(111, 0, makeTaskInfo(222L, 333, 1, 333, 444L, false))
     val taskGettingResult =
-      SparkListenerTaskGettingResult(makeTaskInfo(1000L, 2000, 5, 3000L, true))
+      SparkListenerTaskGettingResult(makeTaskInfo(1000L, 2000, 5, 2000, 3000L, true))
     val taskEnd = SparkListenerTaskEnd(1, 0, "ShuffleMapTask", Success,
-      makeTaskInfo(123L, 234, 67, 345L, false),
+      makeTaskInfo(123L, 234, 67, 234, 345L, false),
       new ExecutorMetrics(Array(543L, 123456L, 12345L, 1234L, 123L, 12L, 432L,
-        321L, 654L, 765L, 256912L, 123456L, 123456L, 61728L, 30364L, 15182L)),
+        321L, 654L, 765L, 256912L, 123456L, 123456L, 61728L, 30364L, 15182L,
+        0, 0, 0, 0, 80001L)),
       makeTaskMetrics(300L, 400L, 500L, 600L, 700, 800, hasHadoopInput = false, hasOutput = false))
     val taskEndWithHadoopInput = SparkListenerTaskEnd(1, 0, "ShuffleMapTask", Success,
-      makeTaskInfo(123L, 234, 67, 345L, false),
+      makeTaskInfo(123L, 234, 67, 234, 345L, false),
       new ExecutorMetrics(Array(543L, 123456L, 12345L, 1234L, 123L, 12L, 432L,
-        321L, 654L, 765L, 256912L, 123456L, 123456L, 61728L, 30364L, 15182L)),
+        321L, 654L, 765L, 256912L, 123456L, 123456L, 61728L, 30364L, 15182L,
+        0, 0, 0, 0, 80001L)),
       makeTaskMetrics(300L, 400L, 500L, 600L, 700, 800, hasHadoopInput = true, hasOutput = false))
     val taskEndWithOutput = SparkListenerTaskEnd(1, 0, "ResultTask", Success,
-      makeTaskInfo(123L, 234, 67, 345L, false),
+      makeTaskInfo(123L, 234, 67, 234, 345L, false),
       new ExecutorMetrics(Array(543L, 123456L, 12345L, 1234L, 123L, 12L, 432L,
-        321L, 654L, 765L, 256912L, 123456L, 123456L, 61728L, 30364L, 15182L)),
+        321L, 654L, 765L, 256912L, 123456L, 123456L, 61728L, 30364L, 15182L,
+        0, 0, 0, 0, 80001L)),
       makeTaskMetrics(300L, 400L, 500L, 600L, 700, 800, hasHadoopInput = true, hasOutput = true))
     val jobStart = {
       val stageIds = Seq[Int](1, 2, 3, 4)
@@ -93,6 +96,9 @@ class JsonProtocolSuite extends SparkFunSuite {
     val applicationEnd = SparkListenerApplicationEnd(42L)
     val executorAdded = SparkListenerExecutorAdded(executorAddedTime, "exec1",
       new ExecutorInfo("Hostee.awesome.com", 11, logUrlMap, attributes, resources.toMap, 4))
+    val executorAddedWithTime = SparkListenerExecutorAdded(executorAddedTime, "exec1",
+      new ExecutorInfo("Hostee.awesome.com", 11, logUrlMap, attributes, resources.toMap, 4,
+        Some(1), Some(0)))
     val executorRemoved = SparkListenerExecutorRemoved(executorRemovedTime, "exec2", "test reason")
     val executorBlacklisted = SparkListenerExecutorBlacklisted(executorExcludedTime, "exec1", 22)
     val executorUnblacklisted =
@@ -114,7 +120,8 @@ class JsonProtocolSuite extends SparkFunSuite {
           .zipWithIndex.map { case (a, i) => a.copy(id = i) }
       val executorUpdates = new ExecutorMetrics(
         Array(543L, 123456L, 12345L, 1234L, 123L, 12L, 432L,
-          321L, 654L, 765L, 256912L, 123456L, 123456L, 61728L, 30364L, 15182L, 10L, 90L, 2L, 20L))
+          321L, 654L, 765L, 256912L, 123456L, 123456L, 61728L,
+          30364L, 15182L, 10L, 90L, 2L, 20L, 80001L))
       SparkListenerExecutorMetricsUpdate("exec3", Seq((1L, 2, 3, accumUpdates)),
         Map((0, 0) -> executorUpdates))
     }
@@ -124,7 +131,8 @@ class JsonProtocolSuite extends SparkFunSuite {
     val stageExecutorMetrics =
       SparkListenerStageExecutorMetrics("1", 2, 3,
         new ExecutorMetrics(Array(543L, 123456L, 12345L, 1234L, 123L, 12L, 432L,
-          321L, 654L, 765L, 256912L, 123456L, 123456L, 61728L, 30364L, 15182L, 10L, 90L, 2L, 20L)))
+          321L, 654L, 765L, 256912L, 123456L, 123456L, 61728L,
+          30364L, 15182L, 10L, 90L, 2L, 20L, 80001L)))
     val rprofBuilder = new ResourceProfileBuilder()
     val taskReq = new TaskResourceRequests().cpus(1).resource("gpu", 1)
     val execReq =
@@ -150,6 +158,7 @@ class JsonProtocolSuite extends SparkFunSuite {
     testEvent(applicationStartWithLogs, applicationStartJsonWithLogUrlsString)
     testEvent(applicationEnd, applicationEndJsonString)
     testEvent(executorAdded, executorAddedJsonString)
+    testEvent(executorAddedWithTime, executorAddedWithTimeJsonString)
     testEvent(executorRemoved, executorRemovedJsonString)
     testEvent(executorBlacklisted, executorBlacklistedJsonString)
     testEvent(executorUnblacklisted, executorUnblacklistedJsonString)
@@ -168,13 +177,16 @@ class JsonProtocolSuite extends SparkFunSuite {
   test("Dependent Classes") {
     val logUrlMap = Map("stderr" -> "mystderr", "stdout" -> "mystdout").toMap
     val attributes = Map("ContainerId" -> "ct1", "User" -> "spark").toMap
+    val rinfo = Map[String, ResourceInformation]().toMap
     testRDDInfo(makeRddInfo(2, 3, 4, 5L, 6L, DeterministicLevel.DETERMINATE))
     testStageInfo(makeStageInfo(10, 20, 30, 40L, 50L))
-    testTaskInfo(makeTaskInfo(999L, 888, 55, 777L, false))
+    testTaskInfo(makeTaskInfo(999L, 888, 55, 888, 777L, false))
     testTaskMetrics(makeTaskMetrics(
       33333L, 44444L, 55555L, 66666L, 7, 8, hasHadoopInput = false, hasOutput = false))
     testBlockManagerId(BlockManagerId("Hong", "Kong", 500))
     testExecutorInfo(new ExecutorInfo("host", 43, logUrlMap, attributes))
+    testExecutorInfo(new ExecutorInfo("host", 43, logUrlMap, attributes,
+      rinfo, 1, Some(1), Some(0)))
 
     // StorageLevel
     testStorageLevel(StorageLevel.NONE)
@@ -502,12 +514,12 @@ class JsonProtocolSuite extends SparkFunSuite {
   test("executorMetricsFromJson backward compatibility: handle missing metrics") {
     // any missing metrics should be set to 0
     val executorMetrics = new ExecutorMetrics(Array(12L, 23L, 45L, 67L, 78L, 89L,
-      90L, 123L, 456L, 789L, 40L, 20L, 20L, 10L, 20L, 10L))
+      90L, 123L, 456L, 789L, 40L, 20L, 20L, 10L, 20L, 10L, 301L))
     val oldExecutorMetricsJson =
       JsonProtocol.executorMetricsToJson(executorMetrics)
         .removeField( _._1 == "MappedPoolMemory")
     val expectedExecutorMetrics = new ExecutorMetrics(Array(12L, 23L, 45L, 67L,
-      78L, 89L, 90L, 123L, 456L, 0L, 40L, 20L, 20L, 10L, 20L, 10L))
+      78L, 89L, 90L, 123L, 456L, 0L, 40L, 20L, 20L, 10L, 20L, 10L, 301L))
     assertEquals(expectedExecutorMetrics,
       JsonProtocol.executorMetricsFromJson(oldExecutorMetricsJson))
   }
@@ -1016,9 +1028,9 @@ private[spark] object JsonProtocolSuite extends Assertions {
     stageInfo
   }
 
-  private def makeTaskInfo(a: Long, b: Int, c: Int, d: Long, speculative: Boolean) = {
-    val taskInfo = new TaskInfo(a, b, c, d, "executor", "your kind sir", TaskLocality.NODE_LOCAL,
-      speculative)
+  private def makeTaskInfo(a: Long, b: Int, c: Int, d: Int, e: Long, speculative: Boolean) = {
+    val taskInfo = new TaskInfo(a, b, c, d, e,
+      "executor", "your kind sir", TaskLocality.NODE_LOCAL, speculative)
     taskInfo.setAccumulables(
       List(makeAccumulableInfo(1), makeAccumulableInfo(2), makeAccumulableInfo(3, internal = true)))
     taskInfo
@@ -1047,7 +1059,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
     val executorMetricsUpdate: Map[(Int, Int), ExecutorMetrics] =
       if (includeExecutorMetrics) {
         Map((0, 0) -> new ExecutorMetrics(Array(123456L, 543L, 0L, 0L, 0L, 0L, 0L,
-          0L, 0L, 0L, 256912L, 123456L, 123456L, 61728L, 30364L, 15182L, 10L, 90L, 2L, 20L)))
+          0L, 0L, 0L, 256912L, 123456L, 123456L, 61728L, 30364L, 15182L, 10L, 90L, 2L, 20L, 301L)))
       } else {
         Map.empty
       }
@@ -1221,6 +1233,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |    "Task ID": 222,
       |    "Index": 333,
       |    "Attempt": 1,
+      |    "Partition ID": 333,
       |    "Launch Time": 444,
       |    "Executor ID": "executor",
       |    "Host": "your kind sir",
@@ -1268,6 +1281,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |    "Task ID": 1000,
       |    "Index": 2000,
       |    "Attempt": 5,
+      |    "Partition ID": 2000,
       |    "Launch Time": 3000,
       |    "Executor ID": "executor",
       |    "Host": "your kind sir",
@@ -1321,6 +1335,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |    "Task ID": 123,
       |    "Index": 234,
       |    "Attempt": 67,
+      |    "Partition ID": 234,
       |    "Launch Time": 345,
       |    "Executor ID": "executor",
       |    "Host": "your kind sir",
@@ -1377,7 +1392,8 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |    "MinorGCCount" : 0,
       |    "MinorGCTime" : 0,
       |    "MajorGCCount" : 0,
-      |    "MajorGCTime" : 0
+      |    "MajorGCTime" : 0,
+      |    "TotalGCTime" : 80001
       |  },
       |  "Task Metrics": {
       |    "Executor Deserialize Time": 300,
@@ -1445,6 +1461,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |    "Task ID": 123,
       |    "Index": 234,
       |    "Attempt": 67,
+      |    "Partition ID": 234,
       |    "Launch Time": 345,
       |    "Executor ID": "executor",
       |    "Host": "your kind sir",
@@ -1501,7 +1518,8 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |    "MinorGCCount" : 0,
       |    "MinorGCTime" : 0,
       |    "MajorGCCount" : 0,
-      |    "MajorGCTime" : 0
+      |    "MajorGCTime" : 0,
+      |    "TotalGCTime" : 80001
       |  },
       |  "Task Metrics": {
       |    "Executor Deserialize Time": 300,
@@ -1569,6 +1587,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |    "Task ID": 123,
       |    "Index": 234,
       |    "Attempt": 67,
+      |    "Partition ID": 234,
       |    "Launch Time": 345,
       |    "Executor ID": "executor",
       |    "Host": "your kind sir",
@@ -1625,7 +1644,8 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |    "MinorGCCount" : 0,
       |    "MinorGCTime" : 0,
       |    "MajorGCCount" : 0,
-      |    "MajorGCTime" : 0
+      |    "MajorGCTime" : 0,
+      |    "TotalGCTime" : 80001
       |  },
       |  "Task Metrics": {
       |    "Executor Deserialize Time": 300,
@@ -2133,6 +2153,37 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |}
     """.stripMargin
 
+  private val executorAddedWithTimeJsonString =
+    s"""
+      |{
+      |  "Event": "SparkListenerExecutorAdded",
+      |  "Timestamp": ${executorAddedTime},
+      |  "Executor ID": "exec1",
+      |  "Executor Info": {
+      |    "Host": "Hostee.awesome.com",
+      |    "Total Cores": 11,
+      |    "Log Urls" : {
+      |      "stderr" : "mystderr",
+      |      "stdout" : "mystdout"
+      |    },
+      |    "Attributes" : {
+      |      "ContainerId" : "ct1",
+      |      "User" : "spark"
+      |    },
+      |    "Resources" : {
+      |      "gpu" : {
+      |        "name" : "gpu",
+      |        "addresses" : [ "0", "1" ]
+      |      }
+      |    },
+      |    "Resource Profile Id": 4,
+      |    "Registration Time" : 1,
+      |    "Request Time" : 0
+      |  }
+      |
+      |}
+    """.stripMargin
+
   private val executorRemovedJsonString =
     s"""
       |{
@@ -2378,7 +2429,8 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |        "MinorGCCount": 10,
       |        "MinorGCTime": 90,
       |        "MajorGCCount": 2,
-      |        "MajorGCTime": 20
+      |        "MajorGCTime": 20,
+      |        "TotalGCTime" : 80001
       |      }
       |    }
       |  ]
@@ -2412,7 +2464,8 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |    "MinorGCCount": 10,
       |    "MinorGCTime": 90,
       |    "MajorGCCount": 2,
-      |    "MajorGCTime": 20
+      |    "MajorGCTime": 20,
+      |    "TotalGCTime" : 80001
       |  }
       |}
     """.stripMargin

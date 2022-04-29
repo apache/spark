@@ -22,7 +22,7 @@ import org.apache.spark.sql.catalyst.analysis.{AnsiTypeCoercion, MultiInstanceRe
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable}
 import org.apache.spark.sql.catalyst.catalog.CatalogTable.VIEW_STORING_ANALYZED_PLAN
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
+import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, TypedImperativeAggregate}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning, RangePartitioning, RoundRobinPartitioning, SinglePartition}
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
@@ -277,11 +277,18 @@ case class Union(
   assert(!allowMissingCol || byName, "`allowMissingCol` can be true only if `byName` is true.")
 
   override def maxRows: Option[Long] = {
-    if (children.exists(_.maxRows.isEmpty)) {
-      None
-    } else {
-      Some(children.flatMap(_.maxRows).sum)
+    var sum = BigInt(0)
+    children.foreach { child =>
+      if (child.maxRows.isDefined) {
+        sum += child.maxRows.get
+        if (!sum.isValidLong) {
+          return None
+        }
+      } else {
+        return None
+      }
     }
+    Some(sum.toLong)
   }
 
   final override val nodePatterns: Seq[TreePattern] = Seq(UNION)
@@ -290,11 +297,18 @@ case class Union(
    * Note the definition has assumption about how union is implemented physically.
    */
   override def maxRowsPerPartition: Option[Long] = {
-    if (children.exists(_.maxRowsPerPartition.isEmpty)) {
-      None
-    } else {
-      Some(children.flatMap(_.maxRowsPerPartition).sum)
+    var sum = BigInt(0)
+    children.foreach { child =>
+      if (child.maxRowsPerPartition.isDefined) {
+        sum += child.maxRowsPerPartition.get
+        if (!sum.isValidLong) {
+          return None
+        }
+      } else {
+        return None
+      }
     }
+    Some(sum.toLong)
   }
 
   def duplicateResolved: Boolean = {
@@ -626,6 +640,8 @@ object View {
 case class UnresolvedWith(
     child: LogicalPlan,
     cteRelations: Seq[(String, SubqueryAlias)]) extends UnaryNode {
+  final override val nodePatterns: Seq[TreePattern] = Seq(UNRESOLVED_WITH)
+
   override def output: Seq[Attribute] = child.output
 
   override def simpleString(maxFields: Int): String = {
@@ -643,8 +659,18 @@ case class UnresolvedWith(
  * A wrapper for CTE definition plan with a unique ID.
  * @param child The CTE definition query plan.
  * @param id    The unique ID for this CTE definition.
+ * @param originalPlanWithPredicates The original query plan before predicate pushdown and the
+ *                                   predicates that have been pushed down into `child`. This is
+ *                                   a temporary field used by optimization rules for CTE predicate
+ *                                   pushdown to help ensure rule idempotency.
+ * @param underSubquery If true, it means we don't need to add a shuffle for this CTE relation as
+ *                      subquery reuse will be applied to reuse CTE relation output.
  */
-case class CTERelationDef(child: LogicalPlan, id: Long = CTERelationDef.newId) extends UnaryNode {
+case class CTERelationDef(
+    child: LogicalPlan,
+    id: Long = CTERelationDef.newId,
+    originalPlanWithPredicates: Option[(LogicalPlan, Seq[Expression])] = None,
+    underSubquery: Boolean = false) extends UnaryNode {
 
   final override val nodePatterns: Seq[TreePattern] = Seq(CTE)
 
@@ -655,17 +681,19 @@ case class CTERelationDef(child: LogicalPlan, id: Long = CTERelationDef.newId) e
 }
 
 object CTERelationDef {
-  private val curId = new java.util.concurrent.atomic.AtomicLong()
+  private[sql] val curId = new java.util.concurrent.atomic.AtomicLong()
   def newId: Long = curId.getAndIncrement()
 }
 
 /**
  * Represents the relation of a CTE reference.
- * @param cteId     The ID of the corresponding CTE definition.
- * @param _resolved Whether this reference is resolved.
- * @param output    The output attributes of this CTE reference, which can be different from
- *                  the output of its corresponding CTE definition after attribute de-duplication.
- * @param statsOpt  The optional statistics inferred from the corresponding CTE definition.
+ * @param cteId                The ID of the corresponding CTE definition.
+ * @param _resolved            Whether this reference is resolved.
+ * @param output               The output attributes of this CTE reference, which can be different
+ *                             from the output of its corresponding CTE definition after attribute
+ *                             de-duplication.
+ * @param statsOpt             The optional statistics inferred from the corresponding CTE
+ *                             definition.
  */
 case class CTERelationRef(
     cteId: Long,
@@ -973,7 +1001,7 @@ case class Aggregate(
   final override val nodePatterns : Seq[TreePattern] = Seq(AGGREGATE)
 
   override lazy val validConstraints: ExpressionSet = {
-    val nonAgg = aggregateExpressions.filter(_.find(_.isInstanceOf[AggregateExpression]).isEmpty)
+    val nonAgg = aggregateExpressions.filter(!_.exists(_.isInstanceOf[AggregateExpression]))
     getAllValidConstraints(nonAgg)
   }
 
@@ -982,7 +1010,30 @@ case class Aggregate(
 
   // Whether this Aggregate operator is group only. For example: SELECT a, a FROM t GROUP BY a
   private[sql] def groupOnly: Boolean = {
-    aggregateExpressions.forall(a => groupingExpressions.exists(g => a.semanticEquals(g)))
+    // aggregateExpressions can be empty through Dateset.agg,
+    // so we should also check groupingExpressions is non empty
+    groupingExpressions.nonEmpty && aggregateExpressions.map {
+      case Alias(child, _) => child
+      case e => e
+    }.forall(a => a.foldable || groupingExpressions.exists(g => a.semanticEquals(g)))
+  }
+}
+
+object Aggregate {
+  def isAggregateBufferMutable(schema: StructType): Boolean = {
+    schema.forall(f => UnsafeRow.isMutable(f.dataType))
+  }
+
+  def supportsHashAggregate(aggregateBufferAttributes: Seq[Attribute]): Boolean = {
+    val aggregationBufferSchema = StructType.fromAttributes(aggregateBufferAttributes)
+    isAggregateBufferMutable(aggregationBufferSchema)
+  }
+
+  def supportsObjectHashAggregate(aggregateExpressions: Seq[AggregateExpression]): Boolean = {
+    aggregateExpressions.map(_.aggregateFunction).exists {
+      case _: TypedImperativeAggregate[_] => true
+      case _ => false
+    }
   }
 }
 
@@ -1125,6 +1176,23 @@ case class Expand(
 }
 
 /**
+ * A logical offset, which may removing a specified number of rows from the beginning of the
+ * output of child logical plan.
+ */
+case class Offset(offsetExpr: Expression, child: LogicalPlan) extends OrderPreservingUnaryNode {
+  override def output: Seq[Attribute] = child.output
+  override def maxRows: Option[Long] = {
+    import scala.math.max
+    offsetExpr match {
+      case IntegerLiteral(offset) => child.maxRows.map { x => max(x - offset, 0) }
+      case _ => None
+    }
+  }
+  override protected def withNewChildInternal(newChild: LogicalPlan): Offset =
+    copy(child = newChild)
+}
+
+/**
  * A constructor for creating a pivot, which will later be converted to a [[Project]]
  * or an [[Aggregate]] during the query analysis.
  *
@@ -1235,6 +1303,37 @@ case class LocalLimit(limitExpr: Expression, child: LogicalPlan) extends OrderPr
     copy(child = newChild)
 }
 
+object LimitAndOffset {
+  def unapply(p: GlobalLimitAndOffset): Option[(Expression, Expression, LogicalPlan)] = {
+    p match {
+      case GlobalLimitAndOffset(le1, le2, LocalLimit(le3, child)) if le1.eval().asInstanceOf[Int]
+        + le2.eval().asInstanceOf[Int] == le3.eval().asInstanceOf[Int] =>
+        Some((le1, le2, child))
+      case _ => None
+    }
+  }
+}
+
+/**
+ * A global (coordinated) limit with offset. This operator can skip at most `offsetExpr` number and
+ * emit at most `limitExpr` number in total. For example, if we have LIMIT 10 OFFSET 5, we impose a
+ * total limit of 10 + 5 = 15 rows and then discard the first 5, leaving 10 rows remaining.
+ */
+case class GlobalLimitAndOffset(
+    limitExpr: Expression,
+    offsetExpr: Expression,
+    child: LogicalPlan) extends OrderPreservingUnaryNode {
+  override def output: Seq[Attribute] = child.output
+  override def maxRows: Option[Long] = {
+    limitExpr match {
+      case IntegerLiteral(limit) => Some(limit)
+      case _ => None
+    }
+  }
+  override protected def withNewChildInternal(newChild: LogicalPlan): GlobalLimitAndOffset =
+    copy(child = newChild)
+}
+
 /**
  * This is similar with [[Limit]] except:
  *
@@ -1339,7 +1438,11 @@ case class Sample(
       s"Sampling fraction ($fraction) must be on interval [0, 1] without replacement")
   }
 
-  override def maxRows: Option[Long] = child.maxRows
+  override def maxRows: Option[Long] = {
+    // when withReplacement is true, PoissonSampler is applied in SampleExec,
+    // which may output more rows than child.maxRows.
+    if (withReplacement) None else child.maxRows
+  }
   override def output: Seq[Attribute] = child.output
 
   override protected def withNewChildInternal(newChild: LogicalPlan): Sample =
@@ -1454,14 +1557,19 @@ object RepartitionByExpression {
  */
 case class RebalancePartitions(
     partitionExpressions: Seq[Expression],
-    child: LogicalPlan) extends UnaryNode {
+    child: LogicalPlan,
+    initialNumPartitionOpt: Option[Int] = None) extends UnaryNode {
   override def maxRows: Option[Long] = child.maxRows
   override def output: Seq[Attribute] = child.output
+  override val nodePatterns: Seq[TreePattern] = Seq(REBALANCE_PARTITIONS)
 
-  def partitioning: Partitioning = if (partitionExpressions.isEmpty) {
-    RoundRobinPartitioning(conf.numShufflePartitions)
-  } else {
-    HashPartitioning(partitionExpressions, conf.numShufflePartitions)
+  def partitioning: Partitioning = {
+    val initialNumPartitions = initialNumPartitionOpt.getOrElse(conf.numShufflePartitions)
+    if (partitionExpressions.isEmpty) {
+      RoundRobinPartitioning(initialNumPartitions)
+    } else {
+      HashPartitioning(partitionExpressions, initialNumPartitions)
+    }
   }
 
   override protected def withNewChildInternal(newChild: LogicalPlan): RebalancePartitions =

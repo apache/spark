@@ -23,7 +23,7 @@ import java.util.concurrent.TimeUnit._
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, TypeCoercion}
-import org.apache.spark.sql.catalyst.expressions.Cast.{forceNullable, resolvableNullability}
+import org.apache.spark.sql.catalyst.expressions.Cast.resolvableNullability
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
@@ -32,6 +32,7 @@ import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
 import org.apache.spark.sql.catalyst.util.IntervalStringStyles.ANSI_STYLE
+import org.apache.spark.sql.catalyst.util.IntervalUtils.{dayTimeIntervalToByte, dayTimeIntervalToInt, dayTimeIntervalToLong, dayTimeIntervalToShort, yearMonthIntervalToByte, yearMonthIntervalToInt, yearMonthIntervalToShort}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -81,9 +82,13 @@ object Cast {
     case (StringType, CalendarIntervalType) => true
     case (StringType, _: DayTimeIntervalType) => true
     case (StringType, _: YearMonthIntervalType) => true
+    case (_: IntegralType, DayTimeIntervalType(s, e)) if s == e => true
+    case (_: IntegralType, YearMonthIntervalType(s, e)) if s == e => true
 
     case (_: DayTimeIntervalType, _: DayTimeIntervalType) => true
     case (_: YearMonthIntervalType, _: YearMonthIntervalType) => true
+    case (_: DayTimeIntervalType, _: IntegralType) => true
+    case (_: YearMonthIntervalType, _: IntegralType) => true
 
     case (StringType, _: NumericType) => true
     case (BooleanType, _: NumericType) => true
@@ -193,8 +198,7 @@ object Cast {
     case (_: NumericType, _: NumericType) => true
     case (_: AtomicType, StringType) => true
     case (_: CalendarIntervalType, StringType) => true
-    case (DateType, TimestampType) => true
-    case (TimestampType, DateType) => true
+    case (_: DatetimeType, _: DatetimeType) => true
 
     case (ArrayType(fromType, fn), ArrayType(toType, tn)) =>
       resolvableNullability(fn, tn) && canANSIStoreAssign(fromType, toType)
@@ -289,10 +293,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
    */
   def typeCheckFailureMessage: String
 
-  override def toString: String = {
-    val ansi = if (ansiEnabled) "ansi_" else ""
-    s"${ansi}cast($child as ${dataType.simpleString})"
-  }
+  override def toString: String = s"cast($child as ${dataType.simpleString})"
 
   override def checkInputDataTypes(): TypeCheckResult = {
     if (canCast(child.dataType, dataType)) {
@@ -310,6 +311,15 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
   // Otherwise behave like Expression.resolved.
   override lazy val resolved: Boolean =
     childrenResolved && checkInputDataTypes().isSuccess && (!needsTimeZone || timeZoneId.isDefined)
+
+  override lazy val preCanonicalized: Expression = {
+    val basic = withNewChildren(Seq(child.preCanonicalized)).asInstanceOf[CastBase]
+    if (timeZoneId.isDefined && !needsTimeZone) {
+      basic.withTimeZone(null)
+    } else {
+      basic
+    }
+  }
 
   def needsTimeZone: Boolean = Cast.needsTimeZone(child.dataType, dataType)
 
@@ -457,7 +467,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
           false
         } else {
           if (ansiEnabled) {
-            throw QueryExecutionErrors.invalidInputSyntaxForBooleanError(s)
+            throw QueryExecutionErrors.invalidInputSyntaxForBooleanError(s, origin.context)
           } else {
             null
           }
@@ -489,7 +499,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
     case StringType =>
       buildCast[UTF8String](_, utfs => {
         if (ansiEnabled) {
-          DateTimeUtils.stringToTimestampAnsi(utfs, zoneId)
+          DateTimeUtils.stringToTimestampAnsi(utfs, zoneId, origin.context)
         } else {
           DateTimeUtils.stringToTimestamp(utfs, zoneId).orNull
         }
@@ -513,17 +523,25 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
       buildCast[Decimal](_, d => decimalToTimestamp(d))
     // TimestampWritable.doubleToTimestamp
     case DoubleType =>
-      buildCast[Double](_, d => doubleToTimestamp(d))
+      if (ansiEnabled) {
+        buildCast[Double](_, d => doubleToTimestampAnsi(d, origin.context))
+      } else {
+        buildCast[Double](_, d => doubleToTimestamp(d))
+      }
     // TimestampWritable.floatToTimestamp
     case FloatType =>
-      buildCast[Float](_, f => doubleToTimestamp(f.toDouble))
+      if (ansiEnabled) {
+        buildCast[Float](_, f => doubleToTimestampAnsi(f.toDouble, origin.context))
+      } else {
+        buildCast[Float](_, f => doubleToTimestamp(f.toDouble))
+      }
   }
 
   private[this] def castToTimestampNTZ(from: DataType): Any => Any = from match {
     case StringType =>
       buildCast[UTF8String](_, utfs => {
         if (ansiEnabled) {
-          DateTimeUtils.stringToTimestampWithoutTimeZoneAnsi(utfs)
+          DateTimeUtils.stringToTimestampWithoutTimeZoneAnsi(utfs, origin.context)
         } else {
           DateTimeUtils.stringToTimestampWithoutTimeZone(utfs).orNull
         }
@@ -556,7 +574,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
   private[this] def castToDate(from: DataType): Any => Any = from match {
     case StringType =>
       if (ansiEnabled) {
-        buildCast[UTF8String](_, s => DateTimeUtils.stringToDateAnsi(s))
+        buildCast[UTF8String](_, s => DateTimeUtils.stringToDateAnsi(s, origin.context))
       } else {
         buildCast[UTF8String](_, s => DateTimeUtils.stringToDate(s).orNull)
       }
@@ -581,6 +599,15 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
       IntervalUtils.castStringToDTInterval(s, it.startField, it.endField))
     case _: DayTimeIntervalType => buildCast[Long](_, s =>
       IntervalUtils.durationToMicros(IntervalUtils.microsToDuration(s), it.endField))
+    case x: IntegralType =>
+      assert(it.startField == it.endField)
+      if (x == LongType) {
+        b => IntervalUtils.longToDayTimeInterval(
+          x.integral.asInstanceOf[Integral[Any]].toLong(b), it.endField)
+      } else {
+        b => IntervalUtils.intToDayTimeInterval(
+          x.integral.asInstanceOf[Integral[Any]].toInt(b), it.endField)
+      }
   }
 
   private[this] def castToYearMonthInterval(
@@ -590,12 +617,21 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
       IntervalUtils.castStringToYMInterval(s, it.startField, it.endField))
     case _: YearMonthIntervalType => buildCast[Int](_, s =>
       IntervalUtils.periodToMonths(IntervalUtils.monthsToPeriod(s), it.endField))
+    case x: IntegralType =>
+      assert(it.startField == it.endField)
+      if (x == LongType) {
+        b => IntervalUtils.longToYearMonthInterval(
+          x.integral.asInstanceOf[Integral[Any]].toLong(b), it.endField)
+      } else {
+        b => IntervalUtils.intToYearMonthInterval(
+          x.integral.asInstanceOf[Integral[Any]].toInt(b), it.endField)
+      }
   }
 
   // LongConverter
   private[this] def castToLong(from: DataType): Any => Any = from match {
     case StringType if ansiEnabled =>
-      buildCast[UTF8String](_, _.toLongExact())
+      buildCast[UTF8String](_, v => UTF8StringUtils.toLongExact(v, origin.context))
     case StringType =>
       val result = new LongWrapper()
       buildCast[UTF8String](_, s => if (s.toLong(result)) result.value else null)
@@ -609,12 +645,16 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
       b => x.exactNumeric.asInstanceOf[Numeric[Any]].toLong(b)
     case x: NumericType =>
       b => x.numeric.asInstanceOf[Numeric[Any]].toLong(b)
+    case x: DayTimeIntervalType =>
+      buildCast[Long](_, i => dayTimeIntervalToLong(i, x.startField, x.endField))
+    case x: YearMonthIntervalType =>
+      buildCast[Int](_, i => yearMonthIntervalToInt(i, x.startField, x.endField).toLong)
   }
 
   // IntConverter
   private[this] def castToInt(from: DataType): Any => Any = from match {
     case StringType if ansiEnabled =>
-      buildCast[UTF8String](_, _.toIntExact())
+      buildCast[UTF8String](_, v => UTF8StringUtils.toIntExact(v, origin.context))
     case StringType =>
       val result = new IntWrapper()
       buildCast[UTF8String](_, s => if (s.toInt(result)) result.value else null)
@@ -628,7 +668,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
         if (longValue == longValue.toInt) {
           longValue.toInt
         } else {
-          throw QueryExecutionErrors.castingCauseOverflowError(t, IntegerType.catalogString)
+          throw QueryExecutionErrors.castingCauseOverflowError(t, from, IntegerType)
         }
       })
     case TimestampType =>
@@ -637,12 +677,16 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
       b => x.exactNumeric.asInstanceOf[Numeric[Any]].toInt(b)
     case x: NumericType =>
       b => x.numeric.asInstanceOf[Numeric[Any]].toInt(b)
+    case x: DayTimeIntervalType =>
+      buildCast[Long](_, i => dayTimeIntervalToInt(i, x.startField, x.endField))
+    case x: YearMonthIntervalType =>
+      buildCast[Int](_, i => yearMonthIntervalToInt(i, x.startField, x.endField))
   }
 
   // ShortConverter
   private[this] def castToShort(from: DataType): Any => Any = from match {
     case StringType if ansiEnabled =>
-      buildCast[UTF8String](_, _.toShortExact())
+      buildCast[UTF8String](_, v => UTF8StringUtils.toShortExact(v, origin.context))
     case StringType =>
       val result = new IntWrapper()
       buildCast[UTF8String](_, s => if (s.toShort(result)) {
@@ -660,7 +704,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
         if (longValue == longValue.toShort) {
           longValue.toShort
         } else {
-          throw QueryExecutionErrors.castingCauseOverflowError(t, ShortType.catalogString)
+          throw QueryExecutionErrors.castingCauseOverflowError(t, from, ShortType)
         }
       })
     case TimestampType =>
@@ -671,21 +715,25 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
           x.exactNumeric.asInstanceOf[Numeric[Any]].toInt(b)
         } catch {
           case _: ArithmeticException =>
-            throw QueryExecutionErrors.castingCauseOverflowError(b, ShortType.catalogString)
+            throw QueryExecutionErrors.castingCauseOverflowError(b, from, ShortType)
         }
         if (intValue == intValue.toShort) {
           intValue.toShort
         } else {
-          throw QueryExecutionErrors.castingCauseOverflowError(b, ShortType.catalogString)
+          throw QueryExecutionErrors.castingCauseOverflowError(b, from, ShortType)
         }
     case x: NumericType =>
       b => x.numeric.asInstanceOf[Numeric[Any]].toInt(b).toShort
+    case x: DayTimeIntervalType =>
+      buildCast[Long](_, i => dayTimeIntervalToShort(i, x.startField, x.endField))
+    case x: YearMonthIntervalType =>
+      buildCast[Int](_, i => yearMonthIntervalToShort(i, x.startField, x.endField))
   }
 
   // ByteConverter
   private[this] def castToByte(from: DataType): Any => Any = from match {
     case StringType if ansiEnabled =>
-      buildCast[UTF8String](_, _.toByteExact())
+      buildCast[UTF8String](_, v => UTF8StringUtils.toByteExact(v, origin.context))
     case StringType =>
       val result = new IntWrapper()
       buildCast[UTF8String](_, s => if (s.toByte(result)) {
@@ -703,7 +751,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
         if (longValue == longValue.toByte) {
           longValue.toByte
         } else {
-          throw QueryExecutionErrors.castingCauseOverflowError(t, ByteType.catalogString)
+          throw QueryExecutionErrors.castingCauseOverflowError(t, from, ByteType)
         }
       })
     case TimestampType =>
@@ -714,15 +762,19 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
           x.exactNumeric.asInstanceOf[Numeric[Any]].toInt(b)
         } catch {
           case _: ArithmeticException =>
-            throw QueryExecutionErrors.castingCauseOverflowError(b, ByteType.catalogString)
+            throw QueryExecutionErrors.castingCauseOverflowError(b, from, ByteType)
         }
         if (intValue == intValue.toByte) {
           intValue.toByte
         } else {
-          throw QueryExecutionErrors.castingCauseOverflowError(b, ByteType.catalogString)
+          throw QueryExecutionErrors.castingCauseOverflowError(b, from, ByteType)
         }
     case x: NumericType =>
       b => x.numeric.asInstanceOf[Numeric[Any]].toInt(b).toByte
+    case x: DayTimeIntervalType =>
+      buildCast[Long](_, i => dayTimeIntervalToByte(i, x.startField, x.endField))
+    case x: YearMonthIntervalType =>
+      buildCast[Int](_, i => yearMonthIntervalToByte(i, x.startField, x.endField))
   }
 
   /**
@@ -741,7 +793,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
         null
       } else {
         throw QueryExecutionErrors.cannotChangeDecimalPrecisionError(
-          value, decimalType.precision, decimalType.scale)
+          value, decimalType.precision, decimalType.scale, origin.context)
       }
     }
   }
@@ -763,7 +815,8 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
         if (d == null) null else changePrecision(d, target)
       })
     case StringType if ansiEnabled =>
-      buildCast[UTF8String](_, s => changePrecision(Decimal.fromStringANSI(s), target))
+      buildCast[UTF8String](_,
+        s => changePrecision(Decimal.fromStringANSI(s, target, origin.context), target))
     case BooleanType =>
       buildCast[Boolean](_, b => toPrecision(if (b) Decimal.ONE else Decimal.ZERO, target))
     case DateType =>
@@ -792,7 +845,8 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
           case _: NumberFormatException =>
             val d = Cast.processFloatingPointSpecialLiterals(doubleStr, false)
             if(ansiEnabled && d == null) {
-              throw QueryExecutionErrors.invalidInputSyntaxForNumericError(s)
+              throw QueryExecutionErrors.invalidInputSyntaxForNumericError(
+                DoubleType, s, origin.context)
             } else {
               d
             }
@@ -817,7 +871,8 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
           case _: NumberFormatException =>
             val f = Cast.processFloatingPointSpecialLiterals(floatStr, true)
             if (ansiEnabled && f == null) {
-              throw QueryExecutionErrors.invalidInputSyntaxForNumericError(s)
+              throw QueryExecutionErrors.invalidInputSyntaxForNumericError(
+                FloatType, s, origin.context)
             } else {
               f
             }
@@ -932,6 +987,10 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
     }
   }
 
+  def errorContextCode(codegenContext: CodegenContext): String = {
+    codegenContext.addReferenceObj("errCtx", origin.context)
+  }
+
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val eval = child.genCode(ctx)
     val nullSafeCast = nullSafeCastFunction(child.dataType, dataType, ctx)
@@ -960,7 +1019,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
     case CalendarIntervalType => castToIntervalCode(from)
     case it: DayTimeIntervalType => castToDayTimeIntervalCode(from, it)
     case it: YearMonthIntervalType => castToYearMonthIntervalCode(from, it)
-    case BooleanType => castToBooleanCode(from)
+    case BooleanType => castToBooleanCode(from, ctx)
     case ByteType => castToByteCode(from, ctx)
     case ShortType => castToShortCode(from, ctx)
     case IntegerType => castToIntCode(from, ctx)
@@ -1136,6 +1195,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
      """.stripMargin
   }
 
+  @scala.annotation.tailrec
   private[this] def castToStringCode(from: DataType, ctx: CodegenContext): CastFunction = {
     from match {
       case BinaryType =>
@@ -1238,8 +1298,9 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
         val intOpt = ctx.freshVariable("intOpt", classOf[Option[Integer]])
         (c, evPrim, evNull) =>
           if (ansiEnabled) {
+            val errorContext = ctx.addReferenceObj("errCtx", origin.context)
             code"""
-              $evPrim = org.apache.spark.sql.catalyst.util.DateTimeUtils.stringToDateAnsi($c);
+              $evPrim = $dateTimeUtilsCls.stringToDateAnsi($c, $errorContext);
             """
           } else {
             code"""
@@ -1267,8 +1328,13 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
     }
   }
 
-  private[this] def changePrecision(d: ExprValue, decimalType: DecimalType,
-      evPrim: ExprValue, evNull: ExprValue, canNullSafeCast: Boolean): Block = {
+  private[this] def changePrecision(
+      d: ExprValue,
+      decimalType: DecimalType,
+      evPrim: ExprValue,
+      evNull: ExprValue,
+      canNullSafeCast: Boolean,
+      ctx: CodegenContext): Block = {
     if (canNullSafeCast) {
       code"""
          |$d.changePrecision(${decimalType.precision}, ${decimalType.scale});
@@ -1280,7 +1346,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
       } else {
         s"""
            |throw QueryExecutionErrors.cannotChangeDecimalPrecisionError(
-           |  $d, ${decimalType.precision}, ${decimalType.scale});
+           |  $d, ${decimalType.precision}, ${decimalType.scale}, ${errorContextCode(ctx)});
          """.stripMargin
       }
       code"""
@@ -1307,20 +1373,22 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
               if ($tmp == null) {
                 $evNull = true;
               } else {
-                ${changePrecision(tmp, target, evPrim, evNull, canNullSafeCast)}
+                ${changePrecision(tmp, target, evPrim, evNull, canNullSafeCast, ctx)}
               }
           """
       case StringType if ansiEnabled =>
+        val errorContext = ctx.addReferenceObj("errCtx", origin.context)
+        val toType = ctx.addReferenceObj("toType", target)
         (c, evPrim, evNull) =>
           code"""
-              Decimal $tmp = Decimal.fromStringANSI($c);
-              ${changePrecision(tmp, target, evPrim, evNull, canNullSafeCast)}
+              Decimal $tmp = Decimal.fromStringANSI($c, $toType, $errorContext);
+              ${changePrecision(tmp, target, evPrim, evNull, canNullSafeCast, ctx)}
           """
       case BooleanType =>
         (c, evPrim, evNull) =>
           code"""
             Decimal $tmp = $c ? Decimal.apply(1) : Decimal.apply(0);
-            ${changePrecision(tmp, target, evPrim, evNull, canNullSafeCast)}
+            ${changePrecision(tmp, target, evPrim, evNull, canNullSafeCast, ctx)}
           """
       case DateType =>
         // date can't cast to decimal in Hive
@@ -1331,19 +1399,19 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
           code"""
             Decimal $tmp = Decimal.apply(
               scala.math.BigDecimal.valueOf(${timestampToDoubleCode(c)}));
-            ${changePrecision(tmp, target, evPrim, evNull, canNullSafeCast)}
+            ${changePrecision(tmp, target, evPrim, evNull, canNullSafeCast, ctx)}
           """
       case DecimalType() =>
         (c, evPrim, evNull) =>
           code"""
             Decimal $tmp = $c.clone();
-            ${changePrecision(tmp, target, evPrim, evNull, canNullSafeCast)}
+            ${changePrecision(tmp, target, evPrim, evNull, canNullSafeCast, ctx)}
           """
       case x: IntegralType =>
         (c, evPrim, evNull) =>
           code"""
             Decimal $tmp = Decimal.apply((long) $c);
-            ${changePrecision(tmp, target, evPrim, evNull, canNullSafeCast)}
+            ${changePrecision(tmp, target, evPrim, evNull, canNullSafeCast, ctx)}
           """
       case x: FractionalType =>
         // All other numeric types can be represented precisely as Doubles
@@ -1351,7 +1419,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
           code"""
             try {
               Decimal $tmp = Decimal.apply(scala.math.BigDecimal.valueOf((double) $c));
-              ${changePrecision(tmp, target, evPrim, evNull, canNullSafeCast)}
+              ${changePrecision(tmp, target, evPrim, evNull, canNullSafeCast, ctx)}
             } catch (java.lang.NumberFormatException e) {
               $evNull = true;
             }
@@ -1370,9 +1438,9 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
       val longOpt = ctx.freshVariable("longOpt", classOf[Option[Long]])
       (c, evPrim, evNull) =>
         if (ansiEnabled) {
+          val errorContext = ctx.addReferenceObj("errCtx", origin.context)
           code"""
-            $evPrim =
-              org.apache.spark.sql.catalyst.util.DateTimeUtils.stringToTimestampAnsi($c, $zid);
+            $evPrim = $dateTimeUtilsCls.stringToTimestampAnsi($c, $zid, $errorContext);
            """
         } else {
           code"""
@@ -1408,22 +1476,32 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
       (c, evPrim, evNull) => code"$evPrim = ${decimalToTimestampCode(c)};"
     case DoubleType =>
       (c, evPrim, evNull) =>
-        code"""
-          if (Double.isNaN($c) || Double.isInfinite($c)) {
-            $evNull = true;
-          } else {
-            $evPrim = (long)($c * $MICROS_PER_SECOND);
-          }
-        """
+        if (ansiEnabled) {
+          val errorContext = ctx.addReferenceObj("errCtx", origin.context)
+          code"$evPrim = $dateTimeUtilsCls.doubleToTimestampAnsi($c, $errorContext);"
+        } else {
+          code"""
+            if (Double.isNaN($c) || Double.isInfinite($c)) {
+              $evNull = true;
+            } else {
+              $evPrim = (long)($c * $MICROS_PER_SECOND);
+            }
+          """
+        }
     case FloatType =>
       (c, evPrim, evNull) =>
-        code"""
-          if (Float.isNaN($c) || Float.isInfinite($c)) {
-            $evNull = true;
-          } else {
-            $evPrim = (long)((double)$c * $MICROS_PER_SECOND);
-          }
-        """
+        if (ansiEnabled) {
+          val errorContext = ctx.addReferenceObj("errCtx", origin.context)
+          code"$evPrim = $dateTimeUtilsCls.doubleToTimestampAnsi((double)$c, $errorContext);"
+        } else {
+          code"""
+            if (Float.isNaN($c) || Float.isInfinite($c)) {
+              $evNull = true;
+            } else {
+              $evPrim = (long)((double)$c * $MICROS_PER_SECOND);
+            }
+          """
+        }
   }
 
   private[this] def castToTimestampNTZCode(
@@ -1433,9 +1511,9 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
       val longOpt = ctx.freshVariable("longOpt", classOf[Option[Long]])
       (c, evPrim, evNull) =>
         if (ansiEnabled) {
+          val errorContext = ctx.addReferenceObj("errCtx", origin.context)
           code"""
-            $evPrim =
-              $dateTimeUtilsCls.stringToTimestampWithoutTimeZoneAnsi($c);
+            $evPrim = $dateTimeUtilsCls.stringToTimestampWithoutTimeZoneAnsi($c, $errorContext);
            """
         } else {
           code"""
@@ -1486,6 +1564,20 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
         code"""
           $evPrim = $util.durationToMicros($util.microsToDuration($c), (byte)${it.endField});
         """
+    case x: IntegralType =>
+      assert(it.startField == it.endField)
+      val util = IntervalUtils.getClass.getCanonicalName.stripSuffix("$")
+      if (x == LongType) {
+        (c, evPrim, _) =>
+          code"""
+            $evPrim = $util.longToDayTimeInterval($c, (byte)${it.endField});
+          """
+      } else {
+        (c, evPrim, _) =>
+          code"""
+            $evPrim = $util.intToDayTimeInterval($c, (byte)${it.endField});
+          """
+      }
   }
 
   private[this] def castToYearMonthIntervalCode(
@@ -1503,6 +1595,20 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
         code"""
           $evPrim = $util.periodToMonths($util.monthsToPeriod($c), (byte)${it.endField});
         """
+    case x: IntegralType =>
+      assert(it.startField == it.endField)
+      val util = IntervalUtils.getClass.getCanonicalName.stripSuffix("$")
+      if (x == LongType) {
+        (c, evPrim, _) =>
+          code"""
+            $evPrim = $util.longToYearMonthInterval($c, (byte)${it.endField});
+          """
+      } else {
+        (c, evPrim, _) =>
+          code"""
+            $evPrim = $util.intToYearMonthInterval($c, (byte)${it.endField});
+          """
+      }
   }
 
   private[this] def decimalToTimestampCode(d: ExprValue): Block = {
@@ -1515,12 +1621,15 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
   private[this] def timestampToDoubleCode(ts: ExprValue): Block =
     code"$ts / (double)$MICROS_PER_SECOND"
 
-  private[this] def castToBooleanCode(from: DataType): CastFunction = from match {
+  private[this] def castToBooleanCode(
+      from: DataType,
+      ctx: CodegenContext): CastFunction = from match {
     case StringType =>
       val stringUtils = inline"${StringUtils.getClass.getName.stripSuffix("$")}"
       (c, evPrim, evNull) =>
         val castFailureCode = if (ansiEnabled) {
-          s"throw QueryExecutionErrors.invalidInputSyntaxForBooleanError($c);"
+          val errorContext = ctx.addReferenceObj("errCtx", origin.context)
+          s"throw QueryExecutionErrors.invalidInputSyntaxForBooleanError($c, $errorContext);"
         } else {
           s"$evNull = true;"
         }
@@ -1547,47 +1656,74 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
   private[this] def castTimestampToIntegralTypeCode(
       ctx: CodegenContext,
       integralType: String,
-      catalogType: String): CastFunction = {
+      from: DataType,
+      to: DataType): CastFunction = {
     if (ansiEnabled) {
       val longValue = ctx.freshName("longValue")
-      (c, evPrim, evNull) =>
+      val fromDt = ctx.addReferenceObj("from", from, from.getClass.getName)
+      val toDt = ctx.addReferenceObj("to", to, to.getClass.getName)
+      (c, evPrim, _) =>
         code"""
           long $longValue = ${timestampToLongCode(c)};
           if ($longValue == ($integralType) $longValue) {
             $evPrim = ($integralType) $longValue;
           } else {
-            throw QueryExecutionErrors.castingCauseOverflowError($c, "$catalogType");
+            throw QueryExecutionErrors.castingCauseOverflowError($c, $fromDt, $toDt);
           }
         """
     } else {
-      (c, evPrim, evNull) => code"$evPrim = ($integralType) ${timestampToLongCode(c)};"
+      (c, evPrim, _) => code"$evPrim = ($integralType) ${timestampToLongCode(c)};"
     }
   }
 
-  private[this] def castDecimalToIntegralTypeCode(
-      ctx: CodegenContext,
-      integralType: String,
-      catalogType: String): CastFunction = {
+  private[this] def castDayTimeIntervalToIntegralTypeCode(
+      startField: Byte,
+      endField: Byte,
+      integralType: String): CastFunction = {
+    val util = IntervalUtils.getClass.getCanonicalName.stripSuffix("$")
+    (c, evPrim, _) =>
+      code"""
+        $evPrim = $util.dayTimeIntervalTo$integralType($c, (byte)$startField, (byte)$endField);
+      """
+  }
+
+  private[this] def castYearMonthIntervalToIntegralTypeCode(
+      startField: Byte,
+      endField: Byte,
+      integralType: String): CastFunction = {
+    val util = IntervalUtils.getClass.getCanonicalName.stripSuffix("$")
+    (c, evPrim, _) =>
+      code"""
+        $evPrim = $util.yearMonthIntervalTo$integralType($c, (byte)$startField, (byte)$endField);
+      """
+  }
+
+  private[this] def castDecimalToIntegralTypeCode(integralType: String): CastFunction = {
     if (ansiEnabled) {
-      (c, evPrim, evNull) => code"$evPrim = $c.roundTo${integralType.capitalize}();"
+      (c, evPrim, _) => code"$evPrim = $c.roundTo${integralType.capitalize}();"
     } else {
-      (c, evPrim, evNull) => code"$evPrim = $c.to${integralType.capitalize}();"
+      (c, evPrim, _) => code"$evPrim = $c.to${integralType.capitalize}();"
     }
   }
 
   private[this] def castIntegralTypeToIntegralTypeExactCode(
+      ctx: CodegenContext,
       integralType: String,
-      catalogType: String): CastFunction = {
+      from: DataType,
+      to: DataType): CastFunction = {
     assert(ansiEnabled)
-    (c, evPrim, evNull) =>
+    val fromDt = ctx.addReferenceObj("from", from, from.getClass.getName)
+    val toDt = ctx.addReferenceObj("to", to, to.getClass.getName)
+    (c, evPrim, _) =>
       code"""
         if ($c == ($integralType) $c) {
           $evPrim = ($integralType) $c;
         } else {
-          throw QueryExecutionErrors.castingCauseOverflowError($c, "$catalogType");
+          throw QueryExecutionErrors.castingCauseOverflowError($c, $fromDt, $toDt);
         }
       """
   }
+
 
   private[this] def lowerAndUpperBound(integralType: String): (String, String) = {
     val (min, max, typeIndicator) = integralType.toLowerCase(Locale.ROOT) match {
@@ -1600,29 +1736,35 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
   }
 
   private[this] def castFractionToIntegralTypeCode(
+      ctx: CodegenContext,
       integralType: String,
-      catalogType: String): CastFunction = {
+      from: DataType,
+      to: DataType): CastFunction = {
     assert(ansiEnabled)
     val (min, max) = lowerAndUpperBound(integralType)
     val mathClass = classOf[Math].getName
+    val fromDt = ctx.addReferenceObj("from", from, from.getClass.getName)
+    val toDt = ctx.addReferenceObj("to", to, to.getClass.getName)
     // When casting floating values to integral types, Spark uses the method `Numeric.toInt`
     // Or `Numeric.toLong` directly. For positive floating values, it is equivalent to `Math.floor`;
     // for negative floating values, it is equivalent to `Math.ceil`.
     // So, we can use the condition `Math.floor(x) <= upperBound && Math.ceil(x) >= lowerBound`
     // to check if the floating value x is in the range of an integral type after rounding.
-    (c, evPrim, evNull) =>
+    (c, evPrim, _) =>
       code"""
         if ($mathClass.floor($c) <= $max && $mathClass.ceil($c) >= $min) {
           $evPrim = ($integralType) $c;
         } else {
-          throw QueryExecutionErrors.castingCauseOverflowError($c, "$catalogType");
+          throw QueryExecutionErrors.castingCauseOverflowError($c, $fromDt, $toDt);
         }
       """
   }
 
   private[this] def castToByteCode(from: DataType, ctx: CodegenContext): CastFunction = from match {
     case StringType if ansiEnabled =>
-      (c, evPrim, evNull) => code"$evPrim = $c.toByteExact();"
+      val stringUtils = UTF8StringUtils.getClass.getCanonicalName.stripSuffix("$")
+      val errorContext = ctx.addReferenceObj("errCtx", origin.context)
+      (c, evPrim, evNull) => code"$evPrim = $stringUtils.toByteExact($c, $errorContext);"
     case StringType =>
       val wrapper = ctx.freshVariable("intWrapper", classOf[UTF8String.IntWrapper])
       (c, evPrim, evNull) =>
@@ -1639,21 +1781,27 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
       (c, evPrim, evNull) => code"$evPrim = $c ? (byte) 1 : (byte) 0;"
     case DateType =>
       (c, evPrim, evNull) => code"$evNull = true;"
-    case TimestampType => castTimestampToIntegralTypeCode(ctx, "byte", ByteType.catalogString)
-    case DecimalType() => castDecimalToIntegralTypeCode(ctx, "byte", ByteType.catalogString)
+    case TimestampType => castTimestampToIntegralTypeCode(ctx, "byte", from, ByteType)
+    case DecimalType() => castDecimalToIntegralTypeCode("byte")
     case ShortType | IntegerType | LongType if ansiEnabled =>
-      castIntegralTypeToIntegralTypeExactCode("byte", ByteType.catalogString)
+      castIntegralTypeToIntegralTypeExactCode(ctx, "byte", from, ByteType)
     case FloatType | DoubleType if ansiEnabled =>
-      castFractionToIntegralTypeCode("byte", ByteType.catalogString)
+      castFractionToIntegralTypeCode(ctx, "byte", from, ByteType)
     case x: NumericType =>
       (c, evPrim, evNull) => code"$evPrim = (byte) $c;"
+    case x: DayTimeIntervalType =>
+      castDayTimeIntervalToIntegralTypeCode(x.startField, x.endField, "Byte")
+    case x: YearMonthIntervalType =>
+      castYearMonthIntervalToIntegralTypeCode(x.startField, x.endField, "Byte")
   }
 
   private[this] def castToShortCode(
       from: DataType,
       ctx: CodegenContext): CastFunction = from match {
     case StringType if ansiEnabled =>
-      (c, evPrim, evNull) => code"$evPrim = $c.toShortExact();"
+      val stringUtils = UTF8StringUtils.getClass.getCanonicalName.stripSuffix("$")
+      val errorContext = ctx.addReferenceObj("errCtx", origin.context)
+      (c, evPrim, evNull) => code"$evPrim = $stringUtils.toShortExact($c, $errorContext);"
     case StringType =>
       val wrapper = ctx.freshVariable("intWrapper", classOf[UTF8String.IntWrapper])
       (c, evPrim, evNull) =>
@@ -1670,19 +1818,25 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
       (c, evPrim, evNull) => code"$evPrim = $c ? (short) 1 : (short) 0;"
     case DateType =>
       (c, evPrim, evNull) => code"$evNull = true;"
-    case TimestampType => castTimestampToIntegralTypeCode(ctx, "short", ShortType.catalogString)
-    case DecimalType() => castDecimalToIntegralTypeCode(ctx, "short", ShortType.catalogString)
+    case TimestampType => castTimestampToIntegralTypeCode(ctx, "short", from, ShortType)
+    case DecimalType() => castDecimalToIntegralTypeCode("short")
     case IntegerType | LongType if ansiEnabled =>
-      castIntegralTypeToIntegralTypeExactCode("short", ShortType.catalogString)
+      castIntegralTypeToIntegralTypeExactCode(ctx, "short", from, ShortType)
     case FloatType | DoubleType if ansiEnabled =>
-      castFractionToIntegralTypeCode("short", ShortType.catalogString)
+      castFractionToIntegralTypeCode(ctx, "short", from, ShortType)
     case x: NumericType =>
       (c, evPrim, evNull) => code"$evPrim = (short) $c;"
+    case x: DayTimeIntervalType =>
+      castDayTimeIntervalToIntegralTypeCode(x.startField, x.endField, "Short")
+    case x: YearMonthIntervalType =>
+      castYearMonthIntervalToIntegralTypeCode(x.startField, x.endField, "Short")
   }
 
   private[this] def castToIntCode(from: DataType, ctx: CodegenContext): CastFunction = from match {
     case StringType if ansiEnabled =>
-      (c, evPrim, evNull) => code"$evPrim = $c.toIntExact();"
+      val stringUtils = UTF8StringUtils.getClass.getCanonicalName.stripSuffix("$")
+      val errorContext = ctx.addReferenceObj("errCtx", origin.context)
+      (c, evPrim, evNull) => code"$evPrim = $stringUtils.toIntExact($c, $errorContext);"
     case StringType =>
       val wrapper = ctx.freshVariable("intWrapper", classOf[UTF8String.IntWrapper])
       (c, evPrim, evNull) =>
@@ -1699,19 +1853,25 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
       (c, evPrim, evNull) => code"$evPrim = $c ? 1 : 0;"
     case DateType =>
       (c, evPrim, evNull) => code"$evNull = true;"
-    case TimestampType => castTimestampToIntegralTypeCode(ctx, "int", IntegerType.catalogString)
-    case DecimalType() => castDecimalToIntegralTypeCode(ctx, "int", IntegerType.catalogString)
+    case TimestampType => castTimestampToIntegralTypeCode(ctx, "int", from, IntegerType)
+    case DecimalType() => castDecimalToIntegralTypeCode("int")
     case LongType if ansiEnabled =>
-      castIntegralTypeToIntegralTypeExactCode("int", IntegerType.catalogString)
+      castIntegralTypeToIntegralTypeExactCode(ctx, "int", from, IntegerType)
     case FloatType | DoubleType if ansiEnabled =>
-      castFractionToIntegralTypeCode("int", IntegerType.catalogString)
+      castFractionToIntegralTypeCode(ctx, "int", from, IntegerType)
     case x: NumericType =>
       (c, evPrim, evNull) => code"$evPrim = (int) $c;"
+    case x: DayTimeIntervalType =>
+      castDayTimeIntervalToIntegralTypeCode(x.startField, x.endField, "Int")
+    case x: YearMonthIntervalType =>
+      castYearMonthIntervalToIntegralTypeCode(x.startField, x.endField, "Int")
   }
 
   private[this] def castToLongCode(from: DataType, ctx: CodegenContext): CastFunction = from match {
     case StringType if ansiEnabled =>
-      (c, evPrim, evNull) => code"$evPrim = $c.toLongExact();"
+      val stringUtils = UTF8StringUtils.getClass.getCanonicalName.stripSuffix("$")
+      val errorContext = ctx.addReferenceObj("errCtx", origin.context)
+      (c, evPrim, evNull) => code"$evPrim = $stringUtils.toLongExact($c, $errorContext);"
     case StringType =>
       val wrapper = ctx.freshVariable("longWrapper", classOf[UTF8String.LongWrapper])
       (c, evPrim, evNull) =>
@@ -1730,11 +1890,15 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
       (c, evPrim, evNull) => code"$evNull = true;"
     case TimestampType =>
       (c, evPrim, evNull) => code"$evPrim = (long) ${timestampToLongCode(c)};"
-    case DecimalType() => castDecimalToIntegralTypeCode(ctx, "long", LongType.catalogString)
+    case DecimalType() => castDecimalToIntegralTypeCode("long")
     case FloatType | DoubleType if ansiEnabled =>
-      castFractionToIntegralTypeCode("long", LongType.catalogString)
+      castFractionToIntegralTypeCode(ctx, "long", from, LongType)
     case x: NumericType =>
       (c, evPrim, evNull) => code"$evPrim = (long) $c;"
+    case x: DayTimeIntervalType =>
+      castDayTimeIntervalToIntegralTypeCode(x.startField, x.endField, "Long")
+    case x: YearMonthIntervalType =>
+      castYearMonthIntervalToIntegralTypeCode(x.startField, x.endField, "Int")
   }
 
   private[this] def castToFloatCode(from: DataType, ctx: CodegenContext): CastFunction = {
@@ -1743,7 +1907,9 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
         val floatStr = ctx.freshVariable("floatStr", StringType)
         (c, evPrim, evNull) =>
           val handleNull = if (ansiEnabled) {
-            s"throw QueryExecutionErrors.invalidInputSyntaxForNumericError($c);"
+            val errorContext = ctx.addReferenceObj("errCtx", origin.context)
+            s"throw QueryExecutionErrors.invalidInputSyntaxForNumericError(" +
+              s"org.apache.spark.sql.types.FloatType$$.MODULE$$,$c, $errorContext);"
           } else {
             s"$evNull = true;"
           }
@@ -1779,7 +1945,9 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
         val doubleStr = ctx.freshVariable("doubleStr", StringType)
         (c, evPrim, evNull) =>
           val handleNull = if (ansiEnabled) {
-            s"throw QueryExecutionErrors.invalidInputSyntaxForNumericError($c);"
+            val errorContext = ctx.addReferenceObj("errCtx", origin.context)
+            s"throw QueryExecutionErrors.invalidInputSyntaxForNumericError(" +
+              s"org.apache.spark.sql.types.DoubleType$$.MODULE$$, $c, $errorContext);"
           } else {
             s"$evNull = true;"
           }
@@ -2069,6 +2237,7 @@ object AnsiCast {
     case (StringType, TimestampType) => true
     case (DateType, TimestampType) => true
     case (TimestampNTZType, TimestampType) => true
+    case (_: NumericType, TimestampType) => true
 
     case (StringType, TimestampNTZType) => true
     case (DateType, TimestampNTZType) => true
@@ -2088,25 +2257,20 @@ object AnsiCast {
     case (_: NumericType, _: NumericType) => true
     case (StringType, _: NumericType) => true
     case (BooleanType, _: NumericType) => true
+    case (TimestampType, _: NumericType) => true
 
     case (ArrayType(fromType, fn), ArrayType(toType, tn)) =>
-      canCast(fromType, toType) &&
-        resolvableNullability(fn || forceNullable(fromType, toType), tn)
+      canCast(fromType, toType) && resolvableNullability(fn, tn)
 
     case (MapType(fromKey, fromValue, fn), MapType(toKey, toValue, tn)) =>
-      canCast(fromKey, toKey) &&
-        (!forceNullable(fromKey, toKey)) &&
-        canCast(fromValue, toValue) &&
-        resolvableNullability(fn || forceNullable(fromValue, toValue), tn)
+      canCast(fromKey, toKey) && canCast(fromValue, toValue) && resolvableNullability(fn, tn)
 
     case (StructType(fromFields), StructType(toFields)) =>
       fromFields.length == toFields.length &&
         fromFields.zip(toFields).forall {
           case (fromField, toField) =>
             canCast(fromField.dataType, toField.dataType) &&
-              resolvableNullability(
-                fromField.nullable || forceNullable(fromField.dataType, toField.dataType),
-                toField.nullable)
+              resolvableNullability(fromField.nullable, toField.nullable)
         }
 
     case (udt1: UserDefinedType[_], udt2: UserDefinedType[_]) if udt2.acceptsType(udt1) => true

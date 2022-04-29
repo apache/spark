@@ -21,7 +21,7 @@ import scala.collection.immutable.HashSet
 import scala.collection.mutable.{ArrayBuffer, Stack}
 
 import org.apache.spark.sql.catalyst.analysis._
-import org.apache.spark.sql.catalyst.expressions.{BinaryExpression, MultiLikeBase, _}
+import org.apache.spark.sql.catalyst.expressions.{MultiLikeBase, _}
 import org.apache.spark.sql.catalyst.expressions.Literal.{FalseLiteral, TrueLiteral}
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.expressions.objects.AssertNotNull
@@ -47,6 +47,7 @@ object ConstantFolding extends Rule[LogicalPlan] {
   private def hasNoSideEffect(e: Expression): Boolean = e match {
     case _: Attribute => true
     case _: Literal => true
+    case c: Cast if !conf.ansiEnabled => hasNoSideEffect(c.child)
     case _: NoThrow if e.deterministic => e.children.forall(hasNoSideEffect)
     case _ => false
   }
@@ -576,8 +577,14 @@ object SimplifyConditionals extends Rule[LogicalPlan] with PredicateHelper {
         if (i == 0) {
           elseValue
         } else {
-          e.copy(branches = branches.take(i).map(branch => (branch._1, elseValue)))
+          e.copy(
+            branches = branches.take(i).map(branch => (branch._1, elseValue)),
+            elseValue = elseOpt.filterNot(_.semanticEquals(Literal(null, e.dataType))))
         }
+
+      case e @ CaseWhen(_, elseOpt)
+          if elseOpt.exists(_.semanticEquals(Literal(null, e.dataType))) =>
+        e.copy(elseValue = None)
     }
   }
 }
@@ -591,8 +598,7 @@ object PushFoldableIntoBranches extends Rule[LogicalPlan] with PredicateHelper {
   // To be conservative here: it's only a guaranteed win if all but at most only one branch
   // end up being not foldable.
   private def atMostOneUnfoldable(exprs: Seq[Expression]): Boolean = {
-    val (foldables, others) = exprs.partition(_.foldable)
-    foldables.nonEmpty && others.length < 2
+    exprs.filterNot(_.foldable).size < 2
   }
 
   // Not all UnaryExpression can be pushed into (if / case) branches, e.g. Alias.
@@ -606,17 +612,6 @@ object PushFoldableIntoBranches extends Rule[LogicalPlan] with PredicateHelper {
     case _: ExtractIntervalPart[_] => true
     case _: ArraySetLike => true
     case _: ExtractValue => true
-    case _ => false
-  }
-
-  // Not all BinaryExpression can be pushed into (if / case) branches.
-  private def supportedBinaryExpression(e: BinaryExpression): Boolean = e match {
-    case _: BinaryComparison | _: StringPredicate | _: StringRegexExpression => true
-    case _: BinaryArithmetic => true
-    case _: BinaryMathExpression => true
-    case _: AddMonths | _: DateAdd | _: DateAddInterval | _: DateDiff | _: DateSub |
-         _: DateAddYMInterval | _: TimestampAddYMInterval | _: TimeAdd => true
-    case _: FindInSet | _: RoundBase => true
     case _ => false
   }
 
@@ -634,39 +629,50 @@ object PushFoldableIntoBranches extends Rule[LogicalPlan] with PredicateHelper {
           if supportedUnaryExpression(u) && atMostOneUnfoldable(branches.map(_._2) ++ elseValue) =>
         c.copy(
           branches.map(e => e.copy(_2 = u.withNewChildren(Array(e._2)))),
-          elseValue.map(e => u.withNewChildren(Array(e))))
+          Some(u.withNewChildren(Array(elseValue.getOrElse(Literal(null, c.dataType))))))
 
-      case b @ BinaryExpression(i @ If(_, trueValue, falseValue), right)
-          if supportedBinaryExpression(b) && right.foldable &&
-            atMostOneUnfoldable(Seq(trueValue, falseValue)) =>
+      case SupportedBinaryExpr(b, i @ If(_, trueValue, falseValue), right)
+          if right.foldable && atMostOneUnfoldable(Seq(trueValue, falseValue)) =>
         i.copy(
           trueValue = b.withNewChildren(Array(trueValue, right)),
           falseValue = b.withNewChildren(Array(falseValue, right)))
 
-      case b @ BinaryExpression(left, i @ If(_, trueValue, falseValue))
-          if supportedBinaryExpression(b) && left.foldable &&
-            atMostOneUnfoldable(Seq(trueValue, falseValue)) =>
+      case SupportedBinaryExpr(b, left, i @ If(_, trueValue, falseValue))
+          if left.foldable && atMostOneUnfoldable(Seq(trueValue, falseValue)) =>
         i.copy(
           trueValue = b.withNewChildren(Array(left, trueValue)),
           falseValue = b.withNewChildren(Array(left, falseValue)))
 
-      case b @ BinaryExpression(c @ CaseWhen(branches, elseValue), right)
-          if supportedBinaryExpression(b) && right.foldable &&
-            atMostOneUnfoldable(branches.map(_._2) ++ elseValue) =>
+      case SupportedBinaryExpr(b, c @ CaseWhen(branches, elseValue), right)
+          if right.foldable && atMostOneUnfoldable(branches.map(_._2) ++ elseValue) =>
         c.copy(
           branches.map(e => e.copy(_2 = b.withNewChildren(Array(e._2, right)))),
-          elseValue.map(e => b.withNewChildren(Array(e, right))))
+          Some(b.withNewChildren(Array(elseValue.getOrElse(Literal(null, c.dataType)), right))))
 
-      case b @ BinaryExpression(left, c @ CaseWhen(branches, elseValue))
-          if supportedBinaryExpression(b) && left.foldable &&
-            atMostOneUnfoldable(branches.map(_._2) ++ elseValue) =>
+      case SupportedBinaryExpr(b, left, c @ CaseWhen(branches, elseValue))
+          if left.foldable && atMostOneUnfoldable(branches.map(_._2) ++ elseValue) =>
         c.copy(
           branches.map(e => e.copy(_2 = b.withNewChildren(Array(left, e._2)))),
-          elseValue.map(e => b.withNewChildren(Array(left, e))))
+          Some(b.withNewChildren(Array(left, elseValue.getOrElse(Literal(null, c.dataType))))))
     }
   }
 }
 
+object SupportedBinaryExpr {
+  def unapply(expr: Expression): Option[(Expression, Expression, Expression)] = expr match {
+    case _: BinaryComparison | _: StringPredicate | _: StringRegexExpression =>
+      Some(expr, expr.children.head, expr.children.last)
+    case _: BinaryArithmetic => Some(expr, expr.children.head, expr.children.last)
+    case _: BinaryMathExpression => Some(expr, expr.children.head, expr.children.last)
+    case _: AddMonths | _: DateAdd | _: DateAddInterval | _: DateDiff | _: DateSub |
+         _: DateAddYMInterval | _: TimestampAddYMInterval | _: TimeAdd =>
+      Some(expr, expr.children.head, expr.children.last)
+    case _: FindInSet | _: RoundBase => Some(expr, expr.children.head, expr.children.last)
+    case BinaryPredicate(expr) =>
+      Some(expr, expr.arguments.head, expr.arguments.last)
+    case _ => None
+  }
+}
 
 /**
  * Simplifies LIKE expressions that do not need full regular expressions to evaluate the condition.
@@ -814,6 +820,39 @@ object NullPropagation extends Rule[LogicalPlan] {
 
 
 /**
+ * Unwrap the input of IsNull/IsNotNull if the input is NullIntolerant
+ * E.g. IsNull(Not(null)) == IsNull(null)
+ */
+object NullDownPropagation extends Rule[LogicalPlan] {
+  // Return true iff the expression returns non-null result for all non-null inputs.
+  // Not all `NullIntolerant` can be propagated. E.g. `Cast` is `NullIntolerant`; however,
+  // cast('Infinity' as integer) is null. Hence, `Cast` is not supported `NullIntolerant`.
+  // `ExtractValue` is also not supported. E.g. the planner may resolve column `a` to `a#123`,
+  // then IsNull(a#123) cannot be optimized.
+  // Applying to `EqualTo` is too disruptive for [SPARK-32290] optimization, not supported for now.
+  // If e has multiple children, the deterministic check is required because optimizing
+  // IsNull(a > b) to Or(IsNull(a), IsNull(b)), for example, may cause skipping the evaluation of b
+  private def supportedNullIntolerant(e: NullIntolerant): Boolean = (e match {
+    case _: Not => true
+    case _: GreaterThan | _: GreaterThanOrEqual | _: LessThan | _: LessThanOrEqual
+      if e.deterministic => true
+    case _ => false
+  }) && e.children.nonEmpty
+
+  def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
+    _.containsPattern(NULL_CHECK), ruleId) {
+    case q: LogicalPlan => q.transformExpressionsDownWithPruning(
+      _.containsPattern(NULL_CHECK), ruleId) {
+      case IsNull(e: NullIntolerant) if supportedNullIntolerant(e) =>
+        e.children.map(IsNull(_): Expression).reduceLeft(Or)
+      case IsNotNull(e: NullIntolerant) if supportedNullIntolerant(e) =>
+        e.children.map(IsNotNull(_): Expression).reduceLeft(And)
+    }
+  }
+}
+
+
+/**
  * Replace attributes with aliases of the original foldable expressions if possible.
  * Other optimizations will take advantage of the propagated foldable expressions. For example,
  * this rule can optimize
@@ -931,12 +970,14 @@ object FoldablePropagation extends Rule[LogicalPlan] {
     case _: Sample => true
     case _: GlobalLimit => true
     case _: LocalLimit => true
+    case _: Offset => true
     case _: Generate => true
     case _: Distinct => true
     case _: AppendColumns => true
     case _: AppendColumnsWithObject => true
     case _: RepartitionByExpression => true
     case _: Repartition => true
+    case _: RebalancePartitions => true
     case _: Sort => true
     case _: TypedFilter => true
     case _ => false
@@ -951,12 +992,24 @@ object SimplifyCasts extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformAllExpressionsWithPruning(
     _.containsPattern(CAST), ruleId) {
     case Cast(e, dataType, _, _) if e.dataType == dataType => e
+    case c @ Cast(Cast(e, dt1: NumericType, _, _), dt2: NumericType, _, _)
+        if isWiderCast(e.dataType, dt1) && isWiderCast(dt1, dt2) =>
+      c.copy(child = e)
     case c @ Cast(e, dataType, _, _) => (e.dataType, dataType) match {
       case (ArrayType(from, false), ArrayType(to, true)) if from == to => e
       case (MapType(fromKey, fromValue, false), MapType(toKey, toValue, true))
         if fromKey == toKey && fromValue == toValue => e
       case _ => c
       }
+  }
+
+  // Returns whether the from DataType can be safely casted to the to DataType without losing
+  // any precision or range.
+  private def isWiderCast(from: DataType, to: NumericType): Boolean = (from, to) match {
+    case (from: NumericType, to: DecimalType) if to.isWiderThan(from) => true
+    case (from: DecimalType, to: NumericType) if from.isTighterThan(to) => true
+    case (from: IntegralType, to: IntegralType) => Cast.canUpCast(from, to)
+    case _ => from == to
   }
 }
 

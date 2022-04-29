@@ -115,7 +115,7 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
   def names: Array[String] = fieldNames
 
   private lazy val fieldNamesSet: Set[String] = fieldNames.toSet
-  private[sql] lazy val nameToField: Map[String, StructField] = fields.map(f => f.name -> f).toMap
+  private lazy val nameToField: Map[String, StructField] = fields.map(f => f.name -> f).toMap
   private lazy val nameToIndex: Map[String, Int] = fieldNames.zipWithIndex.toMap
 
   override def equals(that: Any): Boolean = {
@@ -325,6 +325,7 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
       resolver: Resolver = _ == _,
       context: Origin = Origin()): Option[(Seq[String], StructField)] = {
 
+    @scala.annotation.tailrec
     def findField(
         struct: StructType,
         searchPath: Seq[String],
@@ -641,14 +642,8 @@ object StructType extends AbstractDataType {
 
       case (DecimalType.Fixed(leftPrecision, leftScale),
         DecimalType.Fixed(rightPrecision, rightScale)) =>
-        if ((leftPrecision == rightPrecision) && (leftScale == rightScale)) {
-          DecimalType(leftPrecision, leftScale)
-        } else if ((leftPrecision != rightPrecision) && (leftScale != rightScale)) {
-          throw QueryExecutionErrors.cannotMergeDecimalTypesWithIncompatiblePrecisionAndScaleError(
-            leftPrecision, rightPrecision, leftScale, rightScale)
-        } else if (leftPrecision != rightPrecision) {
-          throw QueryExecutionErrors.cannotMergeDecimalTypesWithIncompatiblePrecisionError(
-            leftPrecision, rightPrecision)
+        if (leftScale == rightScale) {
+          DecimalType(leftPrecision.max(rightPrecision), leftScale)
         } else {
           throw QueryExecutionErrors.cannotMergeDecimalTypesWithIncompatibleScaleError(
             leftScale, rightScale)

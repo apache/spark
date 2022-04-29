@@ -35,7 +35,9 @@ def _unsupported_property(property_name, deprecated=False, reason="", cls="Index
     )
 
 
-class MissingPandasLikeIndex(object):
+class MissingPandasLikeIndex:
+    # NOTE: Please update the document "Supported pandas APIs" when implementing the new API.
+    # Documentation path: `python/docs/source/user_guide/pandas_on_spark/supported_pandas_api.rst`.
 
     # Properties
     nbytes = _unsupported_property("nbytes")
@@ -78,6 +80,8 @@ class MissingPandasLikeIndex(object):
 
 
 class MissingPandasLikeDatetimeIndex(MissingPandasLikeIndex):
+    # NOTE: Please update the document "Supported pandas APIs" when implementing the new API.
+    # Documentation path: `python/docs/source/user_guide/pandas_on_spark/supported_pandas_api.rst`.
 
     # Properties
     nanosecond = _unsupported_property("nanosecond", cls="DatetimeIndex")
@@ -100,7 +104,26 @@ class MissingPandasLikeDatetimeIndex(MissingPandasLikeIndex):
     std = _unsupported_function("std", cls="DatetimeIndex")
 
 
-class MissingPandasLikeMultiIndex(object):
+class MissingPandasLikeTimedeltaIndex(MissingPandasLikeIndex):
+    # NOTE: Please update the document "Supported pandas APIs" when implementing the new API.
+    # Documentation path: `python/docs/source/user_guide/pandas_on_spark/supported_pandas_api.rst`.
+
+    # Properties
+    nanoseconds = _unsupported_property("nanoseconds", cls="TimedeltaIndex")
+    components = _unsupported_property("components", cls="TimedeltaIndex")
+    inferred_freq = _unsupported_property("inferred_freq", cls="TimedeltaIndex")
+
+    # Functions
+    to_pytimedelta = _unsupported_function("to_pytimedelta", cls="TimedeltaIndex")
+    round = _unsupported_function("round", cls="TimedeltaIndex")
+    floor = _unsupported_function("floor", cls="TimedeltaIndex")
+    ceil = _unsupported_function("ceil", cls="TimedeltaIndex")
+    mean = _unsupported_function("mean", cls="TimedeltaIndex")
+
+
+class MissingPandasLikeMultiIndex:
+    # NOTE: Please update the document "Supported pandas APIs" when implementing the new API.
+    # Documentation path: `python/docs/source/user_guide/pandas_on_spark/supported_pandas_api.rst`.
 
     # Functions
     argsort = _unsupported_function("argsort")

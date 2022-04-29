@@ -31,10 +31,32 @@ class JavaSerializerSuite extends SparkFunSuite {
   test("Deserialize object containing a primitive Class as attribute") {
     val serializer = new JavaSerializer(new SparkConf())
     val instance = serializer.newInstance()
-    val obj = instance.deserialize[ContainsPrimitiveClass](instance.serialize(
-      new ContainsPrimitiveClass()))
+    val obj = instance.deserialize[ContainsPrimitiveClass](
+      instance.serialize(new ContainsPrimitiveClass()))
     // enforce class cast
     obj.getClass
+  }
+
+  test("SPARK-36627: Deserialize object containing a proxy Class as attribute") {
+    var classesLoaded = Set[String]()
+    val outer = Thread.currentThread.getContextClassLoader
+    val inner = new ClassLoader() {
+      override def loadClass(name: String): Class[_] = {
+        classesLoaded = classesLoaded + name
+        outer.loadClass(name)
+      }
+    }
+    Thread.currentThread.setContextClassLoader(inner)
+
+    val serializer = new JavaSerializer(new SparkConf())
+    val instance = serializer.newInstance()
+    val obj =
+      instance.deserialize[ContainsProxyClass](instance.serialize(new ContainsProxyClass()))
+    // enforce class cast
+    obj.getClass
+
+    // check that serializer's loader is used to resolve proxied interface.
+    assert(classesLoaded.exists(klass => klass.contains("MyInterface")))
   }
 }
 
@@ -47,5 +69,5 @@ private class ContainsPrimitiveClass extends Serializable {
   val floatClass = classOf[Float]
   val booleanClass = classOf[Boolean]
   val byteClass = classOf[Byte]
-  val voidClass = classOf[Void]
+  val voidClass = classOf[Unit]
 }

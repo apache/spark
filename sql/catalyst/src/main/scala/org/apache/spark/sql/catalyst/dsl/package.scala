@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst
 
 import java.sql.{Date, Timestamp}
-import java.time.{Duration, Instant, LocalDate, Period}
+import java.time.{Duration, Instant, LocalDate, LocalDateTime, Period}
 
 import scala.language.implicitConversions
 
@@ -55,7 +55,7 @@ import org.apache.spark.unsafe.types.UTF8String
  *  // SQL verbs can be used to construct logical query plans.
  *  scala> import org.apache.spark.sql.catalyst.plans.logical._
  *  scala> import org.apache.spark.sql.catalyst.dsl.plans._
- *  scala> LocalRelation('key.int, 'value.string).where('key === 1).select('value).analyze
+ *  scala> LocalRelation($"key".int, $"value".string).where('key === 1).select('value).analyze
  *  res3: org.apache.spark.sql.catalyst.plans.logical.LogicalPlan =
  *  Project [value#3]
  *   Filter (key#2 = 1)
@@ -138,6 +138,14 @@ package object dsl {
       }
     }
 
+    def castNullable(): Expression = {
+      if (expr.resolved && expr.nullable) {
+        expr
+      } else {
+        KnownNullable(expr)
+      }
+    }
+
     def asc: SortOrder = SortOrder(expr, Ascending)
     def asc_nullsLast: SortOrder = SortOrder(expr, Ascending, NullsLast, Seq.empty)
     def desc: SortOrder = SortOrder(expr, Descending)
@@ -165,6 +173,7 @@ package object dsl {
     implicit def bigDecimalToLiteral(d: java.math.BigDecimal): Literal = Literal(d)
     implicit def decimalToLiteral(d: Decimal): Literal = Literal(d)
     implicit def timestampToLiteral(t: Timestamp): Literal = Literal(t)
+    implicit def timestampNTZToLiteral(l: LocalDateTime): Literal = Literal(l)
     implicit def instantToLiteral(i: Instant): Literal = Literal(i)
     implicit def binaryToLiteral(a: Array[Byte]): Literal = Literal(a)
     implicit def periodToLiteral(p: Period): Literal = Literal(p)
@@ -218,6 +227,11 @@ package object dsl {
       BitOrAgg(e).toAggregateExpression(isDistinct = false, filter = filter)
     def bitXor(e: Expression, filter: Option[Expression] = None): Expression =
       BitXorAgg(e).toAggregateExpression(isDistinct = false, filter = filter)
+    def collectList(e: Expression, filter: Option[Expression] = None): Expression =
+      CollectList(e).toAggregateExpression(isDistinct = false, filter = filter)
+    def collectSet(e: Expression, filter: Option[Expression] = None): Expression =
+      CollectSet(e).toAggregateExpression(isDistinct = false, filter = filter)
+
     def upper(e: Expression): Expression = Upper(e)
     def lower(e: Expression): Expression = Lower(e)
     def coalesce(args: Expression*): Expression = Coalesce(args)
@@ -388,6 +402,8 @@ package object dsl {
 
       def limit(limitExpr: Expression): LogicalPlan = Limit(limitExpr, logicalPlan)
 
+      def offset(offsetExpr: Expression): LogicalPlan = Offset(offsetExpr, logicalPlan)
+
       def join(
         otherPlan: LogicalPlan,
         joinType: JoinType = Inner,
@@ -426,7 +442,7 @@ package object dsl {
       def groupBy(groupingExprs: Expression*)(aggregateExprs: Expression*): LogicalPlan = {
         val aliasedExprs = aggregateExprs.map {
           case ne: NamedExpression => ne
-          case e => Alias(e, e.toString)()
+          case e => UnresolvedAlias(e)
         }
         Aggregate(groupingExprs, aliasedExprs, logicalPlan)
       }
@@ -483,6 +499,9 @@ package object dsl {
 
       def distribute(exprs: Expression*)(n: Int): LogicalPlan =
         RepartitionByExpression(exprs, logicalPlan, numPartitions = n)
+
+      def rebalance(exprs: Expression*): LogicalPlan =
+        RebalancePartitions(exprs, logicalPlan)
 
       def analyze: LogicalPlan = {
         val analyzed = analysis.SimpleAnalyzer.execute(logicalPlan)

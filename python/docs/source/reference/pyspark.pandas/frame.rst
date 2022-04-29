@@ -147,7 +147,9 @@ Computations / Descriptive Stats
    DataFrame.any
    DataFrame.clip
    DataFrame.corr
+   DataFrame.corrwith
    DataFrame.count
+   DataFrame.cov
    DataFrame.describe
    DataFrame.kurt
    DataFrame.kurtosis
@@ -217,6 +219,7 @@ Missing data handling
    DataFrame.replace
    DataFrame.bfill
    DataFrame.ffill
+   DataFrame.interpolate
 
 Reshaping, sorting, transposing
 -------------------------------
@@ -320,11 +323,13 @@ specific plotting methods of the form ``DataFrame.plot.<kind>``.
    DataFrame.plot.barh
    DataFrame.plot.bar
    DataFrame.plot.hist
+   DataFrame.plot.box
    DataFrame.plot.line
    DataFrame.plot.pie
    DataFrame.plot.scatter
    DataFrame.plot.density
    DataFrame.hist
+   DataFrame.boxplot
    DataFrame.kde
 
 Pandas-on-Spark specific

@@ -357,7 +357,7 @@ Security options for the Spark History Server are covered more detail in the
   </tr>
   <tr>
     <td>spark.history.custom.executor.log.url.applyIncompleteApplication</td>
-    <td>false</td>
+    <td>true</td>
     <td>
         Specifies whether to apply custom spark executor log URL to incomplete applications as well.
         If executor logs for running applications should be provided as origin log URLs, set this to `false`.
@@ -609,6 +609,17 @@ can be identified by their `[attempt-id]`. In the API listed below, when running
     <code>?details=[true (default) | false]</code> lists/hides metric details in addition to given query details.
     <br>
     <code>?planDescription=[true (default) | false]</code> enables/disables Physical <code>planDescription</code> on demand for the given query when Physical Plan size is high.
+    </td>
+  </tr>
+  <tr>
+    <td><code>/applications/[app-id]/diagnostics/sql/[execution-id]</code></td>
+    <td>Diagnostic for the given query, including:
+    <br>
+    1. plan change history of adaptive execution
+    <br>
+    2. physical plan description with unlimited fields
+    <br>
+    This API requires setting <code>spark.appStatusStore.diskStoreDir</code> for storing the diagnostic information.
     </td>
   </tr>
   <tr>

@@ -608,7 +608,7 @@ setMethod("cache",
 #'
 #' Persist this SparkDataFrame with the specified storage level. For details of the
 #' supported storage levels, refer to
-#' \url{http://spark.apache.org/docs/latest/rdd-programming-guide.html#rdd-persistence}.
+#' \url{https://spark.apache.org/docs/latest/rdd-programming-guide.html#rdd-persistence}.
 #'
 #' @param x the SparkDataFrame to persist.
 #' @param newLevel storage level chosen for the persistence. See available options in
@@ -890,10 +890,9 @@ setMethod("toJSON",
 #'             save mode (it is 'error' by default)
 #' @param ... additional argument(s) passed to the method.
 #'            You can find the JSON-specific options for writing JSON files in
-#'            \url{
-#'            https://spark.apache.org/docs/latest/sql-data-sources-json.html#data-source-option}{
-#'            Data Source Option} in the version you use.
-#'
+# nolint start
+#'            \url{https://spark.apache.org/docs/latest/sql-data-sources-json.html#data-source-option}{Data Source Option} in the version you use.
+# nolint end
 #' @family SparkDataFrame functions
 #' @rdname write.json
 #' @name write.json
@@ -925,10 +924,9 @@ setMethod("write.json",
 #'             save mode (it is 'error' by default)
 #' @param ... additional argument(s) passed to the method.
 #'            You can find the ORC-specific options for writing ORC files in
-#'            \url{
-#'            https://spark.apache.org/docs/latest/sql-data-sources-orc.html#data-source-option}{
-#'            Data Source Option} in the version you use.
-#'
+# nolint start
+#'            \url{https://spark.apache.org/docs/latest/sql-data-sources-orc.html#data-source-option}{Data Source Option} in the version you use.
+# nolint end
 #' @family SparkDataFrame functions
 #' @aliases write.orc,SparkDataFrame,character-method
 #' @rdname write.orc
@@ -960,10 +958,9 @@ setMethod("write.orc",
 #'             save mode (it is 'error' by default)
 #' @param ... additional argument(s) passed to the method.
 #'            You can find the Parquet-specific options for writing Parquet files in
-#'            \url{
-#'            https://spark.apache.org/docs/latest/sql-data-sources-parquet.html#data-source-option
-#'            }{Data Source Option} in the version you use.
-#'
+# nolint start
+#'            \url{https://spark.apache.org/docs/latest/sql-data-sources-parquet.html#data-source-option}{Data Source Option} in the version you use.
+# nolint end
 #' @family SparkDataFrame functions
 #' @rdname write.parquet
 #' @name write.parquet
@@ -996,10 +993,9 @@ setMethod("write.parquet",
 #'             save mode (it is 'error' by default)
 #' @param ... additional argument(s) passed to the method.
 #'            You can find the text-specific options for writing text files in
-#'            \url{
-#'            https://spark.apache.org/docs/latest/sql-data-sources-text.html#data-source-option}{
-#'            Data Source Option} in the version you use.
-#'
+# nolint start
+#'            \url{https://spark.apache.org/docs/latest/sql-data-sources-text.html#data-source-option}{Data Source Option} in the version you use.
+# nolint end
 #' @family SparkDataFrame functions
 #' @aliases write.text,SparkDataFrame,character-method
 #' @rdname write.text
@@ -3912,8 +3908,7 @@ setMethod("isStreaming",
 #' @aliases write.stream,SparkDataFrame-method
 #' @rdname write.stream
 #' @name write.stream
-#' @examples
-#'\dontrun{
+#' @examples \dontrun{
 #' sparkR.session()
 #' df <- read.stream("socket", host = "localhost", port = 9999)
 #' isStreaming(df)
@@ -3922,7 +3917,7 @@ setMethod("isStreaming",
 #' # console
 #' q <- write.stream(wordCounts, "console", outputMode = "complete")
 #' # text stream
-#' q <- write.stream(df, "text", path = "/home/user/out", checkpointLocation = "/home/user/cp"
+#' q <- write.stream(df, "text", path = "/home/user/out", checkpointLocation = "/home/user/cp",
 #'                   partitionBy = c("year", "month"), trigger.processingTime = "30 seconds")
 #' # memory stream
 #' q <- write.stream(wordCounts, "memory", queryName = "outs", outputMode = "complete")

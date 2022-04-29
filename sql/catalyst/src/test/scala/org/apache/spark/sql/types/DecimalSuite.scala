@@ -284,7 +284,8 @@ class DecimalSuite extends SparkFunSuite with PrivateMethodTester with SQLHelper
 
     assert(Decimal.fromString(UTF8String.fromString("str")) === null)
     val e = intercept[NumberFormatException](Decimal.fromStringANSI(UTF8String.fromString("str")))
-    assert(e.getMessage.contains("invalid input syntax for type numeric"))
+    assert(e.getMessage.contains("Invalid input syntax for type " +
+      s""""${DecimalType.USER_DEFAULT.sql}": 'str'"""))
   }
 
   test("SPARK-35841: Casting string to decimal type doesn't work " +
@@ -297,6 +298,21 @@ class DecimalSuite extends SparkFunSuite with PrivateMethodTester with SQLHelper
     for (string <- values) {
       assert(Decimal.fromString(UTF8String.fromString(string)) === Decimal(string))
       assert(Decimal.fromStringANSI(UTF8String.fromString(string)) === Decimal(string))
+    }
+  }
+
+  test("SPARK-37451: Performance improvement regressed String to Decimal cast") {
+    val values = Array("7.836725755512218E38")
+    for (string <- values) {
+      assert(Decimal.fromString(UTF8String.fromString(string)) === null)
+      intercept[ArithmeticException](Decimal.fromStringANSI(UTF8String.fromString(string)))
+    }
+
+    withSQLConf(SQLConf.LEGACY_ALLOW_NEGATIVE_SCALE_OF_DECIMAL_ENABLED.key -> "true") {
+      for (string <- values) {
+        assert(Decimal.fromString(UTF8String.fromString(string)) === Decimal(string))
+        assert(Decimal.fromStringANSI(UTF8String.fromString(string)) === Decimal(string))
+      }
     }
   }
 }

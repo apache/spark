@@ -90,12 +90,12 @@ private[python] class PythonMLLibAPI extends Serializable {
       initialWeights: Vector): JList[Object] = {
     try {
       val model = learner.run(data.rdd.persist(StorageLevel.MEMORY_AND_DISK), initialWeights)
-      if (model.isInstanceOf[LogisticRegressionModel]) {
-        val lrModel = model.asInstanceOf[LogisticRegressionModel]
-        List(lrModel.weights, lrModel.intercept, lrModel.numFeatures, lrModel.numClasses)
-          .map(_.asInstanceOf[Object]).asJava
-      } else {
-        List(model.weights, model.intercept).map(_.asInstanceOf[Object]).asJava
+      model match {
+        case lrModel: LogisticRegressionModel =>
+          List(lrModel.weights, lrModel.intercept, lrModel.numFeatures, lrModel.numClasses)
+            .map(_.asInstanceOf[Object]).asJava
+        case _ =>
+          List(model.weights, model.intercept).map(_.asInstanceOf[Object]).asJava
       }
     } finally {
       data.rdd.unpersist()
@@ -351,13 +351,15 @@ private[python] class PythonMLLibAPI extends Serializable {
       seed: java.lang.Long,
       initializationSteps: Int,
       epsilon: Double,
-      initialModel: java.util.ArrayList[Vector]): KMeansModel = {
+      initialModel: java.util.ArrayList[Vector],
+      distanceMeasure: String): KMeansModel = {
     val kMeansAlg = new KMeans()
       .setK(k)
       .setMaxIterations(maxIterations)
       .setInitializationMode(initializationMode)
       .setInitializationSteps(initializationSteps)
       .setEpsilon(epsilon)
+      .setDistanceMeasure(distanceMeasure)
 
     if (seed != null) kMeansAlg.setSeed(seed)
     if (!initialModel.isEmpty()) kMeansAlg.setInitialModel(new KMeansModel(initialModel))

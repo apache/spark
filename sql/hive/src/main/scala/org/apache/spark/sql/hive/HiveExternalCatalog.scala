@@ -40,14 +40,13 @@ import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.catalog.ExternalCatalogUtils._
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
+import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, CharVarcharUtils}
 import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.execution.datasources.{PartitioningUtils, SourceOptions}
 import org.apache.spark.sql.hive.client.HiveClient
 import org.apache.spark.sql.internal.HiveSerDe
 import org.apache.spark.sql.internal.StaticSQLConf._
-import org.apache.spark.sql.types.{DataType, StructType}
-
+import org.apache.spark.sql.types.{AnsiIntervalType, ArrayType, DataType, MapType, StructType, TimestampNTZType}
 
 /**
  * A persistent implementation of the system catalog using Hive.
@@ -357,6 +356,8 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
 
     val qualifiedTableName = table.identifier.quotedString
     val maybeSerde = HiveSerDe.sourceToSerDe(provider)
+    val incompatibleTypes =
+      table.schema.filter(f => !isHiveCompatibleDataType(f.dataType)).map(_.dataType.simpleString)
 
     val (hiveCompatibleTable, logMessage) = maybeSerde match {
       case _ if options.skipHiveMetadata =>
@@ -365,6 +366,12 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
             "Spark SQL specific format, which is NOT compatible with Hive."
         (None, message)
 
+      case _ if incompatibleTypes.nonEmpty =>
+        val message =
+          s"Hive incompatible types found: ${incompatibleTypes.mkString(", ")}. " +
+            s"Persisting data source table $qualifiedTableName into Hive metastore in " +
+            "Spark SQL specific format, which is NOT compatible with Hive."
+        (None, message)
       // our bucketing is un-compatible with hive(different hash function)
       case Some(serde) if table.bucketSpec.nonEmpty =>
         val message =
@@ -429,8 +436,17 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     val properties = new mutable.HashMap[String, String]
 
     properties.put(CREATED_SPARK_VERSION, table.createVersion)
+    // This is for backward compatibility to Spark 2 to read tables with char/varchar created by
+    // Spark 3.1. At read side, we will restore a table schema from its properties. So, we need to
+    // clear the `varchar(n)` and `char(n)` and replace them with `string` as Spark 2 does not have
+    // a type mapping for them in `DataType.nameToType`.
+    // See `restoreHiveSerdeTable` for example.
+    val newSchema = CharVarcharUtils.replaceCharVarcharWithStringInSchema(schema)
     CatalogTable.splitLargeTableProp(
-      DATASOURCE_SCHEMA, schema.json, properties.put, conf.get(SCHEMA_STRING_LENGTH_THRESHOLD))
+      DATASOURCE_SCHEMA,
+      newSchema.json,
+      properties.put,
+      conf.get(SCHEMA_STRING_LENGTH_THRESHOLD))
 
     if (partitionColumns.nonEmpty) {
       properties.put(DATASOURCE_SCHEMA_NUMPARTCOLS, partitionColumns.length.toString)
@@ -735,8 +751,8 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
       case None if table.tableType == VIEW =>
         // If this is a view created by Spark 2.2 or higher versions, we should restore its schema
         // from table properties.
-        CatalogTable.readLargeTableProp(table.properties, DATASOURCE_SCHEMA).foreach { schemaJson =>
-          table = table.copy(schema = DataType.fromJson(schemaJson).asInstanceOf[StructType])
+        getSchemaFromTableProperties(table.properties).foreach { schemaFromTableProps =>
+          table = table.copy(schema = schemaFromTableProps)
         }
 
       // No provider in table properties, which means this is a Hive serde table.
@@ -752,8 +768,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     val version: String = table.properties.getOrElse(CREATED_SPARK_VERSION, "2.2 or prior")
 
     // Restore Spark's statistics from information in Metastore.
-    val restoredStats =
-      statsFromProperties(table.properties, table.identifier.table, table.schema)
+    val restoredStats = statsFromProperties(table.properties, table.identifier.table)
     if (restoredStats.isDefined) {
       table = table.copy(stats = restoredStats)
     }
@@ -786,9 +801,9 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
 
     // If this is a Hive serde table created by Spark 2.1 or higher versions, we should restore its
     // schema from table properties.
-    val schemaJson = CatalogTable.readLargeTableProp(table.properties, DATASOURCE_SCHEMA)
-    if (schemaJson.isDefined) {
-      val schemaFromTableProps = DataType.fromJson(schemaJson.get).asInstanceOf[StructType]
+    val maybeSchemaFromTableProps = getSchemaFromTableProperties(table.properties)
+    if (maybeSchemaFromTableProps.isDefined) {
+      val schemaFromTableProps = maybeSchemaFromTableProps.get
       val partColumnNames = getPartitionColumnsFromTableProperties(table)
       val reorderedSchema = reorderSchema(schema = schemaFromTableProps, partColumnNames)
 
@@ -814,6 +829,14 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     }
   }
 
+  private def getSchemaFromTableProperties(
+      tableProperties: Map[String, String]): Option[StructType] = {
+    CatalogTable.readLargeTableProp(tableProperties, DATASOURCE_SCHEMA).map { schemaJson =>
+      val parsed = DataType.fromJson(schemaJson).asInstanceOf[StructType]
+      CharVarcharUtils.getRawSchema(parsed)
+    }
+  }
+
   private def restoreDataSourceTable(table: CatalogTable, provider: String): CatalogTable = {
     // Internally we store the table location in storage properties with key "path" for data
     // source tables. Here we set the table location to `locationUri` field and filter out the
@@ -828,8 +851,8 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
       storageWithLocation.properties.filterKeys(!HIVE_GENERATED_STORAGE_PROPERTIES(_)).toMap)
     val partitionProvider = table.properties.get(TABLE_PARTITION_PROVIDER)
 
-    val schemaFromTableProps = CatalogTable.readLargeTableProp(table.properties, DATASOURCE_SCHEMA)
-      .map(json => DataType.fromJson(json).asInstanceOf[StructType]).getOrElse(new StructType())
+    val schemaFromTableProps =
+      getSchemaFromTableProperties(table.properties).getOrElse(new StructType())
     val partColumnNames = getPartitionColumnsFromTableProperties(table)
     val reorderedSchema = reorderSchema(schema = schemaFromTableProps, partColumnNames)
 
@@ -1113,8 +1136,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
 
   private def statsFromProperties(
       properties: Map[String, String],
-      table: String,
-      schema: StructType): Option[CatalogStatistics] = {
+      table: String): Option[CatalogStatistics] = {
 
     val statsProps = properties.filterKeys(_.startsWith(STATISTICS_PREFIX))
     if (statsProps.isEmpty) {
@@ -1184,8 +1206,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
 
     // Restore Spark's statistics from information in Metastore.
     // Note: partition-level statistics were introduced in 2.3.
-    val restoredStats =
-      statsFromProperties(partition.parameters, table.identifier.table, table.schema)
+    val restoredStats = statsFromProperties(partition.parameters, table.identifier.table)
     if (restoredStats.isDefined) {
       partition.copy(
         spec = restoredSpec,
@@ -1249,7 +1270,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
       // treats dot as matching any single character and may return more partitions than we
       // expected. Here we do an extra filter to drop unexpected partitions.
       case Some(spec) if spec.exists(_._2.contains(".")) =>
-        res.filter(p => isPartialPartitionSpec(spec, p.spec))
+        res.filter(p => isPartialPartitionSpec(spec, toMetaStorePartitionSpec(p.spec)))
       case _ => res
     }
   }
@@ -1402,4 +1423,13 @@ object HiveExternalCatalog {
     provider.isDefined && provider != Some(DDLUtils.HIVE_PROVIDER)
   }
 
+  private[spark] def isHiveCompatibleDataType(dt: DataType): Boolean = dt match {
+    case _: AnsiIntervalType => false
+    case _: TimestampNTZType => false
+    case s: StructType => s.forall(f => isHiveCompatibleDataType(f.dataType))
+    case a: ArrayType => isHiveCompatibleDataType(a.elementType)
+    case m: MapType =>
+      isHiveCompatibleDataType(m.keyType) && isHiveCompatibleDataType(m.valueType)
+    case _ => true
+  }
 }

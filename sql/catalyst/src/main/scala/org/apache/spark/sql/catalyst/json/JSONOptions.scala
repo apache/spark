@@ -25,6 +25,7 @@ import com.fasterxml.jackson.core.{JsonFactory, JsonFactoryBuilder}
 import com.fasterxml.jackson.core.json.JsonReadFeature
 
 import org.apache.spark.internal.Logging
+import org.apache.spark.sql.catalyst.FileSourceOptions
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy
@@ -38,7 +39,7 @@ private[sql] class JSONOptions(
     @transient val parameters: CaseInsensitiveMap[String],
     defaultTimeZoneId: String,
     defaultColumnNameOfCorruptRecord: String)
-  extends Logging with Serializable  {
+  extends FileSourceOptions(parameters) with Logging  {
 
   def this(
     parameters: Map[String, String],
@@ -106,6 +107,10 @@ private[sql] class JSONOptions(
       s"${DateFormatter.defaultPattern}'T'HH:mm:ss[.SSS][XXX]"
     })
 
+  val timestampNTZFormatInRead: Option[String] = parameters.get("timestampNTZFormat")
+  val timestampNTZFormatInWrite: String =
+    parameters.getOrElse("timestampNTZFormat", s"${DateFormatter.defaultPattern}'T'HH:mm:ss[.SSS]")
+
   val multiLine = parameters.get("multiLine").map(_.toBoolean).getOrElse(false)
 
   /**
@@ -138,8 +143,9 @@ private[sql] class JSONOptions(
   val pretty: Boolean = parameters.get("pretty").map(_.toBoolean).getOrElse(false)
 
   /**
-   * Enables inferring of TimestampType from strings matched to the timestamp pattern
-   * defined by the timestampFormat option.
+   * Enables inferring of TimestampType and TimestampNTZType from strings matched to the
+   * corresponding timestamp pattern defined by the timestampFormat and timestampNTZFormat options
+   * respectively.
    */
   val inferTimestamp: Boolean = parameters.get("inferTimestamp").map(_.toBoolean).getOrElse(false)
 

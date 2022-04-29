@@ -317,6 +317,7 @@ private[spark] object JsonProtocol {
     ("Task ID" -> taskInfo.taskId) ~
     ("Index" -> taskInfo.index) ~
     ("Attempt" -> taskInfo.attemptNumber) ~
+    ("Partition ID" -> taskInfo.partitionId) ~
     ("Launch Time" -> taskInfo.launchTime) ~
     ("Executor ID" -> taskInfo.executorId) ~
     ("Host" -> taskInfo.host) ~
@@ -463,7 +464,7 @@ private[spark] object JsonProtocol {
       case ExecutorLostFailure(executorId, exitCausedByApp, reason) =>
         ("Executor ID" -> executorId) ~
         ("Exit Caused By App" -> exitCausedByApp) ~
-        ("Loss Reason" -> reason.map(_.toString))
+        ("Loss Reason" -> reason)
       case taskKilled: TaskKilled =>
         val accumUpdates = JArray(taskKilled.accumUpdates.map(accumulableInfoToJson).toList)
         ("Kill Reason" -> taskKilled.reason) ~
@@ -526,7 +527,9 @@ private[spark] object JsonProtocol {
     ("Log Urls" -> mapToJson(executorInfo.logUrlMap)) ~
     ("Attributes" -> mapToJson(executorInfo.attributes)) ~
     ("Resources" -> resourcesMapToJson(executorInfo.resourcesInfo)) ~
-    ("Resource Profile Id" -> executorInfo.resourceProfileId)
+    ("Resource Profile Id" -> executorInfo.resourceProfileId) ~
+    ("Registration Time" -> executorInfo.registrationTime) ~
+    ("Request Time" -> executorInfo.requestTime)
   }
 
   def resourcesMapToJson(m: Map[String, ResourceInformation]): JValue = {
@@ -916,6 +919,7 @@ private[spark] object JsonProtocol {
     val taskId = (json \ "Task ID").extract[Long]
     val index = (json \ "Index").extract[Int]
     val attempt = jsonOption(json \ "Attempt").map(_.extract[Int]).getOrElse(1)
+    val partitionId = jsonOption(json \ "Partition ID").map(_.extract[Int]).getOrElse(-1)
     val launchTime = (json \ "Launch Time").extract[Long]
     val executorId = weakIntern((json \ "Executor ID").extract[String])
     val host = weakIntern((json \ "Host").extract[String])
@@ -930,8 +934,9 @@ private[spark] object JsonProtocol {
       case None => Seq.empty[AccumulableInfo]
     }
 
-    val taskInfo =
-      new TaskInfo(taskId, index, attempt, launchTime, executorId, host, taskLocality, speculative)
+    val taskInfo = new TaskInfo(
+      taskId, index, attempt, partitionId, launchTime,
+      executorId, host, taskLocality, speculative)
     taskInfo.gettingResultTime = gettingResultTime
     taskInfo.finishTime = finishTime
     taskInfo.failed = failed
@@ -1220,8 +1225,15 @@ private[spark] object JsonProtocol {
       case Some(id) => id.extract[Int]
       case None => ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID
     }
+    val registrationTs = jsonOption(json \ "Registration Time") map { ts =>
+      ts.extract[Long]
+    }
+    val requestTs = jsonOption(json \ "Request Time") map { ts =>
+      ts.extract[Long]
+    }
+
     new ExecutorInfo(executorHost, totalCores, logUrls, attributes.toMap, resources.toMap,
-      resourceProfileId)
+      resourceProfileId, registrationTs, requestTs)
   }
 
   def blockUpdatedInfoFromJson(json: JValue): BlockUpdatedInfo = {

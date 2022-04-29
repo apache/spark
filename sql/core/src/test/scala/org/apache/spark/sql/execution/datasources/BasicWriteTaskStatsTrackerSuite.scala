@@ -254,7 +254,7 @@ class BasicWriteTaskStatsTrackerSuite extends SparkFunSuite {
   /**
    * Any FS which supports XAttr must raise an FNFE if the
    * file is missing. This verifies resilience on a path
-   * which the the local FS would not normally take.
+   * which the local FS would not normally take.
    */
   test("Missing File with XAttr") {
     val missing = new Path(tempDirPath, "missing")

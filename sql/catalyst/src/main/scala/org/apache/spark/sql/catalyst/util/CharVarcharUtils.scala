@@ -85,6 +85,22 @@ object CharVarcharUtils extends Logging {
   }
 
   /**
+   * Replaces CharType with VarcharType recursively in the given data type.
+   */
+  def replaceCharWithVarchar(dt: DataType): DataType = dt match {
+    case ArrayType(et, nullable) =>
+      ArrayType(replaceCharWithVarchar(et), nullable)
+    case MapType(kt, vt, nullable) =>
+      MapType(replaceCharWithVarchar(kt), replaceCharWithVarchar(vt), nullable)
+    case StructType(fields) =>
+      StructType(fields.map { field =>
+        field.copy(dataType = replaceCharWithVarchar(field.dataType))
+      })
+    case CharType(length) => VarcharType(length)
+    case _ => dt
+  }
+
+  /**
    * Replaces CharType/VarcharType with StringType recursively in the given data type, with a
    * warning message if it has char or varchar types
    */
@@ -134,6 +150,21 @@ object CharVarcharUtils extends Logging {
   def getRawSchema(schema: StructType): StructType = {
     val fields = schema.map { field =>
       getRawType(field.metadata).map(dt => field.copy(dataType = dt)).getOrElse(field)
+    }
+    StructType(fields)
+  }
+
+  def getRawSchema(schema: StructType, conf: SQLConf): StructType = {
+    val fields = schema.map { field =>
+      getRawType(field.metadata).map { dt =>
+        if (conf.getConf(SQLConf.CHAR_AS_VARCHAR)) {
+          val metadata = new MetadataBuilder().withMetadata(field.metadata)
+            .remove(CHAR_VARCHAR_TYPE_STRING_METADATA_KEY).build()
+          field.copy(dataType = replaceCharWithVarchar(dt), metadata = metadata)
+        } else {
+          field.copy(dataType = dt)
+        }
+      }.getOrElse(field)
     }
     StructType(fields)
   }

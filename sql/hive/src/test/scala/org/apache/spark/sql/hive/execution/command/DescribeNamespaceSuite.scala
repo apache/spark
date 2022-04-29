@@ -23,4 +23,6 @@ import org.apache.spark.sql.execution.command.v1
  * The class contains tests for the `DESCRIBE NAMESPACE` command to check V1 Hive external
  * table catalog.
  */
-class DescribeNamespaceSuite extends v1.DescribeNamespaceSuiteBase with CommandSuiteBase
+class DescribeNamespaceSuite extends v1.DescribeNamespaceSuiteBase with CommandSuiteBase {
+  override def commandVersion: String = super[DescribeNamespaceSuiteBase].commandVersion
+}

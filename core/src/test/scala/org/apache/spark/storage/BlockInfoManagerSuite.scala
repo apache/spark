@@ -64,7 +64,7 @@ class BlockInfoManagerSuite extends SparkFunSuite with BeforeAndAfterEach {
     try {
       TaskContext.setTaskContext(
         new TaskContextImpl(0, 0, 0, taskAttemptId, 0,
-          null, new Properties, null, TaskMetrics.empty, 1))
+          1, null, new Properties, null, TaskMetrics.empty, 1))
       block
     } finally {
       TaskContext.unset()
@@ -299,9 +299,9 @@ class BlockInfoManagerSuite extends SparkFunSuite with BeforeAndAfterEach {
     assert(ThreadUtils.awaitResult(write2Future, 1.seconds).isDefined)
   }
 
-  test("removing a non-existent block throws IllegalArgumentException") {
+  test("removing a non-existent block throws SparkException") {
     withTaskId(0) {
-      intercept[IllegalArgumentException] {
+      intercept[SparkException] {
         blockInfoManager.removeBlock("non-existent-block")
       }
     }
@@ -352,11 +352,12 @@ class BlockInfoManagerSuite extends SparkFunSuite with BeforeAndAfterEach {
 
   test("releaseAllLocksForTask releases write locks") {
     val initialNumMapEntries = blockInfoManager.getNumberOfMapEntries
+    assert(initialNumMapEntries == 12)
     withTaskId(0) {
       assert(blockInfoManager.lockNewBlockForWriting("block", newBlockInfo()))
     }
-    assert(blockInfoManager.getNumberOfMapEntries === initialNumMapEntries + 3)
+    assert(blockInfoManager.getNumberOfMapEntries === initialNumMapEntries + 2)
     blockInfoManager.releaseAllLocksForTask(0)
-    assert(blockInfoManager.getNumberOfMapEntries === initialNumMapEntries)
+    assert(blockInfoManager.getNumberOfMapEntries === initialNumMapEntries - 1)
   }
 }

@@ -7,7 +7,10 @@
 *.pyo
 *.swp
 *~
+.java-version
 .DS_Store
+.ammonite
+.bloop
 .bsp/
 .cache
 .classpath
@@ -20,10 +23,12 @@
 # SPARK-35223: Add IssueNavigationLink to make IDEA support hyperlink on JIRA Ticket and GitHub PR on Git plugin.
 !.idea/vcs.xml
 .idea_modules/
+.metals
 .project
 .pydevproject
 .scala_dependencies
 .settings
+.vscode
 /lib/
 R-unit-tests.log
 R/unit-tests.out
@@ -58,6 +63,7 @@ lint-r-report.log
 lint-js-report.log
 log/
 logs/
+metals.sbt
 out/
 project/boot/
 project/build/target/
@@ -111,3 +117,8 @@ spark-warehouse/
 
 # For Node.js
 node_modules
+
+# For Antlr
+sql/catalyst/gen/
+sql/catalyst/src/main/antlr4/org/apache/spark/sql/catalyst/parser/SqlBaseLexer.tokens
+sql/catalyst/src/main/antlr4/org/apache/spark/sql/catalyst/parser/gen/

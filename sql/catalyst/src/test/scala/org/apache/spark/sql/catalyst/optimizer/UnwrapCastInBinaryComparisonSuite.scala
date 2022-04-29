@@ -23,11 +23,11 @@ import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans.DslLogicalPlan
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.IntegralLiteralTestUtils._
-import org.apache.spark.sql.catalyst.expressions.aggregate.First
 import org.apache.spark.sql.catalyst.optimizer.UnwrapCastInBinaryComparison._
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 class UnwrapCastInBinaryComparisonSuite extends PlanTest with ExpressionEvalHelper {
@@ -38,11 +38,12 @@ class UnwrapCastInBinaryComparisonSuite extends PlanTest with ExpressionEvalHelp
         NullPropagation, UnwrapCastInBinaryComparison) :: Nil
   }
 
-  val testRelation: LocalRelation = LocalRelation('a.short, 'b.float, 'c.decimal(5, 2), 'd.boolean)
-  val f: BoundReference = 'a.short.canBeNull.at(0)
-  val f2: BoundReference = 'b.float.canBeNull.at(1)
-  val f3: BoundReference = 'c.decimal(5, 2).canBeNull.at(2)
-  val f4: BoundReference = 'd.boolean.canBeNull.at(3)
+  val testRelation: LocalRelation = LocalRelation($"a".short, $"b".float,
+    $"c".decimal(5, 2), $"d".boolean)
+  val f: BoundReference = $"a".short.canBeNull.at(0)
+  val f2: BoundReference = $"b".float.canBeNull.at(1)
+  val f3: BoundReference = $"c".decimal(5, 2).canBeNull.at(2)
+  val f4: BoundReference = $"d".boolean.canBeNull.at(3)
 
   test("unwrap casts when literal == max") {
     val v = Short.MaxValue
@@ -183,10 +184,10 @@ class UnwrapCastInBinaryComparisonSuite extends PlanTest with ExpressionEvalHelp
   }
 
  test("unwrap cast should skip when expression is non-deterministic or foldable") {
-    Seq(positiveInt, negativeInt).foreach(v => {
-      val e = Cast(First(f, ignoreNulls = true), IntegerType) <=> v
+   Seq(positiveLong, negativeLong).foreach (v => {
+     val e = Cast(Rand(0), LongType) <=> v
       assertEquivalent(e, e, evaluate = false)
-      val e2 = Cast(Literal(30.toShort), IntegerType) >= v
+      val e2 = Cast(Literal(30), LongType) >= v
       assertEquivalent(e2, e2, evaluate = false)
     })
   }
@@ -203,12 +204,18 @@ class UnwrapCastInBinaryComparisonSuite extends PlanTest with ExpressionEvalHelp
   }
 
   test("unwrap casts should skip if downcast failed") {
-    val decimalValue = decimal2(123456.1234)
-    assertEquivalent(castDecimal2(f3) === decimalValue, castDecimal2(f3) === decimalValue)
+    Seq("true", "false").foreach { ansiEnabled =>
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> ansiEnabled) {
+        val decimalValue = decimal2(123456.1234)
+        assertEquivalent(castDecimal2(f3) === decimalValue, castDecimal2(f3) === decimalValue)
+      }
+    }
   }
 
   test("unwrap cast should skip if cannot coerce type") {
-    assertEquivalent(Cast(f, ByteType) > 100.toByte, Cast(f, ByteType) > 100.toByte)
+    if (!conf.ansiEnabled) {
+      assertEquivalent(Cast(f, ByteType) > 100.toByte, Cast(f, ByteType) > 100.toByte)
+    }
   }
 
   test("test getRange()") {

@@ -18,7 +18,7 @@
 package org.apache.spark.sql
 
 import java.sql.{Date, Timestamp}
-import java.time.LocalDateTime
+import java.time.{Duration, LocalDateTime, Period}
 
 import org.apache.spark.sql.catalyst.expressions.aggregate.ApproximatePercentile
 import org.apache.spark.sql.catalyst.expressions.aggregate.ApproximatePercentile.DEFAULT_PERCENTILE_ACCURACY
@@ -32,7 +32,7 @@ import org.apache.spark.sql.test.SharedSparkSession
 class ApproximatePercentileQuerySuite extends QueryTest with SharedSparkSession {
   import testImplicits._
 
-  private val table = "percentile_test"
+  private val table = "percentile_approx"
 
   test("percentile_approx, single percentile value") {
     withTempView(table) {
@@ -317,6 +317,24 @@ class ApproximatePercentileQuerySuite extends QueryTest with SharedSparkSession 
              |  percentile_approx(col, 0.77, 1000000)
              |FROM $table""".stripMargin),
         Row(18, 17, 17, 17))
+    }
+  }
+
+  test("SPARK-37138: Support Ansi Interval type in ApproximatePercentile") {
+    withTempView(table) {
+      Seq((Period.ofMonths(100), Duration.ofSeconds(100L)),
+        (Period.ofMonths(200), Duration.ofSeconds(200L)),
+        (Period.ofMonths(300), Duration.ofSeconds(300L)))
+        .toDF("col1", "col2").createOrReplaceTempView(table)
+        checkAnswer(
+          spark.sql(
+            s"""SELECT
+               |  percentile_approx(col1, 0.5),
+               |  SUM(null),
+               |  percentile_approx(col2, 0.5)
+               |FROM $table
+           """.stripMargin),
+          Row(Period.ofMonths(200).normalized(), null, Duration.ofSeconds(200L)))
     }
   }
 }

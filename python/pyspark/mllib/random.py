@@ -21,22 +21,31 @@ Python package for random data generation.
 
 import sys
 from functools import wraps
+from typing import Any, Callable, Optional
+
+import numpy as np
 
 from pyspark.mllib.common import callMLlibFunc
+from pyspark.context import SparkContext
+from pyspark.rdd import RDD
+from pyspark.mllib.linalg import Vector
 
 
-__all__ = ['RandomRDDs', ]
+__all__ = [
+    "RandomRDDs",
+]
 
 
-def toArray(f):
+def toArray(f: Callable[..., RDD[Vector]]) -> Callable[..., RDD[np.ndarray]]:
     @wraps(f)
-    def func(sc, *a, **kw):
+    def func(sc: SparkContext, *a: Any, **kw: Any) -> RDD[np.ndarray]:
         rdd = f(sc, *a, **kw)
         return rdd.map(lambda vec: vec.toArray())
+
     return func
 
 
-class RandomRDDs(object):
+class RandomRDDs:
     """
     Generator methods for creating RDDs comprised of i.i.d samples from
     some distribution.
@@ -45,7 +54,9 @@ class RandomRDDs(object):
     """
 
     @staticmethod
-    def uniformRDD(sc, size, numPartitions=None, seed=None):
+    def uniformRDD(
+        sc: SparkContext, size: int, numPartitions: Optional[int] = None, seed: Optional[int] = None
+    ) -> RDD[float]:
         """
         Generates an RDD comprised of i.i.d. samples from the
         uniform distribution U(0.0, 1.0).
@@ -88,7 +99,9 @@ class RandomRDDs(object):
         return callMLlibFunc("uniformRDD", sc._jsc, size, numPartitions, seed)
 
     @staticmethod
-    def normalRDD(sc, size, numPartitions=None, seed=None):
+    def normalRDD(
+        sc: SparkContext, size: int, numPartitions: Optional[int] = None, seed: Optional[int] = None
+    ) -> RDD[float]:
         """
         Generates an RDD comprised of i.i.d. samples from the standard normal
         distribution.
@@ -129,7 +142,14 @@ class RandomRDDs(object):
         return callMLlibFunc("normalRDD", sc._jsc, size, numPartitions, seed)
 
     @staticmethod
-    def logNormalRDD(sc, mean, std, size, numPartitions=None, seed=None):
+    def logNormalRDD(
+        sc: SparkContext,
+        mean: float,
+        std: float,
+        size: int,
+        numPartitions: Optional[int] = None,
+        seed: Optional[int] = None,
+    ) -> RDD[float]:
         """
         Generates an RDD comprised of i.i.d. samples from the log normal
         distribution with the input mean and standard distribution.
@@ -172,11 +192,18 @@ class RandomRDDs(object):
         >>> abs(stats.stdev() - expStd) < 0.5
         True
         """
-        return callMLlibFunc("logNormalRDD", sc._jsc, float(mean), float(std),
-                             size, numPartitions, seed)
+        return callMLlibFunc(
+            "logNormalRDD", sc._jsc, float(mean), float(std), size, numPartitions, seed
+        )
 
     @staticmethod
-    def poissonRDD(sc, mean, size, numPartitions=None, seed=None):
+    def poissonRDD(
+        sc: SparkContext,
+        mean: float,
+        size: int,
+        numPartitions: Optional[int] = None,
+        seed: Optional[int] = None,
+    ) -> RDD[float]:
         """
         Generates an RDD comprised of i.i.d. samples from the Poisson
         distribution with the input mean.
@@ -217,7 +244,13 @@ class RandomRDDs(object):
         return callMLlibFunc("poissonRDD", sc._jsc, float(mean), size, numPartitions, seed)
 
     @staticmethod
-    def exponentialRDD(sc, mean, size, numPartitions=None, seed=None):
+    def exponentialRDD(
+        sc: SparkContext,
+        mean: float,
+        size: int,
+        numPartitions: Optional[int] = None,
+        seed: Optional[int] = None,
+    ) -> RDD[float]:
         """
         Generates an RDD comprised of i.i.d. samples from the Exponential
         distribution with the input mean.
@@ -258,7 +291,14 @@ class RandomRDDs(object):
         return callMLlibFunc("exponentialRDD", sc._jsc, float(mean), size, numPartitions, seed)
 
     @staticmethod
-    def gammaRDD(sc, shape, scale, size, numPartitions=None, seed=None):
+    def gammaRDD(
+        sc: SparkContext,
+        shape: float,
+        scale: float,
+        size: int,
+        numPartitions: Optional[int] = None,
+        seed: Optional[int] = None,
+    ) -> RDD[float]:
         """
         Generates an RDD comprised of i.i.d. samples from the Gamma
         distribution with the input shape and scale.
@@ -301,12 +341,19 @@ class RandomRDDs(object):
         >>> abs(stats.stdev() - expStd) < 0.5
         True
         """
-        return callMLlibFunc("gammaRDD", sc._jsc, float(shape),
-                             float(scale), size, numPartitions, seed)
+        return callMLlibFunc(
+            "gammaRDD", sc._jsc, float(shape), float(scale), size, numPartitions, seed
+        )
 
     @staticmethod
     @toArray
-    def uniformVectorRDD(sc, numRows, numCols, numPartitions=None, seed=None):
+    def uniformVectorRDD(
+        sc: SparkContext,
+        numRows: int,
+        numCols: int,
+        numPartitions: Optional[int] = None,
+        seed: Optional[int] = None,
+    ) -> RDD[Vector]:
         """
         Generates an RDD comprised of vectors containing i.i.d. samples drawn
         from the uniform distribution U(0.0, 1.0).
@@ -346,7 +393,13 @@ class RandomRDDs(object):
 
     @staticmethod
     @toArray
-    def normalVectorRDD(sc, numRows, numCols, numPartitions=None, seed=None):
+    def normalVectorRDD(
+        sc: SparkContext,
+        numRows: int,
+        numCols: int,
+        numPartitions: Optional[int] = None,
+        seed: Optional[int] = None,
+    ) -> RDD[Vector]:
         """
         Generates an RDD comprised of vectors containing i.i.d. samples drawn
         from the standard normal distribution.
@@ -386,7 +439,15 @@ class RandomRDDs(object):
 
     @staticmethod
     @toArray
-    def logNormalVectorRDD(sc, mean, std, numRows, numCols, numPartitions=None, seed=None):
+    def logNormalVectorRDD(
+        sc: SparkContext,
+        mean: float,
+        std: float,
+        numRows: int,
+        numCols: int,
+        numPartitions: Optional[int] = None,
+        seed: Optional[int] = None,
+    ) -> RDD[Vector]:
         """
         Generates an RDD comprised of vectors containing i.i.d. samples drawn
         from the log normal distribution.
@@ -432,12 +493,27 @@ class RandomRDDs(object):
         >>> abs(mat.std() - expStd) < 0.1
         True
         """
-        return callMLlibFunc("logNormalVectorRDD", sc._jsc, float(mean), float(std),
-                             numRows, numCols, numPartitions, seed)
+        return callMLlibFunc(
+            "logNormalVectorRDD",
+            sc._jsc,
+            float(mean),
+            float(std),
+            numRows,
+            numCols,
+            numPartitions,
+            seed,
+        )
 
     @staticmethod
     @toArray
-    def poissonVectorRDD(sc, mean, numRows, numCols, numPartitions=None, seed=None):
+    def poissonVectorRDD(
+        sc: SparkContext,
+        mean: float,
+        numRows: int,
+        numCols: int,
+        numPartitions: Optional[int] = None,
+        seed: Optional[int] = None,
+    ) -> RDD[Vector]:
         """
         Generates an RDD comprised of vectors containing i.i.d. samples drawn
         from the Poisson distribution with the input mean.
@@ -478,12 +554,20 @@ class RandomRDDs(object):
         >>> abs(mat.std() - sqrt(mean)) < 0.5
         True
         """
-        return callMLlibFunc("poissonVectorRDD", sc._jsc, float(mean), numRows, numCols,
-                             numPartitions, seed)
+        return callMLlibFunc(
+            "poissonVectorRDD", sc._jsc, float(mean), numRows, numCols, numPartitions, seed
+        )
 
     @staticmethod
     @toArray
-    def exponentialVectorRDD(sc, mean, numRows, numCols, numPartitions=None, seed=None):
+    def exponentialVectorRDD(
+        sc: SparkContext,
+        mean: float,
+        numRows: int,
+        numCols: int,
+        numPartitions: Optional[int] = None,
+        seed: Optional[int] = None,
+    ) -> RDD[Vector]:
         """
         Generates an RDD comprised of vectors containing i.i.d. samples drawn
         from the Exponential distribution with the input mean.
@@ -524,12 +608,21 @@ class RandomRDDs(object):
         >>> abs(mat.std() - sqrt(mean)) < 0.5
         True
         """
-        return callMLlibFunc("exponentialVectorRDD", sc._jsc, float(mean), numRows, numCols,
-                             numPartitions, seed)
+        return callMLlibFunc(
+            "exponentialVectorRDD", sc._jsc, float(mean), numRows, numCols, numPartitions, seed
+        )
 
     @staticmethod
     @toArray
-    def gammaVectorRDD(sc, shape, scale, numRows, numCols, numPartitions=None, seed=None):
+    def gammaVectorRDD(
+        sc: SparkContext,
+        shape: float,
+        scale: float,
+        numRows: int,
+        numCols: int,
+        numPartitions: Optional[int] = None,
+        seed: Optional[int] = None,
+    ) -> RDD[Vector]:
         """
         Generates an RDD comprised of vectors containing i.i.d. samples drawn
         from the Gamma distribution.
@@ -574,21 +667,27 @@ class RandomRDDs(object):
         >>> abs(mat.std() - expStd) < 0.1
         True
         """
-        return callMLlibFunc("gammaVectorRDD", sc._jsc, float(shape), float(scale),
-                             numRows, numCols, numPartitions, seed)
+        return callMLlibFunc(
+            "gammaVectorRDD",
+            sc._jsc,
+            float(shape),
+            float(scale),
+            numRows,
+            numCols,
+            numPartitions,
+            seed,
+        )
 
 
-def _test():
+def _test() -> None:
     import doctest
     from pyspark.sql import SparkSession
+
     globs = globals().copy()
     # The small batch size here ensures that we see multiple batches,
     # even in these small test examples:
-    spark = SparkSession.builder\
-        .master("local[2]")\
-        .appName("mllib.random tests")\
-        .getOrCreate()
-    globs['sc'] = spark.sparkContext
+    spark = SparkSession.builder.master("local[2]").appName("mllib.random tests").getOrCreate()
+    globs["sc"] = spark.sparkContext
     (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
     spark.stop()
     if failure_count:

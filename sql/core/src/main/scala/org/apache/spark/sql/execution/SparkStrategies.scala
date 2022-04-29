@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution
 import java.util.Locale
 
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{execution, Strategy}
+import org.apache.spark.sql.{execution, AnalysisException, Strategy}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.RowEncoder
 import org.apache.spark.sql.catalyst.expressions._
@@ -29,7 +29,6 @@ import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight, BuildSide
 import org.apache.spark.sql.catalyst.planning._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.plans.physical.RoundRobinPartitioning
 import org.apache.spark.sql.catalyst.streaming.{InternalOutputModes, StreamingRelationV2}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.aggregate.AggUtils
@@ -91,6 +90,17 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           TakeOrderedAndProjectExec(limit, order, projectList, planLater(child)) :: Nil
         case Limit(IntegerLiteral(limit), child) =>
           CollectLimitExec(limit, planLater(child)) :: Nil
+        case LimitAndOffset(IntegerLiteral(limit), IntegerLiteral(offset),
+          Sort(order, true, child)) if limit + offset < conf.topKSortFallbackThreshold =>
+          TakeOrderedAndProjectExec(
+            limit, order, child.output, planLater(child), Some(offset)) :: Nil
+        case LimitAndOffset(IntegerLiteral(limit), IntegerLiteral(offset),
+          Project(projectList, Sort(order, true, child)))
+            if limit + offset < conf.topKSortFallbackThreshold =>
+          TakeOrderedAndProjectExec(
+            limit, order, projectList, planLater(child), Some(offset)) :: Nil
+        case LimitAndOffset(IntegerLiteral(limit), IntegerLiteral(offset), child) =>
+          CollectLimitExec(limit, planLater(child), Some(offset)) :: Nil
         case Tail(IntegerLiteral(limit), child) =>
           CollectTailExec(limit, planLater(child)) :: Nil
         case other => planLater(other) :: Nil
@@ -101,6 +111,24 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case Limit(IntegerLiteral(limit), Project(projectList, Sort(order, true, child)))
           if limit < conf.topKSortFallbackThreshold =>
         TakeOrderedAndProjectExec(limit, order, projectList, planLater(child)) :: Nil
+      // This is a global LIMIT and OFFSET over a logical sorting operator,
+      // where the sum of specified limit and specified offset is less than a heuristic threshold.
+      // In this case we generate a physical top-K sorting operator, passing down
+      // the limit and offset values to be evaluated inline during the physical
+      // sorting operation for greater efficiency.
+      case LimitAndOffset(
+          IntegerLiteral(limit),
+          IntegerLiteral(offset),
+          Sort(order, true, child))
+          if limit + offset < conf.topKSortFallbackThreshold =>
+        TakeOrderedAndProjectExec(
+          limit, order, child.output, planLater(child), Some(offset)) :: Nil
+      case LimitAndOffset(
+          IntegerLiteral(limit),
+          IntegerLiteral(offset),
+          Project(projectList, Sort(order, true, child)))
+          if limit + offset < conf.topKSortFallbackThreshold =>
+        TakeOrderedAndProjectExec(limit, order, projectList, planLater(child), Some(offset)) :: Nil
       case _ => Nil
     }
   }
@@ -266,11 +294,15 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
             }
         }
 
-        createBroadcastHashJoin(true)
-          .orElse { if (hintToSortMergeJoin(hint)) createSortMergeJoin() else None }
-          .orElse(createShuffleHashJoin(true))
-          .orElse { if (hintToShuffleReplicateNL(hint)) createCartesianProduct() else None }
-          .getOrElse(createJoinWithoutHint())
+        if (hint.isEmpty) {
+          createJoinWithoutHint()
+        } else {
+          createBroadcastHashJoin(true)
+            .orElse { if (hintToSortMergeJoin(hint)) createSortMergeJoin() else None }
+            .orElse(createShuffleHashJoin(true))
+            .orElse { if (hintToShuffleReplicateNL(hint)) createCartesianProduct() else None }
+            .getOrElse(createJoinWithoutHint())
+        }
 
       case j @ ExtractSingleColumnNullAwareAntiJoin(leftKeys, rightKeys) =>
         Seq(joins.BroadcastHashJoinExec(leftKeys, rightKeys, LeftAnti, BuildRight,
@@ -339,10 +371,13 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
             }
         }
 
-        createBroadcastNLJoin(hintToBroadcastLeft(hint), hintToBroadcastRight(hint))
-          .orElse { if (hintToShuffleReplicateNL(hint)) createCartesianProduct() else None }
-          .getOrElse(createJoinWithoutHint())
-
+        if (hint.isEmpty) {
+          createJoinWithoutHint()
+        } else {
+          createBroadcastNLJoin(hintToBroadcastLeft(hint), hintToBroadcastRight(hint))
+            .orElse { if (hintToShuffleReplicateNL(hint)) createCartesianProduct() else None }
+            .getOrElse(createJoinWithoutHint())
+        }
 
       // --- Cases where this strategy does not apply ---------------------------------------------
       case _ => Nil
@@ -366,7 +401,8 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         namedGroupingExpressions, aggregateExpressions, rewrittenResultExpressions, child) =>
 
         if (aggregateExpressions.exists(PythonUDF.isGroupedAggPandasUDF)) {
-          throw QueryCompilationErrors.groupAggPandasUDFUnsupportedByStreamingAggError()
+          throw new AnalysisException(
+            "Streaming aggregation doesn't support group aggregate pandas UDF")
         }
 
         val sessionWindowOption = namedGroupingExpressions.find { p =>
@@ -433,7 +469,10 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
 
       /** Ensures that this plan does not have a streaming aggregate in it. */
       def hasNoStreamingAgg: Boolean = {
-        plan.collectFirst { case a: Aggregate if a.isStreaming => a }.isEmpty
+        !plan.exists {
+          case a: Aggregate => a.isStreaming
+          case _ => false
+        }
       }
 
       // The following cases of limits on a streaming plan has to be executed with a stateful
@@ -560,9 +599,12 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           resultExpressions,
           planLater(child)))
 
-      case PhysicalAggregation(_, _, _, _) =>
+      case PhysicalAggregation(_, aggExpressions, _, _) =>
+        val groupAggPandasUDFNames = aggExpressions
+          .filter(_.isInstanceOf[PythonUDF])
+          .map(_.asInstanceOf[PythonUDF].name)
         // If cannot match the two cases above, then it's an error
-        throw QueryCompilationErrors.cannotUseMixtureOfAggFunctionAndGroupAggPandasUDFError()
+        throw QueryCompilationErrors.invalidPandasUDFPlacementError(groupAggPandasUDFNames.distinct)
 
       case _ => Nil
     }
@@ -664,36 +706,6 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
     }
   }
 
-  /**
-   * Strategy to plan CTE relations left not inlined.
-   */
-  object WithCTEStrategy extends Strategy {
-    override def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
-      case WithCTE(plan, cteDefs) =>
-        val cteMap = QueryExecution.cteMap
-        cteDefs.foreach { cteDef =>
-          cteMap.put(cteDef.id, cteDef)
-        }
-        planLater(plan) :: Nil
-
-      case r: CTERelationRef =>
-        val ctePlan = QueryExecution.cteMap(r.cteId).child
-        val projectList = r.output.zip(ctePlan.output).map { case (tgtAttr, srcAttr) =>
-          Alias(srcAttr, tgtAttr.name)(exprId = tgtAttr.exprId)
-        }
-        val newPlan = Project(projectList, ctePlan)
-        // Plan CTE ref as a repartition shuffle so that all refs of the same CTE def will share
-        // an Exchange reuse at runtime.
-        // TODO create a new identity partitioning instead of using RoundRobinPartitioning.
-        exchange.ShuffleExchangeExec(
-          RoundRobinPartitioning(conf.numShufflePartitions),
-          planLater(newPlan),
-          REPARTITION_BY_COL) :: Nil
-
-      case _ => Nil
-    }
-  }
-
   object BasicOperators extends Strategy {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case d: DataWritingCommand => DataWritingCommandExec(d, planLater(d.query)) :: Nil
@@ -755,6 +767,8 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           func, output, planLater(left), planLater(right)) :: Nil
       case logical.MapInPandas(func, output, child) =>
         execution.python.MapInPandasExec(func, output, planLater(child)) :: Nil
+      case logical.PythonMapInArrow(func, output, child) =>
+        execution.python.PythonMapInArrowExec(func, output, planLater(child)) :: Nil
       case logical.AttachDistributedSequence(attr, child) =>
         execution.python.AttachDistributedSequenceExec(attr, planLater(child)) :: Nil
       case logical.MapElements(f, _, _, objAttr, child) =>
@@ -804,6 +818,8 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         execution.LocalLimitExec(limit, planLater(child)) :: Nil
       case logical.GlobalLimit(IntegerLiteral(limit), child) =>
         execution.GlobalLimitExec(limit, planLater(child)) :: Nil
+      case logical.GlobalLimitAndOffset(IntegerLiteral(limit), IntegerLiteral(offset), child) =>
+        execution.GlobalLimitAndOffsetExec(limit, offset, planLater(child)) :: Nil
       case union: logical.Union =>
         execution.UnionExec(union.children.map(planLater)) :: Nil
       case g @ logical.Generate(generator, _, outer, _, _, child) =>

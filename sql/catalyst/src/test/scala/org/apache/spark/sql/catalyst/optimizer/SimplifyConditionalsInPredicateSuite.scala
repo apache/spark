@@ -41,8 +41,9 @@ class SimplifyConditionalsInPredicateSuite extends PlanTest {
   }
 
   private val testRelation =
-    LocalRelation('i.int, 'b.boolean, 'a.array(IntegerType), 'm.map(IntegerType, IntegerType))
-  private val anotherTestRelation = LocalRelation('d.int)
+    LocalRelation($"i".int, $"b".boolean, $"a".array(IntegerType), Symbol("m")
+      .map(IntegerType, IntegerType))
+  private val anotherTestRelation = LocalRelation($"d".int)
 
   test("IF(cond, trueVal, false) => AND(cond, trueVal)") {
     val originalCond = If(
@@ -116,7 +117,10 @@ class SimplifyConditionalsInPredicateSuite extends PlanTest {
       testJoin(originalCond, expectedCond = expectedCond)
       testDelete(originalCond, expectedCond = expectedCond)
       testUpdate(originalCond, expectedCond = expectedCond)
-      testProjection(originalCond, expectedExpr = originalCond)
+      testProjection(originalCond,
+        expectedExpr = CaseWhen(
+          Seq((UnresolvedAttribute("i") > Literal(10), UnresolvedAttribute("b"))),
+          elseExp.filterNot(_.semanticEquals(Literal(null, BooleanType)))))
     }
   }
 
@@ -222,11 +226,11 @@ class SimplifyConditionalsInPredicateSuite extends PlanTest {
   }
 
   private def testProjection(originalExpr: Expression, expectedExpr: Expression): Unit = {
-    test((rel, exp) => rel.select(exp), originalExpr, expectedExpr)
+    test((rel, exp) => rel.select(exp), originalExpr.as("out"), expectedExpr.as("out"))
   }
 
   private def testDelete(originalCond: Expression, expectedCond: Expression): Unit = {
-    test((rel, expr) => DeleteFromTable(rel, Some(expr)), originalCond, expectedCond)
+    test((rel, expr) => DeleteFromTable(rel, expr), originalCond, expectedCond)
   }
 
   private def testUpdate(originalCond: Expression, expectedCond: Expression): Unit = {

@@ -31,13 +31,14 @@ import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName
 import org.apache.spark.SparkException
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.JoinedRow
+import org.apache.spark.sql.catalyst.util.RebaseDateTime.RebaseSpec
 import org.apache.spark.sql.connector.expressions.aggregate.{Aggregation, Count, CountStar, Max, Min}
-import org.apache.spark.sql.execution.RowToColumnConverter
-import org.apache.spark.sql.execution.datasources.PartitioningUtils
-import org.apache.spark.sql.execution.vectorized.{OffHeapColumnVector, OnHeapColumnVector}
+import org.apache.spark.sql.execution.datasources.AggregatePushDownUtils
+import org.apache.spark.sql.execution.datasources.v2.V2ColumnUtils
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.{LegacyBehaviorPolicy, PARQUET_AGGREGATE_PUSHDOWN_ENABLED}
-import org.apache.spark.sql.types.StructType
-import org.apache.spark.sql.vectorized.{ColumnarBatch, ColumnVector}
+import org.apache.spark.sql.types.{ArrayType, AtomicType, DataType, MapType, StructField, StructType}
 
 object ParquetUtils {
   def inferSchema(
@@ -146,10 +147,78 @@ object ParquetUtils {
   }
 
   /**
+   * A StructField metadata key used to set the field id of a column in the Parquet schema.
+   */
+  val FIELD_ID_METADATA_KEY = "parquet.field.id"
+
+  /**
+   * Whether there exists a field in the schema, whether inner or leaf, has the parquet field
+   * ID metadata.
+   */
+  def hasFieldIds(schema: StructType): Boolean = {
+    def recursiveCheck(schema: DataType): Boolean = {
+      schema match {
+        case st: StructType =>
+          st.exists(field => hasFieldId(field) || recursiveCheck(field.dataType))
+
+        case at: ArrayType => recursiveCheck(at.elementType)
+
+        case mt: MapType => recursiveCheck(mt.keyType) || recursiveCheck(mt.valueType)
+
+        case _ =>
+          // No need to really check primitive types, just to terminate the recursion
+          false
+      }
+    }
+    if (schema.isEmpty) false else recursiveCheck(schema)
+  }
+
+  def hasFieldId(field: StructField): Boolean =
+    field.metadata.contains(FIELD_ID_METADATA_KEY)
+
+  def getFieldId(field: StructField): Int = {
+    require(hasFieldId(field),
+      s"The key `$FIELD_ID_METADATA_KEY` doesn't exist in the metadata of " + field)
+    try {
+      Math.toIntExact(field.metadata.getLong(FIELD_ID_METADATA_KEY))
+    } catch {
+      case _: ArithmeticException | _: ClassCastException =>
+        throw new IllegalArgumentException(
+          s"The key `$FIELD_ID_METADATA_KEY` must be a 32-bit integer")
+    }
+  }
+
+  /**
+   * Whether columnar read is supported for the input `schema`.
+   */
+  def isBatchReadSupportedForSchema(sqlConf: SQLConf, schema: StructType): Boolean =
+    sqlConf.parquetVectorizedReaderEnabled &&
+      schema.forall(f => isBatchReadSupported(sqlConf, f.dataType))
+
+  def isBatchReadSupported(sqlConf: SQLConf, dt: DataType): Boolean = dt match {
+    case _: AtomicType =>
+      true
+    case at: ArrayType =>
+      sqlConf.parquetVectorizedReaderNestedColumnEnabled &&
+        isBatchReadSupported(sqlConf, at.elementType)
+    case mt: MapType =>
+      sqlConf.parquetVectorizedReaderNestedColumnEnabled &&
+        isBatchReadSupported(sqlConf, mt.keyType) &&
+        isBatchReadSupported(sqlConf, mt.valueType)
+    case st: StructType =>
+      sqlConf.parquetVectorizedReaderNestedColumnEnabled &&
+        st.fields.forall(f => isBatchReadSupported(sqlConf, f.dataType))
+    case _ =>
+      false
+  }
+
+  /**
    * When the partial aggregates (Max/Min/Count) are pushed down to Parquet, we don't need to
    * createRowBaseReader to read data from Parquet and aggregate at Spark layer. Instead we want
    * to get the partial aggregates (Max/Min/Count) result using the statistics information
-   * from Parquet footer file, and then construct an InternalRow from these aggregate results.
+   * from Parquet file footer, and then construct an InternalRow from these aggregate results.
+   *
+   * NOTE: if statistics is missing from Parquet file footer, exception would be thrown.
    *
    * @return Aggregate results in the format of InternalRow
    */
@@ -160,18 +229,29 @@ object ParquetUtils {
       partitionSchema: StructType,
       aggregation: Aggregation,
       aggSchema: StructType,
-      datetimeRebaseMode: LegacyBehaviorPolicy.Value,
-      isCaseSensitive: Boolean): InternalRow = {
+      partitionValues: InternalRow,
+      datetimeRebaseSpec: RebaseSpec): InternalRow = {
     val (primitiveTypes, values) = getPushedDownAggResult(
-      footer, filePath, dataSchema, partitionSchema, aggregation, isCaseSensitive)
+      footer, filePath, dataSchema, partitionSchema, aggregation)
 
     val builder = Types.buildMessage
     primitiveTypes.foreach(t => builder.addField(t))
     val parquetSchema = builder.named("root")
 
+    // if there are group by columns, we will build result row first,
+    // and then append group by columns values (partition columns values) to the result row.
+    val schemaWithoutGroupBy =
+      AggregatePushDownUtils.getSchemaWithoutGroupingExpression(aggSchema, aggregation)
+
     val schemaConverter = new ParquetToSparkSchemaConverter
-    val converter = new ParquetRowConverter(schemaConverter, parquetSchema, aggSchema,
-      None, datetimeRebaseMode, LegacyBehaviorPolicy.CORRECTED, NoopUpdater)
+    val converter = new ParquetRowConverter(
+      schemaConverter,
+      parquetSchema,
+      schemaWithoutGroupBy,
+      None,
+      datetimeRebaseSpec,
+      RebaseSpec(LegacyBehaviorPolicy.CORRECTED),
+      NoopUpdater)
     val primitiveTypeNames = primitiveTypes.map(_.getPrimitiveTypeName)
     primitiveTypeNames.zipWithIndex.foreach {
       case (PrimitiveType.PrimitiveTypeName.BOOLEAN, i) =>
@@ -198,45 +278,14 @@ object ParquetUtils {
       case (_, i) =>
         throw new SparkException("Unexpected parquet type name: " + primitiveTypeNames(i))
     }
-    converter.currentRecord
-  }
 
-  /**
-   * When the aggregates (Max/Min/Count) are pushed down to Parquet, in the case of
-   * PARQUET_VECTORIZED_READER_ENABLED sets to true, we don't need buildColumnarReader
-   * to read data from Parquet and aggregate at Spark layer. Instead we want
-   * to get the aggregates (Max/Min/Count) result using the statistics information
-   * from Parquet footer file, and then construct a ColumnarBatch from these aggregate results.
-   *
-   * @return Aggregate results in the format of ColumnarBatch
-   */
-  private[sql] def createAggColumnarBatchFromFooter(
-      footer: ParquetMetadata,
-      filePath: String,
-      dataSchema: StructType,
-      partitionSchema: StructType,
-      aggregation: Aggregation,
-      aggSchema: StructType,
-      offHeap: Boolean,
-      datetimeRebaseMode: LegacyBehaviorPolicy.Value,
-      isCaseSensitive: Boolean): ColumnarBatch = {
-    val row = createAggInternalRowFromFooter(
-      footer,
-      filePath,
-      dataSchema,
-      partitionSchema,
-      aggregation,
-      aggSchema,
-      datetimeRebaseMode,
-      isCaseSensitive)
-    val converter = new RowToColumnConverter(aggSchema)
-    val columnVectors = if (offHeap) {
-      OffHeapColumnVector.allocateColumns(1, aggSchema)
+    if (aggregation.groupByExpressions.nonEmpty) {
+      val reorderedPartitionValues = AggregatePushDownUtils.reOrderPartitionCol(
+        partitionSchema, aggregation, partitionValues)
+      new JoinedRow(reorderedPartitionValues, converter.currentRecord)
     } else {
-      OnHeapColumnVector.allocateColumns(1, aggSchema)
+      converter.currentRecord
     }
-    converter.convert(row, columnVectors.toArray)
-    new ColumnarBatch(columnVectors.asInstanceOf[Array[ColumnVector]], 1)
   }
 
   /**
@@ -252,8 +301,7 @@ object ParquetUtils {
       filePath: String,
       dataSchema: StructType,
       partitionSchema: StructType,
-      aggregation: Aggregation,
-      isCaseSensitive: Boolean)
+      aggregation: Aggregation)
   : (Array[PrimitiveType], Array[Any]) = {
     val footerFileMetaData = footer.getFileMetaData
     val fields = footerFileMetaData.getSchema.getFields
@@ -261,7 +309,6 @@ object ParquetUtils {
     val primitiveTypeBuilder = mutable.ArrayBuilder.make[PrimitiveType]
     val valuesBuilder = mutable.ArrayBuilder.make[Any]
 
-    assert(aggregation.groupByColumns.length == 0, "group by shouldn't be pushed down")
     aggregation.aggregateExpressions.foreach { agg =>
       var value: Any = None
       var rowCount = 0L
@@ -271,33 +318,33 @@ object ParquetUtils {
       blocks.forEach { block =>
         val blockMetaData = block.getColumns
         agg match {
-          case max: Max =>
-            val colName = max.column.fieldNames.head
+          case max: Max if V2ColumnUtils.extractV2Column(max.column).isDefined =>
+            val colName = V2ColumnUtils.extractV2Column(max.column).get
             index = dataSchema.fieldNames.toList.indexOf(colName)
             schemaName = "max(" + colName + ")"
             val currentMax = getCurrentBlockMaxOrMin(filePath, blockMetaData, index, true)
             if (value == None || currentMax.asInstanceOf[Comparable[Any]].compareTo(value) > 0) {
               value = currentMax
             }
-          case min: Min =>
-            val colName = min.column.fieldNames.head
+          case min: Min if V2ColumnUtils.extractV2Column(min.column).isDefined =>
+            val colName = V2ColumnUtils.extractV2Column(min.column).get
             index = dataSchema.fieldNames.toList.indexOf(colName)
             schemaName = "min(" + colName + ")"
             val currentMin = getCurrentBlockMaxOrMin(filePath, blockMetaData, index, false)
             if (value == None || currentMin.asInstanceOf[Comparable[Any]].compareTo(value) < 0) {
               value = currentMin
             }
-          case count: Count =>
-            schemaName = "count(" + count.column.fieldNames.head + ")"
+          case count: Count if V2ColumnUtils.extractV2Column(count.column).isDefined =>
+            val colName = V2ColumnUtils.extractV2Column(count.column).get
+            schemaName = "count(" + colName + ")"
             rowCount += block.getRowCount
             var isPartitionCol = false
-            if (partitionSchema.fields.map(PartitioningUtils.getColName(_, isCaseSensitive))
-              .toSet.contains(count.column.fieldNames.head)) {
+            if (partitionSchema.fields.map(_.name).toSet.contains(colName)) {
               isPartitionCol = true
             }
             isCount = true
             if (!isPartitionCol) {
-              index = dataSchema.fieldNames.toList.indexOf(count.column.fieldNames.head)
+              index = dataSchema.fieldNames.toList.indexOf(colName)
               // Count(*) includes the null values, but Count(colName) doesn't.
               rowCount -= getNumNulls(filePath, blockMetaData, index)
             }

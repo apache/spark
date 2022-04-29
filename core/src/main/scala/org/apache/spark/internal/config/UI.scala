@@ -79,6 +79,11 @@ private[spark] object UI {
       "reach your proxy.")
     .version("2.1.0")
     .stringConf
+    .checkValue ({ s =>
+      val words = s.split("/")
+      !words.contains("proxy") && !words.contains("history") },
+      "Cannot use the keyword 'proxy' or 'history' in reverse proxy URL. Spark UI relies on both " +
+        "keywords for getting REST API endpoints from URIs.")
     .createOptional
 
   val UI_KILL_ENABLED = ConfigBuilder("spark.ui.killEnabled")

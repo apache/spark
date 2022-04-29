@@ -134,7 +134,7 @@ private[spark] class ExecutorMonitor(
         .toSeq
       updateNextTimeout(newNextTimeout)
     }
-    timedOutExecs
+    timedOutExecs.sortBy(_._1)
   }
 
   /**
@@ -356,7 +356,8 @@ private[spark] class ExecutorMonitor(
     if (removed != null) {
       decrementExecResourceProfileCount(removed.resourceProfileId)
       if (removed.decommissioning) {
-        if (event.reason == ExecutorLossMessage.decommissionFinished) {
+        if (event.reason == ExecutorLossMessage.decommissionFinished ||
+            event.reason == ExecutorDecommission().message) {
           metrics.gracefullyDecommissioned.inc()
         } else {
           metrics.decommissionUnfinished.inc()
@@ -378,6 +379,10 @@ private[spark] class ExecutorMonitor(
   }
 
   override def onBlockUpdated(event: SparkListenerBlockUpdated): Unit = {
+    if (!client.isExecutorActive(event.blockUpdatedInfo.blockManagerId.executorId)) {
+      return
+    }
+
     val exec = ensureExecutorIsTracked(event.blockUpdatedInfo.blockManagerId.executorId,
       UNKNOWN_RESOURCE_PROFILE_ID)
 

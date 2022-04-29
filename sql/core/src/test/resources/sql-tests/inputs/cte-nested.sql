@@ -136,3 +136,14 @@ SELECT (
   WITH aBc AS (SELECT 2)
   SELECT * FROM aBC
 );
+
+-- SPARK-38404: CTE in CTE definition references outer
+WITH
+  t1 AS (SELECT 1),
+  t2 AS (
+    WITH t3 AS (
+      SELECT * FROM t1
+    )
+    SELECT * FROM t3
+  )
+SELECT * FROM t2;
