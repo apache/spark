@@ -176,7 +176,8 @@ class CsvFunctionsSuite extends QueryTest with SharedSparkSession {
 
     val exception = intercept[SparkException] {
       df.select(from_csv($"value", schema, options)).collect()
-    }.getMessage
+    }.getCause.getMessage
+
     assert(exception.contains(
       "Length of parsed input (3) exceeds the maximum number of " +
       "characters defined in your parser settings (2)."))
