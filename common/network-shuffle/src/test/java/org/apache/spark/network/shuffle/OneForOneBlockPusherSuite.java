@@ -134,7 +134,7 @@ public class OneForOneBlockPusherSuite {
     TransportClient client = mock(TransportClient.class);
     BlockPushingListener listener = mock(BlockPushingListener.class);
     OneForOneBlockPusher pusher =
-      new OneForOneBlockPusher(client, "app-id", 0, blockIds, listener, blocks);
+      new OneForOneBlockPusher(client, "app-id", 0, blockIds, listener, blocks, 10);
 
     Iterator<Map.Entry<String, ManagedBuffer>> blockIterator = blocks.entrySet().iterator();
     Iterator<BlockTransferMessage> msgIterator = expectMessages.iterator();
@@ -158,7 +158,10 @@ public class OneForOneBlockPusherSuite {
       return null;
     }).when(client).uploadStream(any(ManagedBuffer.class), any(), any(RpcResponseCallback.class));
 
-    pusher.start();
+    try {
+      pusher.start();
+    } catch (InterruptedException e) {
+    }
     return listener;
   }
 }

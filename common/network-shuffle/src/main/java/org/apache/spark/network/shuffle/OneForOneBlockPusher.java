@@ -20,6 +20,7 @@ package org.apache.spark.network.shuffle;
 import java.nio.ByteBuffer;
 import java.util.Arrays;
 import java.util.Map;
+import java.util.concurrent.Semaphore;
 
 import com.google.common.base.Preconditions;
 import org.slf4j.Logger;
@@ -54,6 +55,8 @@ public class OneForOneBlockPusher {
   private final String[] blockIds;
   private final BlockPushingListener listener;
   private final Map<String, ManagedBuffer> buffers;
+  private Semaphore maxPushBlocksInFlightPerNode;
+  private boolean failRemaining;
 
   public OneForOneBlockPusher(
       TransportClient client,
@@ -61,13 +64,16 @@ public class OneForOneBlockPusher {
       int appAttemptId,
       String[] blockIds,
       BlockPushingListener listener,
-      Map<String, ManagedBuffer> buffers) {
+      Map<String, ManagedBuffer> buffers,
+      int maxPushBlocksInFlightPerNode) {
     this.client = client;
     this.appId = appId;
     this.appAttemptId = appAttemptId;
     this.blockIds = blockIds;
     this.listener = listener;
     this.buffers = buffers;
+    this.maxPushBlocksInFlightPerNode = new Semaphore(maxPushBlocksInFlightPerNode);
+    this.failRemaining = false;
   }
 
   private class BlockPushCallback implements RpcResponseCallback {
@@ -82,12 +88,14 @@ public class OneForOneBlockPusher {
 
     @Override
     public void onSuccess(ByteBuffer response) {
+      maxPushBlocksInFlightPerNode.release();
       BlockPushReturnCode pushResponse =
         (BlockPushReturnCode) BlockTransferMessage.Decoder.fromByteBuffer(response);
       // If the return code is not SUCCESS, the server has responded some error code. Handle
       // the error accordingly.
       ReturnCode returnCode = BlockPushNonFatalFailure.getReturnCode(pushResponse.returnCode);
       if (returnCode != ReturnCode.SUCCESS) {
+        failRemaining = true;
         String blockId = pushResponse.failureBlockId;
         Preconditions.checkArgument(!blockId.isEmpty());
         checkAndFailRemainingBlocks(index, new BlockPushNonFatalFailure(returnCode,
@@ -100,6 +108,7 @@ public class OneForOneBlockPusher {
 
     @Override
     public void onFailure(Throwable e) {
+      maxPushBlocksInFlightPerNode.release();
       checkAndFailRemainingBlocks(index, e);
     }
   }
@@ -150,22 +159,25 @@ public class OneForOneBlockPusher {
   /**
    * Begins the block pushing process, calling the listener with every block pushed.
    */
-  public void start() {
+  public void start() throws InterruptedException {
     logger.debug("Start pushing {} blocks", blockIds.length);
-    for (int i = 0; i < blockIds.length; i++) {
-      assert buffers.containsKey(blockIds[i]) : "Could not find the block buffer for block "
-        + blockIds[i];
-      String[] blockIdParts = blockIds[i].split("_");
-      if (blockIdParts.length != 5 || !blockIdParts[0].equals(SHUFFLE_PUSH_BLOCK_PREFIX)) {
-        throw new IllegalArgumentException(
-          "Unexpected shuffle push block id format: " + blockIds[i]);
+    for (int i = 0; i < blockIds.length && !failRemaining; i++) {
+      maxPushBlocksInFlightPerNode.acquire();
+      if(!failRemaining) {
+        assert buffers.containsKey(blockIds[i]) : "Could not find the block buffer for block "
+          + blockIds[i];
+        String[] blockIdParts = blockIds[i].split("_");
+        if (blockIdParts.length != 5 || !blockIdParts[0].equals(SHUFFLE_PUSH_BLOCK_PREFIX)) {
+          throw new IllegalArgumentException(
+            "Unexpected shuffle push block id format: " + blockIds[i]);
+        }
+        ByteBuffer header =
+          new PushBlockStream(appId, appAttemptId, Integer.parseInt(blockIdParts[1]),
+            Integer.parseInt(blockIdParts[2]), Integer.parseInt(blockIdParts[3]),
+              Integer.parseInt(blockIdParts[4]), i).toByteBuffer();
+        client.uploadStream(new NioManagedBuffer(header), buffers.get(blockIds[i]),
+          new BlockPushCallback(i, blockIds[i]));
       }
-      ByteBuffer header =
-        new PushBlockStream(appId, appAttemptId, Integer.parseInt(blockIdParts[1]),
-          Integer.parseInt(blockIdParts[2]), Integer.parseInt(blockIdParts[3]),
-            Integer.parseInt(blockIdParts[4]), i).toByteBuffer();
-      client.uploadStream(new NioManagedBuffer(header), buffers.get(blockIds[i]),
-        new BlockPushCallback(i, blockIds[i]));
     }
   }
 }

@@ -386,4 +386,12 @@ public class TransportConf {
   public int ioExceptionsThresholdDuringMerge() {
     return conf.getInt("spark.shuffle.push.server.ioExceptionsThresholdDuringMerge", 4);
   }
+
+  /**
+   * The threshold for push blocks in flight. So we can fast fail the remaining blocks in
+   * OneForOneBlockPusher if shuffle stage is finalized.
+   */
+  public int maxPushBlocksInFlightPerNode() {
+    return conf.getInt("spark.shuffle.push.server.maxPushBlocksInFlightPerNode", 10);
+  }
 }

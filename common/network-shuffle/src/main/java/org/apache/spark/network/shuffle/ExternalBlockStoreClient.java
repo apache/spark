@@ -171,7 +171,8 @@ public class ExternalBlockStoreClient extends BlockStoreClient {
                 "Expecting a BlockPushingListener, but got " + inputListener.getClass();
               TransportClient client = clientFactory.createClient(host, port);
               new OneForOneBlockPusher(client, appId, comparableAppAttemptId, inputBlockId,
-                (BlockPushingListener) inputListener, buffersWithId).start();
+                (BlockPushingListener) inputListener, buffersWithId,
+                transportConf.maxPushBlocksInFlightPerNode()).start();
             } else {
               logger.info("This clientFactory was closed. Skipping further block push retries.");
             }
