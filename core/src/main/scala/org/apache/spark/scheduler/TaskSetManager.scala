@@ -96,7 +96,7 @@ private[spark] class TaskSetManager(
   val minFinishedForSpeculation = math.max((speculationQuantile * numTasks).floor.toInt, 1)
   // User provided threshold for speculation regardless of whether the quantile has been reached
   val speculationTaskDurationThresOpt = conf.get(SPECULATION_TASK_DURATION_THRESHOLD)
-  val isThresholdSpecified = speculationTaskDurationThresOpt.isDefined &&
+  val isSpeculationThresholdSpecified = speculationTaskDurationThresOpt.isDefined &&
     speculationTaskDurationThresOpt.get > 0
   // SPARK-29976: Only when the total number of tasks in the stage is less than or equal to the
   // number of slots on a single executor, would the task manager speculative run the tasks if
@@ -1155,7 +1155,7 @@ private[spark] class TaskSetManager(
     // No need to speculate if the task set is zombie or is from a barrier stage. If there is only
     // one task we don't speculate since we don't have metrics to decide whether it's taking too
     // long or not, unless a task duration threshold is explicitly provided.
-    if (isZombie || isBarrier || (numTasks == 1 && !isThresholdSpecified)) {
+    if (isZombie || isBarrier || (numTasks == 1 && !isSpeculationThresholdSpecified)) {
       return false
     }
     var foundTasks = false
@@ -1168,7 +1168,7 @@ private[spark] class TaskSetManager(
     val timeMs = clock.getTimeMillis()
     if (numSuccessfulTasks >= minFinishedForSpeculation || numTasks == 1) {
       val threshold = if (numSuccessfulTasks <= 0) {
-        if (isThresholdSpecified) {
+        if (isSpeculationThresholdSpecified) {
           max(speculationTaskDurationThresOpt.get, speculationSingleTaskDurationThreshold)
         } else {
           speculationSingleTaskDurationThreshold
@@ -1180,7 +1180,7 @@ private[spark] class TaskSetManager(
       // bound based on that.
       logDebug("Task length threshold for speculation: " + threshold)
       foundTasks = checkAndSubmitSpeculatableTask(timeMs, threshold, numSuccessfulTasks)
-    } else if (isThresholdSpecified && speculationTasksLessEqToSlots) {
+    } else if (isSpeculationThresholdSpecified && speculationTasksLessEqToSlots) {
       val threshold = speculationTaskDurationThresOpt.get
       logDebug(s"Tasks taking longer time than provided speculation threshold: $threshold")
       foundTasks = checkAndSubmitSpeculatableTask(timeMs, threshold, numSuccessfulTasks,
@@ -1283,15 +1283,19 @@ private[spark] class TaskSetManager(
    * the tasks which may be speculated by the previous strategy.
    */
   private[scheduler] class InefficientTask(
-    val recomputeIntervalMs: Long, val maxTasksToCheck: Int) {
+      val recomputeIntervalMs: Long,
+      val maxTasksToCheck: Int) {
     var taskData: Map[Long, TaskData] = null
     var taskProgressThreshold = 0.0
     private var lastComputeMs = -1L
     var updateSealed = false
     private val checkInefficientTask = speculationTaskMinDuration > 0
 
-    def maybeRecompute(appStatusStore: AppStatusStore, nowMs: Long,
-      stageId: Int, stageAttemptId: Int): Unit = {
+    def maybeRecompute(
+        appStatusStore: AppStatusStore,
+        nowMs: Long,
+        stageId: Int,
+        stageAttemptId: Int): Unit = {
       if (!checkInefficientTask || appStatusStore == null) {
         return
       }
