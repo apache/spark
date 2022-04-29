@@ -5318,6 +5318,16 @@ def bucket(numBuckets: Union[Column, int], col: "ColumnOrName") -> Column:
     return _invoke_function("bucket", numBuckets, _to_java_column(col))
 
 
+def unwrap_udt(col):
+    """
+    Unwrap UDT data type column into its underlying struct type
+
+        .. versionadded:: 3.1.0
+
+    """
+    return _invoke_function("unwrap_udt", _to_java_column(col))
+
+
 # ---------------------------- User Defined Function ----------------------------------
 
 
