@@ -21,7 +21,7 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.{And, CaseWhen, Coalesce, Expression, If, IsNotNull, Literal, Not, Or, Rand}
+import org.apache.spark.sql.catalyst.expressions.{And, ArrayContains, CaseWhen, Coalesce, Expression, If, IsNotNull, Literal, Not, Or, Rand}
 import org.apache.spark.sql.catalyst.expressions.Literal.{FalseLiteral, TrueLiteral}
 import org.apache.spark.sql.catalyst.plans.{Inner, PlanTest}
 import org.apache.spark.sql.catalyst.plans.logical.{DeleteFromTable, LocalRelation, LogicalPlan, UpdateTable}
@@ -215,6 +215,32 @@ class SimplifyConditionalsInPredicateSuite extends PlanTest {
       testFilter(originalCond = Literal(null, IntegerType), expectedCond = FalseLiteral)
     }.getMessage
     assert(e.contains("'CAST(NULL AS INT)' of type int is not a boolean"))
+  }
+
+  test("Simplify conditional: i = 10 and array_contains(a, i)") {
+    val originalCond = UnresolvedAttribute("i") === Literal(10) &&
+      ArrayContains(UnresolvedAttribute("a"), UnresolvedAttribute("i"))
+    val expectedCond = UnresolvedAttribute("i") === Literal(10) &&
+      ArrayContains(UnresolvedAttribute("a"), Literal(10))
+
+    testFilter(originalCond, expectedCond = expectedCond)
+    testJoin(originalCond, expectedCond = expectedCond)
+    testDelete(originalCond, expectedCond = expectedCond)
+    testUpdate(originalCond, expectedCond = expectedCond)
+    testProjection(originalCond, expectedExpr = originalCond)
+  }
+
+  test("Simplify conditional: 10 = i and array_contains(a, i)") {
+    val originalCond = Literal(10) === UnresolvedAttribute("i") &&
+      ArrayContains(UnresolvedAttribute("a"), UnresolvedAttribute("i"))
+    val expectedCond = UnresolvedAttribute("i") === Literal(10) &&
+      ArrayContains(UnresolvedAttribute("a"), Literal(10))
+
+    testFilter(originalCond, expectedCond = expectedCond)
+    testJoin(originalCond, expectedCond = expectedCond)
+    testDelete(originalCond, expectedCond = expectedCond)
+    testUpdate(originalCond, expectedCond = expectedCond)
+    testProjection(originalCond, expectedExpr = originalCond)
   }
 
   private def testFilter(originalCond: Expression, expectedCond: Expression): Unit = {

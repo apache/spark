@@ -451,7 +451,7 @@ BroadcastExchange (83)
 Output [2]: [d_date_sk#5, d_year#6]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/date_dim]
-PushedFilters: [IsNotNull(d_year), EqualTo(d_year,2001), In(d_year, [2001,2002]), IsNotNull(d_date_sk)]
+PushedFilters: [IsNotNull(d_year), EqualTo(d_year,2001), IsNotNull(d_date_sk)]
 ReadSchema: struct<d_date_sk:int,d_year:int>
 
 (81) ColumnarToRow [codegen id : 1]
@@ -459,7 +459,7 @@ Input [2]: [d_date_sk#5, d_year#6]
 
 (82) Filter [codegen id : 1]
 Input [2]: [d_date_sk#5, d_year#6]
-Condition : (((isnotnull(d_year#6) AND (d_year#6 = 2001)) AND d_year#6 IN (2001,2002)) AND isnotnull(d_date_sk#5))
+Condition : ((isnotnull(d_year#6) AND (d_year#6 = 2001)) AND isnotnull(d_date_sk#5))
 
 (83) BroadcastExchange
 Input [2]: [d_date_sk#5, d_year#6]
@@ -476,7 +476,7 @@ BroadcastExchange (87)
 Output [2]: [d_date_sk#24, d_year#25]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/date_dim]
-PushedFilters: [IsNotNull(d_year), EqualTo(d_year,2002), In(d_year, [2001,2002]), IsNotNull(d_date_sk)]
+PushedFilters: [IsNotNull(d_year), EqualTo(d_year,2002), IsNotNull(d_date_sk)]
 ReadSchema: struct<d_date_sk:int,d_year:int>
 
 (85) ColumnarToRow [codegen id : 1]
@@ -484,7 +484,7 @@ Input [2]: [d_date_sk#24, d_year#25]
 
 (86) Filter [codegen id : 1]
 Input [2]: [d_date_sk#24, d_year#25]
-Condition : (((isnotnull(d_year#25) AND (d_year#25 = 2002)) AND d_year#25 IN (2001,2002)) AND isnotnull(d_date_sk#24))
+Condition : ((isnotnull(d_year#25) AND (d_year#25 = 2002)) AND isnotnull(d_date_sk#24))
 
 (87) BroadcastExchange
 Input [2]: [d_date_sk#24, d_year#25]
