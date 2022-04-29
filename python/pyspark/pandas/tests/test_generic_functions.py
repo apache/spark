@@ -111,6 +111,41 @@ class GenericFunctionsTest(PandasOnSparkTestCase, TestUtils):
         )
         self._test_interpolate(pdf)
 
+    def _test_stat_functions(self, stat_func):
+        pdf = pd.DataFrame({"a": [np.nan, np.nan, np.nan], "b": [1, np.nan, 2]})
+        psdf = ps.from_pandas(pdf)
+        self.assert_eq(stat_func(pdf.a), stat_func(psdf.a))
+        self.assert_eq(stat_func(pdf.b), stat_func(psdf.b))
+        self.assert_eq(stat_func(pdf), stat_func(psdf))
+
+    # TODO: implement skipna and fill gas to enable disabled tests below
+    def test_stat_functions(self):
+        self._test_stat_functions(lambda x: x.sum())
+        self._test_stat_functions(lambda x: x.sum(skipna=False))
+        self._test_stat_functions(lambda x: x.mean())
+        self._test_stat_functions(lambda x: x.mean(skipna=False))
+        self._test_stat_functions(lambda x: x.product())
+        self._test_stat_functions(lambda x: x.product(skipna=False))
+        self._test_stat_functions(lambda x: x.min())
+        # self._test_stat_functions(lambda x: x.min(skipna=False))
+        self._test_stat_functions(lambda x: x.max())
+        self._test_stat_functions(lambda x: x.max(skipna=False))
+        self._test_stat_functions(lambda x: x.std())
+        self._test_stat_functions(lambda x: x.std(skipna=False))
+        self._test_stat_functions(lambda x: x.sem())
+        self._test_stat_functions(lambda x: x.sem(skipna=False))
+        # self._test_stat_functions(lambda x: x.skew())
+        # self._test_stat_functions(lambda x: x.skew(skipna=False))
+        # self._test_stat_functions(lambda x: x.kurtosis())
+        # self._test_stat_functions(lambda x: x.kurtosis(skipna=False))
+
+        pdf = pd.DataFrame({"a": [np.nan, np.nan, np.nan], "b": [1, np.nan, 2]})
+        psdf = ps.from_pandas(pdf)
+        self.assert_eq(pdf.a.median(), psdf.a.median())
+        self.assert_eq(pdf.a.median(skipna=False), psdf.a.median(skipna=False))
+        self.assert_eq(1.0, psdf.b.median())
+        self.assert_eq(2.0, psdf.b.median(skipna=False))
+
 
 if __name__ == "__main__":
     import unittest
