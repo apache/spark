@@ -19,11 +19,8 @@ package org.apache.spark.util.kvstore;
 
 import java.io.File;
 import java.io.IOException;
-import java.lang.ref.Reference;
-import java.lang.ref.WeakReference;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
@@ -105,13 +102,6 @@ public class RocksDB implements KVStore {
   private final ConcurrentMap<String, byte[]> typeAliases;
   private final ConcurrentMap<Class<?>, RocksDBTypeInfo> types;
 
-  /**
-   * Trying to close a JNI RocksDB handle with a closed DB causes JVM crashes. This is used to
-   * ensure that all iterators are correctly closed before RocksDB is closed. Use weak references
-   * to ensure that the iterator can be GCed, when it is only referenced here.
-   */
-  private final ConcurrentLinkedQueue<Reference<RocksDBIterator<?>>> iteratorTracker;
-
   public RocksDB(File path) throws Exception {
     this(path, new KVStoreSerializer());
   }
@@ -139,8 +129,6 @@ public class RocksDB implements KVStore {
       aliases = new HashMap<>();
     }
     typeAliases = new ConcurrentHashMap<>(aliases);
-
-    iteratorTracker = new ConcurrentLinkedQueue<>();
   }
 
   @Override
@@ -283,9 +271,7 @@ public class RocksDB implements KVStore {
       @Override
       public Iterator<T> iterator() {
         try {
-          RocksDBIterator<T> it = new RocksDBIterator<>(type, RocksDB.this, this);
-          iteratorTracker.add(new WeakReference<>(it));
-          return it;
+          return new RocksDBIterator<>(type, RocksDB.this, this);
         } catch (Exception e) {
           throw Throwables.propagate(e);
         }
@@ -338,17 +324,7 @@ public class RocksDB implements KVStore {
       }
 
       try {
-        if (iteratorTracker != null) {
-          for (Reference<RocksDBIterator<?>> ref: iteratorTracker) {
-            RocksDBIterator<?> it = ref.get();
-            if (it != null) {
-              it.close();
-            }
-          }
-        }
         _db.close();
-      } catch (IOException ioe) {
-        throw ioe;
       } catch (Exception e) {
         throw new IOException(e.getMessage(), e);
       }
@@ -360,21 +336,12 @@ public class RocksDB implements KVStore {
    * with a closed DB can cause JVM crashes, so this ensures that situation does not happen.
    */
   void closeIterator(RocksDBIterator<?> it) throws IOException {
-    notifyIteratorClosed(it);
     synchronized (this._db) {
       org.rocksdb.RocksDB _db = this._db.get();
       if (_db != null) {
         it.close();
       }
     }
-  }
-
-  /**
-   * Remove iterator from iterator tracker. `RocksDBIterator` calls it to notify
-   * iterator is closed.
-   */
-  void notifyIteratorClosed(RocksDBIterator<?> it) {
-    iteratorTracker.removeIf(ref -> it.equals(ref.get()));
   }
 
   /** Returns metadata about indices for the given type. */
