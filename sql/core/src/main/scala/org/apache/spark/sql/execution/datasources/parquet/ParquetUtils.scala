@@ -279,7 +279,7 @@ object ParquetUtils {
         throw new SparkException("Unexpected parquet type name: " + primitiveTypeNames(i))
     }
 
-    if (aggregation.groupByColumns.nonEmpty) {
+    if (aggregation.groupByExpressions.nonEmpty) {
       val reorderedPartitionValues = AggregatePushDownUtils.reOrderPartitionCol(
         partitionSchema, aggregation, partitionValues)
       new JoinedRow(reorderedPartitionValues, converter.currentRecord)

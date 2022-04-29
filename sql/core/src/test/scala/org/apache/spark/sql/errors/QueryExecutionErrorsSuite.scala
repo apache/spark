@@ -261,17 +261,16 @@ class QueryExecutionErrorsSuite
     }
   }
 
-  test("UNSUPPORTED_OPERATION: timeZoneId not specified while converting TimestampType to Arrow") {
+  test("INTERNAL_ERROR: timeZoneId not specified while converting TimestampType to Arrow") {
     checkErrorClass(
-      exception = intercept[SparkUnsupportedOperationException] {
+      exception = intercept[SparkIllegalStateException] {
         ArrowUtils.toArrowSchema(new StructType().add("value", TimestampType), null)
       },
-      errorClass = "UNSUPPORTED_OPERATION",
-      msg = "The operation is not supported: \"TIMESTAMP\" must supply timeZoneId " +
-        "parameter while converting to the arrow timestamp type.")
+      errorClass = "INTERNAL_ERROR",
+      msg = "Missing timezoneId where it is mandatory.")
   }
 
-  test("UNSUPPORTED_OPERATION - SPARK-36346: can't read Timestamp as TimestampNTZ") {
+  test("UNSUPPORTED_FEATURE - SPARK-36346: can't read Timestamp as TimestampNTZ") {
     withTempPath { file =>
       sql("select timestamp_ltz'2019-03-21 00:02:03'").write.orc(file.getCanonicalPath)
       withAllNativeOrcReaders {
@@ -279,14 +278,15 @@ class QueryExecutionErrorsSuite
           exception = intercept[SparkException] {
             spark.read.schema("time timestamp_ntz").orc(file.getCanonicalPath).collect()
           }.getCause.asInstanceOf[SparkUnsupportedOperationException],
-          errorClass = "UNSUPPORTED_OPERATION",
-          msg = "The operation is not supported: " +
+          errorClass = "UNSUPPORTED_FEATURE",
+          errorSubClass = Some("ORC_TYPE_CAST"),
+          msg = "The feature is not supported: " +
             "Unable to convert \"TIMESTAMP\" of Orc to data type \"TIMESTAMP_NTZ\".")
       }
     }
   }
 
-  test("UNSUPPORTED_OPERATION - SPARK-38504: can't read TimestampNTZ as TimestampLTZ") {
+  test("UNSUPPORTED_FEATURE - SPARK-38504: can't read TimestampNTZ as TimestampLTZ") {
     withTempPath { file =>
       sql("select timestamp_ntz'2019-03-21 00:02:03'").write.orc(file.getCanonicalPath)
       withAllNativeOrcReaders {
@@ -294,8 +294,9 @@ class QueryExecutionErrorsSuite
           exception = intercept[SparkException] {
             spark.read.schema("time timestamp_ltz").orc(file.getCanonicalPath).collect()
           }.getCause.asInstanceOf[SparkUnsupportedOperationException],
-          errorClass = "UNSUPPORTED_OPERATION",
-          msg = "The operation is not supported: " +
+          errorClass = "UNSUPPORTED_FEATURE",
+          errorSubClass = Some("ORC_TYPE_CAST"),
+          msg = "The feature is not supported: " +
             "Unable to convert \"TIMESTAMP_NTZ\" of Orc to data type \"TIMESTAMP\".")
       }
     }
