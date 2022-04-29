@@ -106,15 +106,16 @@ class QueryCompilationErrorsSuite
     }
   }
 
-  test("ILLEGAL_SUBSTRING: the argument_index of string format is invalid") {
+  test("INVALID_PARAMETER_VALUE: the argument_index of string format is invalid") {
     withSQLConf(SQLConf.ALLOW_ZERO_INDEX_IN_FORMAT_STRING.key -> "false") {
       val e = intercept[AnalysisException] {
         sql("select format_string('%0$s', 'Hello')")
       }
       checkErrorClass(
         exception = e,
-        errorClass = "ILLEGAL_SUBSTRING",
-        msg = "The argument_index of string format cannot contain position 0$.; line 1 pos 7")
+        errorClass = "INVALID_PARAMETER_VALUE",
+        msg = "The value of parameter(s) 'strfmt' in `format_string` is invalid: " +
+          "expects %1$, %2$ and so on, but got %0$.; line 1 pos 7")
     }
   }
 
@@ -473,6 +474,21 @@ class QueryCompilationErrorsSuite
         matchMsg = true)
 
       checkAnswer(sql("SELECT __auto_generated_subquery_name.i from (SELECT i FROM v)"), Row(1))
+    }
+  }
+
+  test("AMBIGUOUS_FIELD_NAME: alter column matching multi fields in the struct") {
+    withTable("t") {
+      withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+        sql("CREATE TABLE t(c struct<X:String, x:String>) USING parquet")
+      }
+
+      checkErrorClass(
+        exception = intercept[AnalysisException] {
+          sql("ALTER TABLE t CHANGE COLUMN c.X COMMENT 'new comment'")
+        },
+        errorClass = "AMBIGUOUS_FIELD_NAME",
+        msg = "Field name c.X is ambiguous and has 2 matching fields in the struct.; line 1 pos 0")
     }
   }
 }
