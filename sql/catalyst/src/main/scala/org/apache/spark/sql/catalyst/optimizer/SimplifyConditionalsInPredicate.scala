@@ -56,7 +56,7 @@ object SimplifyConditionalsInPredicate extends Rule[LogicalPlan] with PredicateH
     case d @ DeleteFromTable(_, cond) =>
       d.copy(condition = transformConditional(simplifyConditional(cond)))
     case u @ UpdateTable(_, _, Some(cond)) =>
-      u.copy(condition = Some(transformConditionalsimplifyConditional(cond))))
+      u.copy(condition = Some(transformConditional(simplifyConditional(cond))))
   }
 
   private def simplifyConditional(e: Expression): Expression = e match {
