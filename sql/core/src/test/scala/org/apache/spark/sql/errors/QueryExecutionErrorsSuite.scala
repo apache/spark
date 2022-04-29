@@ -17,11 +17,12 @@
 
 package org.apache.spark.sql.errors
 
+import java.io.IOException
 import java.util.Locale
-
+import org.apache.hadoop.fs.{LocalFileSystem, Path}
+import org.apache.hadoop.fs.permission.FsPermission
 import test.org.apache.spark.sql.connector.JavaSimpleWritableDataSource
-
-import org.apache.spark.{SparkArithmeticException, SparkException, SparkIllegalStateException, SparkRuntimeException, SparkUnsupportedOperationException, SparkUpgradeException}
+import org.apache.spark.{SparkArithmeticException, SparkException, SparkIllegalStateException, SparkRuntimeException, SparkSecurityException, SparkUnsupportedOperationException, SparkUpgradeException}
 import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest}
 import org.apache.spark.sql.catalyst.util.BadRecordException
 import org.apache.spark.sql.connector.SimpleWritableDataSource
@@ -429,5 +430,34 @@ class QueryExecutionErrorsSuite
       sqlState = Some("42000"),
       matchMsg = true
     )
+  }
+
+  test("FAILED_SET_ORIGINAL_PERMISSION_BACK: ") {
+      withTable("t") {
+        withSQLConf(
+          "fs.file.impl" -> classOf[FakeFileSystemSetPermission].getName,
+          "fs.file.impl.disable.cache" -> "true") {
+          sql("CREATE TABLE t(c String) USING parquet")
+
+          val e1 = intercept[AnalysisException] {
+            sql("TRUNCATE TABLE t")
+          }
+          assert(e1.getCause.isInstanceOf[SparkSecurityException])
+
+          checkErrorClass(
+            exception = e1.getCause.asInstanceOf[SparkSecurityException],
+            errorClass = "FAILED_SET_ORIGINAL_PERMISSION_BACK",
+            msg = "Failed to set original permission .+ " +
+              "back to the created path: .+\\. Exception: .+",
+            matchMsg = true)
+      }
+    }
+  }
+}
+
+class FakeFileSystemSetPermission extends LocalFileSystem {
+
+  override def setPermission(src: Path, permission: FsPermission): Unit = {
+    throw new IOException(s"fake fileSystem failed to set permission: $permission")
   }
 }
