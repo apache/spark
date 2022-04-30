@@ -45,6 +45,7 @@ trait LimitExec extends UnaryExecNode {
  */
 case class CollectLimitExec(limit: Int = -1, child: SparkPlan, offset: Int = 0) extends LimitExec {
   assert(limit >= 0 || (limit == -1 && offset > 0))
+  
   override def output: Seq[Attribute] = child.output
   override def outputPartitioning: Partitioning = SinglePartition
   override def executeCollect(): Array[InternalRow] = {
@@ -222,6 +223,7 @@ case class GlobalLimitAndOffsetExec(
     limit: Int = -1,
     offset: Int = 0,
     child: SparkPlan) extends BaseLimitExec {
+  assert(limit >= 0 || (limit == -1 && offset > 0))
 
   override def requiredChildDistribution: List[Distribution] = AllTuples :: Nil
 
