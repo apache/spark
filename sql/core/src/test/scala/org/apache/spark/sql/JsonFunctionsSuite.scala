@@ -122,7 +122,7 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
       Row(Row(1)) :: Nil)
   }
 
-  test("from_json with option") {
+  test("from_json with option (timestampFormat)") {
     val df = Seq("""{"time": "26/08/2015 18:00"}""").toDS()
     val schema = new StructType().add("time", TimestampType)
     val options = Map("timestampFormat" -> "dd/MM/yyyy HH:mm")
@@ -130,6 +130,86 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
     checkAnswer(
       df.select(from_json($"value", schema, options)),
       Row(Row(java.sql.Timestamp.valueOf("2015-08-26 18:00:00.0"))))
+  }
+
+  test("from_json with option (allowComments)") {
+    val df = Seq("""{"str": /* Hello */ "World"}""").toDS()
+    val schema = new StructType().add("str", StringType)
+    val options = Map("allowComments" -> "true")
+
+    checkAnswer(
+      df.select(from_json($"value", schema, options)),
+      Row(Row("World")) :: Nil)
+  }
+
+  test("from_json with option (allowUnquotedFieldNames)") {
+    val df = Seq("""{str: "World"}""").toDS()
+    val schema = new StructType().add("str", StringType)
+    val options = Map("allowUnquotedFieldNames" -> "true")
+
+    checkAnswer(
+      df.select(from_json($"value", schema, options)),
+      Row(Row("World")) :: Nil)
+  }
+
+  test("from_json with option (allowSingleQuotes)") {
+    val df = Seq("""{"str": 'World'}""").toDS()
+    val schema = new StructType().add("str", StringType)
+    val options = Map("allowSingleQuotes" -> "true")
+
+    checkAnswer(
+      df.select(from_json($"value", schema, options)),
+      Row(Row("World")) :: Nil)
+  }
+
+  test("from_json with option (allowNumericLeadingZeros)") {
+    val df = Seq("""{"int": 0018}""").toDS()
+    val schema = new StructType().add("int", IntegerType)
+    val options = Map("allowNumericLeadingZeros" -> "true")
+
+    checkAnswer(
+      df.select(from_json($"value", schema, options)),
+      Row(Row(18)) :: Nil)
+  }
+
+  test("from_json with option (allowBackslashEscapingAnyCharacter)") {
+    val df = Seq("""{"str": "\$10"}""").toDS()
+    val schema = new StructType().add("str", StringType)
+    val options = Map("allowBackslashEscapingAnyCharacter" -> "true")
+
+    checkAnswer(
+      df.select(from_json($"value", schema, options)),
+      Row(Row("$10")) :: Nil)
+  }
+
+  test("from_json with option (dateFormat)") {
+    val df = Seq("""{"time": "26/08/2015"}""").toDS()
+    val schema = new StructType().add("time", DateType)
+    val options = Map("dateFormat" -> "dd/MM/yyyy")
+
+    checkAnswer(
+      df.select(from_json($"value", schema, options)),
+      Row(Row(java.sql.Date.valueOf("2015-08-26"))))
+  }
+
+  test("from_json with option (allowUnquotedControlChars)") {
+    val df = Seq("{\"str\": \"a\u0001b\"}").toDS()
+    val schema = new StructType().add("str", StringType)
+    val options = Map("allowUnquotedControlChars" -> "true")
+
+    checkAnswer(
+      df.select(from_json($"value", schema, options)),
+      Row(Row("a\u0001b")) :: Nil)
+  }
+
+  test("from_json with option (allowNonNumericNumbers)") {
+    val df = Seq("""{"int": +Infinity}""").toDS()
+    val schema = new StructType().add("int", FloatType)
+    val options = Map("allowNonNumericNumbers" -> "false")
+
+    checkAnswer(
+      df.select(from_json($"value", schema, options)),
+      Row(Row(null)) :: Nil)
   }
 
   test("from_json missing columns") {
@@ -215,13 +295,31 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
       Row("""{"a":1}""") :: Nil)
   }
 
-  test("to_json with option") {
+  test("to_json with option (timestampFormat)") {
     val df = Seq(Tuple1(Tuple1(java.sql.Timestamp.valueOf("2015-08-26 18:00:00.0")))).toDF("a")
     val options = Map("timestampFormat" -> "dd/MM/yyyy HH:mm")
 
     checkAnswer(
       df.select(to_json($"a", options)),
       Row("""{"_1":"26/08/2015 18:00"}""") :: Nil)
+  }
+
+  test("to_json with option (dateFormat)") {
+    val df = Seq(Tuple1(Tuple1(java.sql.Date.valueOf("2015-08-26")))).toDF("a")
+    val options = Map("dateFormat" -> "dd/MM/yyyy")
+
+    checkAnswer(
+      df.select(to_json($"a", options)),
+      Row("""{"_1":"26/08/2015"}""") :: Nil)
+  }
+
+  test("to_json with option (ignoreNullFields)") {
+    val df = Seq(Tuple1(Tuple1(null))).toDF("a")
+    val options = Map("ignoreNullFields" -> "true")
+
+    checkAnswer(
+      df.select(to_json($"a", options)),
+      Row("""{}""") :: Nil)
   }
 
   test("to_json - interval support") {
