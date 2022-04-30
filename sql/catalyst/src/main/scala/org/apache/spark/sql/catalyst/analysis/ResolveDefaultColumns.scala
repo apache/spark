@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
+import scala.collection.mutable
+
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.{SessionCatalog, UnresolvedCatalogRelation}
@@ -26,8 +28,6 @@ import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
-
-import scala.collection.mutable
 
 /**
  * This is a rule to process DEFAULT columns in statements such as CREATE/REPLACE TABLE.
