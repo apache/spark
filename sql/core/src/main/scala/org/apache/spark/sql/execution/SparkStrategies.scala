@@ -101,6 +101,8 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
             limit, order, projectList, planLater(child), offset) :: Nil
         case LimitAndOffset(IntegerLiteral(limit), IntegerLiteral(offset), child) =>
           CollectLimitExec(limit, planLater(child), offset) :: Nil
+        case logical.Offset(IntegerLiteral(offset), child) =>
+          CollectLimitExec(child = planLater(child), offset = offset) :: Nil
         case Tail(IntegerLiteral(limit), child) =>
           CollectTailExec(limit, planLater(child)) :: Nil
         case other => planLater(other) :: Nil
@@ -126,6 +128,8 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         TakeOrderedAndProjectExec(limit, order, projectList, planLater(child), offset) :: Nil
       case LimitAndOffset(IntegerLiteral(limit), IntegerLiteral(offset), child) =>
         GlobalLimitAndOffsetExec(limit, offset, planLater(child)) :: Nil
+      case logical.Offset(IntegerLiteral(offset), child) =>
+        GlobalLimitAndOffsetExec(offset = offset, child = planLater(child)) :: Nil
       case _ =>
         Nil
     }

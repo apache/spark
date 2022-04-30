@@ -45,7 +45,7 @@ trait LimitExec extends UnaryExecNode {
  */
 case class CollectLimitExec(limit: Int = -1, child: SparkPlan, offset: Int = 0) extends LimitExec {
   assert(limit >= 0 || (limit == -1 && offset > 0))
-  
+
   override def output: Seq[Attribute] = child.output
   override def outputPartitioning: Partitioning = SinglePartition
   override def executeCollect(): Array[InternalRow] = {
@@ -170,8 +170,10 @@ trait BaseLimitExec extends LimitExec with CodegenSupport {
 
   protected lazy val countTerm = BaseLimitExec.newLimitCountTerm()
 
-  override lazy val limitNotReachedChecks: Seq[String] = {
+  override lazy val limitNotReachedChecks: Seq[String] = if (limit >= 0) {
     s"$countTerm < $limit" +: super.limitNotReachedChecks
+  } else {
+    super.limitNotReachedChecks
   }
 
   protected override def doProduce(ctx: CodegenContext): String = {
