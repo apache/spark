@@ -68,7 +68,7 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
   sparkConf.set(DRIVER_PORT, 4040)
   sparkConf.set(SPARK_JARS, Seq("notarealjar.jar"))
   sparkConf.set("spark.yarn.launchContainers", "false")
-  sparkConf.set(YARN_EXECUTOR_DECOMMISSION_ENABLED.key, "true")
+  sparkConf.set(DECOMMISSION_ENABLED.key, "true")
 
   val appAttemptId = ApplicationAttemptId.newInstance(ApplicationId.newInstance(0, 0), 0)
 
@@ -805,7 +805,7 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
       send(DecommissionExecutorsOnHost(org.mockito.ArgumentMatchers.any()))
 
     // Test with config disabled
-    sparkConf.remove(YARN_EXECUTOR_DECOMMISSION_ENABLED.key)
+    sparkConf.remove(DECOMMISSION_ENABLED.key)
 
     // host2 is now in DECOMMISSIONING state
     val httpAddress2 = "host2:420"
