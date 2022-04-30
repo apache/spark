@@ -27,6 +27,8 @@ import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
+import scala.collection.mutable
+
 /**
  * This is a rule to process DEFAULT columns in statements such as CREATE/REPLACE TABLE.
  *
@@ -88,12 +90,21 @@ case class ResolveDefaultColumns(
    * [[insertsFromInlineTable]] method.
    */
   private def resolveDefaultColumnsForInsertFromInlineTable(i: InsertIntoStatement): LogicalPlan = {
+    val children = mutable.Buffer.empty[LogicalPlan]
+    var node = i.query
+    while (node match {
+      case _ if node.children.size == 1 =>
+        children.append(node)
+        node = node.children(0)
+        true
+      case _ => false
+    }) {}
+    val table = node.asInstanceOf[UnresolvedInlineTable]
     val insertTableSchemaWithoutPartitionColumns: StructType =
       getInsertTableSchemaWithoutPartitionColumns(i)
         .getOrElse(return i)
     val regenerated: InsertIntoStatement =
       regenerateUserSpecifiedCols(i, insertTableSchemaWithoutPartitionColumns)
-    val table = i.query.collectFirst { case u: UnresolvedInlineTable => u }.get
     val expanded: UnresolvedInlineTable =
       addMissingDefaultValuesForInsertFromInlineTable(
         table, insertTableSchemaWithoutPartitionColumns)
@@ -101,7 +112,14 @@ case class ResolveDefaultColumns(
       replaceExplicitDefaultValuesForInputOfInsertInto(
         analyzer, insertTableSchemaWithoutPartitionColumns, expanded)
         .getOrElse(return i)
-    regenerated.copy(query = replaced)
+    node = replaced
+    for (child <- children.reverse) {
+      node = child match {
+        case p: Project => p.copy(child = node)
+        case s: SubqueryAlias => s.copy(child = node)
+      }
+    }
+    regenerated.copy(query = node)
   }
 
   /**
