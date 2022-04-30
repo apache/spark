@@ -97,7 +97,7 @@ public class OneForOneBlockPusherSuite {
 
     verify(listener, times(1)).onBlockPushSuccess(eq("shufflePush_0_0_0_0"), any());
     verify(listener, times(1)).onBlockPushFailure(eq("shufflePush_0_0_1_0"), any());
-    verify(listener, times(1)).onBlockPushFailure(eq("shufflePush_0_0_2_0"), any());
+    verify(listener, times(0)).onBlockPushFailure(eq("shufflePush_0_0_2_0"), any());
   }
 
   @Test
@@ -161,6 +161,7 @@ public class OneForOneBlockPusherSuite {
     try {
       pusher.start();
     } catch (InterruptedException e) {
+      e.printStackTrace();
     }
     return listener;
   }
