@@ -974,11 +974,16 @@ class PlanResolutionSuite extends AnalysisTest {
            |SET t.age=32
            |WHERE t.name IN (SELECT s.name FROM s)
          """.stripMargin
+      val sql5 = s"UPDATE $tblName SET name=DEFAULT, age=DEFAULT"
+      // Note: 'i' and 's' are the names of the columns in 'tblName'.
+      val sql6 = s"UPDATE $tblName SET i=DEFAULT, s=DEFAULT"
 
       val parsed1 = parseAndResolve(sql1)
       val parsed2 = parseAndResolve(sql2)
       val parsed3 = parseAndResolve(sql3)
       val parsed4 = parseAndResolve(sql4)
+      val parsed5 = parseAndResolve(sql5)
+      val parsed6 = parseAndResolve(sql6)
 
       parsed1 match {
         case UpdateTable(
@@ -1034,6 +1039,30 @@ class PlanResolutionSuite extends AnalysisTest {
           }
 
         case _ => fail("Expect UpdateTable, but got:\n" + parsed4.treeString)
+      }
+
+      parsed5 match {
+        case UpdateTable(
+        AsDataSourceV2Relation(_),
+        Seq(Assignment(name: UnresolvedAttribute, UnresolvedAttribute(Seq("DEFAULT"))),
+        Assignment(age: UnresolvedAttribute, UnresolvedAttribute(Seq("DEFAULT")))),
+        None) =>
+          assert(name.name == "name")
+          assert(age.name == "age")
+
+        case _ => fail("Expect UpdateTable, but got:\n" + parsed5.treeString)
+      }
+
+      parsed6 match {
+        case UpdateTable(
+        AsDataSourceV2Relation(_),
+        Seq(Assignment(name: AttributeReference, AnsiCast(Literal(null, _), IntegerType, _)),
+        Assignment(age: AttributeReference, AnsiCast(Literal(null, _), StringType, _))),
+        None) =>
+          assert(name.name == "i")
+          assert(age.name == "s")
+
+        case _ => fail("Expect UpdateTable, but got:\n" + parsed6.treeString)
       }
     }
 

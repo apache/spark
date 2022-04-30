@@ -1024,14 +1024,14 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
       sql("create table t(i boolean, s bigint default 42) using parquet")
       assert(intercept[AnalysisException] {
         sql("insert into t values(false, default + 1)")
-      }.getMessage.contains(ResolveDefaultColumns.DEFAULTS_IN_EXPRESSIONS_ERROR))
+      }.getMessage.contains(ResolveDefaultColumns.DEFAULTS_IN_COMPLEX_EXPRESSIONS_IN_INSERT_VALUES))
     }
     // Explicit default values may not participate in complex expressions in the SELECT query.
     withTable("t") {
       sql("create table t(i boolean, s bigint default 42) using parquet")
       assert(intercept[AnalysisException] {
         sql("insert into t select false, default + 1")
-      }.getMessage.contains(ResolveDefaultColumns.DEFAULTS_IN_EXPRESSIONS_ERROR))
+      }.getMessage.contains(ResolveDefaultColumns.DEFAULTS_IN_COMPLEX_EXPRESSIONS_IN_INSERT_VALUES))
     }
     // Explicit default values have a reasonable error path if the table is not found.
     withTable("t") {
