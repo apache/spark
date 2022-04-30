@@ -106,20 +106,6 @@ public class RemoteBlockPushResolverSuite {
   }
 
   @Test
-  public void testErrorLogging() {
-    ErrorHandler.BlockPushErrorHandler errorHandler = RemoteBlockPushResolver.createErrorHandler();
-    assertFalse(errorHandler.shouldLogError(new BlockPushNonFatalFailure(
-      BlockPushNonFatalFailure.ReturnCode.TOO_LATE_BLOCK_PUSH, "")));
-    assertFalse(errorHandler.shouldLogError(new BlockPushNonFatalFailure(
-      BlockPushNonFatalFailure.ReturnCode.TOO_OLD_ATTEMPT_PUSH, "")));
-    assertFalse(errorHandler.shouldLogError(new BlockPushNonFatalFailure(
-      BlockPushNonFatalFailure.ReturnCode.STALE_BLOCK_PUSH, "")));
-    assertFalse(errorHandler.shouldLogError(new BlockPushNonFatalFailure(
-      BlockPushNonFatalFailure.ReturnCode.BLOCK_APPEND_COLLISION_DETECTED, "")));
-    assertTrue(errorHandler.shouldLogError(new Throwable()));
-  }
-
-  @Test
   public void testNoIndexFile() {
     RuntimeException re = assertThrows(RuntimeException.class,
       () -> pushResolver.getMergedBlockMeta(TEST_APP, 0, 0, 0));

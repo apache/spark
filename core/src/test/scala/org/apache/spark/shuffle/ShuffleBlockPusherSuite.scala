@@ -37,7 +37,7 @@ import org.apache.spark.internal.config.REDUCER_MAX_BLOCKS_IN_FLIGHT_PER_ADDRESS
 import org.apache.spark.network.buffer.ManagedBuffer
 import org.apache.spark.network.server.BlockPushNonFatalFailure
 import org.apache.spark.network.server.BlockPushNonFatalFailure.ReturnCode
-import org.apache.spark.network.shuffle.{BlockPushingListener, BlockStoreClient}
+import org.apache.spark.network.shuffle.{BlockPushingListener, BlockStoreClient, ErrorHandler}
 import org.apache.spark.network.util.TransportConf
 import org.apache.spark.serializer.JavaSerializer
 import org.apache.spark.shuffle.ShuffleBlockPusher.PushRequest
@@ -295,8 +295,7 @@ class ShuffleBlockPusherSuite extends SparkFunSuite with BeforeAndAfterEach {
   }
 
   test("Error retries") {
-    val pusher = new ShuffleBlockPusher(conf)
-    val errorHandler = pusher.createErrorHandler()
+    val errorHandler = ErrorHandler.blockPushErrorHandler
     assert(
       !errorHandler.shouldRetryError(new BlockPushNonFatalFailure(
         ReturnCode.TOO_LATE_BLOCK_PUSH, "")))
@@ -314,8 +313,7 @@ class ShuffleBlockPusherSuite extends SparkFunSuite with BeforeAndAfterEach {
   }
 
   test("Error logging") {
-    val pusher = new ShuffleBlockPusher(conf)
-    val errorHandler = pusher.createErrorHandler()
+    val errorHandler = ErrorHandler.blockPushErrorHandler
     assert(
       !errorHandler.shouldLogError(new BlockPushNonFatalFailure(
         ReturnCode.TOO_LATE_BLOCK_PUSH, "")))

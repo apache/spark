@@ -45,7 +45,6 @@ import org.apache.spark.network.shuffle.protocol.PushBlockStream;
  */
 public class OneForOneBlockPusher {
   private static final Logger logger = LoggerFactory.getLogger(OneForOneBlockPusher.class);
-  private static final ErrorHandler PUSH_ERROR_HANDLER = new ErrorHandler.BlockPushErrorHandler();
   public static final String SHUFFLE_PUSH_BLOCK_PREFIX = "shufflePush";
 
   private final TransportClient client;
@@ -128,7 +127,7 @@ public class OneForOneBlockPusher {
     // would immediately invoke parent listener's onBlockTransferFailure. However, the remaining
     // blocks in the same batch would remain current and active and they won't be impacted by
     // this exception.
-    if (PUSH_ERROR_HANDLER.shouldRetryError(e)) {
+    if (ErrorHandler.blockPushErrorHandler().shouldRetryError(e)) {
       String[] targetBlockId = Arrays.copyOfRange(blockIds, index, index + 1);
       failRemainingBlocks(targetBlockId, e);
     } else {

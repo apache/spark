@@ -33,9 +33,8 @@ import org.apache.spark.internal.config._
 import org.apache.spark.launcher.SparkLauncher
 import org.apache.spark.network.buffer.{FileSegmentManagedBuffer, ManagedBuffer, NioManagedBuffer}
 import org.apache.spark.network.netty.SparkTransportConf
-import org.apache.spark.network.server.BlockPushNonFatalFailure
 import org.apache.spark.network.shuffle.BlockPushingListener
-import org.apache.spark.network.shuffle.ErrorHandler.BlockPushErrorHandler
+import org.apache.spark.network.shuffle.ErrorHandler
 import org.apache.spark.network.util.TransportConf
 import org.apache.spark.shuffle.ShuffleBlockPusher._
 import org.apache.spark.storage.{BlockId, BlockManagerId, ShufflePushBlockId}
@@ -60,7 +59,6 @@ private[spark] class ShuffleBlockPusher(conf: SparkConf) extends Logging {
   private[this] val numBlocksInFlightPerAddress = new HashMap[BlockManagerId, Int]()
   private[this] val deferredPushRequests = new HashMap[BlockManagerId, Queue[PushRequest]]()
   private[this] val pushRequests = new Queue[PushRequest]
-  private[this] val errorHandler = createErrorHandler()
   // VisibleForTesting
   private[shuffle] val unreachableBlockMgrs = new HashSet[BlockManagerId]()
   private[this] var shuffleId = -1
@@ -68,28 +66,6 @@ private[spark] class ShuffleBlockPusher(conf: SparkConf) extends Logging {
   private[this] var shuffleMergeId = -1
   private[this] var pushCompletionNotified = false
 
-  // VisibleForTesting
-  private[shuffle] def createErrorHandler(): BlockPushErrorHandler = {
-    new BlockPushErrorHandler() {
-      // For a connection exception against a particular host, we will stop pushing any
-      // blocks to just that host and continue push blocks to other hosts. So, here push of
-      // all blocks will only stop when it is "Too Late" or "Invalid Block push.
-      // Also see updateStateAndCheckIfPushMore.
-      override def shouldRetryError(t: Throwable): Boolean = {
-        // If it is a FileNotFoundException originating from the client while pushing the shuffle
-        // blocks to the server, then we stop pushing all the blocks because this indicates the
-        // shuffle files are deleted and subsequent block push will also fail.
-        if (t.getCause != null && t.getCause.isInstanceOf[FileNotFoundException]) {
-          return false
-        }
-        // If the block is too late or the invalid block push or the attempt is not the latest one,
-        // there is no need to retry it
-        !(t.isInstanceOf[BlockPushNonFatalFailure] &&
-          BlockPushNonFatalFailure.
-            shouldNotRetryErrorCode(t.asInstanceOf[BlockPushNonFatalFailure].getReturnCode));
-      }
-    }
-  }
   // VisibleForTesting
   private[shuffle] def isPushCompletionNotified = pushCompletionNotified
 
@@ -244,7 +220,7 @@ private[spark] class ShuffleBlockPusher(conf: SparkConf) extends Logging {
 
       override def onBlockPushFailure(blockId: String, exception: Throwable): Unit = {
         // check the message or it's cause to see it needs to be logged.
-        if (!errorHandler.shouldLogError(exception)) {
+        if (!ErrorHandler.blockPushErrorHandler().shouldLogError(exception)) {
           logTrace(s"Pushing block $blockId to $address failed.", exception)
         } else {
           logWarning(s"Pushing block $blockId to $address failed.", exception)
@@ -333,7 +309,8 @@ private[spark] class ShuffleBlockPusher(conf: SparkConf) extends Logging {
           s"not pushing any more blocks to this address.")
       }
     }
-    if (pushResult.failure != null && !errorHandler.shouldRetryError(pushResult.failure)) {
+    if (pushResult.failure != null &&
+      !ErrorHandler.blockPushErrorHandler().shouldRetryError(pushResult.failure)) {
       logDebug(s"Encountered an exception from $address which indicates that push needs to " +
         s"stop.")
       return false

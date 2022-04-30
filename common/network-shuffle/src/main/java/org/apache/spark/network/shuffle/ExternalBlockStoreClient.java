@@ -47,8 +47,6 @@ import org.apache.spark.network.util.TransportConf;
  * (via BlockTransferService), which has the downside of losing the data if we lose the executors.
  */
 public class ExternalBlockStoreClient extends BlockStoreClient {
-  private static final ErrorHandler PUSH_ERROR_HANDLER = new ErrorHandler.BlockPushErrorHandler();
-
   private final boolean authEnabled;
   private final SecretKeyHolder secretKeyHolder;
   private final long registrationTimeoutMs;
@@ -178,8 +176,8 @@ public class ExternalBlockStoreClient extends BlockStoreClient {
           };
       int maxRetries = transportConf.maxIORetries();
       if (maxRetries > 0) {
-        new RetryingBlockTransferor(
-          transportConf, blockPushStarter, blockIds, listener, PUSH_ERROR_HANDLER).start();
+        new RetryingBlockTransferor(transportConf, blockPushStarter, blockIds, listener,
+          ErrorHandler.blockPushErrorHandler()).start();
       } else {
         blockPushStarter.createAndStart(blockIds, listener);
       }

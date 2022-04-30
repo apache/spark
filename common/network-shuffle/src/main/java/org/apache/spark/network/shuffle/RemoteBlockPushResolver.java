@@ -83,7 +83,6 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
   public static final String MERGE_DIR_KEY = "mergeDir";
   public static final String ATTEMPT_ID_KEY = "attemptId";
   private static final int UNDEFINED_ATTEMPT_ID = -1;
-  private static final ErrorHandler.BlockPushErrorHandler ERROR_HANDLER = createErrorHandler();
   // ByteBuffer to respond to client upon a successful merge of a pushed block
   private static final ByteBuffer SUCCESS_RESPONSE =
     new BlockPushReturnCode(ReturnCode.SUCCESS.id(), "").toByteBuffer().asReadOnlyBuffer();
@@ -124,19 +123,6 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
       .weigher((Weigher<String, ShuffleIndexInformation>)
         (filePath, indexInfo) -> indexInfo.getRetainedMemorySize())
       .build(indexCacheLoader);
-  }
-
-  @VisibleForTesting
-  protected static ErrorHandler.BlockPushErrorHandler createErrorHandler() {
-    return new ErrorHandler.BlockPushErrorHandler() {
-      // Explicitly use a shuffle service side error handler for handling exceptions.
-      // BlockPushNonException on the server side only has the response field set. It
-      // might require different handling logic compared with a client side error handler.
-      @Override
-      public boolean shouldLogError(Throwable t) {
-        return !(t instanceof BlockPushNonFatalFailure);
-      }
-    };
   }
 
   @VisibleForTesting
@@ -249,8 +235,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
     if (null != partitionsInfo && partitionsInfo.shuffleMergeId > shuffleMergeId) {
       throw new RuntimeException(String.format(
         "MergedBlockMeta fetch for shuffle %s with shuffleMergeId %s reduceId %s is %s",
-        shuffleId, shuffleMergeId, reduceId,
-        ErrorHandler.BlockFetchErrorHandler.STALE_SHUFFLE_BLOCK_FETCH));
+        shuffleId, shuffleMergeId, reduceId, ErrorHandler.STALE_SHUFFLE_BLOCK_FETCH));
     }
     File indexFile = new File(
       appShuffleInfo.getMergedShuffleIndexFilePath(shuffleId, shuffleMergeId, reduceId));
@@ -283,8 +268,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
     if (null != partitionsInfo && partitionsInfo.shuffleMergeId > shuffleMergeId) {
       throw new RuntimeException(String.format(
         "MergedBlockData fetch for shuffle %s with shuffleMergeId %s reduceId %s is %s",
-        shuffleId, shuffleMergeId, reduceId,
-        ErrorHandler.BlockFetchErrorHandler.STALE_SHUFFLE_BLOCK_FETCH));
+        shuffleId, shuffleMergeId, reduceId, ErrorHandler.STALE_SHUFFLE_BLOCK_FETCH));
     }
     File dataFile = appShuffleInfo.getMergedShuffleDataFile(shuffleId, shuffleMergeId, reduceId);
     if (!dataFile.exists()) {
@@ -520,8 +504,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
           mergePartitionsInfo.isFinalized()) {
           throw new RuntimeException(String.format(
               "Shuffle merge finalize request for shuffle %s with" + " shuffleMergeId %s is %s",
-              msg.shuffleId, msg.shuffleMergeId,
-              ErrorHandler.BlockPushErrorHandler.STALE_SHUFFLE_FINALIZE_SUFFIX));
+              msg.shuffleId, msg.shuffleMergeId, ErrorHandler.STALE_SHUFFLE_FINALIZE_SUFFIX));
         } else if (msg.shuffleMergeId > mergePartitionsInfo.shuffleMergeId) {
           // If no blocks pushed for the finalizeShuffleMerge shuffleMergeId then return
           // empty MergeStatuses but cleanup the older shuffleMergeId files.
@@ -762,7 +745,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
       if (partitionInfo.shouldAbort(mergeManager.ioExceptionsThresholdDuringMerge)) {
         deferredBufs = null;
         throw new IllegalStateException(String.format("%s when merging %s",
-          ErrorHandler.BlockPushErrorHandler.IOEXCEPTIONS_EXCEEDED_THRESHOLD_PREFIX,
+          ErrorHandler.IOEXCEPTIONS_EXCEEDED_THRESHOLD_PREFIX,
           streamId));
       }
     }
@@ -963,7 +946,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
 
     @Override
     public void onFailure(String streamId, Throwable throwable) throws IOException {
-      if (ERROR_HANDLER.shouldLogError(throwable)) {
+      if (ErrorHandler.blockPushErrorHandler().shouldLogError(throwable)) {
         logger.error("Encountered issue when merging {}", streamId, throwable);
       } else {
         logger.debug("Encountered issue when merging {}", streamId, throwable);
