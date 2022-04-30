@@ -17,7 +17,7 @@
 
 package org.apache.spark.shuffle
 
-import java.io.{File, FileNotFoundException}
+import java.io.File
 import java.net.ConnectException
 import java.nio.ByteBuffer
 import java.util.concurrent.ExecutorService
