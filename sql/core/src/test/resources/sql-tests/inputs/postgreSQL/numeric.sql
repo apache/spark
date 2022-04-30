@@ -841,12 +841,6 @@ SELECT width_bucket(double('Infinity'), 1, 10, 10),
 DROP TABLE width_bucket_test;
 
 -- TO_CHAR()
-SELECT '' AS to_char_1, to_char(val, '9G999G999G999G999G999'), val
-FROM num_data;
-
-SELECT '' AS to_char_2, to_char(val, '9G999G999G999G999G999D999G999G999G999G999'), val
-FROM num_data;
-
 SELECT '' AS to_char_3, to_char(val, '9999999999999999.999999999999999PR'), val
 FROM num_data;
 

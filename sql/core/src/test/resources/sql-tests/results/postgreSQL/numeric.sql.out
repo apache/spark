@@ -4593,27 +4593,6 @@ struct<>
 -- !query output
 
 
-
--- !query
-SELECT '' AS to_char_1, to_char(val, '9G999G999G999G999G999'), val
-FROM num_data
--- !query schema
-struct<>
--- !query output
-java.lang.IllegalArgumentException
-The input Decimal value '16397.0384910000' does not match the given number format: '9G999G999G999G999G999'
-
-
--- !query
-SELECT '' AS to_char_2, to_char(val, '9G999G999G999G999G999D999G999G999G999G999'), val
-FROM num_data
--- !query schema
-struct<>
--- !query output
-org.apache.spark.sql.AnalysisException
-cannot resolve 'to_char(spark_catalog.default.num_data.val, '9G999G999G999G999G999D999G999G999G999G999')' due to data type mismatch: Thousands separators (, or G) may not appear after the decimal point in the number format: '9G999G999G999G999G999D999G999G999G999G999'; line 1 pos 24
-
-
 -- !query
 SELECT '' AS to_char_3, to_char(val, '9999999999999999.999999999999999PR'), val
 FROM num_data
