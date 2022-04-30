@@ -1871,14 +1871,12 @@ object EliminateLimits extends Rule[LogicalPlan] {
 }
 
 /**
- * Rewrite [[Offset]] as [[GlobalLimitAndOffset]] or [[LocalLimit]],
- * merging the expressions into one single expression. See [[Limit]] for more information
- * about the difference between [[LocalLimit]] and [[GlobalLimit]].
+ * Rewrite [[Offset]] by eliminate [[Offset]] or merge offset value and limit value into
+ * [[LocalLimit]]. See [[Limit]] for more
+ * information about the difference between [[LocalLimit]] and [[GlobalLimit]].
  */
 object RewriteOffsets extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-    case GlobalLimit(le, Offset(oe, grandChild)) =>
-      GlobalLimitAndOffset(le, oe, grandChild)
     case localLimit @ LocalLimit(le, Offset(oe, grandChild)) =>
       val offset = oe.eval().asInstanceOf[Int]
       if (offset == 0) {
