@@ -3868,6 +3868,10 @@ object CleanupAliases extends Rule[LogicalPlan] with AliasHelper {
       val cleanedAggs = aggs.map(trimNonTopLevelAliases)
       Aggregate(grouping.map(trimAliases), cleanedAggs, child)
 
+    case PartialAggregate(grouping, aggs, child) =>
+      val cleanedAggs = aggs.map(trimNonTopLevelAliases)
+      PartialAggregate(grouping.map(trimAliases), cleanedAggs, child)
+
     case Window(windowExprs, partitionSpec, orderSpec, child) =>
       val cleanedWindowExprs = windowExprs.map(trimNonTopLevelAliases)
       Window(cleanedWindowExprs, partitionSpec.map(trimAliases),

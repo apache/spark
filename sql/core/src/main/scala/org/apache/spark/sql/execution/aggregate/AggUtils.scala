@@ -125,6 +125,7 @@ object AggUtils {
       groupingExpressions: Seq[NamedExpression],
       aggregateExpressions: Seq[AggregateExpression],
       resultExpressions: Seq[NamedExpression],
+      partialOnly: Boolean = false,
       child: SparkPlan): Seq[SparkPlan] = {
     // Check if we can use HashAggregate.
 
@@ -168,7 +169,20 @@ object AggUtils {
         resultExpressions = resultExpressions,
         child = interExec)
 
-    finalAggregate :: Nil
+    if (partialOnly) {
+      val completeAggregateExpressions = aggregateExpressions.map(_.copy(mode = Complete))
+      createAggregate(
+        requiredChildDistributionExpressions = None,
+        groupingExpressions = groupingAttributes,
+        aggregateExpressions = completeAggregateExpressions,
+        aggregateAttributes = completeAggregateExpressions.map(_.resultAttribute),
+        initialInputBufferOffset = groupingExpressions.length,
+        resultExpressions = resultExpressions,
+        isPartialAgg = true,
+        child = child) :: Nil
+    } else {
+      finalAggregate :: Nil
+    }
   }
 
   def planAggregateWithOneDistinct(

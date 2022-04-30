@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.catalyst.analysis.MultiAlias
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
-import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Project}
+import org.apache.spark.sql.catalyst.plans.logical.{AggregateBase, Project}
 import org.apache.spark.sql.types.Metadata
 
 /**
@@ -33,7 +33,7 @@ trait AliasHelper {
     getAliasMap(plan.projectList)
   }
 
-  protected def getAliasMap(plan: Aggregate): AttributeMap[Alias] = {
+  protected def getAliasMap(plan: AggregateBase): AttributeMap[Alias] = {
     // Find all the aliased expressions in the aggregate list that don't include any actual
     // AggregateExpression or PythonUDF, and create a map from the alias to the expression
     val aliasMap = plan.aggregateExpressions.collect {

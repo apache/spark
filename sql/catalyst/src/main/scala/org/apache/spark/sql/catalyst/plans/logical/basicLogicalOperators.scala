@@ -1092,28 +1092,15 @@ case class Range(
   }
 }
 
-/**
- * This is a Group by operator with the aggregate functions and projections.
- *
- * @param groupingExpressions expressions for grouping keys
- * @param aggregateExpressions expressions for a project list, which could contain
- *                             [[AggregateExpression]]s.
- *
- * Note: Currently, aggregateExpressions is the project list of this Group by operator. Before
- * separating projection from grouping and aggregate, we should avoid expression-level optimization
- * on aggregateExpressions, which could reference an expression in groupingExpressions.
- * For example, see the rule [[org.apache.spark.sql.catalyst.optimizer.SimplifyExtractValueOps]]
- */
-case class Aggregate(
-    groupingExpressions: Seq[Expression],
-    aggregateExpressions: Seq[NamedExpression],
-    child: LogicalPlan)
-  extends UnaryNode {
+abstract class AggregateBase(
+    val groupingExpressions: Seq[Expression],
+    val aggregateExpressions: Seq[NamedExpression],
+    child: LogicalPlan) extends UnaryNode {
 
   override lazy val resolved: Boolean = {
     val hasWindowExpressions = aggregateExpressions.exists ( _.collect {
-        case window: WindowExpression => window
-      }.nonEmpty
+      case window: WindowExpression => window
+    }.nonEmpty
     )
 
     expressions.forall(_.resolved) && childrenResolved && !hasWindowExpressions
@@ -1136,9 +1123,6 @@ case class Aggregate(
     getAllValidConstraints(nonAgg)
   }
 
-  override protected def withNewChildInternal(newChild: LogicalPlan): Aggregate =
-    copy(child = newChild)
-
   // Whether this Aggregate operator is group only. For example: SELECT a, a FROM t GROUP BY a
   private[sql] def groupOnly: Boolean = {
     // aggregateExpressions can be empty through Dateset.agg,
@@ -1148,6 +1132,45 @@ case class Aggregate(
       case e => e
     }.forall(a => a.foldable || groupingExpressions.exists(g => a.semanticEquals(g)))
   }
+
+  private[sql] lazy val collectAggregateExprs: Seq[AggregateExpression] = {
+    // Collect all aggregate expressions.
+    aggregateExpressions.flatMap { _.collect {
+      case ae: AggregateExpression => ae
+    }}
+  }
+}
+
+/**
+ * This is a Group by operator with the aggregate functions and projections.
+ *
+ * @param groupingExpressions expressions for grouping keys
+ * @param aggregateExpressions expressions for a project list, which could contain
+ *                             [[AggregateExpression]]s.
+ *
+ * Note: Currently, aggregateExpressions is the project list of this Group by operator. Before
+ * separating projection from grouping and aggregate, we should avoid expression-level optimization
+ * on aggregateExpressions, which could reference an expression in groupingExpressions.
+ * For example, see the rule [[org.apache.spark.sql.catalyst.optimizer.SimplifyExtractValueOps]]
+ */
+case class Aggregate(
+    override val groupingExpressions: Seq[Expression],
+    override val aggregateExpressions: Seq[NamedExpression],
+    child: LogicalPlan)
+  extends AggregateBase(groupingExpressions, aggregateExpressions, child) {
+
+  override protected def withNewChildInternal(newChild: LogicalPlan): Aggregate =
+    copy(child = newChild)
+}
+
+case class PartialAggregate(
+    override val groupingExpressions: Seq[Expression],
+    override val aggregateExpressions: Seq[NamedExpression],
+    child: LogicalPlan)
+  extends AggregateBase(groupingExpressions, aggregateExpressions, child) {
+
+  override protected def withNewChildInternal(newChild: LogicalPlan): PartialAggregate =
+    copy(child = newChild)
 }
 
 object Aggregate {

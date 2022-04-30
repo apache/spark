@@ -67,6 +67,8 @@ object SizeInBytesOnlyStatsPlanVisitor extends LogicalPlanVisitor[Statistics] {
     }
   }
 
+  override def visitPartialAggregate(p: PartialAggregate): Statistics = p.child.stats
+
   override def visitDistinct(p: Distinct): Statistics = visitUnaryNode(p)
 
   override def visitExcept(p: Except): Statistics = p.left.stats.copy()

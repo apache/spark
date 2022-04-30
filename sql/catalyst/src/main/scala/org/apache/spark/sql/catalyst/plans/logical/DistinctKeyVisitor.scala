@@ -70,6 +70,8 @@ object DistinctKeyVisitor extends LogicalPlanVisitor[Set[ExpressionSet]] {
     projectDistinctKeys(addDistinctKey(p.child.distinctKeys, groupingExps), p.aggregateExpressions)
   }
 
+  override def visitPartialAggregate(p: PartialAggregate): Set[ExpressionSet] = default(p)
+
   override def visitDistinct(p: Distinct): Set[ExpressionSet] = Set(ExpressionSet(p.output))
 
   override def visitExcept(p: Except): Set[ExpressionSet] =

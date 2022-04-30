@@ -551,6 +551,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
               normalizedGroupingExpressions,
               aggregateExpressions,
               resultExpressions,
+              false,
               planLater(child))
           } else {
             // functionsWithDistinct is guaranteed to be non-empty. Even though it may contain
@@ -604,6 +605,33 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           .map(_.asInstanceOf[PythonUDF].name)
         // If cannot match the two cases above, then it's an error
         throw QueryCompilationErrors.invalidPandasUDFPlacementError(groupAggPandasUDFNames.distinct)
+
+      case PartialAggregate(groupingExps, aggregateExps, child) =>
+        PhysicalAggregation.unapply(logical.Aggregate(groupingExps, aggregateExps, child)) match {
+          case Some((groupingExpressions, aggExpressions, resultExpressions, child))
+            if aggExpressions.forall(expr => expr.isInstanceOf[AggregateExpression]) =>
+            val aggregateExpressions = aggExpressions.map(expr =>
+              expr.asInstanceOf[AggregateExpression])
+
+            // Ideally this should be done in `NormalizeFloatingNumbers`, but we do it here because
+            // `groupingExpressions` is not extracted during logical phase.
+            val normalizedGroupingExpressions = groupingExpressions.map { e =>
+              NormalizeFloatingNumbers.normalize(e) match {
+                case n: NamedExpression => n
+                // Keep the name of the original expression.
+                case other => Alias(other, e.name)(exprId = e.exprId)
+              }
+            }
+            AggUtils.planAggregateWithoutDistinct(
+              normalizedGroupingExpressions,
+              aggregateExpressions,
+              resultExpressions,
+              true,
+              planLater(child))
+
+          case _ =>
+            Nil
+        }
 
       case _ => Nil
     }

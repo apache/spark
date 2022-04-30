@@ -450,7 +450,7 @@ abstract class TypeCoercionBase {
         m.copy(newKeys.zip(newValues).flatMap { case (k, v) => Seq(k, v) })
 
       // Hive lets you do aggregation of timestamps... for some reason
-      case Sum(e @ TimestampType(), _) => Sum(Cast(e, DoubleType))
+      case Sum(e @ TimestampType(), _, _) => Sum(Cast(e, DoubleType))
       case Average(e @ TimestampType(), _) => Average(Cast(e, DoubleType))
 
       // Coalesce should return the first non-null value, which could be any column

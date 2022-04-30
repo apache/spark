@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.BindReferences.bindReference
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
-import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LeafNode, LogicalPlan, Project}
+import org.apache.spark.sql.catalyst.plans.logical.{AggregateBase, LeafNode, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.util.TypeUtils
 import org.apache.spark.sql.internal.SQLConf
@@ -135,7 +135,7 @@ trait PredicateHelper extends AliasHelper with Logging {
         val aliases = getAliasMap(p)
         findExpressionAndTrackLineageDown(replaceAlias(exp, aliases), p.child)
       // we can unwrap only if there are row projections, and no aggregation operation
-      case a: Aggregate =>
+      case a: AggregateBase =>
         val aliasMap = getAliasMap(a)
         findExpressionAndTrackLineageDown(replaceAlias(exp, aliasMap), a.child)
       case l: LeafNode if exp.references.subsetOf(l.outputSet) =>

@@ -923,7 +923,7 @@ case class HashAggregateExec(
          |if (!$skipPartialAggregateTerm) {
          |  if ($numberOfConsumedTerm == ${conf.adaptivePartialAggregationThreshold}) {
          |    $numberOfKeys
-         |    if ((double) $numberOfConsumedKeysTerm / (double) $numberOfConsumedTerm > 0.85) {
+         |    if ((double) $numberOfConsumedKeysTerm / (double) $numberOfConsumedTerm > 0.95) {
          |       $skipPartialAggregateTerm = true;
          |    }
          |  }

@@ -211,6 +211,10 @@ abstract class Optimizer(catalogManager: CatalogManager)
       CostBasedJoinReorder) :+
     Batch("Eliminate Sorts", Once,
       EliminateSorts) :+
+    // This batch must run before "Decimal Optimizations", as that one may change
+    // the attribute to UnscaledValue
+    Batch("Push Partial Aggregation Through Join", Once,
+      PushPartialAggregationThroughJoin) :+
     Batch("Decimal Optimizations", fixedPoint,
       DecimalAggregates) :+
     // This batch must run after "Decimal Optimizations", as that one may change the
@@ -241,6 +245,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
       RemoveRedundantAliases,
       RemoveNoopOperators) :+
     // This batch must be executed after the `RewriteSubquery` batch, which creates joins.
+    Batch("DeduplicateRightSideOfLeftSemiAntiJoin", Once, DeduplicateRightSideOfLeftSemiAntiJoin) :+
     Batch("NormalizeFloatingNumbers", Once, NormalizeFloatingNumbers) :+
     Batch("ReplaceUpdateFieldsExpression", Once, ReplaceUpdateFieldsExpression)
 
@@ -834,6 +839,9 @@ object ColumnPruning extends Rule[LogicalPlan] {
     case p @ Project(_, a: Aggregate) if !a.outputSet.subsetOf(p.references) =>
       p.copy(
         child = a.copy(aggregateExpressions = a.aggregateExpressions.filter(p.references.contains)))
+    case p @ Project(_, a: PartialAggregate) if !a.outputSet.subsetOf(p.references) =>
+      p.copy(
+        child = a.copy(aggregateExpressions = a.aggregateExpressions.filter(p.references.contains)))
     case a @ Project(_, e @ Expand(_, _, grandChild)) if !e.outputSet.subsetOf(a.references) =>
       val newOutput = e.output.filter(a.references.contains(_))
       val newProjects = e.projections.map { proj =>
@@ -854,6 +862,8 @@ object ColumnPruning extends Rule[LogicalPlan] {
 
     // Prunes the unused columns from child of Aggregate/Expand/Generate/ScriptTransformation
     case a @ Aggregate(_, _, child) if !child.outputSet.subsetOf(a.references) =>
+      a.copy(child = prunedChild(child, a.references))
+    case a @ PartialAggregate(_, _, child) if !child.outputSet.subsetOf(a.references) =>
       a.copy(child = prunedChild(child, a.references))
     case f @ FlatMapGroupsInPandas(_, _, _, child) if !child.outputSet.subsetOf(f.references) =>
       f.copy(child = prunedChild(child, f.references))
@@ -980,6 +990,11 @@ object CollapseProject extends Rule[LogicalPlan] with AliasHelper {
       case p @ Project(_, agg: Aggregate)
           if canCollapseExpressions(p.projectList, agg.aggregateExpressions, alwaysInline) &&
              canCollapseAggregate(p, agg) =>
+        agg.copy(aggregateExpressions = buildCleanedProjectList(
+          p.projectList, agg.aggregateExpressions))
+      case p @ Project(_, agg: PartialAggregate)
+          if canCollapseExpressions(p.projectList, agg.aggregateExpressions, alwaysInline) &&
+            canCollapseAggregate(p, agg) =>
         agg.copy(aggregateExpressions = buildCleanedProjectList(
           p.projectList, agg.aggregateExpressions))
       case Project(l1, g @ GlobalLimit(_, limit @ LocalLimit(_, p2 @ Project(l2, _))))
@@ -1116,7 +1131,7 @@ object CollapseProject extends Rule[LogicalPlan] with AliasHelper {
    * in aggregate if they are also part of the grouping expressions. Otherwise the plan
    * after subquery rewrite will not be valid.
    */
-  private def canCollapseAggregate(p: Project, a: Aggregate): Boolean = {
+  private def canCollapseAggregate(p: Project, a: AggregateBase): Boolean = {
     p.projectList.forall(_.collect {
       case s: ScalarSubquery if s.outerAttrs.nonEmpty => s
     }.isEmpty)
@@ -1694,6 +1709,34 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
         filter
       }
 
+    case filter @ Filter(condition, aggregate: PartialAggregate)
+      if aggregate.aggregateExpressions.forall(_.deterministic)
+        && aggregate.groupingExpressions.nonEmpty =>
+      val aliasMap = getAliasMap(aggregate)
+
+      // For each filter, expand the alias and check if the filter can be evaluated using
+      // attributes produced by the aggregate operator's child operator.
+      val (candidates, nonDeterministic) =
+      splitConjunctivePredicates(condition).partition(_.deterministic)
+
+      val (pushDown, rest) = candidates.partition { cond =>
+        val replaced = replaceAlias(cond, aliasMap)
+        cond.references.nonEmpty && replaced.references.subsetOf(aggregate.child.outputSet)
+      }
+
+      val stayUp = rest ++ nonDeterministic
+
+      if (pushDown.nonEmpty) {
+        val pushDownPredicate = pushDown.reduce(And)
+        val replaced = replaceAlias(pushDownPredicate, aliasMap)
+        val newAggregate = aggregate.copy(child = Filter(replaced, aggregate.child))
+        // If there is no more filter to stay up, just eliminate the filter.
+        // Otherwise, create "Filter(stayUp) <- Aggregate <- Filter(pushDownPredicate)".
+        if (stayUp.isEmpty) newAggregate else Filter(stayUp.reduce(And), newAggregate)
+      } else {
+        filter
+      }
+
     // Push [[Filter]] operators through [[Window]] operators. Parts of the predicate that can be
     // pushed beneath must satisfy the following conditions:
     // 1. All the expressions are part of window partitioning key. The expressions can be compound.
@@ -2059,7 +2102,7 @@ object DecimalAggregates extends Rule[LogicalPlan] {
     case q: LogicalPlan => q.transformExpressionsDownWithPruning(
       _.containsAnyPattern(SUM, AVERAGE), ruleId) {
       case we @ WindowExpression(ae @ AggregateExpression(af, _, _, _, _), _) => af match {
-        case Sum(e @ DecimalType.Expression(prec, scale), _) if prec + 10 <= MAX_LONG_DIGITS =>
+        case Sum(e @ DecimalType.Expression(prec, scale), _, _) if prec + 10 <= MAX_LONG_DIGITS =>
           MakeDecimal(we.copy(windowFunction = ae.copy(aggregateFunction = Sum(UnscaledValue(e)))),
             prec + 10, scale)
 
@@ -2073,7 +2116,7 @@ object DecimalAggregates extends Rule[LogicalPlan] {
         case _ => we
       }
       case ae @ AggregateExpression(af, _, _, _, _) => af match {
-        case Sum(e @ DecimalType.Expression(prec, scale), _) if prec + 10 <= MAX_LONG_DIGITS =>
+        case Sum(e @ DecimalType.Expression(prec, scale), _, _) if prec + 10 <= MAX_LONG_DIGITS =>
           MakeDecimal(ae.copy(aggregateFunction = Sum(UnscaledValue(e))), prec + 10, scale)
 
         case Average(e @ DecimalType.Expression(prec, scale), _) if prec + 4 <= MAX_DOUBLE_DIGITS =>

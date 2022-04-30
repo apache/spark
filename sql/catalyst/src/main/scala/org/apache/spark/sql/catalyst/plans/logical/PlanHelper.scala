@@ -43,7 +43,7 @@ object PlanHelper {
         case e: WindowExpression
           if !plan.isInstanceOf[Window] => e
         case e: AggregateExpression
-          if !(plan.isInstanceOf[Aggregate] ||
+          if !(plan.isInstanceOf[AggregateBase] ||
                plan.isInstanceOf[Window] ||
                plan.isInstanceOf[CollectMetrics] ||
                onlyInLateralSubquery(plan)) => e

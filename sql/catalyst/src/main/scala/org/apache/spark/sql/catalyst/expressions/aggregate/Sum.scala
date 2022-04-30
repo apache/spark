@@ -26,7 +26,8 @@ import org.apache.spark.sql.catalyst.util.TypeUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
-abstract class SumBase(child: Expression) extends DeclarativeAggregate
+abstract class SumBase(
+    child: Expression, resultDataType: Option[DataType] = None) extends DeclarativeAggregate
   with ImplicitCastInputTypes
   with UnaryLike[Expression] {
 
@@ -48,13 +49,15 @@ abstract class SumBase(child: Expression) extends DeclarativeAggregate
 
   final override val nodePatterns: Seq[TreePattern] = Seq(SUM)
 
-  protected lazy val resultType = child.dataType match {
-    case DecimalType.Fixed(precision, scale) =>
-      DecimalType.bounded(precision + 10, scale)
-    case _: IntegralType => LongType
-    case it: YearMonthIntervalType => it
-    case it: DayTimeIntervalType => it
-    case _ => DoubleType
+  protected lazy val resultType = resultDataType.getOrElse {
+    child.dataType match {
+      case DecimalType.Fixed(precision, scale) =>
+        DecimalType.bounded(precision + 10, scale)
+      case _: IntegralType => LongType
+      case it: YearMonthIntervalType => it
+      case it: DayTimeIntervalType => it
+      case _ => DoubleType
+    }
   }
 
   private lazy val sum = AttributeReference("sum", resultType)()
@@ -178,9 +181,11 @@ abstract class SumBase(child: Expression) extends DeclarativeAggregate
   since = "1.0.0")
 case class Sum(
     child: Expression,
-    useAnsiAdd: Boolean = SQLConf.get.ansiEnabled)
-  extends SumBase(child) with SupportQueryContext {
-  def this(child: Expression) = this(child, useAnsiAdd = SQLConf.get.ansiEnabled)
+    useAnsiAdd: Boolean = SQLConf.get.ansiEnabled,
+    resultDataType = None)
+  extends SumBase(child, resultDataType) with SupportQueryContext {
+  def this(child: Expression) =
+    this(child, useAnsiAdd = SQLConf.get.ansiEnabled, resultDataType = None)
 
   override def shouldTrackIsEmpty: Boolean = resultType match {
     case _: DecimalType => true
@@ -219,7 +224,7 @@ case class Sum(
   since = "3.3.0",
   group = "agg_funcs")
 // scalastyle:on line.size.limit
-case class TrySum(child: Expression) extends SumBase(child) {
+case class TrySum(child: Expression) extends SumBase(child, None) {
 
   override def useAnsiAdd: Boolean = dataType match {
     // Double type won't fail, thus useAnsiAdd is always false
