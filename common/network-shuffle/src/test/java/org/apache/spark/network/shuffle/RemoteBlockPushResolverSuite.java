@@ -22,6 +22,7 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.nio.channels.ClosedChannelException;
 import java.nio.channels.FileChannel;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -31,7 +32,6 @@ import java.util.Map;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.ThreadLocalRandom;
 
-import com.google.common.base.Throwables;
 import com.google.common.collect.ImmutableMap;
 
 import org.apache.commons.io.FileUtils;
@@ -113,14 +113,11 @@ public class RemoteBlockPushResolverSuite {
     assertTrue(errorHandler.shouldLogError(new Throwable()));
   }
 
-  @Test(expected = RuntimeException.class)
+  @Test
   public void testNoIndexFile() {
-    try {
-      pushResolver.getMergedBlockMeta(TEST_APP, 0, 0, 0);
-    } catch (Throwable t) {
-      assertTrue(t.getMessage().startsWith("Merged shuffle index file"));
-      Throwables.propagate(t);
-    }
+    RuntimeException re = assertThrows(RuntimeException.class,
+      () -> pushResolver.getMergedBlockMeta(TEST_APP, 0, 0, 0));
+    assertTrue(re.getMessage().startsWith("Merged shuffle index file"));
   }
 
   @Test
@@ -312,15 +309,9 @@ public class RemoteBlockPushResolverSuite {
     StreamCallbackWithID stream1 = pushResolver.receiveBlockDataAsStream(
       new PushBlockStream(TEST_APP, NO_ATTEMPT_ID, 0, 0, 1, 0, 0));
     stream1.onData(stream1.getID(), ByteBuffer.wrap(new byte[4]));
-    try {
-      stream1.onComplete(stream1.getID());
-    } catch (BlockPushResponse e) {
-      assertEquals(BlockPushResponse.ReturnCode.TOO_LATE_BLOCK_PUSH, e.getReturnCode());
-      assertEquals(e.getBlockId(), stream1.getID());
-      MergedBlockMeta blockMeta = pushResolver.getMergedBlockMeta(TEST_APP, 0, 0, 0);
-      validateChunks(TEST_APP, 0, 0, 0, blockMeta, new int[]{9}, new int[][]{{0}});
-      throw e;
-    }
+    stream1.onComplete(stream1.getID());
+    MergedBlockMeta blockMeta = pushResolver.getMergedBlockMeta(TEST_APP, 0, 0, 0);
+    validateChunks(TEST_APP, 0, 0, 0, blockMeta, new int[]{9}, new int[][]{{0}});
   }
 
   @Test
@@ -371,10 +362,11 @@ public class RemoteBlockPushResolverSuite {
     StreamCallbackWithID stream3 =
       pushResolver.receiveBlockDataAsStream(
         new PushBlockStream(TEST_APP, NO_ATTEMPT_ID, 0, 0, 2, 0, 0));
+    // This should be deferred
+    stream3.onData(stream3.getID(), ByteBuffer.wrap(new byte[5]));
     // Since this stream didn't get any opportunity it will throw couldn't find opportunity error
     BlockPushResponse failedEx = null;
     try {
-      stream3.onData(stream3.getID(), ByteBuffer.wrap(new byte[5]));
       stream3.onComplete(stream3.getID());
     } catch (BlockPushResponse e) {
       failedEx = e;
@@ -389,7 +381,7 @@ public class RemoteBlockPushResolverSuite {
     Assert.assertNull("There should no collision exception", failedEx);
   }
 
-  @Test(expected = IllegalArgumentException.class)
+  @Test
   public void testUpdateLocalDirsOnlyOnce() throws IOException {
     String testApp = "updateLocalDirsOnlyOnceTest";
     Path[] activeLocalDirs = createLocalDirs(1);
@@ -407,32 +399,25 @@ public class RemoteBlockPushResolverSuite {
     assertTrue(pushResolver.getMergedBlockDirs(testApp)[0].contains(
       activeLocalDirs[0].toFile().getPath()));
     removeApplication(testApp);
-    try {
-      pushResolver.getMergedBlockDirs(testApp);
-    } catch (IllegalArgumentException e) {
-      assertEquals(e.getMessage(),
-        "application " + testApp + " is not registered or NM was restarted.");
-      throw e;
-    }
+    IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
+      () -> pushResolver.getMergedBlockDirs(testApp));
+    assertEquals(e.getMessage(),
+      "application " + testApp + " is not registered or NM was restarted.");
   }
 
-  @Test(expected = IllegalArgumentException.class)
+  @Test
   public void testExecutorRegisterWithInvalidJsonForPushShuffle() throws IOException {
     String testApp = "executorRegisterWithInvalidShuffleManagerMeta";
     Path[] activeLocalDirs = createLocalDirs(1);
-    try {
-      registerExecutor(testApp, prepareLocalDirs(activeLocalDirs, MERGE_DIRECTORY),
-        INVALID_MERGE_DIRECTORY_META);
-    } catch (IllegalArgumentException re) {
-      assertEquals(
-        "Failed to get the merge directory information from the shuffleManagerMeta " +
-          "shuffleManager:{\"mergeDirInvalid\": \"merge_manager_2\", \"attemptId\": \"2\"} in " +
-          "executor registration message", re.getMessage());
-      throw re;
-    }
+    IllegalArgumentException re = assertThrows(IllegalArgumentException.class,
+      () -> registerExecutor(testApp, prepareLocalDirs(activeLocalDirs, MERGE_DIRECTORY),
+        INVALID_MERGE_DIRECTORY_META));
+    assertEquals("Failed to get the merge directory information from the shuffleManagerMeta " +
+      "shuffleManager:{\"mergeDirInvalid\": \"merge_manager_2\", \"attemptId\": \"2\"} in " +
+      "executor registration message", re.getMessage());
   }
 
-  @Test(expected = IllegalArgumentException.class)
+  @Test
   public void testExecutorRegistrationFromTwoAppAttempts() throws IOException {
     String testApp = "testExecutorRegistrationFromTwoAppAttempts";
     Path[] attempt1LocalDirs = createLocalDirs(1);
@@ -460,13 +445,10 @@ public class RemoteBlockPushResolverSuite {
     assertTrue(pushResolver.getMergedBlockDirs(testApp)[0].contains(
       attempt2LocalDirs[0].toFile().getPath()));
     removeApplication(testApp);
-    try {
-      pushResolver.getMergedBlockDirs(testApp);
-    } catch (IllegalArgumentException e) {
-      assertEquals(e.getMessage(),
-        "application " + testApp + " is not registered or NM was restarted.");
-      throw e;
-    }
+    IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
+      () -> pushResolver.getMergedBlockDirs(testApp));
+    assertEquals(e.getMessage(),
+      "application " + testApp + " is not registered or NM was restarted.");
   }
 
   @Test
@@ -631,7 +613,7 @@ public class RemoteBlockPushResolverSuite {
     validateChunks(TEST_APP, 0, 0, 0, blockMeta, new int[] {4, 5}, new int[][] {{0}, {1}});
   }
 
-  @Test(expected = RuntimeException.class)
+  @Test
   public void testIOExceptionsExceededThreshold() throws IOException {
     RemoteBlockPushResolver.PushBlockStreamCallback callback =
       (RemoteBlockPushResolver.PushBlockStreamCallback) pushResolver.receiveBlockDataAsStream(
@@ -645,30 +627,28 @@ public class RemoteBlockPushResolverSuite {
       RemoteBlockPushResolver.PushBlockStreamCallback callback1 =
         (RemoteBlockPushResolver.PushBlockStreamCallback) pushResolver.receiveBlockDataAsStream(
           new PushBlockStream(TEST_APP, NO_ATTEMPT_ID, 0, 0, i, 0, 0));
-      try {
-        callback1.onData(callback1.getID(), ByteBuffer.wrap(new byte[2]));
-        callback1.onComplete(callback1.getID());
-      } catch (IOException ioe) {
-        // this will throw IOException so the client can retry.
-        callback1.onFailure(callback1.getID(), ioe);
-      }
+      IOException ioe = assertThrows(IOException.class,
+        () -> {
+          callback1.onData(callback1.getID(), ByteBuffer.wrap(new byte[2]));
+          callback1.onComplete(callback1.getID());
+        });
+      // this will throw IOException so the client can retry.
+      callback1.onFailure(callback1.getID(), ioe);
     }
     assertEquals(4, partitionInfo.getNumIOExceptions());
     // After 4 IOException, the server will respond with IOExceptions exceeded threshold
-    try {
-      RemoteBlockPushResolver.PushBlockStreamCallback callback2 =
-        (RemoteBlockPushResolver.PushBlockStreamCallback) pushResolver.receiveBlockDataAsStream(
-          new PushBlockStream(TEST_APP, NO_ATTEMPT_ID, 0, 0, 5, 0, 0));
+    RemoteBlockPushResolver.PushBlockStreamCallback callback2 =
+      (RemoteBlockPushResolver.PushBlockStreamCallback) pushResolver.receiveBlockDataAsStream(
+        new PushBlockStream(TEST_APP, NO_ATTEMPT_ID, 0, 0, 5, 0, 0));
+    IllegalStateException e = assertThrows(IllegalStateException.class, () -> {
       callback2.onData(callback.getID(), ByteBuffer.wrap(new byte[1]));
       callback2.onComplete(callback.getID());
-    } catch (Throwable t) {
-      assertEquals("IOExceptions exceeded the threshold when merging shufflePush_0_0_5_0",
-        t.getMessage());
-      throw t;
-    }
+    });
+    assertEquals("IOExceptions exceeded the threshold when merging shufflePush_0_0_5_0",
+      e.getMessage());
   }
 
-  @Test(expected = RuntimeException.class)
+  @Test
   public void testIOExceptionsDuringMetaUpdateIncreasesExceptionCount() throws IOException {
     useTestFiles(true, false);
     RemoteBlockPushResolver.PushBlockStreamCallback callback =
@@ -690,37 +670,29 @@ public class RemoteBlockPushResolverSuite {
     assertEquals(4, partitionInfo.getNumIOExceptions());
     // After 4 IOException, the server will respond with IOExceptions exceeded threshold for any
     // new request for this partition.
-    try {
-      RemoteBlockPushResolver.PushBlockStreamCallback callback2 =
+    RemoteBlockPushResolver.PushBlockStreamCallback callback2 =
       (RemoteBlockPushResolver.PushBlockStreamCallback) pushResolver.receiveBlockDataAsStream(
         new PushBlockStream(TEST_APP, NO_ATTEMPT_ID, 0, 0, 5, 0, 0));
-      callback2.onData(callback2.getID(), ByteBuffer.wrap(new byte[4]));
-      callback2.onComplete(callback2.getID());
-    } catch (Throwable t) {
-      assertEquals("IOExceptions exceeded the threshold when merging shufflePush_0_0_5_0",
-        t.getMessage());
-      throw t;
-    }
+    callback2.onData(callback2.getID(), ByteBuffer.wrap(new byte[4]));
+    IllegalStateException e = assertThrows(IllegalStateException.class,
+      () -> callback2.onComplete(callback2.getID()));
+    assertEquals("IOExceptions exceeded the threshold when merging shufflePush_0_0_5_0",
+      e.getMessage());
   }
 
-  @Test(expected = RuntimeException.class)
-  public void testRequestForAbortedShufflePartitionThrowsException() {
-    try {
-      testIOExceptionsDuringMetaUpdateIncreasesExceptionCount();
-    } catch (Throwable t) {
-      // No more blocks can be merged to this partition.
-    }
-    try {
-      pushResolver.receiveBlockDataAsStream(
-        new PushBlockStream(TEST_APP, NO_ATTEMPT_ID, 0, 0, 10, 0, 0));
-    } catch (Throwable t) {
-      assertEquals("IOExceptions exceeded the threshold when merging shufflePush_0_0_10_0",
-        t.getMessage());
-      throw t;
-    }
+  @Test
+  public void testRequestForAbortedShufflePartitionThrowsException() throws IOException {
+    // No more blocks can be merged to this partition.
+    testIOExceptionsDuringMetaUpdateIncreasesExceptionCount();
+
+    IllegalStateException t = assertThrows(IllegalStateException.class,
+      () -> pushResolver.receiveBlockDataAsStream(
+        new PushBlockStream(TEST_APP, NO_ATTEMPT_ID, 0, 0, 10, 0, 0)));
+    assertEquals("IOExceptions exceeded the threshold when merging shufflePush_0_0_10_0",
+      t.getMessage());
   }
 
-  @Test(expected = RuntimeException.class)
+  @Test
   public void testPendingBlockIsAbortedImmediately() throws IOException {
     useTestFiles(true, false);
     RemoteBlockPushResolver.PushBlockStreamCallback callback =
@@ -733,28 +705,27 @@ public class RemoteBlockPushResolverSuite {
       RemoteBlockPushResolver.PushBlockStreamCallback callback1 =
         (RemoteBlockPushResolver.PushBlockStreamCallback) pushResolver.receiveBlockDataAsStream(
           new PushBlockStream(TEST_APP, NO_ATTEMPT_ID, 0, 0, i, 0, 0));
-      try {
-        callback1.onData(callback1.getID(), ByteBuffer.wrap(new byte[5]));
+      callback1.onData(callback1.getID(), ByteBuffer.wrap(new byte[5]));
+      if (i < 5) {
         // This will complete without any exceptions but the exception count is increased.
         callback1.onComplete(callback1.getID());
-      } catch (Throwable t) {
+      } else {
+        Throwable t = assertThrows(Throwable.class, () -> callback1.onComplete(callback1.getID()));
         callback1.onFailure(callback1.getID(), t);
       }
     }
     assertEquals(5, partitionInfo.getNumIOExceptions());
     // The server will respond with IOExceptions exceeded threshold for any additional attempts
     // to write.
-    try {
+    IllegalStateException e = assertThrows(IllegalStateException.class, () -> {
       callback.onData(callback.getID(), ByteBuffer.wrap(new byte[4]));
       callback.onComplete(callback.getID());
-    } catch (Throwable t) {
-      assertEquals("IOExceptions exceeded the threshold when merging shufflePush_0_0_0_0",
-        t.getMessage());
-      throw t;
-    }
+    });
+    assertEquals("IOExceptions exceeded the threshold when merging shufflePush_0_0_0_0",
+      e.getMessage());
   }
 
-  @Test(expected = RuntimeException.class)
+  @Test
   public void testWritingPendingBufsIsAbortedImmediatelyDuringComplete() throws IOException {
     useTestFiles(true, false);
     RemoteBlockPushResolver.PushBlockStreamCallback callback =
@@ -767,38 +738,28 @@ public class RemoteBlockPushResolverSuite {
       RemoteBlockPushResolver.PushBlockStreamCallback callback1 =
         (RemoteBlockPushResolver.PushBlockStreamCallback) pushResolver.receiveBlockDataAsStream(
           new PushBlockStream(TEST_APP, NO_ATTEMPT_ID, 0, 0, i, 0, 0));
-      try {
-        callback1.onData(callback1.getID(), ByteBuffer.wrap(new byte[5]));
-        // This will complete without any exceptions but the exception count is increased.
-        callback1.onComplete(callback1.getID());
-      } catch (Throwable t) {
-        callback1.onFailure(callback1.getID(), t);
-      }
+      callback1.onData(callback1.getID(), ByteBuffer.wrap(new byte[5]));
+      // This will complete without any exceptions but the exception count is increased.
+      callback1.onComplete(callback1.getID());
     }
     assertEquals(4, partitionInfo.getNumIOExceptions());
     RemoteBlockPushResolver.PushBlockStreamCallback callback2 =
       (RemoteBlockPushResolver.PushBlockStreamCallback) pushResolver.receiveBlockDataAsStream(
-        new PushBlockStream(TEST_APP, 1, 0, 0, 5, 0, 0));
+        new PushBlockStream(TEST_APP, NO_ATTEMPT_ID, 0, 0, 5, 0, 0));
     callback2.onData(callback2.getID(), ByteBuffer.wrap(new byte[5]));
     // This is deferred
     callback.onData(callback.getID(), ByteBuffer.wrap(new byte[4]));
     // Callback2 completes which will throw another exception.
-    try {
-      callback2.onComplete(callback2.getID());
-    } catch (Throwable t) {
-      callback2.onFailure(callback2.getID(), t);
-    }
+    Throwable t = assertThrows(Throwable.class, () -> callback2.onComplete(callback2.getID()));
+    callback2.onFailure(callback2.getID(), t);
     assertEquals(5, partitionInfo.getNumIOExceptions());
     // Restore index file so that any further writes to it are successful and any exceptions are
     // due to IOExceptions exceeding threshold.
     testIndexFile.restore();
-    try {
-      callback.onComplete(callback.getID());
-    } catch (Throwable t) {
-      assertEquals("IOExceptions exceeded the threshold when merging shufflePush_0_0_0",
-        t.getMessage());
-      throw t;
-    }
+    IllegalStateException ie = assertThrows(IllegalStateException.class,
+      () -> callback.onComplete(callback.getID()));
+    assertEquals("IOExceptions exceeded the threshold when merging shufflePush_0_0_0_0",
+      ie.getMessage());
   }
 
   @Test
@@ -879,23 +840,15 @@ public class RemoteBlockPushResolverSuite {
         new PushBlockStream(TEST_APP, NO_ATTEMPT_ID, 0, 0, 2, 0, 0));
     // This should be deferred as stream 2 is still the active stream
     stream3.onData(stream3.getID(), ByteBuffer.wrap(new byte[2]));
-    BlockPushResponse failedEx = null;
-    try {
-      stream3.onComplete(stream3.getID());
-    } catch (BlockPushResponse e) {
-      failedEx = e;
-    }
+    // There should not throw an exception.
+    stream3.onComplete(stream3.getID());
     // Stream 2 writes more and completes
     stream2.onData(stream2.getID(), ByteBuffer.wrap(new byte[4]));
     stream2.onComplete(stream2.getID());
     pushResolver.finalizeShuffleMerge(new FinalizeShuffleMerge(TEST_APP, NO_ATTEMPT_ID, 0, 0));
     MergedBlockMeta blockMeta = pushResolver.getMergedBlockMeta(TEST_APP, 0, 0, 0);
-    // stream 1 (map 0) write 2 bytes to chunk 0
-    // stream 3 (map 2) write 2 bytes to chunk 0
-    // stream 2 (map 1) write 9 bytes to chunk 1
     validateChunks(TEST_APP, 0, 0, 0, blockMeta, new int[] {4, 9}, new int[][] {{0, 2}, {1}});
     removeApplication(TEST_APP);
-    Assert.assertNull("There should no collision exception", failedEx);
   }
 
   @Test
@@ -1020,7 +973,7 @@ public class RemoteBlockPushResolverSuite {
       new PushBlockStream(testApp, 1, 0, 0, 0, 0, 0));
     // The onData callback should be called 4 times here before the onComplete callback. But a
     // register executor message arrives in shuffle service after the 2nd onData callback. The 3rd
-    // onData callback now will not throw any exception.
+    // onData callback should all throw ClosedChannelException as their channels are closed.
     stream1.onData(stream1.getID(), blocks[0]);
     stream1.onData(stream1.getID(), blocks[1]);
     Path[] attempt2LocalDirs = createLocalDirs(2);
@@ -1028,7 +981,7 @@ public class RemoteBlockPushResolverSuite {
       prepareLocalDirs(attempt2LocalDirs, MERGE_DIRECTORY + "_" + ATTEMPT_ID_2),
       MERGE_DIRECTORY_META_2);
     closed.acquire();
-    // Will not throw any exception here.
+    // Should not throw Exception here.
     stream1.onData(stream1.getID(), blocks[3]);
   }
 
@@ -1043,8 +996,9 @@ public class RemoteBlockPushResolverSuite {
         new PushBlockStream(TEST_APP, NO_ATTEMPT_ID, 0, 2, 0, 0, 0));
     stream2.onData(stream2.getID(), ByteBuffer.wrap(new byte[2]));
     stream2.onData(stream2.getID(), ByteBuffer.wrap(new byte[2]));
+    stream1.onData(stream1.getID(), ByteBuffer.wrap(new byte[2]));
     BlockPushResponse e = assertThrows(BlockPushResponse.class,
-      () -> stream1.onData(stream1.getID(), ByteBuffer.wrap(new byte[2])));
+      () -> stream1.onComplete(stream1.getID()));
     assertEquals(BlockPushResponse.ReturnCode.STALE_BLOCK_PUSH, e.getReturnCode());
     assertEquals(e.getBlockId(), stream1.getID());
     // stream 2 now completes
@@ -1065,9 +1019,10 @@ public class RemoteBlockPushResolverSuite {
         new PushBlockStream(TEST_APP, NO_ATTEMPT_ID, 0, 2, 0, 0, 0));
     stream2.onData(stream2.getID(), ByteBuffer.wrap(new byte[2]));
     stream2.onData(stream2.getID(), ByteBuffer.wrap(new byte[2]));
+    stream1.onData(stream1.getID(), ByteBuffer.wrap(new byte[2]));
     // stream 1 push should be rejected as it is from an older shuffleMergeId
     BlockPushResponse e = assertThrows(BlockPushResponse.class,
-      () -> stream1.onData(stream1.getID(), ByteBuffer.wrap(new byte[2])));
+      () -> stream1.onComplete(stream1.getID()));
     assertEquals(BlockPushResponse.ReturnCode.STALE_BLOCK_PUSH, e.getReturnCode());
     assertEquals(e.getBlockId(), stream1.getID());
     // stream 2 now completes
@@ -1114,39 +1069,31 @@ public class RemoteBlockPushResolverSuite {
         new PushBlockStream(TEST_APP, NO_ATTEMPT_ID, 0, 2, 0, 0, 0));
     stream2.onData(stream2.getID(), ByteBuffer.wrap(new byte[2]));
     stream2.onData(stream2.getID(), ByteBuffer.wrap(new byte[2]));
-    try {
-      // stream 1 push should be rejected as it is from an older shuffleMergeId
-      stream1.onData(stream1.getID(), ByteBuffer.wrap(new byte[2]));
-    } catch (BlockPushResponse e) {
-      assertEquals(BlockPushResponse.ReturnCode.STALE_BLOCK_PUSH, e.getReturnCode());
-      assertEquals(e.getBlockId(), stream1.getID());
-    }
+    stream1.onData(stream1.getID(), ByteBuffer.wrap(new byte[2]));
+    // stream 1 push should be rejected as it is from an older shuffleMergeId
+    BlockPushResponse e = assertThrows(BlockPushResponse.class,
+      () -> stream1.onComplete(stream1.getID()));
+    assertEquals(BlockPushResponse.ReturnCode.STALE_BLOCK_PUSH, e.getReturnCode());
+    assertEquals(e.getBlockId(), stream1.getID());
     // stream 2 now completes
     stream2.onComplete(stream2.getID());
     pushResolver.finalizeShuffleMerge(new FinalizeShuffleMerge(TEST_APP, NO_ATTEMPT_ID, 0, 2));
-    try {
-      pushResolver.getMergedBlockMeta(TEST_APP, 0, 0, 0);
-    } catch(RuntimeException re) {
-      assertEquals("MergedBlockMeta fetch for shuffle 0 with shuffleMergeId 0 reduceId 0"
-        + " is stale shuffle block fetch request as shuffle blocks of a higher shuffleMergeId for"
-        + " the shuffle is available", re.getMessage());
-    }
-
-    try {
-      pushResolver.finalizeShuffleMerge(new FinalizeShuffleMerge(TEST_APP, NO_ATTEMPT_ID, 0, 1));
-    } catch(RuntimeException re) {
-      assertEquals("Shuffle merge finalize request for shuffle 0 with shuffleMergeId 1 is stale"
-        + " shuffle finalize request as shuffle blocks of a higher shuffleMergeId for the shuffle"
-          + " is already being pushed", re.getMessage());
-    }
-    try {
-      pushResolver.getMergedBlockData(TEST_APP, 0, 1, 0, 0);
-    } catch(RuntimeException re) {
-      assertEquals("MergedBlockData fetch for shuffle 0 with shuffleMergeId 1 reduceId 0"
-        + " is stale shuffle block fetch request as shuffle blocks of a higher shuffleMergeId for"
-        + " the shuffle is available", re.getMessage());
-    }
-
+    RuntimeException re0 = assertThrows(RuntimeException.class,
+      () -> pushResolver.getMergedBlockMeta(TEST_APP, 0, 0, 0));
+    assertEquals("MergedBlockMeta fetch for shuffle 0 with shuffleMergeId 0 reduceId 0"
+      + " is stale shuffle block fetch request as shuffle blocks of a higher shuffleMergeId for"
+      + " the shuffle is available", re0.getMessage());
+    RuntimeException re1 = assertThrows(RuntimeException.class,
+      () -> pushResolver.finalizeShuffleMerge(
+              new FinalizeShuffleMerge(TEST_APP, NO_ATTEMPT_ID, 0, 1)));
+    assertEquals("Shuffle merge finalize request for shuffle 0 with shuffleMergeId 1 is stale"
+      + " shuffle finalize request as shuffle blocks of a higher shuffleMergeId for the shuffle"
+      + " is already being pushed", re1.getMessage());
+    RuntimeException re2 = assertThrows(RuntimeException.class,
+      () -> pushResolver.getMergedBlockData(TEST_APP, 0, 1, 0, 0));
+    assertEquals("MergedBlockData fetch for shuffle 0 with shuffleMergeId 1 reduceId 0"
+      + " is stale shuffle block fetch request as shuffle blocks of a higher shuffleMergeId for"
+      + " the shuffle is available", re2.getMessage());
     MergedBlockMeta blockMeta = pushResolver.getMergedBlockMeta(TEST_APP, 0, 2, 0);
     validateChunks(TEST_APP, 0, 2, 0, blockMeta, new int[]{4}, new int[][]{{0}});
   }
