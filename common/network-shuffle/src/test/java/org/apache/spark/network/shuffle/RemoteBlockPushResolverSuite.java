@@ -365,12 +365,7 @@ public class RemoteBlockPushResolverSuite {
     // This should be deferred
     stream3.onData(stream3.getID(), ByteBuffer.wrap(new byte[5]));
     // Since this stream didn't get any opportunity it will throw couldn't find opportunity error
-    BlockPushResponse failedEx = null;
-    try {
-      stream3.onComplete(stream3.getID());
-    } catch (BlockPushResponse e) {
-      failedEx = e;
-    }
+    stream3.onComplete(stream3.getID());
     // stream 1 now completes
     stream1.onData(stream1.getID(), ByteBuffer.wrap(new byte[2]));
     stream1.onComplete(stream1.getID());
@@ -378,7 +373,6 @@ public class RemoteBlockPushResolverSuite {
     pushResolver.finalizeShuffleMerge(new FinalizeShuffleMerge(TEST_APP, NO_ATTEMPT_ID, 0, 0));
     MergedBlockMeta blockMeta = pushResolver.getMergedBlockMeta(TEST_APP, 0, 0, 0);
     validateChunks(TEST_APP, 0, 0, 0, blockMeta, new int[] {5, 4}, new int[][] {{2}, {0}});
-    Assert.assertNull("There should no collision exception", failedEx);
   }
 
   @Test
