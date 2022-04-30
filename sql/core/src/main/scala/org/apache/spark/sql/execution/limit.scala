@@ -238,13 +238,15 @@ case class GlobalLimitAndOffsetExec(
   private lazy val skipTerm = BaseLimitExec.newLimitCountTerm()
 
   override def doConsume(ctx: CodegenContext, input: Seq[ExprCode], row: ExprCode): String = {
-    // The counter name is already obtained by the upstream operators via `limitNotReachedChecks`.
-    // Here we have to inline it to not change its name. This is fine as we won't have many limit
-    // operators in one query.
-    ctx.addMutableState(CodeGenerator.JAVA_INT, countTerm, forceInline = true, useFreshName = false)
-    ctx.addMutableState(CodeGenerator.JAVA_INT, skipTerm, forceInline = true, useFreshName = false)
     if (limit >= 0) {
+      // The counter name is already obtained by the upstream operators via `limitNotReachedChecks`.
+      // Here we have to inline it to not change its name. This is fine as we won't have many limit
+      // operators in one query.
+      ctx.addMutableState(
+        CodeGenerator.JAVA_INT, countTerm, forceInline = true, useFreshName = false)
       if (offset > 0) {
+        ctx.addMutableState(
+          CodeGenerator.JAVA_INT, skipTerm, forceInline = true, useFreshName = false)
         s"""
            | if ($skipTerm < $offset) {
            |   $skipTerm += 1;
@@ -262,6 +264,8 @@ case class GlobalLimitAndOffsetExec(
          """.stripMargin
       }
     } else {
+      ctx.addMutableState(
+        CodeGenerator.JAVA_INT, skipTerm, forceInline = true, useFreshName = false)
       s"""
          | if ($skipTerm < $offset) {
          |   $skipTerm += 1;
