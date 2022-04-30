@@ -138,6 +138,7 @@ if TYPE_CHECKING:
     from pyspark.sql._typing import OptionalPrimitiveType
 
     from pyspark.pandas.groupby import DataFrameGroupBy
+    from pyspark.pandas.resample import DataFrameResampler
     from pyspark.pandas.indexes import Index
     from pyspark.pandas.series import Series
 
@@ -12653,6 +12654,18 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         from pyspark.pandas.groupby import DataFrameGroupBy
 
         return DataFrameGroupBy._build(self, by, as_index=as_index, dropna=dropna)
+
+    # Override the `resample` to specify the actual return type annotation.
+    def resample(
+        self,
+        rule: str,
+        closed: Optional[str] = None,
+        label: Optional[str] = None,
+        on: Optional["Series"] = None,
+    ) -> "DataFrameResampler":
+        from pyspark.pandas.resample import DataFrameResampler
+
+        return DataFrameResampler(self, rule=rule, closed=closed, label=label, on=on)
 
     def _to_internal_pandas(self) -> pd.DataFrame:
         """

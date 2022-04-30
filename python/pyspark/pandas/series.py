@@ -123,6 +123,7 @@ if TYPE_CHECKING:
     from pyspark.sql._typing import ColumnOrName
 
     from pyspark.pandas.groupby import SeriesGroupBy
+    from pyspark.pandas.resample import SeriesResampler
     from pyspark.pandas.indexes import Index
     from pyspark.pandas.spark.accessors import SparkIndexOpsMethods
 
@@ -6894,6 +6895,17 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         from pyspark.pandas.groupby import SeriesGroupBy
 
         return SeriesGroupBy._build(self, by, as_index=as_index, dropna=dropna)
+
+    def resample(
+        self,
+        rule: str_type,
+        closed: Optional[str_type] = None,
+        label: Optional[str_type] = None,
+        on: Optional["Series"] = None,
+    ) -> "SeriesResampler":
+        from pyspark.pandas.resample import SeriesResampler
+
+        return SeriesResampler(self, rule=rule, closed=closed, label=label, on=on)
 
     def __getitem__(self, key: Any) -> Any:
         try:
