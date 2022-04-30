@@ -44,11 +44,12 @@ private[sql] object Catalogs {
   @throws[CatalogNotFoundException]
   @throws[SparkException]
   def load(name: String, conf: SQLConf): CatalogPlugin = {
-    if (name.contains(".")) {
-      throw QueryExecutionErrors.invalidCatalogNameError(name)
-    }
     val pluginClassName = try {
-      conf.getConfString("spark.sql.catalog." + name)
+      val _pluginClassName = conf.getConfString("spark.sql.catalog." + name)
+      if (name.contains(".")) {
+        throw QueryExecutionErrors.invalidCatalogNameError(name)
+      }
+      _pluginClassName
     } catch {
       case _: NoSuchElementException =>
         throw QueryExecutionErrors.catalogPluginClassNotFoundError(name)
