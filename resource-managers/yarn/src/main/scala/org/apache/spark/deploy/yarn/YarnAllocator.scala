@@ -17,6 +17,8 @@
 
 package org.apache.spark.deploy.yarn
 
+import java.util.LinkedHashMap
+import java.util.Map.Entry
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicInteger
 import javax.annotation.concurrent.GuardedBy
@@ -178,6 +180,24 @@ private[yarn] class YarnAllocator(
   // A container placement strategy based on pending tasks' locality preference
   private[yarn] val containerPlacementStrategy =
     new LocalityPreferredContainerPlacementStrategy(sparkConf, conf, resolver)
+
+  private val isYarnExecutorDecommissionEnabled: Boolean = {
+    (sparkConf.get(DECOMMISSION_ENABLED),
+      sparkConf.get(SHUFFLE_SERVICE_ENABLED)) match {
+      case (true, false) => true
+      case (true, true) =>
+        logWarning(s"Yarn Executor Decommissioning is supported only " +
+          s"when ${SHUFFLE_SERVICE_ENABLED.key} is set to false. See: SPARK-39018.")
+        false
+      case (false, _) => false
+    }
+  }
+
+  private val decommissioningNodesCache = new LinkedHashMap[String, Boolean]() {
+    override def removeEldestEntry(entry: Entry[String, Boolean]): Boolean = {
+      size() > DECOMMISSIONING_NODES_CACHE_SIZE
+    }
+  }
 
   // The default profile is always present so we need to initialize the datastructures keyed by
   // ResourceProfile id to ensure its present if things start running before a request for
@@ -431,23 +451,17 @@ private[yarn] class YarnAllocator(
       // Some of the nodes are put in decommissioning state where RM did allocate
       // resources on those nodes for earlier allocateResource calls, so notifying driver
       // to put those executors in decommissioning state
-      allocateResponse.getUpdatedNodes.asScala.filter(_.getNodeState == NodeState.DECOMMISSIONING).
-        foreach(node => driverRef.send(DecommissionExecutorsOnHost(getHostAddress(node))))
+      allocateResponse.getUpdatedNodes.asScala.filter (node =>
+        node.getNodeState == NodeState.DECOMMISSIONING &&
+          !decommissioningNodesCache.containsKey(getHostAddress(node)))
+        .foreach { node =>
+          val host = getHostAddress(node)
+          driverRef.send(DecommissionExecutorsOnHost(host))
+          decommissioningNodesCache.put(host, true)
+        }
     } catch {
       case e: Exception => logError("Sending Message to Driver to Decommission Executors" +
         "on Decommissioning Nodes failed", e)
-    }
-  }
-
-  private def isYarnExecutorDecommissionEnabled: Boolean = {
-    (sparkConf.get(YARN_EXECUTOR_DECOMMISSION_ENABLED),
-      sparkConf.get(SHUFFLE_SERVICE_ENABLED)) match {
-      case (true, false) => true
-      case (true, true) =>
-        logWarning(s"Yarn Executor Decommissioning is supported only " +
-          s"when ${SHUFFLE_SERVICE_ENABLED.key} is set to false. See: SPARK-39018.")
-        false
-      case (false, _) => false
     }
   }
 
@@ -985,6 +999,7 @@ private object YarnAllocator {
   val MEM_REGEX = "[0-9.]+ [KMG]B"
   val VMEM_EXCEEDED_EXIT_CODE = -103
   val PMEM_EXCEEDED_EXIT_CODE = -104
+  val DECOMMISSIONING_NODES_CACHE_SIZE = 200
 
   val NOT_APP_AND_SYSTEM_FAULT_EXIT_STATUS = Set(
     ContainerExitStatus.KILLED_BY_RESOURCEMANAGER,
