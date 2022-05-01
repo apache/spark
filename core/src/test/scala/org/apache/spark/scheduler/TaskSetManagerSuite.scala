@@ -2290,10 +2290,8 @@ class TaskSetManagerSuite
         stage.attemptNumber, taskInfo))
     }
     assert(sched.startedTasks.toSet === Set(0, 1, 2, 3))
-    val appStatusStore = sched.sc.statusTracker.getAppStatusStore
     val inefficientTask = manager.inefficientTask
-    inefficientTask.maybeRecompute(
-      appStatusStore, clock.getTimeMillis(), taskSet.stageId, taskSet.stageAttemptId)
+    inefficientTask.maybeRecompute(clock.getTimeMillis())
     assert(inefficientTask.taskProgressThreshold <= 0.0)
     assert(inefficientTask.taskData == null)
     assert(!inefficientTask.updateSealed)
@@ -2326,8 +2324,7 @@ class TaskSetManagerSuite
     // give task metrics some time to update
     Thread.sleep(200)
 
-    inefficientTask.maybeRecompute(
-      appStatusStore, clock.getTimeMillis(), taskSet.stageId, taskSet.stageAttemptId)
+    inefficientTask.maybeRecompute(clock.getTimeMillis())
     val curTaskProgressThreshold = inefficientTask.taskProgressThreshold
     val curTaskData = inefficientTask.taskData
     assert(curTaskProgressThreshold > 0.0)
@@ -2363,15 +2360,13 @@ class TaskSetManagerSuite
     // Not enough time elapsed to recompute
     clock.advance(100)
 
-    inefficientTask.maybeRecompute(
-      appStatusStore, clock.getTimeMillis(), taskSet.stageId, taskSet.stageAttemptId)
+    inefficientTask.maybeRecompute(clock.getTimeMillis())
     assert(curTaskProgressThreshold == inefficientTask.taskProgressThreshold)
     assert(curTaskData == inefficientTask.taskData)
     assert(!inefficientTask.updateSealed)
 
     clock.advance(RUNTIME)
-    inefficientTask.maybeRecompute(
-      appStatusStore, clock.getTimeMillis(), taskSet.stageId, taskSet.stageAttemptId)
+    inefficientTask.maybeRecompute(clock.getTimeMillis())
     assert(curTaskProgressThreshold < inefficientTask.taskProgressThreshold)
     assert(curTaskData != inefficientTask.taskData)
     assert(!inefficientTask.updateSealed)
@@ -2384,6 +2379,7 @@ class TaskSetManagerSuite
     sc.conf.set(config.SPECULATION_ENABLED, true)
     sc.conf.set(config.SPECULATION_TASK_MIN_DURATION.key, "15s")
     sc.conf.set(config.SPECULATION_TASK_PROGRESS_MULTIPLIER.key, "0.5")
+    sc.conf.set(config.SPECULATION_SINGLE_TASK_DURATION_THRESHOLD.key, "15")
     Seq(0, 15).foreach { fallback_ms =>
       sc.conf.set(config.SPECULATION_TASK_DURATION_THRESHOLD.key, fallback_ms.toString)
       sched = new FakeTaskScheduler(sc, ("exec1", "host1"), ("exec2", "host2"))
@@ -2396,9 +2392,6 @@ class TaskSetManagerSuite
       val listener = sc.statusTracker.getAppStatusStore.listener.get
       stage.submissionTime = Some(SUBMISSION_TIME)
       listener.onStageSubmitted(SparkListenerStageSubmitted(stage, new Properties()))
-      val accumUpdatesByTask: Array[Seq[AccumulatorV2[_, _]]] = taskSet.tasks.map { task =>
-        task.metrics.internalAccums
-      }
       // offer resources for the task to start
       for ((k, v) <- List("exec1" -> "host1")) {
         val taskOption = manager.resourceOffer(k, v, NO_PREF)._1

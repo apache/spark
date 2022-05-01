@@ -2081,7 +2081,7 @@ package object config {
       .doc("Only one task in a TasksSet should speculative if it is taking longer time than the " +
         "threshold.")
       .version("3.4.0")
-      .timeConf(TimeUnit.SECONDS)
+      .timeConf(TimeUnit.MILLISECONDS)
       .createWithDefaultString("10min")
 
   private[spark] val SPECULATION_MIN_THRESHOLD =
