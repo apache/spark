@@ -1942,7 +1942,7 @@ object QueryCompilationErrors extends QueryErrorsBase {
       path: Path,
       e: Throwable): Throwable = {
     new AnalysisException(s"Failed to truncate table $tableIdentWithDB when " +
-        s"removing data of the path: $path because of ${e.toString}")
+        s"removing data of the path: $path because of ${e.toString}", cause = Some(e))
   }
 
   def descPartitionNotAllowedOnTempView(table: String): Throwable = {

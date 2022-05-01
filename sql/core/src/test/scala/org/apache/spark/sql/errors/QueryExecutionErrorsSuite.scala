@@ -17,11 +17,14 @@
 
 package org.apache.spark.sql.errors
 
+import java.io.IOException
 import java.util.Locale
 
+import org.apache.hadoop.fs.{LocalFileSystem, Path}
+import org.apache.hadoop.fs.permission.FsPermission
 import test.org.apache.spark.sql.connector.JavaSimpleWritableDataSource
 
-import org.apache.spark.{SparkArithmeticException, SparkException, SparkIllegalArgumentException, SparkIllegalStateException, SparkRuntimeException, SparkUnsupportedOperationException, SparkUpgradeException}
+import org.apache.spark.{SparkArithmeticException, SparkException, SparkIllegalArgumentException, SparkIllegalStateException, SparkRuntimeException, SparkSecurityException, SparkUnsupportedOperationException, SparkUpgradeException}
 import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, SaveMode}
 import org.apache.spark.sql.catalyst.util.BadRecordException
 import org.apache.spark.sql.connector.SimpleWritableDataSource
@@ -456,5 +459,34 @@ class QueryExecutionErrorsSuite
         errorSubClass = Some("EXISTENT_PATH"),
         msg = "The save mode NULL is not supported for: an existent path.")
     }
+  }
+
+  test("FAILED_SET_ORIGINAL_PERMISSION_BACK: can't set permission") {
+      withTable("t") {
+        withSQLConf(
+          "fs.file.impl" -> classOf[FakeFileSystemSetPermission].getName,
+          "fs.file.impl.disable.cache" -> "true") {
+          sql("CREATE TABLE t(c String) USING parquet")
+
+          val e = intercept[AnalysisException] {
+            sql("TRUNCATE TABLE t")
+          }
+          assert(e.getCause.isInstanceOf[SparkSecurityException])
+
+          checkErrorClass(
+            exception = e.getCause.asInstanceOf[SparkSecurityException],
+            errorClass = "FAILED_SET_ORIGINAL_PERMISSION_BACK",
+            msg = "Failed to set original permission .+ " +
+              "back to the created path: .+\\. Exception: .+",
+            matchMsg = true)
+      }
+    }
+  }
+}
+
+class FakeFileSystemSetPermission extends LocalFileSystem {
+
+  override def setPermission(src: Path, permission: FsPermission): Unit = {
+    throw new IOException(s"fake fileSystem failed to set permission: $permission")
   }
 }
