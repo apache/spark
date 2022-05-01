@@ -21,7 +21,7 @@ from pyspark.pandas.missing import unsupported_function, unsupported_property
 
 def _unsupported_function(method_name, deprecated=False, reason=""):
     return unsupported_function(
-        class_name="pd.resample",
+        class_name="pd.resample.Resampler",
         method_name=method_name,
         deprecated=deprecated,
         reason=reason,
@@ -30,7 +30,7 @@ def _unsupported_function(method_name, deprecated=False, reason=""):
 
 def _unsupported_property(property_name, deprecated=False, reason=""):
     return unsupported_property(
-        class_name="pd.resample",
+        class_name="pd.resample.Resampler",
         property_name=property_name,
         deprecated=deprecated,
         reason=reason,

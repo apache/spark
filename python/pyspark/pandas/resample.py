@@ -20,6 +20,7 @@ A wrapper for ResampledData to behave similar to pandas Resampler.
 """
 from abc import ABCMeta
 from distutils.version import LooseVersion
+import re
 from functools import partial
 from typing import (
     Any,
@@ -31,7 +32,6 @@ from typing import (
 import numpy as np
 
 import pandas as pd
-from pandas.api.types import is_hashable, is_list_like  # type: ignore[attr-defined]
 
 if LooseVersion(pd.__version__) >= LooseVersion("1.3.0"):
     from pandas.core.common import _builtin_table  # type: ignore[attr-defined]
@@ -41,44 +41,29 @@ else:
     _builtin_table = SelectionMixin._builtin_table  # type: ignore[attr-defined]
 
 from pyspark import SparkContext
-from pyspark.sql import Column, Window, functions as F
+from pyspark.sql import Column, functions as F
 from pyspark.sql.types import (
-    BooleanType,
     NumericType,
     StructField,
-    StructType,
-    StringType,
     TimestampType,
 )
 
 from pyspark import pandas as ps  # For running doctests and reference resolution in PyCharm.
-from pyspark.pandas._typing import Axis, FrameLike, Label, Name
+from pyspark.pandas._typing import FrameLike
 from pyspark.pandas.frame import DataFrame
 from pyspark.pandas.internal import (
     InternalField,
     InternalFrame,
-    HIDDEN_COLUMNS,
-    NATURAL_ORDER_COLUMN_NAME,
-    SPARK_INDEX_NAME_FORMAT,
     SPARK_DEFAULT_INDEX_NAME,
-    SPARK_DEFAULT_SERIES_NAME,
-    SPARK_INDEX_NAME_PATTERN,
 )
 from pyspark.pandas.missing.resample import (
     MissingPandasLikeDataFrameResampler,
     MissingPandasLikeSeriesResampler,
 )
 from pyspark.pandas.series import Series, first_series
-from pyspark.pandas.spark import functions as SF
 from pyspark.pandas.utils import (
-    align_diff_frames,
-    is_name_like_tuple,
-    is_name_like_value,
-    name_like_string,
-    same_anchor,
     scol_for,
     verify_temp_column_name,
-    log_advice,
 )
 
 
@@ -106,15 +91,60 @@ class Resampler(Generic[FrameLike], metaclass=ABCMeta):
         psdf: DataFrame,
         resamplekey: Optional[Series],
         rule: str,
-        closed: Optional[str],
-        label: Optional[str],
-        agg_columns: List[Series],
+        closed: Optional[str] = None,
+        label: Optional[str] = None,
+        agg_columns: List[Series] = [],
     ):
         self._psdf = psdf
         self._resamplekey = resamplekey
+
+        parsed = re.findall(r"^([0-9]+)?([A-Za-z]+)$", rule)
+        if len(parsed) != 1:
+            raise ValueError("Unsupported freq {}".format(rule))
+
+        offset_str, unit_str = parsed[0]
+        self._freq_offset = 1
+        if offset_str != "":
+            freq_offset = int(offset_str)
+            if not freq_offset > 0:
+                raise ValueError("invalid rule: '{}'".format(rule))
+            self._freq_offset = freq_offset
+
+        unit_mapping = {
+            "Y": "Y",
+            "A": "Y",
+            "M": "M",
+            "D": "D",
+            "H": "H",
+            "T": "T",
+            "MIN": "T",
+            "S": "S",
+        }
+        if unit_str.upper() not in unit_mapping:
+            raise ValueError("Unknown freq unit {}".format(unit_str))
+        self._freq_unit = unit_mapping[unit_str.upper()]
         self._rule = rule
-        self._closed = closed
-        self._label = label
+
+        if closed is not None and closed not in ["left", "right"]:
+            raise ValueError("invalid closed: '{}'".format(closed))
+        if closed is None:
+            if self._freq_unit in ["Y", "M"]:
+                self._closed = "right"
+            else:
+                self._closed = "left"
+        else:
+            self._closed = closed
+
+        if label is not None and label not in ["left", "right"]:
+            raise ValueError("invalid label: '{}'".format(label))
+        if label is None:
+            if self._freq_unit in ["Y", "M"]:
+                self._label = "right"
+            else:
+                self._label = "left"
+        else:
+            self._label = label
+
         self._agg_columns = agg_columns
 
     @property
@@ -128,7 +158,7 @@ class Resampler(Generic[FrameLike], metaclass=ABCMeta):
     def _agg_columns_scols(self) -> List[Column]:
         return [s.spark.column for s in self._agg_columns]
 
-    def _downsample(self, f: str) -> FrameLike:
+    def _downsample(self, f: str) -> DataFrame:
         """
         Downsample the defined function.
 
@@ -137,21 +167,48 @@ class Resampler(Generic[FrameLike], metaclass=ABCMeta):
         how : string / mapped function
         **kwargs : kw args passed to how function
         """
-        # a pass is needed to obtain the range, in the future we may cache it in the index.
-        range_pdf = self._psdf._internal.spark_frame.select(
-            F.min(self._resamplekey_scol), F.max(self._resamplekey_scol)
-        ).toPandas()
-        ts_min, ts_max = range_pdf.iloc[0]
 
-        # the logical to obtain a base to bin the timestamps is too complex to follow,
+        # a simple example to illustrate the computation:
+        #   dates = [
+        #         datetime.datetime(2012, 1, 2),
+        #         datetime.datetime(2012, 5, 3),
+        #         datetime.datetime(2022, 5, 3),
+        #   ]
+        #   index = pd.DatetimeIndex(dates)
+        #   pdf = pd.DataFrame(np.array([1,2,3]), index=index, columns=['A'])
+        #   pdf.resample('3Y').max()
+        #                 A
+        #   2011-12-31  2.0
+        #   2014-12-31  NaN
+        #   2017-12-31  NaN
+        #   2020-12-31  NaN
+        #   2023-12-31  3.0
+        #
+        # in this case, we need to:
+        # 1, obtain one origin point to bin all timestamps, we can get it (2009-12-31)
+        # from the minimum timestamp (2012-01-02);
+        # 2, with this origin, we bin all timestamps, like: 2022-05-03 -> 2023-12-31;
+        # 3, some intervals maybe too large for this down sampling, so we need to pad the results
+        # to avoid missing some results, like: 2014-12-31 and 2020-12-31;
+
+        # one action to obtain the range, in the future we may cache it in the index.
+        ts_min, ts_max = (
+            self._psdf._internal.spark_frame.select(
+                F.min(self._resamplekey_scol), F.max(self._resamplekey_scol)
+            )
+            .toPandas()
+            .iloc[0]
+        )
+
+        # the logic to obtain an origin point to bin the timestamps is too complex to follow,
         # here just use Pandas' resample on a 1-length series to get it.
-        ts_base = (
+        ts_origin = (
             pd.Series([0], index=[ts_min])
             .resample(self._rule, closed=self._closed, label="left")
             .sum()
             .index[0]
         )
-        assert ts_base <= ts_min
+        assert ts_origin <= ts_min
 
         sql_utils = SparkContext._active_spark_context._jvm.PythonSQLUtils
         bin_col_name = "__tmp_resample_bin_col__"
@@ -162,66 +219,47 @@ class Resampler(Generic[FrameLike], metaclass=ABCMeta):
         )
         bin_scol = Column(
             sql_utils.binTimeStamp(
-                F.lit(ts_base)._jc,
-                int(self._rule[0]),
-                self._rule[1],
+                F.lit(ts_origin)._jc,
+                self._freq_offset,
+                self._freq_unit,
                 self._closed == "left",
                 self._label == "left",
                 self._resamplekey_scol._jc,
             )
-        ).alias(bin_col_name)
+        )
 
         agg_columns = [
             psser for psser in self._agg_columns if (isinstance(psser.spark.data_type, NumericType))
         ]
         assert len(agg_columns) > 0
 
-        # some intervals maybe too large for the down sampling,
-        # so we need to pad the inputs (with null values) to avoid missing some results.
-        # for example:
-        #   dates = [
-        #         datetime.datetime(2011, 12, 31),
-        #         datetime.datetime(2012, 1, 2),
-        #         datetime.datetime(2013, 5, 3),
-        #         datetime.datetime(2022, 5, 3),
-        #   ]
-        #   pdf = pd.DataFrame(np.ones(4), index=pd.DatetimeIndex(dates), columns=['A'])
-        #   pdf.resample('3Y').mean()
-        #                 A
-        #   2011-12-31  1.0
-        #   2014-12-31  1.0
-        #   2017-12-31  NaN
-        #   2020-12-31  NaN
-        #   2023-12-31  1.0
-
-        # label the timestamps according to the base and the freq(rule) in the binning side
-        sdf = self._psdf._internal.spark_frame.select(
+        # in the binning side, label the timestamps according to the origin and the freq(rule)
+        bin_sdf = self._psdf._internal.spark_frame.select(
             F.col(SPARK_DEFAULT_INDEX_NAME),
-            bin_scol,
+            bin_scol.alias(bin_col_name),
             *[psser.spark.column for psser in agg_columns],
         )
 
-        # apply ps.date_range to insert necessary points in the padding side
+        # in the padding side, apply ps.date_range to insert necessary points
+        # again, directly apply Pandas' resample on a 2-length series to obtain the indices
         pad_sdf = (
-            ps.date_range(start=ts_base, end=ts_max, freq=self._rule)
-            ._internal.spark_frame.select(
-                F.col(SPARK_DEFAULT_INDEX_NAME), F.col(SPARK_DEFAULT_INDEX_NAME).alias(bin_col_name)
+            ps.from_pandas(
+                pd.Series([0, 0], index=[ts_min, ts_max])
+                .resample(self._rule, closed=self._closed, label=self._label)
+                .sum()
+                .index
             )
-            .where((ts_min < F.col(bin_col_name)) & (F.col(bin_col_name) < ts_max))
+            ._internal.spark_frame.select(F.col(SPARK_DEFAULT_INDEX_NAME).alias(bin_col_name))
+            .where((ts_min <= F.col(bin_col_name)) & (F.col(bin_col_name) <= ts_max))
         )
 
-        sdf = sdf.unionByName(pad_sdf, allowMissingColumns=True)
-
-        # something goes wrong and mess the computation logical in the padding side,
-        # which will result in wrong results.
-        # the conversion to/from rdd here is to work around this wrong optimization.
+        # union the above two spark dataframes.
+        # something goes wrong and mess the computation logic in the padding side,
+        # which may result in wrong results.
+        # the conversion to/from rdd here is to work around via disabling optimizer.
+        sdf = bin_sdf.unionByName(pad_sdf, allowMissingColumns=True)
         spark = sdf.sparkSession
-        sdf = spark.createDataFrame(sdf.rdd, sdf.schema).withColumn(
-            bin_col_name,
-            F.when(F.isnull(F.col(bin_col_name)), SF.lit(None).cast(TimestampType())).otherwise(
-                F.col(bin_col_name)
-            ),
-        )
+        sdf = spark.createDataFrame(sdf.rdd, sdf.schema).where(~F.isnull(F.col(bin_col_name)))
 
         internal = InternalFrame(
             spark_frame=sdf,
@@ -236,48 +274,25 @@ class Resampler(Generic[FrameLike], metaclass=ABCMeta):
         psdf: DataFrame = DataFrame(internal)
 
         groupby = psdf.groupby(psdf._psser_for(bin_col_label), dropna=False)
-        down_sampled = getattr(groupby, f)()
-        down_sampled.index.name = None
+        downsampled = getattr(groupby, f)()
+        downsampled.index.name = None
 
-        return down_sampled
-
-    def min(self) -> FrameLike:
-        return self._downsample("min")
-
-    def max(self) -> FrameLike:
-        return self._downsample("max")
-
-    def sum(self) -> FrameLike:
-        return self._downsample("sum").fillna(0.0)
-
-    def mean(self) -> FrameLike:
-        return self._downsample("mean")
-
-    def std(self) -> FrameLike:
-        return self._downsample("std")
-
-    def var(self) -> FrameLike:
-        return self._downsample("var")
+        return downsampled
 
 
 class DataFrameResampler(Resampler[DataFrame]):
     def __init__(
         self,
         psdf: DataFrame,
+        resamplekey: Optional[Series],
         rule: str,
-        closed: Optional[str],
-        label: Optional[str],
-        on: Optional[Series],
+        closed: Optional[str] = None,
+        label: Optional[str] = None,
+        agg_columns: List[Series] = [],
     ):
-        agg_columns: List[Series] = []
-        for column_label in psdf._internal.column_labels:
-            if isinstance(psdf._internal.spark_type_for(column_label), (NumericType, BooleanType)):
-                agg_columns.append(psdf._psser_for(column_label))
-        assert len(agg_columns) > 0
-
         super().__init__(
             psdf=psdf,
-            resamplekey=on,
+            resamplekey=resamplekey,
             rule=rule,
             closed=closed,
             label=label,
@@ -292,29 +307,66 @@ class DataFrameResampler(Resampler[DataFrame]):
             else:
                 return partial(property_or_func, self)
 
+    def min(self) -> DataFrame:
+        return self._downsample("min")
+
+    def max(self) -> DataFrame:
+        return self._downsample("max")
+
+    def sum(self) -> DataFrame:
+        return self._downsample("sum").fillna(0.0)
+
+    def mean(self) -> DataFrame:
+        return self._downsample("mean")
+
+    def std(self) -> DataFrame:
+        return self._downsample("std")
+
+    def var(self) -> DataFrame:
+        return self._downsample("var")
+
 
 class SeriesResampler(Resampler[Series]):
     def __init__(
         self,
-        psser: Series,
+        psdf: DataFrame,
+        resamplekey: Optional[Series],
         rule: str,
-        closed: Optional[str],
-        label: Optional[str],
-        on: Optional[Series],
+        closed: Optional[str] = None,
+        label: Optional[str] = None,
+        agg_columns: List[Series] = [],
     ):
         super().__init__(
-            psdf=psser._psdf,
-            resamplekey=on,
+            psdf=psdf,
+            resamplekey=resamplekey,
             rule=rule,
             closed=closed,
             label=label,
-            agg_columns=[psser],
+            agg_columns=agg_columns,
         )
 
     def __getattr__(self, item: str) -> Any:
-        if hasattr(MissingPandasLikeDataFrameResampler, item):
-            property_or_func = getattr(MissingPandasLikeDataFrameResampler, item)
+        if hasattr(MissingPandasLikeSeriesResampler, item):
+            property_or_func = getattr(MissingPandasLikeSeriesResampler, item)
             if isinstance(property_or_func, property):
                 return property_or_func.fget(self)
             else:
                 return partial(property_or_func, self)
+
+    def min(self) -> Series:
+        return first_series(self._downsample("min"))
+
+    def max(self) -> Series:
+        return first_series(self._downsample("max"))
+
+    def sum(self) -> Series:
+        return first_series(self._downsample("sum").fillna(0.0))
+
+    def mean(self) -> Series:
+        return first_series(self._downsample("mean"))
+
+    def std(self) -> Series:
+        return first_series(self._downsample("std"))
+
+    def var(self) -> Series:
+        return first_series(self._downsample("var"))
