@@ -182,7 +182,7 @@ abstract class SumBase(
 case class Sum(
     child: Expression,
     useAnsiAdd: Boolean = SQLConf.get.ansiEnabled,
-    resultDataType = None)
+    resultDataType: Option[DataType] = None)
   extends SumBase(child, resultDataType) with SupportQueryContext {
   def this(child: Expression) =
     this(child, useAnsiAdd = SQLConf.get.ansiEnabled, resultDataType = None)

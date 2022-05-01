@@ -22,10 +22,10 @@ import scala.collection.mutable.ArrayBuffer
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.planning.ExtractEquiJoinKeys
-import org.apache.spark.sql.catalyst.plans.{FullOuter, Inner, LeftOuter, RightOuter}
+import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.catalyst.trees.TreePattern.{AGGREGATE, JOIN}
+import org.apache.spark.sql.catalyst.trees.TreePattern.JOIN
 import org.apache.spark.sql.types.DecimalType
 
 /**
@@ -53,9 +53,9 @@ object PushPartialAggregationThroughJoin extends Rule[LogicalPlan]
   private def splitAggregateExpressions(
     aggExps: Seq[AggregateExpression], left: LogicalPlan, right: LogicalPlan) = {
     val (leftAggExprs, rest) =
-      aggExps.partition(e => e.references.size == 1 && canEvaluate(e, left))
+      aggExps.partition(e => e.references.nonEmpty && canEvaluate(e, left))
     val (rightAggExprs, others) =
-      rest.partition(e => e.references.size == 1 && canEvaluate(e, right))
+      rest.partition(e => e.references.nonEmpty && canEvaluate(e, right))
 
     (toAttributeMap(leftAggExprs), toAttributeMap(rightAggExprs), others)
   }
@@ -105,7 +105,7 @@ object PushPartialAggregationThroughJoin extends Rule[LogicalPlan]
                                       leftKeys: Seq[Expression],
                                       rightKeys: Seq[Expression],
                                       join: Join) = {
-    val aggregateExpressions = agg.collectAggregateExprs
+    val aggregateExpressions = agg.ggregateExprs
 
     val (leftProjectList, rightProjectList, remainingProjectList) =
       split(projectList ++ join.condition.map(_.references.toSeq).getOrElse(Nil),
@@ -214,65 +214,75 @@ object PushPartialAggregationThroughJoin extends Rule[LogicalPlan]
   }
 
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
-    _.containsAllPatterns(AGGREGATE, JOIN), ruleId) {
-      case agg @ Aggregate(_, _, join: Join)
-        if join.children.exists(e => e.isInstanceOf[AggregateBase]) =>
-        agg
-      case agg @ Aggregate(_, _, Project(_, join: Join))
-        if join.children.exists(e => e.isInstanceOf[AggregateBase]) =>
-        agg
+    _.containsPattern(JOIN), ruleId) {
+    case j @ Join(_, _: AggregateBase, LeftSemiOrAnti(_), _, _) =>
+      j
+    case j @ Join(_, Project(_, _: AggregateBase), LeftSemiOrAnti(_), _, _) =>
+      j
 
-      case agg @ PartialAggregate(_, _, join: Join)
+    case agg @ Aggregate(_, _, join: Join)
         if join.children.exists(e => e.isInstanceOf[AggregateBase]) =>
-        agg
-      case agg @ PartialAggregate(_, _, Project(_, join: Join))
+      agg
+    case agg @ Aggregate(_, _, Project(_, join: Join))
         if join.children.exists(e => e.isInstanceOf[AggregateBase]) =>
-        agg
+      agg
 
-      case agg @ PartialAggregate(_, aggregateExps,
+    case agg @ PartialAggregate(_, _, join: Join)
+        if join.children.exists(e => e.isInstanceOf[AggregateBase]) =>
+      agg
+    case agg @ PartialAggregate(_, _, Project(_, join: Join))
+        if join.children.exists(e => e.isInstanceOf[AggregateBase]) =>
+      agg
+
+    case agg @ PartialAggregate(_, aggregateExps,
       join @ Join(left, right, Inner | LeftOuter | RightOuter | FullOuter, _, _))
-        if agg.collectAggregateExprs.isEmpty && aggregateExps.forall(_.deterministic) =>
-        Project(aggregateExps, join.copy(
-          left = PartialAggregate(left.output, left.output, left),
-          right = PartialAggregate(right.output, right.output, right)))
+        if agg.ggregateExprs.isEmpty && aggregateExps.forall(_.deterministic) &&
+          !canPlanAsBroadcastHashJoin(join, conf) =>
+      Project(aggregateExps, join.copy(
+        left = PartialAggregate(left.output, left.output, left),
+        right = PartialAggregate(right.output, right.output, right)))
 
-      case agg @ PartialAggregate(_, aggregateExps, Project(projectList,
+    case agg @ PartialAggregate(_, aggregateExps, Project(projectList,
       join @ Join(left, right, Inner | LeftOuter | RightOuter | FullOuter, _, _)))
-        if agg.collectAggregateExprs.isEmpty && aggregateExps.forall(_.deterministic) &&
-          projectList.forall(_.deterministic) =>
-        Project(aggregateExps, Project(projectList, join.copy(
-          left = PartialAggregate(left.output, left.output, left),
-          right = PartialAggregate(right.output, right.output, right))))
+        if agg.ggregateExprs.isEmpty && aggregateExps.forall(_.deterministic) &&
+          projectList.forall(_.deterministic) && !canPlanAsBroadcastHashJoin(join, conf) =>
+      Project(aggregateExps, Project(projectList, join.copy(
+        left = PartialAggregate(left.output, left.output, left),
+        right = PartialAggregate(right.output, right.output, right))))
 
 
-      case agg @ Aggregate(_, _, join: Join)
-        if agg.collectAggregateExprs.forall(isCountDistinct) =>
-        val left = join.left
-        val right = join.right
-        agg.copy(child = join.copy(
-          left = PartialAggregate(left.output, left.output, left),
-          right = PartialAggregate(right.output, right.output, right)))
-      case agg @ Aggregate(_, _, p @ Project(_, join: Join))
-        if agg.collectAggregateExprs.forall(isCountDistinct) =>
-        val left = join.left
-        val right = join.right
-        agg.copy(child = p.copy(child = join.copy(
-          left = PartialAggregate(left.output, left.output, left),
-          right = PartialAggregate(right.output, right.output, right))))
+    case agg @ Aggregate(_, _, join: Join)
+        if agg.ggregateExprs.forall(isCountDistinct) && !canPlanAsBroadcastHashJoin(join, conf) =>
+      val left = join.left
+      val right = join.right
+      agg.copy(child = join.copy(
+        left = PartialAggregate(left.output, left.output, left),
+        right = PartialAggregate(right.output, right.output, right)))
+    case agg @ Aggregate(_, _, p @ Project(_, join: Join))
+        if agg.ggregateExprs.forall(isCountDistinct) && !canPlanAsBroadcastHashJoin(join, conf) =>
+      val left = join.left
+      val right = join.right
+      agg.copy(child = p.copy(child = join.copy(
+        left = PartialAggregate(left.output, left.output, left),
+        right = PartialAggregate(right.output, right.output, right))))
 
-      case agg @ Aggregate(groupExps, aggregateExps,
+    case agg @ Aggregate(groupExps, aggregateExps,
       join @ ExtractEquiJoinKeys(Inner, leftKeys, rightKeys, None, _, _, _, _))
         if groupExps.forall(_.isInstanceOf[Attribute]) && aggregateExps.forall(_.deterministic) &&
           leftKeys.nonEmpty &&
-          agg.collectAggregateExprs.forall(ae => pushableAggExp(ae) || pushableCountExp(ae)) =>
-        pushdownAggThroughJoin(agg, join.output, leftKeys, rightKeys, join)
+          agg.ggregateExprs.forall(ae => pushableAggExp(ae) || pushableCountExp(ae)) &&
+          !canPlanAsBroadcastHashJoin(join, conf) =>
+      pushdownAggThroughJoin(agg, join.output, leftKeys, rightKeys, join)
 
-      case agg @ Aggregate(groupExps, aggregateExps,
-      Project(projectList,
+    case agg @ Aggregate(groupExps, aggregateExps, Project(projectList,
       join @ ExtractEquiJoinKeys(Inner, leftKeys, rightKeys, None, _, _, _, _)))
         if groupExps.forall(_.isInstanceOf[Attribute]) && aggregateExps.forall(_.deterministic) &&
           projectList.forall(_.deterministic) && leftKeys.nonEmpty &&
-          agg.collectAggregateExprs.forall(ae => pushableAggExp(ae) || pushableCountExp(ae)) =>
-        pushdownAggThroughJoin(agg, projectList, leftKeys, rightKeys, join)
+          agg.ggregateExprs.forall(ae => pushableAggExp(ae) || pushableCountExp(ae)) &&
+          !canPlanAsBroadcastHashJoin(join, conf) =>
+      pushdownAggThroughJoin(agg, projectList, leftKeys, rightKeys, join)
+
+    case j @ Join(_, right, LeftSemiOrAnti(_), _, _) if !canPlanAsBroadcastHashJoin(j, conf) =>
+      j.copy(right = PartialAggregate(right.output, right.output, right))
     }
 }
