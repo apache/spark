@@ -513,6 +513,20 @@ class QueryCompilationErrorsSuite
       msg = "Invalid pivot value 'struct(col1, dotnet, col2, Experts)': value data type " +
         "struct<col1:string,col2:string> does not match pivot column data type int")
   }
+
+  test("INVALID_FIELD_NAME: add a nested field for not struct parent") {
+    withTable("t") {
+      sql("CREATE TABLE t(c struct<x:string>, m string) USING parquet")
+
+      val e = intercept[AnalysisException] {
+        sql("ALTER TABLE t ADD COLUMNS (m.n int)")
+      }
+      checkErrorClass(
+        exception = e,
+        errorClass = "INVALID_FIELD_NAME",
+        msg = "Field name m.n is invalid: m is not a struct.; line 1 pos 27")
+    }
+  }
 }
 
 class MyCastToString extends SparkUserDefinedFunction(
