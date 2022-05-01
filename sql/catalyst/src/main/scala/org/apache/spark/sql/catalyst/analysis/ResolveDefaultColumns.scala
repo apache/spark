@@ -57,7 +57,8 @@ case class ResolveDefaultColumns(
       (_ => SQLConf.get.enableDefaultColumns), ruleId) {
       case i: InsertIntoStatement if insertsFromInlineTable(i) =>
         resolveDefaultColumnsForInsertFromInlineTable(i)
-      case i@InsertIntoStatement(_, _, _, _: Project, _, _) =>
+      case i@InsertIntoStatement(_, _, _, project: Project, _, _)
+        if !project.projectList.exists(_.isInstanceOf[Star]) =>
         resolveDefaultColumnsForInsertFromProject(i)
     }
   }
