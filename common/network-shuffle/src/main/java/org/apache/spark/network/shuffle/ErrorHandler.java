@@ -86,9 +86,9 @@ public abstract class ErrorHandler {
    * @since 3.1.0
    */
   public static ErrorHandler blockPushErrorHandler() {
-    if(instance != null) {
+    if(instance == null) {
       synchronized (ErrorHandler.class) {
-        if(instance != null) {
+        if(instance == null) {
           instance = new ErrorHandler() {
 
             @Override
