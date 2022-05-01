@@ -443,15 +443,16 @@ object QueryCompilationErrors extends QueryErrorsBase {
       name: String, expectedInfo: String, actualNumber: Int): Throwable = {
     new AnalysisException(
       errorClass = "INVALID_FUNCTION_ARGUMENTS",
-      messageParameters = Array("number", name, s"Expected: $expectedInfo; Found: $actualNumber"))
+      messageParameters = Array("INVALID_NUMBER_OF_ARGUMENTS",
+        name, expectedInfo, s"$actualNumber"))
   }
 
   def invalidFunctionArgumentNumberError(
       validParametersCount: Seq[Int], name: String, actualNumber: Int): Throwable = {
-    if (validParametersCount.length == 0) {
+    if (validParametersCount.isEmpty) {
       new AnalysisException(
         errorClass = "INVALID_FUNCTION_ARGUMENTS",
-        messageParameters = Array("number", name, ""))
+        messageParameters = Array("EMPTY_NUMBER_OF_ARGUMENTS", name))
     } else {
       val expectedNumberOfParameters = if (validParametersCount.length == 1) {
         validParametersCount.head.toString
@@ -466,7 +467,7 @@ object QueryCompilationErrors extends QueryErrorsBase {
   def functionAcceptsOnlyOneArgumentError(name: String): Throwable = {
     new AnalysisException(
       errorClass = "INVALID_FUNCTION_ARGUMENTS",
-      messageParameters = Array("number", name, s"It accepts only one argument"))
+      messageParameters = Array("CAST_ALIAS", name))
   }
 
   def alterV2TableSetLocationWithPartitionNotSupportedError(): Throwable = {
@@ -772,8 +773,7 @@ object QueryCompilationErrors extends QueryErrorsBase {
   def secondArgumentNotDoubleLiteralError(name: String): Throwable = {
     new AnalysisException(
       errorClass = "INVALID_FUNCTION_ARGUMENTS",
-      messageParameters = Array("type", name,
-        "The second argument should be a double literal")
+      messageParameters = Array("APPROX_COUNT_DISTINCT", name)
     )
   }
 
@@ -1489,10 +1489,9 @@ object QueryCompilationErrors extends QueryErrorsBase {
       unsupported: UnsupportedOperationException): Throwable = {
     new AnalysisException(
       errorClass = "INVALID_FUNCTION_ARGUMENTS",
-      messageParameters = Array("operation", unbound.name,
-        s"It cannot process " +
-        s"input: (${arguments.map(x => toSQLType(x.dataType)).mkString(", ")}): " +
-          unsupported.getMessage),
+      messageParameters = Array("INVALID_OPERATION_FOR_V2FUNCTION",
+        unbound.name, arguments.map(x => toSQLType(x.dataType)).mkString(", "),
+        unsupported.getMessage),
       cause = Some(unsupported))
   }
 
@@ -1501,9 +1500,9 @@ object QueryCompilationErrors extends QueryErrorsBase {
       args: Seq[Expression]): Throwable = {
     new AnalysisException(
       errorClass = "INVALID_FUNCTION_ARGUMENTS",
-      messageParameters = Array("number", bound.name(),
-        s"There are ${args.length} arguments " +
-          s"but ${bound.inputTypes().length} parameters returned from 'inputTypes()'")
+      messageParameters = Array("INVALID_NUMBER_OF_ARGUMENTS_FOR_V2FUNCTION",
+        s"${args.length}", bound.name(),
+        s"${bound.inputTypes().length}")
     )
   }
 
@@ -1586,8 +1585,7 @@ object QueryCompilationErrors extends QueryErrorsBase {
   def secondArgumentInFunctionIsNotBooleanLiteralError(funcName: String): Throwable = {
     new AnalysisException(
       errorClass = "INVALID_FUNCTION_ARGUMENTS",
-      messageParameters = Array("type", funcName,
-        "The second argument should be a boolean literal")
+      messageParameters = Array("FIRST_LAST", funcName)
     )
   }
 
