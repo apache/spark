@@ -102,7 +102,7 @@ case class CollectLimitExec(limit: Int = -1, child: SparkPlan, offset: Int = 0) 
 
   override def stringArgs: Iterator[Any] = {
     super.stringArgs.zipWithIndex.filter {
-      case (0, 1) => false
+      case (0, 2) => false
       case _ => true
     }.map(_._1)
   }
@@ -380,7 +380,7 @@ case class TakeOrderedAndProjectExec(
 
   override def stringArgs: Iterator[Any] = {
     super.stringArgs.zipWithIndex.filter {
-      case (0, 1) => false
+      case (0, 4) => false
       case _ => true
     }.map(_._1)
   }
