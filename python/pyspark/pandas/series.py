@@ -6959,9 +6959,9 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         of the timestamps falling into a bin.
 
         >>> series.resample('3T').sum().sort_index()
-        2000-01-01 00:00:00     3
-        2000-01-01 00:03:00    12
-        2000-01-01 00:06:00    21
+        2000-01-01 00:00:00     3.0
+        2000-01-01 00:03:00    12.0
+        2000-01-01 00:06:00    21.0
         Name: V, dtype: float64
 
         Downsample the series into 3 minute bins as above, but label each
@@ -6975,19 +6975,19 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         illustrated in the example below this one.
 
         >>> series.resample('3T', label='right').sum().sort_index()
-        2000-01-01 00:03:00     3
-        2000-01-01 00:06:00    12
-        2000-01-01 00:09:00    21
+        2000-01-01 00:03:00     3.0
+        2000-01-01 00:06:00    12.0
+        2000-01-01 00:09:00    21.0
         Name: V, dtype: float64
 
         Downsample the series into 3 minute bins as above, but close the right
         side of the bin interval.
 
         >>> series.resample('3T', label='right', closed='right').sum().sort_index()
-        2000-01-01 00:00:00     0
-        2000-01-01 00:03:00     6
-        2000-01-01 00:06:00    15
-        2000-01-01 00:09:00    15
+        2000-01-01 00:00:00     0.0
+        2000-01-01 00:03:00     6.0
+        2000-01-01 00:06:00    15.0
+        2000-01-01 00:09:00    15.0
         Name: V, dtype: float64
 
         Upsample the series into 30 second bins.

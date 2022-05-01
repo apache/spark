@@ -103,6 +103,19 @@ private[sql] object PythonSQLUtils extends Logging {
 
   def nullIndex(e: Column): Column = Column(NullIndex(e.expr))
 
+  // scalastyle:off line.size.limit
+  /**
+   * Downsample timestamps into bins
+   * @param origin the origin point
+   * @param offset length of a bin interval
+   * @param unit unit of a bin interval, refer to
+   *             https://pandas.pydata.org/pandas-docs/stable/user_guide/timeseries.html#offset-aliases
+   *             for details
+   * @param leftClosed whether the intervals are left-closed right-open, or left-open right-closed.
+   * @param leftLabel whether to apply the left bin edge to label bins.
+   * @param ts input timestamps.
+   */
+  // scalastyle:on line.size.limit
   def binTimeStamp(
       origin: Column,
       offset: Int,
@@ -113,7 +126,7 @@ private[sql] object PythonSQLUtils extends Logging {
     assert(offset > 0)
 
     unit match {
-      case "Y" =>
+      case "Y" => // year end frequency
         val diff = year(ts) - year(origin)
         val mod = if (offset == 1) lit(0) else pmod(diff, lit(offset))
 
@@ -140,13 +153,13 @@ private[sql] object PythonSQLUtils extends Logging {
         to_timestamp(make_date(when(cond0, y0).otherwise(y1), lit(12), lit(31)))
 
 
-      case "M" =>
+      case "M" => // month end frequency
         val truncated = date_trunc("MONTH", ts)
         val diff = (year(ts) - year(origin)) * 12 + month(ts) - month(origin)
         val mod = if (offset == 1) lit(0) else pmod(diff, lit(offset))
 
         // let origin=2018-12-31, offset=3, then edges are 2018-12-31, 2019-03-31,...
-        val cond0 = mod === 0 && month(ts) === 12 && dayofmonth(ts) === 31
+        val cond0 = mod === 0 && dayofmonth(ts) === dayofmonth(last_day(ts))
 
         def createMonthInterval(m: Column) = Column(
           MakeInterval(years = Literal(0), months = m.expr, weeks = Literal(0),
@@ -173,7 +186,7 @@ private[sql] object PythonSQLUtils extends Logging {
         to_timestamp(last_day(when(cond0, m0).otherwise(m1)))
 
 
-      case "D" =>
+      case "D" => // calendar day frequency
         val diff = datediff(end = ts, start = origin)
         val mod = if (offset == 1) lit(0) else pmod(diff, lit(offset))
 
@@ -200,7 +213,7 @@ private[sql] object PythonSQLUtils extends Logging {
         date_trunc("DAY", when(cond0, d0).otherwise(d1))
 
 
-      case "H" =>
+      case "H" => // hourly frequency
         val truncated = date_trunc("HOUR", ts)
         val diff = Column(TimestampDiff("HOUR",
           date_trunc("HOUR", origin).expr, truncated.expr))
@@ -235,7 +248,7 @@ private[sql] object PythonSQLUtils extends Logging {
         when(cond0, h0).otherwise(h1)
 
 
-      case "T" =>
+      case "T" => // minutely frequency
         val truncated = date_trunc("MINUTE", ts)
         val diff = Column(TimestampDiff("MINUTE",
           date_trunc("MINUTE", origin).expr, truncated.expr))
@@ -270,7 +283,7 @@ private[sql] object PythonSQLUtils extends Logging {
         when(cond0, m0).otherwise(m1)
 
 
-      case "S" =>
+      case "S" => // secondly frequency
         val truncated = date_trunc("SECOND", ts)
         val diff = Column(TimestampDiff("SECOND",
           date_trunc("SECOND", origin).expr, truncated.expr))

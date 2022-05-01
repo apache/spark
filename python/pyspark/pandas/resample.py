@@ -240,7 +240,7 @@ class Resampler(Generic[FrameLike], metaclass=ABCMeta):
             *[psser.spark.column for psser in agg_columns],
         )
 
-        # in the padding side, apply ps.date_range to insert necessary points
+        # in the padding side, insert necessary points
         # again, directly apply Pandas' resample on a 2-length series to obtain the indices
         pad_sdf = (
             ps.from_pandas(
