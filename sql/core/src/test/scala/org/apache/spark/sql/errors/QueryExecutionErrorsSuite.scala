@@ -457,4 +457,19 @@ class QueryExecutionErrorsSuite
         msg = "The save mode NULL is not supported for: an existent path.")
     }
   }
+
+  test("failedToCastValueToDataTypeForPartitionColumnError") {
+    val tableName: String = "t"
+
+    withTable(tableName) {
+      sql(
+        s"""
+           |CREATE TABLE $tableName (a STRING, b INT)
+           |USING parquet
+           |PARTITIONED BY (b)
+           |""".stripMargin)
+
+      sql("select * from t where b = 'xxx'").collect()
+    }
+  }
 }
