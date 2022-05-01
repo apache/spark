@@ -71,9 +71,6 @@
   "GROUPING_SIZE_LIMIT_EXCEEDED" : {
     "message" : [ "Grouping sets size cannot be greater than <maxSize>" ]
   },
-  "ILLEGAL_SUBSTRING" : {
-    "message" : [ "<subject> cannot contain <content>." ]
-  },
   "INCOMPARABLE_PIVOT_COLUMN" : {
     "message" : [ "Invalid pivot column '<columnName>'. Pivot columns must be comparable." ],
     "sqlState" : "42000"
@@ -243,6 +240,9 @@
       "NATURAL_CROSS_JOIN" : {
         "message" : [ "NATURAL CROSS JOIN." ]
       },
+      "ORC_TYPE_CAST" : {
+        "message" : [ "Unable to convert <orcType> of Orc to data type <toType>." ]
+      },
       "PANDAS_UDAF_IN_PIVOT" : {
         "message" : [ "Pandas user defined aggregate function in the PIVOT clause." ]
       },
@@ -273,8 +273,16 @@
   "UNSUPPORTED_GROUPING_EXPRESSION" : {
     "message" : [ "grouping()/grouping_id() can only be used with GroupingSets/Cube/Rollup" ]
   },
-  "UNSUPPORTED_OPERATION" : {
-    "message" : [ "The operation is not supported: <operation>" ]
+  "UNSUPPORTED_SAVE_MODE" : {
+    "message" : [ "The save mode <saveMode> is not supported for: " ],
+    "subClass" : {
+      "EXISTENT_PATH" : {
+        "message" : [ "an existent path." ]
+      },
+      "NON_EXISTENT_PATH" : {
+        "message" : [ "a not existent path." ]
+      }
+    }
   },
   "UNTYPED_SCALA_UDF" : {
     "message" : [ "You're using untyped Scala UDF, which does not have the input type information. Spark may blindly pass null to the Scala closure with primitive-type argument, and the closure will see the default value of the Java type for the null argument, e.g. `udf((x: Int) => x, IntegerType)`, the result is 0 for null input. To get rid of this error, you could:\n1. use typed Scala UDF APIs(without return type parameter), e.g. `udf((x: Int) => x)`\n2. use Java UDF APIs, e.g. `udf(new UDF1[String, Integer] { override def call(s: String): Integer = s.length() }, IntegerType)`, if input types are all non primitive\n3. set \"spark.sql.legacy.allowUntypedScalaUDF\" to true and use this API with caution" ]

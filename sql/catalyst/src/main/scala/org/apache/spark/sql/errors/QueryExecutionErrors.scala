@@ -68,6 +68,11 @@ import org.apache.spark.util.CircularBuffer
  */
 object QueryExecutionErrors extends QueryErrorsBase {
 
+  def internalMissingTimezoneIdError(): Throwable = {
+    new SparkIllegalStateException(errorClass = "INTERNAL_ERROR",
+      messageParameters = Array("Missing timezoneId where it is mandatory."))
+  }
+
   def logicalHintOperatorNotRemovedDuringAnalysisError(): Throwable = {
     new SparkIllegalStateException(errorClass = "INTERNAL_ERROR",
       messageParameters = Array(
@@ -587,8 +592,13 @@ object QueryExecutionErrors extends QueryErrorsBase {
        """.stripMargin)
   }
 
-  def unsupportedSaveModeError(saveMode: String, pathExists: Boolean): Throwable = {
-    new IllegalStateException(s"unsupported save mode $saveMode ($pathExists)")
+  def saveModeUnsupportedError(saveMode: Any, pathExists: Boolean): Throwable = {
+    pathExists match {
+      case true => new SparkIllegalArgumentException(errorClass = "UNSUPPORTED_SAVE_MODE",
+        messageParameters = Array("EXISTENT_PATH", toSQLValue(saveMode, StringType)))
+      case _ => new SparkIllegalArgumentException(errorClass = "UNSUPPORTED_SAVE_MODE",
+        messageParameters = Array("NON_EXISTENT_PATH", toSQLValue(saveMode, StringType)))
+    }
   }
 
   def cannotClearOutputDirectoryError(staticPrefixPath: Path): Throwable = {
@@ -1614,15 +1624,6 @@ object QueryExecutionErrors extends QueryErrorsBase {
     new SparkException(s"Can not load in UserDefinedType ${name} for user class ${userClass}.")
   }
 
-  def timeZoneIdNotSpecifiedForTimestampTypeError(): Throwable = {
-    new SparkUnsupportedOperationException(
-      errorClass = "UNSUPPORTED_OPERATION",
-      messageParameters = Array(
-        s"${toSQLType(TimestampType)} must supply timeZoneId parameter " +
-          s"while converting to the arrow timestamp type.")
-    )
-  }
-
   def notPublicClassError(name: String): Throwable = {
     new UnsupportedOperationException(
       s"$name is not a public class. Only public classes are supported.")
@@ -1936,18 +1937,18 @@ object QueryExecutionErrors extends QueryErrorsBase {
 
   def cannotConvertOrcTimestampToTimestampNTZError(): Throwable = {
     new SparkUnsupportedOperationException(
-      errorClass = "UNSUPPORTED_OPERATION",
-      messageParameters = Array(
-        s"Unable to convert ${toSQLType(TimestampType)} of Orc to " +
-        s"data type ${toSQLType(TimestampNTZType)}."))
+      errorClass = "UNSUPPORTED_FEATURE",
+      messageParameters = Array("ORC_TYPE_CAST",
+        toSQLType(TimestampType),
+        toSQLType(TimestampNTZType)))
   }
 
   def cannotConvertOrcTimestampNTZToTimestampLTZError(): Throwable = {
     new SparkUnsupportedOperationException(
-      errorClass = "UNSUPPORTED_OPERATION",
-      messageParameters = Array(
-        s"Unable to convert ${toSQLType(TimestampNTZType)} of Orc to " +
-        s"data type ${toSQLType(TimestampType)}."))
+      errorClass = "UNSUPPORTED_FEATURE",
+      messageParameters = Array("ORC_TYPE_CAST",
+        toSQLType(TimestampNTZType),
+        toSQLType(TimestampType)))
   }
 
   def writePartitionExceedConfigSizeWhenDynamicPartitionError(

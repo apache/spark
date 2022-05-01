@@ -21,8 +21,8 @@ import java.util.Locale
 
 import test.org.apache.spark.sql.connector.JavaSimpleWritableDataSource
 
-import org.apache.spark.{SparkArithmeticException, SparkException, SparkIllegalStateException, SparkRuntimeException, SparkUnsupportedOperationException, SparkUpgradeException}
-import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest}
+import org.apache.spark.{SparkArithmeticException, SparkException, SparkIllegalArgumentException, SparkIllegalStateException, SparkRuntimeException, SparkUnsupportedOperationException, SparkUpgradeException}
+import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, SaveMode}
 import org.apache.spark.sql.catalyst.util.BadRecordException
 import org.apache.spark.sql.connector.SimpleWritableDataSource
 import org.apache.spark.sql.execution.QueryExecutionException
@@ -33,6 +33,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy.EXCEPTION
 import org.apache.spark.sql.types.{DecimalType, StructType, TimestampType}
 import org.apache.spark.sql.util.ArrowUtils
+import org.apache.spark.util.Utils
 
 class QueryExecutionErrorsSuite
   extends QueryTest
@@ -261,17 +262,16 @@ class QueryExecutionErrorsSuite
     }
   }
 
-  test("UNSUPPORTED_OPERATION: timeZoneId not specified while converting TimestampType to Arrow") {
+  test("INTERNAL_ERROR: timeZoneId not specified while converting TimestampType to Arrow") {
     checkErrorClass(
-      exception = intercept[SparkUnsupportedOperationException] {
+      exception = intercept[SparkIllegalStateException] {
         ArrowUtils.toArrowSchema(new StructType().add("value", TimestampType), null)
       },
-      errorClass = "UNSUPPORTED_OPERATION",
-      msg = "The operation is not supported: \"TIMESTAMP\" must supply timeZoneId " +
-        "parameter while converting to the arrow timestamp type.")
+      errorClass = "INTERNAL_ERROR",
+      msg = "Missing timezoneId where it is mandatory.")
   }
 
-  test("UNSUPPORTED_OPERATION - SPARK-36346: can't read Timestamp as TimestampNTZ") {
+  test("UNSUPPORTED_FEATURE - SPARK-36346: can't read Timestamp as TimestampNTZ") {
     withTempPath { file =>
       sql("select timestamp_ltz'2019-03-21 00:02:03'").write.orc(file.getCanonicalPath)
       withAllNativeOrcReaders {
@@ -279,14 +279,15 @@ class QueryExecutionErrorsSuite
           exception = intercept[SparkException] {
             spark.read.schema("time timestamp_ntz").orc(file.getCanonicalPath).collect()
           }.getCause.asInstanceOf[SparkUnsupportedOperationException],
-          errorClass = "UNSUPPORTED_OPERATION",
-          msg = "The operation is not supported: " +
+          errorClass = "UNSUPPORTED_FEATURE",
+          errorSubClass = Some("ORC_TYPE_CAST"),
+          msg = "The feature is not supported: " +
             "Unable to convert \"TIMESTAMP\" of Orc to data type \"TIMESTAMP_NTZ\".")
       }
     }
   }
 
-  test("UNSUPPORTED_OPERATION - SPARK-38504: can't read TimestampNTZ as TimestampLTZ") {
+  test("UNSUPPORTED_FEATURE - SPARK-38504: can't read TimestampNTZ as TimestampLTZ") {
     withTempPath { file =>
       sql("select timestamp_ntz'2019-03-21 00:02:03'").write.orc(file.getCanonicalPath)
       withAllNativeOrcReaders {
@@ -294,8 +295,9 @@ class QueryExecutionErrorsSuite
           exception = intercept[SparkException] {
             spark.read.schema("time timestamp_ltz").orc(file.getCanonicalPath).collect()
           }.getCause.asInstanceOf[SparkUnsupportedOperationException],
-          errorClass = "UNSUPPORTED_OPERATION",
-          msg = "The operation is not supported: " +
+          errorClass = "UNSUPPORTED_FEATURE",
+          errorSubClass = Some("ORC_TYPE_CAST"),
+          msg = "The feature is not supported: " +
             "Unable to convert \"TIMESTAMP_NTZ\" of Orc to data type \"TIMESTAMP\".")
       }
     }
@@ -428,5 +430,31 @@ class QueryExecutionErrorsSuite
       sqlState = Some("42000"),
       matchMsg = true
     )
+  }
+
+  test("UNSUPPORTED_SAVE_MODE: unsupported null saveMode whether the path exists or not") {
+    withTempPath { path =>
+      val e1 = intercept[SparkIllegalArgumentException] {
+        val saveMode: SaveMode = null
+        Seq(1, 2).toDS().write.mode(saveMode).parquet(path.getAbsolutePath)
+      }
+      checkErrorClass(
+        exception = e1,
+        errorClass = "UNSUPPORTED_SAVE_MODE",
+        errorSubClass = Some("NON_EXISTENT_PATH"),
+        msg = "The save mode NULL is not supported for: a not existent path.")
+
+      Utils.createDirectory(path)
+
+      val e2 = intercept[SparkIllegalArgumentException] {
+        val saveMode: SaveMode = null
+        Seq(1, 2).toDS().write.mode(saveMode).parquet(path.getAbsolutePath)
+      }
+      checkErrorClass(
+        exception = e2,
+        errorClass = "UNSUPPORTED_SAVE_MODE",
+        errorSubClass = Some("EXISTENT_PATH"),
+        msg = "The save mode NULL is not supported for: an existent path.")
+    }
   }
 }

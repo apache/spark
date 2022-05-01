@@ -37,6 +37,7 @@ from typing import (
     Sequence,
     Set,
     Tuple,
+    Type,
     Union,
     cast,
     TYPE_CHECKING,
@@ -56,6 +57,7 @@ else:
 from pyspark.sql import Column, DataFrame as SparkDataFrame, Window, functions as F
 from pyspark.sql.types import (
     BooleanType,
+    DataType,
     NumericType,
     StructField,
     StructType,
@@ -400,7 +402,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         1  2  3
         2  2  2
         """
-        return self._reduce_for_stat_function(F.count, only_numeric=False)
+        return self._reduce_for_stat_function(F.count)
 
     # TODO: We should fix See Also when Series implementation is finished.
     def first(self, numeric_only: Optional[bool] = False) -> FrameLike:
@@ -446,7 +448,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         2  False  3
         """
         return self._reduce_for_stat_function(
-            F.first, only_numeric=numeric_only, bool_as_numeric=True
+            F.first, accepted_spark_types=(NumericType, BooleanType) if numeric_only else None
         )
 
     def last(self, numeric_only: Optional[bool] = False) -> FrameLike:
@@ -493,8 +495,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         """
         return self._reduce_for_stat_function(
             lambda col: F.last(col, ignorenulls=True),
-            only_numeric=numeric_only,
-            bool_as_numeric=True,
+            accepted_spark_types=(NumericType, BooleanType) if numeric_only else None,
         )
 
     def max(self, numeric_only: Optional[bool] = False) -> FrameLike:
@@ -534,7 +535,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         2  True  4
         """
         return self._reduce_for_stat_function(
-            F.max, only_numeric=numeric_only, bool_as_numeric=True
+            F.max, accepted_spark_types=(NumericType, BooleanType) if numeric_only else None
         )
 
     # TODO: examples should be updated.
@@ -567,7 +568,9 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         1  3.0  1.333333  0.333333
         2  4.0  1.500000  1.000000
         """
-        return self._reduce_for_stat_function(F.mean, only_numeric=True, bool_to_numeric=True)
+        return self._reduce_for_stat_function(
+            F.mean, accepted_spark_types=(NumericType,), bool_to_numeric=True
+        )
 
     def min(self, numeric_only: Optional[bool] = False) -> FrameLike:
         """
@@ -605,7 +608,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         2  False  4
         """
         return self._reduce_for_stat_function(
-            F.min, only_numeric=numeric_only, bool_as_numeric=True
+            F.min, accepted_spark_types=(NumericType, BooleanType) if numeric_only else None
         )
 
     # TODO: sync the doc.
@@ -638,7 +641,9 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         assert ddof in (0, 1)
 
         return self._reduce_for_stat_function(
-            F.stddev_pop if ddof == 0 else F.stddev_samp, only_numeric=True, bool_to_numeric=True
+            F.stddev_pop if ddof == 0 else F.stddev_samp,
+            accepted_spark_types=(NumericType,),
+            bool_to_numeric=True,
         )
 
     def sum(self) -> FrameLike:
@@ -661,7 +666,9 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         pyspark.pandas.Series.groupby
         pyspark.pandas.DataFrame.groupby
         """
-        return self._reduce_for_stat_function(F.sum, only_numeric=True, bool_to_numeric=True)
+        return self._reduce_for_stat_function(
+            F.sum, accepted_spark_types=(NumericType,), bool_to_numeric=True
+        )
 
     # TODO: sync the doc.
     def var(self, ddof: int = 1) -> FrameLike:
@@ -693,7 +700,9 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         assert ddof in (0, 1)
 
         return self._reduce_for_stat_function(
-            F.var_pop if ddof == 0 else F.var_samp, only_numeric=True, bool_to_numeric=True
+            F.var_pop if ddof == 0 else F.var_samp,
+            accepted_spark_types=(NumericType,),
+            bool_to_numeric=True,
         )
 
     # TODO: skipna should be implemented.
@@ -735,7 +744,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         5  False
         """
         return self._reduce_for_stat_function(
-            lambda col: F.min(F.coalesce(col.cast("boolean"), SF.lit(True))), only_numeric=False
+            lambda col: F.min(F.coalesce(col.cast("boolean"), SF.lit(True)))
         )
 
     # TODO: skipna should be implemented.
@@ -777,7 +786,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         5  False
         """
         return self._reduce_for_stat_function(
-            lambda col: F.max(F.coalesce(col.cast("boolean"), SF.lit(False))), only_numeric=False
+            lambda col: F.max(F.coalesce(col.cast("boolean"), SF.lit(False)))
         )
 
     # TODO: groupby multiply columns should be implemented.
@@ -2528,7 +2537,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
                     F.count(F.when(col.isNull(), 1).otherwise(None)) >= 1, 1
                 ).otherwise(0)
 
-        return self._reduce_for_stat_function(stat_function, only_numeric=False)
+        return self._reduce_for_stat_function(stat_function)
 
     def rolling(
         self, window: int, min_periods: Optional[int] = None
@@ -2732,14 +2741,15 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
             return F.percentile_approx(col, 0.5, accuracy)
 
         return self._reduce_for_stat_function(
-            stat_function, only_numeric=numeric_only, bool_to_numeric=True
+            stat_function,
+            accepted_spark_types=(NumericType,) if numeric_only else None,
+            bool_to_numeric=True,
         )
 
     def _reduce_for_stat_function(
         self,
         sfun: Callable[[Column], Column],
-        only_numeric: Optional[bool] = None,
-        bool_as_numeric: bool = False,
+        accepted_spark_types: Optional[Tuple[Type[DataType], ...]] = None,
         bool_to_numeric: bool = False,
     ) -> FrameLike:
         """Apply an aggregate function `sfun` per column and reduce to a FrameLike.
@@ -2747,23 +2757,23 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         Parameters
         ----------
         sfun : The aggregate function to apply per column
-        only_numeric: If True, only numeric columns are involved
-        bool_as_numeric: If True, boolean columns are seen as numeric columns (following pandas)
-        bool_to_numeric: If True, boolean columns are converted to numeric columns
+        accepted_spark_types: Accepted spark types of columns to be aggregated;
+                              default None means all spark types are accepted
+        bool_to_numeric: If True, boolean columns are converted to numeric columns, which
+                         are accepted for all statistical functions regardless of
+                         `accepted_spark_types`.
         """
         groupkey_names = [SPARK_INDEX_NAME_FORMAT(i) for i in range(len(self._groupkeys))]
         groupkey_scols = [s.alias(name) for s, name in zip(self._groupkeys_scols, groupkey_names)]
 
         agg_columns = []
         for psser in self._agg_columns:
-            if (
-                isinstance(psser.spark.data_type, NumericType)
-                or (bool_as_numeric and isinstance(psser.spark.data_type, BooleanType))
-                or not only_numeric
+            if bool_to_numeric and isinstance(psser.spark.data_type, BooleanType):
+                agg_columns.append(psser.astype(int))
+            elif (accepted_spark_types is None) or isinstance(
+                psser.spark.data_type, accepted_spark_types
             ):
                 agg_columns.append(psser)
-            elif bool_to_numeric and isinstance(psser.spark.data_type, BooleanType):
-                agg_columns.append(psser.astype(int))
 
         sdf = self._psdf._internal.spark_frame.select(
             *groupkey_scols, *[psser.spark.column for psser in agg_columns]
@@ -3476,7 +3486,7 @@ class SeriesGroupBy(GroupBy[Series]):
         3    [3, 4]
         Name: b, dtype: object
         """
-        return self._reduce_for_stat_function(F.collect_set, only_numeric=False)
+        return self._reduce_for_stat_function(F.collect_set)
 
 
 def is_multi_agg_with_relabel(**kwargs: Any) -> bool:

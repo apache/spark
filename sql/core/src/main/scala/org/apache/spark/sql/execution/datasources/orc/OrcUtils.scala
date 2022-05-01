@@ -520,7 +520,7 @@ object OrcUtils extends Logging {
     val orcValuesDeserializer = new OrcDeserializer(schemaWithoutGroupBy,
       (0 until schemaWithoutGroupBy.length).toArray)
     val resultRow = orcValuesDeserializer.deserializeFromValues(aggORCValues)
-    if (aggregation.groupByColumns.nonEmpty) {
+    if (aggregation.groupByExpressions.nonEmpty) {
       val reOrderedPartitionValues = AggregatePushDownUtils.reOrderPartitionCol(
         partitionSchema, aggregation, partitionValues)
       new JoinedRow(reOrderedPartitionValues, resultRow)
