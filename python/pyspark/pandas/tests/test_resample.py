@@ -36,14 +36,25 @@ class ResampleTest(PandasOnSparkTestCase, TestUtils):
     def pdf1(self):
         np.random.seed(11)
         dates = [
+            pd.NaT,
             datetime.datetime(2011, 12, 31),
+            datetime.datetime(2011, 12, 31, 0, 0, 1),
+            datetime.datetime(2011, 12, 31, 23, 59, 59),
+            datetime.datetime(2012, 1, 1),
+            datetime.datetime(2012, 1, 1, 0, 0, 1),
+            pd.NaT,
+            datetime.datetime(2012, 1, 1, 23, 59, 59),
             datetime.datetime(2012, 1, 2),
             pd.NaT,
+            datetime.datetime(2012, 1, 30, 23, 59, 59),
+            datetime.datetime(2012, 1, 31),
+            datetime.datetime(2012, 1, 31, 0, 0, 1),
+            datetime.datetime(2012, 3, 31),
             datetime.datetime(2013, 5, 3),
             datetime.datetime(2022, 5, 3),
         ]
         return pd.DataFrame(
-            np.random.rand(len(dates), 3), index=pd.DatetimeIndex(dates), columns=list("ABC")
+            np.random.rand(len(dates), 2), index=pd.DatetimeIndex(dates), columns=list("AB")
         )
 
     @property
@@ -59,44 +70,32 @@ class ResampleTest(PandasOnSparkTestCase, TestUtils):
             datetime.datetime(2022, 5, 11),
         ]
         return pd.DataFrame(
-            np.random.rand(len(dates), 3), index=pd.DatetimeIndex(dates), columns=list("ABC")
+            np.random.rand(len(dates), 2), index=pd.DatetimeIndex(dates), columns=list("AB")
         )
 
     @property
     def pdf3(self):
-        np.random.seed(33)
-        dates = [
-            datetime.datetime(2022, 5, 1, 4, 5, 6),
-            datetime.datetime(2022, 5, 3),
-            datetime.datetime(2022, 5, 3, 23, 59, 59),
-            datetime.datetime(2022, 5, 4),
-            pd.NaT,
-            datetime.datetime(2022, 5, 4, 0, 0, 1),
-            datetime.datetime(2022, 5, 7, 0, 0, 0),
-            datetime.datetime(2022, 5, 9, 0, 0, 1),
-            datetime.datetime(2022, 5, 11),
-        ]
-        return pd.DataFrame(
-            np.random.rand(len(dates), 3), index=pd.DatetimeIndex(dates), columns=list("ABC")
-        )
+        np.random.seed(22)
+        index = pd.date_range(start="2011-01-02", end="2022-05-01", freq="1D")
+        return pd.DataFrame(np.random.rand(len(index), 2), index=index, columns=list("AB"))
 
     @property
     def pdf4(self):
-        np.random.seed(44)
-        index = pd.date_range(start="2019-01-02", end="2022-05-01", freq="7D")
-        return pd.DataFrame(np.random.rand(len(index), 3), index=index, columns=list("ABC"))
+        np.random.seed(33)
+        index = pd.date_range(start="2020-12-12", end="2022-05-01", freq="1H")
+        return pd.DataFrame(np.random.rand(len(index), 2), index=index, columns=list("AB"))
 
     @property
     def pdf5(self):
-        np.random.seed(55)
-        index = pd.date_range(start="2022-05-02 03:04:05", end="2022-05-02 06:07:08", freq="13T")
-        return pd.DataFrame(np.random.rand(len(index), 3), index=index, columns=list("ABC"))
+        np.random.seed(44)
+        index = pd.date_range(start="2021-12-30 03:04:05", end="2022-01-02 06:07:08", freq="1T")
+        return pd.DataFrame(np.random.rand(len(index), 2), index=index, columns=list("AB"))
 
     @property
     def pdf6(self):
-        np.random.seed(66)
-        index = pd.date_range(start="2022-05-02 03:04:05", end="2022-05-02 04:05:06", freq="11S")
-        return pd.DataFrame(np.random.rand(len(index), 3), index=index, columns=list("ABC"))
+        np.random.seed(55)
+        index = pd.date_range(start="2022-05-02 03:04:05", end="2022-05-03 06:07:08", freq="1S")
+        return pd.DataFrame(np.random.rand(len(index), 2), index=index, columns=list("AB"))
 
     @property
     def psdf1(self):
@@ -213,34 +212,39 @@ class ResampleTest(PandasOnSparkTestCase, TestUtils):
             ):
                 getattr(pser_r, name)
 
-    def _test_resample(self, pobj, psobj, rules):
+    def _test_resample(self, pobj, psobj, rules, funcs):
         for rule in rules:
-            for closed in [None, "left", "right"]:
-                for label in [None, "left", "right"]:
-                    for f in ["min", "max", "sum", "mean", "std", "var"]:
+            for func in funcs:
+                for closed in [None, "left", "right"]:
+                    for label in [None, "left", "right"]:
                         p_resample = pobj.resample(rule=rule, closed=closed, label=label)
                         ps_resample = psobj.resample(rule=rule, closed=closed, label=label)
                         self.assert_eq(
-                            getattr(p_resample, f)().sort_index(),
-                            getattr(ps_resample, f)().sort_index(),
+                            getattr(p_resample, func)().sort_index(),
+                            getattr(ps_resample, func)().sort_index(),
                             almost=True,
                         )
 
     def test_dataframe_resample(self):
-        self._test_resample(self.pdf1, self.psdf1, ["3Y", "Y", "9M", "M", "17D", "D"])
-        self._test_resample(self.pdf2, self.psdf2, ["3A", "A", "12M"])
-        self._test_resample(self.pdf3, self.psdf3, ["A", "1D", "17H"])
-        self._test_resample(self.pdf4, self.psdf4, ["D", "3D", "5D"])
-        self._test_resample(self.pdf5, self.psdf5, ["1H", "2H", "22MIN", "33T"])
-        self._test_resample(self.pdf6, self.psdf6, ["1S", "55S", "1MIN"])
+        self._test_resample(
+            self.pdf1,
+            self.psdf1,
+            ["Y", "3Y", "M", "9M", "D", "17D"],
+            ["min", "max", "sum", "mean", "std", "var"],
+        )
+        self._test_resample(self.pdf2, self.psdf2, ["3A", "A", "11M", "D"], ["sum"])
+        self._test_resample(self.pdf3, self.psdf3, ["27H", "1D", "2D", "1M"], ["sum"])
+        self._test_resample(self.pdf4, self.psdf4, ["1H", "5H", "D", "2D"], ["sum"])
+        self._test_resample(self.pdf5, self.psdf5, ["1T", "2T", "5MIN", "1H", "2H", "D"], ["sum"])
+        self._test_resample(self.pdf6, self.psdf6, ["1S", "2S", "1MIN", "H", "2H"], ["sum"])
 
     def test_series_resample(self):
-        self._test_resample(self.pdf1.A, self.psdf1.A, ["4Y"])
-        self._test_resample(self.pdf2.A, self.psdf2.A, ["13M"])
-        self._test_resample(self.pdf3.A, self.psdf3.A, ["18H"])
-        self._test_resample(self.pdf4.A, self.psdf4.A, ["6D"])
-        self._test_resample(self.pdf5.A, self.psdf5.A, ["47T"])
-        self._test_resample(self.pdf6.A, self.psdf6.A, ["37S"])
+        self._test_resample(self.pdf1.A, self.psdf1.A, ["4Y"], ["sum"])
+        self._test_resample(self.pdf2.A, self.psdf2.A, ["13M"], ["sum"])
+        self._test_resample(self.pdf3.A, self.psdf3.A, ["18H"], ["sum"])
+        self._test_resample(self.pdf4.A, self.psdf4.A, ["6D"], ["sum"])
+        self._test_resample(self.pdf5.A, self.psdf5.A, ["47T"], ["sum"])
+        self._test_resample(self.pdf6.A, self.psdf6.A, ["37S"], ["sum"])
 
     def test_resample_on(self):
         np.random.seed(77)

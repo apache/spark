@@ -133,7 +133,7 @@ private[sql] object PythonSQLUtils extends Logging {
         // let origin=2018-12-31, offset=3, then edges are 2018-12-31, 2021-12-31,...
         val cond0 = mod === 0 && month(ts) === 12 && dayofmonth(ts) === 31
 
-        // year label at edges like 2021-12-31
+        // label at edges
         val y0 = (leftClosed, leftLabel) match {
           case (true, true) => year(ts)
           case (true, false) => year(ts) + offset
@@ -141,7 +141,7 @@ private[sql] object PythonSQLUtils extends Logging {
           case (false, false) => year(ts)
         }
 
-        // year label at internal points like 2022-05-31
+        // label at internal points
         val y1 = if (leftLabel) {
           when(mod === 0, year(ts) - offset)
             .otherwise(year(ts) - mod)
@@ -166,7 +166,7 @@ private[sql] object PythonSQLUtils extends Logging {
             days = Literal(0), hours = Literal(0), mins = Literal(0), secs = Literal(0))
         )
 
-        // month label at edges like 2019-03-31
+        // label at edges
         val m0 = (leftClosed, leftLabel) match {
           case (true, true) => truncated
           case (true, false) => truncated + createMonthInterval(lit(offset))
@@ -174,7 +174,7 @@ private[sql] object PythonSQLUtils extends Logging {
           case (false, false) => truncated
         }
 
-        // month label at internal points like 2019-04-20
+        // label at internal points
         val m1 = if (leftLabel) {
           when(mod === 0, truncated - createMonthInterval(lit(offset)))
             .otherwise(truncated - createMonthInterval(mod))
@@ -186,14 +186,33 @@ private[sql] object PythonSQLUtils extends Logging {
         to_timestamp(last_day(when(cond0, m0).otherwise(m1)))
 
 
+      case "D" if offset == 1 => // calendar day frequency
+        // Different from cases with offset>1, here takes hour/minute/second into account!
+        val cond0 = hour(ts) === 0 && minute(ts) === 0 && second(ts) === 0
+
+        (leftClosed, leftLabel) match {
+          case (true, true) =>
+            date_trunc("DAY", ts)
+          case (true, false) =>
+            date_trunc("DAY", date_add(ts, 1))
+          case (false, true) =>
+            when(cond0, date_trunc("DAY", date_sub(ts, 1)))
+              .otherwise(date_trunc("DAY", ts))
+          case (false, false) =>
+            when(cond0, date_trunc("DAY", ts))
+              .otherwise(date_trunc("DAY", date_add(ts, 1)))
+        }
+
+
       case "D" => // calendar day frequency
         val diff = datediff(end = ts, start = origin)
-        val mod = if (offset == 1) lit(0) else pmod(diff, lit(offset))
+        val mod = pmod(diff, lit(offset))
 
         // let origin=2018-12-31, offset=3, then edges are 2019-01-03, 2019-01-06,...
-        val cond0 = mod === 0 && hour(ts) === 0 && minute(ts) === 0 && second(ts) === 0
+        // Different from cases with offset=1, here do NOT take hour/minute/second into account!
+        val cond0 = mod === 0
 
-        // day label at edges like 2019-01-03
+        // label at edges
         val d0 = (leftClosed, leftLabel) match {
           case (true, true) => ts
           case (true, false) => date_add(ts, offset)
@@ -201,13 +220,11 @@ private[sql] object PythonSQLUtils extends Logging {
           case (false, false) => ts
         }
 
-        // day label at internal points like 2019-01-02
+        // label at internal points
         val d1 = if (leftLabel) {
-          when(mod === 0, ts)
-            .otherwise(date_sub(ts, mod))
+          date_sub(ts, mod)
         } else {
-          when(mod === 0, date_add(ts, offset))
-            .otherwise(date_sub(ts, mod - offset))
+          date_sub(ts, mod - offset)
         }
 
         date_trunc("DAY", when(cond0, d0).otherwise(d1))
@@ -228,7 +245,7 @@ private[sql] object PythonSQLUtils extends Logging {
             days = Literal(0), hours = h.expr, mins = Literal(0), secs = Literal(0))
         )
 
-        // hour label at edges like 2018-12-31 03:00:00
+        // label at edges
         val h0 = (leftClosed, leftLabel) match {
           case (true, true) => truncated
           case (true, false) => truncated + createHourInterval(lit(offset))
@@ -236,7 +253,7 @@ private[sql] object PythonSQLUtils extends Logging {
           case (false, false) => truncated
         }
 
-        // hour label at internal points like 2018-12-31 04:02:13
+        // label at internal points
         val h1 = if (leftLabel) {
           when(mod === 0, truncated)
             .otherwise(truncated - createHourInterval(mod))
@@ -263,7 +280,7 @@ private[sql] object PythonSQLUtils extends Logging {
             days = Literal(0), hours = Literal(0), mins = m.expr, secs = Literal(0))
         )
 
-        // minute label at edges like 2018-12-31 00:03:00
+        // label at edges
         val m0 = (leftClosed, leftLabel) match {
           case (true, true) => truncated
           case (true, false) => truncated + createMinuteInterval(lit(offset))
@@ -271,7 +288,7 @@ private[sql] object PythonSQLUtils extends Logging {
           case (false, false) => truncated
         }
 
-        // minute label at internal points like 2018-12-31 00:02:15
+        // label at internal points
         val m1 = if (leftLabel) {
           when(mod === 0, truncated)
             .otherwise(truncated - createMinuteInterval(mod))
@@ -298,7 +315,7 @@ private[sql] object PythonSQLUtils extends Logging {
             days = Literal(0), hours = Literal(0), mins = Literal(0), secs = s.expr)
         )
 
-        // second label at edges like 2018-12-31 00:00:03
+        // label at edges
         val s0 = (leftClosed, leftLabel) match {
           case (true, true) => truncated
           case (true, false) => truncated + createSecondInterval(lit(offset))
@@ -306,7 +323,7 @@ private[sql] object PythonSQLUtils extends Logging {
           case (false, false) => truncated
         }
 
-        // second label at internal points like 2018-12-31 00:00:11
+        // label at internal points
         val m1 = if (leftLabel) {
           when(mod === 0, truncated)
             .otherwise(truncated - createSecondInterval(mod))

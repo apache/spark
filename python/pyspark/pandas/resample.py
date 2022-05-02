@@ -177,12 +177,12 @@ class Resampler(Generic[FrameLike], metaclass=ABCMeta):
         #   index = pd.DatetimeIndex(dates)
         #   pdf = pd.DataFrame(np.array([1,2,3]), index=index, columns=['A'])
         #   pdf.resample('3Y').max()
-        #               A
-        # 2012-12-31  2.0
-        # 2015-12-31  NaN
-        # 2018-12-31  NaN
-        # 2021-12-31  NaN
-        # 2024-12-31  3.0
+        #                 A
+        #   2012-12-31  2.0
+        #   2015-12-31  NaN
+        #   2018-12-31  NaN
+        #   2021-12-31  NaN
+        #   2024-12-31  3.0
         #
         # in this case:
         # 1, obtain one origin point to bin all timestamps, we can get one (2009-12-31)
@@ -244,7 +244,7 @@ class Resampler(Generic[FrameLike], metaclass=ABCMeta):
             F.col(SPARK_DEFAULT_INDEX_NAME),
             bin_scol.alias(bin_col_name),
             *[psser.spark.column for psser in agg_columns],
-        )
+        ).where(~F.isnull(F.col(bin_col_name)))
 
         # in the padding side, insert necessary points
         # again, directly apply Pandas' resample on a 2-length series to obtain the indices
