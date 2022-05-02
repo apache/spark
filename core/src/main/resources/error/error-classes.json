@@ -102,8 +102,8 @@
     "message" : [ "The fraction of sec must be zero. Valid range is [0, 60]. If necessary set <config> to false to bypass this error. " ],
     "sqlState" : "22023"
   },
-  "INVALID_JSON_SCHEMA_MAPTYPE" : {
-    "message" : [ "Input schema <dataType> can only contain StringType as a key type for a MapType." ]
+  "INVALID_JSON_SCHEMA_MAP_TYPE" : {
+    "message" : [ "Input schema <jsonSchema> can only contain STRING as a key type for a MAP." ]
   },
   "INVALID_PANDAS_UDF_PLACEMENT" : {
     "message" : [ "The group aggregate pandas UDF <functionName> cannot be invoked together with as other, non-pandas aggregate functions." ]
