@@ -1594,6 +1594,35 @@ class Dataset[T] private[sql](
   def select(col: String, cols: String*): DataFrame = select((col +: cols).map(Column(_)) : _*)
 
   /**
+   * Selects a set of columns via schema object.
+   */
+  def select(schema: StructType): DataFrame = {
+    val attrs = logicalPlan.output
+    val attrs_map = attrs.map { a => (a.name, a) }.toMap
+    val new_attrs = AttributeMap(schema.map { f =>
+      val o = attrs_map.get(f.name).get
+      AttributeReference(o.name, f.dataType, o.nullable, f.metadata)(o.exprId, o.qualifier)
+    }.map(i => (i, i.asInstanceOf[Attribute])))
+    withPlan {
+      select(schema.map { f => Column(f.name) }: _* ).logicalPlan.transformExpressionsUp {
+        case a: AttributeReference =>
+          new_attrs.get(a) match {
+            case Some(b) =>
+              AttributeReference(a.name, b.dataType, b.nullable, b.metadata)(b.exprId, a.qualifier)
+            case None => a
+          }
+        case a: Alias =>
+          Alias(a.child, a.name)(
+            a.exprId,
+            a.qualifier,
+            Some(new_attrs.get(a.toAttribute).get.metadata),
+            a.nonInheritableMetadataKeys
+          )
+      }
+    }
+  }
+
+  /**
    * Selects a set of SQL expressions. This is a variant of `select` that accepts
    * SQL expressions.
    *

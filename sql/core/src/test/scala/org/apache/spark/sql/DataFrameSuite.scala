@@ -509,6 +509,20 @@ class DataFrameSuite extends QueryTest
       Row("1"))
   }
 
+  test("select via struct type") {
+    //   case class TestData(key: Int, value: String)
+    val builder = new MetadataBuilder
+    val metadata = builder.putLong("foo", 42).build()
+    val schema = StructType(Seq(StructField("value", StringType),
+                                StructField("key", IntegerType, metadata = metadata),
+                                ))
+    checkAnswer(
+      testData.select(schema).where($"key" === lit(1)).select("value"),
+      Row("1")
+    )
+    assert(testData.select(schema).schema.fields(1).metadata.contains("foo"))
+  }
+
   test("select with functions") {
     checkAnswer(
       testData.select(sum("value"), avg("value"), count(lit(1))),
