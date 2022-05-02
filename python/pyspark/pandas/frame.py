@@ -616,6 +616,7 @@ class DataFrame(Frame, Generic[T]):
                     psser.spark.data_type, (NumericType, BooleanType)
                 )
                 keep_column = not numeric_only or is_numeric_or_boolean
+
                 if keep_column:
                     scol = sfun(psser)
 
