@@ -1217,7 +1217,6 @@ class Frame(object, metaclass=ABCMeta):
         def mean(psser: "Series") -> Column:
             spark_type = psser.spark.data_type
             spark_column = psser.spark.column
-
             if isinstance(spark_type, BooleanType):
                 spark_column = spark_column.cast(LongType())
             elif not isinstance(spark_type, NumericType):
@@ -1403,7 +1402,6 @@ class Frame(object, metaclass=ABCMeta):
         >>> ps.Series([]).prod(min_count=1)
         nan
         """
-
         axis = validate_axis(axis)
 
         if numeric_only is None and axis == 0:
@@ -1498,7 +1496,6 @@ class Frame(object, metaclass=ABCMeta):
         def skew(psser: "Series") -> Column:
             spark_type = psser.spark.data_type
             spark_column = psser.spark.column
-
             if isinstance(spark_type, BooleanType):
                 spark_column = spark_column.cast(LongType())
             elif not isinstance(spark_type, NumericType):
@@ -2052,10 +2049,6 @@ class Frame(object, metaclass=ABCMeta):
         def median(psser: "Series") -> Column:
             spark_type = psser.spark.data_type
             spark_column = psser.spark.column
-
-            if not skipna:
-                spark_column = F.when(spark_column.isNull(), np.nan).otherwise(spark_column)
-
             if isinstance(spark_type, (BooleanType, NumericType)):
                 return F.percentile_approx(spark_column.cast(DoubleType()), 0.5, accuracy)
             else:
@@ -2066,7 +2059,11 @@ class Frame(object, metaclass=ABCMeta):
                 )
 
         return self._reduce_for_stat_function(
-            median, name="median", numeric_only=numeric_only, axis=axis
+            median,
+            name="median",
+            numeric_only=numeric_only,
+            axis=axis,
+            skipna=skipna,
         )
 
     def sem(

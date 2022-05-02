@@ -144,7 +144,7 @@ class GenericFunctionsTest(PandasOnSparkTestCase, TestUtils):
         self.assert_eq(pdf.a.median(), psdf.a.median())
         self.assert_eq(pdf.a.median(skipna=False), psdf.a.median(skipna=False))
         self.assert_eq(1.0, psdf.b.median())
-        self.assert_eq(2.0, psdf.b.median(skipna=False))
+        self.assert_eq(pdf.b.median(skipna=False), psdf.b.median(skipna=False))
 
 
 if __name__ == "__main__":
