@@ -91,7 +91,7 @@ class QueryExecutionAnsiErrorsSuite extends QueryTest with QueryErrorsSuiteBase 
         sql("select array(1, 2, 3, 4, 5)[8]").collect()
       },
       errorClass = "INVALID_ARRAY_INDEX",
-      msg = "Invalid index: 8, numElements: 5. " +
+      msg = "The index 8 is out of bounds. The array has 5 elements. " +
         s"If necessary set $ansiConf to false to bypass this error."
     )
   }
