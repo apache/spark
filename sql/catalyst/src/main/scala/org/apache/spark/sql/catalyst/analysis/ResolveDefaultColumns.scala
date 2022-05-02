@@ -196,10 +196,13 @@ case class ResolveDefaultColumns(
       }.toMap
     val newMatchedActions: Seq[MergeAction] = m.matchedActions.map {
       replaceExplicitDefaultValuesInMergeAction(_, columnNamesToExpressions)
+        .getOrElse(return m)
     }
     val newNotMatchedActions: Seq[MergeAction] = m.notMatchedActions.map {
       replaceExplicitDefaultValuesInMergeAction(_, columnNamesToExpressions)
+        .getOrElse(return m)
     }
+    m.copy(matchedActions = newMatchedActions, notMatchedActions = newNotMatchedActions)
   }
 
   /**
@@ -208,19 +211,19 @@ case class ResolveDefaultColumns(
    */
   private def replaceExplicitDefaultValuesInMergeAction(
       action: MergeAction,
-      columnNamesToExpressions: Map[String, Expression]): MergeAction = {
+      columnNamesToExpressions: Map[String, Expression]): Option[MergeAction] = {
     action match {
       case u: UpdateAction =>
         val replaced: Seq[Assignment] =
           replaceExplicitDefaultValuesForUpdateAssignments(u.assignments, columnNamesToExpressions)
-            .getOrElse(return m)
-        u.copy(assignments = replaced)
+            .getOrElse(return None)
+        Some(u.copy(assignments = replaced))
       case i: InsertAction =>
         val replaced: Seq[Assignment] =
           replaceExplicitDefaultValuesForUpdateAssignments(i.assignments, columnNamesToExpressions)
-            .getOrElse(return m)
-        i.copy(assignments = replaced)
-      case _ => action
+            .getOrElse(return None)
+        Some(i.copy(assignments = replaced))
+      case _ => Some(action)
     }
   }
 
