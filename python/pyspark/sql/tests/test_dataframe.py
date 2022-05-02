@@ -1180,9 +1180,6 @@ class DataFrameTests(ReusedSQLTestCase):
     def test_df_is_empty(self):
         # SPARK-39084: Fix df.rdd.isEmpty() resulting in JVM crash.
 
-        tmpPath = tempfile.mkdtemp()
-        shutil.rmtree(tmpPath)
-
         # This particular example of DataFrame reproduces an issue in isEmpty call
         # which could result in JVM crash.
         data = []
@@ -1204,6 +1201,8 @@ class DataFrameTests(ReusedSQLTestCase):
                 for i in range(0, 10):
                     data.append((id,))
 
+        tmpPath = tempfile.mkdtemp()
+        shutil.rmtree(tmpPath)
         try:
             df = self.spark.createDataFrame(data, ["col"])
             df.coalesce(1).write.parquet(tmpPath)
