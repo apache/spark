@@ -144,7 +144,7 @@ case class ResolveDefaultColumns(
   /**
    * Resolves DEFAULT column references for an UPDATE command.
    */
-  private def resolveDefaultColumnsForUpdate(u: UpdateTable): Option[LogicalPlan] = {
+  private def resolveDefaultColumnsForUpdate(u: UpdateTable): LogicalPlan = {
     // Return a more descriptive error message if the user tries to use a DEFAULT column reference
     // inside an UPDATE command's WHERE clause; this is not allowed.
     logWarning(s"@@@ a $u")
@@ -176,7 +176,7 @@ case class ResolveDefaultColumns(
         return u
       }
     logWarning(s"@@@ z $u")
-    Some(u.copy(assignments = newAssignments))
+    u.copy(assignments = newAssignments)
   }
 
   /**
@@ -377,7 +377,8 @@ case class ResolveDefaultColumns(
    */
   private def getInsertTableSchemaWithoutPartitionColumns(
       enclosingInsert: InsertIntoStatement): Option[StructType] = {
-    val schema: StructType = getSchemaForTargetTable(enclosingInsert.table).getOrElse(return None)
+    val target: StructType = getSchemaForTargetTable(enclosingInsert.table).getOrElse(return None)
+    val schema: StructType = StructType(target.fields.dropRight(enclosingInsert.partitionSpec.size))
     // Rearrange the columns in the result schema to match the order of the explicit column list,
     // if any.
     val userSpecifiedCols: Seq[String] = enclosingInsert.userSpecifiedCols
