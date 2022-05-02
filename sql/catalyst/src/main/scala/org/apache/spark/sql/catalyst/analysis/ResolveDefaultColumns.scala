@@ -57,7 +57,8 @@ case class ResolveDefaultColumns(
       (_ => SQLConf.get.enableDefaultColumns), ruleId) {
       case i: InsertIntoStatement if insertsFromInlineTable(i) =>
         resolveDefaultColumnsForInsertFromInlineTable(i)
-      case i@InsertIntoStatement(_, _, _, _: Project, _, _) =>
+      case i@InsertIntoStatement(_, _, _, project: Project, _, _)
+        if !project.projectList.exists(_.isInstanceOf[Star]) =>
         resolveDefaultColumnsForInsertFromProject(i)
       case u: UpdateTable =>
         resolveDefaultColumnsForUpdate(u)
@@ -66,13 +67,13 @@ case class ResolveDefaultColumns(
 
   /**
    * Checks if a logical plan is an INSERT INTO command where the inserted data comes from a VALUES
-   * list, with possible projection(s) and/or alias(es) in between.
+   * list, with possible projection(s), aggregate(s), and/or alias(es) in between.
    */
   private def insertsFromInlineTable(i: InsertIntoStatement): Boolean = {
     var query = i.query
     while (query.children.size == 1) {
       query match {
-        case _: Project | _: SubqueryAlias =>
+        case _: Project | _: Aggregate | _: SubqueryAlias =>
           query = query.children(0)
         case _ =>
           return false
@@ -94,13 +95,10 @@ case class ResolveDefaultColumns(
   private def resolveDefaultColumnsForInsertFromInlineTable(i: InsertIntoStatement): LogicalPlan = {
     val children = mutable.Buffer.empty[LogicalPlan]
     var node = i.query
-    while (node match {
-      case _ if node.children.size == 1 =>
-        children.append(node)
-        node = node.children(0)
-        true
-      case _ => false
-    }) {}
+    while (node.children.size == 1) {
+      children.append(node)
+      node = node.children(0)
+    }
     val table = node.asInstanceOf[UnresolvedInlineTable]
     val insertTableSchemaWithoutPartitionColumns: StructType =
       getInsertTableSchemaWithoutPartitionColumns(i)
@@ -116,10 +114,7 @@ case class ResolveDefaultColumns(
         .getOrElse(return i)
     node = replaced
     for (child <- children.reverse) {
-      node = child match {
-        case p: Project => p.copy(child = node)
-        case s: SubqueryAlias => s.copy(child = node)
-      }
+      node = child.withNewChildren(Seq(node))
     }
     regenerated.copy(query = node)
   }
