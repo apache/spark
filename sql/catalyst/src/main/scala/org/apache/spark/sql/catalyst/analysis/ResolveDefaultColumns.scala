@@ -400,7 +400,7 @@ case class ResolveDefaultColumns(
   }
 
   /**
-   * Returns the schema for the target table of a DML command, lookup up into the catalog if needed.
+   * Returns the schema for the target table of a DML command, lookup into the catalog if needed.
    */
   private def getSchemaForTargetTable(table: LogicalPlan): Option[StructType] = {
     // Check if the target table is already resolved. If so, return the computed schema.
