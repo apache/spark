@@ -92,7 +92,7 @@
     "message" : [ "Invalid index: <indexValue>, numElements: <arraySize>. If necessary set <config> to false to bypass this error." ]
   },
   "INVALID_ARRAY_INDEX_IN_ELEMENT_AT" : {
-    "message" : [ "Invalid index: <indexValue>, numElements: <arraySize>. To return NULL instead, use 'try_element_at'. If necessary set <config> to false to bypass this error." ]
+    "message" : [ "The index <indexValue> is out of bounds. The array has <arraySize> elements. To return NULL instead, use `try_element_at`. If necessary set <config> to false to bypass this error." ]
   },
   "INVALID_FIELD_NAME" : {
     "message" : [ "Field name <fieldName> is invalid: <path> is not a struct." ],
