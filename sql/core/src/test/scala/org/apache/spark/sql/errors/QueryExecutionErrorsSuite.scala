@@ -414,16 +414,18 @@ class QueryExecutionErrorsSuite
       trainingSales
       sql(
         """
-          | select * from (
+          | select *
+          | from (
           |   select *,map(sales.course, sales.year) as map
           |   from trainingSales
           | )
           | pivot (
           |   sum(sales.earnings) as sum
           |   for map in (
-          |   map("dotNET", 2012), map("JAVA", 2012),
-          |   map("dotNet", 2013), map("Java", 2013)
-          | ))
+          |     map("dotNET", 2012), map("JAVA", 2012),
+          |     map("dotNet", 2013), map("Java", 2013)
+          |   )
+          | )
           |""".stripMargin).collect()
     }
     checkErrorClass(
