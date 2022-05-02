@@ -763,7 +763,7 @@ abstract class ParquetQuerySuite extends QueryTest with ParquetTest with SharedS
     }
   }
 
-  testStandardAndLegacyModes("UDT support") {
+  testStandardAndLegacyModes("SPARK-39086: UDT read support") {
     withTempPath { dir =>
       val path = dir.getCanonicalPath
 
