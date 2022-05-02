@@ -949,6 +949,13 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
       sql("insert into t select false, default")
       checkAnswer(spark.table("t"), Row(false, 42L))
     }
+    // There is a complex query plan in the SELECT query in the INSERT INTO statement.
+    withTable("t") {
+      sql("create table t(i boolean default false, s bigint default 42) using parquet")
+      sql("insert into t select col, count(*) from values (default, default) " +
+        "as tab(col, other) group by 1")
+      checkAnswer(spark.table("t"), Row(false, 1))
+    }
     // The explicit default reference resolves successfully with nested table subqueries.
     withTable("t") {
       sql("create table t(i boolean default false, s bigint) using parquet")
@@ -1090,14 +1097,6 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
           sql("insert into t values(true)")
         }.getMessage.contains("target table has 2 column(s) but the inserted data has 1 column(s)"))
       }
-    }
-    // There is a complex query plan in the SELECT query in the INSERT INTO statement.
-    withTable("t") {
-      sql("create table t(i boolean default false, s bigint default 42) using parquet")
-      assert(intercept[AnalysisException] {
-        sql("insert into t select col, count(*) from values (default, default) " +
-          "as tab(col, other) group by 1")
-      }.getMessage.contains(Errors.COLUMN_DEFAULT_NOT_FOUND))
     }
   }
 
@@ -1322,6 +1321,14 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
       sql("insert into t select false, default")
       checkAnswer(spark.table("t"), Row(false, 42))
     }
+    // There is a complex query plan in the SELECT query in the INSERT INTO statement.
+    withTable("t") {
+      sql("create table t(i boolean default false) using parquet")
+      sql("alter table t add column s bigint default 42")
+      sql("insert into t select col, count(*) from values (default, default) " +
+        "as tab(col, other) group by 1")
+      checkAnswer(spark.table("t"), Row(false, 1))
+    }
     // There are three column types exercising various combinations of implicit and explicit
     // default column value references in the 'insert into' statements. Note these tests depend on
     // enabling the configuration to use NULLs for missing DEFAULT column values.
@@ -1356,7 +1363,6 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
   test("SPARK-38811 INSERT INTO on columns added with ALTER TABLE ADD COLUMNS: Negative tests") {
     object Errors {
       val COMMON_SUBSTRING = " has a DEFAULT value"
-      val COLUMN_DEFAULT_NOT_FOUND = "Column 'default' does not exist"
     }
     // The default value fails to analyze.
     withTable("t") {
@@ -1404,15 +1410,6 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
       assert(intercept[AnalysisException] {
         sql("insert into t values(1)")
       }.getMessage.contains("expected 3 columns but found"))
-    }
-    // There is a complex query plan in the SELECT query in the INSERT INTO statement.
-    withTable("t") {
-      sql("create table t(i boolean default false) using parquet")
-      sql("alter table t add column s bigint default 42")
-      assert(intercept[AnalysisException] {
-        sql("insert into t select col, count(*) from values (default, default) " +
-          "as tab(col, other) group by 1")
-      }.getMessage.contains(Errors.COLUMN_DEFAULT_NOT_FOUND))
     }
   }
 
