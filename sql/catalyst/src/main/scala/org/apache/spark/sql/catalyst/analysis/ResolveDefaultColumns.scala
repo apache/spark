@@ -167,9 +167,7 @@ case class ResolveDefaultColumns(
     // right-hand side, look up the corresponding expression from the above map.
     val newAssignments: Seq[Assignment] =
     replaceExplicitDefaultValuesForUpdateAssignments(u.assignments, columnNamesToExpressions)
-      .getOrElse {
-        return u
-      }
+      .getOrElse(return u)
     u.copy(assignments = newAssignments)
   }
 
