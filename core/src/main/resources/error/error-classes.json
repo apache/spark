@@ -72,7 +72,7 @@
     "message" : [ "Grouping sets size cannot be greater than <maxSize>" ]
   },
   "INCOMPARABLE_PIVOT_COLUMN" : {
-    "message" : [ "Invalid pivot column '<columnName>'. Pivot columns must be comparable." ],
+    "message" : [ "Invalid pivot column <columnName>. Pivot columns must be comparable." ],
     "sqlState" : "42000"
   },
   "INCOMPATIBLE_DATASOURCE_REGISTER" : {

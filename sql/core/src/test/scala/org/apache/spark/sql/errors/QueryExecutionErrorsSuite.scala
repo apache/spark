@@ -415,24 +415,23 @@ class QueryExecutionErrorsSuite
       sql(
         """
           | select * from (
-          | select *,map(sales.course, sales.year) as map
-          | from trainingSales
+          |   select *,map(sales.course, sales.year) as map
+          |   from trainingSales
           | )
           | pivot (
-          | sum(sales.earnings) as sum
-          | for map in (
-          | map("dotNET", 2012), map("JAVA", 2012),
-          | map("dotNet", 2013), map("Java", 2013)
+          |   sum(sales.earnings) as sum
+          |   for map in (
+          |   map("dotNET", 2012), map("JAVA", 2012),
+          |   map("dotNet", 2013), map("Java", 2013)
           | ))
           |""".stripMargin).collect()
     }
     checkErrorClass(
       exception = e,
       errorClass = "INCOMPARABLE_PIVOT_COLUMN",
-      msg = "Invalid pivot column 'map.*\\'. Pivot columns must be comparable.",
-      sqlState = Some("42000"),
-      matchMsg = true
-    )
+      msg = "Invalid pivot column `__auto_generated_subquery_name`.`map`. " +
+        "Pivot columns must be comparable.",
+      sqlState = Some("42000"))
   }
 
   test("UNSUPPORTED_SAVE_MODE: unsupported null saveMode whether the path exists or not") {
