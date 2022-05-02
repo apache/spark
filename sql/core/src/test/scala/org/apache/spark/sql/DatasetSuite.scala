@@ -29,6 +29,7 @@ import org.apache.spark.TestUtils.withListener
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
 import org.apache.spark.sql.catalyst.{FooClassWithEnum, FooEnum, ScroogeLikeExample}
 import org.apache.spark.sql.catalyst.encoders.{OuterScopes, RowEncoder}
+import org.apache.spark.sql.catalyst.expressions.Descending
 import org.apache.spark.sql.catalyst.plans.{LeftAnti, LeftSemi}
 import org.apache.spark.sql.catalyst.util.sideBySide
 import org.apache.spark.sql.execution.{LogicalRDD, RDDScanExec, SQLExecution}
@@ -568,6 +569,21 @@ class DatasetSuite extends QueryTest
     )
   }
 
+  test("groupBy function, flatMapSorted by func desc") {
+    val ds = Seq(("a", 1, 10), ("a", 2, 20), ("b", 2, 1), ("b", 1, 2), ("c", 1, 1)).toDS()
+    val grouped = ds.groupByKey(v => (v._1, "word"))
+    val aggregated = grouped.flatMapSortedGroups(v => v._2, Descending) { (g, iter) =>
+      Iterator(g._1, iter.mkString(", "))
+    }
+
+    checkDatasetUnorderly(
+      aggregated,
+      "a", "(a,2,20), (a,1,10)",
+      "b", "(b,2,1), (b,1,2)",
+      "c", "(c,1,1)"
+    )
+  }
+
   test("groupBy function, flatMapSorted by expr") {
     val ds = Seq(("a", 1, 10), ("a", 2, 20), ("b", 2, 1), ("b", 1, 2), ("c", 1, 1))
       .toDF("key", "seq", "value")
@@ -580,6 +596,22 @@ class DatasetSuite extends QueryTest
       aggregated,
       "a", "[a,1,10], [a,2,20]",
       "b", "[b,1,2], [b,2,1]",
+      "c", "[c,1,1]"
+    )
+  }
+
+  test("groupBy function, flatMapSorted by expr desc") {
+    val ds = Seq(("a", 1, 10), ("a", 2, 20), ("b", 2, 1), ("b", 1, 2), ("c", 1, 1))
+      .toDF("key", "seq", "value")
+    val grouped = ds.groupByKey(v => (v.getString(0), "word"))
+    val aggregated = grouped.flatMapSortedGroups($"seq".desc, expr("length(key)")) { (g, iter) =>
+      Iterator(g._1, iter.mkString(", "))
+    }
+
+    checkDatasetUnorderly(
+      aggregated,
+      "a", "[a,2,20], [a,1,10]",
+      "b", "[b,2,1], [b,1,2]",
       "c", "[c,1,1]"
     )
   }
