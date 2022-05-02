@@ -117,7 +117,6 @@ class Frame(object, metaclass=ABCMeta):
         name: str,
         axis: Optional[Axis] = None,
         numeric_only: bool = True,
-        skipna: bool = True,
         **kwargs: Any,
     ) -> Union["Series", Scalar]:
         pass
@@ -1232,7 +1231,7 @@ class Frame(object, metaclass=ABCMeta):
             return F.mean(spark_column)
 
         return self._reduce_for_stat_function(
-            mean, name="mean", axis=axis, numeric_only=numeric_only, skipna=skipna
+            mean, name="mean", axis=axis, numeric_only=numeric_only
         )
 
     def sum(
@@ -1865,7 +1864,7 @@ class Frame(object, metaclass=ABCMeta):
                 return F.stddev_samp(spark_column)
 
         return self._reduce_for_stat_function(
-            std, name="std", axis=axis, numeric_only=numeric_only, ddof=ddof, skipna=skipna
+            std, name="std", axis=axis, numeric_only=numeric_only, ddof=ddof
         )
 
     def var(
@@ -2067,7 +2066,7 @@ class Frame(object, metaclass=ABCMeta):
                 )
 
         return self._reduce_for_stat_function(
-            median, name="median", numeric_only=numeric_only, axis=axis, skipna=skipna
+            median, name="median", numeric_only=numeric_only, axis=axis
         )
 
     def sem(
@@ -2168,7 +2167,7 @@ class Frame(object, metaclass=ABCMeta):
             return std(psser) / pow(Frame._count_expr(psser), 0.5)
 
         return self._reduce_for_stat_function(
-            sem, name="sem", numeric_only=numeric_only, axis=axis, ddof=ddof, skipna=skipna
+            sem, name="sem", numeric_only=numeric_only, axis=axis, ddof=ddof
         )
 
     @property
