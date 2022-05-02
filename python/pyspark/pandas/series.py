@@ -6849,6 +6849,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         name: str_type,
         axis: Optional[Axis] = None,
         numeric_only: bool = True,
+        skipna: bool = True,
         **kwargs: Any,
     ) -> Scalar:
         """
@@ -6865,7 +6866,10 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         if axis == 1:
             raise NotImplementedError("Series does not support columns axis.")
 
-        scol = sfun(self)
+        if skipna:
+            scol = sfun(self)
+        else:
+            scol = F.first(F.lit(np.nan))
 
         min_count = kwargs.get("min_count", 0)
         if min_count > 0:

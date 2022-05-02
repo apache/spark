@@ -583,6 +583,7 @@ class DataFrame(Frame, Generic[T]):
         name: str,
         axis: Optional[Axis] = None,
         numeric_only: bool = True,
+        skipna: bool = True,
         **kwargs: Any,
     ) -> "Series":
         """
@@ -618,7 +619,10 @@ class DataFrame(Frame, Generic[T]):
                 keep_column = not numeric_only or is_numeric_or_boolean
 
                 if keep_column:
-                    scol = sfun(psser)
+                    if not skipna and psser.hasnans:
+                        scol = F.first(F.lit(np.nan))
+                    else:
+                        scol = sfun(psser)
 
                     if min_count > 0:
                         scol = F.when(Frame._count_expr(psser) >= min_count, scol)
