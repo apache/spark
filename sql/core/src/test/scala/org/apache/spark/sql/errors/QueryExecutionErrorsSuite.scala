@@ -18,13 +18,15 @@
 package org.apache.spark.sql.errors
 
 import java.io.IOException
-import java.util.Locale
+import java.util.{Locale, ServiceConfigurationError}
+
+import scala.util.control.ControlThrowable
 
 import org.apache.hadoop.fs.{LocalFileSystem, Path}
 import org.apache.hadoop.fs.permission.FsPermission
 import test.org.apache.spark.sql.connector.JavaSimpleWritableDataSource
 
-import org.apache.spark.{SparkArithmeticException, SparkException, SparkIllegalArgumentException, SparkIllegalStateException, SparkRuntimeException, SparkSecurityException, SparkUnsupportedOperationException, SparkUpgradeException}
+import org.apache.spark.{SparkArithmeticException, SparkClassNotFoundException, SparkException, SparkIllegalArgumentException, SparkIllegalStateException, SparkRuntimeException, SparkSecurityException, SparkUnsupportedOperationException, SparkUpgradeException}
 import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, SaveMode}
 import org.apache.spark.sql.catalyst.util.BadRecordException
 import org.apache.spark.sql.connector.SimpleWritableDataSource
@@ -482,6 +484,35 @@ class QueryExecutionErrorsSuite
       }
     }
   }
+
+  test("INCOMPATIBLE_DATASOURCE_REGISTER: " +
+    "create table using an incompatible dataSource") {
+    val currentLoader = Thread.currentThread().getContextClassLoader()
+    val newClassLoader = new ClassLoader() {
+      override def loadClass(name: String, resolve: Boolean): Class[_] = {
+        if (name.equals("org.apache.spark.sql.fake") ||
+          name.equals("org.apache.spark.sql.fake.DefaultSource")) {
+          // scalastyle:off
+          throw new IncompatibleDatasourceRegisterError(s"Can't load class: $name",
+            new NoClassDefFoundError("org.apache.spark.sql.sources.HadoopFsRelationProvider"))
+          // scalastyle:on throwerror
+        }
+        currentLoader.loadClass(name)
+      }
+    }
+
+    Utils.withContextClassLoader(newClassLoader) {
+      val e = intercept[SparkClassNotFoundException] {
+        sql("CREATE TABLE student (id INT, name STRING, age INT) USING org.apache.spark.sql.fake")
+      }
+      checkErrorClass(
+        exception = e,
+        errorClass = "INCOMPATIBLE_DATASOURCE_REGISTER",
+        msg = "Detected an incompatible DataSourceRegister. " +
+          "Please remove the incompatible library from classpath or upgrade it. " +
+          "Error: Can't load class: org.apache.spark.sql.fake")
+    }
+  }
 }
 
 class FakeFileSystemSetPermission extends LocalFileSystem {
@@ -490,3 +521,6 @@ class FakeFileSystemSetPermission extends LocalFileSystem {
     throw new IOException(s"fake fileSystem failed to set permission: $permission")
   }
 }
+
+class IncompatibleDatasourceRegisterError(msg: String, cause: Throwable) extends
+  ServiceConfigurationError(msg: String, cause: Throwable) with ControlThrowable
