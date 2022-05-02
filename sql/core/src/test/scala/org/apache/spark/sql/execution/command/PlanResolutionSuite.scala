@@ -41,10 +41,9 @@ import org.apache.spark.sql.execution.datasources.{CreateTable => CreateTableV1}
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.internal.{HiveSerDe, SQLConf}
 import org.apache.spark.sql.sources.SimpleScanSource
-import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{BooleanType, CharType, DoubleType, IntegerType, LongType, MetadataBuilder, StringType, StructField, StructType}
 
-class PlanResolutionSuite extends AnalysisTest with SharedSparkSession {
+class PlanResolutionSuite extends AnalysisTest {
   import CatalystSqlParser._
 
   private val v1Format = classOf[SimpleScanSource].getName
