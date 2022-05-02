@@ -336,25 +336,8 @@ case class ResolveDefaultColumns(
    */
   private def getInsertTableSchemaWithoutPartitionColumns(
       enclosingInsert: InsertIntoStatement): Option[StructType] = {
-    val tableName = enclosingInsert.table match {
-      case r: UnresolvedRelation => TableIdentifier(r.name)
-      case r: UnresolvedCatalogRelation => r.tableMeta.identifier
-      case _ => return None
-    }
-    // Lookup the relation from the catalog by name. This either succeeds or returns some "not
-    // found" error. In the latter cases, return out of this rule without changing anything and let
-    // the analyzer return a proper error message elsewhere.
-    val lookup: LogicalPlan = try {
-      catalog.lookupRelation(tableName)
-    } catch {
-      case _: AnalysisException => return None
-    }
-    val schema: StructType = lookup match {
-      case SubqueryAlias(_, r: UnresolvedCatalogRelation) =>
-        StructType(r.tableMeta.schema.fields.dropRight(
-          enclosingInsert.partitionSpec.size))
-      case _ => return None
-    }
+    val target: StructType = getSchemaForTargetTable(enclosingInsert.table).getOrElse(return None)
+    val schema: StructType = StructType(target.fields.dropRight(enclosingInsert.partitionSpec.size))
     // Rearrange the columns in the result schema to match the order of the explicit column list,
     // if any.
     val userSpecifiedCols: Seq[String] = enclosingInsert.userSpecifiedCols
@@ -379,5 +362,29 @@ case class ResolveDefaultColumns(
       }
     Some(StructType(userSpecifiedFields ++
       getStructFieldsForDefaultExpressions(nonUserSpecifiedFields)))
+  }
+
+  /**
+   * Returns the schema for the target table of a DML command, lookup up into the catalog if needed.
+   */
+  private def getSchemaForTargetTable(table: LogicalPlan): Option[StructType] = {
+    // Lookup the relation from the catalog by name. This either succeeds or returns some "not
+    // found" error. In the latter cases, return out of this rule without changing anything and let
+    // the analyzer return a proper error message elsewhere.
+    val tableName: TableIdentifier = table match {
+      case r: UnresolvedRelation => TableIdentifier(r.name)
+      case r: UnresolvedCatalogRelation => r.tableMeta.identifier
+      case _ => return None
+    }
+    val lookup: LogicalPlan = try {
+      catalog.lookupRelation(tableName)
+    } catch {
+      case _: AnalysisException => return None
+    }
+    lookup match {
+      case SubqueryAlias(_, r: UnresolvedCatalogRelation) =>
+        Some(r.tableMeta.schema)
+      case _ => None
+    }
   }
 }
