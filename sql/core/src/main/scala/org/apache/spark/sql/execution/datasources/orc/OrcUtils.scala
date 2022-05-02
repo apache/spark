@@ -33,12 +33,11 @@ import org.apache.spark.{SPARK_VERSION_SHORT, SparkException}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{SPARK_VERSION_METADATA_KEY, SparkSession}
-import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.{FileSourceOptions, InternalRow}
 import org.apache.spark.sql.catalyst.analysis.caseSensitiveResolution
 import org.apache.spark.sql.catalyst.expressions.JoinedRow
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
-import org.apache.spark.sql.catalyst.util.CharVarcharUtils
-import org.apache.spark.sql.catalyst.util.quoteIdentifier
+import org.apache.spark.sql.catalyst.util.{quoteIdentifier, CaseInsensitiveMap, CharVarcharUtils}
 import org.apache.spark.sql.connector.expressions.aggregate.{Aggregation, Count, CountStar, Max, Min}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.datasources.{AggregatePushDownUtils, SchemaMergeUtils}
@@ -143,7 +142,7 @@ object OrcUtils extends Logging {
 
   def readSchema(sparkSession: SparkSession, files: Seq[FileStatus], options: Map[String, String])
       : Option[StructType] = {
-    val ignoreCorruptFiles = sparkSession.sessionState.conf.ignoreCorruptFiles
+    val ignoreCorruptFiles = new FileSourceOptions(CaseInsensitiveMap(options)).ignoreCorruptFiles
     val conf = sparkSession.sessionState.newHadoopConfWithOptions(options)
     files.iterator.map(file => readSchema(file.getPath, conf, ignoreCorruptFiles)).collectFirst {
       case Some(schema) =>
@@ -225,7 +224,9 @@ object OrcUtils extends Logging {
         // the physical schema doesn't match the data schema).
         // In these cases we map the physical schema to the data schema by index.
         assert(orcFieldNames.length <= dataSchema.length, "The given data schema " +
-          s"${dataSchema.catalogString} has less fields than the actual ORC physical schema, " +
+          s"${dataSchema.catalogString} (length:${dataSchema.length}) " +
+          s"has fewer ${orcFieldNames.length - dataSchema.length} fields than " +
+          s"the actual ORC physical schema $orcSchema (length:${orcFieldNames.length}), " +
           "no idea which columns were dropped, fail to read.")
         // for ORC file written by Hive, no field names
         // in the physical schema, there is a need to send the
@@ -408,6 +409,8 @@ object OrcUtils extends Logging {
    * (Max/Min/Count) result using the statistics information from ORC file footer, and then
    * construct an InternalRow from these aggregate results.
    *
+   * NOTE: if statistics is missing from ORC file footer, exception would be thrown.
+   *
    * @return Aggregate results in the format of InternalRow
    */
   def createAggInternalRowFromFooter(
@@ -517,7 +520,7 @@ object OrcUtils extends Logging {
     val orcValuesDeserializer = new OrcDeserializer(schemaWithoutGroupBy,
       (0 until schemaWithoutGroupBy.length).toArray)
     val resultRow = orcValuesDeserializer.deserializeFromValues(aggORCValues)
-    if (aggregation.groupByColumns.nonEmpty) {
+    if (aggregation.groupByExpressions.nonEmpty) {
       val reOrderedPartitionValues = AggregatePushDownUtils.reOrderPartitionCol(
         partitionSchema, aggregation, partitionValues)
       new JoinedRow(reOrderedPartitionValues, resultRow)

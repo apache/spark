@@ -276,7 +276,7 @@ trait SQLInsertTestSuite extends QueryTest with SQLTestUtils {
       val e = intercept[AnalysisException] {
         sql("INSERT OVERWRITE t PARTITION (c='2', C='3') VALUES (1)")
       }
-      assert(e.getMessage.contains("Found duplicate keys 'c'"))
+      assert(e.getMessage.contains("Found duplicate keys `c`"))
     }
     // The following code is skipped for Hive because columns stored in Hive Metastore is always
     // case insensitive and we cannot create such table in Hive Metastore.
@@ -314,7 +314,7 @@ trait SQLInsertTestSuite extends QueryTest with SQLTestUtils {
             val errorMsg = intercept[NumberFormatException] {
               sql("insert into t partition(a='ansi') values('ansi')")
             }.getMessage
-            assert(errorMsg.contains("invalid input syntax for type numeric: ansi"))
+            assert(errorMsg.contains("""Invalid input syntax for type "INT": 'ansi'"""))
           } else {
             sql("insert into t partition(a='ansi') values('ansi')")
             checkAnswer(sql("select * from t"), Row("ansi", null) :: Nil)

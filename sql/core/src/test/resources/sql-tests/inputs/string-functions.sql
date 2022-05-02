@@ -162,10 +162,11 @@ select to_number('454', '000');
 select to_number('454.2', '000.0');
 select to_number('12,454', '00,000');
 select to_number('$78.12', '$00.00');
-select to_number('-454', '-000');
+select to_number('+454', 'S000');
 select to_number('-454', 'S000');
-select to_number('12,454.8-', '00,000.9-');
-select to_number('00,454.8-', '00,000.9-');
+select to_number('12,454.8-', '00,000.9MI');
+select to_number('00,454.8-', '00,000.9MI');
+select to_number('<00,454.8>', '00,000.9PR');
 
 -- to_binary
 select to_binary('abc');

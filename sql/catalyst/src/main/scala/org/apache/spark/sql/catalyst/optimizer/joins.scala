@@ -18,8 +18,10 @@
 package org.apache.spark.sql.catalyst.optimizer
 
 import scala.annotation.tailrec
+import scala.util.control.NonFatal
 
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateFunction
 import org.apache.spark.sql.catalyst.planning.ExtractFiltersAndInnerJoins
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -126,9 +128,15 @@ object ReorderJoin extends Rule[LogicalPlan] with PredicateHelper {
  * - full outer -> left outer if only the left side has such predicates
  * - full outer -> right outer if only the right side has such predicates
  *
- * 2. Removes outer join if it only has distinct on streamed side
+ * 2. Removes outer join if aggregate is from streamed side and duplicate agnostic
+ *
  * {{{
  *   SELECT DISTINCT f1 FROM t1 LEFT JOIN t2 ON t1.id = t2.id  ==>  SELECT DISTINCT f1 FROM t1
+ * }}}
+ *
+ * {{{
+ *   SELECT t1.c1, max(t1.c2) FROM t1 LEFT JOIN t2 ON t1.c1 = t2.c1 GROUP BY t1.c1  ==>
+ *   SELECT t1.c1, max(t1.c2) FROM t1 GROUP BY t1.c1
  * }}}
  *
  * This rule should be executed before pushing down the Filter
@@ -144,8 +152,17 @@ object EliminateOuterJoin extends Rule[LogicalPlan] with PredicateHelper {
     val emptyRow = new GenericInternalRow(attributes.length)
     val boundE = BindReferences.bindReference(e, attributes)
     if (boundE.exists(_.isInstanceOf[Unevaluable])) return false
-    val v = boundE.eval(emptyRow)
-    v == null || v == false
+
+    // some expressions, like map(), may throw an exception when dealing with null values.
+    // therefore, we need to handle exceptions.
+    try {
+      val v = boundE.eval(emptyRow)
+      v == null || v == false
+    } catch {
+      case NonFatal(e) =>
+        // cannot filter out null if `where` expression throws an exception with null input
+        false
+    }
   }
 
   private def buildNewJoinType(filter: Filter, join: Join): JoinType = {
@@ -166,23 +183,33 @@ object EliminateOuterJoin extends Rule[LogicalPlan] with PredicateHelper {
     }
   }
 
+  private def allDuplicateAgnostic(
+      aggregateExpressions: Seq[NamedExpression]): Boolean = {
+    !aggregateExpressions.exists(_.exists {
+      case agg: AggregateFunction => !EliminateDistinct.isDuplicateAgnostic(agg)
+      case _ => false
+    })
+  }
+
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
     _.containsPattern(OUTER_JOIN), ruleId) {
     case f @ Filter(condition, j @ Join(_, _, RightOuter | LeftOuter | FullOuter, _, _)) =>
       val newJoinType = buildNewJoinType(f, j)
       if (j.joinType == newJoinType) f else Filter(condition, j.copy(joinType = newJoinType))
 
-    case a @ Aggregate(_, _, Join(left, _, LeftOuter, _, _))
-        if a.groupOnly && a.references.subsetOf(left.outputSet) =>
+    case a @ Aggregate(_, aggExprs, Join(left, _, LeftOuter, _, _))
+        if a.references.subsetOf(left.outputSet) && allDuplicateAgnostic(aggExprs) =>
       a.copy(child = left)
-    case a @ Aggregate(_, _, Join(_, right, RightOuter, _, _))
-        if a.groupOnly && a.references.subsetOf(right.outputSet) =>
+    case a @ Aggregate(_, aggExprs, Join(_, right, RightOuter, _, _))
+        if a.references.subsetOf(right.outputSet) && allDuplicateAgnostic(aggExprs) =>
       a.copy(child = right)
-    case a @ Aggregate(_, _, p @ Project(_, Join(left, _, LeftOuter, _, _)))
-        if a.groupOnly && p.references.subsetOf(left.outputSet) =>
+    case a @ Aggregate(_, aggExprs, p @ Project(projectList, Join(left, _, LeftOuter, _, _)))
+        if projectList.forall(_.deterministic) && p.references.subsetOf(left.outputSet) &&
+          allDuplicateAgnostic(aggExprs) =>
       a.copy(child = p.copy(child = left))
-    case a @ Aggregate(_, _, p @ Project(_, Join(_, right, RightOuter, _, _)))
-        if a.groupOnly && p.references.subsetOf(right.outputSet) =>
+    case a @ Aggregate(_, aggExprs, p @ Project(projectList, Join(_, right, RightOuter, _, _)))
+        if projectList.forall(_.deterministic) && p.references.subsetOf(right.outputSet) &&
+          allDuplicateAgnostic(aggExprs) =>
       a.copy(child = p.copy(child = right))
   }
 }
@@ -345,6 +372,16 @@ trait JoinSelectionHelper {
       join.hint, hintOnly = true, conf).isDefined ||
       getBroadcastBuildSide(join.left, join.right, join.joinType,
         join.hint, hintOnly = false, conf).isDefined
+  }
+
+  def canPruneLeft(joinType: JoinType): Boolean = joinType match {
+    case Inner | LeftSemi | RightOuter => true
+    case _ => false
+  }
+
+  def canPruneRight(joinType: JoinType): Boolean = joinType match {
+    case Inner | LeftSemi | LeftOuter => true
+    case _ => false
   }
 
   def hintToBroadcastLeft(hint: JoinHint): Boolean = {

@@ -33,13 +33,13 @@ graphlib-dot.min.js
 sorttable.js
 vis-timeline-graph2d.min.js
 vis-timeline-graph2d.min.css
-dataTables.bootstrap4.1.10.20.min.css
-dataTables.bootstrap4.1.10.20.min.js
+dataTables.bootstrap4.1.10.25.min.css
+dataTables.bootstrap4.1.10.25.min.js
 dataTables.rowsGroup.js
 jquery.blockUI.min.js
 jquery.cookies.2.2.0.min.js
-jquery.dataTables.1.10.20.min.css
-jquery.dataTables.1.10.20.min.js
+jquery.dataTables.1.10.25.min.css
+jquery.dataTables.1.10.25.min.js
 jquery.mustache.js
 jsonFormatter.min.css
 jsonFormatter.min.js
