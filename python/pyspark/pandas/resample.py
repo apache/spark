@@ -177,19 +177,25 @@ class Resampler(Generic[FrameLike], metaclass=ABCMeta):
         #   index = pd.DatetimeIndex(dates)
         #   pdf = pd.DataFrame(np.array([1,2,3]), index=index, columns=['A'])
         #   pdf.resample('3Y').max()
-        #                 A
-        #   2011-12-31  2.0
-        #   2014-12-31  NaN
-        #   2017-12-31  NaN
-        #   2020-12-31  NaN
-        #   2023-12-31  3.0
+        #               A
+        # 2012-12-31  2.0
+        # 2015-12-31  NaN
+        # 2018-12-31  NaN
+        # 2021-12-31  NaN
+        # 2024-12-31  3.0
         #
-        # in this case, we need to:
-        # 1, obtain one origin point to bin all timestamps, we can get it (2009-12-31)
+        # in this case:
+        # 1, obtain one origin point to bin all timestamps, we can get one (2009-12-31)
         # from the minimum timestamp (2012-01-02);
-        # 2, with this origin, we bin all timestamps, like: 2022-05-03 -> 2023-12-31;
-        # 3, some intervals maybe too large for this down sampling, so we need to pad the results
-        # to avoid missing some results, like: 2014-12-31 and 2020-12-31;
+        # 2, the default intervals for 'Y' are right-closed, so intervals are:
+        # (2009-12-31, 2012-12-31], (2012-12-31, 2015-12-31], (2015-12-31, 2018-12-31], ...
+        # 3, bin all timestamps, for example, 2022-05-03 belong to interval
+        # (2021-12-31, 2024-12-31], since the default label is 'right', label it with the right
+        # edge 2024-12-31;
+        # 4, some intervals maybe too large for this down sampling, so we need to pad the results
+        # to avoid missing some results, like: 2015-12-31, 2018-12-31 and 2021-12-31;
+        # 5, union the binned dataframe and padded dataframe, and apply aggregation 'max' to get
+        # the final results;
 
         # one action to obtain the range, in the future we may cache it in the index.
         ts_min, ts_max = (
