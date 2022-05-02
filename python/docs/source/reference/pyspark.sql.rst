@@ -302,7 +302,6 @@ Data Types
     StringType
     StructField
     StructType
-    TimestampNTZType
     TimestampType
     DayTimeIntervalType
 

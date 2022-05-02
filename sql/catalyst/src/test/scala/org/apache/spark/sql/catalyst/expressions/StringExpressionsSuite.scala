@@ -773,6 +773,61 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(StringRPad(Literal("hi"), Literal(1)), "h")
   }
 
+  test("PadExpressionBuilderBase") {
+    // test if the correct lpad/rpad expression is created given different parameter types
+    Seq(true, false).foreach { confVal =>
+      SQLConf.get.setConf(SQLConf.LEGACY_LPAD_RPAD_BINARY_TYPE_AS_STRING, confVal)
+
+      val lpadExp1 = LPadExpressionBuilder.build("lpad", Seq(Literal("hi"), Literal(5)))
+      val lpadExp2 = LPadExpressionBuilder.build("lpad", Seq(Literal(Array[Byte]()), Literal(5)))
+      val lpadExp3 = LPadExpressionBuilder.build("lpad",
+        Seq(Literal("hi"), Literal(5), Literal("somepadding")))
+      val lpadExp4 = LPadExpressionBuilder.build("lpad",
+        Seq(Literal(Array[Byte](1, 2)), Literal(5), Literal("somepadding")))
+      val lpadExp5 = LPadExpressionBuilder.build("lpad",
+        Seq(Literal(Array[Byte](1, 2)), Literal(5), Literal(Array[Byte](1))))
+
+      val rpadExp1 = RPadExpressionBuilder.build("rpad", Seq(Literal("hi"), Literal(5)))
+      val rpadExp2 = RPadExpressionBuilder.build("rpad", Seq(Literal(Array[Byte]()), Literal(5)))
+      val rpadExp3 = RPadExpressionBuilder.build("rpad",
+        Seq(Literal("hi"), Literal(5), Literal("somepadding")))
+      val rpadExp4 = RPadExpressionBuilder.build("rpad",
+        Seq(Literal(Array[Byte](1, 2)), Literal(5), Literal("somepadding")))
+      val rpadExp5 = RPadExpressionBuilder.build("rpad",
+        Seq(Literal(Array[Byte](1, 2)), Literal(5), Literal(Array[Byte](1))))
+
+      assert(lpadExp1 == StringLPad(Literal("hi"), Literal(5), Literal(" ")))
+      assert(lpadExp3 == StringLPad(Literal("hi"), Literal(5), Literal("somepadding")))
+      assert(lpadExp4 == StringLPad(Literal(Array[Byte](1, 2)), Literal(5), Literal("somepadding")))
+
+      assert(rpadExp1 == StringRPad(Literal("hi"), Literal(5), Literal(" ")))
+      assert(rpadExp3 == StringRPad(Literal("hi"), Literal(5), Literal("somepadding")))
+      assert(rpadExp4 == StringRPad(Literal(Array[Byte](1, 2)), Literal(5), Literal("somepadding")))
+
+      if (!SQLConf.get.getConf(SQLConf.LEGACY_LPAD_RPAD_BINARY_TYPE_AS_STRING)) {
+        assert(lpadExp2 ==
+          BinaryPad("lpad", Literal(Array[Byte]()), Literal(5), Literal(Array[Byte](0))))
+        assert(lpadExp5 ==
+          BinaryPad("lpad", Literal(Array[Byte](1, 2)), Literal(5), Literal(Array[Byte](1))))
+
+        assert(rpadExp2 ==
+          BinaryPad("rpad", Literal(Array[Byte]()), Literal(5), Literal(Array[Byte](0))))
+        assert(rpadExp5 ==
+          BinaryPad("rpad", Literal(Array[Byte](1, 2)), Literal(5), Literal(Array[Byte](1))))
+      } else {
+        assert(lpadExp2 ==
+          StringLPad(Literal(Array[Byte]()), Literal(5), Literal(" ")))
+        assert(lpadExp5 ==
+          StringLPad(Literal(Array[Byte](1, 2)), Literal(5), Literal(Array[Byte](1))))
+
+        assert(rpadExp2 ==
+          StringRPad(Literal(Array[Byte]()), Literal(5), Literal(" ")))
+        assert(rpadExp5 ==
+          StringRPad(Literal(Array[Byte](1, 2)), Literal(5), Literal(Array[Byte](1))))
+      }
+    }
+  }
+
   test("REPEAT") {
     val s1 = $"a".string.at(0)
     val s2 = $"b".int.at(1)
@@ -917,7 +972,6 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       ("<454>", "999PR") -> Decimal(-454),
       ("454-", "999MI") -> Decimal(-454),
       ("-$54", "MI$99") -> Decimal(-54),
-      ("$4-4", "$9MI9") -> Decimal(-44),
       // The input string contains more digits than fit in a long integer.
       ("123,456,789,123,456,789,123", "999,999,999,999,999,999,999") ->
         Decimal(new JavaBigDecimal("123456789123456789123"))
@@ -954,7 +1008,8 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("ToNumber: negative tests (the format string is invalid)") {
-    val invalidCharacter = "Encountered invalid character"
+    val unexpectedCharacter = "the structure of the format string must match: " +
+      "[MI|S] [$] [0|9|G|,]* [.|D] [0|9]* [$] [PR|MI|S]"
     val thousandsSeparatorDigitsBetween =
       "Thousands separators (,) must have digits in between them"
     val mustBeAtEnd = "must be at the end of the number format"
@@ -963,23 +1018,25 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       // The format string must not be empty.
       ("454", "") -> "The format string cannot be empty",
       // Make sure the format string does not contain any unrecognized characters.
-      ("454", "999@") -> invalidCharacter,
-      ("454", "999M") -> invalidCharacter,
-      ("454", "999P") -> invalidCharacter,
+      ("454", "999@") -> unexpectedCharacter,
+      ("454", "999M") -> unexpectedCharacter,
+      ("454", "999P") -> unexpectedCharacter,
       // Make sure the format string contains at least one digit.
       ("454", "$") -> "The format string requires at least one number digit",
       // Make sure the format string contains at most one decimal point.
       ("454", "99.99.99") -> atMostOne,
       // Make sure the format string contains at most one dollar sign.
       ("454", "$$99") -> atMostOne,
-      // Make sure the format string contains at most one minus sign at the end.
+      // Make sure the format string contains at most one minus sign at the beginning or end.
+      ("$4-4", "$9MI9") -> unexpectedCharacter,
+      ("--4", "SMI9") -> unexpectedCharacter,
       ("--$54", "SS$99") -> atMostOne,
       ("-$54", "MI$99MI") -> atMostOne,
       ("$4-4", "$9MI9MI") -> atMostOne,
       // Make sure the format string contains at most one closing angle bracket at the end.
-      ("<$45>", "PR$99") -> mustBeAtEnd,
-      ("$4<4>", "$9PR9") -> mustBeAtEnd,
-      ("<<454>>", "999PRPR") -> mustBeAtEnd,
+      ("<$45>", "PR$99") -> unexpectedCharacter,
+      ("$4<4>", "$9PR9") -> unexpectedCharacter,
+      ("<<454>>", "999PRPR") -> atMostOne,
       // Make sure that any dollar sign in the format string occurs before any digits.
       ("4$54", "9$99") -> "Currency characters must appear before digits",
       // Make sure that any dollar sign in the format string occurs before any decimal point.

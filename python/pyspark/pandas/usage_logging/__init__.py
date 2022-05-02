@@ -47,6 +47,7 @@ from pyspark.pandas.missing.window import (
     MissingPandasLikeRolling,
     MissingPandasLikeExpandingGroupby,
     MissingPandasLikeRollingGroupby,
+    MissingPandasLikeExponentialMoving,
 )
 from pyspark.pandas.series import Series
 from pyspark.pandas.spark.accessors import (
@@ -122,6 +123,7 @@ def attach(logger_module: Union[str, ModuleType]) -> None:
         (pd.core.window.Rolling, MissingPandasLikeRolling),
         (pd.core.window.ExpandingGroupby, MissingPandasLikeExpandingGroupby),
         (pd.core.window.RollingGroupby, MissingPandasLikeRollingGroupby),
+        (pd.core.window.ExponentialMovingWindow, MissingPandasLikeExponentialMoving),
     ]
 
     _attach(logger_module, modules, classes, missings)  # type: ignore[arg-type]

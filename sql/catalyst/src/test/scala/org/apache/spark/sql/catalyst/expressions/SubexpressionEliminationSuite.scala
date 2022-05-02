@@ -447,6 +447,20 @@ class SubexpressionEliminationSuite extends SparkFunSuite with ExpressionEvalHel
     // So if `p` is replaced by subexpression, the literal will be reused.
     assert(code.value.toString == "((Decimal) references[0] /* literal */)")
   }
+
+  test("SPARK-39040: Respect NaNvl in EquivalentExpressions for expression elimination") {
+    val add = Add(Literal(1), Literal(0))
+    val n1 = NaNvl(Literal(1.0d), Add(add, add))
+    val e1 = new EquivalentExpressions
+    e1.addExprTree(n1)
+    assert(e1.getCommonSubexpressions.isEmpty)
+
+    val n2 = NaNvl(add, add)
+    val e2 = new EquivalentExpressions
+    e2.addExprTree(n2)
+    assert(e2.getCommonSubexpressions.size == 1)
+    assert(e2.getCommonSubexpressions.head == add)
+  }
 }
 
 case class CodegenFallbackExpression(child: Expression)

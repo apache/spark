@@ -198,7 +198,7 @@ trait InsertIntoSQLOnlyTests
   /** Whether to include the SQL specific tests in this trait within the extending test suite. */
   protected val includeSQLOnlyTests: Boolean
 
-  private def withTableAndData(tableName: String)(testFn: String => Unit): Unit = {
+  protected def withTableAndData(tableName: String)(testFn: String => Unit): Unit = {
     withTable(tableName) {
       val viewName = "tmp_view"
       val df = spark.createDataFrame(Seq((1L, "a"), (2L, "b"), (3L, "c"))).toDF("id", "data")
@@ -245,40 +245,6 @@ trait InsertIntoSQLOnlyTests
         sql(s"CREATE TABLE $t1 (id bigint, data string) USING $v2Format PARTITIONED BY (id)")
         sql(s"INSERT INTO $t1 PARTITION (id = 23) SELECT data FROM $view")
         verifyTable(t1, sql(s"SELECT 23, data FROM $view"))
-      }
-    }
-
-    test("InsertInto: static PARTITION clause fails with non-partition column") {
-      val t1 = s"${catalogAndNamespace}tbl"
-      withTableAndData(t1) { view =>
-        sql(s"CREATE TABLE $t1 (id bigint, data string) USING $v2Format PARTITIONED BY (data)")
-
-        val exc = intercept[AnalysisException] {
-          sql(s"INSERT INTO TABLE $t1 PARTITION (id=1) SELECT data FROM $view")
-        }
-
-        verifyTable(t1, spark.emptyDataFrame)
-        assert(exc.getMessage.contains(
-          "PARTITION clause cannot contain a non-partition column name"))
-        assert(exc.getMessage.contains("id"))
-        assert(exc.getErrorClass == "NON_PARTITION_COLUMN")
-      }
-    }
-
-    test("InsertInto: dynamic PARTITION clause fails with non-partition column") {
-      val t1 = s"${catalogAndNamespace}tbl"
-      withTableAndData(t1) { view =>
-        sql(s"CREATE TABLE $t1 (id bigint, data string) USING $v2Format PARTITIONED BY (id)")
-
-        val exc = intercept[AnalysisException] {
-          sql(s"INSERT INTO TABLE $t1 PARTITION (data) SELECT * FROM $view")
-        }
-
-        verifyTable(t1, spark.emptyDataFrame)
-        assert(exc.getMessage.contains(
-          "PARTITION clause cannot contain a non-partition column name"))
-        assert(exc.getMessage.contains("data"))
-        assert(exc.getErrorClass == "NON_PARTITION_COLUMN")
       }
     }
 

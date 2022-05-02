@@ -54,7 +54,28 @@ def _unsupported_property_rolling(property_name, deprecated=False, reason=""):
     )
 
 
+def _unsupported_function_exponential_moving(method_name, deprecated=False, reason=""):
+    return unsupported_function(
+        class_name="pandas.core.window.ExponentialMovingWindow",
+        method_name=method_name,
+        deprecated=deprecated,
+        reason=reason,
+    )
+
+
+def _unsupported_property_exponential_moving(property_name, deprecated=False, reason=""):
+    return unsupported_property(
+        class_name="pandas.core.window.ExponentialMovingWindow",
+        property_name=property_name,
+        deprecated=deprecated,
+        reason=reason,
+    )
+
+
 class MissingPandasLikeExpanding:
+    # NOTE: Please update the document "Supported pandas APIs" when implementing the new API.
+    # Documentation path: `python/docs/source/user_guide/pandas_on_spark/supported_pandas_api.rst`.
+
     agg = _unsupported_function_expanding("agg")
     aggregate = _unsupported_function_expanding("aggregate")
     apply = _unsupported_function_expanding("apply")
@@ -73,6 +94,9 @@ class MissingPandasLikeExpanding:
 
 
 class MissingPandasLikeRolling:
+    # NOTE: Please update the document "Supported pandas APIs" when implementing the new API.
+    # Documentation path: `python/docs/source/user_guide/pandas_on_spark/supported_pandas_api.rst`.
+
     agg = _unsupported_function_rolling("agg")
     aggregate = _unsupported_function_rolling("aggregate")
     apply = _unsupported_function_rolling("apply")
@@ -91,6 +115,9 @@ class MissingPandasLikeRolling:
 
 
 class MissingPandasLikeExpandingGroupby:
+    # NOTE: Please update the document "Supported pandas APIs" when implementing the new API.
+    # Documentation path: `python/docs/source/user_guide/pandas_on_spark/supported_pandas_api.rst`.
+
     agg = _unsupported_function_expanding("agg")
     aggregate = _unsupported_function_expanding("aggregate")
     apply = _unsupported_function_expanding("apply")
@@ -109,6 +136,9 @@ class MissingPandasLikeExpandingGroupby:
 
 
 class MissingPandasLikeRollingGroupby:
+    # NOTE: Please update the document "Supported pandas APIs" when implementing the new API.
+    # Documentation path: `python/docs/source/user_guide/pandas_on_spark/supported_pandas_api.rst`.
+
     agg = _unsupported_function_rolling("agg")
     aggregate = _unsupported_function_rolling("aggregate")
     apply = _unsupported_function_rolling("apply")
@@ -124,3 +154,15 @@ class MissingPandasLikeRollingGroupby:
     is_datetimelike = _unsupported_property_rolling("is_datetimelike")
     is_freq_type = _unsupported_property_rolling("is_freq_type")
     ndim = _unsupported_property_rolling("ndim")
+
+
+class MissingPandasLikeExponentialMoving:
+    sum = _unsupported_function_exponential_moving("sum")
+    var = _unsupported_function_exponential_moving("var")
+    std = _unsupported_function_exponential_moving("std")
+    cov = _unsupported_function_exponential_moving("cov")
+    corr = _unsupported_function_exponential_moving("corr")
+
+    adjust = _unsupported_property_exponential_moving("adjust")
+    axis = _unsupported_property_exponential_moving("axis")
+    method = _unsupported_property_exponential_moving("method")

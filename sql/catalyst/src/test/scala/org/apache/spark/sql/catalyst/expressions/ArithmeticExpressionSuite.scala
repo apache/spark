@@ -93,6 +93,7 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
         line = Some(1),
         startPosition = Some(7),
         startIndex = Some(7),
+        stopIndex = Some(7 + query.length -1),
         sqlText = Some(s"select $query"))
       withOrigin(o) {
         val expr = Add(maxValue, maxValue, failOnError = true)
@@ -177,6 +178,7 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
         line = Some(1),
         startPosition = Some(7),
         startIndex = Some(7),
+        stopIndex = Some(7 + query.length -1),
         sqlText = Some(s"select $query"))
       withOrigin(o) {
         val expr = Subtract(minValue, maxValue, failOnError = true)
@@ -215,6 +217,7 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
         line = Some(1),
         startPosition = Some(7),
         startIndex = Some(7),
+        stopIndex = Some(7 + query.length -1),
         sqlText = Some(s"select $query"))
       withOrigin(o) {
         val expr = Multiply(maxValue, maxValue, failOnError = true)
@@ -259,6 +262,7 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
       line = Some(1),
       startPosition = Some(7),
       startIndex = Some(7),
+      stopIndex = Some(7 + query.length -1),
       sqlText = Some(s"select $query"))
     withOrigin(o) {
       val expr = Divide(Literal(1234.5, DoubleType), Literal(0.0, DoubleType), failOnError = true)
@@ -312,6 +316,7 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
         line = Some(1),
         startPosition = Some(7),
         startIndex = Some(7),
+        stopIndex = Some(7 + query.length -1),
         sqlText = Some(s"select $query"))
       withOrigin(o) {
         val expr =
@@ -362,6 +367,7 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
           line = Some(1),
           startPosition = Some(7),
           startIndex = Some(7),
+          stopIndex = Some(7 + query.length -1),
           sqlText = Some(s"select $query"))
         withOrigin(o) {
           checkExceptionInExpression[ArithmeticException](expr, EmptyRow, query)

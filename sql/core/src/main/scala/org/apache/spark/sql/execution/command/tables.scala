@@ -35,7 +35,7 @@ import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.DescribeCommandSchema
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.util.{escapeSingleQuotedString, quoteIfNeeded, CaseInsensitiveMap, CharVarcharUtils, DateTimeUtils}
+import org.apache.spark.sql.catalyst.util.{escapeSingleQuotedString, quoteIfNeeded, CaseInsensitiveMap, CharVarcharUtils, DateTimeUtils, ResolveDefaultColumns}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.TableIdentifierHelper
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.datasources.DataSource
@@ -230,18 +230,19 @@ case class AlterTableAddColumnsCommand(
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
     val catalogTable = verifyAlterTableAddColumn(sparkSession.sessionState.conf, catalog, table)
+    val colsWithProcessedDefaults = constantFoldCurrentDefaultsToExistDefaults(sparkSession)
 
     CommandUtils.uncacheTableOrView(sparkSession, table.quotedString)
     catalog.refreshTable(table)
 
     SchemaUtils.checkColumnNameDuplication(
-      (colsToAdd ++ catalogTable.schema).map(_.name),
+      (colsWithProcessedDefaults ++ catalogTable.schema).map(_.name),
       "in the table definition of " + table.identifier,
       conf.caseSensitiveAnalysis)
-    DDLUtils.checkTableColumns(catalogTable, StructType(colsToAdd))
+    DDLUtils.checkTableColumns(catalogTable, StructType(colsWithProcessedDefaults))
 
     val existingSchema = CharVarcharUtils.getRawSchema(catalogTable.dataSchema)
-    catalog.alterTableDataSchema(table, StructType(existingSchema ++ colsToAdd))
+    catalog.alterTableDataSchema(table, StructType(existingSchema ++ colsWithProcessedDefaults))
     Seq.empty[Row]
   }
 
@@ -276,6 +277,24 @@ case class AlterTableAddColumnsCommand(
       }
     }
     catalogTable
+  }
+
+  /**
+   * ALTER TABLE ADD COLUMNS commands may optionally specify a DEFAULT expression for any column.
+   * In that case, this method evaluates its originally specified value and then stores the result
+   * in a separate column metadata entry, then returns the updated column definitions.
+   */
+  private def constantFoldCurrentDefaultsToExistDefaults(
+      sparkSession: SparkSession): Seq[StructField] = {
+    colsToAdd.map { col: StructField =>
+      if (col.metadata.contains(ResolveDefaultColumns.CURRENT_DEFAULT_COLUMN_METADATA_KEY)) {
+        val foldedStructType = ResolveDefaultColumns.constantFoldCurrentDefaultsToExistDefaults(
+          sparkSession.sessionState.analyzer, StructType(Seq(col)), "ALTER TABLE ADD COLUMNS")
+        foldedStructType.fields(0)
+      } else {
+        col
+      }
+    }
   }
 }
 

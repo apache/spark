@@ -98,7 +98,7 @@ object PushDownUtils extends PredicateHelper {
 
       case f: FileScanBuilder =>
         val postScanFilters = f.pushFilters(filters)
-        (Left(f.pushedFilters), postScanFilters)
+        (Right(f.pushedFilters), postScanFilters)
       case _ => (Left(Nil), filters)
     }
   }
@@ -187,7 +187,7 @@ object PushDownUtils extends PredicateHelper {
     }
   }
 
-  private def toOutputAttrs(
+  def toOutputAttrs(
       schema: StructType,
       relation: DataSourceV2Relation): Seq[AttributeReference] = {
     val nameToAttr = relation.output.map(_.name).zip(relation.output).toMap

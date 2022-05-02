@@ -1070,7 +1070,7 @@ trait AlterTableTests extends SharedSparkSession {
     }
   }
 
-  test("AlterTable: drop column must exist") {
+  test("AlterTable: drop column must exist if required") {
     val t = s"${catalogAndNamespace}table_name"
     withTable(t) {
       sql(s"CREATE TABLE $t (id int) USING $v2Format")
@@ -1080,10 +1080,15 @@ trait AlterTableTests extends SharedSparkSession {
       }
 
       assert(exc.getMessage.contains("Missing field data"))
+
+      // with if exists it should pass
+      sql(s"ALTER TABLE $t DROP COLUMN IF EXISTS data")
+      val table = getTableMetadata(fullTableName(t))
+      assert(table.schema == new StructType().add("id", IntegerType))
     }
   }
 
-  test("AlterTable: nested drop column must exist") {
+  test("AlterTable: nested drop column must exist if required") {
     val t = s"${catalogAndNamespace}table_name"
     withTable(t) {
       sql(s"CREATE TABLE $t (id int) USING $v2Format")
@@ -1093,6 +1098,27 @@ trait AlterTableTests extends SharedSparkSession {
       }
 
       assert(exc.getMessage.contains("Missing field point.x"))
+
+      // with if exists it should pass
+      sql(s"ALTER TABLE $t DROP COLUMN IF EXISTS point.x")
+      val table = getTableMetadata(fullTableName(t))
+      assert(table.schema == new StructType().add("id", IntegerType))
+
+    }
+  }
+
+  test("AlterTable: drop mixed existing/non-existing columns using IF EXISTS") {
+    val t = s"${catalogAndNamespace}table_name"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id int, name string, points array<struct<x: double, y: double>>) " +
+        s"USING $v2Format")
+
+      // with if exists it should pass
+      sql(s"ALTER TABLE $t DROP COLUMNS IF EXISTS " +
+        s"names, name, points.element.z, id, points.element.x")
+      val table = getTableMetadata(fullTableName(t))
+      assert(table.schema == new StructType()
+        .add("points", ArrayType(StructType(Seq(StructField("y", DoubleType))))))
     }
   }
 

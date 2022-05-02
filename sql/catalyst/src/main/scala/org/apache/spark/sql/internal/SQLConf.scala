@@ -959,6 +959,15 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
+  val PARQUET_FILTER_PUSHDOWN_STRING_PREDICATE_ENABLED =
+    buildConf("spark.sql.parquet.filterPushdown.stringPredicate")
+      .doc("If true, enables Parquet filter push-down optimization for string predicate such " +
+        "as startsWith/endsWith/contains function. This configuration only has an effect when " +
+        s"'${PARQUET_FILTER_PUSHDOWN_ENABLED.key}' is enabled.")
+      .version("3.4.0")
+      .internal()
+      .fallbackConf(PARQUET_FILTER_PUSHDOWN_STRING_STARTSWITH_ENABLED)
+
   val PARQUET_FILTER_PUSHDOWN_INFILTERTHRESHOLD =
     buildConf("spark.sql.parquet.pushdown.inFilterThreshold")
       .doc("For IN predicate, Parquet filter will push-down a set of OR clauses if its " +
@@ -974,9 +983,10 @@ object SQLConf {
       .createWithDefault(10)
 
   val PARQUET_AGGREGATE_PUSHDOWN_ENABLED = buildConf("spark.sql.parquet.aggregatePushdown")
-    .doc("If true, MAX/MIN/COUNT without filter and group by will be pushed" +
-      " down to Parquet for optimization. MAX/MIN/COUNT for complex types and timestamp" +
-      " can't be pushed down")
+    .doc("If true, aggregates will be pushed down to Parquet for optimization. Support MIN, MAX " +
+      "and COUNT as aggregate expression. For MIN/MAX, support boolean, integer, float and date " +
+      "type. For COUNT, support all data types. If statistics is missing from any Parquet file " +
+      "footer, exception would be thrown.")
     .version("3.3.0")
     .booleanConf
     .createWithDefault(false)
@@ -1061,6 +1071,17 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val PARQUET_TIMESTAMP_NTZ_ENABLED =
+    buildConf("spark.sql.parquet.timestampNTZ.enabled")
+      .doc(s"Enables ${TimestampTypes.TIMESTAMP_NTZ} support for Parquet reads and writes. " +
+        s"When enabled, ${TimestampTypes.TIMESTAMP_NTZ} values are written as Parquet timestamp " +
+        "columns with annotation isAdjustedToUTC = false and are inferred in a similar way. " +
+        s"When disabled, such values are read as ${TimestampTypes.TIMESTAMP_LTZ} and have to be " +
+        s"converted to ${TimestampTypes.TIMESTAMP_LTZ} for writes.")
+      .version("3.4.0")
+      .booleanConf
+      .createWithDefault(true)
+
   val ORC_COMPRESSION = buildConf("spark.sql.orc.compression.codec")
     .doc("Sets the compression codec used when writing ORC files. If either `compression` or " +
       "`orc.compress` is specified in the table-specific options/properties, the precedence " +
@@ -1110,7 +1131,8 @@ object SQLConf {
   val ORC_AGGREGATE_PUSHDOWN_ENABLED = buildConf("spark.sql.orc.aggregatePushdown")
     .doc("If true, aggregates will be pushed down to ORC for optimization. Support MIN, MAX and " +
       "COUNT as aggregate expression. For MIN/MAX, support boolean, integer, float and date " +
-      "type. For COUNT, support all data types.")
+      "type. For COUNT, support all data types. If statistics is missing from any ORC file " +
+      "footer, exception would be thrown.")
     .version("3.3.0")
     .booleanConf
     .createWithDefault(false)
@@ -2858,7 +2880,7 @@ object SQLConf {
       .createWithDefault(true)
 
   val USE_NULLS_FOR_MISSING_DEFAULT_COLUMN_VALUES =
-    buildConf("spark.sql.defaultColumn.useNullsForMissingDefautValues")
+    buildConf("spark.sql.defaultColumn.useNullsForMissingDefaultValues")
       .internal()
       .doc("When true, and DEFAULT columns are enabled, allow column definitions lacking " +
         "explicit default values to behave as if they had specified DEFAULT NULL instead. " +
@@ -2877,6 +2899,7 @@ object SQLConf {
     .createWithDefault(false)
 
   val ANSI_STRICT_INDEX_OPERATOR = buildConf("spark.sql.ansi.strictIndexOperator")
+    .internal()
     .doc(s"When true and '${ANSI_ENABLED.key}' is true, accessing complex SQL types via [] " +
       "operator will throw an exception if array index is out of bound, or map key does not " +
       "exist. Otherwise, Spark will return a null result when accessing an invalid index.")
@@ -3197,6 +3220,15 @@ object SQLConf {
     .version("3.0.0")
     .intConf
     .createWithDefault(25)
+
+  val MAX_TO_STRING_FIELDS_FOR_DIAGNOSTIC =
+    buildConf("spark.sql.debug.maxToStringFieldsForDiagnostic")
+      .doc(s"Similar to ${MAX_TO_STRING_FIELDS.key}, but it will take effect when the " +
+        s"output will be stored for the diagnostics API. The output will be stored in " +
+        s"disk instead of memory. So it can be larger than ${MAX_TO_STRING_FIELDS.key}")
+      .version("3.4.0")
+      .intConf
+      .createWithDefault(10000)
 
   val MAX_PLAN_STRING_LENGTH = buildConf("spark.sql.maxPlanStringLength")
     .doc("Maximum number of characters to output for a plan string.  If the plan is " +
@@ -3733,6 +3765,28 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val LEGACY_LPAD_RPAD_BINARY_TYPE_AS_STRING =
+    buildConf("spark.sql.legacy.lpadRpadAlwaysReturnString")
+      .internal()
+      .doc("When set to false, when the first argument and the optional padding pattern is a " +
+        "byte sequence, the result is a BINARY value. The default padding pattern in this case " +
+        "is the zero byte. " +
+        "When set to true, it restores the legacy behavior of always returning string types " +
+        "even for binary inputs.")
+      .version("3.3.0")
+      .booleanConf
+      .createWithDefault(false)
+
+  val LEGACY_NULL_VALUE_WRITTEN_AS_QUOTED_EMPTY_STRING_CSV =
+    buildConf("spark.sql.legacy.nullValueWrittenAsQuotedEmptyStringCsv")
+      .internal()
+      .doc("When set to false, nulls are written as unquoted empty strings in CSV data source. " +
+        "If set to true, it restores the legacy behavior that nulls were written as quoted " +
+        "empty strings, `\"\"`.")
+      .version("3.3.0")
+      .booleanConf
+      .createWithDefault(false)
+
   /**
    * Holds information about keys that have been deprecated.
    *
@@ -4016,8 +4070,8 @@ class SQLConf extends Serializable with Logging {
 
   def parquetFilterPushDownDecimal: Boolean = getConf(PARQUET_FILTER_PUSHDOWN_DECIMAL_ENABLED)
 
-  def parquetFilterPushDownStringStartWith: Boolean =
-    getConf(PARQUET_FILTER_PUSHDOWN_STRING_STARTSWITH_ENABLED)
+  def parquetFilterPushDownStringPredicate: Boolean =
+    getConf(PARQUET_FILTER_PUSHDOWN_STRING_PREDICATE_ENABLED)
 
   def parquetFilterPushDownInFilterThreshold: Int =
     getConf(PARQUET_FILTER_PUSHDOWN_INFILTERTHRESHOLD)
@@ -4439,6 +4493,8 @@ class SQLConf extends Serializable with Logging {
 
   def maxToStringFields: Int = getConf(SQLConf.MAX_TO_STRING_FIELDS)
 
+  def maxToStringFieldsForDiagnostic: Int = getConf(SQLConf.MAX_TO_STRING_FIELDS_FOR_DIAGNOSTIC)
+
   def maxPlanStringLength: Int = getConf(SQLConf.MAX_PLAN_STRING_LENGTH).toInt
 
   def maxMetadataStringLength: Int = getConf(SQLConf.MAX_METADATA_STRING_LENGTH)
@@ -4490,6 +4546,8 @@ class SQLConf extends Serializable with Logging {
   def parquetFieldIdWriteEnabled: Boolean = getConf(SQLConf.PARQUET_FIELD_ID_WRITE_ENABLED)
 
   def ignoreMissingParquetFieldId: Boolean = getConf(SQLConf.IGNORE_MISSING_PARQUET_FIELD_ID)
+
+  def parquetTimestampNTZEnabled: Boolean = getConf(PARQUET_TIMESTAMP_NTZ_ENABLED)
 
   def useV1Command: Boolean = getConf(SQLConf.LEGACY_USE_V1_COMMAND)
 
