@@ -365,7 +365,7 @@ case class ResolveDefaultColumns(
   }
 
   /**
-   * Returns the schema for the target table of a DML command, looking up into the catalog if needed.
+   * Returns the schema for the target table of a DML command, looking into the catalog if needed.
    */
   private def getSchemaForTargetTable(table: LogicalPlan): Option[StructType] = {
     // Lookup the relation from the catalog by name. This either succeeds or returns some "not
