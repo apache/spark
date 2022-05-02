@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.analysis
 
 import scala.collection.mutable
 
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.{SessionCatalog, UnresolvedCatalogRelation}
@@ -51,7 +52,7 @@ import org.apache.spark.sql.types._
  */
 case class ResolveDefaultColumns(
   analyzer: Analyzer,
-  catalog: SessionCatalog) extends Rule[LogicalPlan] {
+  catalog: SessionCatalog) extends Rule[LogicalPlan] with Logging {
   override def apply(plan: LogicalPlan): LogicalPlan = {
     plan.resolveOperatorsWithPruning(
       (_ => SQLConf.get.enableDefaultColumns), ruleId) {
@@ -143,40 +144,39 @@ case class ResolveDefaultColumns(
   /**
    * Resolves DEFAULT column references for an UPDATE command.
    */
-  private def resolveDefaultColumnsForUpdate(u: UpdateTable): LogicalPlan = {
+  private def resolveDefaultColumnsForUpdate(u: UpdateTable): Option[LogicalPlan] = {
     // Return a more descriptive error message if the user tries to use a DEFAULT column reference
     // inside an UPDATE command's WHERE clause; this is not allowed.
+    logWarning(s"@@@ a $u")
     u.condition.map { c: Expression =>
       if (c.find(isExplicitDefaultColumn).isDefined) {
         throw new AnalysisException(DEFAULTS_IN_UPDATE_WHERE_CLAUSE)
       }
     }
-    val schema: StructType = u.table match {
-      case r: NamedRelation => r.schema
-      case SubqueryAlias(_, child: NamedRelation) => child.schema
-      case _ =>
-        return u
-    }
+    logWarning(s"@@@ a11 ${u.table}")
+    val schema: StructType = getSchemaForTargetTable(u.table).getOrElse(return u)
     val defaultExpressions: Seq[Expression] = schema.fields.map {
       case f if f.metadata.contains(CURRENT_DEFAULT_COLUMN_METADATA_KEY) =>
         analyze(analyzer, f, "UPDATE")
       case _ => Literal(null)
     }
     // Create a map from each column name in the target table to its DEFAULT expression.
+    logWarning(s"@@@ a1 $schema")
     val columnNamesToExpressions: Map[String, Expression] =
       schema.fields.zip(defaultExpressions).map {
         case (field, expr) =>
-          (if (SQLConf.get.caseSensitiveAnalysis) field.name.toLowerCase() else field.name) ->
-            expr
+          field.name.map(n => if (SQLConf.get.caseSensitiveAnalysis) n.toLower else n) -> expr
       }.toMap
     // For each assignment in the UPDATE command's SET clause with a DEFAULT column reference on the
     // right-hand side, look up the corresponding expression from the above map.
     val newAssignments: Seq[Assignment] =
     replaceExplicitDefaultValuesForUpdateAssignments(u.assignments, columnNamesToExpressions)
       .getOrElse {
+        logWarning(s"@@@ y $u")
         return u
       }
-    u.copy(assignments = newAssignments)
+    logWarning(s"@@@ z $u")
+    Some(u.copy(assignments = newAssignments))
   }
 
   /**
@@ -377,25 +377,7 @@ case class ResolveDefaultColumns(
    */
   private def getInsertTableSchemaWithoutPartitionColumns(
       enclosingInsert: InsertIntoStatement): Option[StructType] = {
-    val tableName = enclosingInsert.table match {
-      case r: UnresolvedRelation => TableIdentifier(r.name)
-      case r: UnresolvedCatalogRelation => r.tableMeta.identifier
-      case _ => return None
-    }
-    // Lookup the relation from the catalog by name. This either succeeds or returns some "not
-    // found" error. In the latter cases, return out of this rule without changing anything and let
-    // the analyzer return a proper error message elsewhere.
-    val lookup: LogicalPlan = try {
-      catalog.lookupRelation(tableName)
-    } catch {
-      case _: AnalysisException => return None
-    }
-    val schema: StructType = lookup match {
-      case SubqueryAlias(_, r: UnresolvedCatalogRelation) =>
-        StructType(r.tableMeta.schema.fields.dropRight(
-          enclosingInsert.partitionSpec.size))
-      case _ => return None
-    }
+    val schema: StructType = getSchemaForTargetTable(enclosingInsert.table).getOrElse(return None)
     // Rearrange the columns in the result schema to match the order of the explicit column list,
     // if any.
     val userSpecifiedCols: Seq[String] = enclosingInsert.userSpecifiedCols
@@ -423,35 +405,69 @@ case class ResolveDefaultColumns(
   }
 
   /**
+   * Returns the schema for the target table of a DML command, lookup up into the catalog if needed.
+   */
+  private def getSchemaForTargetTable(table: LogicalPlan): Option[StructType] = {
+    // Check if the target table is already resolved. If so, return the computed schema.
+    table match {
+      case r: NamedRelation => return Some(r.schema)
+      case SubqueryAlias(_, child: NamedRelation) => return Some(child.schema)
+      case _ =>
+    }
+    // Lookup the relation from the catalog by name. This either succeeds or returns some "not
+    // found" error. In the latter cases, return out of this rule without changing anything and let
+    // the analyzer return a proper error message elsewhere.
+    val tableName: TableIdentifier = table match {
+      case r: UnresolvedRelation => TableIdentifier(r.name)
+      case r: UnresolvedCatalogRelation => r.tableMeta.identifier
+      case _ => return None
+    }
+    val lookup: LogicalPlan = try {
+      catalog.lookupRelation(tableName)
+    } catch {
+      case _: AnalysisException => return None
+    }
+    lookup match {
+      case SubqueryAlias(_, r: UnresolvedCatalogRelation) =>
+        Some(r.tableMeta.schema)
+      case _ => None
+    }
+  }
+
+  /**
    * Replaces unresolved DEFAULT column references with corresponding values in a series of
    * assignments in an UPDATE command.
    */
   private def replaceExplicitDefaultValuesForUpdateAssignments(
       assignments: Seq[Assignment],
       columnNamesToExpressions: Map[String, Expression]): Option[Seq[Assignment]] = {
+    logWarning(s"@@@ aa $assignments")
     var replaced = false
-    val newAssignments: Seq[Assignment] = for {
-      assignment <- assignments
-      destColName = assignment.key match {
-        case a: AttributeReference => a.name
-        case u: UnresolvedAttribute => u.name
-        case _ => ""
-      }
-      adjusted = if (SQLConf.get.caseSensitiveAnalysis) destColName else destColName.toLowerCase()
-      newValue = columnNamesToExpressions.get(adjusted).map { defaultExpr =>
-        replaceExplicitDefaultReferenceInExpression(
-          assignment.value, defaultExpr, DEFAULTS_IN_COMPLEX_EXPRESSIONS_IN_UPDATE_SET_CLAUSE,
-          false).map { e =>
-          replaced = true
-          e
+    val newAssignments: Seq[Assignment] =
+      for (assignment <- assignments) yield {
+        val destColName = assignment.key match {
+          case a: AttributeReference => a.name
+          case u: UnresolvedAttribute => u.name
+          case _ => ""
+        }
+        val adjusted = destColName.map(c => if (SQLConf.get.caseSensitiveAnalysis) c.toLower else c)
+        logWarning(s"@@@ c $columnNamesToExpressions")
+        val newValue = columnNamesToExpressions.get(adjusted).map { defaultExpr =>
+          replaceExplicitDefaultReferenceInExpression(
+            assignment.value, defaultExpr, DEFAULTS_IN_COMPLEX_EXPRESSIONS_IN_UPDATE_SET_CLAUSE,
+            false).map { e =>
+            logWarning(s"@@@ d $e")
+            replaced = true
+            e
+          }.getOrElse(assignment.value)
         }.getOrElse(assignment.value)
-      }.getOrElse(assignment.value)
-    } yield {
-      assignment.copy(value = newValue)
-    }
+        assignment.copy(value = newValue)
+      }
     if (replaced) {
+      logWarning(s"@@@ zz1 $assignments")
       Some(newAssignments)
     } else {
+      logWarning(s"@@@ zz2 $assignments")
       None
     }
   }

@@ -40,9 +40,10 @@ import org.apache.spark.sql.execution.datasources.{CreateTable => CreateTableV1}
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.internal.{HiveSerDe, SQLConf}
 import org.apache.spark.sql.sources.SimpleScanSource
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{BooleanType, CharType, DoubleType, IntegerType, LongType, StringType, StructField, StructType}
 
-class PlanResolutionSuite extends AnalysisTest {
+class PlanResolutionSuite extends AnalysisTest with SharedSparkSession {
   import CatalystSqlParser._
 
   private val v1Format = classOf[SimpleScanSource].getName
@@ -1093,6 +1094,24 @@ class PlanResolutionSuite extends AnalysisTest {
           case other => fail("Expect StaticInvoke, but got: " + other)
         }
       case _ => fail("Expect UpdateTable, but got:\n" + parsed2.treeString)
+    }
+
+    // Create a table with explicit default values and exercise substituting them in place of
+    // corresponding references in the UPDATE command.
+    withTable("t") {
+      spark.sql("CREATE TABLE t(i BOOLEAN DEFAULT TRUE, s BIGINT DEFAULT 42) USING PARQUET")
+      val sql = s"UPDATE t SET i=DEFAULT, s=DEFAULT"
+      val parsed = parseAndResolve(sql)
+      parsed match {
+        case UpdateTable(
+        AsDataSourceV2Relation(_),
+        Seq(Assignment(name: AttributeReference, Literal(true, BooleanType)),
+        Assignment(age: AttributeReference, Literal(42, LongType))),
+        None) =>
+          assert(name.name == "i")
+          assert(age.name == "s")
+        case _ => fail("Expect UpdateTable, but got:\n" + parsed.treeString)
+      }
     }
   }
 
