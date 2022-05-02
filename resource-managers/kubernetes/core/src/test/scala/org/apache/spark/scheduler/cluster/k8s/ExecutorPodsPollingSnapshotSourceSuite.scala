@@ -90,7 +90,7 @@ class ExecutorPodsPollingSnapshotSourceSuite extends SparkFunSuite with BeforeAn
     verify(eventQueue).replaceSnapshot(Seq(exec1, exec2))
   }
 
-  test("If polling is disabled we don't call pods() on the client") {
+  test("SPARK-36462: If polling is disabled we don't call pods() on the client") {
     val sparkConf = new SparkConf()
     val source = new ExecutorPodsPollingSnapshotSource(
       sparkConf.set(KUBERNETES_EXECUTOR_ENABLE_API_POLLING, false),

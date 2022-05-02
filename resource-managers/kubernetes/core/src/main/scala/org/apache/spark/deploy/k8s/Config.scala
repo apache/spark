@@ -489,6 +489,7 @@ private[spark] object Config extends Logging {
         "You should leave this enabled unless your encountering performance issues with your etcd.")
       .version("3.3.0")
       .booleanConf
+      .internal()
       .createWithDefault(true)
 
   val KUBERNETES_EXECUTOR_ENABLE_API_WATCHER =
@@ -497,6 +498,7 @@ private[spark] object Config extends Logging {
         "You should leave this enabled unless your encountering performance issues with your etcd.")
       .version("3.3.0")
       .booleanConf
+      .internal()
       .createWithDefault(true)
 
 
