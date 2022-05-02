@@ -209,7 +209,8 @@ object ParquetUtils {
       sqlConf.parquetVectorizedReaderNestedColumnEnabled &&
         st.fields.forall(f => isBatchReadSupported(sqlConf, f.dataType))
     case udt: UserDefinedType[_] =>
-      isBatchReadSupported(sqlConf, udt.sqlType)
+      sqlConf.parquetVectorizedReaderNestedColumnEnabled &&
+        isBatchReadSupported(sqlConf, udt.sqlType)
     case _ =>
       false
   }

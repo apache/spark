@@ -763,7 +763,7 @@ abstract class ParquetQuerySuite extends QueryTest with ParquetTest with SharedS
     }
   }
 
-  testStandardAndLegacyModes("SPARK-39086: UDT read support") {
+  testStandardAndLegacyModes("SPARK-39086: UDT read support in vectorized reader") {
     withTempPath { dir =>
       val path = dir.getCanonicalPath
 
@@ -798,7 +798,9 @@ abstract class ParquetQuerySuite extends QueryTest with ParquetTest with SharedS
           )
 
       Seq(true, false).foreach { enabled =>
-        withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_NESTED_COLUMN_ENABLED.key -> s"$enabled") {
+        withSQLConf(
+            SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "true",
+            SQLConf.PARQUET_VECTORIZED_READER_NESTED_COLUMN_ENABLED.key -> s"$enabled") {
           checkAnswer(
             spark.read.schema(userDefinedSchema).parquet(path),
             Row(Row("0", TestNestedStruct(1, 2L, 3.5D), TestPrimitive(4), TestArray(Seq(5, 6)))))
