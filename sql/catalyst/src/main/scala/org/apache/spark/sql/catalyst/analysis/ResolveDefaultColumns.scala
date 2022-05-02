@@ -62,6 +62,8 @@ case class ResolveDefaultColumns(
         resolveDefaultColumnsForInsertFromProject(i)
       case u: UpdateTable =>
         resolveDefaultColumnsForUpdate(u)
+      case m: MergeIntoTable =>
+        resolveDefaultColumnsForMerge(m)
     }
   }
 
@@ -167,10 +169,59 @@ case class ResolveDefaultColumns(
     // right-hand side, look up the corresponding expression from the above map.
     val newAssignments: Seq[Assignment] =
     replaceExplicitDefaultValuesForUpdateAssignments(u.assignments, columnNamesToExpressions)
-      .getOrElse {
-        return u
-      }
+      .getOrElse(return u)
     u.copy(assignments = newAssignments)
+  }
+
+  /**
+   * Resolves DEFAULT column references for a MERGE INTO command.
+   */
+  private def resolveDefaultColumnsForMerge(m: MergeIntoTable): LogicalPlan = {
+    // Return a more descriptive error message if the user tries to use a DEFAULT column reference
+    // inside an UPDATE command's WHERE clause; this is not allowed.
+    m.mergeCondition.map { c: Expression =>
+      if (c.find(isExplicitDefaultColumn).isDefined) {
+        throw new AnalysisException(DEFAULTS_IN_COMPLEX_EXPRESSIONS_IN_MERGE_ASSIGNMENT)
+      }
+    }
+    val schema: StructType = getSchemaForTargetTable(m.targetTable).getOrElse(return m)
+    val defaultExpressions: Seq[Expression] = schema.fields.map {
+      case f if f.metadata.contains(CURRENT_DEFAULT_COLUMN_METADATA_KEY) =>
+        analyze(analyzer, f, "MERGE")
+      case _ => Literal(null)
+    }
+    val columnNamesToExpressions: Map[String, Expression] =
+      schema.fields.zip(defaultExpressions).map {
+        case (field, expr) => field.name -> expr
+      }.toMap
+    val newMatchedActions: Seq[MergeAction] = m.matchedActions.map {
+      replaceExplicitDefaultValuesInMergeAction(_, columnNamesToExpressions)
+    }
+    val newNotMatchedActions: Seq[MergeAction] = m.notMatchedActions.map {
+      replaceExplicitDefaultValuesInMergeAction(_, columnNamesToExpressions)
+    }
+  }
+
+  /**
+   * Replaces unresolved DEFAULT column references with corresponding values in one action of a
+   * MERGE INTO command.
+   */
+  private def replaceExplicitDefaultValuesInMergeAction(
+      action: MergeAction,
+      columnNamesToExpressions: Map[String, Expression]): MergeAction = {
+    action match {
+      case u: UpdateAction =>
+        val replaced: Seq[Assignment] =
+          replaceExplicitDefaultValuesForUpdateAssignments(u.assignments, columnNamesToExpressions)
+            .getOrElse(return m)
+        u.copy(assignments = replaced)
+      case i: InsertAction =>
+        val replaced: Seq[Assignment] =
+          replaceExplicitDefaultValuesForUpdateAssignments(i.assignments, columnNamesToExpressions)
+            .getOrElse(return m)
+        i.copy(assignments = replaced)
+      case _ => action
+    }
   }
 
   /**
