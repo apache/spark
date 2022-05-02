@@ -21,10 +21,10 @@ import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, UnresolvedPartition
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser.parsePlan
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical.ShowPartitions
+import org.apache.spark.sql.errors.QueryErrorsSuiteBase
 import org.apache.spark.sql.execution.SparkSqlParser
-import org.apache.spark.sql.test.SharedSparkSession
 
-class ShowPartitionsParserSuite extends AnalysisTest with SharedSparkSession {
+class ShowPartitionsParserSuite extends AnalysisTest with QueryErrorsSuiteBase {
   test("SHOW PARTITIONS") {
     val commandName = "SHOW PARTITIONS"
     Seq(
@@ -51,7 +51,16 @@ class ShowPartitionsParserSuite extends AnalysisTest with SharedSparkSession {
     val e = intercept[ParseException] {
       new SparkSqlParser().parsePlan(
         "SHOW PARTITIONS dbx.tab1 PARTITION (a='1', b)")
-    }.getMessage
-    assert(e.contains("Found an empty partition key 'b'"))
+    }
+    val msg =
+      """Invalid SQL syntax: Partition key 'b' must set value (can't be empty).(line 1, pos 25)
+        |
+        |== SQL ==
+        |SHOW PARTITIONS dbx.tab1 PARTITION (a='1', b)
+        |-------------------------^^^
+        |""".stripMargin
+    assert(e.getMessage.contains(msg))
+    assert(e.getErrorClass === "INVALID_SQL_SYNTAX")
+    assert(e.getSqlState === "42000")
   }
 }
