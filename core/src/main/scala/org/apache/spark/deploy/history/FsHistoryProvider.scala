@@ -630,6 +630,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
   }
 
   private def cleanAppData(appId: String, attemptId: Option[String], logPath: String): Unit = {
+    // SPARK-39083 prevent race condition between update and clean app data
     listing.synchronized {
       try {
         val app = load(appId)
