@@ -33,6 +33,7 @@ import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException}
 import org.apache.spark.sql.catalyst.plans.logical.{AlterColumn, AnalysisOnlyCommand, AppendData, Assignment, CreateTable, CreateTableAsSelect, DeleteAction, DeleteFromTable, DescribeRelation, DropTable, InsertAction, LocalRelation, LogicalPlan, MergeIntoTable, OneRowRelation, Project, SetTableLocation, SetTableProperties, ShowTableProperties, SubqueryAlias, UnsetTableProperties, UpdateAction, UpdateTable}
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns
 import org.apache.spark.sql.connector.FakeV2Provider
 import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogNotFoundException, Identifier, SupportsDelete, Table, TableCapability, TableCatalog, V1Table}
 import org.apache.spark.sql.connector.expressions.Transform
@@ -41,7 +42,7 @@ import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.internal.{HiveSerDe, SQLConf}
 import org.apache.spark.sql.sources.SimpleScanSource
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{BooleanType, CharType, DoubleType, IntegerType, LongType, StringType, StructField, StructType}
+import org.apache.spark.sql.types.{BooleanType, CharType, DoubleType, IntegerType, LongType, MetadataBuilder, StringType, StructField, StructType}
 
 class PlanResolutionSuite extends AnalysisTest with SharedSparkSession {
   import CatalystSqlParser._
@@ -84,6 +85,22 @@ class PlanResolutionSuite extends AnalysisTest with SharedSparkSession {
     t
   }
 
+  private val defaultValues: Table = {
+    val t = mock(classOf[Table])
+    when(t.schema()).thenReturn(
+      new StructType()
+        .add("i", BooleanType, true,
+          new MetadataBuilder()
+            .putString(ResolveDefaultColumns.CURRENT_DEFAULT_COLUMN_METADATA_KEY, "true")
+            .putString(ResolveDefaultColumns.EXISTS_DEFAULT_COLUMN_METADATA_KEY, "true").build())
+        .add("s", IntegerType, true,
+          new MetadataBuilder()
+            .putString(ResolveDefaultColumns.CURRENT_DEFAULT_COLUMN_METADATA_KEY, "42")
+            .putString(ResolveDefaultColumns.EXISTS_DEFAULT_COLUMN_METADATA_KEY, "42").build()))
+    when(t.partitioning()).thenReturn(Array.empty[Transform])
+    t
+  }
+
   private val v1Table: V1Table = {
     val t = mock(classOf[CatalogTable])
     when(t.schema).thenReturn(new StructType()
@@ -119,6 +136,7 @@ class PlanResolutionSuite extends AnalysisTest with SharedSparkSession {
         case "tab1" => table1
         case "tab2" => table2
         case "charvarchar" => charVarcharTable
+        case "defaultvalues" => defaultValues
         case name => throw new NoSuchTableException(name)
       }
     })
@@ -978,6 +996,7 @@ class PlanResolutionSuite extends AnalysisTest with SharedSparkSession {
       val sql5 = s"UPDATE $tblName SET name=DEFAULT, age=DEFAULT"
       // Note: 'i' and 's' are the names of the columns in 'tblName'.
       val sql6 = s"UPDATE $tblName SET i=DEFAULT, s=DEFAULT"
+      val sql7 = s"UPDATE defaultvalues SET i=DEFAULT, s=DEFAULT"
 
       val parsed1 = parseAndResolve(sql1)
       val parsed2 = parseAndResolve(sql2)
@@ -985,6 +1004,7 @@ class PlanResolutionSuite extends AnalysisTest with SharedSparkSession {
       val parsed4 = parseAndResolve(sql4)
       val parsed5 = parseAndResolve(sql5)
       val parsed6 = parseAndResolve(sql6)
+      val parsed7 = parseAndResolve(sql7, true)
 
       parsed1 match {
         case UpdateTable(
@@ -1057,13 +1077,24 @@ class PlanResolutionSuite extends AnalysisTest with SharedSparkSession {
       parsed6 match {
         case UpdateTable(
         AsDataSourceV2Relation(_),
-        Seq(Assignment(name: AttributeReference, AnsiCast(Literal(null, _), IntegerType, _)),
-        Assignment(age: AttributeReference, AnsiCast(Literal(null, _), StringType, _))),
+        Seq(Assignment(i: AttributeReference, AnsiCast(Literal(null, _), IntegerType, _)),
+        Assignment(s: AttributeReference, AnsiCast(Literal(null, _), StringType, _))),
         None) =>
-          assert(name.name == "i")
-          assert(age.name == "s")
+          assert(i.name == "i")
+          assert(s.name == "s")
 
         case _ => fail("Expect UpdateTable, but got:\n" + parsed6.treeString)
+      }
+
+      parsed7 match {
+        case UpdateTable(
+        _,
+        Seq(Assignment(i: AttributeReference, Literal(true, BooleanType)),
+        Assignment(s: AttributeReference, Literal(42, IntegerType))),
+        None) =>
+          assert(i.name == "i")
+          assert(s.name == "s")
+        case _ => fail("Expect UpdateTable, but got:\n" + parsed7.treeString)
       }
     }
 
@@ -1094,24 +1125,6 @@ class PlanResolutionSuite extends AnalysisTest with SharedSparkSession {
           case other => fail("Expect StaticInvoke, but got: " + other)
         }
       case _ => fail("Expect UpdateTable, but got:\n" + parsed2.treeString)
-    }
-
-    // Create a table with explicit default values and exercise substituting them in place of
-    // corresponding references in the UPDATE command.
-    withTable("t") {
-      spark.sql("CREATE TABLE t(i BOOLEAN DEFAULT TRUE, s BIGINT DEFAULT 42) USING PARQUET")
-      val sql = s"UPDATE t SET i=DEFAULT, s=DEFAULT"
-      val parsed = parseAndResolve(sql)
-      parsed match {
-        case UpdateTable(
-        AsDataSourceV2Relation(_),
-        Seq(Assignment(name: AttributeReference, Literal(true, BooleanType)),
-        Assignment(age: AttributeReference, Literal(42, LongType))),
-        None) =>
-          assert(name.name == "i")
-          assert(age.name == "s")
-        case _ => fail("Expect UpdateTable, but got:\n" + parsed.treeString)
-      }
     }
   }
 

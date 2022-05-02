@@ -19,7 +19,6 @@ package org.apache.spark.sql.catalyst.analysis
 
 import scala.collection.mutable
 
-import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.{SessionCatalog, UnresolvedCatalogRelation}
@@ -52,7 +51,7 @@ import org.apache.spark.sql.types._
  */
 case class ResolveDefaultColumns(
   analyzer: Analyzer,
-  catalog: SessionCatalog) extends Rule[LogicalPlan] with Logging {
+  catalog: SessionCatalog) extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = {
     plan.resolveOperatorsWithPruning(
       (_ => SQLConf.get.enableDefaultColumns), ruleId) {
@@ -147,13 +146,11 @@ case class ResolveDefaultColumns(
   private def resolveDefaultColumnsForUpdate(u: UpdateTable): LogicalPlan = {
     // Return a more descriptive error message if the user tries to use a DEFAULT column reference
     // inside an UPDATE command's WHERE clause; this is not allowed.
-    logWarning(s"@@@ a $u")
     u.condition.map { c: Expression =>
       if (c.find(isExplicitDefaultColumn).isDefined) {
         throw new AnalysisException(DEFAULTS_IN_UPDATE_WHERE_CLAUSE)
       }
     }
-    logWarning(s"@@@ a11 ${u.table}")
     val schema: StructType = getSchemaForTargetTable(u.table).getOrElse(return u)
     val defaultExpressions: Seq[Expression] = schema.fields.map {
       case f if f.metadata.contains(CURRENT_DEFAULT_COLUMN_METADATA_KEY) =>
@@ -161,7 +158,6 @@ case class ResolveDefaultColumns(
       case _ => Literal(null)
     }
     // Create a map from each column name in the target table to its DEFAULT expression.
-    logWarning(s"@@@ a1 $schema")
     val columnNamesToExpressions: Map[String, Expression] =
       schema.fields.zip(defaultExpressions).map {
         case (field, expr) =>
@@ -172,10 +168,8 @@ case class ResolveDefaultColumns(
     val newAssignments: Seq[Assignment] =
     replaceExplicitDefaultValuesForUpdateAssignments(u.assignments, columnNamesToExpressions)
       .getOrElse {
-        logWarning(s"@@@ y $u")
         return u
       }
-    logWarning(s"@@@ z $u")
     u.copy(assignments = newAssignments)
   }
 
@@ -411,8 +405,8 @@ case class ResolveDefaultColumns(
   private def getSchemaForTargetTable(table: LogicalPlan): Option[StructType] = {
     // Check if the target table is already resolved. If so, return the computed schema.
     table match {
-      case r: NamedRelation => return Some(r.schema)
-      case SubqueryAlias(_, child: NamedRelation) => return Some(child.schema)
+      case r: NamedRelation if r.schema.fields.nonEmpty => return Some(r.schema)
+      case SubqueryAlias(_, r: NamedRelation) if r.schema.fields.nonEmpty => return Some (r.schema)
       case _ =>
     }
     // Lookup the relation from the catalog by name. This either succeeds or returns some "not
@@ -442,7 +436,6 @@ case class ResolveDefaultColumns(
   private def replaceExplicitDefaultValuesForUpdateAssignments(
       assignments: Seq[Assignment],
       columnNamesToExpressions: Map[String, Expression]): Option[Seq[Assignment]] = {
-    logWarning(s"@@@ aa $assignments")
     var replaced = false
     val newAssignments: Seq[Assignment] =
       for (assignment <- assignments) yield {
@@ -452,12 +445,10 @@ case class ResolveDefaultColumns(
           case _ => ""
         }
         val adjusted = destColName.map(c => if (SQLConf.get.caseSensitiveAnalysis) c.toLower else c)
-        logWarning(s"@@@ c $columnNamesToExpressions")
         val newValue = columnNamesToExpressions.get(adjusted).map { defaultExpr =>
           replaceExplicitDefaultReferenceInExpression(
             assignment.value, defaultExpr, DEFAULTS_IN_COMPLEX_EXPRESSIONS_IN_UPDATE_SET_CLAUSE,
             false).map { e =>
-            logWarning(s"@@@ d $e")
             replaced = true
             e
           }.getOrElse(assignment.value)
@@ -465,10 +456,8 @@ case class ResolveDefaultColumns(
         assignment.copy(value = newValue)
       }
     if (replaced) {
-      logWarning(s"@@@ zz1 $assignments")
       Some(newAssignments)
     } else {
-      logWarning(s"@@@ zz2 $assignments")
       None
     }
   }
