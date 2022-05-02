@@ -2332,7 +2332,7 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
     ).foreach { schema =>
       withTempDir { dir =>
         val colName = "col"
-        val msg = "can only contain StringType as a key type for a MapType"
+        val msg = "can only contain STRING as a key type for a MAP"
 
         val thrown1 = intercept[AnalysisException](
           spark.readStream.schema(StructType(Seq(StructField(colName, schema))))
