@@ -220,6 +220,7 @@ class QueryExecutionErrorsSuite
       checkErrorClass(
         exception = e,
         errorClass = "INCONSISTENT_BEHAVIOR_CROSS_VERSION",
+        errorSubClass = Some("READ_ANCIENT_DATETIME"),
         msg =
           "You may get a different result due to the upgrading to Spark >= 3.0: " +
           s"""
@@ -248,6 +249,7 @@ class QueryExecutionErrorsSuite
         checkErrorClass(
           exception = e,
           errorClass = "INCONSISTENT_BEHAVIOR_CROSS_VERSION",
+          errorSubClass = Some("WRITE_ANCIENT_DATETIME"),
           msg =
             "You may get a different result due to the upgrading to Spark >= 3.0: " +
             s"""
@@ -258,7 +260,7 @@ class QueryExecutionErrorsSuite
               |details in SPARK-31404. You can set $config to 'LEGACY' to rebase the
               |datetime values w.r.t. the calendar difference during writing, to get maximum
               |interoperability. Or set $config to 'CORRECTED' to write the datetime
-              |values as it is, if you are 100% sure that the written files will only be read by
+              |values as it is, if you are sure that the written files will only be read by
               |Spark 3.0+ or other systems that use Proleptic Gregorian calendar.
               |""".stripMargin)
       }
