@@ -48,19 +48,18 @@ class ShowPartitionsParserSuite extends AnalysisTest with QueryErrorsSuiteBase {
   }
 
   test("empty values in non-optional partition specs") {
-    val e = intercept[ParseException] {
-      new SparkSqlParser().parsePlan(
-        "SHOW PARTITIONS dbx.tab1 PARTITION (a='1', b)")
-    }
-    val msg =
-      """Invalid SQL syntax: Partition key 'b' must set value (can't be empty).(line 1, pos 25)
-        |
-        |== SQL ==
-        |SHOW PARTITIONS dbx.tab1 PARTITION (a='1', b)
-        |-------------------------^^^
-        |""".stripMargin
-    assert(e.getMessage.contains(msg))
-    assert(e.getErrorClass === "INVALID_SQL_SYNTAX")
-    assert(e.getSqlState === "42000")
+    checkParsingError(
+      exception = intercept[ParseException] {
+        new SparkSqlParser().parsePlan("SHOW PARTITIONS dbx.tab1 PARTITION (a='1', b)")
+      },
+      errorClass = "INVALID_SQL_SYNTAX",
+      sqlState = "42000",
+      message =
+        """Invalid SQL syntax: Partition key 'b' must set value (can't be empty).(line 1, pos 25)
+          |
+          |== SQL ==
+          |SHOW PARTITIONS dbx.tab1 PARTITION (a='1', b)
+          |-------------------------^^^
+          |""".stripMargin)
   }
 }
