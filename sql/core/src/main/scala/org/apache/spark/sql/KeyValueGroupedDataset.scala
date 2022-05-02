@@ -21,7 +21,7 @@ import scala.collection.JavaConverters._
 
 import org.apache.spark.api.java.function._
 import org.apache.spark.sql.catalyst.encoders.{encoderFor, ExpressionEncoder}
-import org.apache.spark.sql.catalyst.expressions.{Alias, Ascending, Attribute, CreateStruct, Expression, SortOrder}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Ascending, Attribute, CreateStruct, Expression, SortDirection, SortOrder}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.expressions.ReduceAggregator
@@ -191,7 +191,8 @@ class KeyValueGroupedDataset[K, V] private[sql](
    * @since 3.4.0
    */
   def flatMapSortedGroups[S: Encoder, U : Encoder]
-      (s: V => S)(f: (K, Iterator[V]) => TraversableOnce[U]): Dataset[U] = {
+      (s: V => S, direction: SortDirection = Ascending)
+      (f: (K, Iterator[V]) => TraversableOnce[U]): Dataset[U] = {
     val withSortKey = AppendColumns(s, dataAttributes, logicalPlan)
     val executed = sparkSession.sessionState.executePlan(withSortKey)
 
@@ -201,7 +202,7 @@ class KeyValueGroupedDataset[K, V] private[sql](
         f,
         groupingAttributes,
         dataAttributes,
-        withSortKey.newColumns.map(SortOrder(_, Ascending)),
+        withSortKey.newColumns.map(SortOrder(_, direction)),
         executed.analyzed
       )
     )
