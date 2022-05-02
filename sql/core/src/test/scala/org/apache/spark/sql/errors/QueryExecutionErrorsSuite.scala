@@ -17,12 +17,15 @@
 
 package org.apache.spark.sql.errors
 
+import java.io.IOException
 import java.util.Locale
 
+import org.apache.hadoop.fs.{LocalFileSystem, Path}
+import org.apache.hadoop.fs.permission.FsPermission
 import test.org.apache.spark.sql.connector.JavaSimpleWritableDataSource
 
-import org.apache.spark.{SparkArithmeticException, SparkException, SparkIllegalStateException, SparkRuntimeException, SparkUnsupportedOperationException, SparkUpgradeException}
-import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest}
+import org.apache.spark.{SparkArithmeticException, SparkException, SparkIllegalArgumentException, SparkIllegalStateException, SparkRuntimeException, SparkSecurityException, SparkUnsupportedOperationException, SparkUpgradeException}
+import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, SaveMode}
 import org.apache.spark.sql.catalyst.util.BadRecordException
 import org.apache.spark.sql.connector.SimpleWritableDataSource
 import org.apache.spark.sql.execution.QueryExecutionException
@@ -33,6 +36,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy.EXCEPTION
 import org.apache.spark.sql.types.{DecimalType, StructType, TimestampType}
 import org.apache.spark.sql.util.ArrowUtils
+import org.apache.spark.util.Utils
 
 class QueryExecutionErrorsSuite
   extends QueryTest
@@ -429,5 +433,60 @@ class QueryExecutionErrorsSuite
       sqlState = Some("42000"),
       matchMsg = true
     )
+  }
+
+  test("UNSUPPORTED_SAVE_MODE: unsupported null saveMode whether the path exists or not") {
+    withTempPath { path =>
+      val e1 = intercept[SparkIllegalArgumentException] {
+        val saveMode: SaveMode = null
+        Seq(1, 2).toDS().write.mode(saveMode).parquet(path.getAbsolutePath)
+      }
+      checkErrorClass(
+        exception = e1,
+        errorClass = "UNSUPPORTED_SAVE_MODE",
+        errorSubClass = Some("NON_EXISTENT_PATH"),
+        msg = "The save mode NULL is not supported for: a not existent path.")
+
+      Utils.createDirectory(path)
+
+      val e2 = intercept[SparkIllegalArgumentException] {
+        val saveMode: SaveMode = null
+        Seq(1, 2).toDS().write.mode(saveMode).parquet(path.getAbsolutePath)
+      }
+      checkErrorClass(
+        exception = e2,
+        errorClass = "UNSUPPORTED_SAVE_MODE",
+        errorSubClass = Some("EXISTENT_PATH"),
+        msg = "The save mode NULL is not supported for: an existent path.")
+    }
+  }
+
+  test("FAILED_SET_ORIGINAL_PERMISSION_BACK: can't set permission") {
+      withTable("t") {
+        withSQLConf(
+          "fs.file.impl" -> classOf[FakeFileSystemSetPermission].getName,
+          "fs.file.impl.disable.cache" -> "true") {
+          sql("CREATE TABLE t(c String) USING parquet")
+
+          val e = intercept[AnalysisException] {
+            sql("TRUNCATE TABLE t")
+          }
+          assert(e.getCause.isInstanceOf[SparkSecurityException])
+
+          checkErrorClass(
+            exception = e.getCause.asInstanceOf[SparkSecurityException],
+            errorClass = "FAILED_SET_ORIGINAL_PERMISSION_BACK",
+            msg = "Failed to set original permission .+ " +
+              "back to the created path: .+\\. Exception: .+",
+            matchMsg = true)
+      }
+    }
+  }
+}
+
+class FakeFileSystemSetPermission extends LocalFileSystem {
+
+  override def setPermission(src: Path, permission: FsPermission): Unit = {
+    throw new IOException(s"fake fileSystem failed to set permission: $permission")
   }
 }
