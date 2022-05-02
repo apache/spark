@@ -20,7 +20,7 @@ import random
 import time
 import tempfile
 import unittest
-from pickle import PicklingError
+
 
 from pyspark import SparkConf, SparkContext, Broadcast
 from pyspark.java_gateway import launch_gateway
