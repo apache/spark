@@ -47,7 +47,7 @@ class QueryExecutionAnsiErrorsSuite extends QueryTest with QueryErrorsSuiteBase 
       },
       errorClass = "DIVIDE_BY_ZERO",
       msg =
-        "divide by zero. To return NULL instead, use 'try_divide'. If necessary set " +
+        "Division by zero. To return NULL instead, use `try_divide`. If necessary set " +
         s"$ansiConf to false (except for ANSI interval type) to bypass this error." +
         """
           |== SQL(line 1, position 7) ==
