@@ -50,7 +50,7 @@ class ExecutorPodsWatchSnapshotSource(
   def start(applicationId: String): Unit = {
     if (enablePolling) {
       require(watchConnection == null, "Cannot start the watcher twice.")
-      logDebug(s"Starting watch for pods with labels $SPARK_APP_ID_LABEL=$applicationId," +
+      logDebug(s"Starting to watch for pods with labels $SPARK_APP_ID_LABEL=$applicationId," +
         s" $SPARK_ROLE_LABEL=$SPARK_POD_EXECUTOR_ROLE.")
       watchConnection = kubernetesClient.pods()
         .withLabel(SPARK_APP_ID_LABEL, applicationId)
