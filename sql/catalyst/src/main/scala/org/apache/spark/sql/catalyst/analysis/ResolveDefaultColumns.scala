@@ -384,6 +384,8 @@ case class ResolveDefaultColumns(
     lookup match {
       case SubqueryAlias(_, r: UnresolvedCatalogRelation) =>
         Some(r.tableMeta.schema)
+      case SubqueryAlias(_, r: View) if r.isTempView =>
+        Some(r.schema)
       case _ => None
     }
   }
