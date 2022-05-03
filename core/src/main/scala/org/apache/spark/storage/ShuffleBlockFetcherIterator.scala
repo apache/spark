@@ -763,7 +763,7 @@ final class ShuffleBlockFetcherIterator(
               shuffleMetrics.incLocalBlocksFetched(1)
               shuffleMetrics.incLocalBytesRead(buf.size)
             } else {
-              numBlocksInFlightPerAddress(address) = numBlocksInFlightPerAddress(address) - 1
+              numBlocksInFlightPerAddress(address) -= 1
               shuffleMetrics.incRemoteBytesRead(buf.size)
               if (buf.isInstanceOf[FileSegmentManagedBuffer]) {
                 shuffleMetrics.incRemoteBytesReadToDisk(buf.size)
@@ -905,8 +905,7 @@ final class ShuffleBlockFetcherIterator(
 
         case DeferFetchRequestResult(request) =>
           val address = request.address
-          numBlocksInFlightPerAddress(address) =
-            numBlocksInFlightPerAddress(address) - request.blocks.size
+          numBlocksInFlightPerAddress(address) -= request.blocks.size
           bytesInFlight -= request.size
           reqsInFlight -= 1
           logDebug("Number of requests in flight " + reqsInFlight)
@@ -924,7 +923,7 @@ final class ShuffleBlockFetcherIterator(
           // 3. Failure to get the push-merged-local directories from the external shuffle service.
           //    In this case, the blockId is ShuffleBlockId.
           if (pushBasedFetchHelper.isRemotePushMergedBlockAddress(address)) {
-            numBlocksInFlightPerAddress(address) = numBlocksInFlightPerAddress(address) - 1
+            numBlocksInFlightPerAddress(address) -= 1
             bytesInFlight -= size
           }
           if (isNetworkReqDone) {
@@ -975,7 +974,7 @@ final class ShuffleBlockFetcherIterator(
           // The original meta request is processed so we decrease numBlocksToFetch and
           // numBlocksInFlightPerAddress by 1. We will collect new shuffle chunks request and the
           // count of this is added to numBlocksToFetch in collectFetchReqsFromMergedBlocks.
-          numBlocksInFlightPerAddress(address) = numBlocksInFlightPerAddress(address) - 1
+          numBlocksInFlightPerAddress(address) -= 1
           numBlocksToFetch -= 1
           val blocksToFetch = pushBasedFetchHelper.createChunkBlockInfosFromMetaResponse(
             shuffleId, shuffleMergeId, reduceId, blockSize, bitmaps)
@@ -988,7 +987,7 @@ final class ShuffleBlockFetcherIterator(
         case PushMergedRemoteMetaFailedFetchResult(
           shuffleId, shuffleMergeId, reduceId, address) =>
           // The original meta request failed so we decrease numBlocksInFlightPerAddress by 1.
-          numBlocksInFlightPerAddress(address) = numBlocksInFlightPerAddress(address) - 1
+          numBlocksInFlightPerAddress(address) -= 1
           // If we fail to fetch the meta of a push-merged block, we fall back to fetching the
           // original blocks.
           pushBasedFetchHelper.initiateFallbackFetchForPushMergedBlock(

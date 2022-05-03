@@ -102,47 +102,51 @@ class ParquetInteroperabilitySuite extends ParquetCompatibilityTest with SharedS
     // the data can be correctly read back.
 
     Seq(false, true).foreach { legacyMode =>
-      withSQLConf(SQLConf.PARQUET_WRITE_LEGACY_FORMAT.key -> legacyMode.toString) {
-        withTempPath { tableDir =>
-          val schema1 = StructType(
-            StructField("col-0", ArrayType(
-              StructType(
-                StructField("col-0", IntegerType, true) ::
-                Nil
-              ),
-              containsNull = false // allows to create 2-level Parquet LIST type in legacy mode
-            )) ::
-            Nil
-          )
-          val row1 = Row(Seq(Row(1)))
-          val df1 = spark.createDataFrame(spark.sparkContext.parallelize(row1 :: Nil, 1), schema1)
-          df1.write.parquet(tableDir.getAbsolutePath)
-
-          val schema2 = StructType(
-            StructField("col-0", ArrayType(
-              StructType(
-                StructField("col-0", IntegerType, true) ::
-                StructField("col-1", IntegerType, true) :: // additional field
-                Nil
-              ),
-              containsNull = false
-            )) ::
-            Nil
-          )
-          val row2 = Row(Seq(Row(1, 2)))
-          val df2 = spark.createDataFrame(spark.sparkContext.parallelize(row2 :: Nil, 1), schema2)
-          df2.write.mode("append").parquet(tableDir.getAbsolutePath)
-
-          // Reading of data should succeed and should not fail with
-          // java.lang.ClassCastException: optional int32 col-0 is not a group
-          withAllParquetReaders {
-            checkAnswer(
-              spark.read.schema(schema2).parquet(tableDir.getAbsolutePath),
-              Seq(
-                Row(Seq(Row(1, null))),
-                Row(Seq(Row(1, 2)))
-              )
+      Seq(false, true).foreach { offheapEnabled =>
+        withSQLConf(
+            SQLConf.PARQUET_WRITE_LEGACY_FORMAT.key -> legacyMode.toString,
+            SQLConf.COLUMN_VECTOR_OFFHEAP_ENABLED.key -> offheapEnabled.toString) {
+          withTempPath { tableDir =>
+            val schema1 = StructType(
+              StructField("col-0", ArrayType(
+                StructType(
+                  StructField("col-0", IntegerType, true) ::
+                  Nil
+                ),
+                containsNull = false // allows to create 2-level Parquet LIST type in legacy mode
+              )) ::
+              Nil
             )
+            val row1 = Row(Seq(Row(1)))
+            val df1 = spark.createDataFrame(spark.sparkContext.parallelize(row1 :: Nil, 1), schema1)
+            df1.write.parquet(tableDir.getAbsolutePath)
+
+            val schema2 = StructType(
+              StructField("col-0", ArrayType(
+                StructType(
+                  StructField("col-0", IntegerType, true) ::
+                  StructField("col-1", IntegerType, true) :: // additional field
+                  Nil
+                ),
+                containsNull = false
+              )) ::
+              Nil
+            )
+            val row2 = Row(Seq(Row(1, 2)))
+            val df2 = spark.createDataFrame(spark.sparkContext.parallelize(row2 :: Nil, 1), schema2)
+            df2.write.mode("append").parquet(tableDir.getAbsolutePath)
+
+            // Reading of data should succeed and should not fail with
+            // java.lang.ClassCastException: optional int32 col-0 is not a group
+            withAllParquetReaders {
+              checkAnswer(
+                spark.read.schema(schema2).parquet(tableDir.getAbsolutePath),
+                Seq(
+                  Row(Seq(Row(1, null))),
+                  Row(Seq(Row(1, 2)))
+                )
+              )
+            }
           }
         }
       }

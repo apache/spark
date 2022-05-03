@@ -264,13 +264,13 @@ private[deploy] class Worker(
 
   private def addResourcesUsed(deltaInfo: Map[String, ResourceInformation]): Unit = {
     deltaInfo.foreach { case (rName, rInfo) =>
-      resourcesUsed(rName) = resourcesUsed(rName) + rInfo
+      resourcesUsed(rName) += rInfo
     }
   }
 
   private def removeResourcesUsed(deltaInfo: Map[String, ResourceInformation]): Unit = {
     deltaInfo.foreach { case (rName, rInfo) =>
-      resourcesUsed(rName) = resourcesUsed(rName) - rInfo
+      resourcesUsed(rName) -= rInfo
     }
   }
 

@@ -273,6 +273,7 @@ abstract class BaseScriptTransformationWriterThread extends Thread with Logging 
   def taskContext: TaskContext
   def conf: Configuration
 
+  setName(s"Thread-${this.getClass.getSimpleName}-Feed")
   setDaemon(true)
 
   @volatile protected var _exception: Throwable = null
@@ -328,7 +329,7 @@ abstract class BaseScriptTransformationWriterThread extends Thread with Logging 
         // Javadoc this call will not throw an exception:
         _exception = t
         proc.destroy()
-        logError("Thread-ScriptTransformation-Feed exit cause by: ", t)
+        logError(s"Thread-${this.getClass.getSimpleName}-Feed exit cause by: ", t)
     } finally {
       try {
         Utils.tryLogNonFatalError(outputStream.close())
