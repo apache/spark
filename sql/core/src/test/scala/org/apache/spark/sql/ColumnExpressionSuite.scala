@@ -2989,19 +2989,15 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
     // scalastyle:on
   }
 
-  test("divide period by integral (wholestage codegen off") {
-    withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false") {
-      val df = Seq(((Period.ofDays(4)), 2)).toDF("pd", "num")
-      checkAnswer(df.select($"pd" / $"num"),
-        Seq((Period.ofDays(2))).toDF)
-    }
+  test("divide period by integral expression") {
+    val df = Seq(((Period.ofDays(10)), 2)).toDF("pd", "num")
+    checkAnswer(df.select($"pd" / ($"num" + 3)),
+      Seq((Period.ofDays(2))).toDF)
   }
 
-  test("divide duration by integral (wholestage codegen off") {
-    withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false") {
-      val df = Seq(((Duration.ofDays(4)), 2)).toDF("dd", "num")
-      checkAnswer(df.select($"dd" / $"num"),
-        Seq((Duration.ofDays(2))).toDF)
-    }
+  test("divide duration by integral expression") {
+    val df = Seq(((Duration.ofDays(10)), 2)).toDF("dd", "num")
+    checkAnswer(df.select($"dd" / ($"num" + 3)),
+      Seq((Duration.ofDays(2))).toDF)
   }
 }
