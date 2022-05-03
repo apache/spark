@@ -631,7 +631,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
 
   private def cleanAppData(appId: String, attemptId: Option[String], logPath: String): Unit = {
     // SPARK-39083 prevent race condition between update and clean app data
-    listing.synchronized {
+    synchronized {
       try {
         val app = load(appId)
         val (attempt, others) = app.attempts.partition(_.info.attemptId == attemptId)
@@ -643,10 +643,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
             // in progress application. Just return that the app should be left alone.
             false
           } else {
-            val maybeUI = synchronized {
-              activeUIs.remove(appId -> attemptId)
-            }
-
+            val maybeUI = activeUIs.remove(appId -> attemptId)
             maybeUI.foreach { ui =>
               ui.invalidate()
               ui.ui.store.close()
