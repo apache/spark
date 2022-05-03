@@ -41,10 +41,9 @@ import org.apache.spark.sql.execution.datasources.{CreateTable => CreateTableV1}
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.internal.{HiveSerDe, SQLConf}
 import org.apache.spark.sql.sources.SimpleScanSource
-import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{BooleanType, CharType, DoubleType, IntegerType, LongType, MetadataBuilder, StringType, StructField, StructType}
 
-class PlanResolutionSuite extends AnalysisTest with SharedSparkSession {
+class PlanResolutionSuite extends AnalysisTest {
   import CatalystSqlParser._
 
   private val v1Format = classOf[SimpleScanSource].getName
@@ -89,11 +88,11 @@ class PlanResolutionSuite extends AnalysisTest with SharedSparkSession {
     val t = mock(classOf[Table])
     when(t.schema()).thenReturn(
       new StructType()
-        .add("i", BooleanType, true,
+        .add("col_i", BooleanType, true,
           new MetadataBuilder()
             .putString(ResolveDefaultColumns.CURRENT_DEFAULT_COLUMN_METADATA_KEY, "true")
             .putString(ResolveDefaultColumns.EXISTS_DEFAULT_COLUMN_METADATA_KEY, "true").build())
-        .add("s", IntegerType, true,
+        .add("col_s", IntegerType, true,
           new MetadataBuilder()
             .putString(ResolveDefaultColumns.CURRENT_DEFAULT_COLUMN_METADATA_KEY, "42")
             .putString(ResolveDefaultColumns.EXISTS_DEFAULT_COLUMN_METADATA_KEY, "42").build()))
@@ -1293,7 +1292,7 @@ class PlanResolutionSuite extends AnalysisTest with SharedSparkSession {
     }
   }
 
-  test("MERGE INTO TABLE") {
+  test("MERGE INTO TABLE - primary") {
     def checkResolution(
         target: LogicalPlan,
         source: LogicalPlan,
@@ -1340,6 +1339,7 @@ class PlanResolutionSuite extends AnalysisTest with SharedSparkSession {
 
     Seq(("v2Table", "v2Table1"), ("testcat.tab", "testcat.tab1")).foreach {
       case(target, source) =>
+        /*
         // basic
         val sql1 =
           s"""
@@ -1491,6 +1491,65 @@ class PlanResolutionSuite extends AnalysisTest with SharedSparkSession {
             assert(source.output.map(_.name) == Seq("s", "i"))
             checkResolution(target, source, mergeCondition, Some(dl), Some(ul), Some(il),
               updateAssigns, insertAssigns)
+
+          case other => fail("Expect MergeIntoTable, but got:\n" + other.treeString)
+        }
+         */
+
+        // default columns (implicit)
+        val sql6 =
+          s"""
+             |MERGE INTO $target AS target
+             |USING $source AS source
+             |ON target.i = source.i
+             |WHEN MATCHED AND (target.s='delete') THEN DELETE
+             |WHEN MATCHED AND (target.s='update')
+             |  THEN UPDATE SET target.s = DEFAULT
+             |WHEN NOT MATCHED AND (source.s='insert')
+             |  THEN INSERT (target.i, target.s) values (DEFAULT, DEFAULT)
+           """.stripMargin
+        parseAndResolve(sql6) match {
+          case MergeIntoTable(
+              SubqueryAlias(AliasIdentifier("target", Seq()), AsDataSourceV2Relation(target)),
+              SubqueryAlias(AliasIdentifier("source", Seq()), source: Project),
+              mergeCondition,
+              Seq(DeleteAction(Some(EqualTo(dl: AttributeReference, StringLiteral("delete")))),
+                UpdateAction(Some(EqualTo(ul: AttributeReference, StringLiteral("update"))),
+                  updateAssigns)),
+              Seq(InsertAction(Some(EqualTo(il: AttributeReference, StringLiteral("insert"))),
+                insertAssigns))) =>
+              assert(source.output.map(_.name) == Seq("s", "i"))
+              checkResolution(target, source, mergeCondition, Some(dl), Some(ul), Some(il),
+                updateAssigns, insertAssigns)
+
+          case other => fail("Expect MergeIntoTable, but got:\n" + other.treeString)
+        }
+
+        // default columns (explicit)
+        val sql7 =
+          s"""
+             |MERGE INTO defaultvalues AS target
+             |USING $source AS source
+             |ON target.i = source.i
+             |WHEN MATCHED AND (target.s='delete') THEN DELETE
+             |WHEN MATCHED AND (target.s='update')
+             |  THEN UPDATE SET target.s = DEFAULT
+             |WHEN NOT MATCHED AND (source.s='insert')
+             |  THEN INSERT (target.i, target.s) values (DEFAULT, DEFAULT)
+           """.stripMargin
+        parseAndResolve(sql7) match {
+          case MergeIntoTable(
+          SubqueryAlias(AliasIdentifier("target", Seq()), AsDataSourceV2Relation(target)),
+          SubqueryAlias(AliasIdentifier("source", Seq()), source: Project),
+          mergeCondition,
+          Seq(DeleteAction(Some(EqualTo(dl: AttributeReference, StringLiteral("delete")))),
+            UpdateAction(Some(EqualTo(ul: AttributeReference, StringLiteral("update"))),
+              updateAssigns)),
+          Seq(InsertAction(Some(EqualTo(il: AttributeReference, StringLiteral("insert"))),
+            insertAssigns))) =>
+          assert(source.output.map(_.name) == Seq("s", "i"))
+          checkResolution(target, source, mergeCondition, Some(dl), Some(ul), Some(il),
+            updateAssigns, insertAssigns)
 
           case other => fail("Expect MergeIntoTable, but got:\n" + other.treeString)
         }

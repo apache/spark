@@ -458,10 +458,9 @@ case class ResolveDefaultColumns(
    */
   private def getSchemaForTargetTable(table: LogicalPlan): Option[StructType] = {
     // Check if the target table is already resolved. If so, return the computed schema.
-    table match {
-      case r: NamedRelation if r.schema.fields.nonEmpty => return Some(r.schema)
-      case SubqueryAlias(_, r: NamedRelation) if r.schema.fields.nonEmpty => return Some (r.schema)
-      case _ =>
+    val source = table.collectFirst { case r: NamedRelation => r }
+    source.map { r =>
+      return Some(r.schema)
     }
     // Lookup the relation from the catalog by name. This either succeeds or returns some "not
     // found" error. In the latter cases, return out of this rule without changing anything and let

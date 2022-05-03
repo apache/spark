@@ -287,6 +287,7 @@ class Analyzer(override val catalogManager: CatalogManager)
       ResolveFieldNameAndPosition ::
       AddMetadataColumns ::
       DeduplicateRelations ::
+      ResolveDefaultColumns(this, v1SessionCatalog) ::
       ResolveReferences ::
       ResolveExpressionsWithNamePlaceholders ::
       ResolveDeserializer ::
@@ -312,7 +313,6 @@ class Analyzer(override val catalogManager: CatalogManager)
       ResolveAggregateFunctions ::
       TimeWindowing ::
       SessionWindowing ::
-      ResolveDefaultColumns(this, v1SessionCatalog) ::
       ResolveInlineTables ::
       ResolveLambdaVariables ::
       ResolveTimeZone ::
