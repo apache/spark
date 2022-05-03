@@ -19,6 +19,7 @@ package org.apache.spark.sql.api.python
 
 import java.io.InputStream
 import java.nio.channels.Channels
+import java.util.Locale
 
 import net.razorvine.pickle.Pickler
 
@@ -34,7 +35,6 @@ import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.execution.{ExplainMode, QueryExecution}
 import org.apache.spark.sql.execution.arrow.ArrowConverters
 import org.apache.spark.sql.execution.python.EvaluatePython
-import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.DataType
 
@@ -103,240 +103,24 @@ private[sql] object PythonSQLUtils extends Logging {
 
   def nullIndex(e: Column): Column = Column(NullIndex(e.expr))
 
-  // scalastyle:off line.size.limit
-  /**
-   * Downsample timestamps into bins
-   * @param origin the origin point
-   * @param offset length of a bin interval
-   * @param unit unit of a bin interval, refer to
-   *             https://pandas.pydata.org/pandas-docs/stable/user_guide/timeseries.html#offset-aliases
-   *             for details
-   * @param leftClosed whether the intervals are left-closed right-open, or left-open right-closed.
-   * @param leftLabel whether to apply the left bin edge to label bins.
-   * @param ts input timestamps.
-   */
-  // scalastyle:on line.size.limit
-  def binTimeStamp(
-      origin: Column,
-      offset: Int,
-      unit: String,
-      leftClosed: Boolean,
-      leftLabel: Boolean,
-      ts: Column): Column = {
-    assert(offset > 0)
+  def makeInterval(unit: String, e: Column): Column = {
+    val zero = MakeInterval(years = Literal(0), months = Literal(0), weeks = Literal(0),
+      days = Literal(0), hours = Literal(0), mins = Literal(0), secs = Literal(0))
 
-    unit match {
-      case "Y" => // year end frequency
-        val diff = year(ts) - year(origin)
-        val mod = if (offset == 1) lit(0) else pmod(diff, lit(offset))
-
-        // let origin=2018-12-31, offset=3, then edges are 2018-12-31, 2021-12-31,...
-        val cond0 = mod === 0 && month(ts) === 12 && dayofmonth(ts) === 31
-
-        // label at edges
-        val y0 = (leftClosed, leftLabel) match {
-          case (true, true) => year(ts)
-          case (true, false) => year(ts) + offset
-          case (false, true) => year(ts) - offset
-          case (false, false) => year(ts)
-        }
-
-        // label at internal points
-        val y1 = if (leftLabel) {
-          when(mod === 0, year(ts) - offset)
-            .otherwise(year(ts) - mod)
-        } else {
-          when(mod === 0, year(ts))
-            .otherwise(year(ts) - (mod - offset))
-        }
-
-        to_timestamp(make_date(when(cond0, y0).otherwise(y1), lit(12), lit(31)))
-
-
-      case "M" => // month end frequency
-        val truncated = date_trunc("MONTH", ts)
-        val diff = (year(ts) - year(origin)) * 12 + month(ts) - month(origin)
-        val mod = if (offset == 1) lit(0) else pmod(diff, lit(offset))
-
-        // let origin=2018-12-31, offset=3, then edges are 2018-12-31, 2019-03-31,...
-        val cond0 = mod === 0 && dayofmonth(ts) === dayofmonth(last_day(ts))
-
-        def createMonthInterval(m: Column) = Column(
-          MakeInterval(years = Literal(0), months = m.expr, weeks = Literal(0),
-            days = Literal(0), hours = Literal(0), mins = Literal(0), secs = Literal(0))
-        )
-
-        // label at edges
-        val m0 = (leftClosed, leftLabel) match {
-          case (true, true) => truncated
-          case (true, false) => truncated + createMonthInterval(lit(offset))
-          case (false, true) => truncated - createMonthInterval(lit(offset))
-          case (false, false) => truncated
-        }
-
-        // label at internal points
-        val m1 = if (leftLabel) {
-          when(mod === 0, truncated - createMonthInterval(lit(offset)))
-            .otherwise(truncated - createMonthInterval(mod))
-        } else {
-          when(mod === 0, truncated)
-            .otherwise(truncated - createMonthInterval(mod - offset))
-        }
-
-        to_timestamp(last_day(when(cond0, m0).otherwise(m1)))
-
-
-      case "D" if offset == 1 => // calendar day frequency
-        // Different from cases with offset>1, here takes hour/minute/second into account!
-        val cond0 = hour(ts) === 0 && minute(ts) === 0 && second(ts) === 0
-
-        (leftClosed, leftLabel) match {
-          case (true, true) =>
-            date_trunc("DAY", ts)
-          case (true, false) =>
-            date_trunc("DAY", date_add(ts, 1))
-          case (false, true) =>
-            when(cond0, date_trunc("DAY", date_sub(ts, 1)))
-              .otherwise(date_trunc("DAY", ts))
-          case (false, false) =>
-            when(cond0, date_trunc("DAY", ts))
-              .otherwise(date_trunc("DAY", date_add(ts, 1)))
-        }
-
-
-      case "D" => // calendar day frequency
-        val diff = datediff(end = ts, start = origin)
-        val mod = pmod(diff, lit(offset))
-
-        // let origin=2018-12-31, offset=3, then edges are 2019-01-03, 2019-01-06,...
-        // Different from cases with offset=1, here do NOT take hour/minute/second into account!
-        val cond0 = mod === 0
-
-        // label at edges
-        val d0 = (leftClosed, leftLabel) match {
-          case (true, true) => ts
-          case (true, false) => date_add(ts, offset)
-          case (false, true) => date_sub(ts, offset)
-          case (false, false) => ts
-        }
-
-        // label at internal points
-        val d1 = if (leftLabel) {
-          date_sub(ts, mod)
-        } else {
-          date_sub(ts, mod - offset)
-        }
-
-        date_trunc("DAY", when(cond0, d0).otherwise(d1))
-
-
-      case "H" => // hourly frequency
-        val truncated = date_trunc("HOUR", ts)
-        val diff = Column(TimestampDiff("HOUR",
-          date_trunc("HOUR", origin).expr, truncated.expr))
-        val mod = if (offset == 1) lit(0) else pmod(diff, lit(offset))
-
-        // let origin=2018-12-31 00:00:00, offset=3
-        // then edges are 2018-12-31 00:00:00, 2018-12-31 03:00:00,...
-        val cond0 = mod === 0 && minute(ts) === 0 && second(ts) === 0
-
-        def createHourInterval(h: Column) = Column(
-          MakeInterval(years = Literal(0), months = Literal(0), weeks = Literal(0),
-            days = Literal(0), hours = h.expr, mins = Literal(0), secs = Literal(0))
-        )
-
-        // label at edges
-        val h0 = (leftClosed, leftLabel) match {
-          case (true, true) => truncated
-          case (true, false) => truncated + createHourInterval(lit(offset))
-          case (false, true) => truncated - createHourInterval(lit(offset))
-          case (false, false) => truncated
-        }
-
-        // label at internal points
-        val h1 = if (leftLabel) {
-          when(mod === 0, truncated)
-            .otherwise(truncated - createHourInterval(mod))
-        } else {
-          when(mod === 0, truncated + createHourInterval(lit(offset)))
-            .otherwise(truncated - createHourInterval(mod - offset))
-        }
-
-        when(cond0, h0).otherwise(h1)
-
-
-      case "T" => // minutely frequency
-        val truncated = date_trunc("MINUTE", ts)
-        val diff = Column(TimestampDiff("MINUTE",
-          date_trunc("MINUTE", origin).expr, truncated.expr))
-        val mod = if (offset == 1) lit(0) else pmod(diff, lit(offset))
-
-        // let origin=2018-12-31 00:00:00, offset=3
-        // then edges are 2018-12-31 00:00:00, 2018-12-31 00:03:00,...
-        val cond0 = mod === 0 && second(ts) === 0
-
-        def createMinuteInterval(m: Column) = Column(
-          MakeInterval(years = Literal(0), months = Literal(0), weeks = Literal(0),
-            days = Literal(0), hours = Literal(0), mins = m.expr, secs = Literal(0))
-        )
-
-        // label at edges
-        val m0 = (leftClosed, leftLabel) match {
-          case (true, true) => truncated
-          case (true, false) => truncated + createMinuteInterval(lit(offset))
-          case (false, true) => truncated - createMinuteInterval(lit(offset))
-          case (false, false) => truncated
-        }
-
-        // label at internal points
-        val m1 = if (leftLabel) {
-          when(mod === 0, truncated)
-            .otherwise(truncated - createMinuteInterval(mod))
-        } else {
-          when(mod === 0, truncated + createMinuteInterval(lit(offset)))
-            .otherwise(truncated - createMinuteInterval(mod - offset))
-        }
-
-        when(cond0, m0).otherwise(m1)
-
-
-      case "S" => // secondly frequency
-        val truncated = date_trunc("SECOND", ts)
-        val diff = Column(TimestampDiff("SECOND",
-          date_trunc("SECOND", origin).expr, truncated.expr))
-        val mod = if (offset == 1) lit(0) else pmod(diff, lit(offset))
-
-        // let origin=2018-12-31 00:00:00, offset=3
-        // then edges are 2018-12-31 00:00:03, 2018-12-31 00:00:06,...
-        val cond0 = mod === 0
-
-        def createSecondInterval(s: Column) = Column(
-          MakeInterval(years = Literal(0), months = Literal(0), weeks = Literal(0),
-            days = Literal(0), hours = Literal(0), mins = Literal(0), secs = s.expr)
-        )
-
-        // label at edges
-        val s0 = (leftClosed, leftLabel) match {
-          case (true, true) => truncated
-          case (true, false) => truncated + createSecondInterval(lit(offset))
-          case (false, true) => truncated - createSecondInterval(lit(offset))
-          case (false, false) => truncated
-        }
-
-        // label at internal points
-        val m1 = if (leftLabel) {
-          when(mod === 0, truncated)
-            .otherwise(truncated - createSecondInterval(mod))
-        } else {
-          when(mod === 0, truncated + createSecondInterval(lit(offset)))
-            .otherwise(truncated - createSecondInterval(mod - offset))
-        }
-
-        when(cond0, s0).otherwise(m1)
-
-      case _ =>
-        throw new IllegalArgumentException(s"Unsupported offset alias: $unit")
+    unit.toUpperCase(Locale.ROOT) match {
+      case "YEAR" => Column(zero.copy(years = e.expr))
+      case "MONTH" => Column(zero.copy(months = e.expr))
+      case "WEEK" => Column(zero.copy(weeks = e.expr))
+      case "DAY" => Column(zero.copy(days = e.expr))
+      case "HOUR" => Column(zero.copy(hours = e.expr))
+      case "MINUTE" => Column(zero.copy(mins = e.expr))
+      case "SECOND" => Column(zero.copy(secs = e.expr))
+      case _ => throw new IllegalStateException(s"Got the unexpected unit '$unit'.")
     }
+  }
+
+  def timestampDiff(unit: String, start: Column, end: Column): Column = {
+    Column(TimestampDiff(unit, start.expr, end.expr))
   }
 }
 

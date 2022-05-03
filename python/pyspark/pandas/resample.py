@@ -158,6 +158,163 @@ class Resampler(Generic[FrameLike], metaclass=ABCMeta):
     def _agg_columns_scols(self) -> List[Column]:
         return [s.spark.column for s in self._agg_columns]
 
+    def _bin_time_stamp(self, origin: pd.Timestamp, ts_scol: Column) -> Column:
+        sql_utils = SparkContext._active_spark_context._jvm.PythonSQLUtils
+        origin_scol = F.lit(origin)
+        offset = self._freq_offset
+        left_closed, right_closed = (self._closed == "left", self._closed == "right")
+        left_labeled, right_labeled = (self._label == "left", self._label == "right")
+
+        if self._freq_unit == "Y":
+            assert (
+                origin.month == 12
+                and origin.day == 31
+                and origin.hour == 0
+                and origin.minute == 0
+                and origin.second == 0
+            )
+
+            diff = F.year(ts_scol) - F.year(origin_scol)
+            mod = F.lit(0) if offset == 1 else (diff % offset)
+            edge_cond = (mod == 0) & (F.month(ts_scol) == 12) & (F.dayofmonth(ts_scol) == 31)
+
+            edge_label = F.year(ts_scol)
+            if left_closed and right_labeled:
+                edge_label += offset
+            elif right_closed and left_labeled:
+                edge_label -= offset
+
+            if left_labeled:
+                non_edge_label = F.when(mod == 0, F.year(ts_scol) - offset).otherwise(
+                    F.year(ts_scol) - mod
+                )
+            else:
+                non_edge_label = F.when(mod == 0, F.year(ts_scol)).otherwise(
+                    F.year(ts_scol) - (mod - offset)
+                )
+
+            return F.to_timestamp(
+                F.make_date(
+                    F.when(edge_cond, edge_label).otherwise(non_edge_label), F.lit(12), F.lit(31)
+                )
+            )
+
+        elif self._freq_unit == "M":
+            # TODO: check whether 'origin' is the last day of month
+            assert origin.hour == 0 and origin.minute == 0 and origin.second == 0
+
+            diff = (
+                (F.year(ts_scol) - F.year(origin_scol)) * 12
+                + F.month(ts_scol)
+                - F.month(origin_scol)
+            )
+            mod = F.lit(0) if offset == 1 else (diff % offset)
+            edge_cond = (mod == 0) & (F.dayofmonth(ts_scol) == F.dayofmonth(F.last_day(ts_scol)))
+
+            truncated_ts_scol = F.date_trunc("MONTH", ts_scol)
+            edge_label = truncated_ts_scol
+            if left_closed and right_labeled:
+                edge_label += sql_utils.makeInterval("MONTH", F.lit(offset)._jc)
+            elif right_closed and left_labeled:
+                edge_label -= sql_utils.makeInterval("MONTH", F.lit(offset)._jc)
+
+            if left_labeled:
+                non_edge_label = F.when(
+                    mod == 0,
+                    truncated_ts_scol - sql_utils.makeInterval("MONTH", F.lit(offset)._jc),
+                ).otherwise(truncated_ts_scol - sql_utils.makeInterval("MONTH", mod._jc))
+            else:
+                non_edge_label = F.when(mod == 0, truncated_ts_scol).otherwise(
+                    truncated_ts_scol - sql_utils.makeInterval("MONTH", (mod - offset)._jc)
+                )
+
+            return F.to_timestamp(
+                F.last_day(F.when(edge_cond, edge_label).otherwise(non_edge_label))
+            )
+
+        elif self._freq_unit == "D":
+            assert origin.hour == 0 and origin.minute == 0 and origin.second == 0
+
+            # NOTE: the logic to process '1D' is different from the case offset > 1!
+            if offset == 1:
+                # hour/minute/second parts are taken into account to determine edges!
+                edge_cond = (
+                    (F.hour(ts_scol) == 0) & (F.minute(ts_scol) == 0) & (F.second(ts_scol) == 0)
+                )
+
+                if left_closed and left_labeled:
+                    return F.date_trunc("DAY", ts_scol)
+                elif left_closed and right_labeled:
+                    return F.date_trunc("DAY", F.date_add(ts_scol, 1))
+                elif right_closed and left_labeled:
+                    return F.when(edge_cond, F.date_trunc("DAY", F.date_sub(ts_scol, 1))).otherwise(
+                        F.date_trunc("DAY", ts_scol)
+                    )
+                else:
+                    return F.when(edge_cond, F.date_trunc("DAY", ts_scol)).otherwise(
+                        F.date_trunc("DAY", F.date_add(ts_scol, 1))
+                    )
+
+            else:
+                diff = F.datediff(end=ts_scol, start=origin_scol)
+                mod = diff % offset
+
+                edge_cond = mod == 0
+
+                truncated_ts_scol = F.date_trunc("DAY", ts_scol)
+                edge_label = truncated_ts_scol
+                if left_closed and right_labeled:
+                    edge_label = F.date_add(truncated_ts_scol, offset)
+                elif right_closed and left_labeled:
+                    edge_label = F.date_sub(truncated_ts_scol, offset)
+
+                if left_labeled:
+                    non_edge_label = F.date_sub(truncated_ts_scol, mod)
+                else:
+                    non_edge_label = F.date_sub(truncated_ts_scol, mod - offset)
+
+                return F.when(edge_cond, edge_label).otherwise(non_edge_label)
+
+        elif self._freq_unit in ["H", "T", "S"]:
+            unit_mapping = {"H": "HOUR", "T": "MINUTE", "S": "SECOND"}
+            unit_str = unit_mapping[self._freq_unit]
+
+            truncated_ts_scol = F.date_trunc(unit_str, ts_scol)
+            diff = sql_utils.timestampDiff(unit_str, origin_scol._jc, truncated_ts_scol._jc)
+            mod = F.lit(0) if offset == 1 else (diff % F.lit(offset))
+
+            if unit_str == "HOUR":
+                assert origin.minute == 0 and origin.second == 0
+                edge_cond = (mod == 0) & (F.minute(ts_scol) == 0) & (F.second(ts_scol) == 0)
+            elif unit_str == "MINUTE":
+                assert origin.second == 0
+                edge_cond = (mod == 0) & (F.second(ts_scol) == 0)
+            else:
+                edge_cond = mod == 0
+
+            edge_label = truncated_ts_scol
+            if left_closed and right_labeled:
+                edge_label += sql_utils.makeInterval(unit_str, F.lit(offset)._jc)
+            elif right_closed and left_labeled:
+                edge_label -= sql_utils.makeInterval(unit_str, F.lit(offset)._jc)
+
+            if left_labeled:
+                non_edge_label = F.when(mod == 0, truncated_ts_scol).otherwise(
+                    truncated_ts_scol - sql_utils.makeInterval(unit_str, mod._jc)
+                )
+            else:
+                non_edge_label = F.when(
+                    mod == 0,
+                    truncated_ts_scol + sql_utils.makeInterval(unit_str, F.lit(offset)._jc),
+                ).otherwise(
+                    truncated_ts_scol - sql_utils.makeInterval(unit_str, (mod - offset)._jc)
+                )
+
+            return F.when(edge_cond, edge_label).otherwise(non_edge_label)
+
+        else:
+            raise ValueError("Got the unexpected unit {}".format(self._freq_unit))
+
     def _downsample(self, f: str) -> DataFrame:
         """
         Downsample the defined function.
@@ -216,22 +373,15 @@ class Resampler(Generic[FrameLike], metaclass=ABCMeta):
         )
         assert ts_origin <= ts_min
 
-        sql_utils = SparkContext._active_spark_context._jvm.PythonSQLUtils
         bin_col_name = "__tmp_resample_bin_col__"
         bin_col_label = verify_temp_column_name(self._psdf, bin_col_name)
         bin_col_field = InternalField(
             dtype=np.dtype("datetime64[ns]"),
             struct_field=StructField(bin_col_name, TimestampType(), True),
         )
-        bin_scol = Column(
-            sql_utils.binTimeStamp(
-                F.lit(ts_origin)._jc,
-                self._freq_offset,
-                self._freq_unit,
-                self._closed == "left",
-                self._label == "left",
-                self._resamplekey_scol._jc,
-            )
+        bin_scol = self._bin_time_stamp(
+            ts_origin,
+            self._resamplekey_scol,
         )
 
         agg_columns = [
