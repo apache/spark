@@ -23,7 +23,8 @@ import org.apache.hadoop.fs.Path
 
 import org.apache.spark.annotation.Since
 import org.apache.spark.ml.{Estimator, Model, PipelineStage}
-import org.apache.spark.ml.linalg.Vector
+import org.apache.spark.ml.feature.{Instance, InstanceBlock}
+import org.apache.spark.ml.linalg._
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.stat.Summarizer
@@ -34,7 +35,7 @@ import org.apache.spark.mllib.clustering.{KMeans => MLlibKMeans, KMeansModel => 
 import org.apache.spark.mllib.linalg.{Vector => OldVector, Vectors => OldVectors}
 import org.apache.spark.sql.{DataFrame, Dataset, Row, SparkSession}
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.types.{IntegerType, StructType}
+import org.apache.spark.sql.types._
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.VersionUtils.majorVersion
 
@@ -402,9 +403,10 @@ class KMeans @Since("1.5.0") (
       case AUTO =>
         dataset.schema($(featuresCol)).dataType match {
           case _: VectorUDT =>
+
             val Row(count: Long, numNonzeros: Vector) = dataset
               .select(Summarizer.metrics("count", "numNonZeros")
-                .summary(col($(featuresCol))).as("summary"))
+                .summary(checkNonNanVectors(col($(featuresCol)))).as("summary"))
               .select("summary.count", "summary.numNonZeros")
               .first()
             val numFeatures = numNonzeros.size
@@ -412,7 +414,7 @@ class KMeans @Since("1.5.0") (
             nnz >= BigDecimal(count) * numFeatures * 0.5
 
           case fdt: ArrayType =>
-            // when input schema is array, it should be dense
+            // when input schema is array, the dataset should be dense
             fdt.elementType match {
               case _: FloatType => true
               case _: DoubleType => true
@@ -458,24 +460,22 @@ class KMeans @Since("1.5.0") (
     val numFeatures = centers.head.size
     instr.logNumFeatures(numFeatures)
 
-    val w = if (isDefined(weightCol) && $(weightCol).nonEmpty) {
-      checkNonNegativeWeight(col($(weightCol)).cast(DoubleType))
-    } else {
-      lit(1.0)
-    }
-
     val instances = $(distanceMeasure) match {
       case EUCLIDEAN =>
-        dataset.select(DatasetUtils.columnToVector(dataset, getFeaturesCol), w).rdd
-          .map { case Row(features: Vector, weight: Double) =>
-            Instance(BLAS.dot(features, features), weight, features)
-          }
+        dataset.select(
+          checkNonNanVectors(columnToVector(dataset, $(featuresCol))),
+          checkNonNegativeWeights(get(weightCol))
+        ).rdd.map { case Row(features: Vector, weight: Double) =>
+          Instance(BLAS.dot(features, features), weight, features)
+        }
 
       case COSINE =>
-        dataset.select(DatasetUtils.columnToVector(dataset, getFeaturesCol), w).rdd
-          .map { case Row(features: Vector, weight: Double) =>
-            Instance(1.0, weight, Vectors.normalize(features, 2))
-          }
+        dataset.select(
+          checkNonNanVectors(columnToVector(dataset, $(featuresCol))),
+          checkNonNegativeWeights(get(weightCol))
+        ).rdd.map { case Row(features: Vector, weight: Double) =>
+          Instance(1.0, weight, Vectors.normalize(features, 2))
+        }
     }
 
     var actualBlockSizeInMB = $(maxBlockSizeInMB)
@@ -686,8 +686,7 @@ private class KMeansAggregator (
     }
   }
 
-  // It is performance-critical to avoid reallocating a dense matrix (size x k)
-  // for each instance block!
+  // avoid reallocating a dense matrix (size x k) for each instance block
   @transient private var buffer: Array[Double] = _
 
   def add(block: InstanceBlock): this.type = {
