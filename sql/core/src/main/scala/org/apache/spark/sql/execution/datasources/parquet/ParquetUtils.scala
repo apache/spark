@@ -216,7 +216,9 @@ object ParquetUtils {
    * When the partial aggregates (Max/Min/Count) are pushed down to Parquet, we don't need to
    * createRowBaseReader to read data from Parquet and aggregate at Spark layer. Instead we want
    * to get the partial aggregates (Max/Min/Count) result using the statistics information
-   * from Parquet footer file, and then construct an InternalRow from these aggregate results.
+   * from Parquet file footer, and then construct an InternalRow from these aggregate results.
+   *
+   * NOTE: if statistics is missing from Parquet file footer, exception would be thrown.
    *
    * @return Aggregate results in the format of InternalRow
    */
@@ -277,7 +279,7 @@ object ParquetUtils {
         throw new SparkException("Unexpected parquet type name: " + primitiveTypeNames(i))
     }
 
-    if (aggregation.groupByColumns.nonEmpty) {
+    if (aggregation.groupByExpressions.nonEmpty) {
       val reorderedPartitionValues = AggregatePushDownUtils.reOrderPartitionCol(
         partitionSchema, aggregation, partitionValues)
       new JoinedRow(reorderedPartitionValues, converter.currentRecord)

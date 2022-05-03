@@ -121,3 +121,44 @@ WHERE  NOT EXISTS (SELECT max(dept.dept_id)
                    WHERE  dept.dept_id > 100 
                    GROUP  BY state 
                    LIMIT  1); 
+
+-- limit and offset in the exists subquery block.
+-- TC.03.01
+SELECT *
+FROM   emp
+WHERE  EXISTS (SELECT dept.dept_name
+               FROM   dept
+               WHERE  dept.dept_id > 10
+               LIMIT  1
+               OFFSET 2);
+
+-- limit and offset in the exists subquery block with aggregate.
+-- TC.03.02
+SELECT *
+FROM   emp
+WHERE  EXISTS (SELECT max(dept.dept_id)
+               FROM   dept
+               GROUP  BY state
+               LIMIT  1
+               OFFSET 2);
+
+-- limit and offset in the not exists subquery block.
+-- TC.03.03
+SELECT *
+FROM   emp
+WHERE  NOT EXISTS (SELECT dept.dept_name
+                   FROM   dept
+                   WHERE  dept.dept_id > 100
+                   LIMIT  1
+                   OFFSET 2);
+
+-- limit and offset in the not exists subquery block with aggregates.
+-- TC.03.04
+SELECT *
+FROM   emp
+WHERE  NOT EXISTS (SELECT max(dept.dept_id)
+                   FROM   dept
+                   WHERE  dept.dept_id > 100
+                   GROUP  BY state
+                   LIMIT  1
+                   OFFSET 2);

@@ -814,16 +814,19 @@ abstract class OrcQuerySuite extends OrcQueryTest with SharedSparkSession {
                       | timestamp_ntz '2021-03-14 02:15:00.0' as ts_ntz3
                       |""".stripMargin
 
-      val df = sql(sqlText)
+      withTempPath { dir =>
+        val path = dir.getCanonicalPath
+        val df = sql(sqlText)
 
-      df.write.mode("overwrite").orc("ts_ntz_orc")
+        df.write.mode("overwrite").orc(path)
 
-      val query = "select * from `orc`.`ts_ntz_orc`"
+        val query = s"select * from `orc`.`$path`"
 
-      DateTimeTestUtils.outstandingZoneIds.foreach { zoneId =>
-        DateTimeTestUtils.withDefaultTimeZone(zoneId) {
-          withAllNativeOrcReaders {
-            checkAnswer(sql(query), df)
+        DateTimeTestUtils.outstandingZoneIds.foreach { zoneId =>
+          DateTimeTestUtils.withDefaultTimeZone(zoneId) {
+            withAllNativeOrcReaders {
+              checkAnswer(sql(query), df)
+            }
           }
         }
       }

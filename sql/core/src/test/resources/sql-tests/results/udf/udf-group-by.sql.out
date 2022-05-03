@@ -202,7 +202,7 @@ SELECT a AS k, udf(COUNT(udf(b))) FROM testData GROUP BY k
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Column 'k' does not exist. Did you mean one of the following? [testdata.a, testdata.b]; line 1 pos 57
+[MISSING_COLUMN] Column 'k' does not exist. Did you mean one of the following? [testdata.a, testdata.b]; line 1 pos 57
 
 
 -- !query

@@ -50,8 +50,8 @@ import org.apache.spark.sql.types._
  * @param catalog  the catalog to use for looking up the schema of INSERT INTO table objects.
  */
 case class ResolveDefaultColumns(
-  analyzer: Analyzer,
-  catalog: SessionCatalog) extends Rule[LogicalPlan] {
+    analyzer: Analyzer,
+    catalog: SessionCatalog) extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = {
     plan.resolveOperatorsWithPruning(
       (_ => SQLConf.get.enableDefaultColumns), ruleId) {

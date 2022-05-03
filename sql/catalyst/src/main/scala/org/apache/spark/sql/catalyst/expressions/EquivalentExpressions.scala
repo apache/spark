@@ -135,11 +135,14 @@ class EquivalentExpressions {
   //                will always get accessed.
   //   4. Coalesce: it's also a conditional expression, we should only recurse into the first
   //                children, because others may not get accessed.
+  //   5. NaNvl: it's a conditional expression, we can only guarantee the left child can be always
+  //             accessed. And if we hit the left child, the right will not be accessed.
   private def childrenToRecurse(expr: Expression): Seq[Expression] = expr match {
     case _: CodegenFallback => Nil
     case i: If => i.predicate :: Nil
     case c: CaseWhen => c.children.head :: Nil
     case c: Coalesce => c.children.head :: Nil
+    case n: NaNvl => n.left :: Nil
     case other => other.children
   }
 
@@ -173,6 +176,7 @@ class EquivalentExpressions {
     // If there is only one child, the first child is already covered by
     // `childrenToRecurse` and we should exclude it here.
     case c: Coalesce if c.children.length > 1 => Seq(c.children)
+    case n: NaNvl => Seq(n.children)
     case _ => Nil
   }
 
