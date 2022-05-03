@@ -44,11 +44,11 @@ class ExecutorPodsWatchSnapshotSource(
     conf: SparkConf) extends Logging {
 
   private var watchConnection: Closeable = _
-  private val enablePolling = conf.get(KUBERNETES_EXECUTOR_ENABLE_API_WATCHER)
+  private val enableWatching = conf.get(KUBERNETES_EXECUTOR_ENABLE_API_WATCHER)
 
   @Since("3.1.3")
   def start(applicationId: String): Unit = {
-    if (enablePolling) {
+    if (enableWatching) {
       require(watchConnection == null, "Cannot start the watcher twice.")
       logDebug(s"Starting to watch for pods with labels $SPARK_APP_ID_LABEL=$applicationId," +
         s" $SPARK_ROLE_LABEL=$SPARK_POD_EXECUTOR_ROLE.")
