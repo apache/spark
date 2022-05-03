@@ -581,6 +581,7 @@ class _KMeansParams(
     HasDistanceMeasure,
     HasWeightCol,
     HasSolver,
+    HasMaxBlockSizeInMB,
 ):
     """
     Params for :py:class:`KMeans` and :py:class:`KMeansModel`.
