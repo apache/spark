@@ -1215,7 +1215,7 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       withSQLConf(SQLConf.ANSI_ENABLED.key -> ansiEnabled.toString) {
         var expr: Expression = Elt(Seq(Literal(4), Literal("123"), Literal("456")))
         if (ansiEnabled) {
-          val errMsg = "Invalid index: 4, numElements: 2"
+          val errMsg = "The index 4 is out of bounds. The array has 2 elements."
           checkExceptionInExpression[Exception](expr, errMsg)
         } else {
           checkEvaluation(expr, null)
@@ -1223,7 +1223,7 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
         expr = Elt(Seq(Literal(0), Literal("123"), Literal("456")))
         if (ansiEnabled) {
-          val errMsg = "Invalid index: 0, numElements: 2"
+          val errMsg = "The index 0 is out of bounds. The array has 2 elements."
           checkExceptionInExpression[Exception](expr, errMsg)
         } else {
           checkEvaluation(expr, null)
@@ -1231,7 +1231,7 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
         expr = Elt(Seq(Literal(-1), Literal("123"), Literal("456")))
         if (ansiEnabled) {
-          val errMsg = "Invalid index: -1, numElements: 2"
+          val errMsg = "The index -1 is out of bounds. The array has 2 elements."
           checkExceptionInExpression[Exception](expr, errMsg)
         } else {
           checkEvaluation(expr, null)
