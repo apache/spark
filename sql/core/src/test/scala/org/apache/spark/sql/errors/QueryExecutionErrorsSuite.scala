@@ -18,9 +18,8 @@
 package org.apache.spark.sql.errors
 
 import java.io.IOException
+import java.net.URL
 import java.util.{Locale, ServiceConfigurationError}
-
-import scala.util.control.ControlThrowable
 
 import org.apache.hadoop.fs.{LocalFileSystem, Path}
 import org.apache.hadoop.fs.permission.FsPermission
@@ -487,17 +486,17 @@ class QueryExecutionErrorsSuite
 
   test("INCOMPATIBLE_DATASOURCE_REGISTER: " +
     "create table using an incompatible dataSource") {
-    val currentLoader = Thread.currentThread().getContextClassLoader()
     val newClassLoader = new ClassLoader() {
-      override def loadClass(name: String, resolve: Boolean): Class[_] = {
-        if (name.equals("org.apache.spark.sql.fake") ||
-          name.equals("org.apache.spark.sql.fake.DefaultSource")) {
+
+      override def getResources(name: String): java.util.Enumeration[URL] = {
+        if (name.equals("META-INF/services/org.apache.spark.sql.sources.DataSourceRegister")) {
           // scalastyle:off
-          throw new IncompatibleDatasourceRegisterError(s"Can't load class: $name",
+          throw new ServiceConfigurationError(s"Illegal configuration-file syntax: $name",
             new NoClassDefFoundError("org.apache.spark.sql.sources.HadoopFsRelationProvider"))
           // scalastyle:on throwerror
+        } else {
+          super.getResources(name)
         }
-        currentLoader.loadClass(name)
       }
     }
 
@@ -508,9 +507,9 @@ class QueryExecutionErrorsSuite
       checkErrorClass(
         exception = e,
         errorClass = "INCOMPATIBLE_DATASOURCE_REGISTER",
-        msg = "Detected an incompatible DataSourceRegister. " +
-          "Please remove the incompatible library from classpath or upgrade it. " +
-          "Error: Can't load class: org.apache.spark.sql.fake")
+        msg = "Detected an incompatible DataSourceRegister. Please remove the incompatible library " +
+          "from classpath or upgrade it. Error: Illegal configuration-file syntax: " +
+          "META-INF/services/org.apache.spark.sql.sources.DataSourceRegister")
     }
   }
 }
@@ -521,6 +520,3 @@ class FakeFileSystemSetPermission extends LocalFileSystem {
     throw new IOException(s"fake fileSystem failed to set permission: $permission")
   }
 }
-
-class IncompatibleDatasourceRegisterError(msg: String, cause: Throwable) extends
-  ServiceConfigurationError(msg: String, cause: Throwable) with ControlThrowable
