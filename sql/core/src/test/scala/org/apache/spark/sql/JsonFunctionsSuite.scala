@@ -493,10 +493,6 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
       Seq("""{{"f": 1}: "a"}""").toDS().select(from_json($"value", schema))
     }.getMessage
     assert(exception1.contains(startMsg))
-    val exception2 = intercept[AnalysisException] {
-      Seq("""{{"f": 1}: "a"}""").toDS().select(from_json($"value", schema))
-    }.getMessage
-    assert(exception2.contains(startMsg))
   }
 
   test("SPARK-24709: infers schemas of json strings and pass them to from_json") {
