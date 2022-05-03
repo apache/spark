@@ -191,20 +191,27 @@ class FileIndexSuite extends SharedSparkSession {
         classOf[SubdirectoryDeletionRaceFileSystem],
         classOf[FileDeletionRaceFileSystem]
       );
-      ignoreMissingFiles <- Seq(true, false);
+      (ignoreMissingFiles, sqlConf, options) <- Seq(
+        (true, "true", Map.empty[String, String]),
+        // Explicitly set sqlConf to false, but data source options should take precedence
+        (true, "false", Map("ignoreMissingFiles" -> "true")),
+        (false, "false", Map.empty[String, String]),
+        // Explicitly set sqlConf to true, but data source options should take precedence
+        (false, "true", Map("ignoreMissingFiles" -> "false"))
+      );
       parDiscoveryThreshold <- Seq(0, 100)
     ) {
       withClue(s"raceCondition=$raceCondition, ignoreMissingFiles=$ignoreMissingFiles, " +
-        s"parDiscoveryThreshold=$parDiscoveryThreshold"
+        s"parDiscoveryThreshold=$parDiscoveryThreshold, sqlConf=$sqlConf, options=$options"
       ) {
         withSQLConf(
-          SQLConf.IGNORE_MISSING_FILES.key -> ignoreMissingFiles.toString,
+          SQLConf.IGNORE_MISSING_FILES.key -> sqlConf,
           SQLConf.PARALLEL_PARTITION_DISCOVERY_THRESHOLD.key -> parDiscoveryThreshold.toString,
           "fs.mockFs.impl" -> raceCondition.getName,
           "fs.mockFs.impl.disable.cache" -> "true"
         ) {
           def makeCatalog(): InMemoryFileIndex = new InMemoryFileIndex(
-            spark, Seq(rootDirPath), Map.empty, None)
+            spark, Seq(rootDirPath), options, None)
           if (ignoreMissingFiles) {
             // We're ignoring missing files, so catalog construction should succeed
             val catalog = makeCatalog()

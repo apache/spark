@@ -2018,4 +2018,171 @@ class SubquerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
       }.getMessage.contains("Correlated column is not allowed in predicate"))
     }
   }
+
+  test("Merge non-correlated scalar subqueries") {
+    Seq(false, true).foreach { enableAQE =>
+      withSQLConf(
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> enableAQE.toString) {
+        val df = sql(
+          """
+            |SELECT
+            |  (SELECT avg(key) FROM testData),
+            |  (SELECT sum(key) FROM testData),
+            |  (SELECT count(distinct key) FROM testData)
+          """.stripMargin)
+
+        checkAnswer(df, Row(50.5, 5050, 100) :: Nil)
+
+        val plan = df.queryExecution.executedPlan
+        val subqueryIds = collectWithSubqueries(plan) { case s: SubqueryExec => s.id }
+        val reusedSubqueryIds = collectWithSubqueries(plan) {
+          case rs: ReusedSubqueryExec => rs.child.id
+        }
+
+        assert(subqueryIds.size == 1, "Missing or unexpected SubqueryExec in the plan")
+        assert(reusedSubqueryIds.size == 2,
+          "Missing or unexpected reused ReusedSubqueryExec in the plan")
+      }
+    }
+  }
+
+  test("Merge non-correlated scalar subqueries in a subquery") {
+    Seq(false, true).foreach { enableAQE =>
+      withSQLConf(
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> enableAQE.toString) {
+        val df = sql(
+          """
+            |SELECT (
+            |  SELECT
+            |    SUM(
+            |      (SELECT avg(key) FROM testData) +
+            |      (SELECT sum(key) FROM testData) +
+            |      (SELECT count(distinct key) FROM testData))
+            |   FROM testData
+            |)
+          """.stripMargin)
+
+        checkAnswer(df, Row(520050.0) :: Nil)
+
+        val plan = df.queryExecution.executedPlan
+        val subqueryIds = collectWithSubqueries(plan) { case s: SubqueryExec => s.id }
+        val reusedSubqueryIds = collectWithSubqueries(plan) {
+          case rs: ReusedSubqueryExec => rs.child.id
+        }
+
+        if (enableAQE) {
+          assert(subqueryIds.size == 3, "Missing or unexpected SubqueryExec in the plan")
+          assert(reusedSubqueryIds.size == 4,
+            "Missing or unexpected reused ReusedSubqueryExec in the plan")
+        } else {
+          assert(subqueryIds.size == 2, "Missing or unexpected SubqueryExec in the plan")
+          assert(reusedSubqueryIds.size == 5,
+            "Missing or unexpected reused ReusedSubqueryExec in the plan")
+        }
+      }
+    }
+  }
+
+  test("Merge non-correlated scalar subqueries from different levels") {
+    Seq(false, true).foreach { enableAQE =>
+      withSQLConf(
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> enableAQE.toString) {
+        val df = sql(
+          """
+            |SELECT
+            |  (SELECT avg(key) FROM testData),
+            |  (
+            |    SELECT
+            |      SUM(
+            |        (SELECT sum(key) FROM testData)
+            |      )
+            |    FROM testData
+            |  )
+          """.stripMargin)
+
+        checkAnswer(df, Row(50.5, 505000) :: Nil)
+
+        val plan = df.queryExecution.executedPlan
+        val subqueryIds = collectWithSubqueries(plan) { case s: SubqueryExec => s.id }
+        val reusedSubqueryIds = collectWithSubqueries(plan) {
+          case rs: ReusedSubqueryExec => rs.child.id
+        }
+
+        assert(subqueryIds.size == 2, "Missing or unexpected SubqueryExec in the plan")
+        assert(reusedSubqueryIds.size == 2,
+          "Missing or unexpected reused ReusedSubqueryExec in the plan")
+      }
+    }
+  }
+
+  test("Merge non-correlated scalar subqueries from different parent plans") {
+    Seq(false, true).foreach { enableAQE =>
+      withSQLConf(
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> enableAQE.toString) {
+        val df = sql(
+          """
+            |SELECT
+            |  (
+            |    SELECT
+            |      SUM(
+            |        (SELECT avg(key) FROM testData)
+            |      )
+            |    FROM testData
+            |  ),
+            |  (
+            |    SELECT
+            |      SUM(
+            |        (SELECT sum(key) FROM testData)
+            |      )
+            |    FROM testData
+            |  )
+          """.stripMargin)
+
+        checkAnswer(df, Row(5050.0, 505000) :: Nil)
+
+        val plan = df.queryExecution.executedPlan
+        val subqueryIds = collectWithSubqueries(plan) { case s: SubqueryExec => s.id }
+        val reusedSubqueryIds = collectWithSubqueries(plan) {
+          case rs: ReusedSubqueryExec => rs.child.id
+        }
+
+        if (enableAQE) {
+          assert(subqueryIds.size == 3, "Missing or unexpected SubqueryExec in the plan")
+          assert(reusedSubqueryIds.size == 3,
+            "Missing or unexpected reused ReusedSubqueryExec in the plan")
+        } else {
+          assert(subqueryIds.size == 2, "Missing or unexpected SubqueryExec in the plan")
+          assert(reusedSubqueryIds.size == 4,
+            "Missing or unexpected reused ReusedSubqueryExec in the plan")
+        }
+      }
+    }
+  }
+
+  test("Merge non-correlated scalar subqueries with conflicting names") {
+    Seq(false, true).foreach { enableAQE =>
+      withSQLConf(
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> enableAQE.toString) {
+        val df = sql(
+          """
+            |SELECT
+            |  (SELECT avg(key) AS key FROM testData),
+            |  (SELECT sum(key) AS key FROM testData),
+            |  (SELECT count(distinct key) AS key FROM testData)
+          """.stripMargin)
+
+        checkAnswer(df, Row(50.5, 5050, 100) :: Nil)
+
+        val plan = df.queryExecution.executedPlan
+        val subqueryIds = collectWithSubqueries(plan) { case s: SubqueryExec => s.id }
+        val reusedSubqueryIds = collectWithSubqueries(plan) {
+          case rs: ReusedSubqueryExec => rs.child.id
+        }
+
+        assert(subqueryIds.size == 1, "Missing or unexpected SubqueryExec in the plan")
+        assert(reusedSubqueryIds.size == 2,
+          "Missing or unexpected reused ReusedSubqueryExec in the plan")
+      }
+    }
+  }
 }

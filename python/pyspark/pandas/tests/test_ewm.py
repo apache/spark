@@ -109,6 +109,98 @@ class EWMTest(PandasOnSparkTestCase, TestUtils):
             getattr(pdf.ewm(alpha=0.7, min_periods=2), f)().sum(),
         )
 
+        pdf = pd.DataFrame(
+            {
+                "s1": [None, 2, 3, 4],
+                "s2": [1, None, 3, 4],
+                "s3": [1, 3, 4, 5],
+                "s4": [1, 0, 3, 4],
+                "s5": [None, None, 1, None],
+                "s6": [None, None, None, None],
+            }
+        )
+        psdf = ps.from_pandas(pdf)
+        self.assert_eq(
+            getattr(psdf.ewm(com=0.2, ignore_na=True), f)(),
+            getattr(pdf.ewm(com=0.2, ignore_na=True), f)(),
+        )
+        self.assert_eq(
+            getattr(psdf.ewm(com=0.2, ignore_na=True), f)().sum(),
+            getattr(pdf.ewm(com=0.2, ignore_na=True), f)().sum(),
+        )
+        self.assert_eq(
+            getattr(psdf.ewm(com=0.2, ignore_na=False), f)(),
+            getattr(pdf.ewm(com=0.2, ignore_na=False), f)(),
+        )
+        self.assert_eq(
+            getattr(psdf.ewm(com=0.2, ignore_na=False), f)().sum(),
+            getattr(pdf.ewm(com=0.2, ignore_na=False), f)().sum(),
+        )
+        self.assert_eq(
+            getattr(psdf.ewm(span=1.7, ignore_na=True), f)(),
+            getattr(pdf.ewm(span=1.7, ignore_na=True), f)(),
+        )
+        self.assert_eq(
+            getattr(psdf.ewm(span=1.7, ignore_na=True), f)().sum(),
+            getattr(pdf.ewm(span=1.7, ignore_na=True), f)().sum(),
+        )
+        self.assert_eq(
+            getattr(psdf.ewm(span=1.7, ignore_na=False), f)(),
+            getattr(pdf.ewm(span=1.7, ignore_na=False), f)(),
+        )
+        self.assert_eq(
+            getattr(psdf.ewm(span=1.7, ignore_na=False), f)().sum(),
+            getattr(pdf.ewm(span=1.7, ignore_na=False), f)().sum(),
+        )
+        self.assert_eq(
+            getattr(psdf.ewm(halflife=0.5, ignore_na=True), f)(),
+            getattr(pdf.ewm(halflife=0.5, ignore_na=True), f)(),
+        )
+        self.assert_eq(
+            getattr(psdf.ewm(halflife=0.5, ignore_na=True), f)().sum(),
+            getattr(pdf.ewm(halflife=0.5, ignore_na=True), f)().sum(),
+        )
+        self.assert_eq(
+            getattr(psdf.ewm(halflife=0.5, ignore_na=False), f)(),
+            getattr(pdf.ewm(halflife=0.5, ignore_na=False), f)(),
+        )
+        self.assert_eq(
+            getattr(psdf.ewm(halflife=0.5, ignore_na=False), f)().sum(),
+            getattr(pdf.ewm(halflife=0.5, ignore_na=False), f)().sum(),
+        )
+        self.assert_eq(
+            getattr(psdf.ewm(alpha=0.7, ignore_na=True), f)(),
+            getattr(pdf.ewm(alpha=0.7, ignore_na=True), f)(),
+        )
+        self.assert_eq(
+            getattr(psdf.ewm(alpha=0.7, ignore_na=True), f)().sum(),
+            getattr(pdf.ewm(alpha=0.7, ignore_na=True), f)().sum(),
+        )
+        self.assert_eq(
+            getattr(psdf.ewm(alpha=0.7, ignore_na=False), f)(),
+            getattr(pdf.ewm(alpha=0.7, ignore_na=False), f)(),
+        )
+        self.assert_eq(
+            getattr(psdf.ewm(alpha=0.7, ignore_na=False), f)().sum(),
+            getattr(pdf.ewm(alpha=0.7, ignore_na=False), f)().sum(),
+        )
+        self.assert_eq(
+            getattr(psdf.ewm(alpha=0.7, ignore_na=True, min_periods=2), f)(),
+            getattr(pdf.ewm(alpha=0.7, ignore_na=True, min_periods=2), f)(),
+        )
+        self.assert_eq(
+            getattr(psdf.ewm(alpha=0.7, ignore_na=True, min_periods=2), f)().sum(),
+            getattr(pdf.ewm(alpha=0.7, ignore_na=True, min_periods=2), f)().sum(),
+        )
+        self.assert_eq(
+            getattr(psdf.ewm(alpha=0.7, ignore_na=False, min_periods=2), f)(),
+            getattr(pdf.ewm(alpha=0.7, ignore_na=False, min_periods=2), f)(),
+        )
+        self.assert_eq(
+            getattr(psdf.ewm(alpha=0.7, ignore_na=False, min_periods=2), f)().sum(),
+            getattr(pdf.ewm(alpha=0.7, ignore_na=False, min_periods=2), f)().sum(),
+        )
+
     def test_ewm_mean(self):
         self._test_ewm_func("mean")
 

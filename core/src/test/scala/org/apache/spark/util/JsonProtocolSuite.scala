@@ -96,6 +96,9 @@ class JsonProtocolSuite extends SparkFunSuite {
     val applicationEnd = SparkListenerApplicationEnd(42L)
     val executorAdded = SparkListenerExecutorAdded(executorAddedTime, "exec1",
       new ExecutorInfo("Hostee.awesome.com", 11, logUrlMap, attributes, resources.toMap, 4))
+    val executorAddedWithTime = SparkListenerExecutorAdded(executorAddedTime, "exec1",
+      new ExecutorInfo("Hostee.awesome.com", 11, logUrlMap, attributes, resources.toMap, 4,
+        Some(1), Some(0)))
     val executorRemoved = SparkListenerExecutorRemoved(executorRemovedTime, "exec2", "test reason")
     val executorBlacklisted = SparkListenerExecutorBlacklisted(executorExcludedTime, "exec1", 22)
     val executorUnblacklisted =
@@ -155,6 +158,7 @@ class JsonProtocolSuite extends SparkFunSuite {
     testEvent(applicationStartWithLogs, applicationStartJsonWithLogUrlsString)
     testEvent(applicationEnd, applicationEndJsonString)
     testEvent(executorAdded, executorAddedJsonString)
+    testEvent(executorAddedWithTime, executorAddedWithTimeJsonString)
     testEvent(executorRemoved, executorRemovedJsonString)
     testEvent(executorBlacklisted, executorBlacklistedJsonString)
     testEvent(executorUnblacklisted, executorUnblacklistedJsonString)
@@ -173,6 +177,7 @@ class JsonProtocolSuite extends SparkFunSuite {
   test("Dependent Classes") {
     val logUrlMap = Map("stderr" -> "mystderr", "stdout" -> "mystdout").toMap
     val attributes = Map("ContainerId" -> "ct1", "User" -> "spark").toMap
+    val rinfo = Map[String, ResourceInformation]().toMap
     testRDDInfo(makeRddInfo(2, 3, 4, 5L, 6L, DeterministicLevel.DETERMINATE))
     testStageInfo(makeStageInfo(10, 20, 30, 40L, 50L))
     testTaskInfo(makeTaskInfo(999L, 888, 55, 888, 777L, false))
@@ -180,6 +185,8 @@ class JsonProtocolSuite extends SparkFunSuite {
       33333L, 44444L, 55555L, 66666L, 7, 8, hasHadoopInput = false, hasOutput = false))
     testBlockManagerId(BlockManagerId("Hong", "Kong", 500))
     testExecutorInfo(new ExecutorInfo("host", 43, logUrlMap, attributes))
+    testExecutorInfo(new ExecutorInfo("host", 43, logUrlMap, attributes,
+      rinfo, 1, Some(1), Some(0)))
 
     // StorageLevel
     testStorageLevel(StorageLevel.NONE)
@@ -2143,6 +2150,37 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |    },
       |    "Resource Profile Id": 4
       |  }
+      |}
+    """.stripMargin
+
+  private val executorAddedWithTimeJsonString =
+    s"""
+      |{
+      |  "Event": "SparkListenerExecutorAdded",
+      |  "Timestamp": ${executorAddedTime},
+      |  "Executor ID": "exec1",
+      |  "Executor Info": {
+      |    "Host": "Hostee.awesome.com",
+      |    "Total Cores": 11,
+      |    "Log Urls" : {
+      |      "stderr" : "mystderr",
+      |      "stdout" : "mystdout"
+      |    },
+      |    "Attributes" : {
+      |      "ContainerId" : "ct1",
+      |      "User" : "spark"
+      |    },
+      |    "Resources" : {
+      |      "gpu" : {
+      |        "name" : "gpu",
+      |        "addresses" : [ "0", "1" ]
+      |      }
+      |    },
+      |    "Resource Profile Id": 4,
+      |    "Registration Time" : 1,
+      |    "Request Time" : 0
+      |  }
+      |
       |}
     """.stripMargin
 

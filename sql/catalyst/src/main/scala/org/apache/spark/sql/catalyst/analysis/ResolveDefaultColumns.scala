@@ -50,8 +50,8 @@ import org.apache.spark.sql.types._
  * @param catalog  the catalog to use for looking up the schema of INSERT INTO table objects.
  */
 case class ResolveDefaultColumns(
-  analyzer: Analyzer,
-  catalog: SessionCatalog) extends Rule[LogicalPlan] {
+    analyzer: Analyzer,
+    catalog: SessionCatalog) extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = {
     plan.resolveOperatorsWithPruning(
       (_ => SQLConf.get.enableDefaultColumns), ruleId) {
@@ -454,7 +454,7 @@ case class ResolveDefaultColumns(
   }
 
   /**
-   * Returns the schema for the target table of a DML command, lookup into the catalog if needed.
+   * Returns the schema for the target table of a DML command, looking into the catalog if needed.
    */
   private def getSchemaForTargetTable(table: LogicalPlan): Option[StructType] = {
     // Check if the target table is already resolved. If so, return the computed schema.
@@ -478,6 +478,8 @@ case class ResolveDefaultColumns(
     lookup match {
       case SubqueryAlias(_, r: UnresolvedCatalogRelation) =>
         Some(r.tableMeta.schema)
+      case SubqueryAlias(_, r: View) if r.isTempView =>
+        Some(r.schema)
       case _ => None
     }
   }

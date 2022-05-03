@@ -319,7 +319,7 @@ select date_add('2011-11-11', '1.2')
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-The second argument of 'date_add' function needs to be an integer.
+[SECOND_FUNCTION_ARGUMENT_NOT_INTEGER] The second argument of 'date_add' function needs to be an integer.
 
 
 -- !query
@@ -427,7 +427,7 @@ select date_sub(date'2011-11-11', '1.2')
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-The second argument of 'date_sub' function needs to be an integer.
+[SECOND_FUNCTION_ARGUMENT_NOT_INTEGER] The second argument of 'date_sub' function needs to be an integer.
 
 
 -- !query
