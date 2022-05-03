@@ -78,4 +78,5 @@ private[spark] class HistoryAppStatusStore(
       source.resourceProfileId, source.isExcluded, source.excludedInStages)
   }
 
+  override private[spark] def isHistory(): Boolean = true
 }

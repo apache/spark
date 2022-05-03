@@ -85,6 +85,9 @@ private[spark] class SparkUI private (
     attachTab(new StorageTab(this, store))
     attachTab(new EnvironmentTab(this, store))
     attachTab(new ExecutorsTab(this))
+    if (store.isHistory()) {
+      attachTab(new LiveTab(this, store))
+    }
     addStaticHandler(SparkUI.STATIC_RESOURCE_DIR)
     attachHandler(createRedirectHandler("/", "/jobs/", basePath = basePath))
     attachHandler(ApiRootResource.getServletHandler(this))

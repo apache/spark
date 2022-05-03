@@ -767,6 +767,8 @@ private[spark] class AppStatusStore(
         AppStatusUtils.gettingResultTime(taskDataOld))
     }.toSeq
   }
+
+  private[spark] def isHistory(): Boolean = true
 }
 
 private[spark] object AppStatusStore extends Logging {
