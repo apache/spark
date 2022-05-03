@@ -112,7 +112,7 @@ class GenericFunctionsTest(PandasOnSparkTestCase, TestUtils):
         self._test_interpolate(pdf)
 
     def _test_stat_functions(self, stat_func):
-        pdf = pd.DataFrame({"a": [np.nan, np.nan, np.nan], "b": [1, np.nan, 2]})
+        pdf = pd.DataFrame({"a": [np.nan, np.nan, np.nan], "b": [1, np.nan, 2], "c": [1, 2, 3]})
         psdf = ps.from_pandas(pdf)
         self.assert_eq(stat_func(pdf.a), stat_func(psdf.a))
         self.assert_eq(stat_func(pdf.b), stat_func(psdf.b))
@@ -136,15 +136,22 @@ class GenericFunctionsTest(PandasOnSparkTestCase, TestUtils):
         self._test_stat_functions(lambda x: x.sem(skipna=False))
         # self._test_stat_functions(lambda x: x.skew())
         self._test_stat_functions(lambda x: x.skew(skipna=False))
-        # self._test_stat_functions(lambda x: x.kurtosis())
-        self._test_stat_functions(lambda x: x.kurtosis(skipna=False))
 
-        pdf = pd.DataFrame({"a": [np.nan, np.nan, np.nan], "b": [1, np.nan, 2]})
+        # Test cases below return differently from pandas (either by design or to be fixed)
+        pdf = pd.DataFrame({"a": [np.nan, np.nan, np.nan], "b": [1, np.nan, 2], "c": [1, 2, 3]})
         psdf = ps.from_pandas(pdf)
+
         self.assert_eq(pdf.a.median(), psdf.a.median())
         self.assert_eq(pdf.a.median(skipna=False), psdf.a.median(skipna=False))
         self.assert_eq(1.0, psdf.b.median())
         self.assert_eq(pdf.b.median(skipna=False), psdf.b.median(skipna=False))
+        self.assert_eq(pdf.c.median(), psdf.c.median())
+
+        self.assert_eq(pdf.a.kurtosis(skipna=False), psdf.a.kurtosis(skipna=False))
+        self.assert_eq(pdf.a.kurtosis(), psdf.a.kurtosis())
+        self.assert_eq(pdf.b.kurtosis(skipna=False), psdf.b.kurtosis(skipna=False))
+        # self.assert_eq(pdf.b.kurtosis(), psdf.b.kurtosis())  AssertionError: nan != -2.0
+        self.assert_eq(-1.5, psdf.c.kurtosis())
 
 
 if __name__ == "__main__":
