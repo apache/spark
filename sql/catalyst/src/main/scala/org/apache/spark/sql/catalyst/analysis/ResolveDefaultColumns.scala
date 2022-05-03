@@ -458,16 +458,21 @@ case class ResolveDefaultColumns(
    */
   private def getSchemaForTargetTable(table: LogicalPlan): Option[StructType] = {
     // Check if the target table is already resolved. If so, return the computed schema.
-    val source = table.collectFirst { case r: NamedRelation => r }
+    val source: Option[LogicalPlan] = table.collectFirst {
+      case r: NamedRelation => r
+      case r: UnresolvedCatalogRelation => r
+    }
     source.map { r =>
-      return Some(r.schema)
+      if (r.schema.fields.nonEmpty) {
+        return Some(r.schema)
+      }
     }
     // Lookup the relation from the catalog by name. This either succeeds or returns some "not
     // found" error. In the latter cases, return out of this rule without changing anything and let
     // the analyzer return a proper error message elsewhere.
-    val tableName: TableIdentifier = table match {
-      case r: UnresolvedRelation => TableIdentifier(r.name)
-      case r: UnresolvedCatalogRelation => r.tableMeta.identifier
+    val tableName: TableIdentifier = source match {
+      case Some(r: UnresolvedRelation) => TableIdentifier(r.name)
+      case Some(r: UnresolvedCatalogRelation) => r.tableMeta.identifier
       case _ => return None
     }
     val lookup: LogicalPlan = try {
