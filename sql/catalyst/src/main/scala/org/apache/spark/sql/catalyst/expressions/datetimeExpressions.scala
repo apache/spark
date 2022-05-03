@@ -48,7 +48,7 @@ trait TimeZoneAwareExpression extends Expression {
   override lazy val resolved: Boolean =
     childrenResolved && checkInputDataTypes().isSuccess && timeZoneId.isDefined
 
-  final override val nodePatterns: Seq[TreePattern] =
+  override val nodePatterns: Seq[TreePattern] =
     Seq(TIME_ZONE_AWARE_EXPRESSION) ++ nodePatternsInternal
 
   // Subclasses can override this function to provide more TreePatterns.

@@ -149,7 +149,7 @@ trait HigherOrderFunction extends Expression with ExpectsInputTypes {
 
   override def nullable: Boolean = arguments.exists(_.nullable)
 
-  final override val nodePatterns: Seq[TreePattern] = Seq(HIGH_ORDER_FUNCTION)
+  override val nodePatterns: Seq[TreePattern] = Seq(HIGH_ORDER_FUNCTION)
 
   /**
    * Arguments of the higher ordered function.

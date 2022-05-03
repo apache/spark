@@ -18,7 +18,10 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
+import org.apache.spark.sql.catalyst.trees.TreePattern.TreePattern
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
@@ -837,5 +840,51 @@ class HigherOrderFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper 
     checkEvaluation(arraySort(
       Literal.create(Seq(Double.NaN, 1d, 2d, null), ArrayType(DoubleType))),
       Seq(1d, 2d, Double.NaN, null))
+  }
+
+
+  test("SPARK-39081: compatibility of combo of HigherOrderFunctions" +
+    " with other Expression subclasses") {
+    //Using example given in JIRA, this is to test a compile time issue only, has no real usage
+    case class MyExploder(
+                           arrays: Expression,    // Array[AnyDataType]
+                           asOfDate: Expression,  // LambdaFunction[AnyDataType -> TimestampType]
+                           extractor: Expression, // TimestampType
+                         ) extends HigherOrderFunction with Generator with TimeZoneAwareExpression {
+
+      override def children: Seq[Expression] = Seq[Expression](arrays, asOfDate)
+
+      override def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): Expression = null
+
+      override def eval(input: InternalRow): TraversableOnce[InternalRow] = null
+
+      override def nodePatternsInternal(): Seq[TreePattern] = Seq()
+
+      override def elementSchema: StructType = null
+
+      override def arguments: Seq[Expression] =
+        Seq(arrays, asOfDate)
+
+      override def argumentTypes: Seq[AbstractDataType] =
+        Seq(ArrayType, TimestampType)
+
+      override def doGenCode(ctx: CodegenContext, exp: ExprCode) = null
+
+      override def functions: Seq[Expression] =
+        Seq(extractor)
+
+      override def functionTypes =
+        Seq(TimestampType)
+
+      override def bind(f: (Expression, Seq[(DataType, Boolean)]) => LambdaFunction): HigherOrderFunction = null
+
+      override def timeZoneId: Option[String] = None
+
+      override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression = null
+    }
+
+    //Should not get the error - value nodePatterns ... cannot override final member, or conflict in nodePatterns between two types
+    //Should not get compile error about conflicting fields with same name but were final
+    val myExploder = MyExploder(null, null, null)
   }
 }
