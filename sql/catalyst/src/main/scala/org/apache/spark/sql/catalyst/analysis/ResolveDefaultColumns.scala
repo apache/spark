@@ -441,7 +441,7 @@ case class ResolveDefaultColumns(
       for (assignment <- assignments) yield {
         val destColName = assignment.key match {
           case a: AttributeReference => a.name
-          case u: UnresolvedAttribute => u.name
+          case u: UnresolvedAttribute => u.nameParts.last
           case _ => ""
         }
         val adjusted = destColName.map(c => if (SQLConf.get.caseSensitiveAnalysis) c.toLower else c)
