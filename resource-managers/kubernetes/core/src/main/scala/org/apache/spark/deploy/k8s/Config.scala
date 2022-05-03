@@ -495,7 +495,7 @@ private[spark] object Config extends Logging {
   val KUBERNETES_EXECUTOR_ENABLE_API_WATCHER =
     ConfigBuilder("spark.kubernetes.executor.enableApiWatcher")
       .doc("If Spark should create watchers for executor pod status. " +
-        "You should leave this enabled unless your encountering performance issues with your etcd.")
+        "You should leave this enabled unless you're encountering performance issues with your etcd.")
       .version("3.3.0")
       .booleanConf
       .internal()
