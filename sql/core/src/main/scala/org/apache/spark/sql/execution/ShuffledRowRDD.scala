@@ -21,6 +21,7 @@ import java.util.Arrays
 
 import org.apache.spark._
 import org.apache.spark.rdd.RDD
+import org.apache.spark.shuffle.ShuffleReader
 import org.apache.spark.shuffle.sort.SortShuffleManager
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLShuffleReadMetricsReporter}
@@ -63,6 +64,8 @@ case class CoalescedMapperPartitionSpec(
     startMapIndex: Int,
     endMapIndex: Int,
     numReducers: Int) extends ShufflePartitionSpec
+
+case object EmptyPartitionSpec extends ShufflePartitionSpec
 
 /**
  * The [[Partition]] used by [[ShuffledRowRDD]].
@@ -190,6 +193,8 @@ class ShuffledRowRDD(
 
       case CoalescedMapperPartitionSpec(startMapIndex, endMapIndex, numReducers) =>
         tracker.getMapLocation(dependency, startMapIndex, endMapIndex)
+
+      case EmptyPartitionSpec => Nil
     }
   }
 
@@ -236,6 +241,11 @@ class ShuffledRowRDD(
           numReducers,
           context,
           sqlMetricsReporter)
+
+      case EmptyPartitionSpec =>
+        new ShuffleReader[Int, InternalRow] {
+          override def read(): Iterator[Product2[Int, InternalRow]] = Iterator.empty
+        }
     }
     reader.read().asInstanceOf[Iterator[Product2[Int, InternalRow]]].map(_._2)
   }

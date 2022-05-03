@@ -27,7 +27,7 @@ import org.apache.spark.scheduler.{SparkListener, SparkListenerEvent, SparkListe
 import org.apache.spark.sql.{Dataset, QueryTest, Row, SparkSession, Strategy}
 import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan}
-import org.apache.spark.sql.execution.{CollectLimitExec, CommandResultExec, LocalTableScanExec, PartialReducerPartitionSpec, QueryExecution, ReusedSubqueryExec, ShuffledRowRDD, SortExec, SparkPlan, UnaryExecNode, UnionExec}
+import org.apache.spark.sql.execution.{CollectLimitExec, CommandResultExec, EmptyPartitionSpec, LocalTableScanExec, PartialReducerPartitionSpec, QueryExecution, ReusedSubqueryExec, ShuffledRowRDD, SortExec, SparkPlan, UnaryExecNode, UnionExec}
 import org.apache.spark.sql.execution.aggregate.BaseAggregateExec
 import org.apache.spark.sql.execution.command.DataWritingCommandExec
 import org.apache.spark.sql.execution.datasources.noop.NoopDataSource
@@ -112,6 +112,12 @@ class AdaptiveQueryExecSuite
   private def findTopLevelShuffledHashJoin(plan: SparkPlan): Seq[ShuffledHashJoinExec] = {
     collect(plan) {
       case j: ShuffledHashJoinExec => j
+    }
+  }
+
+  private def findTopLevelShuffledJoin(plan: SparkPlan): Seq[ShuffledJoin] = {
+    collect(plan) {
+      case j: ShuffledJoin => j
     }
   }
 
@@ -1671,7 +1677,7 @@ class AdaptiveQueryExecSuite
         assert(aqeReads.length == 2)
         if (coalescedRead) assert(aqeReads.forall(_.hasCoalescedPartition))
       } else {
-        assert(aqeReads.isEmpty)
+        assert(aqeReads.isEmpty || aqeReads.forall(_.hasSkippedPartition))
       }
     }
 
@@ -2525,6 +2531,76 @@ class AdaptiveQueryExecSuite
           "SELECT key1 FROM skewData1 JOIN skewData2 ON key1 = key2 UNION ALL " +
             "SELECT key1 from (SELECT key1 FROM skewData1 JOIN skewData2 ON key1 = key2) tmp1 " +
             "JOIN (SELECT key2 FROM skewData2 GROUP BY key2) tmp2 ON key1 = key2", 3, 0)
+      }
+    }
+  }
+
+  test("SPARK-39092: propagate empty partitions") {
+    withSQLConf(
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+      SQLConf.COALESCE_PARTITIONS_ENABLED.key -> "false",
+      SQLConf.PROPAGATE_EMPTY_PARTITIONS_ENABLED.key -> "true",
+      SQLConf.SHUFFLE_PARTITIONS.key -> "11") {
+      withTempView("table1", "table2") {
+        // empty indices [0, 4, 6, 7, 9, 10]
+        spark
+          .range(0, 1000, 1, 5)
+          .selectExpr("id % 12 as key1", "id as value1")
+          .createOrReplaceTempView("table1")
+        // empty indices [0, 2, 6, 7, 10]
+        spark
+          .range(0, 1000, 1, 6)
+          .selectExpr("id % 12 + 5 as key2", "id as value2")
+          .createOrReplaceTempView("table2")
+
+        def checkEmptyPartitionSpecExists(
+            query: String,
+            leftExpectedEmptyIndices: Set[Int],
+            rightExpectedEmptyIndices: Set[Int]): Unit = {
+          val (_, adaptive) = runAdaptiveAndVerifyResult(query)
+          val joins = findTopLevelShuffledJoin(adaptive)
+          assert(joins.size == 1)
+
+          val leftRead = collect(joins.head.left) {
+            case read: AQEShuffleReadExec => read
+          }
+          assert(leftRead.size == 1)
+          val leftEmptyIndices = leftRead.head.partitionSpecs
+            .zipWithIndex.filter(_._1 == EmptyPartitionSpec).map(_._2).toSet
+          assert(leftExpectedEmptyIndices === leftEmptyIndices)
+
+          val rightRead = collect(joins.head.right) {
+            case read: AQEShuffleReadExec => read
+          }
+          assert(rightRead.size == 1)
+          val rightEmptyIndices = rightRead.head.partitionSpecs
+            .zipWithIndex.filter(_._1 == EmptyPartitionSpec).map(_._2).toSet
+          assert(rightExpectedEmptyIndices === rightEmptyIndices)
+        }
+
+        val leftOriginalIndices = Set(0, 4, 6, 7, 9, 10)
+        val rightOriginalIndices = Set(0, 2, 6, 7, 10)
+        checkEmptyPartitionSpecExists(
+          "SELECT key1 FROM table1 JOIN table2 ON key1 = key2",
+          leftOriginalIndices ++ rightOriginalIndices,
+          leftOriginalIndices ++ rightOriginalIndices)
+        checkEmptyPartitionSpecExists(
+          "SELECT key1 FROM table1 JOIN table2 ON key1 = key2 GROUP BY key1",
+          leftOriginalIndices ++ rightOriginalIndices,
+          leftOriginalIndices ++ rightOriginalIndices)
+        checkEmptyPartitionSpecExists(
+          "SELECT key1 FROM table1 LEFT JOIN table2 ON key1 = key2",
+          leftOriginalIndices,
+          leftOriginalIndices ++ rightOriginalIndices)
+        checkEmptyPartitionSpecExists(
+          "SELECT key1 FROM table1 RIGHT JOIN table2 ON key1 = key2",
+          leftOriginalIndices ++ rightOriginalIndices,
+          rightOriginalIndices)
+        checkEmptyPartitionSpecExists(
+          "SELECT key1 FROM table1 FULL JOIN table2 ON key1 = key2",
+          leftOriginalIndices,
+          rightOriginalIndices)
       }
     }
   }

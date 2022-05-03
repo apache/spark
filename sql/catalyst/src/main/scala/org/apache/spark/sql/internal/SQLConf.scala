@@ -652,6 +652,14 @@ object SQLConf {
       .checkValue(_ > 0, "The initial number of partitions must be positive.")
       .createOptional
 
+  val PROPAGATE_EMPTY_PARTITIONS_ENABLED =
+    buildConf("spark.sql.adaptive.propagateEmptyPartitions.enabled")
+      .doc(s"When true and '${ADAPTIVE_EXECUTION_ENABLED.key}' is true, Spark will propagate " +
+        "empty partitions to avoid unnecessary shuffle read and task computation.")
+      .version("3.4.0")
+      .booleanConf
+      .createWithDefault(true)
+
   val FETCH_SHUFFLE_BLOCKS_IN_BATCH =
     buildConf("spark.sql.adaptive.fetchShuffleBlocksInBatch")
       .internal()
@@ -4064,6 +4072,8 @@ class SQLConf extends Serializable with Logging {
     getConf(NON_EMPTY_PARTITION_RATIO_FOR_BROADCAST_JOIN)
 
   def coalesceShufflePartitionsEnabled: Boolean = getConf(COALESCE_PARTITIONS_ENABLED)
+
+  def propagateEmptyPartitionsEnabled: Boolean = getConf(PROPAGATE_EMPTY_PARTITIONS_ENABLED)
 
   def minBatchesToRetain: Int = getConf(MIN_BATCHES_TO_RETAIN)
 

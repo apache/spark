@@ -97,17 +97,12 @@ case class AQEShuffleReadExec private(
   }
 
   override def stringArgs: Iterator[Any] = {
-    val desc = if (isLocalRead) {
-      "local"
-    } else if (hasCoalescedPartition && hasSkewedPartition) {
-      "coalesced and skewed"
-    } else if (hasCoalescedPartition) {
-      "coalesced"
-    } else if (hasSkewedPartition) {
-      "skewed"
-    } else {
-      ""
-    }
+    var seq = Seq.empty[String]
+    if (isLocalRead) seq :+= "local"
+    if (hasCoalescedPartition) seq :+= "coalesced"
+    if (hasSkewedPartition) seq :+= "skewed"
+    if (hasSkippedPartition) seq :+= "skipped"
+    val desc = seq.mkString(" and ")
     Iterator(desc)
   }
 
@@ -127,6 +122,9 @@ case class AQEShuffleReadExec private(
     partitionSpecs.exists(isCoalescedSpec)
   }
 
+  def hasSkippedPartition: Boolean =
+    partitionSpecs.contains(EmptyPartitionSpec)
+
   def hasSkewedPartition: Boolean =
     partitionSpecs.exists(_.isInstanceOf[PartialReducerPartitionSpec])
 
@@ -138,8 +136,12 @@ case class AQEShuffleReadExec private(
     partitionSpecs.sliding(2).forall {
       // A single partition spec which is `CoalescedPartitionSpec` also means coalesced read.
       case Seq(_: CoalescedPartitionSpec) => true
+      case Seq(EmptyPartitionSpec) => true
       case Seq(l: CoalescedPartitionSpec, r: CoalescedPartitionSpec) =>
         l.endReducerIndex <= r.startReducerIndex
+      case Seq(EmptyPartitionSpec, _: CoalescedPartitionSpec) => true
+      case Seq(_: CoalescedPartitionSpec, EmptyPartitionSpec) => true
+      case Seq(EmptyPartitionSpec, EmptyPartitionSpec) => true
       case _ => false
     }
   }
@@ -156,6 +158,7 @@ case class AQEShuffleReadExec private(
           assert(p.dataSize.isDefined)
           p.dataSize.get
         case p: PartialReducerPartitionSpec => p.dataSize
+        case EmptyPartitionSpec => 0L
         case p => throw new IllegalStateException(s"unexpected $p")
       })
     } else {
@@ -196,6 +199,13 @@ case class AQEShuffleReadExec private(
       driverAccumUpdates += numCoalescedPartitionsMetric.id -> x
     }
 
+    if (hasSkippedPartition) {
+      val numSkippedPartitionsMetric = metrics("numSkippedPartitions")
+      val x = partitionSpecs.count(_ == EmptyPartitionSpec)
+      numSkippedPartitionsMetric.set(x)
+      driverAccumUpdates += numSkippedPartitionsMetric.id -> x
+    }
+
     partitionDataSizes.foreach { dataSizes =>
       val partitionDataSizeMetrics = metrics("partitionDataSize")
       driverAccumUpdates ++= dataSizes.map(partitionDataSizeMetrics.id -> _)
@@ -230,6 +240,13 @@ case class AQEShuffleReadExec private(
         if (hasCoalescedPartition) {
           Map("numCoalescedPartitions" ->
             SQLMetrics.createMetric(sparkContext, "number of coalesced partitions"))
+        } else {
+          Map.empty
+        }
+      } ++ {
+        if (hasSkippedPartition) {
+          Map("numSkippedPartitions" ->
+            SQLMetrics.createMetric(sparkContext, "number of skipped partitions"))
         } else {
           Map.empty
         }

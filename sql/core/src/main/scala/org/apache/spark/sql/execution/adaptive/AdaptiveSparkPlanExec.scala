@@ -134,7 +134,8 @@ case class AdaptiveSparkPlanExec(
     CoalesceShufflePartitions(context.session),
     // `OptimizeShuffleWithLocalRead` needs to make use of 'AQEShuffleReadExec.partitionSpecs'
     // added by `CoalesceShufflePartitions`, and must be executed after it.
-    OptimizeShuffleWithLocalRead
+    OptimizeShuffleWithLocalRead,
+    PropagateEmptyPartitions
   )
 
   // This rule is stateful as it maintains the codegen stage ID. We can't create a fresh one every
