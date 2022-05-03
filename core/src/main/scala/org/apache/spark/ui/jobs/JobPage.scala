@@ -351,7 +351,23 @@ private[ui] class JobPage(parent: JobsTab, store: AppStatusStore) extends WebUIP
     val shouldShowSkippedStages = isComplete && pendingOrSkippedStages.nonEmpty
     val shouldShowFailedStages = failedStages.nonEmpty
 
+    val driverLink: Option[String] = store.driverSummary.attributes.get("UI").flatMap { ui =>
+      // Don't make a link if the app is finished
+      if (store.applicationInfo().attempts.last.completed) {
+        None
+      } else {
+        Some(ui)
+      }
+    }
+
     val summary: NodeSeq =
+      <div>
+      {
+        if (driverLink.isDefined) {
+          <a href={"%s".format(driverLink.get)}>Live UI</a>
+        }
+      }
+      </div>
       <div>
         <ul class="list-unstyled">
           <li>

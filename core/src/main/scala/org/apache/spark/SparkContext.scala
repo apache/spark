@@ -2581,6 +2581,7 @@ class SparkContext(config: SparkConf) extends Logging {
   private def postApplicationStart(): Unit = {
     // Note: this code assumes that the task scheduler has been initialized and has contacted
     // the cluster manager to get an application ID (in case the cluster manager provides one).
+    // TODO -- Holden -- handle this when there is no driver log urls but there is a UI url.
     val driverUrls = schedulerBackend.getDriverLogUrls.map { urls =>
       urls ++ uiWebUrl.map { uiUrl => ("UI" -> uiUrl) }
     }
