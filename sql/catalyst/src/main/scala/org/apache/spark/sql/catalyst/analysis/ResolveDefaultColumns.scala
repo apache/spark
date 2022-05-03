@@ -75,15 +75,16 @@ case class ResolveDefaultColumns(
         replaceExplicitDefaultColumnValues(analyzer, expanded).getOrElse(table)
       replaced
 
-      case i@InsertIntoStatement(_, _, _, project: Project, _, _) =>
-      enclosingInsert = Some(i)
-      insertTableSchemaWithoutPartitionColumns = getInsertTableSchemaWithoutPartitionColumns
-      val expanded: Project = addMissingDefaultColumnValues(project).getOrElse(project)
-      val replaced: Option[LogicalPlan] = replaceExplicitDefaultColumnValues(analyzer, expanded)
-      val updated: InsertIntoStatement =
-        if (replaced.isDefined) i.copy(query = replaced.get) else i
-      val regenerated: InsertIntoStatement = regenerateUserSpecifiedCols(updated)
-      regenerated
+      case i@InsertIntoStatement(_, _, _, project: Project, _, _)
+        if !project.projectList.exists(_.isInstanceOf[Star]) =>
+        enclosingInsert = Some(i)
+        insertTableSchemaWithoutPartitionColumns = getInsertTableSchemaWithoutPartitionColumns
+        val expanded: Project = addMissingDefaultColumnValues(project).getOrElse(project)
+        val replaced: Option[LogicalPlan] = replaceExplicitDefaultColumnValues(analyzer, expanded)
+        val updated: InsertIntoStatement =
+          if (replaced.isDefined) i.copy(query = replaced.get) else i
+        val regenerated: InsertIntoStatement = regenerateUserSpecifiedCols(updated)
+        regenerated
     }
   }
 
@@ -275,6 +276,9 @@ case class ResolveDefaultColumns(
     val schema: StructType = lookup match {
       case SubqueryAlias(_, r: UnresolvedCatalogRelation) =>
         StructType(r.tableMeta.schema.fields.dropRight(
+          enclosingInsert.get.partitionSpec.size))
+      case SubqueryAlias(_, r: View) if r.isTempView =>
+        StructType(r.schema.fields.dropRight(
           enclosingInsert.get.partitionSpec.size))
       case _ => return None
     }

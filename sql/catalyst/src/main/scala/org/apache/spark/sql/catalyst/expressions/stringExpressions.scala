@@ -1898,8 +1898,7 @@ case class FormatString(children: Expression*) extends Expression with ImplicitC
    */
   private def checkArgumentIndexNotZero(expression: Expression): Unit = expression match {
     case StringLiteral(pattern) if pattern.contains("%0$") =>
-      throw QueryCompilationErrors.illegalSubstringError(
-        "The argument_index of string format", "position 0$")
+      throw QueryCompilationErrors.zeroArgumentIndexError()
     case _ => // do nothing
   }
 }

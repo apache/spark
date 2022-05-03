@@ -1276,7 +1276,7 @@ private[spark] class AppStatusListener(
   private def cleanupStagesWithInMemoryStore(countToDelete: Long): Seq[Array[Int]] = {
     val stageArray = new ArrayBuffer[StageCompletionTime]()
     val stageDataCount = new mutable.HashMap[Int, Int]()
-    kvstore.view(classOf[StageDataWrapper]).forEach { s =>
+    KVUtils.foreach(kvstore.view(classOf[StageDataWrapper])) { s =>
       // Here we keep track of the total number of StageDataWrapper entries for each stage id.
       // This will be used in cleaning up the RDDOperationGraphWrapper data.
       if (stageDataCount.contains(s.info.stageId)) {
