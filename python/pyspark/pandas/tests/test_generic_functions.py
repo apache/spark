@@ -33,17 +33,18 @@ class GenericFunctionsTest(PandasOnSparkTestCase, TestUtils):
         with self.assertRaisesRegex(ValueError, "limit must be > 0"):
             psdf.interpolate(limit=0)
 
-    def _test_series_interpolate(self, pser):
-        psser = ps.from_pandas(pser)
-        self.assert_eq(psser.interpolate(), pser.interpolate())
-        for l1 in range(1, 5):
-            self.assert_eq(psser.interpolate(limit=l1), pser.interpolate(limit=l1))
+        with self.assertRaisesRegex(ValueError, "invalid limit_direction"):
+            psdf.interpolate(limit_direction="jump")
 
-    def _test_dataframe_interpolate(self, pdf):
-        psdf = ps.from_pandas(pdf)
-        self.assert_eq(psdf.interpolate(), pdf.interpolate())
-        for l2 in range(1, 5):
-            self.assert_eq(psdf.interpolate(limit=l2), pdf.interpolate(limit=l2))
+    def _test_interpolate(self, pobj):
+        psobj = ps.from_pandas(pobj)
+        self.assert_eq(psobj.interpolate(), pobj.interpolate())
+        for limit in range(1, 5):
+            for limit_direction in [None, "forward", "backward", "both"]:
+                self.assert_eq(
+                    psobj.interpolate(limit=limit, limit_direction=limit_direction),
+                    pobj.interpolate(limit=limit, limit_direction=limit_direction),
+                )
 
     def test_interpolate(self):
         pser = pd.Series(
@@ -54,7 +55,7 @@ class GenericFunctionsTest(PandasOnSparkTestCase, TestUtils):
             ],
             name="a",
         )
-        self._test_series_interpolate(pser)
+        self._test_interpolate(pser)
 
         pser = pd.Series(
             [
@@ -64,7 +65,7 @@ class GenericFunctionsTest(PandasOnSparkTestCase, TestUtils):
             ],
             name="a",
         )
-        self._test_series_interpolate(pser)
+        self._test_interpolate(pser)
 
         pser = pd.Series(
             [
@@ -84,7 +85,7 @@ class GenericFunctionsTest(PandasOnSparkTestCase, TestUtils):
             ],
             name="a",
         )
-        self._test_series_interpolate(pser)
+        self._test_interpolate(pser)
 
         pdf = pd.DataFrame(
             [
@@ -96,7 +97,7 @@ class GenericFunctionsTest(PandasOnSparkTestCase, TestUtils):
             ],
             columns=list("abc"),
         )
-        self._test_dataframe_interpolate(pdf)
+        self._test_interpolate(pdf)
 
         pdf = pd.DataFrame(
             [
@@ -108,7 +109,7 @@ class GenericFunctionsTest(PandasOnSparkTestCase, TestUtils):
             ],
             columns=list("abcde"),
         )
-        self._test_dataframe_interpolate(pdf)
+        self._test_interpolate(pdf)
 
 
 if __name__ == "__main__":

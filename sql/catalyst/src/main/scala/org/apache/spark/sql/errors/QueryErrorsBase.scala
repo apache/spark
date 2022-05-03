@@ -17,19 +17,22 @@
 
 package org.apache.spark.sql.errors
 
+import java.util.Locale
+
 import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.catalyst.util.quoteIdentifier
 import org.apache.spark.sql.types.{DataType, DoubleType, FloatType}
 
 trait QueryErrorsBase {
-  private def litToErrorValue(l: Literal): String = l match {
+  // Converts an error class parameter to its SQL representation
+  def toSQLValue(v: Any, t: DataType): String = Literal.create(v, t) match {
     case Literal(null, _) => "NULL"
     case Literal(v: Float, FloatType) =>
       if (v.isNaN) "NaN"
       else if (v.isPosInfinity) "Infinity"
       else if (v.isNegInfinity) "-Infinity"
       else v.toString
-    case Literal(v: Double, DoubleType) =>
+    case l @ Literal(v: Double, DoubleType) =>
       if (v.isNaN) "NaN"
       else if (v.isPosInfinity) "Infinity"
       else if (v.isNegInfinity) "-Infinity"
@@ -37,18 +40,12 @@ trait QueryErrorsBase {
     case l => l.sql
   }
 
-  // Converts an error class parameter to its SQL representation
-  def toSQLValue(v: Any): String = {
-    litToErrorValue(Literal(v))
+  private def quoteByDefault(elem: String): String = {
+    "\"" + elem + "\""
   }
 
-  def toSQLValue(v: Any, t: DataType): String = {
-    litToErrorValue(Literal.create(v, t))
-  }
-
-  // Quote sql statements in error messages.
   def toSQLStmt(text: String): String = {
-    s"'$text'"
+    text.toUpperCase(Locale.ROOT)
   }
 
   def toSQLId(parts: Seq[String]): String = {
@@ -60,6 +57,10 @@ trait QueryErrorsBase {
   }
 
   def toSQLType(t: DataType): String = {
-    t.sql
+    quoteByDefault(t.sql)
+  }
+
+  def toSQLConf(conf: String): String = {
+    quoteByDefault(conf)
   }
 }

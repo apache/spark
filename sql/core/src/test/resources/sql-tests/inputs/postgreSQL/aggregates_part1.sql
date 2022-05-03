@@ -83,7 +83,7 @@ FROM (VALUES (7000000000005), (7000000000007)) v(x);
 SELECT regr_count(b, a) FROM aggtest;
 SELECT regr_sxx(b, a) FROM aggtest;
 -- SELECT regr_syy(b, a) FROM aggtest;
--- SELECT regr_sxy(b, a) FROM aggtest;
+SELECT regr_sxy(b, a) FROM aggtest;
 SELECT regr_avgx(b, a), regr_avgy(b, a) FROM aggtest;
 SELECT regr_r2(b, a) FROM aggtest;
 -- SELECT regr_slope(b, a), regr_intercept(b, a) FROM aggtest;
