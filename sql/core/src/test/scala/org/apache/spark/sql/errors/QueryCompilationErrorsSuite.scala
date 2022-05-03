@@ -544,7 +544,8 @@ class QueryCompilationErrorsSuite
           agg(sum($"earnings")).collect()
       },
       errorClass = "NON_LITERAL_PIVOT_VALUES",
-      msg = "Literal expressions required for pivot values, found 'earnings#12'")
+      msg = "Literal expressions required for pivot values, found 'earnings#\\w+'",
+      matchMsg = true)
   }
 }
 
