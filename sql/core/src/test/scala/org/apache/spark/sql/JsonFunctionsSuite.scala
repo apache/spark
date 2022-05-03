@@ -489,14 +489,10 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
   test("SPARK-24027: from_json of a map with unsupported key type") {
     val schema = MapType(StructType(StructField("f", IntegerType) :: Nil), StringType)
     val startMsg = "cannot resolve 'entries' due to data type mismatch:"
-    val exception1 = intercept[AnalysisException] {
+    val exception = intercept[AnalysisException] {
       Seq("""{{"f": 1}: "a"}""").toDS().select(from_json($"value", schema))
     }.getMessage
-    assert(exception1.contains(startMsg))
-    val exception2 = intercept[AnalysisException] {
-      Seq("""{{"f": 1}: "a"}""").toDS().select(from_json($"value", schema))
-    }.getMessage
-    assert(exception2.contains(startMsg))
+    assert(exception.contains(startMsg))
   }
 
   test("SPARK-24709: infers schemas of json strings and pass them to from_json") {
