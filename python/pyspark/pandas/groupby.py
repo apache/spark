@@ -640,6 +640,17 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         """
         assert ddof in (0, 1)
 
+        # Raise the TypeError when all aggregation columns are of unaccepted data types
+        all_unaccepted = True
+        for _agg_col in self._agg_columns:
+            if isinstance(_agg_col.spark.data_type, (NumericType, BooleanType)):
+                all_unaccepted = False
+                break
+        if all_unaccepted:
+            raise TypeError(
+                "Unaccepted data types of aggregation columns; numeric or bool expected."
+            )
+
         return self._reduce_for_stat_function(
             F.stddev_pop if ddof == 0 else F.stddev_samp,
             accepted_spark_types=(NumericType,),
@@ -2756,9 +2767,9 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
 
         Parameters
         ----------
-        sfun : The aggregate function to apply per column
+        sfun : The aggregate function to apply per column.
         accepted_spark_types: Accepted spark types of columns to be aggregated;
-                              default None means all spark types are accepted
+                              default None means all spark types are accepted.
         bool_to_numeric: If True, boolean columns are converted to numeric columns, which
                          are accepted for all statistical functions regardless of
                          `accepted_spark_types`.
