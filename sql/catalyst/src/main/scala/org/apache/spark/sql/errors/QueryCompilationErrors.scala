@@ -1895,16 +1895,6 @@ object QueryCompilationErrors extends QueryErrorsBase {
        """.stripMargin)
   }
 
-  def alterAddColWithDefaultNotSupportDatasourceTableError(
-      tableType: CatalogTable): Throwable = {
-    new AnalysisException(
-      s"""
-         |ALTER ADD COLUMNS does not support specifying DEFAULT values with datasource type
-         |$tableType. You must drop and re-create the table for adding the new columns.
-         |Tables: ${tableType.identifier}
-       """.stripMargin)
-  }
-
   def loadDataNotSupportedForDatasourceTablesError(tableIdentWithDB: String): Throwable = {
     new AnalysisException(s"LOAD DATA is not supported for datasource tables: $tableIdentWithDB")
   }

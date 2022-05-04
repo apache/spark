@@ -29,7 +29,6 @@ import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType}
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns
-import org.apache.spark.sql.execution.command.AlterTableAddColumnsCommand
 import org.apache.spark.sql.execution.datasources.DataSourceUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.PartitionOverwriteMode
@@ -977,6 +976,13 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
       sql("insert into t select false, default")
       checkAnswer(spark.table("t"), Row(false, 42L))
     }
+    // There is a complex query plan in the SELECT query in the INSERT INTO statement.
+    withTable("t") {
+      sql("create table t(i boolean default false, s bigint default 42) using parquet")
+      sql("insert into t select col, count(*) from values (default, default) " +
+        "as tab(col, other) group by 1")
+      checkAnswer(spark.table("t"), Row(false, 1))
+    }
     // The explicit default reference resolves successfully with nested table subqueries.
     withTable("t") {
       sql("create table t(i boolean default false, s bigint) using parquet")
@@ -1272,7 +1278,6 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
   }
 
   test("SPARK-38811 INSERT INTO on columns added with ALTER TABLE ADD COLUMNS: Positive tests") {
-    AlterTableAddColumnsCommand.allowAllAlterTableAddColumnWithDefaultValueForTest = true
     // There is a complex expression in the default value.
     val createTableBooleanCol = "create table t(i boolean) using parquet"
     val createTableIntCol = "create table t(i int) using parquet"
@@ -1343,6 +1348,14 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
       sql("insert into t select false, default")
       checkAnswer(spark.table("t"), Row(false, 42))
     }
+    // There is a complex query plan in the SELECT query in the INSERT INTO statement.
+    withTable("t") {
+      sql("create table t(i boolean default false) using parquet")
+      sql("alter table t add column s bigint default 42")
+      sql("insert into t select col, count(*) from values (default, default) " +
+        "as tab(col, other) group by 1")
+      checkAnswer(spark.table("t"), Row(false, 1))
+    }
     // There are three column types exercising various combinations of implicit and explicit
     // default column value references in the 'insert into' statements. Note these tests depend on
     // enabling the configuration to use NULLs for missing DEFAULT column values.
@@ -1372,11 +1385,9 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
           Row(5, 44L, 43L) :: Nil)
       }
     }
-    AlterTableAddColumnsCommand.allowAllAlterTableAddColumnWithDefaultValueForTest = false
   }
 
   test("SPARK-38811 INSERT INTO on columns added with ALTER TABLE ADD COLUMNS: Negative tests") {
-    AlterTableAddColumnsCommand.allowAllAlterTableAddColumnWithDefaultValueForTest = true
     object Errors {
       val COMMON_SUBSTRING = " has a DEFAULT value"
     }
@@ -1426,26 +1437,6 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
       assert(intercept[AnalysisException] {
         sql("insert into t values(1)")
       }.getMessage.contains("expected 3 columns but found"))
-    }
-    // There is a complex query plan in the SELECT query in the INSERT INTO statement.
-    withTable("t") {
-      sql("create table t(i boolean default false) using parquet")
-      sql("alter table t add column s bigint default 42")
-      assert(intercept[AnalysisException] {
-        sql("insert into t select col, count(*) from values (default, default) " +
-          "as tab(col, other) group by 1")
-      }.getMessage.contains("Column 'default' does not exist"))
-    }
-    AlterTableAddColumnsCommand.allowAllAlterTableAddColumnWithDefaultValueForTest = false
-    // Currently the AlterTableAddColumnsCommand.allowAlterTableAddColumnWithDefaultValue method
-    // returns false for Parquet tables, so adding columns with default values is not supported yet
-    // in production.
-    withTable("t") {
-      sql("create table t(i int) using parquet")
-      assert(intercept[AnalysisException] {
-        sql("alter table t add column s bigint default 42")
-      }.getMessage.contains(
-        "ALTER ADD COLUMNS does not support specifying DEFAULT values with datasource type"))
     }
   }
 
@@ -1730,14 +1721,10 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
   }
 
   test("SPARK-36980: Insert support query with CTE") {
-    withSQLConf(
-      SQLConf.USE_NULLS_FOR_MISSING_DEFAULT_COLUMN_VALUES.key -> "false",
-      SQLConf.USE_NULLS_FOR_MISSING_DEFAULT_COLUMN_VALUES.key -> "true") {
-      withTable("t") {
-        sql("CREATE TABLE t(i int, part1 int, part2 int) using parquet")
-        sql("INSERT INTO t WITH v1(c1) as (values (1)) select 1, 2, 3 from v1")
-        checkAnswer(spark.table("t"), Row(1, 2, 3))
-      }
+    withTable("t") {
+      sql("CREATE TABLE t(i int, part1 int, part2 int) using parquet")
+      sql("INSERT INTO t WITH v1(c1) as (values (1)) select 1, 2, 3 from v1")
+      checkAnswer(spark.table("t"), Row(1, 2, 3))
     }
   }
 

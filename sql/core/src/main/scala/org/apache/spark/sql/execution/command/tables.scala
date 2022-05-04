@@ -298,6 +298,7 @@ case class AlterTableAddColumnsCommand(
   }
 }
 
+
 /**
  * A command that loads data into a Hive table.
  *
