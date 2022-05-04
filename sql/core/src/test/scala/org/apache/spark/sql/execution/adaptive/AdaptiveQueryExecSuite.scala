@@ -849,7 +849,7 @@ class AdaptiveQueryExecSuite
     }
   }
 
-  test("SPARK-36638: General Skew Join: 3-table join") {
+  test("SPARK-36638: Generalize OptimizeSkewedJoin - 3-table join with Window and Aggregate") {
     withSQLConf(
       SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
       SQLConf.SKEW_JOIN_ENABLED.key -> "true",
@@ -889,7 +889,7 @@ class AdaptiveQueryExecSuite
              | LEFT JOIN (SELECT key3, max(value3) AS value3 FROM skewData3 GROUP BY key3)
              | ON key1 = key3
              |""".stripMargin
-        val query = s"SELECT value1, max(row) FROM ($join) GROUP BY value1"
+        val query = s"SELECT value1, min(value3), max(row) FROM ($join) GROUP BY value1"
 
         val (_, adaptivePlan) = runAdaptiveAndVerifyResult(query)
         val joins = findTopLevelShuffledJoin(adaptivePlan)
@@ -899,7 +899,7 @@ class AdaptiveQueryExecSuite
     }
   }
 
-  test("SPARK-36638: General Skew Join: 3-table join UNION 2-table join") {
+  test("SPARK-36638: Generalize OptimizeSkewedJoin - 3-table join UNION 2-table join") {
     withSQLConf(
       SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
       SQLConf.SKEW_JOIN_ENABLED.key -> "true",
@@ -950,7 +950,7 @@ class AdaptiveQueryExecSuite
     }
   }
 
-  test("SPARK-36638: General Skew Join: 5-table join") {
+  test("SPARK-36638: Generalize OptimizeSkewedJoin - 5-table join") {
     withSQLConf(
       SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
       SQLConf.SKEW_JOIN_ENABLED.key -> "true",
@@ -1020,7 +1020,7 @@ class AdaptiveQueryExecSuite
     }
   }
 
-  test("SPARK-36638: General Skew Join: combine splits to handle Combinatorial Explosion") {
+  test("SPARK-36638: Generalize OptimizeSkewedJoin - handle Combinatorial Explosion") {
     withSQLConf(
       SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
       SQLConf.SKEW_JOIN_ENABLED.key -> "true",
@@ -1073,7 +1073,7 @@ class AdaptiveQueryExecSuite
     }
   }
 
-  test("SPARK-36638: General Skew Join: combine splits to handle Combinatorial Explosion II") {
+  test("SPARK-36638: Generalize OptimizeSkewedJoin - handle Combinatorial Explosion II") {
     import OptimizeSkewedJoin.combine
 
     val array0 = Array(511, 622) // 317,842 splits

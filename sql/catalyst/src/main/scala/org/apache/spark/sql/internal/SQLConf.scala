@@ -708,7 +708,7 @@ object SQLConf {
     buildConf("spark.sql.adaptive.skewJoin.maxSplitsPerPartition")
       .doc(s"When '${ADAPTIVE_EXECUTION_ENABLED.key}' and '${SKEW_JOIN_ENABLED.key}' " +
         s"are true, the max number (inclusive) of splits from a partition.")
-      .version("3.3.0")
+      .version("3.4.0")
       .intConf
       .checkValue(_ >= 10, "The max splits must be no less than 10.")
       .createWithDefault(1000)
