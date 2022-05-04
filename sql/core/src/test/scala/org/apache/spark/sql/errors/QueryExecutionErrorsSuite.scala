@@ -484,8 +484,7 @@ class QueryExecutionErrorsSuite
     }
   }
 
-  test("INCOMPATIBLE_DATASOURCE_REGISTER: " +
-    "create table using an incompatible dataSource") {
+  test("INCOMPATIBLE_DATASOURCE_REGISTER: create table using an incompatible data source") {
     val newClassLoader = new ClassLoader() {
 
       override def getResources(name: String): java.util.Enumeration[URL] = {
