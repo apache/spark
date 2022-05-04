@@ -54,6 +54,7 @@ private[spark] class ResourceProfileManager(sparkConf: SparkConf,
   private val master = sparkConf.getOption("spark.master")
   private val isYarn = master.isDefined && master.get.equals("yarn")
   private val isK8s = master.isDefined && master.get.startsWith("k8s://")
+  private val isStandalone = master.isDefined && master.get.startsWith("spark://")
   private val notRunningUnitTests = !isTesting
   private val testExceptionThrown = sparkConf.get(RESOURCE_PROFILE_MANAGER_TESTING)
 
