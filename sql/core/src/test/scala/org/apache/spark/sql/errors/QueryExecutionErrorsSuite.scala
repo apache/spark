@@ -220,6 +220,7 @@ class QueryExecutionErrorsSuite
       checkErrorClass(
         exception = e,
         errorClass = "INCONSISTENT_BEHAVIOR_CROSS_VERSION",
+        errorSubClass = Some("READ_ANCIENT_DATETIME"),
         msg =
           "You may get a different result due to the upgrading to Spark >= 3.0: " +
           s"""
@@ -248,6 +249,7 @@ class QueryExecutionErrorsSuite
         checkErrorClass(
           exception = e,
           errorClass = "INCONSISTENT_BEHAVIOR_CROSS_VERSION",
+          errorSubClass = Some("WRITE_ANCIENT_DATETIME"),
           msg =
             "You may get a different result due to the upgrading to Spark >= 3.0: " +
             s"""
@@ -258,7 +260,7 @@ class QueryExecutionErrorsSuite
               |details in SPARK-31404. You can set $config to 'LEGACY' to rebase the
               |datetime values w.r.t. the calendar difference during writing, to get maximum
               |interoperability. Or set $config to 'CORRECTED' to write the datetime
-              |values as it is, if you are 100% sure that the written files will only be read by
+              |values as it is, if you are sure that the written files will only be read by
               |Spark 3.0+ or other systems that use Proleptic Gregorian calendar.
               |""".stripMargin)
       }
@@ -414,25 +416,26 @@ class QueryExecutionErrorsSuite
       trainingSales
       sql(
         """
-          | select * from (
-          | select *,map(sales.course, sales.year) as map
-          | from trainingSales
+          | select *
+          | from (
+          |   select *,map(sales.course, sales.year) as map
+          |   from trainingSales
           | )
           | pivot (
-          | sum(sales.earnings) as sum
-          | for map in (
-          | map("dotNET", 2012), map("JAVA", 2012),
-          | map("dotNet", 2013), map("Java", 2013)
-          | ))
+          |   sum(sales.earnings) as sum
+          |   for map in (
+          |     map("dotNET", 2012), map("JAVA", 2012),
+          |     map("dotNet", 2013), map("Java", 2013)
+          |   )
+          | )
           |""".stripMargin).collect()
     }
     checkErrorClass(
       exception = e,
       errorClass = "INCOMPARABLE_PIVOT_COLUMN",
-      msg = "Invalid pivot column 'map.*\\'. Pivot columns must be comparable.",
-      sqlState = Some("42000"),
-      matchMsg = true
-    )
+      msg = "Invalid pivot column `__auto_generated_subquery_name`.`map`. " +
+        "Pivot columns must be comparable.",
+      sqlState = Some("42000"))
   }
 
   test("UNSUPPORTED_SAVE_MODE: unsupported null saveMode whether the path exists or not") {

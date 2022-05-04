@@ -47,7 +47,7 @@ class QueryExecutionAnsiErrorsSuite extends QueryTest with QueryErrorsSuiteBase 
       },
       errorClass = "DIVIDE_BY_ZERO",
       msg =
-        "divide by zero. To return NULL instead, use 'try_divide'. If necessary set " +
+        "Division by zero. To return NULL instead, use `try_divide`. If necessary set " +
         s"$ansiConf to false (except for ANSI interval type) to bypass this error." +
         """
           |== SQL(line 1, position 7) ==
@@ -91,7 +91,7 @@ class QueryExecutionAnsiErrorsSuite extends QueryTest with QueryErrorsSuiteBase 
         sql("select array(1, 2, 3, 4, 5)[8]").collect()
       },
       errorClass = "INVALID_ARRAY_INDEX",
-      msg = "Invalid index: 8, numElements: 5. " +
+      msg = "The index 8 is out of bounds. The array has 5 elements. " +
         s"If necessary set $ansiConf to false to bypass this error."
     )
   }
@@ -102,8 +102,8 @@ class QueryExecutionAnsiErrorsSuite extends QueryTest with QueryErrorsSuiteBase 
         sql("select element_at(array(1, 2, 3, 4, 5), 8)").collect()
       },
       errorClass = "INVALID_ARRAY_INDEX_IN_ELEMENT_AT",
-      msg = "Invalid index: 8, numElements: 5. " +
-        "To return NULL instead, use 'try_element_at'. " +
+      msg = "The index 8 is out of bounds. The array has 5 elements. " +
+        "To return NULL instead, use `try_element_at`. " +
         s"If necessary set $ansiConf to false to bypass this error."
     )
   }

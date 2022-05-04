@@ -34,7 +34,7 @@
     "sqlState" : "22008"
   },
   "DIVIDE_BY_ZERO" : {
-    "message" : [ "divide by zero. To return NULL instead, use 'try_divide'. If necessary set <config> to false (except for ANSI interval type) to bypass this error.<details>" ],
+    "message" : [ "Division by zero. To return NULL instead, use `try_divide`. If necessary set <config> to false (except for ANSI interval type) to bypass this error.<details>" ],
     "sqlState" : "22012"
   },
   "DUPLICATE_KEY" : {
@@ -72,14 +72,31 @@
     "message" : [ "Grouping sets size cannot be greater than <maxSize>" ]
   },
   "INCOMPARABLE_PIVOT_COLUMN" : {
-    "message" : [ "Invalid pivot column '<columnName>'. Pivot columns must be comparable." ],
+    "message" : [ "Invalid pivot column <columnName>. Pivot columns must be comparable." ],
     "sqlState" : "42000"
   },
   "INCOMPATIBLE_DATASOURCE_REGISTER" : {
     "message" : [ "Detected an incompatible DataSourceRegister. Please remove the incompatible library from classpath or upgrade it. Error: <message>" ]
   },
   "INCONSISTENT_BEHAVIOR_CROSS_VERSION" : {
-    "message" : [ "You may get a different result due to the upgrading to Spark >= <sparkVersion>: <details>" ]
+    "message" : [ "You may get a different result due to the upgrading to" ],
+    "subClass" : {
+      "DATETIME_PATTERN_RECOGNITION" : {
+        "message" : [ " Spark >= 3.0: \nFail to recognize <pattern> pattern in the DateTimeFormatter. 1) You can set <config> to 'LEGACY' to restore the behavior before Spark 3.0. 2) You can form a valid datetime pattern with the guide from https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html" ]
+      },
+      "FORMAT_DATETIME_BY_NEW_PARSER" : {
+        "message" : [ " Spark >= 3.0: \nFail to format it to <resultCandidate> in the new formatter. You can set\n<config> to 'LEGACY' to restore the behavior before\nSpark 3.0, or set to 'CORRECTED' and treat it as an invalid datetime string.\n" ]
+      },
+      "PARSE_DATETIME_BY_NEW_PARSER" : {
+        "message" : [ " Spark >= 3.0: \nFail to parse <datetime> in the new parser. You can set <config> to 'LEGACY' to restore the behavior before Spark 3.0, or set to 'CORRECTED' and treat it as an invalid datetime string." ]
+      },
+      "READ_ANCIENT_DATETIME" : {
+        "message" : [ " Spark >= 3.0: \nreading dates before 1582-10-15 or timestamps before 1900-01-01T00:00:00Z\nfrom <format> files can be ambiguous, as the files may be written by\nSpark 2.x or legacy versions of Hive, which uses a legacy hybrid calendar\nthat is different from Spark 3.0+'s Proleptic Gregorian calendar.\nSee more details in SPARK-31404. You can set the SQL config <config> or\nthe datasource option '<option>' to 'LEGACY' to rebase the datetime values\nw.r.t. the calendar difference during reading. To read the datetime values\nas it is, set the SQL config <config> or the datasource option '<option>'\nto 'CORRECTED'.\n" ]
+      },
+      "WRITE_ANCIENT_DATETIME" : {
+        "message" : [ " Spark >= 3.0: \nwriting dates before 1582-10-15 or timestamps before 1900-01-01T00:00:00Z\ninto <format> files can be dangerous, as the files may be read by Spark 2.x\nor legacy versions of Hive later, which uses a legacy hybrid calendar that\nis different from Spark 3.0+'s Proleptic Gregorian calendar. See more\ndetails in SPARK-31404. You can set <config> to 'LEGACY' to rebase the\ndatetime values w.r.t. the calendar difference during writing, to get maximum\ninteroperability. Or set <config> to 'CORRECTED' to write the datetime\nvalues as it is, if you are sure that the written files will only be read by\nSpark 3.0+ or other systems that use Proleptic Gregorian calendar.\n" ]
+      }
+    }
   },
   "INDEX_OUT_OF_BOUNDS" : {
     "message" : [ "Index <indexValue> must be between 0 and the length of the ArrayData." ],
@@ -89,10 +106,10 @@
     "message" : [ "<message>" ]
   },
   "INVALID_ARRAY_INDEX" : {
-    "message" : [ "Invalid index: <indexValue>, numElements: <arraySize>. If necessary set <config> to false to bypass this error." ]
+    "message" : [ "The index <indexValue> is out of bounds. The array has <arraySize> elements. If necessary set <config> to false to bypass this error." ]
   },
   "INVALID_ARRAY_INDEX_IN_ELEMENT_AT" : {
-    "message" : [ "Invalid index: <indexValue>, numElements: <arraySize>. To return NULL instead, use 'try_element_at'. If necessary set <config> to false to bypass this error." ]
+    "message" : [ "The index <indexValue> is out of bounds. The array has <arraySize> elements. To return NULL instead, use `try_element_at`. If necessary set <config> to false to bypass this error." ]
   },
   "INVALID_FIELD_NAME" : {
     "message" : [ "Field name <fieldName> is invalid: <path> is not a struct." ],
@@ -102,8 +119,8 @@
     "message" : [ "The fraction of sec must be zero. Valid range is [0, 60]. If necessary set <config> to false to bypass this error. " ],
     "sqlState" : "22023"
   },
-  "INVALID_JSON_SCHEMA_MAPTYPE" : {
-    "message" : [ "Input schema <dataType> can only contain StringType as a key type for a MapType." ]
+  "INVALID_JSON_SCHEMA_MAP_TYPE" : {
+    "message" : [ "Input schema <jsonSchema> can only contain STRING as a key type for a MAP." ]
   },
   "INVALID_PANDAS_UDF_PLACEMENT" : {
     "message" : [ "The group aggregate pandas UDF <functionName> cannot be invoked together with as other, non-pandas aggregate functions." ]

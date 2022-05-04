@@ -398,8 +398,7 @@ class QueryCompilationErrorsSuite
     }
   }
 
-  test("INVALID_JSON_SCHEMA_MAPTYPE: " +
-    "Parse JSON rows can only contain StringType as a key type for a MapType.") {
+  test("INVALID_JSON_SCHEMA_MAP_TYPE: only STRING as a key type for MAP") {
     val schema = StructType(
       StructField("map", MapType(IntegerType, IntegerType, true), false) :: Nil)
 
@@ -407,10 +406,9 @@ class QueryCompilationErrorsSuite
       exception = intercept[AnalysisException] {
         spark.read.schema(schema).json(spark.emptyDataset[String])
       },
-      errorClass = "INVALID_JSON_SCHEMA_MAPTYPE",
-      msg = "Input schema " +
-        "StructType(StructField(map,MapType(IntegerType,IntegerType,true),false)) " +
-        "can only contain StringType as a key type for a MapType."
+      errorClass = "INVALID_JSON_SCHEMA_MAP_TYPE",
+      msg = """Input schema "STRUCT<map: MAP<INT, INT>>" """ +
+        "can only contain STRING as a key type for a MAP."
     )
   }
 
