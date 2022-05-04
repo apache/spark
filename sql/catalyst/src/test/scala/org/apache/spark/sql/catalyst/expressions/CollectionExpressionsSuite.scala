@@ -2288,7 +2288,7 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
         val array = Literal.create(Seq(1, 2, 3), ArrayType(IntegerType))
         var expr: Expression = ElementAt(array, Literal(5))
         if (ansiEnabled) {
-          val errMsg = "Invalid index: 5, numElements: 3"
+          val errMsg = "The index 5 is out of bounds. The array has 3 elements."
           checkExceptionInExpression[Exception](expr, errMsg)
         } else {
           checkEvaluation(expr, null)
@@ -2296,7 +2296,7 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
 
         expr = ElementAt(array, Literal(-5))
         if (ansiEnabled) {
-          val errMsg = "Invalid index: -5, numElements: 3"
+          val errMsg = "The index -5 is out of bounds. The array has 3 elements."
           checkExceptionInExpression[Exception](expr, errMsg)
         } else {
           checkEvaluation(expr, null)

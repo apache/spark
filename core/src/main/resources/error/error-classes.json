@@ -37,7 +37,7 @@
     "sqlState" : "22008"
   },
   "DIVIDE_BY_ZERO" : {
-    "message" : [ "divide by zero. To return NULL instead, use 'try_divide'. If necessary set <config> to false (except for ANSI interval type) to bypass this error.<details>" ],
+    "message" : [ "Division by zero. To return NULL instead, use `try_divide`. If necessary set <config> to false (except for ANSI interval type) to bypass this error.<details>" ],
     "sqlState" : "22012"
   },
   "DUPLICATE_KEY" : {
@@ -72,7 +72,7 @@
     "message" : [ "Grouping sets size cannot be greater than <maxSize>" ]
   },
   "INCOMPARABLE_PIVOT_COLUMN" : {
-    "message" : [ "Invalid pivot column '<columnName>'. Pivot columns must be comparable." ],
+    "message" : [ "Invalid pivot column <columnName>. Pivot columns must be comparable." ],
     "sqlState" : "42000"
   },
   "INCOMPATIBLE_DATASOURCE_REGISTER" : {
@@ -89,10 +89,10 @@
     "message" : [ "<message>" ]
   },
   "INVALID_ARRAY_INDEX" : {
-    "message" : [ "Invalid index: <indexValue>, numElements: <arraySize>. If necessary set <config> to false to bypass this error." ]
+    "message" : [ "The index <indexValue> is out of bounds. The array has <arraySize> elements. If necessary set <config> to false to bypass this error." ]
   },
   "INVALID_ARRAY_INDEX_IN_ELEMENT_AT" : {
-    "message" : [ "Invalid index: <indexValue>, numElements: <arraySize>. To return NULL instead, use 'try_element_at'. If necessary set <config> to false to bypass this error." ]
+    "message" : [ "The index <indexValue> is out of bounds. The array has <arraySize> elements. To return NULL instead, use `try_element_at`. If necessary set <config> to false to bypass this error." ]
   },
   "INVALID_FIELD_NAME" : {
     "message" : [ "Field name <fieldName> is invalid: <path> is not a struct." ],
@@ -102,8 +102,8 @@
     "message" : [ "The fraction of sec must be zero. Valid range is [0, 60]. If necessary set <config> to false to bypass this error. " ],
     "sqlState" : "22023"
   },
-  "INVALID_JSON_SCHEMA_MAPTYPE" : {
-    "message" : [ "Input schema <dataType> can only contain StringType as a key type for a MapType." ]
+  "INVALID_JSON_SCHEMA_MAP_TYPE" : {
+    "message" : [ "Input schema <jsonSchema> can only contain STRING as a key type for a MAP." ]
   },
   "INVALID_PARAMETER_VALUE" : {
     "message" : [ "The value of parameter(s) '<parameter>' in <functionName> is invalid: <expected>" ],
