@@ -242,22 +242,17 @@ public final class VectorizedRleValuesReader extends ValuesReader
           case RLE:
             if (currentValue == state.maxDefinitionLevel) {
               updater.readValues(n, state.valueOffset, values, valueReader);
-              state.valueOffset += n;
-            } else if (!state.isRequired && currentValue == state.maxDefinitionLevel - 1) {
-              // Only add null if this represents a null element, but not for the case where a
-              // struct itself is null
+            } else {
               nulls.putNulls(state.valueOffset, n);
-              state.valueOffset += n;
             }
+            state.valueOffset += n;
             break;
           case PACKED:
             for (int i = 0; i < n; ++i) {
-              int value = currentBuffer[currentBufferIdx++];
-              if (value == state.maxDefinitionLevel) {
+              int currentValue = currentBuffer[currentBufferIdx++];
+              if (currentValue == state.maxDefinitionLevel) {
                 updater.readValue(state.valueOffset++, values, valueReader);
               } else {
-                // Only add null if this represents a null element, but not for the case where a
-                // struct itself is null
                 nulls.putNull(state.valueOffset++);
               }
             }
