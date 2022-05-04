@@ -768,7 +768,7 @@ private[spark] class AppStatusStore(
     }.toSeq
   }
 
-  private[spark] def isHistory(): Boolean = true
+  private[spark] def isHistory(): Boolean = false
 }
 
 private[spark] object AppStatusStore extends Logging {
