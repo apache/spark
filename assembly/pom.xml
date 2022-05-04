@@ -187,6 +187,11 @@
           </exclusions>
         </dependency>
         <dependency>
+          <groupId>org.apache.spark</groupId>
+          <artifactId>spark-network-common_2.12</artifactId>
+          <version>3.2.1</version>
+        </dependency>
+        <dependency>
           <groupId>com.amazonaws</groupId>
           <artifactId>aws-java-sdk-dynamodb</artifactId>
           <version>${aws.java.sdk.version}</version>

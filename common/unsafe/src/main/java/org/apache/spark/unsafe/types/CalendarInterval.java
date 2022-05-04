@@ -25,6 +25,8 @@ import java.time.Duration;
 import java.time.Period;
 import java.time.temporal.ChronoUnit;
 import java.util.Objects;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import static org.apache.spark.sql.catalyst.util.DateTimeConstants.*;
 
@@ -51,6 +53,25 @@ public final class CalendarInterval implements Serializable {
   public final int days;
   public final long microseconds;
 
+  /**
+   * A function to generate regex which matches interval string's unit part like "3 years".
+   *
+   * First, we can leave out some units in interval string, and we only care about the value of
+   * unit, so here we use non-capturing group to wrap the actual regex.
+   * At the beginning of the actual regex, we should match spaces before the unit part.
+   * Next is the number part, starts with an optional "-" to represent negative value. We use
+   * capturing group to wrap this part as we need the value later.
+   * Finally is the unit name, ends with an optional "s".
+   */
+  private static String unitRegex(String unit) {
+    return "(?:\\s+(-?\\d+)\\s+" + unit + "s?)?";
+  }
+
+  private static Pattern p = Pattern.compile("interval" + unitRegex("year") + unitRegex("month") +
+          unitRegex("week") + unitRegex("day") + unitRegex("hour") + unitRegex("minute") +
+          unitRegex("second") + unitRegex("millisecond") + unitRegex("microsecond"));
+
+
   // CalendarInterval is represented by months, days and microseconds. Months and days are not
   // units of time with a constant length (unlike hours, seconds), so they are two separated fields
   // from microseconds. One month may be equal to 29, 30 or 31 days and one day may be equal to
@@ -74,6 +95,44 @@ public final class CalendarInterval implements Serializable {
   @Override
   public int hashCode() {
     return Objects.hash(months, days, microseconds);
+  }
+
+  /**
+   * Convert a string to CalendarInterval. Return null if the input string is not a valid interval.
+   * This method is case-sensitive and all characters in the input string should be in lower case.
+   */
+  public static CalendarInterval fromString(String s) {
+    if (s == null) {
+      return null;
+    }
+    s = s.trim();
+    Matcher m = p.matcher(s);
+    if (!m.matches() || s.equals("interval")) {
+      return null;
+    } else {
+      long months = toLong(m.group(1)) * 12 + toLong(m.group(2));
+      long microseconds = toLong(m.group(3)) * MICROS_PER_DAY * 7;
+      microseconds += toLong(m.group(4)) * MICROS_PER_DAY;
+      microseconds += toLong(m.group(5)) * MICROS_PER_HOUR;
+      microseconds += toLong(m.group(6)) * MICROS_PER_MINUTE;
+      microseconds += toLong(m.group(7)) * MICROS_PER_SECOND;
+      microseconds += toLong(m.group(8)) * MICROS_PER_MILLIS;
+      microseconds += toLong(m.group(9));
+      return new CalendarInterval((int) months, 0, microseconds);
+    }
+  }
+
+  private static long toLong(String s) {
+    if (s == null) {
+      return 0;
+    } else {
+      return Long.parseLong(s);
+    }
+  }
+
+
+  public long milliseconds() {
+    return this.microseconds / MICROS_PER_MILLIS;
   }
 
   @Override

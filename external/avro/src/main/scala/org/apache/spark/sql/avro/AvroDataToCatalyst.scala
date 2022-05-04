@@ -117,6 +117,7 @@ private[avro] case class AvroDataToCatalyst(
     }
   }
 
+
   override def prettyName: String = "from_avro"
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
