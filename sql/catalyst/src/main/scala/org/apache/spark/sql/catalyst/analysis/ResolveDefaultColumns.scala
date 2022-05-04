@@ -109,15 +109,16 @@ case class ResolveDefaultColumns(
     val expanded: UnresolvedInlineTable =
       addMissingDefaultValuesForInsertFromInlineTable(
         table, insertTableSchemaWithoutPartitionColumns)
-    replaceExplicitDefaultValuesForInputOfInsertInto(
-      analyzer, insertTableSchemaWithoutPartitionColumns, expanded)
-      .map { replaced: LogicalPlan =>
-        node = replaced
-        for (child <- children.reverse) {
-          node = child.withNewChildren(Seq(node))
-        }
-        regenerated.copy(query = node)
-      }.getOrElse(i)
+    val replaced: Option[LogicalPlan] =
+      replaceExplicitDefaultValuesForInputOfInsertInto(
+        analyzer, insertTableSchemaWithoutPartitionColumns, expanded)
+    replaced.map { r: LogicalPlan =>
+      node = r
+      for (child <- children.reverse) {
+        node = child.withNewChildren(Seq(node))
+      }
+      regenerated.copy(query = node)
+    }.getOrElse(i)
   }
 
   /**
@@ -134,11 +135,12 @@ case class ResolveDefaultColumns(
     val expanded: Project =
       addMissingDefaultValuesForInsertFromProject(
         project, insertTableSchemaWithoutPartitionColumns)
-    replaceExplicitDefaultValuesForInputOfInsertInto(
-      analyzer, insertTableSchemaWithoutPartitionColumns, expanded)
-      .map { replaced: LogicalPlan =>
-        regenerated.copy(query = replaced)
-      }.getOrElse(i)
+    val replaced: Option[LogicalPlan] =
+      replaceExplicitDefaultValuesForInputOfInsertInto(
+        analyzer, insertTableSchemaWithoutPartitionColumns, expanded)
+    replaced.map { r =>
+      regenerated.copy(query = r)
+    }.getOrElse(i)
   }
 
   /**
@@ -163,10 +165,11 @@ case class ResolveDefaultColumns(
       mapStructFieldNamesToExpressions(schema, defaultExpressions)
     // For each assignment in the UPDATE command's SET clause with a DEFAULT column reference on the
     // right-hand side, look up the corresponding expression from the above map.
-    replaceExplicitDefaultValuesForUpdateAssignments(u.assignments, columnNamesToExpressions)
-      .map { newAssignments: Seq[Assignment] =>
-        u.copy(assignments = newAssignments)
-      }.getOrElse(u)
+    val newAssignments: Option[Seq[Assignment]] =
+      replaceExplicitDefaultValuesForUpdateAssignments(u.assignments, columnNamesToExpressions)
+    newAssignments.map { n =>
+      u.copy(assignments = n)
+    }.getOrElse(u)
   }
 
   /**
