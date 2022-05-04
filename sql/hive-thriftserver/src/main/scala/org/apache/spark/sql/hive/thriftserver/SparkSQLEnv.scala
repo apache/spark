@@ -51,14 +51,14 @@ private[hive] object SparkSQLEnv extends Logging {
         .set(SQLConf.DATETIME_JAVA8API_ENABLED, true)
 
       // if user specified in-memory explicitly, we bypass enable hive support.
-      val shouldUseInmemoryCatalog =
+      val shouldUseInMemoryCatalog =
         sparkConf.getOption(CATALOG_IMPLEMENTATION.key).contains("in-memory")
 
       val builder = SparkSession.builder()
         .config(sparkConf)
         .config(BUILTIN_HIVE_VERSION.key, builtinHiveVersion)
 
-      if (!shouldUseInmemoryCatalog) {
+      if (!shouldUseInMemoryCatalog) {
         builder.enableHiveSupport()
       }
       val sparkSession = builder.getOrCreate()
@@ -70,7 +70,7 @@ private[hive] object SparkSQLEnv extends Logging {
       // different class loader).
       sparkSession.sessionState
 
-      if (!shouldUseInmemoryCatalog) {
+      if (!shouldUseInMemoryCatalog) {
         val metadataHive = sparkSession
           .sharedState.externalCatalog.unwrapped.asInstanceOf[HiveExternalCatalog].client
         metadataHive.setOut(new PrintStream(System.out, true, UTF_8.name()))

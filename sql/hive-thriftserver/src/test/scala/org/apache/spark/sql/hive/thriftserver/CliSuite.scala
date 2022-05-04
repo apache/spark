@@ -683,11 +683,12 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
   }
 
   test("SPARK-39068: support in-memory catalog and running concurrently") {
-    val extraConf = Seq("-c", "spark.sql.catalogImplementation=in-memory")
+    val extraConf = Seq("-c", s"${StaticSQLConf.CATALOG_IMPLEMENTATION.key}=in-memory")
     val cd = new CountDownLatch(2)
     def t: Thread = new Thread {
       override def run(): Unit = {
-        // catalog is in memory, so that isolated
+        // catalog is in-memory and isolated, so that we can create table with duplicated
+        // names.
         runCliWithin(1.minute, extraArgs = extraConf)(
           "create table src(key int) using hive;" ->
             "Hive support is required to CREATE Hive TABLE",
