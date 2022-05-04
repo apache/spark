@@ -111,15 +111,16 @@ case class ResolveDefaultColumns(
     val expanded: UnresolvedInlineTable =
       addMissingDefaultValuesForInsertFromInlineTable(
         table, insertTableSchemaWithoutPartitionColumns)
-    replaceExplicitDefaultValuesForInputOfInsertInto(
-      analyzer, insertTableSchemaWithoutPartitionColumns, expanded)
-      .map { replaced: LogicalPlan =>
-        node = replaced
-        for (child <- children.reverse) {
-          node = child.withNewChildren(Seq(node))
-        }
-        regenerated.copy(query = node)
-      }.getOrElse(i)
+    val replaced: Option[LogicalPlan] =
+      replaceExplicitDefaultValuesForInputOfInsertInto(
+        analyzer, insertTableSchemaWithoutPartitionColumns, expanded)
+    replaced.map { r: LogicalPlan =>
+      node = r
+      for (child <- children.reverse) {
+        node = child.withNewChildren(Seq(node))
+      }
+      regenerated.copy(query = node)
+    }.getOrElse(i)
   }
 
   /**
@@ -136,11 +137,12 @@ case class ResolveDefaultColumns(
     val expanded: Project =
       addMissingDefaultValuesForInsertFromProject(
         project, insertTableSchemaWithoutPartitionColumns)
-    replaceExplicitDefaultValuesForInputOfInsertInto(
-      analyzer, insertTableSchemaWithoutPartitionColumns, expanded)
-      .map { replaced: LogicalPlan =>
-        regenerated.copy(query = replaced)
-      }.getOrElse(i)
+    val replaced: Option[LogicalPlan] =
+      replaceExplicitDefaultValuesForInputOfInsertInto(
+        analyzer, insertTableSchemaWithoutPartitionColumns, expanded)
+    replaced.map { r =>
+      regenerated.copy(query = r)
+    }.getOrElse(i)
   }
 
   /**
@@ -165,17 +167,19 @@ case class ResolveDefaultColumns(
       mapStructFieldNamesToExpressions(schema, defaultExpressions)
     // For each assignment in the UPDATE command's SET clause with a DEFAULT column reference on the
     // right-hand side, look up the corresponding expression from the above map.
-    replaceExplicitDefaultValuesForUpdateAssignments(
-      u.assignments, CommandType.Update, columnNamesToExpressions)
-      .map { newAssignments: Seq[Assignment] =>
-        u.copy(assignments = newAssignments)
-      }.getOrElse(u)
+    val newAssignments: Option[Seq[Assignment]] =
+      replaceExplicitDefaultValuesForUpdateAssignments(
+        u.assignments, CommandType.Update, columnNamesToExpressions)
+    newAssignments.map { n =>
+      u.copy(assignments = n)
+    }.getOrElse(u)
   }
 
   /**
    * Resolves DEFAULT column references for a MERGE INTO command.
    */
   private def resolveDefaultColumnsForMerge(m: MergeIntoTable): LogicalPlan = {
+    val schema: StructType = getSchemaForTargetTable(m.targetTable).getOrElse(return m)
     // Return a more descriptive error message if the user tries to use a DEFAULT column reference
     // inside an UPDATE command's WHERE clause; this is not allowed.
     m.mergeCondition.map { c: Expression =>
@@ -183,25 +187,26 @@ case class ResolveDefaultColumns(
         throw QueryCompilationErrors.defaultReferencesNotAllowedInMergeCondition()
       }
     }
-    val schema: StructType = getSchemaForTargetTable(m.targetTable).getOrElse(return m)
     val defaultExpressions: Seq[Expression] = schema.fields.map {
       case f if f.metadata.contains(CURRENT_DEFAULT_COLUMN_METADATA_KEY) =>
         analyze(analyzer, f, "MERGE")
       case _ => Literal(null)
     }
     val columnNamesToExpressions: Map[String, Expression] =
-      schema.fields.zip(defaultExpressions).map {
-        case (field, expr) => field.name -> expr
-      }.toMap
-    val newMatchedActions: Seq[MergeAction] = m.matchedActions.map {
+      mapStructFieldNamesToExpressions(schema, defaultExpressions)
+    val newMatchedActions: Seq[Option[MergeAction]] = m.matchedActions.map {
       replaceExplicitDefaultValuesInMergeAction(_, columnNamesToExpressions)
-        .getOrElse(return m)
     }
-    val newNotMatchedActions: Seq[MergeAction] = m.notMatchedActions.map {
+    val newNotMatchedActions: Seq[Option[MergeAction]] = m.notMatchedActions.map {
       replaceExplicitDefaultValuesInMergeAction(_, columnNamesToExpressions)
-        .getOrElse(return m)
     }
-    m.copy(matchedActions = newMatchedActions, notMatchedActions = newNotMatchedActions)
+    if (newMatchedActions.forall(_.isDefined) &&
+      newNotMatchedActions.forall(_.isDefined)) {
+      m.copy(matchedActions = newMatchedActions.map(_.get),
+        notMatchedActions = newNotMatchedActions.map(_.get))
+    } else {
+      m
+    }
   }
 
   /**
@@ -213,17 +218,19 @@ case class ResolveDefaultColumns(
       columnNamesToExpressions: Map[String, Expression]): Option[MergeAction] = {
     action match {
       case u: UpdateAction =>
-        val replaced: Seq[Assignment] =
+        val replaced: Option[Seq[Assignment]] =
           replaceExplicitDefaultValuesForUpdateAssignments(
             u.assignments, CommandType.Merge, columnNamesToExpressions)
-              .getOrElse(return None)
-        Some(u.copy(assignments = replaced))
+        replaced.map { r =>
+          Some(u.copy(assignments = r))
+        }.getOrElse(None)
       case i: InsertAction =>
-        val replaced: Seq[Assignment] =
+        val replaced: Option[Seq[Assignment]] =
           replaceExplicitDefaultValuesForUpdateAssignments(
             i.assignments, CommandType.Merge, columnNamesToExpressions)
-              .getOrElse(return None)
-        Some(i.copy(assignments = replaced))
+        replaced.map { r =>
+          Some(i.copy(assignments = r))
+        }.getOrElse(None)
       case _ => Some(action)
     }
   }
