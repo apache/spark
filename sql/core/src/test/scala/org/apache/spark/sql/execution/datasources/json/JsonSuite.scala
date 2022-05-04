@@ -3175,8 +3175,7 @@ abstract class JsonSuite
       }
     }
 
-    withSQLConf(
-        SQLConf.LEGACY_RESPECT_NULLABILITY_IN_TEXT_DATASET_CONVERSION.key -> true.toString) {
+    withSQLConf(SQLConf.LEGACY_RESPECT_NULLABILITY_IN_TEXT_DATASET_CONVERSION.key -> "true") {
       checkAnswer(
         spark.read.schema(
           StructType(

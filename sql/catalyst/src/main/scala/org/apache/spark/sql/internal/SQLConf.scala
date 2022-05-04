@@ -3026,16 +3026,15 @@ object SQLConf {
     .createOptional
 
   val LEGACY_RESPECT_NULLABILITY_IN_TEXT_DATASET_CONVERSION =
-  buildConf("spark.sql.legacy.respectNullabilityInTextDatasetConversion")
-    .internal()
-    .doc(
-      "When true, the nullability in the user-specified schema for " +
+    buildConf("spark.sql.legacy.respectNullabilityInTextDatasetConversion")
+      .internal()
+      .doc("When true, the nullability in the user-specified schema for " +
         "`DataFrameReader.schema(schema).json(jsonDataset)` and " +
         "`DataFrameReader.schema(schema).csv(csvDataset)` is respected. Otherwise, they are " +
-        "turned to a nullable schema forcely.")
-    .version("3.3.0")
-    .booleanConf
-    .createWithDefault(false)
+        "turned to a nullable schema forcibly.")
+      .version("3.3.0")
+      .booleanConf
+      .createWithDefault(false)
 
   val REPL_EAGER_EVAL_ENABLED = buildConf("spark.sql.repl.eagerEval.enabled")
     .doc("Enables eager evaluation or not. When true, the top K rows of Dataset will be " +
