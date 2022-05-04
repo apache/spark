@@ -55,7 +55,7 @@ class ShowPartitionsParserSuite extends AnalysisTest with QueryErrorsSuiteBase {
       errorClass = "INVALID_SQL_SYNTAX",
       sqlState = "42000",
       message =
-        """Invalid SQL syntax: Partition key 'b' must set value (can't be empty).(line 1, pos 25)
+        """Invalid SQL syntax: Partition key `b` must set value (can't be empty).(line 1, pos 25)
           |
           |== SQL ==
           |SHOW PARTITIONS dbx.tab1 PARTITION (a='1', b)

@@ -589,7 +589,7 @@ class QueryParsingErrorsSuite extends QueryTest with QueryErrorsSuiteBase {
       errorClass = "INVALID_SQL_SYNTAX",
       sqlState = "42000",
       message =
-        """Invalid SQL syntax: Partition key 'grade' must set value (can't be empty).(line 1, pos 47)
+        """Invalid SQL syntax: Partition key `grade` must set value (can't be empty).(line 1, pos 47)
           |
           |== SQL ==
           |SHOW TABLE EXTENDED IN default LIKE 'employee' PARTITION (grade)
@@ -604,7 +604,7 @@ class QueryParsingErrorsSuite extends QueryTest with QueryErrorsSuiteBase {
       errorClass = "INVALID_SQL_SYNTAX",
       sqlState = "42000",
       message =
-        """Invalid SQL syntax: Expected a column reference for transform bucket: 66(line 1, pos 67)
+        """Invalid SQL syntax: Expected a column reference for transform `bucket`: 66(line 1, pos 67)
           |
           |== SQL ==
           |CREATE TABLE my_tab(a INT, b STRING) USING parquet PARTITIONED BY (bucket(32, a, 66))
@@ -619,8 +619,8 @@ class QueryParsingErrorsSuite extends QueryTest with QueryErrorsSuiteBase {
       errorSubClass = Some("DESC_TABLE_COLUMN_PARTITION"),
       sqlState = "0A000",
       message =
-        """The feature is not supported: DESC TABLE COLUMN for a specific partition """ +
-        """is not supported.(line 1, pos 0)""" +
+        """The feature is not supported: DESC TABLE COLUMN for a specific partition""" +
+        """.(line 1, pos 0)""" +
         """|
            |
            |== SQL ==

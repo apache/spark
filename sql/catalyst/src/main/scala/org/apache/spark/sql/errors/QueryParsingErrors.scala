@@ -79,7 +79,8 @@ object QueryParsingErrors extends QueryErrorsBase {
   def emptyPartitionKeyError(key: String, ctx: PartitionSpecContext): Throwable = {
     new ParseException(
       errorClass = "INVALID_SQL_SYNTAX",
-      messageParameters = Array(s"Partition key '$key' must set value (can't be empty)."),
+      messageParameters =
+        Array(s"Partition key ${toSQLId(key)} must set value (can't be empty)."),
       ctx)
   }
 
@@ -248,7 +249,8 @@ object QueryParsingErrors extends QueryErrorsBase {
       name: String, describe: String, ctx: ApplyTransformContext): Throwable = {
     new ParseException(
       errorClass = "INVALID_SQL_SYNTAX",
-      messageParameters = Array(s"Expected a column reference for transform $name: $describe"),
+      messageParameters =
+        Array(s"Expected a column reference for transform ${toSQLId(name)}: $describe"),
       ctx)
   }
 
@@ -314,7 +316,7 @@ object QueryParsingErrors extends QueryErrorsBase {
       key: String, ctx: DescribeRelationContext): Throwable = {
     new ParseException(
       errorClass = "INVALID_SQL_SYNTAX",
-      messageParameters = Array(s"PARTITION specification is incomplete: `$key`"),
+      messageParameters = Array(s"PARTITION specification is incomplete: ${toSQLId(key)}"),
       ctx)
   }
 

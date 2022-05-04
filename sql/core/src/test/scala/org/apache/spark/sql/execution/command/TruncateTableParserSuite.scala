@@ -54,7 +54,7 @@ class TruncateTableParserSuite extends AnalysisTest with QueryErrorsSuiteBase {
       errorClass = "INVALID_SQL_SYNTAX",
       sqlState = "42000",
       message =
-        """Invalid SQL syntax: Partition key 'b' must set value (can't be empty).(line 1, pos 24)
+        """Invalid SQL syntax: Partition key `b` must set value (can't be empty).(line 1, pos 24)
           |
           |== SQL ==
           |TRUNCATE TABLE dbx.tab1 PARTITION (a='1', b)
