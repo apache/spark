@@ -27,8 +27,8 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap;
 
 public class JavaOrderAndPartitionAwareDataSource extends JavaPartitionAwareDataSource {
 
-  static class MyScanBuilder extends JavaSimpleScanBuilder
-          implements SupportsReportPartitioning, SupportsReportOrdering {
+  static class MyScanBuilder extends JavaPartitionAwareDataSource.MyScanBuilder
+          implements SupportsReportOrdering {
 
     private final Partitioning partitioning;
     private final SortOrder[] ordering;
@@ -62,11 +62,6 @@ public class JavaOrderAndPartitionAwareDataSource extends JavaPartitionAwareData
       partitions[0] = new SpecificInputPartition(new int[]{1, 1, 3}, new int[]{4, 5, 5});
       partitions[1] = new SpecificInputPartition(new int[]{2, 4, 4}, new int[]{6, 1, 2});
       return partitions;
-    }
-
-    @Override
-    public PartitionReaderFactory createReaderFactory() {
-      return new SpecificReaderFactory();
     }
 
     @Override
