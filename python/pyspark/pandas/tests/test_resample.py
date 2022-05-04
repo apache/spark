@@ -138,10 +138,10 @@ class ResampleTest(PandasOnSparkTestCase, TestUtils):
         pdf = pd.DataFrame(np.ones(len(dates)), index=pd.DatetimeIndex(dates), columns=["A"])
         psdf = ps.from_pandas(pdf)
 
-        with self.assertRaisesRegex(ValueError, "Unknown freq unit W"):
+        with self.assertRaisesRegex(ValueError, "rule code W-SUN is not supported"):
             psdf.A.resample("3W").sum()
 
-        with self.assertRaisesRegex(ValueError, "invalid rule: '0Y'"):
+        with self.assertRaisesRegex(ValueError, "rule offset must be positive"):
             psdf.A.resample("0Y").sum()
 
         with self.assertRaisesRegex(ValueError, "invalid closed: 'middle'"):

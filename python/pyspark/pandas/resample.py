@@ -20,7 +20,6 @@ A wrapper for ResampledData to behave similar to pandas Resampler.
 """
 from abc import ABCMeta
 from distutils.version import LooseVersion
-import re
 from functools import partial
 from typing import (
     Any,
@@ -32,6 +31,7 @@ from typing import (
 import numpy as np
 
 import pandas as pd
+from pandas._libs.tslibs import to_offset
 
 if LooseVersion(pd.__version__) >= LooseVersion("1.3.0"):
     from pandas.core.common import _builtin_table  # type: ignore[attr-defined]
@@ -98,52 +98,25 @@ class Resampler(Generic[FrameLike], metaclass=ABCMeta):
         self._psdf = psdf
         self._resamplekey = resamplekey
 
-        parsed = re.findall(r"^([0-9]+)?([A-Za-z]+)$", rule)
-        if len(parsed) != 1:
-            raise ValueError("Unsupported freq {}".format(rule))
+        self._offset = to_offset(rule)
+        if self._offset.rule_code not in ["A-DEC", "M", "D", "H", "T", "S"]:
+            raise ValueError("rule code {} is not supported".format(self._offset.rule_code))
+        if not self._offset.n > 0:
+            raise ValueError("rule offset must be positive")
 
-        offset_str, unit_str = parsed[0]
-        self._freq_offset = 1
-        if offset_str != "":
-            freq_offset = int(offset_str)
-            if not freq_offset > 0:
-                raise ValueError("invalid rule: '{}'".format(rule))
-            self._freq_offset = freq_offset
-
-        unit_mapping = {
-            "Y": "Y",
-            "A": "Y",
-            "M": "M",
-            "D": "D",
-            "H": "H",
-            "T": "T",
-            "MIN": "T",
-            "S": "S",
-        }
-        if unit_str.upper() not in unit_mapping:
-            raise ValueError("Unknown freq unit {}".format(unit_str))
-        self._freq_unit = unit_mapping[unit_str.upper()]
-        self._rule = rule
-
-        if closed is not None and closed not in ["left", "right"]:
-            raise ValueError("invalid closed: '{}'".format(closed))
         if closed is None:
-            if self._freq_unit in ["Y", "M"]:
-                self._closed = "right"
-            else:
-                self._closed = "left"
-        else:
+            self._closed = "right" if self._offset.rule_code in ["A-DEC", "M"] else "left"
+        elif closed in ["left", "right"]:
             self._closed = closed
-
-        if label is not None and label not in ["left", "right"]:
-            raise ValueError("invalid label: '{}'".format(label))
-        if label is None:
-            if self._freq_unit in ["Y", "M"]:
-                self._label = "right"
-            else:
-                self._label = "left"
         else:
+            raise ValueError("invalid closed: '{}'".format(closed))
+
+        if label is None:
+            self._label = "right" if self._offset.rule_code in ["A-DEC", "M"] else "left"
+        elif label in ["left", "right"]:
             self._label = label
+        else:
+            raise ValueError("invalid label: '{}'".format(label))
 
         self._agg_columns = agg_columns
 
@@ -161,11 +134,11 @@ class Resampler(Generic[FrameLike], metaclass=ABCMeta):
     def _bin_time_stamp(self, origin: pd.Timestamp, ts_scol: Column) -> Column:
         sql_utils = SparkContext._active_spark_context._jvm.PythonSQLUtils
         origin_scol = F.lit(origin)
-        offset = self._freq_offset
+        (rule_code, n) = (self._offset.rule_code, self._offset.n)
         left_closed, right_closed = (self._closed == "left", self._closed == "right")
         left_labeled, right_labeled = (self._label == "left", self._label == "right")
 
-        if self._freq_unit == "Y":
+        if rule_code == "A-DEC":
             assert (
                 origin.month == 12
                 and origin.day == 31
@@ -175,22 +148,22 @@ class Resampler(Generic[FrameLike], metaclass=ABCMeta):
             )
 
             diff = F.year(ts_scol) - F.year(origin_scol)
-            mod = F.lit(0) if offset == 1 else (diff % offset)
+            mod = F.lit(0) if n == 1 else (diff % n)
             edge_cond = (mod == 0) & (F.month(ts_scol) == 12) & (F.dayofmonth(ts_scol) == 31)
 
             edge_label = F.year(ts_scol)
             if left_closed and right_labeled:
-                edge_label += offset
+                edge_label += n
             elif right_closed and left_labeled:
-                edge_label -= offset
+                edge_label -= n
 
             if left_labeled:
-                non_edge_label = F.when(mod == 0, F.year(ts_scol) - offset).otherwise(
+                non_edge_label = F.when(mod == 0, F.year(ts_scol) - n).otherwise(
                     F.year(ts_scol) - mod
                 )
             else:
                 non_edge_label = F.when(mod == 0, F.year(ts_scol)).otherwise(
-                    F.year(ts_scol) - (mod - offset)
+                    F.year(ts_scol) - (mod - n)
                 )
 
             return F.to_timestamp(
@@ -199,45 +172,49 @@ class Resampler(Generic[FrameLike], metaclass=ABCMeta):
                 )
             )
 
-        elif self._freq_unit == "M":
-            # TODO: check whether 'origin' is the last day of month
-            assert origin.hour == 0 and origin.minute == 0 and origin.second == 0
+        elif rule_code == "M":
+            assert (
+                origin.is_month_end
+                and origin.hour == 0
+                and origin.minute == 0
+                and origin.second == 0
+            )
 
             diff = (
                 (F.year(ts_scol) - F.year(origin_scol)) * 12
                 + F.month(ts_scol)
                 - F.month(origin_scol)
             )
-            mod = F.lit(0) if offset == 1 else (diff % offset)
+            mod = F.lit(0) if n == 1 else (diff % n)
             edge_cond = (mod == 0) & (F.dayofmonth(ts_scol) == F.dayofmonth(F.last_day(ts_scol)))
 
             truncated_ts_scol = F.date_trunc("MONTH", ts_scol)
             edge_label = truncated_ts_scol
             if left_closed and right_labeled:
-                edge_label += sql_utils.makeInterval("MONTH", F.lit(offset)._jc)
+                edge_label += sql_utils.makeInterval("MONTH", F.lit(n)._jc)
             elif right_closed and left_labeled:
-                edge_label -= sql_utils.makeInterval("MONTH", F.lit(offset)._jc)
+                edge_label -= sql_utils.makeInterval("MONTH", F.lit(n)._jc)
 
             if left_labeled:
                 non_edge_label = F.when(
                     mod == 0,
-                    truncated_ts_scol - sql_utils.makeInterval("MONTH", F.lit(offset)._jc),
+                    truncated_ts_scol - sql_utils.makeInterval("MONTH", F.lit(n)._jc),
                 ).otherwise(truncated_ts_scol - sql_utils.makeInterval("MONTH", mod._jc))
             else:
                 non_edge_label = F.when(mod == 0, truncated_ts_scol).otherwise(
-                    truncated_ts_scol - sql_utils.makeInterval("MONTH", (mod - offset)._jc)
+                    truncated_ts_scol - sql_utils.makeInterval("MONTH", (mod - n)._jc)
                 )
 
             return F.to_timestamp(
                 F.last_day(F.when(edge_cond, edge_label).otherwise(non_edge_label))
             )
 
-        elif self._freq_unit == "D":
+        elif rule_code == "D":
             assert origin.hour == 0 and origin.minute == 0 and origin.second == 0
 
-            # NOTE: the logic to process '1D' is different from the case offset > 1!
-            if offset == 1:
-                # hour/minute/second parts are taken into account to determine edges!
+            if n == 1:
+                # NOTE: the logic to process '1D' is different from the cases with n>1,
+                # since hour/minute/second parts are taken into account to determine edges!
                 edge_cond = (
                     (F.hour(ts_scol) == 0) & (F.minute(ts_scol) == 0) & (F.second(ts_scol) == 0)
                 )
@@ -257,36 +234,36 @@ class Resampler(Generic[FrameLike], metaclass=ABCMeta):
 
             else:
                 diff = F.datediff(end=ts_scol, start=origin_scol)
-                mod = diff % offset
+                mod = diff % n
 
                 edge_cond = mod == 0
 
                 truncated_ts_scol = F.date_trunc("DAY", ts_scol)
                 edge_label = truncated_ts_scol
                 if left_closed and right_labeled:
-                    edge_label = F.date_add(truncated_ts_scol, offset)
+                    edge_label = F.date_add(truncated_ts_scol, n)
                 elif right_closed and left_labeled:
-                    edge_label = F.date_sub(truncated_ts_scol, offset)
+                    edge_label = F.date_sub(truncated_ts_scol, n)
 
                 if left_labeled:
                     non_edge_label = F.date_sub(truncated_ts_scol, mod)
                 else:
-                    non_edge_label = F.date_sub(truncated_ts_scol, mod - offset)
+                    non_edge_label = F.date_sub(truncated_ts_scol, mod - n)
 
                 return F.when(edge_cond, edge_label).otherwise(non_edge_label)
 
-        elif self._freq_unit in ["H", "T", "S"]:
+        elif rule_code in ["H", "T", "S"]:
             unit_mapping = {"H": "HOUR", "T": "MINUTE", "S": "SECOND"}
-            unit_str = unit_mapping[self._freq_unit]
+            unit_str = unit_mapping[rule_code]
 
             truncated_ts_scol = F.date_trunc(unit_str, ts_scol)
             diff = sql_utils.timestampDiff(unit_str, origin_scol._jc, truncated_ts_scol._jc)
-            mod = F.lit(0) if offset == 1 else (diff % F.lit(offset))
+            mod = F.lit(0) if n == 1 else (diff % F.lit(n))
 
-            if unit_str == "HOUR":
+            if rule_code == "H":
                 assert origin.minute == 0 and origin.second == 0
                 edge_cond = (mod == 0) & (F.minute(ts_scol) == 0) & (F.second(ts_scol) == 0)
-            elif unit_str == "MINUTE":
+            elif rule_code == "T":
                 assert origin.second == 0
                 edge_cond = (mod == 0) & (F.second(ts_scol) == 0)
             else:
@@ -294,9 +271,9 @@ class Resampler(Generic[FrameLike], metaclass=ABCMeta):
 
             edge_label = truncated_ts_scol
             if left_closed and right_labeled:
-                edge_label += sql_utils.makeInterval(unit_str, F.lit(offset)._jc)
+                edge_label += sql_utils.makeInterval(unit_str, F.lit(n)._jc)
             elif right_closed and left_labeled:
-                edge_label -= sql_utils.makeInterval(unit_str, F.lit(offset)._jc)
+                edge_label -= sql_utils.makeInterval(unit_str, F.lit(n)._jc)
 
             if left_labeled:
                 non_edge_label = F.when(mod == 0, truncated_ts_scol).otherwise(
@@ -305,15 +282,13 @@ class Resampler(Generic[FrameLike], metaclass=ABCMeta):
             else:
                 non_edge_label = F.when(
                     mod == 0,
-                    truncated_ts_scol + sql_utils.makeInterval(unit_str, F.lit(offset)._jc),
-                ).otherwise(
-                    truncated_ts_scol - sql_utils.makeInterval(unit_str, (mod - offset)._jc)
-                )
+                    truncated_ts_scol + sql_utils.makeInterval(unit_str, F.lit(n)._jc),
+                ).otherwise(truncated_ts_scol - sql_utils.makeInterval(unit_str, (mod - n)._jc))
 
             return F.when(edge_cond, edge_label).otherwise(non_edge_label)
 
         else:
-            raise ValueError("Got the unexpected unit {}".format(self._freq_unit))
+            raise ValueError("Got the unexpected unit {}".format(rule_code))
 
     def _downsample(self, f: str) -> DataFrame:
         """
@@ -346,10 +321,10 @@ class Resampler(Generic[FrameLike], metaclass=ABCMeta):
         # from the minimum timestamp (2012-01-02);
         # 2, the default intervals for 'Y' are right-closed, so intervals are:
         # (2009-12-31, 2012-12-31], (2012-12-31, 2015-12-31], (2015-12-31, 2018-12-31], ...
-        # 3, bin all timestamps, for example, 2022-05-03 belong to interval
+        # 3, bin all timestamps, for example, 2022-05-03 belongs to interval
         # (2021-12-31, 2024-12-31], since the default label is 'right', label it with the right
         # edge 2024-12-31;
-        # 4, some intervals maybe too large for this down sampling, so we need to pad the results
+        # 4, some intervals maybe too large for this down sampling, so we need to pad the dataframe
         # to avoid missing some results, like: 2015-12-31, 2018-12-31 and 2021-12-31;
         # 5, union the binned dataframe and padded dataframe, and apply aggregation 'max' to get
         # the final results;
@@ -367,7 +342,7 @@ class Resampler(Generic[FrameLike], metaclass=ABCMeta):
         # here just use Pandas' resample on a 1-length series to get it.
         ts_origin = (
             pd.Series([0], index=[ts_min])
-            .resample(self._rule, closed=self._closed, label="left")
+            .resample(rule=self._offset.freqstr, closed=self._closed, label="left")
             .sum()
             .index[0]
         )
@@ -401,7 +376,7 @@ class Resampler(Generic[FrameLike], metaclass=ABCMeta):
         pad_sdf = (
             ps.from_pandas(
                 pd.Series([0, 0], index=[ts_min, ts_max])
-                .resample(self._rule, closed=self._closed, label=self._label)
+                .resample(rule=self._offset.freqstr, closed=self._closed, label=self._label)
                 .sum()
                 .index
             )
