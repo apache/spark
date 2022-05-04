@@ -110,10 +110,11 @@ statement
         RENAME COLUMN
         from=multipartIdentifier TO to=errorCapturingIdentifier        #renameTableColumn
     | ALTER TABLE multipartIdentifier
-        DROP (COLUMN | COLUMNS)
+        DROP (COLUMN | COLUMNS) (IF EXISTS)?
         LEFT_PAREN columns=multipartIdentifierList RIGHT_PAREN         #dropTableColumns
     | ALTER TABLE multipartIdentifier
-        DROP (COLUMN | COLUMNS) columns=multipartIdentifierList        #dropTableColumns
+        DROP (COLUMN | COLUMNS) (IF EXISTS)?
+        columns=multipartIdentifierList                                #dropTableColumns
     | ALTER (TABLE | VIEW) from=multipartIdentifier
         RENAME TO to=multipartIdentifier                               #renameTable
     | ALTER (TABLE | VIEW) multipartIdentifier
@@ -439,6 +440,7 @@ queryOrganization
       (SORT BY sort+=sortItem (COMMA sort+=sortItem)*)?
       windowClause?
       (LIMIT (ALL | limit=expression))?
+      (OFFSET offset=expression)?
     ;
 
 multiInsertQueryBody
@@ -1450,6 +1452,7 @@ nonReserved
     | NULL
     | NULLS
     | OF
+    | OFFSET
     | ONLY
     | OPTION
     | OPTIONS

@@ -20,14 +20,17 @@ package org.apache.spark.executor
 import java.io.File
 import java.nio.ByteBuffer
 import java.util.Properties
+import java.util.concurrent.ConcurrentHashMap
 
+import scala.collection.concurrent.TrieMap
 import scala.collection.mutable
 import scala.concurrent.duration._
 
 import org.json4s.{DefaultFormats, Extraction}
 import org.json4s.JsonAST.{JArray, JObject}
 import org.json4s.JsonDSL._
-import org.mockito.Mockito.when
+import org.mockito.ArgumentMatchers.any
+import org.mockito.Mockito._
 import org.scalatest.concurrent.Eventually.{eventually, timeout}
 import org.scalatestplus.mockito.MockitoSugar
 
@@ -38,9 +41,9 @@ import org.apache.spark.resource.ResourceUtils._
 import org.apache.spark.resource.TestResourceIDs._
 import org.apache.spark.rpc.RpcEnv
 import org.apache.spark.scheduler.TaskDescription
-import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages.LaunchTask
+import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages.{KillTask, LaunchTask}
 import org.apache.spark.serializer.JavaSerializer
-import org.apache.spark.util.{SerializableBuffer, Utils}
+import org.apache.spark.util.{SerializableBuffer, ThreadUtils, Utils}
 
 class CoarseGrainedExecutorBackendSuite extends SparkFunSuite
     with LocalSparkContext with MockitoSugar {
@@ -354,6 +357,182 @@ class CoarseGrainedExecutorBackendSuite extends SparkFunSuite
 
     val arg = CoarseGrainedExecutorBackend.parseArguments(args1, "")
     assert(arg.bindAddress == "bindaddress1")
+  }
+
+  /**
+   * This testcase is to verify that [[Executor.killTask()]] will always cancel a task that is
+   * being executed in [[Executor.TaskRunner]].
+   */
+  test(s"Tasks launched should always be cancelled.")  {
+    val conf = new SparkConf
+    val securityMgr = new SecurityManager(conf)
+    val serializer = new JavaSerializer(conf)
+    val threadPool = ThreadUtils.newDaemonFixedThreadPool(32, "test-executor")
+    var backend: CoarseGrainedExecutorBackend = null
+
+    try {
+      val rpcEnv = RpcEnv.create("1", "localhost", 0, conf, securityMgr)
+      val env = createMockEnv(conf, serializer, Some(rpcEnv))
+      backend = new CoarseGrainedExecutorBackend(env.rpcEnv, rpcEnv.address.hostPort, "1",
+        "host1", "host1", 4, env, None,
+        resourceProfile = ResourceProfile.getOrCreateDefaultProfile(conf))
+
+      backend.rpcEnv.setupEndpoint("Executor 1", backend)
+      backend.executor = mock[Executor](CALLS_REAL_METHODS)
+      val executor = backend.executor
+      // Mock the executor.
+      when(executor.threadPool).thenReturn(threadPool)
+      val runningTasks = spy(new ConcurrentHashMap[Long, Executor#TaskRunner])
+      when(executor.runningTasks).thenAnswer(_ => runningTasks)
+      when(executor.conf).thenReturn(conf)
+
+      // We don't really verify the data, just pass it around.
+      val data = ByteBuffer.wrap(Array[Byte](1, 2, 3, 4))
+
+      val numTasks = 1000
+      val tasksKilled = new TrieMap[Long, Boolean]()
+      val tasksExecuted = new TrieMap[Long, Boolean]()
+
+      // Fake tasks with different taskIds.
+      val taskDescriptions = (1 to numTasks).map {
+        taskId => new TaskDescription(taskId, 2, "1", "TASK ${taskId}", 19,
+          1, mutable.Map.empty, mutable.Map.empty, mutable.Map.empty, new Properties, 1,
+          Map(GPU -> new ResourceInformation(GPU, Array("0", "1"))), data)
+      }
+      assert(taskDescriptions.length == numTasks)
+
+      def getFakeTaskRunner(taskDescription: TaskDescription): Executor#TaskRunner = {
+        new executor.TaskRunner(backend, taskDescription, None) {
+          override def run(): Unit = {
+            tasksExecuted.put(taskDescription.taskId, true)
+            logInfo(s"task ${taskDescription.taskId} runs.")
+          }
+
+          override def kill(interruptThread: Boolean, reason: String): Unit = {
+            logInfo(s"task ${taskDescription.taskId} killed.")
+            tasksKilled.put(taskDescription.taskId, true)
+          }
+        }
+      }
+
+      // Feed the fake task-runners to be executed by the executor.
+      val firstLaunchTask = getFakeTaskRunner(taskDescriptions(1))
+      val otherTasks = taskDescriptions.slice(1, numTasks).map(getFakeTaskRunner(_)).toArray
+      assert (otherTasks.length == numTasks - 1)
+      // Workaround for compilation issue around Mockito.doReturn
+      doReturn(firstLaunchTask, otherTasks: _*).when(executor).
+        createTaskRunner(any(), any())
+
+      // Launch tasks and quickly kill them so that TaskRunner.killTask will be triggered.
+      taskDescriptions.foreach { taskDescription =>
+        val buffer = new SerializableBuffer(TaskDescription.encode(taskDescription))
+        backend.self.send(LaunchTask(buffer))
+        Thread.sleep(1)
+        backend.self.send(KillTask(taskDescription.taskId, "exec1", false, "test"))
+      }
+
+      eventually(timeout(10.seconds)) {
+        verify(runningTasks, times(numTasks)).put(any(), any())
+      }
+
+      assert(tasksExecuted.size == tasksKilled.size,
+        s"Tasks killed ${tasksKilled.size} != tasks executed ${tasksExecuted.size}")
+      assert(tasksExecuted.keySet == tasksKilled.keySet)
+      logInfo(s"Task executed ${tasksExecuted.size}, task killed ${tasksKilled.size}")
+    } finally {
+      if (backend != null) {
+        backend.rpcEnv.shutdown()
+      }
+      threadPool.shutdownNow()
+    }
+  }
+
+  /**
+   * This testcase is to verify that [[Executor.killTask()]] will always cancel a task even if
+   * it has not been launched yet.
+   */
+  test(s"Tasks not launched should always be cancelled.")  {
+    val conf = new SparkConf
+    val securityMgr = new SecurityManager(conf)
+    val serializer = new JavaSerializer(conf)
+    val threadPool = ThreadUtils.newDaemonFixedThreadPool(32, "test-executor")
+    var backend: CoarseGrainedExecutorBackend = null
+
+    try {
+      val rpcEnv = RpcEnv.create("1", "localhost", 0, conf, securityMgr)
+      val env = createMockEnv(conf, serializer, Some(rpcEnv))
+      backend = new CoarseGrainedExecutorBackend(env.rpcEnv, rpcEnv.address.hostPort, "1",
+        "host1", "host1", 4, env, None,
+        resourceProfile = ResourceProfile.getOrCreateDefaultProfile(conf))
+
+      backend.rpcEnv.setupEndpoint("Executor 1", backend)
+      backend.executor = mock[Executor](CALLS_REAL_METHODS)
+      val executor = backend.executor
+      // Mock the executor.
+      when(executor.threadPool).thenReturn(threadPool)
+      val runningTasks = spy(new ConcurrentHashMap[Long, Executor#TaskRunner])
+      when(executor.runningTasks).thenAnswer(_ => runningTasks)
+      when(executor.conf).thenReturn(conf)
+
+      // We don't really verify the data, just pass it around.
+      val data = ByteBuffer.wrap(Array[Byte](1, 2, 3, 4))
+
+      val numTasks = 1000
+      val tasksKilled = new TrieMap[Long, Boolean]()
+      val tasksExecuted = new TrieMap[Long, Boolean]()
+
+      // Fake tasks with different taskIds.
+      val taskDescriptions = (1 to numTasks).map {
+        taskId => new TaskDescription(taskId, 2, "1", "TASK ${taskId}", 19,
+          1, mutable.Map.empty, mutable.Map.empty, mutable.Map.empty, new Properties, 1,
+          Map(GPU -> new ResourceInformation(GPU, Array("0", "1"))), data)
+      }
+      assert(taskDescriptions.length == numTasks)
+
+      def getFakeTaskRunner(taskDescription: TaskDescription): Executor#TaskRunner = {
+        new executor.TaskRunner(backend, taskDescription, None) {
+          override def run(): Unit = {
+            tasksExecuted.put(taskDescription.taskId, true)
+            logInfo(s"task ${taskDescription.taskId} runs.")
+          }
+
+          override def kill(interruptThread: Boolean, reason: String): Unit = {
+            logInfo(s"task ${taskDescription.taskId} killed.")
+            tasksKilled.put(taskDescription.taskId, true)
+          }
+        }
+      }
+
+      // Feed the fake task-runners to be executed by the executor.
+      val firstLaunchTask = getFakeTaskRunner(taskDescriptions(1))
+      val otherTasks = taskDescriptions.slice(1, numTasks).map(getFakeTaskRunner(_)).toArray
+      assert (otherTasks.length == numTasks - 1)
+      // Workaround for compilation issue around Mockito.doReturn
+      doReturn(firstLaunchTask, otherTasks: _*).when(executor).
+        createTaskRunner(any(), any())
+
+      // The reverse order of events can happen when the scheduler tries to cancel a task right
+      // after launching it.
+      taskDescriptions.foreach { taskDescription =>
+        val buffer = new SerializableBuffer(TaskDescription.encode(taskDescription))
+        backend.self.send(KillTask(taskDescription.taskId, "exec1", false, "test"))
+        backend.self.send(LaunchTask(buffer))
+      }
+
+      eventually(timeout(10.seconds)) {
+        verify(runningTasks, times(numTasks)).put(any(), any())
+      }
+
+      assert(tasksExecuted.size == tasksKilled.size,
+        s"Tasks killed ${tasksKilled.size} != tasks executed ${tasksExecuted.size}")
+      assert(tasksExecuted.keySet == tasksKilled.keySet)
+      logInfo(s"Task executed ${tasksExecuted.size}, task killed ${tasksKilled.size}")
+    } finally {
+      if (backend != null) {
+        backend.rpcEnv.shutdown()
+      }
+      threadPool.shutdownNow()
+    }
   }
 
   private def createMockEnv(conf: SparkConf, serializer: JavaSerializer,

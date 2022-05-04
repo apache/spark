@@ -61,7 +61,11 @@ class DistinctKeyVisitorSuite extends PlanTest {
     checkDistinctAttributes(t1.groupBy($"a")($"a", max($"b")), Set(ExpressionSet(Seq(a))))
     checkDistinctAttributes(t1.groupBy($"a", $"b")($"a", $"b", d, e),
       Set(ExpressionSet(Seq(a, b)), ExpressionSet(Seq(d.toAttribute, e.toAttribute))))
-    checkDistinctAttributes(t1.groupBy()(sum($"c")), Set.empty)
+    checkDistinctAttributes(t1.groupBy()(sum($"c")), Set(ExpressionSet()))
+    // ExpressionSet() is a subset of anything, so we do not need ExpressionSet(c2)
+    checkDistinctAttributes(t1.groupBy()(sum($"c") as "c2").groupBy($"c2")("c2"),
+      Set(ExpressionSet()))
+    checkDistinctAttributes(t1.groupBy()(), Set(ExpressionSet()))
     checkDistinctAttributes(t1.groupBy($"a")($"a", $"a" % 10, d, sum($"b")),
       Set(ExpressionSet(Seq(a)), ExpressionSet(Seq(d.toAttribute))))
     checkDistinctAttributes(t1.groupBy(f.child, $"b")(f, $"b", sum($"c")),
@@ -91,6 +95,15 @@ class DistinctKeyVisitorSuite extends PlanTest {
     checkDistinctAttributes(Distinct(t1).limit(10), Set(ExpressionSet(Seq(a, b, c))))
     checkDistinctAttributes(LocalLimit(10, Distinct(t1)), Set(ExpressionSet(Seq(a, b, c))))
     checkDistinctAttributes(t1.limit(1),
+      Set(ExpressionSet(Seq(a)), ExpressionSet(Seq(b)), ExpressionSet(Seq(c))))
+  }
+
+  test("Offset's distinct attributes") {
+    checkDistinctAttributes(Distinct(t1).limit(12).offset(10).limit(10),
+      Set(ExpressionSet(Seq(a, b, c))))
+    checkDistinctAttributes(LocalLimit(10, Offset(10, LocalLimit(12, Distinct(t1)))),
+      Set(ExpressionSet(Seq(a, b, c))))
+    checkDistinctAttributes(t1.offset(1).limit(1),
       Set(ExpressionSet(Seq(a)), ExpressionSet(Seq(b)), ExpressionSet(Seq(c))))
   }
 

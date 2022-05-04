@@ -688,7 +688,10 @@ class PlanParserSuite extends AnalysisTest {
       UnresolvedTableValuedFunction("range", Literal(2) :: Nil, Seq.empty).select(star()))
     // SPARK-34627
     intercept("select * from default.range(2)",
-      "table valued function cannot specify database name: default.range")
+      "table valued function cannot specify database name")
+    // SPARK-38957
+    intercept("select * from spark_catalog.default.range(2)",
+      "table valued function cannot specify database name")
   }
 
   test("SPARK-20311 range(N) as alias") {
@@ -1250,7 +1253,7 @@ class PlanParserSuite extends AnalysisTest {
         |    "escapeChar" = "\\")
         |FROM testData
       """.stripMargin,
-      "TRANSFORM with serde is only supported in hive mode")
+      "TRANSFORM with SERDE is only supported in hive mode.")
   }
 
 

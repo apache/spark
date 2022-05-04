@@ -24,6 +24,8 @@ def _unsupported_function(method_name, deprecated=False, reason=""):
 
 
 class _MissingPandasLikeGeneralFunctions:
+    # NOTE: Please update the document "Supported pandas APIs" when implementing the new API.
+    # Documentation path: `python/docs/source/user_guide/pandas_on_spark/supported_pandas_api.rst`.
 
     pivot = _unsupported_function("pivot")
     pivot_table = _unsupported_function("pivot_table")

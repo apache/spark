@@ -2169,18 +2169,28 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             )
         )._psser_for(self._column_label)
 
-    def interpolate(self, method: Optional[str] = None, limit: Optional[int] = None) -> "Series":
-        return self._interpolate(method=method, limit=limit)
+    def interpolate(
+        self,
+        method: str = "linear",
+        limit: Optional[int] = None,
+        limit_direction: Optional[str] = None,
+    ) -> "Series":
+        return self._interpolate(method=method, limit=limit, limit_direction=limit_direction)
 
     def _interpolate(
         self,
-        method: Optional[str] = None,
+        method: str = "linear",
         limit: Optional[int] = None,
+        limit_direction: Optional[str] = None,
     ) -> "Series":
-        if (method is not None) and (method not in ["linear"]):
+        if method not in ["linear"]:
             raise NotImplementedError("interpolate currently works only for method='linear'")
         if (limit is not None) and (not limit > 0):
             raise ValueError("limit must be > 0.")
+        if (limit_direction is not None) and (
+            limit_direction not in ["forward", "backward", "both"]
+        ):
+            raise ValueError("invalid limit_direction: '{}'".format(limit_direction))
 
         if not self.spark.nullable and not isinstance(
             self.spark.data_type, (FloatType, DoubleType)
@@ -2209,15 +2219,50 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         ) * null_index_forward + last_non_null_forward
 
         fill_cond = ~F.isnull(last_non_null_backward) & ~F.isnull(last_non_null_forward)
-        pad_cond = F.isnull(last_non_null_backward) & ~F.isnull(last_non_null_forward)
-        if limit is not None:
-            fill_cond = fill_cond & (null_index_forward <= F.lit(limit))
-            pad_cond = pad_cond & (null_index_forward <= F.lit(limit))
+
+        pad_head = SF.lit(None)
+        pad_head_cond = SF.lit(False)
+        pad_tail = SF.lit(None)
+        pad_tail_cond = SF.lit(False)
+
+        # inputs  -> NaN, NaN, 1.0, NaN, NaN, NaN, 5.0, NaN, NaN
+        if limit_direction is None or limit_direction == "forward":
+            # outputs -> NaN, NaN, 1.0, 2.0, 3.0, 4.0, 5.0, 5.0, 5.0
+            pad_tail = last_non_null_forward
+            pad_tail_cond = F.isnull(last_non_null_backward) & ~F.isnull(last_non_null_forward)
+            if limit is not None:
+                # outputs (limit=1) -> NaN, NaN, 1.0, 2.0, NaN, NaN, 5.0, 5.0, NaN
+                fill_cond = fill_cond & (null_index_forward <= F.lit(limit))
+                pad_tail_cond = pad_tail_cond & (null_index_forward <= F.lit(limit))
+
+        elif limit_direction == "backward":
+            # outputs -> 1.0, 1.0, 1.0, 2.0, 3.0, 4.0, 5.0, NaN, NaN
+            pad_head = last_non_null_backward
+            pad_head_cond = ~F.isnull(last_non_null_backward) & F.isnull(last_non_null_forward)
+            if limit is not None:
+                # outputs (limit=1) -> NaN, 1.0, 1.0, NaN, NaN, 4.0, 5.0, NaN, NaN
+                fill_cond = fill_cond & (null_index_backward <= F.lit(limit))
+                pad_head_cond = pad_head_cond & (null_index_backward <= F.lit(limit))
+
+        else:
+            # outputs -> 1.0, 1.0, 1.0, 2.0, 3.0, 4.0, 5.0, 5.0, 5.0
+            pad_head = last_non_null_backward
+            pad_head_cond = ~F.isnull(last_non_null_backward) & F.isnull(last_non_null_forward)
+            pad_tail = last_non_null_forward
+            pad_tail_cond = F.isnull(last_non_null_backward) & ~F.isnull(last_non_null_forward)
+            if limit is not None:
+                # outputs (limit=1) -> NaN, 1.0, 1.0, 2.0, NaN, 4.0, 5.0, 5.0, NaN
+                fill_cond = fill_cond & (
+                    (null_index_forward <= F.lit(limit)) | (null_index_backward <= F.lit(limit))
+                )
+                pad_head_cond = pad_head_cond & (null_index_backward <= F.lit(limit))
+                pad_tail_cond = pad_tail_cond & (null_index_forward <= F.lit(limit))
 
         cond = self.isnull().spark.column
         scol = (
             F.when(cond & fill_cond, fill)
-            .when(cond & pad_cond, last_non_null_forward)
+            .when(cond & pad_head_cond, pad_head)
+            .when(cond & pad_tail_cond, pad_tail)
             .otherwise(scol)
         )
 
@@ -2365,7 +2410,9 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         self,
         labels: Optional[Union[Name, List[Name]]] = None,
         index: Optional[Union[Name, List[Name]]] = None,
+        columns: Optional[Union[Name, List[Name]]] = None,
         level: Optional[int] = None,
+        inplace: bool = False,
     ) -> "Series":
         """
         Return Series with specified index labels removed.
@@ -2377,10 +2424,18 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         ----------
         labels : single label or list-like
             Index labels to drop.
-        index : None
+        index : single label or list-like
             Redundant for application on Series, but index can be used instead of labels.
+        columns : single label or list-like
+            No change is made to the Series; use ‘index’ or ‘labels’ instead.
+
+            .. versionadded:: 3.4.0
         level : int or level name, optional
             For MultiIndex, level for which the labels will be removed.
+        inplace: bool, default False
+            If True, do operation inplace and return None
+
+            .. versionadded:: 3.4.0
 
         Returns
         -------
@@ -2421,6 +2476,21 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         dtype: int64
 
         >>> s.drop(index=['B', 'C'])
+        A    0
+        dtype: int64
+
+        With 'columns', no change is made to the Series.
+
+        >>> s.drop(columns=['A'])
+        A    0
+        B    1
+        C    2
+        dtype: int64
+
+        With 'inplace=True', do operation inplace and return None.
+
+        >>> s.drop(index=['B', 'C'], inplace=True)
+        >>> s
         A    0
         dtype: int64
 
@@ -2474,18 +2544,23 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
                 length      0.3
         dtype: float64
         """
-        return first_series(self._drop(labels=labels, index=index, level=level))
+        dropped = self._drop(
+            labels=labels, index=index, level=level, inplace=inplace, columns=columns
+        )
+        return None if dropped is None else first_series(dropped)
 
     def _drop(
         self,
         labels: Optional[Union[Name, List[Name]]] = None,
         index: Optional[Union[Name, List[Name]]] = None,
         level: Optional[int] = None,
-    ) -> DataFrame:
+        inplace: bool = False,
+        columns: Optional[Union[Name, List[Name]]] = None,
+    ) -> Optional[DataFrame]:
         if labels is not None:
-            if index is not None:
-                raise ValueError("Cannot specify both 'labels' and 'index'")
-            return self._drop(index=labels, level=level)
+            if columns is not None or index is not None:
+                raise ValueError("Cannot specify both 'labels' and 'index'/'columns'")
+            return self._drop(index=labels, level=level, inplace=inplace, columns=columns)
         if index is not None:
             internal = self._internal
             if level is None:
@@ -2524,10 +2599,16 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
                 drop_index_scols.append(reduce(lambda x, y: x & y, index_scols))
 
             cond = ~reduce(lambda x, y: x | y, drop_index_scols)
-
-            return DataFrame(internal.with_filter(cond))
+            dropped_internal = internal.with_filter(cond)
+            if inplace:
+                self._update_anchor(DataFrame(dropped_internal))
+                return None
+            else:
+                return DataFrame(dropped_internal)
+        elif columns is not None:
+            return self._psdf
         else:
-            raise ValueError("Need to specify at least one of 'labels' or 'index'")
+            raise ValueError("Need to specify at least one of 'labels', 'index' or 'columns'")
 
     def head(self, n: int = 5) -> "Series":
         """
@@ -3443,9 +3524,16 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         frac: Optional[float] = None,
         replace: bool = False,
         random_state: Optional[int] = None,
+        ignore_index: bool = False,
     ) -> "Series":
         return first_series(
-            self.to_frame().sample(n=n, frac=frac, replace=replace, random_state=random_state)
+            self.to_frame().sample(
+                n=n,
+                frac=frac,
+                replace=replace,
+                random_state=random_state,
+                ignore_index=ignore_index,
+            )
         ).rename(self.name)
 
     sample.__doc__ = DataFrame.sample.__doc__

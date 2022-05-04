@@ -242,6 +242,21 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
     }
   }
 
+  test("TakeOrderedAndProjectExec appears only when limit + offset is below the threshold.") {
+    withTempView("testLimitAndOffset") {
+      testData.createOrReplaceTempView("testLimitAndOffset")
+      withSQLConf(SQLConf.TOP_K_SORT_FALLBACK_THRESHOLD.key -> "1000") {
+        val query0 = sql("select value from testLimitAndOffset order by key limit 100 offset 100")
+        val planned0 = query0.queryExecution.executedPlan
+        assert(planned0.exists(_.isInstanceOf[TakeOrderedAndProjectExec]))
+
+        val query1 = sql("select value from testLimitAndOffset order by key limit 100 offset 1000")
+        val planned1 = query1.queryExecution.executedPlan
+        assert(!planned1.exists(_.isInstanceOf[TakeOrderedAndProjectExec]))
+      }
+    }
+  }
+
   test("PartitioningCollection") {
     withTempView("normal", "small", "tiny") {
       testData.createOrReplaceTempView("normal")

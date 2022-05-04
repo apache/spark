@@ -2619,7 +2619,7 @@ class Frame(object, metaclass=ABCMeta):
 
         return Expanding(self, min_periods=min_periods)
 
-    # TODO: 'adjust', 'ignore_na', 'axis', 'method' parameter should be implemented.
+    # TODO: 'adjust', 'axis', 'method' parameter should be implemented.
     def ewm(
         self: FrameLike,
         com: Optional[float] = None,
@@ -2627,6 +2627,7 @@ class Frame(object, metaclass=ABCMeta):
         halflife: Optional[float] = None,
         alpha: Optional[float] = None,
         min_periods: Optional[int] = None,
+        ignore_na: bool_type = False,
     ) -> "ExponentialMoving[FrameLike]":
         """
         Provide exponentially weighted window transformations.
@@ -2659,6 +2660,21 @@ class Frame(object, metaclass=ABCMeta):
             Minimum number of observations in window required to have a value
             (otherwise result is NA).
 
+        ignore_na : bool, default False
+            Ignore missing values when calculating weights.
+
+            - When ``ignore_na=False`` (default), weights are based on absolute positions.
+              For example, the weights of :math:`x_0` and :math:`x_2` used in calculating
+              the final weighted average of [:math:`x_0`, None, :math:`x_2`] are
+              :math:`(1-\alpha)^2` and :math:`1` if ``adjust=True``, and
+              :math:`(1-\alpha)^2` and :math:`\alpha` if ``adjust=False``.
+
+            - When ``ignore_na=True``, weights are based
+              on relative positions. For example, the weights of :math:`x_0` and :math:`x_2`
+              used in calculating the final weighted average of
+              [:math:`x_0`, None, :math:`x_2`] are :math:`1-\alpha` and :math:`1` if
+              ``adjust=True``, and :math:`1-\alpha` and :math:`\alpha` if ``adjust=False``.
+
         Returns
         -------
         a Window sub-classed for the particular operation
@@ -2666,7 +2682,13 @@ class Frame(object, metaclass=ABCMeta):
         from pyspark.pandas.window import ExponentialMoving
 
         return ExponentialMoving(
-            self, com=com, span=span, halflife=halflife, alpha=alpha, min_periods=min_periods
+            self,
+            com=com,
+            span=span,
+            halflife=halflife,
+            alpha=alpha,
+            min_periods=min_periods,
+            ignore_na=ignore_na,
         )
 
     def get(self, key: Any, default: Optional[Any] = None) -> Any:
@@ -3231,16 +3253,17 @@ class Frame(object, metaclass=ABCMeta):
 
     pad = ffill
 
-    # TODO: add 'axis', 'inplace', 'limit_direction', 'limit_area', 'downcast'
+    # TODO: add 'axis', 'inplace', 'limit_area', 'downcast'
     def interpolate(
         self: FrameLike,
-        method: Optional[str] = None,
+        method: str = "linear",
         limit: Optional[int] = None,
+        limit_direction: Optional[str] = None,
     ) -> FrameLike:
         """
         Fill NaN values using an interpolation method.
 
-        .. note:: the current implementation of rank uses Spark's Window without
+        .. note:: the current implementation of interpolate uses Spark's Window without
             specifying partition specification. This leads to move all data into
             single partition in single machine and could cause serious
             performance degradation. Avoid this method against very large dataset.
@@ -3258,6 +3281,10 @@ class Frame(object, metaclass=ABCMeta):
         limit : int, optional
             Maximum number of consecutive NaNs to fill. Must be greater than
             0.
+
+        limit_direction : str, default None
+            Consecutive NaNs will be filled in this direction.
+            One of {{'forward', 'backward', 'both'}}.
 
         Returns
         -------
@@ -3313,7 +3340,7 @@ class Frame(object, metaclass=ABCMeta):
         2  2.0  3.0 -3.0   9.0
         3  2.0  4.0 -4.0  16.0
         """
-        return self.interpolate(method=method, limit=limit)
+        return self.interpolate(method=method, limit=limit, limit_direction=limit_direction)
 
     @property
     def at(self) -> AtIndexer:

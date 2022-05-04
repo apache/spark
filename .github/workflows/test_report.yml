@@ -26,6 +26,7 @@ on:
 
 jobs:
   test_report:
+    if: github.event.workflow_run.conclusion != 'skipped'
     runs-on: ubuntu-latest
     steps:
     - name: Download test results to report

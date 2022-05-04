@@ -143,7 +143,8 @@ case class ReplaceColumns(
     // REPLACE COLUMNS deletes all the existing columns and adds new columns specified.
     require(table.resolved)
     val deleteChanges = table.schema.fieldNames.map { name =>
-      TableChange.deleteColumn(Array(name))
+      // REPLACE COLUMN should require column to exist
+      TableChange.deleteColumn(Array(name), ifExists = false)
     }
     val addChanges = columnsToAdd.map { col =>
       assert(col.path.isEmpty)
@@ -167,11 +168,12 @@ case class ReplaceColumns(
  */
 case class DropColumns(
     table: LogicalPlan,
-    columnsToDrop: Seq[FieldName]) extends AlterTableCommand {
+    columnsToDrop: Seq[FieldName],
+    ifExists: Boolean) extends AlterTableCommand {
   override def changes: Seq[TableChange] = {
     columnsToDrop.map { col =>
       require(col.resolved, "FieldName should be resolved before it's converted to TableChange.")
-      TableChange.deleteColumn(col.name.toArray)
+      TableChange.deleteColumn(col.name.toArray, ifExists)
     }
   }
 

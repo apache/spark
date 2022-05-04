@@ -426,6 +426,38 @@ abstract class TypeCoercionSuiteBase extends AnalysisTest {
       SubtractTimestamps(timestampNTZLiteral, Cast(timestampLiteral, TimestampNTZType)))
   }
 
+  test("datetime comparison") {
+    val rule = ImplicitTypeCasts
+    val dateLiteral = Literal(java.sql.Date.valueOf("2021-01-01"))
+    val timestampNTZLiteral = Literal(LocalDateTime.parse("2021-01-01T00:00:00"))
+    val timestampLiteral = Literal(Timestamp.valueOf("2021-01-01 00:00:00"))
+    Seq(
+      EqualTo,
+      EqualNullSafe,
+      GreaterThan,
+      GreaterThanOrEqual,
+      LessThan,
+      LessThanOrEqual).foreach { op =>
+      ruleTest(rule,
+        op(dateLiteral, timestampNTZLiteral),
+        op(Cast(dateLiteral, TimestampNTZType), timestampNTZLiteral))
+      ruleTest(rule,
+        op(timestampNTZLiteral, dateLiteral),
+        op(timestampNTZLiteral, Cast(dateLiteral, TimestampNTZType)))
+      ruleTest(rule,
+        op(dateLiteral, timestampLiteral),
+        op(Cast(dateLiteral, TimestampType), timestampLiteral))
+      ruleTest(rule,
+        op(timestampLiteral, dateLiteral),
+        op(timestampLiteral, Cast(dateLiteral, TimestampType)))
+      ruleTest(rule,
+        op(timestampNTZLiteral, timestampLiteral),
+        op(Cast(timestampNTZLiteral, TimestampType), timestampLiteral))
+      ruleTest(rule,
+        op(timestampLiteral, timestampNTZLiteral),
+        op(timestampLiteral, Cast(timestampNTZLiteral, TimestampType)))
+    }
+  }
 }
 
 class TypeCoercionSuite extends TypeCoercionSuiteBase {
