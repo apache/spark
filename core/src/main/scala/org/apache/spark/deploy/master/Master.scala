@@ -37,7 +37,8 @@ import org.apache.spark.internal.config.Deploy._
 import org.apache.spark.internal.config.UI._
 import org.apache.spark.internal.config.Worker._
 import org.apache.spark.metrics.{MetricsSystem, MetricsSystemInstances}
-import org.apache.spark.resource.{ResourceRequirement, ResourceUtils}
+import org.apache.spark.resource.{ResourceProfile, ResourceRequirement, ResourceUtils}
+import org.apache.spark.resource.ResourceProfile.getCustomExecutorResources
 import org.apache.spark.rpc._
 import org.apache.spark.serializer.{JavaSerializer, Serializer}
 import org.apache.spark.util.{SparkUncaughtExceptionHandler, ThreadUtils, Utils}
@@ -349,7 +350,7 @@ private[deploy] class Master(
             val (execDesc, execResources) = (exec.desc, exec.resources)
             val app = idToApp(execDesc.appId)
             val execInfo = app.addExecutor(
-              worker, execDesc.cores, execResources, Some(execDesc.execId))
+              worker, execDesc.cores, execResources, execDesc.rpId, Some(execDesc.execId))
             worker.addExecutor(execInfo)
             worker.recoverResources(execResources)
             execInfo.copyState(execDesc)
@@ -482,8 +483,8 @@ private[deploy] class Master(
     case BoundPortsRequest =>
       context.reply(BoundPortsResponse(address.port, webUi.boundPort, restServerBoundPort))
 
-    case RequestExecutors(appId, requestedTotal) =>
-      context.reply(handleRequestExecutors(appId, requestedTotal))
+    case RequestExecutors(appId, resourceProfileToTotalExecs: Map[ResourceProfile, Int]) =>
+      context.reply(handleRequestExecutors(appId, resourceProfileToTotalExecs))
 
     case KillExecutors(appId, executorIds) =>
       val formattedExecutorIds = formatExecutorIds(executorIds)
@@ -496,8 +497,9 @@ private[deploy] class Master(
         context.reply(0)
       }
 
-    case ExecutorStateChanged(appId, execId, state, message, exitStatus) =>
-      val execOption = idToApp.get(appId).flatMap(app => app.executors.get(execId))
+    case ExecutorStateChanged(appId, execId, rpId, state, message, exitStatus) =>
+      val execOption = idToApp.get(appId).flatMap(app =>
+        app.executorsPerResourceProfileId.get(rpId).flatMap(_.get(execId)))
       execOption match {
         case Some(exec) =>
           val appInfo = idToApp(appId)
@@ -531,7 +533,7 @@ private[deploy] class Master(
               && oldState != ExecutorState.DECOMMISSIONED
               && appInfo.incrementRetryCount() >= maxExecutorRetries
               && maxExecutorRetries >= 0) { // < 0 disables this application-killing path
-              val execs = appInfo.executors.values
+              val execs = appInfo.executorsPerResourceProfileId.values.flatMap(_.values)
               if (!execs.exists(_.state == ExecutorState.RUNNING)) {
                 logError(s"Application ${appInfo.desc.name} with ID ${appInfo.id} failed " +
                   s"${appInfo.retryCount} times; removing it")
@@ -647,13 +649,16 @@ private[deploy] class Master(
    */
   private def scheduleExecutorsOnWorkers(
       app: ApplicationInfo,
+      resourceProfile: ResourceProfile,
       usableWorkers: Array[WorkerInfo],
       spreadOutApps: Boolean): Array[Int] = {
-    val coresPerExecutor = app.desc.coresPerExecutor
+    val coresPerExecutor = resourceProfile.getExecutorCores
     val minCoresPerExecutor = coresPerExecutor.getOrElse(1)
     val oneExecutorPerWorker = coresPerExecutor.isEmpty
-    val memoryPerExecutor = app.desc.memoryPerExecutorMB
-    val resourceReqsPerExecutor = app.desc.resourceReqsPerExecutor
+    val memoryPerExecutor = resourceProfile.getExecutorMemory.getOrElse(1024L).toInt
+    val resourceReqsPerExecutor =
+      ResourceUtils.executorResourceRequestToRequirement(
+        getCustomExecutorResources(resourceProfile).values.toSeq)
     val numUsable = usableWorkers.length
     val assignedCores = new Array[Int](numUsable) // Number of cores to give to each worker
     val assignedExecutors = new Array[Int](numUsable) // Number of new executors on each worker
@@ -679,7 +684,9 @@ private[deploy] class Master(
         }
         val enoughResources = ResourceUtils.resourcesMeetRequirements(
           resourcesFree, resourceReqsPerExecutor)
-        val underLimit = assignedExecutors.sum + app.executors.size < app.executorLimit
+        val executorNum = app.executorsPerResourceProfileId(resourceProfile.id).size
+        val executorLimit = app.targetNumExecutorsPerResourceProfileId(resourceProfile.id)
+        val underLimit = assignedExecutors.sum + executorNum < executorLimit
         keepScheduling && enoughCores && enoughMemory && enoughResources && underLimit
       } else {
         // We're adding cores to an existing executor, so no need
@@ -725,26 +732,43 @@ private[deploy] class Master(
    */
   private def startExecutorsOnWorkers(): Unit = {
     // Right now this is a very simple FIFO scheduler. We keep trying to fit in the first app
-    // in the queue, then the second app, etc.
+    // in the queue, then the second app, etc. And for each app, we will schedule base on
+    // resource profiles also with a simple FIFO scheduler, resource profile with smaller id
+    // first.
     for (app <- waitingApps) {
-      val coresPerExecutor = app.desc.coresPerExecutor.getOrElse(1)
-      // If the cores left is less than the coresPerExecutor,the cores left will not be allocated
-      if (app.coresLeft >= coresPerExecutor) {
-        // Filter out workers that don't have enough resources to launch an executor
-        val usableWorkers = workers.toArray.filter(_.state == WorkerState.ALIVE)
-          .filter(canLaunchExecutor(_, app.desc))
-          .sortBy(_.coresFree).reverse
-        val appMayHang = waitingApps.length == 1 &&
-          waitingApps.head.executors.isEmpty && usableWorkers.isEmpty
-        if (appMayHang) {
-          logWarning(s"App ${app.id} requires more resource than any of Workers could have.")
-        }
-        val assignedCores = scheduleExecutorsOnWorkers(app, usableWorkers, spreadOutApps)
+      // TODO: refactor the code here, prepare schedule information inside [[ApplicationInfo]]
+      for (rpId <- app.allResourceProfileIds()) {
+        val resourceProfile = app.getResourceProfileById(rpId)
+        val coresPerExecutor = resourceProfile.getExecutorCores.getOrElse(1)
 
-        // Now that we've decided how many cores to allocate on each worker, let's allocate them
-        for (pos <- usableWorkers.indices if assignedCores(pos) > 0) {
-          allocateWorkerResourceToExecutors(
-            app, assignedCores(pos), app.desc.coresPerExecutor, usableWorkers(pos))
+        // If the cores left is less than the coresPerExecutor,the cores left will not be allocated
+        if (app.coresLeft >= coresPerExecutor) {
+          // Filter out workers that don't have enough resources to launch an executor
+          val usableWorkers = workers.toArray.filter(_.state == WorkerState.ALIVE)
+            .filter(canLaunchExecutor(_, resourceProfile))
+            .sortBy(_.coresFree).reverse
+          val appMayHang = waitingApps.length == 1 &&
+            waitingApps.head.executorsPerResourceProfileId.values.forall(_.isEmpty) &&
+            usableWorkers.isEmpty
+          if (appMayHang) {
+            logWarning(s"App ${app.id} requires more resource than any of Workers could have.")
+          }
+          // TODO: schedule base on resource profile.
+          val assignedCores =
+            scheduleExecutorsOnWorkers(app, resourceProfile, usableWorkers, spreadOutApps)
+
+          // Now that we've decided how many cores to allocate on each worker, let's allocate them
+          for (pos <- usableWorkers.indices if assignedCores(pos) > 0) {
+            val customResourceRequests = ResourceUtils.executorResourceRequestToRequirement(
+              getCustomExecutorResources(resourceProfile).values.toSeq)
+            allocateWorkerResourceToExecutors(
+              app,
+              assignedCores(pos),
+              resourceProfile.getExecutorCores,
+              customResourceRequests,
+              usableWorkers(pos),
+              resourceProfile.id)
+          }
         }
       }
     }
@@ -761,15 +785,17 @@ private[deploy] class Master(
       app: ApplicationInfo,
       assignedCores: Int,
       coresPerExecutor: Option[Int],
-      worker: WorkerInfo): Unit = {
+      resourceReqsPerExecutor: Seq[ResourceRequirement] = Seq.empty,
+      worker: WorkerInfo,
+      rpId: Int): Unit = {
     // If the number of cores per executor is specified, we divide the cores assigned
     // to this worker evenly among the executors with no remainder.
     // Otherwise, we launch a single executor that grabs all the assignedCores on this worker.
     val numExecutors = coresPerExecutor.map { assignedCores / _ }.getOrElse(1)
     val coresToAssign = coresPerExecutor.getOrElse(assignedCores)
     for (i <- 1 to numExecutors) {
-      val allocated = worker.acquireResources(app.desc.resourceReqsPerExecutor)
-      val exec = app.addExecutor(worker, coresToAssign, allocated)
+      val allocated = worker.acquireResources(resourceReqsPerExecutor)
+      val exec = app.addExecutor(worker, coresToAssign, allocated, rpId)
       launchExecutor(worker, exec)
       app.state = ApplicationState.RUNNING
     }
@@ -798,12 +824,13 @@ private[deploy] class Master(
   /**
    * @return whether the worker could launch the executor according to application's requirement
    */
-  private def canLaunchExecutor(worker: WorkerInfo, desc: ApplicationDescription): Boolean = {
+  private def canLaunchExecutor(worker: WorkerInfo, resourceProfile: ResourceProfile): Boolean = {
+    val customExecutorResources = getCustomExecutorResources(resourceProfile)
     canLaunch(
       worker,
-      desc.memoryPerExecutorMB,
-      desc.coresPerExecutor.getOrElse(1),
-      desc.resourceReqsPerExecutor)
+      resourceProfile.getExecutorMemory.getOrElse(1024L).toInt,
+      resourceProfile.getExecutorCores.getOrElse(1),
+      ResourceUtils.executorResourceRequestToRequirement(customExecutorResources.values.toSeq))
   }
 
   /**
@@ -849,7 +876,7 @@ private[deploy] class Master(
     logInfo("Launching executor " + exec.fullId + " on worker " + worker.id)
     worker.addExecutor(exec)
     worker.endpoint.send(LaunchExecutor(masterUrl, exec.application.id, exec.id,
-      exec.application.desc, exec.cores, exec.memory, exec.resources))
+      exec.rpId, exec.application.desc, exec.cores, exec.memory, exec.resources))
     exec.application.driver.send(
       ExecutorAdded(exec.id, worker.id, worker.hostPort, exec.cores, exec.memory))
   }
@@ -1023,7 +1050,7 @@ private[deploy] class Master(
       completedApps += app // Remember it in our history
       waitingApps -= app
 
-      for (exec <- app.executors.values) {
+      for (exec <- app.executorsPerResourceProfileId.values.flatMap(_.values)) {
         killExecutor(exec)
       }
       app.markFinished(state)
@@ -1049,15 +1076,16 @@ private[deploy] class Master(
    *
    * @return whether the application has previously registered with this Master.
    */
-  private def handleRequestExecutors(appId: String, requestedTotal: Int): Boolean = {
+  private def handleRequestExecutors(
+      appId: String,
+      resourceProfileToTotalExecs: Map[ResourceProfile, Int]): Boolean = {
     idToApp.get(appId) match {
       case Some(appInfo) =>
-        logInfo(s"Application $appId requested to set total executors to $requestedTotal.")
-        appInfo.executorLimit = requestedTotal
+        appInfo.handleRequestExecutors(resourceProfileToTotalExecs)
         schedule()
         true
       case None =>
-        logWarning(s"Unknown application $appId requested $requestedTotal total executors.")
+        // logWarning(s"Unknown application $appId requested $requestedTotal total executors.")
         false
     }
   }
@@ -1075,9 +1103,9 @@ private[deploy] class Master(
     idToApp.get(appId) match {
       case Some(appInfo) =>
         logInfo(s"Application $appId requests to kill executors: " + executorIds.mkString(", "))
-        val (known, unknown) = executorIds.partition(appInfo.executors.contains)
+        val (known, unknown) = executorIds.partition(appInfo.allExecutors().contains)
         known.foreach { executorId =>
-          val desc = appInfo.executors(executorId)
+          val desc = appInfo.allExecutors()(executorId)
           appInfo.removeExecutor(desc)
           killExecutor(desc)
         }

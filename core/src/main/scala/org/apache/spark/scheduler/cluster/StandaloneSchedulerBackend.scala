@@ -82,7 +82,8 @@ private[spark] class StandaloneSchedulerBackend(
       "--hostname", "{{HOSTNAME}}",
       "--cores", "{{CORES}}",
       "--app-id", "{{APP_ID}}",
-      "--worker-url", "{{WORKER_URL}}")
+      "--worker-url", "{{WORKER_URL}}",
+      "--resourceProfileId", "{{RESOURCE_PROFILE_ID}}")
     val extraJavaOpts = sc.conf.get(config.EXECUTOR_JAVA_OPTIONS)
       .map(Utils.splitCommandString).getOrElse(Seq.empty)
     val classPathEntries = sc.conf.get(config.EXECUTOR_CLASS_PATH)
@@ -118,8 +119,8 @@ private[spark] class StandaloneSchedulerBackend(
     val executorResourceReqs = ResourceUtils.parseResourceRequirements(conf,
       config.SPARK_EXECUTOR_PREFIX)
     val appDesc = ApplicationDescription(sc.appName, maxCores, sc.executorMemory, command,
-      webUrl, sc.eventLogDir, sc.eventLogCodec, coresPerExecutor, initialExecutorLimit,
-      resourceReqsPerExecutor = executorResourceReqs)
+      webUrl, defaultProfile = defaultProf, sc.eventLogDir, sc.eventLogCodec, coresPerExecutor,
+      initialExecutorLimit, resourceReqsPerExecutor = executorResourceReqs)
     client = new StandaloneAppClient(sc.env.rpcEnv, masters, appDesc, this, conf)
     client.start()
     launcherBackend.setState(SparkAppHandle.State.SUBMITTED)
@@ -215,8 +216,7 @@ private[spark] class StandaloneSchedulerBackend(
     // resources profiles not supported
     Option(client) match {
       case Some(c) =>
-        val numExecs = resourceProfileToTotalExecs.getOrElse(defaultProf, 0)
-        c.requestTotalExecutors(numExecs)
+        c.requestTotalExecutors(resourceProfileToTotalExecs)
       case None =>
         logWarning("Attempted to request executors before driver fully initialized.")
         Future.successful(false)

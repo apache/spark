@@ -21,17 +21,22 @@ import java.io.File
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.{ApplicationDescription, Command, ExecutorState}
+import org.apache.spark.internal.config.EXECUTOR_MEMORY
+import org.apache.spark.resource.ResourceProfile
 
 class ExecutorRunnerTest extends SparkFunSuite {
   test("command includes appId") {
     val appId = "12345-worker321-9876"
-    val conf = new SparkConf
+    val conf = new SparkConf()
+      .setMaster("spark://ut.cluster")
+      .set(EXECUTOR_MEMORY.key, "500m")
     val sparkHome = sys.props.getOrElse("spark.test.home", fail("spark.test.home is not set!"))
     val appDesc = new ApplicationDescription("app name", Some(8), 500,
-      Command("foo", Seq(appId), Map(), Seq(), Seq(), Seq()), "appUiUrl")
+      Command("foo", Seq(appId), Map(), Seq(), Seq(), Seq()), "appUiUrl",
+      ResourceProfile.getOrCreateDefaultProfile(conf))
     val er = new ExecutorRunner(appId, 1, appDesc, 8, 500, null, "blah", "http://", "worker321",
       123, "publicAddr", new File(sparkHome), new File("ooga"), "blah", conf, Seq("localDir"),
-      ExecutorState.RUNNING)
+      ExecutorState.RUNNING, Map.empty, ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
     val builder = CommandUtils.buildProcessBuilder(
       appDesc.command, new SecurityManager(conf), 512, sparkHome, er.substituteVariables)
     val builderCommand = builder.command()

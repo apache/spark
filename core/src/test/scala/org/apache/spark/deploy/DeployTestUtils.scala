@@ -22,13 +22,16 @@ import java.io.File
 import org.apache.spark.{SecurityManager, SparkConf}
 import org.apache.spark.deploy.master.{ApplicationInfo, DriverInfo, WorkerInfo, WorkerResourceInfo}
 import org.apache.spark.deploy.worker.{DriverRunner, ExecutorRunner}
-import org.apache.spark.resource.{ResourceInformation, ResourceRequirement}
+import org.apache.spark.internal.config.EXECUTOR_MEMORY
+import org.apache.spark.resource.{ResourceInformation, ResourceProfile, ResourceRequirement}
 import org.apache.spark.resource.ResourceUtils.{FPGA, GPU}
 
 private[deploy] object DeployTestUtils {
   def createAppDesc(): ApplicationDescription = {
     val cmd = new Command("mainClass", List("arg1", "arg2"), Map(), Seq(), Seq(), Seq())
-    new ApplicationDescription("name", Some(4), 1234, cmd, "appUiUrl")
+    val conf = new SparkConf().set(EXECUTOR_MEMORY.key, "1234m")
+    val rp = ResourceProfile.getOrCreateDefaultProfile(conf)
+    new ApplicationDescription("name", Some(4), 1234, cmd, "appUiUrl", rp)
   }
 
   def createAppInfo() : ApplicationInfo = {
@@ -89,7 +92,8 @@ private[deploy] object DeployTestUtils {
       new SparkConf,
       Seq("localDir"),
       ExecutorState.RUNNING,
-      resources)
+      resources,
+      ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
   }
 
   def createDriverRunner(driverId: String): DriverRunner = {

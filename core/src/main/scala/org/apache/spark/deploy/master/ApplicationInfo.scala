@@ -18,12 +18,14 @@
 package org.apache.spark.deploy.master
 
 import java.util.Date
+import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.mutable
-import scala.collection.mutable.ArrayBuffer
+import scala.collection.mutable.{ArrayBuffer, HashMap}
 
 import org.apache.spark.deploy.ApplicationDescription
-import org.apache.spark.resource.ResourceInformation
+import org.apache.spark.resource.{ResourceInformation, ResourceProfile}
+import org.apache.spark.resource.ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID
 import org.apache.spark.rpc.RpcEndpointRef
 import org.apache.spark.util.Utils
 
@@ -42,6 +44,15 @@ private[spark] class ApplicationInfo(
   @transient var coresGranted: Int = _
   @transient var endTime: Long = _
   @transient var appSource: ApplicationSource = _
+
+  @transient val executorsPerResourceProfileId =
+    new HashMap[Int, mutable.HashMap[Int, ExecutorDesc]]()
+
+  @GuardedBy("this")
+  private[deploy] val targetNumExecutorsPerResourceProfileId = new mutable.HashMap[Int, Int]
+
+  @GuardedBy("this")
+  private[deploy] val rpIdToResourceProfile = new mutable.HashMap[Int, ResourceProfile]
 
   // A cap on the number of executors this application can have at any given time.
   // By default, this is infinite. Only after the first allocation request is issued by the
@@ -66,6 +77,46 @@ private[spark] class ApplicationInfo(
     nextExecutorId = 0
     removedExecutors = new ArrayBuffer[ExecutorDesc]
     executorLimit = desc.initialExecutorLimit.getOrElse(Integer.MAX_VALUE)
+    rpIdToResourceProfile(DEFAULT_RESOURCE_PROFILE_ID) = desc.defaultProfile
+    targetNumExecutorsPerResourceProfileId(DEFAULT_RESOURCE_PROFILE_ID) = executorLimit
+    executorsPerResourceProfileId.put(
+      DEFAULT_RESOURCE_PROFILE_ID, mutable.HashMap[Int, ExecutorDesc]())
+  }
+
+  private[deploy] def handleRequestExecutors(
+      resourceProfileToTotalExecs: Map[ResourceProfile, Int]): Unit = {
+    // TODO: handle the multi-resource profiles.
+    val requestedTotal = resourceProfileToTotalExecs.find { case (profile, _) => profile.id == 0 }
+      .map { case (_, num) => num }
+      .getOrElse(0)
+
+    executorLimit = requestedTotal
+
+    resourceProfileToTotalExecs.foreach { case (rp, num) =>
+      if (!rpIdToResourceProfile.contains(rp.id)) {
+        rpIdToResourceProfile(rp.id) = rp
+      }
+
+      if (!targetNumExecutorsPerResourceProfileId.get(rp.id).contains(num)) {
+        targetNumExecutorsPerResourceProfileId(rp.id) = num
+      }
+
+      if (!executorsPerResourceProfileId.contains(rp.id)) {
+        executorsPerResourceProfileId.put(rp.id, new mutable.HashMap[Int, ExecutorDesc]())
+      }
+    }
+  }
+
+  private[deploy] def allExecutors(): mutable.HashMap[Int, ExecutorDesc] = {
+    executorsPerResourceProfileId.values.reduce((x, y) => x ++ y)
+  }
+
+  private[deploy] def allResourceProfileIds(): Seq[Int] = {
+    targetNumExecutorsPerResourceProfileId.keySet.toSeq.sorted
+  }
+
+  private[deploy] def getResourceProfileById(rpId: Int): ResourceProfile = {
+    rpIdToResourceProfile(rpId)
   }
 
   private def newExecutorId(useID: Option[Int] = None): Int = {
@@ -84,18 +135,21 @@ private[spark] class ApplicationInfo(
       worker: WorkerInfo,
       cores: Int,
       resources: Map[String, ResourceInformation],
+      rpId: Int,
       useID: Option[Int] = None): ExecutorDesc = {
     val exec = new ExecutorDesc(newExecutorId(useID), this, worker, cores,
-      desc.memoryPerExecutorMB, resources)
-    executors(exec.id) = exec
+      desc.memoryPerExecutorMB, resources, rpId)
+    executorsPerResourceProfileId
+      .getOrElseUpdate(rpId, new mutable.HashMap[Int, ExecutorDesc]())
+      .put(exec.id, exec)
     coresGranted += cores
     exec
   }
 
   private[master] def removeExecutor(exec: ExecutorDesc): Unit = {
-    if (executors.contains(exec.id)) {
-      removedExecutors += executors(exec.id)
-      executors -= exec.id
+    if (executorsPerResourceProfileId.get(exec.rpId).exists(_.contains(exec.id))) {
+      removedExecutors += executorsPerResourceProfileId(exec.rpId)(exec.id)
+      executorsPerResourceProfileId(exec.rpId) -= exec.id
       coresGranted -= exec.cores
     }
   }

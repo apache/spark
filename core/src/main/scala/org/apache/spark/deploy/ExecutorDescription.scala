@@ -25,10 +25,12 @@ package org.apache.spark.deploy
 private[deploy] class ExecutorDescription(
     val appId: String,
     val execId: Int,
+    val rpId: Int,
     val cores: Int,
     val state: ExecutorState.Value)
   extends Serializable {
 
   override def toString: String =
-    "ExecutorState(appId=%s, execId=%d, cores=%d, state=%s)".format(appId, execId, cores, state)
+    "ExecutorState(appId=%s, execId=%d, rpId=%d, cores=%d, state=%s)"
+      .format(appId, execId, rpId, cores, state)
 }

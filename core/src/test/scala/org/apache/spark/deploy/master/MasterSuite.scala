@@ -44,7 +44,7 @@ import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.Deploy._
 import org.apache.spark.internal.config.UI._
 import org.apache.spark.internal.config.Worker._
-import org.apache.spark.resource.{ResourceInformation, ResourceRequirement}
+import org.apache.spark.resource.{ResourceInformation, ResourceProfile, ResourceRequirement}
 import org.apache.spark.resource.ResourceUtils.{FPGA, GPU}
 import org.apache.spark.rpc.{RpcAddress, RpcEndpoint, RpcEndpointRef, RpcEnv}
 import org.apache.spark.serializer
@@ -81,7 +81,7 @@ class MockWorker(master: RpcEndpointRef, conf: SparkConf = new SparkConf) extend
   override def receive: PartialFunction[Any, Unit] = {
     case RegisteredWorker(masterRef, _, _, _) =>
       masterRef.send(WorkerLatestState(id, Nil, drivers.toSeq))
-    case LaunchExecutor(_, appId, execId, _, _, _, resources_) =>
+    case LaunchExecutor(_, appId, execId, _, _, _, _, resources_) =>
       execResources(appId + "/" + execId) = resources_.map(r => (r._1, r._2.addresses.toSet))
     case LaunchDriver(driverId, desc, resources_) =>
       drivers += driverId
@@ -126,7 +126,7 @@ class MockExecutorLaunchFailWorker(master: Master, conf: SparkConf = new SparkCo
       }
 
       appRegistered.countDown()
-    case LaunchExecutor(_, appId, execId, _, _, _, _) =>
+    case LaunchExecutor(_, appId, execId, rpId, _, _, _, _) =>
       assert(appRegistered.await(10, TimeUnit.SECONDS))
 
       if (failedCnt == 0) {
@@ -135,7 +135,8 @@ class MockExecutorLaunchFailWorker(master: Master, conf: SparkConf = new SparkCo
       assert(master.idToApp.contains(appId))
       appIdsToLaunchExecutor += appId
       failedCnt += 1
-      master.self.askSync(ExecutorStateChanged(appId, execId, ExecutorState.FAILED, None, None))
+      master.self.askSync(ExecutorStateChanged(appId, execId,
+        rpId, ExecutorState.FAILED, None, None))
 
     case otherMsg => super.receive(otherMsg)
   }
@@ -184,6 +185,7 @@ class MasterSuite extends SparkFunSuite
         memoryPerExecutorMB = 0,
         command = commandToPersist,
         appUiUrl = "",
+        defaultProfile = new ResourceProfile(Map.empty, Map.empty),
         eventLogDir = None,
         eventLogCodec = None,
         coresPerExecutor = None),
@@ -281,9 +283,10 @@ class MasterSuite extends SparkFunSuite
       master.workers should be(Set(fakeWorkerInfo))
 
       // Notify Master about the executor and driver info to make it correctly recovered.
+      val rpId = ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID
       val fakeExecutors = List(
-        new ExecutorDescription(fakeAppInfo.id, 0, 8, ExecutorState.RUNNING),
-        new ExecutorDescription(fakeAppInfo.id, 0, 7, ExecutorState.RUNNING))
+        new ExecutorDescription(fakeAppInfo.id, 0, rpId, 8, ExecutorState.RUNNING),
+        new ExecutorDescription(fakeAppInfo.id, 0, rpId, 7, ExecutorState.RUNNING))
 
       fakeAppInfo.state should be(ApplicationState.UNKNOWN)
       fakeWorkerInfo.coresFree should be(16)
@@ -697,8 +700,14 @@ class MasterSuite extends SparkFunSuite
       memoryPerExecutorMb: Int,
       coresPerExecutor: Option[Int] = None,
       maxCores: Option[Int] = None): ApplicationInfo = {
+    val conf = new SparkConf(loadDefaults = false)
+    conf.set(EXECUTOR_MEMORY.key, s"${memoryPerExecutorMb}m")
+    coresPerExecutor.foreach(cores => conf.set(EXECUTOR_CORES.key, cores.toString))
+    ResourceProfile.clearDefaultProfile()
+    val rp = ResourceProfile.getOrCreateDefaultProfile(conf)
+
     val desc = new ApplicationDescription(
-      "test", maxCores, memoryPerExecutorMb, null, "", None, None, coresPerExecutor)
+      "test", maxCores, memoryPerExecutorMb, null, "", rp, None, None, coresPerExecutor)
     val appId = System.currentTimeMillis.toString
     val endpointRef = mock(classOf[RpcEndpointRef])
     val mockAddress = mock(classOf[RpcAddress])
@@ -746,7 +755,8 @@ class MasterSuite extends SparkFunSuite
       "http://localhost:8080",
       RpcAddress("localhost", 9999)))
     val executors = (0 until 3).map { i =>
-      new ExecutorDescription(appId = i.toString, execId = i, 2, ExecutorState.RUNNING)
+      new ExecutorDescription(appId = i.toString, execId = i,
+        ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID, 2, ExecutorState.RUNNING)
     }
     master.self.send(WorkerLatestState("1", executors, driverIds = Seq("0", "1", "2")))
 

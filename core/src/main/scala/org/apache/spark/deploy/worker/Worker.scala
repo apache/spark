@@ -485,7 +485,7 @@ private[deploy] class Worker(
         }
 
         val execs = executors.values.map { e =>
-          new ExecutorDescription(e.appId, e.execId, e.cores, e.state)
+          new ExecutorDescription(e.appId, e.execId, e.rpId, e.cores, e.state)
         }
         masterRef.send(WorkerLatestState(workerId, execs.toList, drivers.keys.toSeq))
 
@@ -555,7 +555,7 @@ private[deploy] class Worker(
 
       val executorResponses = executors.values.map { e =>
         WorkerExecutorStateResponse(new ExecutorDescription(
-          e.appId, e.execId, e.cores, e.state), e.resources)
+          e.appId, e.execId, e.rpId, e.cores, e.state), e.resources)
       }
       val driverResponses = drivers.keys.map { id =>
         WorkerDriverStateResponse(id, drivers(id).resources)}
@@ -566,7 +566,7 @@ private[deploy] class Worker(
       logInfo(s"Master with url $masterUrl requested this worker to reconnect.")
       registerWithMaster()
 
-    case LaunchExecutor(masterUrl, appId, execId, appDesc, cores_, memory_, resources_) =>
+    case LaunchExecutor(masterUrl, appId, execId, rpId, appDesc, cores_, memory_, resources_) =>
       if (masterUrl != activeMasterUrl) {
         logWarning("Invalid Master (" + masterUrl + ") attempted to launch executor.")
       } else if (decommissioned) {
@@ -622,7 +622,8 @@ private[deploy] class Worker(
             conf,
             appLocalDirs,
             ExecutorState.LAUNCHING,
-            resources_)
+            resources_,
+            rpId)
           executors(appId + "/" + execId) = manager
           manager.start()
           coresUsed += cores_
@@ -635,8 +636,8 @@ private[deploy] class Worker(
               executors(appId + "/" + execId).kill()
               executors -= appId + "/" + execId
             }
-            syncExecutorStateWithMaster(ExecutorStateChanged(appId, execId, ExecutorState.FAILED,
-              Some(e.toString), None))
+            syncExecutorStateWithMaster(ExecutorStateChanged(appId, execId, rpId,
+              ExecutorState.FAILED, Some(e.toString), None))
         }
       }
 

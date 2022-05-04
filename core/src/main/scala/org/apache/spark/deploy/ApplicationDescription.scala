@@ -19,7 +19,7 @@ package org.apache.spark.deploy
 
 import java.net.URI
 
-import org.apache.spark.resource.ResourceRequirement
+import org.apache.spark.resource.{ResourceProfile, ResourceRequirement}
 
 private[spark] case class ApplicationDescription(
     name: String,
@@ -27,6 +27,7 @@ private[spark] case class ApplicationDescription(
     memoryPerExecutorMB: Int,
     command: Command,
     appUiUrl: String,
+    defaultProfile: ResourceProfile,
     eventLogDir: Option[URI] = None,
     // short name of compression codec used when writing event logs, if any (e.g. lzf)
     eventLogCodec: Option[String] = None,

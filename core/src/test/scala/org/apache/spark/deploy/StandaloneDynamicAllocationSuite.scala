@@ -649,8 +649,9 @@ class StandaloneDynamicAllocationSuite
     override def receive: PartialFunction[Any, Unit] = testReceive.orElse(super.receive)
 
     private def testReceive: PartialFunction[Any, Unit] = synchronized {
-      case LaunchExecutor(_, appId, execId, _, _, _, _) =>
-        self.send(ExecutorStateChanged(appId, execId, ExecutorState.RUNNING, None, None))
+      case LaunchExecutor(_, appId, execId, rpId, _, _, _, _) =>
+        self.send(ExecutorStateChanged(appId, execId, rpId,
+          ExecutorState.RUNNING, None, None))
     }
 
   }

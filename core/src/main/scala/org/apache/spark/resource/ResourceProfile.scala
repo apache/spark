@@ -24,7 +24,7 @@ import javax.annotation.concurrent.GuardedBy
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 
-import org.apache.spark.{SparkConf, SparkException}
+import org.apache.spark.{SparkConf, SparkContext, SparkException}
 import org.apache.spark.annotation.{Evolving, Since}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
@@ -88,6 +88,10 @@ class ResourceProfile(
 
   private[spark] def getPySparkMemory: Option[Long] = {
     executorResources.get(ResourceProfile.PYSPARK_MEM).map(_.amount)
+  }
+
+  private[spark] def getExecutorMemory: Option[Long] = {
+    executorResources.get(ResourceProfile.MEMORY).map(_.amount)
   }
 
   /*
@@ -347,7 +351,11 @@ object ResourceProfile extends Logging {
     cores.foreach(ereqs.cores)
 
     // Setting all resources here, cluster managers will take the resources they respect.
-    val memory = conf.get(EXECUTOR_MEMORY)
+    val memory = if (isStandalone) {
+      SparkContext.executorMemoryInMb(conf)
+    } else {
+      conf.get(EXECUTOR_MEMORY)
+    }
     ereqs.memory(memory.toString)
     val overheadMem = conf.get(EXECUTOR_MEMORY_OVERHEAD)
     overheadMem.map(mem => ereqs.memoryOverhead(mem.toString))
