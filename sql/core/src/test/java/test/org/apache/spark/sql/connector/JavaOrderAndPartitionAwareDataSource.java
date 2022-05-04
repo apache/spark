@@ -37,7 +37,7 @@ public class JavaOrderAndPartitionAwareDataSource extends JavaPartitionAwareData
       if (partitionKeys != null) {
         String[] keys = partitionKeys.split(",");
         Expression[] clustering = new Transform[keys.length];
-        for (int i=0; i< keys.length; i++) {
+        for (int i = 0; i < keys.length; i++) {
           clustering[i] = Expressions.identity(keys[i]);
         }
         this.partitioning = new KeyGroupedPartitioning(clustering, 2);
@@ -48,7 +48,7 @@ public class JavaOrderAndPartitionAwareDataSource extends JavaPartitionAwareData
       if (orderKeys != null) {
         String[] keys = orderKeys.split(",");
         this.ordering = new SortOrder[keys.length];
-        for (int i=0; i<keys.length; i++) {
+        for (int i = 0; i < keys.length; i++) {
           this.ordering[i] = new MySortOrder(keys[i]);
         }
       } else {
