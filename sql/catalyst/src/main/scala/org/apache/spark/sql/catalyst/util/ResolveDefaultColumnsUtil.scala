@@ -55,26 +55,6 @@ object ResolveDefaultColumns {
   // Name of attributes representing explicit references to the value stored in the above
   // CURRENT_DEFAULT_COLUMN_METADATA.
   val CURRENT_DEFAULT_COLUMN_NAME = "DEFAULT"
-  // Return a more descriptive error message if the user tries to nest a DEFAULT column reference
-  // inside some other expression (such as DEFAULT + 1) in an INSERT INTO command's VALUES list;
-  // this is not allowed.
-  val DEFAULTS_IN_COMPLEX_EXPRESSIONS_IN_INSERT_VALUES = "Failed to execute INSERT INTO command " +
-    "because the VALUES list contains a DEFAULT column reference as part of another expression; " +
-    "this is not allowed"
-  // Return a descriptive error message in the presence of INSERT INTO commands with explicit
-  // DEFAULT column references and explicit column lists, since this is not implemented yet.
-  val DEFAULTS_IN_COMPLEX_EXPRESSIONS_IN_UPDATE_SET_CLAUSE = "Failed to execute UPDATE command " +
-    "because the SET list contains a DEFAULT column reference as part of another expression; " +
-    "this is not allowed"
-  // Return a more descriptive error message if the user tries to use a DEFAULT column reference
-  // inside an UPDATE command's WHERE clause; this is not allowed.
-  val DEFAULTS_IN_UPDATE_WHERE_CLAUSE = "Failed to execute UPDATE command because the WHERE " +
-    "clause contains a DEFAULT column reference; this is not allowed"
-  // Return a more descriptive error message if the user tries to use a DEFAULT column reference
-  // inside an MERGE INTO command's INSERT or UPDATE assignment; this is not allowed.
-  val DEFAULTS_IN_COMPLEX_EXPRESSIONS_IN_MERGE_ASSIGNMENT = "Failed to execute MERGE INTO " +
-    "command because one of its INSERT or UPDATE assignments contains a DEFAULT column reference " +
-    "as part of another expression; this is not allowed"
 
   /**
    * Finds "current default" expressions in CREATE/REPLACE TABLE columns and constant-folds them.

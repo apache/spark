@@ -75,7 +75,7 @@ class QueryExecutionAnsiErrorsSuite extends QueryTest with QueryErrorsSuiteBase 
       },
       errorClass = "CANNOT_CHANGE_DECIMAL_PRECISION",
       msg =
-        "Decimal(expanded,66666666666666.666,17,3}) cannot be represented as Decimal(8, 1). " +
+        "Decimal(expanded, 66666666666666.666, 17, 3) cannot be represented as Decimal(8, 1). " +
         s"If necessary set $ansiConf to false to bypass this error." +
         """
           |== SQL(line 1, position 7) ==
