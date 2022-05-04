@@ -140,9 +140,8 @@ trait DataSourceV2ScanExecBase extends LeafExecNode {
 
   override def outputOrdering: Seq[SortOrder] = scan match {
     case s: SupportsReportOrdering if this.logicalLink.isDefined &&
-      // when groupedPartitions are applied (see `partitions` and `outputPartitioning`) and
-      // multiple partitions are grouped together, the order inside individual partitions gets lost
-      (partitions.length == 1 || groupedPartitions.forall(_.forall(_._2.length == 1))) =>
+      // when multiple partitions are grouped together, the ordering inside partitions gets lost
+      groupedPartitions.forall(_.forall(_._2.length <= 1)) =>
       V2ExpressionUtils.toCatalystOrdering(s.outputOrdering(), this.logicalLink.get)
     case _ => super.outputOrdering
   }
