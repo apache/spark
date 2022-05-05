@@ -3832,7 +3832,7 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
     } else {
       None
     }
-    val setDefaultExpression =
+    val setDefaultExpression: Option[String] =
       if (action.defaultExpression != null) {
         Option(action.defaultExpression()).map(visitDefaultExpression)
       } else if (action.dropDefault != null) {
@@ -3840,6 +3840,9 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
       } else {
         None
       }
+    if (setDefaultExpression.isDefined && !conf.getConf(SQLConf.ENABLE_DEFAULT_COLUMNS)) {
+      throw QueryParsingErrors.defaultColumnNotEnabledError(ctx)
+    }
 
     assert(Seq(dataType, nullable, comment, position, setDefaultExpression)
       .count(_.nonEmpty) == 1)

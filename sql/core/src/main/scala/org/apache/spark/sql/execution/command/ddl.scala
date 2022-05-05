@@ -37,6 +37,7 @@ import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns
 import org.apache.spark.sql.connector.catalog.{CatalogV2Util, TableCatalog}
 import org.apache.spark.sql.connector.catalog.SupportsNamespaces._
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -358,6 +359,11 @@ case class AlterTableChangeColumnCommand(
         // Create a new column from the origin column with the new current default value.
         if (newColumn.getCurrentDefaultValue().isDefined) {
           if (newColumn.getCurrentDefaultValue().get.nonEmpty) {
+            // Check that the proposed default value parses and analyzes correctly, and that the
+            // type of the resulting expression is equivalent or coercible to the destination column
+            // type.
+            ResolveDefaultColumns.analyze(
+              sparkSession.sessionState.analyzer, field, "ALTER TABLE ALTER COLUMN")
             addCurrentDefaultValue(withNewComment, newColumn.getCurrentDefaultValue())
           } else {
             withNewComment.clearCurrentDefaultValue()

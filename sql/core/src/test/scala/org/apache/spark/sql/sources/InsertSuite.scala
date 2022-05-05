@@ -1464,7 +1464,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
     }
   }
 
-  test("SPARK-38338 INSERT INTO with defaults set by ALTER TABLE ALTER COLUMN: negative tests") {
+  test("SPARK-38838 INSERT INTO with defaults set by ALTER TABLE ALTER COLUMN: negative tests") {
     object Errors {
       val COMMON_SUBSTRING = " has a DEFAULT value"
       val BAD_SUBQUERY =
@@ -1475,14 +1475,12 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
     withTable("t") {
       sql(createTable)
       // The default value fails to analyze.
-      sql("alter table t alter column s set default badvalue")
       assert(intercept[AnalysisException] {
-        sql(insertDefaults)
+        sql("alter table t alter column s set default badvalue")
       }.getMessage.contains(Errors.COMMON_SUBSTRING))
       // The default value analyzes to a table not in the catalog.
-      sql("alter table t alter column s set default (select min(x) from badtable)")
       assert(intercept[AnalysisException] {
-        sql(insertDefaults)
+        sql("alter table t alter column s set default (select min(x) from badtable)")
       }.getMessage.contains(Errors.COMMON_SUBSTRING))
       // The default value has an explicit alias. It fails to evaluate when inlined into the VALUES
       // list at the INSERT INTO time.
@@ -1491,13 +1489,14 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
         sql(insertDefaults)
       }.getMessage.contains(Errors.BAD_SUBQUERY))
       // The default value parses but the type is not coercible.
-      sql("alter table t alter column s set default false")
       assert(intercept[AnalysisException] {
-        sql(insertDefaults)
+        sql("alter table t alter column s set default false")
       }.getMessage.contains("provided a value of incompatible type"))
       // The default value is disabled per configuration.
       withSQLConf(SQLConf.ENABLE_DEFAULT_COLUMNS.key -> "false") {
-        sql("alter table t alter column s set default 41 + 1")
+        assert(intercept[ParseException] {
+          sql("alter table t alter column s set default 41 + 1")
+        }.getMessage.contains("Support for DEFAULT column values is not allowed"))
       }
     }
     // Attempting to set a default value for a partitioning column is not allowed.
