@@ -206,6 +206,9 @@
       "AES_MODE" : {
         "message" : [ "AES-<mode> with the padding <padding> by the <functionName> function." ]
       },
+      "DESC_TABLE_COLUMN_PARTITION" : {
+        "message" : [ "DESC TABLE COLUMN for a specific partition." ]
+      },
       "DISTRIBUTE_BY" : {
         "message" : [ "DISTRIBUTE BY clause." ]
       },
