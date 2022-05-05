@@ -96,9 +96,6 @@ case class ResolveDefaultColumns(
    * [[insertsFromInlineTable]] method.
    */
   private def resolveDefaultColumnsForInsertFromInlineTable(i: InsertIntoStatement): LogicalPlan = {
-    val insertTableSchemaWithoutPartitionColumns: StructType =
-      getInsertTableSchemaWithoutPartitionColumns(i)
-        .getOrElse(return i)
     val children = mutable.Buffer.empty[LogicalPlan]
     var node = i.query
     while (node.children.size == 1) {
@@ -106,20 +103,22 @@ case class ResolveDefaultColumns(
       node = node.children(0)
     }
     val table = node.asInstanceOf[UnresolvedInlineTable]
-    val regenerated: InsertIntoStatement =
-      regenerateUserSpecifiedCols(i, insertTableSchemaWithoutPartitionColumns)
-    val expanded: UnresolvedInlineTable =
-      addMissingDefaultValuesForInsertFromInlineTable(
-        table, insertTableSchemaWithoutPartitionColumns)
-    val replaced: Option[LogicalPlan] =
-      replaceExplicitDefaultValuesForInputOfInsertInto(
-        analyzer, insertTableSchemaWithoutPartitionColumns, expanded)
-    replaced.map { r: LogicalPlan =>
-      node = r
-      for (child <- children.reverse) {
-        node = child.withNewChildren(Seq(node))
-      }
-      regenerated.copy(query = node)
+    val insertTableSchemaWithoutPartitionColumns: Option[StructType] =
+      getInsertTableSchemaWithoutPartitionColumns(i)
+    insertTableSchemaWithoutPartitionColumns.map { schema: StructType =>
+      val regenerated: InsertIntoStatement =
+        regenerateUserSpecifiedCols(i, schema)
+      val expanded: UnresolvedInlineTable =
+        addMissingDefaultValuesForInsertFromInlineTable(table, schema)
+      val replaced: Option[LogicalPlan] =
+        replaceExplicitDefaultValuesForInputOfInsertInto(analyzer, schema, expanded)
+      replaced.map { r: LogicalPlan =>
+        node = r
+        for (child <- children.reverse) {
+          node = child.withNewChildren(Seq(node))
+        }
+        regenerated.copy(query = node)
+      }.getOrElse(i)
     }.getOrElse(i)
   }
 
@@ -128,20 +127,18 @@ case class ResolveDefaultColumns(
    * projection.
    */
   private def resolveDefaultColumnsForInsertFromProject(i: InsertIntoStatement): LogicalPlan = {
-    val insertTableSchemaWithoutPartitionColumns: StructType =
+    val insertTableSchemaWithoutPartitionColumns: Option[StructType] =
       getInsertTableSchemaWithoutPartitionColumns(i)
-        .getOrElse(return i)
-    val regenerated: InsertIntoStatement =
-      regenerateUserSpecifiedCols(i, insertTableSchemaWithoutPartitionColumns)
-    val project: Project = i.query.asInstanceOf[Project]
-    val expanded: Project =
-      addMissingDefaultValuesForInsertFromProject(
-        project, insertTableSchemaWithoutPartitionColumns)
-    val replaced: Option[LogicalPlan] =
-      replaceExplicitDefaultValuesForInputOfInsertInto(
-        analyzer, insertTableSchemaWithoutPartitionColumns, expanded)
-    replaced.map { r =>
-      regenerated.copy(query = r)
+    insertTableSchemaWithoutPartitionColumns.map { schema =>
+      val regenerated: InsertIntoStatement = regenerateUserSpecifiedCols(i, schema)
+      val project: Project = i.query.asInstanceOf[Project]
+      val expanded: Project =
+        addMissingDefaultValuesForInsertFromProject(project, schema)
+      val replaced: Option[LogicalPlan] =
+        replaceExplicitDefaultValuesForInputOfInsertInto(analyzer, schema, expanded)
+      replaced.map { r =>
+        regenerated.copy(query = r)
+      }.getOrElse(i)
     }.getOrElse(i)
   }
 
@@ -151,27 +148,28 @@ case class ResolveDefaultColumns(
   private def resolveDefaultColumnsForUpdate(u: UpdateTable): LogicalPlan = {
     // Return a more descriptive error message if the user tries to use a DEFAULT column reference
     // inside an UPDATE command's WHERE clause; this is not allowed.
-    u.condition.map { c: Expression =>
+    u.condition.foreach { c: Expression =>
       if (c.find(isExplicitDefaultColumn).isDefined) {
         throw QueryCompilationErrors.defaultReferencesNotAllowedInUpdateWhereClause()
       }
     }
-    val schema: StructType = getSchemaForTargetTable(u.table).getOrElse(return u)
-    val defaultExpressions: Seq[Expression] = schema.fields.map {
-      case f if f.metadata.contains(CURRENT_DEFAULT_COLUMN_METADATA_KEY) =>
-        analyze(analyzer, f, "UPDATE")
-      case _ => Literal(null)
-    }
-    // Create a map from each column name in the target table to its DEFAULT expression.
-    val columnNamesToExpressions: Map[String, Expression] =
-      mapStructFieldNamesToExpressions(schema, defaultExpressions)
-    // For each assignment in the UPDATE command's SET clause with a DEFAULT column reference on the
-    // right-hand side, look up the corresponding expression from the above map.
-    val newAssignments: Option[Seq[Assignment]] =
-      replaceExplicitDefaultValuesForUpdateAssignments(
-        u.assignments, CommandType.Update, columnNamesToExpressions)
-    newAssignments.map { n =>
-      u.copy(assignments = n)
+    val schemaForTargetTable: Option[StructType] = getSchemaForTargetTable(u.table)
+    schemaForTargetTable.map { schema =>
+      val defaultExpressions: Seq[Expression] = schema.fields.map {
+        case f if f.metadata.contains(CURRENT_DEFAULT_COLUMN_METADATA_KEY) =>
+          analyze(analyzer, f, "UPDATE")
+        case _ => Literal(null)
+      }
+      // Create a map from each column name in the target table to its DEFAULT expression.
+      val columnNamesToExpressions: Map[String, Expression] =
+        mapStructFieldNamesToExpressions(schema, defaultExpressions)
+      // For each assignment in the UPDATE command's SET clause with a DEFAULT column reference on
+      // the right-hand side, look up the corresponding expression from the above map.
+      val newAssignments: Option[Seq[Assignment]] =
+      replaceExplicitDefaultValuesForUpdateAssignments(u.assignments, columnNamesToExpressions)
+      newAssignments.map { n =>
+        u.copy(assignments = n)
+      }.getOrElse(u)
     }.getOrElse(u)
   }
 
