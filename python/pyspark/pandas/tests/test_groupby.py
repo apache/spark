@@ -1281,9 +1281,18 @@ class GroupByTest(PandasOnSparkTestCase, TestUtils):
         # Unlike pandas', the median in pandas-on-Spark is an approximated median based upon
         # approximate percentile computation because computing median across a large dataset
         # is extremely expensive.
+        expected = ps.DataFrame({"B": [3.1, 3.1], "D": [0, 0]}, index=pd.Index([1, 2], name="A"))
         self.assert_eq(
             psdf.groupby("A").median().sort_index(),
-            ps.DataFrame({"B": [3.1, 3.1], "D": [0, 0]}, index=pd.Index([1, 2], name="A")),
+            expected,
+        )
+        self.assert_eq(
+            psdf.groupby("A").median(numeric_only=None).sort_index(),
+            expected,
+        )
+        self.assert_eq(
+            psdf.groupby("A").median(numeric_only=False).sort_index(),
+            expected,
         )
 
         # TODO: fix bug of `std` and re-enable the test below
@@ -1293,6 +1302,11 @@ class GroupByTest(PandasOnSparkTestCase, TestUtils):
         # TODO: fix bug of `sum` and re-enable the test below
         # self._test_stat_func(lambda groupby_obj: groupby_obj.sum(), check_exact=False)
         self.assert_eq(psdf.groupby("A").sum(), pdf.groupby("A").sum(), check_exact=False)
+
+    def test_median(self):
+        self._test_stat_func(lambda groupby_obj: groupby_obj.median())
+        self._test_stat_func(lambda groupby_obj: groupby_obj.median(numeric_only=None))
+        self._test_stat_func(lambda groupby_obj: groupby_obj.median(numeric_only=True))
 
     def test_min(self):
         self._test_stat_func(lambda groupby_obj: groupby_obj.min())
