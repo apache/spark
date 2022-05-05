@@ -209,7 +209,7 @@ class SparkPlanGraphCluster(
   extends SparkPlanGraphNode(id, name, desc, metrics) {
 
   override def makeDotNode(metricsValue: Map[Long, String],
-                           stagesGraph: Map[Long, List[Int]]): String = {
+    stagesGraph: Map[Long, List[Int]]): String = {
     val duration = metrics.filter(_.name.startsWith(WholeStageCodegenExec.PIPELINE_DURATION_METRIC))
     val stageStr = if (!stagesGraph.getOrElse(id, List()).isEmpty) {
       "Stages: " + stagesGraph.getOrElse(this.id, List()).mkString(",") + "\n" } else " "
