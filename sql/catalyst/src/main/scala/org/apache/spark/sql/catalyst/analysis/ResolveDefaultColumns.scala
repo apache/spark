@@ -166,7 +166,8 @@ case class ResolveDefaultColumns(
       // For each assignment in the UPDATE command's SET clause with a DEFAULT column reference on
       // the right-hand side, look up the corresponding expression from the above map.
       val newAssignments: Option[Seq[Assignment]] =
-      replaceExplicitDefaultValuesForUpdateAssignments(u.assignments, columnNamesToExpressions)
+      replaceExplicitDefaultValuesForUpdateAssignments(
+        u.assignments, CommandType.Update, columnNamesToExpressions)
       newAssignments.map { n =>
         u.copy(assignments = n)
       }.getOrElse(u)
