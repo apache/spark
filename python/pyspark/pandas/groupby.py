@@ -2759,7 +2759,8 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
             bool_to_numeric=True,
         )
 
-    def _validate_agg_columns(self, numeric_only: Optional[bool], function_name: str):
+    def _validate_agg_columns(self, numeric_only: Optional[bool], function_name: str) -> None:
+        """Validate aggregation columns and raise an error or a warning following pandas."""
         has_non_numeric = False
         for _agg_col in self._agg_columns:
             if not isinstance(_agg_col.spark.data_type, (NumericType, BooleanType)):
