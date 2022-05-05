@@ -1201,7 +1201,7 @@ class DDLParserSuite extends AnalysisTest {
     val caught = intercept[AnalysisException](
       parsePlan("DESCRIBE TABLE t PARTITION (ds='1970-01-01') col"))
     assert(caught.getMessage.contains(
-        "DESC TABLE COLUMN for a specific partition is not supported"))
+        "The feature is not supported: DESC TABLE COLUMN for a specific partition."))
   }
 
   test("SPARK-17328 Fix NPE with EXPLAIN DESCRIBE TABLE") {
