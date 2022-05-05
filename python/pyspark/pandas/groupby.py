@@ -577,9 +577,10 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         """
         if not numeric_only:
             warnings.warn(
-                "Dropping invalid columns in DataFrameGroupBy.mean is deprecated. "
+                "Dropping invalid columns in GroupBy.mean is deprecated. "
                 "In a future version, a TypeError will be raised. "
-                "Before calling .mean, select only columns which should be valid for the function.",
+                "Before calling .mean, select only columns which should be "
+                "valid for the function.",
                 FutureWarning,
             )
 
@@ -2756,7 +2757,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
 
         if not numeric_only:
             warnings.warn(
-                "Dropping invalid columns in DataFrameGroupBy.mean is deprecated. "
+                "Dropping invalid columns in GroupBy.mean is deprecated. "
                 "In a future version, a TypeError will be raised. "
                 "Before calling .median, select only columns which should be "
                 "valid for the function.",
