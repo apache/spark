@@ -18,13 +18,14 @@
 package org.apache.spark.sql.errors
 
 import java.io.IOException
-import java.util.Locale
+import java.net.URL
+import java.util.{Locale, ServiceConfigurationError}
 
 import org.apache.hadoop.fs.{LocalFileSystem, Path}
 import org.apache.hadoop.fs.permission.FsPermission
 import test.org.apache.spark.sql.connector.JavaSimpleWritableDataSource
 
-import org.apache.spark.{SparkArithmeticException, SparkException, SparkIllegalArgumentException, SparkIllegalStateException, SparkRuntimeException, SparkSecurityException, SparkUnsupportedOperationException, SparkUpgradeException}
+import org.apache.spark.{SparkArithmeticException, SparkClassNotFoundException, SparkException, SparkIllegalArgumentException, SparkIllegalStateException, SparkRuntimeException, SparkSecurityException, SparkUnsupportedOperationException, SparkUpgradeException}
 import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, SaveMode}
 import org.apache.spark.sql.catalyst.util.BadRecordException
 import org.apache.spark.sql.connector.SimpleWritableDataSource
@@ -483,6 +484,34 @@ class QueryExecutionErrorsSuite
               "back to the created path: .+\\. Exception: .+",
             matchMsg = true)
       }
+    }
+  }
+
+  test("INCOMPATIBLE_DATASOURCE_REGISTER: create table using an incompatible data source") {
+    val newClassLoader = new ClassLoader() {
+
+      override def getResources(name: String): java.util.Enumeration[URL] = {
+        if (name.equals("META-INF/services/org.apache.spark.sql.sources.DataSourceRegister")) {
+          // scalastyle:off
+          throw new ServiceConfigurationError(s"Illegal configuration-file syntax: $name",
+            new NoClassDefFoundError("org.apache.spark.sql.sources.HadoopFsRelationProvider"))
+          // scalastyle:on throwerror
+        } else {
+          super.getResources(name)
+        }
+      }
+    }
+
+    Utils.withContextClassLoader(newClassLoader) {
+      val e = intercept[SparkClassNotFoundException] {
+        sql("CREATE TABLE student (id INT, name STRING, age INT) USING org.apache.spark.sql.fake")
+      }
+      checkErrorClass(
+        exception = e,
+        errorClass = "INCOMPATIBLE_DATASOURCE_REGISTER",
+        msg = "Detected an incompatible DataSourceRegister. Please remove the incompatible library " +
+          "from classpath or upgrade it. Error: Illegal configuration-file syntax: " +
+          "META-INF/services/org.apache.spark.sql.sources.DataSourceRegister")
     }
   }
 }
