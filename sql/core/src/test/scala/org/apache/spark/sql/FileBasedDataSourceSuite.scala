@@ -731,6 +731,28 @@ class FileBasedDataSourceSuite extends QueryTest
     }
   }
 
+  test("SPARK-36568: FileScan statistics estimation takes read schema into account") {
+    withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> "") {
+      withTempDir { dir =>
+        spark.range(1000).map(x => (x / 100, x, x)).toDF("k", "v1", "v2").
+          write.partitionBy("k").mode(SaveMode.Overwrite).orc(dir.toString)
+        val dfAll = spark.read.orc(dir.toString)
+        val dfK = dfAll.select("k")
+        val dfV1 = dfAll.select("v1")
+        val dfV2 = dfAll.select("v2")
+        val dfV1V2 = dfAll.select("v1", "v2")
+
+        def sizeInBytes(df: DataFrame): BigInt = df.queryExecution.optimizedPlan.stats.sizeInBytes
+
+        assert(sizeInBytes(dfAll) === BigInt(getLocalDirSize(dir)))
+        assert(sizeInBytes(dfK) < sizeInBytes(dfAll))
+        assert(sizeInBytes(dfV1) < sizeInBytes(dfAll))
+        assert(sizeInBytes(dfV2) === sizeInBytes(dfV1))
+        assert(sizeInBytes(dfV1V2) < sizeInBytes(dfAll))
+      }
+    }
+  }
+
   test("File source v2: support partition pruning") {
     withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> "") {
       allFileBasedDataSources.foreach { format =>

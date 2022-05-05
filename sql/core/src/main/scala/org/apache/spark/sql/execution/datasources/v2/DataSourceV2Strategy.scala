@@ -18,14 +18,17 @@
 package org.apache.spark.sql.execution.datasources.v2
 
 import scala.collection.JavaConverters._
+import scala.collection.mutable
 
 import org.apache.spark.sql.{SparkSession, Strategy}
 import org.apache.spark.sql.catalyst.analysis.{ResolvedNamespace, ResolvedPartitionSpec, ResolvedTable}
-import org.apache.spark.sql.catalyst.expressions.{And, Attribute, DynamicPruning, Expression, NamedExpression, PredicateHelper, SubqueryExpression}
+import org.apache.spark.sql.catalyst.expressions
+import org.apache.spark.sql.catalyst.expressions.{And, Attribute, DynamicPruning, Expression, NamedExpression, Not, Or, PredicateHelper, SubqueryExpression}
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.util.toPrettySQL
+import org.apache.spark.sql.catalyst.util.{toPrettySQL, V2ExpressionBuilder}
 import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Identifier, StagingTableCatalog, SupportsNamespaces, SupportsPartitionManagement, SupportsWrite, Table, TableCapability, TableCatalog}
+import org.apache.spark.sql.connector.expressions.filter.{And => V2And, Not => V2Not, Or => V2Or, Predicate}
 import org.apache.spark.sql.connector.read.LocalScan
 import org.apache.spark.sql.connector.read.streaming.{ContinuousStream, MicroBatchStream}
 import org.apache.spark.sql.connector.write.V1Write
@@ -86,8 +89,8 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
   }
 
   override def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
-    case PhysicalOperation(project, filters,
-        DataSourceV2ScanRelation(_, V1ScanWrapper(scan, pushed, aggregate), output)) =>
+    case PhysicalOperation(project, filters, DataSourceV2ScanRelation(
+      _, V1ScanWrapper(scan, pushed, pushedDownOperators), output)) =>
       val v1Relation = scan.toV1TableScan[BaseRelation with TableScan](session.sqlContext)
       if (v1Relation.schema != scan.readSchema()) {
         throw QueryExecutionErrors.fallbackV1RelationReportsInconsistentSchemaError(
@@ -95,12 +98,13 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       }
       val rdd = v1Relation.buildScan()
       val unsafeRowRDD = DataSourceStrategy.toCatalystRDD(v1Relation, output, rdd)
+
       val dsScan = RowDataSourceScanExec(
         output,
         output.toStructType,
         Set.empty,
         pushed.toSet,
-        aggregate,
+        pushedDownOperators,
         unsafeRowRDD,
         v1Relation,
         tableIdentifier = None)
@@ -426,4 +430,113 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
 
     case _ => Nil
   }
+}
+
+private[sql] object DataSourceV2Strategy {
+
+  private def translateLeafNodeFilterV2(
+      predicate: Expression,
+      supportNestedPredicatePushdown: Boolean): Option[Predicate] = {
+    val pushablePredicate = PushablePredicate(supportNestedPredicatePushdown)
+    predicate match {
+      case pushablePredicate(expr) => Some(expr)
+      case _ => None
+    }
+  }
+
+  /**
+   * Tries to translate a Catalyst [[Expression]] into data source [[Filter]].
+   *
+   * @return a `Some[Filter]` if the input [[Expression]] is convertible, otherwise a `None`.
+   */
+  protected[sql] def translateFilterV2(
+      predicate: Expression,
+      supportNestedPredicatePushdown: Boolean): Option[Predicate] = {
+    translateFilterV2WithMapping(predicate, None, supportNestedPredicatePushdown)
+  }
+
+  /**
+   * Tries to translate a Catalyst [[Expression]] into data source [[Filter]].
+   *
+   * @param predicate The input [[Expression]] to be translated as [[Filter]]
+   * @param translatedFilterToExpr An optional map from leaf node filter expressions to its
+   *                               translated [[Filter]]. The map is used for rebuilding
+   *                               [[Expression]] from [[Filter]].
+   * @return a `Some[Filter]` if the input [[Expression]] is convertible, otherwise a `None`.
+   */
+  protected[sql] def translateFilterV2WithMapping(
+      predicate: Expression,
+      translatedFilterToExpr: Option[mutable.HashMap[Predicate, Expression]],
+      nestedPredicatePushdownEnabled: Boolean)
+  : Option[Predicate] = {
+    predicate match {
+      case And(left, right) =>
+        // See SPARK-12218 for detailed discussion
+        // It is not safe to just convert one side if we do not understand the
+        // other side. Here is an example used to explain the reason.
+        // Let's say we have (a = 2 AND trim(b) = 'blah') OR (c > 0)
+        // and we do not understand how to convert trim(b) = 'blah'.
+        // If we only convert a = 2, we will end up with
+        // (a = 2) OR (c > 0), which will generate wrong results.
+        // Pushing one leg of AND down is only safe to do at the top level.
+        // You can see ParquetFilters' createFilter for more details.
+        for {
+          leftFilter <- translateFilterV2WithMapping(
+            left, translatedFilterToExpr, nestedPredicatePushdownEnabled)
+          rightFilter <- translateFilterV2WithMapping(
+            right, translatedFilterToExpr, nestedPredicatePushdownEnabled)
+        } yield new V2And(leftFilter, rightFilter)
+
+      case Or(left, right) =>
+        for {
+          leftFilter <- translateFilterV2WithMapping(
+            left, translatedFilterToExpr, nestedPredicatePushdownEnabled)
+          rightFilter <- translateFilterV2WithMapping(
+            right, translatedFilterToExpr, nestedPredicatePushdownEnabled)
+        } yield new V2Or(leftFilter, rightFilter)
+
+      case Not(child) =>
+        translateFilterV2WithMapping(child, translatedFilterToExpr, nestedPredicatePushdownEnabled)
+          .map(new V2Not(_))
+
+      case other =>
+        val filter = translateLeafNodeFilterV2(other, nestedPredicatePushdownEnabled)
+        if (filter.isDefined && translatedFilterToExpr.isDefined) {
+          translatedFilterToExpr.get(filter.get) = predicate
+        }
+        filter
+    }
+  }
+
+  protected[sql] def rebuildExpressionFromFilter(
+      predicate: Predicate,
+      translatedFilterToExpr: mutable.HashMap[Predicate, Expression]): Expression = {
+    predicate match {
+      case and: V2And =>
+        expressions.And(
+          rebuildExpressionFromFilter(and.left(), translatedFilterToExpr),
+          rebuildExpressionFromFilter(and.right(), translatedFilterToExpr))
+      case or: V2Or =>
+        expressions.Or(
+          rebuildExpressionFromFilter(or.left(), translatedFilterToExpr),
+          rebuildExpressionFromFilter(or.right(), translatedFilterToExpr))
+      case not: V2Not =>
+        expressions.Not(rebuildExpressionFromFilter(not.child(), translatedFilterToExpr))
+      case _ =>
+        translatedFilterToExpr.getOrElse(predicate,
+          throw new IllegalStateException("Failed to rebuild Expression for filter: " + predicate))
+    }
+  }
+}
+
+/**
+ * Get the expression of DS V2 to represent catalyst predicate that can be pushed down.
+ */
+case class PushablePredicate(nestedPredicatePushdownEnabled: Boolean) {
+
+  def unapply(e: Expression): Option[Predicate] =
+    new V2ExpressionBuilder(e, nestedPredicatePushdownEnabled, true).build().map { v =>
+      assert(v.isInstanceOf[Predicate])
+      v.asInstanceOf[Predicate]
+    }
 }

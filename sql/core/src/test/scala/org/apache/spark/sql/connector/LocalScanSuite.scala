@@ -17,10 +17,6 @@
 
 package org.apache.spark.sql.connector
 
-import java.util
-
-import scala.collection.JavaConverters._
-
 import org.apache.spark.sql.{QueryTest, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.connector.catalog.{BasicInMemoryTableCatalog, Identifier, SupportsRead, Table, TableCapability}
@@ -63,7 +59,7 @@ class TestLocalScanCatalog extends BasicInMemoryTableCatalog {
       ident: Identifier,
       schema: StructType,
       partitions: Array[Transform],
-      properties: util.Map[String, String]): Table = {
+      properties: java.util.Map[String, String]): Table = {
     val table = new TestLocalScanTable(ident.toString)
     tables.put(ident, table)
     table
@@ -78,7 +74,8 @@ object TestLocalScanTable {
 class TestLocalScanTable(override val name: String) extends Table with SupportsRead {
   override def schema(): StructType = TestLocalScanTable.schema
 
-  override def capabilities(): util.Set[TableCapability] = Set(TableCapability.BATCH_READ).asJava
+  override def capabilities(): java.util.Set[TableCapability] =
+    java.util.EnumSet.of(TableCapability.BATCH_READ)
 
   override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder =
     new TestLocalScanBuilder

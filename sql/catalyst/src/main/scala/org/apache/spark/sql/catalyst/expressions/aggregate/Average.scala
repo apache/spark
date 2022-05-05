@@ -69,15 +69,15 @@ case class Average(
     case _ => DoubleType
   }
 
-  private lazy val sumDataType = child.dataType match {
+  lazy val sumDataType = child.dataType match {
     case _ @ DecimalType.Fixed(p, s) => DecimalType.bounded(p + 10, s)
     case _: YearMonthIntervalType => YearMonthIntervalType()
     case _: DayTimeIntervalType => DayTimeIntervalType()
     case _ => DoubleType
   }
 
-  private lazy val sum = AttributeReference("sum", sumDataType)()
-  private lazy val count = AttributeReference("count", LongType)()
+  lazy val sum = AttributeReference("sum", sumDataType)()
+  lazy val count = AttributeReference("count", LongType)()
 
   override lazy val aggBufferAttributes = sum :: count :: Nil
 

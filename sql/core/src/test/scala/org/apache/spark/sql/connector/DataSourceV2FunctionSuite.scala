@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.connector
 
-import java.util
 import java.util.Collections
 
 import test.org.apache.spark.sql.connector.catalog.functions.{JavaAverage, JavaLongAdd, JavaStrLen}
@@ -35,7 +34,7 @@ import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
 class DataSourceV2FunctionSuite extends DatasourceV2SQLBase {
-  private val emptyProps: util.Map[String, String] = Collections.emptyMap[String, String]
+  private val emptyProps: java.util.Map[String, String] = Collections.emptyMap[String, String]
 
   private def addFunction(ident: Identifier, fn: UnboundFunction): Unit = {
     catalog("testcat").asInstanceOf[InMemoryCatalog].createFunction(ident, fn)

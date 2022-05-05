@@ -19,7 +19,13 @@ package org.apache.spark.sql.jdbc.v2
 
 import org.apache.log4j.Level
 
-import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.{AnalysisException, DataFrame}
+import org.apache.spark.sql.catalyst.analysis.{IndexAlreadyExistsException, NoSuchIndexException}
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, Sample}
+import org.apache.spark.sql.connector.catalog.{Catalogs, Identifier, TableCatalog}
+import org.apache.spark.sql.connector.catalog.index.SupportsIndex
+import org.apache.spark.sql.connector.expressions.aggregate.GeneralAggregateFunc
+import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2ScanRelation, V1ScanWrapper}
 import org.apache.spark.sql.jdbc.DockerIntegrationFunSuite
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
@@ -27,7 +33,15 @@ import org.apache.spark.tags.DockerTest
 
 @DockerTest
 private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFunSuite {
+  import testImplicits._
+
   val catalogName: String
+
+  val namespaceOpt: Option[String] = None
+
+  private def catalogAndNamespace =
+    namespaceOpt.map(namespace => s"$catalogName.$namespace").getOrElse(catalogName)
+
   // dialect specific update column type test
   def testUpdateColumnType(tbl: String): Unit
 
@@ -180,5 +194,313 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
       testCreateTableWithProperty(s"$catalogName.new_table")
     }
   }
-}
 
+  def supportsIndex: Boolean = false
+
+  def indexOptions: String = ""
+
+  test("SPARK-36895: Test INDEX Using SQL") {
+    if (supportsIndex) {
+      withTable(s"$catalogName.new_table") {
+        sql(s"CREATE TABLE $catalogName.new_table(col1 INT, col2 INT, col3 INT," +
+          " col4 INT, col5 INT)")
+        val loaded = Catalogs.load(catalogName, conf)
+        val jdbcTable = loaded.asInstanceOf[TableCatalog]
+          .loadTable(Identifier.of(Array.empty[String], "new_table"))
+          .asInstanceOf[SupportsIndex]
+        assert(jdbcTable.indexExists("i1") == false)
+        assert(jdbcTable.indexExists("i2") == false)
+
+        val indexType = "DUMMY"
+        var m = intercept[UnsupportedOperationException] {
+          sql(s"CREATE index i1 ON $catalogName.new_table USING $indexType (col1)")
+        }.getMessage
+        assert(m.contains(s"Index Type $indexType is not supported." +
+          s" The supported Index Types are:"))
+
+        sql(s"CREATE index i1 ON $catalogName.new_table USING BTREE (col1)")
+        sql(s"CREATE index i2 ON $catalogName.new_table (col2, col3, col5)" +
+          s" OPTIONS ($indexOptions)")
+
+        assert(jdbcTable.indexExists("i1") == true)
+        assert(jdbcTable.indexExists("i2") == true)
+
+        // This should pass without exception
+        sql(s"CREATE index IF NOT EXISTS i1 ON $catalogName.new_table (col1)")
+
+        m = intercept[IndexAlreadyExistsException] {
+          sql(s"CREATE index i1 ON $catalogName.new_table (col1)")
+        }.getMessage
+        assert(m.contains("Failed to create index i1 in new_table"))
+
+        sql(s"DROP index i1 ON $catalogName.new_table")
+        sql(s"DROP index i2 ON $catalogName.new_table")
+
+        assert(jdbcTable.indexExists("i1") == false)
+        assert(jdbcTable.indexExists("i2") == false)
+
+        // This should pass without exception
+        sql(s"DROP index IF EXISTS i1 ON $catalogName.new_table")
+
+        m = intercept[NoSuchIndexException] {
+          sql(s"DROP index i1 ON $catalogName.new_table")
+        }.getMessage
+        assert(m.contains("Failed to drop index i1 in new_table"))
+      }
+    }
+  }
+
+  def supportsTableSample: Boolean = false
+
+  private def checkSamplePushed(df: DataFrame, pushed: Boolean = true): Unit = {
+    val sample = df.queryExecution.optimizedPlan.collect {
+      case s: Sample => s
+    }
+    if (pushed) {
+      assert(sample.isEmpty)
+    } else {
+      assert(sample.nonEmpty)
+    }
+  }
+
+  private def checkFilterPushed(df: DataFrame, pushed: Boolean = true): Unit = {
+    val filter = df.queryExecution.optimizedPlan.collect {
+      case f: Filter => f
+    }
+    if (pushed) {
+      assert(filter.isEmpty)
+    } else {
+      assert(filter.nonEmpty)
+    }
+  }
+
+  private def limitPushed(df: DataFrame, limit: Int): Boolean = {
+    df.queryExecution.optimizedPlan.collect {
+      case relation: DataSourceV2ScanRelation => relation.scan match {
+        case v1: V1ScanWrapper =>
+          return v1.pushedDownOperators.limit == Some(limit)
+      }
+    }
+    false
+  }
+
+  private def checkColumnPruned(df: DataFrame, col: String): Unit = {
+    val scan = df.queryExecution.optimizedPlan.collectFirst {
+      case s: DataSourceV2ScanRelation => s
+    }.get
+    assert(scan.schema.names.sameElements(Seq(col)))
+  }
+
+  test("SPARK-37038: Test TABLESAMPLE") {
+    if (supportsTableSample) {
+      withTable(s"$catalogName.new_table") {
+        sql(s"CREATE TABLE $catalogName.new_table (col1 INT, col2 INT)")
+        spark.range(10).select($"id" * 2, $"id" * 2 + 1).write.insertInto(s"$catalogName.new_table")
+
+        // sample push down + column pruning
+        val df1 = sql(s"SELECT col1 FROM $catalogName.new_table TABLESAMPLE (BUCKET 6 OUT OF 10)" +
+          " REPEATABLE (12345)")
+        checkSamplePushed(df1)
+        checkColumnPruned(df1, "col1")
+        assert(df1.collect().length < 10)
+
+        // sample push down only
+        val df2 = sql(s"SELECT * FROM $catalogName.new_table TABLESAMPLE (50 PERCENT)" +
+          " REPEATABLE (12345)")
+        checkSamplePushed(df2)
+        assert(df2.collect().length < 10)
+
+        // sample(BUCKET ... OUT OF) push down + limit push down + column pruning
+        val df3 = sql(s"SELECT col1 FROM $catalogName.new_table TABLESAMPLE (BUCKET 6 OUT OF 10)" +
+          " LIMIT 2")
+        checkSamplePushed(df3)
+        assert(limitPushed(df3, 2))
+        checkColumnPruned(df3, "col1")
+        assert(df3.collect().length <= 2)
+
+        // sample(... PERCENT) push down + limit push down + column pruning
+        val df4 = sql(s"SELECT col1 FROM $catalogName.new_table" +
+          " TABLESAMPLE (50 PERCENT) REPEATABLE (12345) LIMIT 2")
+        checkSamplePushed(df4)
+        assert(limitPushed(df4, 2))
+        checkColumnPruned(df4, "col1")
+        assert(df4.collect().length <= 2)
+
+        // sample push down + filter push down + limit push down
+        val df5 = sql(s"SELECT * FROM $catalogName.new_table" +
+          " TABLESAMPLE (BUCKET 6 OUT OF 10) WHERE col1 > 0 LIMIT 2")
+        checkSamplePushed(df5)
+        checkFilterPushed(df5)
+        assert(limitPushed(df5, 2))
+        assert(df5.collect().length <= 2)
+
+        // sample + filter + limit + column pruning
+        // sample pushed down, filer/limit not pushed down, column pruned
+        // Todo: push down filter/limit
+        val df6 = sql(s"SELECT col1 FROM $catalogName.new_table" +
+          " TABLESAMPLE (BUCKET 6 OUT OF 10) WHERE col1 > 0 LIMIT 2")
+        checkSamplePushed(df6)
+        checkFilterPushed(df6, false)
+        assert(!limitPushed(df6, 2))
+        checkColumnPruned(df6, "col1")
+        assert(df6.collect().length <= 2)
+
+        // sample + limit
+        // Push down order is sample -> filter -> limit
+        // only limit is pushed down because in this test sample is after limit
+        val df7 = spark.read.table(s"$catalogName.new_table").limit(2).sample(0.5)
+        checkSamplePushed(df7, false)
+        assert(limitPushed(df7, 2))
+
+        // sample + filter
+        // Push down order is sample -> filter -> limit
+        // only filter is pushed down because in this test sample is after filter
+        val df8 = spark.read.table(s"$catalogName.new_table").where($"col1" > 1).sample(0.5)
+        checkSamplePushed(df8, false)
+        checkFilterPushed(df8)
+        assert(df8.collect().length < 10)
+      }
+    }
+  }
+
+  protected def checkAggregateRemoved(df: DataFrame): Unit = {
+    val aggregates = df.queryExecution.optimizedPlan.collect {
+      case agg: Aggregate => agg
+    }
+    assert(aggregates.isEmpty)
+  }
+
+  private def checkAggregatePushed(df: DataFrame, funcName: String): Unit = {
+    df.queryExecution.optimizedPlan.collect {
+      case DataSourceV2ScanRelation(_, scan, _) =>
+        assert(scan.isInstanceOf[V1ScanWrapper])
+        val wrapper = scan.asInstanceOf[V1ScanWrapper]
+        assert(wrapper.pushedDownOperators.aggregation.isDefined)
+        val aggregationExpressions =
+          wrapper.pushedDownOperators.aggregation.get.aggregateExpressions()
+        assert(aggregationExpressions.length == 1)
+        assert(aggregationExpressions(0).isInstanceOf[GeneralAggregateFunc])
+        assert(aggregationExpressions(0).asInstanceOf[GeneralAggregateFunc].name() == funcName)
+    }
+  }
+
+  protected def caseConvert(tableName: String): String = tableName
+
+  protected def testVarPop(isDistinct: Boolean = false): Unit = {
+    val distinct = if (isDistinct) "DISTINCT " else ""
+    test(s"scan with aggregate push-down: VAR_POP with distinct: $isDistinct") {
+      val df = sql(s"SELECT VAR_POP(${distinct}bonus) FROM $catalogAndNamespace." +
+        s"${caseConvert("employee")} WHERE dept > 0 GROUP BY dept ORDER BY dept")
+      checkFilterPushed(df)
+      checkAggregateRemoved(df)
+      checkAggregatePushed(df, "VAR_POP")
+      val row = df.collect()
+      assert(row.length === 3)
+      assert(row(0).getDouble(0) === 10000d)
+      assert(row(1).getDouble(0) === 2500d)
+      assert(row(2).getDouble(0) === 0d)
+    }
+  }
+
+  protected def testVarSamp(isDistinct: Boolean = false): Unit = {
+    val distinct = if (isDistinct) "DISTINCT " else ""
+    test(s"scan with aggregate push-down: VAR_SAMP with distinct: $isDistinct") {
+      val df = sql(
+        s"SELECT VAR_SAMP(${distinct}bonus) FROM $catalogAndNamespace." +
+        s"${caseConvert("employee")} WHERE dept > 0 GROUP BY dept ORDER BY dept")
+      checkFilterPushed(df)
+      checkAggregateRemoved(df)
+      checkAggregatePushed(df, "VAR_SAMP")
+      val row = df.collect()
+      assert(row.length === 3)
+      assert(row(0).getDouble(0) === 20000d)
+      assert(row(1).getDouble(0) === 5000d)
+      assert(row(2).isNullAt(0))
+    }
+  }
+
+  protected def testStddevPop(isDistinct: Boolean = false): Unit = {
+    val distinct = if (isDistinct) "DISTINCT " else ""
+    test(s"scan with aggregate push-down: STDDEV_POP with distinct: $isDistinct") {
+      val df = sql(
+        s"SELECT STDDEV_POP(${distinct}bonus) FROM $catalogAndNamespace." +
+        s"${caseConvert("employee")} WHERE dept > 0 GROUP BY dept ORDER BY dept")
+      checkFilterPushed(df)
+      checkAggregateRemoved(df)
+      checkAggregatePushed(df, "STDDEV_POP")
+      val row = df.collect()
+      assert(row.length === 3)
+      assert(row(0).getDouble(0) === 100d)
+      assert(row(1).getDouble(0) === 50d)
+      assert(row(2).getDouble(0) === 0d)
+    }
+  }
+
+  protected def testStddevSamp(isDistinct: Boolean = false): Unit = {
+    val distinct = if (isDistinct) "DISTINCT " else ""
+    test(s"scan with aggregate push-down: STDDEV_SAMP with distinct: $isDistinct") {
+      val df = sql(
+        s"SELECT STDDEV_SAMP(${distinct}bonus) FROM $catalogAndNamespace." +
+        s"${caseConvert("employee")} WHERE dept > 0 GROUP BY dept ORDER BY dept")
+      checkFilterPushed(df)
+      checkAggregateRemoved(df)
+      checkAggregatePushed(df, "STDDEV_SAMP")
+      val row = df.collect()
+      assert(row.length === 3)
+      assert(row(0).getDouble(0) === 141.4213562373095d)
+      assert(row(1).getDouble(0) === 70.71067811865476d)
+      assert(row(2).isNullAt(0))
+    }
+  }
+
+  protected def testCovarPop(isDistinct: Boolean = false): Unit = {
+    val distinct = if (isDistinct) "DISTINCT " else ""
+    test(s"scan with aggregate push-down: COVAR_POP with distinct: $isDistinct") {
+      val df = sql(
+        s"SELECT COVAR_POP(${distinct}bonus, bonus) FROM $catalogAndNamespace." +
+        s"${caseConvert("employee")} WHERE dept > 0 GROUP BY dept ORDER BY dept")
+      checkFilterPushed(df)
+      checkAggregateRemoved(df)
+      checkAggregatePushed(df, "COVAR_POP")
+      val row = df.collect()
+      assert(row.length === 3)
+      assert(row(0).getDouble(0) === 10000d)
+      assert(row(1).getDouble(0) === 2500d)
+      assert(row(2).getDouble(0) === 0d)
+    }
+  }
+
+  protected def testCovarSamp(isDistinct: Boolean = false): Unit = {
+    val distinct = if (isDistinct) "DISTINCT " else ""
+    test(s"scan with aggregate push-down: COVAR_SAMP with distinct: $isDistinct") {
+      val df = sql(
+        s"SELECT COVAR_SAMP(${distinct}bonus, bonus) FROM $catalogAndNamespace." +
+        s"${caseConvert("employee")} WHERE dept > 0 GROUP BY dept ORDER BY dept")
+      checkFilterPushed(df)
+      checkAggregateRemoved(df)
+      checkAggregatePushed(df, "COVAR_SAMP")
+      val row = df.collect()
+      assert(row.length === 3)
+      assert(row(0).getDouble(0) === 20000d)
+      assert(row(1).getDouble(0) === 5000d)
+      assert(row(2).isNullAt(0))
+    }
+  }
+
+  protected def testCorr(isDistinct: Boolean = false): Unit = {
+    val distinct = if (isDistinct) "DISTINCT " else ""
+    test(s"scan with aggregate push-down: CORR with distinct: $isDistinct") {
+      val df = sql(
+        s"SELECT CORR(${distinct}bonus, bonus) FROM $catalogAndNamespace." +
+        s"${caseConvert("employee")} WHERE dept > 0 GROUP BY dept ORDER BY dept")
+      checkFilterPushed(df)
+      checkAggregateRemoved(df)
+      checkAggregatePushed(df, "CORR")
+      val row = df.collect()
+      assert(row.length === 3)
+      assert(row(0).getDouble(0) === 1d)
+      assert(row(1).getDouble(0) === 1d)
+      assert(row(2).isNullAt(0))
+    }
+  }
+}

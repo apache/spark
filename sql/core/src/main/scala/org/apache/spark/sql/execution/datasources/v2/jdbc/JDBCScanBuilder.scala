@@ -20,12 +20,14 @@ import scala.util.control.NonFatal
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.connector.expressions.SortOrder
 import org.apache.spark.sql.connector.expressions.aggregate.Aggregation
-import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownAggregates, SupportsPushDownFilters, SupportsPushDownRequiredColumns}
+import org.apache.spark.sql.connector.expressions.filter.Predicate
+import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownAggregates, SupportsPushDownLimit, SupportsPushDownRequiredColumns, SupportsPushDownTableSample, SupportsPushDownTopN, SupportsPushDownV2Filters}
 import org.apache.spark.sql.execution.datasources.PartitioningUtils
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JDBCRDD, JDBCRelation}
+import org.apache.spark.sql.execution.datasources.v2.TableSampleInfo
 import org.apache.spark.sql.jdbc.JdbcDialects
-import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.types.StructType
 
 case class JDBCScanBuilder(
@@ -33,40 +35,56 @@ case class JDBCScanBuilder(
     schema: StructType,
     jdbcOptions: JDBCOptions)
   extends ScanBuilder
-    with SupportsPushDownFilters
+    with SupportsPushDownV2Filters
     with SupportsPushDownRequiredColumns
     with SupportsPushDownAggregates
+    with SupportsPushDownLimit
+    with SupportsPushDownTableSample
+    with SupportsPushDownTopN
     with Logging {
 
   private val isCaseSensitive = session.sessionState.conf.caseSensitiveAnalysis
 
-  private var pushedFilter = Array.empty[Filter]
+  private var pushedPredicate = Array.empty[Predicate]
 
   private var finalSchema = schema
 
-  override def pushFilters(filters: Array[Filter]): Array[Filter] = {
+  private var tableSample: Option[TableSampleInfo] = None
+
+  private var pushedLimit = 0
+
+  private var sortOrders: Array[SortOrder] = Array.empty[SortOrder]
+
+  override def pushPredicates(predicates: Array[Predicate]): Array[Predicate] = {
     if (jdbcOptions.pushDownPredicate) {
       val dialect = JdbcDialects.get(jdbcOptions.url)
-      val (pushed, unSupported) = filters.partition(JDBCRDD.compileFilter(_, dialect).isDefined)
-      this.pushedFilter = pushed
+      val (pushed, unSupported) = predicates.partition(dialect.compileExpression(_).isDefined)
+      this.pushedPredicate = pushed
       unSupported
     } else {
-      filters
+      predicates
     }
   }
 
-  override def pushedFilters(): Array[Filter] = pushedFilter
+  override def pushedPredicates(): Array[Predicate] = pushedPredicate
 
   private var pushedAggregateList: Array[String] = Array()
 
   private var pushedGroupByCols: Option[Array[String]] = None
 
+  override def supportCompletePushDown(aggregation: Aggregation): Boolean = {
+    lazy val fieldNames = aggregation.groupByColumns()(0).fieldNames()
+    jdbcOptions.numPartitions.map(_ == 1).getOrElse(true) ||
+      (aggregation.groupByColumns().length == 1 && fieldNames.length == 1 &&
+        jdbcOptions.partitionColumn.exists(fieldNames(0).equalsIgnoreCase(_)))
+  }
+
   override def pushAggregation(aggregation: Aggregation): Boolean = {
     if (!jdbcOptions.pushDownAggregate) return false
 
     val dialect = JdbcDialects.get(jdbcOptions.url)
-    val compiledAgg = JDBCRDD.compileAggregates(aggregation.aggregateExpressions, dialect)
-    if (compiledAgg.isEmpty) return false
+    val compiledAggs = aggregation.aggregateExpressions.flatMap(dialect.compileAggregate)
+    if (compiledAggs.length != aggregation.aggregateExpressions.length) return false
 
     val groupByCols = aggregation.groupByColumns.map { col =>
       if (col.fieldNames.length != 1) return false
@@ -77,7 +95,7 @@ case class JDBCScanBuilder(
     // e.g. "DEPT","NAME",MAX("SALARY"),MIN("BONUS") =>
     // SELECT "DEPT","NAME",MAX("SALARY"),MIN("BONUS") FROM "test"."employee"
     //   GROUP BY "DEPT", "NAME"
-    val selectList = groupByCols ++ compiledAgg.get
+    val selectList = groupByCols ++ compiledAggs
     val groupByClause = if (groupByCols.isEmpty) {
       ""
     } else {
@@ -97,6 +115,38 @@ case class JDBCScanBuilder(
         false
     }
   }
+
+  override def pushTableSample(
+      lowerBound: Double,
+      upperBound: Double,
+      withReplacement: Boolean,
+      seed: Long): Boolean = {
+    if (jdbcOptions.pushDownTableSample &&
+      JdbcDialects.get(jdbcOptions.url).supportsTableSample) {
+      this.tableSample = Some(TableSampleInfo(lowerBound, upperBound, withReplacement, seed))
+      return true
+    }
+    false
+  }
+
+  override def pushLimit(limit: Int): Boolean = {
+    if (jdbcOptions.pushDownLimit) {
+      pushedLimit = limit
+      return true
+    }
+    false
+  }
+
+  override def pushTopN(orders: Array[SortOrder], limit: Int): Boolean = {
+    if (jdbcOptions.pushDownLimit) {
+      pushedLimit = limit
+      sortOrders = orders
+      return true
+    }
+    false
+  }
+
+  override def isPartiallyPushed(): Boolean = jdbcOptions.numPartitions.map(_ > 1).getOrElse(false)
 
   override def pruneColumns(requiredSchema: StructType): Unit = {
     // JDBC doesn't support nested column pruning.
@@ -122,7 +172,7 @@ case class JDBCScanBuilder(
     // "DEPT","NAME",MAX("SALARY"),MIN("BONUS"), instead of getting column names from
     // prunedSchema and quote them (will become "MAX(SALARY)", "MIN(BONUS)" and can't
     // be used in sql string.
-    JDBCScan(JDBCRelation(schema, parts, jdbcOptions)(session), finalSchema, pushedFilter,
-      pushedAggregateList, pushedGroupByCols)
+    JDBCScan(JDBCRelation(schema, parts, jdbcOptions)(session), finalSchema, pushedPredicate,
+      pushedAggregateList, pushedGroupByCols, tableSample, pushedLimit, sortOrders)
   }
 }

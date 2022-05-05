@@ -24,7 +24,7 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, QualifiedTableName, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, NamespaceAlreadyExistsException, NoSuchFunctionException, NoSuchNamespaceException, NoSuchPartitionException, NoSuchTableException, ResolvedNamespace, ResolvedTable, ResolvedView, TableAlreadyExistsException}
-import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogTable, InvalidUDFClassException}
+import org.apache.spark.sql.catalyst.catalog.{CatalogTable, InvalidUDFClassException}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, AttributeSet, CreateMap, Expression, GroupingID, NamedExpression, SpecifiedWindowFrame, WindowFrame, WindowFunction, WindowSpecDefinition}
 import org.apache.spark.sql.catalyst.plans.JoinType
@@ -553,6 +553,11 @@ object QueryCompilationErrors {
 
   def databaseNotEmptyError(db: String, details: String): Throwable = {
     new AnalysisException(s"Database $db is not empty. One or more $details exist.")
+  }
+
+  def cannotDropNonemptyNamespaceError(namespace: Seq[String]): Throwable = {
+    new AnalysisException(s"Cannot drop a non-empty namespace: ${namespace.quoted}. " +
+      "Use CASCADE option to drop a non-empty namespace.")
   }
 
   def invalidNameForTableOrDatabaseError(name: String): Throwable = {
@@ -1369,11 +1374,6 @@ object QueryCompilationErrors {
 
   def cannotUseIntervalTypeInTableSchemaError(): Throwable = {
     new AnalysisException("Cannot use interval type in the table schema.")
-  }
-
-  def cannotConvertBucketWithSortColumnsToTransformError(spec: BucketSpec): Throwable = {
-    new AnalysisException(
-      s"Cannot convert bucketing with sort columns to a transform: $spec")
   }
 
   def cannotConvertTransformsToPartitionColumnsError(nonIdTransforms: Seq[Transform]): Throwable = {
@@ -2370,5 +2370,9 @@ object QueryCompilationErrors {
       errorClass = "INVALID_FIELD_NAME",
       messageParameters = Array(fieldName.quoted, path.quoted),
       origin = context)
+  }
+
+  def noSuchFunctionError(database: String, funcInfo: String): Throwable = {
+    new AnalysisException(s"$database does not support function: $funcInfo")
   }
 }

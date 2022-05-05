@@ -38,12 +38,13 @@ private[sql] object CatalogV2Implicits {
 
   implicit class BucketSpecHelper(spec: BucketSpec) {
     def asTransform: BucketTransform = {
-      if (spec.sortColumnNames.nonEmpty) {
-        throw QueryCompilationErrors.cannotConvertBucketWithSortColumnsToTransformError(spec)
-      }
-
       val references = spec.bucketColumnNames.map(col => reference(Seq(col)))
-      bucket(spec.numBuckets, references.toArray)
+      if (spec.sortColumnNames.nonEmpty) {
+        val sortedCol = spec.sortColumnNames.map(col => reference(Seq(col)))
+        bucket(spec.numBuckets, references.toArray, sortedCol.toArray)
+      } else {
+        bucket(spec.numBuckets, references.toArray)
+      }
     }
   }
 

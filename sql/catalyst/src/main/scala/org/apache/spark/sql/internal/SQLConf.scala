@@ -851,6 +851,14 @@ object SQLConf {
       .checkValue(threshold => threshold >= 0, "The threshold must not be negative.")
       .createWithDefault(10)
 
+  val PARQUET_AGGREGATE_PUSHDOWN_ENABLED = buildConf("spark.sql.parquet.aggregatePushdown")
+    .doc("If true, MAX/MIN/COUNT without filter and group by will be pushed" +
+      " down to Parquet for optimization. MAX/MIN/COUNT for complex types and timestamp" +
+      " can't be pushed down")
+    .version("3.3.0")
+    .booleanConf
+    .createWithDefault(false)
+
   val PARQUET_WRITE_LEGACY_FORMAT = buildConf("spark.sql.parquet.writeLegacyFormat")
     .doc("If true, data will be written in a way of Spark 1.4 and earlier. For example, decimal " +
       "values will be written in Apache Parquet's fixed-length byte array format, which other " +
@@ -941,6 +949,14 @@ object SQLConf {
     .version("1.4.0")
     .booleanConf
     .createWithDefault(true)
+
+  val ORC_AGGREGATE_PUSHDOWN_ENABLED = buildConf("spark.sql.orc.aggregatePushdown")
+    .doc("If true, aggregates will be pushed down to ORC for optimization. Support MIN, MAX and " +
+      "COUNT as aggregate expression. For MIN/MAX, support boolean, integer, float and date " +
+      "type. For COUNT, support all data types.")
+    .version("3.3.0")
+    .booleanConf
+    .createWithDefault(false)
 
   val ORC_SCHEMA_MERGING_ENABLED = buildConf("spark.sql.orc.mergeSchema")
     .doc("When true, the Orc data source merges schemas collected from all data files, " +
@@ -1851,6 +1867,13 @@ object SQLConf {
       .version("3.2.0")
       .booleanConf
       .createWithDefault(true)
+
+  val COLLAPSE_PROJECT_ALWAYS_INLINE = buildConf("spark.sql.optimizer.collapseProjectAlwaysInline")
+    .doc("Whether to always collapse two adjacent projections and inline expressions even if " +
+      "it causes extra duplication.")
+    .version("3.3.0")
+    .booleanConf
+    .createWithDefault(false)
 
   val FILE_SINK_LOG_DELETION = buildConf("spark.sql.streaming.fileSink.log.deletion")
     .internal()
@@ -3679,7 +3702,11 @@ class SQLConf extends Serializable with Logging {
   def parquetFilterPushDownInFilterThreshold: Int =
     getConf(PARQUET_FILTER_PUSHDOWN_INFILTERTHRESHOLD)
 
+  def parquetAggregatePushDown: Boolean = getConf(PARQUET_AGGREGATE_PUSHDOWN_ENABLED)
+
   def orcFilterPushDown: Boolean = getConf(ORC_FILTER_PUSHDOWN_ENABLED)
+
+  def orcAggregatePushDown: Boolean = getConf(ORC_AGGREGATE_PUSHDOWN_ENABLED)
 
   def isOrcSchemaMergingEnabled: Boolean = getConf(ORC_SCHEMA_MERGING_ENABLED)
 

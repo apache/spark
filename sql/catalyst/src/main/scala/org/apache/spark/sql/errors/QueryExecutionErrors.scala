@@ -1804,4 +1804,16 @@ object QueryExecutionErrors {
   def pivotNotAfterGroupByUnsupportedError(): Throwable = {
     new UnsupportedOperationException("pivot is only supported after a groupBy")
   }
+
+  def unsupportedCreateNamespaceCommentError(): Throwable = {
+    new SQLFeatureNotSupportedException("Create namespace comment is not supported")
+  }
+
+  def unsupportedRemoveNamespaceCommentError(): Throwable = {
+    new SQLFeatureNotSupportedException("Remove namespace comment is not supported")
+  }
+
+  def unsupportedDropNamespaceRestrictError(): Throwable = {
+    new SQLFeatureNotSupportedException("Drop namespace restrict is not supported")
+  }
 }
