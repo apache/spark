@@ -35,6 +35,19 @@ from pyspark.testing.pandasutils import PandasOnSparkTestCase, TestUtils
 
 
 class GroupByTest(PandasOnSparkTestCase, TestUtils):
+    def pdf(self):
+        return pd.DataFrame(
+            {
+                "A": [1, 2, 1, 2],
+                "B": [3.1, 4.1, 4.1, 3.1],
+                "C": ["a", "b", "b", "a"],
+                "D": [True, False, False, True],
+            }
+        )
+
+    def psdf(self):
+        return ps.from_pandas(self.pdf())
+
     def test_groupby_simple(self):
         pdf = pd.DataFrame(
             {
@@ -1245,18 +1258,14 @@ class GroupByTest(PandasOnSparkTestCase, TestUtils):
 
     # TODO: All statistical functions should leverage this utility
     def _test_stat_func(self, func, check_exact=True):
-        pdf = pd.DataFrame(
-            {
-                "A": [1, 2, 1, 2],
-                "B": [3.1, 4.1, 4.1, 3.1],
-                "C": ["a", "b", "b", "a"],
-                "D": [True, False, False, True],
-            }
-        )
-        psdf = ps.from_pandas(pdf)
+        pdf, psdf = self.pdf(), self.psdf()
         for p_groupby_obj, ps_groupby_obj in [
+            # Against DataFrameGroupBy
             (pdf.groupby("A"), psdf.groupby("A")),
+            # Against DataFrameGroupBy with an aggregation column of string type
             (pdf.groupby("A")[["C"]], psdf.groupby("A")[["C"]]),
+            # Against SeriesGroupBy
+            (pdf.groupby("A")["B"], psdf.groupby("A")["B"]),
         ]:
             self.assert_eq(
                 func(p_groupby_obj).sort_index(),
@@ -1265,18 +1274,9 @@ class GroupByTest(PandasOnSparkTestCase, TestUtils):
             )
 
     def test_basic_stat_funcs(self):
-        self._test_stat_func(lambda groupby_obj: groupby_obj.mean(), check_exact=False)
         self._test_stat_func(lambda groupby_obj: groupby_obj.var(), check_exact=False)
 
-        pdf = pd.DataFrame(
-            {
-                "A": [1, 2, 1, 2],
-                "B": [3.1, 4.1, 4.1, 3.1],
-                "C": ["a", "b", "b", "a"],
-                "D": [True, False, False, True],
-            }
-        )
-        psdf = ps.from_pandas(pdf)
+        pdf, psdf = self.pdf(), self.psdf()
 
         # Unlike pandas', the median in pandas-on-Spark is an approximated median based upon
         # approximate percentile computation because computing median across a large dataset
@@ -1294,6 +1294,12 @@ class GroupByTest(PandasOnSparkTestCase, TestUtils):
             psdf.groupby("A").median(numeric_only=False).sort_index(),
             expected,
         )
+        self.assert_eq(
+            psdf.groupby("A")["B"].median().sort_index(),
+            expected.B,
+        )
+        with self.assertRaises(TypeError):
+            psdf.groupby("A")["C"].mean()
 
         # TODO: fix bug of `std` and re-enable the test below
         # self._test_stat_func(lambda groupby_obj: groupby_obj.std(), check_exact=False)
@@ -1303,10 +1309,13 @@ class GroupByTest(PandasOnSparkTestCase, TestUtils):
         # self._test_stat_func(lambda groupby_obj: groupby_obj.sum(), check_exact=False)
         self.assert_eq(psdf.groupby("A").sum(), pdf.groupby("A").sum(), check_exact=False)
 
-    def test_median(self):
-        self._test_stat_func(lambda groupby_obj: groupby_obj.median())
-        self._test_stat_func(lambda groupby_obj: groupby_obj.median(numeric_only=None))
-        self._test_stat_func(lambda groupby_obj: groupby_obj.median(numeric_only=True))
+    def test_mean(self):
+        self._test_stat_func(lambda groupby_obj: groupby_obj.mean())
+        self._test_stat_func(lambda groupby_obj: groupby_obj.mean(numeric_only=None))
+        self._test_stat_func(lambda groupby_obj: groupby_obj.mean(numeric_only=True))
+        psdf = self.psdf()
+        with self.assertRaises(TypeError):
+            psdf.groupby("A")["C"].mean()
 
     def test_min(self):
         self._test_stat_func(lambda groupby_obj: groupby_obj.min())

@@ -575,22 +575,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         1  3.0  1.333333  0.333333
         2  4.0  1.500000  1.000000
         """
-        if not numeric_only:
-            # Raise the FutureWarning only when there is non-numeric aggregation column
-            has_non_numeric = False
-            for _agg_col in self._agg_columns:
-                if not isinstance(_agg_col.spark.data_type, (NumericType, BooleanType)):
-                    has_non_numeric = True
-                    break
-
-            if has_non_numeric:
-                warnings.warn(
-                    "Dropping invalid columns in GroupBy.mean is deprecated. "
-                    "In a future version, a TypeError will be raised. "
-                    "Before calling .mean, select only columns which should be "
-                    "valid for the function.",
-                    FutureWarning,
-                )
+        self._validate_agg_columns(numeric_only=numeric_only, function_name="median")
 
         return self._reduce_for_stat_function(
             F.mean, accepted_spark_types=(NumericType,), bool_to_numeric=True
@@ -2763,22 +2748,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
                 "accuracy must be an integer; however, got [%s]" % type(accuracy).__name__
             )
 
-        if not numeric_only:
-            # Raise the FutureWarning only when there is non-numeric aggregation column
-            has_non_numeric = False
-            for _agg_col in self._agg_columns:
-                if not isinstance(_agg_col.spark.data_type, (NumericType, BooleanType)):
-                    has_non_numeric = True
-                    break
-
-            if has_non_numeric:
-                warnings.warn(
-                    "Dropping invalid columns in GroupBy.mean is deprecated. "
-                    "In a future version, a TypeError will be raised. "
-                    "Before calling .median, select only columns which should be "
-                    "valid for the function.",
-                    FutureWarning,
-                )
+        self._validate_agg_columns(numeric_only=numeric_only, function_name="median")
 
         def stat_function(col: Column) -> Column:
             return F.percentile_approx(col, 0.5, accuracy)
@@ -2788,6 +2758,26 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
             accepted_spark_types=(NumericType,),
             bool_to_numeric=True,
         )
+
+    def _validate_agg_columns(self, numeric_only: Optional[bool], function_name: str):
+        has_non_numeric = False
+        for _agg_col in self._agg_columns:
+            if not isinstance(_agg_col.spark.data_type, (NumericType, BooleanType)):
+                has_non_numeric = True
+                break
+        if has_non_numeric:
+            if isinstance(self, SeriesGroupBy):
+                raise TypeError("Only numeric aggregation column is accepted.")
+
+            if not numeric_only:
+                if has_non_numeric:
+                    warnings.warn(
+                        "Dropping invalid columns in DataFrameGroupBy.mean is deprecated. "
+                        "In a future version, a TypeError will be raised. "
+                        "Before calling .%s, select only columns which should be "
+                        "valid for the function." % function_name,
+                        FutureWarning,
+                    )
 
     def _reduce_for_stat_function(
         self,
