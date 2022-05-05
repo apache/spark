@@ -34,6 +34,8 @@ from pyspark.ml.param.shared import (
     HasProbabilityCol,
     HasDistanceMeasure,
     HasCheckpointInterval,
+    HasSolver,
+    HasMaxBlockSizeInMB,
     Param,
     Params,
     TypeConverters,
@@ -571,7 +573,15 @@ class KMeansSummary(ClusteringSummary):
 
 @inherit_doc
 class _KMeansParams(
-    HasMaxIter, HasFeaturesCol, HasSeed, HasPredictionCol, HasTol, HasDistanceMeasure, HasWeightCol
+    HasMaxIter,
+    HasFeaturesCol,
+    HasSeed,
+    HasPredictionCol,
+    HasTol,
+    HasDistanceMeasure,
+    HasWeightCol,
+    HasSolver,
+    HasMaxBlockSizeInMB,
 ):
     """
     Params for :py:class:`KMeans` and :py:class:`KMeansModel`.
@@ -599,6 +609,12 @@ class _KMeansParams(
         "The number of steps for k-means|| " + "initialization mode. Must be > 0.",
         typeConverter=TypeConverters.toInt,
     )
+    solver: Param[str] = Param(
+        Params._dummy(),
+        "solver",
+        "The solver algorithm for optimization. Supported " + "options: auto, row, block.",
+        typeConverter=TypeConverters.toString,
+    )
 
     def __init__(self, *args: Any):
         super(_KMeansParams, self).__init__(*args)
@@ -609,6 +625,8 @@ class _KMeansParams(
             tol=1e-4,
             maxIter=20,
             distanceMeasure="euclidean",
+            solver="auto",
+            maxBlockSizeInMB=0.0,
         )
 
     @since("1.5.0")
@@ -711,7 +729,11 @@ class KMeans(JavaEstimator[KMeansModel], _KMeansParams, JavaMLWritable, JavaMLRe
     >>> kmeans.getMaxIter()
     10
     >>> kmeans.clear(kmeans.maxIter)
+    >>> kmeans.getSolver()
+    'auto'
     >>> model = kmeans.fit(df)
+    >>> model.getMaxBlockSizeInMB()
+    0.0
     >>> model.getDistanceMeasure()
     'euclidean'
     >>> model.setPredictionCol("newPrediction")
@@ -770,11 +792,14 @@ class KMeans(JavaEstimator[KMeansModel], _KMeansParams, JavaMLWritable, JavaMLRe
         seed: Optional[int] = None,
         distanceMeasure: str = "euclidean",
         weightCol: Optional[str] = None,
+        solver: str = "auto",
+        maxBlockSizeInMB: float = 0.0,
     ):
         """
         __init__(self, \\*, featuresCol="features", predictionCol="prediction", k=2, \
                  initMode="k-means||", initSteps=2, tol=1e-4, maxIter=20, seed=None, \
-                 distanceMeasure="euclidean", weightCol=None)
+                 distanceMeasure="euclidean", weightCol=None, solver="auto", \
+                 maxBlockSizeInMB=0.0)
         """
         super(KMeans, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.clustering.KMeans", self.uid)
@@ -799,11 +824,14 @@ class KMeans(JavaEstimator[KMeansModel], _KMeansParams, JavaMLWritable, JavaMLRe
         seed: Optional[int] = None,
         distanceMeasure: str = "euclidean",
         weightCol: Optional[str] = None,
+        solver: str = "auto",
+        maxBlockSizeInMB: float = 0.0,
     ) -> "KMeans":
         """
         setParams(self, \\*, featuresCol="features", predictionCol="prediction", k=2, \
                   initMode="k-means||", initSteps=2, tol=1e-4, maxIter=20, seed=None, \
-                  distanceMeasure="euclidean", weightCol=None)
+                  distanceMeasure="euclidean", weightCol=None, solver="auto", \
+                  maxBlockSizeInMB=0.0)
 
         Sets params for KMeans.
         """
@@ -879,6 +907,20 @@ class KMeans(JavaEstimator[KMeansModel], _KMeansParams, JavaMLWritable, JavaMLRe
         Sets the value of :py:attr:`weightCol`.
         """
         return self._set(weightCol=value)
+
+    @since("3.4.0")
+    def setSolver(self, value: str) -> "KMeans":
+        """
+        Sets the value of :py:attr:`solver`.
+        """
+        return self._set(solver=value)
+
+    @since("3.4.0")
+    def setMaxBlockSizeInMB(self, value: float) -> "KMeans":
+        """
+        Sets the value of :py:attr:`maxBlockSizeInMB`.
+        """
+        return self._set(maxBlockSizeInMB=value)
 
 
 @inherit_doc
