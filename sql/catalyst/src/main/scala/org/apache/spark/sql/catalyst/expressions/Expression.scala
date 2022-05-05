@@ -455,6 +455,33 @@ trait Nondeterministic extends Expression {
 }
 
 /**
+ * An expression that contains predicate expression branch, so not all branch will be hit
+ * at runtime. All optimization should be careful with the evaluation order.
+ */
+trait ConditionalExpression extends Expression {
+  /**
+   * Return the expression which can always be hit at runtime, For example:
+   * 1. If: common subexpressions will always be evaluated at the beginning, but the true and
+   *        false expressions in `If` may not get accessed, according to the predicate
+   *        expression. We should only return the predicate expression.
+   * 2. CaseWhen: like `If`, the children of `CaseWhen` only get accessed in a certain
+   *              condition. We should only return the first condition expression as it
+   *              will always get accessed.
+   * 3. Coalesce: it's also a conditional expression, we should only return the first child,
+   *              because others may not get accessed.
+   * 4. NaNvl: we can only guarantee the left child can be always accessed.
+   *           And if we hit the left child, the right will not be accessed.
+   */
+  def head: Expression = children.head
+
+  /**
+   * Return groups of expressions. Codegen will pull out the common sub expressions inside
+   * each group and evaluate them first.
+   */
+  def commonExpressions: Seq[Seq[Expression]]
+}
+
+/**
  * An expression that contains mutable state. A stateful expression is always non-deterministic
  * because the results it produces during evaluation are not only dependent on the given input
  * but also on its internal state.
