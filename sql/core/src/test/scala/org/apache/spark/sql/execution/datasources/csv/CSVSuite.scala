@@ -2693,6 +2693,16 @@ abstract class CSVSuite
       assert(df.schema == expected)
       checkAnswer(df, Row(1, null) :: Nil)
     }
+
+    withSQLConf(SQLConf.LEGACY_RESPECT_NULLABILITY_IN_TEXT_DATASET_CONVERSION.key -> "true") {
+      checkAnswer(
+        spark.read.schema(
+          StructType(
+            StructField("f1", StringType, nullable = false) ::
+            StructField("f2", StringType, nullable = false) :: Nil)
+        ).option("mode", "DROPMALFORMED").csv(Seq("a,", "a,b").toDS),
+        Row("a", "b"))
+    }
   }
 
   test("SPARK-36536: use casting when datetime pattern is not set") {
