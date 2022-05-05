@@ -31,27 +31,28 @@ class AntiAffinityFeatureStepSuite extends SparkFunSuite {
     val sparkPod =
       new AntiAffinityFeatureStep(executorConf).configurePod(SparkPod.initialPod())
 
-    assert(sparkPod.pod.getSpec.getAffinity.getPodAntiAffinity != null)
-    assert(sparkPod.pod.getSpec.getAffinity.getPodAntiAffinity
+    val podAntiAffinity = sparkPod.pod.getSpec.getAffinity.getPodAntiAffinity
+    assert(podAntiAffinity != null)
+    assert(podAntiAffinity
       .getPreferredDuringSchedulingIgnoredDuringExecution != null)
-    assert(sparkPod.pod.getSpec.getAffinity.getPodAntiAffinity
+    assert(podAntiAffinity
       .getPreferredDuringSchedulingIgnoredDuringExecution.size() == 1)
-    assert(sparkPod.pod.getSpec.getAffinity.getPodAntiAffinity
+    assert(podAntiAffinity
       .getPreferredDuringSchedulingIgnoredDuringExecution.get(0).getPodAffinityTerm != null)
-    assert(sparkPod.pod.getSpec.getAffinity.getPodAntiAffinity
+    assert(podAntiAffinity
       .getPreferredDuringSchedulingIgnoredDuringExecution.get(0)
       .getPodAffinityTerm.getLabelSelector != null)
-    assert(sparkPod.pod.getSpec.getAffinity.getPodAntiAffinity
+    assert(podAntiAffinity
       .getPreferredDuringSchedulingIgnoredDuringExecution.get(0)
       .getPodAffinityTerm.getLabelSelector.getMatchExpressions != null)
-    assert(sparkPod.pod.getSpec.getAffinity.getPodAntiAffinity
+    assert(podAntiAffinity
       .getPreferredDuringSchedulingIgnoredDuringExecution.get(0)
       .getPodAffinityTerm.getLabelSelector.getMatchExpressions.size() == 1)
-    assert(sparkPod.pod.getSpec.getAffinity.getPodAntiAffinity
+    assert(podAntiAffinity
       .getPreferredDuringSchedulingIgnoredDuringExecution.get(0)
       .getPodAffinityTerm.getLabelSelector.getMatchExpressions.get(0)
       .getKey.equals(SPARK_APP_ID_LABEL))
-    assert(sparkPod.pod.getSpec.getAffinity.getPodAntiAffinity
+    assert(podAntiAffinity
       .getPreferredDuringSchedulingIgnoredDuringExecution.get(0)
       .getPodAffinityTerm.getLabelSelector.getMatchExpressions.get(0)
       .getValues.get(0).equals(appId))
