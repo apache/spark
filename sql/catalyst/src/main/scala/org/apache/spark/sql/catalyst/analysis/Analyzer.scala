@@ -3748,7 +3748,6 @@ class Analyzer(override val catalogManager: CatalogManager)
           val existing = CharVarcharUtils.getRawType(field.metadata).getOrElse(field.dataType)
           if (existing == dt) None else Some(dt)
         }
-
         val newPosition = position map {
           case u @ UnresolvedFieldPosition(after: After) =>
             // TODO: since the field name is already resolved, it's more efficient if
