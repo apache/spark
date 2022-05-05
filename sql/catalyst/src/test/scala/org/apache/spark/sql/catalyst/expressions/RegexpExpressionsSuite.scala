@@ -323,6 +323,16 @@ class RegexpExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     val nonNullExpr = RegExpReplace(Literal("100-200"), Literal("(\\d+)"), Literal("num"))
     checkEvaluation(nonNullExpr, "num-num", row1)
 
+    // Test empty string replacement
+    val emptyString = RegExpReplace(Literal(""), Literal("^$"), Literal("<empty string>"))
+    checkEvaluation(emptyString, "<empty string>", create_row("", "^$", "<empty string>"))
+    val emptyStringWithPositionOne =
+      RegExpReplace(Literal(""), Literal("^$"), Literal("<empty string>"), 1)
+    checkEvaluation(emptyStringWithPositionOne, "<empty string>", create_row(""))
+    val emptyStringWithPositionGreater =
+      RegExpReplace(Literal(""), Literal("^$"), Literal("<empty string>"), 2)
+    checkEvaluation(emptyStringWithPositionGreater, "", create_row(""))
+
     // Test escaping of arguments
     GenerateUnsafeProjection.generate(
       RegExpReplace(Literal("\"quote"), Literal("\"quote"), Literal("\"quote")) :: Nil)

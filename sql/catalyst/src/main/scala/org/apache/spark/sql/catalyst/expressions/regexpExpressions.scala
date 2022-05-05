@@ -642,7 +642,7 @@ case class RegExpReplace(subject: Expression, regexp: Expression, rep: Expressio
     }
     val source = s.toString()
     val position = i.asInstanceOf[Int] - 1
-    if (position < source.length) {
+    if (position < source.length || (position == 0 && source.equals(""))) {
       val m = pattern.matcher(source)
       m.region(position, source.length)
       result.delete(0, result.length())
@@ -696,7 +696,7 @@ case class RegExpReplace(subject: Expression, regexp: Expression, rep: Expressio
       }
       String $source = $subject.toString();
       int $position = $pos - 1;
-      if ($position < $source.length()) {
+      if ($position < $source.length() || ($position == 0 && $source.equals(""))) {
         $classNameStringBuffer $termResult = new $classNameStringBuffer();
         java.util.regex.Matcher $matcher = $termPattern.matcher($source);
         $matcher.region($position, $source.length());
