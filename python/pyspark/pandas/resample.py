@@ -31,7 +31,7 @@ from typing import (
 import numpy as np
 
 import pandas as pd
-from pandas._libs.tslibs import to_offset
+from pandas.tseries.frequencies import to_offset
 
 if LooseVersion(pd.__version__) >= LooseVersion("1.3.0"):
     from pandas.core.common import _builtin_table  # type: ignore[attr-defined]
