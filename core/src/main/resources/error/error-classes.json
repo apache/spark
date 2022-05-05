@@ -105,27 +105,27 @@
   "INVALID_FUNCTION_ARGUMENTS" : {
     "message" : [ "The function arguments invalid: " ],
     "subClass" : {
-        "INVALID_NUMBER_OF_ARGUMENTS" : {
-            "message" : [ "Invalid number of arguments for function <functionName>. Expected: <expected>; Found: <found>" ]
-        },
-        "EMPTY_NUMBER_OF_ARGUMENTS" : {
-            "message" : [ "Invalid number of arguments for function <functionName>" ]
-        },
-        "INVALID_OPERATION_FOR_V2FUNCTION" : {
-            "message" : [ "V2Function <functionName> cannot process input: (<type>): <message>" ]
-        },
-        "INVALID_NUMBER_OF_ARGUMENTS_FOR_V2FUNCTION" : {
-            "message" : [ "There are <expected> arguments in V2Function <functionName>, but <found> parameters returned from 'inputTypes()'" ]
-        },
-        "CAST_ALIAS" : {
-            "message" : [ "Function <functionName> accepts only one argument" ]
-        },
-        "APPROX_COUNT_DISTINCT" : {
-            "message" : [ "The second argument in <functionName> should be a double literal" ]
-        },
-        "FIRST_LAST" : {
-            "message" : [ "The second argument in <functionName> should be a boolean literal" ]
-        }
+      "APPROX_COUNT_DISTINCT" : {
+        "message" : [ "The second argument in <functionName> should be a double literal" ]
+      },
+      "CAST_ALIAS" : {
+        "message" : [ "Function <functionName> accepts only one argument" ]
+      },
+      "EMPTY_NUMBER_OF_ARGUMENTS" : {
+        "message" : [ "Invalid number of arguments for function <functionName>" ]
+      },
+      "FIRST_LAST" : {
+        "message" : [ "The second argument in <functionName> should be a boolean literal" ]
+      },
+      "INVALID_NUMBER_OF_ARGUMENTS" : {
+        "message" : [ "Invalid number of arguments for function <functionName>. Expected: <expected>; Found: <found>" ]
+      },
+      "INVALID_NUMBER_OF_ARGUMENTS_FOR_V2FUNCTION" : {
+        "message" : [ "There are <expected> arguments in V2Function <functionName>, but <found> parameters returned from 'inputTypes()'" ]
+      },
+      "INVALID_OPERATION_FOR_V2FUNCTION" : {
+        "message" : [ "V2Function <functionName> cannot process input: (<type>): <message>" ]
+      }
     },
     "sqlState" : "22023"
   },
