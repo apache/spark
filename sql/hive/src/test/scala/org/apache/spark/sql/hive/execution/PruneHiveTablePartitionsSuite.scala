@@ -140,7 +140,7 @@ class PruneHiveTablePartitionsSuite extends PrunePartitionSuiteBase with TestHiv
   }
 
   test("SPARK-39073: Keep rowCount after PruneHiveTablePartitions " +
-    "if table only have hive statistics") {
+    "if table only has hive statistics") {
     withTable("SPARK_39073") {
       withSQLConf(
         SQLConf.CBO_ENABLED.key -> "true",
