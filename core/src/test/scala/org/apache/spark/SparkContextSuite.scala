@@ -1354,6 +1354,34 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
     }.getMessage
     assert(msg.contains("Cannot use the keyword 'proxy' or 'history' in reverse proxy URL"))
   }
+
+ test("SPARK-39103: add empty Hadoop directory") {
+    withTempDir { targetDir =>
+      withTempDir { shipDir =>
+        try {
+          sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local"))
+          sc.hadoopConfiguration.set("fs.file2.impl",
+            classOf[org.apache.spark.SparkContextSuite.LocalFile2System].getName)
+          sc.addFile(shipDir.getAbsolutePath, true)
+          // Retrieve filename and timestamp from SparkContext
+          val addedFilesField = sc.getClass.getDeclaredField("addedFiles")
+          addedFilesField.setAccessible(true)
+          val addedFiles = addedFilesField.get(sc)
+            .asInstanceOf[scala.collection.mutable.Map[String, Long]]
+          assert(addedFiles.size == 1)
+          val (filename, timestamp) = addedFiles.toIterator.next
+          // Mimic executor to retrive a file of hadoop scheme (not file:)
+          Utils.fetchFile(filename.replace("file:", "file2:"), targetDir,
+            sc.conf, sc.hadoopConfiguration, timestamp, true)
+        } catch {
+          case e: java.nio.file.NoSuchFileException =>
+            throw new RuntimeException("this should be fixed", e)
+        } finally {
+          sc.stop()
+        }
+      }
+    }
+  }
 }
 
 object SparkContextSuite {
@@ -1361,4 +1389,11 @@ object SparkContextSuite {
   @volatile var taskKilled = false
   @volatile var taskSucceeded = false
   val semaphore = new Semaphore(0)
+
+  class LocalFile2System extends
+    org.apache.hadoop.fs.RawLocalFileSystem {
+    override def getUri(): URI = {
+      URI.create("file2:///")
+    }
+  }
 }

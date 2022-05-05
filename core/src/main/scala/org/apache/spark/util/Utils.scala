@@ -767,9 +767,9 @@ private[spark] object Utils extends Logging {
       }
       val subfiles = source.listFiles()
       subfiles.foreach(f => copyRecursive(f, new File(dest, f.getName)))
-    } else {
+    } else if (source.isFile()) {
       Files.copy(source.toPath, dest.toPath)
-    }
+    } // Do nothing if source does not exist
   }
 
   /**
