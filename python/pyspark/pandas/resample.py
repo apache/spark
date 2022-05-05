@@ -31,7 +31,7 @@ from typing import (
 import numpy as np
 
 import pandas as pd
-from pandas.tseries.frequencies import DateOffset, to_offset
+from pandas.tseries.frequencies import to_offset
 
 if LooseVersion(pd.__version__) >= LooseVersion("1.3.0"):
     from pandas.core.common import _builtin_table  # type: ignore[attr-defined]
@@ -98,12 +98,10 @@ class Resampler(Generic[FrameLike], metaclass=ABCMeta):
         self._psdf = psdf
         self._resamplekey = resamplekey
 
-        self._offset: Optional[DateOffset] = to_offset(rule)
-        assert self._offset is not None
-
+        self._offset = to_offset(rule)
         if self._offset.rule_code not in ["A-DEC", "M", "D", "H", "T", "S"]:
             raise ValueError("rule code {} is not supported".format(self._offset.rule_code))
-        if not self._offset.n > 0:
+        if not self._offset.n > 0:  # type: ignore[attr-defined]
             raise ValueError("rule offset must be positive")
 
         if closed is None:
@@ -136,7 +134,7 @@ class Resampler(Generic[FrameLike], metaclass=ABCMeta):
     def _bin_time_stamp(self, origin: pd.Timestamp, ts_scol: Column) -> Column:
         sql_utils = SparkContext._active_spark_context._jvm.PythonSQLUtils
         origin_scol = F.lit(origin)
-        (rule_code, n) = (self._offset.rule_code, self._offset.n)
+        (rule_code, n) = (self._offset.rule_code, self._offset.n)  # type: ignore[attr-defined]
         left_closed, right_closed = (self._closed == "left", self._closed == "right")
         left_labeled, right_labeled = (self._label == "left", self._label == "right")
 
