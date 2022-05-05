@@ -17,11 +17,15 @@
 
 package org.apache.spark.sql.errors
 
-import java.util.Locale
+import java.io.IOException
+import java.net.URL
+import java.util.{Locale, ServiceConfigurationError}
 
+import org.apache.hadoop.fs.{LocalFileSystem, Path}
+import org.apache.hadoop.fs.permission.FsPermission
 import test.org.apache.spark.sql.connector.JavaSimpleWritableDataSource
 
-import org.apache.spark.{SparkArithmeticException, SparkException, SparkIllegalArgumentException, SparkIllegalStateException, SparkRuntimeException, SparkUnsupportedOperationException, SparkUpgradeException}
+import org.apache.spark.{SparkArithmeticException, SparkClassNotFoundException, SparkException, SparkIllegalArgumentException, SparkIllegalStateException, SparkRuntimeException, SparkSecurityException, SparkUnsupportedOperationException, SparkUpgradeException}
 import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, SaveMode}
 import org.apache.spark.sql.catalyst.util.BadRecordException
 import org.apache.spark.sql.connector.SimpleWritableDataSource
@@ -217,6 +221,7 @@ class QueryExecutionErrorsSuite
       checkErrorClass(
         exception = e,
         errorClass = "INCONSISTENT_BEHAVIOR_CROSS_VERSION",
+        errorSubClass = Some("READ_ANCIENT_DATETIME"),
         msg =
           "You may get a different result due to the upgrading to Spark >= 3.0: " +
           s"""
@@ -245,6 +250,7 @@ class QueryExecutionErrorsSuite
         checkErrorClass(
           exception = e,
           errorClass = "INCONSISTENT_BEHAVIOR_CROSS_VERSION",
+          errorSubClass = Some("WRITE_ANCIENT_DATETIME"),
           msg =
             "You may get a different result due to the upgrading to Spark >= 3.0: " +
             s"""
@@ -255,7 +261,7 @@ class QueryExecutionErrorsSuite
               |details in SPARK-31404. You can set $config to 'LEGACY' to rebase the
               |datetime values w.r.t. the calendar difference during writing, to get maximum
               |interoperability. Or set $config to 'CORRECTED' to write the datetime
-              |values as it is, if you are 100% sure that the written files will only be read by
+              |values as it is, if you are sure that the written files will only be read by
               |Spark 3.0+ or other systems that use Proleptic Gregorian calendar.
               |""".stripMargin)
       }
@@ -411,25 +417,26 @@ class QueryExecutionErrorsSuite
       trainingSales
       sql(
         """
-          | select * from (
-          | select *,map(sales.course, sales.year) as map
-          | from trainingSales
+          | select *
+          | from (
+          |   select *,map(sales.course, sales.year) as map
+          |   from trainingSales
           | )
           | pivot (
-          | sum(sales.earnings) as sum
-          | for map in (
-          | map("dotNET", 2012), map("JAVA", 2012),
-          | map("dotNet", 2013), map("Java", 2013)
-          | ))
+          |   sum(sales.earnings) as sum
+          |   for map in (
+          |     map("dotNET", 2012), map("JAVA", 2012),
+          |     map("dotNet", 2013), map("Java", 2013)
+          |   )
+          | )
           |""".stripMargin).collect()
     }
     checkErrorClass(
       exception = e,
       errorClass = "INCOMPARABLE_PIVOT_COLUMN",
-      msg = "Invalid pivot column 'map.*\\'. Pivot columns must be comparable.",
-      sqlState = Some("42000"),
-      matchMsg = true
-    )
+      msg = "Invalid pivot column `__auto_generated_subquery_name`.`map`. " +
+        "Pivot columns must be comparable.",
+      sqlState = Some("42000"))
   }
 
   test("UNSUPPORTED_SAVE_MODE: unsupported null saveMode whether the path exists or not") {
@@ -456,5 +463,62 @@ class QueryExecutionErrorsSuite
         errorSubClass = Some("EXISTENT_PATH"),
         msg = "The save mode NULL is not supported for: an existent path.")
     }
+  }
+
+  test("FAILED_SET_ORIGINAL_PERMISSION_BACK: can't set permission") {
+      withTable("t") {
+        withSQLConf(
+          "fs.file.impl" -> classOf[FakeFileSystemSetPermission].getName,
+          "fs.file.impl.disable.cache" -> "true") {
+          sql("CREATE TABLE t(c String) USING parquet")
+
+          val e = intercept[AnalysisException] {
+            sql("TRUNCATE TABLE t")
+          }
+          assert(e.getCause.isInstanceOf[SparkSecurityException])
+
+          checkErrorClass(
+            exception = e.getCause.asInstanceOf[SparkSecurityException],
+            errorClass = "FAILED_SET_ORIGINAL_PERMISSION_BACK",
+            msg = "Failed to set original permission .+ " +
+              "back to the created path: .+\\. Exception: .+",
+            matchMsg = true)
+      }
+    }
+  }
+
+  test("INCOMPATIBLE_DATASOURCE_REGISTER: create table using an incompatible data source") {
+    val newClassLoader = new ClassLoader() {
+
+      override def getResources(name: String): java.util.Enumeration[URL] = {
+        if (name.equals("META-INF/services/org.apache.spark.sql.sources.DataSourceRegister")) {
+          // scalastyle:off
+          throw new ServiceConfigurationError(s"Illegal configuration-file syntax: $name",
+            new NoClassDefFoundError("org.apache.spark.sql.sources.HadoopFsRelationProvider"))
+          // scalastyle:on throwerror
+        } else {
+          super.getResources(name)
+        }
+      }
+    }
+
+    Utils.withContextClassLoader(newClassLoader) {
+      val e = intercept[SparkClassNotFoundException] {
+        sql("CREATE TABLE student (id INT, name STRING, age INT) USING org.apache.spark.sql.fake")
+      }
+      checkErrorClass(
+        exception = e,
+        errorClass = "INCOMPATIBLE_DATASOURCE_REGISTER",
+        msg = "Detected an incompatible DataSourceRegister. Please remove the incompatible library " +
+          "from classpath or upgrade it. Error: Illegal configuration-file syntax: " +
+          "META-INF/services/org.apache.spark.sql.sources.DataSourceRegister")
+    }
+  }
+}
+
+class FakeFileSystemSetPermission extends LocalFileSystem {
+
+  override def setPermission(src: Path, permission: FsPermission): Unit = {
+    throw new IOException(s"fake fileSystem failed to set permission: $permission")
   }
 }

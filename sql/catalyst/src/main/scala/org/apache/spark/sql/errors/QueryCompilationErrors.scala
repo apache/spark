@@ -76,7 +76,7 @@ object QueryCompilationErrors extends QueryErrorsBase {
   def unorderablePivotColError(pivotCol: Expression): Throwable = {
     new AnalysisException(
       errorClass = "INCOMPARABLE_PIVOT_COLUMN",
-      messageParameters = Array(pivotCol.toString))
+      messageParameters = Array(toSQLId(pivotCol.sql)))
   }
 
   def nonLiteralPivotValError(pivotVal: Expression): Throwable = {
@@ -1961,7 +1961,7 @@ object QueryCompilationErrors extends QueryErrorsBase {
       path: Path,
       e: Throwable): Throwable = {
     new AnalysisException(s"Failed to truncate table $tableIdentWithDB when " +
-        s"removing data of the path: $path because of ${e.toString}")
+        s"removing data of the path: $path because of ${e.toString}", cause = Some(e))
   }
 
   def descPartitionNotAllowedOnTempView(table: String): Throwable = {
@@ -2388,8 +2388,8 @@ object QueryCompilationErrors extends QueryErrorsBase {
 
   def invalidJsonSchema(schema: DataType): Throwable = {
     new AnalysisException(
-      errorClass = "INVALID_JSON_SCHEMA_MAPTYPE",
-      messageParameters = Array(schema.toString))
+      errorClass = "INVALID_JSON_SCHEMA_MAP_TYPE",
+      messageParameters = Array(toSQLType(schema)))
   }
 
   def tableIndexNotSupportedError(errorMessage: String): Throwable = {
