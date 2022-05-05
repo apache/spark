@@ -3356,11 +3356,11 @@ object SQLConf {
       "'codegen', 'cost' and 'formatted'.")
     .createWithDefault("formatted")
 
-  val UI_RULE_SHOW = buildConf("spark.sql.ui.ruleShow")
+  val UI_RULE_SHOW = buildConf("spark.sql.expose.logicalPlanRules")
     .internal()
-    .doc("number of Spark rules to show on UI for Spark compile metrics per query.")
+    .doc("number of individual Catalyst rules to show on UI for Spark compile metrics per query.")
     .intConf
-    .createWithDefault(50)
+    .createWithDefault(15)
 
   val SOURCES_BINARY_FILE_MAX_LENGTH = buildConf("spark.sql.sources.binaryFile.maxLength")
     .doc("The max length of a file that can be read by the binary file data source. " +

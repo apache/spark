@@ -19,21 +19,19 @@ package org.apache.spark.status.api.v1.sql
 
 import java.net.URL
 import java.text.SimpleDateFormat
-
 import org.json4s.DefaultFormats
 import org.json4s.jackson.JsonMethods
 import org.scalatest.PrivateMethodTester
-
 import org.apache.spark.SparkConf
 import org.apache.spark.deploy.history.HistoryServerSuite.getContentAndCode
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.execution.metric.SQLMetricsTestUtils
-import org.apache.spark.sql.internal.SQLConf.ADAPTIVE_EXECUTION_ENABLED
+import org.apache.spark.sql.internal.SQLConf.{ADAPTIVE_EXECUTION_ENABLED, UI_RULE_SHOW}
 import org.apache.spark.sql.test.SharedSparkSession
 
 /**
- * Sql Resource Public API Unit Tests running query and extracting the metrics.
+ * Sql Compiler Resource Public API Unit Tests running query and extracting the compile metrics.
  */
 class SqlCompileResourceSuite
   extends SharedSparkSession with SQLMetricsTestUtils with SQLHelper with PrivateMethodTester {
@@ -68,7 +66,7 @@ class SqlCompileResourceSuite
       s"Expected Query Result Size is higher than 0 but received: ${compilerStats.size}")
     val compilerStatData = compilerStats.head
     verifyCompilerStatRestContent(compilerStatData)
-    compilerStatData.id
+    compilerStatData.executionId
   }
 
   private def callCompilerStatRestEndpointByExecutionIdAndVerifyResult(executionId: Long): Unit = {
@@ -80,13 +78,13 @@ class SqlCompileResourceSuite
   }
 
   private def verifyCompilerStatRestContent(compileStats: CompileData): Unit = {
-    assert(compileStats.appID != "", "Should have valid application ID")
-    assert(compileStats.id > -1,
-      s"Expected execution ID is valid, found ${compileStats.id}")
-    assert(compileStats.ruleInfo.length == 50,
-      s"Expected number of Spark rules is 50, found ${compileStats.ruleInfo.length}")
-    assert(compileStats.phaseTime.length == 3,
-      s"Expected number of phase info is: 3 found ${compileStats.phaseTime.length}")
+    assert(compileStats.executionId > -1,
+      s"Expected execution ID is valid, found ${compileStats.executionId}")
+    assert(compileStats.rules.length == UI_RULE_SHOW.defaultValue.get,
+      s"Expected number of Spark rules is ${UI_RULE_SHOW.defaultValue.get}," +
+        s" found ${compileStats.rules.length}")
+    assert(compileStats.phases.length == 3,
+      s"Expected number of phase info is: 3 found ${compileStats.phases.length}")
   }
 
   private def verifyAndGetCompileStatRestResult(url: URL): String = {

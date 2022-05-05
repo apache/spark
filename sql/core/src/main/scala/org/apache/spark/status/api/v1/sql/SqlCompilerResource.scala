@@ -19,10 +19,9 @@ package org.apache.spark.status.api.v1.sql
 
 import javax.ws.rs._
 import javax.ws.rs.core.MediaType
-
 import scala.collection.mutable.ListBuffer
-
 import org.apache.spark.internal.Logging
+import org.apache.spark.sql.catalyst.QueryPlanningTracker
 import org.apache.spark.sql.execution.ui.{SQLAppStatusStore, SQLExecutionUIData}
 import org.apache.spark.status.api.v1.{BaseAppResource, NotFoundException}
 
@@ -37,12 +36,11 @@ private[v1] class SqlCompilerResource extends BaseAppResource with Logging {
       @DefaultValue("20") @QueryParam("length") length: Int): Seq[CompileData] = {
     withUI { ui =>
       val sqlStore = new SQLAppStatusStore(ui.store.store)
-      val appid = ui.store.environmentInfo().sparkProperties.toMap.getOrElse("spark.app.id", "")
       sqlStore.executionsList(offset, length).map { exec =>
         val compileStats = sqlStore.getCompilerStats(exec.executionId)
         sqlStore
           .execution(exec.executionId)
-          .map(prepareCompileData(_, compileStats, appid)).get
+          .map(prepareCompileData(_, compileStats)).getOrElse(null)
       }
     }
   }
@@ -54,21 +52,19 @@ private[v1] class SqlCompilerResource extends BaseAppResource with Logging {
     withUI { ui =>
       val sqlStore = new SQLAppStatusStore(ui.store.store)
       val compileStats = sqlStore.getCompilerStats(execId)
-      val appid = ui.store.environmentInfo().sparkProperties.toMap.getOrElse("spark.app.id", "")
       sqlStore
         .execution(execId)
-        .map(prepareCompileData(_, compileStats, appid))
+        .map(prepareCompileData(_, compileStats))
         .getOrElse(throw new NotFoundException("unknown query execution id: " + execId))
     }
   }
 
   private def prepareCompileData(
     exec: SQLExecutionUIData,
-    compileStats: String,
-    appId: String): CompileData = {
+    compileStats: String): CompileData = {
 
-    val phaseString = compileStats.split("=== Spark Rule Timing Statistics ===")
-    val phaseListStr = phaseString.head.split("=== Spark Phase Timing Statistics ===")(1).
+    val phaseString = compileStats.split(QueryPlanningTracker.ruleHeader)
+    val phaseListStr = phaseString.head.split(QueryPlanningTracker.phaseHeader)(1).
       split("\\r?\\n")
     val phaseTimes = new ListBuffer[PhaseTime]()
     for(i <- 1 until phaseListStr.length by 2) {
@@ -89,7 +85,6 @@ private[v1] class SqlCompilerResource extends BaseAppResource with Logging {
 
     new CompileData(
       exec.executionId,
-      appId,
       phaseTimes.toSeq,
       rules.toSeq)
   }

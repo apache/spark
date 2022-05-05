@@ -43,6 +43,9 @@ object QueryPlanningTracker {
   val OPTIMIZATION = "optimization"
   val PLANNING = "planning"
 
+  val phaseHeader = "=== Spark Phase Timing Statistics ==="
+  val ruleHeader = "=== Spark Rule Timing Statistics ==="
+
   /**
    * Summary for a rule.
    * @param totalTimeNs total amount of time, in nanosecs, spent in this rule.
@@ -102,6 +105,8 @@ class QueryPlanningTracker {
 
   // From a phase to its start time and end time, in ms.
   private val phasesMap = new java.util.HashMap[String, PhaseSummary]
+
+  private val numRules = SQLConf.get.uiRulesShow
 
   /**
    * Measure the start and end time of a phase. Note that if this function is called multiple
@@ -167,16 +172,19 @@ class QueryPlanningTracker {
       case (phase, summary) => "Spark Phase: " + phase + "\nTime(ms): " + summary.durationMs
     } mkString ("", "\n", "\n")
 
-    val ruleStr = topRulesByTime(SQLConf.get.uiRulesShow).view map {
-      case (rule, summary) => "Spark rule: " + rule + "\nTime(ms): " +
-        summary.totalTimeNs/1000000.0 + "\nNumber of Invocations: " + summary.numInvocations +
-        "\nNumber of Effective Invocations: " + summary.numEffectiveInvocations
+    val ruleStr = topRulesByTime(numRules).view map {
+      case (rule, summary) =>
+        val splitstr = rule.split("\\.")
+        "Spark rule: " + splitstr.take(5).map(_.head).mkString("." ) + "." +
+          splitstr.drop(5).mkString(".") + "\nTime(ms): " + summary.totalTimeNs / 1000000.0 +
+          "\nNumber of Invocations: " + summary.numInvocations +
+          "\nNumber of Effective Invocations: " + summary.numEffectiveInvocations
     } mkString ("", "\n", "")
 
     val compileStatStr = s"""
-                            |=== Spark Phase Timing Statistics ===
+                            |$phaseHeader
                             |$phaseStr
-                            |=== Spark Rule Timing Statistics ===
+                            |$ruleHeader
                             |$ruleStr
      """.stripMargin
     compileStatStr

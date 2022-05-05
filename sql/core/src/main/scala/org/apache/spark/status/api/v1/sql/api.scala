@@ -34,10 +34,9 @@ class ExecutionData private[spark] (
     val edges: Seq[SparkPlanGraphEdge])
 
 class CompileData private[spark] (
-   val id: Long,
-   val appID: String,
-   val phaseTime: Seq[PhaseTime],
-   val ruleInfo: Seq[Rule])
+     val executionId: Long,
+     val phases: Seq[PhaseTime],
+     val rules: Seq[Rule])
 
 case class Rule private[spark](
     ruleName: String,
