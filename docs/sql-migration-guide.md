@@ -24,7 +24,7 @@ license: |
 
 ## Upgrading from Spark SQL 3.3 to 3.4
   
-  - Since Spark 3.4, Spark disable `hive.stats.autogather` when create `HiveClientImpl`. To restore the behavior before Spark 3.4, you can set `spark.hadoop.hive.stats.autogather` to `true`.
+  - Since Spark 3.4, Spark disables `hive.stats.autogather` by default, which means Hive tables won't automatically update statistics that can be consumed by Hive (not Spark). To restore the behavior before Spark 3.4, you can set `spark.hadoop.hive.stats.autogather` to `true`.
 
 ## Upgrading from Spark SQL 3.2 to 3.3
 
