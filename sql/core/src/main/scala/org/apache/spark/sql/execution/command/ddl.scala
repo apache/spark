@@ -359,12 +359,14 @@ case class AlterTableChangeColumnCommand(
         // Create a new column from the origin column with the new current default value.
         if (newColumn.getCurrentDefaultValue().isDefined) {
           if (newColumn.getCurrentDefaultValue().get.nonEmpty) {
+            val result: StructField =
+              addCurrentDefaultValue(withNewComment, newColumn.getCurrentDefaultValue())
             // Check that the proposed default value parses and analyzes correctly, and that the
             // type of the resulting expression is equivalent or coercible to the destination column
             // type.
             ResolveDefaultColumns.analyze(
-              sparkSession.sessionState.analyzer, field, "ALTER TABLE ALTER COLUMN")
-            addCurrentDefaultValue(withNewComment, newColumn.getCurrentDefaultValue())
+              sparkSession.sessionState.analyzer, result, "ALTER TABLE ALTER COLUMN")
+            result
           } else {
             withNewComment.clearCurrentDefaultValue()
           }
