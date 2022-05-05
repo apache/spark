@@ -31,7 +31,7 @@ from typing import (
 import numpy as np
 
 import pandas as pd
-from pandas.tseries.frequencies import to_offset  # type: ignore[attr-defined]
+from pandas.tseries.frequencies import DateOffset, to_offset
 
 if LooseVersion(pd.__version__) >= LooseVersion("1.3.0"):
     from pandas.core.common import _builtin_table  # type: ignore[attr-defined]
@@ -98,7 +98,9 @@ class Resampler(Generic[FrameLike], metaclass=ABCMeta):
         self._psdf = psdf
         self._resamplekey = resamplekey
 
-        self._offset = to_offset(rule)
+        self._offset: Optional[DateOffset] = to_offset(rule)
+        assert self._offset is not None
+
         if self._offset.rule_code not in ["A-DEC", "M", "D", "H", "T", "S"]:
             raise ValueError("rule code {} is not supported".format(self._offset.rule_code))
         if not self._offset.n > 0:
