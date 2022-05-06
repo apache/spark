@@ -654,7 +654,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
         }
       }
 
-      if(isStale) {
+      if (isStale) {
         val maybeUI = synchronized {
           activeUIs.remove(appId -> attemptId)
         }
