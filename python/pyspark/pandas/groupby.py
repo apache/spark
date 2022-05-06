@@ -2110,7 +2110,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         groupkey_scols = [psdf._internal.spark_column_for(label) for label in groupkey_labels]
 
         sdf = psdf._internal.spark_frame
-        tmp_col = verify_temp_column_name(sdf, "__row_number__")
+        tmp_row_num_col = verify_temp_column_name(sdf, "__row_number__")
 
         # This part is handled differently depending on whether it is a tail or a head.
         window = (
@@ -2121,11 +2121,22 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
             )
         )
 
-        sdf = (
-            sdf.withColumn(tmp_col, F.row_number().over(window))
-            .filter(F.col(tmp_col) <= n)
-            .drop(tmp_col)
-        )
+        if n >= 0 or LooseVersion(pd.__version__) < LooseVersion("1.4.0"):
+            sdf = (
+                sdf.withColumn(tmp_row_num_col, F.row_number().over(window))
+                .filter(F.col(tmp_row_num_col) <= n)
+                .drop(tmp_row_num_col)
+            )
+        else:
+            # Pandas supports Groupby positional indexing since v1.4.0
+            # https://pandas.pydata.org/docs/whatsnew/v1.4.0.html#groupby-positional-indexing
+            tmp_cnt_col = verify_temp_column_name(sdf, "__group_count__")
+            sdf = (
+                sdf.withColumn(tmp_row_num_col, F.row_number().over(window))
+                .withColumn(tmp_cnt_col, F.count("*").over(Window.partitionBy(*groupkey_scols)))
+                .filter(F.col(tmp_row_num_col) - F.col(tmp_cnt_col) <= n)
+                .drop(tmp_row_num_col, tmp_cnt_col)
+            )
 
         internal = psdf._internal.with_new_sdf(sdf)
         return self._cleanup_and_return(DataFrame(internal).drop(groupkey_labels, axis=1))
