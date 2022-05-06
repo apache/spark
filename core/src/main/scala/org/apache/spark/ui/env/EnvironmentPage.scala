@@ -154,7 +154,7 @@ private[ui] class EnvironmentPage(
             <a>Metrics Properties</a>
           </h4>
         </span>
-        <div class="aggregated-systemProperties collapsible-table collapsed">
+        <div class="aggregated-metricsProperties collapsible-table collapsed">
           {metricsPropertiesTable}
         </div>
         <span class="collapse-aggregated-classpathEntries collapse-table"
