@@ -95,6 +95,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
         OptimizeWindowFunctions,
         CollapseWindow,
         CombineFilters,
+        EliminateOffsets,
         EliminateLimits,
         CombineUnions,
         // Constant folding and strength reduction
@@ -750,10 +751,8 @@ object LimitPushDown extends Rule[LogicalPlan] {
     case Limit(le @ IntegerLiteral(1), p @ Project(_, a: Aggregate)) if a.groupOnly =>
       Limit(le, p.copy(child = Project(a.aggregateExpressions, LocalLimit(le, a.child))))
     // Merge offset value and limit value into LocalLimit and pushes down LocalLimit through Offset.
-    case LocalLimit(le, Offset(oe @ IntegerLiteral(offset), grandChild)) if offset > 0 =>
+    case LocalLimit(le, Offset(oe, grandChild)) =>
       Offset(oe, LocalLimit(Add(le, oe), grandChild))
-    // Eliminate Offset if offset value equals 0.
-    case Offset(IntegerLiteral(0), child) => child
   }
 }
 
@@ -1871,6 +1870,22 @@ object EliminateLimits extends Rule[LogicalPlan] {
       LocalLimit(Literal(Least(Seq(ne, le)).eval().asInstanceOf[Int]), grandChild)
     case Limit(le, Limit(ne, grandChild)) =>
       Limit(Literal(Least(Seq(ne, le)).eval().asInstanceOf[Int]), grandChild)
+  }
+}
+
+/**
+ * This rule optimizes Offset operators by:
+ * 1. Eliminate [[Offset]] operators if offset == 0.
+ * 2. Replace [[Offset]] operators to empty [[LocalRelation]]
+ *    if [[Offset]]'s child max row <= offset.
+ */
+object EliminateOffsets extends Rule[LogicalPlan] {
+  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+    case Offset(oe, child) if oe.foldable && oe.eval().asInstanceOf[Int] == 0 =>
+      child
+    case Offset(oe, child)
+      if oe.foldable && child.maxRows.exists(_ <= oe.eval().asInstanceOf[Int]) =>
+      LocalRelation(child.output, data = Seq.empty, isStreaming = plan.isStreaming)
   }
 }
 
