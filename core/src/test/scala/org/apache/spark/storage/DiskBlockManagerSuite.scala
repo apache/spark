@@ -21,13 +21,11 @@ import java.io.{File, FileWriter}
 import java.nio.file.{Files, Paths}
 import java.nio.file.attribute.{PosixFilePermission, PosixFilePermissions}
 import java.util.HashMap
-
 import com.fasterxml.jackson.core.`type`.TypeReference
 import com.fasterxml.jackson.databind.ObjectMapper
-import jnr.posix.POSIXFactory
+import jnr.posix.{POSIX, POSIXFactory}
 import org.apache.commons.io.FileUtils
 import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach}
-
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.internal.config
 import org.apache.spark.util.Utils
@@ -144,8 +142,7 @@ class DiskBlockManagerSuite extends SparkFunSuite with BeforeAndAfterEach with B
 
   // Use jnr to get and override the current process umask.
   // Expects the input mask to be an octal number
-  private def getAndSetUmask(mask: String): String = {
-    val posix = POSIXFactory.getPOSIX
+  private def getAndSetUmask(posix: POSIX, mask: String): String = {
     val prev = posix.umask(BigInt(mask, 8).toInt)
     "0" + "%o".format(prev)
   }
@@ -155,28 +152,35 @@ class DiskBlockManagerSuite extends SparkFunSuite with BeforeAndAfterEach with B
     conf.set("spark.local.dir", rootDirs)
     conf.set("spark.shuffle.service.enabled", "true")
     conf.set("spark.shuffle.service.removeShuffle", "false")
+    val posix = POSIXFactory.getPOSIX
 
-    val oldUmask = getAndSetUmask("077")
-    try {
-      val diskBlockManager = new DiskBlockManager(conf, deleteFilesOnStop = true, isDriver = false)
-      val blockId = new TestBlockId("test")
-      val newFile = diskBlockManager.getFile(blockId)
-      val parentDir = newFile.getParentFile()
-      assert(parentDir.exists && parentDir.isDirectory)
-      val permission = Files.getPosixFilePermissions(parentDir.toPath)
-      assert(!permission.contains(PosixFilePermission.GROUP_WRITE))
+    if (posix.isNative) {
+      val oldUmask = getAndSetUmask(posix, "077")
+      try {
+        val diskBlockManager = new DiskBlockManager(conf, deleteFilesOnStop = true,
+          isDriver = false)
+        val blockId = new TestBlockId("test")
+        val newFile = diskBlockManager.getFile(blockId)
+        val parentDir = newFile.getParentFile()
+        assert(parentDir.exists && parentDir.isDirectory)
+        val permission = Files.getPosixFilePermissions(parentDir.toPath)
+        assert(!permission.contains(PosixFilePermission.GROUP_WRITE))
 
-      assert(parentDir.delete())
+        assert(parentDir.delete())
 
-      conf.set("spark.shuffle.service.removeShuffle", "true")
-      val diskBlockManager2 = new DiskBlockManager(conf, deleteFilesOnStop = true, isDriver = false)
-      val newFile2 = diskBlockManager2.getFile(blockId)
-      val parentDir2 = newFile2.getParentFile()
-      assert(parentDir2.exists && parentDir2.isDirectory)
-      val permission2 = Files.getPosixFilePermissions(parentDir2.toPath)
-      assert(permission2.contains(PosixFilePermission.GROUP_WRITE))
-    } finally {
-      getAndSetUmask(oldUmask)
+        conf.set("spark.shuffle.service.removeShuffle", "true")
+        val diskBlockManager2 = new DiskBlockManager(conf, deleteFilesOnStop = true,
+          isDriver = false)
+        val newFile2 = diskBlockManager2.getFile(blockId)
+        val parentDir2 = newFile2.getParentFile()
+        assert(parentDir2.exists && parentDir2.isDirectory)
+        val permission2 = Files.getPosixFilePermissions(parentDir2.toPath)
+        assert(permission2.contains(PosixFilePermission.GROUP_WRITE))
+      } finally {
+        getAndSetUmask(posix, oldUmask)
+      }
+    } else {
+      logInfo("Skipping test for SPARK-37618, native posix support not found")
     }
   }
 
