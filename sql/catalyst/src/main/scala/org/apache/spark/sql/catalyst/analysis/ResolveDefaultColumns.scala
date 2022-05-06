@@ -57,14 +57,19 @@ case class ResolveDefaultColumns(
   override def apply(plan: LogicalPlan): LogicalPlan = {
     plan.resolveOperatorsWithPruning(
       (_ => SQLConf.get.enableDefaultColumns), ruleId) {
-      case i: InsertIntoStatement if insertsFromInlineTable(i) =>
+      case i: InsertIntoStatement
+        if insertsFromInlineTable(i) &&
+          !acceptsAnySchema(i.table) =>
         resolveDefaultColumnsForInsertFromInlineTable(i)
       case i@InsertIntoStatement(_, _, _, project: Project, _, _)
-        if !project.projectList.exists(_.isInstanceOf[Star]) =>
+        if !project.projectList.exists(_.isInstanceOf[Star]) &&
+          !acceptsAnySchema(i.table) =>
         resolveDefaultColumnsForInsertFromProject(i)
-      case u: UpdateTable =>
+      case u: UpdateTable
+        if !acceptsAnySchema(u.table) =>
         resolveDefaultColumnsForUpdate(u)
-      case m: MergeIntoTable =>
+      case m: MergeIntoTable
+        if !acceptsAnySchema(m.targetTable) =>
         resolveDefaultColumnsForMerge(m)
     }
   }
@@ -110,11 +115,7 @@ case class ResolveDefaultColumns(
       val regenerated: InsertIntoStatement =
         regenerateUserSpecifiedCols(i, schema)
       val expanded: UnresolvedInlineTable =
-        if (tableAcceptsAnySchema(i.table)) {
-          table
-        } else {
-          addMissingDefaultValuesForInsertFromInlineTable(table, schema)
-        }
+        addMissingDefaultValuesForInsertFromInlineTable(table, schema)
       val replaced: Option[LogicalPlan] =
         replaceExplicitDefaultValuesForInputOfInsertInto(analyzer, schema, expanded)
       replaced.map { r: LogicalPlan =>
@@ -138,11 +139,7 @@ case class ResolveDefaultColumns(
       val regenerated: InsertIntoStatement = regenerateUserSpecifiedCols(i, schema)
       val project: Project = i.query.asInstanceOf[Project]
       val expanded: Project =
-        if (tableAcceptsAnySchema(i.table)) {
-          project
-        } else {
-          addMissingDefaultValuesForInsertFromProject(project, schema)
-        }
+        addMissingDefaultValuesForInsertFromProject(project, schema)
       val replaced: Option[LogicalPlan] =
         replaceExplicitDefaultValuesForInputOfInsertInto(analyzer, schema, expanded)
       replaced.map { r =>
@@ -154,25 +151,31 @@ case class ResolveDefaultColumns(
   /**
    * Check if the target table has "ACCEPT_ANY_SCHEMA" capabilities and if so, don't do anything.
    */
-  private def tableAcceptsAnySchema(table: LogicalPlan): Boolean = {
-    val tableName: Option[String] = table.collectFirst {
-      case r: NamedRelation => r.name
-      case r: UnresolvedCatalogRelation => r.tableMeta.identifier.table
-    }
-    analyzer.currentCatalog match {
-      case tableCatalog: TableCatalog if tableName.isDefined =>
-        val id: Identifier = Identifier.of(tableCatalog.defaultNamespace(), tableName.get)
-        val capabilities: java.util.Set[TableCapability] = tableCatalog.loadTable(id).capabilities
-        val it: java.util.Iterator[TableCapability] = capabilities.iterator()
-        var acceptsAnySchema = false
-        while (it.hasNext) {
-          if (it.next() == TableCapability.ACCEPT_ANY_SCHEMA) {
-            acceptsAnySchema = true
+  private def acceptsAnySchema(table: LogicalPlan): Boolean = {
+    table.collectFirst {
+      case r: NamedRelation => r
+    }.map {
+      _.skipSchemaResolution
+    }.getOrElse {
+      val tableName: String = table.collectFirst {
+        case r: UnresolvedCatalogRelation =>
+          r.tableMeta.identifier.table
+      }.getOrElse("")
+      analyzer.currentCatalog match {
+        case tableCatalog: TableCatalog if tableName.nonEmpty =>
+          val id: Identifier = Identifier.of(tableCatalog.defaultNamespace(), tableName)
+          val capabilities: java.util.Set[TableCapability] = tableCatalog.loadTable(id).capabilities
+          val it: java.util.Iterator[TableCapability] = capabilities.iterator()
+          var acceptsAnySchema = false
+          while (it.hasNext) {
+            if (it.next() == TableCapability.ACCEPT_ANY_SCHEMA) {
+              acceptsAnySchema = true
+            }
           }
-        }
-        acceptsAnySchema
-      case _ =>
-        false
+          acceptsAnySchema
+        case _ =>
+          false
+      }
     }
   }
 

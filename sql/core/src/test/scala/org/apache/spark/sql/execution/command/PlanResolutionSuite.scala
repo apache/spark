@@ -996,6 +996,7 @@ class PlanResolutionSuite extends AnalysisTest {
       // Note: 'i' and 's' are the names of the columns in 'tblName'.
       val sql6 = s"UPDATE $tblName SET i=DEFAULT, s=DEFAULT"
       val sql7 = s"UPDATE defaultvalues SET i=DEFAULT, s=DEFAULT"
+      val sql8 = s"UPDATE v2TableWithAcceptAnySchemaCapability SET i=DEFAULT"
 
       val parsed1 = parseAndResolve(sql1)
       val parsed2 = parseAndResolve(sql2)
@@ -1004,6 +1005,7 @@ class PlanResolutionSuite extends AnalysisTest {
       val parsed5 = parseAndResolve(sql5)
       val parsed6 = parseAndResolve(sql6)
       val parsed7 = parseAndResolve(sql7, true)
+      val parsed8 = parseAndResolve(sql8)
 
       parsed1 match {
         case UpdateTable(
@@ -1083,6 +1085,17 @@ class PlanResolutionSuite extends AnalysisTest {
           assert(s.name == "s")
 
         case _ => fail("Expect UpdateTable, but got:\n" + parsed6.treeString)
+      }
+
+      parsed7 match {
+        case UpdateTable(
+        _,
+        Seq(Assignment(i: AttributeReference, Literal(true, BooleanType)),
+        Assignment(s: AttributeReference, Literal(42, IntegerType))),
+        None) =>
+          assert(i.name == "i")
+          assert(s.name == "s")
+        case _ => fail("Expect UpdateTable, but got:\n" + parsed7.treeString)
       }
 
       parsed7 match {
