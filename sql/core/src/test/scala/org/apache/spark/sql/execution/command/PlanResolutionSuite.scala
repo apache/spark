@@ -1147,7 +1147,7 @@ class PlanResolutionSuite extends AnalysisTest {
     }
   }
 
-  test("SPARK-38334 INSERT INTO table with ACCEPT_ANY_SCHEMA capability") {
+  test("SPARK-38869 INSERT INTO table with ACCEPT_ANY_SCHEMA capability") {
     // Note: 'i' is the correct column name, but since the table has ACCEPT_ANY_SCHEMA capability,
     // DEFAULT column resolution should skip this table.
     val sql1 = s"INSERT INTO v2TableWithAcceptAnySchemaCapability VALUES(DEFAULT)"
