@@ -74,7 +74,7 @@ case class Coalesce(children: Seq[Expression])
 
   override def branchGroups: Seq[Seq[Expression]] = if (children.length > 1) {
     // If there is only one child, the first child is already covered by
-    // `head` and we should exclude it here.
+    // `alwaysEvaluatedInputs` and we should exclude it here.
     Seq(children)
   } else {
     Nil

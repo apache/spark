@@ -127,7 +127,7 @@ class EquivalentExpressions {
 
   // There are some special expressions that we should not recurse into all of its children.
   //   1. CodegenFallback: it's children will not be used to generate code (call eval() instead)
-  //   2. ConditionalExpression: use it's specified expression
+  //   2. ConditionalExpression: use its children that will always be evaluated.
   private def childrenToRecurse(expr: Expression): Seq[Expression] = expr match {
     case _: CodegenFallback => Nil
     case c: ConditionalExpression => c.alwaysEvaluatedInputs

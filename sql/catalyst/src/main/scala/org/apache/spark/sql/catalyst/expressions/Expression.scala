@@ -460,7 +460,7 @@ trait Nondeterministic extends Expression {
  */
 trait ConditionalExpression extends Expression {
   /**
-   * Return the expression which can always be hit at runtime.
+   * Return the children expressions which can always be hit at runtime.
    */
   def alwaysEvaluatedInputs: Seq[Expression]
 
