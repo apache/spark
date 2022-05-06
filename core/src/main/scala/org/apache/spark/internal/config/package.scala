@@ -2051,27 +2051,35 @@ package object config {
       .doubleConf
       .createWithDefault(0.75)
 
-  private[spark] val SPECULATION_TASK_MIN_DURATION =
-    ConfigBuilder("spark.speculation.task.min.duration")
-      .doc("The minimum duration of a task can be speculative.")
+  private[spark] val SPECULATION_INEFFICIENT_ENABLE =
+    ConfigBuilder("spark.speculation.inefficient.enabled")
+      .doc("When set to true, spark will evaluate the efficiency of task processing through the " +
+        "stage task metrics and only need to speculate the inefficient tasks.")
       .version("3.4.0")
-      .timeConf(TimeUnit.MILLISECONDS)
-      .createWithDefaultString("0s")
+      .booleanConf
+      .createWithDefault(true)
 
   private[spark] val SPECULATION_TASK_PROGRESS_MULTIPLIER =
-    ConfigBuilder("spark.speculation.task.progress.multiplier")
+    ConfigBuilder("spark.speculation.inefficient.progress.multiplier")
+      .doc("A multiplier for evaluating the efficiency of task processing. A task will be " +
+        "evaluated an inefficient one when it's progress rate is less than the " +
+        "successTaskProgressRate * multiplier")
       .version("3.4.0")
       .doubleConf
       .createWithDefault(1.0)
 
   private[spark] val SPECULATION_TASK_DURATION_FACTOR =
-    ConfigBuilder("spark.speculation.task.duration.factor")
+    ConfigBuilder("spark.speculation.inefficient.duration.factor")
+      .doc("When a task runtime is bigger than the factor * threshold, it should be considered " +
+        "for speculation to avoid that it is too late to launch a necessary speculation.")
       .version("3.4.0")
       .doubleConf
       .createWithDefault(2.0)
 
   private[spark] val SPECULATION_TASK_STATS_CACHE_DURATION =
-    ConfigBuilder("spark.speculation.task.stats.cache.duration")
+    ConfigBuilder("spark.speculation.inefficient.stats.cache.duration")
+      .doc("The interval of time between recompute success task progress to avoid scanning " +
+        "repeatedly.")
       .version("3.4.0")
       .timeConf(TimeUnit.MILLISECONDS)
       .createWithDefaultString("1000ms")

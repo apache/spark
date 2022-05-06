@@ -2254,7 +2254,6 @@ class TaskSetManagerSuite
     // set the speculation multiplier to be 0, so speculative tasks are launched immediately
     sc.conf.set(config.SPECULATION_MULTIPLIER.key, "0.0")
     sc.conf.set(config.SPECULATION_ENABLED, true)
-    sc.conf.set(config.SPECULATION_TASK_MIN_DURATION.key, "15s")
     sc.conf.set(config.SPECULATION_TASK_PROGRESS_MULTIPLIER.key, "0.5")
     sc.conf.set(config.SPECULATION_TASK_DURATION_FACTOR.key, "2.0")
     sc.conf.set(config.SPECULATION_TASK_STATS_CACHE_DURATION.key, "1s")
@@ -2290,7 +2289,7 @@ class TaskSetManagerSuite
         stage.attemptNumber, taskInfo))
     }
     assert(sched.startedTasks.toSet === Set(0, 1, 2, 3))
-    val inefficientTask = manager.inefficientTask
+    val inefficientTask = manager.inefficientTaskCalculator
     inefficientTask.maybeRecompute(clock.getTimeMillis())
     assert(inefficientTask.taskProgressThreshold <= 0.0)
     assert(inefficientTask.taskData == null)
@@ -2377,7 +2376,6 @@ class TaskSetManagerSuite
     // set the speculation multiplier to be 0, so speculative tasks are launched immediately
     sc.conf.set(config.SPECULATION_MULTIPLIER.key, "0.0")
     sc.conf.set(config.SPECULATION_ENABLED, true)
-    sc.conf.set(config.SPECULATION_TASK_MIN_DURATION.key, "15s")
     sc.conf.set(config.SPECULATION_TASK_PROGRESS_MULTIPLIER.key, "0.5")
     sc.conf.set(config.SPECULATION_SINGLE_TASK_DURATION_THRESHOLD.key, "15")
     Seq(0, 15).foreach { fallback_ms =>
@@ -2423,16 +2421,14 @@ class TaskSetManagerSuite
     }
   }
 
-  test("SPARK-32170: test 'spark.speculation.task.min.duration' for speculating " +
-    "inefficient tasks") {
+  test("SPARK-32170: test SPECULATION_MIN_THRESHOLD for speculating inefficient tasks") {
     sc = new SparkContext("local", "test")
     // set the speculation multiplier to be 0, so speculative tasks are launched immediately
     sc.conf.set(config.SPECULATION_MULTIPLIER.key, "0.0")
     sc.conf.set(config.SPECULATION_ENABLED, true)
     sc.conf.set(config.SPECULATION_TASK_PROGRESS_MULTIPLIER.key, "0.5")
     sc.conf.set(config.SPECULATION_TASK_DURATION_FACTOR.key, Int.MaxValue.toString)
-    Seq("0s", "10s", "50s").foreach { minDuration =>
-      sc.conf.set(config.SPECULATION_TASK_MIN_DURATION.key, minDuration)
+    Seq(0, 10000, 50000).foreach { minDuration =>
       sched = new FakeTaskScheduler(sc, ("exec1", "host1"), ("exec2", "host2"))
       val taskSet = FakeTask.createTaskSet(4)
       val clock = new ManualClock()
@@ -2498,23 +2494,22 @@ class TaskSetManagerSuite
       // above (10s) and evaluated an inefficient task to speculate.
       // 3) when 'spark.speculation.task.min.duration' is equal 50s, the task 4 runtime(20s) is
       // less than (50s) and no needs to speculate.
-      if (Seq("0s", "10s").contains(minDuration)) {
-        assert(manager.checkSpeculatableTasks(0))
+      if (Seq(0, 10000).contains(minDuration)) {
+        assert(manager.checkSpeculatableTasks(minDuration))
         assert(sched.speculativeTasks.toSet === Set(3))
       } else {
-        assert(!manager.checkSpeculatableTasks(0))
+        assert(!manager.checkSpeculatableTasks(minDuration))
         assert(sched.speculativeTasks.toSet === Set.empty)
       }
     }
   }
 
-  test("SPARK-32170: test 'spark.speculation.task.progress.multiplier' for speculating " +
+  test("SPARK-32170: test SPECULATION_TASK_PROGRESS_MULTIPLIER for speculating " +
     "inefficient tasks") {
     sc = new SparkContext("local", "test")
     // set the speculation multiplier to be 0, so speculative tasks are launched immediately
     sc.conf.set(config.SPECULATION_MULTIPLIER.key, "0.0")
     sc.conf.set(config.SPECULATION_ENABLED, true)
-    sc.conf.set(config.SPECULATION_TASK_MIN_DURATION.key, "10s")
     sc.conf.set(config.SPECULATION_TASK_DURATION_FACTOR.key, Int.MaxValue.toString)
     Seq(0.5, 0.8).foreach { progressMultiplier => {
       sc.conf.set(config.SPECULATION_TASK_PROGRESS_MULTIPLIER.key, progressMultiplier.toString)
@@ -2579,23 +2574,22 @@ class TaskSetManagerSuite
       listener.onExecutorMetricsUpdate(SparkListenerExecutorMetricsUpdate("exec2", accum))
       // 0.5 < 0.6 < 0.8
       if (progressMultiplier == 0.8) {
-        assert(manager.checkSpeculatableTasks(0))
+        assert(manager.checkSpeculatableTasks(100))
         assert(sched.speculativeTasks.toSet === Set(3))
       } else {
-        assert(!manager.checkSpeculatableTasks(0))
+        assert(!manager.checkSpeculatableTasks(100))
         assert(sched.speculativeTasks.toSet === Set.empty)
       }
     }
     }
   }
 
-  test("SPARK-32170: test 'spark.speculation.task.duration.factor' for speculating" +
+  test("SPARK-32170: test SPECULATION_TASK_DURATION_FACTOR for speculating" +
     " tasks") {
     sc = new SparkContext("local", "test")
     // set the speculation multiplier to be 0, so speculative tasks are launched immediately
     sc.conf.set(config.SPECULATION_MULTIPLIER.key, "0.0")
     sc.conf.set(config.SPECULATION_ENABLED, true)
-    sc.conf.set(config.SPECULATION_TASK_MIN_DURATION.key, "15s")
     sc.conf.set(config.SPECULATION_TASK_PROGRESS_MULTIPLIER.key, "0.5")
     Seq(1, 2).foreach { factor => {
       sc.conf.set(config.SPECULATION_TASK_DURATION_FACTOR.key, factor.toString)
@@ -2660,11 +2654,11 @@ class TaskSetManagerSuite
       listener.onExecutorMetricsUpdate(SparkListenerExecutorMetricsUpdate("exec2", accum))
       // runtimeMs(20s) > 15s(1 * 15s)
       if (factor == 1) {
-        assert(manager.checkSpeculatableTasks(0))
+        assert(manager.checkSpeculatableTasks(15000))
         assert(sched.speculativeTasks.toSet === Set(3))
       } else {
         // runtimeMs(20s) < 30s(2 * 15s)
-        assert(!manager.checkSpeculatableTasks(0))
+        assert(!manager.checkSpeculatableTasks(15000))
         assert(sched.speculativeTasks.toSet === Set.empty)
       }
     }
