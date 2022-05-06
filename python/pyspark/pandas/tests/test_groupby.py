@@ -1286,13 +1286,24 @@ class GroupByTest(PandasOnSparkTestCase, TestUtils):
             ps.DataFrame({"B": [3.1, 3.1], "D": [0, 0]}, index=pd.Index([1, 2], name="A")),
         )
 
-        # TODO: fix bug of `std` and re-enable the test below
-        # self._test_stat_func(lambda groupby_obj: groupby_obj.std(), check_exact=False)
-        self.assert_eq(psdf.groupby("A").std(), pdf.groupby("A").std(), check_exact=False)
+        with self.assertRaisesRegex(
+            TypeError, "Unaccepted data types of aggregation columns; numeric or bool expected."
+        ):
+            psdf.groupby("A")[["C"]].std()
+
+        self.assert_eq(
+            psdf.groupby("A").std().sort_index(),
+            pdf.groupby("A").std().sort_index(),
+            check_exact=False,
+        )
 
         # TODO: fix bug of `sum` and re-enable the test below
         # self._test_stat_func(lambda groupby_obj: groupby_obj.sum(), check_exact=False)
-        self.assert_eq(psdf.groupby("A").sum(), pdf.groupby("A").sum(), check_exact=False)
+        self.assert_eq(
+            psdf.groupby("A").sum().sort_index(),
+            pdf.groupby("A").sum().sort_index(),
+            check_exact=False,
+        )
 
     def test_min(self):
         self._test_stat_func(lambda groupby_obj: groupby_obj.min())
