@@ -20,6 +20,7 @@ package org.apache.spark.util.kvstore;
 import java.io.File;
 import java.io.IOException;
 import java.lang.ref.Reference;
+import java.lang.ref.ReferenceQueue;
 import java.lang.ref.WeakReference;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
@@ -111,6 +112,9 @@ public class RocksDB implements KVStore {
    * to ensure that the iterator can be GCed, when it is only referenced here.
    */
   private final ConcurrentLinkedQueue<Reference<RocksDBIterator<?>>> iteratorTracker;
+  private final ReferenceQueue<RocksDBIterator<?>> referenceQueue;
+  private volatile boolean stopped = false;
+  private final Thread cleaningThread;
 
   public RocksDB(File path) throws Exception {
     this(path, new KVStoreSerializer());
@@ -141,6 +145,11 @@ public class RocksDB implements KVStore {
     typeAliases = new ConcurrentHashMap<>(aliases);
 
     iteratorTracker = new ConcurrentLinkedQueue<>();
+
+    referenceQueue = new ReferenceQueue<>();
+    cleaningThread = new Thread(this::keepCleaning);
+    cleaningThread.setDaemon(true);
+    cleaningThread.start();
   }
 
   @Override
@@ -284,7 +293,7 @@ public class RocksDB implements KVStore {
       public Iterator<T> iterator() {
         try {
           RocksDBIterator<T> it = new RocksDBIterator<>(type, RocksDB.this, this);
-          iteratorTracker.add(new WeakReference<>(it));
+          iteratorTracker.add(new RocksDBIteratorWeakReference(it, referenceQueue));
           return it;
         } catch (Exception e) {
           throw Throwables.propagate(e);
@@ -338,6 +347,7 @@ public class RocksDB implements KVStore {
       }
 
       try {
+        stopCleanupThread();
         if (iteratorTracker != null) {
           for (Reference<RocksDBIterator<?>> ref: iteratorTracker) {
             RocksDBIterator<?> it = ref.get();
@@ -351,20 +361,6 @@ public class RocksDB implements KVStore {
         throw ioe;
       } catch (Exception e) {
         throw new IOException(e.getMessage(), e);
-      }
-    }
-  }
-
-  /**
-   * Closes the given iterator if the DB is still open. Trying to close a JNI RocksDB handle
-   * with a closed DB can cause JVM crashes, so this ensures that situation does not happen.
-   */
-  void closeIterator(RocksDBIterator<?> it) throws IOException {
-    notifyIteratorClosed(it);
-    synchronized (this._db) {
-      org.rocksdb.RocksDB _db = this._db.get();
-      if (_db != null) {
-        it.close();
       }
     }
   }
@@ -418,6 +414,31 @@ public class RocksDB implements KVStore {
     return alias;
   }
 
+  private void stopCleanupThread() throws InterruptedException {
+    if (cleaningThread != null) {
+      stopped = true;
+      cleaningThread.join();
+    }
+  }
+
+  private void keepCleaning() {
+    while (!stopped) {
+      try {
+        Optional<? extends Reference<? extends RocksDBIterator<?>>> removed =
+          Optional.ofNullable(referenceQueue.remove(1000L));
+        if (removed.isPresent()) {
+          RocksDBIteratorWeakReference reference =
+            (RocksDBIteratorWeakReference) removed.get();
+          iteratorTracker.remove(reference);
+          reference.close();
+        }
+      } catch (InterruptedException ignored) {
+        // do nothing
+      }
+    }
+  }
+
+
   /** Needs to be public for Jackson. */
   public static class TypeAliases {
 
@@ -454,7 +475,21 @@ public class RocksDB implements KVStore {
       }
       return prefix;
     }
-
   }
 
+  private static class RocksDBIteratorWeakReference extends WeakReference<RocksDBIterator<?>> {
+
+    private final RocksIterator it;
+
+    RocksDBIteratorWeakReference(
+        RocksDBIterator<?> referent,
+        ReferenceQueue<? super RocksDBIterator<?>> q) {
+      super(referent, q);
+      it = referent.internalIterator();
+    }
+
+    public void close() {
+      it.close();
+    }
+  }
 }
