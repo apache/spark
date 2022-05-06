@@ -376,7 +376,7 @@ class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationSuite {
     assert(filtered.length == 0)
   }
 
-  test("prepareQuery and query JDBC options") {
+  test("SPARK-37259: prepareQuery and query JDBC options") {
     val expectedResult = Set(
       (42, "fred"),
       (17, "dave")
@@ -394,7 +394,7 @@ class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationSuite {
     assert(df.collect.toSet === expectedResult)
   }
 
-  test("prepareQuery and dbtable JDBC options") {
+  test("SPARK-37259: prepareQuery and dbtable JDBC options") {
     val expectedResult = Set(
       (42, "fred"),
       (17, "dave")
@@ -412,7 +412,7 @@ class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationSuite {
     assert(df.collect.toSet === expectedResult)
   }
 
-  test("temp table prepareQuery and query JDBC options") {
+  test("SPARK-37259: temp table prepareQuery and query JDBC options") {
     val expectedResult = Set(
       (42, "fred"),
       (17, "dave")

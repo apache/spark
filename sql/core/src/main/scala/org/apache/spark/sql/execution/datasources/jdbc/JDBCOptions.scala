@@ -223,6 +223,8 @@ class JDBCOptions(
   // User specified JDBC connection provider name
   val connectionProviderName = parameters.get(JDBC_CONNECTION_PROVIDER)
 
+  // The prefix that is be added to the query sent to the JDBC database.
+  // This is required to support some complex queries with some JDBC databases.
   val prepareQuery = parameters.get(JDBC_PREPARE_QUERY).map(_ + " ").getOrElse("")
 }
 
