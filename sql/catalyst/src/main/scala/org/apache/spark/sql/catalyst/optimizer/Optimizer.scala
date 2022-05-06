@@ -211,16 +211,15 @@ abstract class Optimizer(catalogManager: CatalogManager)
       CostBasedJoinReorder) :+
     Batch("Eliminate Sorts", Once,
       EliminateSorts) :+
-    // This batch must run before "Decimal Optimizations", as that one may change
-    // the attribute to UnscaledValue
-    Batch("Push Partial Aggregation Through Join", Once,
-      PushPartialAggregationThroughJoin) :+
     Batch("Decimal Optimizations", fixedPoint,
       DecimalAggregates) :+
     // This batch must run after "Decimal Optimizations", as that one may change the
     // aggregate distinct column
     Batch("Distinct Aggregate Rewrite", Once,
       RewriteDistinctAggregates) :+
+    Batch("Push Partial Aggregation Through Join", Once,
+      PushPartialAggregationThroughJoin,
+      SimplifyCasts) :+
     Batch("Object Expressions Optimization", fixedPoint,
       EliminateMapObjects,
       CombineTypedFilters,
@@ -241,8 +240,8 @@ abstract class Optimizer(catalogManager: CatalogManager)
       PushPredicateThroughJoin,
       LimitPushDown,
       ColumnPruning,
-      CollapseProject,
       PushPartialAggregationThroughJoin,
+      CollapseProject,
       RemoveRedundantAliases,
       RemoveNoopOperators) :+
     // This batch must be executed after the `RewriteSubquery` batch, which creates joins.
