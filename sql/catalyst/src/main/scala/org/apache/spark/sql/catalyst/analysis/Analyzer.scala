@@ -3742,7 +3742,7 @@ class Analyzer(override val catalogManager: CatalogManager)
         resolved
 
       case a @ AlterColumn(
-          table: ResolvedTable, ResolvedFieldName(path, field), dataType, _, _, position) =>
+          table: ResolvedTable, ResolvedFieldName(path, field), dataType, _, _, position, _) =>
         val newDataType = dataType.flatMap { dt =>
           // Hive style syntax provides the column type, even if it may not have changed.
           val existing = CharVarcharUtils.getRawType(field.metadata).getOrElse(field.dataType)

@@ -206,7 +206,8 @@ case class AlterColumn(
     dataType: Option[DataType],
     nullable: Option[Boolean],
     comment: Option[String],
-    position: Option[FieldPosition]) extends AlterTableCommand {
+    position: Option[FieldPosition],
+    setDefaultExpression: Option[String]) extends AlterTableCommand {
   override def changes: Seq[TableChange] = {
     require(column.resolved, "FieldName should be resolved before it's converted to TableChange.")
     val colName = column.name.toArray

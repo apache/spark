@@ -525,6 +525,26 @@ class QueryCompilationErrorsSuite
         msg = "Field name m.n is invalid: m is not a struct.; line 1 pos 27")
     }
   }
+
+  test("NON_LITERAL_PIVOT_VALUES: literal expressions required for pivot values") {
+    val df = Seq(
+      ("dotNET", 2012, 10000),
+      ("Java", 2012, 20000),
+      ("dotNET", 2012, 5000),
+      ("dotNET", 2013, 48000),
+      ("Java", 2013, 30000)
+    ).toDF("course", "year", "earnings")
+
+    checkErrorClass(
+      exception = intercept[AnalysisException] {
+        df.groupBy(df("course")).
+          pivot(df("year"), Seq($"earnings")).
+          agg(sum($"earnings")).collect()
+      },
+      errorClass = "NON_LITERAL_PIVOT_VALUES",
+      msg = "Literal expressions required for pivot values, found 'earnings#\\w+'",
+      matchMsg = true)
+  }
 }
 
 class MyCastToString extends SparkUserDefinedFunction(
