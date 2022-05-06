@@ -19,9 +19,9 @@ package org.apache.spark.sql
 
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.spark.sql.catalyst.expressions.SubqueryExpression
+import org.apache.spark.sql.catalyst.expressions.{IsNotNull, SubqueryExpression}
 import org.apache.spark.sql.catalyst.plans.logical.{Join, LogicalPlan, Sort}
-import org.apache.spark.sql.execution.{ColumnarToRowExec, ExecSubqueryExpression, FileSourceScanExec, InputAdapter, ReusedSubqueryExec, ScalarSubquery, SubqueryExec, WholeStageCodegenExec}
+import org.apache.spark.sql.execution.{ColumnarToRowExec, ExecSubqueryExpression, FileSourceScanExec, FilterExec, InputAdapter, ReusedSubqueryExec, ScalarSubquery, SubqueryExec, WholeStageCodegenExec}
 import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanHelper, DisableAdaptiveExecution}
 import org.apache.spark.sql.execution.datasources.FileScanRDD
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
@@ -1901,6 +1901,25 @@ class SubquerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
         case s: ShuffleExchangeExec => s
       }
       assert(exchanges.size === 1)
+    }
+  }
+
+  test("SPARK-39131: Infer filters after RewritePredicateSubquery") {
+    withTable("t1", "t2") {
+      sql("CREATE TABLE t1 USING parquet AS SELECT IF(id < 5, null, id) as key, id AS value FROM range(10)")
+      val df = sql(
+        """
+          |SELECT *
+          |FROM   t1 as t1a
+          |WHERE  t1a.key IN (SELECT t1b.key FROM t1 as t1b WHERE t1a.key = t1b.key)
+          |""".stripMargin)
+
+      df.collect()
+      val filters = collect(df.queryExecution.executedPlan) {
+        case s@FilterExec(IsNotNull(_), _) => s
+      }
+      // 1 filter for each side of the join can now be inferred
+      assert(filters.size === 2)
     }
   }
 

@@ -137,6 +137,8 @@ abstract class Optimizer(catalogManager: CatalogManager)
     val operatorOptimizationBatch: Seq[Batch] = {
       Batch("Operator Optimization before Inferring Filters", fixedPoint,
         operatorOptimizationRuleSet: _*) ::
+      Batch("RewritePredicateSubquery before Inferring Filters", Once,
+        RewritePredicateSubquery) ::
       Batch("Infer Filters", Once,
         InferFiltersFromGenerate,
         InferFiltersFromConstraints) ::
