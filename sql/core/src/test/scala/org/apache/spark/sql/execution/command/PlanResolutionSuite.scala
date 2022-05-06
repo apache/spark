@@ -26,12 +26,12 @@ import org.mockito.invocation.InvocationOnMock
 
 import org.apache.spark.sql.{AnalysisException, SaveMode}
 import org.apache.spark.sql.catalyst.{AliasIdentifier, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.{AnalysisContext, AnalysisTest, Analyzer, EmptyFunctionRegistry, NoSuchTableException, ResolvedDBObjectName, ResolvedFieldName, ResolvedTable, ResolveSessionCatalog, UnresolvedAttribute, UnresolvedRelation, UnresolvedSubqueryColumnAliases, UnresolvedTable}
+import org.apache.spark.sql.catalyst.analysis.{AnalysisContext, AnalysisTest, Analyzer, EmptyFunctionRegistry, NoSuchTableException, ResolvedDBObjectName, ResolvedFieldName, ResolvedTable, ResolveSessionCatalog, UnresolvedAttribute, UnresolvedInlineTable, UnresolvedRelation, UnresolvedSubqueryColumnAliases, UnresolvedTable}
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, CatalogTable, CatalogTableType, InMemoryCatalog, SessionCatalog}
 import org.apache.spark.sql.catalyst.expressions.{AnsiCast, AttributeReference, Cast, EqualTo, Expression, InSubquery, IntegerLiteral, ListQuery, Literal, StringLiteral}
 import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException}
-import org.apache.spark.sql.catalyst.plans.logical.{AlterColumn, AnalysisOnlyCommand, AppendData, Assignment, CreateTable, CreateTableAsSelect, DeleteAction, DeleteFromTable, DescribeRelation, DropTable, InsertAction, LocalRelation, LogicalPlan, MergeIntoTable, OneRowRelation, Project, SetTableLocation, SetTableProperties, ShowTableProperties, SubqueryAlias, UnsetTableProperties, UpdateAction, UpdateTable}
+import org.apache.spark.sql.catalyst.plans.logical.{AlterColumn, AnalysisOnlyCommand, AppendData, Assignment, CreateTable, CreateTableAsSelect, DeleteAction, DeleteFromTable, DescribeRelation, DropTable, InsertAction, InsertIntoStatement, LocalRelation, LogicalPlan, MergeIntoTable, OneRowRelation, Project, SetTableLocation, SetTableProperties, ShowTableProperties, SubqueryAlias, UnsetTableProperties, UpdateAction, UpdateTable}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns
 import org.apache.spark.sql.connector.FakeV2Provider
@@ -996,6 +996,8 @@ class PlanResolutionSuite extends AnalysisTest {
       // Note: 'i' and 's' are the names of the columns in 'tblName'.
       val sql6 = s"UPDATE $tblName SET i=DEFAULT, s=DEFAULT"
       val sql7 = s"UPDATE defaultvalues SET i=DEFAULT, s=DEFAULT"
+      // Note: 'i' is the correct column name, but since the table has ACCEPT_ANY_SCHEMA capability,
+      // DEFAULT column resolution should skip this table.
       val sql8 = s"UPDATE v2TableWithAcceptAnySchemaCapability SET i=DEFAULT"
 
       val parsed1 = parseAndResolve(sql1)
@@ -1098,15 +1100,14 @@ class PlanResolutionSuite extends AnalysisTest {
         case _ => fail("Expect UpdateTable, but got:\n" + parsed7.treeString)
       }
 
-      parsed7 match {
+      parsed8 match {
         case UpdateTable(
-        _,
-        Seq(Assignment(i: AttributeReference, Literal(true, BooleanType)),
-        Assignment(s: AttributeReference, Literal(42, IntegerType))),
-        None) =>
+          AsDataSourceV2Relation(_),
+          Seq(Assignment(i: UnresolvedAttribute, UnresolvedAttribute(Seq("DEFAULT")))),
+          None) =>
           assert(i.name == "i")
-          assert(s.name == "s")
-        case _ => fail("Expect UpdateTable, but got:\n" + parsed7.treeString)
+
+        case _ => fail("Expect UpdateTable, but got:\n" + parsed5.treeString)
       }
     }
 
@@ -1137,6 +1138,33 @@ class PlanResolutionSuite extends AnalysisTest {
           case other => fail("Expect StaticInvoke, but got: " + other)
         }
       case _ => fail("Expect UpdateTable, but got:\n" + parsed2.treeString)
+    }
+  }
+
+  test("INSERT INTO table with ACCEPT_ANY_SCHEMA capability") {
+    // Note: 'i' is the correct column name, but since the table has ACCEPT_ANY_SCHEMA capability,
+    // DEFAULT column resolution should skip this table.
+    val sql1 = s"INSERT INTO v2TableWithAcceptAnySchemaCapability VALUES(DEFAULT)"
+    val sql2 = s"INSERT INTO v2TableWithAcceptAnySchemaCapability SELECT DEFAULT"
+    val parsed1 = parseAndResolve(sql1)
+    val parsed2 = parseAndResolve(sql2)
+    parsed1 match {
+      case InsertIntoStatement(
+        AsDataSourceV2Relation(_),
+        _, _,
+        UnresolvedInlineTable(_, Seq(Seq(UnresolvedAttribute(Seq("DEFAULT"))))),
+        _, _) =>
+
+      case _ => fail("Expect UpdateTable, but got:\n" + parsed1.treeString)
+    }
+    parsed2 match {
+      case InsertIntoStatement(
+        AsDataSourceV2Relation(_),
+        _, _,
+        Project(Seq(UnresolvedAttribute(Seq("DEFAULT"))), _),
+        _, _) =>
+
+      case _ => fail("Expect UpdateTable, but got:\n" + parsed1.treeString)
     }
   }
 
@@ -1836,7 +1864,7 @@ class PlanResolutionSuite extends AnalysisTest {
          |ON target.i = source.i
          |WHEN MATCHED AND (target.s='delete') THEN DELETE
          |WHEN MATCHED AND (target.s='update') THEN UPDATE SET target.s = source.s
-         |WHEN NOT MATCHED AND (target.s='insert')
+         |WHEN NOT MATCHED AND (target.s=DEFAULT)
          |  THEN INSERT (target.i, target.s) values (source.i, source.s)
        """.stripMargin
 
@@ -1852,7 +1880,7 @@ class PlanResolutionSuite extends AnalysisTest {
               updateAssigns)),
           Seq(
             InsertAction(
-              Some(EqualTo(il: UnresolvedAttribute, StringLiteral("insert"))),
+              Some(EqualTo(il: UnresolvedAttribute, UnresolvedAttribute(Seq("DEFAULT")))),
               insertAssigns))) =>
         assert(l.name == "target.i" && r.name == "source.i")
         assert(dl.name == "target.s")
