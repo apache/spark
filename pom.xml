@@ -136,6 +136,7 @@
     <jetty.version>9.4.46.v20220331</jetty.version>
     <jakartaservlet.version>4.0.3</jakartaservlet.version>
     <chill.version>0.10.0</chill.version>
+    <jnr.version>3.0.9</jnr.version>
     <ivy.version>2.5.0</ivy.version>
     <oro.version>2.0.8</oro.version>
     <!--
@@ -456,6 +457,12 @@
         <groupId>com.twitter</groupId>
         <artifactId>chill-java</artifactId>
         <version>${chill.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>com.github.jnr</groupId>
+        <artifactId>jnr-posix</artifactId>
+        <version>${jnr.version}</version>
+        <scope>test</scope>
       </dependency>
       <!-- This artifact is a shaded version of ASM 9.x. The POM that was used to produce this
            is at https://github.com/apache/geronimo-xbean/tree/trunk/xbean-asm9-shaded

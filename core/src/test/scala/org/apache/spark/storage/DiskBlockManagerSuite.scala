@@ -24,6 +24,7 @@ import java.util.HashMap
 
 import com.fasterxml.jackson.core.`type`.TypeReference
 import com.fasterxml.jackson.databind.ObjectMapper
+import jnr.posix.POSIXFactory
 import org.apache.commons.io.FileUtils
 import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach}
 
@@ -141,28 +142,42 @@ class DiskBlockManagerSuite extends SparkFunSuite with BeforeAndAfterEach with B
     assert(attemptId.equals("1"))
   }
 
+  // Use jnr to get and override the current process umask.
+  // Expects the input mask to be an octal number
+  private def getAndSetUmask(mask: String): String = {
+    val posix = POSIXFactory.getPOSIX
+    val prev = posix.umask(BigInt(mask, 8).toInt)
+    "0" + "%o".format(prev)
+  }
+
   test("SPARK-37618: Sub dirs are group writable when removing from shuffle service enabled") {
     val conf = testConf.clone
     conf.set("spark.local.dir", rootDirs)
     conf.set("spark.shuffle.service.enabled", "true")
     conf.set("spark.shuffle.service.removeShuffle", "false")
-    val diskBlockManager = new DiskBlockManager(conf, deleteFilesOnStop = true, isDriver = false)
-    val blockId = new TestBlockId("test")
-    val newFile = diskBlockManager.getFile(blockId)
-    val parentDir = newFile.getParentFile()
-    assert(parentDir.exists && parentDir.isDirectory)
-    val permission = Files.getPosixFilePermissions(parentDir.toPath)
-    assert(!permission.contains(PosixFilePermission.GROUP_WRITE))
 
-    assert(parentDir.delete())
+    val oldUmask = getAndSetUmask("077")
+    try {
+      val diskBlockManager = new DiskBlockManager(conf, deleteFilesOnStop = true, isDriver = false)
+      val blockId = new TestBlockId("test")
+      val newFile = diskBlockManager.getFile(blockId)
+      val parentDir = newFile.getParentFile()
+      assert(parentDir.exists && parentDir.isDirectory)
+      val permission = Files.getPosixFilePermissions(parentDir.toPath)
+      assert(!permission.contains(PosixFilePermission.GROUP_WRITE))
 
-    conf.set("spark.shuffle.service.removeShuffle", "true")
-    val diskBlockManager2 = new DiskBlockManager(conf, deleteFilesOnStop = true, isDriver = false)
-    val newFile2 = diskBlockManager2.getFile(blockId)
-    val parentDir2 = newFile2.getParentFile()
-    assert(parentDir2.exists && parentDir2.isDirectory)
-    val permission2 = Files.getPosixFilePermissions(parentDir2.toPath)
-    assert(permission2.contains(PosixFilePermission.GROUP_WRITE))
+      assert(parentDir.delete())
+
+      conf.set("spark.shuffle.service.removeShuffle", "true")
+      val diskBlockManager2 = new DiskBlockManager(conf, deleteFilesOnStop = true, isDriver = false)
+      val newFile2 = diskBlockManager2.getFile(blockId)
+      val parentDir2 = newFile2.getParentFile()
+      assert(parentDir2.exists && parentDir2.isDirectory)
+      val permission2 = Files.getPosixFilePermissions(parentDir2.toPath)
+      assert(permission2.contains(PosixFilePermission.GROUP_WRITE))
+    } finally {
+      getAndSetUmask(oldUmask)
+    }
   }
 
   def writeToFile(file: File, numBytes: Int): Unit = {
