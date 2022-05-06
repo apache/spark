@@ -53,6 +53,7 @@ public class NumericHistogram {
     public double x;
     public double y;
 
+    @Override
     public int compareTo(Object other) {
       return Double.compare(x, ((Coord) other).x);
     }
