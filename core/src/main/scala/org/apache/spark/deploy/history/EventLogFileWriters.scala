@@ -218,10 +218,19 @@ class SingleEventLogFileWriter(
     hadoopConf: Configuration)
   extends EventLogFileWriter(appId, appAttemptId, logBaseDir, sparkConf, hadoopConf) {
 
-  override val logPath: String = SingleEventLogFileWriter.getLogPath(logBaseDir, appId,
-    appAttemptId, compressionCodecName)
+  override val logPath: String = addTaskIdInLogPathIfExist()
 
   protected def inProgressPath = logPath + EventLogFileWriter.IN_PROGRESS
+
+  def addTaskIdInLogPathIfExist(): String = {
+    val taskId = sparkConf.get("spark.driver.param.taskId", "")
+    val localMaster = sparkConf.get("spark.master", "local").startsWith("local")
+    if (taskId.nonEmpty && localMaster) {
+      return SingleEventLogFileWriter.getLogPath(logBaseDir, appId,
+        appAttemptId, compressionCodecName) + "-" + taskId.substring(0, 8)
+    }
+    SingleEventLogFileWriter.getLogPath(logBaseDir, appId, appAttemptId, compressionCodecName)
+  }
 
   override def start(): Unit = {
     requireLogBaseDirAsDirectory()

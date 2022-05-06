@@ -372,4 +372,31 @@ class RollingEventLogFilesWriterSuite extends EventLogFileWritersSuite {
     fileSystem.listStatus(logDirPath).filter(isEventLogFile)
       .sortBy { fs => getEventLogFileIndex(fs.getPath.getName) }
   }
+
+  test("add TaskId In LogPath If Exist") {
+    val conf = new SparkConf
+    conf.set(EVENT_LOG_ENABLED, true)
+    conf.set(EVENT_LOG_DIR, testDir.toString)
+
+    val writer = EventLogFileWriter(
+      getUniqueApplicationId, None, testDirPath.toUri, conf,
+      SparkHadoopUtil.get.newConfiguration(conf)).asInstanceOf[SingleEventLogFileWriter]
+
+    var appId = writer.addTaskIdInLogPathIfExist()
+    assert(!appId.endsWith("-"))
+
+    conf.set("spark.driver.param.taskId", "e7eaaf98-7ee6-ae6f-b53a-d9165f336305-01")
+    appId = writer.addTaskIdInLogPathIfExist()
+    assert(appId.endsWith("e7eaaf98"))
+
+
+    conf.set("spark.driver.param.taskId", "")
+    appId = writer.addTaskIdInLogPathIfExist()
+    assert(!appId.endsWith("-"))
+
+    conf.set("spark.driver.param.taskId", "e7eaaf98-7ee6-ae6f-b53a-d9165f336305-01")
+    conf.set("spark.master", "yarn")
+    appId = writer.addTaskIdInLogPathIfExist()
+    assert(!appId.endsWith("e7eaaf98"))
+  }
 }
