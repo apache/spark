@@ -1101,13 +1101,19 @@ class PlanResolutionSuite extends AnalysisTest {
       }
 
       parsed8 match {
-        case UpdateTable(
-          AsDataSourceV2Relation(_),
-          Seq(Assignment(i: UnresolvedAttribute, UnresolvedAttribute(Seq("DEFAULT")))),
-          None) =>
-          assert(i.name == "i")
+        case u: UpdateTable =>
+          assert(u.assignments.size == 1)
+          u.assignments(0).key match {
+            case i: AttributeReference =>
+              assert(i.name == "i")
+          }
+          u.assignments(0).value match {
+            case d: UnresolvedAttribute =>
+              assert(d.name == "DEFAULT")
+          }
 
-        case _ => fail("Expect UpdateTable, but got:\n" + parsed5.treeString)
+        case _ =>
+          fail("Expect UpdateTable, but got:\n" + parsed8.treeString)
       }
     }
 
@@ -1150,8 +1156,7 @@ class PlanResolutionSuite extends AnalysisTest {
     val parsed2 = parseAndResolve(sql2)
     parsed1 match {
       case InsertIntoStatement(
-        AsDataSourceV2Relation(_),
-        _, _,
+        _, _, _,
         UnresolvedInlineTable(_, Seq(Seq(UnresolvedAttribute(Seq("DEFAULT"))))),
         _, _) =>
 
@@ -1159,8 +1164,7 @@ class PlanResolutionSuite extends AnalysisTest {
     }
     parsed2 match {
       case InsertIntoStatement(
-        AsDataSourceV2Relation(_),
-        _, _,
+        _, _, _,
         Project(Seq(UnresolvedAttribute(Seq("DEFAULT"))), _),
         _, _) =>
 

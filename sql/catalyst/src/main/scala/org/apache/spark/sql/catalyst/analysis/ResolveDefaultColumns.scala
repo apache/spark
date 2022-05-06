@@ -26,7 +26,6 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns._
-import org.apache.spark.sql.connector.catalog.{Identifier, TableCapability, TableCatalog}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -57,19 +56,14 @@ case class ResolveDefaultColumns(
   override def apply(plan: LogicalPlan): LogicalPlan = {
     plan.resolveOperatorsWithPruning(
       (_ => SQLConf.get.enableDefaultColumns), ruleId) {
-      case i: InsertIntoStatement
-        if insertsFromInlineTable(i) &&
-          !acceptsAnySchema(i.table) =>
+      case i: InsertIntoStatement if insertsFromInlineTable(i) =>
         resolveDefaultColumnsForInsertFromInlineTable(i)
       case i@InsertIntoStatement(_, _, _, project: Project, _, _)
-        if !project.projectList.exists(_.isInstanceOf[Star]) &&
-          !acceptsAnySchema(i.table) =>
+        if !project.projectList.exists(_.isInstanceOf[Star]) =>
         resolveDefaultColumnsForInsertFromProject(i)
-      case u: UpdateTable
-        if !acceptsAnySchema(u.table) =>
+      case u: UpdateTable =>
         resolveDefaultColumnsForUpdate(u)
-      case m: MergeIntoTable
-        if !acceptsAnySchema(m.targetTable) =>
+      case m: MergeIntoTable =>
         resolveDefaultColumnsForMerge(m)
     }
   }
@@ -146,37 +140,6 @@ case class ResolveDefaultColumns(
         regenerated.copy(query = r)
       }.getOrElse(i)
     }.getOrElse(i)
-  }
-
-  /**
-   * Check if the target table has "ACCEPT_ANY_SCHEMA" capabilities and if so, don't do anything.
-   */
-  private def acceptsAnySchema(table: LogicalPlan): Boolean = {
-    table.collectFirst {
-      case r: NamedRelation => r
-    }.map {
-      _.skipSchemaResolution
-    }.getOrElse {
-      val tableName: String = table.collectFirst {
-        case r: UnresolvedCatalogRelation =>
-          r.tableMeta.identifier.table
-      }.getOrElse("")
-      analyzer.currentCatalog match {
-        case tableCatalog: TableCatalog if tableName.nonEmpty =>
-          val id: Identifier = Identifier.of(tableCatalog.defaultNamespace(), tableName)
-          val capabilities: java.util.Set[TableCapability] = tableCatalog.loadTable(id).capabilities
-          val it: java.util.Iterator[TableCapability] = capabilities.iterator()
-          var acceptsAnySchema = false
-          while (it.hasNext) {
-            if (it.next() == TableCapability.ACCEPT_ANY_SCHEMA) {
-              acceptsAnySchema = true
-            }
-          }
-          acceptsAnySchema
-        case _ =>
-          false
-      }
-    }
   }
 
   /**
@@ -542,7 +505,7 @@ case class ResolveDefaultColumns(
   private def getSchemaForTargetTable(table: LogicalPlan): Option[StructType] = {
     // Check if the target table is already resolved. If so, return the computed schema.
     val source: Option[LogicalPlan] = table.collectFirst {
-      case r: NamedRelation => r
+      case r: NamedRelation if !r.skipSchemaResolution => r
       case r: UnresolvedCatalogRelation => r
     }
     source.map { r =>
