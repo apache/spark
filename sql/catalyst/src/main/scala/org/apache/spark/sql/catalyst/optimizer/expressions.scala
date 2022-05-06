@@ -52,22 +52,28 @@ object ConstantFolding extends Rule[LogicalPlan] {
     case _ => false
   }
 
+  private def constantFolding(e: Expression): Expression = e match {
+    // do not partially fold children inside ConditionalExpression
+    case c: ConditionalExpression if !c.foldable => c
+
+    // Skip redundant folding of literals. This rule is technically not necessary. Placing this
+    // here avoids running the next rule for Literal values, which would create a new Literal
+    // object and running eval unnecessarily.
+    case l: Literal => l
+
+    case Size(c: CreateArray, _) if c.children.forall(hasNoSideEffect) =>
+      Literal(c.children.length)
+    case Size(c: CreateMap, _) if c.children.forall(hasNoSideEffect) =>
+      Literal(c.children.length / 2)
+
+    // Fold expressions that are foldable.
+    case e if e.foldable => Literal.create(e.eval(EmptyRow), e.dataType)
+
+    case other => other.mapChildren(constantFolding)
+  }
+
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(AlwaysProcess.fn, ruleId) {
-    case q: LogicalPlan => q.transformExpressionsDownWithPruning(
-      AlwaysProcess.fn, ruleId) {
-      // Skip redundant folding of literals. This rule is technically not necessary. Placing this
-      // here avoids running the next rule for Literal values, which would create a new Literal
-      // object and running eval unnecessarily.
-      case l: Literal => l
-
-      case Size(c: CreateArray, _) if c.children.forall(hasNoSideEffect) =>
-        Literal(c.children.length)
-      case Size(c: CreateMap, _) if c.children.forall(hasNoSideEffect) =>
-        Literal(c.children.length / 2)
-
-      // Fold expressions that are foldable.
-      case e if e.foldable => Literal.create(e.eval(EmptyRow), e.dataType)
-    }
+    case q: LogicalPlan => q.mapExpressions(constantFolding)
   }
 }
 
