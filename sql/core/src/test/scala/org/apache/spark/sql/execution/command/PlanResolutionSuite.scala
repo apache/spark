@@ -28,11 +28,12 @@ import org.apache.spark.sql.{AnalysisException, SaveMode}
 import org.apache.spark.sql.catalyst.{AliasIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{AnalysisContext, AnalysisTest, Analyzer, EmptyFunctionRegistry, NoSuchTableException, ResolvedDBObjectName, ResolvedFieldName, ResolvedTable, ResolveSessionCatalog, UnresolvedAttribute, UnresolvedRelation, UnresolvedSubqueryColumnAliases, UnresolvedTable}
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, CatalogTable, CatalogTableType, InMemoryCatalog, SessionCatalog}
-import org.apache.spark.sql.catalyst.expressions.{AnsiCast, AttributeReference, EqualTo, Expression, InSubquery, IntegerLiteral, ListQuery, Literal, StringLiteral}
+import org.apache.spark.sql.catalyst.expressions.{AnsiCast, AttributeReference, Cast, EqualTo, Expression, InSubquery, IntegerLiteral, ListQuery, Literal, StringLiteral}
 import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException}
 import org.apache.spark.sql.catalyst.plans.logical.{AlterColumn, AnalysisOnlyCommand, AppendData, Assignment, CreateTable, CreateTableAsSelect, DeleteAction, DeleteFromTable, DescribeRelation, DropTable, InsertAction, LocalRelation, LogicalPlan, MergeIntoTable, OneRowRelation, Project, SetTableLocation, SetTableProperties, ShowTableProperties, SubqueryAlias, UnsetTableProperties, UpdateAction, UpdateTable}
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns
 import org.apache.spark.sql.connector.FakeV2Provider
 import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogNotFoundException, Identifier, SupportsDelete, Table, TableCapability, TableCatalog, V1Table}
 import org.apache.spark.sql.connector.expressions.Transform
@@ -40,7 +41,7 @@ import org.apache.spark.sql.execution.datasources.{CreateTable => CreateTableV1}
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.internal.{HiveSerDe, SQLConf}
 import org.apache.spark.sql.sources.SimpleScanSource
-import org.apache.spark.sql.types.{BooleanType, CharType, DoubleType, IntegerType, LongType, StringType, StructField, StructType}
+import org.apache.spark.sql.types.{BooleanType, CharType, DoubleType, IntegerType, LongType, MetadataBuilder, StringType, StructField, StructType}
 
 class PlanResolutionSuite extends AnalysisTest {
   import CatalystSqlParser._
@@ -83,6 +84,22 @@ class PlanResolutionSuite extends AnalysisTest {
     t
   }
 
+  private val defaultValues: Table = {
+    val t = mock(classOf[Table])
+    when(t.schema()).thenReturn(
+      new StructType()
+        .add("i", BooleanType, true,
+          new MetadataBuilder()
+            .putString(ResolveDefaultColumns.CURRENT_DEFAULT_COLUMN_METADATA_KEY, "true")
+            .putString(ResolveDefaultColumns.EXISTS_DEFAULT_COLUMN_METADATA_KEY, "true").build())
+        .add("s", IntegerType, true,
+          new MetadataBuilder()
+            .putString(ResolveDefaultColumns.CURRENT_DEFAULT_COLUMN_METADATA_KEY, "42")
+            .putString(ResolveDefaultColumns.EXISTS_DEFAULT_COLUMN_METADATA_KEY, "42").build()))
+    when(t.partitioning()).thenReturn(Array.empty[Transform])
+    t
+  }
+
   private val v1Table: V1Table = {
     val t = mock(classOf[CatalogTable])
     when(t.schema).thenReturn(new StructType()
@@ -118,6 +135,7 @@ class PlanResolutionSuite extends AnalysisTest {
         case "tab1" => table1
         case "tab2" => table2
         case "charvarchar" => charVarcharTable
+        case "defaultvalues" => defaultValues
         case name => throw new NoSuchTableException(name)
       }
     })
@@ -974,11 +992,18 @@ class PlanResolutionSuite extends AnalysisTest {
            |SET t.age=32
            |WHERE t.name IN (SELECT s.name FROM s)
          """.stripMargin
+      val sql5 = s"UPDATE $tblName SET name=DEFAULT, age=DEFAULT"
+      // Note: 'i' and 's' are the names of the columns in 'tblName'.
+      val sql6 = s"UPDATE $tblName SET i=DEFAULT, s=DEFAULT"
+      val sql7 = s"UPDATE defaultvalues SET i=DEFAULT, s=DEFAULT"
 
       val parsed1 = parseAndResolve(sql1)
       val parsed2 = parseAndResolve(sql2)
       val parsed3 = parseAndResolve(sql3)
       val parsed4 = parseAndResolve(sql4)
+      val parsed5 = parseAndResolve(sql5)
+      val parsed6 = parseAndResolve(sql6)
+      val parsed7 = parseAndResolve(sql7, true)
 
       parsed1 match {
         case UpdateTable(
@@ -1034,6 +1059,41 @@ class PlanResolutionSuite extends AnalysisTest {
           }
 
         case _ => fail("Expect UpdateTable, but got:\n" + parsed4.treeString)
+      }
+
+      parsed5 match {
+        case UpdateTable(
+        AsDataSourceV2Relation(_),
+        Seq(Assignment(name: UnresolvedAttribute, UnresolvedAttribute(Seq("DEFAULT"))),
+        Assignment(age: UnresolvedAttribute, UnresolvedAttribute(Seq("DEFAULT")))),
+        None) =>
+          assert(name.name == "name")
+          assert(age.name == "age")
+
+        case _ => fail("Expect UpdateTable, but got:\n" + parsed5.treeString)
+      }
+
+      parsed6 match {
+        case UpdateTable(
+        AsDataSourceV2Relation(_),
+        Seq(Assignment(i: AttributeReference, AnsiCast(Literal(null, _), IntegerType, _)),
+        Assignment(s: AttributeReference, AnsiCast(Literal(null, _), StringType, _))),
+        None) =>
+          assert(i.name == "i")
+          assert(s.name == "s")
+
+        case _ => fail("Expect UpdateTable, but got:\n" + parsed6.treeString)
+      }
+
+      parsed7 match {
+        case UpdateTable(
+        _,
+        Seq(Assignment(i: AttributeReference, Literal(true, BooleanType)),
+        Assignment(s: AttributeReference, Literal(42, IntegerType))),
+        None) =>
+          assert(i.name == "i")
+          assert(s.name == "s")
+        case _ => fail("Expect UpdateTable, but got:\n" + parsed7.treeString)
       }
     }
 
@@ -1108,6 +1168,7 @@ class PlanResolutionSuite extends AnalysisTest {
                 Some(LongType),
                 None,
                 None,
+                None,
                 None) =>
               assert(column.name == Seq("i"))
             case _ => fail("expect AlterTableAlterColumn")
@@ -1120,6 +1181,7 @@ class PlanResolutionSuite extends AnalysisTest {
                 None,
                 None,
                 Some("new comment"),
+                None,
                 None) =>
               assert(column.name == Seq("i"))
             case _ => fail("expect AlterTableAlterColumn")
@@ -1169,14 +1231,15 @@ class PlanResolutionSuite extends AnalysisTest {
     Seq("v2Table", "testcat.tab").foreach { tblName =>
       parseAndResolve(s"ALTER TABLE $tblName CHANGE COLUMN i i int COMMENT 'an index'") match {
         case AlterColumn(
-            _: ResolvedTable, _: ResolvedFieldName, None, None, Some(comment), None) =>
+            _: ResolvedTable, _: ResolvedFieldName, None, None, Some(comment), None, None) =>
           assert(comment == "an index")
         case _ => fail("expect AlterTableAlterColumn with comment change only")
       }
 
       parseAndResolve(s"ALTER TABLE $tblName CHANGE COLUMN i i long COMMENT 'an index'") match {
         case AlterColumn(
-            _: ResolvedTable, _: ResolvedFieldName, Some(dataType), None, Some(comment), None) =>
+            _: ResolvedTable, _: ResolvedFieldName, Some(dataType), None, Some(comment), None,
+            None) =>
           assert(comment == "an index")
           assert(dataType == LongType)
         case _ => fail("expect AlterTableAlterColumn with type and comment changes")
@@ -1211,7 +1274,7 @@ class PlanResolutionSuite extends AnalysisTest {
       val catalog = if (isSessionCatalog) v2SessionCatalog else testCat
       val tableIdent = if (isSessionCatalog) "v2Table" else "tab"
       parsed match {
-        case AlterColumn(r: ResolvedTable, _, _, _, _, _) =>
+        case AlterColumn(r: ResolvedTable, _, _, _, _, _, _) =>
           assert(r.catalog == catalog)
           assert(r.identifier.name() == tableIdent)
         case Project(_, AsDataSourceV2Relation(r)) =>
@@ -1232,7 +1295,7 @@ class PlanResolutionSuite extends AnalysisTest {
     }
   }
 
-  test("MERGE INTO TABLE") {
+  test("MERGE INTO TABLE - primary") {
     def checkResolution(
         target: LogicalPlan,
         source: LogicalPlan,
@@ -1433,6 +1496,152 @@ class PlanResolutionSuite extends AnalysisTest {
 
           case other => fail("Expect MergeIntoTable, but got:\n" + other.treeString)
         }
+
+        // default columns (implicit)
+        val sql6 =
+          s"""
+             |MERGE INTO $target AS target
+             |USING $source AS source
+             |ON target.i = source.i
+             |WHEN MATCHED AND (target.s='delete') THEN DELETE
+             |WHEN MATCHED AND (target.s='update')
+             |  THEN UPDATE SET target.s = DEFAULT
+             |WHEN NOT MATCHED AND (source.s='insert')
+             |  THEN INSERT (target.i, target.s) values (DEFAULT, DEFAULT)
+           """.stripMargin
+        parseAndResolve(sql6) match {
+          case m: MergeIntoTable =>
+            val source = m.sourceTable
+            val target = m.targetTable
+            val ti = target.output.find(_.name == "i").get.asInstanceOf[AttributeReference]
+            val si = source.output.find(_.name == "i").get.asInstanceOf[AttributeReference]
+            m.mergeCondition match {
+              case EqualTo(l: AttributeReference, r: AttributeReference) =>
+                assert(l.sameRef(ti) && r.sameRef(si))
+              case Literal(_, BooleanType) => // this is acceptable as a merge condition
+              case other => fail("unexpected merge condition " + other)
+            }
+            assert(m.matchedActions.length == 2)
+            val first = m.matchedActions(0)
+            first match {
+              case DeleteAction(Some(EqualTo(_: AttributeReference, StringLiteral("delete")))) =>
+              case other => fail("unexpected first matched action " + other)
+            }
+            val second = m.matchedActions(1)
+            second match {
+              case UpdateAction(Some(EqualTo(_: AttributeReference, StringLiteral("update"))),
+                  Seq(Assignment(
+                    _: AttributeReference, AnsiCast(Literal(null, _), StringType, _)))) =>
+              case other => fail("unexpected second matched action " + other)
+            }
+            assert(m.notMatchedActions.length == 1)
+            val negative = m.notMatchedActions(0)
+            negative match {
+              case InsertAction(Some(EqualTo(_: AttributeReference, StringLiteral("insert"))),
+              Seq(Assignment(i: AttributeReference, AnsiCast(Literal(null, _), IntegerType, _)),
+              Assignment(s: AttributeReference, AnsiCast(Literal(null, _), StringType, _)))) =>
+                assert(i.name == "i")
+                assert(s.name == "s")
+              case other => fail("unexpected not matched action " + other)
+            }
+
+          case other =>
+            fail("Expect MergeIntoTable, but got:\n" + other.treeString)
+        }
+    }
+
+
+    // default columns (explicit)
+    val mergeDefault1 =
+      s"""
+         |MERGE INTO defaultvalues AS target
+         |USING v2Table1 AS source
+         |ON target.i = source.i
+         |WHEN MATCHED AND (target.s='delete') THEN DELETE
+         |WHEN MATCHED AND (target.s='update')
+         |  THEN UPDATE SET target.s = DEFAULT
+         |WHEN NOT MATCHED AND (source.s='insert')
+         |  THEN INSERT (target.i, target.s) values (DEFAULT, DEFAULT)
+           """.stripMargin
+    parseAndResolve(mergeDefault1, true) match {
+      case m: MergeIntoTable =>
+        val cond = m.mergeCondition
+        cond match {
+          case EqualTo(l: UnresolvedAttribute, r: UnresolvedAttribute) =>
+            assert(l.nameParts.last == "i")
+            assert(r.nameParts.last == "i")
+          case Literal(_, BooleanType) => // this is acceptable as a merge condition
+          case other => fail("unexpected merge condition " + other)
+        }
+        assert(m.matchedActions.length == 2)
+        val first = m.matchedActions(0)
+        first match {
+          case DeleteAction(Some(EqualTo(_: UnresolvedAttribute, StringLiteral("delete")))) =>
+          case other => fail("unexpected first matched action " + other)
+        }
+        val second = m.matchedActions(1)
+        second match {
+          case UpdateAction(Some(EqualTo(_: UnresolvedAttribute, StringLiteral("update"))),
+          Seq(Assignment(_: UnresolvedAttribute, Literal(42, IntegerType)))) =>
+          case other => fail("unexpected second matched action " + other)
+        }
+        assert(m.notMatchedActions.length == 1)
+        val negative = m.notMatchedActions(0)
+        negative match {
+          case InsertAction(Some(EqualTo(_: UnresolvedAttribute, StringLiteral("insert"))),
+          Seq(
+          Assignment(_: UnresolvedAttribute, Literal(true, BooleanType)),
+          Assignment(_: UnresolvedAttribute, Literal(42, IntegerType)))) =>
+          case other => fail("unexpected not matched action " + other)
+        }
+
+      case other =>
+        fail("Expect MergeIntoTable, but got:\n" + other.treeString)
+    }
+    val mergeDefault2 =
+      s"""
+         |MERGE INTO defaultvalues AS target
+         |USING testcat.tab1 AS source
+         |ON target.i = source.i
+         |WHEN MATCHED AND (target.s = 31) THEN DELETE
+         |WHEN MATCHED AND (target.s = 31)
+         |  THEN UPDATE SET target.s = DEFAULT
+         |WHEN NOT MATCHED AND (source.s='insert')
+         |  THEN INSERT (target.i, target.s) values (DEFAULT, DEFAULT)
+           """.stripMargin
+    parseAndResolve(mergeDefault2, true) match {
+      case m: MergeIntoTable =>
+        val cond = m.mergeCondition
+        cond match {
+          case EqualTo(Cast(l: AttributeReference, IntegerType, _, _), r: AttributeReference) =>
+            assert(l.name == "i")
+            assert(r.name == "i")
+          case Literal(_, BooleanType) => // this is acceptable as a merge condition
+          case other => fail("unexpected merge condition " + other)
+        }
+        assert(m.matchedActions.length == 2)
+        val first = m.matchedActions(0)
+        first match {
+          case DeleteAction(Some(EqualTo(_: AttributeReference, Literal(31, IntegerType)))) =>
+          case other => fail("unexpected first matched action " + other)
+        }
+        val second = m.matchedActions(1)
+        second match {
+          case UpdateAction(Some(EqualTo(_: AttributeReference, Literal(31, IntegerType))),
+          Seq(Assignment(_: AttributeReference, Literal(42, IntegerType)))) =>
+          case other => fail("unexpected second matched action " + other)
+        }
+        assert(m.notMatchedActions.length == 1)
+        val negative = m.notMatchedActions(0)
+        negative match {
+          case InsertAction(Some(EqualTo(_: AttributeReference, StringLiteral("insert"))),
+          Seq(Assignment(_: AttributeReference, Literal(true, BooleanType)),
+          Assignment(_: AttributeReference, Literal(42, IntegerType)))) =>
+          case other => fail("unexpected not matched action " + other)
+        }
+
+      case other =>
+        fail("Expect MergeIntoTable, but got:\n" + other.treeString)
     }
 
     // no aliases

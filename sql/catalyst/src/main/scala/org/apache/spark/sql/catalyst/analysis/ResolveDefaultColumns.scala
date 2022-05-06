@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import scala.collection.mutable
+
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.{SessionCatalog, UnresolvedCatalogRelation}
@@ -26,6 +27,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns._
 import org.apache.spark.sql.connector.catalog.{Identifier, TableCapability, TableCatalog}
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
@@ -33,7 +35,7 @@ import org.apache.spark.sql.types._
  * This is a rule to process DEFAULT columns in statements such as CREATE/REPLACE TABLE.
  *
  * Background: CREATE TABLE and ALTER TABLE invocations support setting column default values for
- * later operations. Following INSERT, and INSERT MERGE commands may then reference the value
+ * later operations. Following INSERT, UPDATE, and MERGE commands may then reference the value
  * using the DEFAULT keyword as needed.
  *
  * Example:
@@ -60,6 +62,10 @@ case class ResolveDefaultColumns(
       case i@InsertIntoStatement(_, _, _, project: Project, _, _)
         if !project.projectList.exists(_.isInstanceOf[Star]) =>
         resolveDefaultColumnsForInsertFromProject(i)
+      case u: UpdateTable =>
+        resolveDefaultColumnsForUpdate(u)
+      case m: MergeIntoTable =>
+        resolveDefaultColumnsForMerge(m)
     }
   }
 
@@ -98,23 +104,27 @@ case class ResolveDefaultColumns(
       node = node.children(0)
     }
     val table = node.asInstanceOf[UnresolvedInlineTable]
-    val insertTableSchemaWithoutPartitionColumns: StructType =
+    val insertTableSchemaWithoutPartitionColumns: Option[StructType] =
       getInsertTableSchemaWithoutPartitionColumns(i)
-        .getOrElse(return i)
-    val regenerated: InsertIntoStatement =
-      regenerateUserSpecifiedCols(i, insertTableSchemaWithoutPartitionColumns)
-    val expanded: UnresolvedInlineTable =
-      addMissingDefaultValuesForInsertFromInlineTable(
-        table, insertTableSchemaWithoutPartitionColumns)
-    val replaced: LogicalPlan =
-      replaceExplicitDefaultValuesForInputOfInsertInto(
-        analyzer, insertTableSchemaWithoutPartitionColumns, expanded)
-        .getOrElse(return i)
-    node = replaced
-    for (child <- children.reverse) {
-      node = child.withNewChildren(Seq(node))
-    }
-    regenerated.copy(query = node)
+    insertTableSchemaWithoutPartitionColumns.map { schema: StructType =>
+      val regenerated: InsertIntoStatement =
+        regenerateUserSpecifiedCols(i, schema)
+      val expanded: UnresolvedInlineTable =
+        if (tableAcceptsAnySchema(i.table)) {
+          table
+        } else {
+          addMissingDefaultValuesForInsertFromInlineTable(table, schema)
+        }
+      val replaced: Option[LogicalPlan] =
+        replaceExplicitDefaultValuesForInputOfInsertInto(analyzer, schema, expanded)
+      replaced.map { r: LogicalPlan =>
+        node = r
+        for (child <- children.reverse) {
+          node = child.withNewChildren(Seq(node))
+        }
+        regenerated.copy(query = node)
+      }.getOrElse(i)
+    }.getOrElse(i)
   }
 
   /**
@@ -122,20 +132,140 @@ case class ResolveDefaultColumns(
    * projection.
    */
   private def resolveDefaultColumnsForInsertFromProject(i: InsertIntoStatement): LogicalPlan = {
-    val insertTableSchemaWithoutPartitionColumns: StructType =
+    val insertTableSchemaWithoutPartitionColumns: Option[StructType] =
       getInsertTableSchemaWithoutPartitionColumns(i)
-        .getOrElse(return i)
-    val regenerated: InsertIntoStatement =
-      regenerateUserSpecifiedCols(i, insertTableSchemaWithoutPartitionColumns)
-    val project: Project = i.query.asInstanceOf[Project]
-    val expanded: Project =
-      addMissingDefaultValuesForInsertFromProject(
-        project, insertTableSchemaWithoutPartitionColumns)
-    val replaced: LogicalPlan =
-      replaceExplicitDefaultValuesForInputOfInsertInto(
-        analyzer, insertTableSchemaWithoutPartitionColumns, expanded)
-        .getOrElse(return i)
-    regenerated.copy(query = replaced)
+    insertTableSchemaWithoutPartitionColumns.map { schema =>
+      val regenerated: InsertIntoStatement = regenerateUserSpecifiedCols(i, schema)
+      val project: Project = i.query.asInstanceOf[Project]
+      val expanded: Project =
+        if (tableAcceptsAnySchema(i.table)) {
+          project
+        } else {
+          addMissingDefaultValuesForInsertFromProject(project, schema)
+        }
+      val replaced: Option[LogicalPlan] =
+        replaceExplicitDefaultValuesForInputOfInsertInto(analyzer, schema, expanded)
+      replaced.map { r =>
+        regenerated.copy(query = r)
+      }.getOrElse(i)
+    }.getOrElse(i)
+  }
+
+  /**
+   * Check if the target table has "ACCEPT_ANY_SCHEMA" capabilities and if so, don't do anything.
+   */
+  private def tableAcceptsAnySchema(table: LogicalPlan): Boolean = {
+    val tableName: Option[String] = table.collectFirst {
+      case r: NamedRelation => r.name
+      case r: UnresolvedCatalogRelation => r.tableMeta.identifier.table
+    }
+    analyzer.currentCatalog match {
+      case tableCatalog: TableCatalog if tableName.isDefined =>
+        val id: Identifier = Identifier.of(tableCatalog.defaultNamespace(), tableName.get)
+        val capabilities: java.util.Set[TableCapability] = tableCatalog.loadTable(id).capabilities
+        val it: java.util.Iterator[TableCapability] = capabilities.iterator()
+        var acceptsAnySchema = false
+        while (it.hasNext) {
+          if (it.next() == TableCapability.ACCEPT_ANY_SCHEMA) {
+            acceptsAnySchema = true
+          }
+        }
+        acceptsAnySchema
+      case _ =>
+        false
+    }
+  }
+
+  /**
+   * Resolves DEFAULT column references for an UPDATE command.
+   */
+  private def resolveDefaultColumnsForUpdate(u: UpdateTable): LogicalPlan = {
+    // Return a more descriptive error message if the user tries to use a DEFAULT column reference
+    // inside an UPDATE command's WHERE clause; this is not allowed.
+    u.condition.foreach { c: Expression =>
+      if (c.find(isExplicitDefaultColumn).isDefined) {
+        throw QueryCompilationErrors.defaultReferencesNotAllowedInUpdateWhereClause()
+      }
+    }
+    val schemaForTargetTable: Option[StructType] = getSchemaForTargetTable(u.table)
+    schemaForTargetTable.map { schema =>
+      val defaultExpressions: Seq[Expression] = schema.fields.map {
+        case f if f.metadata.contains(CURRENT_DEFAULT_COLUMN_METADATA_KEY) =>
+          analyze(analyzer, f, "UPDATE")
+        case _ => Literal(null)
+      }
+      // Create a map from each column name in the target table to its DEFAULT expression.
+      val columnNamesToExpressions: Map[String, Expression] =
+        mapStructFieldNamesToExpressions(schema, defaultExpressions)
+      // For each assignment in the UPDATE command's SET clause with a DEFAULT column reference on
+      // the right-hand side, look up the corresponding expression from the above map.
+      val newAssignments: Option[Seq[Assignment]] =
+      replaceExplicitDefaultValuesForUpdateAssignments(
+        u.assignments, CommandType.Update, columnNamesToExpressions)
+      newAssignments.map { n =>
+        u.copy(assignments = n)
+      }.getOrElse(u)
+    }.getOrElse(u)
+  }
+
+  /**
+   * Resolves DEFAULT column references for a MERGE INTO command.
+   */
+  private def resolveDefaultColumnsForMerge(m: MergeIntoTable): LogicalPlan = {
+    val schema: StructType = getSchemaForTargetTable(m.targetTable).getOrElse(return m)
+    // Return a more descriptive error message if the user tries to use a DEFAULT column reference
+    // inside an UPDATE command's WHERE clause; this is not allowed.
+    m.mergeCondition.map { c: Expression =>
+      if (c.find(isExplicitDefaultColumn).isDefined) {
+        throw QueryCompilationErrors.defaultReferencesNotAllowedInMergeCondition()
+      }
+    }
+    val defaultExpressions: Seq[Expression] = schema.fields.map {
+      case f if f.metadata.contains(CURRENT_DEFAULT_COLUMN_METADATA_KEY) =>
+        analyze(analyzer, f, "MERGE")
+      case _ => Literal(null)
+    }
+    val columnNamesToExpressions: Map[String, Expression] =
+      mapStructFieldNamesToExpressions(schema, defaultExpressions)
+    val newMatchedActions: Seq[Option[MergeAction]] = m.matchedActions.map {
+      replaceExplicitDefaultValuesInMergeAction(_, columnNamesToExpressions)
+    }
+    val newNotMatchedActions: Seq[Option[MergeAction]] = m.notMatchedActions.map {
+      replaceExplicitDefaultValuesInMergeAction(_, columnNamesToExpressions)
+    }
+    if (newMatchedActions.forall(_.isDefined) &&
+      newNotMatchedActions.forall(_.isDefined)) {
+      m.copy(matchedActions = newMatchedActions.map(_.get),
+        notMatchedActions = newNotMatchedActions.map(_.get))
+    } else {
+      m
+    }
+  }
+
+  /**
+   * Replaces unresolved DEFAULT column references with corresponding values in one action of a
+   * MERGE INTO command.
+   */
+  private def replaceExplicitDefaultValuesInMergeAction(
+      action: MergeAction,
+      columnNamesToExpressions: Map[String, Expression]): Option[MergeAction] = {
+    action match {
+      case u: UpdateAction =>
+        val replaced: Option[Seq[Assignment]] =
+          replaceExplicitDefaultValuesForUpdateAssignments(
+            u.assignments, CommandType.Merge, columnNamesToExpressions)
+        replaced.map { r =>
+          Some(u.copy(assignments = r))
+        }.getOrElse(None)
+      case i: InsertAction =>
+        val replaced: Option[Seq[Assignment]] =
+          replaceExplicitDefaultValuesForUpdateAssignments(
+            i.assignments, CommandType.Merge, columnNamesToExpressions)
+        replaced.map { r =>
+          Some(i.copy(assignments = r))
+        }.getOrElse(None)
+      case _ => Some(action)
+    }
   }
 
   /**
@@ -260,7 +390,7 @@ case class ResolveDefaultColumns(
           expr = row(i)
           defaultExpr = if (i < defaultExpressions.size) defaultExpressions(i) else Literal(null)
         } yield replaceExplicitDefaultReferenceInExpression(
-          expr, defaultExpr, DEFAULTS_IN_EXPRESSIONS_ERROR, false).map { e =>
+          expr, defaultExpr, CommandType.Insert, addAlias = false).map { e =>
           replaced = true
           e
         }.getOrElse(expr)
@@ -286,7 +416,7 @@ case class ResolveDefaultColumns(
         projectExpr = project.projectList(i)
         defaultExpr = if (i < defaultExpressions.size) defaultExpressions(i) else Literal(null)
       } yield replaceExplicitDefaultReferenceInExpression(
-        projectExpr, defaultExpr, DEFAULTS_IN_EXPRESSIONS_ERROR, true).map { e =>
+        projectExpr, defaultExpr, CommandType.Insert, addAlias = true).map { e =>
         replaced = true
         e.asInstanceOf[NamedExpression]
       }.getOrElse(projectExpr)
@@ -299,18 +429,25 @@ case class ResolveDefaultColumns(
   }
 
   /**
+   * Represents a type of command we are currently processing.
+   */
+  private object CommandType extends Enumeration {
+    val Insert, Update, Merge = Value
+  }
+
+  /**
    * Checks if a given input expression is an unresolved "DEFAULT" attribute reference.
    *
    * @param input the input expression to examine.
    * @param defaultExpr the default to return if [[input]] is an unresolved "DEFAULT" reference.
-   * @param complexDefaultError error if [[input]] is a complex expression with "DEFAULT" inside.
+   * @param isInsert the type of command we are currently processing.
    * @param addAlias if true, wraps the result with an alias of the original default column name.
    * @return [[defaultExpr]] if [[input]] is an unresolved "DEFAULT" attribute reference.
    */
   private def replaceExplicitDefaultReferenceInExpression(
       input: Expression,
       defaultExpr: Expression,
-      complexDefaultError: String,
+      command: CommandType.Value,
       addAlias: Boolean): Option[Expression] = {
     input match {
       case a@Alias(u: UnresolvedAttribute, _)
@@ -325,7 +462,14 @@ case class ResolveDefaultColumns(
         }
       case expr@_
         if expr.find(isExplicitDefaultColumn).isDefined =>
-        throw new AnalysisException(complexDefaultError)
+        command match {
+          case CommandType.Insert =>
+            throw QueryCompilationErrors
+              .defaultReferencesNotAllowedInComplexExpressionsInInsertValuesList()
+          case CommandType.Update =>
+            throw QueryCompilationErrors
+              .defaultReferencesNotAllowedInComplexExpressionsInUpdateSetClause()
+        }
       case _ =>
         None
     }
@@ -344,16 +488,10 @@ case class ResolveDefaultColumns(
     if (userSpecifiedCols.isEmpty) {
       return Some(schema)
     }
-    def normalize(str: String) = {
-      if (SQLConf.get.caseSensitiveAnalysis) str else str.toLowerCase()
-    }
-    val colNamesToFields: Map[String, StructField] =
-      schema.fields.map {
-        field: StructField => normalize(field.name) -> field
-      }.toMap
+    val colNamesToFields: Map[String, StructField] = mapStructFieldNamesToFields(schema)
     val userSpecifiedFields: Seq[StructField] =
       userSpecifiedCols.map {
-        name: String => colNamesToFields.getOrElse(normalize(name), return None)
+        name: String => colNamesToFields.getOrElse(normalizeFieldName(name), return None)
       }
     val userSpecifiedColNames: Set[String] = userSpecifiedCols.toSet
     val nonUserSpecifiedFields: Seq[StructField] =
@@ -365,33 +503,59 @@ case class ResolveDefaultColumns(
   }
 
   /**
+   * Normalizes a schema field name suitable for use in map lookups.
+   */
+  private def normalizeFieldName(str: String): String = {
+    if (SQLConf.get.caseSensitiveAnalysis) {
+      str
+    } else {
+      str.toLowerCase()
+    }
+  }
+
+  /**
+   * Returns a map of the names of fields in a schema to the fields themselves.
+   */
+  private def mapStructFieldNamesToFields(schema: StructType): Map[String, StructField] = {
+    schema.fields.map {
+      field: StructField => normalizeFieldName(field.name) -> field
+    }.toMap
+  }
+
+  /**
+   * Returns a map of the names of fields in a schema to corresponding expressions.
+   */
+  private def mapStructFieldNamesToExpressions(
+      schema: StructType,
+      expressions: Seq[Expression]): Map[String, Expression] = {
+    val namesToFields: Map[String, StructField] = mapStructFieldNamesToFields(schema)
+    val namesAndExpressions: Seq[(String, Expression)] = namesToFields.keys.toSeq.zip(expressions)
+    namesAndExpressions.toMap
+  }
+
+  /**
    * Returns the schema for the target table of a DML command, looking into the catalog if needed.
    */
   private def getSchemaForTargetTable(table: LogicalPlan): Option[StructType] = {
+    // Check if the target table is already resolved. If so, return the computed schema.
+    val source: Option[LogicalPlan] = table.collectFirst {
+      case r: NamedRelation => r
+      case r: UnresolvedCatalogRelation => r
+    }
+    source.map { r =>
+      if (r.schema.fields.nonEmpty) {
+        return Some(r.schema)
+      }
+    }
     // Lookup the relation from the catalog by name. This either succeeds or returns some "not
     // found" error. In the latter cases, return out of this rule without changing anything and let
     // the analyzer return a proper error message elsewhere.
-    val tableName: TableIdentifier = table match {
-      case r: UnresolvedRelation => TableIdentifier(r.name)
-      case r: UnresolvedCatalogRelation => r.tableMeta.identifier
+    val tableName: TableIdentifier = source match {
+      case Some(r: UnresolvedRelation) => TableIdentifier(r.name)
+      case Some(r: UnresolvedCatalogRelation) => r.tableMeta.identifier
       case _ => return None
     }
     val lookup: LogicalPlan = try {
-      // Check if the target table has "ACCEPT_ANY_SCHEMA" capabilities and if so,
-      // don't do anything.
-      analyzer.currentCatalog match {
-        case tableCatalog: TableCatalog =>
-          val id = Identifier.of(Array.empty[String], tableName.identifier)
-          val capabilities = tableCatalog.loadTable(id).capabilities
-          var it = capabilities.iterator()
-          while (it.hasNext) {
-            if (it() == TableCapability.ACCEPT_ANY_SCHEMA)) {
-              return None
-            }
-            it = it.next()
-          }
-        case _ =>
-      }
       catalog.lookupRelation(tableName)
     } catch {
       case _: AnalysisException => return None
@@ -402,6 +566,45 @@ case class ResolveDefaultColumns(
       case SubqueryAlias(_, r: View) if r.isTempView =>
         Some(r.schema)
       case _ => None
+    }
+  }
+
+  /**
+   * Replaces unresolved DEFAULT column references with corresponding values in a series of
+   * assignments in an UPDATE assignment, either comprising an UPDATE command or as part of a MERGE.
+   */
+  private def replaceExplicitDefaultValuesForUpdateAssignments(
+      assignments: Seq[Assignment],
+      command: CommandType.Value,
+      columnNamesToExpressions: Map[String, Expression]): Option[Seq[Assignment]] = {
+    var replaced = false
+    val newAssignments: Seq[Assignment] =
+      for (assignment <- assignments) yield {
+        val destColName = assignment.key match {
+          case a: AttributeReference => a.name
+          case u: UnresolvedAttribute => u.nameParts.last
+          case _ => ""
+        }
+        val adjusted: String = normalizeFieldName(destColName)
+        val lookup: Option[Expression] = columnNamesToExpressions.get(adjusted)
+        val newValue: Expression = lookup.map { defaultExpr =>
+          val updated: Option[Expression] =
+            replaceExplicitDefaultReferenceInExpression(
+              assignment.value,
+              defaultExpr,
+              command,
+              addAlias = false)
+          updated.map { e =>
+            replaced = true
+            e
+          }.getOrElse(assignment.value)
+        }.getOrElse(assignment.value)
+        assignment.copy(value = newValue)
+      }
+    if (replaced) {
+      Some(newAssignments)
+    } else {
+      None
     }
   }
 }
