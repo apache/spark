@@ -20,6 +20,7 @@ package org.apache.spark.util.kvstore;
 import java.io.File;
 import java.io.IOException;
 import java.lang.ref.Reference;
+import java.lang.ref.ReferenceQueue;
 import java.lang.ref.WeakReference;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
@@ -34,6 +35,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.base.Throwables;
 import org.fusesource.leveldbjni.JniDBFactory;
 import org.iq80.leveldb.DB;
+import org.iq80.leveldb.DBIterator;
 import org.iq80.leveldb.Options;
 import org.iq80.leveldb.WriteBatch;
 
@@ -74,6 +76,9 @@ public class LevelDB implements KVStore {
    * to ensure that the iterator can be GCed, when it is only referenced here.
    */
   private final ConcurrentLinkedQueue<Reference<LevelDBIterator<?>>> iteratorTracker;
+  private final ReferenceQueue<LevelDBIterator<?>> referenceQueue;
+  private volatile boolean stopped = false;
+  private final Thread cleaningThread;
 
   public LevelDB(File path) throws Exception {
     this(path, new KVStoreSerializer());
@@ -107,6 +112,11 @@ public class LevelDB implements KVStore {
     typeAliases = new ConcurrentHashMap<>(aliases);
 
     iteratorTracker = new ConcurrentLinkedQueue<>();
+
+    referenceQueue = new ReferenceQueue<>();
+    cleaningThread = new Thread(this::keepCleaning);
+    cleaningThread.setDaemon(true);
+    cleaningThread.start();
   }
 
   @Override
@@ -251,7 +261,7 @@ public class LevelDB implements KVStore {
       public Iterator<T> iterator() {
         try {
           LevelDBIterator<T> it = new LevelDBIterator<>(type, LevelDB.this, this);
-          iteratorTracker.add(new WeakReference<>(it));
+          iteratorTracker.add(new LevelDBIteratorWeakReference(it, referenceQueue));
           return it;
         } catch (Exception e) {
           throw Throwables.propagate(e);
@@ -305,6 +315,7 @@ public class LevelDB implements KVStore {
       }
 
       try {
+        stopCleanupThread();
         if (iteratorTracker != null) {
           for (Reference<LevelDBIterator<?>> ref: iteratorTracker) {
             LevelDBIterator<?> it = ref.get();
@@ -318,20 +329,6 @@ public class LevelDB implements KVStore {
         throw ioe;
       } catch (Exception e) {
         throw new IOException(e.getMessage(), e);
-      }
-    }
-  }
-
-  /**
-   * Closes the given iterator if the DB is still open. Trying to close a JNI LevelDB handle
-   * with a closed DB can cause JVM crashes, so this ensures that situation does not happen.
-   */
-  void closeIterator(LevelDBIterator<?> it) throws IOException {
-    notifyIteratorClosed(it);
-    synchronized (this._db) {
-      DB _db = this._db.get();
-      if (_db != null) {
-        it.close();
       }
     }
   }
@@ -385,6 +382,31 @@ public class LevelDB implements KVStore {
     return alias;
   }
 
+  private void stopCleanupThread() throws InterruptedException {
+    if (cleaningThread != null) {
+      stopped = true;
+      cleaningThread.interrupt();
+      cleaningThread.join();
+    }
+  }
+
+  private void keepCleaning() {
+    if (!stopped) {
+      try {
+        Optional<? extends Reference<? extends LevelDBIterator<?>>> removed =
+          Optional.ofNullable(referenceQueue.remove(1000L));
+        if (removed.isPresent()) {
+          LevelDBIteratorWeakReference reference =
+                  (LevelDBIteratorWeakReference) removed.get();
+          iteratorTracker.remove(reference);
+          reference.close();
+        }
+      } catch (InterruptedException ignored) {
+        // do nothing
+      }
+    }
+  }
+
   /** Needs to be public for Jackson. */
   public static class TypeAliases {
 
@@ -424,4 +446,23 @@ public class LevelDB implements KVStore {
 
   }
 
+  private static class LevelDBIteratorWeakReference extends WeakReference<LevelDBIterator<?>> {
+
+    private final DBIterator it;
+
+    LevelDBIteratorWeakReference(
+        LevelDBIterator<?> referent,
+        ReferenceQueue<? super LevelDBIterator<?>> q) {
+      super(referent, q);
+      it = referent.internalIterator();
+    }
+
+    public void close() {
+      try {
+        it.close();
+      } catch (IOException ioe) {
+        // ignored
+      }
+    }
+  }
 }
