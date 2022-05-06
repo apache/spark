@@ -101,8 +101,7 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
             .asInstanceOf[HiveTableRelation]
 
           val properties = relation.tableMeta.ignoredProperties
-          // Since HIVE-6727, Hive fixes table-level stats for external tables are incorrect.
-          assert(properties("totalSize").toLong == 6)
+          assert(properties.get("totalSize").isEmpty)
           assert(properties.get("rawDataSize").isEmpty)
 
           val sizeInBytes = relation.stats.sizeInBytes

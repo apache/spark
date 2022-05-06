@@ -27,32 +27,32 @@ object MathUtils {
   def addExact(a: Int, b: Int): Int = withOverflow(Math.addExact(a, b))
 
   def addExact(a: Int, b: Int, errorContext: String): Int =
-    withOverflow(Math.addExact(a, b), errorContext = errorContext)
+    withOverflow(Math.addExact(a, b), hint = "try_add", errorContext = errorContext)
 
   def addExact(a: Long, b: Long): Long = withOverflow(Math.addExact(a, b))
 
   def addExact(a: Long, b: Long, errorContext: String): Long =
-    withOverflow(Math.addExact(a, b), errorContext = errorContext)
+    withOverflow(Math.addExact(a, b), hint = "try_add", errorContext = errorContext)
 
   def subtractExact(a: Int, b: Int): Int = withOverflow(Math.subtractExact(a, b))
 
   def subtractExact(a: Int, b: Int, errorContext: String): Int =
-    withOverflow(Math.subtractExact(a, b), errorContext = errorContext)
+    withOverflow(Math.subtractExact(a, b), hint = "try_subtract", errorContext = errorContext)
 
   def subtractExact(a: Long, b: Long): Long = withOverflow(Math.subtractExact(a, b))
 
   def subtractExact(a: Long, b: Long, errorContext: String): Long =
-    withOverflow(Math.subtractExact(a, b), errorContext = errorContext)
+    withOverflow(Math.subtractExact(a, b), hint = "try_subtract", errorContext = errorContext)
 
   def multiplyExact(a: Int, b: Int): Int = withOverflow(Math.multiplyExact(a, b))
 
   def multiplyExact(a: Int, b: Int, errorContext: String): Int =
-    withOverflow(Math.multiplyExact(a, b), errorContext = errorContext)
+    withOverflow(Math.multiplyExact(a, b), hint = "try_multiply", errorContext = errorContext)
 
   def multiplyExact(a: Long, b: Long): Long = withOverflow(Math.multiplyExact(a, b))
 
   def multiplyExact(a: Long, b: Long, errorContext: String): Long =
-    withOverflow(Math.multiplyExact(a, b), errorContext = errorContext)
+    withOverflow(Math.multiplyExact(a, b), hint = "try_multiply", errorContext = errorContext)
 
   def negateExact(a: Int): Int = withOverflow(Math.negateExact(a))
 

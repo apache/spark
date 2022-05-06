@@ -478,6 +478,22 @@ object DenseMatrix {
   private[ml] def unapply(dm: DenseMatrix): Option[(Int, Int, Array[Double], Boolean)] =
     Some((dm.numRows, dm.numCols, dm.values, dm.isTransposed))
 
+  private[ml] def fromVectors(vectors: Seq[Vector]): DenseMatrix = {
+    val numRows = vectors.length
+    val numCols = vectors.head.size
+    val values = Array.ofDim[Double](numRows * numCols)
+    var offset = 0
+    var j = 0
+    while (j < numRows) {
+      vectors(j).foreachNonZero { (i, v) =>
+        values(offset + i) = v
+      }
+      offset += numCols
+      j += 1
+    }
+    new DenseMatrix(numRows, numCols, values, true)
+  }
+
   /**
    * Generate a `DenseMatrix` consisting of zeros.
    * @param numRows number of rows of the matrix
@@ -833,6 +849,30 @@ object SparseMatrix {
        sm: SparseMatrix): Option[(Int, Int, Array[Int], Array[Int], Array[Double], Boolean)] =
     Some((sm.numRows, sm.numCols, sm.colPtrs, sm.rowIndices, sm.values, sm.isTransposed))
 
+  private[ml] def fromVectors(vectors: Seq[Vector]): SparseMatrix = {
+    val numRows = vectors.length
+    val numCols = vectors.head.size
+    val colIndices = MArrayBuilder.make[Int]
+    val values = MArrayBuilder.make[Double]
+    val rowPtrs = MArrayBuilder.make[Int]
+    var rowPtr = 0
+    rowPtrs += 0
+    var j = 0
+    while (j < numRows) {
+      var nnz = 0
+      vectors(j).foreachNonZero { (i, v) =>
+        colIndices += i
+        values += v
+        nnz += 1
+      }
+      rowPtr += nnz
+      rowPtrs += rowPtr
+      j += 1
+    }
+    new SparseMatrix(numRows, numCols, rowPtrs.result(),
+      colIndices.result(), values.result(), true)
+  }
+
   /**
    * Generate a `SparseMatrix` from Coordinate List (COO) format. Input must be an array of
    * (i, j, value) tuples. Entries that have duplicate values of i and j are
@@ -1014,37 +1054,9 @@ object Matrices {
     val nnz = vectors.iterator.map(_.numNonzeros).sum
     val sparseSize = Matrices.getSparseSize(nnz, numRows + 1)
     if (denseSize < sparseSize) {
-      val values = Array.ofDim[Double](numRows * numCols)
-      var offset = 0
-      var j = 0
-      while (j < numRows) {
-        vectors(j).foreachNonZero { (i, v) =>
-          values(offset + i) = v
-        }
-        offset += numCols
-        j += 1
-      }
-      new DenseMatrix(numRows, numCols, values, true)
+      DenseMatrix.fromVectors(vectors)
     } else {
-      val colIndices = MArrayBuilder.make[Int]
-      val values = MArrayBuilder.make[Double]
-      val rowPtrs = MArrayBuilder.make[Int]
-      var rowPtr = 0
-      rowPtrs += 0
-      var j = 0
-      while (j < numRows) {
-        var nnz = 0
-        vectors(j).foreachNonZero { (i, v) =>
-          colIndices += i
-          values += v
-          nnz += 1
-        }
-        rowPtr += nnz
-        rowPtrs += rowPtr
-        j += 1
-      }
-      new SparseMatrix(numRows, numCols, rowPtrs.result(),
-        colIndices.result(), values.result(), true)
+      SparseMatrix.fromVectors(vectors)
     }
   }
 
