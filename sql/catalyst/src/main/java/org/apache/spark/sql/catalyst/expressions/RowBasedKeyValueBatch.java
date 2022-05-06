@@ -115,6 +115,7 @@ public abstract class RowBasedKeyValueBatch extends MemoryConsumer implements Cl
 
   public final int numRows() { return numRows; }
 
+  @Override
   public final void close() {
     if (page != null) {
       freePage(page);
@@ -169,6 +170,7 @@ public abstract class RowBasedKeyValueBatch extends MemoryConsumer implements Cl
    * space for new consumers. For RowBasedKeyValueBatch, we do not actually spill and return 0.
    * We should not throw OutOfMemory exception here because other associated consumers might spill
    */
+  @Override
   public final long spill(long size, MemoryConsumer trigger) throws IOException {
     logger.warn("Calling spill() on RowBasedKeyValueBatch. Will not spill but return 0.");
     return 0;

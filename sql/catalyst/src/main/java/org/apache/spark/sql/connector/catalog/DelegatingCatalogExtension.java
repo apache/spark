@@ -39,6 +39,7 @@ public abstract class DelegatingCatalogExtension implements CatalogExtension {
 
   private CatalogPlugin delegate;
 
+  @Override
   public final void setDelegateCatalog(CatalogPlugin delegate) {
     this.delegate = delegate;
   }

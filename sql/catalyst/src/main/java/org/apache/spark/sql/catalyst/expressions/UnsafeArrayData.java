@@ -98,6 +98,7 @@ public final class UnsafeArrayData extends ArrayData implements Externalizable, 
     assert ordinal < numElements : "ordinal (" + ordinal + ") should < " + numElements;
   }
 
+  @Override
   public Object[] array() {
     throw new UnsupportedOperationException("Not supported on UnsafeArrayData.");
   }
