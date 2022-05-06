@@ -96,7 +96,6 @@ abstract class Optimizer(catalogManager: CatalogManager)
         CollapseWindow,
         CombineFilters,
         EliminateLimits,
-        RewriteOffsets,
         CombineUnions,
         // Constant folding and strength reduction
         OptimizeRepartition,
@@ -673,7 +672,7 @@ object RemoveNoopUnion extends Rule[LogicalPlan] {
 }
 
 /**
- * Pushes down [[LocalLimit]] beneath UNION ALL and joins.
+ * Pushes down [[LocalLimit]] beneath UNION ALL, OFFSET and joins.
  */
 object LimitPushDown extends Rule[LogicalPlan] {
 
@@ -750,6 +749,11 @@ object LimitPushDown extends Rule[LogicalPlan] {
       Limit(le, Project(a.aggregateExpressions, LocalLimit(le, a.child)))
     case Limit(le @ IntegerLiteral(1), p @ Project(_, a: Aggregate)) if a.groupOnly =>
       Limit(le, p.copy(child = Project(a.aggregateExpressions, LocalLimit(le, a.child))))
+    // Merge offset value and limit value into LocalLimit and pushes down LocalLimit through Offset.
+    case LocalLimit(le, Offset(oe @ IntegerLiteral(offset), grandChild)) if offset > 0 =>
+      Offset(oe, LocalLimit(Add(le, oe), grandChild))
+    // Eliminate Offset if offset value equals 0.
+    case Offset(IntegerLiteral(0), child) => child
   }
 }
 
@@ -1867,23 +1871,6 @@ object EliminateLimits extends Rule[LogicalPlan] {
       LocalLimit(Literal(Least(Seq(ne, le)).eval().asInstanceOf[Int]), grandChild)
     case Limit(le, Limit(ne, grandChild)) =>
       Limit(Literal(Least(Seq(ne, le)).eval().asInstanceOf[Int]), grandChild)
-  }
-}
-
-/**
- * Rewrite [[Offset]] by eliminate [[Offset]] or merge offset value and limit value into
- * [[LocalLimit]]. See [[Limit]] for more information about the difference between
- * [[LocalLimit]] and [[GlobalLimit]].
- */
-object RewriteOffsets extends Rule[LogicalPlan] {
-  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-    case localLimit @ LocalLimit(le, Offset(oe, grandChild)) =>
-      val offset = oe.eval().asInstanceOf[Int]
-      if (offset == 0) {
-        localLimit.withNewChildren(Seq(grandChild))
-      } else {
-        Offset(oe, LocalLimit(Add(le, oe), grandChild))
-      }
   }
 }
 

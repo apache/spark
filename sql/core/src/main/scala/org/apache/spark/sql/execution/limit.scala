@@ -78,10 +78,14 @@ case class CollectLimitExec(limit: Int = -1, child: SparkPlan, offset: Int = 0) 
       val singlePartitionRDD = if (childRDD.getNumPartitions == 1) {
         childRDD
       } else {
-        val locallyLimited = if (offset > 0) {
-          childRDD.mapPartitionsInternal(_.take(limit + offset))
+        val locallyLimited = if (limit >= 0) {
+          if (offset > 0) {
+            childRDD.mapPartitionsInternal(_.take(limit + offset))
+          } else {
+            childRDD.mapPartitionsInternal(_.take(limit))
+          }
         } else {
-          childRDD.mapPartitionsInternal(_.take(limit))
+          childRDD
         }
         new ShuffledRowRDD(
           ShuffleExchangeExec.prepareShuffleDependency(
@@ -92,10 +96,14 @@ case class CollectLimitExec(limit: Int = -1, child: SparkPlan, offset: Int = 0) 
             writeMetrics),
           readMetrics)
       }
-      if (offset > 0) {
-        singlePartitionRDD.mapPartitionsInternal(_.drop(offset).take(limit))
+      if (limit >= 0) {
+        if (offset > 0) {
+          singlePartitionRDD.mapPartitionsInternal(_.drop(offset).take(limit))
+        } else {
+          singlePartitionRDD.mapPartitionsInternal(_.take(limit))
+        }
       } else {
-        singlePartitionRDD.mapPartitionsInternal(_.take(limit))
+        singlePartitionRDD.mapPartitionsInternal(_.drop(offset))
       }
     }
   }
@@ -223,18 +231,14 @@ case class GlobalLimitExec(limit: Int, child: SparkPlan) extends BaseLimitExec {
  */
 case class GlobalLimitAndOffsetExec(
     limit: Int = -1,
-    offset: Int = 0,
+    offset: Int,
     child: SparkPlan) extends BaseLimitExec {
-  assert(limit >= 0 || (limit == -1 && offset > 0))
+  assert(offset > 0)
 
   override def requiredChildDistribution: List[Distribution] = AllTuples :: Nil
 
   override def doExecute(): RDD[InternalRow] = if (limit >= 0) {
-    if (offset > 0) {
-      child.execute().mapPartitions(iter => iter.take(limit + offset).drop(offset))
-    } else {
-      child.execute().mapPartitions(iter => iter.take(limit))
-    }
+    child.execute().mapPartitions(iter => iter.take(limit + offset).drop(offset))
   } else {
     child.execute().mapPartitions(iter => iter.drop(offset))
   }
@@ -242,34 +246,23 @@ case class GlobalLimitAndOffsetExec(
   private lazy val skipTerm = BaseLimitExec.newLimitCountTerm()
 
   override def doConsume(ctx: CodegenContext, input: Seq[ExprCode], row: ExprCode): String = {
+    ctx.addMutableState(
+      CodeGenerator.JAVA_INT, skipTerm, forceInline = true, useFreshName = false)
     if (limit >= 0) {
       // The counter name is already obtained by the upstream operators via `limitNotReachedChecks`.
       // Here we have to inline it to not change its name. This is fine as we won't have many limit
       // operators in one query.
       ctx.addMutableState(
         CodeGenerator.JAVA_INT, countTerm, forceInline = true, useFreshName = false)
-      if (offset > 0) {
-        ctx.addMutableState(
-          CodeGenerator.JAVA_INT, skipTerm, forceInline = true, useFreshName = false)
-        s"""
-           | if ($skipTerm < $offset) {
-           |   $skipTerm += 1;
-           | } else if ($countTerm < $limit) {
-           |   $countTerm += 1;
-           |   ${consume(ctx, input)}
-           | }
+      s"""
+         | if ($skipTerm < $offset) {
+         |   $skipTerm += 1;
+         | } else if ($countTerm < $limit) {
+         |   $countTerm += 1;
+         |   ${consume(ctx, input)}
+         | }
          """.stripMargin
-      } else {
-        s"""
-           | if ($countTerm < $limit) {
-           |   $countTerm += 1;
-           |   ${consume(ctx, input)}
-           | }
-         """.stripMargin
-      }
     } else {
-      ctx.addMutableState(
-        CodeGenerator.JAVA_INT, skipTerm, forceInline = true, useFreshName = false)
       s"""
          | if ($skipTerm < $offset) {
          |   $skipTerm += 1;
@@ -295,7 +288,8 @@ case class TakeOrderedAndProjectExec(
     limit: Int,
     sortOrder: Seq[SortOrder],
     projectList: Seq[NamedExpression],
-    child: SparkPlan, offset: Int = 0) extends UnaryExecNode {
+    child: SparkPlan,
+    offset: Int = 0) extends UnaryExecNode {
 
   override def output: Seq[Attribute] = {
     projectList.map(_.toAttribute)
