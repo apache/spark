@@ -48,7 +48,14 @@ case class If(predicate: Expression, trueValue: Expression, falseValue: Expressi
   override def second: Expression = trueValue
   override def third: Expression = falseValue
   override def nullable: Boolean = trueValue.nullable || falseValue.nullable
-  override def commonExpressions: Seq[Seq[Expression]] = Seq(Seq(trueValue, falseValue))
+  /**
+   * Common subexpressions will always be evaluated at the beginning, but the true and
+   * false expressions in `If` may not get accessed, according to the predicate expression.
+   * We should only return the predicate expression.
+   */
+  override def alwaysEvaluatedInputs: Seq[Expression] = predicate :: Nil
+
+  override def branchGroups: Seq[Seq[Expression]] = Seq(Seq(trueValue, falseValue))
 
   final override val nodePatterns : Seq[TreePattern] = Seq(IF)
 
@@ -180,7 +187,13 @@ case class CaseWhen(
     }
   }
 
-  override def commonExpressions: Seq[Seq[Expression]] = {
+  /**
+   * Like `If`, the children of `CaseWhen` only get accessed in a certain condition.
+   * We should only return the first condition expression as it will always get accessed.
+   */
+  override def alwaysEvaluatedInputs: Seq[Expression] = children.head :: Nil
+
+  override def branchGroups: Seq[Seq[Expression]] = {
     // We look at subexpressions in conditions and values of `CaseWhen` separately. It is
     // because a subexpression in conditions will be run no matter which condition is matched
     // if it is shared among conditions, but it doesn't need to be shared in values. Similarly,

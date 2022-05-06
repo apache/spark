@@ -130,7 +130,7 @@ class EquivalentExpressions {
   //   2. ConditionalExpression: use it's specified expression
   private def childrenToRecurse(expr: Expression): Seq[Expression] = expr match {
     case _: CodegenFallback => Nil
-    case c: ConditionalExpression => c.head :: Nil
+    case c: ConditionalExpression => c.alwaysEvaluatedInputs
     case other => other.children
   }
 
@@ -138,7 +138,7 @@ class EquivalentExpressions {
   // recursively add the common expressions shared between all of its children.
   private def commonChildrenToRecurse(expr: Expression): Seq[Seq[Expression]] = expr match {
     case _: CodegenFallback => Nil
-    case c: ConditionalExpression => c.commonExpressions
+    case c: ConditionalExpression => c.branchGroups
     case _ => Nil
   }
 

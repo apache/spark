@@ -67,7 +67,12 @@ case class Coalesce(children: Seq[Expression])
     }
   }
 
-  override def commonExpressions: Seq[Seq[Expression]] = if (children.length > 1) {
+  /**
+   * We should only return the first child, because others may not get accessed.
+   */
+  override def alwaysEvaluatedInputs: Seq[Expression] = children.head :: Nil
+
+  override def branchGroups: Seq[Seq[Expression]] = if (children.length > 1) {
     // If there is only one child, the first child is already covered by
     // `head` and we should exclude it here.
     Seq(children)
@@ -277,7 +282,13 @@ case class NaNvl(left: Expression, right: Expression)
   override def inputTypes: Seq[AbstractDataType] =
     Seq(TypeCollection(DoubleType, FloatType), TypeCollection(DoubleType, FloatType))
 
-  override def commonExpressions: Seq[Seq[Expression]] = Seq(children)
+  /**
+   * We can only guarantee the left child can be always accessed. If we hit the left child,
+   * the right child will not be accessed.
+   */
+  override def alwaysEvaluatedInputs: Seq[Expression] = left :: Nil
+
+  override def branchGroups: Seq[Seq[Expression]] = Seq(children)
 
   override def eval(input: InternalRow): Any = {
     val value = left.eval(input)
