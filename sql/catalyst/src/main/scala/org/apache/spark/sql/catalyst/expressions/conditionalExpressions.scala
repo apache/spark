@@ -48,7 +48,6 @@ case class If(predicate: Expression, trueValue: Expression, falseValue: Expressi
   override def second: Expression = trueValue
   override def third: Expression = falseValue
   override def nullable: Boolean = trueValue.nullable || falseValue.nullable
-  override def foldable: Boolean = children.forall(_.foldable)
 
   /**
    * Only the condition expression will always be evaluated.
@@ -165,8 +164,6 @@ case class CaseWhen(
     // Result is nullable if any of the branch is nullable, or if the else value is nullable
     branches.exists(_._2.nullable) || elseValue.map(_.nullable).getOrElse(true)
   }
-
-  override def foldable: Boolean = children.forall(_.foldable)
 
   override def checkInputDataTypes(): TypeCheckResult = {
     if (TypeCoercion.haveSameType(inputTypesForMerging)) {
