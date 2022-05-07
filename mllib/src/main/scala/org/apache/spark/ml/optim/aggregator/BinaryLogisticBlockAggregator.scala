@@ -71,6 +71,8 @@ private[ml] class BinaryLogisticBlockAggregator(
     Double.NaN
   }
 
+  @transient private var buffer: Array[Double] = _
+
   /**
    * Add a new training instance block to this BinaryLogisticBlockAggregator, and update the loss
    * and gradient of the objective function.
@@ -88,13 +90,19 @@ private[ml] class BinaryLogisticBlockAggregator(
     if (block.weightIter.forall(_ == 0)) return this
     val size = block.size
 
+    if (buffer == null || buffer.length < size) {
+      buffer = Array.ofDim[Double](size)
+    }
+
     // arr here represents margins
-    val arr = Array.ofDim[Double](size)
+    val arr = buffer
     if (fitIntercept) {
       val offset = if (fitWithMean) marginOffset else coefficientsArray.last
-      java.util.Arrays.fill(arr, offset)
+      java.util.Arrays.fill(arr, 0, size, offset)
+      BLAS.gemv(1.0, block.matrix, coefficientsArray, 1.0, arr)
+    } else {
+      BLAS.gemv(1.0, block.matrix, coefficientsArray, 0.0, arr)
     }
-    BLAS.gemv(1.0, block.matrix, coefficientsArray, 1.0, arr)
 
     // in-place convert margins to multiplier
     // then, arr represents multiplier
