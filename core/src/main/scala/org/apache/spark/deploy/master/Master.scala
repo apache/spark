@@ -737,9 +737,11 @@ private[deploy] class Master(
     // first.
     for (app <- waitingApps) {
       // TODO: refactor the code here, prepare schedule information inside [[ApplicationInfo]]
+      logInfo(s"Start scheduling for app ${app.id} with rpIds: ${app.allResourceProfileIds()}")
       for (rpId <- app.allResourceProfileIds()) {
         val resourceProfile = app.getResourceProfileById(rpId)
         val coresPerExecutor = resourceProfile.getExecutorCores.getOrElse(1)
+        logInfo(s"Scheduling for rp: $rpId => $resourceProfile")
 
         // If the cores left is less than the coresPerExecutor,the cores left will not be allocated
         if (app.coresLeft >= coresPerExecutor) {
