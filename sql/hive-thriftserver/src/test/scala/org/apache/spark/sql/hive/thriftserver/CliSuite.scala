@@ -21,6 +21,7 @@ import java.io._
 import java.nio.charset.StandardCharsets
 import java.sql.Timestamp
 import java.util.Date
+import java.util.concurrent.CountDownLatch
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
@@ -679,5 +680,24 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
     }
     sessionState.close()
     SparkSQLEnv.stop()
+  }
+
+  test("SPARK-39068: support in-memory catalog and running concurrently") {
+    val extraConf = Seq("-c", s"${StaticSQLConf.CATALOG_IMPLEMENTATION.key}=in-memory")
+    val cd = new CountDownLatch(2)
+    def t: Thread = new Thread {
+      override def run(): Unit = {
+        // catalog is in-memory and isolated, so that we can create table with duplicated
+        // names.
+        runCliWithin(1.minute, extraArgs = extraConf)(
+          "create table src(key int) using hive;" ->
+            "Hive support is required to CREATE Hive TABLE",
+          "create table src(key int) using parquet;" -> "")
+        cd.countDown()
+      }
+    }
+    t.start()
+    t.start()
+    cd.await()
   }
 }

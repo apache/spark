@@ -243,6 +243,7 @@ public class TransportContext implements Closeable {
     return registeredConnections;
   }
 
+  @Override
   public void close() {
     if (chunkFetchWorkers != null) {
       chunkFetchWorkers.shutdownGracefully();

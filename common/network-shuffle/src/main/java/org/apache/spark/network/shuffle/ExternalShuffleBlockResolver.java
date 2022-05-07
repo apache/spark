@@ -114,6 +114,7 @@ public class ExternalShuffleBlockResolver {
     String indexCacheSize = conf.get("spark.shuffle.service.index.cache.size", "100m");
     CacheLoader<String, ShuffleIndexInformation> indexCacheLoader =
         new CacheLoader<String, ShuffleIndexInformation>() {
+          @Override
           public ShuffleIndexInformation load(String filePath) throws IOException {
             return new ShuffleIndexInformation(filePath);
           }
