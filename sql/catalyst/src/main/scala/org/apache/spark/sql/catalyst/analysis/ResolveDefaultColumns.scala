@@ -232,6 +232,8 @@ case class ResolveDefaultColumns(
         }.getOrElse(None)
       case _ => Some(action)
     }
+=======
+>>>>>>> master
   }
 
   /**

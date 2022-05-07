@@ -3159,7 +3159,7 @@ class Analyzer(override val catalogManager: CatalogManager)
       // We only extract Window Expressions after all expressions of the Project
       // have been resolved.
       case p @ Project(projectList, child)
-        if hasWindowFunction(projectList) && !p.expressions.exists(!_.resolved) =>
+        if hasWindowFunction(projectList) && p.expressions.forall(_.resolved) =>
         val (windowExpressions, regularExpressions) = extract(projectList.toIndexedSeq)
         // We add a project to get all needed expressions for window expressions from the child
         // of the original Project operator.
