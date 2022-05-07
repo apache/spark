@@ -2250,20 +2250,21 @@ class TaskSetManagerSuite
   }
 
   test("SPARK-32170: test InefficientTask.maybeRecompute") {
-    sc = new SparkContext("local", "test")
     // set the speculation multiplier to be 0, so speculative tasks are launched immediately
-    sc.conf.set(config.SPECULATION_MULTIPLIER.key, "0.0")
-    sc.conf.set(config.SPECULATION_ENABLED, true)
-    sc.conf.set(config.SPECULATION_TASK_PROGRESS_MULTIPLIER.key, "0.5")
-    sc.conf.set(config.SPECULATION_TASK_DURATION_FACTOR.key, "2.0")
-    sc.conf.set(config.SPECULATION_TASK_STATS_CACHE_DURATION.key, "1s")
+    val conf = new SparkConf()
+      .set(config.SPECULATION_MULTIPLIER.key, "0.0")
+      .set(config.SPECULATION_ENABLED, true)
+      .set(config.SPECULATION_TASK_PROGRESS_MULTIPLIER.key, "0.5")
+      .set(config.SPECULATION_TASK_DURATION_FACTOR.key, "2.0")
+      .set(config.SPECULATION_TASK_STATS_CACHE_DURATION.key, "1s")
+    sc = new SparkContext("local", "test", conf)
     sched = new FakeTaskScheduler(sc, ("exec1", "host1"), ("exec2", "host2"))
     val taskSet = FakeTask.createTaskSet(4)
     val clock = new ManualClock()
     val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES, clock = clock)
     val stage = new StageInfo(0, 0, "stage", 4, Nil, Nil, null, null,
       resourceProfileId = ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
-    val listener = sc.statusTracker.getAppStatusStore.listener.get
+    val listener = sc.statusTracker.getAppStatusListener.get
     stage.submissionTime = Some(SUBMISSION_TIME)
     listener.onStageSubmitted(SparkListenerStageSubmitted(stage, new Properties()))
     val accumUpdatesByTask: Array[Seq[AccumulatorV2[_, _]]] = taskSet.tasks.map { task =>
@@ -2292,7 +2293,6 @@ class TaskSetManagerSuite
     val inefficientTask = manager.inefficientTaskCalculator
     inefficientTask.maybeRecompute(clock.getTimeMillis())
     assert(inefficientTask.taskProgressThreshold <= 0.0)
-    assert(inefficientTask.taskData == null)
     assert(!inefficientTask.updateSealed)
     clock.advance(RUNTIME)
 
@@ -2325,9 +2325,7 @@ class TaskSetManagerSuite
 
     inefficientTask.maybeRecompute(clock.getTimeMillis())
     val curTaskProgressThreshold = inefficientTask.taskProgressThreshold
-    val curTaskData = inefficientTask.taskData
     assert(curTaskProgressThreshold > 0.0)
-    assert(curTaskData != null)
     assert(!inefficientTask.updateSealed)
 
     // complete the remaining 1 task and leave 1 task in running
@@ -2361,25 +2359,24 @@ class TaskSetManagerSuite
 
     inefficientTask.maybeRecompute(clock.getTimeMillis())
     assert(curTaskProgressThreshold == inefficientTask.taskProgressThreshold)
-    assert(curTaskData == inefficientTask.taskData)
     assert(!inefficientTask.updateSealed)
 
     clock.advance(RUNTIME)
     inefficientTask.maybeRecompute(clock.getTimeMillis())
     assert(curTaskProgressThreshold < inefficientTask.taskProgressThreshold)
-    assert(curTaskData != inefficientTask.taskData)
-    assert(!inefficientTask.updateSealed)
+    assert(inefficientTask.updateSealed)
   }
 
   test("SPARK-32170: test speculation for TaskSet with single task") {
-    sc = new SparkContext("local", "test")
     // set the speculation multiplier to be 0, so speculative tasks are launched immediately
-    sc.conf.set(config.SPECULATION_MULTIPLIER.key, "0.0")
-    sc.conf.set(config.SPECULATION_ENABLED, true)
-    sc.conf.set(config.SPECULATION_TASK_PROGRESS_MULTIPLIER.key, "0.5")
-    sc.conf.set(config.SPECULATION_SINGLE_TASK_DURATION_THRESHOLD.key, "15")
-    Seq(0, 15).foreach { fallback_ms =>
-      sc.conf.set(config.SPECULATION_TASK_DURATION_THRESHOLD.key, fallback_ms.toString)
+    val conf = new SparkConf()
+      .set(config.SPECULATION_MULTIPLIER.key, "0.0")
+      .set(config.SPECULATION_ENABLED, true)
+      .set(config.SPECULATION_TASK_PROGRESS_MULTIPLIER.key, "0.5")
+      .set(config.SPECULATION_SINGLE_TASK_DURATION_THRESHOLD.key, "15")
+    sc = new SparkContext("local", "test", conf)
+    Seq(0, 15).foreach { duration =>
+      sc.conf.set(config.SPECULATION_TASK_DURATION_THRESHOLD.key, duration.toString)
       sched = new FakeTaskScheduler(sc, ("exec1", "host1"), ("exec2", "host2"))
       val numTasks = 1
       val taskSet = FakeTask.createTaskSet(numTasks)
@@ -2387,7 +2384,7 @@ class TaskSetManagerSuite
       val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES, clock = clock)
       val stage = new StageInfo(0, 0, "stage", numTasks, Nil, Nil, null, null,
         resourceProfileId = ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
-      val listener = sc.statusTracker.getAppStatusStore.listener.get
+      val listener = sc.statusTracker.getAppStatusListener.get
       stage.submissionTime = Some(SUBMISSION_TIME)
       listener.onStageSubmitted(SparkListenerStageSubmitted(stage, new Properties()))
       // offer resources for the task to start
@@ -2411,7 +2408,7 @@ class TaskSetManagerSuite
       clock.advance(RUNTIME)
       // No task is completed.
       // runtimeMs(20s) > 15s(1 * 15s)
-      if (fallback_ms <= 0) {
+      if (duration <= 0) {
         assert(!manager.checkSpeculatableTasks(0))
         assert(sched.speculativeTasks.toSet === Set.empty)
       } else {
@@ -2422,12 +2419,13 @@ class TaskSetManagerSuite
   }
 
   test("SPARK-32170: test SPECULATION_MIN_THRESHOLD for speculating inefficient tasks") {
-    sc = new SparkContext("local", "test")
     // set the speculation multiplier to be 0, so speculative tasks are launched immediately
-    sc.conf.set(config.SPECULATION_MULTIPLIER.key, "0.0")
-    sc.conf.set(config.SPECULATION_ENABLED, true)
-    sc.conf.set(config.SPECULATION_TASK_PROGRESS_MULTIPLIER.key, "0.5")
-    sc.conf.set(config.SPECULATION_TASK_DURATION_FACTOR.key, Int.MaxValue.toString)
+    val conf = new SparkConf()
+      .set(config.SPECULATION_MULTIPLIER.key, "0.0")
+      .set(config.SPECULATION_ENABLED, true)
+      .set(config.SPECULATION_TASK_PROGRESS_MULTIPLIER.key, "0.5")
+      .set(config.SPECULATION_TASK_DURATION_FACTOR.key, Int.MaxValue.toString)
+    sc = new SparkContext("local", "test", conf)
     Seq(0, 10000, 50000).foreach { minDuration =>
       sched = new FakeTaskScheduler(sc, ("exec1", "host1"), ("exec2", "host2"))
       val taskSet = FakeTask.createTaskSet(4)
@@ -2435,7 +2433,7 @@ class TaskSetManagerSuite
       val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES, clock = clock)
       val stage = new StageInfo(0, 0, "stage", 4, Nil, Nil, null, null,
         resourceProfileId = ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
-      val listener = sc.statusTracker.getAppStatusStore.listener.get
+      val listener = sc.statusTracker.getAppStatusListener.get
       stage.submissionTime = Some(SUBMISSION_TIME)
       listener.onStageSubmitted(SparkListenerStageSubmitted(stage, new Properties()))
       val accumUpdatesByTask: Array[Seq[AccumulatorV2[_, _]]] = taskSet.tasks.map { task =>
@@ -2506,11 +2504,12 @@ class TaskSetManagerSuite
 
   test("SPARK-32170: test SPECULATION_TASK_PROGRESS_MULTIPLIER for speculating " +
     "inefficient tasks") {
-    sc = new SparkContext("local", "test")
     // set the speculation multiplier to be 0, so speculative tasks are launched immediately
-    sc.conf.set(config.SPECULATION_MULTIPLIER.key, "0.0")
-    sc.conf.set(config.SPECULATION_ENABLED, true)
-    sc.conf.set(config.SPECULATION_TASK_DURATION_FACTOR.key, Int.MaxValue.toString)
+    val conf = new SparkConf()
+      .set(config.SPECULATION_MULTIPLIER.key, "0.0")
+      .set(config.SPECULATION_ENABLED, true)
+      .set(config.SPECULATION_TASK_DURATION_FACTOR.key, Int.MaxValue.toString)
+    sc = new SparkContext("local", "test", conf)
     Seq(0.5, 0.8).foreach { progressMultiplier => {
       sc.conf.set(config.SPECULATION_TASK_PROGRESS_MULTIPLIER.key, progressMultiplier.toString)
       sched = new FakeTaskScheduler(sc, ("exec1", "host1"), ("exec2", "host2"))
@@ -2519,7 +2518,7 @@ class TaskSetManagerSuite
       val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES, clock = clock)
       val stage = new StageInfo(0, 0, "stage", 4, Nil, Nil, null, null,
         resourceProfileId = ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
-      val listener = sc.statusTracker.getAppStatusStore.listener.get
+      val listener = sc.statusTracker.getAppStatusListener.get
       stage.submissionTime = Some(SUBMISSION_TIME)
       listener.onStageSubmitted(SparkListenerStageSubmitted(stage, new Properties()))
       val accumUpdatesByTask: Array[Seq[AccumulatorV2[_, _]]] = taskSet.tasks.map { task =>
@@ -2568,6 +2567,7 @@ class TaskSetManagerSuite
       val taskMetrics = TaskMetrics.empty
       taskMetrics.inputMetrics.incRecordsRead((0.6 * RECORDS_NUM).toLong)
       taskMetrics.shuffleReadMetrics.incRecordsRead((0.6 * RECORDS_NUM).toLong)
+      taskMetrics.setExecutorRunTime(RUNTIME)
       // accum is Array((taskId, stageId, stageAttemptId, accumUpdates))
       val accum = Array((3.toLong, 0, 0, taskMetrics.accumulators().map(AccumulatorSuite.makeInfo)))
       // update the task-4 metrics
@@ -2586,11 +2586,12 @@ class TaskSetManagerSuite
 
   test("SPARK-32170: test SPECULATION_TASK_DURATION_FACTOR for speculating" +
     " tasks") {
-    sc = new SparkContext("local", "test")
     // set the speculation multiplier to be 0, so speculative tasks are launched immediately
-    sc.conf.set(config.SPECULATION_MULTIPLIER.key, "0.0")
-    sc.conf.set(config.SPECULATION_ENABLED, true)
-    sc.conf.set(config.SPECULATION_TASK_PROGRESS_MULTIPLIER.key, "0.5")
+    val conf = new SparkConf()
+      .set(config.SPECULATION_MULTIPLIER.key, "0.0")
+      .set(config.SPECULATION_ENABLED, true)
+      .set(config.SPECULATION_TASK_PROGRESS_MULTIPLIER.key, "0.5")
+    sc = new SparkContext("local", "test", conf)
     Seq(1, 2).foreach { factor => {
       sc.conf.set(config.SPECULATION_TASK_DURATION_FACTOR.key, factor.toString)
       sched = new FakeTaskScheduler(sc, ("exec1", "host1"), ("exec2", "host2"))
@@ -2599,7 +2600,7 @@ class TaskSetManagerSuite
       val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES, clock = clock)
       val stage = new StageInfo(0, 0, "stage", 4, Nil, Nil, null, null,
         resourceProfileId = ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
-      val listener = sc.statusTracker.getAppStatusStore.listener.get
+      val listener = sc.statusTracker.getAppStatusListener.get
       stage.submissionTime = Some(SUBMISSION_TIME)
       listener.onStageSubmitted(SparkListenerStageSubmitted(stage, new Properties()))
       val accumUpdatesByTask: Array[Seq[AccumulatorV2[_, _]]] = taskSet.tasks.map { task =>
@@ -2648,6 +2649,7 @@ class TaskSetManagerSuite
       val taskMetrics = TaskMetrics.empty
       taskMetrics.inputMetrics.incRecordsRead((0.6 * RECORDS_NUM).toLong)
       taskMetrics.shuffleReadMetrics.incRecordsRead((0.6 * RECORDS_NUM).toLong)
+      taskMetrics.setExecutorRunTime(RUNTIME)
       // accum is Array((taskId, stageId, stageAttemptId, accumUpdates))
       val accum = Array((3.toLong, 0, 0, taskMetrics.accumulators().map(AccumulatorSuite.makeInfo)))
       // update the task-4 metrics

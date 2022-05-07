@@ -19,6 +19,7 @@ package org.apache.spark.status
 
 import java.util.Date
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicInteger
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.{ArrayBuffer, HashMap}
@@ -27,7 +28,7 @@ import scala.collection.mutable
 import org.apache.spark._
 import org.apache.spark.executor.{ExecutorMetrics, TaskMetrics}
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.config.CPUS_PER_TASK
+import org.apache.spark.internal.config.{CPUS_PER_TASK, SPECULATION_ENABLED, SPECULATION_INEFFICIENT_ENABLE}
 import org.apache.spark.internal.config.Status._
 import org.apache.spark.resource.ResourceProfile.CPUS
 import org.apache.spark.scheduler._
@@ -66,6 +67,9 @@ private[spark] class AppStatusListener(
    */
   private val liveUpdateMinFlushPeriod = conf.get(LIVE_ENTITY_UPDATE_MIN_FLUSH_PERIOD)
 
+  private val calculateTaskProgressRate = conf.get(SPECULATION_ENABLED) &&
+    conf.get(SPECULATION_INEFFICIENT_ENABLE)
+
   private val maxTasksPerStage = conf.get(MAX_RETAINED_TASKS_PER_STAGE)
   private val maxGraphRootNodes = conf.get(MAX_RETAINED_ROOT_NODES)
 
@@ -76,6 +80,65 @@ private[spark] class AppStatusListener(
   private[spark] val liveExecutors = new HashMap[String, LiveExecutor]()
   private val deadExecutors = new HashMap[String, LiveExecutor]()
   private val liveTasks = new HashMap[Long, LiveTask]()
+  private val liveStageSuccessTaskMetrics = if (calculateTaskProgressRate) {
+    new ConcurrentHashMap[(Int, Int), StageSuccessTaskMetrics]()
+  } else {
+    null
+  }
+
+  def getRunTaskProgressRate(taskId: Long): Double = {
+    liveTasks.get(taskId).map {
+      _.taskProgressRate
+    }.getOrElse(0.0)
+  }
+
+  def getStageSuccessTaskProgress(stageId: Int, stageAttemptId: Int): (Double, Int) = {
+    Option(liveStageSuccessTaskMetrics).map(_.computeIfAbsent((stageId,
+      stageAttemptId), _ => new StageSuccessTaskMetrics)).map(stageSuccessTaskMetrics =>
+      (stageSuccessTaskMetrics.computeAndGetSuccessTaskProgress(),
+        stageSuccessTaskMetrics.getSuccessTaskNum())).getOrElse((0.0, -1))
+  }
+
+  /**
+   * A class to record stage successful tasks' Metrics, which can be used to compute successful
+   * tasks' processing.
+   */
+  private[spark] class StageSuccessTaskMetrics {
+    // Record the total records of inputMetrics and shuffleReadMetrics for a stage
+    // successful tasks, as the inputMetrics and shuffleReadMetrics can not appear in the same
+    // stage at the same time, so we can use the totalRecords(inputMetrics + shuffleReadMetrics)
+    // to evaluate the efficiency of task processing.
+    private var totalRecords = 0L
+    // Record the total runTime of a stage successful tasks.
+    private var totalRunTime = 0L
+    private val successTaskNum = new AtomicInteger(0)
+
+    def updateMetrics(records: Long, runTime: Long): Unit = {
+      successTaskNum.synchronized {
+        totalRecords += records
+        totalRunTime += runTime
+      }
+    }
+
+    def addSuccessTaskNum(): Unit = {
+      successTaskNum.incrementAndGet()
+    }
+
+    def computeAndGetSuccessTaskProgress(): Double = {
+      var progressRate = 0.0
+      if (totalRunTime > 0) {
+        successTaskNum.synchronized {
+          progressRate = totalRecords / (totalRunTime / 1000.0)
+        }
+      }
+      progressRate
+    }
+
+    def getSuccessTaskNum(): Int = {
+      successTaskNum.get()
+    }
+  }
+
   private val liveRDDs = new HashMap[Int, LiveRDD]()
   private val pools = new HashMap[String, SchedulerPool]()
   private val liveResourceProfiles = new HashMap[Int, LiveResourceProfile]()
@@ -644,6 +707,24 @@ private[spark] class AppStatusListener(
     }
   }
 
+  private def updateSuccessTasksMetrics(event: SparkListenerTaskEnd): Unit = {
+    if (calculateTaskProgressRate && event.taskMetrics != null) {
+      val records = event.taskMetrics.inputMetrics.recordsRead +
+        event.taskMetrics.shuffleReadMetrics.recordsRead
+      val runTime = event.taskMetrics.executorRunTime
+      val stageSuccessTaskMetrics = liveStageSuccessTaskMetrics.computeIfAbsent((event.stageId,
+        event.stageAttemptId), _ => new StageSuccessTaskMetrics)
+      stageSuccessTaskMetrics.addSuccessTaskNum()
+      stageSuccessTaskMetrics.updateMetrics(records, runTime)
+    }
+  }
+
+  private def removeSuccessTaskMetrics(stageId: Int, stageAttemptId: Int): Unit = {
+    if (calculateTaskProgressRate) {
+      liveStageSuccessTaskMetrics.remove((stageId, stageAttemptId))
+    }
+  }
+
   override def onTaskEnd(event: SparkListenerTaskEnd): Unit = {
     // TODO: can this really happen?
     if (event.taskInfo == null) {
@@ -657,6 +738,7 @@ private[spark] class AppStatusListener(
 
       val errorMessage = event.reason match {
         case Success =>
+          updateSuccessTasksMetrics(event)
           None
         case k: TaskKilled =>
           Some(k.reason)
@@ -770,6 +852,7 @@ private[spark] class AppStatusListener(
       }
       if (removeStage) {
         liveStages.remove((event.stageId, event.stageAttemptId))
+        removeSuccessTaskMetrics(event.stageId, event.stageAttemptId)
       }
     }
 
@@ -856,6 +939,7 @@ private[spark] class AppStatusListener(
       update(stage, now, last = removeStage)
       if (removeStage) {
         liveStages.remove((event.stageInfo.stageId, event.stageInfo.attemptNumber))
+        removeSuccessTaskMetrics(event.stageInfo.stageId, event.stageInfo.attemptNumber)
       }
       if (stage.status == v1.StageStatus.COMPLETE) {
         appSummary = new AppSummary(appSummary.numCompletedJobs, appSummary.numCompletedStages + 1)
@@ -936,7 +1020,7 @@ private[spark] class AppStatusListener(
     event.accumUpdates.foreach { case (taskId, sid, sAttempt, accumUpdates) =>
       liveTasks.get(taskId).foreach { task =>
         val metrics = TaskMetrics.fromAccumulatorInfos(accumUpdates)
-        val delta = task.updateMetrics(metrics)
+        val delta = task.updateMetrics(metrics, calculateTaskProgressRate)
         maybeUpdate(task, now)
 
         Option(liveStages.get((sid, sAttempt))).foreach { stage =>

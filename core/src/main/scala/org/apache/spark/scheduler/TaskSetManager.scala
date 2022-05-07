@@ -33,8 +33,7 @@ import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.internal.config._
 import org.apache.spark.resource.ResourceInformation
 import org.apache.spark.scheduler.SchedulingMode._
-import org.apache.spark.status.AppStatusStore
-import org.apache.spark.status.api.v1.TaskData
+import org.apache.spark.status.AppStatusListener
 import org.apache.spark.util.{AccumulatorV2, Clock, LongAccumulator, SystemClock, Utils}
 import org.apache.spark.util.collection.MedianHeap
 
@@ -1274,99 +1273,47 @@ private[spark] class TaskSetManager(
    * the tasks which may be speculated by the previous strategy.
    */
   private[scheduler] class InefficientTaskCalculator {
-    var taskData: Map[Long, TaskData] = null
     var taskProgressThreshold = 0.0
     var updateSealed = false
     private var lastComputeMs = -1L
-    private var appStatusStore: AppStatusStore = null
-    private def hasSetAppStatusStore(): Boolean = {
-      if (appStatusStore != null) {
+    private var appStatusListener: AppStatusListener = null
+
+    private def hasSetAppStatusListener(): Boolean = {
+      if (appStatusListener != null) {
         true
       } else {
         val statusTracker = sched.sc.statusTracker
         if (statusTracker != null) {
-          appStatusStore = statusTracker.getAppStatusStore
+          appStatusListener = statusTracker.getAppStatusListener.get
         }
-        appStatusStore != null
+        appStatusListener != null
       }
     }
 
     def maybeRecompute(nowMs: Long): Unit = {
-      try {
-        if (hasSetAppStatusStore && !updateSealed &&
-          (lastComputeMs <= 0 || nowMs > lastComputeMs + speculationTaskStatsCacheInterval)) {
-          val (progressRate, numSuccessTasks): (Double, Int) = computeSuccessTaskProgress()
-          if (progressRate > 0.0) {
-            setTaskData()
-            taskProgressThreshold = progressRate * speculationTaskProgressMultiplier
-            if (numSuccessTasks >= minFinishedForSpeculation) {
-              updateSealed = true
-            }
-            lastComputeMs = nowMs
+      if (hasSetAppStatusListener && !updateSealed &&
+        (lastComputeMs <= 0 || nowMs > lastComputeMs + speculationTaskStatsCacheInterval)) {
+        val (progressRate, numSuccessTasks): (Double, Int) =
+          appStatusListener.getStageSuccessTaskProgress(stageId, stageAttemptId)
+        if (progressRate > 0.0) {
+          taskProgressThreshold = progressRate * speculationTaskProgressMultiplier
+          if (numSuccessTasks >= minFinishedForSpeculation) {
+            updateSealed = true
           }
+          lastComputeMs = nowMs
         }
-      } catch {
-        case e: InterruptedException => throw e
-        case t: Throwable => logWarning("Failed to recompute InefficientTask state", t)
       }
-    }
-
-    private def setTaskData(): Unit = {
-      try {
-        // The stage entity will be writen into appStatusStore by
-        // 'listener.onStageSubmitted' and updated by 'listener.onExecutorMetricsUpdate',
-        // it's not going to be in appStatusStore when 'TaskSetManager.checkSpeculatableTasks'
-        // comes before 'listener.onStageSubmitted' to write it, so we should catch that and
-        // fallback.
-        val stageData = appStatusStore.stageAttempt(stageId, stageAttemptId, true)
-        if (stageData != null) {
-          taskData = stageData._1.tasks.orNull
-        }
-      } catch {
-        case e: RuntimeException => logWarning("Failed to set taskData", e)
-      }
-    }
-
-    private def computeSuccessTaskProgress(): (Double, Int) = {
-      var sumInputRecords, sumShuffleReadRecords, sumExecutorRunTime = 0.0
-      var progressRate = 0.0
-      var numSuccessTasks = 0
-      try {
-        appStatusStore.taskList(stageId, stageAttemptId, minFinishedForSpeculation).filter {
-          _.status == "SUCCESS"
-        }.map(_.taskMetrics).filter(_.isDefined).map(_.get).foreach { task =>
-          if (task.inputMetrics != null) {
-            sumInputRecords += task.inputMetrics.recordsRead
-          }
-          if (task.shuffleReadMetrics != null) {
-            sumShuffleReadRecords += task.shuffleReadMetrics.recordsRead
-          }
-          numSuccessTasks += 1
-          sumExecutorRunTime += task.executorRunTime
-        }
-        if (sumExecutorRunTime > 0) {
-          progressRate = (sumInputRecords + sumShuffleReadRecords) /
-            (sumExecutorRunTime / 1000.0)
-        }
-      } catch {
-        case e: RuntimeException =>
-          logWarning("Failed to computeAndSetSuccessTaskProgress", e)
-      }
-      (progressRate, numSuccessTasks)
     }
 
     def maySpeculateTask(tid: Long, runtimeMs: Long, taskInfo: TaskInfo): Boolean = {
-      // note: 1) only check inefficient tasks when 'SPECULATION_TASK_DURATION_THRESHOLD' > 0.
-      // 2) some tasks may have neither input records nor shuffleRead records, so
-      // the 'successTaskProgress' may be zero all the time, this case we should not consider,
+      // Only check inefficient tasks when taskProgressThreshold > 0, because some stage
+      // tasks may have neither input records nor shuffleRead records, so the taskProgressThreshold
+      // may be zero all the time, this case we should make sure it can be speculated.
       // eg: some spark-sql like that 'msck repair table' or 'drop table' and so on.
       if (taskProgressThreshold <= 0.0) {
         true
-      } else if (taskData != null && taskData.contains(tid) && taskData(tid) != null &&
-        taskData(tid).taskMetrics.isDefined) {
-        val taskMetrics = taskData(tid).taskMetrics.get
-        val currentTaskProgressRate = (taskMetrics.inputMetrics.recordsRead +
-          taskMetrics.shuffleReadMetrics.recordsRead) / (runtimeMs / 1000.0)
+      } else {
+        val currentTaskProgressRate = appStatusListener.getRunTaskProgressRate(tid)
         val isInefficientTask = currentTaskProgressRate < taskProgressThreshold
         if (isInefficientTask) {
           logInfo(s"Marking task ${taskInfo.index} in stage ${taskSet.id} " +
@@ -1374,8 +1321,6 @@ private[spark] class TaskSetManager(
             s"it's progress ($currentTaskProgressRate) is less than ($taskProgressThreshold).")
         }
         isInefficientTask
-      } else {
-        true
       }
     }
   }
