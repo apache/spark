@@ -232,8 +232,6 @@ case class ResolveDefaultColumns(
         }.getOrElse(None)
       case _ => Some(action)
     }
-=======
->>>>>>> master
   }
 
   /**
@@ -532,7 +530,7 @@ case class ResolveDefaultColumns(
       case SubqueryAlias(_, r: UnresolvedCatalogRelation) =>
         Some(r.tableMeta.schema)
       case SubqueryAlias(_, r: View) if r.isTempView =>
-        Some(r.schema)
+        Some(r.desc.schema)
       case _ => None
     }
   }
