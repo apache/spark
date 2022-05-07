@@ -23,9 +23,7 @@ import org.apache.spark.deploy.k8s.Constants.SPARK_APP_ID_LABEL
 class AntiAffinityFeatureStepSuite extends SparkFunSuite {
 
   test("enable executor pod antiAffinity") {
-    val appId = "test-executor-pod-antiAffinity"
     val conf = new SparkConf()
-      .set("spark.app.id", appId)
       .set("spark.kubernetes.executor.pod.antiAffinity.enable", "true")
     val executorConf = KubernetesTestConf.createExecutorConf(conf)
     val sparkPod =
@@ -55,6 +53,6 @@ class AntiAffinityFeatureStepSuite extends SparkFunSuite {
     assert(podAntiAffinity
       .getPreferredDuringSchedulingIgnoredDuringExecution.get(0)
       .getPodAffinityTerm.getLabelSelector.getMatchExpressions.get(0)
-      .getValues.get(0).equals(appId))
+      .getValues.get(0).equals(KubernetesTestConf.APP_ID))
   }
 }
