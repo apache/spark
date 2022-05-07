@@ -439,6 +439,15 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
         s"failed to match ${toSQLId(funcName)} at `addNewFunction`.")
   }
 
+  def lambdaVariableAlreadyDefinedError(name: String): Throwable = {
+    new IllegalArgumentException(s"Lambda variable $name cannot be redefined")
+  }
+
+  def lambdaVariableNotDefinedError(name: String): Throwable = {
+    new IllegalArgumentException(
+      s"Lambda variable $name is not defined in the current codegen scope")
+  }
+
   def cannotGenerateCodeForIncomparableTypeError(
       codeType: String, dataType: DataType): Throwable = {
     SparkException.internalError(
