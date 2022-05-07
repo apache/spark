@@ -136,7 +136,7 @@
     <jetty.version>9.4.46.v20220331</jetty.version>
     <jakartaservlet.version>4.0.3</jakartaservlet.version>
     <chill.version>0.10.0</chill.version>
-    <jnr.version>3.0.9</jnr.version>
+    <jnr.version>3.1.15</jnr.version>
     <ivy.version>2.5.0</ivy.version>
     <oro.version>2.0.8</oro.version>
     <!--
