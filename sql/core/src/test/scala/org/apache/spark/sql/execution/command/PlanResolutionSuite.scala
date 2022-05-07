@@ -37,6 +37,7 @@ import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns
 import org.apache.spark.sql.connector.FakeV2Provider
 import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogNotFoundException, Identifier, SupportsDelete, Table, TableCapability, TableCatalog, V1Table}
 import org.apache.spark.sql.connector.expressions.Transform
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.{CreateTable => CreateTableV1}
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.internal.{HiveSerDe, SQLConf}
@@ -996,9 +997,10 @@ class PlanResolutionSuite extends AnalysisTest {
       // Note: 'i' and 's' are the names of the columns in 'tblName'.
       val sql6 = s"UPDATE $tblName SET i=DEFAULT, s=DEFAULT"
       val sql7 = s"UPDATE defaultvalues SET i=DEFAULT, s=DEFAULT"
+      val sql8 = s"UPDATE $tblName SET name='Robert', age=32 WHERE p=DEFAULT"
       // Note: 'i' is the correct column name, but since the table has ACCEPT_ANY_SCHEMA capability,
       // DEFAULT column resolution should skip this table.
-      val sql8 = s"UPDATE v2TableWithAcceptAnySchemaCapability SET i=DEFAULT"
+      val sql9 = s"UPDATE v2TableWithAcceptAnySchemaCapability SET i=DEFAULT"
 
       val parsed1 = parseAndResolve(sql1)
       val parsed2 = parseAndResolve(sql2)
@@ -1067,10 +1069,11 @@ class PlanResolutionSuite extends AnalysisTest {
 
       parsed5 match {
         case UpdateTable(
-        AsDataSourceV2Relation(_),
-        Seq(Assignment(name: UnresolvedAttribute, UnresolvedAttribute(Seq("DEFAULT"))),
-        Assignment(age: UnresolvedAttribute, UnresolvedAttribute(Seq("DEFAULT")))),
-        None) =>
+          AsDataSourceV2Relation(_),
+          Seq(
+            Assignment(name: UnresolvedAttribute, UnresolvedAttribute(Seq("DEFAULT"))),
+            Assignment(age: UnresolvedAttribute, UnresolvedAttribute(Seq("DEFAULT")))),
+          None) =>
           assert(name.name == "name")
           assert(age.name == "age")
 
@@ -1079,10 +1082,14 @@ class PlanResolutionSuite extends AnalysisTest {
 
       parsed6 match {
         case UpdateTable(
-        AsDataSourceV2Relation(_),
-        Seq(Assignment(i: AttributeReference, AnsiCast(Literal(null, _), IntegerType, _)),
-        Assignment(s: AttributeReference, AnsiCast(Literal(null, _), StringType, _))),
-        None) =>
+          AsDataSourceV2Relation(_),
+          Seq(
+            // Note that when resolving DEFAULT column references, the analyzer will insert literal
+            // NULL values if the corresponding table does not define an explicit default value for
+            // that column. This is intended.
+            Assignment(i: AttributeReference, AnsiCast(Literal(null, _), IntegerType, _)),
+            Assignment(s: AttributeReference, AnsiCast(Literal(null, _), StringType, _))),
+          None) =>
           assert(i.name == "i")
           assert(s.name == "s")
 
@@ -1091,12 +1098,14 @@ class PlanResolutionSuite extends AnalysisTest {
 
       parsed7 match {
         case UpdateTable(
-        _,
-        Seq(Assignment(i: AttributeReference, Literal(true, BooleanType)),
-        Assignment(s: AttributeReference, Literal(42, IntegerType))),
-        None) =>
+          _,
+          Seq(
+            Assignment(i: AttributeReference, Literal(true, BooleanType)),
+            Assignment(s: AttributeReference, Literal(42, IntegerType))),
+          None) =>
           assert(i.name == "i")
           assert(s.name == "s")
+
         case _ => fail("Expect UpdateTable, but got:\n" + parsed7.treeString)
       }
 
@@ -1115,6 +1124,11 @@ class PlanResolutionSuite extends AnalysisTest {
         case _ =>
           fail("Expect UpdateTable, but got:\n" + parsed8.treeString)
       }
+
+      assert(intercept[AnalysisException] {
+        parseAndResolve(sql9)
+      }.getMessage.contains(
+        QueryCompilationErrors.defaultReferencesNotAllowedInUpdateWhereClause().getMessage))
     }
 
     val sql1 = "UPDATE non_existing SET id=1"
