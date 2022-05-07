@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.optimizer
 
 import scala.collection.immutable.HashSet
 import scala.collection.mutable.{ArrayBuffer, Stack}
+import scala.util.control.NonFatal
 
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions.{MultiLikeBase, _}
@@ -52,9 +53,26 @@ object ConstantFolding extends Rule[LogicalPlan] {
     case _ => false
   }
 
+  /**
+   * The method is used to fold the children expression inside a conditional expression which
+   * is not foldable. Some branches may not be evaluated at runtime, so here we should in case of
+   * the exception and leave it to runtime
+   */
+  private def conditionalExpressionFolding(child: Expression): Expression = {
+    if (child.foldable) {
+      try {
+        Literal.create(child.eval(EmptyRow), child.dataType)
+      } catch {
+        case NonFatal(_) => child
+      }
+    } else {
+      child.mapChildren(conditionalExpressionFolding)
+    }
+  }
+
   private def constantFolding(e: Expression): Expression = e match {
-    // do not partially fold children inside ConditionalExpression
-    case c: ConditionalExpression if !c.foldable => c
+    case c: ConditionalExpression if !c.foldable =>
+      c.mapChildren(conditionalExpressionFolding)
 
     // Skip redundant folding of literals. This rule is technically not necessary. Placing this
     // here avoids running the next rule for Literal values, which would create a new Literal

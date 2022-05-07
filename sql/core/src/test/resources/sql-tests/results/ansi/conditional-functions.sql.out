@@ -97,7 +97,7 @@ EXPLAIN SELECT if(c2 > 2, 1-0, 1/0) from t
 struct<plan:string>
 -- !query output
 == Physical Plan ==
-*Project [if ((c2#x > 2)) cast((1 - 0) as double) else (cast(1 as double) / cast(0 as double)) AS (IF((c2 > 2), (1 - 0), (1 / 0)))#x]
+*Project [if ((c2#x > 2)) 1.0 else (cast(1 as double) / cast(0 as double)) AS (IF((c2 > 2), (1 - 0), (1 / 0)))#x]
 +- *ColumnarToRow
    +- FileScan parquet default.t[c2#x] Batched: true, DataFilters: [], Format: Parquet, Location [not included in comparison]/{warehouse_dir}/t], PartitionFilters: [], PushedFilters: [], ReadSchema: struct<c2:int>
 
@@ -215,7 +215,7 @@ EXPLAIN SELECT case when c2 > 2 then 1 else 1/0 end from t
 struct<plan:string>
 -- !query output
 == Physical Plan ==
-*Project [CASE WHEN (c2#x > 2) THEN cast(1 as double) ELSE (cast(1 as double) / cast(0 as double)) END AS CASE WHEN (c2 > 2) THEN 1 ELSE (1 / 0) END#x]
+*Project [CASE WHEN (c2#x > 2) THEN 1.0 ELSE (cast(1 as double) / cast(0 as double)) END AS CASE WHEN (c2 > 2) THEN 1 ELSE (1 / 0) END#x]
 +- *ColumnarToRow
    +- FileScan parquet default.t[c2#x] Batched: true, DataFilters: [], Format: Parquet, Location [not included in comparison]/{warehouse_dir}/t], PartitionFilters: [], PushedFilters: [], ReadSchema: struct<c2:int>
 
