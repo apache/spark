@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.jdbc
 
+import java.sql.Types
 import java.util.Locale
 
 import org.apache.spark.sql.connector.expressions.aggregate.{AggregateFunc, GeneralAggregateFunc}
@@ -95,5 +96,36 @@ private case object TeradataDialect extends JdbcDialect {
 
   override def getLimitClause(limit: Integer): String = {
     ""
+  }
+
+  /**
+   * Get the custom datatype mapping for the given jdbc meta information.
+   * Handle Numeric type explicitly or the column will be converted to BigDecimal(38, 0)
+   * disregard the fractional part.
+   *
+   * @param sqlType The sql type (see java.sql.Types)
+   * @param typeName The sql type name (e.g. "BIGINT UNSIGNED")
+   * @param size The size of the type.
+   * @param md Result metadata associated with this type.
+   * @return The actual DataType (subclasses of [[org.apache.spark.sql.types.DataType]])
+   *         or null if the default type mapping should be used.
+   */
+  override def getCatalystType(
+    sqlType: Int, typeName: String, size: Int, md: MetadataBuilder): Option[DataType] = {
+    val defaultScale = 18
+    if (sqlType == Types.NUMERIC) {
+      if (md == null) {
+        Option(DecimalType(DecimalType.MAX_PRECISION, defaultScale))
+      } else {
+        val scale = md.build().getLong("scale")
+        if (scale == 0) {
+          Option(DecimalType(DecimalType.MAX_PRECISION, defaultScale))
+        } else {
+          Option(DecimalType(DecimalType.MAX_PRECISION, scale.toInt))
+        }
+      }
+    } else {
+      None
+    }
   }
 }
