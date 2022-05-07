@@ -173,6 +173,40 @@ class CodegenContext extends Logging {
   var currentVars: Seq[ExprCode] = null
 
   /**
+   * Holding a map of current lambda variables.
+   */
+  var currentLambdaVars: mutable.Map[String, ExprCode] = mutable.HashMap.empty
+
+  def withLambdaVars(namedLambdas: Seq[NamedLambdaVariable],
+      f: Seq[ExprCode] => ExprCode): ExprCode = {
+    val lambdaVars = namedLambdas.map { namedLambda =>
+      val name = namedLambda.variableName
+      if (currentLambdaVars.get(name).nonEmpty) {
+        throw QueryExecutionErrors.lambdaVariableAlreadyDefinedError(name)
+      }
+      val isNull = if (namedLambda.nullable) {
+        JavaCode.isNullGlobal(addMutableState(JAVA_BOOLEAN, "lambdaIsNull"))
+      } else {
+        FalseLiteral
+      }
+      val value = addMutableState(javaType(namedLambda.dataType), "lambdaValue")
+      val lambdaVar = ExprCode(isNull, JavaCode.global(value, namedLambda.dataType))
+      currentLambdaVars.put(name, lambdaVar)
+      lambdaVar
+    }
+
+    val result = f(lambdaVars)
+    namedLambdas.foreach(v => currentLambdaVars.remove(v.variableName))
+    result
+  }
+
+  def getLambdaVar(name: String): ExprCode = {
+    currentLambdaVars.getOrElse(name, {
+      throw QueryExecutionErrors.lambdaVariableNotDefinedError(name)
+    })
+  }
+
+  /**
    * Holding expressions' inlined mutable states like `MonotonicallyIncreasingID.count` as a
    * 2-tuple: java type, variable name.
    * As an example, ("int", "count") will produce code:
