@@ -64,16 +64,18 @@ private[spark] class ResourceProfileManager(sparkConf: SparkConf,
    */
   private[spark] def isSupported(rp: ResourceProfile): Boolean = {
     val isNotDefaultProfile = rp.id != ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID
-    val notYarnOrK8sAndNotDefaultProfile = isNotDefaultProfile && !(isYarn || isK8s)
-    val YarnOrK8sNotDynAllocAndNotDefaultProfile =
-      isNotDefaultProfile && (isYarn || isK8s) && !dynamicEnabled
+    val notYarnOrK8sOrStandaloneAndNotDefaultProfile =
+      isNotDefaultProfile && !(isYarn || isK8s || isStandalone)
+    val YarnOrK8sOrStandaloneNotDynAllocAndNotDefaultProfile =
+      isNotDefaultProfile && (isYarn || isK8s || isStandalone) && !dynamicEnabled
     // We want the exception to be thrown only when we are specifically testing for the
     // exception or in a real application. Otherwise in all other testing scenarios we want
     // to skip throwing the exception so that we can test in other modes to make testing easier.
     if ((notRunningUnitTests || testExceptionThrown) &&
-        (notYarnOrK8sAndNotDefaultProfile || YarnOrK8sNotDynAllocAndNotDefaultProfile)) {
+        (notYarnOrK8sOrStandaloneAndNotDefaultProfile ||
+          YarnOrK8sOrStandaloneNotDynAllocAndNotDefaultProfile)) {
       throw new SparkException("ResourceProfiles are only supported on YARN and Kubernetes " +
-        "with dynamic allocation enabled.")
+        "and Standalone with dynamic allocation enabled.")
     }
     true
   }
