@@ -858,6 +858,9 @@ case class MyShuffleExchangeExec(delegate: ShuffleExchangeExec) extends ShuffleE
   override def shuffleOrigin: ShuffleOrigin = {
     delegate.shuffleOrigin
   }
+  override def changeShuffleOrigin(origin: ShuffleOrigin): Unit = {
+    delegate.shuffleOrigin = origin
+  }
   override def mapOutputStatisticsFuture: Future[MapOutputStatistics] =
     delegate.submitShuffleJob
   override def getShuffleRDD(partitionSpecs: Array[ShufflePartitionSpec]): RDD[_] =

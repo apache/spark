@@ -60,6 +60,9 @@ trait ShuffleExchangeLike extends Exchange {
    */
   def shuffleOrigin: ShuffleOrigin
 
+
+  def changeShuffleOrigin(origin: ShuffleOrigin): Unit
+
   /**
    * The asynchronous job that materializes the shuffle. It also does the preparations work,
    * such as waiting for the subqueries.
@@ -89,6 +92,10 @@ sealed trait ShuffleOrigin
 // Spark is free to optimize it as long as the requirements are still ensured.
 case object ENSURE_REQUIREMENTS extends ShuffleOrigin
 
+// Indicates that the shuffle operator was added by the internal `EnsureRequirements` rule.
+// But with optimization, this shuffle operator no longer makes sense.
+case object ENSURE_REQUIREMENTS_MEANINGLESS extends ShuffleOrigin
+
 // Indicates that the shuffle operator was added by the user-specified repartition operator. Spark
 // can still optimize it via changing shuffle partition number, as data partitioning won't change.
 case object REPARTITION_BY_COL extends ShuffleOrigin
@@ -115,7 +122,7 @@ case object REBALANCE_PARTITIONS_BY_COL extends ShuffleOrigin
 case class ShuffleExchangeExec(
     override val outputPartitioning: Partitioning,
     child: SparkPlan,
-    shuffleOrigin: ShuffleOrigin = ENSURE_REQUIREMENTS)
+    var shuffleOrigin: ShuffleOrigin = ENSURE_REQUIREMENTS)
   extends ShuffleExchangeLike {
 
   private lazy val writeMetrics =
@@ -128,6 +135,10 @@ case class ShuffleExchangeExec(
   ) ++ readMetrics ++ writeMetrics
 
   override def nodeName: String = "Exchange"
+
+  override def changeShuffleOrigin(origin: ShuffleOrigin): Unit = {
+    shuffleOrigin = origin
+  }
 
   private lazy val serializer: Serializer =
     new UnsafeRowSerializer(child.output.size, longMetric("dataSize"))

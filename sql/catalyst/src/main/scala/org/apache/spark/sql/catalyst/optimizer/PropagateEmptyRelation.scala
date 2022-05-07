@@ -57,6 +57,10 @@ abstract class PropagateEmptyRelationBase extends Rule[LogicalPlan] with CastSup
   protected def empty(plan: LogicalPlan): LocalRelation =
     LocalRelation(plan.output, data = Seq.empty, isStreaming = plan.isStreaming)
 
+  protected def maybeShuffleCanLocalRead(plan: LogicalPlan): LogicalPlan = {
+    plan
+  }
+
   // Construct a project list from plan's output, while the value is always NULL.
   private def nullValueProjectList(plan: LogicalPlan): Seq[NamedExpression] =
     plan.output.map{ a => Alias(cast(Literal(null), a.dataType), a.name)(a.exprId) }
@@ -105,21 +109,25 @@ abstract class PropagateEmptyRelationBase extends Rule[LogicalPlan] with CastSup
           // Except is handled as LeftAnti by `ReplaceExceptWithAntiJoin` rule.
           case LeftOuter | LeftSemi | LeftAnti if isLeftEmpty => empty(p)
           case LeftSemi if isRightEmpty | isFalseCondition => empty(p)
-          case LeftAnti if isRightEmpty | isFalseCondition => p.left
+          case LeftAnti if isRightEmpty | isFalseCondition => maybeShuffleCanLocalRead(p.left)
           case FullOuter if isLeftEmpty && isRightEmpty => empty(p)
           case LeftOuter | FullOuter if isRightEmpty =>
-            Project(p.left.output ++ nullValueProjectList(p.right), p.left)
+            Project(p.left.output ++ nullValueProjectList(p.right),
+              maybeShuffleCanLocalRead(p.left))
           case RightOuter if isRightEmpty => empty(p)
           case RightOuter | FullOuter if isLeftEmpty =>
-            Project(nullValueProjectList(p.left) ++ p.right.output, p.right)
+            Project(nullValueProjectList(p.left) ++ p.right.output,
+              maybeShuffleCanLocalRead(p.right))
           case LeftOuter if isFalseCondition =>
-            Project(p.left.output ++ nullValueProjectList(p.right), p.left)
+            Project(p.left.output ++ nullValueProjectList(p.right),
+              maybeShuffleCanLocalRead(p.left))
           case RightOuter if isFalseCondition =>
-            Project(nullValueProjectList(p.left) ++ p.right.output, p.right)
+            Project(nullValueProjectList(p.left) ++ p.right.output,
+              maybeShuffleCanLocalRead(p.right))
           case _ => p
         }
       } else if (joinType == LeftSemi && conditionOpt.isEmpty && nonEmpty(p.right)) {
-        p.left
+        maybeShuffleCanLocalRead(p.left)
       } else if (joinType == LeftAnti && conditionOpt.isEmpty && nonEmpty(p.right)) {
         empty(p)
       } else {

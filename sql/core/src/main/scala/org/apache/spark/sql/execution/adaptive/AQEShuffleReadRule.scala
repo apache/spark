@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution.adaptive
 
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.execution.SparkPlan
+import org.apache.spark.sql.execution.{ShufflePartitionSpec, SparkPlan}
 import org.apache.spark.sql.execution.exchange.{ShuffleExchangeLike, ShuffleOrigin}
 
 /**
@@ -33,5 +33,20 @@ trait AQEShuffleReadRule extends Rule[SparkPlan] {
 
   protected def isSupported(shuffle: ShuffleExchangeLike): Boolean = {
     supportedShuffleOrigins.contains(shuffle.shuffleOrigin)
+  }
+}
+
+private class ShuffleStageInfo(
+  val shuffleStage: ShuffleQueryStageExec,
+  val partitionSpecs: Option[Seq[ShufflePartitionSpec]])
+
+private object ShuffleStageInfo {
+  def unapply(plan: SparkPlan)
+      : Option[(ShuffleQueryStageExec, Option[Seq[ShufflePartitionSpec]])] = plan match {
+    case stage: ShuffleQueryStageExec =>
+      Some((stage, None))
+    case AQEShuffleReadExec(s: ShuffleQueryStageExec, partitionSpecs) =>
+      Some((s, Some(partitionSpecs)))
+    case _ => None
   }
 }

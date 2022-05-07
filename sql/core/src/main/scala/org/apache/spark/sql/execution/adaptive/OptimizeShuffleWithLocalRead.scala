@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.adaptive
 import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight, BuildSide}
 import org.apache.spark.sql.catalyst.plans.physical.SinglePartition
 import org.apache.spark.sql.execution._
-import org.apache.spark.sql.execution.exchange.{ENSURE_REQUIREMENTS, REBALANCE_PARTITIONS_BY_NONE, ShuffleExchangeLike, ShuffleOrigin}
+import org.apache.spark.sql.execution.exchange.{ENSURE_REQUIREMENTS, ENSURE_REQUIREMENTS_MEANINGLESS, REBALANCE_PARTITIONS_BY_NONE, ShuffleExchangeLike, ShuffleOrigin}
 import org.apache.spark.sql.execution.joins.BroadcastHashJoinExec
 import org.apache.spark.sql.internal.SQLConf
 
@@ -107,12 +107,22 @@ object OptimizeShuffleWithLocalRead extends AQEShuffleReadRule {
       (remaining until numBuckets).map(i => splitPoint + (i - remaining) * elementsPerBucket)
   }
 
+  private def covertMeaninglessShuffleToLocalRead(plan: SparkPlan): SparkPlan = plan match {
+    case ShuffleStageInfo(stage, spec) =>
+      if (stage.shuffle.shuffleOrigin == ENSURE_REQUIREMENTS_MEANINGLESS) {
+        AQEShuffleReadExec(stage, getPartitionSpecs(stage, spec.map(_.length)))
+      } else {
+        plan
+      }
+    case other => other.mapChildren(covertMeaninglessShuffleToLocalRead(_))
+  }
+
   override def apply(plan: SparkPlan): SparkPlan = {
     if (!conf.getConf(SQLConf.LOCAL_SHUFFLE_READER_ENABLED)) {
       return plan
     }
-
-    plan match {
+    val convertedPlan = covertMeaninglessShuffleToLocalRead(plan)
+    convertedPlan match {
       case s: SparkPlan if canUseLocalShuffleRead(s) =>
         createLocalRead(s)
       case s: SparkPlan =>

@@ -22,6 +22,7 @@ import org.apache.spark.sql.catalyst.planning.ExtractSingleColumnNullAwareAntiJo
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.trees.TreePattern.{LOCAL_RELATION, LOGICAL_QUERY_STAGE, TRUE_OR_FALSE_LITERAL}
 import org.apache.spark.sql.execution.aggregate.BaseAggregateExec
+import org.apache.spark.sql.execution.exchange.{ENSURE_REQUIREMENTS, ENSURE_REQUIREMENTS_MEANINGLESS}
 import org.apache.spark.sql.execution.joins.HashedRelationWithAllNullKeys
 
 /**
@@ -37,6 +38,14 @@ object AQEPropagateEmptyRelation extends PropagateEmptyRelationBase {
 
   override protected def nonEmpty(plan: LogicalPlan): Boolean =
     super.nonEmpty(plan) || getEstimatedRowCount(plan).exists(_ > 0)
+
+  override protected def maybeShuffleCanLocalRead(plan: LogicalPlan): LogicalPlan = plan match {
+    case l @ LogicalQueryStage(_, stage: ShuffleQueryStageExec)
+      if stage.shuffle.shuffleOrigin == ENSURE_REQUIREMENTS =>
+        stage.shuffle.changeShuffleOrigin(ENSURE_REQUIREMENTS_MEANINGLESS)
+        l
+    case other => other
+  }
 
   // The returned value follows:
   //   - 0 means the plan must produce 0 row
