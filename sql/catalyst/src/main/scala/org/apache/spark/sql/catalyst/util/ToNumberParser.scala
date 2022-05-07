@@ -37,8 +37,9 @@ object ToNumberParser {
   final val PLUS_SIGN = '+'
   final val POINT_LETTER = 'D'
   final val POINT_SIGN = '.'
-  final val ZERO_DIGIT = '0'
+  final val POUND_SIGN = '#'
   final val SPACE = ' '
+  final val ZERO_DIGIT = '0'
 
   final val OPTIONAL_MINUS_STRING = "MI"
   final val WRAPPING_ANGLE_BRACKETS_TO_NEGATIVE_NUMBER = "PR"
@@ -628,8 +629,7 @@ class ToNumberParser(numberFormat: String, errorOnFail: Boolean) extends Seriali
     // These are string representations of the input Decimal value.
     val (inputBeforeDecimalPoint: String,
       inputAfterDecimalPoint: String) =
-      formatSplitInputBeforeAndAfterDecimalPoint(input).getOrElse(
-        return formatMatchFailure(input, numberFormat))
+      formatSplitInputBeforeAndAfterDecimalPoint(input)
     // These are indexes into the characters of the input string before and after the decimal point.
     formattingBeforeDecimalPointIndex = 0
     formattingAfterDecimalPointIndex = 0
@@ -662,15 +662,24 @@ class ToNumberParser(numberFormat: String, errorOnFail: Boolean) extends Seriali
           if (input < Decimal.ZERO) {
             stripTrailingLoneDecimalPoint(result)
             addCharacterCheckingTrailingSpaces(result, MINUS_SIGN)
+            // Add a second space to account for the "MI" sequence comprising two characters in the
+            // format string.
+            result.append(SPACE)
+          } else {
+            result.append(SPACE)
+            result.append(SPACE)
           }
         case OpeningAngleBracket() =>
           if (input < Decimal.ZERO) {
             result.append(ANGLE_BRACKET_OPEN)
           }
         case ClosingAngleBracket() =>
+          stripTrailingLoneDecimalPoint(result)
           if (input < Decimal.ZERO) {
-            stripTrailingLoneDecimalPoint(result)
             addCharacterCheckingTrailingSpaces(result, ANGLE_BRACKET_CLOSE)
+          } else {
+            result.append(SPACE)
+            result.append(SPACE)
           }
       }
     }
@@ -693,17 +702,15 @@ class ToNumberParser(numberFormat: String, errorOnFail: Boolean) extends Seriali
   /**
    * Splits the provided Decimal value's string representation by the decimal point, if any.
    * @param input the Decimal value to consume
-   * @return two strings representing the contents before and after the decimal point (if any),
-   *         respectively, or None if the input string did not match the format string.
+   * @return two strings representing the contents before and after the decimal point (if any)
    */
-  private def formatSplitInputBeforeAndAfterDecimalPoint(
-      input: Decimal): Option[(String, String)] = {
+  private def formatSplitInputBeforeAndAfterDecimalPoint(input: Decimal): (String, String) = {
     // Convert the input Decimal value to a string (without exponent notation).
     val inputString = input.toJavaBigDecimal.toPlainString
     // Split the digits before and after the decimal point.
-    val tokens = inputString.split(POINT_SIGN)
-    var beforeDecimalPoint = tokens(0)
-    var afterDecimalPoint = if (tokens.length > 1) tokens(1) else ""
+    val tokens: Array[String] = inputString.split(POINT_SIGN)
+    var beforeDecimalPoint: String = tokens(0)
+    var afterDecimalPoint: String = if (tokens.length > 1) tokens(1) else ""
     // Strip any leading minus sign to consider the digits only.
     // Strip leading and trailing zeros to match cases when the format string begins with a decimal
     // point.
@@ -737,14 +744,15 @@ class ToNumberParser(numberFormat: String, errorOnFail: Boolean) extends Seriali
       case _ =>
     }
     // If there were more digits in the provided input string (before or after the decimal point)
-    // than specified in the format string, the input string does not match the format.
+    // than specified in the format string, this is an overflow.
     if (numFormatDigitsBeforeDecimalPoint < beforeDecimalPoint.length ||
-        numFormatDigitsAfterDecimalPoint < afterDecimalPoint.length) {
-      return None
+      numFormatDigitsAfterDecimalPoint < afterDecimalPoint.length) {
+      beforeDecimalPoint = "#" * numFormatDigitsBeforeDecimalPoint
+      afterDecimalPoint = "#" * numFormatDigitsAfterDecimalPoint
     }
     val leadingSpaces = " " * (numFormatDigitsBeforeDecimalPoint - beforeDecimalPoint.length)
     val trailingSpaces = " " * (numFormatDigitsAfterDecimalPoint - afterDecimalPoint.length)
-    Some((leadingSpaces + beforeDecimalPoint, afterDecimalPoint + trailingSpaces))
+    (leadingSpaces + beforeDecimalPoint, afterDecimalPoint + trailingSpaces)
   }
 
   /**
@@ -776,17 +784,14 @@ class ToNumberParser(numberFormat: String, errorOnFail: Boolean) extends Seriali
           }
           for (_ <- 0 until numDigits) {
             inputBeforeDecimalPoint(formattingBeforeDecimalPointIndex) match {
-              case c: Char if c != SPACE =>
+              case SPACE if digits.isInstanceOf[ExactlyAsManyDigits] =>
+                // The format string started with a zero and had more digits than the provided
+                // input string, so we prepend a zero to the result.
+                result.append(ZERO_DIGIT)
+              case SPACE =>
+                addSpaceCheckingTrailingCharacters(result)
+              case c: Char =>
                 result.append(c)
-              case _ => digits match {
-                case _: ExactlyAsManyDigits =>
-                  // The format string started with a 0 and had more digits than the provided
-                  // input string, so we prepend a 0 to the result.
-                  result.append(ZERO_DIGIT)
-                case _: AtMostAsManyDigits =>
-                  // The format string started with a 9 and had more digits than the provided
-                  // input string, so we prepend nothing to the result.
-              }
             }
             formattingBeforeDecimalPointIndex += 1
           }
@@ -797,17 +802,18 @@ class ToNumberParser(numberFormat: String, errorOnFail: Boolean) extends Seriali
           }
           for (_ <- 0 until numDigits) {
             inputAfterDecimalPoint(formattingAfterDecimalPointIndex) match {
-              case c: Char if c != SPACE =>
+              case SPACE =>
+                addSpaceCheckingTrailingCharacters(result)
+              case c: Char =>
                 result.append(c)
-              case _ =>
-                // The format string had more digits after the decimal point than the provided input
-                // string, so we append nothing to the result.
             }
             formattingAfterDecimalPointIndex += 1
           }
         case _: ThousandsSeparator =>
           if (result.nonEmpty && result.last >= ZERO_DIGIT && result.last <= NINE_DIGIT) {
             result.append(COMMA_SIGN)
+          } else {
+            addSpaceCheckingTrailingCharacters(result)
           }
       }
     }
@@ -820,9 +826,29 @@ class ToNumberParser(numberFormat: String, errorOnFail: Boolean) extends Seriali
   private def addCharacterCheckingTrailingSpaces(result: StringBuilder, char: Char): Unit = {
     result.append(char)
     var i = result.size - 1
-    while (i > 1 && result(i - 1) == SPACE && result(i) == char) {
+    while (i >= 1 &&
+      result(i - 1) == SPACE &&
+      result(i) == char) {
+      result(i) = SPACE
       result(i - 1) = char
-      result.deleteCharAt(i)
+      i -= 1
+    }
+  }
+
+  /**
+   * Adds a character to the end of the string builder. After doing so, if we just added the
+   * character after cases like unary plus or minus, swap the characters.
+   */
+  private def addSpaceCheckingTrailingCharacters(result: StringBuilder): Unit = {
+    result.append(SPACE)
+    var i = result.size - 1
+    while (i >= 1 &&
+      (result(i - 1) == PLUS_SIGN ||
+        result(i - 1) == MINUS_SIGN ||
+        result(i - 1) == ANGLE_BRACKET_OPEN) &&
+      result(i) == SPACE) {
+      result(i) = result(i - 1)
+      result(i - 1) = SPACE
       i -= 1
     }
   }
@@ -832,8 +858,10 @@ class ToNumberParser(numberFormat: String, errorOnFail: Boolean) extends Seriali
    */
   private def stripTrailingLoneDecimalPoint(result: StringBuilder): Unit = {
     val i = result.indexOf(POINT_SIGN)
-    if (i != -1 && (i == result.length - 1 || result(i + 1) == SPACE)) {
-      result.deleteCharAt(i)
+    if (i != -1 &&
+      (i == result.length - 1 ||
+        result(i + 1) == SPACE)) {
+      result(i) = SPACE
     }
   }
 }
