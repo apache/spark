@@ -238,9 +238,9 @@ case class GlobalLimitAndOffsetExec(
   override def requiredChildDistribution: List[Distribution] = AllTuples :: Nil
 
   override def doExecute(): RDD[InternalRow] = if (limit >= 0) {
-    child.execute().mapPartitions(iter => iter.take(limit + offset).drop(offset))
+    child.execute().mapPartitionsInternal(iter => iter.take(limit + offset).drop(offset))
   } else {
-    child.execute().mapPartitions(iter => iter.drop(offset))
+    child.execute().mapPartitionsInternal(iter => iter.drop(offset))
   }
 
   private lazy val skipTerm = BaseLimitExec.newLimitCountTerm()
@@ -298,9 +298,10 @@ case class TakeOrderedAndProjectExec(
   override def executeCollect(): Array[InternalRow] = {
     val ord = new LazilyGeneratedOrdering(sortOrder, child.output)
     val data = if (offset > 0) {
-      child.execute().map(_.copy()).takeOrdered(limit + offset)(ord).drop(offset)
+      child.execute().mapPartitionsInternal(_.map(_.copy()))
+        .takeOrdered(limit + offset)(ord).drop(offset)
     } else {
-      child.execute().map(_.copy()).takeOrdered(limit)(ord)
+      child.execute().mapPartitionsInternal(_.map(_.copy())).takeOrdered(limit)(ord)
     }
     if (projectList != child.output) {
       val proj = UnsafeProjection.create(projectList, child.output)
@@ -328,11 +329,11 @@ case class TakeOrderedAndProjectExec(
         childRDD
       } else {
         val localTopK = if (offset > 0) {
-          childRDD.mapPartitions { iter =>
+          childRDD.mapPartitionsInternal { iter =>
             Utils.takeOrdered(iter.map(_.copy()), limit + offset)(ord)
           }
         } else {
-          childRDD.mapPartitions { iter =>
+          childRDD.mapPartitionsInternal { iter =>
             Utils.takeOrdered(iter.map(_.copy()), limit)(ord)
           }
         }
@@ -345,7 +346,7 @@ case class TakeOrderedAndProjectExec(
             writeMetrics),
           readMetrics)
       }
-      singlePartitionRDD.mapPartitions { iter =>
+      singlePartitionRDD.mapPartitionsInternal { iter =>
         val topK = if (offset > 0) {
           Utils.takeOrdered(iter.map(_.copy()), limit + offset)(ord).drop(offset)
         } else {

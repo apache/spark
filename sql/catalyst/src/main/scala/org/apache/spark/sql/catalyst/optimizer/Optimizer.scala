@@ -753,6 +753,8 @@ object LimitPushDown extends Rule[LogicalPlan] {
     // Merge offset value and limit value into LocalLimit and pushes down LocalLimit through Offset.
     case LocalLimit(le, Offset(oe, grandChild)) =>
       Offset(oe, LocalLimit(Add(le, oe), grandChild))
+    case offset @ Offset(_, Limit(le, grandChild)) =>
+      Limit(le, offset.withNewChildren(Seq(grandChild)))
   }
 }
 
@@ -1885,7 +1887,7 @@ object EliminateOffsets extends Rule[LogicalPlan] {
       child
     case Offset(oe, child)
       if oe.foldable && child.maxRows.exists(_ <= oe.eval().asInstanceOf[Int]) =>
-      LocalRelation(child.output, data = Seq.empty, isStreaming = plan.isStreaming)
+      LocalRelation(child.output, data = Seq.empty, isStreaming = child.isStreaming)
   }
 }
 
