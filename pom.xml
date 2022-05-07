@@ -136,7 +136,6 @@
     <jetty.version>9.4.46.v20220331</jetty.version>
     <jakartaservlet.version>4.0.3</jakartaservlet.version>
     <chill.version>0.10.0</chill.version>
-    <jnr.version>3.1.15</jnr.version>
     <ivy.version>2.5.0</ivy.version>
     <oro.version>2.0.8</oro.version>
     <!--
@@ -461,7 +460,7 @@
       <dependency>
         <groupId>com.github.jnr</groupId>
         <artifactId>jnr-posix</artifactId>
-        <version>${jnr.version}</version>
+        <version>3.1.15</version>
         <scope>test</scope>
       </dependency>
       <!-- This artifact is a shaded version of ASM 9.x. The POM that was used to produce this
