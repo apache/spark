@@ -287,6 +287,15 @@ logging into the data sources.
   </tr>
 
   <tr>
+    <td><code>maxPushDownLimit</code></td>
+    <td><code>-1</code></td>
+    <td>
+     The option to specify the maximum value that pushing down LIMIT into V2 JDBC data source. <code>maxPushDownLimit</code> only works if set <code>pushDownLimit</code> to true. The default value is -1, in which case Spark always push down LIMIT to the JDBC data source.
+    </td>
+    <td>read</td>
+  </tr>
+
+  <tr>
     <td><code>pushDownTableSample</code></td>
     <td><code>false</code></td>
     <td>
