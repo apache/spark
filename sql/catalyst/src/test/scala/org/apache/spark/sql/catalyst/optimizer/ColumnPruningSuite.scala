@@ -495,4 +495,17 @@ class ColumnPruningSuite extends PlanTest {
       .analyze
     comparePlans(optimized, expected)
   }
+
+  test("SPARK-39120: Prunes the duplicate columns from child of UnaryNode") {
+    val input = LocalRelation($"a".int, $"b".int, $"c".int)
+
+    comparePlans(
+      Optimize.execute(input.select('a, 'b, 'a, 'b, 'a).groupBy('a)(sum('b).as("sum_b")).analyze),
+      input.select('a, 'b).groupBy('a)(sum('b).as("sum_b")).analyze)
+
+    comparePlans(
+      Optimize.execute(input.select('a, 'b, 'a, 'b, ('a + 'b).as("ab"))
+        .groupBy('a, 'ab)(sum('b).as("sum_b")).analyze),
+      input.select('a, 'b, ('a + 'b).as("ab")).groupBy('a, 'ab)(sum('b).as("sum_b")).analyze)
+  }
 }

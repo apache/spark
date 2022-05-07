@@ -855,6 +855,15 @@ object ColumnPruning extends Rule[LogicalPlan] {
     case e @ Expand(_, _, child) if !child.outputSet.subsetOf(e.references) =>
       e.copy(child = prunedChild(child, e.references))
 
+    // Prunes the duplicate columns from child of UnaryNode, e.g.: Aggregate
+    case p: UnaryNode
+      if p.child.isInstanceOf[Project] && p.child.output.size > p.child.outputSet.size =>
+      val child = p.child.asInstanceOf[Project]
+      val newProjectList =
+        ExpressionSet(child.projectList).toSeq.map(_.asInstanceOf[NamedExpression])
+      val newChild = child.copy(projectList = newProjectList)
+      p.withNewChildren(Seq(newChild))
+
     // prune unrequired references
     // There are 2 types of pruning here:
     // 1. For attributes in g.child.outputSet that is not used by the generator nor the project,
