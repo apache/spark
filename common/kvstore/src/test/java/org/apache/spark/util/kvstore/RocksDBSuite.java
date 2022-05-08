@@ -303,6 +303,30 @@ public class RocksDBSuite {
     assertTrue(!dbPathForCloseTest.exists());
   }
 
+  @Test
+  public void testAllRocksDBIteratorNotExplicitClosed() throws Exception {
+    File dbPathForCloseTest = File
+      .createTempFile(
+        "test_db_close.",
+        ".rdb");
+    dbPathForCloseTest.delete();
+    RocksDB dbForCloseTest = new RocksDB(dbPathForCloseTest);
+    for (int i = 0; i < 8192; i++) {
+      dbForCloseTest.write(createCustomType1(i));
+    }
+    for (int loop = 0; loop < 4; loop++) {
+      for (int i = 0; i < 1000; i++) {
+        dbForCloseTest.view(CustomType1.class).iterator().next();
+      }
+      System.gc();
+    }
+
+    dbForCloseTest.close();
+    assertTrue(dbPathForCloseTest.exists());
+    FileUtils.deleteQuietly(dbPathForCloseTest);
+    assertFalse(dbPathForCloseTest.exists());
+  }
+
   private CustomType1 createCustomType1(int i) {
     CustomType1 t = new CustomType1();
     t.key = "key" + i;
