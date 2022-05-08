@@ -477,6 +477,7 @@ public class RocksDB implements KVStore {
       }
       return prefix;
     }
+
   }
 
   private static class RocksDBIteratorWeakReference extends WeakReference<RocksDBIterator<?>> {
