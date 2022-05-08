@@ -55,11 +55,6 @@ object ResolveDefaultColumns {
   // Name of attributes representing explicit references to the value stored in the above
   // CURRENT_DEFAULT_COLUMN_METADATA.
   val CURRENT_DEFAULT_COLUMN_NAME = "DEFAULT"
-  // Return a more descriptive error message if the user tries to nest the DEFAULT column reference
-  // inside some other expression, such as DEFAULT + 1 (this is not allowed).
-  val DEFAULTS_IN_EXPRESSIONS_ERROR = "Failed to execute INSERT INTO command because the " +
-    "VALUES list contains a DEFAULT column reference as part of another expression; this is " +
-    "not allowed"
 
   /**
    * Finds "current default" expressions in CREATE/REPLACE TABLE columns and constant-folds them.

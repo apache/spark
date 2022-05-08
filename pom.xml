@@ -166,7 +166,7 @@
       See: SPARK-36547, SPARK-38394.
        -->
 
-    <scala-maven-plugin.version>4.5.6</scala-maven-plugin.version>
+    <scala-maven-plugin.version>4.6.1</scala-maven-plugin.version>
     <!-- for now, not running scalafmt as part of default verify pipeline -->
     <scalafmt.skip>true</scalafmt.skip>
     <codehaus.jackson.version>1.9.13</codehaus.jackson.version>
@@ -402,7 +402,7 @@
     </dependency>
     <dependency>
       <groupId>org.scalatestplus</groupId>
-      <artifactId>mockito-4-2_${scala.binary.version}</artifactId>
+      <artifactId>mockito-4-5_${scala.binary.version}</artifactId>
       <scope>test</scope>
     </dependency>
     <dependency>
@@ -456,6 +456,12 @@
         <groupId>com.twitter</groupId>
         <artifactId>chill-java</artifactId>
         <version>${chill.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>com.github.jnr</groupId>
+        <artifactId>jnr-posix</artifactId>
+        <version>3.1.15</version>
+        <scope>test</scope>
       </dependency>
       <!-- This artifact is a shaded version of ASM 9.x. The POM that was used to produce this
            is at https://github.com/apache/geronimo-xbean/tree/trunk/xbean-asm9-shaded
@@ -1143,8 +1149,8 @@
       </dependency>
       <dependency>
         <groupId>org.scalatestplus</groupId>
-        <artifactId>mockito-4-2_${scala.binary.version}</artifactId>
-        <version>3.2.11.0</version>
+        <artifactId>mockito-4-5_${scala.binary.version}</artifactId>
+        <version>3.2.12.0</version>
         <scope>test</scope>
       </dependency>
       <dependency>
@@ -1156,13 +1162,13 @@
       <dependency>
         <groupId>org.mockito</groupId>
         <artifactId>mockito-core</artifactId>
-        <version>4.2.0</version>
+        <version>4.5.1</version>
         <scope>test</scope>
       </dependency>
       <dependency>
         <groupId>org.mockito</groupId>
         <artifactId>mockito-inline</artifactId>
-        <version>4.2.0</version>
+        <version>4.5.1</version>
         <scope>test</scope>
       </dependency>
       <dependency>

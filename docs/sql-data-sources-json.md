@@ -155,7 +155,7 @@ Data source options of JSON can be set via:
     <td>read</td>
   </tr>
   <tr>
-    <td><code>allowNumericLeadingZero</code></td>
+    <td><code>allowNumericLeadingZeros</code></td>
     <td><code>false</code></td>
     <td>Allows leading zeros in numbers (e.g. 00012).</td>
     <td>read</td>
