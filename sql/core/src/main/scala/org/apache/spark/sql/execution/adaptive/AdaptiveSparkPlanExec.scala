@@ -131,11 +131,11 @@ case class AdaptiveSparkPlanExec(
     PlanAdaptiveDynamicPruningFilters(this),
     ReuseAdaptiveSubquery(context.subqueryCache),
     OptimizeSkewInRebalancePartitions,
+    PropagateEmptyPartitions,
     CoalesceShufflePartitions(context.session),
     // `OptimizeShuffleWithLocalRead` needs to make use of 'AQEShuffleReadExec.partitionSpecs'
     // added by `CoalesceShufflePartitions`, and must be executed after it.
-    OptimizeShuffleWithLocalRead,
-    PropagateEmptyPartitions
+    OptimizeShuffleWithLocalRead
   )
 
   // This rule is stateful as it maintains the codegen stage ID. We can't create a fresh one every

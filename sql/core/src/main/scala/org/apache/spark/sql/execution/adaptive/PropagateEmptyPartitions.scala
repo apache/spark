@@ -30,17 +30,32 @@ import org.apache.spark.sql.execution.joins._
  *
  * The general idea is to utilize the shuffled join to skip some partitions.
  *
- * For example, assume the shuffled join has 4 partitions, and L2 and R3 are empty:
+ * Example 1: 2-table join, assume the shuffled join has 4 partitions, and L2 and R3 are empty:
  * left:  [L1, L2, L3, L4]
  * right: [R1, R2, R3, R4]
- *
  * Suppose the join type is Inner. Then this rule will skip reading partitions: L2, R2, L3, R3.
- *
  * Suppose the join type is LeftOuter. Then this rule will skip reading partitions: L2, R2, R3.
- *
  * Suppose the join type is RightOuter. Then this rule will skip reading partitions: L2, L3, R3.
- *
  * Suppose the join type is FullOuter. Then this rule will skip reading partitions: L2, R3.
+ *
+ * Example 2: 3-table join
+ *                                SMJ (RightOuter)
+ *                               /                 \
+ *                         SMJ (Inner)          SortAgg
+ *                        /         \              |
+ *                  Shuffle A    Shuffle B      Shuffle C
+ *                    (0,1)        (0,2)           (4)      empty partition indices
+ *
+ * Suppose Shuffle A/B/C have empty partition indices (0,1)/(0, 2)/(4), respectively.
+ * After this optimization, the plan will be like:
+ *                                SMJ (RightOuter)
+ *                               /                 \
+ *                         SMJ (Inner)          SortAgg
+ *                        /         \              |
+ *            AQEShuffleRead   AQEShuffleRead   AQEShuffleRead
+ *                 (0,1,2,4)     (0,1,2,4)        (4)      skipped partition indices
+ *                       |          |              |
+ *                  Shuffle A    Shuffle B      Shuffle C
  */
 object PropagateEmptyPartitions extends AQEShuffleReadRule {
 
@@ -54,14 +69,13 @@ object PropagateEmptyPartitions extends AQEShuffleReadRule {
     }
 
     // If there is no ShuffledJoin, no need to continue.
-    if (plan.collectFirst { case j: ShuffledJoin => j }.isEmpty) {
+    if (!plan.exists(_.isInstanceOf[ShuffledJoin])) {
       return plan
     }
 
     val stages = plan.collect { case s: ShuffleQueryStageExec => s }
     // currently, empty information is only extracted from and propagated to shuffle data.
-    // TODO: support DataScan in the future.
-    if (stages.size < 2 || !stages.forall(_.isMaterialized)) {
+    if (stages.size < 2 || !stages.forall(_.mapStats.exists(_.bytesByPartitionId.length > 0))) {
       return plan
     }
 

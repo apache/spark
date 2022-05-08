@@ -21,7 +21,7 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.{MapOutputStatistics, MapOutputTrackerMaster, SparkEnv}
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.execution.{CoalescedPartitionSpec, PartialReducerPartitionSpec, ShufflePartitionSpec}
+import org.apache.spark.sql.execution.{CoalescedPartitionSpec, EmptyPartitionSpec, PartialReducerPartitionSpec, ShufflePartitionSpec}
 
 object ShufflePartitionsUtil extends Logging {
   final val SMALL_PARTITION_FACTOR = 0.2
@@ -64,12 +64,13 @@ object ShufflePartitionsUtil extends Logging {
     logInfo(s"For shuffle($shuffleIds), advisory target size: $advisoryTargetSize, " +
       s"actual target size $targetSize, minimum partition size: $minPartitionSize")
 
-    // If `inputPartitionSpecs` are all empty, it means skew join optimization is not applied.
+    // If `inputPartitionSpecs` are all empty, it means skew join optimization or
+    // empty partition propagation is not applied.
     if (inputPartitionSpecs.forall(_.isEmpty)) {
       coalescePartitionsWithoutSkew(
         mapOutputStatistics, targetSize, minPartitionSize)
     } else {
-      coalescePartitionsWithSkew(
+      coalescePartitionsWithEmpty(
         mapOutputStatistics, inputPartitionSpecs, targetSize, minPartitionSize)
     }
   }
@@ -104,11 +105,125 @@ object ShufflePartitionsUtil extends Logging {
     }
   }
 
-  private def coalescePartitionsWithSkew(
+  private def coalescePartitionsWithEmpty(
       mapOutputStatistics: Seq[Option[MapOutputStatistics]],
       inputPartitionSpecs: Seq[Option[Seq[ShufflePartitionSpec]]],
       targetSize: Long,
       minPartitionSize: Long): Seq[Seq[ShufflePartitionSpec]] = {
+    // Do not coalesce if any of the map output stats are missing or if not all shuffles have
+    // partition specs, which should not happen in practice.
+    if (!mapOutputStatistics.forall(_.isDefined) || !inputPartitionSpecs.forall(_.isDefined)) {
+      logWarning("Could not apply partition coalescing because of missing MapOutputStatistics " +
+        "or shuffle partition specs.")
+      return Seq.empty
+    }
+
+    val emptyIndexSet = collection.mutable.Set.empty[Int]
+    inputPartitionSpecs.foreach(_.get.iterator.zipWithIndex.foreach {
+      case (EmptyPartitionSpec, i) => emptyIndexSet.add(i)
+      case _ =>
+    })
+
+    if (emptyIndexSet.isEmpty) {
+      return coalescePartitionsWithSkew(mapOutputStatistics, inputPartitionSpecs,
+        targetSize, minPartitionSize, true)
+    }
+
+    // ShufflePartitionSpecs at these emptyIndices can NOT be coalesced
+    // split inputPartitionSpecs into sub-sequences by the empty indices, and
+    // call coalescePartitionsWithSkew to optimize each sub-sequence.
+    // let inputPartitionSpecs are:
+    //   [A0(empty), A1, A2, A3(empty), A4(empty), A5, A6, A7, A8, A9, A10]
+    //   [B0, B1, B2, B3, B4(empty), B5, B6, B7, B8(empty), B9, B10]
+    // then:
+    // 1, specs at index (0, 3, 8) are kept: (A0(empty)-B0), (A3(empty)-B3), (A8-B8(empty))
+    // 2, specs at index 4 are discarded, since they are all empty: (A4(empty)-B4(empty))
+    // 3, sub-sequences [A1-B1, A2-B2], [A5-B5, A6-B6, A7-B7], [A9-B9, A10-B10] are optimized
+
+    val emptyIndices = emptyIndexSet.toArray.sorted
+    val newSpecsSeq = Seq.fill(mapOutputStatistics.length)(ArrayBuffer.empty[ShufflePartitionSpec])
+    var coalesced = false
+
+    val firstEmptyIdx = emptyIndices(0)
+    if (firstEmptyIdx > 0) {
+      // coalesce specs before the first empty spec
+      val firstSpecs = inputPartitionSpecs.map(_.map(_.take(firstEmptyIdx)))
+      val partiallyCoalesced = coalescePartitionsWithSkew(
+        mapOutputStatistics, firstSpecs, targetSize, minPartitionSize, true)
+      if (partiallyCoalesced.nonEmpty) {
+        newSpecsSeq.zip(partiallyCoalesced).foreach(t => t._1 ++= t._2)
+        coalesced = true
+      } else {
+        newSpecsSeq.zip(firstSpecs).foreach(t => t._1 ++= t._2.get)
+      }
+    }
+    val specsAtEmptyIdx = inputPartitionSpecs.map(_.get(firstEmptyIdx))
+    if (specsAtEmptyIdx.forall(_ == EmptyPartitionSpec)) {
+      // if all specs at an empty index are EmptyPartitionSpec, discard them
+      coalesced = true
+    } else {
+      newSpecsSeq.zip(specsAtEmptyIdx).foreach(t => t._1 += t._2)
+    }
+
+    var i = 1
+    while (i < emptyIndices.length) {
+      val prevEmptyIdx = emptyIndices(i - 1)
+      val currEmptyIdx = emptyIndices(i)
+      if (prevEmptyIdx < currEmptyIdx - 1) {
+        val slicedSpecs = inputPartitionSpecs.map(_.map(_.slice(prevEmptyIdx + 1, currEmptyIdx)))
+        val partiallyCoalesced = coalescePartitionsWithSkew(
+          mapOutputStatistics, slicedSpecs, targetSize, minPartitionSize, false)
+        if (partiallyCoalesced.nonEmpty) {
+          newSpecsSeq.zip(partiallyCoalesced).foreach(t => t._1 ++= t._2)
+          coalesced = true
+        } else {
+          newSpecsSeq.zip(slicedSpecs).foreach(t => t._1 ++= t._2.get)
+        }
+      }
+      val specsAtEmptyIdx = inputPartitionSpecs.map(_.get(currEmptyIdx))
+      if (specsAtEmptyIdx.forall(_ == EmptyPartitionSpec)) {
+        // if all specs at an empty index are EmptyPartitionSpec, discard them
+        coalesced = true
+      } else {
+        newSpecsSeq.zip(specsAtEmptyIdx).foreach(t => t._1 += t._2)
+      }
+      i += 1
+    }
+
+    val lastEmptyIdx = emptyIndices.last
+    val numSpecs = inputPartitionSpecs.head.get.size
+    if (lastEmptyIdx < numSpecs - 1) {
+      // coalesce specs after the last empty spec
+      val lastSpecs = inputPartitionSpecs.map(_.map(_.slice(lastEmptyIdx + 1, numSpecs)))
+      val partiallyCoalesced = coalescePartitionsWithSkew(
+        mapOutputStatistics, lastSpecs, targetSize, minPartitionSize, false)
+      if (partiallyCoalesced.nonEmpty) {
+        newSpecsSeq.zip(partiallyCoalesced).foreach(t => t._1 ++= t._2)
+        coalesced = true
+      } else {
+        newSpecsSeq.zip(lastSpecs).foreach(t => t._1 ++= t._2.get)
+      }
+    }
+
+    // when all partitions are empty, append one EmptyPartitionSpec here to satisfy
+    // SPARK-32083 (AQE coalesce should at least return one partition).
+    if (newSpecsSeq.forall(_.isEmpty)) {
+      newSpecsSeq.foreach(t => t += EmptyPartitionSpec)
+    }
+
+    if (coalesced) {
+      newSpecsSeq.map(_.toSeq)
+    } else {
+      Seq.empty
+    }
+  }
+
+  private def coalescePartitionsWithSkew(
+      mapOutputStatistics: Seq[Option[MapOutputStatistics]],
+      inputPartitionSpecs: Seq[Option[Seq[ShufflePartitionSpec]]],
+      targetSize: Long,
+      minPartitionSize: Long,
+      checkFirstIndex: Boolean): Seq[Seq[ShufflePartitionSpec]] = {
     // Do not coalesce if any of the map output stats are missing or if not all shuffles have
     // partition specs, which should not happen in practice.
     if (!mapOutputStatistics.forall(_.isDefined) || !inputPartitionSpecs.forall(_.isDefined)) {
@@ -134,8 +249,9 @@ object ShufflePartitionsUtil extends Logging {
     // The indices may look like [0, 1, 2, 2, 2, 3, 4, 4, 5], and the repeated `2` and `4` mean
     // skewed partitions.
     val partitionIndices = partitionIndicesSeq.head
-    // The fist index must be 0.
-    assert(partitionIndices.head == 0)
+    if (checkFirstIndex) {
+      assert(partitionIndices.head == 0)
+    }
     val newPartitionSpecsSeq = Seq.fill(mapOutputStatistics.length)(
       ArrayBuffer.empty[ShufflePartitionSpec])
     val numPartitions = partitionIndices.length

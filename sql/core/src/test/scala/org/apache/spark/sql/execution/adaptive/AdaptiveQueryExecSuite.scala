@@ -1677,7 +1677,7 @@ class AdaptiveQueryExecSuite
         assert(aqeReads.length == 2)
         if (coalescedRead) assert(aqeReads.forall(_.hasCoalescedPartition))
       } else {
-        assert(aqeReads.isEmpty || aqeReads.forall(_.hasSkippedPartition))
+        assert(aqeReads.isEmpty)
       }
     }
 
@@ -1720,7 +1720,8 @@ class AdaptiveQueryExecSuite
         SQLConf.SKEW_JOIN_ENABLED.key -> "true",
         SQLConf.SKEW_JOIN_SKEWED_PARTITION_THRESHOLD.key -> "1",
         SQLConf.SKEW_JOIN_SKEWED_PARTITION_FACTOR.key -> "0",
-        SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.key -> "10") {
+        SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.key -> "10",
+        SQLConf.PROPAGATE_EMPTY_PARTITIONS_ENABLED.key -> "false") {
         // Repartition with no partition num specified.
         checkSMJ(df.repartition($"b"),
           // The top shuffle from repartition is optimized out.
@@ -1862,9 +1863,9 @@ class AdaptiveQueryExecSuite
           SQLConf.SHUFFLE_PARTITIONS.key -> "10",
           combineUnionConfig) {
         withTempView("t1", "t2") {
-          spark.sparkContext.parallelize((1 to 10).map(i => TestData(i, i.toString)), 2)
+          spark.sparkContext.parallelize((1 to 100).map(i => TestData(i, i.toString)), 2)
             .toDF().createOrReplaceTempView("t1")
-          spark.sparkContext.parallelize((1 to 10).map(i => TestData(i, i.toString)), 4)
+          spark.sparkContext.parallelize((1 to 100).map(i => TestData(i, i.toString)), 4)
             .toDF().createOrReplaceTempView("t2")
 
           // positive test that could be coalesced
