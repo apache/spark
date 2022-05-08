@@ -422,11 +422,13 @@ public class RocksDB implements KVStore {
   }
 
   private void keepCleaning() {
-    while (!stopped) {
+    boolean lastIsPresent = false;
+    while (!stopped || lastIsPresent) {
       try {
         Optional<? extends Reference<? extends RocksDBIterator<?>>> removed =
           Optional.ofNullable(referenceQueue.remove(1000L));
-        if (removed.isPresent()) {
+        lastIsPresent = removed.isPresent();
+        if (lastIsPresent) {
           RocksDBIteratorWeakReference reference =
             (RocksDBIteratorWeakReference) removed.get();
           iteratorTracker.remove(reference);
