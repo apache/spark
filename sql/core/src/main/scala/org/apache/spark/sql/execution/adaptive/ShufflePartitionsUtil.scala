@@ -224,14 +224,6 @@ object ShufflePartitionsUtil extends Logging {
       targetSize: Long,
       minPartitionSize: Long,
       checkFirstIndex: Boolean): Seq[Seq[ShufflePartitionSpec]] = {
-    // Do not coalesce if any of the map output stats are missing or if not all shuffles have
-    // partition specs, which should not happen in practice.
-    if (!mapOutputStatistics.forall(_.isDefined) || !inputPartitionSpecs.forall(_.isDefined)) {
-      logWarning("Could not apply partition coalescing because of missing MapOutputStatistics " +
-        "or shuffle partition specs.")
-      return Seq.empty
-    }
-
     val validMetrics = mapOutputStatistics.map(_.get)
     // Extract the start indices of each partition spec. Give invalid index -1 to unexpected
     // partition specs. When we reach here, it means skew join optimization has been applied.

@@ -63,13 +63,18 @@ object PropagateEmptyPartitions extends AQEShuffleReadRule {
     Seq(ENSURE_REQUIREMENTS, REPARTITION_BY_NUM, REPARTITION_BY_COL,
       REBALANCE_PARTITIONS_BY_NONE, REBALANCE_PARTITIONS_BY_COL)
 
+  private val supportedJoinTypes: Seq[JoinType] =
+    Seq(Inner, LeftOuter, LeftAnti, LeftSemi, RightOuter, Cross)
+
   override def apply(plan: SparkPlan): SparkPlan = {
     if (!conf.propagateEmptyPartitionsEnabled) {
       return plan
     }
 
-    // If there is no ShuffledJoin, no need to continue.
-    if (!plan.exists(_.isInstanceOf[ShuffledJoin])) {
+    // If there is no ShuffledJoin, or only a full outer ShuffledJoin, no need to continue.
+    if (plan
+      .collectFirst { case j: ShuffledJoin if supportedJoinTypes.contains(j.joinType) => j }
+      .isEmpty) {
       return plan
     }
 
