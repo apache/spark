@@ -31,29 +31,29 @@ import org.apache.spark.sql.catalyst.trees.TreePattern.JOIN
 import org.apache.spark.sql.types.{DecimalType, NumericType}
 
 /**
- * Push down the partial aggregation through join if it cannot be planned as broadcast hash join.
+ * Push down the partial aggregation through join.
  *
  * For example:
  * CREATE TABLE t1(a int, b int, c int) using parquet;
  * CREATE TABLE t2(x int, y int, z int) using parquet;
- * SELECT a, SUM(b) FROM t1 INNER JOIN t2 ON t1.a = t2.x GROUP BY a;
+ * SELECT b, SUM(c) FROM t1 INNER JOIN t2 ON t1.a = t2.x GROUP BY b;
  *
  * The current optimized logical plan is:
- * Aggregate [a#0], [a#0, sum((pushed_sum(b#1)#12L * cnt#15L)) AS sum(b)#7L]
- * +- Project [a#0, pushed_sum(b#1)#12L, cnt#15L]
- *    +- Join Inner, (a#0 = x#3)
- *       :- PartialAggregate [a#0], [a#0, sum(b#1) AS pushed_sum(b#1)#12L]
- *       :  +- Project [a#0, b#1, a#0]
- *       :     +- Filter isnotnull(a#0)
- *       :        +- Relation default.t1[a#0,b#1,c#2] parquet
- *       +- PartialAggregate [x#3], [count(1) AS cnt#15L, x#3]
- *          +- Project [x#3]
- *             +- Filter isnotnull(x#3)
- *                +- Relation default.t2[x#3,y#4,z#5] parquet
+ * Aggregate [b#2], [b#2, sum((pushed_sum_c#13L * cnt#16L)) AS sum(c)#8L]
+ * +- Project [b#2, pushed_sum_c#13L, cnt#16L]
+ *    +- Join Inner, (a#1 = x#4)
+ *       :- PartialAggregate [a#1, b#2], [a#1, b#2, sum(c#3) AS pushed_sum_c#13L]
+ *       :  +- Project [b#2, c#3, a#1]
+ *       :     +- Filter isnotnull(a#1)
+ *       :        +- Relation default.t1[a#1,b#2,c#3] parquet
+ *       +- PartialAggregate [x#4], [count(1) AS cnt#16L, x#4]
+ *          +- Project [x#4]
+ *             +- Filter isnotnull(x#4)
+ *                +- Relation default.t2[x#4,y#5,z#6] parquet
+ *
+ * This rule should be applied before ColumnPruning.
  */
-object PushPartialAggregationThroughJoin extends Rule[LogicalPlan]
-  with PredicateHelper
-  with JoinSelectionHelper {
+object PushPartialAggregationThroughJoin extends Rule[LogicalPlan] with PredicateHelper {
 
   // Returns true if `expr`'s references is non empty and can be evaluated using only
   // the output of `plan`.
@@ -81,14 +81,16 @@ object PushPartialAggregationThroughJoin extends Rule[LogicalPlan]
   // and the value used to push through Join. see the function of replaceAliasName.
   private def toExpressionMap(aggExps: Seq[AggregateExpression]) = {
     aggExps.map { a =>
-      a.aggregateFunction.canonicalized -> Alias(a, s"pushed_${a.toString}")()
+      val name =
+        s"_pushed_${a.aggregateFunction.prettyName}_${a.references.map(_.name).mkString("_")}"
+      a.aggregateFunction.canonicalized -> Alias(a, name)()
     }.toMap[Expression, Alias]
   }
 
   // Replace the current Aggregate's aggregate expression references with pushed attribute.
   // Please note that:
-  // 1. We will replace the sum with the current side sum * the other side row count
-  // 2. We will replace the count with the current side row count * the other side row count
+  // 1. Replace the sum with the current side sum * the other side row count
+  // 2. Replace the count with the current side row count * the other side row count
   private def replaceAliasName(
       expr: NamedExpression,
       aliasMap: Map[Expression, Alias],
@@ -96,19 +98,20 @@ object PushPartialAggregationThroughJoin extends Rule[LogicalPlan]
     // Use transformUp to prevent infinite recursion when the replacement expression
     // redefines the same ExprId.
     expr.mapChildren(_.transformUp {
-      case e @ Sum(_, failOnError, dt) if aliasMap.contains(e.canonicalized) =>
+      case e @ Sum(_, useAnsiAdd, dt) if aliasMap.contains(e.canonicalized) =>
         val value = aliasMap(e.canonicalized)
-        val multiply = Multiply(value.toAttribute, Cast(cnt.toAttribute, value.dataType))
+        val multiply = Multiply(value.toAttribute,
+          cnt.toAttribute.cast(value.dataType, Some(conf.sessionLocalTimeZone)))
         e.dataType match {
           case decType: DecimalType =>
-            Sum(CheckOverflow(multiply, decType, !failOnError), failOnError,
-              Some(dt.getOrElse(e.dataType)))
+            // Do not use DecimalPrecision because it may be change the precision and scale
+            Sum(CheckOverflow(multiply, decType, !useAnsiAdd), useAnsiAdd, Some(decType))
           case _ =>
-            Sum(multiply, failOnError, Some(dt.getOrElse(e.dataType)))
+            Sum(multiply, useAnsiAdd, Some(dt.getOrElse(e.dataType)))
         }
       case e: Count if aliasMap.contains(e.canonicalized) =>
         Sum(Multiply(aliasMap(e.canonicalized).toAttribute, cnt.toAttribute),
-          !conf.ansiEnabled, Some(e.dataType))
+          conf.ansiEnabled, Some(e.dataType))
       case e: Min if aliasMap.contains(e.canonicalized) =>
         e.copy(child = aliasMap(e.canonicalized).toAttribute)
       case e: Max if aliasMap.contains(e.canonicalized) =>
@@ -144,14 +147,18 @@ object PushPartialAggregationThroughJoin extends Rule[LogicalPlan]
     case _ => false
   }
 
-  // All aggregate expressions should be pushable aggregate expression or count expression,
-  // and it should can be evaluated only on left or right
   private def supportPushDownAgg(
       aggExps: Seq[AggregateExpression],
       left: LogicalPlan,
       right: LogicalPlan): Boolean = {
-    aggExps.forall(e => (pushableAggExp(e) || pushableCountExp(e)) &&
+    // All aggregate expressions should be pushable aggregate expression or count expression,
+    // and it should can be evaluated only on left or right
+    val semanticSupport = aggExps.forall(e => (pushableAggExp(e) || pushableCountExp(e)) &&
       (canEvaluate(e, left) || canEvaluate(e, right)))
+    // Will not push down Agg if all aggregate expression's size much larger than
+    // all aggregate expression references's size because it may increase shuffle data
+    val references = AttributeSet(aggExps.flatMap(_.references))
+    semanticSupport && aggExps.size / math.max(references.size, aggExps.size).toFloat < 2
   }
 
   // Deduplicate and reorder aggregate expressions to avoid some query can't reuse the exchange.
@@ -176,11 +183,16 @@ object PushPartialAggregationThroughJoin extends Rule[LogicalPlan]
               e.dataType match {
                 case _: DecimalType =>
                   DecimalPrecision.decimalAndDecimal()(
-                    Divide(CheckOverflowInSum(sum, avg.sumDataType.asInstanceOf[DecimalType],
-                      !useAnsiAdd),
-                      count.cast(DecimalType.LongDecimal), failOnError = false)).cast(avg.dataType)
+                    Divide(
+                      CheckOverflowInSum(sum, avg.sumDataType.asInstanceOf[DecimalType],
+                        !useAnsiAdd),
+                      count.cast(DecimalType.LongDecimal, Some(conf.sessionLocalTimeZone)),
+                      failOnError = false)).cast(avg.dataType, Some(conf.sessionLocalTimeZone))
                 case _ =>
-                  Divide(sum.cast(avg.dataType), count.cast(avg.dataType), failOnError = false)
+                  Divide(
+                    sum.cast(avg.dataType, Some(conf.sessionLocalTimeZone)),
+                    count.cast(avg.dataType, Some(conf.sessionLocalTimeZone)),
+                    failOnError = false)
               }
             case _ => ae
           }
@@ -199,7 +211,7 @@ object PushPartialAggregationThroughJoin extends Rule[LogicalPlan]
     val newJoinKeys = joinKeys.map {
       case a: Attribute => a
       case o =>
-        val ne = Alias(o, o.toString)()
+        val ne = Alias(o, s"_pullout_${o.prettyName}_${o.references.map(_.name).mkString("_")}")()
         complexJoinKeys += ne
         ne.toAttribute
     }
@@ -294,8 +306,9 @@ object PushPartialAggregationThroughJoin extends Rule[LogicalPlan]
         .map(replaceAliasName(_, rightAliasMap, leftCnt))
         .map { expr =>
           expr.mapChildren(_.transformUp {
-            case Count(Seq(IntegerLiteral(1))) =>
-              Sum(Multiply(leftCnt.toAttribute, rightCnt.toAttribute))
+            case e @ Count(Seq(IntegerLiteral(1))) =>
+              Sum(Multiply(leftCnt.toAttribute, rightCnt.toAttribute),
+                conf.ansiEnabled, Some(e.dataType))
           }).asInstanceOf[NamedExpression]
         }
 
@@ -316,11 +329,6 @@ object PushPartialAggregationThroughJoin extends Rule[LogicalPlan]
 
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
     _.containsPattern(JOIN), ruleId) {
-    case j @ Join(_, _: AggregateBase, _, _, _) =>
-      j
-    case j @ Join(_, Project(_, _: AggregateBase), _, _, _) =>
-      j
-
     case agg @ Aggregate(_, _, j: Join)
         if j.children.exists(_.isInstanceOf[AggregateBase]) =>
       agg
@@ -336,53 +344,52 @@ object PushPartialAggregationThroughJoin extends Rule[LogicalPlan]
       agg
 
     case agg @ PartialAggregate(_, aggregateExps,
-      join @ Join(left, right, Inner | LeftOuter | RightOuter | FullOuter, _, _))
-        if agg.aggregateExprs.isEmpty && aggregateExps.forall(_.deterministic) &&
-          !canPlanAsBroadcastHashJoin(join, conf) =>
-      Project(aggregateExps, join.copy(
+      j @ Join(left, right, Inner | LeftOuter | RightOuter | FullOuter, _, _))
+        if agg.aggregateExprs.isEmpty && aggregateExps.forall(_.deterministic) =>
+      Project(aggregateExps, j.copy(
         left = PartialAggregate(left.output, left.output, left),
         right = PartialAggregate(right.output, right.output, right)))
 
     case agg @ PartialAggregate(_, aggregateExps, Project(projectList,
-      join @ Join(left, right, Inner | LeftOuter | RightOuter | FullOuter, _, _)))
+      j @ Join(left, right, Inner | LeftOuter | RightOuter | FullOuter, _, _)))
         if agg.aggregateExprs.isEmpty && aggregateExps.forall(_.deterministic) &&
-          projectList.forall(_.deterministic) && !canPlanAsBroadcastHashJoin(join, conf) =>
-      Project(aggregateExps, Project(projectList, join.copy(
+          projectList.forall(_.deterministic) =>
+      Project(aggregateExps, Project(projectList, j.copy(
         left = PartialAggregate(left.output, left.output, left),
         right = PartialAggregate(right.output, right.output, right))))
 
-    case agg @ Aggregate(_, _, join: Join)
-        if agg.aggregateExprs.forall(isDistinct) && !canPlanAsBroadcastHashJoin(join, conf) =>
-      val left = join.left
-      val right = join.right
-      agg.copy(child = join.copy(
+    case agg @ Aggregate(_, _, j: Join) if agg.aggregateExprs.forall(isDistinct) =>
+      val left = j.left
+      val right = j.right
+      agg.copy(child = j.copy(
         left = PartialAggregate(left.output, left.output, left),
         right = PartialAggregate(right.output, right.output, right)))
 
-    case agg @ Aggregate(_, _, p @ Project(_, join: Join))
-        if agg.aggregateExprs.forall(isDistinct) && !canPlanAsBroadcastHashJoin(join, conf) =>
-      val left = join.left
-      val right = join.right
-      agg.copy(child = p.copy(child = join.copy(
+    case agg @ Aggregate(_, _, p @ Project(_, j: Join)) if agg.aggregateExprs.forall(isDistinct) =>
+      val left = j.left
+      val right = j.right
+      agg.copy(child = p.copy(child = j.copy(
         left = PartialAggregate(left.output, left.output, left),
         right = PartialAggregate(right.output, right.output, right))))
 
     case agg @ Aggregate(groupExps, aggregateExps,
-      join @ ExtractEquiJoinKeys(Inner, leftKeys, rightKeys, None, _, left, right, _))
+      j @ ExtractEquiJoinKeys(Inner, leftKeys, rightKeys, None, _, left, right, _))
         if groupExps.forall(_.isInstanceOf[Attribute]) && aggregateExps.forall(_.deterministic) &&
-          leftKeys.nonEmpty && supportPushDownAgg(agg.aggregateExprs, left, right) &&
-          !canPlanAsBroadcastHashJoin(join, conf) =>
-      pushdownAggThroughJoin(agg, join.output, leftKeys, rightKeys, join)
+          leftKeys.nonEmpty && supportPushDownAgg(agg.aggregateExprs, left, right) =>
+      pushdownAggThroughJoin(agg, j.output, leftKeys, rightKeys, j)
 
     case agg @ Aggregate(groupExps, aggregateExps, Project(projectList,
-      join @ ExtractEquiJoinKeys(Inner, leftKeys, rightKeys, None, _, left, right, _)))
+      j @ ExtractEquiJoinKeys(Inner, leftKeys, rightKeys, None, _, left, right, _)))
         if groupExps.forall(_.isInstanceOf[Attribute]) && aggregateExps.forall(_.deterministic) &&
           projectList.forall(_.deterministic) && leftKeys.nonEmpty &&
-          supportPushDownAgg(agg.aggregateExprs, left, right) &&
-          !canPlanAsBroadcastHashJoin(join, conf) =>
-      pushdownAggThroughJoin(agg, projectList, leftKeys, rightKeys, join)
+          supportPushDownAgg(agg.aggregateExprs, left, right) =>
+      pushdownAggThroughJoin(agg, projectList, leftKeys, rightKeys, j)
 
-    case j @ Join(_, right, LeftSemiOrAnti(_), _, _) if !canPlanAsBroadcastHashJoin(j, conf) =>
+    case j @ Join(_, _: AggregateBase, _, _, _) =>
+      j
+    case j @ Join(_, Project(_, _: AggregateBase), _, _, _) =>
+      j
+    case j @ Join(_, right, LeftSemiOrAnti(_), _, _) =>
       j.copy(right = PartialAggregate(right.output, right.output, right))
     }
 }
