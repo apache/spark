@@ -204,7 +204,7 @@
     <!-- When upgrading `netty.version`, need to check whether
          the version of `netty-tcnative-classes.version` also needs to be upgraded
     -->
-    <netty.version>4.1.76.Final</netty.version>
+    <netty.version>4.1.77.Final</netty.version>
     <netty-tcnative-classes.version>2.0.51.Final</netty-tcnative-classes.version>
     <!--
     If you are changing Arrow version specification, please check
