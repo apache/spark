@@ -201,7 +201,7 @@
     "sqlState" : "0A000"
   },
   "UNSUPPORTED_DESERIALIZER" : {
-    "message" : ["The deserializer is not supported: "],
+    "message" : [ "The deserializer is not supported: " ],
     "subClass" : {
       "DATA_TYPE_MISMATCH" : {
         "message" : [ "need <quantifier> <desiredType> field but got <dataType>." ]
