@@ -670,8 +670,6 @@
         <groupId>org.rocksdb</groupId>
         <artifactId>rocksdbjni</artifactId>
         <version>7.0.3</version>
-        <scope>system</scope>
-        <systemPath>/Users/yangjie01/SourceCode/git/rocksdb/java/target/rocksdbjni-7.0.3-osx.jar</systemPath>
       </dependency>
       <dependency>
         <groupId>${leveldbjni.group}</groupId>
