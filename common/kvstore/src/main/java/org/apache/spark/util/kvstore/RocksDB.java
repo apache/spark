@@ -476,6 +476,5 @@ public class RocksDB implements KVStore {
       }
       return prefix;
     }
-
   }
 }
