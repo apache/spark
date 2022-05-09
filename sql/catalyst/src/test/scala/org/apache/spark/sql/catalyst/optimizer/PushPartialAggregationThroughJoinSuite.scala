@@ -86,7 +86,6 @@ class PushPartialAggregationThroughJoinSuite extends PlanTest {
         PushPredicateThroughJoin,
         ColumnPruning,
         PushPartialAggregationThroughJoin,
-        ResolveTimeZone,
         SimplifyCasts,
         CollapseProject) :: Nil
   }

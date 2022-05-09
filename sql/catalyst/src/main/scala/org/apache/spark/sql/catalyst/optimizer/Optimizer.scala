@@ -219,7 +219,6 @@ abstract class Optimizer(catalogManager: CatalogManager)
       RewriteDistinctAggregates) :+
     Batch("Push Partial Aggregation Through Join", fixedPoint,
       PushPartialAggregationThroughJoin,
-      ResolveTimeZone,
       SimplifyCasts) :+
     Batch("Object Expressions Optimization", fixedPoint,
       EliminateMapObjects,
