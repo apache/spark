@@ -2619,7 +2619,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
 
     # TODO: 'adjust', 'axis', 'method' parameter should be implemented.
     def ewm(
-        self: FrameLike,
+        self,
         com: Optional[float] = None,
         span: Optional[float] = None,
         halflife: Optional[float] = None,
