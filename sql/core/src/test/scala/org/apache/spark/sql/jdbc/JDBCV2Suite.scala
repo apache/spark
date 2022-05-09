@@ -202,14 +202,14 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
     checkPushedInfo(df5, "PushedFilters: [], ")
     checkAnswer(df5, Seq(Row(10000.00, 1000.0, "amy")))
 
-    Seq(1, 2, 3).foreach { maxLimit =>
+    Seq(-1, 1, 2, 3).foreach { maxLimit =>
       withSQLConf(SQLConf.MAX_JDBC_PUSH_DOWN_LIMIT.key -> maxLimit.toString) {
         val df6 = spark.read
           .table("h2.test.employee")
           .filter($"dept" > 1)
           .limit(2)
-        checkLimitRemoved(df6, 2 <= maxLimit)
-        if (2 <= maxLimit) {
+        checkLimitRemoved(df6, maxLimit == -1 || 2 <= maxLimit)
+        if (maxLimit == -1 || 2 <= maxLimit) {
           checkPushedInfo(df6,
             "PushedFilters: [DEPT IS NOT NULL, DEPT > 1], PushedLimit: LIMIT 2, ")
         } else {
