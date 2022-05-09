@@ -111,6 +111,7 @@ private[v1] class AbstractApplicationResource extends BaseAppResource {
       Utils.redact(ui.conf, envInfo.sparkProperties).sortBy(_._1),
       Utils.redact(ui.conf, envInfo.hadoopProperties).sortBy(_._1),
       Utils.redact(ui.conf, envInfo.systemProperties).sortBy(_._1),
+      Utils.redact(ui.conf, envInfo.metricsProperties).sortBy(_._1),
       envInfo.classpathEntries.sortBy(_._1),
       resourceProfileInfo)
   }

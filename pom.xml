@@ -204,8 +204,8 @@
     <!-- When upgrading `netty.version`, need to check whether
          the version of `netty-tcnative-classes.version` also needs to be upgraded
     -->
-    <netty.version>4.1.76.Final</netty.version>
-    <netty-tcnative-classes.version>2.0.51.Final</netty-tcnative-classes.version>
+    <netty.version>4.1.77.Final</netty.version>
+    <netty-tcnative-classes.version>2.0.52.Final</netty-tcnative-classes.version>
     <!--
     If you are changing Arrow version specification, please check
     ./python/pyspark/sql/pandas/utils.py, and ./python/setup.py too.
@@ -402,7 +402,7 @@
     </dependency>
     <dependency>
       <groupId>org.scalatestplus</groupId>
-      <artifactId>mockito-4-2_${scala.binary.version}</artifactId>
+      <artifactId>mockito-4-5_${scala.binary.version}</artifactId>
       <scope>test</scope>
     </dependency>
     <dependency>
@@ -456,6 +456,12 @@
         <groupId>com.twitter</groupId>
         <artifactId>chill-java</artifactId>
         <version>${chill.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>com.github.jnr</groupId>
+        <artifactId>jnr-posix</artifactId>
+        <version>3.1.15</version>
+        <scope>test</scope>
       </dependency>
       <!-- This artifact is a shaded version of ASM 9.x. The POM that was used to produce this
            is at https://github.com/apache/geronimo-xbean/tree/trunk/xbean-asm9-shaded
@@ -669,7 +675,7 @@
       <dependency>
         <groupId>org.rocksdb</groupId>
         <artifactId>rocksdbjni</artifactId>
-        <version>7.0.3</version>
+        <version>7.1.2</version>
       </dependency>
       <dependency>
         <groupId>${leveldbjni.group}</groupId>
@@ -1143,8 +1149,8 @@
       </dependency>
       <dependency>
         <groupId>org.scalatestplus</groupId>
-        <artifactId>mockito-4-2_${scala.binary.version}</artifactId>
-        <version>3.2.11.0</version>
+        <artifactId>mockito-4-5_${scala.binary.version}</artifactId>
+        <version>3.2.12.0</version>
         <scope>test</scope>
       </dependency>
       <dependency>
@@ -1156,13 +1162,13 @@
       <dependency>
         <groupId>org.mockito</groupId>
         <artifactId>mockito-core</artifactId>
-        <version>4.2.0</version>
+        <version>4.5.1</version>
         <scope>test</scope>
       </dependency>
       <dependency>
         <groupId>org.mockito</groupId>
         <artifactId>mockito-inline</artifactId>
-        <version>4.2.0</version>
+        <version>4.5.1</version>
         <scope>test</scope>
       </dependency>
       <dependency>

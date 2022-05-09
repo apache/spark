@@ -91,7 +91,7 @@ class EventLoggingListenerSuite extends SparkFunSuite with LocalSparkContext wit
       .set(key, secretPassword)
     val hadoopconf = SparkHadoopUtil.get.newConfiguration(new SparkConf())
     val envDetails = SparkEnv.environmentDetails(
-      conf, hadoopconf, "FIFO", Seq.empty, Seq.empty, Seq.empty)
+      conf, hadoopconf, "FIFO", Seq.empty, Seq.empty, Seq.empty, Map.empty)
     val event = SparkListenerEnvironmentUpdate(envDetails)
     val redactedProps = EventLoggingListener
       .redactEvent(conf, event).environmentDetails("Spark Properties").toMap

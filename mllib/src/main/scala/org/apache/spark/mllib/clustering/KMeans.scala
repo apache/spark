@@ -234,6 +234,22 @@ class KMeans private (
     model
   }
 
+  private[spark] def initialize(data: RDD[Vector]): Array[Vector] = {
+    val dataWithNorms = data.map(new VectorWithNorm(_))
+
+    val centers = initializationMode match {
+      case KMeans.RANDOM =>
+        initRandom(dataWithNorms)
+      case KMeans.K_MEANS_PARALLEL =>
+        val distanceMeasureInstance = DistanceMeasure.decodeFromString(this.distanceMeasure)
+        dataWithNorms.persist(StorageLevel.MEMORY_AND_DISK)
+        val centers = initKMeansParallel(dataWithNorms, distanceMeasureInstance)
+        dataWithNorms.unpersist()
+        centers
+    }
+    centers.map(_.vector)
+  }
+
   /**
    * Implementation of K-Means algorithm.
    */

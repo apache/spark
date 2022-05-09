@@ -398,8 +398,7 @@ class QueryCompilationErrorsSuite
     }
   }
 
-  test("INVALID_JSON_SCHEMA_MAPTYPE: " +
-    "Parse JSON rows can only contain StringType as a key type for a MapType.") {
+  test("INVALID_JSON_SCHEMA_MAP_TYPE: only STRING as a key type for MAP") {
     val schema = StructType(
       StructField("map", MapType(IntegerType, IntegerType, true), false) :: Nil)
 
@@ -407,10 +406,9 @@ class QueryCompilationErrorsSuite
       exception = intercept[AnalysisException] {
         spark.read.schema(schema).json(spark.emptyDataset[String])
       },
-      errorClass = "INVALID_JSON_SCHEMA_MAPTYPE",
-      msg = "Input schema " +
-        "StructType(StructField(map,MapType(IntegerType,IntegerType,true),false)) " +
-        "can only contain StringType as a key type for a MapType."
+      errorClass = "INVALID_JSON_SCHEMA_MAP_TYPE",
+      msg = """Input schema "STRUCT<map: MAP<INT, INT>>" """ +
+        "can only contain STRING as a key type for a MAP."
     )
   }
 
@@ -526,6 +524,26 @@ class QueryCompilationErrorsSuite
         errorClass = "INVALID_FIELD_NAME",
         msg = "Field name m.n is invalid: m is not a struct.; line 1 pos 27")
     }
+  }
+
+  test("NON_LITERAL_PIVOT_VALUES: literal expressions required for pivot values") {
+    val df = Seq(
+      ("dotNET", 2012, 10000),
+      ("Java", 2012, 20000),
+      ("dotNET", 2012, 5000),
+      ("dotNET", 2013, 48000),
+      ("Java", 2013, 30000)
+    ).toDF("course", "year", "earnings")
+
+    checkErrorClass(
+      exception = intercept[AnalysisException] {
+        df.groupBy(df("course")).
+          pivot(df("year"), Seq($"earnings")).
+          agg(sum($"earnings")).collect()
+      },
+      errorClass = "NON_LITERAL_PIVOT_VALUES",
+      msg = "Literal expressions required for pivot values, found 'earnings#\\w+'",
+      matchMsg = true)
   }
 }
 

@@ -34,13 +34,16 @@ public final class AlwaysFalse extends Predicate implements Literal<Boolean> {
     super("ALWAYS_FALSE", new Predicate[]{});
   }
 
+  @Override
   public Boolean value() {
     return false;
   }
 
+  @Override
   public DataType dataType() {
     return DataTypes.BooleanType;
   }
 
+  @Override
   public String toString() { return "FALSE"; }
 }
