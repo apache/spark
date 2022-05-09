@@ -619,7 +619,7 @@ class DataFrame(Frame, Generic[T]):
                 keep_column = not numeric_only or is_numeric_or_boolean
 
                 if keep_column:
-                    if not skipna and psser.hasnans:
+                    if not skipna and get_option("compute.eager_check") and psser.hasnans:
                         scol = F.first(F.lit(np.nan))
                     else:
                         scol = sfun(psser)

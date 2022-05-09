@@ -6866,7 +6866,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         if axis == 1:
             raise NotImplementedError("Series does not support columns axis.")
 
-        if not skipna and self.hasnans:
+        if not skipna and get_option("compute.eager_check") and self.hasnans:
             scol = F.first(F.lit(np.nan))
         else:
             scol = sfun(self)
