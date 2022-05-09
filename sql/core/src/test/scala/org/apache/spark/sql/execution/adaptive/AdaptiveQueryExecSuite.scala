@@ -2576,7 +2576,7 @@ class AdaptiveQueryExecSuite
     }
   }
 
-  test("After eliminating join to one side, that side should " +
+  test("SPARK-39126: After eliminating join to one side, that side should " +
     "take advantage of LocalShuffleRead optimization") {
     withSQLConf(
       SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
