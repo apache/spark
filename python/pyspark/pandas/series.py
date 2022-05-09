@@ -6861,6 +6861,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         name : original pandas API name.
         axis : used only for sanity check because series only support index axis.
         numeric_only : not used by this implementation, but passed down by stats functions.
+        skipna: exclude NA/null values when computing the result.
         """
         axis = validate_axis(axis)
         if axis == 1:

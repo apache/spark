@@ -601,6 +601,8 @@ class DataFrame(Frame, Generic[T]):
             Include only float, int, boolean columns. False is not supported. This parameter
             is mainly for pandas compatibility. Only 'DataFrame.count' uses this parameter
             currently.
+        skipna : bool, default True
+            Exclude NA/null values when computing the result.
         """
         from pyspark.pandas.series import Series, first_series
 
