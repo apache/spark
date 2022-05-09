@@ -176,7 +176,7 @@ class BisectingKMeans:
 
     @classmethod
     def train(
-        self,
+        cls,
         rdd: RDD["VectorLike"],
         k: int = 4,
         maxIterations: int = 20,

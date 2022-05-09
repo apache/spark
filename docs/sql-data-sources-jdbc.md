@@ -98,6 +98,37 @@ logging into the data sources.
     </td>
     <td>read/write</td>
   </tr>
+  <tr>
+    <td><code>prepareQuery</code></td>
+    <td>(none)</td>
+    <td>
+      A prefix that will form the final query together with <code>query</code>.
+      As the specified <code>query</code> will be parenthesized as a subquery in the <code>FROM</code> clause and some databases do not 
+      support all clauses in subqueries, the <code>prepareQuery</code> property offers a way to run such complex queries.
+      As an example, spark will issue a query of the following form to the JDBC Source.<br><br>
+      <code>&lt;prepareQuery&gt; SELECT &lt;columns&gt; FROM (&lt;user_specified_query&gt;) spark_gen_alias</code><br><br>
+      Below are a couple of examples.<br>
+      <ol>
+         <li> MSSQL Server does not accept <code>WITH</code> clauses in subqueries but it is possible to split such a query to <code>prepareQuery</code> and <code>query</code>:<br>
+            <code>
+               spark.read.format("jdbc")<br>
+                 .option("url", jdbcUrl)<br>
+                 .option("prepareQuery", "WITH t AS (SELECT x, y FROM tbl)")<br>
+                 .option("query", "SELECT * FROM t WHERE x > 10")<br>
+                 .load()
+            </code></li>
+         <li> MSSQL Server does not accept temp table clauses in subqueries but it is possible to split such a query to <code>prepareQuery</code> and <code>query</code>:<br>
+            <code>
+               spark.read.format("jdbc")<br>
+                 .option("url", jdbcUrl)<br>
+                 .option("prepareQuery", "(SELECT * INTO #TempTable FROM (SELECT * FROM tbl) t)")<br>
+                 .option("query", "SELECT * FROM #TempTable")<br>
+                 .load()
+            </code></li>
+      </ol>
+    </td>
+    <td>read/write</td>
+  </tr>
 
   <tr>
     <td><code>driver</code></td>

@@ -2990,9 +2990,9 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
   }
 
   test("SPARK-39093: divide period by integral expression") {
-    val df = Seq(((Period.ofDays(10)), 2)).toDF("pd", "num")
+    val df = Seq(((Period.ofMonths(10)), 2)).toDF("pd", "num")
     checkAnswer(df.select($"pd" / ($"num" + 3)),
-      Seq((Period.ofDays(2))).toDF)
+      Seq((Period.ofMonths(2))).toDF)
   }
 
   test("SPARK-39093: divide duration by integral expression") {
