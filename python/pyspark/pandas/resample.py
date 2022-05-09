@@ -369,7 +369,7 @@ class Resampler(Generic[FrameLike], metaclass=ABCMeta):
             F.col(SPARK_DEFAULT_INDEX_NAME),
             bin_scol.alias(bin_col_name),
             *[psser.spark.column for psser in agg_columns],
-        ).where(~F.isnull(F.col(bin_col_name)))
+        )
 
         # in the padding side, insert necessary points
         # again, directly apply Pandas' resample on a 2-length series to obtain the indices
@@ -385,12 +385,9 @@ class Resampler(Generic[FrameLike], metaclass=ABCMeta):
         )
 
         # union the above two spark dataframes.
-        # something goes wrong and mess the computation logic in the padding side,
-        # which may result in wrong results.
-        # the conversion to/from rdd here is to work around via disabling optimizer.
-        sdf = bin_sdf.unionByName(pad_sdf, allowMissingColumns=True)
-        spark = sdf.sparkSession
-        sdf = spark.createDataFrame(sdf.rdd, sdf.schema).where(~F.isnull(F.col(bin_col_name)))
+        sdf = bin_sdf.unionByName(pad_sdf, allowMissingColumns=True).where(
+            ~F.isnull(F.col(bin_col_name))
+        )
 
         internal = InternalFrame(
             spark_frame=sdf,
