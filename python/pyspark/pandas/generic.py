@@ -1177,7 +1177,8 @@ class Frame(object, metaclass=ABCMeta):
         skipna : bool, default True
             Exclude NA/null values when computing the result.
 
-            .. versionadded:: 3.4.0
+            .. versionchanged:: 3.4.0
+               Supported including NA/null values.
         numeric_only : bool, default None
             Include only float, int, boolean columns. False is not supported. This parameter
             is mainly for pandas compatibility.
@@ -1254,7 +1255,8 @@ class Frame(object, metaclass=ABCMeta):
         skipna : bool, default True
             Exclude NA/null values when computing the result.
 
-            .. versionadded:: 3.4.0
+            .. versionchanged:: 3.4.0
+               Added *skipna* to exclude .
         numeric_only : bool, default None
             Include only float, int, boolean columns. False is not supported. This parameter
             is mainly for pandas compatibility.
@@ -1358,7 +1360,8 @@ class Frame(object, metaclass=ABCMeta):
         skipna : bool, default True
             Exclude NA/null values when computing the result.
 
-            .. versionadded:: 3.4.0
+            .. versionchanged:: 3.4.0
+               Supported including NA/null values.
         numeric_only : bool, default None
             Include only float, int, boolean columns. False is not supported. This parameter
             is mainly for pandas compatibility.
@@ -1469,7 +1472,8 @@ class Frame(object, metaclass=ABCMeta):
         skipna : bool, default True
             Exclude NA/null values when computing the result.
 
-            .. versionadded:: 3.4.0
+            .. versionchanged:: 3.4.0
+               Supported including NA/null values.
         numeric_only : bool, default None
             Include only float, int, boolean columns. False is not supported. This parameter
             is mainly for pandas compatibility.
@@ -1536,7 +1540,8 @@ class Frame(object, metaclass=ABCMeta):
         skipna : bool, default True
             Exclude NA/null values when computing the result.
 
-            .. versionadded:: 3.4.0
+            .. versionchanged:: 3.4.0
+               Supported including NA/null values.
         numeric_only : bool, default None
             Include only float, int, boolean columns. False is not supported. This parameter
             is mainly for pandas compatibility.
@@ -1604,7 +1609,8 @@ class Frame(object, metaclass=ABCMeta):
         skipna : bool, default True
             Exclude NA/null values when computing the result.
 
-            .. versionadded:: 3.4.0
+            .. versionchanged:: 3.4.0
+               Supported including NA/null values.
         numeric_only : bool, default None
             If True, include only float, int, boolean columns. This parameter is mainly for
             pandas compatibility. False is supported; however, the columns should
@@ -1667,7 +1673,8 @@ class Frame(object, metaclass=ABCMeta):
         skipna : bool, default True
             Exclude NA/null values when computing the result.
 
-            .. versionadded:: 3.4.0
+            .. versionchanged:: 3.4.0
+               Supported including NA/null values.
         numeric_only : bool, default None
             If True, include only float, int, boolean columns. This parameter is mainly for
             pandas compatibility. False is supported; however, the columns should
@@ -1808,7 +1815,8 @@ class Frame(object, metaclass=ABCMeta):
         skipna : bool, default True
             Exclude NA/null values when computing the result.
 
-            .. versionadded:: 3.4.0
+            .. versionchanged:: 3.4.0
+               Supported including NA/null values.
         ddof : int, default 1
             Delta Degrees of Freedom. The divisor used in calculations is N - ddof,
             where N represents the number of elements.
@@ -1982,7 +1990,8 @@ class Frame(object, metaclass=ABCMeta):
         skipna : bool, default True
             Exclude NA/null values when computing the result.
 
-            .. versionadded:: 3.4.0
+            .. versionchanged:: 3.4.0
+               Supported including NA/null values.
         numeric_only : bool, default None
             Include only float, int, boolean columns. False is not supported. This parameter
             is mainly for pandas compatibility.
@@ -2101,7 +2110,8 @@ class Frame(object, metaclass=ABCMeta):
         skipna : bool, default True
             Exclude NA/null values when computing the result.
 
-            .. versionadded:: 3.4.0
+            .. versionchanged:: 3.4.0
+               Supported including NA/null values.
         ddof : int, default 1
             Delta Degrees of Freedom. The divisor used in calculations is N - ddof,
             where N represents the number of elements.
