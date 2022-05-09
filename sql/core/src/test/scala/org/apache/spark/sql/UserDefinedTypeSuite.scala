@@ -275,7 +275,7 @@ class UserDefinedTypeSuite extends QueryTest with SharedSparkSession with Parque
 
   test("Test unwrap_udt function") {
     val unwrappedFeatures = pointsRDD.select(unwrap_udt(col("features")))
-      .rdd.map { case Row(v: Array[Double]) => v }
+      .rdd.map { case Row(v: Seq[Double]) => v.toArray }
     val unwrappedFeaturesArrays: Array[Array[Double]] = unwrappedFeatures.collect()
     assert(unwrappedFeaturesArrays.size === 2)
 
