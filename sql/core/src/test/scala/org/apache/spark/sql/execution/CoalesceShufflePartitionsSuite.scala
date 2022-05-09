@@ -444,6 +444,6 @@ class CoalesceShufflePartitionsSuite extends SparkFunSuite with BeforeAndAfterAl
 
 object CoalescedShuffleRead {
   def unapply(read: AQEShuffleReadExec): Boolean = {
-    !read.isLocalRead && !read.hasSkewedPartition && read.hasCoalescedPartition
+    !read.isLocalRead && !read.hasSkewedPartition && read.isCoalescedRead
   }
 }
