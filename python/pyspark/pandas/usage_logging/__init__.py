@@ -140,4 +140,4 @@ def attach(logger_module: Union[str, ModuleType]) -> None:
         ),
     ]
 
-    _attach(logger_module, modules, classes, missings)  # type: ignore[arg-type]
+    _attach(logger_module, modules, classes, missings)
