@@ -18,6 +18,8 @@
 package org.apache.spark.util.kvstore;
 
 import java.io.IOException;
+import java.lang.ref.ReferenceQueue;
+import java.lang.ref.WeakReference;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -192,17 +194,6 @@ class LevelDBIterator<T> implements KVStoreIterator<T> {
     }
   }
 
-  /**
-   * Because it's tricky to expose closeable iterators through many internal APIs, especially
-   * when Scala wrappers are used, this makes sure that, hopefully, the JNI resources held by
-   * the iterator will eventually be released.
-   */
-  @SuppressWarnings("deprecation")
-  @Override
-  protected void finalize() throws Throwable {
-    db.closeIterator(this);
-  }
-
   private byte[] loadNext() {
     if (count >= max) {
       return null;
@@ -280,6 +271,26 @@ class LevelDBIterator<T> implements KVStoreIterator<T> {
     }
 
     return a.length - b.length;
+  }
+
+  static class LevelDBIteratorWeakReference extends WeakReference<LevelDBIterator<?>> {
+
+    private final DBIterator it;
+
+    LevelDBIteratorWeakReference(
+        LevelDBIterator<?> referent,
+        ReferenceQueue<? super LevelDBIterator<?>> q) {
+      super(referent, q);
+      it = referent.it;
+    }
+
+    public void close() {
+      try{
+        it.close();
+      } catch (IOException ignored) {
+        // ignored this.
+      }
+    }
   }
 
 }
