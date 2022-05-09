@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.optimizer
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
+import org.apache.spark.sql.catalyst.expressions.{Add, Literal}
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
@@ -83,6 +84,16 @@ class EliminateOffsetsSuite extends PlanTest {
 
     val optimized = Optimize.execute(originalQuery.analyze)
     val correctAnswer = originalQuery.analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("Combines Offset operators") {
+    val child = testRelation.select($"a").analyze
+    val originalQuery = child.offset(2).offset(3)
+
+    val optimized = Optimize.execute(originalQuery.analyze)
+    val correctAnswer = child.offset(Add(Literal(3), Literal(2))).analyze
 
     comparePlans(optimized, correctAnswer)
   }
