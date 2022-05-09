@@ -17,6 +17,8 @@
 
 package test.org.apache.spark.sql.connector;
 
+import java.util.Arrays;
+
 import org.apache.spark.sql.connector.catalog.Table;
 import org.apache.spark.sql.connector.expressions.*;
 import org.apache.spark.sql.connector.read.*;
@@ -80,7 +82,13 @@ public class JavaOrderAndPartitionAwareDataSource extends JavaPartitionAwareData
     return new JavaSimpleBatchTable() {
       @Override
       public Transform[] partitioning() {
-        return new Transform[] { Expressions.identity("i") };
+        String partitionKeys = options.get("partitionKeys");
+        if (partitionKeys == null) {
+          return new Transform[0];
+        } else {
+          return (Transform[])Arrays.stream(partitionKeys.split(","))
+            .map(Expressions::identity).toArray();
+        }
       }
 
       @Override
