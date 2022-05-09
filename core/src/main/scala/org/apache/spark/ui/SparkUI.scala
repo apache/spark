@@ -175,7 +175,8 @@ private[spark] class SparkUI private (
         sparkUser = getSparkUser,
         completed = false,
         appSparkVersion = appSparkVersion
-      ))
+      )),
+      driverLink = None
     ))
   }
 

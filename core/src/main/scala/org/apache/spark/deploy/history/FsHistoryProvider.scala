@@ -1532,6 +1532,7 @@ private[history] class AppListingListener(
   override def onApplicationStart(event: SparkListenerApplicationStart): Unit = {
     app.id = event.appId.orNull
     app.name = event.appName
+    app.driverLink = event.driverLogs.flatMap(_.get("UI"))
 
     attempt.attemptId = event.appAttemptId
     attempt.startTime = new Date(event.time)
@@ -1596,9 +1597,10 @@ private[history] class AppListingListener(
   private class MutableApplicationInfo {
     var id: String = null
     var name: String = null
+    var driverLink: Option[String] = None
 
     def toView(): ApplicationInfoWrapper = {
-      val apiInfo = ApplicationInfo(id, name, None, None, None, None, Nil)
+      val apiInfo = ApplicationInfo(id, name, None, None, None, None, Nil, driverLink)
       new ApplicationInfoWrapper(apiInfo, List(attempt.toView()))
     }
 

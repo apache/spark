@@ -162,10 +162,6 @@ private[spark] class AppStatusStore(
     store.read(classOf[ExecutorSummaryWrapper], executorId).info
   }
 
-  def driverSummary(): v1.ExecutorSummary = {
-    store.read(classOf[ExecutorSummaryWrapper], SparkContext.DRIVER_IDENTIFIER).info
-  }
-
   /**
    * This is used by ConsoleProgressBar to quickly fetch active stages for drawing the progress
    * bar. It will only return anything useful when called from a live application.

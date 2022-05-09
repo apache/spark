@@ -143,7 +143,7 @@ abstract class FsHistoryProviderSuite extends SparkFunSuite with Matchers with P
         val duration = if (end > 0) end - start else 0
         new ApplicationInfo(id, name, None, None, None, None,
           List(ApplicationAttemptInfo(None, new Date(start),
-            new Date(end), new Date(lastMod), duration, user, completed, SPARK_VERSION)))
+            new Date(end), new Date(lastMod), duration, user, completed, SPARK_VERSION)), None)
       }
 
       // For completed files, lastUpdated would be lastModified time.
@@ -189,7 +189,8 @@ abstract class FsHistoryProviderSuite extends SparkFunSuite with Matchers with P
       )
     val logFile2 = newLogFile("new2", None, inProgress = false)
     writeFile(logFile2, None,
-      SparkListenerApplicationStart("app1-2", Some("app1-2"), 1L, "test", None),
+      SparkListenerApplicationStart("app1-2", Some("app1-2"), 1L, "test", None,
+        Some(Map(("UI" -> "http://cheeseburgers.com")))),
       SparkListenerApplicationEnd(2L)
       )
     logFile2.setReadable(false, false)
@@ -502,7 +503,8 @@ abstract class FsHistoryProviderSuite extends SparkFunSuite with Matchers with P
       SparkListenerExecutorAdded(1 + idx, s"exec$idx", execInfo)
     }.toList.sortBy(_.time)
     val allEvents = List(SparkListenerApplicationStart("app1", Some("app1"), 1L,
-      "test", Some("attempt1"))) ++ executorAddedEvents ++
+      "test", Some("attempt1"),
+      Some(Map(("UI" -> "http://cheeseburgers.com"))))) ++ executorAddedEvents ++
       (if (isCompletedApp) List(SparkListenerApplicationEnd(1000L)) else Seq())
 
     writeFile(attempt1, None, allEvents: _*)
@@ -515,6 +517,9 @@ abstract class FsHistoryProviderSuite extends SparkFunSuite with Matchers with P
         app.attempts.foreach { attempt =>
           val appUi = provider.getAppUI(app.id, attempt.attemptId)
           appUi should not be null
+          appUi.isDefined should not be false
+          val driverLink = appUi.get.ui.store.applicationInfo().driverLink
+          driverLink.isDefined should not be false
           val executors = appUi.get.ui.store.executorList(false).iterator
           executors should not be null
 

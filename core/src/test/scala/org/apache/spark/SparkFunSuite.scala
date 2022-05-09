@@ -104,10 +104,15 @@ abstract class SparkFunSuite
   }
 
   // helper function
+  // In sbt 1.0+ this does not work with run.
+  // https://stackoverflow.com/questions/55493096/listing-files-from-resource-directory-in-sbt-1-2-8
   protected final def getTestResourceFile(file: String): File = {
     new File(getClass.getClassLoader.getResource(file).getFile)
   }
 
+  // helper function
+  // In sbt 1.0+ this does not work with run.
+  // https://stackoverflow.com/questions/55493096/listing-files-from-resource-directory-in-sbt-1-2-8
   protected final def getTestResourcePath(file: String): String = {
     getTestResourceFile(file).getCanonicalPath
   }

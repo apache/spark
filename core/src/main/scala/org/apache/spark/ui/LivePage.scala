@@ -28,7 +28,7 @@ private[ui] class LivePage(parent: LiveTab, store: AppStatusStore) extends WebUI
 
   def render(request: HttpServletRequest): Seq[Node] = {
 
-    val driverLink: Option[String] = store.driverSummary.attributes.get("UI").flatMap { ui =>
+    val driverLink: Option[String] = store.applicationInfo().driverLink.flatMap { ui =>
       // Don't make a link if the app is finished
       if (store.applicationInfo().attempts.last.completed) {
         None

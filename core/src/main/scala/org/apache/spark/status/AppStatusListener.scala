@@ -127,6 +127,8 @@ private[spark] class AppStatusListener(
       false,
       sparkVersion)
 
+    val driverLink = event.driverLogs.flatMap(_.get("UI"))
+
     appInfo = v1.ApplicationInfo(
       event.appId.get,
       event.appName,
@@ -134,7 +136,8 @@ private[spark] class AppStatusListener(
       None,
       None,
       None,
-      Seq(attempt))
+      Seq(attempt),
+      driverLink)
 
     kvstore.write(new ApplicationInfoWrapper(appInfo))
     kvstore.write(appSummary)
@@ -208,7 +211,8 @@ private[spark] class AppStatusListener(
       None,
       None,
       None,
-      Seq(attempt))
+      Seq(attempt),
+      appInfo.driverLink)
     kvstore.write(new ApplicationInfoWrapper(appInfo))
   }
 
