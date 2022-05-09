@@ -134,7 +134,7 @@ def attach(logger_module: Union[str, ModuleType]) -> None:
         (pd.core.window.ExpandingGroupby, MissingPandasLikeExpandingGroupby),
         (pd.core.window.RollingGroupby, MissingPandasLikeRollingGroupby),
         (pd.core.window.ExponentialMovingWindow, MissingPandasLikeExponentialMoving),
-        (pd.core.window.ExponentialMovingWindowGroupby, MissingPandasLikeExponentialMovingGroupby),
+        (pd.core.window.ExponentialMovingWindowGroupby, MissingPandasLikeExponentialMovingGroupby),  # type: ignore[attr-defined]
     ]
 
     _attach(logger_module, modules, classes, missings)  # type: ignore[arg-type]
