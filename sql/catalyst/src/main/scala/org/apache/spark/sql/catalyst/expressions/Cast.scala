@@ -2342,29 +2342,3 @@ case class UpCast(child: Expression, target: AbstractDataType, walkedTypePath: S
 
   override protected def withNewChildInternal(newChild: Expression): UpCast = copy(child = newChild)
 }
-
-/**
- * Unwrap UDT data type column into its underlying struct type
- */
-case class UnwrapUDT(child: Expression) extends UnaryExpression with NonSQLExpression {
-
-  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = child.genCode(ctx)
-
-  override def checkInputDataTypes(): TypeCheckResult = {
-    if (child.dataType.isInstanceOf[UserDefinedType[_]]) {
-      TypeCheckResult.TypeCheckSuccess
-    } else {
-      TypeCheckResult.TypeCheckFailure(
-        s"Input type should be UserDefinedType but got ${child.dataType.catalogString}")
-    }
-  }
-  override def dataType: DataType = child.dataType.asInstanceOf[UserDefinedType[_]].sqlType
-
-  override def nullSafeEval(input: Any): Any = input
-
-  override def prettyName: String = "unwrap_udt"
-
-  override protected def withNewChildInternal(newChild: Expression): UnwrapUDT = {
-    copy(child = newChild)
-  }
-}

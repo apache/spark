@@ -5320,9 +5320,9 @@ def bucket(numBuckets: Union[Column, int], col: "ColumnOrName") -> Column:
 
 def unwrap_udt(col):
     """
-    Unwrap UDT data type column into its underlying struct type
+    Unwrap UDT data type column into its underlying type.
 
-        .. versionadded:: 3.1.0
+        .. versionadded:: 3.4.0
 
     """
     return _invoke_function("unwrap_udt", _to_java_column(col))

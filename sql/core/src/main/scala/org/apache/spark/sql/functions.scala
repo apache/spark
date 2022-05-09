@@ -5501,7 +5501,7 @@ object functions {
   }
 
   /**
-   * Unwrap UDT data type column into its underlying struct type
+   * Unwrap UDT data type column into its underlying type.
    *
    * @since 3.4.0
    */
