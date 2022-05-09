@@ -17,7 +17,6 @@
 package org.apache.spark.sql.execution.datasources.v2.jdbc
 
 import scala.util.control.NonFatal
-
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.connector.expressions.{FieldReference, SortOrder}
@@ -27,6 +26,7 @@ import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownA
 import org.apache.spark.sql.execution.datasources.PartitioningUtils
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JDBCRDD, JDBCRelation}
 import org.apache.spark.sql.execution.datasources.v2.TableSampleInfo
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.jdbc.JdbcDialects
 import org.apache.spark.sql.types.StructType
 
@@ -132,8 +132,8 @@ case class JDBCScanBuilder(
   }
 
   override def pushLimit(limit: Int): Boolean = {
-    if (jdbcOptions.pushDownLimit &&
-      JdbcDialects.get(jdbcOptions.url).canPushDownLimit(jdbcOptions, limit)) {
+    if (jdbcOptions.pushDownLimit && (SQLConf.get.maxJdbcPushDownLimit == -1 ||
+      limit <= SQLConf.get.maxJdbcPushDownLimit)) {
       pushedLimit = limit
       return true
     }

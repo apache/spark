@@ -202,36 +202,24 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
     checkPushedInfo(df5, "PushedFilters: [], ")
     checkAnswer(df5, Seq(Row(10000.00, 1000.0, "amy")))
 
-    val df6 = spark.read
-      .option("maxPushDownLimit", "2")
-      .table("h2.test.employee")
-      .filter($"dept" > 1)
-      .limit(1)
-    checkLimitRemoved(df6)
-    checkPushedInfo(df6,
-      "PushedFilters: [DEPT IS NOT NULL, DEPT > 1], PushedLimit: LIMIT 1, ")
-    checkAnswer(df6, Seq(Row(2, "alex", 12000.00, 1200.0, false)))
-
-    val df7 = spark.read
-      .option("maxPushDownLimit", "2")
-      .table("h2.test.employee")
-      .filter($"dept" > 1)
-      .limit(2)
-    checkLimitRemoved(df7)
-    checkPushedInfo(df7,
-      "PushedFilters: [DEPT IS NOT NULL, DEPT > 1], PushedLimit: LIMIT 2, ")
-    checkAnswer(df7, Seq(Row(2, "alex", 12000, 1200, false), Row(2, "david", 10000, 1300, true)))
-
-    val df8 = spark.read
-      .option("maxPushDownLimit", "2")
-      .table("h2.test.employee")
-      .filter($"dept" > 1)
-      .limit(3)
-    checkLimitRemoved(df8, false)
-    checkPushedInfo(df8,
-      "PushedFilters: [DEPT IS NOT NULL, DEPT > 1], ReadSchema:")
-    checkAnswer(df8, Seq(Row(2, "alex", 12000, 1200, false),
-      Row(2, "david", 10000, 1300, true), Row(6, "jen", 12000, 1200, true)))
+    Seq(1, 2, 3).foreach { maxLimit =>
+      withSQLConf(SQLConf.MAX_JDBC_PUSH_DOWN_LIMIT.key -> maxLimit.toString) {
+        val df6 = spark.read
+          .table("h2.test.employee")
+          .filter($"dept" > 1)
+          .limit(2)
+        checkLimitRemoved(df6, 2 <= maxLimit)
+        if (2 <= maxLimit) {
+          checkPushedInfo(df6,
+            "PushedFilters: [DEPT IS NOT NULL, DEPT > 1], PushedLimit: LIMIT 2, ")
+        } else {
+          checkPushedInfo(df6,
+            "PushedFilters: [DEPT IS NOT NULL, DEPT > 1], ReadSchema:")
+        }
+        checkAnswer(df6,
+          Seq(Row(2, "alex", 12000, 1200, false), Row(2, "david", 10000, 1300, true)))
+      }
+    }
   }
 
   private def checkSortRemoved(df: DataFrame, removed: Boolean = true): Unit = {

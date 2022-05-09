@@ -3798,6 +3798,16 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val MAX_JDBC_PUSH_DOWN_LIMIT =
+    buildConf("spark.sql.sources.jdbc.pushdown.maxLimit")
+      .doc("The maximum value that pushing down LIMIT into V2 JDBC data source. " +
+        "The default value is -1, in which case Spark always push down LIMIT to " +
+        "the JDBC data source. The config only used to avoid OOM at the executor side. " +
+        "If User collect data to driver, OOM may happen at the driver side.")
+      .version("3.4.0")
+      .intConf
+      .createWithDefault(-1)
+
   /**
    * Holds information about keys that have been deprecated.
    *
@@ -4564,6 +4574,8 @@ class SQLConf extends Serializable with Logging {
 
   def histogramNumericPropagateInputType: Boolean =
     getConf(SQLConf.HISTOGRAM_NUMERIC_PROPAGATE_INPUT_TYPE)
+
+  def maxJdbcPushDownLimit: Int = getConf(SQLConf.MAX_JDBC_PUSH_DOWN_LIMIT)
 
   /** ********************** SQLConf functionality methods ************ */
 
