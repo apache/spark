@@ -129,6 +129,12 @@ object ShufflePartitionsUtil extends Logging {
         targetSize, minPartitionSize, true)
     }
 
+    // when all partitions are empty, return single EmptyPartitionSpec here to satisfy
+    // SPARK-32083 (AQE coalesce should at least return one partition).
+    if (inputPartitionSpecs.flatten.flatten.forall(_ == EmptyPartitionSpec)) {
+      return inputPartitionSpecs.map(_ => Seq(EmptyPartitionSpec))
+    }
+
     // ShufflePartitionSpecs at these emptyIndices can NOT be coalesced
     // split inputPartitionSpecs into sub-sequences by the empty indices, and
     // call coalescePartitionsWithSkew to optimize each sub-sequence.
@@ -203,12 +209,6 @@ object ShufflePartitionsUtil extends Logging {
       } else {
         newSpecsSeq.zip(lastSpecs).foreach(t => t._1 ++= t._2.get)
       }
-    }
-
-    // when all partitions are empty, append one EmptyPartitionSpec here to satisfy
-    // SPARK-32083 (AQE coalesce should at least return one partition).
-    if (newSpecsSeq.forall(_.isEmpty)) {
-      newSpecsSeq.foreach(t => t += EmptyPartitionSpec)
     }
 
     if (coalesced) {

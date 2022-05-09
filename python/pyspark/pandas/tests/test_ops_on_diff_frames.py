@@ -899,7 +899,7 @@ class OpsOnDiffFramesEnabledTest(PandasOnSparkTestCase, SQLTestUtils):
         )
 
         with ps.option_context("compute.eager_check", False):
-            self.assert_eq(expected, psser1.compare(psser2))
+            self.assert_eq(expected, psser1.compare(psser2).sort_index())
 
     def test_different_columns(self):
         psdf1 = self.psdf1
