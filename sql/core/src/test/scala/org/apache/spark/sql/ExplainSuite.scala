@@ -528,6 +528,23 @@ class ExplainSuite extends ExplainSuiteHelper with DisableAdaptiveExecutionSuite
         "== Analyzed Logical Plan ==\nCreateViewCommand")
     }
   }
+
+  test("SPARK-39112: UnsupportedOperationException if spark.sql.ui.explainMode is set to cost") {
+    withSQLConf(SQLConf.UI_EXPLAIN_MODE.key -> "cost") {
+      withTempDir { dir =>
+        sql("CREATE DATABASE tmp")
+        sql("DESC DATABASE tmp")
+        sql(s"ALTER DATABASE tmp SET LOCATION '${dir.toURI.toString}'")
+        sql("USE tmp")
+        sql("CREATE TABLE t(c1 int) USING PARQUET")
+        sql("SHOW TABLES")
+        sql("SHOW CREATE TABLE t")
+        sql("SHOW TBLPROPERTIES t")
+        sql("DROP TABLE t")
+        sql("DROP DATABASE tmp")
+      }
+    }
+  }
 }
 
 class ExplainSuiteAE extends ExplainSuiteHelper with EnableAdaptiveExecutionSuite {
