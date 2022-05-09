@@ -175,7 +175,8 @@ class HadoopTableReader(
             def updateExistPathSetByPathPattern(pathPatternStr: String): Unit = {
               val pathPattern = new Path(pathPatternStr)
               val fs = pathPattern.getFileSystem(hadoopConf)
-              val matches = fs.globStatus(pathPattern)
+              val (matches, timeCost) = Utils.timeTakenMs(fs.globStatus(pathPattern))
+              logInfo(s"Get FileStatus for path '$pathPatternStr' costs $timeCost ms.")
               matches.foreach(fileStatus => existPathSet += fileStatus.getPath.toString)
             }
             // convert  /demo/data/year/month/day  to  /demo/data/*/*/*/
