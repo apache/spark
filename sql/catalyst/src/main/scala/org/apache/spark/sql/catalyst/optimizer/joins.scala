@@ -387,11 +387,15 @@ trait JoinSelectionHelper {
     }
   }
 
-  def canPlanAsBroadcastHashJoin(join: Join, conf: SQLConf): Boolean = {
+  def getBroadcastBuildSide(join: Join, conf: SQLConf): Option[BuildSide] = {
     getBroadcastBuildSide(join.left, join.right, join.joinType,
-      join.hint, hintOnly = true, conf).isDefined ||
+      join.hint, hintOnly = true, conf).orElse(
       getBroadcastBuildSide(join.left, join.right, join.joinType,
-        join.hint, hintOnly = false, conf).isDefined
+        join.hint, hintOnly = false, conf))
+  }
+
+  def canPlanAsBroadcastHashJoin(join: Join, conf: SQLConf): Boolean = {
+    getBroadcastBuildSide(join, conf).isDefined
   }
 
   def canPruneLeft(joinType: JoinType): Boolean = joinType match {

@@ -182,7 +182,7 @@ abstract class TypeCoercionBase {
    * Type coercion rule that combines multiple type coercion rules and applies them in a single tree
    * traversal.
    */
-  class CombinedTypeCoercionRule(rules: Seq[TypeCoercionRule]) extends TypeCoercionRule {
+  class CombinedTypeCoercionRule(val rules: Seq[TypeCoercionRule]) extends TypeCoercionRule {
     override def transform: PartialFunction[Expression, Expression] = {
       val transforms = rules.map(_.transform)
       Function.unlift { e: Expression =>

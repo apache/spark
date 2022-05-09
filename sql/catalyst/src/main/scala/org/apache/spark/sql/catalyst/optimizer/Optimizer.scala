@@ -217,8 +217,9 @@ abstract class Optimizer(catalogManager: CatalogManager)
     // aggregate distinct column
     Batch("Distinct Aggregate Rewrite", Once,
       RewriteDistinctAggregates) :+
-    Batch("Push Partial Aggregation Through Join", Once,
+    Batch("Push Partial Aggregation Through Join", fixedPoint,
       PushPartialAggregationThroughJoin,
+      ResolveTimeZone,
       SimplifyCasts) :+
     Batch("Object Expressions Optimization", fixedPoint,
       EliminateMapObjects,
@@ -868,6 +869,15 @@ object ColumnPruning extends Rule[LogicalPlan] {
       f.copy(child = prunedChild(child, f.references))
     case e @ Expand(_, _, child) if !child.outputSet.subsetOf(e.references) =>
       e.copy(child = prunedChild(child, e.references))
+
+    // Prunes the duplicate columns from child of UnaryNode, e.g.: Aggregate
+    case p: UnaryNode
+        if p.child.isInstanceOf[Project] && p.child.output.size > p.child.outputSet.size =>
+      val child = p.child.asInstanceOf[Project]
+      val newProjectList =
+        ExpressionSet(child.projectList).toSeq.map(_.asInstanceOf[NamedExpression])
+      val newChild = child.copy(projectList = newProjectList)
+      p.withNewChildren(Seq(newChild))
 
     // prune unrequired references
     case p @ Project(_, g: Generate) if p.references != g.outputSet =>
