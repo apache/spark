@@ -21,7 +21,6 @@ import java.io.File;
 import java.io.IOException;
 import java.lang.ref.Reference;
 import java.lang.ref.ReferenceQueue;
-import java.lang.ref.WeakReference;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
@@ -293,7 +292,7 @@ public class RocksDB implements KVStore {
       public Iterator<T> iterator() {
         try {
           RocksDBIterator<T> it = new RocksDBIterator<>(type, RocksDB.this, this);
-          iteratorTracker.add(new RocksDBIteratorWeakReference(it, referenceQueue));
+          iteratorTracker.add(new RocksDBIterator.RocksDBIteratorWeakReference(it, referenceQueue));
           return it;
         } catch (Exception e) {
           throw Throwables.propagate(e);
@@ -429,8 +428,8 @@ public class RocksDB implements KVStore {
           Optional.ofNullable(referenceQueue.remove(1000L));
         lastIsPresent = removed.isPresent();
         if (lastIsPresent) {
-          RocksDBIteratorWeakReference reference =
-            (RocksDBIteratorWeakReference) removed.get();
+          RocksDBIterator.RocksDBIteratorWeakReference reference =
+            (RocksDBIterator.RocksDBIteratorWeakReference) removed.get();
           iteratorTracker.remove(reference);
           reference.close();
         }
@@ -478,21 +477,5 @@ public class RocksDB implements KVStore {
       return prefix;
     }
 
-  }
-
-  private static class RocksDBIteratorWeakReference extends WeakReference<RocksDBIterator<?>> {
-
-    private final RocksIterator it;
-
-    RocksDBIteratorWeakReference(
-        RocksDBIterator<?> referent,
-        ReferenceQueue<? super RocksDBIterator<?>> q) {
-      super(referent, q);
-      it = referent.internalIterator();
-    }
-
-    public void close() {
-      it.close();
-    }
   }
 }

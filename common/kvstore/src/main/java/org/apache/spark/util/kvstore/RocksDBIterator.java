@@ -18,6 +18,8 @@
 package org.apache.spark.util.kvstore;
 
 import java.io.IOException;
+import java.lang.ref.ReferenceQueue;
+import java.lang.ref.WeakReference;
 import java.util.*;
 
 import com.google.common.annotations.VisibleForTesting;
@@ -264,7 +266,19 @@ class RocksDBIterator<T> implements KVStoreIterator<T> {
     return a.length - b.length;
   }
 
-  RocksIterator internalIterator() {
-    return it;
+  static class RocksDBIteratorWeakReference extends WeakReference<RocksDBIterator<?>> {
+
+    private final RocksIterator it;
+
+    RocksDBIteratorWeakReference(
+        RocksDBIterator<?> referent,
+        ReferenceQueue<? super RocksDBIterator<?>> q) {
+      super(referent, q);
+      it = referent.it;
+    }
+
+    public void close() {
+      it.close();
+    }
   }
 }
