@@ -107,6 +107,7 @@ class PushPartialAggregationThroughJoinSuite extends PlanTest {
     val originalQuery = testRelation1
       .join(testRelation2, joinType = Inner, condition = Some('a === 'x))
       .groupBy('b)(sum('c).as("sum_c"))
+      .analyze
 
     val correctLeft = PartialAggregate(Seq('a, 'b), Seq(sum('c).as("_pushed_sum_c"), 'a, 'b),
       testRelation1.select('b, 'c, 'a)).as("l")
@@ -120,13 +121,14 @@ class PushPartialAggregationThroughJoinSuite extends PlanTest {
       .groupBy('b)(sumWithDataType('_pushed_sum_c * 'cnt, datatype = Some(LongType)).as("sum_c"))
       .analyze
 
-    comparePlans(Optimize.execute(originalQuery.analyze), correctAnswer)
+    comparePlans(Optimize.execute(originalQuery), correctAnswer)
   }
 
   test("Push down count") {
     val originalQuery = testRelation1
       .join(testRelation2, joinType = Inner, condition = Some('a === 'x))
       .groupBy('b)(count(1).as("cnt"))
+      .analyze
 
     val correctLeft = PartialAggregate(Seq('a, 'b), Seq('a, 'b, count(1).as("cnt")),
       testRelation1.select('b, 'a)).as("l")
@@ -137,15 +139,17 @@ class PushPartialAggregationThroughJoinSuite extends PlanTest {
         condition = Some('a === 'x))
       .select('b, $"l.cnt", $"r.cnt")
       .groupBy('b)(sumWithDataType($"l.cnt" * $"r.cnt", datatype = Some(LongType)).as("cnt"))
+      .analyze
 
 
-    comparePlans(Optimize.execute(originalQuery.analyze), correctAnswer.analyze)
+    comparePlans(Optimize.execute(originalQuery), correctAnswer)
   }
 
   test("Push down avg") {
     val originalQuery = testRelation1
       .join(testRelation2, joinType = Inner, condition = Some('a === 'x))
       .groupBy('b)(avg('c).as("avg_c"))
+      .analyze
 
     val correctLeft = PartialAggregate(Seq('a, 'b),
       Seq(sumWithDataType('c, datatype = Some(DoubleType)).as("_pushed_sum_c"), 'a, 'b,
@@ -165,14 +169,16 @@ class PushPartialAggregationThroughJoinSuite extends PlanTest {
       condition = Some('a === 'x))
       .select( $"l._pushed_sum_c", 'b, $"l.cnt", $"r.cnt")
       .groupBy('b)(newAvg.as("avg_c"))
+      .analyze
 
-    comparePlans(Optimize.execute(originalQuery.analyze), correctAnswer.analyze)
+    comparePlans(Optimize.execute(originalQuery), correctAnswer)
   }
 
   test("Push down first and last") {
     val originalQuery = testRelation1
       .join(testRelation2, joinType = Inner, condition = Some('a === 'x))
       .groupBy('b)(first('c).as("first_c"), last('c).as("last_c"))
+      .analyze
 
     val correctLeft = PartialAggregate(Seq('a, 'b),
       Seq(first('c).as("_pushed_first_c"), last('c).as("_pushed_last_c"), 'a, 'b),
@@ -183,14 +189,16 @@ class PushPartialAggregationThroughJoinSuite extends PlanTest {
       condition = Some('a === 'x))
       .select($"l._pushed_first_c", $"l._pushed_last_c", 'b)
       .groupBy('b)(first('_pushed_first_c).as("first_c"), last('_pushed_last_c).as("last_c"))
+      .analyze
 
-    comparePlans(Optimize.execute(originalQuery.analyze), correctAnswer.analyze)
+    comparePlans(Optimize.execute(originalQuery), correctAnswer)
   }
 
   test("Push down max and min") {
     val originalQuery = testRelation1
       .join(testRelation2, joinType = Inner, condition = Some('a === 'x))
       .groupBy('b)(max('c).as("max_c"), min('c).as("min_c"))
+      .analyze
 
     val correctLeft = PartialAggregate(Seq('a, 'b),
       Seq(max('c).as("_pushed_max_c"), min('c).as("_pushed_min_c"), 'a, 'b),
@@ -201,8 +209,9 @@ class PushPartialAggregationThroughJoinSuite extends PlanTest {
       condition = Some('a === 'x))
       .select($"l._pushed_max_c", $"l._pushed_min_c", 'b)
       .groupBy('b)(max('_pushed_max_c).as("max_c"), min('_pushed_min_c).as("min_c"))
+      .analyze
 
-    comparePlans(Optimize.execute(originalQuery.analyze), correctAnswer.analyze)
+    comparePlans(Optimize.execute(originalQuery), correctAnswer)
   }
 
   test("Push distinct") {
@@ -262,6 +271,7 @@ class PushPartialAggregationThroughJoinSuite extends PlanTest {
         val originalQuery = testRelation1
           .join(testRelation2, joinType = joinType, condition = Some('a === 'x))
           .groupBy('b)(sumDistinct('c), countDistinct('c))
+          .analyze
 
         val correctLeft = PartialAggregate(Seq('a, 'b, 'c), Seq('a, 'b, 'c), testRelation1).as("l")
         val correctRight = PartialAggregate(Seq('x), Seq('x), testRelation2.select('x)).as("r")
@@ -270,8 +280,9 @@ class PushPartialAggregationThroughJoinSuite extends PlanTest {
           condition = Some('a === 'x))
           .select('b, 'c)
           .groupBy('b)(sumDistinct('c), countDistinct('c))
+          .analyzePlan
 
-        comparePlans(Optimize.execute(originalQuery.analyze), correctAnswer.analyze)
+        comparePlans(Optimize.execute(originalQuery), correctAnswer)
       }
     }
   }
@@ -287,7 +298,7 @@ class PushPartialAggregationThroughJoinSuite extends PlanTest {
           val correctRight = PartialAggregate(Seq('x), Seq('x), testRelation2.select('x)).as("r")
           val correctAnswer = testRelation1.join(correctRight, joinType = joinType,
             condition = Some('a === 'x))
-            .analyze
+            .analyzePlan
 
           if (threshold < 0) {
             comparePlans(Optimize.execute(originalQuery), correctAnswer)
@@ -303,6 +314,7 @@ class PushPartialAggregationThroughJoinSuite extends PlanTest {
     val originalQuery = testRelation1
       .join(testRelation2, joinType = Inner, condition = Some('a + 1 === 'x + 2))
       .groupBy('b)(max('c).as("max_c"))
+      .analyze
 
     val correctLeft = PartialAggregate(Seq('_pullout_add_a, 'b),
       Seq('_pullout_add_a, max('c).as("_pushed_max_c"), 'b),
@@ -314,14 +326,16 @@ class PushPartialAggregationThroughJoinSuite extends PlanTest {
       condition = Some('_pullout_add_a === '_pullout_add_x))
       .select($"l._pushed_max_c", 'b)
       .groupBy('b)(max('_pushed_max_c).as("max_c"))
+      .analyzePlan
 
-    comparePlans(Optimize.execute(originalQuery.analyze), correctAnswer.analyze)
+    comparePlans(Optimize.execute(originalQuery), correctAnswer)
   }
 
   test("Complex grouping keys") {
     val originalQuery = testRelation1
       .join(testRelation2, joinType = Inner, condition = Some('a === 'x))
       .groupBy('b + 1)(max('c).as("max_c"))
+      .analyze
 
     val correctLeft = PartialAggregate(Seq('a, '_groupingexpression),
       Seq('_groupingexpression, max('c).as("_pushed_max_c"), 'a),
@@ -333,8 +347,9 @@ class PushPartialAggregationThroughJoinSuite extends PlanTest {
       condition = Some('x === 'a))
       .select($"l._groupingexpression", $"l._pushed_max_c")
       .groupBy('_groupingexpression)(max('_pushed_max_c).as("max_c"))
+      .analyzePlan
 
-    comparePlans(Optimize.execute(originalQuery.analyze), correctAnswer.analyze)
+    comparePlans(Optimize.execute(originalQuery), correctAnswer)
   }
 
   test("Complex expressions between Aggregate and Join") {
@@ -342,6 +357,7 @@ class PushPartialAggregationThroughJoinSuite extends PlanTest {
       .join(testRelation2, joinType = Inner, condition = Some('a === 'x))
       .select(('a + 1).as("a1"), 'b)
       .groupBy('a1)(max('b).as("max_b"))
+      .analyze
 
     val correctLeft = PartialAggregate(Seq('a, 'a1),
       Seq(max('b).as("_pushed_max_b"), 'a, 'a1),
@@ -353,8 +369,9 @@ class PushPartialAggregationThroughJoinSuite extends PlanTest {
       condition = Some('x === 'a))
       .select($"l._pushed_max_b", 'a1)
       .groupBy('a1)(max('_pushed_max_b).as("max_b"))
+      .analyzePlan
 
-    comparePlans(Optimize.execute(originalQuery.analyze), correctAnswer.analyze)
+    comparePlans(Optimize.execute(originalQuery), correctAnswer)
   }
 
   test("Decimal type sum") {
@@ -446,6 +463,67 @@ class PushPartialAggregationThroughJoinSuite extends PlanTest {
     }
   }
 
+  test("Push down partial aggregate") {
+    val originalQuery = PartialAggregate(Seq('a, 'y), Seq('a, 'y),
+      testRelation1.join(testRelation2, joinType = FullOuter, condition = Some('a === 'x)))
+      .analyze
+
+    val correctLeft = PartialAggregate(Seq('a), Seq('a),
+      testRelation1.select('a)).as("l")
+    val correctRight = PartialAggregate(Seq('x, 'y), Seq('x, 'y),
+      testRelation2.select('x, 'y)).as("r")
+
+    val correctAnswer =
+      correctLeft.join(correctRight,
+        joinType = FullOuter, condition = Some('a === 'x))
+        .select('a, 'y)
+        .analyzePlan
+
+    comparePlans(Optimize.execute(originalQuery), correctAnswer)
+  }
+
+  test("Push down partial aggregate through join") {
+    val originalQuery = testRelation1.as("t1")
+      .join(testRelation2.as("t2"), joinType = FullOuter, condition = Some($"t1.a" === 'x))
+      .join(testRelation1.as("t3"), joinType = Inner, condition = Some($"t3.b" === 'y))
+      .groupBy($"t1.c")(max($"t3.c").as("max_c"))
+      .analyze
+
+    val correctAnswer =
+      PartialAggregate(Seq('a, 'c), Seq('a, 'c), testRelation1.select('a, 'c)).as("t1")
+        .join(PartialAggregate(Seq('x, 'y), Seq('x, 'y), testRelation2.select('x, 'y)).as("t2"),
+          joinType = FullOuter, condition = Some('x === 'a))
+        .select('c, 'y)
+        .join(PartialAggregate(Seq('b), Seq(max('c).as("_pushed_max_c"), 'b),
+          testRelation1.select('c, 'b)).as("t3"), joinType = Inner, condition = Some('b === 'y))
+        .select('c, $"t3._pushed_max_c")
+        .groupBy($"t1.c")(max($"t3._pushed_max_c").as("max_c"))
+        .analyzePlan
+
+    comparePlans(Optimize.execute(originalQuery), correctAnswer)
+  }
+
+  test("Add join condition references to split list") {
+    val originalQuery = testRelation1
+      .join(testRelation2, joinType = Inner, condition = Some('a === 'x))
+      .groupBy('b)(sum('c).as("sum_c"))
+      .analyze
+
+    val correctLeft = PartialAggregate(Seq('a, 'b), Seq(sum('c).as("_pushed_sum_c"), 'a, 'b),
+      testRelation1.select('b, 'c, 'a)).as("l")
+    val correctRight = PartialAggregate(Seq('x), Seq(count(1).as("cnt"), 'x),
+      testRelation2.select('x)).as("r")
+
+    val correctAnswer =
+      correctLeft.join(correctRight,
+        joinType = Inner, condition = Some('a === 'x))
+        .select('_pushed_sum_c, 'b, 'cnt)
+        .groupBy('b)(sumWithDataType('_pushed_sum_c * 'cnt, datatype = Some(LongType)).as("sum_c"))
+        .analyzePlan
+
+    comparePlans(Optimize.execute(originalQuery), correctAnswer)
+  }
+
   // The following tests are unsupported cases
 
   test("Do not push down count if grouping is empty") {
@@ -457,11 +535,96 @@ class PushPartialAggregationThroughJoinSuite extends PlanTest {
     comparePlans(Optimize.execute(originalQuery), ColumnPruning(originalQuery))
   }
 
+  test("Do not push down avg if grouping is empty") {
+    val originalQuery = testRelation1
+      .join(testRelation2, joinType = Inner, condition = Some('a === 'x))
+      .groupBy()(avg('y).as("avg_y"))
+      .analyze
+
+    comparePlans(Optimize.execute(originalQuery), ColumnPruning(originalQuery))
+  }
+
   test("Do not push down there are too many aggregate expressions") {
     val originalQuery = testRelation1
       .join(testRelation2, joinType = Inner, condition = Some('a === 'x))
       .groupBy('b)(first('c).as("first_c"), last('c).as("last_c"), max('c).as("max_c"),
         min('c).as("min_c"), sum('c).as("max_c"))
+      .analyze
+
+    comparePlans(Optimize.execute(originalQuery), ColumnPruning(originalQuery))
+  }
+
+  test("Do not push down if the aggregate references from both left and right side") {
+    val originalQuery1 = testRelation1
+      .join(testRelation2, joinType = Inner, condition = Some('a === 'x))
+      .groupBy('b)(sum('c + 'y).as("sum_c_y"))
+      .analyze
+
+    comparePlans(Optimize.execute(originalQuery1), ColumnPruning(originalQuery1))
+
+    val originalQuery2 = testRelation1
+      .join(testRelation2, joinType = Inner, condition = Some('a === 'x))
+      .select('b, ('c + 'y).as("cy"))
+      .groupBy('b)(sum('cy).as("sum_c_y"))
+      .analyze
+
+    comparePlans(Optimize.execute(originalQuery2), ColumnPruning(originalQuery2))
+  }
+
+  test("Do not push down aggregate expressions if the aggregate references is empty") {
+    val originalQuery = testRelation1
+      .join(testRelation2, joinType = Inner, condition = Some('a === 'x))
+      .groupBy('b)(sum(1).as("sum_lit_1"))
+      .analyze
+
+    comparePlans(Optimize.execute(originalQuery), ColumnPruning(originalQuery))
+  }
+
+  test("Do not push down if grouping references from left and right side") {
+    val originalQuery = testRelation1
+      .join(testRelation2, joinType = Inner, condition = Some('a === 'x))
+      .groupBy('b + 'y)(sum('z).as("sum_z"))
+      .analyze
+
+    comparePlans(Optimize.execute(originalQuery),
+      CollapseProject(ColumnPruning(PullOutGroupingExpressions(originalQuery))))
+  }
+
+  test("Do not push down if join condition is empty or contains unequal expression") {
+    Seq(None, Some('a > 'x)).foreach { condition =>
+      val originalQuery = testRelation1
+        .join(testRelation2, joinType = Inner, condition = condition)
+        .groupBy('b)(sum('y).as("sum_y"))
+        .analyze
+
+      comparePlans(Optimize.execute(originalQuery), ColumnPruning(originalQuery))
+    }
+  }
+
+  test("Do not push down aggregate expressions if it's not Inner Join") {
+    Seq(LeftOuter, RightOuter, FullOuter).foreach { joinType =>
+      val originalQuery = testRelation1
+        .join(testRelation2, joinType = joinType, condition = Some('a === 'x))
+        .groupBy('b)(sum('c).as("sum_c"))
+        .analyze
+
+      comparePlans(Optimize.execute(originalQuery), ColumnPruning(originalQuery))
+    }
+  }
+
+  test("Do not push down aggregate expressions if it's not pushable expression") {
+    val originalQuery = testRelation1
+      .join(testRelation2, joinType = Inner, condition = Some('a === 'x))
+      .groupBy('b)(bitAnd('c).as("bitAnd_c"))
+      .analyze
+
+    comparePlans(Optimize.execute(originalQuery), ColumnPruning(originalQuery))
+  }
+
+  test("Do not push down aggregate expressions if the aggregate filter is not empty") {
+    val originalQuery = testRelation1
+      .join(testRelation2, joinType = Inner, condition = Some('a === 'x))
+      .groupBy('b)(sum('c, Some('c > 1)).as("sum_c"))
       .analyze
 
     comparePlans(Optimize.execute(originalQuery), ColumnPruning(originalQuery))
