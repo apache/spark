@@ -35,6 +35,7 @@ from pyspark.testing.pandasutils import PandasOnSparkTestCase, TestUtils
 
 
 class GroupByTest(PandasOnSparkTestCase, TestUtils):
+    @property
     def pdf(self):
         return pd.DataFrame(
             {
@@ -45,8 +46,9 @@ class GroupByTest(PandasOnSparkTestCase, TestUtils):
             }
         )
 
+    @property
     def psdf(self):
-        return ps.from_pandas(self.pdf())
+        return ps.from_pandas(self.pdf)
 
     def test_groupby_simple(self):
         pdf = pd.DataFrame(
@@ -1154,7 +1156,7 @@ class GroupByTest(PandasOnSparkTestCase, TestUtils):
         )
         self.assert_eq(
             psdf.groupby([("X", "A"), ("Y", "B")]).size().sort_index(),
-            pdf.groupby([("X", "A"), ("Y", "B")]).size().sort_index(),
+            pdf.groupby([("X", "A"), ("Y", "B")]f).size().sort_index(),
         )
 
     def test_diff(self):
@@ -1258,7 +1260,7 @@ class GroupByTest(PandasOnSparkTestCase, TestUtils):
 
     # TODO: All statistical functions should leverage this utility
     def _test_stat_func(self, func, check_exact=True):
-        pdf, psdf = self.pdf(), self.psdf()
+        pdf, psdf = self.pdf, self.psdf
         for p_groupby_obj, ps_groupby_obj in [
             # Against DataFrameGroupBy
             (pdf.groupby("A"), psdf.groupby("A")),
@@ -1276,7 +1278,7 @@ class GroupByTest(PandasOnSparkTestCase, TestUtils):
     def test_basic_stat_funcs(self):
         self._test_stat_func(lambda groupby_obj: groupby_obj.var(), check_exact=False)
 
-        pdf, psdf = self.pdf(), self.psdf()
+        pdf, psdf = self.pdf, self.psdf
 
         # Unlike pandas', the median in pandas-on-Spark is an approximated median based upon
         # approximate percentile computation because computing median across a large dataset
@@ -1313,7 +1315,7 @@ class GroupByTest(PandasOnSparkTestCase, TestUtils):
         self._test_stat_func(lambda groupby_obj: groupby_obj.mean())
         self._test_stat_func(lambda groupby_obj: groupby_obj.mean(numeric_only=None))
         self._test_stat_func(lambda groupby_obj: groupby_obj.mean(numeric_only=True))
-        psdf = self.psdf()
+        psdf = self.psdf
         with self.assertRaises(TypeError):
             psdf.groupby("A")["C"].mean()
 
