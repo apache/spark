@@ -40,6 +40,8 @@ case class JDBCTable(ident: Identifier, schema: StructType, jdbcOptions: JDBCOpt
     util.EnumSet.of(BATCH_READ, V1_BATCH_WRITE, TRUNCATE)
   }
 
+  override def properties(): util.Map[String, String] = jdbcOptions.parameters.toMap.asJava
+
   override def newScanBuilder(options: CaseInsensitiveStringMap): JDBCScanBuilder = {
     val mergedOptions = new JDBCOptions(
       jdbcOptions.parameters.originalMap ++ options.asCaseSensitiveMap().asScala)

@@ -1296,4 +1296,13 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
       }
     }
   }
+
+  test("SPARK-39136: JDBCTable support table properties") {
+    assert(
+      sql("DESC FORMATTED h2.test.employee")
+        .collect()
+        .filter(_.getString(0) == "Table Properties")
+        .head.getString(1)
+        .contains("dbtable=\"test\".\"employee\""))
+  }
 }
