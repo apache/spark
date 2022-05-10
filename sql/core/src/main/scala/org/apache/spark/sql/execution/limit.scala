@@ -82,7 +82,8 @@ case class CollectLimitExec(
             writeMetrics),
           readMetrics)
       }
-      offsetOpt.map(offset => singlePartitionRDD.mapPartitionsInternal(_.drop(offset).take(limit)))
+      offsetOpt
+        .map(offset => singlePartitionRDD.mapPartitionsInternal(_.slice(offset, offset + limit)))
         .getOrElse(singlePartitionRDD.mapPartitionsInternal(_.take(limit)))
     }
   }
@@ -214,7 +215,7 @@ case class GlobalLimitAndOffsetExec(
   override def requiredChildDistribution: List[Distribution] = AllTuples :: Nil
 
   override def doExecute(): RDD[InternalRow] = child.execute().mapPartitions { iter =>
-    iter.take(limit + offset).drop(offset)
+    iter.slice(offset, limit + offset)
   }
 
   private lazy val skipTerm = BaseLimitExec.newLimitCountTerm()
