@@ -459,6 +459,8 @@ trait Nondeterministic extends Expression {
  * All optimization should be careful with the evaluation order.
  */
 trait ConditionalExpression extends Expression {
+  final override def foldable: Boolean = children.forall(_.foldable)
+
   /**
    * Return the children expressions which can always be hit at runtime.
    */
