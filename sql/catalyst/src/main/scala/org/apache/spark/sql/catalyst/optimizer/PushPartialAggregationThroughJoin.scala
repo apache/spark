@@ -101,8 +101,8 @@ object PushPartialAggregationThroughJoin extends Rule[LogicalPlan]
     // redefines the same ExprId.
     expr.mapChildren(_.transformUp {
       case e @ Sum(_, useAnsiAdd, dt) if aliasMap.contains(e.canonicalized) =>
-        val value = aliasMap(e.canonicalized)
-        val multiply = Multiply(value.toAttribute,
+        val value = aliasMap(e.canonicalized).toAttribute
+        val multiply = Multiply(value,
           cnt.toAttribute.cast(value.dataType, Some(conf.sessionLocalTimeZone)))
         e.dataType match {
           case decType: DecimalType =>
@@ -254,7 +254,7 @@ object PushPartialAggregationThroughJoin extends Rule[LogicalPlan]
 
   // The entry of push down partial aggregate through join.
   // Will return the current aggregate if it can't push down.
-  private def pushDownAggThroughJoin(
+  private def pushAggThroughJoin(
       agg: Aggregate,
       projectList: Seq[NamedExpression],
       leftKeys: Seq[Expression],
@@ -359,11 +359,11 @@ object PushPartialAggregationThroughJoin extends Rule[LogicalPlan]
         if j.children.exists(_.isInstanceOf[AggregateBase]) =>
       agg
 
-    case agg @ PartialAggregate(_, _, join: Join)
-        if join.children.exists(_.isInstanceOf[AggregateBase]) =>
+    case agg @ PartialAggregate(_, _, j: Join)
+        if j.children.exists(_.isInstanceOf[AggregateBase]) =>
       agg
-    case agg @ PartialAggregate(_, _, Project(_, join: Join))
-        if join.children.exists(_.isInstanceOf[AggregateBase]) =>
+    case agg @ PartialAggregate(_, _, Project(_, j: Join))
+        if j.children.exists(_.isInstanceOf[AggregateBase]) =>
       agg
 
     case agg @ PartialAggregate(_, aggregateExps, j: Join)
@@ -384,14 +384,14 @@ object PushPartialAggregationThroughJoin extends Rule[LogicalPlan]
       j @ ExtractEquiJoinKeys(Inner, leftKeys, rightKeys, None, _, left, right, _))
         if groupExps.forall(_.isInstanceOf[Attribute]) && aggregateExps.forall(_.deterministic) &&
           leftKeys.nonEmpty && supportPushDownAgg(agg.aggregateExprs, left, right) =>
-      pushDownAggThroughJoin(agg, j.output, leftKeys, rightKeys, j)
+      pushAggThroughJoin(agg, j.output, leftKeys, rightKeys, j)
 
     case agg @ Aggregate(groupExps, aggregateExps, Project(projectList,
       j @ ExtractEquiJoinKeys(Inner, leftKeys, rightKeys, None, _, left, right, _)))
         if groupExps.forall(_.isInstanceOf[Attribute]) && aggregateExps.forall(_.deterministic) &&
           projectList.forall(_.deterministic) && leftKeys.nonEmpty &&
           supportPushDownAgg(agg.aggregateExprs, left, right) =>
-      pushDownAggThroughJoin(agg, projectList, leftKeys, rightKeys, j)
+      pushAggThroughJoin(agg, projectList, leftKeys, rightKeys, j)
 
     case j @ Join(_, _: AggregateBase, _, _, _) =>
       j

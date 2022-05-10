@@ -217,7 +217,7 @@ class PushPartialAggregationThroughJoinSuite extends PlanTest {
   test("Push distinct") {
     Seq(-1, 10000).foreach { threshold =>
       withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> threshold.toString) {
-        Seq(Inner, LeftOuter, RightOuter, FullOuter).foreach { joinType =>
+        Seq(Inner, LeftOuter, RightOuter, FullOuter, Cross).foreach { joinType =>
           val originalQuery = testRelation1
             .join(testRelation2, joinType = joinType, condition = Some('a === 'x))
             .groupBy('b, 'y)('b, 'y)

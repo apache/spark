@@ -869,15 +869,6 @@ object ColumnPruning extends Rule[LogicalPlan] {
     case e @ Expand(_, _, child) if !child.outputSet.subsetOf(e.references) =>
       e.copy(child = prunedChild(child, e.references))
 
-    // Prunes the duplicate columns from child of UnaryNode, e.g.: Aggregate
-    case p: UnaryNode
-        if p.child.isInstanceOf[Project] && p.child.output.size > p.child.outputSet.size =>
-      val child = p.child.asInstanceOf[Project]
-      val newProjectList =
-        ExpressionSet(child.projectList).toSeq.map(_.asInstanceOf[NamedExpression])
-      val newChild = child.copy(projectList = newProjectList)
-      p.withNewChildren(Seq(newChild))
-
     // prune unrequired references
     case p @ Project(_, g: Generate) if p.references != g.outputSet =>
       val requiredAttrs = p.references -- g.producedAttributes ++ g.generator.references
@@ -1689,7 +1680,7 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
       val aliasMap = getAliasMap(project)
       project.copy(child = Filter(replaceAlias(condition, aliasMap), grandChild))
 
-    case filter @ Filter(condition, aggregate: Aggregate)
+    case filter @ Filter(condition, aggregate: AggregateBase)
       if aggregate.aggregateExpressions.forall(_.deterministic)
         && aggregate.groupingExpressions.nonEmpty =>
       val aliasMap = getAliasMap(aggregate)
@@ -1709,35 +1700,7 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
       if (pushDown.nonEmpty) {
         val pushDownPredicate = pushDown.reduce(And)
         val replaced = replaceAlias(pushDownPredicate, aliasMap)
-        val newAggregate = aggregate.copy(child = Filter(replaced, aggregate.child))
-        // If there is no more filter to stay up, just eliminate the filter.
-        // Otherwise, create "Filter(stayUp) <- Aggregate <- Filter(pushDownPredicate)".
-        if (stayUp.isEmpty) newAggregate else Filter(stayUp.reduce(And), newAggregate)
-      } else {
-        filter
-      }
-
-    case filter @ Filter(condition, aggregate: PartialAggregate)
-      if aggregate.aggregateExpressions.forall(_.deterministic)
-        && aggregate.groupingExpressions.nonEmpty =>
-      val aliasMap = getAliasMap(aggregate)
-
-      // For each filter, expand the alias and check if the filter can be evaluated using
-      // attributes produced by the aggregate operator's child operator.
-      val (candidates, nonDeterministic) =
-      splitConjunctivePredicates(condition).partition(_.deterministic)
-
-      val (pushDown, rest) = candidates.partition { cond =>
-        val replaced = replaceAlias(cond, aliasMap)
-        cond.references.nonEmpty && replaced.references.subsetOf(aggregate.child.outputSet)
-      }
-
-      val stayUp = rest ++ nonDeterministic
-
-      if (pushDown.nonEmpty) {
-        val pushDownPredicate = pushDown.reduce(And)
-        val replaced = replaceAlias(pushDownPredicate, aliasMap)
-        val newAggregate = aggregate.copy(child = Filter(replaced, aggregate.child))
+        val newAggregate = aggregate.withNewChildren(Seq(Filter(replaced, aggregate.child)))
         // If there is no more filter to stay up, just eliminate the filter.
         // Otherwise, create "Filter(stayUp) <- Aggregate <- Filter(pushDownPredicate)".
         if (stayUp.isEmpty) newAggregate else Filter(stayUp.reduce(And), newAggregate)

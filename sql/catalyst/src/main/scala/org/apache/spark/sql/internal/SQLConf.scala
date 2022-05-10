@@ -832,6 +832,14 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val PUSH_PARTIAL_AGGREGATION_ENABLED =
+    buildConf("spark.sql.pushPartialAggregationThroughJoin.enabled")
+    .internal()
+    .doc("When true, the query optimizer will push the partial aggregation through Join.")
+    .version("3.4.0")
+    .booleanConf
+    .createWithDefault(false)
+
   val ESCAPED_STRING_LITERALS = buildConf("spark.sql.parser.escapedStringLiterals")
     .internal()
     .doc("When true, string literals (including regex patterns) remain escaped in our SQL " +
