@@ -809,6 +809,34 @@ abstract class ParquetQuerySuite extends QueryTest with ParquetTest with SharedS
     }
   }
 
+  test("SPARK-39086: support UDT type in ColumnVector") {
+    val schema = StructType(
+      StructField("col1", ArrayType(new TestPrimitiveUDT())) ::
+      StructField("col2", ArrayType(new TestArrayUDT())) ::
+      StructField("col3", ArrayType(new TestNestedStructUDT())) ::
+      Nil)
+
+    withTempPath { dir =>
+      val rows = sparkContext.parallelize(0 until 2).map { _ =>
+        Row(
+          Seq(new TestPrimitive(1)),
+          Seq(new TestArray(Seq(1L, 2L, 3L))),
+          Seq(new TestNestedStruct(1, 2L, 3.0)))
+      }
+      val df = spark.createDataFrame(rows, schema)
+      df.write.parquet(dir.getCanonicalPath)
+
+      for (offHeapEnabled <- Seq(true, false)) {
+        withSQLConf(SQLConf.COLUMN_VECTOR_OFFHEAP_ENABLED.key -> offHeapEnabled.toString) {
+          withAllParquetReaders {
+            val res = spark.read.parquet(dir.getCanonicalPath)
+            checkAnswer(res, df)
+          }
+        }
+      }
+    }
+  }
+
   test("expand UDT in StructType") {
     val schema = new StructType().add("n", new TestNestedStructUDT, nullable = true)
     val expected = new StructType().add("n", new TestNestedStructUDT().sqlType, nullable = true)
@@ -1168,6 +1196,7 @@ object TestingUDT {
       row.setInt(0, n.a)
       row.setLong(1, n.b)
       row.setDouble(2, n.c)
+      row
     }
 
     override def userClass: Class[TestNestedStruct] = classOf[TestNestedStruct]
@@ -1186,7 +1215,7 @@ object TestingUDT {
   class TestArrayUDT extends UserDefinedType[TestArray] {
     override def sqlType: DataType = ArrayType(LongType)
 
-    override def serialize(obj: TestArray): Any = obj.value.toArray
+    override def serialize(obj: TestArray): Any = ArrayData.toArrayData(obj.value.toArray)
 
     override def userClass: Class[TestArray] = classOf[TestArray]
 
