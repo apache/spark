@@ -41,7 +41,7 @@ import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog.HiveTableRelation
 import org.apache.spark.sql.catalyst.encoders._
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.json.{JSONOptions, JacksonGenerator}
+import org.apache.spark.sql.catalyst.json.{JacksonGenerator, JSONOptions}
 import org.apache.spark.sql.catalyst.optimizer.CombineUnions
 import org.apache.spark.sql.catalyst.parser.{ParseException, ParserUtils}
 import org.apache.spark.sql.catalyst.plans._
@@ -3919,7 +3919,7 @@ class Dataset[T] private[sql](
       case NonFatal(e) =>
         throw new SparkException(
           errorClass = "INTERNAL_ERROR",
-          messageParameters = Array(s"The \"$name\" action failed."),
+          messageParameters = Array(s"""The "$name" action failed."""),
           cause = e)
       case e: Throwable => throw e
     }
