@@ -29,7 +29,7 @@ import org.apache.spark.sql.catalyst.expressions.objects.AssertNotNull
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
-import org.apache.spark.sql.catalyst.trees.AlwaysProcess
+import org.apache.spark.sql.catalyst.trees.{AlwaysProcess, TreeNodeTag}
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -44,6 +44,9 @@ import org.apache.spark.unsafe.types.UTF8String
  * equivalent [[Literal]] values.
  */
 object ConstantFolding extends Rule[LogicalPlan] {
+  // This tag is for avoid repeatedly evaluating expression inside condition which has already
+  // failed to evaluate
+  private val FAILED_TO_EVALUATED = TreeNodeTag[Boolean]("FAILED_TO_EVALUATED")
 
   private def hasNoSideEffect(e: Expression): Boolean = e match {
     case _: Attribute => true
@@ -53,26 +56,11 @@ object ConstantFolding extends Rule[LogicalPlan] {
     case _ => false
   }
 
-  /**
-   * The method is used to fold the children expression inside a conditional expression which
-   * is not foldable. Some branches may not be evaluated at runtime, so here we should in case of
-   * the exception and leave it to runtime
-   */
-  private def conditionalExpressionFolding(child: Expression): Expression = {
-    if (child.foldable) {
-      try {
-        Literal.create(child.eval(EmptyRow), child.dataType)
-      } catch {
-        case NonFatal(_) => child
-      }
-    } else {
-      child.mapChildren(conditionalExpressionFolding)
-    }
-  }
-
-  private def constantFolding(e: Expression): Expression = e match {
+  private def constantFolding(
+      e: Expression,
+      isConditionalBranch: Boolean = false): Expression = e match {
     case c: ConditionalExpression if !c.foldable =>
-      c.mapChildren(conditionalExpressionFolding)
+      c.mapChildren(constantFolding(_, isConditionalBranch = true))
 
     // Skip redundant folding of literals. This rule is technically not necessary. Placing this
     // here avoids running the next rule for Literal values, which would create a new Literal
@@ -84,14 +72,26 @@ object ConstantFolding extends Rule[LogicalPlan] {
     case Size(c: CreateMap, _) if c.children.forall(hasNoSideEffect) =>
       Literal(c.children.length / 2)
 
-    // Fold expressions that are foldable.
-    case e if e.foldable => Literal.create(e.eval(EmptyRow), e.dataType)
+    case e if e.getTagValue(FAILED_TO_EVALUATED).getOrElse(false) => e
 
-    case other => other.mapChildren(constantFolding)
+    // Fold expressions that are foldable.
+    case e if e.foldable =>
+      try {
+        Literal.create(e.eval(EmptyRow), e.dataType)
+      } catch {
+        case NonFatal(_) if isConditionalBranch =>
+          // Fold the children expression inside a conditional expression which is not foldable.
+          // Some branches may not be evaluated at runtime, so here we should in case the exception
+          // and leave it to runtime.
+          e.setTagValue(FAILED_TO_EVALUATED, true)
+          e
+      }
+
+    case other => other.mapChildren(constantFolding(_, isConditionalBranch))
   }
 
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(AlwaysProcess.fn, ruleId) {
-    case q: LogicalPlan => q.mapExpressions(constantFolding)
+    case q: LogicalPlan => q.mapExpressions(constantFolding(_))
   }
 }
 
