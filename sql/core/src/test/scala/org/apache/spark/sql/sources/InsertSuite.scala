@@ -1512,7 +1512,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
     }
   }
 
-  test("SELECT defaults set by ALTER TABLE ADD COLUMNS after INSERTed rows: Positive tests") {
+  test("INSERT rows, ALTER TABLE ADD COLUMNS with DEFAULTs, then SELECT them: Positive tests") {
     val createTableIntCol = "create table t(i int) using csv"
     // Adding a column with a valid default value into a table containing existing data works
     // successfully. Querying data from the altered table returns the new value.
