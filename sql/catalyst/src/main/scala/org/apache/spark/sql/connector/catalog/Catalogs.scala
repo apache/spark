@@ -45,7 +45,7 @@ private[sql] object Catalogs {
   @throws[SparkException]
   def load(name: String, conf: SQLConf): CatalogPlugin = {
     val pluginClassName = try {
-      val _pluginClassName = conf.getConfString("spark.sql.catalog." + name)
+      val _pluginClassName = conf.getConfString(s"spark.sql.catalog.$name")
       if (!isValidPartName(name)) {
         throw QueryExecutionErrors.invalidCatalogNameError(name)
       }
