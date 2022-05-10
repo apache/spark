@@ -20,8 +20,6 @@ package org.apache.spark.sql
 import java.time.Year
 import java.util.Arrays
 
-import scala.collection.mutable.WrappedArray
-
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.CatalystTypeConverters
 import org.apache.spark.sql.catalyst.expressions.{Cast, ExpressionEvalHelper, Literal}
@@ -277,7 +275,7 @@ class UserDefinedTypeSuite extends QueryTest with SharedSparkSession with Parque
 
   test("Test unwrap_udt function") {
     val unwrappedFeatures = pointsRDD.select(unwrap_udt(col("features")))
-      .rdd.map { case Row(v: WrappedArray[Double]) => v.toArray }
+      .rdd.map { (row: Row) => row.getAs[Seq[Double]](0).toArray }
     val unwrappedFeaturesArrays: Array[Array[Double]] = unwrappedFeatures.collect()
     assert(unwrappedFeaturesArrays.size === 2)
 
