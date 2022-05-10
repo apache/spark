@@ -1512,6 +1512,15 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
     }
   }
 
+  test("SELECT defaults set by ALTER TABLE ADD COLUMNS when rows already exist: Positive tests") {
+    val createTableIntCol = "create table t(i int) using csv"
+    withTable("t") {
+      sql(createTableIntCol)
+      sql("insert into t values(42)")
+      sql("alter table t add column s string default concat('abc', def')")
+      checkAnswer(spark.table("t"), Row(42, "abcdef"))
+    }
+
   test("Stop task set if FileAlreadyExistsException was thrown") {
     Seq(true, false).foreach { fastFail =>
       withSQLConf("fs.file.impl" -> classOf[FileExistingTestFileSystem].getName,

@@ -2432,4 +2432,14 @@ object QueryCompilationErrors extends QueryErrorsBase {
       "Failed to execute UPDATE command because the WHERE clause contains a DEFAULT column " +
         "reference; this is not allowed")
   }
+
+  def failedToParseExistenceDefaultAsLiteral(
+      dataSourceType: String,
+      fieldName: String,
+      defaultValue: String): Throwable = {
+    throw new AnalysisException(
+      s"Failed to query $dataSourceType because the destination table column " +
+        s"$fieldName has a DEFAULT value of $defaultValue which fails to parse as a valid " +
+        "literal value")
+  }
 }
