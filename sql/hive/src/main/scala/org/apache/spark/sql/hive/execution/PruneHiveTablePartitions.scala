@@ -74,42 +74,21 @@ private[sql] class PruneHiveTablePartitions(session: SparkSession)
         0L
       }
     }
-    if (sizeOfPartitions.forall(_ > 0) && prunedPartitions.forall(_.stats.isDefined)) {
-      val rowCountOfPartitions = prunedPartitions.map { partition =>
-        val rowCount = partition.stats.get.rowCount.map(_.toLong)
-        if (rowCount.isDefined && rowCount.get > 0L) {
-          rowCount.get
-        } else {
-          0L
-        }
-      }
-      if (rowCountOfPartitions.forall(_ > 0)) {
-        val stats = relation.stats
-        val oldRowCount = stats.rowCount
-        val newRowCount = BigInt(rowCountOfPartitions.sum)
-        var colStats = Map.empty[String, CatalogColumnStat]
-        if (oldRowCount.isDefined) {
-          stats.attributeStats.map(_._2.updateCountStats(
-            oldNumRows = oldRowCount.get, newNumRows = newRowCount))
-          colStats = stats.attributeStats.map{ case (attr, colStat) =>
-            (attr.name, colStat.toCatalogColumnStat(attr.name, attr.dataType))}
-        }
-        return relation.tableMeta.copy(stats = Some(CatalogStatistics(
-          sizeInBytes = BigInt(sizeOfPartitions.sum),
-          rowCount = Option(newRowCount),
-          colStats = colStats)))
-      }
-    }
     if (sizeOfPartitions.forall(_ > 0)) {
       val filteredStats =
         FilterEstimation(Filter(partitionKeyFilters.reduce(And), relation)).estimate
       val colStats = filteredStats.map(_.attributeStats.map { case (attr, colStat) =>
         (attr.name, colStat.toCatalogColumnStat(attr.name, attr.dataType))
       })
+      val rowCount = if (prunedPartitions.forall(_.stats.flatMap(_.rowCount).exists(_ > 0))) {
+        Option(prunedPartitions.map(_.stats.get.rowCount.get).sum)
+      } else {
+        filteredStats.flatMap(_.rowCount)
+      }
       relation.tableMeta.copy(
         stats = Some(CatalogStatistics(
           sizeInBytes = BigInt(sizeOfPartitions.sum),
-          rowCount = filteredStats.flatMap(_.rowCount),
+          rowCount = rowCount,
           colStats = colStats.getOrElse(Map.empty))))
     } else {
       relation.tableMeta
