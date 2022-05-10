@@ -78,6 +78,8 @@ class JsonProtocolSuite extends SparkFunSuite {
       "Spark Properties" -> Seq(("Job throughput", "80000 jobs/s, regardless of job type")),
       "Hadoop Properties" -> Seq(("hadoop.tmp.dir", "/usr/local/hadoop/tmp")),
       "System Properties" -> Seq(("Username", "guest"), ("Password", "guest")),
+      "Metrics Properties" ->
+        Seq(("*.sink.servlet.class", "org.apache.spark.metrics.sink.MetricsServlet")),
       "Classpath Entries" -> Seq(("Super library", "/tmp/super_library"))
     ))
     val blockManagerAdded = SparkListenerBlockManagerAdded(1L,
@@ -2047,6 +2049,9 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |  "System Properties": {
       |    "Username": "guest",
       |    "Password": "guest"
+      |  },
+      |  "Metrics Properties": {
+      |    "*.sink.servlet.class": "org.apache.spark.metrics.sink.MetricsServlet"
       |  },
       |  "Classpath Entries": {
       |    "Super library": "/tmp/super_library"

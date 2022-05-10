@@ -81,7 +81,7 @@ case class Project(projectList: Seq[NamedExpression], child: LogicalPlan)
       }.nonEmpty
     )
 
-    !expressions.exists(!_.resolved) && childrenResolved && !hasSpecialExpressions
+    expressions.forall(_.resolved) && childrenResolved && !hasSpecialExpressions
   }
 
   override lazy val validConstraints: ExpressionSet =
@@ -985,7 +985,7 @@ case class Aggregate(
       }.nonEmpty
     )
 
-    !expressions.exists(!_.resolved) && childrenResolved && !hasWindowExpressions
+    expressions.forall(_.resolved) && childrenResolved && !hasWindowExpressions
   }
 
   override def output: Seq[Attribute] = aggregateExpressions.map(_.toAttribute)

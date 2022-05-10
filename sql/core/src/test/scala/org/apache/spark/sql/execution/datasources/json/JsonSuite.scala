@@ -3165,7 +3165,7 @@ abstract class JsonSuite
     Seq(missingFieldInput, nullValueInput).foreach { jsonString =>
       Seq("DROPMALFORMED", "FAILFAST", "PERMISSIVE").foreach { mode =>
         val json = spark.createDataset(
-          spark.sparkContext.parallelize(jsonString:: Nil))(Encoders.STRING)
+          spark.sparkContext.parallelize(jsonString :: Nil))(Encoders.STRING)
         val df = spark.read
           .option("mode", mode)
           .schema(schema)
@@ -3173,6 +3173,18 @@ abstract class JsonSuite
         assert(df.schema == expected)
         checkAnswer(df, Row(1, null) :: Nil)
       }
+    }
+
+    withSQLConf(SQLConf.LEGACY_RESPECT_NULLABILITY_IN_TEXT_DATASET_CONVERSION.key -> "true") {
+      checkAnswer(
+        spark.read.schema(
+          StructType(
+            StructField("f1", LongType, nullable = false) ::
+            StructField("f2", LongType, nullable = false) :: Nil)
+        ).option("mode", "DROPMALFORMED").json(Seq("""{"f1": 1}""").toDS),
+        // It is for testing legacy configuration. This is technically a bug as
+        // `0` has to be `null` but the schema is non-nullable.
+        Row(1, 0))
     }
   }
 

@@ -23,18 +23,19 @@ import org.apache.hadoop.fs.Path
 
 import org.apache.spark.annotation.Since
 import org.apache.spark.ml.{Estimator, Model, PipelineStage}
-import org.apache.spark.ml.linalg.Vector
+import org.apache.spark.ml.feature.{Instance, InstanceBlock}
+import org.apache.spark.ml.linalg._
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
+import org.apache.spark.ml.stat.Summarizer
 import org.apache.spark.ml.util._
 import org.apache.spark.ml.util.DatasetUtils._
 import org.apache.spark.ml.util.Instrumentation.instrumented
-import org.apache.spark.mllib.clustering.{DistanceMeasure, KMeans => MLlibKMeans, KMeansModel => MLlibKMeansModel}
+import org.apache.spark.mllib.clustering.{KMeans => MLlibKMeans, KMeansModel => MLlibKMeansModel}
 import org.apache.spark.mllib.linalg.{Vector => OldVector, Vectors => OldVectors}
-import org.apache.spark.mllib.linalg.VectorImplicits._
 import org.apache.spark.sql.{DataFrame, Dataset, Row, SparkSession}
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.types.{IntegerType, StructType}
+import org.apache.spark.sql.types._
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.VersionUtils.majorVersion
 
@@ -42,7 +43,9 @@ import org.apache.spark.util.VersionUtils.majorVersion
  * Common params for KMeans and KMeansModel
  */
 private[clustering] trait KMeansParams extends Params with HasMaxIter with HasFeaturesCol
-  with HasSeed with HasPredictionCol with HasTol with HasDistanceMeasure with HasWeightCol {
+  with HasSeed with HasPredictionCol with HasTol with HasDistanceMeasure with HasWeightCol
+  with HasSolver with HasMaxBlockSizeInMB {
+  import KMeans._
 
   /**
    * The number of clusters to create (k). Must be &gt; 1. Note that it is possible for fewer than
@@ -67,7 +70,7 @@ private[clustering] trait KMeansParams extends Params with HasMaxIter with HasFe
   @Since("1.5.0")
   final val initMode = new Param[String](this, "initMode", "The initialization algorithm. " +
     "Supported options: 'random' and 'k-means||'.",
-    (value: String) => MLlibKMeans.validateInitMode(value))
+    ParamValidators.inArray[String](supportedInitModes))
 
   /** @group expertGetParam */
   @Since("1.5.0")
@@ -86,8 +89,28 @@ private[clustering] trait KMeansParams extends Params with HasMaxIter with HasFe
   @Since("1.5.0")
   def getInitSteps: Int = $(initSteps)
 
-  setDefault(k -> 2, maxIter -> 20, initMode -> MLlibKMeans.K_MEANS_PARALLEL, initSteps -> 2,
-    tol -> 1e-4, distanceMeasure -> DistanceMeasure.EUCLIDEAN)
+  /**
+   * Param for the name of optimization method used in KMeans.
+   * Supported options:
+   *  - "auto": Automatically select the solver based on the input schema and sparsity:
+   *            If input instances are arrays or input vectors are dense, set to "block".
+   *            Else, set to "row".
+   *  - "row": input instances are processed row by row, and triangle-inequality is applied to
+   *           accelerate the training.
+   *  - "block": input instances are stacked to blocks, and GEMM is applied to compute the
+   *             distances.
+   * Default is "auto".
+   *
+   * @group expertParam
+   */
+  @Since("3.4.0")
+  final override val solver: Param[String] = new Param[String](this, "solver",
+    "The solver algorithm for optimization. Supported options: " +
+      s"${supportedSolvers.mkString(", ")}. (Default auto)",
+    ParamValidators.inArray[String](supportedSolvers))
+
+  setDefault(k -> 2, maxIter -> 20, initMode -> K_MEANS_PARALLEL, initSteps -> 2,
+    tol -> 1e-4, distanceMeasure -> EUCLIDEAN, solver -> AUTO, maxBlockSizeInMB -> 0.0)
 
   /**
    * Validates and transforms the input schema.
@@ -151,7 +174,7 @@ class KMeansModel private[ml] (
   }
 
   @Since("3.0.0")
-  def predict(features: Vector): Int = parentModel.predict(features)
+  def predict(features: Vector): Int = parentModel.predict(OldVectors.fromML(features))
 
   @Since("2.0.0")
   def clusterCenters: Array[Vector] = parentModel.clusterCenters.map(_.asML)
@@ -272,6 +295,7 @@ object KMeansModel extends MLReadable[KMeansModel] {
 class KMeans @Since("1.5.0") (
     @Since("1.5.0") override val uid: String)
   extends Estimator[KMeansModel] with KMeansParams with DefaultParamsWritable {
+  import KMeans._
 
   @Since("1.5.0")
   override def copy(extra: ParamMap): KMeans = defaultCopy(extra)
@@ -325,6 +349,24 @@ class KMeans @Since("1.5.0") (
   @Since("3.0.0")
   def setWeightCol(value: String): this.type = set(weightCol, value)
 
+  /**
+   * Sets the value of param [[solver]].
+   * Default is "auto".
+   *
+   * @group expertSetParam
+   */
+  @Since("3.4.0")
+  def setSolver(value: String): this.type = set(solver, value)
+
+  /**
+   * Sets the value of param [[maxBlockSizeInMB]].
+   * Default is 0.0, then 1.0 MB will be chosen.
+   *
+   * @group expertSetParam
+   */
+  @Since("3.4.0")
+  def setMaxBlockSizeInMB(value: Double): this.type = set(maxBlockSizeInMB, value)
+
   @Since("2.0.0")
   override def fit(dataset: Dataset[_]): KMeansModel = instrumented { instr =>
     transformSchema(dataset.schema, logging = true)
@@ -332,7 +374,59 @@ class KMeans @Since("1.5.0") (
     instr.logPipelineStage(this)
     instr.logDataset(dataset)
     instr.logParams(this, featuresCol, predictionCol, k, initMode, initSteps, distanceMeasure,
-      maxIter, seed, tol, weightCol)
+      maxIter, seed, tol, weightCol, solver, maxBlockSizeInMB)
+
+    val oldModel = if (preferBlockSolver(dataset)) {
+      trainWithBlock(dataset, instr)
+    } else {
+      trainWithRow(dataset, instr)
+    }
+
+    val model = copyValues(new KMeansModel(uid, oldModel).setParent(this))
+    val summary = new KMeansSummary(
+      model.transform(dataset),
+      $(predictionCol),
+      $(featuresCol),
+      $(k),
+      oldModel.numIter,
+      oldModel.trainingCost)
+
+    model.setSummary(Some(summary))
+    instr.logNamedValue("clusterSizes", summary.clusterSizes)
+    model
+  }
+
+  private def preferBlockSolver(dataset: Dataset[_]): Boolean = {
+    $(solver) match {
+      case ROW => false
+      case BLOCK => true
+      case AUTO =>
+        dataset.schema($(featuresCol)).dataType match {
+          case _: VectorUDT =>
+
+            val Row(count: Long, numNonzeros: Vector) = dataset
+              .select(Summarizer.metrics("count", "numNonZeros")
+                .summary(checkNonNanVectors(col($(featuresCol)))).as("summary"))
+              .select("summary.count", "summary.numNonZeros")
+              .first()
+            val numFeatures = numNonzeros.size
+            val nnz = numNonzeros.activeIterator.map(_._1).foldLeft(BigDecimal(0))(_ + _)
+            nnz >= BigDecimal(count) * numFeatures * 0.5
+
+          case fdt: ArrayType =>
+            // when input schema is array, the dataset should be dense
+            fdt.elementType match {
+              case _: FloatType => true
+              case _: DoubleType => true
+              case _ => false
+            }
+
+          case _ => false
+        }
+    }
+  }
+
+  private def trainWithRow(dataset: Dataset[_], instr: Instrumentation) = {
     val algo = new MLlibKMeans()
       .setK($(k))
       .setInitializationMode($(initMode))
@@ -349,20 +443,155 @@ class KMeans @Since("1.5.0") (
     }.setName("training instances")
 
     val handlePersistence = dataset.storageLevel == StorageLevel.NONE
-    val parentModel = algo.runWithWeight(instances, handlePersistence, Some(instr))
-    val model = copyValues(new KMeansModel(uid, parentModel).setParent(this))
+    algo.runWithWeight(instances, handlePersistence, Some(instr))
+  }
 
-    val summary = new KMeansSummary(
-      model.transform(dataset),
-      $(predictionCol),
-      $(featuresCol),
-      $(k),
-      parentModel.numIter,
-      parentModel.trainingCost)
+  private def trainWithBlock(dataset: Dataset[_], instr: Instrumentation) = {
+    if (dataset.storageLevel != StorageLevel.NONE) {
+      instr.logWarning(s"Input vectors will be blockified to blocks, and " +
+        s"then cached during training. Be careful of double caching!")
+    }
 
-    model.setSummary(Some(summary))
-    instr.logNamedValue("clusterSizes", summary.clusterSizes)
-    model
+    val initStartTime = System.nanoTime
+    val centers = initialize(dataset)
+    val initTimeInSeconds = (System.nanoTime - initStartTime) / 1e9
+    instr.logInfo(f"Initialization with ${$(initMode)} took $initTimeInSeconds%.3f seconds.")
+
+    val numFeatures = centers.head.size
+    instr.logNumFeatures(numFeatures)
+
+    val instances = $(distanceMeasure) match {
+      case EUCLIDEAN =>
+        dataset.select(
+          checkNonNanVectors(columnToVector(dataset, $(featuresCol))),
+          checkNonNegativeWeights(get(weightCol))
+        ).rdd.map { case Row(features: Vector, weight: Double) =>
+          Instance(BLAS.dot(features, features), weight, features)
+        }
+
+      case COSINE =>
+        dataset.select(
+          checkNonNanVectors(columnToVector(dataset, $(featuresCol))),
+          checkNonNegativeWeights(get(weightCol))
+        ).rdd.map { case Row(features: Vector, weight: Double) =>
+          Instance(1.0, weight, Vectors.normalize(features, 2))
+        }
+    }
+
+    var actualBlockSizeInMB = $(maxBlockSizeInMB)
+    if (actualBlockSizeInMB == 0) {
+      actualBlockSizeInMB = InstanceBlock.DefaultBlockSizeInMB
+      require(actualBlockSizeInMB > 0, "inferred actual BlockSizeInMB must > 0")
+      instr.logNamedValue("actualBlockSizeInMB", actualBlockSizeInMB.toString)
+    }
+    val maxMemUsage = (actualBlockSizeInMB * 1024L * 1024L).ceil.toLong
+    val blocks = InstanceBlock.blokifyWithMaxMemUsage(instances, maxMemUsage)
+      .persist(StorageLevel.MEMORY_AND_DISK)
+      .setName(s"$uid: training blocks (blockSizeInMB=$actualBlockSizeInMB)")
+
+    val distanceFunction = getDistanceFunction
+    val sc = dataset.sparkSession.sparkContext
+    val iterationStartTime = System.nanoTime
+    var converged = false
+    var cost = 0.0
+    var iteration = 0
+
+    // Execute iterations of Lloyd's algorithm until converged
+    while (iteration < $(maxIter) && !converged) {
+      // Find the new centers
+      val bcCenters = sc.broadcast(DenseMatrix.fromVectors(centers))
+      val countSumAccum = if (iteration == 0) sc.longAccumulator else null
+      val weightSumAccum = if (iteration == 0) sc.doubleAccumulator else null
+      val costSumAccum = sc.doubleAccumulator
+
+      val newCenters = blocks.mapPartitions { iter =>
+        if (iter.nonEmpty) {
+          val agg = new KMeansAggregator(bcCenters.value, $(k), numFeatures, $(distanceMeasure))
+          iter.foreach(agg.add)
+          if (iteration == 0) {
+            countSumAccum.add(agg.count)
+            weightSumAccum.add(agg.weightSum)
+          }
+          costSumAccum.add(agg.costSum)
+          agg.weightSumVec.iterator.zip(agg.sumMat.rowIter)
+            .flatMap { case ((i, weightSum), vectorSum) =>
+              if (weightSum > 0) Some((i, (weightSum, vectorSum.toDense))) else None
+            }
+        } else Iterator.empty
+      }.reduceByKey { (sum1, sum2) =>
+        BLAS.axpy(1.0, sum2._2, sum1._2)
+        (sum1._1 + sum2._1, sum1._2)
+      }.mapValues { case (weightSum, vectorSum) =>
+        BLAS.scal(1.0 / weightSum, vectorSum)
+        $(distanceMeasure) match {
+          case COSINE => Vectors.normalize(vectorSum, 2)
+          case _ => vectorSum
+        }
+      }.collectAsMap()
+      bcCenters.destroy()
+
+      if (iteration == 0) {
+        instr.logNumExamples(countSumAccum.value)
+        instr.logSumOfWeights(weightSumAccum.value)
+      }
+
+      // Update the cluster centers and costs
+      converged = true
+      newCenters.foreach { case (i, newCenter) =>
+        if (converged && distanceFunction(centers(i), newCenter) > $(tol)) {
+          converged = false
+        }
+        centers(i) = newCenter
+      }
+      cost = costSumAccum.value
+      iteration += 1
+    }
+    blocks.unpersist()
+
+    val iterationTimeInSeconds = (System.nanoTime() - iterationStartTime) / 1e9
+    instr.logInfo(f"Iterations took $iterationTimeInSeconds%.3f seconds.")
+
+    if (iteration == $(maxIter)) {
+      instr.logInfo(s"KMeans reached the max number of iterations: ${$(maxIter)}.")
+    } else {
+      instr.logInfo(s"KMeans converged in $iteration iterations.")
+    }
+    instr.logInfo(s"The cost is $cost.")
+    new MLlibKMeansModel(centers.map(OldVectors.fromML), $(distanceMeasure), cost, iteration)
+  }
+
+  private def getDistanceFunction = $(distanceMeasure) match {
+    case EUCLIDEAN =>
+      (v1: Vector, v2: Vector) =>
+        math.sqrt(Vectors.sqdist(v1, v2))
+    case COSINE =>
+      (v1: Vector, v2: Vector) =>
+        val norm1 = Vectors.norm(v1, 2)
+        val norm2 = Vectors.norm(v2, 2)
+        require(norm1 > 0 && norm2 > 0,
+          "Cosine distance is not defined for zero-length vectors.")
+        1 - BLAS.dot(v1, v2) / norm1 / norm2
+  }
+
+  private def initialize(dataset: Dataset[_]): Array[Vector] = {
+    val algo = new MLlibKMeans()
+      .setK($(k))
+      .setInitializationMode($(initMode))
+      .setInitializationSteps($(initSteps))
+      .setMaxIterations($(maxIter))
+      .setSeed($(seed))
+      .setEpsilon($(tol))
+      .setDistanceMeasure($(distanceMeasure))
+
+    val vectors = dataset.select(DatasetUtils.columnToVector(dataset, getFeaturesCol))
+      .rdd
+      .map { case Row(features: Vector) => OldVectors.fromML(features) }
+
+    val centers = algo.initialize(vectors).map(_.asML)
+    $(distanceMeasure) match {
+      case EUCLIDEAN => centers
+      case COSINE => centers.map(Vectors.normalize(_, 2))
+    }
   }
 
   @Since("1.5.0")
@@ -376,6 +605,31 @@ object KMeans extends DefaultParamsReadable[KMeans] {
 
   @Since("1.6.0")
   override def load(path: String): KMeans = super.load(path)
+
+  /** String name for random mode type. */
+  private[clustering] val RANDOM = "random"
+
+  /** String name for k-means|| mode type. */
+  private[clustering] val K_MEANS_PARALLEL = "k-means||"
+
+  private[clustering] val supportedInitModes = Array(RANDOM, K_MEANS_PARALLEL)
+
+  /** String name for euclidean distance. */
+  private[clustering] val EUCLIDEAN = "euclidean"
+
+  /** String name for cosine distance. */
+  private[clustering] val COSINE = "cosine"
+
+  /** String name for optimizer based on triangle-inequality. */
+  private[clustering] val ROW = "row"
+
+  /** String name for optimizer based on blockifying and gemm. */
+  private[clustering] val BLOCK = "block"
+
+  /** String name for optimizer automatically chosen based on data schema and sparsity. */
+  private[clustering] val AUTO = "auto"
+
+  private[clustering] val supportedSolvers = Array(ROW, BLOCK, AUTO)
 }
 
 /**
@@ -398,3 +652,133 @@ class KMeansSummary private[clustering] (
     numIter: Int,
     @Since("2.4.0") val trainingCost: Double)
   extends ClusteringSummary(predictions, predictionCol, featuresCol, k, numIter)
+
+/**
+ * KMeansAggregator computes the distances and updates the centers for blocks
+ * in sparse or dense matrix in an online fashion.
+ * @param centerMatrix The matrix containing center vectors.
+ * @param k The number of clusters.
+ * @param numFeatures The number of features.
+ * @param distanceMeasure The distance measure.
+ *                        When 'euclidean' is chosen, the instance blocks should contains
+ *                        the squared norms in the labels field;
+ *                        When 'cosine' is chosen, the vectors should be already normalized.
+ */
+private class KMeansAggregator (
+    val centerMatrix: DenseMatrix,
+    val k: Int,
+    val numFeatures: Int,
+    val distanceMeasure: String) extends Serializable {
+  import KMeans.{EUCLIDEAN, COSINE}
+
+  def weightSum: Double = weightSumVec.values.sum
+
+  var costSum = 0.0
+  var count = 0L
+  val weightSumVec = new DenseVector(Array.ofDim[Double](k))
+  val sumMat = new DenseMatrix(k, numFeatures, Array.ofDim[Double](k * numFeatures))
+
+  @transient private lazy val centerSquaredNorms = {
+    distanceMeasure match {
+      case EUCLIDEAN =>
+        centerMatrix.rowIter.map(center => center.dot(center)).toArray
+      case COSINE => null
+    }
+  }
+
+  // avoid reallocating a dense matrix (size x k) for each instance block
+  @transient private var buffer: Array[Double] = _
+
+  def add(block: InstanceBlock): this.type = {
+    val size = block.size
+    require(block.matrix.isTransposed)
+    require(numFeatures == block.numFeatures, s"Dimensions mismatch when adding new " +
+      s"instance. Expecting $numFeatures but got ${block.numFeatures}.")
+    require(block.weightIter.forall(_ >= 0),
+      s"instance weights ${block.weightIter.mkString("[", ",", "]")} has to be >= 0.0")
+    if (block.weightIter.forall(_ == 0)) return this
+
+    if (buffer == null || buffer.length < size * k) {
+      buffer = Array.ofDim[Double](size * k)
+    }
+
+    distanceMeasure match {
+      case EUCLIDEAN => euclideanUpdateInPlace(block)
+      case COSINE => cosineUpdateInPlace(block)
+    }
+    count += size
+
+    this
+  }
+
+  private def euclideanUpdateInPlace(block: InstanceBlock): Unit = {
+    val localBuffer = buffer
+    BLAS.gemm(-2.0, block.matrix, centerMatrix.transpose, 0.0, localBuffer)
+
+    val size = block.size
+    val localCenterSquaredNorms = centerSquaredNorms
+    val localWeightSumArr = weightSumVec.values
+    val localSumArr = sumMat.values
+    var i = 0
+    var j = 0
+    while (i < size) {
+      val weight = block.getWeight(i)
+      if (weight > 0) {
+        val instanceSquaredNorm = block.getLabel(i)
+        var bestIndex = 0
+        var bestSquaredDistance = Double.PositiveInfinity
+        j = 0
+        while (j < k) {
+          val squaredDistance = localBuffer(i + j * size) +
+            instanceSquaredNorm + localCenterSquaredNorms(j)
+          if (squaredDistance < bestSquaredDistance) {
+            bestIndex = j
+            bestSquaredDistance = squaredDistance
+          }
+          j += 1
+        }
+
+        costSum += weight * bestSquaredDistance
+        localWeightSumArr(bestIndex) += weight
+        block.getNonZeroIter(i)
+          .foreach { case (j, v) => localSumArr(bestIndex + j * k) += v * weight }
+      }
+
+      i += 1
+    }
+  }
+
+  private def cosineUpdateInPlace(block: InstanceBlock): Unit = {
+    val localBuffer = buffer
+    BLAS.gemm(-1.0, block.matrix, centerMatrix.transpose, 0.0, localBuffer)
+
+    val size = block.size
+    val localWeightSumArr = weightSumVec.values
+    val localSumArr = sumMat.values
+    var i = 0
+    var j = 0
+    while (i < size) {
+      val weight = block.getWeight(i)
+      if (weight > 0) {
+        var bestIndex = 0
+        var bestDistance = Double.PositiveInfinity
+        j = 0
+        while (j < k) {
+          val cosineDistance = 1 + localBuffer(i + j * size)
+          if (cosineDistance < bestDistance) {
+            bestIndex = j
+            bestDistance = cosineDistance
+          }
+          j += 1
+        }
+
+        costSum += weight * bestDistance
+        localWeightSumArr(bestIndex) += weight
+        block.getNonZeroIter(i)
+          .foreach { case (j, v) => localSumArr(bestIndex + j * k) += v * weight }
+      }
+
+      i += 1
+    }
+  }
+}

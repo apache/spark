@@ -298,6 +298,7 @@ public abstract class AbstractLauncher<T extends AbstractLauncher<T>> {
       return true;
     }
 
+    @Override
     protected void handleExtraArgs(List<String> extra) {
       // No op.
     }

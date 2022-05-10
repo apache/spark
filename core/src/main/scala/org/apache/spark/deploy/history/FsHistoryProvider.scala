@@ -631,37 +631,38 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
 
   private def cleanAppData(appId: String, attemptId: Option[String], logPath: String): Unit = {
     try {
-      val app = load(appId)
-      val (attempt, others) = app.attempts.partition(_.info.attemptId == attemptId)
+      var isStale = false
+      listing.synchronized {
+        val app = load(appId)
+        val (attempt, others) = app.attempts.partition(_.info.attemptId == attemptId)
 
-      assert(attempt.isEmpty || attempt.size == 1)
-      val isStale = attempt.headOption.exists { a =>
-        if (a.logPath != new Path(logPath).getName()) {
-          // If the log file name does not match, then probably the old log file was from an
-          // in progress application. Just return that the app should be left alone.
-          false
-        } else {
-          val maybeUI = synchronized {
-            activeUIs.remove(appId -> attemptId)
+        assert(attempt.isEmpty || attempt.size == 1)
+        isStale = attempt.headOption.exists { a =>
+          if (a.logPath != new Path(logPath).getName()) {
+            // If the log file name does not match, then probably the old log file was from an
+            // in progress application. Just return that the app should be left alone.
+            false
+          } else {
+            if (others.nonEmpty) {
+              val newAppInfo = new ApplicationInfoWrapper(app.info, others)
+              listing.write(newAppInfo)
+            } else {
+              listing.delete(classOf[ApplicationInfoWrapper], appId)
+            }
+            true
           }
-
-          maybeUI.foreach { ui =>
-            ui.invalidate()
-            ui.ui.store.close()
-          }
-
-          diskManager.foreach(_.release(appId, attemptId, delete = true))
-          true
         }
       }
 
       if (isStale) {
-        if (others.nonEmpty) {
-          val newAppInfo = new ApplicationInfoWrapper(app.info, others)
-          listing.write(newAppInfo)
-        } else {
-          listing.delete(classOf[ApplicationInfoWrapper], appId)
+        val maybeUI = synchronized {
+          activeUIs.remove(appId -> attemptId)
         }
+        maybeUI.foreach { ui =>
+          ui.invalidate()
+          ui.ui.store.close()
+        }
+        diskManager.foreach(_.release(appId, attemptId, delete = true))
       }
     } catch {
       case _: NoSuchElementException =>
