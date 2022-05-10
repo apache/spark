@@ -26,13 +26,14 @@ import java.util.concurrent.TimeUnit
 import org.apache.spark.{SparkConf, SparkException, SparkUpgradeException}
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.{CEST, LA}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.errors.QueryErrorsSuiteBase
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.DoubleType
 import org.apache.spark.unsafe.types.CalendarInterval
 
-class DateFunctionsSuite extends QueryTest with SharedSparkSession {
+class DateFunctionsSuite extends QueryTest with SharedSparkSession with QueryErrorsSuiteBase {
   import testImplicits._
 
   // The test cases which throw exceptions under ANSI mode are covered by date.sql and
@@ -763,8 +764,12 @@ class DateFunctionsSuite extends QueryTest with SharedSparkSession {
 
         // invalid format
         val invalid = df1.selectExpr(s"to_unix_timestamp(x, 'yyyy-MM-dd bb:HH:ss')")
-        val e = intercept[IllegalArgumentException](invalid.collect())
-        assert(e.getMessage.contains('b'))
+        val e = intercept[SparkException](invalid.collect())
+        checkErrorClass(
+          exception = e,
+          errorClass = "INTERNAL_ERROR",
+          msg = """The "collect" action failed.""")
+        assert(e.getCause.getMessage.contains('b'))
       }
     }
   }
