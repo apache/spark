@@ -239,7 +239,7 @@ case class CachedRDDBuilder(
 
   def isCachedColumnBuffersLoaded: Boolean = {
     if (_cachedColumnBuffers != null) {
-      _cachedColumnBuffersAreLoaded.synchronized {
+      _cachedColumnBuffers.synchronized {
         return _cachedColumnBuffers != null && isCachedRDDLoaded
       }
     }
