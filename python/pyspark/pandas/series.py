@@ -6849,6 +6849,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         name: str_type,
         axis: Optional[Axis] = None,
         numeric_only: bool = True,
+        skipna: bool = True,
         **kwargs: Any,
     ) -> Scalar:
         """
@@ -6859,13 +6860,17 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         sfun : the stats function to be used for aggregation
         name : original pandas API name.
         axis : used only for sanity check because series only support index axis.
-        numeric_only : not used by this implementation, but passed down by stats functions
+        numeric_only : not used by this implementation, but passed down by stats functions.
+        skipna: exclude NA/null values when computing the result.
         """
         axis = validate_axis(axis)
         if axis == 1:
             raise NotImplementedError("Series does not support columns axis.")
 
-        scol = sfun(self)
+        if not skipna and get_option("compute.eager_check") and self.hasnans:
+            scol = F.first(F.lit(np.nan))
+        else:
+            scol = sfun(self)
 
         min_count = kwargs.get("min_count", 0)
         if min_count > 0:
