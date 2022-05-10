@@ -246,17 +246,19 @@ case class CachedRDDBuilder(
     false
   }
 
-  def isCachedRDDLoaded: Boolean = {
-      _cachedColumnBuffersAreLoaded || {
+  def isCachedRDDLoaded: Boolean = _cachedColumnBuffersAreLoaded || {
+    _cachedColumnBuffersAreLoaded.synchronized {
+      if (!_cachedColumnBuffersAreLoaded) {
         val bmMaster = SparkEnv.get.blockManager.master
         val rddLoaded = _cachedColumnBuffers.partitions.forall { partition =>
           bmMaster.getBlockStatus(RDDBlockId(_cachedColumnBuffers.id, partition.index), false)
-            .exists { case(_, blockStatus) => blockStatus.isCached }
+            .exists { case (_, blockStatus) => blockStatus.isCached }
         }
         if (rddLoaded) {
           _cachedColumnBuffersAreLoaded = rddLoaded
         }
-        rddLoaded
+      }
+      _cachedColumnBuffersAreLoaded
     }
   }
 
