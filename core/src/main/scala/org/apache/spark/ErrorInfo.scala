@@ -80,9 +80,9 @@ private[spark] object SparkThrowableHelper {
       val errorSubInfo = subClass.getOrElse(subErrorClass,
         throw new IllegalArgumentException(s"Cannot find sub error class '$subErrorClass'"))
       val subMessageParameters = messageParameters.tail
-      "[" + errorClass + "." + subErrorClass + "] " + errorInfo.messageFormat +
-        String.format(errorSubInfo.messageFormat.replaceAll("<[a-zA-Z0-9_-]+>", "%s"),
-          subMessageParameters: _*)
+      "[" + errorClass + "." + subErrorClass + "] " + String.format((errorInfo.messageFormat +
+        errorSubInfo.messageFormat).replaceAll("<[a-zA-Z0-9_-]+>", "%s"),
+        subMessageParameters: _*)
     } else {
       "[" + errorClass + "] " + String.format(
         errorInfo.messageFormat.replaceAll("<[a-zA-Z0-9_-]+>", "%s"),

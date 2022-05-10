@@ -37,6 +37,7 @@ import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns
 import org.apache.spark.sql.connector.catalog.{CatalogV2Util, TableCatalog}
 import org.apache.spark.sql.connector.catalog.SupportsNamespaces._
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -353,7 +354,25 @@ case class AlterTableChangeColumnCommand(
     val newDataSchema = table.dataSchema.fields.map { field =>
       if (field.name == originColumn.name) {
         // Create a new column from the origin column with the new comment.
-        addComment(field, newColumn.getComment)
+        val withNewComment: StructField =
+          addComment(field, newColumn.getComment)
+        // Create a new column from the origin column with the new current default value.
+        if (newColumn.getCurrentDefaultValue().isDefined) {
+          if (newColumn.getCurrentDefaultValue().get.nonEmpty) {
+            val result: StructField =
+              addCurrentDefaultValue(withNewComment, newColumn.getCurrentDefaultValue())
+            // Check that the proposed default value parses and analyzes correctly, and that the
+            // type of the resulting expression is equivalent or coercible to the destination column
+            // type.
+            ResolveDefaultColumns.analyze(
+              sparkSession.sessionState.analyzer, result, "ALTER TABLE ALTER COLUMN")
+            result
+          } else {
+            withNewComment.clearCurrentDefaultValue()
+          }
+        } else {
+          withNewComment
+        }
       } else {
         field
       }
@@ -375,6 +394,11 @@ case class AlterTableChangeColumnCommand(
   // Add the comment to a column, if comment is empty, return the original column.
   private def addComment(column: StructField, comment: Option[String]): StructField =
     comment.map(column.withComment).getOrElse(column)
+
+  // Add the current default value to a column, if default value is empty, return the original
+  // column.
+  private def addCurrentDefaultValue(column: StructField, value: Option[String]): StructField =
+    value.map(column.withCurrentDefaultValue).getOrElse(column)
 
   // Compare a [[StructField]] to another, return true if they have the same column
   // name(by resolver) and dataType.

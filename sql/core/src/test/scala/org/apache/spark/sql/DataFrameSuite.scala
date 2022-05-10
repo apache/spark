@@ -3043,7 +3043,7 @@ class DataFrameSuite extends QueryTest
     ).foreach { case (schema, jsonData) =>
       withTempDir { dir =>
         val colName = "col"
-        val msg = "can only contain StringType as a key type for a MapType"
+        val msg = "can only contain STRING as a key type for a MAP"
 
         val thrown1 = intercept[AnalysisException](
           spark.read.schema(StructType(Seq(StructField(colName, schema))))

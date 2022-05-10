@@ -458,7 +458,7 @@ PIVOT (
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-[INCOMPARABLE_PIVOT_COLUMN] Invalid pivot column 'm#x'. Pivot columns must be comparable.
+[INCOMPARABLE_PIVOT_COLUMN] Invalid pivot column `__auto_generated_subquery_name`.`m`. Pivot columns must be comparable.
 
 
 -- !query
@@ -475,7 +475,7 @@ PIVOT (
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-[INCOMPARABLE_PIVOT_COLUMN] Invalid pivot column 'named_struct(course, course#x, m, m#x)'. Pivot columns must be comparable.
+[INCOMPARABLE_PIVOT_COLUMN] Invalid pivot column `named_struct('course', __auto_generated_subquery_name`.`course, 'm', __auto_generated_subquery_name`.`m)`. Pivot columns must be comparable.
 
 
 -- !query
