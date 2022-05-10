@@ -65,7 +65,6 @@ SELECT '7' AS `None`,
   CASE WHEN rand() < 0 THEN 1
   END AS `NULL on no matches`;
 
--- [SPARK-33008] Spark SQL throws an exception
 -- Constant-expression folding shouldn't evaluate unreachable subexpressions
 SELECT CASE WHEN 1=0 THEN 1/0 WHEN 1=1 THEN 1 ELSE 2/0 END;
 SELECT CASE 1 WHEN 0 THEN 1/0 WHEN 1 THEN 1 ELSE 2/0 END;

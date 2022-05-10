@@ -176,37 +176,28 @@ struct<None:string,NULL on no matches:int>
 -- !query
 SELECT CASE WHEN 1=0 THEN 1/0 WHEN 1=1 THEN 1 ELSE 2/0 END
 -- !query schema
-struct<>
+struct<CASE WHEN (1 = 0) THEN (1 / 0) WHEN (1 = 1) THEN 1 ELSE (2 / 0) END:double>
 -- !query output
-org.apache.spark.SparkArithmeticException
-[DIVIDE_BY_ZERO] Division by zero. To return NULL instead, use `try_divide`. If necessary set "spark.sql.ansi.enabled" to false (except for ANSI interval type) to bypass this error.
-== SQL(line 1, position 26) ==
-SELECT CASE WHEN 1=0 THEN 1/0 WHEN 1=1 THEN 1 ELSE 2/0 END
-                          ^^^
+1.0
 
 
 -- !query
 SELECT CASE 1 WHEN 0 THEN 1/0 WHEN 1 THEN 1 ELSE 2/0 END
 -- !query schema
-struct<>
+struct<CASE WHEN (1 = 0) THEN (1 / 0) WHEN (1 = 1) THEN 1 ELSE (2 / 0) END:double>
 -- !query output
-org.apache.spark.SparkArithmeticException
-[DIVIDE_BY_ZERO] Division by zero. To return NULL instead, use `try_divide`. If necessary set "spark.sql.ansi.enabled" to false (except for ANSI interval type) to bypass this error.
-== SQL(line 1, position 26) ==
-SELECT CASE 1 WHEN 0 THEN 1/0 WHEN 1 THEN 1 ELSE 2/0 END
-                          ^^^
+1.0
 
 
 -- !query
 SELECT CASE WHEN i > 100 THEN 1/0 ELSE 0 END FROM case_tbl
 -- !query schema
-struct<>
+struct<CASE WHEN (i > 100) THEN (1 / 0) ELSE 0 END:double>
 -- !query output
-org.apache.spark.SparkArithmeticException
-[DIVIDE_BY_ZERO] Division by zero. To return NULL instead, use `try_divide`. If necessary set "spark.sql.ansi.enabled" to false (except for ANSI interval type) to bypass this error.
-== SQL(line 1, position 30) ==
-SELECT CASE WHEN i > 100 THEN 1/0 ELSE 0 END FROM case_tbl
-                              ^^^
+0.0
+0.0
+0.0
+0.0
 
 
 -- !query
