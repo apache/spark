@@ -240,7 +240,7 @@ class SymmetricHashJoinStateManager(
             // First search the values for the current key.
             val valuePair = keyWithIndexToValue.get(currentKey, index)
             if (valuePair == null && storeConf.skipNullsForStreamStreamJoins) {
-              skippedNullValueCount.get += 1L
+              skippedNullValueCount.map(_ += 1L)
               index += 1
             } else if (removalCondition(valuePair.value)) {
               return valuePair
@@ -620,7 +620,7 @@ class SymmetricHashJoinStateManager(
             val keyWithIndex = keyWithIndexRow(key, index)
             val valuePair = valueRowConverter.convertValue(stateStore.get(keyWithIndex))
             if (valuePair == null && storeConf.skipNullsForStreamStreamJoins) {
-              skippedNullValueCount.get += 1L
+              skippedNullValueCount.map(_ += 1L)
               index += 1
             } else {
               keyWithIndexAndValue.withNew(key, index, valuePair)
