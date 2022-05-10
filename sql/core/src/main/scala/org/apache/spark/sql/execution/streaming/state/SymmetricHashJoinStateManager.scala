@@ -25,6 +25,7 @@ import org.apache.spark.TaskContext
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Expression, JoinedRow, Literal, SafeProjection, SpecificInternalRow, UnsafeProjection, UnsafeRow}
+import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.execution.streaming.StatefulOperatorStateInfo
 import org.apache.spark.sql.execution.streaming.StreamingSymmetricHashJoinHelper._
 import org.apache.spark.sql.types.{BooleanType, LongType, StructField, StructType}
@@ -74,7 +75,8 @@ class SymmetricHashJoinStateManager(
     storeConf: StateStoreConf,
     hadoopConf: Configuration,
     partitionId: Int,
-    stateFormatVersion: Int) extends Logging {
+    stateFormatVersion: Int,
+    skippedNullValueCount: Option[SQLMetric] = None) extends Logging {
   import SymmetricHashJoinStateManager._
 
   /*
@@ -617,6 +619,7 @@ class SymmetricHashJoinStateManager(
             val keyWithIndex = keyWithIndexRow(key, index)
             val valuePair = valueRowConverter.convertValue(stateStore.get(keyWithIndex))
             if (valuePair == null && storeConf.skipNullsForStreamStreamJoins) {
+              skippedNullValueCount.map(_ += 1L)
               index += 1
             } else {
               keyWithIndexAndValue.withNew(key, index, valuePair)
