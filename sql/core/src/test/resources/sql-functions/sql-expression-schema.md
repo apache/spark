@@ -92,6 +92,7 @@
 | org.apache.spark.sql.catalyst.expressions.CurrentTimeZone | current_timezone | SELECT current_timezone() | struct<current_timezone():string> |
 | org.apache.spark.sql.catalyst.expressions.CurrentTimestamp | current_timestamp | SELECT current_timestamp() | struct<current_timestamp():timestamp> |
 | org.apache.spark.sql.catalyst.expressions.CurrentUser | current_user | SELECT current_user() | struct<current_user():string> |
+| org.apache.spark.sql.catalyst.expressions.CurrentUser | user | SELECT user() | struct<current_user():string> |
 | org.apache.spark.sql.catalyst.expressions.DateAdd | date_add | SELECT date_add('2016-07-30', 1) | struct<date_add(2016-07-30, 1):date> |
 | org.apache.spark.sql.catalyst.expressions.DateDiff | datediff | SELECT datediff('2009-07-31', '2009-07-30') | struct<datediff(2009-07-31, 2009-07-30):int> |
 | org.apache.spark.sql.catalyst.expressions.DateFormatClass | date_format | SELECT date_format('2016-04-08', 'y') | struct<date_format(2016-04-08, y):string> |
