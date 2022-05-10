@@ -27,7 +27,7 @@ import scala.util.control.NonFatal
 
 import org.apache.commons.lang3.StringUtils
 
-import org.apache.spark.TaskContext
+import org.apache.spark.{SparkException, SparkThrowable, TaskContext}
 import org.apache.spark.annotation.{DeveloperApi, Stable, Unstable}
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.api.java.function._
@@ -41,7 +41,7 @@ import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog.HiveTableRelation
 import org.apache.spark.sql.catalyst.encoders._
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.json.{JacksonGenerator, JSONOptions}
+import org.apache.spark.sql.catalyst.json.{JSONOptions, JacksonGenerator}
 import org.apache.spark.sql.catalyst.optimizer.CombineUnions
 import org.apache.spark.sql.catalyst.parser.{ParseException, ParserUtils}
 import org.apache.spark.sql.catalyst.plans._
@@ -3909,9 +3909,19 @@ class Dataset[T] private[sql](
    * user-registered callback functions.
    */
   private def withAction[U](name: String, qe: QueryExecution)(action: SparkPlan => U) = {
-    SQLExecution.withNewExecutionId(qe, Some(name)) {
-      qe.executedPlan.resetMetrics()
-      action(qe.executedPlan)
+    try {
+      SQLExecution.withNewExecutionId(qe, Some(name)) {
+        qe.executedPlan.resetMetrics()
+        action(qe.executedPlan)
+      }
+    } catch {
+      case e: SparkThrowable => throw e
+      case NonFatal(e) =>
+        throw new SparkException(
+          errorClass = "INTERNAL_ERROR",
+          messageParameters = Array(s"The \"$name\" action failed."),
+          cause = e)
+      case e: Throwable => throw e
     }
   }
 
