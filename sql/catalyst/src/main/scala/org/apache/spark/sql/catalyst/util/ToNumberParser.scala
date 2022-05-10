@@ -548,7 +548,7 @@ class ToNumberParser(numberFormat: String, errorOnFail: Boolean) extends Seriali
       case _ if char.isWhitespace =>
         // Ignore whitespace and keep advancing through the input string.
         true
-      case _ if char >= ZERO_DIGIT && char <= NINE_DIGIT =>
+      case _ if char.isDigit =>
         parsedNumDigitsInCurrentGroup += 1
         // Append each group of input digits to the appropriate before/parsedAfterDecimalPoint
         // string for later use in constructing the result Decimal value.
@@ -691,11 +691,12 @@ class ToNumberParser(numberFormat: String, errorOnFail: Boolean) extends Seriali
       formatMatchFailure(input, numberFormat)
     } else {
       stripTrailingLoneDecimalPoint(result)
-      if (result.isEmpty || result.toString == "+" || result.toString == "-") {
-        result.clear()
-        result.append('0')
+      val str = result.toString
+      if (result.isEmpty || str == "+" || str == "-") {
+        UTF8String.fromString("0")
+      } else {
+        UTF8String.fromString(str)
       }
-      UTF8String.fromString(result.toString())
     }
   }
 
@@ -801,16 +802,11 @@ class ToNumberParser(numberFormat: String, errorOnFail: Boolean) extends Seriali
             case AtMostAsManyDigits(num) => num
           }
           for (_ <- 0 until numDigits) {
-            inputAfterDecimalPoint(formattingAfterDecimalPointIndex) match {
-              case SPACE =>
-                addSpaceCheckingTrailingCharacters(result)
-              case c: Char =>
-                result.append(c)
-            }
+            result.append(inputAfterDecimalPoint(formattingAfterDecimalPointIndex))
             formattingAfterDecimalPointIndex += 1
           }
         case _: ThousandsSeparator =>
-          if (result.nonEmpty && result.last >= ZERO_DIGIT && result.last <= NINE_DIGIT) {
+          if (result.nonEmpty && result.last.isDigit) {
             result.append(COMMA_SIGN)
           } else {
             addSpaceCheckingTrailingCharacters(result)
