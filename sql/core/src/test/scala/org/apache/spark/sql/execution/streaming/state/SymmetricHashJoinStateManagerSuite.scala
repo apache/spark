@@ -211,12 +211,20 @@ class SymmetricHashJoinStateManagerSuite extends StreamTest with BeforeAndAfter 
       appendAndTest(40, 50, 200, 300)
       assert(numRows === 3)
       updateNumValues(40, 4) // create a null at the end
+      assert(getNumValues(40) === 3)
+      assert(metric.value == 1)
+
       append(40, 400)
+      assert(getNumValues(40) === 4)
+      assert(metric.value == 2)
+
       updateNumValues(40, 7) // create nulls in between and end
+      assert(getNumValues(40) === 4)
+      assert(metric.value == 5)
 
       removeByValue(50)
+
       assert(getNumValues(40) === 3)       // we should now get (400, 200, 300) with nulls skipped
-      assert(metric.value == 2)
 
       removeByValue(300)
       assert(getNumValues(40) === 1)         // only 400 should remain
