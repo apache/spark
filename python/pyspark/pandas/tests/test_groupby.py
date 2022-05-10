@@ -1156,7 +1156,7 @@ class GroupByTest(PandasOnSparkTestCase, TestUtils):
         )
         self.assert_eq(
             psdf.groupby([("X", "A"), ("Y", "B")]).size().sort_index(),
-            pdf.groupby([("X", "A"), ("Y", "B")]f).size().sort_index(),
+            pdf.groupby([("X", "A"), ("Y", "B")]).size().sort_index(),
         )
 
     def test_diff(self):
