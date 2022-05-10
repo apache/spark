@@ -159,3 +159,54 @@ GROUP  BY t1b
 ORDER BY t1b NULLS last
 LIMIT  1
 OFFSET 1;
+
+-- OFFSET in parent side
+-- TC 03.01
+SELECT *
+FROM   t1
+WHERE  t1a IN (SELECT t2a
+               FROM   t2
+               WHERE  t1d = t2d)
+OFFSET 2;
+
+-- TC 03.02
+SELECT *
+FROM   t1
+WHERE  t1c IN (SELECT t2c
+               FROM   t2
+               WHERE  t2b >= 8
+               OFFSET 2)
+OFFSET 4;
+
+-- TC 03.03
+SELECT Count(DISTINCT( t1a )),
+       t1b
+FROM   t1
+WHERE  t1d IN (SELECT t2d
+               FROM   t2
+               ORDER  BY t2c, t2d
+               OFFSET 2)
+GROUP  BY t1b
+ORDER  BY t1b DESC NULLS FIRST
+OFFSET 1;
+
+-- OFFSET with NOT IN
+-- TC 03.04
+SELECT *
+FROM   t1
+WHERE  t1b NOT IN (SELECT t2b
+                   FROM   t2
+                   WHERE  t2b > 6
+                   OFFSET 2);
+
+-- TC 03.05
+SELECT Count(DISTINCT( t1a )),
+       t1b
+FROM   t1
+WHERE  t1d NOT IN (SELECT t2d
+                   FROM   t2
+                   ORDER  BY t2b DESC nulls first, t2d
+                   OFFSET 1)
+GROUP  BY t1b
+ORDER BY t1b NULLS last
+OFFSET 1;

@@ -2577,8 +2577,9 @@ object SQLConf {
   val PYSPARK_JVM_STACKTRACE_ENABLED =
     buildConf("spark.sql.pyspark.jvmStacktrace.enabled")
       .doc("When true, it shows the JVM stacktrace in the user-facing PySpark exception " +
-        "together with Python stacktrace. By default, it is disabled and hides JVM stacktrace " +
-        "and shows a Python-friendly exception only.")
+        "together with Python stacktrace. By default, it is disabled to hide JVM stacktrace " +
+        "and shows a Python-friendly exception only. Note that this is independent from log " +
+        "level settings.")
       .version("3.0.0")
       .booleanConf
       // show full stacktrace in tests but hide in production by default.

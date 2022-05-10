@@ -95,8 +95,8 @@ abstract class Optimizer(catalogManager: CatalogManager)
         OptimizeWindowFunctions,
         CollapseWindow,
         CombineFilters,
+        EliminateOffsets,
         EliminateLimits,
-        RewriteOffsets,
         CombineUnions,
         // Constant folding and strength reduction
         OptimizeRepartition,
@@ -673,7 +673,7 @@ object RemoveNoopUnion extends Rule[LogicalPlan] {
 }
 
 /**
- * Pushes down [[LocalLimit]] beneath UNION ALL and joins.
+ * Pushes down [[LocalLimit]] beneath UNION ALL, OFFSET and joins.
  */
 object LimitPushDown extends Rule[LogicalPlan] {
 
@@ -750,6 +750,9 @@ object LimitPushDown extends Rule[LogicalPlan] {
       Limit(le, Project(a.aggregateExpressions, LocalLimit(le, a.child)))
     case Limit(le @ IntegerLiteral(1), p @ Project(_, a: Aggregate)) if a.groupOnly =>
       Limit(le, p.copy(child = Project(a.aggregateExpressions, LocalLimit(le, a.child))))
+    // Merge offset value and limit value into LocalLimit and pushes down LocalLimit through Offset.
+    case LocalLimit(le, Offset(oe, grandChild)) =>
+      Offset(oe, LocalLimit(Add(le, oe), grandChild))
   }
 }
 
@@ -1871,21 +1874,22 @@ object EliminateLimits extends Rule[LogicalPlan] {
 }
 
 /**
- * Rewrite [[Offset]] as [[GlobalLimitAndOffset]] or [[LocalLimit]],
- * merging the expressions into one single expression. See [[Limit]] for more information
- * about the difference between [[LocalLimit]] and [[GlobalLimit]].
+ * This rule optimizes Offset operators by:
+ * 1. Eliminate [[Offset]] operators if offset == 0.
+ * 2. Replace [[Offset]] operators to empty [[LocalRelation]]
+ *    if [[Offset]]'s child max row <= offset.
+ * 3. Combines two adjacent [[Offset]] operators into one, merging the
+ *    expressions into one single expression.
  */
-object RewriteOffsets extends Rule[LogicalPlan] {
+object EliminateOffsets extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-    case GlobalLimit(le, Offset(oe, grandChild)) =>
-      GlobalLimitAndOffset(le, oe, grandChild)
-    case localLimit @ LocalLimit(le, Offset(oe, grandChild)) =>
-      val offset = oe.eval().asInstanceOf[Int]
-      if (offset == 0) {
-        localLimit.withNewChildren(Seq(grandChild))
-      } else {
-        Offset(oe, LocalLimit(Add(le, oe), grandChild))
-      }
+    case Offset(oe, child) if oe.foldable && oe.eval().asInstanceOf[Int] == 0 =>
+      child
+    case Offset(oe, child)
+      if oe.foldable && child.maxRows.exists(_ <= oe.eval().asInstanceOf[Int]) =>
+      LocalRelation(child.output, data = Seq.empty, isStreaming = child.isStreaming)
+    case Offset(oe1, Offset(oe2, child)) =>
+      Offset(Add(oe1, oe2), child)
   }
 }
 

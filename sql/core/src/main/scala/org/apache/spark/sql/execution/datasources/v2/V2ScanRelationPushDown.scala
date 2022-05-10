@@ -294,7 +294,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper wit
   private def supportPartialAggPushDown(agg: Aggregation): Boolean = {
     // We don't know the agg buffer of `GeneralAggregateFunc`, so can't do partial agg push down.
     // If `Sum`, `Count`, `Avg` with distinct, can't do partial agg push down.
-    agg.aggregateExpressions().exists {
+    agg.aggregateExpressions().isEmpty || agg.aggregateExpressions().exists {
       case sum: Sum => !sum.isDistinct
       case count: Count => !count.isDistinct
       case avg: Avg => !avg.isDistinct
