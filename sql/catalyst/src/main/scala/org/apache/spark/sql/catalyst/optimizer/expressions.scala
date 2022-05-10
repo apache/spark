@@ -44,8 +44,8 @@ import org.apache.spark.unsafe.types.UTF8String
  * equivalent [[Literal]] values.
  */
 object ConstantFolding extends Rule[LogicalPlan] {
-  // This tag is for avoid repeatedly evaluating expression inside condition which has already
-  // failed to evaluate
+  // This tag is for avoid repeatedly evaluating expression inside conditional expression
+  // which has already failed to evaluate before.
   private val FAILED_TO_EVALUATED = TreeNodeTag[Boolean]("FAILED_TO_EVALUATED")
 
   private def hasNoSideEffect(e: Expression): Boolean = e match {
