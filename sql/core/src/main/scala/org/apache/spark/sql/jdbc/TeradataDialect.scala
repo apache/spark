@@ -112,6 +112,7 @@ private case object TeradataDialect extends JdbcDialect {
    */
   override def getCatalystType(
     sqlType: Int, typeName: String, size: Int, md: MetadataBuilder): Option[DataType] = {
+    // Use 18 as default scale respect to DecimalType definition
     val defaultScale = 18
     if (sqlType == Types.NUMERIC) {
       if (md == null) {
