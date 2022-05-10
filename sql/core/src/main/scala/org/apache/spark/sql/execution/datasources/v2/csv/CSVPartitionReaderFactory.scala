@@ -19,11 +19,7 @@ package org.apache.spark.sql.execution.datasources.v2.csv
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.csv.{CSVHeaderChecker, CSVOptions, UnivocityParser}
-import org.apache.spark.sql.catalyst.expressions.{Literal => ExprLiteral}
-import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.connector.read.PartitionReader
-import org.apache.spark.sql.errors.QueryCompilationErrors
-import org.apache.spark.sql.execution.SparkSqlParser
 import org.apache.spark.sql.execution.datasources.PartitionedFile
 import org.apache.spark.sql.execution.datasources.csv.CSVDataSource
 import org.apache.spark.sql.execution.datasources.v2._
@@ -72,49 +68,8 @@ case class CSVPartitionReaderFactory(
       parser,
       headerChecker,
       readDataSchema)
-    val defaultColumnWrapper = new NullValuesToDefaultColumns(iter, dataSchema, "CSV")
-    val fileReader = new PartitionReaderFromIterator[InternalRow](defaultColumnWrapper)
+    val fileReader = new PartitionReaderFromIterator[InternalRow](iter)
     new PartitionReaderWithPartitionValues(fileReader, readDataSchema,
       partitionSchema, file.partitionValues)
-  }
-}
-
-/**
- * Wraps an iterator of InternalRow elements and replaces any NULL values for columns with mapped
- * DEFAULT values in the schema. This works for data sources that only return NULL values when the
- * corresponding data is not present in storage, such as CSV scans.
- * @param iter an iterator to InternalRow data produced by the data source.
- * @param readDataSchema Required data schema in the batch scan.
- * @param dataSourceType String identifying the type of data scanned, useful for error messages.
- */
-case class NullValuesToDefaultColumns(
-    iter: Iterator[InternalRow],
-    readDataSchema: StructType,
-    dataSourceType: String) extends Iterator[InternalRow] {
-  def hasNext: Boolean = iter.hasNext
-  def next(): InternalRow = {
-    val row: InternalRow = iter.next()
-    lazy val defaultValues: Seq[Option[Any]] = readDataSchema.fields.map { field =>
-      lazy val parser = new SparkSqlParser
-      val colText: Option[String] = field.getExistenceDefaultValue()
-      colText.map { s =>
-        val result = try {
-          parser.parseExpression(s) match {
-            case ExprLiteral(value, _) => value
-          }
-        } catch {
-          case _: ParseException | _: MatchError =>
-            throw QueryCompilationErrors.failedToParseExistenceDefaultAsLiteral(
-              dataSourceType, field.name, s)
-        }
-        Some(result)
-      }.getOrElse(None)
-    }
-    defaultValues.zipWithIndex.foreach { case (value: Option[Any], i: Int) =>
-      if (value.isDefined) {
-        row.update(i, value.get)
-      }
-    }
-    row
   }
 }

@@ -2433,13 +2433,9 @@ object QueryCompilationErrors extends QueryErrorsBase {
         "reference; this is not allowed")
   }
 
-  def failedToParseExistenceDefaultAsLiteral(
-      dataSourceType: String,
-      fieldName: String,
-      defaultValue: String): Throwable = {
+  def failedToParseExistenceDefaultAsLiteral(fieldName: String, defaultValue: String): Throwable = {
     throw new AnalysisException(
-      s"Failed to query $dataSourceType because the destination table column " +
-        s"$fieldName has a DEFAULT value of $defaultValue which fails to parse as a valid " +
+      s"Invalid DEFAULT value for column $fieldName: $defaultValue fails to parse as a valid " +
         "literal value")
   }
 }

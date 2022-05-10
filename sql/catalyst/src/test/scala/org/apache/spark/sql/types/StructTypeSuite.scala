@@ -22,12 +22,15 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.{caseInsensitiveResolution, caseSensitiveResolution}
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.SQLHelper
+import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DayTimeIntervalType => DT}
 import org.apache.spark.sql.types.{YearMonthIntervalType => YM}
-import org.apache.spark.sql.types.DayTimeIntervalType._
+import org.apache.spark.sql.types.MetadataBuilder
 import org.apache.spark.sql.types.StructType.fromDDL
 import org.apache.spark.sql.types.YearMonthIntervalType._
+import org.apache.spark.unsafe.types.UTF8String
 
 class StructTypeSuite extends SparkFunSuite with SQLHelper {
 
@@ -435,5 +438,42 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
       StructType.fromDDL("c1 DECIMAL(12, 5)").merge(StructType.fromDDL("c1 DECIMAL(12, 2)"))
     }
     assert(e.getMessage.contains("Failed to merge decimal types"))
+  }
+
+  test("SPARK-39143: Test parsing default column values out of struct types") {
+    // Positive test: the StructType.defaultValues evaluation is successful.
+    val source1 = StructType.fromDDL(
+      "c1 BIGINT DEFAULT CAST(42 AS BIGINT), c2 STRING DEFAULT 'abc', c3 BOOLEAN")
+    assert(source1.defaultValues.size == 3)
+    assert(source1.defaultValues(0).get == 42)
+    assert(source1.defaultValues(1).get == UTF8String.fromString("abc"))
+    assert(!source1.defaultValues(2).isDefined)
+
+    // Positive test: StructType.defaultValues fails because the existence default value parses and
+    // resolves successfully, and evaluates to a non-literal expression.
+    val source4 = StructType(
+      Array(StructField("c1", IntegerType, true,
+        new MetadataBuilder
+        .putString(ResolveDefaultColumns.EXISTS_DEFAULT_COLUMN_METADATA_KEY, "1 + 1")
+          .putString(ResolveDefaultColumns.CURRENT_DEFAULT_COLUMN_METADATA_KEY, "1 + 1")
+          .build())))
+    assert(source1.defaultValues.size == 1)
+    assert(source1.defaultValues(0).get == 2)
+
+    // Negative test: StructType.defaultValues fails because the existence default value fails to
+    // parse.
+    val source2 = StructType.fromDDL("c1 INT invalid")
+    assert(intercept[ParseException] {
+      source2.defaultValues
+    }.getMessage.contains(
+      QueryCompilationErrors.failedToParseExistenceDefaultAsLiteral("c1", "invalid")))
+
+    // Negative test: StructType.defaultValues fails because the existence default value fails to
+    // resolve.
+    val source3 = StructType.fromDDL("c1 INT (SELECT 'abc' FROM missingtable)")
+    assert(intercept[ParseException] {
+      source3.defaultValues
+    }.getMessage.contains(
+      QueryCompilationErrors.failedToParseExistenceDefaultAsLiteral("c1", "invalid")))
   }
 }

@@ -26,7 +26,7 @@ import org.json4s.JsonDSL._
 import org.apache.spark.annotation.Stable
 import org.apache.spark.sql.catalyst.analysis.Resolver
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, InterpretedOrdering}
-import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, LegacyTypeStringParser}
+import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, LegacyTypeStringParser, ParseException}
 import org.apache.spark.sql.catalyst.trees.Origin
 import org.apache.spark.sql.catalyst.util.{truncatedString, StringUtils}
 import org.apache.spark.sql.catalyst.util.StringUtils.StringConcat
@@ -511,6 +511,27 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
   @transient
   private[sql] lazy val interpretedOrdering =
     InterpretedOrdering.forSchema(this.fields.map(_.dataType))
+
+  /**
+   * Parses the text representing constant-folded default column literal values.
+   * @return a sequence of either (1) None, if the column had no default value, or (2) an object of
+   *         Any type suitable for assigning into a row using the InternalRow.update method.
+   */
+  lazy val defaultValues: Seq[Option[Any]] =
+    fields.map { field: StructField =>
+      val defaultValue: Option[String] = field.getExistenceDefaultValue()
+      defaultValue.map { text: String =>
+        val expr = try {
+          CatalystSqlParser.parseExpression(text)
+        } catch {
+          case _: ParseException =>
+            throw QueryCompilationErrors.failedToParseExistenceDefaultAsLiteral(field.name, text)
+        }
+        // The expression should be a literal value by this point, possibly wrapped in a cast
+        // function. This is enforced by the execution of commands that assign default values.
+        Some(expr.eval())
+      }.getOrElse(None)
+    }
 }
 
 /**
