@@ -1355,7 +1355,21 @@ class JDBCSuite extends QueryTest
       map(_.databaseTypeDefinition).get == "CHAR(1)")
   }
 
-  test("Checking metrics correctness with JDBC") {
+  test("SPARK-38846: TeradataDialect catalyst type mapping") {
+    val defaultScale = 18
+    val teradataDialect = JdbcDialects.get("jdbc:teradata")
+    val metadata = new MetadataBuilder().putString("name", "test_column").putLong("scale", 0)
+    assert(teradataDialect.getCatalystType(java.sql.Types.NUMERIC, "NUMBER", 10, metadata) ==
+      Some(DecimalType(DecimalType.MAX_PRECISION, defaultScale)))
+    val specifiedScale = 10
+    metadata.putLong("scale", specifiedScale)
+    assert(teradataDialect.getCatalystType(java.sql.Types.NUMERIC, "NUMBER", 10, metadata) ==
+      Some(DecimalType(DecimalType.MAX_PRECISION, specifiedScale)))
+    assert(teradataDialect.getCatalystType(java.sql.Types.NUMERIC, "NUMBER", 10, null) ==
+      Some(DecimalType(DecimalType.MAX_PRECISION, defaultScale)))
+  }
+
+    test("Checking metrics correctness with JDBC") {
     val foobarCnt = spark.table("foobar").count()
     val res = InputOutputMetricsHelper.run(sql("SELECT * FROM foobar").toDF())
     assert(res === (foobarCnt, 0L, foobarCnt) :: Nil)
