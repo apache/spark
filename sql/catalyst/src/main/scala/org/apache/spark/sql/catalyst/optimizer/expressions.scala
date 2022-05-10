@@ -46,7 +46,7 @@ import org.apache.spark.unsafe.types.UTF8String
 object ConstantFolding extends Rule[LogicalPlan] {
   // This tag is for avoid repeatedly evaluating expression inside conditional expression
   // which has already failed to evaluate before.
-  private val FAILED_TO_EVALUATED = TreeNodeTag[Boolean]("FAILED_TO_EVALUATED")
+  private val FAILED_TO_EVALUATE = TreeNodeTag[Boolean]("FAILED_TO_EVALUATE")
 
   private def hasNoSideEffect(e: Expression): Boolean = e match {
     case _: Attribute => true
@@ -72,7 +72,7 @@ object ConstantFolding extends Rule[LogicalPlan] {
     case Size(c: CreateMap, _) if c.children.forall(hasNoSideEffect) =>
       Literal(c.children.length / 2)
 
-    case e if e.getTagValue(FAILED_TO_EVALUATED).getOrElse(false) => e
+    case e if e.getTagValue(FAILED_TO_EVALUATE).getOrElse(false) => e
 
     // Fold expressions that are foldable.
     case e if e.foldable =>
@@ -83,7 +83,7 @@ object ConstantFolding extends Rule[LogicalPlan] {
           // Fold the children expression inside a conditional expression which is not foldable.
           // Some branches may not be evaluated at runtime, so here we should in case the exception
           // and leave it to runtime.
-          e.setTagValue(FAILED_TO_EVALUATED, true)
+          e.setTagValue(FAILED_TO_EVALUATE, true)
           e
       }
 
