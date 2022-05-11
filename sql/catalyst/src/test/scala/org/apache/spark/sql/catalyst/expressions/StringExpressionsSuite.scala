@@ -1163,19 +1163,19 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     Seq(
       (Decimal(0.4542),
         ".00000") ->
-        ".4542 ",
+        ".45420",
       (Decimal(454.2),
         "000.0") ->
         "454.2",
       (Decimal(454),
         "000.0") ->
-        "454  ",
+        "454.0",
       (Decimal(454.2),
         "000.00") ->
-        "454.2 ",
+        "454.20",
       (Decimal(454),
         "000.00") ->
-        "454   ",
+        "454.00",
       (Decimal(0.4542),
         ".0000") ->
         ".4542",
@@ -1204,19 +1204,19 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     Seq(
       (Decimal(454.2),
         "0000.00") ->
-        "0454.2 ",
+        "0454.20",
       (Decimal(454),
         "0000.00") ->
-        "0454   ",
+        "0454.00",
       (Decimal(4542),
         "00000.") ->
         "04542 ",
       (Decimal(454.2),
         "9999.99") ->
-        " 454.2 ",
+        " 454.20",
       (Decimal(454),
         "9999.99") ->
-        " 454   ",
+        " 454.00",
       // There are no digits after the decimal point.
       (Decimal(4542),
         "99999.") ->
@@ -1296,9 +1296,6 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         "000,000,000") ->
         "012,454,367",
       (Decimal(12454),
-        "000,000") ->
-        "012,454",
-      (Decimal(12454),
         "999,999") ->
         " 12,454",
       (Decimal(12454),
@@ -1351,13 +1348,13 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     Seq(
       (Decimal(83028485),
         "S99999999999.9999999") ->
-        "   +83028485        ",
+        "   +83028485.0000000",
       (Decimal(0),
         "9999999999999999.999999999999999S") ->
-        "               0+                ",
+        "               0.000000000000000+",
       (Decimal(unscaled = 43100000000L, precision = 38, scale = 10),
         "9999999999999999.999999999999999S") ->
-        "               4.31+             ",
+        "               4.310000000000000+",
       (Decimal(-454.8),
         "99G999.9S") ->
         "   454.8-",
@@ -1375,7 +1372,7 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         "12,454.8-",
       (Decimal(-83028485),
         "99999999999.9999999S") ->
-        "   83028485-        "
+        "   83028485.0000000-"
     ).foreach { case ((decimal, format), expected) =>
       var expr: Expression = ToCharacter(Literal(decimal), Literal(format))
       assert(expr.checkInputDataTypes() == TypeCheckResult.TypeCheckSuccess)
@@ -1390,13 +1387,13 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     Seq(
       (Decimal(4.31),
         "9999999999999999.999999999999999MI") ->
-        "               4.31               ",
+        "               4.310000000000000  ",
       (Decimal(0),
         "9999999999999999.999999999999999MI") ->
-        "               0                  ",
+        "               0.000000000000000  ",
       (Decimal(unscaled = 43100000000L, precision = 38, scale = 10),
         "9999999999999999.999999999999999MI") ->
-        "               4.31               ",
+        "               4.310000000000000  ",
       (Decimal(-454.8),
         "99G999.9MI") ->
         "   454.8- ",
@@ -1423,19 +1420,19 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     Seq(
       (Decimal(4.31),
         "9999999999999999.999999999999999PR") ->
-        "               4.31               ",
+        "               4.310000000000000  ",
       (Decimal(0),
         "9999999999999999.999999999999999PR") ->
-        "               0                  ",
+        "               0.000000000000000  ",
       (Decimal(unscaled = 43100000000L, precision = 38, scale = 10),
         "9999999999999999.999999999999999PR") ->
-        "               4.31               ",
+        "               4.310000000000000  ",
       (Decimal(-123),
         "9999999999999999.999PR") ->
-        "             <123>    ",
+        "             <123.000>",
       (Decimal(-123.4),
         "9999999999999999.999PR") ->
-        "             <123.4>  ",
+        "             <123.400>",
       (Decimal(-454.8),
         "99G999.9PR") ->
         "   <454.8>",

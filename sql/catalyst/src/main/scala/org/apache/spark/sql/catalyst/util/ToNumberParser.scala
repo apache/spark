@@ -752,7 +752,7 @@ class ToNumberParser(numberFormat: String, errorOnFail: Boolean) extends Seriali
       afterDecimalPoint = "#" * numFormatDigitsAfterDecimalPoint
     }
     val leadingSpaces = " " * (numFormatDigitsBeforeDecimalPoint - beforeDecimalPoint.length)
-    val trailingSpaces = " " * (numFormatDigitsAfterDecimalPoint - afterDecimalPoint.length)
+    val trailingSpaces = "0" * (numFormatDigitsAfterDecimalPoint - afterDecimalPoint.length)
     (leadingSpaces + beforeDecimalPoint, afterDecimalPoint + trailingSpaces)
   }
 
