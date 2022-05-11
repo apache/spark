@@ -39,7 +39,7 @@ private[sql] object Catalogs {
    * @param conf a SQLConf
    * @return an initialized CatalogPlugin
    * @throws CatalogNotFoundException if the plugin class cannot be found
-   * @throws org.apache.spark.SparkException if the plugin class cannot be instantiated
+   * @throws org.apache.spark.SparkException           if the plugin class cannot be instantiated
    */
   @throws[CatalogNotFoundException]
   @throws[SparkException]
