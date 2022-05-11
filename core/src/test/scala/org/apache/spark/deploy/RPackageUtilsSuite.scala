@@ -26,7 +26,6 @@ import java.util.zip.ZipFile
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
 
-import com.google.common.io.Files
 import org.apache.commons.io.FileUtils
 import org.scalatest.BeforeAndAfterEach
 
