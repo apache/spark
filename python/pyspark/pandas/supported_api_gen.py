@@ -16,7 +16,6 @@ MAX_MISSING_PARAMS_SIZE = 5
 COMMON_PARAMETER_SET = {"kwargs", "args", "cls"}
 MODULE_GROUP_MATCH = [(pd, ps), (pdw, psw), (pdg, psg)]
 
-FILE_PATH_PREFIX = "./user_guide/pandas_on_spark"
 SPARK_HOME = _find_spark_home()
 TARGET_RST_FILE = os.path.join(
     SPARK_HOME, "python/docs/source/user_guide/pandas_on_spark/supported_pandas_api.rst"
