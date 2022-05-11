@@ -394,7 +394,6 @@ public class LevelDB implements KVStore {
         Optional<? extends Reference<? extends LevelDBIterator<?>>> removed =
           Optional.ofNullable(referenceQueue.remove(1000L));
         lastIsPresent = removed.isPresent();
-        System.out.println("lastIsPresent is " + lastIsPresent);
         if (lastIsPresent) {
           LevelDBIterator.LevelDBIteratorWeakReference reference =
             (LevelDBIterator.LevelDBIteratorWeakReference) removed.get();
