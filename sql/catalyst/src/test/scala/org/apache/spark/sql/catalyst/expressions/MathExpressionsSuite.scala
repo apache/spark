@@ -641,6 +641,8 @@ class MathExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("round/bround/floor/ceil") {
+    val decimalRound = BRound(BigDecimal("35.1"), -1)
+    assert(DecimalType(3, 1).equals(decimalRound.dataType))
     val scales = -6 to 6
     val doublePi: Double = math.Pi
     val shortPi: Short = 31415
