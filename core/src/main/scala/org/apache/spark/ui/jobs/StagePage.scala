@@ -99,8 +99,7 @@ private[ui] class StagePage(parent: StagesTab, store: AppStatusStore) extends We
       eventTimelineParameterTaskPageSize).map(_.toInt).getOrElse(100)
 
     val taskSortColumn = Option(parameterTaskSortColumn).map { sortColumn =>
-      UIUtils.decodeURLParameter(sortColumn)
-    }.getOrElse(HEADER_ERROR)
+      UIUtils.decodeURLParameter(sortColumn) }.getOrElse(HEADER_ERROR)
     val taskSortDesc = Option(parameterTaskSortDesc).exists(!_.toBoolean)
     val taskPageSize = Option(parameterTaskPageSize).map(_.toInt).getOrElse(100)
     val stageId = parameterId.toInt
