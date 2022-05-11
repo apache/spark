@@ -28,7 +28,6 @@ import com.codahale.metrics.Meter;
 import com.codahale.metrics.Metric;
 import com.codahale.metrics.Timer;
 import com.google.common.io.ByteStreams;
-import org.apache.spark.network.util.JavaUtils;
 import org.junit.Before;
 import org.junit.Test;
 import org.mockito.ArgumentCaptor;
@@ -60,6 +59,7 @@ import org.apache.spark.network.shuffle.protocol.OpenBlocks;
 import org.apache.spark.network.shuffle.protocol.RegisterExecutor;
 import org.apache.spark.network.shuffle.protocol.StreamHandle;
 import org.apache.spark.network.shuffle.protocol.UploadBlock;
+import org.apache.spark.network.util.JavaUtils;
 
 public class ExternalBlockHandlerSuite {
   TransportClient client = mock(TransportClient.class);
