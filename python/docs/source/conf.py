@@ -23,8 +23,8 @@ import errno
 sys.path.insert(0, os.path.abspath('.'))
 
 # generate user_guide/pandas_on_spark/supported_pandas_api.rst
-from user_guide.pandas_on_spark.supported_status_rst_generator import SuppportedStatusRSTGenerator
-SuppportedStatusRSTGenerator().execute()
+from pyspark.pandas.supported_api_gen import generate_supported_api
+generate_supported_api()
 
 # Remove previously generated rst files. Ignore errors just in case it stops
 # generating whole docs.
