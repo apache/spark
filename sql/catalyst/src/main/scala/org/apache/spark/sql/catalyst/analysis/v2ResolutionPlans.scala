@@ -20,8 +20,7 @@ package org.apache.spark.sql.catalyst.analysis
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Attribute, LeafExpression, Unevaluable}
-import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan, Statistics}
-import org.apache.spark.sql.catalyst.trees.LeafLike
+import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, Statistics}
 import org.apache.spark.sql.catalyst.trees.TreePattern.{TreePattern, UNRESOLVED_FUNC}
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.connector.catalog.{CatalogPlugin, FunctionCatalog, Identifier, Table, TableCatalog}
@@ -142,9 +141,9 @@ case class UnresolvedDBObjectName(nameParts: Seq[String], isNamespace: Boolean) 
 }
 
 /**
- * A resolved leaf like node that its statistics is no meaning.
+ * A resolved leaf node whose statistics has no meaning.
  */
-trait ResolvedLeafObject extends LogicalPlan with LeafLike[LogicalPlan] {
+trait LeafNodeWithoutStats extends LeafNode {
   // Here we just return a dummy statistics to avoid compute statsCache
   override def stats: Statistics = Statistics.DUMMY
 }
@@ -153,7 +152,7 @@ trait ResolvedLeafObject extends LogicalPlan with LeafLike[LogicalPlan] {
  * A plan containing resolved namespace.
  */
 case class ResolvedNamespace(catalog: CatalogPlugin, namespace: Seq[String])
-  extends ResolvedLeafObject {
+  extends LeafNodeWithoutStats {
   override def output: Seq[Attribute] = Nil
 }
 
@@ -165,7 +164,7 @@ case class ResolvedTable(
     identifier: Identifier,
     table: Table,
     outputAttributes: Seq[Attribute])
-  extends ResolvedLeafObject {
+  extends LeafNodeWithoutStats {
   override def output: Seq[Attribute] = {
     val qualifier = catalog.name +: identifier.namespace :+ identifier.name
     outputAttributes.map(_.withQualifier(qualifier))
@@ -200,7 +199,7 @@ case class ResolvedFieldPosition(position: ColumnPosition) extends FieldPosition
  */
 // TODO: create a generic representation for temp view, v1 view and v2 view, after we add view
 //       support to v2 catalog. For now we only need the identifier to fallback to v1 command.
-case class ResolvedView(identifier: Identifier, isTemp: Boolean) extends ResolvedLeafObject {
+case class ResolvedView(identifier: Identifier, isTemp: Boolean) extends LeafNodeWithoutStats {
   override def output: Seq[Attribute] = Nil
 }
 
@@ -211,7 +210,7 @@ case class ResolvedPersistentFunc(
     catalog: FunctionCatalog,
     identifier: Identifier,
     func: UnboundFunction)
-  extends ResolvedLeafObject {
+  extends LeafNodeWithoutStats {
   override def output: Seq[Attribute] = Nil
 }
 
@@ -221,7 +220,7 @@ case class ResolvedPersistentFunc(
 case class ResolvedNonPersistentFunc(
     name: String,
     func: UnboundFunction)
-  extends ResolvedLeafObject {
+  extends LeafNodeWithoutStats {
   override def output: Seq[Attribute] = Nil
 }
 
@@ -231,6 +230,6 @@ case class ResolvedNonPersistentFunc(
 case class ResolvedDBObjectName(
     catalog: CatalogPlugin,
     nameParts: Seq[String])
-  extends ResolvedLeafObject {
+  extends LeafNodeWithoutStats {
   override def output: Seq[Attribute] = Nil
 }
