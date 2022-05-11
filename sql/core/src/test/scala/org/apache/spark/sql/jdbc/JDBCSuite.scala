@@ -318,31 +318,31 @@ class JDBCSuite extends QueryTest
   }
 
   test("SELECT *") {
-    assert(sql("SELECT * FROM foobar").collect().size === 3)
+    assert(sql("SELECT * FROM foobar").count() === 3)
   }
 
   test("SELECT * WHERE (simple predicates)") {
-    assert(checkPushdown(sql("SELECT * FROM foobar WHERE THEID < 1")).collect().size == 0)
-    assert(checkPushdown(sql("SELECT * FROM foobar WHERE THEID != 2")).collect().size == 2)
-    assert(checkPushdown(sql("SELECT * FROM foobar WHERE THEID = 1")).collect().size == 1)
-    assert(checkPushdown(sql("SELECT * FROM foobar WHERE NAME = 'fred'")).collect().size == 1)
-    assert(checkPushdown(sql("SELECT * FROM foobar WHERE NAME <=> 'fred'")).collect().size == 1)
-    assert(checkPushdown(sql("SELECT * FROM foobar WHERE NAME > 'fred'")).collect().size == 2)
-    assert(checkPushdown(sql("SELECT * FROM foobar WHERE NAME != 'fred'")).collect().size == 2)
+    assert(checkPushdown(sql("SELECT * FROM foobar WHERE THEID < 1")).count() == 0)
+    assert(checkPushdown(sql("SELECT * FROM foobar WHERE THEID != 2")).count() == 2)
+    assert(checkPushdown(sql("SELECT * FROM foobar WHERE THEID = 1")).count() == 1)
+    assert(checkPushdown(sql("SELECT * FROM foobar WHERE NAME = 'fred'")).count() == 1)
+    assert(checkPushdown(sql("SELECT * FROM foobar WHERE NAME <=> 'fred'")).count() == 1)
+    assert(checkPushdown(sql("SELECT * FROM foobar WHERE NAME > 'fred'")).count() == 2)
+    assert(checkPushdown(sql("SELECT * FROM foobar WHERE NAME != 'fred'")).count() == 2)
 
     assert(checkPushdown(sql("SELECT * FROM foobar WHERE NAME IN ('mary', 'fred')"))
-      .collect().size == 2)
+      .count() == 2)
     assert(checkPushdown(sql("SELECT * FROM foobar WHERE NAME NOT IN ('fred')"))
-      .collect().size == 2)
+      .count() == 2)
     assert(checkPushdown(sql("SELECT * FROM foobar WHERE THEID = 1 OR NAME = 'mary'"))
-      .collect().size == 2)
+      .count() == 2)
     assert(checkPushdown(sql("SELECT * FROM foobar WHERE THEID = 1 OR NAME = 'mary' "
-      + "AND THEID = 2")).collect().size == 2)
-    assert(checkPushdown(sql("SELECT * FROM foobar WHERE NAME LIKE 'fr%'")).collect().size == 1)
-    assert(checkPushdown(sql("SELECT * FROM foobar WHERE NAME LIKE '%ed'")).collect().size == 1)
-    assert(checkPushdown(sql("SELECT * FROM foobar WHERE NAME LIKE '%re%'")).collect().size == 1)
-    assert(checkPushdown(sql("SELECT * FROM nulltypes WHERE A IS NULL")).collect().size == 1)
-    assert(checkPushdown(sql("SELECT * FROM nulltypes WHERE A IS NOT NULL")).collect().size == 0)
+      + "AND THEID = 2")).count() == 2)
+    assert(checkPushdown(sql("SELECT * FROM foobar WHERE NAME LIKE 'fr%'")).count() == 1)
+    assert(checkPushdown(sql("SELECT * FROM foobar WHERE NAME LIKE '%ed'")).count() == 1)
+    assert(checkPushdown(sql("SELECT * FROM foobar WHERE NAME LIKE '%re%'")).count() == 1)
+    assert(checkPushdown(sql("SELECT * FROM nulltypes WHERE A IS NULL")).count() == 1)
+    assert(checkPushdown(sql("SELECT * FROM nulltypes WHERE A IS NOT NULL")).count() == 0)
 
     // This is a test to reflect discussion in SPARK-12218.
     // The older versions of spark have this kind of bugs in parquet data source.
@@ -354,8 +354,8 @@ class JDBCSuite extends QueryTest
       "WHERE (THEID > 0 AND TRIM(NAME) = 'mary') OR (NAME = 'fred')")
     assert(df2.collect.toSet === Set(Row("fred", 1), Row("mary", 2)))
 
-    assert(checkNotPushdown(sql("SELECT * FROM foobar WHERE (THEID + 1) < 2")).collect().size == 0)
-    assert(checkNotPushdown(sql("SELECT * FROM foobar WHERE (THEID + 2) != 4")).collect().size == 2)
+    assert(checkNotPushdown(sql("SELECT * FROM foobar WHERE (THEID + 1) < 2")).count() == 0)
+    assert(checkNotPushdown(sql("SELECT * FROM foobar WHERE (THEID + 2) != 4")).count() == 2)
   }
 
   test("SELECT COUNT(1) WHERE (predicates)") {
@@ -369,7 +369,7 @@ class JDBCSuite extends QueryTest
   }
 
   test("SELECT * WHERE (quoted strings)") {
-    assert(sql("select * from foobar").where($"NAME" === "joe 'foo' \"bar\"").collect().size === 1)
+    assert(sql("select * from foobar").where($"NAME" === "joe 'foo' \"bar\"").count() === 1)
   }
 
   test("SELECT first field") {
@@ -1268,23 +1268,23 @@ class JDBCSuite extends QueryTest
   }
 
   test("SPARK-18141: Predicates on quoted column names in the jdbc data source") {
-    assert(sql("SELECT * FROM mixedCaseCols WHERE Id < 1").collect().size == 0)
-    assert(sql("SELECT * FROM mixedCaseCols WHERE Id <= 1").collect().size == 1)
-    assert(sql("SELECT * FROM mixedCaseCols WHERE Id > 1").collect().size == 2)
-    assert(sql("SELECT * FROM mixedCaseCols WHERE Id >= 1").collect().size == 3)
-    assert(sql("SELECT * FROM mixedCaseCols WHERE Id = 1").collect().size == 1)
-    assert(sql("SELECT * FROM mixedCaseCols WHERE Id != 2").collect().size == 2)
-    assert(sql("SELECT * FROM mixedCaseCols WHERE Id <=> 2").collect().size == 1)
-    assert(sql("SELECT * FROM mixedCaseCols WHERE Name LIKE 'fr%'").collect().size == 1)
-    assert(sql("SELECT * FROM mixedCaseCols WHERE Name LIKE '%ed'").collect().size == 1)
-    assert(sql("SELECT * FROM mixedCaseCols WHERE Name LIKE '%re%'").collect().size == 1)
-    assert(sql("SELECT * FROM mixedCaseCols WHERE Name IS NULL").collect().size == 1)
-    assert(sql("SELECT * FROM mixedCaseCols WHERE Name IS NOT NULL").collect().size == 2)
-    assert(sql("SELECT * FROM mixedCaseCols").filter($"Name".isin()).collect().size == 0)
-    assert(sql("SELECT * FROM mixedCaseCols WHERE Name IN ('mary', 'fred')").collect().size == 2)
-    assert(sql("SELECT * FROM mixedCaseCols WHERE Name NOT IN ('fred')").collect().size == 1)
-    assert(sql("SELECT * FROM mixedCaseCols WHERE Id = 1 OR Name = 'mary'").collect().size == 2)
-    assert(sql("SELECT * FROM mixedCaseCols WHERE Name = 'mary' AND Id = 2").collect().size == 1)
+    assert(sql("SELECT * FROM mixedCaseCols WHERE Id < 1").count() == 0)
+    assert(sql("SELECT * FROM mixedCaseCols WHERE Id <= 1").count() == 1)
+    assert(sql("SELECT * FROM mixedCaseCols WHERE Id > 1").count() == 2)
+    assert(sql("SELECT * FROM mixedCaseCols WHERE Id >= 1").count() == 3)
+    assert(sql("SELECT * FROM mixedCaseCols WHERE Id = 1").count() == 1)
+    assert(sql("SELECT * FROM mixedCaseCols WHERE Id != 2").count() == 2)
+    assert(sql("SELECT * FROM mixedCaseCols WHERE Id <=> 2").count() == 1)
+    assert(sql("SELECT * FROM mixedCaseCols WHERE Name LIKE 'fr%'").count() == 1)
+    assert(sql("SELECT * FROM mixedCaseCols WHERE Name LIKE '%ed'").count() == 1)
+    assert(sql("SELECT * FROM mixedCaseCols WHERE Name LIKE '%re%'").count() == 1)
+    assert(sql("SELECT * FROM mixedCaseCols WHERE Name IS NULL").count() == 1)
+    assert(sql("SELECT * FROM mixedCaseCols WHERE Name IS NOT NULL").count() == 2)
+    assert(sql("SELECT * FROM mixedCaseCols").filter($"Name".isin()).count() == 0)
+    assert(sql("SELECT * FROM mixedCaseCols WHERE Name IN ('mary', 'fred')").count() == 2)
+    assert(sql("SELECT * FROM mixedCaseCols WHERE Name NOT IN ('fred')").count() == 1)
+    assert(sql("SELECT * FROM mixedCaseCols WHERE Id = 1 OR Name = 'mary'").count() == 2)
+    assert(sql("SELECT * FROM mixedCaseCols WHERE Name = 'mary' AND Id = 2").count() == 1)
   }
 
   test("SPARK-18419: Fix `asConnectionProperties` to filter case-insensitively") {
