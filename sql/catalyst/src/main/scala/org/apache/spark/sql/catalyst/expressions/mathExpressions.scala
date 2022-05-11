@@ -1300,7 +1300,7 @@ abstract class RoundBase(child: Expression, scale: Expression,
   override lazy val dataType: DataType = child.dataType match {
     // if the new scale is bigger which means we are scaling up,
     // keep the original scale as `Decimal` does
-    case DecimalType.Fixed(p, s) => DecimalType(p, if (_scale > s) s else _scale)
+    case DecimalType.Fixed(p, s) if _scale >= 0 => DecimalType(p, if (_scale > s) s else _scale)
     case t => t
   }
 
