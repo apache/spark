@@ -1657,7 +1657,6 @@ class PlanResolutionSuite extends AnalysisTest {
         fail("Expect MergeIntoTable, but got:\n" + other.treeString)
     }
 
-
     // no aliases
     Seq(("v2Table", "v2Table1"), ("testcat.tab", "testcat.tab1")).foreach { pair =>
 
