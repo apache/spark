@@ -29,7 +29,7 @@ import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.util.{DateTimeTestUtils, DateTimeUtils}
-import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.UTC
+import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.{outstandingZoneIds, UTC}
 import org.apache.spark.sql.catalyst.util.IntervalUtils._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -961,6 +961,23 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
         Cast(Literal("2011-04-01"), DateType),
         Option(Literal(stringToInterval("interval 1 hour")))), null,
         "sequence step must be an interval of day granularity if start and end values are dates")
+    }
+  }
+
+  test("SPARK-37544: Time zone should not affect date sequence") {
+    outstandingZoneIds.foreach { zid =>
+      DateTimeTestUtils.withDefaultTimeZone(zid) {
+        checkEvaluation(new Sequence(
+          Literal(Date.valueOf("2021-01-01")),
+          Literal(Date.valueOf("2022-01-01")),
+          Literal(stringToInterval("interval 3 month"))),
+          Seq(
+            Date.valueOf("2021-01-01"),
+            Date.valueOf("2021-04-01"),
+            Date.valueOf("2021-07-01"),
+            Date.valueOf("2021-10-01"),
+            Date.valueOf("2022-01-01")))
+      }
     }
   }
 
