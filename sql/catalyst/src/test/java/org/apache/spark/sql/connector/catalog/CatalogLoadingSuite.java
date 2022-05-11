@@ -27,16 +27,16 @@ public class CatalogLoadingSuite {
   @Test
   public void testLoad() throws SparkException {
     SQLConf conf = new SQLConf();
-    conf.setConfString("spark.sql.catalog.test_name", TestCatalogPlugin.class.getCanonicalName());
+    conf.setConfString("spark.sql.catalog.test-name", TestCatalogPlugin.class.getCanonicalName());
 
-    CatalogPlugin plugin = Catalogs.load("test_name", conf);
+    CatalogPlugin plugin = Catalogs.load("test-name", conf);
     Assert.assertNotNull("Should instantiate a non-null plugin", plugin);
     Assert.assertEquals("Plugin should have correct implementation",
         TestCatalogPlugin.class, plugin.getClass());
 
     TestCatalogPlugin testPlugin = (TestCatalogPlugin) plugin;
     Assert.assertEquals("Options should contain no keys", 0, testPlugin.options.size());
-    Assert.assertEquals("Catalog should have correct name", "test_name", testPlugin.name());
+    Assert.assertEquals("Catalog should have correct name", "test-name", testPlugin.name());
   }
 
   @Test
@@ -53,11 +53,11 @@ public class CatalogLoadingSuite {
   @Test
   public void testInitializationOptions() throws SparkException {
     SQLConf conf = new SQLConf();
-    conf.setConfString("spark.sql.catalog.test_name", TestCatalogPlugin.class.getCanonicalName());
-    conf.setConfString("spark.sql.catalog.test_name.name", "not_catalog_name");
-    conf.setConfString("spark.sql.catalog.test_name.kEy", "valUE");
+    conf.setConfString("spark.sql.catalog.test-name", TestCatalogPlugin.class.getCanonicalName());
+    conf.setConfString("spark.sql.catalog.test-name.name", "not-catalog-name");
+    conf.setConfString("spark.sql.catalog.test-name.kEy", "valUE");
 
-    CatalogPlugin plugin = Catalogs.load("test_name", conf);
+    CatalogPlugin plugin = Catalogs.load("test-name", conf);
     Assert.assertNotNull("Should instantiate a non-null plugin", plugin);
     Assert.assertEquals("Plugin should have correct implementation",
         TestCatalogPlugin.class, plugin.getClass());
@@ -66,7 +66,7 @@ public class CatalogLoadingSuite {
 
     Assert.assertEquals("Options should contain only two keys", 2, testPlugin.options.size());
     Assert.assertEquals("Options should contain correct value for name (not overwritten)",
-        "not_catalog_name", testPlugin.options.get("name"));
+        "not-catalog-name", testPlugin.options.get("name"));
     Assert.assertEquals("Options should contain correct value for key",
         "valUE", testPlugin.options.get("key"));
   }
