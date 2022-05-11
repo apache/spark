@@ -172,21 +172,21 @@ class SuppportedStatusRSTGenerator:
         w_fd: TextIO,
     ) -> None:
         lines = []
-        lines.append(f"Supported ")
+        lines.append("Supported ")
         if module_name:
             lines.append(module_name)
         else:
-            lines.append(f"General Function")
-        lines.append(f" APIs\n")
+            lines.append("General Function")
+        lines.append(" APIs\n")
         lines.append("-" * 100)
         lines.append("\n")
         lines.append(f".. currentmodule:: {module_path}")
         if module_name:
             lines.append(f".{module_name}\n")
         else:
-            lines.append(f"\n")
+            lines.append("\n")
         lines.append("\n")
-        lines.append(f".. list-table::\n")
+        lines.append(".. list-table::\n")
         lines.append("    :header-rows: 1\n")
         lines.append("\n")
         lines.append("    * - API\n")
@@ -206,7 +206,7 @@ class SuppportedStatusRSTGenerator:
 
     def escape_func_str(self, func_str: str) -> str:
         if func_str.endswith("_"):
-            return func_str[:-1] + "\_"
+            return func_str[:-1] + "\_"  # noqa: W605
         else:
             return func_str
 
