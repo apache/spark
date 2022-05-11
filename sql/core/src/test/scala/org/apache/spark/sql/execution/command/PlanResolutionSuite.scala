@@ -1522,8 +1522,7 @@ class PlanResolutionSuite extends AnalysisTest {
              |ON target.i = source.i
              |WHEN MATCHED AND (target.s='delete') THEN DELETE
              |WHEN MATCHED AND (target.s='update')
-             |  THEN UPDATE SET target.s = DEFAULT,
-             |    target.i = target.i
+             |THEN UPDATE SET target.s = DEFAULT, target.i = target.i
              |WHEN NOT MATCHED AND (source.s='insert')
              |  THEN INSERT (target.i, target.s) values (DEFAULT, DEFAULT)
            """.stripMargin
