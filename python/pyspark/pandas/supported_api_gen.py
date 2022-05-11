@@ -1,7 +1,27 @@
+#
+# Licensed to the Apache Software Foundation (ASF) under one or more
+# contributor license agreements.  See the NOTICE file distributed with
+# this work for additional information regarding copyright ownership.
+# The ASF licenses this file to You under the Apache License, Version 2.0
+# (the "License"); you may not use this file except in compliance with
+# the License.  You may obtain a copy of the License at
+#
+#    http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+
+"""
+Generate 'Supported pandas APIs' documentation file
+"""
 import os
 from enum import Enum, unique
 from inspect import getmembers, isclass, isfunction, signature
-from typing import Callable, Dict, List, Set, TextIO, Tuple
+from typing import Any, Callable, Dict, List, Set, TextIO, Tuple
 
 import pyspark.pandas as ps
 import pyspark.pandas.groupby as psg
@@ -21,24 +41,6 @@ TARGET_RST_FILE = os.path.join(
     SPARK_HOME, "python/docs/source/user_guide/pandas_on_spark/supported_pandas_api.rst"
 )
 RST_HEADER = """
-..  Licensed to the Apache Software Foundation (ASF) under one
-    or more contributor license agreements.  See the NOTICE file
-    distributed with this work for additional information
-    regarding copyright ownership.  The ASF licenses this file
-    to you under the Apache License, Version 2.0 (the
-    "License"); you may not use this file except in compliance
-    with the License.  You may obtain a copy of the License at
-
-..    http://www.apache.org/licenses/LICENSE-2.0
-
-..  Unless required by applicable law or agreed to in writing,
-    software distributed under the License is distributed on an
-    "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
-    KIND, either express or implied.  See the License for the
-    specific language governing permissions and limitations
-    under the License.
-
-
 =====================
 Supported pandas APIs
 =====================
@@ -78,13 +80,22 @@ class Implemented(Enum):
 
 
 class SupportedStatus:
+    """
+    SupportedStatus class that defines a supported status for a specific pandas API
+    """
+
     def __init__(self, implemented: str, missing: str = ""):
         self.implemented = implemented
         self.missing = missing
 
 
 def generate_supported_api() -> None:
-    all_supported_status = {}
+    """
+    Generate supported APIs status dictionary.
+
+    Write supported APIs documentation.
+    """
+    all_supported_status: Dict[Tuple[str, str], Dict[str, SupportedStatus]] = {}
     for pd_module_group, ps_module_group in MODULE_GROUP_MATCH:
         pd_modules = get_pd_modules(pd_module_group)
         update_all_supported_status(
@@ -94,28 +105,32 @@ def generate_supported_api() -> None:
 
 
 def create_supported_by_module(
-    module_name: str, pd_module_group, ps_module_group
+    module_name: str, pd_module_group: Any, ps_module_group: Any
 ) -> Dict[str, SupportedStatus]:
-    pd_module = (
-        getattr(pd_module_group, module_name) if module_name else pd_module_group
-    )
+    """
+    Retrieves supported status of pandas module
+
+    Parameters
+    ----------
+    module_name : str
+        Class name that exists in the path of the module.
+    pd_module_group : Any
+        Specific path of importable pandas module.
+    ps_module_group: Any
+        Specific path of importable pyspark.pandas module.
+    """
+    pd_module = getattr(pd_module_group, module_name) if module_name else pd_module_group
     try:
-        ps_module = (
-            getattr(ps_module_group, module_name) if module_name else ps_module_group
-        )
+        ps_module = getattr(ps_module_group, module_name) if module_name else ps_module_group
     except AttributeError:
         # module not implemented
         return {}
 
-    pd_funcs = dict(
-        [m for m in getmembers(pd_module, isfunction) if not m[0].startswith("_")]
-    )
+    pd_funcs = dict([m for m in getmembers(pd_module, isfunction) if not m[0].startswith("_")])
     if not pd_funcs:
         return {}
 
-    ps_funcs = dict(
-        [m for m in getmembers(ps_module, isfunction) if not m[0].startswith("_")]
-    )
+    ps_funcs = dict([m for m in getmembers(ps_module, isfunction) if not m[0].startswith("_")])
 
     return organize_by_implementation_status(
         module_name, pd_funcs, ps_funcs, pd_module_group, ps_module_group
@@ -126,9 +141,25 @@ def organize_by_implementation_status(
     module_name: str,
     pd_funcs: Dict[str, Callable],
     ps_funcs: Dict[str, Callable],
-    pd_module_group,
-    ps_module_group,
+    pd_module_group: Any,
+    ps_module_group: Any,
 ) -> Dict[str, SupportedStatus]:
+    """
+    Check the implementation status and parameters of both modules.
+
+    Parmeters
+    ---------
+    module_name : str
+        Class name that exists in the path of the module.
+    pd_funcs: Dict[str, Callable]
+        function name and function object mapping of pandas module.
+    ps_funcs: Dict[str, Callable]
+        function name and function object mapping of pyspark.pandas module.
+    pd_module_group : Any
+        Specific path of importable pandas module.
+    ps_module_group: Any
+        Specific path of importable pyspark.pandas module.
+    """
     pd_dict = {}
     for pd_func_name, pd_func in pd_funcs.items():
         ps_func = ps_funcs.get(pd_func_name)
@@ -166,13 +197,31 @@ def transform_missing(
     pd_module_path: str,
     ps_module_path: str,
 ) -> str:
-    missing_str = " , ".join(
-        f"``{x}``" for x in sorted(missing_set)[:MAX_MISSING_PARAMS_SIZE]
-    )
+    """
+    Transform missing parameters into table information string.
+
+    Parameters
+    ----------
+    module_name : str
+        Class name that exists in the path of the module.
+    pd_func_name : str
+        Name of pandas API.
+    missing_set : Set[str]
+        A set of parameters not yet implemented.
+    pd_module_path : str
+        Path string of pandas module.
+    ps_module_path : str
+        Path string of pyspark.pandas module.
+
+    Examples
+    --------
+    >>> transform_missing("DataFrame", "add", {"axis", "fill_value", "level"},
+    ...                     "pandas.DataFrame", "pyspark.pandas.DataFrame")
+    >>> ``axis`` , ``fill_value`` , ``level``
+    """
+    missing_str = " , ".join(f"``{x}``" for x in sorted(missing_set)[:MAX_MISSING_PARAMS_SIZE])
     if len(missing_set) > MAX_MISSING_PARAMS_SIZE:
-        module_dot_func = (
-            f"{module_name}.{pd_func_name}" if module_name else pd_func_name
-        )
+        module_dot_func = f"{module_name}.{pd_func_name}" if module_name else pd_func_name
         additional_str = (
             " and more. See the "
             f"`{pd_module_path}.{module_dot_func} "
@@ -186,27 +235,43 @@ def transform_missing(
     return missing_str
 
 
-def get_pd_modules(pd_module_group) -> List[str]:
-    return sorted(
-        [m[0] for m in getmembers(pd_module_group, isclass) if not m[0].startswith("_")]
-    )
+def get_pd_modules(pd_module_group: Any) -> List[str]:
+    """
+    Returns sorted pandas memeber list from pandas module path.
+
+    Parameters
+    ----------
+    pd_module_group : Any
+        Specific path of importable pandas module.
+    """
+    return sorted([m[0] for m in getmembers(pd_module_group, isclass) if not m[0].startswith("_")])
 
 
 def update_all_supported_status(
     all_supported_status: Dict[Tuple[str, str], Dict[str, SupportedStatus]],
     pd_modules: List[str],
-    pd_module_group,
-    ps_module_group,
+    pd_module_group: Any,
+    ps_module_group: Any,
 ) -> None:
+    """
+    Updates supported status across multiple module paths.
+
+    Parmeters
+    ---------
+    all_supported_status: Dict[Tuple[str, str], Dict[str, SupportedStatus]]
+        Data that stores the supported status across multiple module paths.
+    pd_modles: List[str]
+        Name list of pandas modules.
+    pd_module_group : Any
+        Specific path of importable pandas module.
+    ps_module_group: Any
+        Specific path of importable pyspark.pandas module.
+    """
     pd_modules += [""]  # for General Function APIs
     for module_name in pd_modules:
-        supported_status = create_supported_by_module(
-            module_name, pd_module_group, ps_module_group
-        )
+        supported_status = create_supported_by_module(module_name, pd_module_group, ps_module_group)
         if supported_status:
-            all_supported_status[
-                (module_name, ps_module_group.__name__)
-            ] = supported_status
+            all_supported_status[(module_name, ps_module_group.__name__)] = supported_status
 
 
 def write_table(
@@ -215,6 +280,9 @@ def write_table(
     supported_status: Dict[str, SupportedStatus],
     w_fd: TextIO,
 ) -> None:
+    """
+    Write table by using Sphinx list-table directive.
+    """
     lines = []
     lines.append("Supported ")
     if module_name:
@@ -250,15 +318,19 @@ def write_table(
 
 
 def escape_func_str(func_str: str) -> str:
+    """
+    Transforms which affecting rst data format.
+    """
     if func_str.endswith("_"):
         return func_str[:-1] + "\_"  # noqa: W605
     else:
         return func_str
 
 
-def write_rst(
-    all_supported_status: Dict[Tuple[str, str], Dict[str, SupportedStatus]]
-) -> None:
+def write_rst(all_supported_status: Dict[Tuple[str, str], Dict[str, SupportedStatus]]) -> None:
+    """
+    Writes the documentation to the target file path.
+    """
     with open(TARGET_RST_FILE, "w") as w_fd:
         w_fd.write(RST_HEADER)
         for module_info, supported_status in all_supported_status.items():
