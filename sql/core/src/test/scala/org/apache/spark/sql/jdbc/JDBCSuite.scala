@@ -322,27 +322,27 @@ class JDBCSuite extends QueryTest
   }
 
   test("SELECT * WHERE (simple predicates)") {
-    assert(checkPushdown(sql("SELECT * FROM foobar WHERE THEID < 1")).count() == 0)
-    assert(checkPushdown(sql("SELECT * FROM foobar WHERE THEID != 2")).count() == 2)
-    assert(checkPushdown(sql("SELECT * FROM foobar WHERE THEID = 1")).count() == 1)
-    assert(checkPushdown(sql("SELECT * FROM foobar WHERE NAME = 'fred'")).count() == 1)
-    assert(checkPushdown(sql("SELECT * FROM foobar WHERE NAME <=> 'fred'")).count() == 1)
-    assert(checkPushdown(sql("SELECT * FROM foobar WHERE NAME > 'fred'")).count() == 2)
-    assert(checkPushdown(sql("SELECT * FROM foobar WHERE NAME != 'fred'")).count() == 2)
+    assert(checkPushdown(sql("SELECT * FROM foobar WHERE THEID < 1")).collect().size == 0)
+    assert(checkPushdown(sql("SELECT * FROM foobar WHERE THEID != 2")).collect().size == 2)
+    assert(checkPushdown(sql("SELECT * FROM foobar WHERE THEID = 1")).collect().size == 1)
+    assert(checkPushdown(sql("SELECT * FROM foobar WHERE NAME = 'fred'")).collect().size == 1)
+    assert(checkPushdown(sql("SELECT * FROM foobar WHERE NAME <=> 'fred'")).collect().size == 1)
+    assert(checkPushdown(sql("SELECT * FROM foobar WHERE NAME > 'fred'")).collect().size == 2)
+    assert(checkPushdown(sql("SELECT * FROM foobar WHERE NAME != 'fred'")).collect().size == 2)
 
     assert(checkPushdown(sql("SELECT * FROM foobar WHERE NAME IN ('mary', 'fred')"))
-      .count() == 2)
+      .collect().size == 2)
     assert(checkPushdown(sql("SELECT * FROM foobar WHERE NAME NOT IN ('fred')"))
-      .count() == 2)
+      .collect().size == 2)
     assert(checkPushdown(sql("SELECT * FROM foobar WHERE THEID = 1 OR NAME = 'mary'"))
-      .count() == 2)
+      .collect().size == 2)
     assert(checkPushdown(sql("SELECT * FROM foobar WHERE THEID = 1 OR NAME = 'mary' "
-      + "AND THEID = 2")).count() == 2)
-    assert(checkPushdown(sql("SELECT * FROM foobar WHERE NAME LIKE 'fr%'")).count() == 1)
-    assert(checkPushdown(sql("SELECT * FROM foobar WHERE NAME LIKE '%ed'")).count() == 1)
-    assert(checkPushdown(sql("SELECT * FROM foobar WHERE NAME LIKE '%re%'")).count() == 1)
-    assert(checkPushdown(sql("SELECT * FROM nulltypes WHERE A IS NULL")).count() == 1)
-    assert(checkPushdown(sql("SELECT * FROM nulltypes WHERE A IS NOT NULL")).count() == 0)
+      + "AND THEID = 2")).collect().size == 2)
+    assert(checkPushdown(sql("SELECT * FROM foobar WHERE NAME LIKE 'fr%'")).collect().size == 1)
+    assert(checkPushdown(sql("SELECT * FROM foobar WHERE NAME LIKE '%ed'")).collect().size == 1)
+    assert(checkPushdown(sql("SELECT * FROM foobar WHERE NAME LIKE '%re%'")).collect().size == 1)
+    assert(checkPushdown(sql("SELECT * FROM nulltypes WHERE A IS NULL")).collect().size == 1)
+    assert(checkPushdown(sql("SELECT * FROM nulltypes WHERE A IS NOT NULL")).collect().size == 0)
 
     // This is a test to reflect discussion in SPARK-12218.
     // The older versions of spark have this kind of bugs in parquet data source.
@@ -354,8 +354,8 @@ class JDBCSuite extends QueryTest
       "WHERE (THEID > 0 AND TRIM(NAME) = 'mary') OR (NAME = 'fred')")
     assert(df2.collect.toSet === Set(Row("fred", 1), Row("mary", 2)))
 
-    assert(checkNotPushdown(sql("SELECT * FROM foobar WHERE (THEID + 1) < 2")).count() == 0)
-    assert(checkNotPushdown(sql("SELECT * FROM foobar WHERE (THEID + 2) != 4")).count() == 2)
+    assert(checkNotPushdown(sql("SELECT * FROM foobar WHERE (THEID + 1) < 2")).collect().size == 0)
+    assert(checkNotPushdown(sql("SELECT * FROM foobar WHERE (THEID + 2) != 4")).collect().size == 2)
   }
 
   test("SELECT COUNT(1) WHERE (predicates)") {
