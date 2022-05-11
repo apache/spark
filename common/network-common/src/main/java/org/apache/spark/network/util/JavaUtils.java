@@ -21,6 +21,8 @@ import java.io.*;
 import java.nio.ByteBuffer;
 import java.nio.channels.ReadableByteChannel;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.Locale;
 import java.util.concurrent.TimeUnit;
 import java.util.regex.Matcher;
@@ -360,6 +362,18 @@ public class JavaUtils {
       buffer.get(bytes);
       return bytes;
     }
+  }
+
+  /**
+   * Create a temporary directory inside `java.io.tmpdir`. The directory will be
+   * automatically deleted when the VM shuts down.
+   */
+  public static File createTempDir() throws IOException {
+    Path baseDir = new File(System.getProperty("java.io.tmpdir")).toPath();
+    String namePrefix = "spark";
+    File dir = Files.createTempDirectory(baseDir, namePrefix).toFile();
+    dir.deleteOnExit();
+    return dir;
   }
 
   /**

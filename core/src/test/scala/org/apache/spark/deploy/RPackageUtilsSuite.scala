@@ -144,7 +144,7 @@ class RPackageUtilsSuite
   }
 
   test("SparkR zipping works properly") {
-    val tempDir = Files.createTempDir()
+    val tempDir = Utils.createTempDir()
     Utils.tryWithSafeFinally {
       IvyTestUtils.writeFile(tempDir, "test.R", "abc")
       val fakeSparkRDir = new File(tempDir, "SparkR")

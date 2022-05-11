@@ -28,7 +28,7 @@ import com.codahale.metrics.Meter;
 import com.codahale.metrics.Metric;
 import com.codahale.metrics.Timer;
 import com.google.common.io.ByteStreams;
-import com.google.common.io.Files;
+import org.apache.spark.network.util.JavaUtils;
 import org.junit.Before;
 import org.junit.Test;
 import org.mockito.ArgumentCaptor;
@@ -126,7 +126,7 @@ public class ExternalBlockHandlerSuite {
     int reduceId = 0;
 
     // prepare the checksum file
-    File tmpDir = Files.createTempDir();
+    File tmpDir = JavaUtils.createTempDir();
     File checksumFile = new File(tmpDir,
       "shuffle_" + shuffleId + "_" + mapId + "_" + reduceId + ".checksum." + algorithm);
     DataOutputStream out = new DataOutputStream(new FileOutputStream(checksumFile));
