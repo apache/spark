@@ -197,7 +197,7 @@ class JDBCOptions(
   val pushDownLimit = parameters.getOrElse(JDBC_PUSHDOWN_LIMIT, "false").toBoolean
 
   // An option to allow/disallow pushing down OFFSET into V2 JDBC data source
-  // This only applies to Data Source V2 JDBC and allow pushing down LIMIT first
+  // This only applies to Data Source V2 JDBC
   val pushDownOffset =
     pushDownLimit && parameters.getOrElse(JDBC_PUSHDOWN_OFFSET, "false").toBoolean
 

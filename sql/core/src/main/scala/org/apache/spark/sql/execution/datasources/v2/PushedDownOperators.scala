@@ -31,5 +31,5 @@ case class PushedDownOperators(
     offset: Option[Int],
     sortValues: Seq[SortOrder],
     pushedPredicates: Seq[Predicate]) {
-  assert((limit.isEmpty && sortValues.isEmpty && offset.isEmpty) || limit.isDefined)
+  assert((limit.isEmpty && sortValues.isEmpty) || limit.isDefined)
 }

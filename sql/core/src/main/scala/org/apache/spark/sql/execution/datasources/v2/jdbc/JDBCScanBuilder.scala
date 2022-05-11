@@ -23,7 +23,7 @@ import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.connector.expressions.{FieldReference, SortOrder}
 import org.apache.spark.sql.connector.expressions.aggregate.Aggregation
 import org.apache.spark.sql.connector.expressions.filter.Predicate
-import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownAggregates, SupportsPushDownLimit, SupportsPushDownLimitAndOffset, SupportsPushDownRequiredColumns, SupportsPushDownTableSample, SupportsPushDownTopN, SupportsPushDownV2Filters}
+import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownAggregates, SupportsPushDownLimit, SupportsPushDownOffset, SupportsPushDownRequiredColumns, SupportsPushDownTableSample, SupportsPushDownTopN, SupportsPushDownV2Filters}
 import org.apache.spark.sql.execution.datasources.PartitioningUtils
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JDBCRDD, JDBCRelation}
 import org.apache.spark.sql.execution.datasources.v2.TableSampleInfo
@@ -39,7 +39,7 @@ case class JDBCScanBuilder(
     with SupportsPushDownRequiredColumns
     with SupportsPushDownAggregates
     with SupportsPushDownLimit
-    with SupportsPushDownLimitAndOffset
+    with SupportsPushDownOffset
     with SupportsPushDownTableSample
     with SupportsPushDownTopN
     with Logging {
@@ -142,9 +142,8 @@ case class JDBCScanBuilder(
     false
   }
 
-  override def pushLimitAndOffset(limit: Int, offset: Int): Boolean = {
-    if (jdbcOptions.pushDownOffset) {
-      pushedLimit = limit
+  override def pushOffset(offset: Int): Boolean = {
+    if (jdbcOptions.pushDownOffset && !isPartiallyPushed) {
       pushedOffset = offset
       return true
     }

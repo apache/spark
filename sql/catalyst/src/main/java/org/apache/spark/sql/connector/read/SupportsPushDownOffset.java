@@ -21,23 +21,16 @@ import org.apache.spark.annotation.Evolving;
 
 /**
  * A mix-in interface for {@link ScanBuilder}. Data sources can implement this interface to
- * push down LIMIT and OFFSET. Please note that the combination of LIMIT and OFFSET with other
- * operations such as AGGREGATE, GROUP BY, SORT BY, CLUSTER BY, DISTRIBUTE BY, etc.
- * is NOT pushed down.
+ * push down OFFSET. Please note that the combination of OFFSET with other operations
+ * such as AGGREGATE, GROUP BY, SORT BY, CLUSTER BY, DISTRIBUTE BY, etc. is NOT pushed down.
  *
  * @since 3.4.0
  */
 @Evolving
-public interface SupportsPushDownLimitAndOffset {
-  /**
-   * Pushes down LIMIT and OFFSET to the data source.
-   */
-  boolean pushLimitAndOffset(int limit, int offset);
+public interface SupportsPushDownOffset extends ScanBuilder {
 
   /**
-   * Whether the LIMIT and OFFSET is partially pushed or not. If it returns true, then Spark will
-   * do LIMIT and OFFSET again. This method will only be called when {@link #pushLimitAndOffset}
-   * returns true.
+   * Pushes down OFFSET to the data source.
    */
-  default boolean isPartiallyPushed() { return true; }
+  boolean pushOffset(int offset);
 }

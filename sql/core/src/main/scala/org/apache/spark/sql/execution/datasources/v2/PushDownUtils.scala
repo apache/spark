@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.expressions.{AttributeReference, AttributeS
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.connector.expressions.SortOrder
 import org.apache.spark.sql.connector.expressions.filter.Predicate
-import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownFilters, SupportsPushDownLimit, SupportsPushDownLimitAndOffset, SupportsPushDownRequiredColumns, SupportsPushDownTableSample, SupportsPushDownTopN, SupportsPushDownV2Filters}
+import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownFilters, SupportsPushDownLimit, SupportsPushDownOffset, SupportsPushDownRequiredColumns, SupportsPushDownTableSample, SupportsPushDownTopN, SupportsPushDownV2Filters}
 import org.apache.spark.sql.execution.datasources.DataSourceStrategy
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources
@@ -131,19 +131,15 @@ object PushDownUtils extends PredicateHelper {
   }
 
   /**
-   * Pushes down LIMIT and OFFSET to the data source Scan.
+   * Pushes down OFFSET to the data source Scan.
    *
-   * @return the tuple of Boolean. The first Boolean value represents whether to push down, and
-   *         the second Boolean value represents whether to push down partially, which means
-   *         Spark will keep the Limit and Offset and do it again.
+   * @return the Boolean value represents whether to push down.
    */
-  def pushLimitAndOffset(scanBuilder: ScanBuilder, limit: Int, offset: Int): (Boolean, Boolean) = {
+  def pushOffset(scanBuilder: ScanBuilder, offset: Int): Boolean = {
     scanBuilder match {
-      case s: SupportsPushDownLimitAndOffset if !s.isPartiallyPushed =>
-        (s.pushLimitAndOffset(limit, offset), false)
-      case s: SupportsPushDownLimit if s.pushLimit(limit + offset) =>
-        (true, s.isPartiallyPushed)
-      case _ => (false, false)
+      case s: SupportsPushDownOffset =>
+        s.pushOffset(offset)
+      case _ => false
     }
   }
 

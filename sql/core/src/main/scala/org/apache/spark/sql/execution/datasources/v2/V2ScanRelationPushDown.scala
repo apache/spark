@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.expressions.{aggregate, Alias, AliasHelper,
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.optimizer.CollapseProject
 import org.apache.spark.sql.catalyst.planning.ScanOperation
-import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, LeafNode, Limit, LimitAndOffset, LocalLimit, LogicalPlan, Project, Sample, Sort}
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, LeafNode, Limit, LocalLimit, LogicalPlan, Offset, Project, Sample, Sort}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.connector.expressions.{SortOrder => V2SortOrder}
 import org.apache.spark.sql.connector.expressions.aggregate.{Aggregation, Avg, Count, GeneralAggregateFunc, Sum}
@@ -44,7 +44,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper wit
       pushDownFilters,
       pushDownAggregates,
       pushDownLimits,
-      pushDownLimitAndOffsets,
+      pushDownOffsets,
       pruneColumns)
 
     pushdownRules.foldLeft(plan) { (newPlan, pushDownRule) =>
@@ -420,35 +420,26 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper wit
       }
   }
 
-  private def pushDownLimitAndOffset(
-      plan: LogicalPlan, limit: Int, offset: Int): (LogicalPlan, Boolean) = plan match {
+  private def pushDownOffset(plan: LogicalPlan, offset: Int): (LogicalPlan, Boolean) = plan match {
     case operation @ ScanOperation(_, filter, sHolder: ScanBuilderHolder) if filter.isEmpty =>
-      val (isPushed, isPartiallyPushed) =
-        PushDownUtils.pushLimitAndOffset(sHolder.builder, limit, offset)
+      val isPushed = PushDownUtils.pushOffset(sHolder.builder, offset)
       if (isPushed) {
-        if (isPartiallyPushed) {
-          sHolder.pushedLimit = Some(limit + offset)
-        } else {
-          sHolder.pushedLimit = Some(limit)
-          sHolder.pushedOffset = Some(offset)
-        }
+        sHolder.pushedOffset = Some(offset)
       }
-      (operation, isPushed && !isPartiallyPushed)
+      (operation, isPushed)
     case p: Project =>
-      val (newChild, isPartiallyPushed) = pushDownLimitAndOffset(p.child, limit, offset)
-      (p.withNewChildren(Seq(newChild)), isPartiallyPushed)
+      val (newChild, isPushed) = pushDownOffset(p.child, offset)
+      (p.withNewChildren(Seq(newChild)), isPushed)
     case other => (other, false)
   }
 
-  def pushDownLimitAndOffsets(plan: LogicalPlan): LogicalPlan = plan.transform {
-    case limitAndOffset @ LimitAndOffset(IntegerLiteral(limit), IntegerLiteral(offset), child) =>
-      val (newChild, canRemoveLimitAndOffset) = pushDownLimitAndOffset(child, limit, offset)
-      if (canRemoveLimitAndOffset) {
+  def pushDownOffsets(plan: LogicalPlan): LogicalPlan = plan.transform {
+    case offset @ Offset(IntegerLiteral(n), child) =>
+      val (newChild, isPushed) = pushDownOffset(child, n)
+      if (isPushed) {
         newChild
       } else {
-        val newLocalLimit =
-          limitAndOffset.child.asInstanceOf[LocalLimit].withNewChildren(Seq(newChild))
-        limitAndOffset.withNewChildren(Seq(newLocalLimit))
+        offset
       }
   }
 
