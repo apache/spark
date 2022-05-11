@@ -1906,7 +1906,12 @@ class SubquerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
 
   test("SPARK-39131: Infer filters after RewritePredicateSubquery") {
     withTable("t1", "t2") {
-      sql("CREATE TABLE t1 USING parquet AS SELECT IF(id < 5, null, id) as key, id AS value FROM range(10)")
+      sql(
+        """
+          |CREATE TABLE t1 USING parquet AS
+          |SELECT IF(id < 5, null, id) as key, id AS value
+          |FROM range(10)
+          |""".stripMargin)
       val df = sql(
         """
           |SELECT *
