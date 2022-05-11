@@ -347,7 +347,7 @@ private[spark] class BlockManager(
         case ex: KryoException if ex.getCause.isInstanceOf[IOException] =>
           // We need to have detailed log message to catch environmental problems easily.
           // Further details: https://issues.apache.org/jira/browse/SPARK-37710
-          processKryoException(ex, blockId)
+          processIORelatedException(ex, blockId, 0)
           throw ex
       } finally {
         IOUtils.closeQuietly(inputStream)
@@ -933,10 +933,29 @@ private[spark] class BlockManager(
           })
           Some(new BlockResult(ci, DataReadMethod.Memory, info.size))
         } else if (level.useDisk && diskStore.contains(blockId)) {
-          try {
-            val diskData = diskStore.getBytes(blockId)
-            val iterToReturn: Iterator[Any] = {
-              if (level.deserialized) {
+          var retryCount = 0
+          val retryLimit = 3
+          var diskData: BlockData = null
+
+          def handleRetriableException(e: Exception) = {
+            processIORelatedException(e, blockId, retryCount)
+            if (diskData != null) {
+              diskData.dispose()
+              diskData = null
+            }
+            if (retryCount == retryLimit) {
+              releaseLock(blockId, taskContext)
+              // Remove the block so that its unavailability is reported to the driver
+              removeBlock(blockId)
+              throw e
+            }
+          }
+
+          var iterToReturn: Iterator[Any] = null
+          while (iterToReturn == null) {
+            try {
+              diskData = diskStore.getBytes(blockId)
+              iterToReturn = if (level.deserialized) {
                 val diskValues = serializerManager.dataDeserializeStream(
                   blockId,
                   diskData.toInputStream())(info.classTag)
@@ -947,27 +966,42 @@ private[spark] class BlockManager(
                   .getOrElse { diskData.toInputStream() }
                 serializerManager.dataDeserializeStream(blockId, stream)(info.classTag)
               }
+            } catch {
+              case e: KryoException if e.getCause.isInstanceOf[IOException] =>
+                handleRetriableException(e)
+              case e: IOException =>
+                handleRetriableException(e)
+              case t: Throwable =>
+                if (diskData != null) {
+                  diskData.dispose()
+                }
+                // not a retriable exception
+                throw t
             }
-            val ci = CompletionIterator[Any, Iterator[Any]](iterToReturn, {
-              releaseLockAndDispose(blockId, diskData, taskContext)
-            })
-            Some(new BlockResult(ci, DataReadMethod.Disk, info.size))
-          } catch {
-            case ex: KryoException if ex.getCause.isInstanceOf[IOException] =>
-              // We need to have detailed log message to catch environmental problems easily.
-              // Further details: https://issues.apache.org/jira/browse/SPARK-37710
-              processKryoException(ex, blockId)
-              throw ex
+            retryCount += 1
           }
+          val ci = CompletionIterator[Any, Iterator[Any]](iterToReturn, {
+            releaseLockAndDispose(blockId, diskData, taskContext)
+          })
+          Some(new BlockResult(ci, DataReadMethod.Disk, info.size))
         } else {
           handleLocalReadFailure(blockId)
         }
     }
   }
 
-  private def processKryoException(ex: KryoException, blockId: BlockId): Unit = {
-    var message =
-      "%s. %s - blockId: %s".format(ex.getMessage, blockManagerId.toString, blockId)
+  /**
+   *  We need to have detailed log message to catch environmental problems easily.
+   *  Further details: https://issues.apache.org/jira/browse/SPARK-37710
+   */
+   private def processIORelatedException(e: Exception, blockId: BlockId, retryCount: Int): Unit = {
+    var message: String = if (retryCount == 0) {
+      "%s. %s - blockId: %s"
+        .format(e.getMessage, blockManagerId.toString, blockId)
+    } else {
+      "%s. %s - blockId: %s retryCount: %d"
+        .format(e.getMessage, blockManagerId.toString, blockId, retryCount)
+    }
     val file = diskBlockManager.getFile(blockId)
     if (file.exists()) {
       message = "%s - blockDiskPath: %s".format(message, file.getAbsolutePath)
