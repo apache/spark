@@ -201,7 +201,7 @@ case class TryToNumber(left: Expression, right: Expression)
       > SELECT _FUNC_(454, '999');
        454
       > SELECT _FUNC_(454.00, '000D00');
-       454
+       454.00
       > SELECT _FUNC_(12454, '99G999');
        12,454
       > SELECT _FUNC_(78.12, '$99.99');
@@ -272,7 +272,7 @@ case class ToCharacter(left: Expression, right: Expression)
       > SELECT _FUNC_(454, '999');
        454
       > SELECT _FUNC_(454.00, '000D00');
-       454
+       454.00
       > SELECT _FUNC_(12454, '99G999');
        12,454
       > SELECT _FUNC_(78.12, '$99.99');

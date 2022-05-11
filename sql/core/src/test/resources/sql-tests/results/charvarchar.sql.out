@@ -494,17 +494,33 @@ create table char_part(c1 char(5), c2 char(2), v1 varchar(6), v2 varchar(2)) usi
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Can not create the managed table('`default`.`char_part`'). The associated location('file:/Users/Daniel.Tenedorio/spark-4/sql/core/spark-warehouse/org.apache.spark.sql.SQLQueryTestSuite/char_part') already exists.
+
 
 
 -- !query
 desc formatted char_part
 -- !query schema
-struct<>
+struct<col_name:string,data_type:string,comment:string>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table or view not found: char_part; line 1 pos 15
+c1                  	char(5)
+v1                  	varchar(6)
+v2                  	varchar(2)
+c2                  	char(2)
+# Partition Information
+# col_name          	data_type           	comment
+v2                  	varchar(2)
+c2                  	char(2)
+
+# Detailed Table Information
+Database            	default
+Table               	char_part
+Created Time [not included in comparison]
+Last Access [not included in comparison]
+Created By [not included in comparison]
+Type                	MANAGED
+Provider            	parquet
+Location [not included in comparison]/{warehouse_dir}/char_part
+Partition Provider  	Catalog
 
 
 -- !query
@@ -512,17 +528,33 @@ alter table char_part add partition (v2='ke', c2='nt') location 'loc1'
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: char_part; line 1 pos 12
+
 
 
 -- !query
 desc formatted char_part
 -- !query schema
-struct<>
+struct<col_name:string,data_type:string,comment:string>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table or view not found: char_part; line 1 pos 15
+c1                  	char(5)
+v1                  	varchar(6)
+v2                  	varchar(2)
+c2                  	char(2)
+# Partition Information
+# col_name          	data_type           	comment
+v2                  	varchar(2)
+c2                  	char(2)
+
+# Detailed Table Information
+Database            	default
+Table               	char_part
+Created Time [not included in comparison]
+Last Access [not included in comparison]
+Created By [not included in comparison]
+Type                	MANAGED
+Provider            	parquet
+Location [not included in comparison]/{warehouse_dir}/char_part
+Partition Provider  	Catalog
 
 
 -- !query
@@ -531,16 +563,33 @@ alter table char_part partition (v2='ke') rename to partition (v2='nt')
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Table not found: char_part; line 1 pos 12
+Partition spec is invalid. The spec (v2) must match the partition spec (v2, c2) defined in table '`default`.`char_part`'
 
 
 -- !query
 desc formatted char_part
 -- !query schema
-struct<>
+struct<col_name:string,data_type:string,comment:string>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table or view not found: char_part; line 1 pos 15
+c1                  	char(5)
+v1                  	varchar(6)
+v2                  	varchar(2)
+c2                  	char(2)
+# Partition Information
+# col_name          	data_type           	comment
+v2                  	varchar(2)
+c2                  	char(2)
+
+# Detailed Table Information
+Database            	default
+Table               	char_part
+Created Time [not included in comparison]
+Last Access [not included in comparison]
+Created By [not included in comparison]
+Type                	MANAGED
+Provider            	parquet
+Location [not included in comparison]/{warehouse_dir}/char_part
+Partition Provider  	Catalog
 
 
 -- !query
@@ -548,17 +597,33 @@ alter table char_part partition (v2='ke', c2='nt') set location 'loc2'
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: char_part; line 1 pos 12
+
 
 
 -- !query
 desc formatted char_part
 -- !query schema
-struct<>
+struct<col_name:string,data_type:string,comment:string>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table or view not found: char_part; line 1 pos 15
+c1                  	char(5)
+v1                  	varchar(6)
+v2                  	varchar(2)
+c2                  	char(2)
+# Partition Information
+# col_name          	data_type           	comment
+v2                  	varchar(2)
+c2                  	char(2)
+
+# Detailed Table Information
+Database            	default
+Table               	char_part
+Created Time [not included in comparison]
+Last Access [not included in comparison]
+Created By [not included in comparison]
+Type                	MANAGED
+Provider            	parquet
+Location [not included in comparison]/{warehouse_dir}/char_part
+Partition Provider  	Catalog
 
 
 -- !query
@@ -566,17 +631,33 @@ MSCK REPAIR TABLE char_part
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: char_part; line 1 pos 18
+
 
 
 -- !query
 desc formatted char_part
 -- !query schema
-struct<>
+struct<col_name:string,data_type:string,comment:string>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table or view not found: char_part; line 1 pos 15
+c1                  	char(5)
+v1                  	varchar(6)
+v2                  	varchar(2)
+c2                  	char(2)
+# Partition Information
+# col_name          	data_type           	comment
+v2                  	varchar(2)
+c2                  	char(2)
+
+# Detailed Table Information
+Database            	default
+Table               	char_part
+Created Time [not included in comparison]
+Last Access [not included in comparison]
+Created By [not included in comparison]
+Type                	MANAGED
+Provider            	parquet
+Location [not included in comparison]/{warehouse_dir}/char_part
+Partition Provider  	Catalog
 
 
 -- !query
@@ -621,10 +702,10 @@ N      	N       	N 	N
 NULL	NULL	NULL	NULL
 NULL	NULL	S	NULL
 Ne     	Ne      	Sp	Ne
-Net    	Net     	Spa  	Net  
+Net    	Net     	Spa  	Net
 NetE   	NetE    	Spar	NetE
-NetEa  	NetEa   	Spark 	NetEa 
-NetEas 	NetEas  	Spark	NetEas 
+NetEa  	NetEa   	Spark 	NetEa
+NetEas 	NetEas  	Spark	NetEas
 NetEase	NetEase 	Spark-	NetEase
 
 
@@ -635,10 +716,10 @@ struct<c7:string,c8:string,v:string,s:string>
 -- !query output
 N      	N       	N 	N
 Ne     	Ne      	Sp	Ne
-Net    	Net     	Spa  	Net  
+Net    	Net     	Spa  	Net
 NetE   	NetE    	Spar	NetE
-NetEa  	NetEa   	Spark 	NetEa 
-NetEas 	NetEas  	Spark	NetEas 
+NetEa  	NetEa   	Spark 	NetEa
+NetEas 	NetEas  	Spark	NetEas
 NetEase	NetEase 	Spark-	NetEase
 
 
@@ -655,7 +736,7 @@ select c7, c8, v, s from char_tbl4 where c7 = s
 -- !query schema
 struct<c7:string,c8:string,v:string,s:string>
 -- !query output
-NetEas 	NetEas  	Spark	NetEas 
+NetEas 	NetEas  	Spark	NetEas
 NetEase	NetEase 	Spark-	NetEase
 
 
@@ -684,10 +765,10 @@ NULL	NULL	NULL	NULL
 NULL	NULL	S	NULL
 N      	N       	N 	N
 Ne     	Ne      	Sp	Ne
-Net    	Net     	Spa  	Net  
+Net    	Net     	Spa  	Net
 NetE   	NetE    	Spar	NetE
-NetEa  	NetEa   	Spark 	NetEa 
-NetEas 	NetEas  	Spark	NetEas 
+NetEa  	NetEa   	Spark 	NetEa
+NetEas 	NetEas  	Spark	NetEas
 NetEase	NetEase 	Spark-	NetEase
 
 
@@ -700,10 +781,10 @@ NULL	NULL	NULL	NULL
 N      	N       	N 	N
 NULL	NULL	S	NULL
 Ne     	Ne      	Sp	Ne
-Net    	Net     	Spa  	Net  
+Net    	Net     	Spa  	Net
 NetE   	NetE    	Spar	NetE
-NetEas 	NetEas  	Spark	NetEas 
-NetEa  	NetEa   	Spark 	NetEa 
+NetEas 	NetEas  	Spark	NetEas
+NetEa  	NetEa   	Spark 	NetEa
 NetEase	NetEase 	Spark-	NetEase
 
 
@@ -792,14 +873,14 @@ select concat_ws('|', c7, c8), concat_ws('|', c7, v), concat_ws('|', c7, s), con
 -- !query schema
 struct<concat_ws(|, c7, c8):string,concat_ws(|, c7, v):string,concat_ws(|, c7, s):string,concat_ws(|, v, s):string>
 -- !query output
-			
+
 	S		S
 N      |N       	N      |N 	N      |N	N |N
 Ne     |Ne      	Ne     |Sp	Ne     |Ne	Sp|Ne
-Net    |Net     	Net    |Spa  	Net    |Net  	Spa  |Net  
+Net    |Net     	Net    |Spa  	Net    |Net  	Spa  |Net
 NetE   |NetE    	NetE   |Spar	NetE   |NetE	Spar|NetE
-NetEa  |NetEa   	NetEa  |Spark 	NetEa  |NetEa 	Spark |NetEa 
-NetEas |NetEas  	NetEas |Spark	NetEas |NetEas 	Spark|NetEas 
+NetEa  |NetEa   	NetEa  |Spark 	NetEa  |NetEa 	Spark |NetEa
+NetEas |NetEas  	NetEas |Spark	NetEas |NetEas 	Spark|NetEas
 NetEase|NetEase 	NetEase|Spark-	NetEase|NetEase	Spark-|NetEase
 
 
@@ -812,10 +893,10 @@ N      N       	N      N 	N      N	N N
 NULL	NULL	NULL	NULL
 NULL	NULL	NULL	NULL
 Ne     Ne      	Ne     Sp	Ne     Ne	SpNe
-Net    Net     	Net    Spa  	Net    Net  	Spa  Net  
+Net    Net     	Net    Spa  	Net    Net  	Spa  Net
 NetE   NetE    	NetE   Spar	NetE   NetE	SparNetE
-NetEa  NetEa   	NetEa  Spark 	NetEa  NetEa 	Spark NetEa 
-NetEas NetEas  	NetEas Spark	NetEas NetEas 	SparkNetEas 
+NetEa  NetEa   	NetEa  Spark 	NetEa  NetEa 	Spark NetEa
+NetEas NetEas  	NetEas Spark	NetEas NetEas 	SparkNetEas
 NetEaseNetEase 	NetEaseSpark-	NetEaseNetEase	Spark-NetEase
 
 
@@ -882,10 +963,10 @@ struct<printf(Hey, %s%s%s%s, c7, c8, v, s):string>
 -- !query output
 Hey, N      N       N N
 Hey, Ne     Ne      SpNe
-Hey, Net    Net     Spa  Net  
+Hey, Net    Net     Spa  Net
 Hey, NetE   NetE    SparNetE
-Hey, NetEa  NetEa   Spark NetEa 
-Hey, NetEas NetEas  SparkNetEas 
+Hey, NetEa  NetEa   Spark NetEa
+Hey, NetEas NetEas  SparkNetEas
 Hey, NetEaseNetEase Spark-NetEase
 Hey, nullnullSnull
 Hey, nullnullnullnull
@@ -900,10 +981,10 @@ N      N      	N       N       	N N 	NN
 NULL	NULL	NULL	NULL
 NULL	NULL	SS	NULL
 Ne     Ne     	Ne      Ne      	SpSp	NeNe
-Net    Net    	Net     Net     	Spa  Spa  	Net  Net  
+Net    Net    	Net     Net     	Spa  Spa  	Net  Net
 NetE   NetE   	NetE    NetE    	SparSpar	NetENetE
-NetEa  NetEa  	NetEa   NetEa   	Spark Spark 	NetEa NetEa 
-NetEas NetEas 	NetEas  NetEas  	SparkSpark	NetEas NetEas 
+NetEa  NetEa  	NetEa   NetEa   	Spark Spark 	NetEa NetEa
+NetEas NetEas 	NetEas  NetEas  	SparkSpark	NetEas NetEas
 NetEaseNetEase	NetEase NetEase 	Spark-Spark-	NetEaseNetEase
 
 
@@ -912,10 +993,10 @@ select replace(c7, 'Net', 'Apache'), replace(c8, 'Net', 'Apache'), replace(v, 'S
 -- !query schema
 struct<replace(c7, Net, Apache):string,replace(c8, Net, Apache):string,replace(v, Spark, Kyuubi):string,replace(s, Net, Apache):string>
 -- !query output
-Apache    	Apache     	Spa  	Apache  
+Apache    	Apache     	Spa  	Apache
 ApacheE   	ApacheE    	Spar	ApacheE
-ApacheEa  	ApacheEa   	Kyuubi 	ApacheEa 
-ApacheEas 	ApacheEas  	Kyuubi	ApacheEas 
+ApacheEa  	ApacheEa   	Kyuubi 	ApacheEa
+ApacheEas 	ApacheEas  	Kyuubi	ApacheEas
 ApacheEase	ApacheEase 	Kyuubi-	ApacheEase
 N      	N       	N 	N
 NULL	NULL	NULL	NULL
@@ -928,12 +1009,12 @@ select rpad(c7, 10), rpad(c8, 5), rpad(v, 5), rpad(s, 5)  from char_tbl4
 -- !query schema
 struct<rpad(c7, 10,  ):string,rpad(c8, 5,  ):string,rpad(v, 5,  ):string,rpad(s, 5,  ):string>
 -- !query output
-N         	N    	N    	N    
+N         	N    	N    	N
 NULL	NULL	NULL	NULL
 NULL	NULL	S    	NULL
-Ne        	Ne   	Sp   	Ne   
-Net       	Net  	Spa  	Net  
-NetE      	NetE 	Spar 	NetE 
+Ne        	Ne   	Sp   	Ne
+Net       	Net  	Spa  	Net
+NetE      	NetE 	Spar 	NetE
 NetEa     	NetEa	Spark	NetEa
 NetEas    	NetEa	Spark	NetEa
 NetEase   	NetEa	Spark	NetEa
@@ -976,14 +1057,14 @@ select substring(c7, 2), substring(c8, 2), substring(v, 3), substring(s, 2) from
 -- !query schema
 struct<substring(c7, 2, 2147483647):string,substring(c8, 2, 2147483647):string,substring(v, 3, 2147483647):string,substring(s, 2, 2147483647):string>
 -- !query output
-      	       		
+
 NULL	NULL		NULL
 NULL	NULL	NULL	NULL
 e     	e      		e
-et    	et     	a  	et  
+et    	et     	a  	et
 etE   	etE    	ar	etE
-etEa  	etEa   	ark 	etEa 
-etEas 	etEas  	ark	etEas 
+etEa  	etEa   	ark 	etEa
+etEas 	etEas  	ark	etEas
 etEase	etEase 	ark-	etEase
 
 
@@ -1010,12 +1091,12 @@ struct<right(c7, 2):string,right(c8, 2):string,right(v, 3):string,right(s, 2):st
 -- !query output
   	  	N 	N
   	  	Sp	Ne
-  	  	a  	  
+  	  	a
   	  	par	tE
-  	  	rk 	a 
+  	  	rk 	a
 NULL	NULL	NULL	NULL
 NULL	NULL	S	NULL
-s 	  	ark	s 
+s 	  	ark	s
 se	e 	rk-	se
 
 
@@ -1036,10 +1117,10 @@ N      	N       	N 	N 	N
 NULL	NULL	NULL	NULL	NULL
 NULL	NULL	S	S	NULL
 Ne     	Ne      	Sp	Sp	Ne
-Net    	Net     	Spa  	Spa  	Net  
+Net    	Net     	Spa  	Spa  	Net
 NetE   	NetE    	Spar	Spar	NetE
-NetEa  	NetEa   	Spark 	Spark 	NetEa 
-NetEas 	NetEas  	Spark	Spark	NetEas 
+NetEa  	NetEa   	Spark 	Spark 	NetEa
+NetEas 	NetEas  	Spark	Spark	NetEas
 NetEase	NetEase 	Spark-	Spark-	NetEase
 
 
@@ -1072,4 +1153,3 @@ drop table char_tbl4
 -- !query schema
 struct<>
 -- !query output
-
