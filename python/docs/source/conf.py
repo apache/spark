@@ -22,6 +22,10 @@ import errno
 # documentation root, use os.path.abspath to make it absolute, like shown here.
 sys.path.insert(0, os.path.abspath('.'))
 
+# generate user_guide/pandas_on_spark/supported_pandas_api.rst
+from user_guide.pandas_on_spark.supported_status_rst_generator import SuppportedStatusRSTGenerator
+SuppportedStatusRSTGenerator().execute()
+
 # Remove previously generated rst files. Ignore errors just in case it stops
 # generating whole docs.
 shutil.rmtree(

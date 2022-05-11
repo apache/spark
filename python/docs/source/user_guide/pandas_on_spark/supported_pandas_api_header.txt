@@ -1,0 +1,46 @@
+..  Licensed to the Apache Software Foundation (ASF) under one
+    or more contributor license agreements.  See the NOTICE file
+    distributed with this work for additional information
+    regarding copyright ownership.  The ASF licenses this file
+    to you under the Apache License, Version 2.0 (the
+    "License"); you may not use this file except in compliance
+    with the License.  You may obtain a copy of the License at
+
+..    http://www.apache.org/licenses/LICENSE-2.0
+
+..  Unless required by applicable law or agreed to in writing,
+    software distributed under the License is distributed on an
+    "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+    KIND, either express or implied.  See the License for the
+    specific language governing permissions and limitations
+    under the License.
+
+
+=====================
+Supported pandas APIs
+=====================
+
+.. currentmodule:: pyspark.pandas
+
+The following table shows the pandas APIs that implemented or non-implemented from pandas API on
+Spark.
+
+Some pandas APIs do not implement full parameters, so the third column shows missing parameters for
+each API.
+
+'Y' in the second column means it's implemented including its whole parameter.
+'N' means it's not implemented yet.
+'P' means it's partially implemented with the missing of some parameters.
+
+If there is non-implemented pandas API or parameter you want, you can create an `Apache Spark
+JIRA <https://issues.apache.org/jira/projects/SPARK/summary>`__ to request or to contribute by your
+own.
+
+The API list is updated based on the `latest pandas official API
+reference <https://pandas.pydata.org/docs/reference/index.html#>`__.
+
+All implemented APIs listed here are distributed except the ones that requires the local
+computation by design. For example, `DataFrame.to_numpy() <https://spark.apache.org
+/docs/latest/api/python/reference/pyspark.pandas/api/pyspark.pandas.DataFrame.
+to_numpy.html>`__ requires to collect the data to the driver side.
+
