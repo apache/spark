@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical.EventTimeWatermark._
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.execution.{BinaryExecNode, SparkPlan}
+import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.execution.streaming.StreamingSymmetricHashJoinHelper._
 import org.apache.spark.sql.execution.streaming.state._
 import org.apache.spark.sql.execution.streaming.state.SymmetricHashJoinStateManager.KeyToValuePair
@@ -250,6 +251,11 @@ case class StreamingSymmetricHashJoinExec(
     val allRemovalsTimeMs = longMetric("allRemovalsTimeMs")
     val commitTimeMs = longMetric("commitTimeMs")
     val stateMemory = longMetric("stateMemory")
+    val skippedNullValueCount = if (storeConf.skipNullsForStreamStreamJoins) {
+      Some(longMetric("skippedNullValueCount"))
+    } else {
+      None
+    }
 
     val updateStartTimeNs = System.nanoTime
     val joinedRow = new JoinedRow
@@ -260,10 +266,12 @@ case class StreamingSymmetricHashJoinExec(
       Predicate.create(condition.bothSides.getOrElse(Literal(true)), inputSchema).eval _
     val leftSideJoiner = new OneSideHashJoiner(
       LeftSide, left.output, leftKeys, leftInputIter,
-      condition.leftSideOnly, postJoinFilter, stateWatermarkPredicates.left, partitionId)
+      condition.leftSideOnly, postJoinFilter, stateWatermarkPredicates.left, partitionId,
+      skippedNullValueCount)
     val rightSideJoiner = new OneSideHashJoiner(
       RightSide, right.output, rightKeys, rightInputIter,
-      condition.rightSideOnly, postJoinFilter, stateWatermarkPredicates.right, partitionId)
+      condition.rightSideOnly, postJoinFilter, stateWatermarkPredicates.right, partitionId,
+      skippedNullValueCount)
 
     //  Join one side input using the other side's buffered/state rows. Here is how it is done.
     //
@@ -503,7 +511,8 @@ case class StreamingSymmetricHashJoinExec(
       preJoinFilterExpr: Option[Expression],
       postJoinFilter: (InternalRow) => Boolean,
       stateWatermarkPredicate: Option[JoinStateWatermarkPredicate],
-      partitionId: Int) {
+      partitionId: Int,
+      skippedNullValueCount: Option[SQLMetric]) {
 
     // Filter the joined rows based on the given condition.
     val preJoinFilter =
@@ -511,7 +520,7 @@ case class StreamingSymmetricHashJoinExec(
 
     private val joinStateManager = new SymmetricHashJoinStateManager(
       joinSide, inputAttributes, joinKeys, stateInfo, storeConf, hadoopConfBcast.value.value,
-      partitionId, stateFormatVersion)
+      partitionId, stateFormatVersion, skippedNullValueCount)
     private[this] val keyGenerator = UnsafeProjection.create(joinKeys, inputAttributes)
 
     private[this] val stateKeyWatermarkPredicateFunc = stateWatermarkPredicate match {
@@ -675,4 +684,14 @@ case class StreamingSymmetricHashJoinExec(
     override def hasNext: Boolean = iter.hasNext
     override def next(): JoinedRow = iter.next()
   }
+
+  // If `STATE_STORE_SKIP_NULLS_FOR_STREAM_STREAM_JOINS` is enabled, counting the number
+  // of skipped null values as custom metric of stream join operator.
+  override def customStatefulOperatorMetrics: Seq[StatefulOperatorCustomMetric] =
+    if (storeConf.skipNullsForStreamStreamJoins) {
+      Seq(StatefulOperatorCustomSumMetric("skippedNullValueCount",
+        "number of skipped null values"))
+    } else {
+      Nil
+    }
 }

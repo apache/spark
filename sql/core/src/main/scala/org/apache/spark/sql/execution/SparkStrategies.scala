@@ -93,14 +93,16 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         case LimitAndOffset(IntegerLiteral(limit), IntegerLiteral(offset),
           Sort(order, true, child)) if limit + offset < conf.topKSortFallbackThreshold =>
           TakeOrderedAndProjectExec(
-            limit, order, child.output, planLater(child), Some(offset)) :: Nil
+            limit, order, child.output, planLater(child), offset) :: Nil
         case LimitAndOffset(IntegerLiteral(limit), IntegerLiteral(offset),
           Project(projectList, Sort(order, true, child)))
             if limit + offset < conf.topKSortFallbackThreshold =>
           TakeOrderedAndProjectExec(
-            limit, order, projectList, planLater(child), Some(offset)) :: Nil
+            limit, order, projectList, planLater(child), offset) :: Nil
         case LimitAndOffset(IntegerLiteral(limit), IntegerLiteral(offset), child) =>
-          CollectLimitExec(limit, planLater(child), Some(offset)) :: Nil
+          CollectLimitExec(limit, planLater(child), offset) :: Nil
+        case logical.Offset(IntegerLiteral(offset), child) =>
+          CollectLimitExec(child = planLater(child), offset = offset) :: Nil
         case Tail(IntegerLiteral(limit), child) =>
           CollectTailExec(limit, planLater(child)) :: Nil
         case other => planLater(other) :: Nil
@@ -116,20 +118,18 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       // In this case we generate a physical top-K sorting operator, passing down
       // the limit and offset values to be evaluated inline during the physical
       // sorting operation for greater efficiency.
-      case LimitAndOffset(
-          IntegerLiteral(limit),
-          IntegerLiteral(offset),
-          Sort(order, true, child))
+      case LimitAndOffset(IntegerLiteral(limit), IntegerLiteral(offset),
+        Sort(order, true, child)) if limit + offset < conf.topKSortFallbackThreshold =>
+          TakeOrderedAndProjectExec(
+            limit, order, child.output, planLater(child), offset) :: Nil
+      case LimitAndOffset(IntegerLiteral(limit), IntegerLiteral(offset),
+        Project(projectList, Sort(order, true, child)))
           if limit + offset < conf.topKSortFallbackThreshold =>
-        TakeOrderedAndProjectExec(
-          limit, order, child.output, planLater(child), Some(offset)) :: Nil
-      case LimitAndOffset(
-          IntegerLiteral(limit),
-          IntegerLiteral(offset),
-          Project(projectList, Sort(order, true, child)))
-          if limit + offset < conf.topKSortFallbackThreshold =>
-        TakeOrderedAndProjectExec(limit, order, projectList, planLater(child), Some(offset)) :: Nil
-      case _ => Nil
+        TakeOrderedAndProjectExec(limit, order, projectList, planLater(child), offset) :: Nil
+      case LimitAndOffset(IntegerLiteral(limit), IntegerLiteral(offset), child) =>
+        GlobalLimitAndOffsetExec(limit, offset, planLater(child)) :: Nil
+      case _ =>
+        Nil
     }
   }
 
@@ -818,8 +818,8 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         execution.LocalLimitExec(limit, planLater(child)) :: Nil
       case logical.GlobalLimit(IntegerLiteral(limit), child) =>
         execution.GlobalLimitExec(limit, planLater(child)) :: Nil
-      case logical.GlobalLimitAndOffset(IntegerLiteral(limit), IntegerLiteral(offset), child) =>
-        execution.GlobalLimitAndOffsetExec(limit, offset, planLater(child)) :: Nil
+      case logical.Offset(IntegerLiteral(offset), child) =>
+        GlobalLimitAndOffsetExec(offset = offset, child = planLater(child)) :: Nil
       case union: logical.Union =>
         execution.UnionExec(union.children.map(planLater)) :: Nil
       case g @ logical.Generate(generator, _, outer, _, _, child) =>
