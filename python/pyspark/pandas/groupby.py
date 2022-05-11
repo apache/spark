@@ -2112,28 +2112,74 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         sdf = psdf._internal.spark_frame
         tmp_row_num_col = verify_temp_column_name(sdf, "__row_number__")
 
+        window = Window.partitionBy(*groupkey_scols)
         # This part is handled differently depending on whether it is a tail or a head.
-        window = (
-            Window.partitionBy(*groupkey_scols).orderBy(F.col(NATURAL_ORDER_COLUMN_NAME).asc())
+        ordered_window = (
+            window.orderBy(F.col(NATURAL_ORDER_COLUMN_NAME).asc())
             if asc
-            else Window.partitionBy(*groupkey_scols).orderBy(
-                F.col(NATURAL_ORDER_COLUMN_NAME).desc()
-            )
+            else window.orderBy(F.col(NATURAL_ORDER_COLUMN_NAME).desc())
         )
 
         if n >= 0 or LooseVersion(pd.__version__) < LooseVersion("1.4.0"):
+
             sdf = (
-                sdf.withColumn(tmp_row_num_col, F.row_number().over(window))
+                sdf.withColumn(tmp_row_num_col, F.row_number().over(ordered_window))
                 .filter(F.col(tmp_row_num_col) <= n)
                 .drop(tmp_row_num_col)
             )
         else:
             # Pandas supports Groupby positional indexing since v1.4.0
             # https://pandas.pydata.org/docs/whatsnew/v1.4.0.html#groupby-positional-indexing
+            #
+            # To support groupby positional indexing, we need add two columns to help we filter
+            # target rows:
+            # - Add `__row_number__` and `__group_count__` columns.
+            # - Use `F.col(tmp_row_num_col) - F.col(tmp_cnt_col) <= positional_index_number` to
+            #   filter target rows.
+            # - Then drop `__row_number__` and `__group_count__` columns.
+            #
+            # For example for the dataframe:
+            # >>> df = ps.DataFrame([["g", "g0"],
+            # ...                   ["g", "g1"],
+            # ...                   ["g", "g2"],
+            # ...                   ["g", "g3"],
+            # ...                   ["h", "h0"],
+            # ...                   ["h", "h1"]], columns=["A", "B"])
+            # >>> df.groupby("A").head(-1)
+            #
+            # Below is an example to show the `__row_number__` column and `__group_count__` column
+            # for above df:
+            # >>> sdf.withColumn(tmp_row_num_col, F.row_number().over(window))
+            #        .withColumn(tmp_cnt_col, F.count("*").over(window)).show()
+            # +---------------+------------+---+---+------------+--------------+---------------+
+            # |__index_level..|__groupkey..|  A|  B|__natural_..|__row_number__|__group_count__|
+            # +---------------+------------+---+---+------------+--------------+---------------+
+            # |              0|           g|  g| g0| 17179869184|             1|              4|
+            # |              1|           g|  g| g1| 42949672960|             2|              4|
+            # |              2|           g|  g| g2| 60129542144|             3|              4|
+            # |              3|           g|  g| g3| 85899345920|             4|              4|
+            # |              4|           h|  h| h0|111669149696|             1|              2|
+            # |              5|           h|  h| h1|128849018880|             2|              2|
+            # +---------------+------------+---+---+------------+--------------+---------------+
+            #
+            # The limit n is `-1`, we need to filter rows[:-1] in each group:
+            #
+            # >>> sdf.withColumn(tmp_row_num_col, F.row_number().over(window))
+            #        .withColumn(tmp_cnt_col, F.count("*").over(window))
+            #        .filter(F.col(tmp_row_num_col) - F.col(tmp_cnt_col) <= -1).show()
+            # +-----------------+------------+---+---+------------+--------------+---------------+
+            # |__index_level_0__|__groupkey..|  A|  B|__natural_..|__row_number__|__group_count__|
+            # +-----------------+------------+---+---+------------+--------------+---------------+
+            # |                0|           g|  g| g0| 17179869184|             1|              4|
+            # |                1|           g|  g| g1| 42949672960|             2|              4|
+            # |                2|           g|  g| g2| 60129542144|             3|              4|
+            # |                4|           h|  h| h0|111669149696|             1|              2|
+            # +-----------------+------------+---+---+------------+--------------+---------------+
+            #
             tmp_cnt_col = verify_temp_column_name(sdf, "__group_count__")
             sdf = (
-                sdf.withColumn(tmp_row_num_col, F.row_number().over(window))
-                .withColumn(tmp_cnt_col, F.count("*").over(Window.partitionBy(*groupkey_scols)))
+                sdf.withColumn(tmp_row_num_col, F.row_number().over(ordered_window))
+                .withColumn(tmp_cnt_col, F.count("*").over(window))
                 .filter(F.col(tmp_row_num_col) - F.col(tmp_cnt_col) <= n)
                 .drop(tmp_row_num_col, tmp_cnt_col)
             )
@@ -2186,6 +2232,20 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         7      2
         10    10
         Name: b, dtype: int64
+
+        # Supports Groupby positional indexing Since pandas on Spark 3.4 (with pandas 1.4+)
+        >>> df = ps.DataFrame([["g", "g0"],
+        ...                   ["g", "g1"],
+        ...                   ["g", "g2"],
+        ...                   ["g", "g3"],
+        ...                   ["h", "h0"],
+        ...                   ["h", "h1"]], columns=["A", "B"])
+        >>> df.groupby("A").head(-1) # doctest: +SKIP
+           A   B
+        0  g  g0
+        1  g  g1
+        2  g  g2
+        4  h  h0
         """
         return self._limit(n, asc=True)
 
@@ -2239,6 +2299,20 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         6    5
         9    8
         Name: b, dtype: int64
+
+        # Supports Groupby positional indexing Since pandas on Spark 3.4 (with pandas 1.4+)
+        >>> df = ps.DataFrame([["g", "g0"],
+        ...                   ["g", "g1"],
+        ...                   ["g", "g2"],
+        ...                   ["g", "g3"],
+        ...                   ["h", "h0"],
+        ...                   ["h", "h1"]], columns=["A", "B"])
+        >>> df.groupby("A").tail(-1) # doctest: +SKIP
+           A   B
+        3  g  g3
+        2  g  g2
+        1  g  g1
+        5  h  h1
         """
         return self._limit(n, asc=False)
 
