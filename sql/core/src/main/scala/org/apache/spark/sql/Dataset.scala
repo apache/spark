@@ -3906,7 +3906,8 @@ class Dataset[T] private[sql](
 
   /**
    * Wrap a Dataset action to track the QueryExecution and time cost, then report to the
-   * user-registered callback functions.
+   * user-registered callback functions, and also to convert asserts/illegal states to
+   * the internal error exception.
    */
   private def withAction[U](name: String, qe: QueryExecution)(action: SparkPlan => U) = {
     try {
@@ -3916,7 +3917,7 @@ class Dataset[T] private[sql](
       }
     } catch {
       case e: SparkThrowable => throw e
-      case NonFatal(e) =>
+      case e @ (_: java.lang.IllegalStateException | _: java.lang.AssertionError) =>
         throw new SparkException(
           errorClass = "INTERNAL_ERROR",
           messageParameters = Array(s"""The "$name" action failed."""),
