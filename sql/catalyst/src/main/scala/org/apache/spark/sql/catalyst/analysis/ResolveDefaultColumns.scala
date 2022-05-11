@@ -527,11 +527,8 @@ case class ResolveDefaultColumns(
     // found" error. In the latter cases, return out of this rule without changing anything and let
     // the analyzer return a proper error message elsewhere.
     val tableName: TableIdentifier = source match {
-      case Some(r: UnresolvedRelation) =>
-        val name = r.name
-        TableIdentifier(name.stripPrefix("`").stripSuffix("`"))
-      case Some(r: UnresolvedCatalogRelation) =>
-        r.tableMeta.identifier
+      case Some(r: UnresolvedRelation) => TableIdentifier(r.name)
+      case Some(r: UnresolvedCatalogRelation) => r.tableMeta.identifier
       case _ => return None
     }
     val lookup: LogicalPlan = try {
