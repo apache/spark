@@ -763,9 +763,8 @@ class DateFunctionsSuite extends QueryTest with SharedSparkSession {
 
         // invalid format
         val invalid = df1.selectExpr(s"to_unix_timestamp(x, 'yyyy-MM-dd bb:HH:ss')")
-        val e = intercept[SparkException](invalid.collect())
-        assert(e.getErrorClass === "INTERNAL_ERROR")
-        assert(e.getCause.getMessage.contains('b'))
+        val e = intercept[IllegalArgumentException](invalid.collect())
+        assert(e.getMessage.contains('b'))
       }
     }
   }

@@ -19,7 +19,6 @@ package org.apache.spark.sql
 
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.expressions.SubqueryExpression
 import org.apache.spark.sql.catalyst.plans.logical.{Join, LogicalPlan, Sort}
 import org.apache.spark.sql.execution.{ColumnarToRowExec, ExecSubqueryExpression, FileSourceScanExec, InputAdapter, ReusedSubqueryExec, ScalarSubquery, SubqueryExec, WholeStageCodegenExec}
@@ -147,11 +146,10 @@ class SubquerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
   }
 
   test("runtime error when the number of rows is greater than 1") {
-    val error2 = intercept[SparkException] {
+    val error2 = intercept[RuntimeException] {
       sql("select (select a from (select 1 as a union all select 2 as a) t) as b").collect()
     }
-    assert(error2.getErrorClass === "INTERNAL_ERROR")
-    assert(error2.getCause.getMessage.contains(
+    assert(error2.getMessage.contains(
       "more than one row returned by a subquery used as an expression")
     )
   }
