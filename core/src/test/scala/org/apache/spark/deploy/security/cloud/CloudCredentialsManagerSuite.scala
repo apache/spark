@@ -52,9 +52,6 @@ object TestCloudCredentialsProvider {
 
 private class TestCredentialsManagerClusterScheduler(scheduler: TaskSchedulerImpl, sc: SparkContext)
   extends CoarseGrainedSchedulerBackend(scheduler, sc.env.rpcEnv) {
-  override protected def createCloudCredentialsManager(): Option[CloudCredentialsManager] = {
-    Some(new CloudCredentialsManager(conf, sc.hadoopConfiguration, driverEndpoint))
-  }
 }
 
 private class TestCredentialsManagerClusterManager extends ExternalClusterManager {
@@ -94,8 +91,7 @@ private class TestCredentialsManagerSchedulerBackend(scheduler: TaskSchedulerImp
   var credentialsManager: Option[CloudCredentialsManager] = None
 
   override protected def createCloudCredentialsManager(): Option[CloudCredentialsManager] = {
-    credentialsManager =
-      Some(new CloudCredentialsManager(conf, sc.hadoopConfiguration, driverEndpoint))
+    credentialsManager = super.createCloudCredentialsManager()
     credentialsManager
   }
 

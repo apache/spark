@@ -29,7 +29,6 @@ import org.apache.hadoop.yarn.api.records.{ApplicationAttemptId, ApplicationId}
 
 import org.apache.spark.SparkContext
 import org.apache.spark.deploy.security.HadoopDelegationTokenManager
-import org.apache.spark.deploy.security.cloud.CloudCredentialsManager
 import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.internal.config.UI._
 import org.apache.spark.resource.ResourceProfile
@@ -258,10 +257,6 @@ private[spark] abstract class YarnSchedulerBackend(
 
   override protected def createTokenManager(): Option[HadoopDelegationTokenManager] = {
     Some(new HadoopDelegationTokenManager(sc.conf, sc.hadoopConfiguration, driverEndpoint))
-  }
-
-  override protected def createCloudCredentialsManager(): Option[CloudCredentialsManager] = {
-    Some(new CloudCredentialsManager(conf, sc.hadoopConfiguration, driverEndpoint))
   }
 
   /**

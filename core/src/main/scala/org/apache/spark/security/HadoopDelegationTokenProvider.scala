@@ -28,13 +28,7 @@ import org.apache.spark.annotation.DeveloperApi
  * Hadoop delegation token provider.
  */
 @DeveloperApi
-trait HadoopDelegationTokenProvider {
-
-  /**
-   * Name of the service to provide delegation tokens. This name should be unique.  Spark will
-   * internally use this name to differentiate delegation token providers.
-   */
-  def serviceName: String
+trait HadoopDelegationTokenProvider extends ServiceCredentialsProvider{
 
   /**
    * Returns true if delegation tokens are required for this service. By default, it is based on

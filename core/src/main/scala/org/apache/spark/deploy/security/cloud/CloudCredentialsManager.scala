@@ -18,20 +18,18 @@
 package org.apache.spark.deploy.security.cloud
 
 import java.util.ServiceLoader
-import java.util.concurrent.{ScheduledExecutorService, TimeUnit}
-
-import scala.collection.mutable
+import java.util.concurrent.TimeUnit
 
 import org.apache.hadoop.conf.Configuration
 
 import org.apache.spark.SparkConf
 import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.spark.internal.Logging
-import org.apache.spark.internal.config._
+import org.apache.spark.deploy.security.{ServiceCredentialsConfig, ServiceCredentialsManager}
 import org.apache.spark.rpc.RpcEndpointRef
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages.UpdateCloudCredentials
 import org.apache.spark.ui.UIUtils
-import org.apache.spark.util.{ThreadUtils, Utils}
+import org.apache.spark.util.Utils
+
 
 /**
  * Manager for cloud credentials in a Spark application.
@@ -41,43 +39,47 @@ import org.apache.spark.util.{ThreadUtils, Utils}
  * Credentials distributed to the driver/executors are accessible in the hadoop configuration.
  */
 private[spark] class CloudCredentialsManager(
-    protected val sparkConf: SparkConf,
-    protected val hadoopConf: Configuration,
-    protected val schedulerRef: RpcEndpointRef) extends Logging {
+    override protected val sparkConf: SparkConf,
+    override protected val hadoopConf: Configuration,
+    override protected val schedulerRef: RpcEndpointRef)
+  extends ServiceCredentialsManager[CloudCredentialsProvider](sparkConf, hadoopConf, schedulerRef) {
 
-  private val cloudCredentialsProviders = loadProviders()
-  logDebug("Using the following cloud credentials providers: " +
-    s"${cloudCredentialsProviders.keys.mkString(", ")}.")
+  val cloudCredentialsProviders: Map[String, CloudCredentialsProvider] = credentialsProviders
+      .asInstanceOf[Map[String, CloudCredentialsProvider]]
 
-  private var renewalExecutor: ScheduledExecutorService = _
+  def credentialsType: String = "Cloud service credentials"
+
+  def credentialsConfig: ServiceCredentialsConfig = CloudCredentialsManager
+
+  def getProviderLoader: ServiceLoader[CloudCredentialsProvider] =
+    ServiceLoader.load(classOf[CloudCredentialsProvider], Utils.getContextOrSparkClassLoader)
+
+  def renewalEnabled: Boolean = true
 
   /**
    * Start the credentials renewer. Upon start, the renewer will
    * obtain credentials for all configured services and send them to the driver, and
    * set up tasks to renew credentials before they expire
+   *
    * @return New set of credentials for the service.
    */
- def start(): Unit = {
-    require(schedulerRef != null, "Credentials renewal requires a scheduler endpoint.")
-    renewalExecutor =
-      ThreadUtils.newDaemonSingleThreadScheduledExecutor("Cloud Credentials Renewal Thread")
-
-   cloudCredentialsProviders
-     .values
-     .filter(p => CloudCredentialsManager.isServiceEnabled(sparkConf, p.serviceName))
-     .foreach(p => updateCredentialsTask(p.serviceName))
-   ()
+  override def start(): Array[Byte] = {
+    super.start()
   }
 
-  def stop(): Unit = {
-    if (renewalExecutor != null) {
-      renewalExecutor.shutdownNow()
-      renewalExecutor = null
-    }
+  def updateCredentialsGrantingTicket(): Unit = {}
+
+  def updateCredentialsTask(): Array[Byte] = {
+    cloudCredentialsProviders
+      .values
+      .filter(p => CloudCredentialsManager.isServiceEnabled(sparkConf, p.serviceName))
+      .foreach(p => updateServiceCredentialsTask(p.serviceName))
+    // Return an empty byte array only to satisfy the compiler
+    Array.emptyByteArray
   }
 
   /**
-   * Fetch new credentials for a configured service.
+   * Fetch new credentials for a configured credentials service.
    *
    * @return credentials for the service
    */
@@ -89,18 +91,13 @@ private[spark] class CloudCredentialsManager(
     }
   }
 
-  // Visible for testing.
-  def isProviderLoaded(serviceName: String): Boolean = {
-    cloudCredentialsProviders.contains(serviceName)
-  }
-
   private def scheduleRenewal(serviceName: String, delay: Long): Unit = {
     val _delay = math.max(0, delay)
-    logInfo(s"Scheduling renewal in ${UIUtils.formatDuration(_delay)}.")
+    logInfo(s"Scheduling $serviceName credentials renewal in ${UIUtils.formatDuration(_delay)}.")
 
     val renewalTask = new Runnable() {
       override def run(): Unit = {
-        updateCredentialsTask(serviceName)
+        updateServiceCredentialsTask(serviceName)
       }
     }
     renewalExecutor.schedule(renewalTask, _delay, TimeUnit.MILLISECONDS)
@@ -109,7 +106,7 @@ private[spark] class CloudCredentialsManager(
   /**
    * Periodic task to update credentials.
    */
-  private def updateCredentialsTask(serviceName: String): Unit = {
+  private def updateServiceCredentialsTask(serviceName: String): Unit = {
     try {
       val creds = obtainCredentialsAndScheduleRenewal(serviceName)
       logInfo(s"Updating credentials from ${serviceName}.")
@@ -117,7 +114,7 @@ private[spark] class CloudCredentialsManager(
         UpdateCloudCredentials(SparkHadoopUtil.get.serializeCloudCredentials(creds)))
     } catch {
       case _: InterruptedException =>
-        // Ignore, may happen if shutting down.
+      // Ignore, may happen if shutting down.
     }
   }
 
@@ -130,49 +127,28 @@ private[spark] class CloudCredentialsManager(
   private def obtainCredentialsAndScheduleRenewal(serviceName: String): CloudCredentials = {
     val creds = obtainCredentials(serviceName)
 
-    // Calculate the time when new credentials should be created, based on the configured
-    // ratio.
     if (creds.expiry.isDefined) {
       val nextRenewal = creds.expiry.get
-      val now = System.currentTimeMillis
-      val ratio = sparkConf.get(CREDENTIALS_RENEWAL_INTERVAL_RATIO)
-      val delay = (ratio * (nextRenewal - now)).toLong
-      logInfo(s"Calculated delay on renewal is $delay, based on next renewal $nextRenewal " +
-        s"and the ratio $ratio, and current time $now")
+      val delay = calculateNextRenewalInterval(nextRenewal)
+
       scheduleRenewal(serviceName, delay)
     }
     creds
   }
 
-  private def loadProviders(): Map[String, CloudCredentialsProvider] = {
-    val loader = ServiceLoader.load(classOf[CloudCredentialsProvider],
-      Utils.getContextOrSparkClassLoader)
-    val providers = mutable.ArrayBuffer[CloudCredentialsProvider]()
-
-    val iterator = loader.iterator
-    while (iterator.hasNext) {
-      try {
-        providers += iterator.next
-      } catch {
-        case t: Throwable =>
-          logDebug(s"Failed to load built in provider.", t)
-      }
-    }
-    // Filter out providers for which spark.security.cloud.credentials.{service}.enabled is false.
-    providers
-      .filter { p => CloudCredentialsManager.isServiceEnabled(sparkConf, p.serviceName) }
-      .map { p => (p.serviceName, p) }
-      .toMap
-  }
-
 }
 
 // This is public so that implementations can access the config variables defined here
-object CloudCredentialsManager extends Logging {
-  private val providerEnabledConfig = "spark.security.cloud.credentials.%s.enabled"
+object CloudCredentialsManager extends ServiceCredentialsConfig {
+
   val cloudCredentialsConfig = "spark.security.cloud.credentials.%s"
 
-  def isServiceEnabled(sparkConf: SparkConf, serviceName: String): Boolean = {
+  override def providerEnabledConfig: String = "spark.security.cloud.credentials.%s.enabled"
+
+  override def deprecatedProviderEnabledConfigs: List[String] = List()
+
+  // Cloud credentials loading is disabled by default.
+  override def isServiceEnabled(sparkConf: SparkConf, serviceName: String): Boolean = {
     val key = providerEnabledConfig.format(serviceName)
     sparkConf.getOption(key).exists(_.toBoolean)
   }

@@ -15,27 +15,21 @@
  * limitations under the License.
  */
 
-package org.apache.spark.deploy.security.cloud
+package org.apache.spark.security
 
-import org.apache.hadoop.conf.Configuration
-
-import org.apache.spark.SparkConf
 import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.security.ServiceCredentialsProvider
 
 /**
  * ::DeveloperApi::
  * Hadoop cloud credentials provider.
  */
 @DeveloperApi
-trait CloudCredentialsProvider extends ServiceCredentialsProvider {
+trait ServiceCredentialsProvider {
 
   /**
-   * Obtain credentials for this service and get the time of the next renewal.
-   * @param hadoopConf Configuration of current Hadoop Compatible system.
-   * @return  a CloudCredentials object with the credentials and expiry time set
+   * Name of the service to provide credentials. This name should be unique.  Spark will
+   * internally use this name to differentiate providers.
    */
-  def obtainCredentials(
-    hadoopConf: Configuration,
-    sparkConf: SparkConf): Option[CloudCredentials]
+  def serviceName: String
+
 }

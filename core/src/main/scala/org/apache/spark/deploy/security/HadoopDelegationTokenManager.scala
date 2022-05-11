@@ -21,22 +21,19 @@ import java.io.File
 import java.net.URI
 import java.security.PrivilegedExceptionAction
 import java.util.ServiceLoader
-import java.util.concurrent.{ScheduledExecutorService, TimeUnit}
-
-import scala.collection.mutable
+import java.util.concurrent.TimeUnit
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.security.{Credentials, UserGroupInformation}
 
 import org.apache.spark.SparkConf
 import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.rpc.RpcEndpointRef
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages.UpdateDelegationTokens
 import org.apache.spark.security.HadoopDelegationTokenProvider
 import org.apache.spark.ui.UIUtils
-import org.apache.spark.util.{ThreadUtils, Utils}
+import org.apache.spark.util.Utils
 
 /**
  * Manager for delegation tokens in a Spark application.
@@ -61,9 +58,11 @@ import org.apache.spark.util.{ThreadUtils, Utils}
  * generated.
  */
 private[spark] class HadoopDelegationTokenManager(
-    protected val sparkConf: SparkConf,
-    protected val hadoopConf: Configuration,
-    protected val schedulerRef: RpcEndpointRef) extends Logging {
+    override protected val sparkConf: SparkConf,
+    override protected val hadoopConf: Configuration,
+    override protected val schedulerRef: RpcEndpointRef)
+  extends ServiceCredentialsManager[HadoopDelegationTokenProvider](
+    sparkConf, hadoopConf, schedulerRef) {
 
   private val principal = sparkConf.get(PRINCIPAL).orNull
 
@@ -74,11 +73,15 @@ private[spark] class HadoopDelegationTokenManager(
   require((principal == null) == (keytab == null),
     "Both principal and keytab must be defined, or neither.")
 
-  private val delegationTokenProviders = loadProviders()
-  logDebug("Using the following builtin delegation token providers: " +
-    s"${delegationTokenProviders.keys.mkString(", ")}.")
+  val delegationTokenProviders: Map[String, HadoopDelegationTokenProvider] = credentialsProviders
+      .asInstanceOf[Map[String, HadoopDelegationTokenProvider]]
 
-  private var renewalExecutor: ScheduledExecutorService = _
+  def credentialsType: String = "Delegation token"
+
+  def credentialsConfig: ServiceCredentialsConfig = HadoopDelegationTokenManager
+
+  def getProviderLoader: ServiceLoader[HadoopDelegationTokenProvider] =
+    ServiceLoader.load(classOf[HadoopDelegationTokenProvider], Utils.getContextOrSparkClassLoader)
 
   /** @return Whether delegation token renewal is enabled. */
   def renewalEnabled: Boolean = sparkConf.get(KERBEROS_RENEWAL_CREDENTIALS) match {
@@ -97,14 +100,15 @@ private[spark] class HadoopDelegationTokenManager(
    *
    * @return New set of delegation tokens created for the configured principal.
    */
-  def start(): Array[Byte] = {
-    require(renewalEnabled, "Token renewal must be enabled to start the renewer.")
-    require(schedulerRef != null, "Token renewal requires a scheduler endpoint.")
-    renewalExecutor =
-      ThreadUtils.newDaemonSingleThreadScheduledExecutor("Credential Renewal Thread")
+  override def start(): Array[Byte] = {
+    super.start()
+  }
 
-    val ugi = UserGroupInformation.getCurrentUser()
-    if (ugi.isFromKeytab()) {
+  def updateCredentialsGrantingTicket(): Unit = {
+    require(renewalExecutor != null,
+      "Renewal executor must be initialized before updating TGT.")
+    val ugi = UserGroupInformation.getCurrentUser
+    if (ugi.isFromKeytab) {
       // In Hadoop 2.x, renewal of the keytab-based login seems to be automatic, but in Hadoop 3.x,
       // it is configurable (see hadoop.kerberos.keytab.login.autorenewal.enabled, added in
       // HADOOP-9567). This task will make sure that the user stays logged in regardless of that
@@ -119,14 +123,10 @@ private[spark] class HadoopDelegationTokenManager(
       renewalExecutor.scheduleAtFixedRate(tgtRenewalTask, tgtRenewalPeriod, tgtRenewalPeriod,
         TimeUnit.SECONDS)
     }
-
-    updateTokensTask()
   }
 
-  def stop(): Unit = {
-    if (renewalExecutor != null) {
-      renewalExecutor.shutdownNow()
-    }
+  def updateCredentialsTask(): Array[Byte] = {
+    updateTokensTask()
   }
 
   /**
@@ -171,23 +171,6 @@ private[spark] class HadoopDelegationTokenManager(
     (creds, nextRenewal)
   }
 
-  // Visible for testing.
-  def isProviderLoaded(serviceName: String): Boolean = {
-    delegationTokenProviders.contains(serviceName)
-  }
-
-  private def scheduleRenewal(delay: Long): Unit = {
-    val _delay = math.max(0, delay)
-    logInfo(s"Scheduling renewal in ${UIUtils.formatDuration(_delay)}.")
-
-    val renewalTask = new Runnable() {
-      override def run(): Unit = {
-        updateTokensTask()
-      }
-    }
-    renewalExecutor.schedule(renewalTask, _delay, TimeUnit.MILLISECONDS)
-  }
-
   /**
    * Periodic task to login to the KDC and create new delegation tokens. Re-schedules itself
    * to fetch the next set of tokens when needed.
@@ -224,14 +207,7 @@ private[spark] class HadoopDelegationTokenManager(
     ugi.doAs(new PrivilegedExceptionAction[Credentials]() {
       override def run(): Credentials = {
         val (creds, nextRenewal) = obtainDelegationTokens()
-
-        // Calculate the time when new credentials should be created, based on the configured
-        // ratio.
-        val now = System.currentTimeMillis
-        val ratio = sparkConf.get(CREDENTIALS_RENEWAL_INTERVAL_RATIO)
-        val delay = (ratio * (nextRenewal - now)).toLong
-        logInfo(s"Calculated delay on renewal is $delay, based on next renewal $nextRenewal " +
-          s"and the ratio $ratio, and current time $now")
+        val delay = calculateNextRenewalInterval(nextRenewal)
         scheduleRenewal(delay)
         creds
       }
@@ -255,57 +231,12 @@ private[spark] class HadoopDelegationTokenManager(
       UserGroupInformation.getCurrentUser()
     }
   }
-
-  private def loadProviders(): Map[String, HadoopDelegationTokenProvider] = {
-    val loader = ServiceLoader.load(classOf[HadoopDelegationTokenProvider],
-      Utils.getContextOrSparkClassLoader)
-    val providers = mutable.ArrayBuffer[HadoopDelegationTokenProvider]()
-
-    val iterator = loader.iterator
-    while (iterator.hasNext) {
-      try {
-        providers += iterator.next
-      } catch {
-        case t: Throwable =>
-          logDebug(s"Failed to load built in provider.", t)
-      }
-    }
-
-    // Filter out providers for which spark.security.credentials.{service}.enabled is false.
-    providers
-      .filter { p => HadoopDelegationTokenManager.isServiceEnabled(sparkConf, p.serviceName) }
-      .map { p => (p.serviceName, p) }
-      .toMap
-  }
 }
 
-private[spark] object HadoopDelegationTokenManager extends Logging {
-  private val providerEnabledConfig = "spark.security.credentials.%s.enabled"
+private[spark] object HadoopDelegationTokenManager extends ServiceCredentialsConfig {
+  override def providerEnabledConfig: String = "spark.security.credentials.%s.enabled"
 
-  private val deprecatedProviderEnabledConfigs = List(
+  override def deprecatedProviderEnabledConfigs: List[String] = List(
     "spark.yarn.security.tokens.%s.enabled",
     "spark.yarn.security.credentials.%s.enabled")
-
-  def isServiceEnabled(sparkConf: SparkConf, serviceName: String): Boolean = {
-    val key = providerEnabledConfig.format(serviceName)
-
-    deprecatedProviderEnabledConfigs.foreach { pattern =>
-      val deprecatedKey = pattern.format(serviceName)
-      if (sparkConf.contains(deprecatedKey)) {
-        logWarning(s"${deprecatedKey} is deprecated.  Please use ${key} instead.")
-      }
-    }
-
-    val isEnabledDeprecated = deprecatedProviderEnabledConfigs.forall { pattern =>
-      sparkConf
-        .getOption(pattern.format(serviceName))
-        .map(_.toBoolean)
-        .getOrElse(true)
-    }
-
-    sparkConf
-      .getOption(key)
-      .map(_.toBoolean)
-      .getOrElse(isEnabledDeprecated)
-  }
 }

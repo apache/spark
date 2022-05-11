@@ -1031,8 +1031,9 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
   /**
    * Create the cloud credentials manager to be used for the application.
    */
-  protected def createCloudCredentialsManager(): Option[CloudCredentialsManager] = None
-
+  protected def createCloudCredentialsManager(): Option[CloudCredentialsManager] = {
+    Some(new CloudCredentialsManager(conf, scheduler.sc.hadoopConfiguration, driverEndpoint))
+  }
   /**
    * Called when a new set of cloud credentials is sent to the driver. Child classes can override
    * this method but should always call this implementation, which handles credentials distribution
@@ -1040,6 +1041,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
    */
   protected def updateCloudCredentials(credentials: Array[Byte]): Unit = {
     SparkHadoopUtil.get.updateCloudCredentials(credentials, conf)
+    logInfo(s"Updating cloud credentials for ${executorDataMap.size} executors")
     executorDataMap.values.foreach { ed =>
       ed.executorEndpoint.send(UpdateCloudCredentials(credentials))
     }

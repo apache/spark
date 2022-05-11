@@ -166,7 +166,7 @@ private[spark] class SparkHadoopUtil extends Logging {
   private[spark] def updateCloudCredentials(credentials: Array[Byte], sparkConf: SparkConf): Unit =
   {
     val creds = deserializeCloudCredentials(credentials)
-    logInfo("Updating cloud credentials for current user.")
+    logInfo(s"Updating cloud credentials for ${creds.serviceName}.")
     sparkConf.set(CloudCredentialsManager.cloudCredentialsConfig.format(creds.serviceName),
       creds.credentials)
   }
