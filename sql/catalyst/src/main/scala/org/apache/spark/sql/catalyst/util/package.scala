@@ -130,11 +130,8 @@ package object util extends Logging {
     "`" + name.replace("`", "``") + "`"
   }
 
-  def isValidPartName(part: String): Boolean =
-    part.matches("[a-zA-Z0-9_]+") && !part.matches("\\d+")
-
   def quoteIfNeeded(part: String): String = {
-    if (isValidPartName(part)) {
+    if (part.matches("[a-zA-Z0-9_]+") && !part.matches("\\d+")) {
       part
     } else {
       s"`${part.replace("`", "``")}`"

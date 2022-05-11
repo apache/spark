@@ -19,10 +19,10 @@ package org.apache.spark.sql.connector.catalog
 
 import java.lang.reflect.InvocationTargetException
 import java.util
+import java.util.NoSuchElementException
 import java.util.regex.Pattern
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.catalyst.util.isValidPartName
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -46,7 +46,7 @@ private[sql] object Catalogs {
   def load(name: String, conf: SQLConf): CatalogPlugin = {
     val pluginClassName = try {
       val _pluginClassName = conf.getConfString("spark.sql.catalog." + name)
-      if (isValidPartName(name)) {
+      if (name.contains(".")) {
         throw QueryExecutionErrors.invalidCatalogNameError(name)
       }
       _pluginClassName

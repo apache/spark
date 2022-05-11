@@ -1535,7 +1535,7 @@ object QueryExecutionErrors extends QueryErrorsBase {
   }
 
   def invalidCatalogNameError(name: String): Throwable = {
-    new SparkException(s"Invalid catalog name: $name")
+    new SparkException(s"'$name' is an illegal catalog name, should not contain '.'")
   }
 
   def catalogPluginClassNotFoundError(name: String): Throwable = {

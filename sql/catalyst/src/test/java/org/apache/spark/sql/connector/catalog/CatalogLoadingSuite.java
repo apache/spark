@@ -47,7 +47,7 @@ public class CatalogLoadingSuite {
     SparkException exc = Assert.assertThrows(SparkException.class,
             () -> Catalogs.load("test.name", conf));
     Assert.assertTrue("Catalog name should not contain '.'", exc.getMessage().contains(
-            "Invalid catalog name: test.name"));
+            "'test.name' is an illegal catalog name, should not contain '.'"));
   }
 
   @Test
