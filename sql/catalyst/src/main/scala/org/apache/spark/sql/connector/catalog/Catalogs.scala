@@ -19,7 +19,6 @@ package org.apache.spark.sql.connector.catalog
 
 import java.lang.reflect.InvocationTargetException
 import java.util
-import java.util.NoSuchElementException
 import java.util.regex.Pattern
 
 import org.apache.spark.SparkException
@@ -44,12 +43,11 @@ private[sql] object Catalogs {
   @throws[CatalogNotFoundException]
   @throws[SparkException]
   def load(name: String, conf: SQLConf): CatalogPlugin = {
+    if (name.contains(".")) {
+      throw QueryExecutionErrors.invalidCatalogNameError(name)
+    }
     val pluginClassName = try {
-      val _pluginClassName = conf.getConfString(s"spark.sql.catalog.$name")
-      if (name.contains(".")) {
-        throw QueryExecutionErrors.invalidCatalogNameError(name)
-      }
-      _pluginClassName
+      conf.getConfString(s"spark.sql.catalog.$name")
     } catch {
       case _: NoSuchElementException =>
         throw QueryExecutionErrors.catalogPluginClassNotFoundError(name)
